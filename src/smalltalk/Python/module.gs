@@ -333,14 +333,30 @@ __cached__
 category: 'Grail-Accessors'
 method: module
 __doc__
-	"Return the module docstring, falling back to the base object docstring
-	if unset.  Guard the dict read with includesKey: — an unguarded
-	``at:'' raises LookupError for a module with no docstring (now that
-	bare ``__doc__'' reads actually perform this accessor instead of
-	being mis-wrapped as a BoundMethod)."
+	"The module's own docstring, or None.
+
+	NEVER Object's DOCSTRING.  This used to end ``^ super __doc__'', which
+	climbs the Smalltalk superclass chain to Object and answers ``The base
+	class of the class hierarchy...'' -- so EVERY module in the corpus reported
+	that as its docstring, including ones whose real docstring was sitting in
+	the source file unread.  It was not a missing feature but a wrong answer,
+	and a plausible-looking one, which is why it survived: nothing raises and
+	the value is a string.
+
+	Two sources, in CPython's order of precedence:
+	  * an entry in the module namespace, which is where the compiled docstring
+	    is stamped (importlib class >> ___stampDocstringOn___:) and where an
+	    explicit ``__doc__ = ...'' in the module body lands.  Either way the
+	    module's own binding wins;
+	  * None when there is none.  A module without a docstring HAS the
+	    attribute and its value is None -- distinct from not having it.
+
+	The includesKey: guard stays: an unguarded ``at:'' raises LookupError for a
+	module with no docstring, now that a bare ``__doc__'' read performs this
+	accessor rather than being mis-wrapped as a BoundMethod."
 
 	(self @env0:includesKey: #__doc__) ifTrue: [^ self @env0:at: #__doc__].
-	^ super __doc__
+	^ None
 %
 
 category: 'Grail-Attribute Access'

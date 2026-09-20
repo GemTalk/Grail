@@ -788,6 +788,42 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			] on: CompileWarning do: [:ex | ex resume].
 		].
 
+		"The module's own docstring, as a class-side method, so ``mod.__doc__''
+		answers the module's docstring instead of inheriting Object's through the
+		superclass chain -- measured before this, EVERY module answered ``The base
+		class of the class hierarchy...''.
+
+		ON THE CLASS, not stamped straight onto an instance, because the AST only
+		exists on a COLD load: a warm bind reuses a committed module class and
+		never parses.  Compiled here, the docstring rides the class, and
+		registerModule:with: copies it onto whichever instance a session ends up
+		with -- so both paths agree.  Same reason ___methodCodeTable___ above sits
+		on the class.
+
+		EMITTED ONLY WHEN THERE IS ONE.  A module without a docstring leaves the
+		selector absent, which module >> __doc__ reads as None -- CPython's answer
+		for that case, and distinguishable from a docstring that is the empty
+		string."
+		(moduleAst ___docString___) ifNotNil: [:docNode |
+			| docSrc |
+			docSrc := WriteStream on: String new.
+			docSrc nextPutAll: '___pyModuleDoc___'; nextPutAll: lf.
+			docSrc nextPutAll: '	^ '.
+			moduleAst emitStringLiteral: docNode value on: docSrc.
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
+					nextPutAll: 'classmethod: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: docSrc contents on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
+			].
+			[moduleClass class compileMethod: docSrc contents
+				dictionaries: sl
+				category: 'Grail-Python Metadata'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
+		].
+
 		"Generate the module body as Smalltalk source for the initialize method.
 		Top-level defs emit BoundMethod assignments; calls emit self-sends."
 		stream := PrettyWriteStream on: Unicode7 new.
@@ -2558,6 +2594,37 @@ ___forgetHashStateFor___: aName
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___stampDocstringOn___: aModule
+	"Copy aModule's compiled docstring onto the instance, so ``mod.__doc__''
+	and ``mod.__dict__['__doc__']'' both answer it -- CPython's import machinery
+	puts the docstring IN the namespace, not merely within reach of a getattr.
+
+	DOES NOT OVERWRITE an entry already there.  Two cases depend on that: a
+	module body that assigns ``__doc__ = ...'' itself, and types.ModuleType,
+	whose constructor stores None before this runs.  Both must keep what they
+	set.
+
+	Silent when the class carries no ``___pyModuleDoc___'' -- a module with no
+	docstring compiles no such method, and the absence is the answer.  module >>
+	__doc__ turns it into None there, which is what CPython reports."
+
+	| cls |
+	aModule isNil ifTrue: [^ self].
+	[(aModule @env0:includesKey: #'__doc__') ifTrue: [^ self].
+	cls := aModule @env0:class.
+	"environmentId: 1, not canUnderstand:.  The method is compiled in env 1, so
+	an env-0 canUnderstand: answers false for a selector that is plainly there
+	-- the same trap BoundMethod >> ___methodCodeTableFor___: documents for
+	___methodCodeTable___, and walked into again here: every module reported a
+	nil docstring while the compiled method sat on the class."
+	(cls @env0:class @env0:whichClassIncludesSelector: #'___pyModuleDoc___' environmentId: 1)
+		isNil ifTrue: [^ self].
+	aModule @env0:at: #'__doc__' put: (cls @env0:perform: #'___pyModuleDoc___' env: 1)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 ___builtinsModuleOrNil___
 	"The builtins MODULE instance from sys.modules, or nil before it is
 	registered.  Distinct from the PyModuleDict VIEW of it that
@@ -2691,6 +2758,12 @@ registerModule: aName with: aModule
 	happens to cover.  See ___stampBuiltinsOn___: for the ordering guard and
 	why the value is the builtins module's DICT."
 	self ___stampBuiltinsOn___: aModule.
+	"``__doc__'' -- the module's own docstring, copied from the class-side
+	``___pyModuleDoc___'' the compiler stamped at build time.  Here, beside the
+	__builtins__ stamp and for the same reason: this is the one point EVERY path
+	reaches, including the warm bind that reuses a committed class and never
+	parses a line."
+	self ___stampDocstringOn___: aModule.
 	"Provenance for the liveness check every registry read makes
 	(___moduleEntryIsLive___:).  Record the class only when PythonModules
 	names it AT REGISTRATION -- that is what makes the later identity compare

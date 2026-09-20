@@ -454,6 +454,36 @@ body
 
 category: 'Grail-evaluation'
 method: ModuleAst
+___docString___
+	"The module's docstring node -- the leading bare string-literal statement
+	of the module body, which CPython lifts into ``__doc__''.  Answer that
+	ConstantAst, or nil when the body does not open with one.
+
+	The module-level twin of ClassDefAst >> ___docString___, and added for the
+	same defect it was added for: without it a module INHERITS Object's
+	docstring through the superclass chain, so ``textwrap.__doc__'' answered
+	``The base class of the class hierarchy...'' instead of ``Text wrapping and
+	filling.''.  Measured on every module in the corpus, not just a few.
+
+	The NODE rather than the string value, so the emit can reuse
+	emitStringLiteral:on: and get escaping right for a docstring containing
+	quotes, backslashes or newlines -- which most real ones do."
+
+	| stmts first inner |
+	body isNil ifTrue: [^ nil].
+	stmts := body body.
+	(stmts isNil or: [stmts isEmpty]) ifTrue: [^ nil].
+	first := stmts at: 1.
+	(first isKindOf: ExprAst) ifFalse: [^ nil].
+	inner := first value.
+	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	^ (inner value isKindOf: CharacterCollection)
+		ifTrue: [inner]
+		ifFalse: [nil]
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
 ensureModuleScope: aSymbolDictionary
 	"Ensure module scope has entries for declared variables."
 
