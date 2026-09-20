@@ -920,6 +920,31 @@ ___scopeNodeDeclaresGlobal___: aScopeNode named: aSymbol
 	^ gset notNil and: [gset includes: aSymbol asSymbol]
 %
 
+category: 'Grail-Scope'
+method: AbstractNode
+___nearestEnclosingFunctionDeclaresNonlocal___: aSymbol
+	"``nonlocal aSymbol'' declared by the nearest enclosing FUNCTION -- the
+	scope whose declaration decides where a store in this node lands.
+
+	Distinct from ___declaredInEnclosingFunction___:, which answers true for a
+	``global'' declaration too and walks past the nearest scope.  The
+	``__class__'' cell branches need the narrower question: a method declaring
+	the name NONLOCAL shares the class's implicit cell, whereas one declaring
+	it GLOBAL means the module binding and must keep standing down."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				^ node body notNil
+					and: [node body nonlocalNames notNil
+					and: [node body nonlocalNames includes: aSymbol]]].
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		node := node parent].
+	^ false
+%
+
 category: 'Grail-codegen helpers'
 method: AbstractNode
 ___nearestEnclosingScopeDeclaresGlobal___: aSymbol

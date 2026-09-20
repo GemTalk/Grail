@@ -100,6 +100,87 @@ class SuperControl:
 r["zero_arg_super_still_works"] = SuperControl().m()
 
 
+# ---------------------------------------------------------------------------
+# A METHOD declaring ``nonlocal __class__'' writes the SAME shared cell.
+#
+# The class-body form above was handled; this one was not.  Grail emitted the
+# store against the temp popScope keeps for the declared name, so the write
+# landed in a local nobody reads and the cell kept its old value -- silently,
+# with no corpus test able to see it (test_super's tearDown repairs damage that
+# never happened under Grail, so its repair being a no-op costs nothing there).
+#
+# Reading it back inside the SAME frame is the half that makes read and write
+# one change rather than two: route the store to the cell while the read still
+# reads the temp, and the read raises UnboundLocalError instead.
+# ---------------------------------------------------------------------------
+
+
+class MA:
+    def f(self):
+        return "A"
+
+
+class MB(MA):
+    def f(self):
+        return "B"
+
+
+class MC(MB):
+    def f(self):
+        return "C"
+
+    def g(self):
+        # Reads the cell; declares nothing itself.
+        return super().f()
+
+    def damage(self):
+        nonlocal __class__
+        __class__ = MB
+        return __class__.__name__
+
+    def peek(self):
+        nonlocal __class__
+        return __class__.__name__
+
+
+_mc = MC()
+r["method_nonlocal_super_before"] = _mc.g()
+r["method_nonlocal_peek_before"] = _mc.peek()
+r["method_nonlocal_read_after_write"] = _mc.damage()
+r["method_nonlocal_super_after"] = _mc.g()
+r["method_nonlocal_sibling_sees_it"] = _mc.peek()
+r["method_nonlocal_not_a_class_attribute"] = "__class__" not in MC.__dict__
+
+
+# The cell may hold a NON-CLASS, and a later write must still land.  The write
+# targets the container, so the receiver has to be the class object, not what
+# the cell currently reads out to -- getting that wrong sends the setter to a
+# SmallInteger.  test_super does exactly this (``__class__ = 42''); this shape
+# is here so the fixture can see it too.
+
+
+class MD(MA):
+    def set_junk(self):
+        nonlocal __class__
+        __class__ = 42
+
+    def restore(self):
+        nonlocal __class__
+        __class__ = MD
+
+    def peek(self):
+        nonlocal __class__
+        return __class__
+
+
+_md = MD()
+r["junk_cell_peek_before"] = _md.peek() is MD
+_md.set_junk()
+r["junk_cell_holds_non_class"] = _md.peek()
+_md.restore()
+r["junk_cell_restored"] = _md.peek() is MD
+
+
 EXPECTED = {
     "read_before_the_write_is_the_class": True,
     "read_after_the_write_is_the_new_value": 42,
@@ -107,6 +188,17 @@ EXPECTED = {
     "sibling_method_sees_the_write": 99,
     "an_ordinary_class_is_unaffected": True,
     "zero_arg_super_still_works": True,
+    # The method-level form: the cell moves for the WHOLE class, so g()'s
+    # zero-arg super() resolves against MB after the write and finds MA.f.
+    "method_nonlocal_super_before": "B",
+    "method_nonlocal_peek_before": "MC",
+    "method_nonlocal_read_after_write": "MB",
+    "method_nonlocal_super_after": "A",
+    "method_nonlocal_sibling_sees_it": "MB",
+    "method_nonlocal_not_a_class_attribute": True,
+    "junk_cell_peek_before": True,
+    "junk_cell_holds_non_class": 42,
+    "junk_cell_restored": True,
 }
 
 

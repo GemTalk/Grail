@@ -703,7 +703,8 @@ ___emitSmalltalkOn___: aStream
 		and: [CallAst classBeingCompiled notNil
 		and: [CallAst moduleClassBeingCompiled notNil
 		and: [CallAst inClassBodyValueEmit ~~ true
-		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not]]]]])
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
+			or: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']]]]]])
 		ifTrue: [
 			CallAst printDefiningClassOn: aStream.
 			^ self
