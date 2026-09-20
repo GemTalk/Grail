@@ -4404,9 +4404,10 @@ ___irSuperShape___
 		only shape the key ``___cell_<ClassName>___'' exists under.  Naming a
 		DIFFERENT method-local class keeps the text's other path, so it must
 		keep refusing here."
-		(CallAst classDefIsModuleScope == false
-			and: [(arguments at: 1) id asSymbol ~~ CallAst classBeingCompiled asSymbol])
-				ifTrue: [^ nil].
+		"A method-local class naming a DIFFERENT class, or a parameter, or any
+		other local: admitted now that ___emitIRSuperExplicitOn___: takes the
+		cell only for the class naming itself and otherwise emits what the
+		text emits."
 		^ #superExplicit].
 	^ nil
 %
@@ -4436,14 +4437,23 @@ ___irSuperStaysOnText___
 	   under the class's OWN name, so there is nothing to read for another."
 
 	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ false].
-	arguments isEmpty ifTrue: [^ true].
-	keywords isEmpty ifFalse: [^ false].
+	"THE SHADOW TEST COMES FIRST, because a shadowed ``super'' is not the
+	rewrite at all.  printSmalltalkOn: declines to rewrite it -- the name
+	holds whatever the user bound, a class or a function -- and emits the
+	ordinary call, so there is no precondition arm to get wrong and nothing
+	for the zero-argument rule below to protect.  It used to be tested
+	AFTER, so ``arguments isEmpty'' claimed a shadowed ``super()'' as well
+	and kept it on text (`CallAst:super-shadowed'); test_super's
+	test_shadowed_local -- ``class super:'' in the enclosing method, then a
+	method-local class calling ``super()'' -- is that shape."
 	self ___superNameIsShadowed___ ifTrue: [^ false].
-	CallAst classBeingCompiled isNil ifTrue: [^ false].
-	CallAst moduleClassBeingCompiled isNil ifTrue: [^ false].
-	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifFalse: [^ false].
-	^ CallAst classDefIsModuleScope == false
-		and: [(arguments at: 1) id asSymbol ~~ CallAst classBeingCompiled asSymbol]
+	arguments isEmpty ifTrue: [^ true].
+	"REASON 2 IS GONE: the emit no longer assumes the first argument names
+	the class being compiled.  It takes the cell only for a method-local
+	class naming ITSELF, and otherwise falls through to the module-instance
+	accessor or the plain argument emit -- which is exactly what the text
+	does, so there is no longer a spelling here without a twin."
+	^ false
 %
 
 category: 'Grail-IR Codegen'
@@ -4601,13 +4611,28 @@ ___emitIRSuperExplicitOn___: aBuilder
 
 	| first cls obj |
 	first := arguments at: 1.
-	cls := (CallAst classDefIsModuleScope == false)
+	cls := ((CallAst classDefIsModuleScope == false)
+		and: [first id asSymbol == CallAst classBeingCompiled asSymbol])
 		ifTrue: [
-			"A method-local class naming itself: the cell, as the text writes it.
+			"A method-local class naming ITSELF: the cell, as the text writes it.
 			 ___classCell___: and not the ForSuper variant -- the text uses
 			 `Super checkedCls:' here, so the supercheck rides on the
 			 CONSTRUCTOR rather than on the cell read, and reading through
-			 ForSuper as well would apply it twice."
+			 ForSuper as well would apply it twice.
+
+			 NAMING ITSELF is now part of the test.  This branch used to be
+			 taken for ANY first argument inside a method-local class, so it
+			 would have read the class's own cell where the source named
+			 something else entirely -- which is what ___irSuperStaysOnText___
+			 was keeping off the IR path (`CallAst:super-explicitNamesOtherClass').
+			 The cell key ``___cell_<ClassName>___'' exists only under the
+			 class's own name, so there is nothing to read for another; the two
+			 branches below are what the text falls through to, and they are
+			 correct here for the same reason they are correct there.
+
+			 test_super's test_supercheck_fail is the shape: ``super(type_,
+			 obj)'' where type_ is the method's own PARAMETER, so the first
+			 argument is a plain local read and no cell is involved at all."
 			aBuilder atNode: first.
 			self ___emitIRDefiningClassReadOn___: aBuilder
 				cellSelector: #'___classCell___:']

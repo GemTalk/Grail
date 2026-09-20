@@ -263,7 +263,25 @@ ___irSuperLoadKind___
 	nothing."
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
-	(self ___declaredInEnclosingFunction___: #'super') ifTrue: [^ nil].
+	(self ___declaredInEnclosingFunction___: #'super') ifTrue: [
+		"...and when that declaration is reached THROUGH THE CLASS CELL, the
+		read is an ordinary captured enclosing-function local and the cell
+		read spells it.  ``super'' is a Smalltalk reserved identifier, so it
+		would have taken ___irNonLocalLoadKind___:'s reserved-name branch --
+		which already answers #classCell for exactly this shape, and whose
+		comment records that ``(self ___classCell___: #'___cell_x___')'' is
+		NAME-AGNOSTIC -- except that the ``super'' test above it claims the
+		name first and refused outright.
+
+		test_super's test_shadowed_local is the shape: ``class super:'' in a
+		test method, then a method-local class whose method calls
+		``super()''.  The call is NOT the zero-argument rewrite -- CallAst's
+		___superNameIsShadowed___ declines it -- so it is an ordinary call of
+		whatever the name holds, and the name is a captured local.
+
+		Without a cell the read is the text's reserved-name TRANSPORT rename,
+		which is a different emit, so that keeps refusing."
+		^ self ___readsThroughClassCell___ ifTrue: [#classCell] ifFalse: [nil]].
 	(self isModuleVariableName: #'super') ifTrue: [^ nil].
 	"No module class means nothing could have been patched, so the text emits
 	Super directly rather than probing for a shadow."
