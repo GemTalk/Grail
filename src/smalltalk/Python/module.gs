@@ -933,14 +933,16 @@ ___globalAt___: aSym otherwise: aBlock
 	is the builtins module's DICT, not the module (test_funcattrs
 	test___builtins__ picks between the two on __name__).
 
-	COMPUTED HERE, NOT STORED AT IMPORT, and the difference is deliberate.
-	Storing it would put an entry in every module's namespace, which changes
-	what ``dir(mod)'', ``vars(mod)'' and every iteration over a module dict
-	answer -- for a name almost nothing reads, across the whole corpus, to buy
-	the same value this line computes.  The cost of computing is one memoised
-	PyModuleDict lookup on a miss, and a miss is already the expensive path.
-	The visible divergence from CPython is that the name does not appear in
-	``list(mod.__dict__)''; reads of it work, which is what code does with it.
+	A FALLBACK, NOT THE PRIMARY MECHANISM.  importlib class >>
+	___stampBuiltinsOn___: writes the name into each module's namespace at
+	registration, so it is normally a real entry and dir()/vars()/iteration see
+	it as in CPython.  This branch covers what the stamp cannot reach: the
+	bootstrap modules that register BEFORE the builtins module exists (a
+	one-time sweep catches those up, but this makes the read correct even
+	before it runs) and the launcher's own script module, which is created
+	outside the import machinery.  Answering here means a read never depends on
+	the stamp having run.  The cost is one memoised PyModuleDict lookup on a
+	miss, and a miss is already the expensive path.
 
 	LAST, after every other branch, so it is only a FALLBACK: a module that
 	binds ``__builtins__'' itself -- which is how a sandbox restricts one --

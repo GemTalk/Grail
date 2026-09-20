@@ -1500,7 +1500,15 @@ ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
 
 	Shared by the except-as, with-as and for-target bindings exactly as the
 	text helper is, so the three cannot drift apart from each other or from
-	the text."
+	the text.
+
+	ANSWERS A NODE; IT DOES NOT APPEND ONE.  Every arm is a send:/assign:
+	constructor, because ___emitIRMatchCaptureStore___: needs the store as an
+	EXPRESSION inside a pattern's and: chain.  A caller emitting a STATEMENT
+	must therefore wrap the answer in ``aBuilder add:''.  Three call sites
+	once did not, and the ForAst one dropped the drain-guarded fetch of the
+	next item along with the store, so ``global n; for n in ...'' looped
+	forever -- a SUnit shard at 100% CPU for four hours rather than a failure."
 
 	| sym moduleRoute |
 	sym := aNameSymbol asSymbol.

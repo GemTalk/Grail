@@ -43,16 +43,31 @@ FunctionBuiltinsAttrTestCase category: 'Grail-SUnit'
 ! module, which is what makes ``f.__builtins__ is __builtins__'' true rather
 ! than merely equal.  Upstream asserts every one of these with assertIs.
 !
-! COMPUTED, NOT STORED, and that is the one deliberate divergence.  module >>
-! ___globalAt___:otherwise: answers the name from a LAST-resort branch instead
-! of the import machinery writing an entry into each module's namespace.
-! Storing it would change what ``dir(mod)'', ``vars(mod)'' and every iteration
-! over a module dict answer, across the whole corpus, for a name almost nothing
-! reads.  The visible consequence is that ``__builtins__'' does not appear in
-! ``list(mod.__dict__)'' as it does in CPython; reads of it all work, and reads
-! are what code does with it.  Being a last-resort branch is also what lets a
-! module bind its own ``__builtins__'' -- how a sandbox restricts one -- and
-! have that binding win, since a real binding is found long before this branch.
+! STORED, WITH A COMPUTED FALLBACK.  importlib class >> ___stampBuiltinsOn___:
+! writes the name into each module's namespace from registerModule:with: -- the
+! one choke point every entry point that makes a module passes through -- so it
+! is a real entry that ``dir(mod)'', ``vars(mod)'' and any iteration over a
+! module namespace see, as in CPython.  module >> ___globalAt___:otherwise:
+! ALSO answers it from a last-resort branch, which covers the modules the stamp
+! cannot reach: the bootstrap set that registers before the builtins module
+! exists (caught afterwards by a one-time sweep) and the launcher's own script
+! module, which is created outside the import machinery.  So a READ never
+! depends on the stamp having run; only membership does.
+!
+! A first version computed the name and stored nothing.  Every read passed, and
+! the fixture passed, because a read is exactly what a computed branch serves --
+! which is why the checks below test MEMBERSHIP (``_has(vars(mod), ...)'')
+! rather than only reading.  A read-only implementation cannot satisfy those.
+!
+! THE BUILTINS MODULE ITSELF IS EXCLUDED, because CPython excludes it: measured
+! on 3.14.6, ``'__builtins__' in builtins.__dict__'' is False.  Grail's first
+! attempt stamped it anyway -- the guard compared the candidate against the
+! builtins VIEW (a PyModuleDict) rather than against the builtins MODULE, and
+! those are never identical, so the guard matched nothing.
+!
+! Being a last-resort branch, and the stamp declining to overwrite, is also what
+! lets a module bind its own ``__builtins__'' -- how a sandbox restricts one --
+! and keep that binding.
 !
 ! THREE CALLABLE CLASSES, THREE SEPARATE ATTRIBUTES.  Grail represents a
 ! module-level def as a BoundMethod, a nested def or lambda as an ExecBlock
@@ -126,6 +141,26 @@ testTheBareModuleLevelNameResolvesToTheBuiltinsNamespace
 
 	self assertMatchesCPythonAt: 'bare_name_is_builtins_namespace'.
 	self assertMatchesCPythonAt: 'globals_entry_is_bare_name'.
+%
+
+category: 'Grail-Tests - Module Name'
+method: FunctionBuiltinsAttrTestCase
+testTheNameIsAnEntryInTheModuleNamespaceNotMerelyReadable
+	"CPython's import machinery writes ``__builtins__'' into each module's
+	namespace, so it is visible to dir(), vars() and any iteration -- not just
+	to a read.  These check MEMBERSHIP for that reason: Grail also computes the
+	name on a miss, so every read-based check here passed while nothing was
+	stored, and only these can tell the two implementations apart.
+
+	The builtins module itself is excluded, matching CPython, and that half is
+	not cosmetic -- the first guard written for it compared against the module's
+	PyModuleDict VIEW rather than the module, matched nothing, and stamped
+	builtins along with everything else."
+
+	self assertMatchesCPythonAt: 'present_in_own_module_dict'.
+	self assertMatchesCPythonAt: 'present_in_another_module_dict'.
+	self assertMatchesCPythonAt: 'readable_as_a_module_attribute'.
+	self assertMatchesCPythonAt: 'builtins_module_itself_excluded'.
 %
 
 category: 'Grail-Tests - Callables'

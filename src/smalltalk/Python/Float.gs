@@ -624,23 +624,12 @@ method: float
 __divmod__: other
 	"Return (quotient, remainder) as a tuple.
 
-	Computed by DELEGATING to __floordiv__ and __mod__ rather than repeating
-	their arithmetic.  Repeating it is what broke test_fractions: those two
-	carry real special-case handling -- an infinite divisor, Python's
-	divisor-signed zero, the int/float result types -- and a __divmod__ that
-	went straight to the kernel's // and \\ answered (0.0, nan) for
-	``divmod(0.1, float('inf'))'' where CPython answers (0.0, 0.1).
-	Delegating keeps the pair bit-identical to what divmod() produced before it
-	started dispatching here; the ONLY thing that changed is who gets asked.
+	One call to ___pyDivModPair___ rather than one each to __floordiv__ and
+	__mod__: upstream divmod IS that routine, and calling it once also means
+	the exact fmod behind it runs once instead of twice.
 
-	The operand guard stays here, ahead of the delegation, because
-	__floordiv__ declines by RAISING (naming ``//''), and a divmod() call must
-	report divmod().
-
-	Delegating also fixes a second-order bug for free: this method never
-	coerced its quotient, so ``divmod(7.5, 2)'' answered (3, 1.5) where
-	CPython answers (3.0, 1.5).  __floordiv__ has made that coercion all
-	along."
+	The operand guard stays here, ahead of it, because __floordiv__ declines by
+	RAISING and names ``//'' -- a divmod() call must report divmod()."
 
 	| d |
 	d := nil.
@@ -650,7 +639,9 @@ __divmod__: other
 			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
 	d == nil ifTrue: [
 		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
-	^ tuple @env0:with: (self __floordiv__: d) with: (self __mod__: d)
+	(ZeroDivisionError @env0:___isZeroDivisor___: d) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
+	^ tuple @env0:withAll: (self ___pyDivModPair___: d)
 %
 
 category: 'Grail-Documentation'
@@ -710,31 +701,131 @@ __floor__
 
 category: 'Grail-Arithmetic'
 method: float
+___pyFmod___: other
+	"C fmod(self, other): self - n*other with n = trunc(self/other), computed
+	EXACTLY.
+
+	GemStone's rem: and \\ take n from the ROUNDED double quotient, and that is
+	a DIFFERENT n whenever the true quotient sits just below an integer.  The
+	standard case is a divisor of 0.1: the stored double is slightly MORE than
+	a tenth, so the true 1.0/0.1 is 9.999..., fmod's n is 9 and the remainder
+	is 0.09999999999999995 -- while the rounded quotient is exactly 10.0, n is
+	10, and ``1.0 rem: 0.1'' answers 0.0.  Every disagreement Grail's float //,
+	% and divmod had with CPython on a 0.1-like divisor came from that one
+	substitution, and so did math.fmod.
+
+	asFraction is the float's exact binary value, so the quotient and the
+	product are exact.  fmod's result is always exactly representable in the
+	format, so the closing asFloat is a conversion and not a second rounding.
+
+	The caller handles a zero, infinite or NaN operand: asFraction has no
+	meaning for those."
+
+	| n |
+	"|self| < |other| means n is 0 and the remainder is self -- sound, and it
+	skips the Fraction arithmetic entirely for the commonest shape (a value
+	reduced modulo a larger period).  There is no cheap SOUND test for the
+	general case: the whole defect is that a rounded quotient can look correct,
+	so ``the double answer passes a plausibility check'' does not license it."
+	(self @env0:abs @env0:< other @env0:abs) ifTrue: [^ self].
+	n := (self @env0:asFraction @env0:/ other @env0:asFraction) @env0:truncated.
+	^ (self @env0:asFraction @env0:- (n @env0:* other @env0:asFraction)) @env0:asFloat
+%
+
+category: 'Grail-Arithmetic'
+method: float
+___pyDivModPair___: other
+	"CPython's float_divmod (Objects/floatobject.c), answering the Array
+	{ floordiv. mod }.
+
+	Upstream DERIVES both // and % from this one routine, and deriving them
+	here too is the point: Grail computed each separately and they disagreed
+	with CPython in different places.  The quotient never took the ``div -= 1''
+	that accompanies the remainder's sign adjustment, so ``0.1 // -inf'' was
+	0.0 where CPython says -1.0; and neither produced the signed zero quotient,
+	so ``0.0 // -1.0'' was 0.0 where CPython says -0.0.
+
+	The caller has already rejected a zero divisor and a non-numeric operand.
+
+	Note the zero-divisor MESSAGE is a plain 'division by zero' for all three
+	entry points.  CPython's C source carries distinct strings ('float floor
+	division by zero', 'float modulo', 'float divmod()'), and writing those in
+	from memory cost a test_builtin regression: 3.14 unified them, and
+	test_divmod pins the unified wording.  Measure the message, do not recall
+	it."
+
+	| vx wx mod div floordiv |
+	vx := self @env0:asFloat.
+	wx := other @env0:asFloat.
+	"NaN anywhere, or an INFINITE DIVIDEND: fmod is NaN and everything derived
+	from it is NaN.  An infinite DIVISOR is deliberately NOT special-cased --
+	fmod(x, +-inf) is x, and it is the sign adjustment below that turns
+	``0.1 // -inf'' into -1.0 rather than any infinity rule."
+	(((vx @env0:_getKind) @env0:> 4)
+		@env0:or: [((wx @env0:_getKind) @env0:> 4)
+		@env0:or: [(vx @env0:_getKind) @env0:== 3]]) ifTrue: [
+			^ Array @env0:with: PlusQuietNaN with: PlusQuietNaN].
+	"fmod, with the two operands asFraction cannot express."
+	((wx @env0:_getKind) @env0:== 3)
+		ifTrue: [mod := vx]
+		ifFalse: [(vx @env0:= 0.0)
+			ifTrue: [mod := vx]
+			ifFalse: [mod := vx ___pyFmod___: wx]].
+	div := (vx @env0:- mod) @env0:/ wx.
+	(mod @env0:= 0.0)
+		ifTrue: [
+			"A zero remainder takes the DIVISOR's sign, which is the half
+			GemStone's \\ does not do reliably."
+			mod := (wx @env0:signBit) @env0:== 1
+				ifTrue: [0.0 @env0:negated] ifFalse: [0.0]]
+		ifFalse: [
+			"A non-zero remainder must take the divisor's sign too; when it does
+			not, shift it one divisor up AND drop the quotient by one.  Dropping
+			the quotient is what Grail was missing."
+			((wx @env0:< 0) @env0:~~ (mod @env0:< 0)) ifTrue: [
+				mod := mod @env0:+ wx.
+				div := div @env0:- 1.0]].
+	((div @env0:_getKind) @env0:== 3)
+		ifTrue: [floordiv := div]
+		ifFalse: [(div @env0:= 0.0)
+			ifTrue: [
+				"A zero quotient carries the sign of the TRUE quotient vx/wx."
+				floordiv := ((vx @env0:signBit) @env0:== (wx @env0:signBit))
+					ifTrue: [0.0] ifFalse: [0.0 @env0:negated]]
+			ifFalse: [
+				floordiv := div @env0:floor @env0:asFloat.
+				"fp division leaves div very slightly off an integral value;
+				upstream snaps it to the nearer one."
+				((div @env0:- floordiv) @env0:> 0.5) ifTrue: [
+					floordiv := floordiv @env0:+ 1.0]]].
+	^ Array @env0:with: floordiv with: mod
+%
+
+category: 'Grail-Arithmetic'
+method: float
 __floordiv__: other
 	"Floor division.  Python ``float // x'' always yields a FLOAT (``0.1 //
-	1.0'' is 0.0, not 0) -- GemStone's // answers an Integer, so coerce."
+	1.0'' is 0.0, not 0).
 
-	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
+	The value comes from ___pyDivModPair___, which is CPython's float_divmod:
+	// and % are two halves of ONE routine upstream, and computing them apart
+	is what let them drift.  See that method for the two families this fixed.
+
+	The operand TYPE is checked BEFORE the divisor's value, as CPython does:
 	``1.0 // 0j'' is a TypeError -- complex has no floor division -- and NOT a
-	ZeroDivisionError.  The guard used to run first, so a complex zero was
-	reported as division by zero and test_complex's test_floordiv_zero_division
-	failed on the wrong exception.  Confining the guard to the branch that will
-	actually do the arithmetic gets the order right without duplicating the
-	dispatch."
-	(other isKindOf: Number) ifTrue: [
-		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-			ZeroDivisionError ___signal___: 'division by zero'].
-		^ (self @env0:// other) @env0:asFloat].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
-			"The __index__ result is the real divisor, so it is what gets checked:
-			``1.0 // False'' has a non-Number operand that indexes to zero."
-			| idx |
-			idx := other __index__.
-			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [
-				ZeroDivisionError ___signal___: 'division by zero'].
-			^ (self @env0:// idx) @env0:asFloat].
-	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
+	ZeroDivisionError."
+
+	| d |
+	d := nil.
+	(other isKindOf: Number) ifTrue: [d := other]
+	ifFalse: [
+		((other @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+	d == nil ifTrue: [
+		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: d) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
+	^ (self ___pyDivModPair___: d) @env0:at: 1
 %
 
 category: 'Grail-Comparison'
@@ -800,42 +891,30 @@ __lt__: other
 category: 'Grail-Arithmetic'
 method: float
 __mod__: other
-	"Modulo operation.  Python float % takes the divisor's sign; an INFINITE
-	divisor returns self (finite self same-signed as inf) or the infinity
-	(opposite sign) -- fmod(self, inf)=self then CPython's sign-adjust -- where
-	GemStone's \\ yields NaN."
+	"Modulo.  Python's float % takes the DIVISOR's sign, including the sign of
+	a zero result, and an infinite divisor returns self (finite self
+	same-signed as the infinity) or the infinity (opposite sign).
 
-	| result |
-	"``1.0 % 0'' answered NaN before this guard: GemStone's \\ follows fmod,
-	which has no error case for a zero divisor.  Python raises."
-	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
+	The value comes from ___pyDivModPair___, which is CPython's float_divmod;
+	see it for why // and % must be derived from one routine.  Both the
+	infinite-divisor rule and the divisor-signed zero live there now, so this
+	method is the guard and nothing else.
+
+	The operand TYPE is checked BEFORE the divisor's value, as CPython does:
 	``1.0 % 0j'' is a TypeError -- complex has no modulo -- and NOT a
-	ZeroDivisionError.  The guard used to run first, so a complex zero was
-	reported as division by zero and test_complex's test_mod_zero_division
-	failed on the wrong exception.  Confining the guard to the branch that will
-	actually do the arithmetic gets the order right without duplicating the
-	dispatch."
-	(other isKindOf: Number) ifTrue: [
-		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-			ZeroDivisionError ___signal___: 'division by zero'].
-		((other @env0:isKindOf: Float) and: [(other @env0:_getKind) @env0:== 3]) ifTrue: [
-			| mod |
-			mod := self.
-			((mod @env0:~= 0) and: [(other @env0:< 0) @env0:~= (mod @env0:< 0)])
-				ifTrue: [mod := mod @env0:+ other].
-			^ mod @env0:asFloat].
-		result := self @env0:\\ other.
-		"GemStone's \\ doesn't reliably produce a divisor-SIGNED zero the
-		way Python's float % always does (e.g. -0.0 \\ 1.0 comes back
-		-0.0, and 1.0 \\ -1.0 comes back +0.0, both wrong) -- force the
-		sign explicitly whenever the mathematical result is zero
-		(test_float.py's test_float_mod)."
-		(result @env0:= 0.0) ifTrue: [
-			^ (other @env0:signBit) @env0:== 1 ifTrue: [0.0 @env0:negated] ifFalse: [0.0]].
-		^ result].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other __index__)].
-	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
+	ZeroDivisionError."
+
+	| d |
+	d := nil.
+	(other isKindOf: Number) ifTrue: [d := other]
+	ifFalse: [
+		((other @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+	d == nil ifTrue: [
+		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: d) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
+	^ (self ___pyDivModPair___: d) @env0:at: 2
 %
 
 category: 'Grail-Arithmetic'

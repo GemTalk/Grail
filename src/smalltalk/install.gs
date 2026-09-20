@@ -956,6 +956,7 @@ run
 	at: #'ImportErrorTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
+	at: #'IndexTypeErrorNamesTestCase' put: nil;
 	at: #'ImportlibFileOpenErrorTestCase' put: nil;
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'ImportlibResourcesTestCase' put: nil;
@@ -1154,6 +1155,7 @@ run
 	at: #'ReservedNameClassCellTestCase' put: nil;
 	at: #'ReservedNameLocalClassTestCase' put: nil;
 	at: #'BuiltinProtocolDispatchTestCase' put: nil;
+	at: #'FloatFloorDivModTestCase' put: nil;
 	at: #'ReservedParamDefaultTestCase' put: nil;
 	at: #'ResourceWarningTestCase' put: nil;
 	at: #'ReturnTestCase' put: nil;
@@ -2256,6 +2258,7 @@ input src/smalltalk/PythonTests/HttpClientTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiejarTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/HttpStatusTestCase.gs
+input src/smalltalk/PythonTests/IndexTypeErrorNamesTestCase.gs
 input src/smalltalk/PythonTests/ImportErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
@@ -2470,6 +2473,7 @@ input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
 input src/smalltalk/PythonTests/BuiltinProtocolDispatchTestCase.gs
+input src/smalltalk/PythonTests/FloatFloorDivModTestCase.gs
 input src/smalltalk/PythonTests/ReservedParamDefaultTestCase.gs
 input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
 input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
