@@ -4553,6 +4553,29 @@ ___emitIRSuperZeroOn___: aBuilder
 			if: cond
 			then: [
 				| guardName |
+				"CPython'S PRECONDITION 1, and it is a COMPILE-TIME fact: the
+				enclosing def declares no positional parameter, so there is no
+				argument 0 to take the receiver from and no run-time state that
+				could make ``def f(): super()'' work.  The text emits
+				``Super @env1:___noArguments___'' unconditionally here; this arm
+				is its twin, and it has to come FIRST because the proxy below
+				would otherwise answer a working super where CPython raises --
+				which is precisely what FunctionDefAst's `method:noSelfSuper'
+				refusal was standing in for, and what
+				SuperPreconditionErrorsTestCase caught the last time it was
+				widened.
+
+				Inside the shadow probe, not around it: a replacement ``super''
+				is entitled to take the call even where the builtin would have
+				refused it, which is the rule ___printShadowableSuperOn___:arm:
+				records for all four emits."
+				(CallAst functionBeingCompiled notNil
+					and: [CallAst functionBeingCompiled ___receiverParamName___ isNil])
+					ifTrue: [
+						aBuilder add: (aBuilder
+							send: #'___noArguments___' to: (aBuilder globalNamed: #Super)
+							with: { } env: 1)]
+					ifFalse: [
 				"CPython's precondition 2: a ``del'' of the enclosing def's first
 				 parameter makes super() raise rather than bind.  Only a def
 				 NESTED in a method can be in that state -- a method's own first
@@ -4574,7 +4597,7 @@ ___emitIRSuperZeroOn___: aBuilder
 							then: [aBuilder add: (aBuilder
 								send: #'___argZeroDeleted___' to: (aBuilder globalNamed: #Super)
 								with: { } env: 1)]
-							else: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]]]
+							else: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]]]]
 			else: [
 				"A SHADOWED ``super'' is whatever the user bound -- a function, a
 				class, a lambda -- so it is called through the indirect protocol,

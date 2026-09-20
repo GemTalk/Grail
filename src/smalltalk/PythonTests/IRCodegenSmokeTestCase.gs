@@ -416,15 +416,30 @@ testIRPathWasActuallyTaken
 			refusal, so the total does not move.  Measured, not reasoned --
 			which is the rule this number exists to enforce.)
 
+			Cut ``super precondition 1'': 642 -> **643**, and the split says
+			which kind of def moved: top-level `compiled' unchanged at 427,
+			class methods 215 -> 216.  That is a zero-parameter method whose
+			body names ``super'' -- `method:noSelfSuper', which refused the def
+			rather than emit a proxy where CPython raises ``super(): no
+			arguments''.  The emit now spells that arm, so the refusal is gone
+			and the method compiles.
+
+			NOTE FOR WHICHEVER OF THIS AND THE TYPE-ALIAS CUT MERGES SECOND:
+			they pin different numbers because they are measured on different
+			opt-outs.  The type-alias cut retires text_caller's type alias and
+			replaces it with a bare ``super()'', netting zero; this one adds a
+			class method, netting +1 from 642.  Together the answer is 643, and
+			the second merge will fire this assertion to say so.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 642
+			self assert: (stats at: #compiled) = 643
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 642']
+					, ', expected 643']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

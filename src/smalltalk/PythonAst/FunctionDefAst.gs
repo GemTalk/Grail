@@ -4340,8 +4340,14 @@ ___irMethodModeReason___
 		super where CPython raises.  SuperPreconditionErrorsTestCase >>
 		testAZeroParameterMethodIsCallableThroughItsClass pins that message, and
 		caught this exact widening."
-		(self ___irNestedBodyMentions___: #'super' in: body)
-			ifTrue: [^ #'method:noSelfSuper'].
+		"NO LONGER REFUSED.  ___emitIRSuperZeroOn___: now emits CPython's
+		precondition 1 -- ``Super @env1:___noArguments___'', the text's own
+		arm -- when the enclosing def declares no positional parameter, which
+		is a COMPILE-TIME fact.  This refusal was standing in for that
+		missing arm: without it the shape reached the proxy and answered a
+		working super where CPython raises, which is what
+		SuperPreconditionErrorsTestCase >>
+		testAZeroParameterMethodIsCallableThroughItsClass caught."
 		^ self ___irMethodModeTailReason___].
 	"The receiver is the def's FIRST parameter whatever it is called (cut 60):
 	ClassDefAst switches selfParameterName to it per def, the text's
@@ -7087,7 +7093,21 @@ ___irNestedDefReasonUnguarded___: localNames
 
 	A bare mention of the NAME with no call (``callable(super)'') is likewise
 	not a rewrite and is left to the ordinary value path."
-	(self ___irNestedBodyBareSuperCall___: body) ifTrue: [^ #'nestedDef:super'].
+	"A bare ``super()'' in a nested def refuses only when it would need the
+	RUN-TIME machinery.  When this def declares no positional parameter the
+	answer is CPython's precondition 1, which is a COMPILE-TIME fact --
+	``Super @env1:___noArguments___'', the arm ___emitIRSuperZeroOn___: now
+	emits -- so there is nothing left to refuse.  That is the whole of
+	test_super's ``def f(): super()'' (test_obscure_super_errors).
+
+	Narrowed CONSERVATIVELY: a def nested deeper inside this one has its own
+	parameter list and its own answer, and this walk cannot tell whose bare
+	super it found, so the presence of any further def or lambda keeps the
+	refusal."
+	((self ___irNestedBodyBareSuperCall___: body)
+		and: [self allParameterNames isEmpty not
+			or: [self ___irBodyHoldsANestedScope___: body]])
+				ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].
@@ -7993,6 +8013,28 @@ ___irNestedBodyMentions___: aSymbol in: node
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			(self ___irNestedBodyMentions___: aSymbol in: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irBodyHoldsANestedScope___: node
+	"Is there a def or a lambda anywhere under node?  Asked only to keep
+	___irNestedDefReason___'s bare-super narrowing conservative: a deeper
+	scope has its own parameter list, so a bare super found by the walk
+	might belong to it rather than to this def, and the walk does not say
+	which."
+
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irBodyHoldsANestedScope___: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+		ifTrue: [^ true].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irBodyHoldsANestedScope___: (node instVarAt: i)) ifTrue: [^ true]]].
 	^ false
 %
 
