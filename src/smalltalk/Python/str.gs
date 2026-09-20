@@ -569,8 +569,13 @@ __getitem__: index
 
 		Grail matched list, tuple and bytes exactly and dropped the quotes
 		on this one."
+		"PYTHON type name, through ___pyTypeNameForError___: ``index class name''
+		is the GEMSTONE class backing the value, so this message read ``not
+		Unicode7'' for a str key, ``not SmallDouble'' for a float and ``not
+		ByteArray'' for bytes, where CPython says str / float / bytes.  Bytes.gs
+		and Bytearray.gs already named the type properly; these sites did not."
 		TypeError ___signal___: ('string indices must be integers, not '''
-			@env0:, index @env0:class @env0:name @env0:asString @env0:, '''')].
+			@env0:, (index ___pyTypeNameForError___) @env0:, '''')].
 	"Fetch the index via __index__ -- probing only proved it is index-like
 	(test_index.StringTestCase; env-0 #< on the object is an uncatchable DNU)."
 	idx := index ___asIndex___.
