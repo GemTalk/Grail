@@ -287,18 +287,46 @@ grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l   # must equal the worker cou
 grep -l 'Login failed' out/shard_*.out               # must be empty
 ```
 
-Note that the obvious guard `pgrep -f runTestsShard.gs` matches its own wait
-loop's command line; the `topaz.*` prefix is what excludes it. The pattern also
-has to name EVERY run the lock protects, because it is the liveness half of the
-stale-lock test:
+### The budget is EIGHT, and a full run wants eight
 
-```bash
-pgrep -fl 'topaz.*(runTestsShard|run_one_cpython_module)'
-```
+The limit counts the stone's OWN gems. Measured on `gs40` (Community Edition,
+`StnMaxSessions` = 10): `reclaimgcgem` and `symbolgem` hold two slots from the
+moment the stone starts, so **eight** are left for everything else — and
+`GRAIL_TEST_WORKERS` has defaulted to eight since PR #876. A solo, correctly
+serialized run therefore fits with **zero headroom**, and any single extra
+session costs a SHARD its login: an editor's Jasper/MCP session, an
+`install.sh`, a stray `topaz` probe, another worktree's framework deploy.
 
-`run_tests.sh` drives `runTestsShard.gs`, `run_cpython_suite.sh` drives
-`run_one_cpython_module.gs`. Matching only the first is not academic: the lock
-frees itself after 45 minutes when no matching process is alive, and a full
-corpus run has been measured at ~29 min under emulation and ~7-13 min natively
-(one module alone at 4m20s), so a loaded machine can reach that threshold and
-have its lock broken out from under a run that is very much alive.
+So the lock is necessary and not sufficient. `run_tests.sh` now asks the stone
+for its free-slot count immediately before launching shards
+(`tests/scripts/checkSessionBudget.gs`) and refuses rather than launching a run
+it cannot finish; `GRAIL_ALLOW_TIGHT_SESSIONS=1` overrides, and a run made that
+way is explicitly not a gate result.
+
+Read the suite line for what it now says. It reports the shards that ANSWERED,
+not the ones requested, and an incomplete run says `main suite INCOMPLETE` in
+the same breath as its total — because the old line read `sharded: 8 of x8`
+whatever happened, and on 2026-09-20 printed `8 of x8: 3408 run, 3408 passed, 0
+failed, 0 errors` directly below four `NO RESULT` lines.
+
+### The lock's liveness is the holder's PID
+
+It used to be a pgrep over `topaz.*(runTestsShard|run_one_cpython_module)` plus
+a 45-minute age threshold. That is wrong in both directions and the permissive
+direction corrupts a run silently:
+
+* `run_tests.sh` matches that pattern only during its SHARD phase. It opens a
+  `deployFrameworks` session before the shards and ~14 more sequential topaz
+  sessions after them (`cpython-embedded`, `gemdb`, `slot-compaction`,
+  `flask-deploy`, …), none of which name `runTestsShard`. Observed live on
+  2026-09-20: lock held, `run_tests.sh` alive, pattern matching **zero**
+  processes. Full runs have been measured at 4531s, well past the threshold.
+* the pattern was GLOBAL, not per-lock, so an unrelated worktree's shards
+  vouched for a lock they had nothing to do with.
+* conversely, a holder killed one second ago kept its lock for 45 minutes.
+
+`with_stone_lock.sh` now asks whether the PID it already records in
+`$LOCK/owner` is alive (confirming the command line, against PID reuse). That
+covers every phase, needs no pattern maintenance as phases are added, and
+reclaims a dead holder's lock in seconds. `tests/scripts/run_stone_lock_test.sh`
+guards it and needs no stone.
