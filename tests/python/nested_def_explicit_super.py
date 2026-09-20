@@ -127,6 +127,57 @@ def super_named_but_not_called():
 record('super_named_but_not_called', super_named_but_not_called)
 
 
+class NestedBareSuperPreconditions:
+    """The three ways a bare ``super()'' in a NESTED def can land, which is what
+    the def-level refusal was standing in front of.
+
+    The emit has had the arg[0] guard since the nested-def cut; what refused was
+    FunctionDefAst, one level up, for any nested bare super at all.  These pin
+    that each of the three reaches the arm CPython reaches."""
+
+    def nested_arg_deleted(self):
+        # Precondition 2: argument 0 exists and has been deleted.  The guard
+        # reads the INNER def's temp while the proxy would bind the OUTER
+        # receiver -- which looks inconsistent and is what CPython does.
+        def inner(x):
+            del x
+            super()
+        try:
+            inner(None)
+            return 'no error'
+        except RuntimeError as e:
+            return str(e)
+
+    def nested_no_args(self):
+        # Precondition 1, from inside a method rather than at module scope.
+        def inner():
+            super()
+        try:
+            inner()
+            return 'no error'
+        except RuntimeError as e:
+            return str(e)
+
+    def nested_arg_present(self):
+        # NOT an error arm: the nested def closes over the METHOD's class cell,
+        # so super() is built from (Holder, arg[0]) and the supercheck is what
+        # rejects it.  The message names both, which is the cheapest proof that
+        # the outer class and the inner argument are the two things being
+        # paired.
+        def inner(x):
+            return super()
+        try:
+            return type(inner(1)).__name__
+        except BaseException as e:
+            return type(e).__name__
+
+
+_nbsp = NestedBareSuperPreconditions()
+record('nested_super_arg_deleted', _nbsp.nested_arg_deleted)
+record('nested_super_no_args', _nbsp.nested_no_args)
+record('nested_super_arg_present', _nbsp.nested_arg_present)
+
+
 def a_lambda_with_a_two_arg_super():
     obj = Child()
     return (lambda: super(Child, obj).greet())()
@@ -136,6 +187,9 @@ record('a_lambda_with_a_two_arg_super', a_lambda_with_a_two_arg_super)
 
 
 EXPECTED = {
+    'nested_super_arg_deleted': 'super(): arg[0] deleted',
+    'nested_super_no_args': 'super(): no arguments',
+    'nested_super_arg_present': 'TypeError',
     'two_arg_super_in_a_nested_def': 'base',
     'two_arg_super_on_a_type': 'base-cm',
     'a_method_with_a_nested_two_arg_super': 'base',

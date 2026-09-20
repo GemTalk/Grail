@@ -7105,9 +7105,8 @@ ___irNestedDefReasonUnguarded___: localNames
 	super it found, so the presence of any further def or lambda keeps the
 	refusal."
 	((self ___irNestedBodyBareSuperCall___: body)
-		and: [self allParameterNames isEmpty not
-			or: [self ___irBodyHoldsANestedScope___: body]])
-				ifTrue: [^ #'nestedDef:super'].
+		and: [self ___irBodyHoldsANestedScope___: body])
+			ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].

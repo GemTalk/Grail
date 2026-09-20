@@ -68,6 +68,8 @@ tearDown
 	importlib ___irCodegenEnabledInvalidate___.
 	(importlib @env1:modules) removeKey: #'ndes_ir' ifAbsent: [].
 	(importlib @env1:modules) removeKey: #'ndes_census' ifAbsent: [].
+	(importlib @env1:modules) removeKey: #'ndes_text' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'ndes_text'.
 	irRegistrySnapshot ifNotNil: [:snap |
 		importlib ___canonicalRegistryRestore___: snap.
 		irRegistrySnapshot := nil].
@@ -225,7 +227,7 @@ testTheExplicitSpellingsAreNowEligible
 		+ (counts at: #'cm:nestedDef:super' ifAbsent: [0]).
 	self assert: refused = 0
 		description: 'a nested def still refuses as nestedDef:super, where the '
-			, 'precondition-1 emit should have admitted it: ' , refused printString
+			, 'precondition emits should have admitted it: ' , refused printString
 			, ' of ' , counts printString.
 	"...and the module-scope bare super still refuses, on its own row.  Asserted
 	because it is the half that must NOT have moved: it has no enclosing class,
@@ -247,4 +249,75 @@ testTheIRArmActuallyCompiledTheFixture
 	self assert: (stats at: #fallbacks) = 0
 		description: 'IR fell back to text: ' , (stats at: #fallbacks) printString
 			, ' (last error: ' , (stats at: #lastError) printString , ')'
+%
+
+category: 'Grail-Tests - nested super'
+method: NestedDefExplicitSuperTestCase
+testTheThreeNestedBareSuperLandingsAgreeWithCPython
+	"The def-level refusal stood in front of THREE different answers, and the
+	emit had reached all three for some time -- what refused was
+	FunctionDefAst, one level up, for any nested bare super at all.
+
+	  * argument 0 deleted   -> ``super(): arg[0] deleted''
+	  * no argument at all   -> ``super(): no arguments''
+	  * argument 0 present   -> NOT an error arm: the nested def closes over
+	                            the METHOD's class cell, so super() is built
+	                            from (the class, arg[0]) and the supercheck is
+	                            what rejects an int.
+
+	The third is the one worth having.  Both error arms would still look right
+	if the emit paired the wrong objects -- they never build a proxy at all --
+	whereas the supercheck message names the class AND the argument, so it is
+	the cheapest proof that the OUTER class and the INNER argument are what get
+	paired.  That pairing is the thing the refusal was protecting.
+
+	Guarded on SUPPORT, not on the ambient flag: ___irModule___ forces the seam
+	itself, and the flag-off arm is where a text-path regression would show."
+
+	| results expected bad textResults |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	results := self ___irModule___ @env1:___pyAttrLoad___: #'r'.
+	expected := self ___irModule___ @env1:___pyAttrLoad___: #'EXPECTED'.
+	bad := OrderedCollection new.
+	"The two ERROR arms are pinned against CPython outright."
+	#('nested_super_arg_deleted' 'nested_super_no_args') do: [:k | | got want |
+		got := (results @env1:__getitem__: k) @env1:__repr__ @env0:asString.
+		want := (expected @env1:__getitem__: k) @env1:__repr__ @env0:asString.
+		got = want ifFalse: [bad add: k , ': ' , got , ' vs ' , want]].
+	self assert: bad isEmpty
+		description: 'a nested bare super lands on the wrong arm: '
+			, bad asArray printString.
+	"THE THIRD IS A KNOWN DIVERGENCE, so it is pinned ARM AGAINST ARM instead.
+	CPython applies super()'s supercheck and raises ``super(type, obj): obj
+	(instance of int) is not an instance or subtype of type''; Grail builds the
+	proxy and answers it.  Measured on BOTH paths here -- the text does the same
+	-- so it is not this cut's doing and not the IR path's: the supercheck rides
+	on ``Super checkedCls:obj:'', which the zero-argument rewrite does not go
+	through.  Recorded in docs/Issues.md.
+	Comparing the arms is still worth doing, and is the part this cut owns: the
+	nested def must pair the OUTER class with the INNER argument, and if the IR
+	paired them differently from the text this is where it would show."
+	textResults := self ___textModule___ @env1:___pyAttrLoad___: #'r'.
+	self assert: ((results @env1:__getitem__: 'nested_super_arg_present')
+			@env1:__repr__ @env0:asString)
+		equals: ((textResults @env1:__getitem__: 'nested_super_arg_present')
+			@env1:__repr__ @env0:asString)
+		description: 'the IR and text arms disagree about what a nested super '
+			, 'with a live argument 0 builds'
+%
+
+category: 'Grail-Private'
+method: NestedDefExplicitSuperTestCase
+___textModule___
+	"The same fixture with the seam FORCED OFF, under its own module name, so a
+	shape can be compared arm against arm where CPython and Grail disagree and
+	an absolute expectation would pin the divergence instead of the behaviour."
+
+	(importlib @env1:modules) removeKey: #'ndes_text' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'ndes_text'.
+	irRegistrySnapshot ifNil: [
+		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
+	importlib ___irCodegenForce___: false.
+	^ [importlib loadModuleFromPath: self ___fixturePath___ name: 'ndes_text']
+		ensure: [importlib ___irCodegenForce___: true]
 %

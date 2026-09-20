@@ -5832,3 +5832,35 @@ loop. Only a parameter literally named `self` in a nested `def` inside a method.
 Grail already has test cases for `self` name collisions elsewhere
 (`SelfNameCollisionTestCase`, `SelfReboundInMethodTestCase`), so this is a gap
 in that family rather than a new subject.
+
+## A bare `super()` in a nested def skips the supercheck
+
+CPython builds `super()` from the enclosing class and argument 0 and then
+**checks** that argument 0 is an instance of that class, raising
+
+    TypeError: super(type, obj): obj (instance of int) is not an instance or
+    subtype of type (Holder)
+
+Grail builds the proxy and answers it. Measured 2026-09-20 on both paths:
+
+```python
+class Holder:
+    def m(self):
+        def inner(x):
+            return super()          # closes over Holder's class cell
+        return type(inner(1)).__name__
+
+Holder().m()        # CPython: TypeError      Grail: 'super'
+```
+
+The cause is structural rather than an oversight: the supercheck rides on
+`Super checkedCls:obj:`, which is what the EXPLICIT two-argument rewrite emits.
+The zero-argument rewrite builds its proxy directly and never goes through it,
+so the check has nowhere to happen. The text path and the IR path do the same
+thing, so this is not an IR gap and closing it would change both.
+
+Pinned arm-against-arm by
+`NestedDefExplicitSuperTestCase>>testTheThreeNestedBareSuperLandingsAgreeWithCPython`,
+which asserts the two ERROR arms against CPython outright and compares this one
+between the arms, so the divergence cannot silently widen into a disagreement
+between the two paths.
