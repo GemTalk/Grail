@@ -219,6 +219,30 @@ ___grailSlotIsTombstone___: anEntry
 
 category: 'Grail-Slots'
 classmethod: object
+___grailSlotOwner___: aSym
+	"The class HIGHEST in this chain whose slot layout holds aSym -- the one a
+	drop or a rename of that name has to be run on -- or nil when no layout
+	holds it.
+
+	A layout is copied downwards: a subclass continues its parent's numbering,
+	so the parent's position for aSym is the subclass's position for aSym too.
+	Freeing or relabelling it on the subclass alone would leave ONE position
+	with two names, the parent still answering the old one through its own
+	inherited pair, which is silently wrong data rather than an error."
+
+	| owner sup |
+	owner := nil.
+	sup := self.
+	[sup ~~ nil] @env0:whileTrue: [
+		((sup @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) ~~ nil
+			@env0:and: [(sup @env0:perform: #'___pySlotLayout___' env: 1) @env0:includes: aSym])
+				ifTrue: [owner := sup].
+		sup := sup @env0:superclass].
+	^ owner
+%
+
+category: 'Grail-Slots'
+classmethod: object
 ___pyDeclaredSlotInChain___: aSym
 	"Whether aSym is in the __slots__ CURRENTLY declared by this class or an
 	ancestor (the ___pyDeclaredSlotNames___ tables ClassDefAst emits).  The
@@ -323,6 +347,11 @@ ___grailDropSlot___: aName tree: tree instances: byClass batch: batchSize
 	((effLayoutOf @env0:value: self) @env0:includes: sym) ifFalse: [
 		^ self ___grailSchemaRefuse___:
 			'no slot named ' @env0:, sym @env0:asString @env0:, ' on ' @env0:, self @env0:name @env0:asString].
+	(self ___grailSlotOwner___: sym) ~~ self ifTrue: [
+		^ self ___grailSchemaRefuse___:
+			'slot ' @env0:, sym @env0:asString @env0:, ' is inherited from '
+				@env0:, (self ___grailSlotOwner___: sym) @env0:name @env0:asString
+				@env0:, ': run the drop there, so the whole subtree frees the position at once'].
 	tree @env0:do: [:c |
 		(((c @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
 				@env0:and: [c ___pyOwnInferredSlots___ @env0:includes: sym])
@@ -382,10 +411,142 @@ ___grailSchemaRefuse___: aMessage
 	Falls back to ImproperOperation when ValueError is not reachable -- a
 	bootstrap session -- so a refusal is never silent."
 
+	^ self ___grailSchemaRefuse___: aMessage class: #'ValueError'
+%
+category: 'Grail-Slots'
+classmethod: object
+___grailSchemaRefuse___: aMessage class: aClassName
+	"___grailSchemaRefuse___: with the Python exception class named.
+	ValueError for a programmatic gemdb.schema call; ImportError for a
+	refusal raised while a class body is being REBUILT, where the caller is
+	an import statement and an ImportError is the diagnostic that names the
+	module the developer has to edit."
+
 	| errCls |
-	errCls := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'ValueError'.
+	errCls := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: aClassName.
 	errCls == nil ifTrue: [^ ImproperOperation @env0:signal: aMessage].
 	^ errCls ___signal___: aMessage
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailImportRenameSkipSet___
+	"The classes whose ``does a body still assign this?'' tables must NOT be
+	consulted during an import-time relabel: this class, and every class of the
+	module whose body is running.
+
+	Their ___pyOwnInferredSlots___ and ___pyDeclaredSlotNames___ still describe
+	the PREVIOUS body at that moment -- the class statements that refresh them
+	are further down the same file and have not run yet -- so reading them
+	refuses exactly the rename the new source just asked for.  A subclass
+	OUTSIDE the module is answered honestly and still refuses, which is the
+	case the check exists for: nothing in this import is going to rewrite it."
+
+	| set modName prefix reg |
+	set := IdentitySet @env0:new.
+	set @env0:add: self.
+	modName := importlib @env0:___initializingModuleName___.
+	modName == nil ifTrue: [^ set].
+	prefix := modName @env0:asString @env0:, '.'.
+	reg := importlib @env0:___canonicalClassRegistry___.
+	reg @env0:keysAndValuesDo: [:k :v | | ks |
+		ks := k @env0:asString.
+		((ks @env0:size @env0:> prefix @env0:size)
+			@env0:and: [(ks @env0:copyFrom: 1 to: prefix @env0:size) @env0:= prefix])
+				ifTrue: [(v @env0:isKindOf: Behavior) ifTrue: [set @env0:add: v]]].
+	^ set
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailApplyDeclaredRenames___: renamedPairs assigning: assignedNames
+	"Apply this class body's ``__renamed__ = {''old'': ''new''}'' declaration to
+	the layout, BEFORE the rebuild merges the new names into it
+	(___grailMergedSlotLayout___:).  The order is the whole point: the relabel
+	has to reach the old position first, or the merge appends the new name
+	beside it and the values sit under a name nothing reads any more.
+	docs/Schema_Evolution.md, docs/Schema_Evolution_Design.md.
+
+	renamedPairs is an Array of { old . new } pairs in source order, as
+	ClassDefAst emits it; assignedNames is what the NEW body assigns and
+	declares.  Each pair is applied on its own:
+
+	  - no layout anywhere in the chain holds old -- a first build, or a
+	    repository that never saw the name -> no-op.  So the declaration can
+	    stay in the source and one file deploys everywhere;
+	  - old is not a live name in the layout -> no-op.  A HOLE ``~old'' is
+	    left alone: a drop already took its values, so relabelling would only
+	    carry a dead name forward, and compaction is what frees it;
+	  - the body still ASSIGNS old -> ImportError.  The declaration and the
+	    assignment contradict each other and only the author can say which
+	    was meant;
+	  - new already has a position somewhere in the subtree -> ImportError
+	    naming both.  That is the MOVE case: values exist under both names,
+	    so every instance has to be migrated -- a repository scan that must
+	    own its transaction, which is gemdb.schema.rename(Cls, old, new) and
+	    can never be an import side effect;
+	  - otherwise RELABEL the position in place, here and in every subclass
+	    layout that holds it.  No instance is touched and no scan is made:
+	    the values are already at that position and stay there, under the new
+	    name, the moment the import returns."
+
+	| tree |
+	(renamedPairs == nil @env0:or: [renamedPairs @env0:isEmpty]) ifTrue: [^ self].
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+		ifTrue: [^ self].
+	renamedPairs @env0:do: [:pair | | old new layout |
+		old := (pair @env0:at: 1) @env0:asSymbol.
+		new := (pair @env0:at: 2) @env0:asSymbol.
+		layout := self @env0:perform: #'___pySlotLayout___' env: 1.
+		(layout @env0:includes: old) ifTrue: [
+			old == new ifTrue: [
+				^ self ___grailSchemaRefuse___:
+					'__renamed__ on ' @env0:, self @env0:name @env0:asString
+						@env0:, ' maps ' @env0:, old @env0:asString @env0:, ' to itself'
+					class: #'ImportError'].
+			(assignedNames @env0:includes: old) ifTrue: [
+				^ self ___grailSchemaRefuse___:
+					'__renamed__ on ' @env0:, self @env0:name @env0:asString @env0:, ' renames '
+						@env0:, old @env0:asString @env0:, ' to ' @env0:, new @env0:asString
+						@env0:, ', but the body still assigns ' @env0:, old @env0:asString
+						@env0:, ': remove the assignment or the declaration'
+					class: #'ImportError'].
+			(self ___grailSlotOwner___: old) ~~ self ifTrue: [
+				^ self ___grailSchemaRefuse___:
+					'__renamed__ on ' @env0:, self @env0:name @env0:asString @env0:, ': ' @env0:, old @env0:asString
+						@env0:, ' is inherited from ' @env0:, (self ___grailSlotOwner___: old) @env0:name @env0:asString
+						@env0:, ', where the position was handed out; declare the rename there instead'
+					class: #'ImportError'].
+			tree := self ___grailSlotSubtree___.
+			(tree @env0:anySatisfy: [:c |
+				(c @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) ~~ nil
+					@env0:and: [(c @env0:perform: #'___pySlotLayout___' env: 1) @env0:includes: new]]) ifTrue: [
+				^ self ___grailSchemaRefuse___:
+					'__renamed__ on ' @env0:, self @env0:name @env0:asString @env0:, ': ' @env0:, old @env0:asString
+						@env0:, ' and ' @env0:, new @env0:asString
+						@env0:, ' both have positions, so the values have to be MOVED instance by instance; run gemdb.schema.rename under a clean transaction and then drop the declaration'
+					class: #'ImportError'].
+			self ___grailRenameSlot___: old to: new tree: tree instances: nil
+				ignoringAssignmentsIn: self ___grailImportRenameSkipSet___]].
+	^ self
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailInstallInferredSlots___: inferredNames declared: declaredNames properties: propertyNames indexed: wantIndexed renamed: renamedPairs
+	"The installer with this body's ``__renamed__'' declaration -- emitted by
+	ClassDefAst only when the class declares one, so an ordinary class body
+	still generates the four-keyword line.  The relabel runs FIRST, so the
+	merge below finds the new name already in the layout, at the old name's
+	position, and binds to the values that are there."
+
+	| assigned |
+	assigned := OrderedCollection @env0:new.
+	declaredNames @env0:do: [:n | assigned @env0:add: n @env0:asSymbol].
+	inferredNames @env0:do: [:n | assigned @env0:add: n @env0:asSymbol].
+	self ___grailApplyDeclaredRenames___: renamedPairs assigning: assigned.
+	^ self ___grailInstallInferredSlots___: inferredNames declared: declaredNames
+		properties: propertyNames indexed: wantIndexed
 %
 
 category: 'Grail-Slots'
@@ -591,9 +752,26 @@ ___grailInstancesOf___: tree inMemoryOnly: memOnly
 category: 'Grail-Slots'
 classmethod: object
 ___grailRenameSlot___: old to: new tree: tree instances: byClassOrNil
+	"The rename proper, checking every class in the tree for a body that still
+	assigns the old name -- see ___grailRenameSlot___:to:tree:instances:ignoringAssignmentsIn:."
+
+	^ self ___grailRenameSlot___: old to: new tree: tree instances: byClassOrNil
+		ignoringAssignmentsIn: nil
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailRenameSlot___: old to: new tree: tree instances: byClassOrNil ignoringAssignmentsIn: skipSetOrNil
 	"The rename proper -- see ___grailRenameSlot___:_:.  byClassOrNil is nil
 	for a RELABEL (new is in no layout) and the instances per class for a
-	MOVE.  Every refusal is checked before anything is written."
+	MOVE.  Every refusal is checked before anything is written.
+
+	skipSetOrNil is the set of classes whose ``still assigns old'' tables are
+	NOT consulted -- the class being rebuilt and its module's other classes,
+	when the rename comes from a declared ``__renamed__''
+	(___grailImportRenameSkipSet___).  The import path asks the INCOMING
+	declared and inferred names instead, which is the same question put to the
+	right source."
 
 	| lf effLayoutOf classesDone moved hookInChainOf setattrHookInChainOf |
 	lf := Character @env0:lf @env0:asString.
@@ -605,11 +783,17 @@ ___grailRenameSlot___: old to: new tree: tree instances: byClassOrNil
 	((effLayoutOf @env0:value: self) @env0:includes: old) ifFalse: [
 		^ self ___grailSchemaRefuse___:
 			'no slot named ' @env0:, old @env0:asString @env0:, ' on ' @env0:, self @env0:name @env0:asString].
+	(self ___grailSlotOwner___: old) ~~ self ifTrue: [
+		^ self ___grailSchemaRefuse___:
+			'slot ' @env0:, old @env0:asString @env0:, ' is inherited from '
+				@env0:, (self ___grailSlotOwner___: old) @env0:name @env0:asString
+				@env0:, ': rename it there, so the whole subtree changes the name at once'].
 	tree @env0:do: [:c |
-		(((c @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
-				@env0:and: [c ___pyOwnInferredSlots___ @env0:includes: old])
-			@env0:or: [(c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
-				@env0:and: [c ___pyDeclaredSlotNames___ @env0:includes: old]]) ifTrue: [
+		((skipSetOrNil == nil @env0:or: [(skipSetOrNil @env0:includes: c) @env0:not]) @env0:and: [
+			((c @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
+					@env0:and: [c ___pyOwnInferredSlots___ @env0:includes: old])
+				@env0:or: [(c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+					@env0:and: [c ___pyDeclaredSlotNames___ @env0:includes: old]]]) ifTrue: [
 			^ self ___grailSchemaRefuse___:
 				'slot ' @env0:, old @env0:asString @env0:, ' is still assigned by ' @env0:, c @env0:name @env0:asString
 					@env0:, ': edit the source to assign ' @env0:, new @env0:asString @env0:, ' and re-import first']].

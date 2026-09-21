@@ -1,8 +1,9 @@
 # Schema evolution: decisions and cuts
 
-**Status:** design, 2026-09-20; **cuts 1 and 2 implemented 2026-09-21**
+**Status:** design, 2026-09-20; **cuts 1-3 implemented 2026-09-21**
 (cut 1: survivors, holes, the class-side drop, one home per name, strict
-slots on the current declaration; cut 2: `gemdb.schema`), cuts 3-5 open.
+slots on the current declaration; cut 2: `gemdb.schema`; cut 3: the declared
+`__renamed__`), cuts 4-5 open.
 Follows
 [Schema_Evolution_Review.md](Schema_Evolution_Review.md), whose proposals
 James reviewed the same day; the decisions below supersede that note's
@@ -204,7 +205,44 @@ refused with the owning class named.
 
 ### Cut 3. `__renamed__`
 
-*Tier 2 (ClassDefAst, the merge).*
+*Tier 2 (ClassDefAst, the merge).* **Done 2026-09-21.** Two things to
+record:
+
+* **The module-level `__renamed__` moved to cut 4.** Renaming a CLASS is a
+  class-level change, and cut 4's refusal for a class that disappeared from
+  a body is defined as "not covered by a module-level `__renamed__`" — the
+  two are one mechanism seen from opposite sides, and splitting them would
+  mean shipping a refusal with no way to answer it. Cut 3 is the ATTRIBUTE
+  rename, which is self-contained: the class-body declaration and the
+  relabel it calls.
+* **A drop or a rename of an INHERITED name is now refused** (`object class
+  >> ___grailSlotOwner___`), which cut 2 intended and did not implement: its
+  only check was that the name is in *this* class's effective layout, which
+  an inherited name is. A layout is copied downwards, so relabelling or
+  freeing the position on a subclass alone leaves that one position with two
+  names — the parent still answering the old one through its own pair. That
+  is silently wrong data rather than an error, so it is fixed here for all
+  three entry points, `ValueError` from `gemdb.schema` and `ImportError`
+  from the declaration.
+
+The declaration is a RELABEL only. The MOVE — the new name already has a
+position, so values exist under both — reads every instance in the
+repository and must own its transaction, which an import cannot; it is
+refused with an `ImportError` naming both and `gemdb.schema.rename`. The
+relabel runs BEFORE the merge, or the merge would append the new name beside
+the old one. The classes whose "does a body still assign this?" tables are not
+consulted are the ones belonging to the MODULE being imported:
+`___pyOwnInferredSlots___` still describes the previous body at that moment,
+and for a subclass further down the same file the statement that refreshes it
+has not run yet, so the parent's relabel would refuse on the subclass's stale
+table. The incoming declared and inferred names are asked instead
+(`___grailImportRenameSkipSet___`). A subclass in another module is answered
+honestly and still refuses — nothing in this import is going to rewrite it.
+
+A subclass needs no declaration of its own: `___grailSlotSubtree___` reads
+the persistent canonical class registry, which the module re-run does not
+purge (it drops the session's `__subclasses__` registrations), so the
+parent's declaration reaches every subclass layout.
 
 - `ClassDefAst` recognises a class-body `__renamed__ = {"old": "new", ...}`
   literal (string keys and values only; anything else is a compile error)
@@ -219,16 +257,13 @@ refused with the owning class named.
   itself is relabelled too.
 - The declaration stays in the source; on a repository that never saw `old`
   it is a no-op, so one file deploys everywhere.
-- **Module-level `__renamed__`** (`{"Person": "Customer"}`, or
-  `{"other_mod.Person": "Customer"}` for a move) re-keys the canonical class
-  registry entry to the new name and module and renames the Smalltalk class,
-  keeping its identity. To probe first: what renaming a class whose name is
-  part of generated selectors (the `___pyDefinedClass___` marker, the class
-  attribute holder) actually requires on 4.0.
-- Tests: rename with data (old value readable under the new name at once),
-  rename of a hole (no-op), conflict (ImportError), rename under a subclass
-  that assigns the old name, fresh repository (no-op). `experiments/schema_changes/rename/`
-  v3 becomes the `__renamed__` version and loses its load-bearing assignment.
+- Tests (all landed): relabel in place with committed data, no-op on a fresh
+  class and on a re-import, refusal when the body still assigns the old name,
+  refusal when both names have positions, a hole left alone, the relabel
+  reaching a subclass that declares nothing, an inherited name refused, and a
+  `__renamed__` that is not a dict of string literals as a `SyntaxError`.
+  `experiments/schema_changes/renamed_declaration/` is the scenario; `rename/`
+  keeps the programmatic MOVE, which is the other half of the story.
 
 ### Cut 4. Refuse-at-import for class-level changes, with the migrations
 
@@ -243,6 +278,14 @@ identity reuse when the parent differs. Three refusals, each an
   body**, not covered by a module-level `__renamed__`: "class Person was
   removed; run gemdb.schema.drop_class('mod.Person') or declare
   __renamed__";
+
+**Module-level `__renamed__`** (deferred here from cut 3, since it is the
+answer to that first refusal): `{"Person": "Customer"}`, or
+`{"other_mod.Person": "Customer"}` for a move, re-keys the canonical class
+registry entry to the new name and module and renames the Smalltalk class,
+keeping its identity. To probe first: what renaming a class whose name is
+part of generated selectors (the `___pyDefinedClass___` marker, the class
+attribute holder) actually requires on 4.0.
 - **a class whose bases changed**: "class Customer changed its bases; run
   gemdb.schema.rebase('mod.Customer')";
 - a `__renamed__` target that already exists.

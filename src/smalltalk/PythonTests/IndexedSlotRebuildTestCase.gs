@@ -559,3 +559,263 @@ testDropRefusesAnAssignedNameAndClearsAnUnassignedOne
 	inst := c3 @env1:___pyCallValue___: { } kw: nil.
 	self assert: (inst at: 1) equals: 11
 %
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredRenameRelabelsInPlace
+	"``__renamed__ = {'x': 'a'}'' next to the edit that starts assigning a: the
+	position keeps its value and changes its name, so the instance built under
+	the old body answers the new name the moment the import returns.  No
+	instance is written and nothing is appended -- the layout has the same
+	size it had (docs/Schema_Evolution.md)."
+	| mod c inst mod2 c2 vars |
+	mod := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 10
+        self.y = 20
+'.
+	c := mod @env1:C.
+	inst := c @env1:___pyCallValue___: { } kw: nil.
+	self assert: (self layoutOf: c) equals: #(#x #y).
+	mod2 := self loadRevision: 'class C:
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.a = 10
+        self.y = 20
+'.
+	c2 := mod2 @env1:C.
+	self assert: c2 == c.
+	self assert: (self layoutOf: c2) equals: #(#a #y)
+		description: 'relabelled in place, not appended'.
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 10
+		description: 'the old value, under the new name, unmoved'.
+	self should: [inst @env1:___pyAttrLoad___: #x] raise: AttributeError.
+	self assert: (inst @env1:___pySlotIndexFor___: #a) equals: -1.
+	self assert: (inst @env1:___pySlotIndexFor___: #x) equals: 0.
+	self assert: (c2 whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil
+		description: 'the old pair is gone, so nothing answers the freed name'.
+	vars := inst @env1:___pyAttrLoad___: #'__dict__'.
+	self assert: (vars @env1:__contains__: 'a').
+	self deny: (vars @env1:__contains__: 'x')
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredRenameIsANoOpWithoutTheOldName
+	"The declaration is idempotent, which is what lets one source file deploy
+	to a repository that has already been migrated and to a brand-new one: a
+	FIRST build has no layout to relabel, and a re-import finds no x."
+	| mod c mod2 |
+	mod := self loadRevision: 'class C:
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.a = 10
+'.
+	c := mod @env1:C.
+	self assert: (self layoutOf: c) equals: #(#a) description: 'a first build'.
+	mod2 := self loadRevision: 'class C:
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.a = 10
+'.
+	self assert: (self layoutOf: mod2 @env1:C) equals: #(#a)
+		description: 'and re-importing the same file changes nothing'
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredRenameRefusesWhenTheBodyStillAssignsTheOldName
+	"Declaring the rename while still assigning x contradicts itself: the
+	import would relabel the position and the very next __init__ would create
+	x again beside it.  Only the author can say which was meant."
+	| mod |
+	mod := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 10
+'.
+	mod @env1:C.
+	self should: [self loadRevision: 'class C:
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.x = 10
+        self.a = 11
+']
+		raise: ImportError
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredRenameRefusesWhenBothNamesHaveAPosition
+	"The MOVE case: the code that assigns a shipped first, so both names hold
+	positions and both may hold values.  That migration reads every instance
+	in the repository and must own its transaction, so it is
+	gemdb.schema.rename and never an import side effect."
+	| mod |
+	mod := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 10
+        self.a = 11
+'.
+	mod @env1:C.
+	self should: [self loadRevision: 'class C:
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.a = 11
+']
+		raise: ImportError
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredRenameLeavesAHoleAlone
+	"A hole is a position an explicit drop already emptied.  Relabelling it
+	would carry a dead name forward for no one; compaction is what frees it."
+	| mod c mod2 mod3 |
+	mod := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 10
+        self.y = 20
+'.
+	c := mod @env1:C.
+	c @env1:___pyCallValue___: { } kw: nil.
+	"A drop needs the body to have stopped assigning the name first."
+	mod2 := self loadRevision: 'class C:
+    def __init__(self):
+        self.y = 20
+'.
+	c := mod2 @env1:C.
+	c @env1:___grailDropSlotSessionOnly___: #x.
+	self assert: (self layoutOf: c) equals: #(#'~x' #y).
+	mod3 := self loadRevision: 'class C:
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.a = 10
+        self.y = 20
+'.
+	self assert: (self layoutOf: mod3 @env1:C) equals: #(#'~x' #y #a)
+		description: 'the hole is untouched and a takes a position of its own'
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredRenameReachesASubclass
+	"A subclass continues its parent's numbering, so the relabel has to reach
+	its layout too or position 1 would be called x in B and a in A.  Only A
+	declares the rename: B is found through the persistent canonical class
+	registry, which the module re-run does NOT purge (it drops the session's
+	__subclasses__ registrations), so the parent's declaration is enough."
+	| mod b inst mod2 b2 |
+	mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = 10
+
+class B(A):
+    def __init__(self):
+        self.x = 10
+        self.b = 2
+'.
+	b := mod @env1:B.
+	inst := b @env1:___pyCallValue___: { } kw: nil.
+	self assert: (self layoutOf: b) equals: #(#x #b).
+	mod2 := self loadRevision: 'class A:
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.a = 10
+
+class B(A):
+    def __init__(self):
+        self.a = 10
+        self.b = 2
+'.
+	b2 := mod2 @env1:B.
+	self assert: (self layoutOf: mod2 @env1:A) equals: #(#a).
+	self assert: (self layoutOf: b2) equals: #(#a #b)
+		description: 'the subclass keeps its own numbering under the new name'.
+	self assert: (b2 whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil.
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 10.
+	self assert: (inst @env1:___pyAttrLoad___: #b) equals: 2
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testRenamedDeclarationMustBeStringLiterals
+	"The declaration's whole job is to keep stored data reachable, so a shape
+	Grail cannot read is a SyntaxError rather than a silent skip -- unlike
+	__slots__, where an unreadable value costs an optimisation, not data."
+	self should: [self loadRevision: 'class C:
+    __renamed__ = ("x", "a")
+
+    def __init__(self):
+        self.a = 10
+']
+		raise: SyntaxError.
+	self should: [self loadRevision: 'class C:
+    __renamed__ = {"x": 3}
+
+    def __init__(self):
+        self.a = 10
+']
+		raise: SyntaxError
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredRenameRefusesAnInheritedName
+	"B inherits x's position from A.  Relabelling it on B alone would leave one
+	position with two names -- x through A's own pair, a through B's -- so the
+	declaration has to go on the class that handed the position out."
+	| mod |
+	mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = 10
+
+class B(A):
+    def __init__(self):
+        self.x = 10
+        self.b = 2
+'.
+	mod @env1:B.
+	self should: [self loadRevision: 'class A:
+    def __init__(self):
+        self.x = 10
+
+class B(A):
+    __renamed__ = {"x": "a"}
+
+    def __init__(self):
+        self.a = 10
+        self.b = 2
+']
+		raise: ImportError
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDropAndRenameRefuseAnInheritedName
+	"The same rule for the two programmatic commands, as a ValueError."
+	| mod a b |
+	mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = 10
+
+class B(A):
+    def __init__(self):
+        self.x = 10
+        self.b = 2
+'.
+	a := mod @env1:A.
+	b := mod @env1:B.
+	b @env1:___pyCallValue___: { } kw: nil.
+	self assert: (self layoutOf: b) equals: #(#x #b).
+	self should: [b @env1:___grailDropSlotSessionOnly___: #x] raise: ValueError.
+	self should: [b @env1:___grailRenameSlotSessionOnly___: #x _: #a] raise: ValueError.
+	self assert: (self layoutOf: b) equals: #(#x #b) description: 'nothing changed'.
+	self assert: (self layoutOf: a) equals: #(#x)
+%

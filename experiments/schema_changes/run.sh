@@ -21,7 +21,7 @@ cd "$HERE/../.."
 ID=${RUN_ID:-$(date +%H%M%S)}
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/grail-schema-XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
-ALL="remove_and_readd compact rename move_in_hierarchy refactor_helper uncommitted_rebuild dual_home"
+ALL="remove_and_readd compact rename renamed_declaration move_in_hierarchy refactor_helper uncommitted_rebuild dual_home"
 status=0
 for scen in ${@:-$ALL}; do
   for v in v1 v2 v3 v4; do

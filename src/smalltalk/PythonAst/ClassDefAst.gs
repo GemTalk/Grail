@@ -103,7 +103,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet mangledSlotNames savedBackingInstVars
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
-	  slotPropertyNames accessorInferredNames accessorPairsWanted
+	  slotPropertyNames accessorInferredNames accessorPairsWanted renamedPairsOrdered
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
@@ -1958,12 +1958,14 @@ printSmalltalkRuntimeOn: aStream
 	ownership questions depend on.  Also emitted when this class infers
 	nothing but declares properties or an attribute hook, for the forwarder
 	cases."
+	renamedPairsOrdered := self renamedNamePairs.
 	(slotNamesOrdered isEmpty not
+		or: [renamedPairsOrdered isEmpty not
 		or: [accessorPairsWanted
 		and: [accessorInferredNames isEmpty not
 			or: [slotPropertyNames isEmpty not
 			or: [self instanceMethodDefs anySatisfy: [:def |
-				#('__setattr__' '__getattribute__') includes: def name asString]]]]]) ifTrue: [
+				#('__setattr__' '__getattribute__') includes: def name asString]]]]]]) ifTrue: [
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailInstallInferredSlots___: '.
 		self printSymbolArray: (accessorPairsWanted ifTrue: [accessorInferredNames] ifFalse: [#()]) on: aStream.
@@ -1971,7 +1973,13 @@ printSmalltalkRuntimeOn: aStream
 		self printSymbolArray: slotNamesOrdered on: aStream.
 		aStream nextPutAll: ' properties: '.
 		self printSymbolArray: (accessorPairsWanted ifTrue: [slotPropertyNames] ifFalse: [#()]) on: aStream.
-		aStream nextPutAll: ' indexed: '; nextPutAll: (inferredSlotNames isEmpty not) printString; nextPutAll: '.'; lf].
+		aStream nextPutAll: ' indexed: '; nextPutAll: (inferredSlotNames isEmpty not) printString.
+		"The fifth keyword only when the body declares __renamed__, so an
+		ordinary class body generates byte-identical source to before."
+		renamedPairsOrdered isEmpty ifFalse: [
+			aStream nextPutAll: ' renamed: '.
+			self printSymbolPairArray: renamedPairsOrdered on: aStream].
+		aStream nextPutAll: '.'; lf].
 
 	"Read accessors for the class's METHODS and class-body DATA attributes
 	(GRAIL_ATTR_ACCESSORS, stage 3): ``c.foo'' / ``c.MAX'' from anywhere
@@ -2766,6 +2774,18 @@ printSymbolArray: names on: aStream
 
 category: 'Grail-code generation'
 method: ClassDefAst
+printSymbolPairArray: pairs on: aStream
+	"Emit a literal array of two-element symbol arrays, #( #( old new ) ... ),
+	the shape object class >> ___grailApplyDeclaredRenames___:assigning: reads
+	a __renamed__ declaration in."
+
+	aStream nextPutAll: '#('.
+	pairs do: [:p | aStream space. self printSymbolArray: p on: aStream].
+	aStream nextPutAll: ' )'.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 ___redirectUnarySelectorIn: sourceString from: oldName to: newName
 	"Rewrite the leading (unary) selector of a generated method source from
 	oldName to newName, keeping the body verbatim.  Used to move a property
@@ -3484,6 +3504,73 @@ slotsValueAst
 				ifTrue: [result := stmt value].
 	].
 	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+renamedValueAst
+	"Return the value-expression AST of the class body's ``__renamed__''
+	assignment -- plain or annotated -- or nil when the class declares none.
+	A later assignment wins, as slotsValueAst has it for __slots__."
+
+	| result |
+	result := nil.
+	body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [stmt targets size = 1
+			and: [(stmt targets first isKindOf: NameAst)
+			and: [stmt targets first id asString = '__renamed__']]])
+				ifTrue: [result := stmt value].
+		((stmt isKindOf: AnnAssignAst)
+			and: [(stmt target isKindOf: NameAst)
+			and: [stmt target id asString = '__renamed__'
+			and: [stmt value notNil]]])
+				ifTrue: [result := stmt value].
+	].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+renamedNamePairs
+	"Python ``__renamed__ = {'old': 'new', ...}'', Grail's declaration that a
+	STORED attribute changed its name: an ordered collection of
+	{ oldSymbol . newSymbol } pairs in source order, empty when the class
+	declares none.  docs/Schema_Evolution.md.
+
+	Only a dict DISPLAY of string literals is accepted.  A computed dict, a
+	non-string key or value, a ``**'' unpacking -- each is a SyntaxError rather
+	than a silent skip, because this declaration's whole job is to keep stored
+	data reachable: a __renamed__ Grail quietly ignored would strand the values
+	it was written to carry.  (__slots__ is lenient about the same shapes, and
+	can afford to be: a __slots__ Grail cannot read costs an optimisation, not
+	data.)
+
+	Entries are private-name mangled exactly as __slots__ entries are, so
+	``__renamed__ = {'__x': '__y'}'' in class C names _C__x and _C__y, which is
+	what the body's own ``self.__x'' compiled to."
+
+	| valueAst pairs badShape |
+	valueAst := self renamedValueAst.
+	valueAst ifNil: [^ OrderedCollection new].
+	badShape := [:what |
+		SyntaxError @env1:___signal___:
+			'__renamed__ must be a dict of string literals, as in ',
+			'__renamed__ = {''phone'': ''phones''} (', what, ')'].
+	(valueAst isKindOf: DictAst) ifFalse: [^ badShape value: 'not a dict display'].
+	pairs := OrderedCollection new.
+	1 to: valueAst keys size do: [:i | | k v |
+		k := valueAst keys at: i.
+		v := valueAst values at: i.
+		k isNil ifTrue: [^ badShape value: 'a ** unpacking'].
+		((k isKindOf: ConstantAst) and: [k value isKindOf: String])
+			ifFalse: [^ badShape value: 'a key that is not a string literal'].
+		((v isKindOf: ConstantAst) and: [v value isKindOf: String])
+			ifFalse: [^ badShape value: 'a value that is not a string literal'].
+		pairs add: (Array
+			with: (self ___mangleSlotName___: k value) asSymbol
+			with: (self ___mangleSlotName___: v value) asSymbol)].
+	^ pairs
 %
 
 category: 'Grail-Class Compilation'
