@@ -2131,7 +2131,7 @@ loadModuleFromPath: pathString name: moduleName
 	sys.modules; the Smalltalk class is only consulted to allocate
 	new instances when the cache is missed."
 
-	| moduleAst moduleClass moduleInstance nameParts packageName
+	| moduleAst moduleClass moduleInstance
 	  srcString srcHash hashes hashState stateMap |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
@@ -2266,30 +2266,36 @@ loadModuleFromPath: pathString name: moduleName
 	the module defines.  See FlaskScaffoldingTestCase >>
 	testModuleSingletonReturnsSameClass for the regression fixture."
 	moduleClass ___adoptInstance___: moduleInstance.
-	nameParts := $. split: moduleName.
-	packageName := (nameParts size > 1)
-		ifTrue: ['.' @env1:join: (nameParts copyFrom: 1 to: nameParts size - 1)]
-		ifFalse: [None].
-	moduleInstance
-		@env1:__name__: moduleName;
-		@env1:__package__: packageName.
-	"Record the source path so importlib.reload(module) can re-read it.  Stored
-	in the Phase-A dynamic-instVar store, so Python ``module.__file__'' reads it
-	through ___pyAttrLoad___ like any other module attribute."
-	moduleInstance dynamicInstVarAt: #'__file__' put: pathString.
-	"PEP 302 ``__loader__''.  Not cosmetic: linecache resolves a filename that
-	is not on disk through the CALLING module's loader (get_source), which is
-	how CPython shows source for a frame whose co_filename does not name a
-	readable file.  With no __loader__ that lookup silently answered [] --
-	see PySourceFileLoader."
-	moduleInstance dynamicInstVarAt: #'__loader__'
-		put: (PySourceFileLoader name: moduleName path: pathString).
-	(pathString endsWith: '__init__.py') ifTrue: [
-		| dirPath |
-		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.
-		moduleInstance @env1:__path__: { dirPath }.
-		moduleInstance @env1:__package__: moduleName.
-	].
+	"PEP 451: build the SPEC, then derive every machinery attribute from it.
+
+	``__name__'', ``__package__'', ``__file__'', ``__loader__'' and ``__path__''
+	used to be written here one by one, each deciding for itself -- and
+	``__spec__'' was never set at all, so ``mod.__spec__'' was None on every
+	module in the corpus.  They now all come out of ___initModuleAttrsFrom___:on:,
+	which is CPython's _init_module_attrs, so the spec and the mirrors cannot
+	disagree.
+
+	A PACKAGE IS ONE INPUT, not a second pass: an ``__init__.py'' path makes the
+	containing directory the spec's submodule_search_locations, and parent,
+	__path__ and __package__ all follow from that single field.  Before, the
+	package case re-wrote __package__ after the fact, which is exactly the kind
+	of second write that lets a mirror drift.
+
+	``__loader__'' stays a PySourceFileLoader and is not cosmetic: linecache
+	resolves a filename that is not on disk through the CALLING module's loader
+	(get_source), which is how CPython shows source for a frame whose
+	co_filename does not name a readable file.  With no __loader__ that lookup
+	silently answered []."
+	moduleInstance @env0:dynamicInstVarAt: #'__spec__' put: nil.
+	self
+		___initModuleAttrsFrom___: (self
+			___specFor___: moduleName
+			origin: pathString
+			loader: (PySourceFileLoader name: moduleName path: pathString)
+			locations: ((pathString endsWith: '__init__.py')
+				ifTrue: [{ pathString copyFrom: 1 to: pathString size - '/__init__.py' size }]
+				ifFalse: [nil]))
+		on: moduleInstance.
 	"Register BEFORE execution so circular imports resolve"
 	self registerModule: moduleName with: moduleInstance.
 	"Execute the module body.  Registration happens BEFORE the body runs (so
@@ -2625,6 +2631,115 @@ ___stampDocstringOn___: aModule
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___specFor___: aName origin: anOrigin loader: aLoader locations: locsOrNil
+	"Build the ModuleSpec for a module Grail is about to create.
+
+	ONE CONSTRUCTION POINT for every loader path, so ``__file__'',
+	``__loader__'', ``__package__'' and ``__path__'' are all computed from the
+	same four inputs rather than each path deciding for itself.  That was the
+	state before: four creation sites each wrote the mirrors independently, and
+	``__spec__'' was None everywhere."
+
+	^ (Python @env0:at: #'ModuleSpec')
+		@env0:name: aName
+		loader: aLoader
+		origin: anOrigin
+		submoduleSearchLocations: locsOrNil
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___initModuleAttrsFrom___: aSpec on: aModule
+	"CPython's importlib._bootstrap._init_module_attrs: set ``__spec__'' and
+	DERIVE the legacy mirrors from it.
+
+	THE SPEC IS THE SOURCE.  CPython assigns ``module.__file__ = spec.origin'',
+	``__loader__ = spec.loader'', ``__package__ = spec.parent'' and
+	``__path__ = spec.submodule_search_locations'', and warns when a mirror
+	disagrees with the spec (``__package__ != __spec__.parent'' is a
+	DeprecationWarning there).  Routing every creation path through here is what
+	makes the two incapable of drifting in Grail.
+
+	__file__ IS KEYED ON has_location, exactly as CPython keys it: a namespace
+	package and a built-in have no location, and must NOT get a __file__ naming
+	one.  A namespace package is the case that makes this non-obvious -- it gets
+	``__file__ = None'' rather than no __file__ at all, which is what
+	___loadNamespacePackage___: already did by hand.
+
+	__cached__ IS DELIBERATELY NOT SET.  CPython sets it only ``if spec.cached
+	is not None'', and Grail's spec.cached is always None because Grail writes
+	no bytecode -- see ModuleSpec's class comment and module >> __cached__."
+
+	| none origin locs |
+	none := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None'.
+	aModule @env0:dynamicInstVarAt: #'__spec__' put: aSpec.
+	aModule @env1:__name__: (self @env1:___specAttr___: aSpec named: #'name').
+	aModule @env1:__package__: (self @env1:___specAttr___: aSpec named: #'parent').
+	aModule @env0:dynamicInstVarAt: #'__loader__'
+		put: (self @env1:___specAttr___: aSpec named: #'loader').
+	origin := self @env1:___specAttr___: aSpec named: #'origin'.
+	(self @env1:___specAttr___: aSpec named: #'has_location') == true
+		ifTrue: [aModule @env0:dynamicInstVarAt: #'__file__' put: origin]
+		ifFalse: [aModule @env0:dynamicInstVarAt: #'__file__' put: none].
+	locs := self @env1:___specAttr___: aSpec named: #'submodule_search_locations'.
+	(locs notNil and: [locs ~~ none]) ifTrue: [
+		aModule @env1:__path__: (self @env1:___stringListFrom___: locs)].
+	^ aModule
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___moduleSpecClass___
+	"The one ModuleSpec class.
+
+	importlib/__init__.py used to define its own four-slot ``_ModuleSpec'' and
+	alias it as ``ModuleSpec''.  That cannot stand beside a Smalltalk one: two
+	classes with one name means ``isinstance(spec, ModuleSpec)'' is false for a
+	spec the machinery built, and third-party code does ask.  The .py now takes
+	its ``_ModuleSpec'' from here, so ``from importlib.machinery import
+	ModuleSpec'', ``importlib.util.spec_from_file_location'' and ``mod.__spec__''
+	are all the same type."
+
+	^ Python @env0:at: #'ModuleSpec'
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___stampBuiltinSpecOn___: aModule
+	"Give a module that has no ``__spec__'' the built-in shape, so every module
+	in sys.modules carries a real spec rather than None.
+
+	FOR SMALLTALK-IMPLEMENTED MODULES (json, string, sys, ...).  They are not
+	produced by any loader -- ``module class >> instance'' mints the singleton
+	directly -- so none of the four spec-driven creation paths sees them, and
+	before this they kept ``__spec__ = None''.  CPython's own C modules are the
+	same kind of thing and DO get a spec: measured on 3.14.6, ``sys.__spec__''
+	is ``ModuleSpec(name='sys', loader=BuiltinImporter, origin='built-in')''.
+	So ``built-in'' here is the correct description, not a placeholder.
+
+	THE MIRRORS ARE LEFT ALONE, unlike ___initModuleAttrsFrom___:on:.  That is
+	the one place in this change where the spec does NOT drive them, and the
+	reason is that for a hand-written Smalltalk module there is no loader that
+	knows better than the module does: the module IS the source, and the spec
+	describes it.  Re-deriving ``__package__'' from the spec's parent here would
+	rewrite a None the module chose into '' on the strength of a spec this
+	method just invented.
+
+	Never overwrites: a module that already has a spec came from a loader path
+	that knew its real origin."
+
+	| nm |
+	aModule isNil ifTrue: [^ self].
+	[(aModule @env0:dynamicInstVarAt: #'__spec__') isNil ifFalse: [^ self].
+	nm := [aModule @env1:__name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	nm isNil ifTrue: [^ self].
+	aModule @env0:dynamicInstVarAt: #'__spec__'
+		put: (self ___specFor___: nm origin: 'built-in' loader: nil locations: nil)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 ___builtinsModuleOrNil___
 	"The builtins MODULE instance from sys.modules, or nil before it is
 	registered.  Distinct from the PyModuleDict VIEW of it that
@@ -2722,7 +2837,21 @@ ___sweepBuiltinsIntoLoadedModules___: aView
 			and: [(m @env0:isKindOf: module)
 			and: [m ~~ selfMod
 			and: [(m @env0:dynamicInstVarAt: #'__builtins__') isNil]]])
-				ifTrue: [m @env0:dynamicInstVarAt: #'__builtins__' put: aView]]
+				ifTrue: [m @env0:dynamicInstVarAt: #'__builtins__' put: aView].
+		"``__spec__'' rides the same sweep, for the same reason and with the
+		same measurement behind it: the bootstrap SEED never passes through
+		registerModule:with: in a fresh session, so stamping only there left 25
+		of 35 modules with __spec__ None -- json, string, sys and every other
+		seeded Smalltalk-implemented module among them.
+
+		THE SWEEP COVERS THE SEED, NOT EVERY SMALLTALK MODULE, and reading it as
+		the latter is what hid a second gap.  It fires ONCE, at the first
+		registration of the session; a module minted afterwards by lookupModule:'s
+		symbol-list fallback is past it, and used to be stored bare.  That is
+		fixed at the store instead -- widening the sweep could not have fixed it,
+		because there is no later moment at which the sweep runs."
+		[m notNil ifTrue: [self ___stampBuiltinSpecOn___: m]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 %
@@ -2758,6 +2887,18 @@ registerModule: aName with: aModule
 	happens to cover.  See ___stampBuiltinsOn___: for the ordering guard and
 	why the value is the builtins module's DICT."
 	self ___stampBuiltinsOn___: aModule.
+	"``__spec__'' for a module that arrived without one -- see
+	___stampBuiltinSpecOn___:."
+	self ___stampBuiltinSpecOn___: aModule.
+	"The importlib module's namespace carries the ModuleSpec CLASS, because its
+	.py facade no longer defines one -- see ___moduleSpecClass___ and the note in
+	importlib/__init__.py.  Stamped BEFORE the body runs, which registration
+	already guarantees -- the comment further down this method says so in as
+	many words -- so the bare names resolve while that body is executing."
+	(aName = 'importlib') ifTrue: [
+		[aModule @env0:at: #'_ModuleSpec' put: self ___moduleSpecClass___.
+		aModule @env0:at: #'ModuleSpec' put: self ___moduleSpecClass___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	"``__doc__'' -- the module's own docstring, copied from the class-side
 	``___pyModuleDoc___'' the compiler stamped at build time.  Here, beside the
 	__builtins__ stamp and for the same reason: this is the one point EVERY path
@@ -5389,11 +5530,20 @@ ___loadNamespacePackage___: moduleName portions: dirs
 	its internal structure initialized -- see loadModuleFromPath:name:."
 	moduleInstance := moduleClass @env0:new.
 	moduleClass @env0:___adoptInstance___: moduleInstance.
-	moduleInstance
-		@env1:__name__: moduleName;
-		@env1:__package__: moduleName;
-		@env1:__path__: dirs.
-	moduleInstance @env0:dynamicInstVarAt: #'__file__' put: None.
+	"PEP 451, through the same seam as every other loader path.  A namespace
+	package is the case that makes has_location worth having: origin is None, so
+	the spec reports has_location false and ___initModuleAttrsFrom___:on: sets
+	``__file__'' to None -- present and None, not absent.  CPython does exactly
+	that, and its own comment calls it a hack for consistency (bpo-32305).
+	``__package__'' and ``__path__'' come from submodule_search_locations rather
+	than being written separately."
+	self
+		@env0:___initModuleAttrsFrom___: (self
+			@env0:___specFor___: moduleName
+			origin: nil
+			loader: nil
+			locations: dirs)
+		on: moduleInstance.
 	self @env0:registerModule: moduleName with: moduleInstance.
 	^ moduleInstance
 %
@@ -5969,13 +6119,19 @@ ___emptyModuleNamed___: aName spec: aSpec loader: aLoader
 		ifFalse: [parts @env0:size @env0:< 2
 			ifTrue: ['']
 			ifFalse: ['.' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1)]].
-	inst @env1:__name__: aName.
-	inst @env1:__package__: pkgName.
-	inst @env0:dynamicInstVarAt: #'__file__'
-		put: ((origin == nil or: [origin == None]) ifTrue: [None] ifFalse: [origin]).
-	inst @env0:dynamicInstVarAt: #'__loader__' put: aLoader.
-	inst @env0:dynamicInstVarAt: #'__spec__' put: aSpec.
-	isPkg ifTrue: [inst @env1:__path__: (self ___stringListFrom___: locs)].
+	"Through the shared seam, so a meta_path loader's module gets its attributes
+	by the same rule as every other.  THE FINDER'S OWN SPEC IS KEPT -- it is
+	whatever the finder answered and may be a CPython ModuleSpec, Grail's, or a
+	duck-typed stand-in, and replacing it with one of ours would discard fields
+	the finder set (loader_state especially).  So this derives the mirrors FROM
+	that spec rather than building a new one."
+	self @env0:___initModuleAttrsFrom___: aSpec on: inst.
+	"__package__ is recomputed here rather than taken from the spec's ``parent'':
+	a duck-typed finder spec need not have one, and pkgName above is derived
+	from the same is-it-a-package test CPython uses.  Only overwritten when the
+	spec did not supply a parent."
+	(self ___specAttr___: aSpec named: #'parent') isNil
+		ifTrue: [inst @env1:__package__: pkgName].
 	^ inst
 %
 
@@ -6045,7 +6201,24 @@ lookupModule: aName
 		and: [(cls isKindOf: Behavior)
 		and: [cls @env0:inheritsFrom: module]]) ifTrue: [
 		inst := cls @env0:___instance___.
-		self modules @env0:at: aName put: inst.
+		"THROUGH registerModule:with:, not a bare ``at:put:''.  This is the
+		SECOND way a module reaches sys.modules, and until #1068's follow-up it
+		was the one that silently skipped every stamp: ``__builtins__'' and
+		``__spec__'' are written by ___stampBuiltinsOn___: / ___stampBuiltinSpecOn___:,
+		which are reached ONLY from registerModule:with: and from the one-time
+		sweep -- and the sweep fires at the FIRST registration of the session,
+		so anything minted here afterwards was never stamped and nothing ever
+		came back for it.  Measured before the change, in a session that had
+		already imported a .py module: grail, os.path and _weakref each carried
+		``__spec__'' None and no ``__builtins__''.  (That, not ``created outside
+		the import machinery'', is why the __spec__ coverage count fell short.)
+
+		Registration also gives these modules the parent/child binding the bare
+		store never did -- ``os.path'' on ``os'' -- which happened to be masked
+		because os's own initialize binds ``path'' by hand.
+
+		Env 0: this method is env 1 and registerModule:with: is env 0."
+		self @env0:registerModule: aName with: inst.
 		^ inst].
 	^ nil
 %

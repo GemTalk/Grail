@@ -274,6 +274,7 @@ run
 	at: #'LookupError' put: nil;
 	at: #'MemoryError' put: nil;
 	at: #'ModuleNotFoundError' put: nil;
+	at: #'ModuleSpec' put: nil;
 	at: #'NameError' put: nil;
 	at: #'None' put: nil;
 	at: #'NotImplemented' put: nil;
@@ -1038,6 +1039,7 @@ run
 	at: #'MockTestCase' put: nil;
 	at: #'ModuleAttrCallTestCase' put: nil;
 	at: #'ModuleDocstringTestCase' put: nil;
+	at: #'ModuleSpecTestCase' put: nil;
 	at: #'ModuleCachedAbsentTestCase' put: nil;
 	at: #'ModuleAttrZeroArgCallTestCase' put: nil;
 	at: #'ModuleDictItemTestCase' put: nil;
@@ -1552,6 +1554,7 @@ input src/smalltalk/Python/ShimBisectModule.gs
 input src/smalltalk/Python/ShimCrc32cModule.gs
 input src/smalltalk/Python/ShimTestModule.gs
 input src/smalltalk/Python/ShimSreModule.gs
+input src/smalltalk/Python/ModuleSpec.gs
 input src/smalltalk/Python/importlib.gs
 input src/weakref/WeakReference.gs
 input src/smalltalk/Python/hashlib.gs
@@ -2353,6 +2356,7 @@ input src/smalltalk/PythonTests/MockPatchTargetTestCase.gs
 input src/smalltalk/PythonTests/MockTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
+input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleCachedAbsentTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrZeroArgCallTestCase.gs
