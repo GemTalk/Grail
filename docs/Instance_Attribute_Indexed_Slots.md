@@ -220,6 +220,22 @@ index on an attribute is the case for a named instVar and a migration.
    position, and the `__dict__` views list such a name once.
    `IndexedSlotRebuildTestCase` pins the survivor, the parent-stops-assigning
    case, the promotion, the removed declared slot and the drop.
+   **The rename** (`___grailRenameSlot___:_:`) relabels a position across the
+   subtree when the new name has none — nothing is written, whatever the
+   repository holds — and moves every instance's value when a deploy already
+   appended one, leaving the old name a hole. A class body's
+   `__renamed__ = {"old": "new"}` (`ClassDefAst >> renamedNamePairs`, emitted
+   as the installer's fifth keyword) calls the relabel BEFORE the merge, so
+   the new name binds to the old position instead of being appended beside
+   it; the move is refused at import, because it scans the repository and
+   must own its transaction. The one class the import path does not ask
+   "does a body still assign this?" is the module being imported: the
+   `___pyOwnInferredSlots___` of its classes still describe the previous
+   bodies at that moment — the class statements that refresh them are further
+   down the same file — so the check reads the incoming names instead
+   (`___grailImportRenameSkipSet___`, passed as
+   `___grailRenameSlot___:to:tree:instances:ignoringAssignmentsIn:`). A
+   subclass in another module is answered honestly and still refuses.
 5. **Compaction.** An explicit, developer-invoked maintenance operation, never
    an import side effect: `Cls ___grailCompactSlots___` rewrites the layout of
    the class and of every subclass without tombstones, recompiles the index

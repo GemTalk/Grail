@@ -16,7 +16,8 @@ the older demo next door, [experiments/schema/](../schema/).
 | --- | --- | --- |
 | `remove_and_readd` | stop assigning `balance`, then assign it again | nothing is retired: the old value stays readable and listed; re-adding changes nothing |
 | `compact` | stop assigning `raw`, DROP it, compact, re-add `raw` | the two explicit steps through `gemdb.schema`; a name re-added after a drop is a new position |
-| `rename` | `phone` → `phones` | the old value stays readable under the old name, and `gemdb.schema.rename` relabels the position without touching an instance |
+| `rename` | `phone` → `phones`, the code shipped first | the old value stays readable under the old name; `gemdb.schema.rename` then MOVES it, because a second position already exists |
+| `renamed_declaration` | the same rename, declared as `__renamed__` | the import relabels the position in place: the value never moves, and the declaration is a no-op on a repository that has already caught up |
 | `move_in_hierarchy` | `a2` moves from `Base` into `Derived` | no layout changes; every value reads as before |
 | `refactor_helper` | assign `height` through a helper instead of `self` | the class stops assigning the name but the helper's store lands in the same position; same schema |
 | `uncommitted_rebuild` | an edit imported but not committed | the rebuilt layout is rolled back with the session; a schema change is part of the importing transaction |
@@ -25,7 +26,7 @@ the older demo next door, [experiments/schema/](../schema/).
 ## Running
 
 ```bash
-./scripts/with_stone_lock.sh experiments/schema_changes/run.sh                 # all seven
+./scripts/with_stone_lock.sh experiments/schema_changes/run.sh                 # all eight
 ./scripts/with_stone_lock.sh experiments/schema_changes/run.sh rename compact  # some
 ```
 
@@ -66,6 +67,13 @@ v1: layout = ['phone']  vars(c) = {'phone': '555-1234'}
 v2: layout = ['phone', 'phones']  c.phone = 555-1234  c.phones -> AttributeError  vars(c) = {'phone': '555-1234'}
 === rename v3 ===
 v3: rename -> {'classes': 1, 'instances': 1}  layout = [('phone', 'hole'), ('phones', 'assigned')]  c.phones = 555-1234
+
+=== renamed_declaration v1 ===
+v1: layout = ['phone']  vars(c) = {'phone': '555-1234'}
+=== renamed_declaration v2 ===
+v2: layout = ['phones']  c.phones = 555-1234  vars(c) = {'phones': '555-1234'}
+=== renamed_declaration v3 ===
+v3: layout = ['phones']  c.phones = 555-1234
 
 === move_in_hierarchy v1 ===
 v1: Base = ['a1', 'a2']  Derived = ['a1', 'a2', 'd1']

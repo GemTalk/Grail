@@ -193,33 +193,70 @@ these steps walk, so its persisted instances are not touched.
 
 ### 3.5 Rename an attribute
 
-Rename it by name, and nothing is copied:
+Declare it in the class body, beside the edit that changes the name:
+
+```python
+class Contact:
+    __renamed__ = {"phone": "phones"}
+
+    def __init__(self, phones):
+        self.phones = list(phones)
+```
+
+The import *relabels* position 1. Nothing is copied, no instance is read,
+and no repository scan happens — the contacts stored under `phone` answer
+`c.phones` the moment the import returns, however many of them there are
+(`renamed_declaration`). It is the one migration that costs nothing.
+
+`__renamed__` is a dict of `{"old": "new"}` string literals, applied in
+source order, and Grail refuses anything it cannot read at compile time
+(a computed dict, a non-string key) rather than skipping it quietly: a
+declaration that silently did nothing would strand the values it was
+written to carry.
+
+**Leave it in the source.** On a repository that has already been migrated,
+or one that never held `phone` at all, it finds nothing to rename and does
+nothing, so one file deploys to every repository you have. Delete it once
+they have all caught up.
+
+**Two things it refuses**, both at import, naming the class:
+
+* the body still *assigns* `phone`. The declaration and the assignment
+  contradict each other, and only you can say which was meant.
+* `phones` already has a position of its own. That is the case below.
+
+#### When the code shipped first
+
+If a version that assigns `phones` was already imported, the layout is
+`['phone', 'phones']`: a second, empty position beside the data. Now the
+values have to *move*, instance by instance, which reads every instance in
+the repository and needs its own clean transaction — so it is a command you
+run, never an import side effect:
 
 ```python
 gemdb.commit()
-gemdb.schema.rename(Contact, "phone", "phones")   # {'classes': 1, 'instances': 0}
+gemdb.schema.rename(Contact, "phone", "phones")   # {'classes': 1, 'instances': 12034}
 ```
 
-That is a *relabel*, and it is what you get when `phones` has no position
-yet: the position keeps its data and changes its name, so however many
-contacts there are, none is touched. Renaming *before* shipping the code
-that assigns `phones` is therefore the cheap order, and that code's import
-then finds the name already in the layout holding the values.
+`phone` becomes a hole, and the call refuses outright if any instance has a
+value under *both* names rather than choosing one for you (`rename`,
+version 3). The same command does the free relabel when `phones` has no
+position yet — it is what `__renamed__` calls — so it is also the way to
+rename from a console without editing the source.
 
-If the code ships first, its import appends `phones` as an empty position
-while `phone` survives with the data, and the same call *moves* every value
-across and leaves `phone` a hole (`rename`, version 3). It refuses if any
-instance has a value under both names rather than choosing one.
-
-Either way it refuses while a method still assigns `phone`, so the edit that
+Either form refuses while a method still assigns `phone`, so the edit that
 stops assigning it comes first.
 
-**Without renaming**, the edit alone is an addition beside a name the class
-stopped assigning: the layout becomes `['phone', 'phones']`, an old contact
-still answers `c.phone`, and `c.phones` raises because that instance never
-had one (`rename`, version 2). Nothing is lost, but nothing migrated either.
-That is the case for a migration in plain Python, lazily on first use, which
-is also how to handle the change of *shape* a rename often carries:
+#### Renaming without declaring it
+
+The edit alone is an addition beside a name the class stopped assigning: the
+layout becomes `['phone', 'phones']`, an old contact still answers
+`c.phone`, and `c.phones` raises because that instance never had one
+(`rename`, version 2). Nothing is lost, but nothing migrated either.
+
+That is also the case for a migration in plain Python, lazily on first use,
+which is how to handle the change of *shape* a rename often carries —
+`phone` holding one number becoming `phones` holding a list:
 
 ```python
 class Contact:
@@ -238,20 +275,10 @@ class Contact:
 ```
 
 After this version is imported, `old.phones` answers `['555-1234']` and the
-instance has been upgraded in place, with `phone` deleted from it (`rename`,
-version 3). Once every instance has been touched, drop `phone` (§3.4).
-
-**Proposed** (cut 3 of the design note, not implemented): declare the rename
-in the class body, so it applies on import without a separate call,
-
-```python
-class Contact:
-    __renamed__ = {"phone": "phones"}
-```
-
-which costs nothing per instance because the data does not move; only the
-name of slot 1 changes. A rename that also changes shape would still use a
-lazy normaliser like the property above.
+instance has been upgraded in place, with `phone` deleted from it. Once
+every instance has been touched, drop `phone` (§3.4). A `__renamed__` and a
+normaliser compose: rename the position first so the data arrives under the
+new name, then normalise its *shape* lazily.
 
 ### 3.6 Change what an attribute holds
 
@@ -306,7 +333,8 @@ behind unread; it is invisible and goes with the next `del`.
 | bring one back | assign it again | untouched; nothing ever left | none |
 | delete an attribute's values | stop assigning it, import, then `gemdb.schema.drop(Cls, "x")` | every instance nilled at that position, in batches | the values, deliberately |
 | reclaim holes | `gemdb.schema.compact(Cls)` | every instance moved, in one transaction | none |
-| rename | `gemdb.schema.rename(Cls, "old", "new")`; **proposed** `__renamed__` | untouched for a relabel | none |
+| rename an attribute | `__renamed__ = {"old": "new"}` in the class body | untouched: the position is relabelled | none |
+| rename after the code shipped | `gemdb.schema.rename(Cls, "old", "new")` | every instance's value moved, one transaction | none |
 | change the value's shape | lazy normaliser, or a batch rewrite | untouched until read or rewritten | none |
 | move between parent and child | just move the assignment | untouched | none |
 | change the bases / rename the class | a real migration: new instances, replace references | stranded on the old class | none, but manual |
