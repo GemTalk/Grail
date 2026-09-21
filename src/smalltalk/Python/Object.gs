@@ -7322,6 +7322,31 @@ ___unboundMethodClosure___: aSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___requireClassNameString___: aValue for: aSlotName
+	"The three refusals CPython makes for a class's __name__ / __qualname__.
+
+	Shared between the two because they are the same rule, and kept beside the
+	store rather than inside it so the raise happens before anything is
+	written -- test_type_name and test_type_qualname both assert that a
+	REJECTED assignment leaves the previous value in place, which a check made
+	after the store cannot satisfy."
+
+	| b |
+	b := builtins @env1:instance.
+	((aValue @env0:isKindOf: CharacterCollection)
+		@env0:or: [aValue @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+		^ TypeError @env1:___signal___: 'can only assign string to '
+			@env0:, (self @env0:___pyClassNameForError___) @env0:asString
+			@env0:, '.' @env0:, aSlotName @env0:, ', not '''
+			@env0:, (aValue ___pyTypeNameForError___) @env0:asString @env0:, ''''].
+	((b @env1:___codePointsOf___: aValue) @env0:includes: 0) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'type name must not contain null characters'].
+	^ b @env1:___requireEncodable___: aValue what: 'the type name'
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___pyStoreDynamic___: aSym put: aValue
 	"Store a Python attribute, turning GemStone's dynamic-instVar ceiling into a
 	CATCHABLE Python exception.
@@ -9062,8 +9087,27 @@ __doc__
 	through ___pyAttrLoad___ to its method-wrap fallback and hands back a
 	callable; that is not a docstring, and None is the honest answer."
 
-	| cls d |
+	| cls d holder own |
 	(self @env0:isKindOf: Behavior) ifTrue: [
+		"THE CLASS'S OWN ENTRY WINS, and only its own: CPython gives every class
+		a __doc__ of its own, so a subclass of a documented class answers None
+		rather than inheriting.  Read straight from this class's holder rather
+		than through ___dynamicClassAttr___, which WALKS the chain and would
+		hand back the base's docstring.
+
+		Reached only by a class that has no __doc__ ACCESSOR -- every class the
+		class statement builds gets one from ClassDefAst -- which is to say by
+		a class built through type(), and by the kernel-backed built-ins.  The
+		built-ins keep the old answer: they have no stored docstring, so they
+		fall through to the text below exactly as before."
+		holder := (self ___respondsTo___: #___dynInstVars___)
+			ifTrue: [[self @env0:perform: #___dynInstVars___ env: 1]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+			ifFalse: [nil].
+		holder @env0:notNil ifTrue: [
+			own := [holder @env0:dynamicInstVarAt: #'__doc__']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			own @env0:notNil ifTrue: [^ own]].
 		^ 'The base class of the class hierarchy.
 
 When called, it accepts no arguments and returns a new featureless
@@ -12704,6 +12748,11 @@ ___pyAttrStore___: aName put: aValue
 		build-time value through the one path the getter already honours.
 		test_enum test_pickle_nested_class."
 		(aName @env0:asString @env0:= '__qualname__') ifTrue: [
+			"CPython accepts only a STRING here, and the refusal has to come
+			BEFORE the store or a rejected assignment still lands -- the test
+			checks the old value survives, which is the half that catches a
+			validate-then-store-anyway mistake."
+			self ___requireClassNameString___: aValue for: '__qualname__'.
 			^ self ___classHolderAttrStore___: #'___qualname___' put: aValue].
 		"``cls.__name__ = 'T''' is writable too, and dropped for the same reason:
 		the class-side read performs the getter, which derives the name from the
@@ -12712,7 +12761,30 @@ ___pyAttrStore___: aName put: aValue
 		it after the typename it was asked for, which is also what makes the
 		result picklable."
 		(aName @env0:asString @env0:= '__name__') ifTrue: [
+			"Same three refusals type() itself makes for the name it is given --
+			not a string, a NUL, a lone surrogate -- because ``A.__name__ =
+			x'' and ``type(x, (), {})'' are the same constraint arriving by two
+			routes.  Grail applied none of them here and stored whatever it was
+			handed, so a class could end up named b'A' or 'A\x00B'."
+			self ___requireClassNameString___: aValue for: '__name__'.
 			^ self ___classHolderAttrStore___: #'___name___' put: aValue].
+		"``cls.__module__ = m'' DROPS __firstlineno__, which is CPython's rule
+		and looks arbitrary until you see what the attribute is for: the
+		compiler records the line a class was defined on, and pydoc /
+		inspect.getsource use it together with __module__ to find the source.
+		Assigning __module__ says the class now claims to come from somewhere
+		else, so the recorded line no longer refers to anything and CPython
+		removes it rather than leave a number that points into the wrong file.
+		test_builtin test_type_firstlineno."
+		(aName @env0:asString @env0:= '__module__') ifTrue: [
+			| ___h |
+			___h := (self ___respondsTo___: #___dynInstVars___)
+				ifTrue: [[self @env0:perform: #___dynInstVars___ env: 1]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+				ifFalse: [nil].
+			___h @env0:notNil ifTrue: [
+				[___h @env0:removeDynamicInstVar: #'__firstlineno__']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 		"(Enum member-reassignment is guarded in __setattr__:_:, the single
 		store entry point, BEFORE the accessor-setter dispatch.)"
 		"``C.m = f'' HAS TO REACH ``self.m()'' in C's own methods, and a self-send

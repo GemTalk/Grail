@@ -90,6 +90,25 @@ value: positional value: kwargs
 
 category: 'Grail-Class-Call Fast Path'
 classmethod: type
+__new__
+	"``type()'' with NO arguments.
+
+	_new:kw: beside this already answers ``type() takes 1 or 3 arguments'' for
+	every other count, but it never saw the zero-argument call: object class >>
+	___pyInstantiate___ dispatches 0 positional and no keywords straight to
+	``__new__'', ahead of the keyword branch that reaches _new:kw:.  So
+	``type()'' inherited object's __new__ and ALLOCATED one -- answering
+	``<type object at 0x...>'', an instance of type that is not a class and
+	that nothing else in Grail can use.
+
+	The arity rule lives in _new:kw:; this is the one count that does not
+	arrive there."
+
+	^ TypeError @env1:___signal___: 'type() takes 1 or 3 arguments'
+%
+
+category: 'Grail-Class-Call Fast Path'
+classmethod: type
 _new: positional kw: kwargs
 	"Python's ``type'' constructor, both spellings:
 

@@ -4311,6 +4311,267 @@ setattr: anObject _: aName _: aValue
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___validateTypeArgs___: className bases: bases namespace: namespace
+	"CPython's type.__new__ argument checking, which Grail did not do at all.
+
+	Each refusal below is one CPython raises and Grail did not; the message is
+	CPython's, because a caller that greps for it (or an assertRaisesRegex)
+	should not have to know which implementation raised.  Ordered as CPython
+	orders them, so a call that is wrong in two ways reports the same one."
+
+	| seen |
+	"NAME.  ``type(b'A', (), {})'' built a class called 'aByteArray' -- the
+	printString of the bytes object -- which is the shape of bug that looks
+	like it worked."
+	"PyStrSurrogate IS a str -- it is the class Grail switches to the moment a
+	string holds a lone surrogate -- but it does not answer to
+	``isKindOf: CharacterCollection''.  Testing only that rejected
+	``type('A\udcdcB', (), {})'' as ``argument 1 must be str, not str'',
+	which is both wrong and unreadable; the right answer is the
+	UnicodeEncodeError raised just below."
+	((className @env0:isKindOf: CharacterCollection)
+		@env0:or: [className @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+		^ TypeError ___signal___: 'type.__new__() argument 1 must be str, not '
+			@env0:, (className ___pyTypeNameForError___) @env0:asString].
+	"A NUL in a class name is a ValueError, not a TypeError -- CPython
+	separates ``wrong kind of thing'' from ``right kind, impossible value'',
+	and test_type_name asserts the distinction.  Grail reported neither: the
+	name reached the Smalltalk class builder and failed there with ``Grail
+	cannot subclass sealed kernel class 'PythonInstance''', which names
+	nothing the caller did."
+	"Asked through ___codePointsOf___ rather than asString: PyStrSurrogate
+	refuses asString on purpose, and does not answer the Collection protocol
+	either, so either route would turn a surrogate name into a refusal about
+	the wrong thing instead of into the UnicodeEncodeError below."
+	((self ___codePointsOf___: className) @env0:includes: 0) ifTrue: [
+		^ ValueError ___signal___: 'type name must not contain null characters'].
+	self ___requireEncodable___: className what: 'the type name'.
+	(namespace @env0:notNil @env0:and: [namespace @env1:__contains__: '__doc__']) ifTrue: [
+		self ___requireEncodable___: (namespace @env1:__getitem__: '__doc__')
+			what: 'the docstring'].
+	"BASES must be a TUPLE, not merely iterable.  Grail said ``Array withAll:
+	bases'', which accepts a list, a set or a string -- and a string would have
+	been taken apart into one base per character."
+	(bases @env0:isKindOf: tuple) ifFalse: [
+		^ TypeError ___signal___: 'type.__new__() argument 2 must be tuple, not '
+			@env0:, (bases ___pyTypeNameForError___) @env0:asString].
+	"NAMESPACE must be a dict.  A mappingproxy is the case that matters and
+	the one CPython's own test names: it is a READ-ONLY view, so accepting it
+	silently promises a class whose namespace cannot be written back."
+	((namespace @env0:isKindOf: mappingproxy) @env0:not
+		@env0:and: [(namespace @env0:isKindOf: AbstractDictionary)
+			@env0:or: [namespace @env0:isKindOf: KeyValueDictionary]]) ifFalse: [
+		^ TypeError ___signal___: 'type.__new__() argument 3 must be dict, not '
+			@env0:, (namespace ___pyTypeNameForError___) @env0:asString].
+	"TWO BASES THAT EACH CARRY STORAGE cannot both be the Smalltalk
+	superclass, and CPython refuses the same combination for the same reason
+	-- ``multiple bases have instance lay-out conflict''.  Grail's
+	___selectStorageBase___ simply picked the leftmost, so ``type('A', (int,
+	str), {})'' answered an int-backed class that claimed str in its bases and
+	behaved as neither.
+
+	Asked of the STORAGE roots rather than the bases themselves, because two
+	bases in a subclass relationship (int and a subclass of int) are
+	compatible -- it is unrelated storage that cannot be merged."
+	seen := nil.
+	(Array @env0:withAll: bases) @env0:do: [:b |
+		((b @env0:isKindOf: Behavior)
+			@env0:and: [(Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b]) ifTrue: [
+				seen @env0:isNil
+					ifTrue: [seen := b]
+					ifFalse: [
+						((seen @env0:== b) @env0:or: [(seen @env0:inheritsFrom: b)
+							@env0:or: [b @env0:inheritsFrom: seen]]) ifFalse: [
+								^ TypeError ___signal___:
+									'multiple bases have instance lay-out conflict']]]].
+	^ self ___validateSlots___: namespace bases: bases
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___validateSlots___: namespace bases: bases
+	"CPython's __slots__ checking, none of which Grail did.
+
+	Every refusal here is one that otherwise produces a class with a slot
+	nobody can use -- a slot named '42' is unreachable from Python source, and
+	a slot that collides with a class variable silently loses one of the two."
+
+	| slots names |
+	namespace @env0:isNil ifTrue: [^ self].
+	(namespace @env1:__contains__: '__slots__') ifFalse: [^ self].
+	slots := namespace @env1:__getitem__: '__slots__'.
+	"A bare STRING is ONE slot name rather than a sequence of one-character
+	ones, so it is taken first and never iterated.
+
+	Everything else is iterated, and bytes needs no special case: b'x'
+	iterates to INTEGERS, which the per-item string check below refuses with
+	the message CPython uses for exactly that input -- ``__slots__ items must
+	be strings, not 'int'''.  An earlier draft named the bytes class
+	explicitly and was both redundant and wrong about the class's name."
+	names := (slots @env0:isKindOf: CharacterCollection)
+		ifTrue: [{ slots }]
+		ifFalse: [[Array @env0:withAll: slots]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
+	"NOT ITERABLE AT ALL is a different complaint, and CPython words it as one
+	-- ``'int' object is not iterable'' -- because the fault is the object's
+	rather than __slots__'s."
+	names @env0:isNil ifTrue: [
+		^ TypeError ___signal___: '''' @env0:,
+			(slots ___pyTypeNameForError___) @env0:asString
+			@env0:, ''' object is not iterable'].
+	"A SLOT ON A BUILT-IN-STORAGE BASE has nowhere to live: the instance's
+	storage is the primitive one, so CPython refuses rather than producing an
+	object whose slot writes go nowhere."
+	(Array @env0:withAll: bases) @env0:do: [:b |
+		((b @env0:isKindOf: Behavior)
+			@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b)
+			@env0:and: [names @env0:isEmpty @env0:not]]) ifTrue: [
+				^ TypeError ___signal___: 'nonempty __slots__ not supported for subtype of '''
+					@env0:, (b @env1:__name__) @env0:asString @env0:, '''']].
+	names @env0:do: [:each |
+		(each @env0:isKindOf: CharacterCollection) ifFalse: [
+			^ TypeError ___signal___: '__slots__ items must be strings, not '''
+				@env0:, (each ___pyTypeNameForError___) @env0:asString @env0:, ''''].
+		(self ___isPythonIdentifier___: each @env0:asString) ifFalse: [
+			^ TypeError ___signal___: '__slots__ must be identifiers'].
+		"A NAME THAT IS ALSO A CLASS VARIABLE is a ValueError, not a TypeError:
+		both halves are well-formed, and it is the COMBINATION that cannot
+		work -- the slot descriptor and the class variable would occupy the
+		same name."
+		(namespace @env1:__contains__: each @env0:asString) ifTrue: [
+			^ ValueError ___signal___: '''' @env0:, each @env0:asString @env0:,
+				''' in __slots__ conflicts with class variable']].
+	"__dict__ AND __weakref__ are slots a class gets at most once.  Listing
+	either twice, or listing one a base already supplies, is CPython's
+	``...slot disallowed: we already got one''."
+	#('__dict__' '__weakref__') @env0:do: [:special |
+		| count |
+		count := 0.
+		names @env0:do: [:each |
+			((each @env0:isKindOf: CharacterCollection)
+				@env0:and: [each @env0:asString @env0:= special]) ifTrue: [count := count @env0:+ 1]].
+		count @env0:> 0 ifTrue: [
+			count @env0:> 1 ifTrue: [
+				^ TypeError ___signal___: special @env0:,
+					' slot disallowed: we already got one'].
+			(Array @env0:withAll: bases) @env0:do: [:b |
+				((b @env0:isKindOf: Behavior)
+					@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b) @env0:not]) ifTrue: [
+						^ TypeError ___signal___: special @env0:,
+							' slot disallowed: we already got one']]]].
+	^ self
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___codePointsOf___: aString
+	"The code points of a Python str, whichever class is carrying it.
+
+	Grail switches a string holding a lone surrogate to PyStrSurrogate, which
+	deliberately answers almost nothing a CharacterCollection does -- not
+	asString, not do:, not anySatisfy: -- so every scan of a str that might
+	hold one has to come through here or it raises about the wrong thing."
+
+	(aString @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ Array @env0:withAll: (aString @env0:___codePoints___)].
+	^ (1 @env0:to: aString @env0:size) @env0:collect: [:i |
+		(aString @env0:at: i) @env0:codePoint]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___smalltalkClassNameFor___: aPythonName
+	"A symbol GemStone will accept as a class name, for a Python class name
+	that may be anything at all.
+
+	The usual transform is kept whenever its result is a legal identifier, so
+	nothing about the common case changes -- the Smalltalk class is still
+	called what the Python class is called, which is what makes a Smalltalk
+	stack trace readable.  Only a name GemStone would refuse is replaced, and
+	then ___name___ carries the real one."
+
+	| mangled ok |
+	mangled := [(Python @env0:at: #importlib)
+		@env0:___asSmalltalkClassName___: aPythonName @env0:asString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	ok := false.
+	mangled @env0:notNil ifTrue: [
+		ok := self ___isAsciiIdentifier___: mangled @env0:asString].
+	ok ifTrue: [^ mangled @env0:asSymbol].
+	"Unique per class, because two classes named '42' in one session must not
+	collide in the Smalltalk namespace the way their Python names may."
+	^ ('GrailAnonClass_' @env0:, (System @env0:_zeroArgPrim: 50) @env0:printString
+		@env0:, '_' @env0:, (Object @env0:new @env0:asOop) @env0:printString) @env0:asSymbol
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isAsciiIdentifier___: aString
+	"GemStone's rule for a class name, which is ASCII-only: a letter or
+	underscore, then letters, digits or underscores.  Deliberately stricter
+	than ___isPythonIdentifier___ beside it -- Python accepts '\xc4' as an
+	identifier character and GemStone does not."
+
+	| c |
+	aString @env0:isEmpty ifTrue: [^ false].
+	c := (aString @env0:at: 1) @env0:codePoint.
+	((c @env0:>= 65 @env0:and: [c @env0:<= 90])
+		@env0:or: [(c @env0:>= 97 @env0:and: [c @env0:<= 122])
+		@env0:or: [c @env0:= 95]]) ifFalse: [^ false].
+	2 @env0:to: aString @env0:size do: [:i |
+		| k |
+		k := (aString @env0:at: i) @env0:codePoint.
+		((k @env0:>= 65 @env0:and: [k @env0:<= 90])
+			@env0:or: [(k @env0:>= 97 @env0:and: [k @env0:<= 122])
+			@env0:or: [(k @env0:>= 48 @env0:and: [k @env0:<= 57])
+			@env0:or: [k @env0:= 95]]]) ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireEncodable___: aValue what: aLabel
+	"CPython stores a class's name and docstring as UTF-8, so a lone surrogate
+	in either is a UnicodeEncodeError at CLASS-CREATION time rather than later
+	at the point something tries to print it.  test_type_name and test_type_doc
+	both assert that, and Grail raised nothing: the surrogate travelled into
+	the class and surfaced, much later, wherever the name was next encoded.
+
+	Only strings are checked -- __doc__ takes any object in CPython (``type('A',
+	(), {'__doc__': 42})'' is legal and answers 42), so a non-string is not an
+	error here."
+
+	((aValue @env0:isKindOf: CharacterCollection)
+		@env0:or: [aValue @env0:isKindOf: PyStrSurrogate]) ifFalse: [^ self].
+	(self ___codePointsOf___: aValue) @env0:do: [:cp |
+		(cp @env0:>= 16rD800 @env0:and: [cp @env0:<= 16rDFFF]) ifTrue: [
+			^ UnicodeEncodeError ___signal___:
+				'''utf-8'' codec can''t encode character in ' @env0:, aLabel
+					@env0:, ': surrogates not allowed']].
+	^ self
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isPythonIdentifier___: aString
+	"``str.isidentifier()'' without going through the Python layer -- this runs
+	inside type()'s argument checking, where a raise from the check itself
+	would be reported as the caller's error."
+
+	| c |
+	aString @env0:isEmpty ifTrue: [^ false].
+	c := aString @env0:at: 1.
+	((c @env0:isLetter) @env0:or: [c @env0:== $_]) ifFalse: [^ false].
+	2 @env0:to: aString @env0:size do: [:i |
+		| ch |
+		ch := aString @env0:at: i.
+		((ch @env0:isLetter) @env0:or: [(ch @env0:isDigit) @env0:or: [ch @env0:== $_]])
+			ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 type: className _: bases _: namespace
 	"Python builtin type(name, bases, namespace) — the 3-argument
 	metaclass form that builds a class dynamically.  Mirrors the
@@ -4332,6 +4593,14 @@ type: className _: bases _: namespace
 	path in ClassDefAst emits for every class it builds.  Ensured below."
 
 	| il baseArray storageBase nameSym newClass ownAttrNames orderedKeys |
+	"VALIDATE FIRST.  type() built a class from almost anything -- a bytes
+	name, a list of bases, a mappingproxy namespace, a __slots__ of '42' --
+	and every one of those is a TypeError in CPython.  Building instead of
+	refusing is not a lenient version of the same thing: the caller asked for
+	a class it cannot have, and gets one that is subtly wrong (``type(b'A',
+	(), {})'' made a class NAMED 'aByteArray') instead of being told.
+	test_builtin test_bad_args and test_bad_slots."
+	self ___validateTypeArgs___: className bases: bases namespace: namespace.
 	il := Python @env0:at: #importlib.
 	baseArray := Array @env0:withAll: bases.
 	"CPython REFUSES to resolve __mro_entries__ here: ``type('Bad', (c,),
@@ -4352,7 +4621,21 @@ type: className _: bases _: namespace
 					'type() doesn''t support MRO entry resolution; use types.new_class()']].
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
-	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
+	"THE SMALLTALK NAME AND THE PYTHON NAME ARE NOW TWO THINGS.
+
+	They used to be one: ___asSmalltalkClassName___ only turns `.' into `_',
+	and cls.__name__ read the Smalltalk class name straight back.  That works
+	for the names Python programs usually pick and fails for the ones CPython
+	explicitly allows -- ``type('42', (), {})'', ``type('', (), {})'' and
+	``type('\U0001f40d', (), {})'' are all legal there and all rejected by
+	GemStone, which requires an identifier; and ``type('B.A', (), {})''
+	silently answered a class whose __name__ was 'B_A'.
+
+	So the class gets a name GemStone will take, and the name the CALLER asked
+	for is stored in ___name___ / ___qualname___ -- the same two slots
+	``cls.__name__ = ...'' has written since namedtuple needed them, read by
+	the same accessors.  test_builtin test_type_name."
+	nameSym := self ___smalltalkClassNameFor___: className.
 	"``___dynInstVars___'' is the class-side SLOT the class-attribute holder lives in,
 	and it is requested here rather than added later because a Smalltalk class's
 	instVars are fixed at creation.  ClassDefAst declares it for every class it
@@ -4412,6 +4695,39 @@ type: className _: bases _: namespace
 	off Response, and ``type('Derived', (Base,), {'kind': 'derived'})'' keeps its
 	own namespace store because nothing overwrites it afterwards
 	(docs/Class_Attribute_Single_Home.md)."
+	"EVERY CLASS CARRIES A __doc__, which is how CPython makes an undocumented
+	class answer None rather than inheriting its base's docstring:
+
+	    class Base: 'bdoc'
+	    class Sub(Base): pass
+	    Sub.__doc__        -- None, not 'bdoc'
+
+	ClassDefAst emits a __doc__ accessor for every class the class STATEMENT
+	builds, so those have been right all along.  A class built here had no
+	entry and no accessor, so the read fell through to object>>__doc__ and
+	every one of them claimed object's own docstring -- ``The base class of
+	the class hierarchy...'' -- whatever the caller passed in the namespace.
+	test_builtin test_type_doc."
+	"THE NAME THE CALLER ASKED FOR, kept beside the Smalltalk one.  Stored even
+	when the two agree: the accessors read ___name___ when it is set and fall
+	back to the Smalltalk class otherwise, so writing it unconditionally is
+	what makes the answer independent of how the Smalltalk name was derived.
+	A namespace that supplies __qualname__ has already been copied above, so
+	it wins -- CPython's rule."
+	il @env0:___ensureClassAttrHolder___: newClass.
+	newClass ___classHolderAttrStore___: #'___name___' put: className.
+	(ownAttrNames @env0:includes: #'__qualname__') ifFalse: [
+		newClass ___classHolderAttrStore___: #'___qualname___' put: className].
+	(ownAttrNames @env0:includes: #'__doc__') ifFalse: [
+		"ENSURE THE HOLDER FIRST.  The namespace-copy loop above ensures it, but
+		only on the branch it takes when the namespace is NON-EMPTY -- and the
+		class that most needs a __doc__ entry is ``type('A', (), {})'', whose
+		namespace is empty.  Without this the store fell through
+		___pyAttrStore___ to its ``no ___dynInstVars___'' arm and raised
+		``cannot set '__doc__' attribute of immutable type 'A''', which broke
+		type() outright."
+		il @env0:___ensureClassAttrHolder___: newClass.
+		newClass ___pyAttrStore___: #'__doc__' put: None].
 	"__module__ comes from the CALLER, not from the bases.  CPython's type_new
 	stamps it from ``PyEval_GetGlobals()['__name__']'' whenever the namespace
 	did not supply one, and a class statement always supplies one -- so this
@@ -4440,7 +4756,14 @@ type: className _: bases _: namespace
 			modName := il @env1:___callerModuleName___.
 			modName @env0:notNil ifTrue: [
 				il @env0:___ensureClassAttrHolder___: newClass.
-				newClass ___pyAttrStore___: #'__module__' put: modName]].
+				"WRITTEN TO THE HOLDER DIRECTLY, not through ___pyAttrStore___.
+				A ``__module__'' store now clears ``__firstlineno__'' (CPython's
+				rule -- a class that claims a different module has no valid
+				recorded line), and this is type() filling in a DEFAULT, not a
+				caller moving the class.  Routing it through the store made
+				``type('A', (), {'__firstlineno__': 42})'' lose the entry it
+				had just been given."
+				newClass ___classHolderAttrStore___: #'__module__' put: modName]].
 	"``type(name, bases, ns)'' IS type.__new__, so a ``__classcell__'' in the
 	namespace binds here on the same terms as in a class statement -- and is
 	REFUSED when it already points at another class.  test_super

@@ -46,6 +46,27 @@ ___on: aMapping
 	^ v
 %
 
+category: 'Grail-Initialization'
+classmethod: mappingproxy
+__new__: aMapping
+	"``types.MappingProxyType(d)'' -- the PUBLIC constructor, as distinct from
+	___on: beside it, which is the internal one Grail's own __dict__ accessors
+	use.  Both wrap the live mapping; only this one validates, because only
+	this one can be handed anything.
+
+	Reached because types.py now names this class (``MappingProxyType =
+	type(type.__dict__)'', CPython's own spelling) instead of stubbing the
+	constructor to answer its argument.  Without a __new__: here that call
+	fell through the generic instantiation path and died with ``a PyDict does
+	not understand #'new''', an uncatchable Smalltalk error."
+
+	((aMapping @env0:isKindOf: AbstractDictionary)
+		@env0:or: [aMapping @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+		^ TypeError ___signal___: 'mappingproxy() argument must be a mapping, not '
+			@env0:, (aMapping ___pyTypeNameForError___) @env0:asString].
+	^ self ___on: aMapping
+%
+
 category: 'Grail-Private'
 method: mappingproxy
 ___setMapping: aMapping
