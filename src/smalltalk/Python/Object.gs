@@ -5232,10 +5232,19 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	and every caller used to be a statement that discarded it.  A store emitted
 	as an EXPRESSION cannot: ``(a, b) = pair'' inside a class body, a class-body
 	walrus, and a match capture all read the result back."
-	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
-		ifTrue: [
-			object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: v.
-			^ v].
+	"Through the SAME gate as __setattr__ and ___pyAttrStore___.  This store
+	used to test the pair shape alone, so it was the one caller left that read
+	(__new__, __new__:) as a getter/setter pair -- and a ``def __new__'' under a
+	class-body ``if'' then CALLED object.__new__ with the function standing in
+	for the class, an uncatchable ``ExecBlock does not understand #new''.
+	CPython's pathlib does exactly that (WindowsPath refuses to be built off
+	Windows), so it could not be imported."
+	((self ___mayDispatchToSetter___: getterSym)
+		and: [(self ___respondsTo___: setterSym)
+		and: [self ___respondsTo___: getterSym]])
+			ifTrue: [
+				object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: v.
+				^ v].
 	self ___classHolderAttrStore___: aName put: v.
 	^ v
 %
@@ -11321,9 +11330,12 @@ method: object
 ___mayDispatchToSetter___: aSym
 	"True when (aSym, aSym:) may be read as a getter/setter pair.
 
-	Two call sites -- __setattr__ and ___pyAttrStore___ -- have to decide
-	whether an assignment should DISPATCH to a one-argument method of the same
-	name or STORE a value.  The pair SHAPE is the only signal available, and
+	Three call sites -- __setattr__, ___pyAttrStore___ and
+	___classBodyDefinitionalStore___:put: -- have to decide whether an
+	assignment should DISPATCH to a one-argument method of the same name or
+	STORE a value.  (The third was missed when this gate was introduced, so a
+	conditional ``def __new__'' in a class body still dispatched.)  The pair
+	SHAPE is the only signal available, and
 	it is right for class-body data and for @property, which are always
 	getter+setter.
 
