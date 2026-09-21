@@ -1,10 +1,11 @@
-"""refactor_helper v2: a behaviour-preserving refactor that changes the schema.
+"""refactor_helper v2: a behaviour-preserving refactor, and the schema agrees.
 
 `height` is now assigned by a module-level helper through a parameter named
 `obj`, not through `self` in a method of Widget.  Grail's inference sees only
-`self.<name> = ...` inside the class's own methods, so height is RETIRED: the
-old instance's 2 is hidden, and a new Widget stores height in per-object
-(dynamic) storage instead of a position.  Same behaviour, different schema.
+`self.<name> = ...` inside the class's own methods, so Widget no longer
+ASSIGNS height -- but the name survives in the layout, the old instance
+reads its 2, and the helper's store lands in the same position.  Same
+behaviour, same schema.
 """
 import gemdb
 
@@ -17,10 +18,10 @@ class Widget:
         _size(self)
 
 w = gemdb.root[__name__ + ":w"]
-assert Widget.___pySlotLayout___() == ["width", "~height"]
-assert not hasattr(w, "height"), "hidden by a refactor that meant to change nothing"
+assert Widget.___pySlotLayout___() == ["width", "height"]
+assert w.height == 2
 w2 = Widget()
-assert vars(w2) == {"width": 1, "height": 2}, "the new instance still works -- height is per-object now"
+assert vars(w2) == {"width": 1, "height": 2}
 gemdb.commit()
-print("v2: layout =", Widget.___pySlotLayout___(), " old w.height ->",
-      getattr(w, "height", "AttributeError"), " new Widget(): vars =", vars(w2))
+print("v2: layout =", Widget.___pySlotLayout___(), " old w.height =", w.height,
+      " new Widget(): vars =", vars(w2))

@@ -1,15 +1,15 @@
-"""rename v3: the recovery, with today's tools.
+"""rename v3: migrate lazily, in plain Python.
 
-A tombstone revives when a method assigns the name again, so the old value
-can be brought back by keeping ONE assignment to `phone` somewhere in a
-method -- here, the property that migrates a v1 instance on first read.  This
-works, but the `self.phone = None` line is load-bearing and nothing says so;
-the review proposes a declared rename instead.
+Because the old value stayed readable, the migration is an ordinary
+property: on first read, an instance that still has `phone` gets its list
+built from it and the old attribute deleted.  Nothing here is load-bearing
+for Grail; it is the code you would write against any object store.  (The
+declared rename, `__renamed__`, is cut 3 of docs/Schema_Evolution_Design.md
+and relabels the position instead.)
 """
 import gemdb
 
 class Contact:
-    phone = None            # class default for an instance that never had one
     _phones = None
 
     def __init__(self, phones):
@@ -17,16 +17,17 @@ class Contact:
 
     @property
     def phones(self):
-        if self.phone is not None:       # a v1 instance: one number, not yet migrated
-            self._phones = [self.phone]
-            self.phone = None            # <- this assignment keeps 'phone' in the layout
+        old = getattr(self, "phone", None)
+        if old is not None:                  # a v1 instance: one number, not yet migrated
+            self._phones = [old]
+            del self.phone
         return self._phones if self._phones is not None else []
 
 c = gemdb.root[__name__ + ":c"]
-assert Contact.___pySlotLayout___() == ["phone", "~phones", "_phones"]
-assert vars(c) == {"phone": "555-1234"}, "revived: the v1 value is visible again"
+assert Contact.___pySlotLayout___() == ["phone", "phones", "_phones"]
+assert vars(c) == {"phone": "555-1234"}
 assert c.phones == ["555-1234"]
-assert vars(c) == {"_phones": ["555-1234"], "phone": None}
+assert vars(c) == {"_phones": ["555-1234"]}, "migrated in place: phone deleted, _phones set"
 gemdb.commit()
 print("v3: layout =", Contact.___pySlotLayout___(), " c.phones =", c.phones,
       " vars(c) =", vars(c))

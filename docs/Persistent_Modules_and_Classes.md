@@ -679,11 +679,12 @@ indexed part is its content: a declared slot there is still a named instVar,
 and a reused class cannot grow one, so a slot added to such a class on an edit
 degrades to dynamic storage and a strict class then refuses a foreign store of
 it. No Python-defined class rooted at `PythonInstance` has a named instVar
-any more, and no ordinary edit re-mints one. A slot an edit DROPS keeps its
-position as a `~name` tombstone (the name reads as absent; the value stays in
-the instance) until the developer runs the explicit compaction,
-`Cls ___grailCompactSlots___`, which moves every instance in the caller's
-transaction — the one instance migration left, and an opt-in one.
+any more, and no ordinary edit re-mints one. A slot an edit stops assigning
+SURVIVES, readable and writable, until the developer runs the explicit drop,
+`Cls ___grailDropSlot___: #name` (nils every instance, leaves a `~name` hole),
+and optionally the compaction, `Cls ___grailCompactSlots___`, which moves
+every instance in the caller's transaction — the two instance migrations
+left, both opt-in ([Schema_Evolution_Design.md](Schema_Evolution_Design.md)).
 
 ### 8.4 Smaller items
 

@@ -14,9 +14,11 @@ output pushnew runSlotCompactionTest.out
 !
 ! Session 1: import a fixture whose A declares __slots__ (x y z) and B(A)
 ! adds b1, commit an instance of each under UserGlobals keys, re-import a
-! revision that drops x (A keeps its identity; x becomes the tombstone ~x),
-! assert that compaction REFUSES while the session is dirty, commit, compact,
-! commit.  Session 2: fresh login, fault the instances back through their
+! revision that no longer declares x (A keeps its identity; x SURVIVES in the
+! layout -- docs/Schema_Evolution_Design.md), assert that the drop and the
+! compaction both REFUSE while the session is dirty, commit, DROP x (the
+! explicit step that nils every instance and makes the hole ~x), commit,
+! compact, commit.  Session 2: fresh login, fault the instances back through their
 ! keys alone (no import), and verify the compact layouts, the moved values,
 ! the shrunk sizes and the reads through the accessor pairs; then
 ! ensure:-restore the registries and remove the keys so the repository is
@@ -77,7 +79,7 @@ UserGlobals at: #'Grail_compact_b' put: bInst.
 System commit.
 out cr; nextPutAll: 'session1: committed A and B instances'; cr.
 
-"Revision 2 drops x from A's __slots__: identity kept, position 1 retired."
+"Revision 2 drops x from A's __slots__: identity kept, x survives at position 1."
 f := GsFile openWriteOnServer: path.
 f nextPutAll: 'class A:
     __slots__ = ("y", "z")
@@ -101,16 +103,31 @@ f close.
 (importlib @env1:modules) removeKey: #'grail_slot_compaction' ifAbsent: [].
 mod := importlib loadModuleFromPath: path name: 'grail_slot_compaction'.
 (mod @env1:A) == a ifFalse: [^ self error: 'setup: the rebuild re-minted A'].
-((a perform: #'___pySlotLayout___' env: 1) asArray = #(#'~x' #y #z))
-  ifFalse: [^ self error: 'setup: A layout after the drop is ' , (a perform: #'___pySlotLayout___' env: 1) printString].
-((b perform: #'___pySlotLayout___' env: 1) asArray = #(#'~x' #y #z #b1))
-  ifFalse: [^ self error: 'setup: B layout after the drop is ' , (b perform: #'___pySlotLayout___' env: 1) printString].
+"The edit retires nothing: x survives in both layouts."
+((a perform: #'___pySlotLayout___' env: 1) asArray = #(#x #y #z))
+  ifFalse: [^ self error: 'setup: A layout after the edit is ' , (a perform: #'___pySlotLayout___' env: 1) printString].
+((b perform: #'___pySlotLayout___' env: 1) asArray = #(#x #y #z #b1))
+  ifFalse: [^ self error: 'setup: B layout after the edit is ' , (b perform: #'___pySlotLayout___' env: 1) printString].
+(aInst @env1:___pyAttrLoad___: #x) = 1
+  ifFalse: [^ self error: 'setup: the committed A instance lost x on the edit'].
 
-"The session is dirty (the re-import): the repository scan must refuse."
+"The session is dirty (the re-import): the repository scans must refuse."
+dirtyRefused := [a @env1:___grailDropSlot___: #x. false]
+  on: ImproperOperation do: [:e | e return: true].
+dirtyRefused ifFalse: [^ self error: 'drop ran in a dirty transaction'].
 dirtyRefused := [a @env1:___grailCompactSlots___. false]
   on: ImproperOperation do: [:e | e return: true].
 dirtyRefused ifFalse: [^ self error: 'compaction ran in a dirty transaction'].
 System commit.
+report := a @env1:___grailDropSlot___: #x.
+System commit.
+out nextPutAll: 'session1: dropped x -> ' , report printString; cr.
+(report at: 1) = 2 ifFalse: [^ self error: 'expected 2 layouts to hold the hole, got ' , report printString].
+(report at: 2) >= 2 ifFalse: [^ self error: 'expected at least 2 instances cleared, got ' , report printString].
+((a perform: #'___pySlotLayout___' env: 1) asArray = #(#'~x' #y #z))
+  ifFalse: [^ self error: 'A layout after the drop is ' , (a perform: #'___pySlotLayout___' env: 1) printString].
+((b perform: #'___pySlotLayout___' env: 1) asArray = #(#'~x' #y #z #b1))
+  ifFalse: [^ self error: 'B layout after the drop is ' , (b perform: #'___pySlotLayout___' env: 1) printString].
 report := a @env1:___grailCompactSlots___.
 System commit.
 out nextPutAll: 'session1: compacted -> ' , report printString; cr.

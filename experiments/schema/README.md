@@ -115,28 +115,23 @@ boilerplate Grail requires. Without it, `b.z` on the legacy instance raises
 attribute set. Handling that is a Python question (a default, a `getattr`, a
 property), not a database question, which is the point.
 
-### Tombstones, if you run v1 again
+### If you run v1 again
 
-`run.sh` re-runs version 1, which *drops* `z`. A dropped position is not
-reclaimed; it is retired to a `~z` tombstone, so existing instances stay valid
-and a re-added `z` gets its old offset back. On the second and later runs
-version 1 therefore prints
+`run.sh` re-runs version 1, which no longer assigns `z`. Nothing is retired:
+`z` keeps its position and the old instance keeps its value, so on the second
+and later runs version 1 prints the same `['x', 'z']` / `['x', 'y', 'z']`
+layouts as version 2 did. The `['x']` / `['x', 'y']` in the sample output
+above is the first run against an extent that has never compiled this
+module's version 2 — measured by running version 1's source under an unused
+module name. Note that the class outlives `PythonModules`: deleting the
+module's entry there does *not* forget the layout, because the canonical
+class registry still holds the class.
 
-```
-v1: A slot layout = ['x', '~z']
-v1: B slot layout = ['x', 'y', '~z']
-```
-
-and says so. The `['x']` / `['x', 'y']` in the sample output above is the
-first run against an extent that has never compiled this module's version 2 —
-measured by running version 1's source under an unused module name. Note that
-the class outlives `PythonModules`: deleting the module's entry there does
-*not* forget the layout, because the canonical class registry still holds the
-class.
-
-Reclaiming a tombstone is the one instance migration Grail has, and it is
-explicit and opt-in: `Cls ___grailCompactSlots___` moves every instance in the
-caller's transaction.
+Deleting an attribute's values is an explicit step, `Cls
+___grailDropSlot___: #z`, and reclaiming its position another, `Cls
+___grailCompactSlots___`; neither is an import side effect. The other edits
+are the scenarios in [experiments/schema_changes/](../schema_changes/), with
+the narrative in [docs/Schema_Evolution.md](../../docs/Schema_Evolution.md).
 
 ### What still costs something
 
@@ -146,10 +141,6 @@ changing a class's **bases** re-mints it, and a `__slots__` name added to a
 class rooted at a kernel class (`Exception`, `dict`, …) degrades to dynamic
 storage, because there the indexed part is already the object's content. An
 added or dropped attribute on an ordinary class — this demo — does not.
-
-The other edits -- remove, re-add, compact, rename, move in the hierarchy --
-are the scenarios in [experiments/schema_changes/](../schema_changes/), with the
-narrative in [docs/Schema_Evolution.md](../../docs/Schema_Evolution.md).
 
 Related: [GemDB_Module.md](../../docs/GemDB_Module.md) for the `gemdb` API, and
 [Persistent_Modules_and_Classes.md](../../docs/Persistent_Modules_and_Classes.md)

@@ -3,7 +3,10 @@
 *For Python developers using Grail with GemDB. The implementation is in
 [Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md);
 the review of it, with the proposals this page marks as **proposed**, is
-[Schema_Evolution_Review.md](Schema_Evolution_Review.md). Every claim on this
+[Schema_Evolution_Review.md](Schema_Evolution_Review.md), and the decisions
+behind the current behaviour, with the cuts still to come (a declared rename,
+`gemdb.schema`), are in [Schema_Evolution_Design.md](Schema_Evolution_Design.md).
+Every claim on this
 page is one of the runnable examples in
 [experiments/schema_changes/](../experiments/schema_changes/) or
 [experiments/schema/](../experiments/schema/).*
@@ -51,9 +54,9 @@ edit untouched.
 **The layout only grows.** Positions are handed out once and never reused by
 a later edit. That single rule is what makes every scenario below work
 without moving instances: an edit can add a position at the end, or stop
-using one, but `balance` is slot 1 forever. A position an edit stops using is
-*retired* and shows up as `~balance` in the layout. It is reclaimed only by
-an explicit compaction (§3.4).
+assigning one, but `balance` is slot 1 forever. An edit never removes a
+name. Removing one is an explicit step you take by name (§3.4), and it
+leaves a hole, shown as `~balance`, that only a compaction reclaims.
 
 ## 2. When the schema changes, and the one thing to remember
 
@@ -107,80 +110,81 @@ class Account:
         self.owner = owner               # balance is gone
 ```
 
-On import, `balance` is retired: the layout reads `['~balance', 'owner']`.
-For an old instance, `acct.balance` raises `AttributeError`, `hasattr` is
-false, `vars(acct)` no longer lists it. The 10 the instance was holding is
-still physically there, at the retired position; it is just unreachable from
-Python. That value is kept until you compact (§3.4).
+On import, nothing happens to the data. The layout still reads
+`['balance', 'owner']`, an old instance still answers `acct.balance == 10`,
+`vars(acct)` still lists it, and a caller can still assign it. The class has
+merely stopped assigning it, so a *new* `Account` never gets one. This is
+what CPython does too: removing the assignment leaves an old instance's
+`__dict__` entry alone (`remove_and_readd`, version 2).
 
-**This is a departure from CPython**, where removing the assignment leaves an
-old instance's `__dict__` entry readable. Grail's rule today is that the
-class is the schema, so an attribute the class no longer assigns is gone.
-The review proposes changing this so that a retired value stays *readable*
-until compaction (see §5); until then, the value is safe but invisible.
+So removing an assignment is not a deletion. It is a signal about new
+instances, and it is safe to make by accident: moving `self.height = h` into
+a module-level helper that receives the instance under another name
+(`def _size(obj): obj.height = h`) changes nothing for old or new instances,
+because the helper's store lands in the same position (`refactor_helper`).
+Likewise, if `Base` stops assigning `a2` and `Derived` assigns it instead,
+no layout changes (`move_in_hierarchy`).
 
-Removing is *implicit*: nothing in the source says "drop balance", the
-absence of an assignment says it. Two consequences worth knowing:
-
-- **A refactor can retire a name by accident.** Moving `self.height = h`
-  into a module-level helper that receives the instance under another name
-  (`def _size(obj): obj.height = h`) means no method of the class assigns
-  `self.height` any more. The name is retired, old instances hide their
-  value, and new instances store `height` per object instead of by position.
-  Behaviour is identical; the schema is not (`refactor_helper`).
-- **A subclass that assigns the name keeps it.** If `Base` stops assigning
-  `a2` but `Derived` assigns it, `Derived` keeps `a2` live at its position
-  and old `Derived` instances read it unchanged (`move_in_hierarchy`).
+Deleting the values is a separate, explicit step, by name, in §3.4.
 
 ### 3.3 Re-add an attribute you removed
 
-Put the assignment back. The retired position **revives in place**, and with
-it the values the old instances have been carrying: after the re-add,
-`acct.balance` answers the 10 from before the removal (`remove_and_readd`).
-So a removal followed by a re-add is lossless, at any distance in time, with
-one exception: if a compaction ran in between, the position is gone and the
-re-added name is a fresh position at the end. An old instance then reads it
-as absent (`compact`, version 3).
+Put the assignment back. The layout does not change, because the name never
+left it, and `acct.balance` still answers the 10 it always had
+(`remove_and_readd`, version 3). The one exception is a name you *dropped*
+in between (§3.4): the drop freed the values, and the re-added name is a
+fresh position, so an old instance reads it as absent (`compact`, version 3).
 
-### 3.4 Compact: the one step that loses data, and the only explicit one
+### 3.4 Drop, then compact: the two explicit steps, and the only ones that lose data
 
-Retired positions cost a slot per old instance, and they keep whatever object
-was stored there alive. To reclaim them:
+An attribute nobody assigns any more still costs a slot per instance and
+keeps whatever object is stored there alive. To get rid of it, first stop
+assigning it (§3.2) and import that, then **drop** it by name:
 
 ```python
-gemdb.commit()                              # compaction scans the repository:
-classes, instances = Account.___grailCompactSlots___()   # it needs a clean transaction
+gemdb.commit()                                       # both steps scan the repository:
+classes, instances = Account.___grailDropSlot___("balance")   # they need a clean transaction
 gemdb.commit()
 ```
 
-This rewrites the layout of `Account` *and every class below it* without
-tombstones, recompiles the accessors, moves every existing instance's values
-to the new positions and shrinks each instance to its last set position. It
-runs in your transaction and answers how many classes and instances it
-touched. It is never done for you on import. Treat it as you would a
-migration script: run it when you are sure the retired attributes will not
-come back, on a quiet system, and commit once.
+The drop nils `balance` on every instance of `Account` and of every class
+below it, and turns its position into a hole, `~balance`. From then on the
+name is unknown to the class: `acct.balance` raises, `vars()` does not list
+it, and assigning it from outside makes an ordinary per-object attribute. It
+is refused while any method still assigns the name, because the next
+instance would bring it straight back. Nothing moves, so re-running it after
+an interruption is harmless (`compact`, version 2).
 
-Two limits today: every instance moved is held in memory for the duration, so
-a class with more instances than one transaction should carry is not handled;
-and a class defined inside a function is not in the registry the compaction
-walks, so its persisted instances are not moved.
+A hole costs one empty slot per instance. To reclaim holes:
+
+```python
+gemdb.commit()
+classes, instances = Account.___grailCompactSlots___()
+gemdb.commit()
+```
+
+This rewrites the layouts without holes, recompiles the accessors, moves
+every existing instance's values to the new positions and shrinks each
+instance. Unlike the drop it is one atomic switch across every instance, so
+it is the step to run on a quiet system and commit once. Neither step is
+ever done for you on import.
+
+Two limits today: every instance touched is held in memory for the duration,
+so a class with more instances than one transaction should carry is not
+handled (the batched `gemdb.schema.drop` is cut 2 of the design note); and a
+class defined inside a function is not in the registry either step walks, so
+its persisted instances are not touched.
 
 ### 3.5 Rename an attribute
 
-To Grail today, `phone` → `phones` is a removal plus an addition, so **the
-naive rename hides every old value**: the layout becomes
-`['~phone', 'phones']`, and an old contact answers `AttributeError` for both
-names, with nothing in `vars()` (`rename`, version 2). The value is retained,
-as in §3.2, but no Python code can reach it.
-
-It can be recovered, because a re-added name revives its position (§3.3).
-The pattern is to keep *one* assignment to the old name in some method, and
-to migrate each old instance lazily on first use:
+To Grail today, `phone` → `phones` is an addition beside a name the class
+stopped assigning: the layout becomes `['phone', 'phones']`, an old contact
+still answers `c.phone`, and `c.phones` raises because that instance never
+had one (`rename`, version 2). Nothing is lost and nothing is hidden, but
+nothing migrated either. The migration is plain Python, lazily on first use:
 
 ```python
 class Contact:
-    phone = None                 # class default for an instance that never had one
     _phones = None
 
     def __init__(self, phones):
@@ -188,20 +192,21 @@ class Contact:
 
     @property
     def phones(self):
-        if self.phone is not None:          # a pre-rename instance: one number
-            self._phones = [self.phone]
-            self.phone = None               # this assignment keeps 'phone' in the layout
+        old = getattr(self, "phone", None)
+        if old is not None:                 # a pre-rename instance: one number
+            self._phones = [old]
+            del self.phone
         return self._phones if self._phones is not None else []
 ```
 
 After this version is imported, `old.phones` answers `['555-1234']` and the
-instance has been upgraded in place (`rename`, version 3). It works, and it
-also handles the change of *shape* (one value to a list) that a rename often
-carries. But the `self.phone = None` line is load-bearing and nothing says
-so; delete it as dead code and every old phone number is hidden again.
+instance has been upgraded in place, with `phone` deleted from it (`rename`,
+version 3). This also handles the change of *shape* (one value to a list)
+that a rename often carries. Once every instance has been touched, drop
+`phone` (§3.4).
 
-**Proposed** (not implemented; see the review): declare the rename in the
-class body and let Grail relabel the position,
+**Proposed** (cut 3 of the design note, not implemented): declare the rename
+in the class body and let Grail relabel the position,
 
 ```python
 class Contact:
@@ -210,7 +215,7 @@ class Contact:
 
 which costs nothing per instance because the data does not move; only the
 name of slot 1 changes. A rename that also changes shape would still use a
-lazy normaliser like the property above, but without the hidden dependency.
+lazy normaliser like the property above.
 
 ### 3.6 Change what an attribute holds
 
@@ -245,38 +250,32 @@ attributes per object, not by position, since its indexed part is its
 content. Its edits never move anything, and a `__slots__` name added to such
 a class on an edit falls back to per-object storage.
 
-## 4. Two things that can bite today
+## 4. One name, one home
 
-Both are measured in `dual_home` and are defects the review asks to fix, not
-behaviour to rely on.
-
-- **A name with two homes.** An attribute first assigned from outside the
-  class (per object) that a later edit promotes to a position, or a retired
-  name that a caller assigns while it is retired and that a later edit
-  revives, ends up stored twice on the same instance. Reads take the
-  position, `vars()` shows the other value, and `del obj.x` clears only the
-  position, so the older value resurfaces where CPython would raise
-  `AttributeError`. Until fixed: avoid assigning a retired name from outside
-  the class, and after promoting a per-object attribute, assign it once
-  through the class before relying on `del`.
-- **A body that assigns nothing keeps everything.** If an edit removes
-  *every* `self.x = …` from a class, the layout is not updated at all; the
-  old names stay live and a new instance still stores them by position. If it
-  removes only some, those are retired. The two outcomes should be the same.
+An attribute first assigned from *outside* the class is stored per object.
+If a later edit makes a method assign it, the name gets a position, and an
+old instance holds the value in the old place until something writes the
+new one. Reads still find it, and the first store or `del` through the
+attribute moves the name into its position and removes the per-object copy,
+so `vars()` and the attribute always agree and `del` leaves nothing to
+resurface (`dual_home`). A store made inside a method leaves the old copy
+behind unread; it is invisible and goes with the next `del`.
 
 ## 5. Cheat sheet
 
 | you want to | do | instances in the database | data loss |
 | --- | --- | --- | --- |
 | add an attribute | assign it in a method; give the class a default | untouched; read the default until assigned | none |
-| remove an attribute | stop assigning it | untouched; the name reads as absent | none until you compact |
-| bring a removed one back | assign it again | untouched; old values reappear | none (unless compacted) |
-| reclaim removed attributes | commit, `Cls.___grailCompactSlots___()`, commit | every instance moved, in one transaction | the retired values, deliberately |
-| rename | today: keep one assignment to the old name + lazy migrate (§3.5); **proposed** `__renamed__` | untouched | none, if the old name stays assigned |
+| stop using an attribute | stop assigning it | untouched; old values still read | none |
+| bring one back | assign it again | untouched; nothing ever left | none |
+| delete an attribute's values | stop assigning it, import, then commit, `Cls.___grailDropSlot___("x")`, commit | every instance nilled at that position | the values, deliberately |
+| reclaim holes | commit, `Cls.___grailCompactSlots___()`, commit | every instance moved, in one transaction | none |
+| rename | lazy migrate in a property (§3.5), then drop the old name; **proposed** `__renamed__` | untouched until read | none |
 | change the value's shape | lazy normaliser, or a batch rewrite | untouched until read or rewritten | none |
 | move between parent and child | just move the assignment | untouched | none |
 | change the bases / rename the class | a real migration: new instances, replace references | stranded on the old class | none, but manual |
 
 Where every row says "untouched": the instance's bytes on disk do not change
 on import. An instance grows only when *you* assign a position it lacks, and
-shrinks only in a compaction. That is the whole difference from a migration.
+is written by Grail only in the two steps you run by name. That is the whole
+difference from a migration.

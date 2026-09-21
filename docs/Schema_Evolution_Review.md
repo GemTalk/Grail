@@ -1,5 +1,10 @@
 # Schema evolution over indexed slots: a review
 
+**Decisions taken on this review are in [Schema_Evolution_Design.md](Schema_Evolution_Design.md)**
+(same day); where the two differ, the design note wins. In particular P1 was
+simplified to "an unassigned name survives" with no tombstone state at all,
+P4 is withdrawn as a consequence, and the mass delete lives in `gemdb.schema`.
+
 **Date:** 2026-09-20, on `main` at #1056, gs40. **Scope:** the design in
 [Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md)
 as implemented by #1011/#1019/#1027/#1029, read against James's questions
