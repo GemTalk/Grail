@@ -504,3 +504,26 @@ test.test_funcattrs|FunctionPropertiesTest.test_func_default_args|assigning __de
 # DOUBLING achievable method depth (1212 -> 2599).  Full analysis, and the four
 # hypotheses closed by measurement, in docs/Issues.md.
 test.test_traceback|TestTracebackException.test_long_context_chain|recursion depth is physical stack exhaustion, not a counter: the test's own assertions pass by 24x in isolation, but its margin inside unittest's outcome machinery is a knife edge that any codegen change moves
+# test_xml_etree's deepcopy recursion test.  It builds a 500,000-deep element
+# chain and deep-copies it inside support.infinite_recursion(), asserting a
+# RecursionError -- upstream's own comment is "This should raise a RecursionError
+# and not crash", because CPython ITSELF crashed on it (cpython#148801).
+#
+# PLATFORM-SPLIT, and that is the reason it is here rather than on the board.
+# Both platforms run with the SAME stack configuration (max=74000,
+# errorPercent=25, AlmostOutOfStackError enabled), but that max is a BYTE budget
+# expressed in nominal 128-byte activations, so the frames a program actually
+# gets depend on how large its frames really are:
+#
+#   Darwin arm64   PASSES -- GRAIL_STACK_OVERFLOW|enter=1|converted=1|deepest=72587:
+#                  the yellow-zone reserve is enough to BUILD the RecursionError.
+#   Linux x86_64   CRASH  -- AlmostOutOfStackError 2519 surfaces at stack depth 6,
+#                  from GsProcess>>_start, outside the driver's per-test rescue;
+#                  topaz exits and the module reports no result line at all.
+#
+# Native code (GEM_NATIVE_CODE_ENABLED, on for x86_64 and unavailable on arm64)
+# spends the reserve before the conversion completes.  The cost of NOT skipping
+# was not one test but the module: CI scored test_xml_etree CRASH with 14 of 226
+# tests reported, hiding the ~176 that pass.  Skipping it costs Darwin one real
+# pass, which is the right trade -- the committed board is CI-measured.
+test.test_xml_etree|BadElementTest.test_deeply_nested_deepcopy|500k-deep deepcopy recursion: converted to RecursionError on Darwin arm64 but the yellow-zone reserve runs out on Linux x86_64 native code, so AlmostOutOfStackError escapes from GsProcess>>_start and kills the scoring session
