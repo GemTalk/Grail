@@ -4628,6 +4628,27 @@ value: positional value: kwargs
 	metaResult := self ___grailMetaclassCall___: positional kw: kwargs.
 	metaResult @env0:== #'___noMetaCall___' ifFalse: [^ metaResult].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
+		"ONLY IF IT IS IMPLEMENTED, which the dispatch order above has always
+		said and this branch did not do.  A built-in class with no ``_new:kw:''
+		performed a selector nobody defines, and the resulting env-1
+		MessageNotUnderstood is an UNCATCHABLE Smalltalk error -- so
+		``frozenset(zz=1)'', ``slice(zz=1)'', ``object(zz=1)'' and
+		``type(None)(a=1, b=2)'' could not be caught by ``except TypeError'',
+		or by anything else.  Measured on 2026-09-21; tuple, which does
+		implement it, answered the right TypeError all along, so the two halves
+		of the same protocol disagreed.
+
+		The positional branch below already guards itself this way, for exactly
+		this reason and against exactly this failure; the keyword branch was
+		simply never given the same treatment.
+
+		CPython's wording, and the same wording tuple>>_new:kw: already
+		produces, so the two paths stay indistinguishable to a caller.
+		test_builtin test_construct_singletons."
+		(self @env0:class @env0:whichClassIncludesSelector: #'_new:kw:'
+			environmentId: 1) == nil ifTrue: [
+				^ TypeError ___signal___: (self @env0:name @env0:asString
+					@env0:, '() takes no keyword arguments')].
 		^ self _new: positional kw: kwargs
 	].
 	nargs := positional @env0:size.
@@ -7328,16 +7349,53 @@ ___pyStoreDynamic___: aSym put: aValue
 	^ [self @env0:dynamicInstVarAt: aSym put: aValue]
 		@env0:on: Error
 		do: [:ex |
+			| why |
 			"Match on the reason, not the class: ImproperOperation covers more
-			than this one condition."
-			(((ex @env0:messageText ifNil: ['']) @env0:asString)
-				@env0:indexOfSubCollection: 'more than 255 dynamic instVars') @env0:> 0
+			than this one condition, and the two refusals below arrive as
+			ImproperOperation (2484) and ArgumentTypeError (2031) respectively."
+			why := (ex @env0:messageText @env0:ifNil: ['']) @env0:asString.
+			(why @env0:indexOfSubCollection: 'more than 255 dynamic instVars') @env0:> 0
 				ifTrue: [
 					MemoryError ___signal___: 'cannot set attribute '''
 						@env0:, aSym @env0:asString @env0:,
 						''': a Grail object holds at most 255 attributes (GemStone '
 						@env0:, 'dynamic instVar limit); see section 9.41']
-				ifFalse: [ex @env0:pass]]
+				ifFalse: [
+					"AN OBJECT THAT CANNOT HOLD ATTRIBUTES AT ALL, which is what
+					CPython reports as a plain AttributeError and Grail reported
+					as an UNCATCHABLE Smalltalk error -- so ``x.attr = 1'' on an
+					int, a float, a bool, a str, a tuple, a bytes or a frozenset
+					did not raise a Python exception at all.  It killed the
+					program, and inside a test shard it kills the shard.
+					Measured on 2026-09-21, every one of those seven types:
+
+					  (1).zz = 1          ImproperOperation 2484
+					                      'dynamic instVars not supported on
+					                       special objects'
+					  'ab'.zz = 1         ArgumentTypeError 2031
+					                      'Attempt to modify invariant object'
+
+					GemStone refuses for two different reasons -- a SPECIAL
+					object has no object body to hang a dynamic instVar on, and
+					an INVARIANT one may not be written -- but Python has one
+					answer for both, and it is the answer the caller can catch.
+
+					Matched on the REASON rather than the class for the same
+					reason the 255-limit branch above is: ImproperOperation and
+					ArgumentTypeError each cover much more than this condition,
+					and a class test would swallow unrelated failures.
+
+					This converts a failure; it does not create one.  A store
+					that GemStone accepts still lands, so nothing that works
+					today changes -- including the mutable built-ins (list,
+					dict, a computed str) which still accept an attribute where
+					CPython refuses.  Closing THAT gap needs a type-level
+					``this type has no __dict__'' notion and is a separate cut."
+					((why @env0:indexOfSubCollection: 'dynamic instVars not supported') @env0:> 0
+						@env0:or: [(why @env0:indexOfSubCollection: 'Attempt to modify invariant object') @env0:> 0])
+						ifTrue: [
+							AttributeError @env0:___signalNoDict___: aSym on: self]
+						ifFalse: [ex @env0:pass]]]
 %
 
 category: 'Grail-Attribute Protocol'
@@ -12695,10 +12753,28 @@ ___pyAttrStore___: aName put: aValue
 		"Python user class — store in the per-class ___dynInstVars___ dict."
 		(self ___respondsTo___: #___dynInstVars___)
 			ifTrue: [^ self ___classHolderAttrStore___: aName put: aValue].
-		"Built-in / non-Python class with no setter — AttributeError."
-		^ AttributeError ___signal___:
-			'''' @env0:, self @env0:name @env0:asString @env0:,
-				''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+		"Built-in / non-Python class with no setter.  CPython's refusal here is
+		a TypeError naming the type as IMMUTABLE, not an AttributeError:
+
+		    >>> int.foo = 1
+		    TypeError: cannot set 'foo' attribute of immutable type 'int'
+
+		and the distinction is load-bearing to a caller, because the two mean
+		different things -- AttributeError says ``this object has no such
+		attribute'', which invites a getattr() fallback, where TypeError says
+		``this TYPE does not take attributes'', which no retry can fix.
+		test_builtin test_singleton_attribute_access asserts exactly that:
+		``type(NotImplemented).prop = 1'' must raise TypeError while
+		``NotImplemented.prop'' raises AttributeError, so a single error class
+		for both cannot satisfy it.
+
+		The message also had the wrong SHAPE for a class receiver -- it said
+		``'NoneType' object has no attribute 'prop''', which reads as though
+		the class were an instance."
+		^ TypeError ___signal___:
+			'cannot set ''' @env0:, aName @env0:asString @env0:,
+				''' attribute of immutable type ''' @env0:,
+				self @env0:___pyClassNameForError___ @env0:, ''''
 	].
 	"Data-descriptor priority (CPython): a @property intercepts the instance
 	store -- dispatch to its setter, which writes the backing (or raises for a
@@ -13047,6 +13123,36 @@ ___pyDnuTypeName___
 
 	^ [self @env1:___pyTypeNameForError___]
 		on: Error do: [:ex | ex return: self class name asString]
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyClassNameForError___
+	"The PYTHON name of a CLASS receiver for an error message -- ``int'', not
+	``Integer''.
+
+	The sibling ___pyDnuTypeName___ answers the type of an INSTANCE and is no
+	use here: for a class receiver it answers 'type', which is correct for
+	``iter(list)'' (``'type' object is not iterable'') and wrong for the two
+	messages that name the class ITSELF:
+
+	    type object 'int' has no attribute 'nosuchattr'
+	    cannot set 'foo' attribute of immutable type 'int'
+
+	Both used ``self name asString'', the SMALLTALK class name, so they read
+	'Integer', 'Unicode7' and 'Float' -- names no Python programmer has seen.
+	The classes whose two names happen to coincide (NoneType, frozenset,
+	tuple) hid it, which is why it survived: whether the message was right
+	depended on which built-in you picked.
+
+	``__name__'' is the same source CPython prints from and Grail already
+	answers it correctly for every built-in, so this is DERIVED rather than a
+	second table to keep in step.  Wrapped, and falling back to the Smalltalk
+	name, because it runs on the error path: a receiver carrying no env-1
+	__name__ must still get its exception rather than a nested failure."
+
+	^ [(self @env1:__name__) @env0:asString]
+		on: Error do: [:ex | ex return: self @env0:name @env0:asString]
 %
 
 category: 'Grail-Attribute Access'
