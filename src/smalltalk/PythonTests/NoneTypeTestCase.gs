@@ -69,10 +69,29 @@ testNoneClass
 
 category: 'Grail-Tests - Singleton'
 method: NoneTypeTestCase
-testNewRaisesTypeError
-	"NoneType cannot be instantiated; ``new`` raises TypeError."
+testNewAnswersTheSingleton
+	"``NoneType new'' / ``type(None)()'' answers None.
 
-	self should: [NoneType new] raise: TypeError.
+	THIS TEST USED TO ASSERT THE OPPOSITE -- ``NoneType cannot be
+	instantiated; new raises TypeError'' -- and it was wrong about CPython,
+	which answers the one instance:
+
+	    >>> type(None)() is None
+	    True
+
+	The wording it pinned (``cannot create 'NoneType' instances'') is
+	CPython's for a type that cannot be instantiated AT ALL, so the refusal
+	read as deliberate rather than as a gap, and the test then held it in
+	place.  ellipsis and NotImplementedType, written later, answered their
+	instance from the start; NoneType was the odd one out.  test_builtin
+	test_construct_singletons, and see NoDictAttributesTestCase.
+
+	Answering a FRESH instance would be worse than either -- it prints the
+	same __repr__, so only ``is'' can see it -- hence the identity assertion
+	rather than a bare ``notNil''."
+
+	self assert: NoneType new == None.
+	self assert: None class new == None.
 %
 
 category: 'Grail-Tests - Singleton'

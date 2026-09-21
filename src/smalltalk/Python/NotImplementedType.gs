@@ -135,6 +135,47 @@ new
 	^ self instance
 %
 
+category: 'Grail-Convenience Methods - Attribute'
+method: NotImplementedType
+___pyAttrStore___: aName put: aValue
+	"``NotImplemented.x = 1'' raises AttributeError in CPython: the singleton types
+	carry no instance dictionary, so there is nowhere for the attribute to go.
+
+	Grail ACCEPTED it.  NotImplemented is an ordinary GemStone object and the generic
+	store in object>>___pyAttrStore___:put: writes a dynamic instVar on
+	anything that will take one, so a mistyped assignment succeeded silently
+	and was then visible to every later read in the session -- ``NotImplemented.x''
+	answered 1 instead of raising.  Nothing is committed, so the damage stops
+	at the session boundary, but within a session it is a wrong answer rather
+	than an error.
+
+	Overridden HERE rather than guarded in the generic store because this is a
+	property of the TYPE, and the type is the thing that knows it.
+	test_builtin test_singleton_attribute_access."
+
+	"@env0: because ___signalMissing___:on: is compiled in env 0 and this
+	method is in the file's env-1 region -- an unqualified send lands in
+	env 1 and misses, turning the refusal into an uncatchable MNU."
+	"GRAIL'S OWN BOOKKEEPING IS NOT A PYTHON ATTRIBUTE, and it lands here.
+	ClassDefAst emits a closure-cell store ``<cls> ___pyAttrStore___:
+	#'___cell_<name>___' put: [...]'' for every enclosing local a class's
+	methods capture, and the receiver is whatever the class name holds at
+	that moment -- which is None for a classdef whose name is not yet bound
+	to a class (DunderClassInjectedCellTestCase, all five of its tests).
+	Refusing those broke the closure-cell machinery outright.
+
+	The ``___'' prefix is the whole of Grail's internal attribute namespace
+	(___cell_x___, ___cellSetter_x___, ___qualname___, ...), so this lets the
+	implementation through while still refusing everything a Python program
+	would actually write.  The divergence it leaves is that ``None.___x___ =
+	1'' is accepted where CPython refuses -- a name no program writes, traded
+	for not having to teach every internal store about singleton receivers."
+	(aName @env0:asString @env0:size @env0:>= 3
+		@env0:and: [(aName @env0:asString @env0:copyFrom: 1 to: 3) @env0:= '___'])
+		ifTrue: [^ super ___pyAttrStore___: aName put: aValue].
+	^ AttributeError @env0:___signalNoDict___: aName on: self
+%
+
 category: 'Grail-Singleton'
 classmethod: NotImplementedType
 __new__
