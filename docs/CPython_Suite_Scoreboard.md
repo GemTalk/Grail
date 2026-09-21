@@ -35,7 +35,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_decimal | ERROR | 368 | 0 | 4 | 200 |  |
+| test.test_decimal | OK | 368 | 0 | 0 | 200 |  |
 | test.test_datetime | OK | 525 | 0 | 0 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 30 |  |
 | test.test_functools | OK | 325 | 0 | 0 | 125 |  |
@@ -82,10 +82,10 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_complex | OK | 37 | 0 | 0 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | OK | 37 | 0 | 0 | 2 |  |
-| test.test_funcattrs | ERROR | 35 | 0 | 1 | 3 |  |
+| test.test_funcattrs | OK | 35 | 0 | 0 | 4 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 20 | 32 | 15 |  |
+| test.test_builtin | ERROR | 133 | 21 | 30 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 1 | 1 | 0 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
@@ -124,6 +124,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
+| test.test_xml_etree | CRASH | 0 | 0 | 0 | 0 | topaz exit 1, no result line (see out/cpython/test.test_xml_etree.out) |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
 | test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
