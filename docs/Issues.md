@@ -5978,3 +5978,104 @@ for every `with` in the corpus, and nothing moved.
 
 Found through CPython's glob, which lists a directory with exactly
 `contextlib.closing(_iterdir(...))`.
+## zipfile is CPython's own, and it can write
+
+Started as "`test.test_zipapp` cannot import: no `zipapp`". Vendoring the 231-line
+`zipapp` moved it to `ERROR` with 27 of 35 tests failing on one line —
+`Grail's zipfile is read-only; mode 'w' is not implemented`. `zipapp` was
+never the gap. Grail's `zipfile` was a 599-line hand-written reader, and the
+fix was the one that worked for ElementTree: vendor CPython's real module,
+verbatim, and let it find out what the rest of Grail is missing.
+
+It found six things, in order, each a piece CPython has and Grail did not:
+
+| blocked | missing | fixed by |
+| --- | --- | --- |
+| import | `os.SEEK_SET/CUR/END` | three constants beside the `O_*` flags |
+| extraction | `os.path.splitdrive` (sanitises every member name) | `os_path.gs` |
+| extraction | `os.makedirs(p, exist_ok=True)` matched no selector | a keyword form, no semantic change |
+| adding a file named by a `Path` | `os.fspath(Path(...))` raised `TypeError` | one class-chain predicate shared with `___fsPath___:` |
+| `zipapp.create_archive` | `shutil.copyfileobj` | CPython's six lines, verbatim |
+| **listing any ordinary archive** | the `cp437` codec | `encodings/cp437.py`, verbatim |
+| writing a **deflated** entry | `zlib.compressobj` | `ZlibCompress`, over `deflateInit2_` |
+
+Plus `os.path.splitroot` and `os.path.samefile`, which the package and `zipapp`
+use. Every piece was measured against CPython 3.14 before it was trusted.
+
+### Two of those were regressions against the reader it replaced
+
+This is the part worth keeping. The real `zipfile` *read* worse than the shim at
+first, twice, and only the existing tests said so:
+
+* **`cp437`.** CPython decodes a member name without the UTF-8 flag in `cp437`,
+  and it sets that flag only for non-ASCII names — so `cp437` is the encoding of
+  most archives in existence. Without it the real module could not *list* the
+  CPython-made fixtures. `ZipfileTestCase` went from 14/14 to 1/14.
+* **An exponential memory blow-up** reading a 320 KB member in 1000-byte steps,
+  from a PRE-EXISTING zlib bug — next entry.
+
+Neither would have surfaced by testing only what this change added. The CPython
+round trip of archives Grail WROTE was clean; it was re-running the untouched
+reader tests that exposed both.
+
+## zlib's decompressobj prepended unconsumed_tail, which CPython does not
+
+`ZlibDecompress>>decompress:_:` prepended the previous `unconsumed_tail` itself,
+under a comment claiming that matched CPython. It does not. CPython's documented
+protocol is that the CALLER hands the tail back, and every protocol-following
+caller does — CPython's own `ZipExtFile._read1` among them. So each call received
+the tail twice, and it grew with every call until the gem's temporary object
+memory was exhausted.
+
+Measured, `max_length=100` over 51,200 bytes:
+
+```
+                                      CPython              Grail before
+A  empty follow-up calls              101 of 51200         (continued -- the bug)
+B  pass unconsumed_tail back          51200 of 51200 exact AlmostOutOfMemory
+```
+
+**A test was pinning the bug.** `ZlibTestCase>>testMaxLengthAndUnconsumedTail`
+fed empty follow-up calls and expected them to continue from the tail. Run under
+CPython 3.14, its own final assertion was `False` — 533 of 131,072 bytes. It had
+been written from what a Grail session did, which is exactly what
+`scripts/check_python_fixtures.sh` warns about in its header. It now asserts the
+documented protocol, and a second test pins that an empty follow-up does NOT
+resume — the half that would catch the prepend coming back.
+
+`tarfile` (no `max_length`, so never a tail) and `zlib_codec` (one-shot) were
+unaffected; only a caller that uses `max_length` AND follows CPython's protocol
+could see it, which is why it survived until CPython's own `zipfile` arrived.
+
+## zlib.compressobj exists
+
+`ZlibCompress` drives `deflateInit2_` / `deflate` / `deflateEnd` over the same
+112-byte z_stream as `ZlibDecompress` (one shared allocator now, `zlib
+_zeroedStream`). libz judges every option itself: a bad level, method, wbits or
+memLevel comes back as `Z_STREAM_ERROR`, reported as CPython reports it —
+`ValueError: Invalid initialization option` — with no second set of range checks
+to disagree with libz. A finished stream raises CPython's exact
+`Error -2 while compressing data: inconsistent stream state`.
+
+Verified across implementations, not just by round trip: raw deflate written by
+Grail decompresses in real CPython, and a DEFLATED zip written by Grail passes
+CPython's `testzip()` with `compress_type` 8 on every entry.
+
+`ZlibTestCase>>testCompressobjStillUnsupported` pinned the gap; it is replaced by
+a round-trip test. `zdict` is refused with `NotImplementedError` rather than
+silently compressing without the dictionary.
+
+## Still open, found along the way
+
+* **`os.makedirs` never raises `FileExistsError`.** `exist_ok=False` is not
+  honoured and `mode` is not applied — by the one-argument form too, so both
+  spellings behave the same. The keyword form was added to reach it, not to
+  change it.
+* **Subclassing `io.BytesIO` breaks `write` / `tell`** with an uncatchable
+  `nil + ...` MessageNotUnderstood — the subclass instance's native state is
+  never initialised. A plain `BytesIO` is fine.
+* **`pathlib.Path` lacks `chmod`, `stat`, `open`, `match`** — 9 of the 11 errors
+  left in `test_zipapp` (35 | 0 | 11 | 0, was IMPORTERROR).
+* **`cp437` cannot ENCODE**: `'é'.encode('cp437')` raises where CPython answers
+  `b'\x82'`. Decoding works, and zipfile only decodes with it (it writes names
+  as ASCII or UTF-8), but the dict-based `charmap_encode` path is wrong.

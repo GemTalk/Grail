@@ -77,6 +77,61 @@ ZlibDecompress class removeAllMethods: 0.
 ZlibDecompress class removeAllMethods: 1.
 %
 
+! ===============================================================================
+! ZlibCompress - the Python ``zlib.Compress`` streaming deflater
+! ===============================================================================
+
+expectvalue /Class
+doit
+PythonInstance subclass: 'ZlibCompress'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+ZlibCompress comment:
+'The object answered by ``zlib.compressobj(...)`` - a streaming deflater
+over a libz ``z_stream``, the compressing half of ZlibDecompress.
+
+It drives deflateInit2_/deflate/deflateEnd over the same 112-byte
+z_stream, so every option CPython passes reaches libz, and libz is what
+judges it: a bad level, method, wbits or memLevel comes back from
+deflateInit2_ as Z_STREAM_ERROR, reported as CPython reports it
+(ValueError: Invalid initialization option).  There is no second set of
+range checks here to disagree with libz.
+
+This is what CPython''s zipfile and tarfile need to WRITE a deflated
+archive.  zipfile asks for compressobj(level, DEFLATED, -15): raw deflate,
+exactly what a zip entry holds.
+
+State lives in dynamic instVars: #stream is the z_stream CByteArray (libz
+holds its address, so it must stay reachable), and #finished records that
+a Z_FINISH flush has handed libz its state back.  Past that point the
+object is spent, as CPython''s is, and using it again raises the same
+zlib.error CPython raises.
+
+zdict (deflateSetDictionary) is not wired: it raises NotImplementedError
+rather than silently compressing without the dictionary.'
+%
+
+expectvalue /Class
+doit
+ZlibCompress category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+ZlibCompress removeAllMethods: 0.
+ZlibCompress removeAllMethods: 1.
+ZlibCompress class removeAllMethods: 0.
+ZlibCompress class removeAllMethods: 1.
+%
+
 set compile_env: 0
 
 category: 'Grail-Introspection'
@@ -120,10 +175,11 @@ z_stream, so every windowBits CPython accepts works: 8..15 zlib,
 auto-detect.  decompress(data, wbits, bufsize) is implemented ON TOP
 of it, so the one-shot and streaming paths cannot drift apart.
 
-COMPRESSION is still one-shot: compress(data, level) goes through
-compress2() in the standard zlib format, and compressobj() raises
-NotImplementedError - it needs the matching deflateInit2_ half, which
-is also what zipfile/tarfile would need to WRITE archives.
+COMPRESSION is complete too.  compressobj(...) answers a ZlibCompress
+driving deflateInit2_/deflate/deflateEnd over the same z_stream - the
+half zipfile and tarfile need to WRITE a deflated archive.
+compress(data, level) stays one-shot, over compress2() in the standard
+zlib format.
 
 crc32 and adler32 are exposed; ZLIB_VERSION is not.
 
@@ -185,10 +241,9 @@ _initWbits: wbits
 	ok ifFalse: [
 		ZlibError ___signal___: ('Invalid initialization option: ' @env0:, wbits @env0:printString)].
 	callouts := zlib _libzCallouts.
-	strm := CByteArray @env0:gcMalloc: 112.
-	0 @env0:to: 13 do: [:i | strm @env0:int64At: (i @env0:* 8) put: 0].
+	strm := zlib _zeroedStream.
 	rc := (callouts @env0:at: #inflateInit2_) @env0:callWith:
-		{ strm. wbits. callouts @env0:at: #zlibVersion. 112 }.
+		{ strm. wbits. callouts @env0:at: #zlibVersion. zlib _streamSize }.
 	rc @env0:= 0 ifFalse: [
 		ZlibError ___signal___: ('inflateInit2_ failed with ' @env0:, rc @env0:printString)].
 	self @env0:dynamicInstVarAt: #strm put: strm.
@@ -309,10 +364,22 @@ decompress: data
 category: 'Grail-Decompression'
 method: ZlibDecompress
 decompress: data _: maxLength
-	"Decompress(data[, max_length]).  Any unconsumed_tail left by the
-	previous call is prepended, matching CPython."
+	"Decompress(data[, max_length]) -- THIS data and nothing else.
 
-	| bytes input tail |
+	The previous unconsumed_tail is NOT prepended.  This used to prepend it,
+	under a comment claiming that matched CPython; it does not.  CPython's
+	documented protocol is that the CALLER passes unconsumed_tail back to the
+	next call, and every protocol-following caller does -- CPython's own
+	zipfile (ZipExtFile._read1) among them.  With the tail prepended here as
+	well, each call received it twice, so it grew with every call: reading a
+	320 KB zip member in 1000-byte steps exhausted the gem's memory.
+
+	Measured against CPython 3.14 with max_length=100 over 51,200 bytes:
+	passing the tail back recovers all of it; feeding empty follow-up calls
+	recovers 101 bytes, because the input was never handed back.  flush()
+	still processes the stored tail, which is what CPython's flush does."
+
+	| bytes |
 	bytes := zlib _asBytesArg: data.
 	(self @env0:dynamicInstVarAt: #eof) == true ifTrue: [
 		"Past the end of the stream CPython accumulates into unused_data."
@@ -320,10 +387,8 @@ decompress: data _: maxLength
 			self @env0:dynamicInstVarAt: #unused put:
 				((self @env0:dynamicInstVarAt: #unused) @env0:, bytes)].
 		^ ByteArray @env0:new].
-	tail := self @env0:dynamicInstVarAt: #tail.
-	input := tail @env0:isEmpty ifTrue: [bytes] ifFalse: [tail @env0:, bytes].
 	self @env0:dynamicInstVarAt: #tail put: ByteArray @env0:new.
-	^ self _run: input flushMode: 0 maxLength: maxLength
+	^ self _run: bytes flushMode: 0 maxLength: maxLength
 %
 
 category: 'Grail-Decompression'
@@ -394,6 +459,269 @@ unconsumed_tail
 	^ self @env0:dynamicInstVarAt: #tail
 %
 
+category: 'Grail-Instance Creation'
+classmethod: ZlibCompress
+level: aLevel method: aMethod wbits: aWindowBits memLevel: aMemoryLevel strategy: aStrategy
+	"The one way to make a compressor.  libz judges every argument itself, so
+	the precondition IS deflateInit2_'s answer."
+
+	^ self @env0:new _initializeStream:
+		(self
+			_deflateStreamLevel: aLevel
+			method: aMethod
+			wbits: aWindowBits
+			memLevel: aMemoryLevel
+			strategy: aStrategy)
+%
+
+category: 'Grail-Private'
+classmethod: ZlibCompress
+_deflateStreamLevel: aLevel method: aMethod wbits: aWindowBits memLevel: aMemoryLevel strategy: aStrategy
+	"A zeroed z_stream that deflateInit2_ has accepted."
+
+	| callouts stream result |
+
+	callouts := zlib _libzCallouts.
+	stream := zlib _zeroedStream.
+	result := (callouts @env0:at: #deflateInit2_) @env0:callWith: {
+		stream. aLevel. aMethod. aWindowBits. aMemoryLevel. aStrategy.
+		callouts @env0:at: #zlibVersion. zlib _streamSize }.
+	self _assertInitialized: result.
+	^ stream
+%
+
+category: 'Grail-Private'
+classmethod: ZlibCompress
+_assertInitialized: aResult
+	"deflateInit2_'s answer, mapped the way CPython's zlibmodule maps it."
+
+	aResult @env0:= 0 ifTrue: [^ self].
+	aResult @env0:= -2 ifTrue: [^ ValueError ___signal___: self _invalidInitializationOptionMessage].
+	aResult @env0:= -4 ifTrue: [^ MemoryError ___signal___: self _cannotAllocateMessage].
+	^ ZlibError ___signal___: (self _errorMessageFor: aResult while: 'creating compression object')
+%
+
+category: 'Grail-Error Messages'
+classmethod: ZlibCompress
+_invalidInitializationOptionMessage
+
+	^ 'Invalid initialization option'
+%
+
+category: 'Grail-Error Messages'
+classmethod: ZlibCompress
+_cannotAllocateMessage
+
+	^ 'Can''t allocate memory for compression object'
+%
+
+category: 'Grail-Error Messages'
+classmethod: ZlibCompress
+_zdictNotImplementedMessage
+
+	^ 'zlib.compressobj(zdict=...) is not implemented in Grail (deflateSetDictionary is not wired)'
+%
+
+category: 'Grail-Error Messages'
+classmethod: ZlibCompress
+_errorMessageFor: aResult while: aPhase
+
+	^ 'Error ' @env0:, aResult @env0:printString @env0:, ' while ' @env0:, aPhase
+%
+
+category: 'Grail-Error Messages'
+classmethod: ZlibCompress
+_inconsistentStreamStateWhile: aPhase
+	"What CPython reports once a finished stream is used again: libz answers
+	Z_STREAM_ERROR with no message of its own, and CPython supplies this one."
+
+	^ (self _errorMessageFor: -2 while: aPhase) @env0:, ': inconsistent stream state'
+%
+
+category: 'Grail-Constants'
+classmethod: ZlibCompress
+_noFlushMode
+
+	^ 0
+%
+
+category: 'Grail-Constants'
+classmethod: ZlibCompress
+_finishMode
+
+	^ 4
+%
+
+category: 'Grail-Constants'
+classmethod: ZlibCompress
+_chunkSize
+	"Output is collected 16 KiB at a time, as ZlibDecompress collects it."
+
+	^ 16384
+%
+
+category: 'Grail-Initialization'
+method: ZlibCompress
+_initializeStream: aStream
+
+	self @env0:dynamicInstVarAt: #stream put: aStream.
+	self @env0:dynamicInstVarAt: #finished put: false
+%
+
+category: 'Grail-Compression'
+method: ZlibCompress
+compress: data
+	"compress(data) -- whatever compressed output the data has produced so far,
+	which may be nothing: libz holds input back until it has a block's worth."
+
+	self _assertNotFinishedWhile: 'compressing data'.
+	^ self
+		_deflate: (zlib _asBytesArg: data)
+		flushMode: self @env0:class _noFlushMode
+		while: 'compressing data'
+%
+
+category: 'Grail-Compression'
+method: ZlibCompress
+_compress: positional kw: kwargs
+	"The varargs form of compress(data), for a held-and-called-later method."
+
+	^ self compress: (positional @env0:at: 1)
+%
+
+category: 'Grail-Compression'
+method: ZlibCompress
+flush
+	"flush() -- finish the stream, which is CPython's default mode."
+
+	^ self flush: self @env0:class _finishMode
+%
+
+category: 'Grail-Fixed Arity Forwarders'
+method: ZlibCompress
+flush: aMode
+	"flush(mode) -- Z_FINISH ends the stream and hands libz its state back; the
+	other modes emit what is pending and keep the stream open.  Z_NO_FLUSH is
+	a no-op even on a finished stream, so it is tested first, as CPython does."
+
+	| output |
+
+	aMode @env0:= self @env0:class _noFlushMode ifTrue: [^ ByteArray @env0:new].
+	self _assertNotFinishedWhile: 'flushing'.
+	output := self _deflate: ByteArray @env0:new flushMode: aMode while: 'flushing'.
+	aMode @env0:= self @env0:class _finishMode ifTrue: [self _finish].
+	^ output
+%
+
+category: 'Grail-Compression'
+method: ZlibCompress
+_flush: positional kw: kwargs
+	"The varargs form of flush([mode])."
+
+	positional @env0:ifEmpty: [^ self flush].
+	^ self flush: (positional @env0:at: 1)
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_deflate: someBytes flushMode: aMode while: aPhase
+	"Run deflate() over someBytes until libz has emitted everything it will for
+	this mode: to Z_STREAM_END when finishing, otherwise until it stops filling
+	the output buffer.  The input CByteArray is held in a temp because libz
+	has only its address."
+
+	| stream input output |
+
+	stream := self _stream.
+	input := self _point: stream atInput: someBytes.
+	output := WriteStream @env0:on: ByteArray @env0:new.
+	[self _deflateChunkOf: stream mode: aMode into: output while: aPhase] @env0:whileTrue.
+	^ output @env0:contents
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_point: aStream atInput: someBytes
+	"Aim next_in / avail_in at someBytes, answering the CByteArray that must
+	stay alive while libz reads it.  libz accepts a NULL next_in only while
+	avail_in is 0."
+
+	| input |
+
+	someBytes @env0:ifEmpty: [
+		aStream @env0:int64At: 0 put: 0.
+		aStream @env0:uint32At: 8 put: 0.
+		^ nil].
+	input := CByteArray @env0:withAll: someBytes.
+	aStream @env0:pointerAt: 0 put: input.
+	aStream @env0:uint32At: 8 put: someBytes @env0:size.
+	^ input
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_deflateChunkOf: aStream mode: aMode into: anOutput while: aPhase
+	"One deflate() call into a fresh output chunk.  Answers whether another
+	call is needed."
+
+	| chunk result produced |
+
+	chunk := CByteArray @env0:gcMalloc: self @env0:class _chunkSize.
+	aStream @env0:pointerAt: 24 put: chunk.
+	aStream @env0:uint32At: 32 put: self @env0:class _chunkSize.
+	result := ((zlib _libzCallouts) @env0:at: #deflate) @env0:callWith: { aStream. aMode }.
+	self _assertDeflated: result while: aPhase.
+	produced := self @env0:class _chunkSize @env0:- (aStream @env0:uint32At: 32).
+	produced @env0:> 0 ifTrue: [
+		anOutput @env0:nextPutAll: (chunk @env0:byteArrayFrom: 0 numBytes: produced)].
+	^ self _continuesAfter: result mode: aMode stream: aStream
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_continuesAfter: aResult mode: aMode stream: aStream
+	"Z_BUF_ERROR (-5) means no progress was possible, so stop.  Finishing runs
+	to Z_STREAM_END (1); any other mode stops once libz leaves room in the
+	output buffer, which means it has emitted all it can."
+
+	aResult @env0:= -5 ifTrue: [^ false].
+	aMode @env0:= self @env0:class _finishMode ifTrue: [^ aResult @env0:~= 1].
+	^ (aStream @env0:uint32At: 32) @env0:= 0
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_assertDeflated: aResult while: aPhase
+	"Z_BUF_ERROR (-5) is not fatal -- see _continuesAfter:mode:stream:."
+
+	(aResult @env0:< 0 and: [aResult @env0:~= -5]) ifTrue: [
+		ZlibError ___signal___: (self @env0:class _errorMessageFor: aResult while: aPhase)]
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_assertNotFinishedWhile: aPhase
+
+	(self @env0:dynamicInstVarAt: #finished) ifTrue: [
+		ZlibError ___signal___: (self @env0:class _inconsistentStreamStateWhile: aPhase)]
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_finish
+	"Hand libz its state back.  The object is spent afterwards, as CPython's is."
+
+	((zlib _libzCallouts) @env0:at: #deflateEnd) @env0:callWith: { self _stream }.
+	self @env0:dynamicInstVarAt: #finished put: true
+%
+
+category: 'Grail-Private'
+method: ZlibCompress
+_stream
+
+	^ self @env0:dynamicInstVarAt: #stream
+%
+
 category: 'Grail-Initialization'
 method: zlib
 initialize
@@ -434,10 +762,14 @@ _libzCallouts
 	#zlibVersion holds the CPointer answered by zlibVersion(), not a
 	callout: inflateInit2_ takes the version STRING and checks its major
 	digit, and handing it libz's own constant is more honest than
-	hardcoding '1.x' here."
+	hardcoding '1.x' here.
+
+	The key is VERSIONED and was bumped (v2 -> v3) when the deflate half was
+	added: a session that cached the old dictionary would otherwise answer
+	nil for #deflate for the rest of its life."
 
 	| d lib libName |
-	d := SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v2 otherwise: nil.
+	d := SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v3 otherwise: nil.
 	d == nil ifTrue: [
 		"libz lives at a different path/extension per OS; pass a bare soname
 		and let the loader resolve it (avoids Linux multiarch dir differences).
@@ -455,10 +787,39 @@ _libzCallouts
 		d @env0:at: #inflateInit2_ put: (CCallout @env0:library: lib name: 'inflateInit2_' result: #int32 args: #(#'ptr' #'int32' #'ptr' #'int32')).
 		d @env0:at: #inflate put: (CCallout @env0:library: lib name: 'inflate' result: #int32 args: #(#'ptr' #'int32')).
 		d @env0:at: #inflateEnd put: (CCallout @env0:library: lib name: 'inflateEnd' result: #int32 args: #(#'ptr')).
+		d @env0:at: #deflateInit2_ put: (CCallout @env0:library: lib name: 'deflateInit2_' result: #int32
+			args: #(#'ptr' #'int32' #'int32' #'int32' #'int32' #'int32' #'ptr' #'int32')).
+		d @env0:at: #deflate put: (CCallout @env0:library: lib name: 'deflate' result: #int32 args: #(#'ptr' #'int32')).
+		d @env0:at: #deflateEnd put: (CCallout @env0:library: lib name: 'deflateEnd' result: #int32 args: #(#'ptr')).
 		d @env0:at: #zlibVersion put:
 			((CCallout @env0:library: lib name: 'zlibVersion' result: #'ptr' args: #()) @env0:callWith: #()).
-		SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v2 put: d].
+		SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v3 put: d].
 	^ d
+%
+
+category: 'Grail-Private'
+classmethod: zlib
+_streamSize
+	"sizeof(z_stream) on LP64 -- Linux x86_64 and Darwin arm64 alike.  libz is
+	told it (the stream_size argument of both init calls) and checks it."
+
+	^ 112
+%
+
+category: 'Grail-Private'
+classmethod: zlib
+_zeroedStream
+	"A z_stream with every field zero.  zalloc / zfree / opaque are read by the
+	init call, and NULL there means libz's own allocator.  Shared by
+	ZlibDecompress and ZlibCompress, which drive the same struct in the two
+	directions."
+
+	| stream |
+
+	stream := CByteArray @env0:gcMalloc: self _streamSize.
+	0 @env0:to: self _streamSize @env0:// 8 @env0:- 1 do: [:word |
+		stream @env0:int64At: word @env0:* 8 put: 0].
+	^ stream
 %
 
 category: 'Grail-Private'
@@ -649,8 +1010,48 @@ _adler32: positional kw: kwargs
 category: 'Grail-Streaming'
 method: zlib
 _compressobj: positional kw: kwargs
-	NotImplementedError ___signal___:
-		'zlib.compressobj() is not implemented in Grail (one-shot compress/decompress only)'
+	"zlib.compressobj(level, method, wbits, memLevel, strategy, zdict), each by
+	position or by keyword, with CPython's defaults."
+
+	| arguments |
+
+	arguments := self _compressobjArguments: positional kw: kwargs.
+	(arguments @env0:at: 6) == None ifFalse: [
+		NotImplementedError ___signal___: ZlibCompress _zdictNotImplementedMessage].
+	^ ZlibCompress
+		level: (arguments @env0:at: 1)
+		method: (arguments @env0:at: 2)
+		wbits: (arguments @env0:at: 3)
+		memLevel: (arguments @env0:at: 4)
+		strategy: (arguments @env0:at: 5)
+%
+
+category: 'Grail-Streaming'
+method: zlib
+_compressobjArguments: positional kw: kwargs
+	"The six compressobj arguments in declaration order: by position, else by
+	keyword, else CPython's default."
+
+	| names defaults |
+
+	names := #('level' 'method' 'wbits' 'memLevel' 'strategy' 'zdict').
+	defaults := { -1. 8. 15. 8. 0. None }.
+	^ (1 @env0:to: names @env0:size) @env0:collect: [:index |
+		self
+			_argumentAt: index
+			named: (names @env0:at: index)
+			from: positional
+			kw: kwargs
+			ifAbsent: (defaults @env0:at: index)]
+%
+
+category: 'Grail-Streaming'
+method: zlib
+_argumentAt: anIndex named: aName from: positional kw: kwargs ifAbsent: aDefault
+
+	positional @env0:size @env0:>= anIndex ifTrue: [^ positional @env0:at: anIndex].
+	kwargs ifNil: [^ aDefault].
+	^ kwargs @env0:at: aName ifAbsent: [aDefault]
 %
 
 category: 'Grail-Streaming'
