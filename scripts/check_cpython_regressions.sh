@@ -78,7 +78,27 @@ awk '
         split($0, f, /\|/)
         m = trim(f[2]); cstat = trim(f[3]); ctests = trim(f[4])
         cfe = trim(f[5]) + trim(f[6])
-        if (!(m in bseen)) { printf "new       %s: %s (%d fail+err) -- no baseline\n", m, cstat, cfe; next }
+        # A module absent from the baseline is REPORTED rather than judged, because
+        # its counts have nothing to be compared with (see the empty-baseline case in
+        # the gate self-test).  One judgement needs no baseline, though: a module
+        # that ENTERS the board CRASH, TIMEOUT or STERROR measured nothing at all --
+        # the harness died, so its 0 fail+err is not a count.  That is exactly the
+        # move is_hard() already calls a regression for a module that WAS on the
+        # board, and entering hard is no better than moving there.
+        #
+        # Found the expensive way: test.test_xml_etree entered as CRASH (one test
+        # exhausted the stack uncatchably on Linux) and three nightlies reported
+        # "new ... -- no baseline" and passed, until the baseline refresh committed
+        # the CRASH row and made it look like the real state of the module.
+        if (!(m in bseen)) {
+            if (is_hard(cstat)) {
+                printf "REGRESSION %s: entered the board as %s -- a new module that measured nothing\n", m, cstat
+                nreg++
+            } else {
+                printf "new       %s: %s (%d fail+err) -- no baseline\n", m, cstat, cfe
+            }
+            next
+        }
         reg = ""
         # Unblocked: the baseline never ran a test, and now the module does.
         # An improvement regardless of the new counts -- and the count rule

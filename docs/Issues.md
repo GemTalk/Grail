@@ -5916,4 +5916,41 @@ The second is a gap in the gate. The nightly that first measured the crash
 reported `new test.test_xml_etree: CRASH (0 fail+err) -- no baseline` and still
 passed with 0 regressions: a NEW module that enters the board as CRASH, STERROR
 or TIMEOUT is never flagged, so this sat for three days behind green nightlies.
-Still open.
+Fixed in the next entry.
+
+## The gate now fails a module that enters the board measuring nothing
+
+`check_cpython_regressions.sh` reported a module absent from the baseline and
+moved on, deliberately: it cannot judge counts it has never seen. That left one
+judgement on the table that needs no baseline at all. A module that enters the
+board `CRASH`, `TIMEOUT` or `STERROR` measured nothing — the harness died, so
+its `0 fail+err` is not a count — and `is_hard()` already calls the same move a
+regression for a module that WAS on the board. Entering hard is no better than
+moving there.
+
+The rule stays narrow on purpose. A new module that enters `IMPORTERROR`, `ERROR`,
+`FAIL` or `OK` is still reported and passed: an import failure is a real
+measurement (the manifest carries such modules so the detail column can name
+the missing symbol), and a module that runs has counts the gate simply has
+nothing to compare with yet.
+
+**Replayed against the nightly that let `test_xml_etree` through** — the real
+09-21 CI board against the baseline committed at the time:
+
+```
+before   new       test.test_xml_etree: CRASH (0 fail+err) -- no baseline
+         cpython regression gate: 0 regression(s), 3 improvement(s)    exit 0
+after    REGRESSION test.test_xml_etree: entered the board as CRASH -- ...
+         cpython regression gate: 1 regression(s), 3 improvement(s)    exit 1
+```
+
+The self-test gains seven cases, and they were checked against the OLD gate as
+well as the new one: exactly the four that assert the new rule fail there
+(entering as CRASH, TIMEOUT and STERROR, and a CRASH row on an empty baseline),
+while the three that pin the rule's narrowness pass on both. A case that passes
+before and after a change proves nothing about the change.
+
+Safe to land today: the manifest and the committed board agree row for row
+(104 and 104), so no module is "new" to the next nightly and this cannot turn it
+red by itself. It fires the next time someone adds a module that crashes — which
+is exactly when it should.
