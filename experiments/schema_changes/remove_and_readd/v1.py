@@ -1,5 +1,6 @@
 """remove_and_readd v1: a class with two attributes; commit one instance."""
 import gemdb
+import gemdb.schema
 
 class Account:
     def __init__(self):
@@ -9,5 +10,5 @@ class Account:
 acct = Account()
 gemdb.root[__name__ + ":acct"] = acct
 gemdb.commit()
-assert Account.___pySlotLayout___() == ["balance", "owner"]
-print("v1: layout =", Account.___pySlotLayout___(), " vars(acct) =", vars(acct))
+assert [r["name"] for r in gemdb.schema.layout(Account)] == ["balance", "owner"]
+print("v1: layout =", [r["name"] for r in gemdb.schema.layout(Account)], " vars(acct) =", vars(acct))

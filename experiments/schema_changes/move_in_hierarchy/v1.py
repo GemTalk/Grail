@@ -1,5 +1,6 @@
 """move_in_hierarchy v1: Base assigns a1 and a2; Derived adds d1."""
 import gemdb
+import gemdb.schema
 
 class Base:
     def __init__(self):
@@ -14,6 +15,6 @@ class Derived(Base):
 d = Derived()
 gemdb.root[__name__ + ":d"] = d
 gemdb.commit()
-assert Base.___pySlotLayout___() == ["a1", "a2"]
-assert Derived.___pySlotLayout___() == ["a1", "a2", "d1"]
-print("v1: Base =", Base.___pySlotLayout___(), " Derived =", Derived.___pySlotLayout___())
+assert [r["name"] for r in gemdb.schema.layout(Base)] == ["a1", "a2"]
+assert [r["name"] for r in gemdb.schema.layout(Derived)] == ["a1", "a2", "d1"]
+print("v1: Base =", [r["name"] for r in gemdb.schema.layout(Base)], " Derived =", [r["name"] for r in gemdb.schema.layout(Derived)])

@@ -6,10 +6,11 @@ everything else.  A schema change is an ordinary part of the transaction
 that imported it.
 """
 import gemdb
+import gemdb.schema
 
 class Note:
     def __init__(self):
         self.body = "hi"
 
-assert Note.___pySlotLayout___() == ["text", "body"]
-print("v2: layout in this session =", Note.___pySlotLayout___(), " -- and no commit")
+assert [r["name"] for r in gemdb.schema.layout(Note)] == ["text", "body"]
+print("v2: layout in this session =", [r["name"] for r in gemdb.schema.layout(Note)], " -- and no commit")

@@ -15,8 +15,8 @@ the older demo next door, [experiments/schema/](../schema/).
 | scenario | the edit | what it shows |
 | --- | --- | --- |
 | `remove_and_readd` | stop assigning `balance`, then assign it again | nothing is retired: the old value stays readable and listed; re-adding changes nothing |
-| `compact` | stop assigning `raw`, DROP it, compact, re-add `raw` | the two explicit lossy steps, commit-drop-commit-compact-commit; a name re-added afterwards is a new position |
-| `rename` | `phone` → `phones` | the old value stays readable under the old name; the migration is a plain property with `getattr` and `del` |
+| `compact` | stop assigning `raw`, DROP it, compact, re-add `raw` | the two explicit steps through `gemdb.schema`; a name re-added after a drop is a new position |
+| `rename` | `phone` → `phones` | the old value stays readable under the old name, and `gemdb.schema.rename` relabels the position without touching an instance |
 | `move_in_hierarchy` | `a2` moves from `Base` into `Derived` | no layout changes; every value reads as before |
 | `refactor_helper` | assign `height` through a helper instead of `self` | the class stops assigning the name but the helper's store lands in the same position; same schema |
 | `uncommitted_rebuild` | an edit imported but not committed | the rebuilt layout is rolled back with the session; a schema change is part of the importing transaction |
@@ -41,7 +41,7 @@ nothing. The versions are copied under that name into a temp tree that the
 runner removes on exit. Each version is a separate `./grail -c 'import …'`, so
 each is its own session and its own transaction.
 
-## Measured output (2026-09-21, gs40, cut 1 of the design note)
+## Measured output (2026-09-21, gs40, cuts 1 and 2 of the design note)
 
 ```
 === remove_and_readd v1 ===
@@ -54,8 +54,9 @@ v3: layout = ['balance', 'owner']  acct.balance = 10  Account().balance = 0
 === compact v1 ===
 v1: layout = ['raw', 'value']  vars(r) = {'raw': 1, 'value': 2}
 === compact v2 ===
-v2: dropped raw -> 1 class, 1 instance; layout = ['~raw', 'value']
-v2: compacted -> 1 class, 1 instance; layout = ['value']  vars(r) = {'value': 2}
+v2: layout = {'raw': 'unassigned', 'value': 'assigned'}
+v2: dropped raw -> {'classes': 1, 'instances': 1}  layout = {'raw': 'hole', 'value': 'assigned'}
+v2: compacted -> {'classes': 1, 'instances': 1}  layout = ['value']  vars(r) = {'value': 2}
 === compact v3 ===
 v3: layout = ['value', 'raw']  r.raw -> AttributeError  (gone: the drop freed it)
 
@@ -64,7 +65,7 @@ v1: layout = ['phone']  vars(c) = {'phone': '555-1234'}
 === rename v2 ===
 v2: layout = ['phone', 'phones']  c.phone = 555-1234  c.phones -> AttributeError  vars(c) = {'phone': '555-1234'}
 === rename v3 ===
-v3: layout = ['phone', 'phones', '_phones']  c.phones = ['555-1234']  vars(c) = {'_phones': ['555-1234']}
+v3: rename -> {'classes': 1, 'instances': 1}  layout = [('phone', 'hole'), ('phones', 'assigned')]  c.phones = 555-1234
 
 === move_in_hierarchy v1 ===
 v1: Base = ['a1', 'a2']  Derived = ['a1', 'a2', 'd1']
@@ -92,9 +93,6 @@ v2 Q: layout = ['x', 'y']  after q.x = 99: vars(q) = {'x': 99, 'y': 20}
 v3 Q: layout = ['x', 'y']  q.x was 99; after del q.x: hasattr = False
 ```
 
-`Cls.___pySlotLayout___()` is the class's slot layout, callable from Python;
-`~name` marks a hole a drop left. `Cls.___grailDropSlot___("name")` is the
-drop and `Cls.___grailCompactSlots___()` the compaction; each answers
-`[classes rewritten, instances touched]`. All three are Grail-internal
-spellings, used here because they are the only way to *see* the schema
-today; `gemdb.schema` (cut 2 of the design note) will be the public one.
+The scenarios use the public `gemdb.schema` API: `layout` (one row per
+position, with a `kind` of `assigned`, `unassigned` or `hole`), `drop`,
+`rename` and `compact`. See [docs/GemDB_Module.md](../../docs/GemDB_Module.md).

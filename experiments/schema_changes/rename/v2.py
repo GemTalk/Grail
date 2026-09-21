@@ -6,16 +6,17 @@ so nothing is lost and nothing is hidden -- but nothing migrated either:
 c.phones raises, because this instance never had one.
 """
 import gemdb
+import gemdb.schema
 
 class Contact:
     def __init__(self, phones):
         self.phones = list(phones)
 
 c = gemdb.root[__name__ + ":c"]
-assert Contact.___pySlotLayout___() == ["phone", "phones"]
+assert [r["name"] for r in gemdb.schema.layout(Contact)] == ["phone", "phones"]
 assert c.phone == "555-1234"
 assert not hasattr(c, "phones")
 assert vars(c) == {"phone": "555-1234"}
 gemdb.commit()
-print("v2: layout =", Contact.___pySlotLayout___(), " c.phone =", c.phone,
+print("v2: layout =", [r["name"] for r in gemdb.schema.layout(Contact)], " c.phone =", c.phone,
       " c.phones ->", getattr(c, "phones", "AttributeError"), " vars(c) =", vars(c))

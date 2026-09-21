@@ -524,8 +524,11 @@ testDropRefusesAnAssignedNameAndClearsAnUnassignedOne
 '.
 	c := mod @env1:C.
 	inst := c @env1:___pyCallValue___: { } kw: nil.
-	self should: [c @env1:___grailDropSlotSessionOnly___: #x] raise: ImproperOperation.
-	self should: [c @env1:___grailDropSlotSessionOnly___: #nope] raise: ImproperOperation.
+	"An ARGUMENT refusal is a Python ValueError, not a Smalltalk
+	ImproperOperation: these run inside Python code, where a Smalltalk error
+	cannot be caught (object class >> ___grailSchemaRefuse___)."
+	self should: [c @env1:___grailDropSlotSessionOnly___: #x] raise: ValueError.
+	self should: [c @env1:___grailDropSlotSessionOnly___: #nope] raise: ValueError.
 	self assert: (self layoutOf: c) equals: #(#x #y).
 	self assert: (inst at: 1) equals: 10.
 	mod2 := self loadRevision: 'class C:

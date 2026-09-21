@@ -48,3 +48,19 @@ for _name in ("current", "all"):
     getattr(_self, _name)
 _precached = _gemstone.describe_session
 del _self, _name, _sys
+
+# Warm the getattr cache for this module's own names, during the deploy
+# commit, for the reason gemdb/__init__.py warms its own: the getattr path
+# CACHES the wrapper on the module object, so the first ``gemdb.sessions.f()`` in a
+# later session would be a WRITE on a committed module -- dirtying a
+# transaction the caller believes is clean.
+#
+# It is not a hygiene nicety here.  Nothing here refuses a dirty session, so the cost is only the
+# stray write itself -- but a read-only call must not dirty a transaction,
+# and the same warming is what makes that true.
+import sys as _sys
+
+_self = _sys.modules[__name__]
+for _name in ("current", "all"):
+    getattr(_self, _name)
+del _self, _name, _sys

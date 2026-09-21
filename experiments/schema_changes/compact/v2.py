@@ -1,38 +1,43 @@
 """compact v2: stop assigning `raw`, then DROP it, then COMPACT.
 
-Two explicit steps, both developer-invoked, never an import side effect:
+Two explicit steps, both run by name through `gemdb.schema`, never an
+import side effect:
 
 * the drop nils `raw` on every instance of Reading and its subclasses and
-  turns its position into a hole ('~raw' in the layout); the name is then
-  unknown to the class;
+  turns its position into a hole; the name is then unknown to the class;
 * the compaction rewrites the layout without holes and moves every
   instance's values to the new positions.
 
-Both scan the repository, which needs a clean transaction: commit, drop,
-commit, compact, commit.  The drop is refused while a method still assigns
+Both scan the repository, which needs a clean transaction, and both
+commit their own work.  The drop is refused while a method still assigns
 the name, so the assignment goes first.
 """
 import gemdb
+import gemdb.schema
+
 
 class Reading:
     def __init__(self):
         self.value = 2
 
+
 r = gemdb.root[__name__ + ":r"]
-assert Reading.___pySlotLayout___() == ["raw", "value"], "the edit alone changes nothing"
+kinds = {row["name"]: row["kind"] for row in gemdb.schema.layout(Reading)}
+assert kinds == {"raw": "unassigned", "value": "assigned"}, "the edit alone changes nothing"
 assert r.raw == 1
+print("v2: layout =", kinds)
+
 gemdb.commit()                                       # clean transaction first
-classes, instances = Reading.___grailDropSlot___("raw")
-gemdb.commit()
-assert (classes, instances) == (1, 1)
-assert Reading.___pySlotLayout___() == ["~raw", "value"]
+res = gemdb.schema.drop(Reading, "raw")
+assert res == {"classes": 1, "instances": 1}
+kinds = {row["name"]: row["kind"] for row in gemdb.schema.layout(Reading)}
+assert kinds == {"raw": "hole", "value": "assigned"}
 assert not hasattr(r, "raw") and vars(r) == {"value": 2}
-print("v2: dropped raw ->", classes, "class,", instances, "instance; layout =",
-      Reading.___pySlotLayout___())
-classes, instances = Reading.___grailCompactSlots___()
-gemdb.commit()
-assert (classes, instances) == (1, 1)
-assert Reading.___pySlotLayout___() == ["value"]
+print("v2: dropped raw ->", res, " layout =", kinds)
+
+res = gemdb.schema.compact(Reading)
+assert res == {"classes": 1, "instances": 1}
+assert [row["name"] for row in gemdb.schema.layout(Reading)] == ["value"]
 assert vars(r) == {"value": 2}
-print("v2: compacted ->", classes, "class,", instances, "instance; layout =",
-      Reading.___pySlotLayout___(), " vars(r) =", vars(r))
+print("v2: compacted ->", res, " layout =",
+      [row["name"] for row in gemdb.schema.layout(Reading)], " vars(r) =", vars(r))

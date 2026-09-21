@@ -332,6 +332,14 @@ timed "gemstone-system" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/
 timed "gemdb" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemdbTest.gs < /dev/null || EXIT=$?
 timed "gemdb-conflict" tests/scripts/run_gemdb_conflict_test.sh || EXIT=$?
 
+# Functional test for gemdb.schema (layout/report/drop/rename/compact, the
+# public surface for deliberate schema change). Every operation but layout()
+# scans the repository for the instances it touches, which aborts first and
+# so needs a clean transaction, and they commit themselves -- neither of
+# which the in-session SUnit suite can do. IndexedSlotRebuildTestCase covers
+# the same primitives over their session-only entry points.
+timed "gemdb-schema" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runSchemaTest.gs < /dev/null || EXIT=$?
+
 # An abort rolls the repository back but not the session: sys.modules keeps
 # every module imported before it, while the generated class, the registry
 # entry and the source hash -- written in the aborted transaction -- go with

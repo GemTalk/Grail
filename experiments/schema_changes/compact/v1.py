@@ -1,5 +1,6 @@
 """compact v1: two attributes, one committed instance."""
 import gemdb
+import gemdb.schema
 
 class Reading:
     def __init__(self):
@@ -9,5 +10,5 @@ class Reading:
 r = Reading()
 gemdb.root[__name__ + ":r"] = r
 gemdb.commit()
-assert Reading.___pySlotLayout___() == ["raw", "value"]
-print("v1: layout =", Reading.___pySlotLayout___(), " vars(r) =", vars(r))
+assert [r["name"] for r in gemdb.schema.layout(Reading)] == ["raw", "value"]
+print("v1: layout =", [r["name"] for r in gemdb.schema.layout(Reading)], " vars(r) =", vars(r))
