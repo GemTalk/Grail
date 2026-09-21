@@ -255,17 +255,28 @@ so the worktrees do not contend over them. Remove a finished worktree with
 `git worktree remove .claude/worktrees/<branch>`, which frees its Claude user
 for the next one.
 
-## Two worktrees on ONE stone cannot run the suite at the same time
+## Two worktrees on ONE stone: the session budget
 
 `run_tests.sh` opens `GRAIL_TEST_WORKERS` sessions — **eight** since PR #876 —
-and a stone has a max-sessions limit. Two worktrees on the same stone therefore
-need sixteen and exceed it. The failure mode is the dangerous kind: the losing
-shards die with `Login failed: the maximum number of users are already logged
-in` and contribute nothing, while the runner still prints a well-formed, GREEN
-suite line. It read `4288 run, 4288 passed, 0 failed` where a full run is 6535.
-A vacuous pass that looks like a pass is worse than a crash.
+and a stone has a max-sessions limit. When that limit is tight the failure mode
+is the dangerous kind: the losing shards die with `Login failed: the maximum
+number of users are already logged in` and contribute nothing, while the runner
+still prints a well-formed, GREEN suite line. It read `4288 run, 4288 passed, 0
+failed` where a full run is 6535. A vacuous pass that looks like a pass is worse
+than a crash.
 
-So serialize mechanically rather than by convention:
+**How tight the limit is depends on the LICENSE KEY, so measure it rather than
+assuming.** A Community key caps `StnMaxSessions` at 10, which left exactly
+eight after the stone's own gems — the same eight a full run wants, with zero
+headroom, so a single stray session cost a shard its login. An internal key
+lifts the cap and GemStone's default of **40** applies instead, which is room
+for four concurrent suites and retires that failure entirely. `run_tests.sh`
+prints what it found before it launches (`stone sessions: max=… in-use=…
+free-for-shards=… (need …)`), so the number is in every run's output.
+
+Serializing still pays, but for WALL-CLOCK rather than correctness once the
+budget is generous — one suite already saturates the performance cores, so a
+second concurrent suite competes rather than scaling:
 
 ```bash
 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
@@ -274,9 +285,9 @@ GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/with_stone_lock.sh ./scripts/run_
 ```
 
 **Wrap the CPython suite too, not just `run_tests.sh`.** It opens
-`GRAIL_CPYTHON_WORKERS` sessions of its own (four by default), so an unlocked
-four alongside a locked eight still exceeds the limit — and the lock then
-supplies false confidence rather than exclusion.
+`GRAIL_CPYTHON_WORKERS` sessions of its own (four by default), so on a tight
+budget an unlocked four alongside a locked eight exceeds the limit — and the
+lock then supplies false confidence rather than exclusion.
 
 The lock is keyed on `GEMSTONE_NAME`. Every worktree is on `gs40` now, so in
 practice it serializes all of them; it is opt-in and CI never calls it. Whether or not you use it,
@@ -287,21 +298,32 @@ grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l   # must equal the worker cou
 grep -l 'Login failed' out/shard_*.out               # must be empty
 ```
 
-### The budget is EIGHT, and a full run wants eight
+### The limit counts the stone's OWN gems
 
-The limit counts the stone's OWN gems. Measured on `gs40` (Community Edition,
-`StnMaxSessions` = 10): `reclaimgcgem` and `symbolgem` hold two slots from the
-moment the stone starts, so **eight** are left for everything else — and
-`GRAIL_TEST_WORKERS` has defaulted to eight since PR #876. A solo, correctly
-serialized run therefore fits with **zero headroom**, and any single extra
-session costs a SHARD its login: an editor's Jasper/MCP session, an
-`install.sh`, a stray `topaz` probe, another worktree's framework deploy.
+Whatever the key allows, `reclaimgcgem` and `symbolgem` hold two slots from the
+moment the stone starts, so the usable figure is always two below the maximum.
+That is what made a Community key so tight: 10 − 2 = **8**, exactly what a full
+run wants, so an editor's Jasper/MCP session, an `install.sh`, a stray `topaz`
+probe or another worktree's framework deploy each cost a SHARD its login. On a
+40-session stone the same arithmetic leaves 38 and the problem does not arise.
 
-So the lock is necessary and not sufficient. `run_tests.sh` now asks the stone
-for its free-slot count immediately before launching shards
+So the lock is necessary and not sufficient. `run_tests.sh` asks the stone for
+its free-slot count immediately before launching shards
 (`tests/scripts/checkSessionBudget.gs`) and refuses rather than launching a run
 it cannot finish; `GRAIL_ALLOW_TIGHT_SESSIONS=1` overrides, and a run made that
-way is explicitly not a gate result.
+way is explicitly not a gate result. The check costs one session and about a
+second, and it is cheap insurance on a generous stone rather than dead weight —
+it is what tells you the budget changed.
+
+**The shared page cache is capped by the OS, not by the key.** GemStone
+allocates it as a SysV segment, macOS defaults `kern.sysv.shmmax` to 1 GB, and
+the segment carries roughly 7% overhead on top of `SHR_PAGE_CACHE_SIZE_KB`. So a
+cache at or above 1 GiB makes the stone **fail to start** until that limit is
+raised — on this machine by the `shared-memory` LaunchDaemons in
+`/Library/LaunchDaemons`, which re-apply at boot. Note also that a bigger cache
+is not free speed: raising it from 98 MB to 4 GiB moved the suite 373s → 403s,
+because the suite is CPU-bound (8 shards draw 620–760% CPU on 6 performance
+cores), not page-cache-bound.
 
 Read the suite line for what it now says. It reports the shards that ANSWERED,
 not the ones requested, and an incomplete run says `main suite INCOMPLETE` in
