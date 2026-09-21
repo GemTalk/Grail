@@ -87,3 +87,19 @@ _self = _sys.modules["gemdb.admin"]
 for _name in ("size", "backup", "garbage_collect"):
     getattr(_self, _name)
 del _self, _name, _sys
+
+# Warm the getattr cache for this module's own names, during the deploy
+# commit, for the reason gemdb/__init__.py warms its own: the getattr path
+# CACHES the wrapper on the module object, so the first ``gemdb.admin.f()`` in a
+# later session would be a WRITE on a committed module -- dirtying a
+# transaction the caller believes is clean.
+#
+# It is not a hygiene nicety here.  ``backup`` and ``garbage_collect`` check needs_commit() first,
+# so an unwarmed module would make the first call in a session raise
+# PendingChangesError against a session that was in fact clean.
+import sys as _sys
+
+_self = _sys.modules[__name__]
+for _name in ("size", "backup", "garbage_collect"):
+    getattr(_self, _name)
+del _self, _name, _sys

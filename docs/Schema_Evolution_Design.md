@@ -1,8 +1,9 @@
 # Schema evolution: decisions and cuts
 
-**Status:** design, 2026-09-20; **cut 1 implemented 2026-09-21** (survivors,
-holes, the class-side drop, one home per name, strict slots on the current
-declaration), the rest open. Follows
+**Status:** design, 2026-09-20; **cuts 1 and 2 implemented 2026-09-21**
+(cut 1: survivors, holes, the class-side drop, one home per name, strict
+slots on the current declaration; cut 2: `gemdb.schema`), cuts 3-5 open.
+Follows
 [Schema_Evolution_Review.md](Schema_Evolution_Review.md), whose proposals
 James reviewed the same day; the decisions below supersede that note's
 P1-P6 where they differ. The Python-facing narrative of today's behaviour
@@ -146,6 +147,33 @@ until the next `del` or generic store.
 ### Cut 2. `gemdb.schema`
 
 *Tier 1 plus a committing script, like `runSlotCompactionTest.gs`.*
+**Done 2026-09-21.** Three things the plan did not predict:
+
+* **`rename` landed here rather than in cut 3**, because the primitive is
+  the same one `__renamed__` will call and the programmatic form is what
+  makes it testable. It has two branches: a RELABEL when the new name has no
+  position (nothing is touched, whatever the repository holds) and a MOVE
+  when a deploy already appended it (values migrate, the old name becomes a
+  hole, and it refuses outright if any instance holds a value under both
+  names). Both refuse while a body still assigns the old name. Cut 3 is now
+  only the declarative surface.
+* **A refusal has to be a Python exception.** The primitives signalled
+  Smalltalk `ImproperOperation`, which code running in Python cannot catch:
+  `gemdb.schema.drop(Cls, name)` on a still-assigned name tore through an
+  `except Exception` and killed the caller. Refusals about the *request* now
+  signal `ValueError` (`object class >> ___grailSchemaRefuse___`), the same
+  translation `Repository.gs` does for the administration primitives; the
+  transaction refusals stay `ImproperOperation`, since the Python layer
+  converts them to `PendingChangesError` before they can fire.
+* **The submodules were never getattr-warmed**, and that is a defect this
+  cut had to fix rather than a nicety. `gemdb/__init__.py` warms its own
+  public names during the deploy commit because the getattr path CACHES the
+  wrapper on the module object, so a first call in a later session is a
+  WRITE on a committed module. `admin` and `sessions` never did the same, so
+  the first `gemdb.admin.backup(...)` of a session dirtied it and then
+  `backup`'s own `needs_commit()` check refused — against a session the
+  caller had just committed. `gemdb.schema`, whose every operation makes
+  that check, failed on its first call until all three modules were warmed.
 
 A new submodule of `gemdb` beside `admin` and `sessions`
 ([GemDB_Module.md](GemDB_Module.md)), Python surface over class-side

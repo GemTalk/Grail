@@ -1,33 +1,35 @@
-"""rename v3: migrate lazily, in plain Python.
+"""rename v3: finish the rename, and the old values move across.
 
-Because the old value stayed readable, the migration is an ordinary
-property: on first read, an instance that still has `phone` gets its list
-built from it and the old attribute deleted.  Nothing here is load-bearing
-for Grail; it is the code you would write against any object store.  (The
-declared rename, `__renamed__`, is cut 3 of docs/Schema_Evolution_Design.md
-and relabels the position instead.)
+Version 2 already shipped the code that assigns `phones`, so the import
+appended `phones` as an empty position while `phone` kept the data.  The
+rename therefore MOVES every contact's value from one position to the
+other and leaves `phone` a hole.  It refuses if any instance has a value
+under both names rather than silently choosing one.
+
+Renaming BEFORE shipping that code would have been free: with no
+`phones` position yet, the same call relabels the position in place and
+touches no instance at all.  That is the cheaper order when there are
+many instances.
 """
 import gemdb
+import gemdb.schema
+
 
 class Contact:
-    _phones = None
-
     def __init__(self, phones):
-        self._phones = list(phones)
+        self.phones = list(phones)
 
-    @property
-    def phones(self):
-        old = getattr(self, "phone", None)
-        if old is not None:                  # a v1 instance: one number, not yet migrated
-            self._phones = [old]
-            del self.phone
-        return self._phones if self._phones is not None else []
 
 c = gemdb.root[__name__ + ":c"]
-assert Contact.___pySlotLayout___() == ["phone", "phones", "_phones"]
-assert vars(c) == {"phone": "555-1234"}
-assert c.phones == ["555-1234"]
-assert vars(c) == {"_phones": ["555-1234"]}, "migrated in place: phone deleted, _phones set"
+before = [(row["name"], row["kind"]) for row in gemdb.schema.layout(Contact)]
+assert before == [("phone", "unassigned"), ("phones", "assigned")]
+assert c.phone == "555-1234" and not hasattr(c, "phones")
+
 gemdb.commit()
-print("v3: layout =", Contact.___pySlotLayout___(), " c.phones =", c.phones,
-      " vars(c) =", vars(c))
+res = gemdb.schema.rename(Contact, "phone", "phones")
+assert res == {"classes": 1, "instances": 1}, "the deployed-first path moves the value"
+after = [(row["name"], row["kind"]) for row in gemdb.schema.layout(Contact)]
+assert after == [("phone", "hole"), ("phones", "assigned")]
+assert c.phones == "555-1234", "the v1 value, now under the new name"
+assert not hasattr(c, "phone")
+print("v3: rename ->", res, " layout =", after, " c.phones =", c.phones)

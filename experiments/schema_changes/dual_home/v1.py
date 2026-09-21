@@ -4,6 +4,7 @@
 attribute.  `q.x` and `q.y` are ordinary positions.
 """
 import gemdb
+import gemdb.schema
 
 class Point:
     def __init__(self):
@@ -20,4 +21,4 @@ q = Q()
 gemdb.root[__name__ + ":p"] = p
 gemdb.root[__name__ + ":q"] = q
 gemdb.commit()
-print("v1: vars(p) =", vars(p), "(per-object)   Q layout =", Q.___pySlotLayout___())
+print("v1: vars(p) =", vars(p), "(per-object)   Q layout =", [r["name"] for r in gemdb.schema.layout(Q)])

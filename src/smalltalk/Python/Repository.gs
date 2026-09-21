@@ -115,4 +115,28 @@ mark_for_collection
 	^ r
 %
 
+category: 'Grail-Repository Administration'
+method: Repository
+schema_report
+	"Python repository.schema_report() -- every persistent Python class whose
+	slot layout holds an attribute nothing assigns any more, or a hole a drop
+	left, with the instance counts that say how much data each is carrying
+	(object class >> ___grailSchemaReport___; docs/Schema_Evolution_Design.md).
+	gemdb.schema.report() wraps it.
+
+	ON THE REPOSITORY INSTANCE, not on the gemstone module, and for the reason
+	docs/GemDB_Module.md gives for the administration primitives: a unary
+	method on a MODULE class is performed by a bare attribute read, so a
+	module-level spelling would run this -- a full repository scan -- from
+	``inspect.getmembers(gemstone)'' or a REPL completer.  An instance
+	attribute read only wraps; nothing runs until the caller writes
+	parentheses.
+
+	Needs a session with no uncommitted changes (the scan aborts first);
+	gemdb.schema checks that ahead of the call, so the refusal is a Python
+	exception with advice rather than a kernel error."
+
+	^ object ___grailSchemaReport___
+%
+
 set compile_env: 0

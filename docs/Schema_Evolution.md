@@ -31,7 +31,10 @@ class Account:
         self.balance = 0
         self.owner = owner
 
-Account.___pySlotLayout___()      # ['balance', 'owner']
+import gemdb.schema
+gemdb.schema.layout(Account)
+# [{'name': 'balance', 'position': 1, 'kind': 'assigned'},
+#  {'name': 'owner',   'position': 2, 'kind': 'assigned'}]
 ```
 
 An `Account` instance is a small array; `balance` is slot 1 and `owner` is
@@ -142,46 +145,81 @@ keeps whatever object is stored there alive. To get rid of it, first stop
 assigning it (§3.2) and import that, then **drop** it by name:
 
 ```python
-gemdb.commit()                                       # both steps scan the repository:
-classes, instances = Account.___grailDropSlot___("balance")   # they need a clean transaction
-gemdb.commit()
+import gemdb.schema
+gemdb.commit()                                  # the scan needs a clean transaction
+gemdb.schema.drop(Account, "balance")           # {'classes': 1, 'instances': 12034}
 ```
 
 The drop nils `balance` on every instance of `Account` and of every class
-below it, and turns its position into a hole, `~balance`. From then on the
-name is unknown to the class: `acct.balance` raises, `vars()` does not list
-it, and assigning it from outside makes an ordinary per-object attribute. It
-is refused while any method still assigns the name, because the next
-instance would bring it straight back. Nothing moves, so re-running it after
-an interruption is harmless (`compact`, version 2).
+below it, and turns its position into a *hole*. From then on the name is
+unknown to the class: `acct.balance` raises, `vars()` does not list it, and
+assigning it from outside makes an ordinary per-object attribute. It is
+refused while any method still assigns the name, because the next instance
+would bring it straight back. It commits itself every thousand instances, so
+a large class is handled and an interrupted run is safe to repeat: nothing
+moves, so a re-run finds fewer values and finishes (`compact`, version 2).
 
 A hole costs one empty slot per instance. To reclaim holes:
 
 ```python
 gemdb.commit()
-classes, instances = Account.___grailCompactSlots___()
-gemdb.commit()
+gemdb.schema.compact(Account)
 ```
 
 This rewrites the layouts without holes, recompiles the accessors, moves
 every existing instance's values to the new positions and shrinks each
-instance. Unlike the drop it is one atomic switch across every instance, so
-it is the step to run on a quiet system and commit once. Neither step is
-ever done for you on import.
+instance. Unlike the drop it cannot be batched, because every instance has
+to move together or a read would find the wrong position, so it is the step
+to run on a quiet system. Neither step is ever done for you on import.
 
-Two limits today: every instance touched is held in memory for the duration,
-so a class with more instances than one transaction should carry is not
-handled (the batched `gemdb.schema.drop` is cut 2 of the design note); and a
-class defined inside a function is not in the registry either step walks, so
-its persisted instances are not touched.
+**Which attributes are worth dropping** is what `gemdb.schema.report()`
+answers, across the whole repository:
+
+```python
+gemdb.schema.report()
+# [{'class': 'billing.Account', 'instances': 12034,
+#   'attributes': [{'name': 'balance', 'kind': 'unassigned', 'holding': 12034}]}]
+```
+
+`holding` is how many instances still carry a value, so an attribute nothing
+assigns and nothing holds is free to drop, while a large `holding` is a
+deletion to think about. Grail deliberately does not turn an unused
+attribute into an import error: the rebuild happens in whichever session
+imports the edited source first, which may be production, and a refactor
+should not halt an application.
+
+One limit today: a class defined inside a function is in neither registry
+these steps walk, so its persisted instances are not touched.
 
 ### 3.5 Rename an attribute
 
-To Grail today, `phone` → `phones` is an addition beside a name the class
+Rename it by name, and nothing is copied:
+
+```python
+gemdb.commit()
+gemdb.schema.rename(Contact, "phone", "phones")   # {'classes': 1, 'instances': 0}
+```
+
+That is a *relabel*, and it is what you get when `phones` has no position
+yet: the position keeps its data and changes its name, so however many
+contacts there are, none is touched. Renaming *before* shipping the code
+that assigns `phones` is therefore the cheap order, and that code's import
+then finds the name already in the layout holding the values.
+
+If the code ships first, its import appends `phones` as an empty position
+while `phone` survives with the data, and the same call *moves* every value
+across and leaves `phone` a hole (`rename`, version 3). It refuses if any
+instance has a value under both names rather than choosing one.
+
+Either way it refuses while a method still assigns `phone`, so the edit that
+stops assigning it comes first.
+
+**Without renaming**, the edit alone is an addition beside a name the class
 stopped assigning: the layout becomes `['phone', 'phones']`, an old contact
 still answers `c.phone`, and `c.phones` raises because that instance never
-had one (`rename`, version 2). Nothing is lost and nothing is hidden, but
-nothing migrated either. The migration is plain Python, lazily on first use:
+had one (`rename`, version 2). Nothing is lost, but nothing migrated either.
+That is the case for a migration in plain Python, lazily on first use, which
+is also how to handle the change of *shape* a rename often carries:
 
 ```python
 class Contact:
@@ -201,12 +239,10 @@ class Contact:
 
 After this version is imported, `old.phones` answers `['555-1234']` and the
 instance has been upgraded in place, with `phone` deleted from it (`rename`,
-version 3). This also handles the change of *shape* (one value to a list)
-that a rename often carries. Once every instance has been touched, drop
-`phone` (§3.4).
+version 3). Once every instance has been touched, drop `phone` (§3.4).
 
 **Proposed** (cut 3 of the design note, not implemented): declare the rename
-in the class body and let Grail relabel the position,
+in the class body, so it applies on import without a separate call,
 
 ```python
 class Contact:
@@ -268,14 +304,14 @@ behind unread; it is invisible and goes with the next `del`.
 | add an attribute | assign it in a method; give the class a default | untouched; read the default until assigned | none |
 | stop using an attribute | stop assigning it | untouched; old values still read | none |
 | bring one back | assign it again | untouched; nothing ever left | none |
-| delete an attribute's values | stop assigning it, import, then commit, `Cls.___grailDropSlot___("x")`, commit | every instance nilled at that position | the values, deliberately |
-| reclaim holes | commit, `Cls.___grailCompactSlots___()`, commit | every instance moved, in one transaction | none |
-| rename | lazy migrate in a property (§3.5), then drop the old name; **proposed** `__renamed__` | untouched until read | none |
+| delete an attribute's values | stop assigning it, import, then `gemdb.schema.drop(Cls, "x")` | every instance nilled at that position, in batches | the values, deliberately |
+| reclaim holes | `gemdb.schema.compact(Cls)` | every instance moved, in one transaction | none |
+| rename | `gemdb.schema.rename(Cls, "old", "new")`; **proposed** `__renamed__` | untouched for a relabel | none |
 | change the value's shape | lazy normaliser, or a batch rewrite | untouched until read or rewritten | none |
 | move between parent and child | just move the assignment | untouched | none |
 | change the bases / rename the class | a real migration: new instances, replace references | stranded on the old class | none, but manual |
 
 Where every row says "untouched": the instance's bytes on disk do not change
 on import. An instance grows only when *you* assign a position it lacks, and
-is written by Grail only in the two steps you run by name. That is the whole
-difference from a migration.
+is written by Grail only in the `gemdb.schema` operations you run by name.
+That is the whole difference from a migration.

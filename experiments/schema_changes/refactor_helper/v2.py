@@ -8,6 +8,7 @@ reads its 2, and the helper's store lands in the same position.  Same
 behaviour, same schema.
 """
 import gemdb
+import gemdb.schema
 
 def _size(obj):
     obj.height = 2
@@ -18,10 +19,10 @@ class Widget:
         _size(self)
 
 w = gemdb.root[__name__ + ":w"]
-assert Widget.___pySlotLayout___() == ["width", "height"]
+assert [r["name"] for r in gemdb.schema.layout(Widget)] == ["width", "height"]
 assert w.height == 2
 w2 = Widget()
 assert vars(w2) == {"width": 1, "height": 2}
 gemdb.commit()
-print("v2: layout =", Widget.___pySlotLayout___(), " old w.height =", w.height,
+print("v2: layout =", [r["name"] for r in gemdb.schema.layout(Widget)], " old w.height =", w.height,
       " new Widget(): vars =", vars(w2))
