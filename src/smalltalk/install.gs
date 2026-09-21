@@ -959,6 +959,7 @@ run
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
 	at: #'IndexTypeErrorNamesTestCase' put: nil;
+	at: #'MapFilterZipPickleTestCase' put: nil;
 	at: #'ImportlibFileOpenErrorTestCase' put: nil;
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'ImportlibResourcesTestCase' put: nil;
@@ -2266,6 +2267,7 @@ input src/smalltalk/PythonTests/HttpCookiejarTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/IndexTypeErrorNamesTestCase.gs
+input src/smalltalk/PythonTests/MapFilterZipPickleTestCase.gs
 input src/smalltalk/PythonTests/ImportErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs

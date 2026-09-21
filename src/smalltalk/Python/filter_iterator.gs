@@ -76,4 +76,21 @@ __next__
 		keep ifTrue: [^ item]]
 %
 
+category: 'Grail-Pickle Support'
+method: filter_iterator
+__reduce__
+	"CPython's filter_reduce: ``(type(self), (func, iterator))''.  Measured on
+	3.14.6, after one next():
+
+	    filter(None, [1,2]).__reduce__() -> (filter, (None, <list_iterator>))
+
+	filter has no strict= keyword, so there is no state slot.  func is passed
+	through unchanged INCLUDING None, which filter() reads as ``keep truthy
+	items'' -- reconstructing with None is what preserves that."
+
+	^ tuple @env0:withAll: {
+		self ___builtinNamed___: #'filter'.
+		tuple @env0:withAll: { func. source } }
+%
+
 set compile_env: 0

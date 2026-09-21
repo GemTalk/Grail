@@ -100,6 +100,28 @@ __repr__
 	^ stream @env0:contents
 %
 
+category: 'Grail-Pickle Support'
+method: iterator
+___builtinNamed___: aSymbol
+	"The builtins callable that RECONSTRUCTS this iterator, for __reduce__.
+
+	CPython names the TYPE -- ``(<class 'map'>, (func, it))'' -- because in
+	CPython map IS the type and builtins.map resolves to it. In Grail the two
+	are separate: map() is a BoundMethod on the builtins module and the instance
+	it answers is a map_iterator. Naming the class here would not pickle, because
+	pickle saves a class by module+name and there is no builtins.map_iterator to
+	resolve on the way back in; that is exactly the failure this fixes, reported
+	as ``Can't pickle <class 'map_iterator'>: module '__main__' not found''.
+
+	So the CALLABLE is named instead, which is the same object CPython ends up
+	calling and pickles by reference as builtins.map. Reconstruction re-enters
+	map()/filter()/zip() with the SOURCE ITERATORS, and iter() answers an
+	iterator unchanged, so a partially consumed position survives the round trip
+	-- which is what check_iter_pickle resumes and compares."
+
+	^ (importlib @env0:___builtinsModuleOrNil___) @env1:___pyAttrLoad___: aSymbol
+%
+
 category: 'Grail-Private'
 method: iterator
 ___strictExhausted___: anIndex sources: srcs name: aName
