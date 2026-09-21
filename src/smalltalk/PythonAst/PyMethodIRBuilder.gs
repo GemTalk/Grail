@@ -217,6 +217,36 @@ at: aModuleOffset
 
 category: 'building'
 method: PyMethodIRBuilder
+at: aModuleOffset span: anEntry
+	"Stamp aModuleOffset AND arm an EXPLICIT position-map entry, given as
+	``{ beginOffset. endOffset. beginLine. beginColumn. endLine. endColumn }''
+	in module offsets.
+
+	atNode: derives the entry from a node's own extent, which covers every case
+	but one: a range that no node has.  CPython blames a re-raise on the whole
+	``except*'' CLAUSE -- keyword through the end of its body -- and neither the
+	handler nor its last statement answers that extent, so TryAst works it out
+	from the source text and hands it here.  The text path does the same thing
+	by storing a literal PEP 657 span in ___curPos___.
+
+	Everything after the stamp mirrors atNode: exactly -- the same clamp into
+	the attached slice, the same ``outside the slice earns no entry'' rule, and
+	the same ARMED-not-recorded discipline, so commitPendingPosition writes it
+	only if a send follows."
+
+	| start endPos |
+	self at: aModuleOffset.
+	attachedSource isNil ifTrue: [^ self].
+	start := (((anEntry at: 1) - sourceBase + 1) max: 1).
+	endPos := (((anEntry at: 2) - sourceBase + 1) max: start) min: attachedSource size.
+	start > attachedSource size ifTrue: [^ self].
+	pendingPos := { start. endPos.
+		anEntry at: 3. anEntry at: 4. anEntry at: 5. anEntry at: 6 }.
+	^ self
+%
+
+category: 'building'
+method: PyMethodIRBuilder
 atNode: aNode
 	"Set the current Python position from aNode AND record aNode's extent in the
 	position map.  The stamping half is exactly ``at: aNode beginPosition''; the
