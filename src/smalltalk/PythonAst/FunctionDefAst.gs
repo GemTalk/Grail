@@ -4447,9 +4447,16 @@ ___irMethodLocalClassMethodReason___
 
 	A class statement INSIDE such a method was a fourth refusal
 	(``method:methodLocalNestedClass'', an undocumented exit through
-	___irSubtreeContainsClassDef___).  Removing the guard was the whole of that
-	cut: the inner class takes the same compiled-text transport it takes
-	anywhere else, so the refusal was turning away a shape that already worked."
+	___irSubtreeContainsClassDef___).  #983 removed it on the grounds that the
+	inner class takes the same compiled-text transport it takes anywhere else.
+
+	IT DID NOT, QUITE.  That transport compiles its helper onto ``aBuilder
+	targetClass'', which for this shape is the stand-in a shared build carries
+	instead of a class -- so the helper landed where the method would never
+	look and test.test_datetime raised a DNU under the flag (bisected to #983,
+	cut note 128).  The transport now DEFERS the helper for a shared build and
+	files it per class in ___irRegenerateOn___:, which is what makes the claim
+	true rather than nearly true."
 
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
 	(self ___irEnclosingClassIsMethodLocal___
@@ -4532,13 +4539,25 @@ method: FunctionDefAst
 ___irSubtreeContainsClassDef___
 	"Does a ``class'' statement appear anywhere beneath this def's body?
 
-	Only cut 79's shared build asks, and it is a refusal there rather than a
-	shape it cannot emit: cut 76 carries a class statement inside an IR method by
-	compiling a helper method onto ``aBuilder targetClass'', and for a SHARED
-	build that class is the stand-in PythonInstance -- so the helper would be
-	installed on the root of every Python class, once per such statement.  A
-	class inside a method of a method-local class therefore stays on text, which
-	is where it is today."
+	NO SENDERS.  #983 removed the one call (the
+	``method:methodLocalNestedClass'' refusal in
+	___irMethodLocalClassMethodReason___) and this predicate was left behind.
+
+	What it used to guard, and why the guard was not enough: cut 76 carries a
+	class statement inside an IR method by compiling a helper onto ``aBuilder
+	targetClass'', and for a SHARED build (cut 79) that class is importlib's
+	stand-in rather than any class the method runs on.  Removing the refusal
+	therefore let the helper be installed where it would never be found, and
+	the send -- whose selector is derived from the class's source offset, so it
+	is identical on every regeneration -- raised
+	``a MyTzInfo class does not understand #'___irClassDef_91742_MyStr___'''
+	on test.test_datetime under the flag.
+
+	That is fixed at the install site rather than restored here:
+	PyMethodIRBuilder>>___irNoteClassHelper___:source: defers the helper for a
+	shared build and ___irRegenerateOn___: files it once per class.  The
+	predicate is kept because it is the cheapest way to find this shape in a
+	tree, not because anything refuses on it."
 
 	^ self ___irNodeContainsClassDef___: body
 %
