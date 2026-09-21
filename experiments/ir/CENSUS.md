@@ -47,36 +47,18 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 Importing the 129 manifest modules compiles them AND the stdlib they pull in; 9 failed to import for pre-existing reasons unrelated to IR (test.test_annotationlib, test.test_codecencodings_kr, test.test_ipaddress, test.test_linecache, test.test_pickle, test.test_pulldom, test.test_ssl, test.test_typing, test.test_zipapp).
 
-**test corpus, everything compiled**: 1360 top-level defs, **1358 compiled through IR (99.9%)**; 11463 class-body methods, of which **11443 are IR-eligible (99.8%)** through the class-method seam (cut 36); 157 nested defs/lambdas. Of all 12980 defs the corpus holds, 98.6% go through IR.
+**test corpus, everything compiled**: 1360 top-level defs, **1360 compiled through IR (100.0%)**; 11463 class-body methods, of which **11462 are IR-eligible (100.0%)** through the class-method seam (cut 36); 157 nested defs/lambdas. Of all 12980 defs the corpus holds, 98.8% go through IR.
 
-**`test.*` modules alone**: 281 top-level defs, 280 compiled (99.6%); 8765 class methods (test code is almost entirely TestCase methods), of which 8745 IR-eligible; 58 nested.
+**`test.*` modules alone**: 281 top-level defs, 281 compiled (100.0%); 8765 class methods (test code is almost entirely TestCase methods), of which 8764 IR-eligible; 58 nested.
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 8745 | 99.8% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_no |
-| 2 | 0.0% | `NonlocalAst:classCell` | test.test_super.TestSuper.tearDown, test.test_super.X.f |
-| 2 | 0.0% | `classDef:outerBinding` | test.test_scope.ScopeTests.testNonLocalClass, test.test_super.TestSuper.test_various___class___pathologies |
-| 1 | 0.0% | `AssignAst:chained-target-NameAst` | test.test_builtin.BuiltinTest.test_all_any_tuple_optimization |
-| 1 | 0.0% | `AugAssignAst:target-SubscriptAst-slice` | test.test_augassign.AugAssignTest.testSequences |
-| 1 | 0.0% | `CallAst:super-explicitNamesOtherClass` | test.test_super.C.method |
-| 1 | 0.0% | `Comprehension:target-SubscriptAst` | test.test_listcomps.ListComprehensionTest.test_unbound_local_inside_comprehension |
-| 1 | 0.0% | `DeleteAst:name` | test.test_dict.ClearOnDelete.__del__ |
+| 8764 | 100.0% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_no |
 | 1 | 0.0% | `ForAst:async` | test.test_coroutines.CoroutineTest.test_for_assign_raising_stop_async_iteration |
-| 1 | 0.0% | `ForAst:other` | test.test_global.GlobalTests.test_iteration_variable |
-| 1 | 0.0% | `NameAst:super-declaredInFunction` | test.test_super.C.method |
-| 1 | 0.0% | `classDef:moduleScopeTarget` | test.test_global.GlobalTests.test_class_def |
-| 1 | 0.0% | `method:classInClassBody` | test.test_traceback.X.__str__ |
-| 1 | 0.0% | `method:noSelfSuper` | test.test_super.C.f |
-| 1 | 0.0% | `nestedDef:super` | test.test_super.TestSuper.test_obscure_super_errors |
-| 1 | 0.0% | `shape:DictAst` | test.test_listcomps.ListComprehensionTest.test_code_replace_extended_arg |
-| 1 | 0.0% | `shape:ImportAst` | test.test_global.GlobalTests.test_import_result |
-| 1 | 0.0% | `shape:SetAst` | test.test_collections.TestCollectionABCs.test_Set_hash_matches_frozenset |
-| 1 | 0.0% | `stmt:TypeAliasAst` | test.test_global.GlobalTests.test_type_alias |
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
-| 280 | 99.6% | `compiled` | test.test_math.count_set_bits, test.test_math.partial_product, test.test_math.py_factorial, test.test_math.to_ulps, test |
-| 1 | 0.4% | `AssignAst:chained-target-NameAst` | test.test_xml_etree.setUpModule |
+| 281 | 100.0% | `compiled` | test.test_math.count_set_bits, test.test_math.partial_product, test.test_math.py_factorial, test.test_math.to_ulps, test |
 
 ## Per-module coverage (stdlib corpus)
 
