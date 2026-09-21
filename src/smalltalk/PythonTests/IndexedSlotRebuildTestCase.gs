@@ -207,77 +207,13 @@ testDeclaredSlotAddedOnRebuildKeepsIdentityAndInstances
 	self should: [inst @env1:___pyAttrLoad___: #'__dict__'] raise: AttributeError
 %
 
-category: 'Grail-Tests'
-method: IndexedSlotRebuildTestCase
-testDroppedSlotIsATombstoneThatKeepsItsPosition
-	"Revision 2 no longer assigns x: its position is RETIRED (``~x'' in the
-	layout) rather than reused, so y stays where an instance built under
-	revision 1 has it and z is appended.  A retired name reads as absent on
-	the old instance -- the value is still in the indexed part, but the class
-	no longer knows the name -- and is out of vars(); a foreign store of it
-	goes to per-object storage.  Revision 3 assigns x again and gets the old
-	position back, and with it the old instance's old value."
-	| mod c inst mod2 c2 mod3 c3 vars |
-	mod := self loadRevision: 'class C:
-    def __init__(self):
-        self.x = 10
-        self.y = 20
-'.
-	c := mod @env1:C.
-	inst := c @env1:___pyCallValue___: { } kw: nil.
-	self assert: (self layoutOf: c) equals: #(#x #y).
-	self assert: (c whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == c.
-	mod2 := self loadRevision: 'class C:
-    def __init__(self):
-        self.y = 20
-        self.z = 30
-'.
-	c2 := mod2 @env1:C.
-	self assert: c2 == c.
-	self assert: (self layoutOf: c2) equals: #(#'~x' #y #z).
-	self assert: (inst @env1:___pySlotIndexFor___: #x) equals: 0.
-	self assert: (inst @env1:___pySlotIndexFor___: #y) equals: -2.
-	self assert: (inst @env1:___pyAttrLoad___: #y) equals: 20.
-	self should: [inst @env1:___pyAttrLoad___: #x] raise: AttributeError.
-	self should: [inst @env1:___pyAttrLoad___: #z] raise: AttributeError.
-	self assert: (inst at: 1) equals: 10 description: 'the retired value stays until compaction'.
-	"The retired name's own pair is gone, so nothing answers position 1 for x."
-	self assert: (c2 whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil.
-	vars := inst @env1:___pyAttrLoad___: #'__dict__'.
-	self deny: (vars @env1:__contains__: 'x').
-	self assert: (vars @env1:__contains__: 'y').
-	"A foreign store of the retired name is a per-object attribute now."
-	inst @env1:___pyAttrStore___: #x put: 99.
-	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 99.
-	self assert: (inst at: 1) equals: 10.
-	self assert: (inst dynamicInstVarAt: #x) equals: 99.
-	inst := c2 @env1:___pyCallValue___: { } kw: nil.
-	self assert: (inst at: 2) equals: 20.
-	self assert: (inst at: 3) equals: 30.
-	self assert: inst _basicSize equals: 3.
-	"Revision 3 revives x in place."
-	mod3 := self loadRevision: 'class C:
-    def __init__(self):
-        self.x = 11
-        self.y = 20
-'.
-	c3 := mod3 @env1:C.
-	self assert: c3 == c.
-	self assert: (self layoutOf: c3) equals: #(#x #y #'~z').
-	self assert: (c3 whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == c3.
-	self assert: (inst @env1:___pySlotIndexFor___: #x) equals: -1.
-	"The revision-2 instance never had x set; a revision-3 one has it at 1."
-	self should: [inst @env1:___pyAttrLoad___: #x] raise: AttributeError.
-	inst := c3 @env1:___pyCallValue___: { } kw: nil.
-	self assert: (inst at: 1) equals: 11.
-	self should: [inst @env1:___pyAttrLoad___: #z] raise: AttributeError
-%
 
 category: 'Grail-Tests'
 method: IndexedSlotRebuildTestCase
-testCompactionFreesRetiredPositionsAndMovesInstances
+testCompactionFreesHolesAndMovesInstances
 	"The explicit maintenance operation.  A(x y z) with B(A) adding b1; a
-	revision drops x, leaving ``~x'' at position 1 in both layouts.  Compacting
+	revision stops assigning x and an explicit drop turns it into the hole
+	``~x'' at position 1 in both layouts.  Compacting
 	A rewrites A to (y z) and B to (y z b1), moves every existing instance's
 	values down one position and shrinks it, recompiles the index tables and
 	the pairs -- B's own b1 pair now reads 3 -- and a fresh instance is built
@@ -319,8 +255,18 @@ class B(A):
 '.
 	a2 := mod2 @env1:A. b2 := mod2 @env1:B.
 	self assert: (a2 == a and: [b2 == b]).
+	"The edit retires nothing: x survives in both layouts and the instances
+	still hold it.  The explicit DROP makes the hole, nilling both."
+	self assert: (self layoutOf: a2) equals: #(#x #y #z).
+	self assert: (self layoutOf: b2) equals: #(#x #y #z #b1).
+	self assert: (aInst @env1:___pyAttrLoad___: #x) equals: 1.
+	report := a2 @env1:___grailDropSlotSessionOnly___: #x.
+	self assert: (report at: 1) equals: 2 description: 'both layouts hold the hole'.
+	self assert: (report at: 2) equals: 2 description: 'both instances cleared'.
 	self assert: (self layoutOf: a2) equals: #(#'~x' #y #z).
 	self assert: (self layoutOf: b2) equals: #(#'~x' #y #z #b1).
+	self assert: (aInst at: 1) isNil.
+	self should: [aInst @env1:___pyAttrLoad___: #x] raise: AttributeError.
 	report := a2 @env1:___grailCompactSlotsSessionOnly___.
 	self assert: (report at: 1) equals: 2 description: 'both layouts rewritten'.
 	self assert: (report at: 2) >= 2 description: 'both instances moved'.
@@ -353,12 +299,72 @@ class B(A):
 
 category: 'Grail-Tests'
 method: IndexedSlotRebuildTestCase
-testParentRetiresASlotUnderSubclasses
-	"A retires a1 while B(A) merely inherited it and D(A) assigns it itself.
-	B mirrors the tombstone; D keeps a1 live and, A's pair being gone, gets a
-	pair of its own.  Both subclasses are rebuilt in the same module load, so
-	this is the merge path (___grailMergedSlotLayout___:), not the registry
-	walk."
+testUnassignedSlotSurvives
+	"Revision 2 no longer assigns x.  Nothing is retired: x keeps its position,
+	its pair and its index entry, the old instance still reads 10, vars() still
+	lists it, and a foreign store writes the position -- the class merely
+	stopped assigning it (docs/Schema_Evolution_Design.md).  A revision-2
+	instance never has x set; revision 3 assigns it again and the layout is
+	simply unchanged."
+	| mod c inst mod2 c2 mod3 c3 vars |
+	mod := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 10
+        self.y = 20
+'.
+	c := mod @env1:C.
+	inst := c @env1:___pyCallValue___: { } kw: nil.
+	self assert: (self layoutOf: c) equals: #(#x #y).
+	self assert: (c whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == c.
+	mod2 := self loadRevision: 'class C:
+    def __init__(self):
+        self.y = 20
+        self.z = 30
+'.
+	c2 := mod2 @env1:C.
+	self assert: c2 == c.
+	self assert: (self layoutOf: c2) equals: #(#x #y #z).
+	self assert: (inst @env1:___pySlotIndexFor___: #x) equals: -1.
+	self assert: (inst @env1:___pySlotIndexFor___: #y) equals: -2.
+	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 10
+		description: 'the value the body stopped assigning is still there'.
+	self assert: (inst @env1:___pyAttrLoad___: #y) equals: 20.
+	self should: [inst @env1:___pyAttrLoad___: #z] raise: AttributeError.
+	self assert: (c2 whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == c2
+		description: 'the pair survives with the name'.
+	vars := inst @env1:___pyAttrLoad___: #'__dict__'.
+	self assert: (vars @env1:__contains__: 'x').
+	self assert: (vars @env1:__contains__: 'y').
+	"A foreign store writes the position; nothing goes per object."
+	inst @env1:___pyAttrStore___: #x put: 99.
+	self assert: (inst at: 1) equals: 99.
+	self assert: (inst dynamicInstVarAt: #x) isNil.
+	"A revision-2 instance never assigns x: unbound, at its position."
+	inst := c2 @env1:___pyCallValue___: { } kw: nil.
+	self assert: inst _basicSize equals: 3.
+	self assert: (inst at: 1) isNil.
+	self should: [inst @env1:___pyAttrLoad___: #x] raise: AttributeError.
+	mod3 := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 11
+        self.y = 20
+'.
+	c3 := mod3 @env1:C.
+	self assert: c3 == c.
+	self assert: (self layoutOf: c3) equals: #(#x #y #z).
+	inst := c3 @env1:___pyCallValue___: { } kw: nil.
+	self assert: (inst at: 1) equals: 11.
+	self should: [inst @env1:___pyAttrLoad___: #z] raise: AttributeError
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testParentStopsAssigningUnderSubclasses
+	"A stops assigning a1 while B(A) merely inherited it and D(A) assigns it
+	itself.  Nothing changes in any layout: a1 survives everywhere, A's pair
+	keeps serving it, and every instance reads what it held.  Both subclasses
+	are rebuilt in the same module load, so this is the merge path
+	(___grailMergedSlotLayout___:), not the registry walk."
 	| mod a b d bInst dInst mod2 a2 b2 d2 |
 	mod := self loadRevision: 'class A:
     def __init__(self):
@@ -397,15 +403,156 @@ class D(A):
 '.
 	a2 := mod2 @env1:A. b2 := mod2 @env1:B. d2 := mod2 @env1:D.
 	self assert: (a2 == a and: [b2 == b and: [d2 == d]]).
-	self assert: (self layoutOf: a2) equals: #(#'~a1' #a2).
-	self assert: (self layoutOf: b2) equals: #(#'~a1' #a2 #b1).
+	self assert: (self layoutOf: a2) equals: #(#a1 #a2).
+	self assert: (self layoutOf: b2) equals: #(#a1 #a2 #b1).
 	self assert: (self layoutOf: d2) equals: #(#a1 #a2).
-	self assert: (a2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) isNil.
-	self assert: (d2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == d2.
-	self should: [bInst @env1:___pyAttrLoad___: #a1] raise: AttributeError.
+	self assert: (a2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a2.
+	self assert: (d2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a2.
+	self assert: (bInst @env1:___pyAttrLoad___: #a1) equals: 1.
 	self assert: (bInst @env1:___pyAttrLoad___: #b1) equals: 7.
 	self assert: (dInst @env1:___pyAttrLoad___: #a1) equals: 5.
+	bInst := b2 @env1:___pyCallValue___: { } kw: nil.
+	self should: [bInst @env1:___pyAttrLoad___: #a1] raise: AttributeError.
 	dInst := d2 @env1:___pyCallValue___: { } kw: nil.
 	self assert: (dInst @env1:___pyAttrLoad___: #a1) equals: 5.
 	self assert: (dInst at: 1) equals: 5
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testPromotedNameHasOneHome
+	"A value stored per object BEFORE the class gave the name a position (a
+	promotion) has one home afterwards.  Until the first store it still reads;
+	a store through the generic path moves it into the position and removes
+	the per-object copy; a leftover under a store made through the class's own
+	pair is invisible (the dict lists the name once, with the position's
+	value); and del removes both, so nothing resurfaces
+	(docs/Schema_Evolution_Design.md, cut 1; the dual_home scenario)."
+	| mod c inst mod2 c2 vars |
+	mod := self loadRevision: 'class C:
+    def __init__(self):
+        pass
+'.
+	c := mod @env1:C.
+	inst := c @env1:___pyCallValue___: { } kw: nil.
+	inst @env1:___pyAttrStore___: #x put: 1.
+	self assert: (inst dynamicInstVarAt: #x) equals: 1 description: 'per object: the class has no position for x'.
+	mod2 := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 0
+
+    def set_x(self, v):
+        self.x = v
+'.
+	c2 := mod2 @env1:C.
+	self assert: c2 == c.
+	self assert: (self layoutOf: c2) equals: #(#x).
+	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 1 description: 'the old per-object value still reads'.
+	inst @env1:___pyAttrStore___: #x put: 2.
+	self assert: (inst at: 1) equals: 2.
+	self assert: (inst dynamicInstVarAt: #x) isNil description: 'the store moved the name into its position'.
+	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 2.
+	vars := inst @env1:___pyAttrLoad___: #'__dict__'.
+	self assert: (vars @env1:__getitem__: 'x') equals: 2.
+	inst dynamicInstVarAt: #x put: 7.
+	inst @env1:set_x: 3.
+	vars := inst @env1:___pyAttrLoad___: #'__dict__'.
+	self assert: (vars @env1:__getitem__: 'x') equals: 3.
+	self assert: (vars @env1:__len__) equals: 1 description: 'the leftover is not a second entry'.
+	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 3.
+	inst @env1:___pyAttrDelete___: #x.
+	self assert: (inst dynamicInstVarAt: #x) isNil description: 'del removed both homes'.
+	self should: [inst @env1:___pyAttrLoad___: #x] raise: AttributeError.
+	self should: [inst @env1:___pyAttrDelete___: #x] raise: AttributeError
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testRemovedDeclaredSlotSurvivesButRefusesNewStore
+	"__slots__ is a contract, not storage (docs/Schema_Evolution_Design.md
+	par.2).  Revision 2 removes a from the declaration: a survives in the
+	layout, the old instance still reads and can delete it, but a NEW store of
+	a is refused like any undeclared name, on the old instance and on a new one."
+	| mod s inst mod2 s2 |
+	importlib ___inferredSlotsForce___: false.
+	mod := self loadRevision: 'class S:
+    __slots__ = (''a'', ''b'')
+    def __init__(self):
+        self.a = 1
+        self.b = 2
+'.
+	s := mod @env1:S.
+	inst := s @env1:___pyCallValue___: { } kw: nil.
+	self assert: (self layoutOf: s) equals: #(#a #b).
+	mod2 := self loadRevision: 'class S:
+    __slots__ = (''b'',)
+    def __init__(self):
+        self.b = 2
+'.
+	s2 := mod2 @env1:S.
+	self assert: s2 == s.
+	self assert: (self layoutOf: s2) equals: #(#a #b) description: 'the removed slot survives'.
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 1.
+	self should: [inst @env1:___pyAttrStore___: #a put: 5] raise: AttributeError.
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 1.
+	inst @env1:___pyAttrStore___: #b put: 6.
+	self assert: (inst @env1:___pyAttrLoad___: #b) equals: 6.
+	inst @env1:___pyAttrDelete___: #a.
+	self should: [inst @env1:___pyAttrLoad___: #a] raise: AttributeError.
+	inst := s2 @env1:___pyCallValue___: { } kw: nil.
+	self should: [inst @env1:___pyAttrStore___: #a put: 5] raise: AttributeError.
+	self should: [inst @env1:___pyAttrStore___: #c put: 1] raise: AttributeError.
+	self assert: (inst @env1:___pyAttrLoad___: #b) equals: 2
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDropRefusesAnAssignedNameAndClearsAnUnassignedOne
+	"The explicit drop (docs/Schema_Evolution_Design.md): refused while the
+	body still assigns the name, and for a name the layout lacks; once the
+	assignment is gone it nils every instance's value, turns the position
+	into the hole ``~x'', removes the index entry and the pair, and the name
+	is unknown to the class -- a foreign store is per object.  A later
+	assignment of the SAME name revives the hole, and the per-object value
+	reads until a store moves it.  Session-only entry point, as for
+	compaction."
+	| mod c inst mod2 c2 mod3 c3 report vars |
+	mod := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 10
+        self.y = 20
+'.
+	c := mod @env1:C.
+	inst := c @env1:___pyCallValue___: { } kw: nil.
+	self should: [c @env1:___grailDropSlotSessionOnly___: #x] raise: ImproperOperation.
+	self should: [c @env1:___grailDropSlotSessionOnly___: #nope] raise: ImproperOperation.
+	self assert: (self layoutOf: c) equals: #(#x #y).
+	self assert: (inst at: 1) equals: 10.
+	mod2 := self loadRevision: 'class C:
+    def __init__(self):
+        self.y = 20
+'.
+	c2 := mod2 @env1:C.
+	report := c2 @env1:___grailDropSlotSessionOnly___: #x.
+	self assert: report asArray equals: #(1 1).
+	self assert: (self layoutOf: c2) equals: #(#'~x' #y).
+	self assert: (inst at: 1) isNil.
+	self should: [inst @env1:___pyAttrLoad___: #x] raise: AttributeError.
+	self assert: (inst @env1:___pySlotIndexFor___: #x) equals: 0.
+	self assert: (c2 whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil.
+	vars := inst @env1:___pyAttrLoad___: #'__dict__'.
+	self deny: (vars @env1:__contains__: 'x').
+	inst @env1:___pyAttrStore___: #x put: 99.
+	self assert: (inst dynamicInstVarAt: #x) equals: 99.
+	self assert: (inst at: 1) isNil.
+	mod3 := self loadRevision: 'class C:
+    def __init__(self):
+        self.x = 11
+        self.y = 20
+'.
+	c3 := mod3 @env1:C.
+	self assert: (self layoutOf: c3) equals: #(#x #y) description: 'the same name revives its hole'.
+	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 99.
+	inst := c3 @env1:___pyCallValue___: { } kw: nil.
+	self assert: (inst at: 1) equals: 11
 %

@@ -1,6 +1,8 @@
 # Schema evolution: decisions and cuts
 
-**Status:** design, 2026-09-20. Nothing here is implemented. Follows
+**Status:** design, 2026-09-20; **cut 1 implemented 2026-09-21** (survivors,
+holes, the class-side drop, one home per name, strict slots on the current
+declaration), the rest open. Follows
 [Schema_Evolution_Review.md](Schema_Evolution_Review.md), whose proposals
 James reviewed the same day; the decisions below supersede that note's
 P1-P6 where they differ. The Python-facing narrative of today's behaviour
@@ -77,8 +79,11 @@ Rules:
 - a rebuild **appends** the assigned names the layout lacks and changes
   nothing else; a body that assigns nothing new leaves the layout alone;
 - a rename **relabels** a position;
-- a drop turns a name into a hole after nilling it everywhere; holes are
-  **never reused** by an append, only reclaimed by compaction;
+- a drop turns a name into a hole after nilling it everywhere; a hole is
+  reused by exactly one thing, a later assignment of the **same** name
+  (safe, because the drop nilled every instance and a stale session writing
+  that name writes that name), never by a different name; compaction
+  reclaims it;
 - every layout name has an accessor pair and an index entry, whether or not
   it is assigned; a subclass continues its parent's positions as now.
 
@@ -96,7 +101,16 @@ builds on.
 
 ### Cut 1. Survivors, and one home per name
 
-*Tier 2 (Object.gs and ClassDefAst).*
+*Tier 2 (Object.gs and ClassDefAst).* **Done 2026-09-21**, with the
+class-side drop primitives (`___grailDropSlot___:`,
+`___grailDropSlotSessionOnly___:`) brought forward from cut 2 so the
+compaction tests have a way to make a hole; `gemdb.schema` still wraps them
+in cut 2. One refinement against the list below: the indexed pair's SETTER
+does not reconcile a per-object leftover (it is the hot path; ~11 ns per
+store to probe), so a store made inside a method can leave an old copy
+behind unread. The dict views list the name once, reads take the position,
+and `del` removes both, so nothing observable differs; the copy is garbage
+until the next `del` or generic store.
 
 - `___grailMergedSlotLayout___:`: a rebuild keeps every existing entry as it
   is and appends; the parent-tombstone copy logic goes. Holes are copied

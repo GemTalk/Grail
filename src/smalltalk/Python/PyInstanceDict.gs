@@ -198,9 +198,15 @@ ___allPairs___
 	that happen to live in named instVars; they come first, in the class's
 	first-assignment order -- see object >> ___pyInferredSlotPairs___."
 	result @env0:addAll: source @env1:___pyInferredSlotPairs___.
+	"ONE NAME, ONE ENTRY: a dynamic instVar whose name is a SET slot is a
+	promotion leftover (a value stored per object before the class gave the
+	name a position); the slot is the home the read answers from, so the
+	dict lists the name once, with the slot's value
+	(docs/Schema_Evolution_Design.md, cut 1)."
 	n := 1.
 	[n @env0:< raw @env0:size] @env0:whileTrue: [
-		(raw @env0:at: n) @env0:== self ___overflowSlot___ ifFalse: [
+		((raw @env0:at: n) @env0:== self ___overflowSlot___
+			@env0:or: [self ___slotPairs___: result name: (raw @env0:at: n)]) ifFalse: [
 			result @env0:add: (raw @env0:at: n);
 				add: (raw @env0:at: n @env0:+ 1)].
 		n := n @env0:+ 2].
@@ -235,8 +241,23 @@ ___stringKeysDo___: aBlock
 	slots := source @env1:___pyInferredSlotPairs___.
 	1 to: slots size by: 2 do: [:i | aBlock value: (slots at: i)].
 	raw := source dynamicInstVarPairs.
+	"A dynamic name that is a SET slot is a promotion leftover, reported once,
+	as the slot (see ___allPairs___)."
 	1 to: raw size by: 2 do: [:i |
-		(raw at: i) == self ___overflowSlot___ ifFalse: [aBlock value: (raw at: i)]]
+		((raw at: i) == self ___overflowSlot___
+			or: [self ___slotPairs___: slots name: (raw at: i)]) ifFalse: [aBlock value: (raw at: i)]]
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___slotPairs___: pairs name: aSymbol
+	"Whether aSymbol is one of the NAMES in pairs, a flat name/value Array as
+	object >> ___pyInferredSlotPairs___ answers it (so only SET slots).  Used to
+	report a name once when a dynamic instVar of the same name survives
+	underneath a slot."
+
+	1 to: pairs size by: 2 do: [:i | (pairs at: i) == aSymbol ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Non-String Keys'
@@ -297,7 +318,9 @@ ___slotOrDynamicAt___: sym
 
 	| idx |
 	idx := source @env1:___pyInferredSlotIndexFor___: sym.
-	idx ~~ 0 ifTrue: [^ source @env1:___pySlotAt___: idx].
+	"An UNSET slot falls through to a per-object value of the same name (a
+	promotion leftover), as the attribute read does."
+	idx ~~ 0 ifTrue: [^ (source @env1:___pySlotAt___: idx) ifNil: [source dynamicInstVarAt: sym]].
 	^ source dynamicInstVarAt: sym
 %
 
@@ -309,7 +332,11 @@ ___slotOrDynamicAt___: sym put: value
 
 	| idx |
 	idx := source @env1:___pyInferredSlotIndexFor___: sym.
-	idx ~~ 0 ifTrue: [source @env1:___pySlotAt___: idx put: value. ^ value].
+	idx ~~ 0 ifTrue: [
+		source @env1:___pySlotAt___: idx put: value.
+		"One home per name: a promotion leftover is superseded."
+		(source dynamicInstVarAt: sym) == nil ifFalse: [source removeDynamicInstVar: sym].
+		^ value].
 	^ source dynamicInstVarAt: sym put: value
 %
 
@@ -321,7 +348,10 @@ ___slotOrDynamicRemove___: sym
 
 	| idx |
 	idx := source @env1:___pyInferredSlotIndexFor___: sym.
-	idx ~~ 0 ifTrue: [^ source @env1:___pySlotAt___: idx put: nil].
+	idx ~~ 0 ifTrue: [
+		"Both homes: the slot is nilled and a promotion leftover goes with it."
+		(source dynamicInstVarAt: sym) == nil ifFalse: [source removeDynamicInstVar: sym].
+		^ source @env1:___pySlotAt___: idx put: nil].
 	^ source removeDynamicInstVar: sym
 %
 category: 'Grail-Non-String Keys'

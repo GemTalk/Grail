@@ -2996,9 +2996,15 @@ vars: anObject
 	1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
 		d __setitem__: ((inferredPairs @env0:at: i) @env0:asString @env0:asUnicodeString)
 			_: (inferredPairs @env0:at: i @env0:+ 1)].
-	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm |
-		d __setitem__: (nm @env0:asString @env0:asUnicodeString)
-			_: (anObject @env0:dynamicInstVarAt: nm)].
+	"A dynamic instVar named like a SET slot is a promotion leftover: the slot
+	is the home the read answers from, so it is reported once, above."
+	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm | | shadowed |
+		shadowed := false.
+		1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
+			(inferredPairs @env0:at: i) == nm ifTrue: [shadowed := true]].
+		shadowed ifFalse: [
+			d __setitem__: (nm @env0:asString @env0:asUnicodeString)
+				_: (anObject @env0:dynamicInstVarAt: nm)]].
 	(anObject @env0:class @env0:allInstVarNames) @env0:doWithIndex: [:nm :i |
 		| v |
 		v := anObject @env0:instVarAt: i.

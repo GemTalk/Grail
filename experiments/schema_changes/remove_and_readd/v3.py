@@ -1,8 +1,8 @@
 """remove_and_readd v3: `balance` is assigned again.
 
-The tombstone revives IN PLACE: balance gets its old position back, and with
-it the value the v1 instance has been carrying all along.  Nothing was lost,
-because nothing was compacted.
+The layout does not change -- the name never left it -- and the old
+instance's 10 was readable the whole time.  A removal followed by a re-add
+is a no-op for the data, at any distance in time.
 """
 import gemdb
 
@@ -13,8 +13,8 @@ class Account:
 
 acct = gemdb.root[__name__ + ":acct"]
 assert Account.___pySlotLayout___() == ["balance", "owner"]
-assert acct.balance == 10, "the v1 value is back"
-assert vars(acct) == {"balance": 10, "owner": "ann"}
+assert acct.balance == 10
+assert Account().balance == 0
 gemdb.commit()
 print("v3: layout =", Account.___pySlotLayout___(), " acct.balance =", acct.balance,
-      " (the v1 value, back through the revived position)")
+      " Account().balance =", Account().balance)

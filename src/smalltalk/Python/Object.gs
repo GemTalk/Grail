@@ -141,32 +141,36 @@ ___grailInstallInferredSlots___: inferredNames properties: propertyNames indexed
 category: 'Grail-Slots'
 classmethod: object
 ___grailMergedSlotLayout___: inferredNames
-	"This class's slot LAYOUT -- the Symbols whose inferred values live in the
-	indexed part of its instances, by position -- after merging inferredNames
-	into it, compiled class-side as ``___pySlotLayout___'' and answered as an
-	Array.  docs/Instance_Attribute_Indexed_Slots.md.
+	"This class's slot LAYOUT -- the Symbols whose values live in the indexed
+	part of its instances, by position -- after merging inferredNames into it,
+	compiled class-side as ``___pySlotLayout___'' and answered as an Array.
+	docs/Instance_Attribute_Indexed_Slots.md, docs/Schema_Evolution_Design.md.
 
 	The starting point is the class's OWN existing layout when it has one (a
 	rebuild that reused the class identity: positions already handed out are
 	kept, so instances built under the previous body stay valid), else the
 	nearest superclass's (a subclass continues its parent's numbering, so an
-	inherited pair reads the same position on either), else empty.  New names
-	are APPENDED; nothing moves.  Category ``Grail-Slot Layout'', which no
-	rebuild reset clears: this is the class's persistent schema, the one thing a
-	re-executed body must not start from scratch.
+	inherited pair reads the same position on either), else empty.  Names are
+	APPENDED; nothing moves and nothing is removed.  Category ``Grail-Slot
+	Layout'', which no rebuild reset clears: this is the class's persistent
+	schema, the one thing a re-executed body must not start from scratch.
 
-	TOMBSTONES.  A name the rebuilt body no longer holds -- neither declared nor
-	inferred here, and not live in the parent's layout -- keeps its position
-	but is written ``~name'': the position is retired, the name reads as absent
-	(no index-table entry, no pair, not in vars()), existing instances stay
-	valid, and a name declared or inferred again later gets its old position
-	-- and the old instances' old values -- back.  A tombstone is dropped only
-	by the explicit compaction (___grailCompactSlots___).  A subclass mirrors
-	its parent's layout, tombstones included, so an inherited pair reads the
-	same position on either; a name the parent retired stays live in a
-	subclass that holds it itself."
+	A NAME THE REBUILT BODY NO LONGER ASSIGNS SURVIVES, untouched: it keeps its
+	position, its pair and its index entry, and reads, writes, deletes and
+	lists like any other attribute.  The class merely stops assigning it,
+	exactly as if callers had been assigning it from outside all along -- and
+	as CPython, which leaves an old instance's __dict__ entry alone.  Removing
+	the VALUES is the explicit, developer-invoked drop (___grailDropSlot___:),
+	never an import side effect.
 
-	| layout own parentLayout src lf tomb bare inferredSyms |
+	A HOLE, ``~name'', is a position a drop freed.  It is kept so nothing
+	moves, a subclass's first layout copies it as a hole, and it is reused by
+	exactly one thing: a later assignment of the SAME name, which revives it in
+	place (the drop nilled every instance, so nothing stale can be read there,
+	and a stale session writing that name writes that name).  A different name
+	never takes a hole; compaction (___grailCompactSlots___) is what frees it."
+
+	| layout parentLayout src lf tomb bare inferredSyms |
 	lf := Character @env0:lf @env0:asString.
 	tomb := [:n | ('~' @env0:, n @env0:asString) @env0:asSymbol].
 	bare := [:e | | s | s := e @env0:asString.
@@ -176,29 +180,18 @@ ___grailMergedSlotLayout___: inferredNames
 		ifTrue: [#()]
 		ifFalse: [self @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1].
 	layout := OrderedCollection @env0:new.
-	own := self @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1.
-	own
-		ifTrue: [
-			"A REBUILD: every position stays; each entry is live if this body holds
-			the name or the parent still does, else a tombstone."
-			(self @env0:perform: #'___pySlotLayout___' env: 1) @env0:do: [:e | | n |
-				n := bare @env0:value: e.
-				layout @env0:add: (((inferredSyms @env0:includes: n) @env0:or: [parentLayout @env0:includes: n])
-					ifTrue: [n] ifFalse: [tomb @env0:value: n])]]
-		ifFalse: [
-			"A FIRST build continues the parent's numbering exactly, tombstones
-			included, so the parent's pairs read the same positions here."
-			layout @env0:addAll: parentLayout].
-	"Then every LIVE name the parent's layout has that this one lacks.  On a
-	rebuild the parent's class statement runs first and may have appended
-	names, and its propagation cannot reach this class: the module re-run drops
-	the subclass registrations before the body runs
+	(self @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1)
+		ifTrue: [layout @env0:addAll: (self @env0:perform: #'___pySlotLayout___' env: 1)]
+		ifFalse: [layout @env0:addAll: parentLayout].
+	"Every LIVE name the parent's layout has that this one lacks.  On a rebuild
+	the parent's class statement runs first and may have appended names, and
+	its propagation cannot reach this class: the module re-run drops the
+	subclass registrations before the body runs
 	(___forgetSubclassesFromModule___:).  So the subclass picks the parent's new
-	names up ITSELF, appended after its own -- reviving a tombstone of the same
-	name in place -- and the installer then compiles its own pair for each one
-	whose position differs from the parent's.  A parent tombstone this class
-	lacks is not copied: a dead name needs no position here, and a later
-	revival arrives as a live name."
+	names up ITSELF, appended after its own -- reviving a hole of the same name
+	in place -- and the installer then compiles its own pair for each one whose
+	position differs from the parent's.  A parent HOLE this class lacks is not
+	copied on a rebuild: a dead name needs no position here."
 	parentLayout @env0:do: [:e | | n i |
 		n := bare @env0:value: e.
 		(e == n @env0:and: [(layout @env0:includes: n) @env0:not]) ifTrue: [
@@ -226,22 +219,131 @@ ___grailSlotIsTombstone___: anEntry
 
 category: 'Grail-Slots'
 classmethod: object
-___grailOwnSlotNames___
-	"The slot names (Symbols) THIS class holds itself -- its declared __slots__
-	and the names its own methods assign (the ___pyDeclaredSlotNames___ and
-	___pyOwnInferredSlots___ tables compiled on its metaclass) -- as opposed to
-	the ones it merely continues from its parent.  Decides, when a parent
-	retires a name, whether a subclass keeps it live (docs/Instance_Attribute_
-	Indexed_Slots.md)."
+___pyDeclaredSlotInChain___: aSym
+	"Whether aSym is in the __slots__ CURRENTLY declared by this class or an
+	ancestor (the ___pyDeclaredSlotNames___ tables ClassDefAst emits).  The
+	strict-store check asks this rather than the index table, because a name an
+	edit removed from __slots__ keeps its index entry as a survivor
+	(docs/Schema_Evolution_Design.md par.2)."
 
-	| names |
-	names := OrderedCollection @env0:new.
-	(self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
-		ifTrue: [self ___pyDeclaredSlotNames___ @env0:do: [:n | names @env0:add: n @env0:asSymbol]].
-	(self @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
-		ifTrue: [self ___pyOwnInferredSlots___ @env0:do: [:n |
-			(names @env0:includes: n @env0:asSymbol) ifFalse: [names @env0:add: n @env0:asSymbol]]].
-	^ names
+	| cls |
+	cls := self.
+	[cls @env0:notNil] @env0:whileTrue: [
+		((cls @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+			@env0:and: [cls ___pyDeclaredSlotNames___ @env0:includes: aSym]) ifTrue: [^ true].
+		cls := cls @env0:superclass].
+	^ false
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailDropSlot___: aName
+	"DROP -- the explicit, developer-invoked removal of an attribute's VALUES
+	(docs/Schema_Evolution_Design.md): nil the position of aName in every
+	instance of this class and of every class below it, then turn the name
+	into a hole ``~name'' in each of those layouts, recompile their index
+	tables (a hole has no entry) and remove their own pairs for it.  From then
+	on the name is unknown to the class: a read answers AttributeError, a
+	foreign store is a per-object attribute, and only a later assignment of
+	the same name revives the hole.  Answers { classes rewritten . instances
+	cleared }.
+
+	REFUSES while this class or any class below it still ASSIGNS the name
+	(drop the assignment first, or the next instance brings it straight back)
+	and for a name the layout does not hold.  Refuses in a DIRTY transaction
+	too, for the reason ___grailCompactSlots___ gives: the instances come
+	from a repository scan, which aborts first.  Commit (or abort), drop,
+	commit.  Unlike compaction nothing moves, so re-running after a failure
+	is harmless: it finds fewer values to nil and finishes.  A session that
+	built every instance itself can use ___grailDropSlotSessionOnly___:."
+
+	| tree lists memLists byClass |
+	tree := self ___grailSlotSubtree___.
+	System @env0:needsCommit ifTrue: [
+		^ ImproperOperation @env0:signal:
+			'slot drop scans the repository for instances, which needs a clean transaction: commit or abort first'].
+	lists := SystemRepository @env0:listInstances: tree @env0:asArray.
+	memLists := SystemRepository @env0:listInstancesInMemory: tree @env0:asArray.
+	byClass := IdentityKeyValueDictionary @env0:new.
+	tree @env0:doWithIndex: [:c :i | | set |
+		set := IdentitySet @env0:new.
+		(lists @env0:at: i) @env0:do: [:inst | set @env0:add: inst].
+		(memLists @env0:at: i) @env0:do: [:inst | set @env0:add: inst].
+		byClass @env0:at: c put: set].
+	^ self ___grailDropSlot___: aName tree: tree instances: byClass
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailDropSlotSessionOnly___: aName
+	"___grailDropSlot___: over the instances in THIS SESSION'S MEMORY only
+	(listInstancesInMemory:, which works inside a dirty transaction).  For a
+	session that built every instance of the subtree itself -- SUnit, a scratch
+	session.  A committed instance this session has not touched keeps its
+	value at a position the class now calls a hole, so this is not the
+	maintenance entry point; that is ___grailDropSlot___:."
+
+	| tree memLists byClass |
+	tree := self ___grailSlotSubtree___.
+	memLists := SystemRepository @env0:listInstancesInMemory: tree @env0:asArray.
+	byClass := IdentityKeyValueDictionary @env0:new.
+	tree @env0:doWithIndex: [:c :i | | set |
+		set := IdentitySet @env0:new.
+		(memLists @env0:at: i) @env0:do: [:inst | set @env0:add: inst].
+		byClass @env0:at: c put: set].
+	^ self ___grailDropSlot___: aName tree: tree instances: byClass
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailDropSlot___: aName tree: tree instances: byClass
+	"The drop proper -- see ___grailDropSlot___: -- over tree (this class
+	first, then its descendants) and byClass, the instances per class, already
+	enumerated.  Every refusal is checked before anything is written."
+
+	| sym hole lf classesDone instancesDone effLayoutOf |
+	sym := aName @env0:asSymbol.
+	hole := ('~' @env0:, sym @env0:asString) @env0:asSymbol.
+	lf := Character @env0:lf @env0:asString.
+	effLayoutOf := [:c |
+		(c @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+			ifTrue: [#()]
+			ifFalse: [(c @env0:perform: #'___pySlotLayout___' env: 1) @env0:asArray]].
+	((effLayoutOf @env0:value: self) @env0:includes: sym) ifFalse: [
+		^ ImproperOperation @env0:signal:
+			'no slot named ' @env0:, sym @env0:asString @env0:, ' on ' @env0:, self @env0:name @env0:asString].
+	tree @env0:do: [:c |
+		(((c @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
+				@env0:and: [c ___pyOwnInferredSlots___ @env0:includes: sym])
+			@env0:or: [(c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+				@env0:and: [c ___pyDeclaredSlotNames___ @env0:includes: sym]]) ifTrue: [
+			^ ImproperOperation @env0:signal:
+				'slot ' @env0:, sym @env0:asString @env0:, ' is still assigned by ' @env0:, c @env0:name @env0:asString
+					@env0:, ': remove the assignment (or the __slots__ entry) and re-import first']].
+	classesDone := 0.
+	instancesDone := 0.
+	tree @env0:do: [:c |
+		| pos |
+		pos := (effLayoutOf @env0:value: c) @env0:indexOf: sym.
+		pos @env0:> 0 ifTrue: [
+			"1. Every instance of c, whether c owns its layout or inherits it."
+			(byClass @env0:at: c otherwise: #()) @env0:do: [:inst |
+				(pos @env0:<= inst @env0:_basicSize @env0:and: [(inst @env0:at: pos) ~~ nil]) ifTrue: [
+					inst @env0:at: pos put: nil.
+					instancesDone := instancesDone @env0:+ 1]].
+			"2. The layout, index table and own pair, where c owns them."
+			(c @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
+				| layout src |
+				layout := OrderedCollection @env0:withAll: (c @env0:perform: #'___pySlotLayout___' env: 1).
+				layout @env0:at: pos put: hole.
+				src := '___pySlotLayout___' @env0:, lf @env0:, '	^ #('.
+				layout @env0:do: [:n | src := src @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
+				src := src @env0:, ' )'.
+				c @env0:class ___compileMethod: src category: 'Grail-Slot Layout'.
+				classesDone := classesDone @env0:+ 1].
+			c ___grailCompileSlotIndexTable___.
+			c ___grailRemoveOwnIndexedPair___: sym]].
+	^ { classesDone. instancesDone }
 %
 
 category: 'Grail-Slots'
@@ -435,7 +537,9 @@ classmethod: object
 ___grailRemoveOwnIndexedPair___: aName
 	"Remove THIS class's own accessor pair for aName when it is an indexed-slot
 	pair (category ``Grail-Inferred Slots'' and reading the indexed part) --
-	after the name was retired, so nothing keeps answering the old position.  A
+	after a DROP turned the name into a hole (___grailDropSlot___:), so nothing
+	keeps answering the freed position.  Never on a rebuild: a name the body
+	stopped assigning keeps its pair (docs/Schema_Evolution_Design.md).  A
 	@property / hook forwarder of the same spelling is left alone: it forwards
 	to the loader, which is still right."
 
@@ -523,11 +627,11 @@ ___grailPropagateSlotLayoutToSubclasses___
 	The direct subclasses come from importlib's registry through __subclasses__
 	(a class built ``inDictionary: nil'' is invisible to the kernel's own walk).
 
-	TOMBSTONES travel the same way.  A name this class RETIRED (``~name'') is
-	retired in a subclass that does not hold it itself (___grailOwnSlotNames___),
-	and that subclass's own pair for it goes; a subclass that DOES hold it keeps
-	it live and gets its own pair, since this class's pair is gone.  A name this
-	class REVIVED is revived in place in a subclass that had the tombstone."
+	Nothing is ever RETIRED here: a name this class stopped assigning survives
+	in every layout (docs/Schema_Evolution_Design.md), and a hole a drop left
+	is the drop's own business (___grailDropSlot___: walks the subtree).  A
+	name this class assigns that a subclass holds as a hole is revived there
+	in place."
 
 	| mine lf subs tomb bare |
 	"A class with no layout anywhere in its metaclass chain has nothing to hand
@@ -550,31 +654,20 @@ ___grailPropagateSlotLayoutToSubclasses___
 	subs @env0:do: [:sub |
 		(sub @env0:isKindOf: Behavior) ifTrue: [
 		(sub @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
-			| own ownNames changed needPair dropped src |
+			| own changed needPair src |
 			own := OrderedCollection @env0:withAll: (sub @env0:perform: #'___pySlotLayout___' env: 1).
-			ownNames := sub ___grailOwnSlotNames___.
 			changed := false.
 			needPair := OrderedCollection @env0:new.
-			dropped := OrderedCollection @env0:new.
-			mine @env0:do: [:e | | n i di |
+			mine @env0:do: [:e | | n di |
 				n := bare @env0:value: e.
-				i := own @env0:indexOf: n.
-				di := own @env0:indexOf: (tomb @env0:value: n).
-				e == n
-					ifTrue: [
-						"Live here: the subclass appends it, or revives its tombstone in
-						place; either way it gets its own pair at its own position."
-						i @env0:= 0 ifTrue: [
-							di @env0:= 0 ifTrue: [own @env0:add: n] ifFalse: [own @env0:at: di put: n].
-							needPair @env0:add: n.
-							changed := true]]
-					ifFalse: [
-						"Retired here: retired in the subclass too unless it holds the
-						name itself, in which case it now needs a pair of its own."
-						i @env0:> 0 ifTrue: [
-							(ownNames @env0:includes: n)
-								ifTrue: [needPair @env0:add: n]
-								ifFalse: [own @env0:at: i put: (tomb @env0:value: n). dropped @env0:add: n. changed := true]]]].
+				"Live here and absent there: the subclass appends it, or revives
+				its hole in place; either way it gets its own pair at its own
+				position.  A hole here changes nothing there."
+				(e == n @env0:and: [(own @env0:includes: n) @env0:not]) ifTrue: [
+					di := own @env0:indexOf: (tomb @env0:value: n).
+					di @env0:= 0 ifTrue: [own @env0:add: n] ifFalse: [own @env0:at: di put: n].
+					needPair @env0:add: n.
+					changed := true]].
 			changed ifTrue: [
 				src := '___pySlotLayout___' @env0:, lf @env0:, '	^ #('.
 				own @env0:do: [:n | src := src @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
@@ -583,8 +676,7 @@ ___grailPropagateSlotLayoutToSubclasses___
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				sub ___grailCompileSlotIndexTable___].
 			needPair @env0:do: [:n |
-				sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n) forwardGetter: false].
-			dropped @env0:do: [:n | sub ___grailRemoveOwnIndexedPair___: n]].
+				sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n) forwardGetter: false]].
 		sub ___grailPropagateSlotLayoutToSubclasses___]].
 	^ self
 %
@@ -667,8 +759,9 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	inherited, or to a DNU -- is what the diagnostics then show.  Category
 	``Grail-Inferred Slots'' names them for ___grailResetClassMethods___ /
 	introspection; re-emitted unconditionally on a rebuild, so they cannot
-	go stale (a name the new body no longer assigns leaves a harmless pair
-	behind)."
+	go stale.  A name the new body no longer assigns KEEPS its pair: the name
+	survives in the layout and the pair is what serves it
+	(docs/Schema_Evolution_Design.md)."
 
 	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain setattrHookOwner setattrHookInChain layout hadLayout parentLayout layoutNames |
 	lf := Character @env0:lf @env0:asString.
@@ -738,14 +831,9 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not
 			@env0:and: [(parentLayout @env0:indexOf: n) @env0:~= pos]]) ifTrue: [
 				self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain forwardSetter: setattrHookInChain]].
-	"A name this rebuild RETIRED (a tombstone in the layout) loses this class's
-	own indexed pair, so a foreign accessor send stops answering the retired
-	position; the sends in the new body no longer name it."
-	layout @env0:do: [:n |
-		(self ___grailSlotIsTombstone___: n) ifTrue: [ | bareName |
-			bareName := n @env0:asString @env0:copyFrom: 2 to: n @env0:asString @env0:size.
-			(propertyNames @env0:includes: bareName @env0:asSymbol) ifFalse: [
-				self ___grailRemoveOwnIndexedPair___: bareName]]].
+	"A name the new body no longer assigns SURVIVES with its pair
+	(docs/Schema_Evolution_Design.md): nothing is removed on a rebuild.  A hole
+	(``~name'', left by an explicit drop) has no pair and no index entry."
 	"The inferred names this class's instances hold in a NAMED instVar (own
 	or inherited), recorded class-side as ``___pyOwnInferredSlots___'' so the
 	__dict__ view / vars() can tell an inferred slot -- an ordinary Python
@@ -914,13 +1002,19 @@ ___grailInstallAttrReadAccessors___: names
 category: 'Grail-Slots'
 classmethod: object
 ___pyInferredSlotNames___
-	"Every INFERRED slot name (Symbol) an instance of the receiver class holds
-	in a named instVar: the union of the ``___pyOwnInferredSlots___'' tables
-	___grailInstallInferredSlots___: compiled up the superclass chain.  Empty
-	for a class built with GRAIL_INFERRED_SLOTS off, and for declared
-	__slots__, which are not instance-dict entries.  Not a hot path: read by
-	the __dict__ view (PyInstanceDict), vars() and __getstate__, never by an
-	attribute load."
+	"Every INFERRED slot name (Symbol) an instance of the receiver class holds:
+	the non-hole names of its slot LAYOUT (docs/Instance_Attribute_Indexed_Slots.md)
+	-- whether or not the CURRENT body assigns them, since a name the body
+	stopped assigning survives as an ordinary attribute
+	(docs/Schema_Evolution_Design.md) -- plus, for a class whose slots are
+	named instVars (a kernel-rooted class), the union of the
+	``___pyOwnInferredSlots___'' tables up the superclass chain.  Minus every
+	name DECLARED in __slots__ anywhere in the chain, which is a slot, not an
+	instance-dict entry, even where an ancestor inferred the same name
+	(``class Sub(Base): __slots__ = ('a',)'' over a Base whose __init__ assigns
+	self.a): the declaration shadows the inference.  Empty for a class built
+	with GRAIL_INFERRED_SLOTS off.  Not a hot path: read by the __dict__ view
+	(PyInstanceDict), vars() and __getstate__, never by an attribute load."
 
 	| names cls declared chain |
 	names := OrderedCollection @env0:new.
@@ -930,19 +1024,18 @@ ___pyInferredSlotNames___
 	[cls @env0:notNil] @env0:whileTrue: [
 		chain @env0:addFirst: cls.
 		cls := cls @env0:superclass].
-	"ROOT FIRST, so the names come out in layout order -- the parent's before
-	the subclass's, which is also the order ``super().__init__'' assigns them
-	in and so the order CPython's instance __dict__ shows
-	(docs/Instance_Attribute_Indexed_Slots.md)."
+	"The layout is already ROOT FIRST -- the parent's names before the
+	subclass's, which is also the order ``super().__init__'' assigns them in
+	and so the order CPython's instance __dict__ shows."
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil ifFalse: [
+		(self @env0:perform: #'___pySlotLayout___' env: 1) @env0:do: [:e |
+			(self ___grailSlotIsTombstone___: e) ifFalse: [
+				(names @env0:includes: e @env0:asSymbol) ifFalse: [names @env0:add: e @env0:asSymbol]]]].
 	chain @env0:do: [:c |
 		(c @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
 			ifTrue: [
 				c ___pyOwnInferredSlots___ @env0:do: [:n |
 					(names @env0:includes: n) ifFalse: [names @env0:add: n]]].
-		"A name DECLARED in __slots__ anywhere in the chain is a slot, not an
-		instance-dict entry, even where an ancestor inferred the same name
-		(``class Sub(Base): __slots__ = ('a',)'' over a Base whose __init__
-		assigns self.a): the declaration shadows the inference."
 		(c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
 			ifTrue: [declared @env0:addAll: c ___pyDeclaredSlotNames___]].
 	^ names @env0:reject: [:n | declared @env0:includes: n]
@@ -11205,10 +11298,16 @@ ___pyAttrDelete___: aName
 		| slotIdx |
 		slotIdx := self ___pySlotIndexFor___: sym.
 		slotIdx @env0:~= 0 ifTrue: [
-			(self ___pySlotAt___: slotIdx) == nil ifTrue: [
+			"ONE HOME PER NAME: the position is nilled AND a per-object value of
+			the same name (a promotion leftover) goes with it, so the name is
+			gone rather than uncovered.  Unbound in both -> AttributeError
+			(docs/Schema_Evolution_Design.md, cut 1)."
+			((self ___pySlotAt___: slotIdx) == nil
+				@env0:and: [(self @env0:dynamicInstVarAt: sym) == nil]) ifTrue: [
 				^ AttributeError ___signal___:
 					'''' @env0:, aName @env0:asString @env0:, ''''
 			].
+			(self @env0:dynamicInstVarAt: sym) == nil ifFalse: [self @env0:removeDynamicInstVar: sym].
 			^ self ___pySlotAt___: slotIdx put: nil
 		]
 	].
@@ -12285,10 +12384,27 @@ ___pyAttrStore___: aName put: aValue
 	non-strict slotted class (it has a __dict__) — falls back to
 	dynamic-instVar storage."
 	(self ___respondsTo___: #'___pyHasSlots___') ifTrue: [
-		| slotIdx |
+		| slotIdx strict |
 		slotIdx := self ___pySlotIndexFor___: aName.
+		strict := (self ___respondsTo___: #'___pySlotsStrict___') @env0:and: [self ___pySlotsStrict___].
+		"A STRICT class's contract is its CURRENT __slots__.  A name an edit
+		removed from the declaration SURVIVES in the layout -- readable and
+		deletable on the instances that hold it -- but a new store of it is
+		refused like any undeclared name (docs/Schema_Evolution_Design.md par.2).
+		Consulted only for a strict class, and there every layout name is a
+		declared one except such a survivor."
+		(slotIdx @env0:~= 0 @env0:and: [strict
+			@env0:and: [(self @env0:class ___pyDeclaredSlotInChain___: aName @env0:asSymbol) @env0:not]]) ifTrue: [
+			^ AttributeError ___signal___:
+				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
+					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
 		slotIdx @env0:~= 0 ifTrue: [
 			self ___pySlotAt___: slotIdx put: aValue.
+			"ONE HOME PER NAME: a value stored per object before the name had a
+			position (a promotion) is superseded, never left underneath to
+			resurface on a later del (docs/Schema_Evolution_Design.md, cut 1)."
+			(self @env0:dynamicInstVarAt: aName @env0:asSymbol) == nil ifFalse: [
+				self @env0:removeDynamicInstVar: aName @env0:asSymbol].
 			^ aValue
 		].
 		"The marker's VALUE, not merely its presence: a class declaring no

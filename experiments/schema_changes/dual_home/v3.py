@@ -1,8 +1,6 @@
-"""dual_home v3: Q assigns x again, so the tombstone revives.
-
-The revived position wins over the per-object 99: q.x answers the v1 10,
-vars() shows the 99, and `del q.x` clears the position so the 99 resurfaces.
-"""
+"""dual_home v3: Q assigns x again.  Nothing changes: the layout never
+retired x, so the 99 the caller stored is what q.x answers, and del removes
+it for good."""
 import gemdb
 
 class Point:
@@ -15,8 +13,9 @@ class Q:
         self.y = 20
 
 q = gemdb.root[__name__ + ":q"]
-print("v3 Q: layout =", Q.___pySlotLayout___(), " q.x =", q.x, " vars(q) =", vars(q),
-      "  <-- DEFECT: the read and the dict disagree")
+assert Q.___pySlotLayout___() == ["x", "y"]
+assert q.x == 99 and vars(q) == {"x": 99, "y": 20}
 del q.x
-print("v3 Q: after del q.x: hasattr =", hasattr(q, "x"), " q.x =", getattr(q, "x", "AttributeError"),
-      "  <-- DEFECT: the 99 resurfaces")
+assert not hasattr(q, "x")
+assert Q().x == 11
+print("v3 Q: layout =", Q.___pySlotLayout___(), " q.x was 99; after del q.x: hasattr =", hasattr(q, "x"))
