@@ -714,6 +714,7 @@ run
 	at: #'ClassAttrsTestCase' put: nil;
 	at: #'ClassBodyAugAssignTestCase' put: nil;
 	at: #'ClassBodyClosureCellTestCase' put: nil;
+	at: #'ClassBodyConditionalNewTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
 	at: #'ClassBodyControlFlowTestCase' put: nil;
 	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
@@ -2026,6 +2027,7 @@ input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyAugAssignTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyConditionalNewTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyControlFlowTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
