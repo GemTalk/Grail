@@ -226,6 +226,12 @@ initialize
 	self @env0:at: #O_EXCL put: 2048.
 	self @env0:at: #O_NOFOLLOW put: 256.
 	self @env0:at: #O_CLOEXEC put: 16777216.
+	"lseek(2) whence values, spelled as CPython's os and io spell them.  CPython's
+	own zipfile seeks with os.SEEK_SET / SEEK_CUR / SEEK_END, so without them the
+	real module could not even be imported."
+	self @env0:at: #SEEK_SET put: 0.
+	self @env0:at: #SEEK_CUR put: 1.
+	self @env0:at: #SEEK_END put: 2.
 	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
 	"os.supports_* -- the sets CPython uses to advertise which os functions
 	accept a file DESCRIPTOR in place of a path, a dir_fd, follow_symlinks=False,
@@ -285,8 +291,7 @@ fspath: path
 
 	(path isKindOf: CharacterCollection) ifTrue: [^ path].
 	(path isKindOf: ByteArray) ifTrue: [^ path].
-	((path @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'__fspath__')
-		ifTrue: [^ path __fspath__].
+	(self ___isPathLike___: path) ifTrue: [^ path __fspath__].
 	TypeError ___signal___: 'expected str, bytes, or os.PathLike'
 %
 
@@ -308,13 +313,26 @@ ___fsPath___: path
 	was ``shutil.rmtree(Path(tempfile.mkdtemp()))'', where rmtree's
 	os.listdir killed the session outright.
 
-	Probes the whole class chain (whichClassIncludesSelector:, like
-	os_PathLike>>__instancecheck__) rather than the own method dict, so a
-	Path SUBCLASS that inherits __fspath__ is coerced too."
+	Probes the whole class chain (___isPathLike___:) rather than the own
+	method dict, so a Path SUBCLASS that inherits __fspath__ is coerced too."
 
-	((path @env0:class @env0:whichClassIncludesSelector: #'__fspath__' environmentId: 1) notNil)
-		ifTrue: [^ path __fspath__].
+	(self ___isPathLike___: path) ifTrue: [^ path __fspath__].
 	^ path
+%
+
+category: 'Grail-Filesystem'
+method: os
+___isPathLike___: anObject
+	"Whether anObject's class OR ANY SUPERCLASS defines __fspath__.
+
+	The one predicate behind both fspath: and ___fsPath___:, because two copies
+	of it had already disagreed: ___fsPath___: probed the whole chain while the
+	public os.fspath() read only the object's OWN method dict.  pathlib.Path
+	inherits __fspath__ from PurePath, so os.stat(Path(...)) worked and
+	os.fspath(Path(...)) raised TypeError -- which is what stopped CPython's
+	zipfile from adding a file named by a Path (ZipInfo.from_file)."
+
+	^ (anObject @env0:class @env0:whichClassIncludesSelector: #'__fspath__' environmentId: 1) notNil
 %
 
 category: 'Grail-Filesystem'
@@ -785,6 +803,43 @@ makedirs: aPath
 		]
 	].
 	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+_makedirs: positional kw: kwargs
+	"os.makedirs(name, mode=0o777, exist_ok=False), for a call that passes any
+	argument by keyword.  CPython's zipfile extracts with
+	``os.makedirs(upperdirs, exist_ok=True)'', and without this form that call
+	matched no selector and raised TypeError before a single member was written.
+
+	It reaches makedirs: and changes nothing about what that does.  makedirs:
+	creates only the missing components and never raises when the directory is
+	already there -- so exist_ok=True is exactly its behaviour, and
+	exist_ok=False does NOT raise FileExistsError as CPython would.  That gap
+	belongs to makedirs: itself (both spellings share it), and is recorded in
+	docs/Issues.md rather than changed here.  mode is accepted and, as by
+	makedirs:, not applied."
+
+	^ self makedirs: (self ___makedirsName: positional kw: kwargs)
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___makedirsName: positional kw: kwargs
+	"The path argument of makedirs, by position or by its keyword ``name''."
+
+	positional @env0:ifNotEmpty: [:arguments | ^ arguments @env0:at: 1].
+	(kwargs notNil and: [kwargs @env0:includesKey: 'name'])
+		ifTrue: [^ kwargs @env0:at: 'name'].
+	^ TypeError ___signal___: self @env0:class ___makedirsMissingNameMessage
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___makedirsMissingNameMessage
+
+	^ 'makedirs() missing required argument ''name'' (pos 1)'
 %
 
 category: 'Grail-File and Directory Operations'

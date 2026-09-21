@@ -280,6 +280,62 @@ splitext: aPath
 
 category: 'Grail-Path Manipulation'
 method: os_path
+splitdrive: aPath
+	"os.path.splitdrive(path) -- POSIX has no drives, so the drive is always empty."
+
+	^ tuple @env0:with: '' with: ((os instance) ___fsPath___: aPath)
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+splitroot: aPath
+	"os.path.splitroot(path) -- (drive, root, tail).  Exactly two leading slashes
+	are a root of their own: POSIX leaves a leading ``//'' implementation-defined,
+	and CPython keeps it rather than collapsing it to ``/''."
+
+	| path |
+
+	path := (os instance) ___fsPath___: aPath.
+	(path @env0:beginsWith: '/') ifFalse: [^ tuple @env0:with: '' with: '' with: path].
+	(self ___hasExactlyTwoLeadingSlashes___: path)
+		ifTrue: [^ tuple @env0:with: '' with: '//' with: (path @env0:copyFrom: 3 to: path @env0:size)].
+	^ tuple @env0:with: '' with: '/' with: (path @env0:copyFrom: 2 to: path @env0:size)
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___hasExactlyTwoLeadingSlashes___: aPath
+	"CPython's test, for a path already known to start with a slash:
+	``p[1:2] == sep and p[2:3] != sep''."
+
+	^ (aPath @env0:size @env0:>= 2 and: [(aPath @env0:at: 2) @env0:= $/])
+		and: [aPath @env0:size @env0:= 2 or: [(aPath @env0:at: 3) @env0:~= $/]]
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+samefile: aPath _: anotherPath
+	"os.path.samefile(path1, path2) -- the same inode on the same device, as
+	CPython's samestat decides it."
+
+	^ (self ___fileIdentityOf___: aPath) @env0:= (self ___fileIdentityOf___: anotherPath)
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___fileIdentityOf___: aPath
+	"The (st_dev, st_ino) pair that makes two paths name the same file."
+
+	| status |
+
+	status := (os instance) stat: aPath.
+	^ Array
+		@env0:with: (status @env1:___pyAttrLoad___: #'st_dev')
+		with: (status @env1:___pyAttrLoad___: #'st_ino')
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
 isabs: aPath
 	"os.path.isabs(path) — True if path is absolute."
 

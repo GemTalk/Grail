@@ -430,6 +430,7 @@ run
 	at: #'zlib' put: nil;
 	at: #'ZlibError' put: nil;
 	at: #'ZlibDecompress' put: nil;
+	at: #'ZlibCompress' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
@@ -1105,6 +1106,7 @@ run
 	at: #'OsTestCase' put: nil;
 	at: #'OsUtimeTestCase' put: nil;
 	at: #'OsWalkTestCase' put: nil;
+	at: #'OsZipfileSurfaceTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
 	at: #'OverrideDefaultArgTestCase' put: nil;
 	at: #'PackageImportTestCase' put: nil;
@@ -2432,6 +2434,7 @@ input src/smalltalk/EmbeddedPythonTests/EmbeddedExtensionModuleTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/PythonStoreTestCase.gs
 input src/smalltalk/PythonTests/OsUtimeTestCase.gs
 input src/smalltalk/PythonTests/OsWalkTestCase.gs
+input src/smalltalk/PythonTests/OsZipfileSurfaceTestCase.gs
 input src/smalltalk/PythonTests/OverflowErrorTestCase.gs
 input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs

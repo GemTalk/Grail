@@ -35,6 +35,22 @@ __all__ = ["Error", "SameFileError", "copyfile", "copy", "copy2",
            "get_terminal_size"]
 
 
+# CPython's value, and its own copyfileobj below verbatim.  Grail is posix, so
+# the non-Windows branch of ``1024 * 1024 if _WINDOWS else 256 * 1024''.
+COPY_BUFSIZE = 256 * 1024
+
+
+def copyfileobj(fsrc, fdst, length=0):
+    """copy data from file-like object fsrc to file-like object fdst"""
+    if not length:
+        length = COPY_BUFSIZE
+    # Localize variable access to minimize overhead.
+    fsrc_read = fsrc.read
+    fdst_write = fdst.write
+    while buf := fsrc_read(length):
+        fdst_write(buf)
+
+
 class Error(OSError):
     pass
 
