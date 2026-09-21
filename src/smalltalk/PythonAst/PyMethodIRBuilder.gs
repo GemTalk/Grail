@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos deferredInstVars instVarsResolvedFor)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos deferredInstVars instVarsResolvedFor deferredClassHelpers classHelpersInstalledFor)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -1277,11 +1277,81 @@ install
 		and: [instVarsResolvedFor ~~ targetClass]]) ifTrue: [
 		Error signal: 'PyMethodIRBuilder: deferred instVar offsets not resolved for '
 			, targetClass name asString].
+	"The same refusal for a deferred CLASS HELPER, and for the same reason:
+	installing the method while its class statement's helper sits on the
+	stand-in gives a method that generates cleanly and then raises a DNU the
+	first time the class statement runs."
+	(deferredClassHelpers notNil
+		and: [deferredClassHelpers notEmpty
+		and: [classHelpersInstalledFor ~~ targetClass]]) ifTrue: [
+		Error signal: 'PyMethodIRBuilder: deferred class helpers not installed for '
+			, targetClass name asString].
 	meth := self generatedMethod.
 	self ensureEnvDict at: methNode selector put: meth.
 	Behavior _clearLookupCaches: env.
 	env = 0 ifFalse: [Behavior _clearLookupCaches: 0].
 	^ meth
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+___irNoteClassHelper___: aSelector source: aString
+	"Take a class statement's compiled-text helper (cut 76) -- compiling it NOW
+	for an ordinary build, DEFERRING it for a shared one.
+
+	A shared build (see deferInstVars) has no real class at emit time:
+	targetClass is importlib's stand-in, so compiling the helper there installs
+	it where the method will never run.  The selector is derived from the
+	class's source offset and name, so it is stable across regenerations and
+	the send finds nothing on the class the method is actually installed on --
+	``a MyTzInfo class does not understand #'___irClassDef_91742_MyStr___''',
+	which is what test.test_datetime read under the flag once #983 removed the
+	refusal that had been standing in for this.
+
+	Deferring is sound for the same reason deferring an instVar offset is: the
+	helper's SOURCE is the class body's text, which does not mention the
+	enclosing class at all.  Only where it is installed depends on the class,
+	and ___irRegenerateOn___: knows that."
+
+	deferredInstVars isNil ifTrue: [
+		^ self ___compileClassHelper___: aSelector source: aString on: targetClass].
+	deferredClassHelpers isNil ifTrue: [deferredClassHelpers := OrderedCollection new].
+	deferredClassHelpers add: (Array with: aSelector with: aString).
+	^ self
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+___compileClassHelper___: aSelector source: aString on: aClass
+	"File one class-statement helper onto aClass, env 1, and prove it landed.
+
+	A compile failure has to RAISE rather than answer: the seam's handler turns
+	it into a fallback to the whole method's text, and the alternative is a
+	method whose class statement sends a selector nothing implements."
+
+	[aClass compileMethod: aString
+		dictionaries: importlib ___grailCompileSymbolList___
+		category: 'Grail-IR Class Helpers'
+		environmentId: 1]
+		on: CompileWarning do: [:ex | ex resume].
+	(aClass includesSelector: aSelector environmentId: 1) ifFalse: [
+		Error signal: 'IR class helper did not compile: ' , aSelector asString].
+	^ self
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+___installDeferredClassHelpersOn___: aClass
+	"Compile every deferred class-statement helper onto the class this
+	regeneration is for.  Once per class, which is once per CALL of the
+	enclosing def -- the same lifetime the class itself has, and the same
+	lifetime the text path pays for the whole method."
+
+	deferredClassHelpers ifNotNil: [
+		deferredClassHelpers do: [:pair |
+			self ___compileClassHelper___: (pair at: 1) source: (pair at: 2) on: aClass]].
+	classHelpersInstalledFor := aClass.
+	^ self
 %
 
 category: 'generation'
@@ -1315,6 +1385,7 @@ ___irRegenerateOn___: aClass
 	targetClass := aClass.
 	methNode class: aClass.
 	self ___resolveDeferredInstVarsOn___: aClass.
+	self ___installDeferredClassHelpersOn___: aClass.
 	^ self install
 %
 

@@ -6305,12 +6305,16 @@ ___emitIRStatementOn___: aBuilder
 	___irEligibleStatementLocals___: for why the class emit travels as a
 	compiled-text helper rather than as transcribed IR nodes.
 
-	The helper is compiled HERE, while the compile context is exactly the one
-	the text would have generated the class under, and installed on the class
-	the enclosing method is being built on.  A compile failure raises, which
-	the seam's handler turns into a fallback to the whole method's text."
+	The helper's SOURCE is generated HERE, while the compile context is exactly
+	the one the text would have generated the class under.  Where it is
+	INSTALLED is the builder's decision (___irNoteClassHelper___:source:): on
+	the target class now for an ordinary build, and once per class at
+	regeneration time for a SHARED build, whose targetClass at this point is
+	importlib's stand-in rather than any class the method will run on.  A
+	compile failure raises, which the seam's handler turns into a fallback to
+	the whole method's text."
 
-	| sel src cls carried args routesToModule |
+	| sel src carried args routesToModule |
 	"ASK THE ROUTING QUESTION FIRST.  ___irHelperSourceWithSelector___:carrying:
 	below GENERATES THE CLASS BODY'S TEXT, which walks into the class's own
 	scope, and the answer differs on the two sides of that call: eligibility
@@ -6321,14 +6325,7 @@ ___emitIRStatementOn___: aBuilder
 	carried := self ___irCarriedCaptureNames___: (aBuilder localNameSet).
 	sel := self ___irHelperSelector___: carried.
 	src := self ___irHelperSourceWithSelector___: sel carrying: carried.
-	cls := aBuilder targetClass.
-	[cls compileMethod: src
-		dictionaries: importlib ___grailCompileSymbolList___
-		category: 'Grail-IR Class Helpers'
-		environmentId: 1]
-		on: CompileWarning do: [:ex | ex resume].
-	(cls includesSelector: sel environmentId: 1) ifFalse: [
-		Error signal: 'IR class helper did not compile: ' , sel asString].
+	aBuilder ___irNoteClassHelper___: sel source: src.
 	"``at:'', not ``atNode:'': the OFFSET (so the frame reports the ``class''
 	line) without a position-map ENTRY.  A class statement's extent is its whole
 	suite, so recording it would put carets under every line of the class body
