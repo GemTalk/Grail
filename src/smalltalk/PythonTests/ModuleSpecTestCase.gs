@@ -57,10 +57,15 @@ ModuleSpecTestCase category: 'Grail-SUnit'
 ! origin ``built-in'', has_location false, no __file__.  That is not a
 ! placeholder -- CPython's own C modules report exactly that, measured on
 ! 3.14.6 as ``ModuleSpec(name='sys', loader=BuiltinImporter, origin='built-in')''.
-! Those modules are minted by ``module class >> instance'' and never pass
-! through registerModule:with: in a fresh session, so the stamp rides the same
-! one-time sweep ``__builtins__'' uses; stamping only at registration left 25
-! of 35 modules with __spec__ None, measured.
+! Those modules are minted by ``module class >> instance'', and they reach
+! sys.modules by TWO routes that are not the loader path.  The BOOTSTRAP SEED
+! (sys class >> initializeBuiltinModules) runs inside sys.modules' own lazy
+! init, before importlib can be called at all, so it rides the one-time sweep
+! ``__builtins__'' uses -- stamping only at registration left 25 of 35 modules
+! with __spec__ None, measured.  The LAZY FALLBACK (importlib class >>
+! lookupModule:, on a sys.modules miss) registers properly; it used to store
+! bare, which the sweep cannot catch up because the sweep has already fired by
+! then -- see testALazilyResolvedSmalltalkBuiltinCarriesASpec.
 !
 ! KNOWN DIVERGENCE, deliberate: ``spec.cached'' is always None.  It names the
 ! compiled bytecode file and Grail writes no .pyc.  That is load-bearing rather
@@ -159,4 +164,43 @@ testCachedIsAlwaysNone
 	module.__cached__ absent -- see ModuleCachedAbsentTestCase."
 
 	self assertMatchesAt: 'cached_is_none' in: #GRAIL_ONLY.
+%
+
+category: 'Grail-Tests'
+method: ModuleSpecTestCase
+testALazilyResolvedSmalltalkBuiltinCarriesASpec
+	"THE SECOND WAY INTO sys.modules, and the one that used to skip every stamp.
+
+	A pure-Smalltalk builtin (grail, os.path, _weakref, socket, ...) comes from
+	no loader: on a sys.modules miss, importlib class >> lookupModule: finds the
+	class on the symbol list and mints its singleton.  That store was a bare
+	``at:put:'', which reaches neither ___stampBuiltinsOn___: nor
+	___stampBuiltinSpecOn___: -- they are called only from registerModule:with:
+	and from the one-time sweep.  And the sweep fires at the FIRST registration
+	of the session, so a module minted here afterwards was never stamped and
+	nothing ever came back for it.
+
+	Measured before the fix, in a session that had already imported one .py
+	module: of 49 modules in sys.modules, grail, os.path and _weakref each
+	carried ``__spec__'' None and no ``__builtins__''.  After it, 56 of 56 are
+	covered -- the sole remaining blank being builtins' own ``__builtins__'',
+	which CPython omits too.  The count is not a fixed 1: it is however many
+	Smalltalk builtins a given session happens to resolve lazily.
+
+	THE ORDERING IS THE TEST.  setUp has already loaded module_spec.py through
+	the loader path, so the sweep has certainly run before the eviction below --
+	which is exactly the sequence that used to leave the module bare.  Evicting
+	and re-resolving inside the test is what makes this a regression test rather
+	than a restatement of whatever the session happened to do first."
+
+	| mods inst |
+	mods := importlib @env1:modules.
+	mods removeKey: #'_weakref' ifAbsent: [].
+	inst := importlib @env1:lookupModule: '_weakref'.
+	self deny: inst isNil
+		description: '_weakref should resolve from the symbol list'.
+	self deny: (inst dynamicInstVarAt: #'__spec__') isNil
+		description: 'a lazily-resolved Smalltalk builtin must carry a __spec__'.
+	self deny: (inst dynamicInstVarAt: #'__builtins__') isNil
+		description: 'a lazily-resolved Smalltalk builtin must carry __builtins__'.
 %

@@ -2839,10 +2839,17 @@ ___sweepBuiltinsIntoLoadedModules___: aView
 			and: [(m @env0:dynamicInstVarAt: #'__builtins__') isNil]]])
 				ifTrue: [m @env0:dynamicInstVarAt: #'__builtins__' put: aView].
 		"``__spec__'' rides the same sweep, for the same reason and with the
-		same measurement behind it: the bootstrap set never passes through
+		same measurement behind it: the bootstrap SEED never passes through
 		registerModule:with: in a fresh session, so stamping only there left 25
 		of 35 modules with __spec__ None -- json, string, sys and every other
-		Smalltalk-implemented module among them."
+		seeded Smalltalk-implemented module among them.
+
+		THE SWEEP COVERS THE SEED, NOT EVERY SMALLTALK MODULE, and reading it as
+		the latter is what hid a second gap.  It fires ONCE, at the first
+		registration of the session; a module minted afterwards by lookupModule:'s
+		symbol-list fallback is past it, and used to be stored bare.  That is
+		fixed at the store instead -- widening the sweep could not have fixed it,
+		because there is no later moment at which the sweep runs."
 		[m notNil ifTrue: [self ___stampBuiltinSpecOn___: m]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]
@@ -6194,7 +6201,24 @@ lookupModule: aName
 		and: [(cls isKindOf: Behavior)
 		and: [cls @env0:inheritsFrom: module]]) ifTrue: [
 		inst := cls @env0:___instance___.
-		self modules @env0:at: aName put: inst.
+		"THROUGH registerModule:with:, not a bare ``at:put:''.  This is the
+		SECOND way a module reaches sys.modules, and until #1068's follow-up it
+		was the one that silently skipped every stamp: ``__builtins__'' and
+		``__spec__'' are written by ___stampBuiltinsOn___: / ___stampBuiltinSpecOn___:,
+		which are reached ONLY from registerModule:with: and from the one-time
+		sweep -- and the sweep fires at the FIRST registration of the session,
+		so anything minted here afterwards was never stamped and nothing ever
+		came back for it.  Measured before the change, in a session that had
+		already imported a .py module: grail, os.path and _weakref each carried
+		``__spec__'' None and no ``__builtins__''.  (That, not ``created outside
+		the import machinery'', is why the __spec__ coverage count fell short.)
+
+		Registration also gives these modules the parent/child binding the bare
+		store never did -- ``os.path'' on ``os'' -- which happened to be masked
+		because os's own initialize binds ``path'' by hand.
+
+		Env 0: this method is env 1 and registerModule:with: is env 0."
+		self @env0:registerModule: aName with: inst.
 		^ inst].
 	^ nil
 %
