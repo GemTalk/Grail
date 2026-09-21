@@ -5864,3 +5864,56 @@ Pinned arm-against-arm by
 which asserts the two ERROR arms against CPython outright and compares this one
 between the arms, so the divergence cannot silently widen into a disagreement
 between the two paths.
+
+## test.test_xml_etree crashed on CI while passing locally
+
+The "160 of 226 pass" entry above was true on Darwin arm64 and false on the
+board that matters. The CI-measured scoreboard recorded the module as
+`CRASH | 0 | 0 | 0 | 0` — topaz exited after 14 of 226 tests and printed no
+result line, so every test that passes was invisible.
+
+**One test did it.** `BadElementTest.test_deeply_nested_deepcopy` builds a
+500,000-deep element chain and deep-copies it, asserting a `RecursionError`
+(upstream: *"This should raise a RecursionError and not crash"* — CPython itself
+crashed on it, cpython#148801). Both platforms run the same stack configuration,
+`max=74000, errorPercent=25`, but that is a BYTE budget, so the frames a program
+actually gets depend on how large its frames are:
+
+```
+Darwin arm64   GRAIL_STACK_OVERFLOW|enter=1|converted=1|deepest=72587   -> passes
+Linux x86_64   AlmostOutOfStackError 2519 at stack depth 6,
+               from GsProcess>>_start                                   -> session dies
+```
+
+Native code (on for x86_64, unavailable on arm64) spends the yellow-zone reserve
+before the `RecursionError` can be built, so the error surfaces outside the
+driver's per-test rescue. It is skipped in `scripts/cpython_suite_skips.txt`,
+which exists for exactly this failure mode. Measured on both platforms after the
+skip, the module now agrees to the digit:
+
+```
+Darwin arm64   ERROR | 226 | 14 | 34 | 3
+Linux x86_64   ERROR | 226 | 14 | 34 | 3     (workflow_dispatch run 35623620330)
+```
+
+**175 passing tests are now visible on the board.** The skip costs Darwin one
+real pass, which is the right trade for a CI-measured board.
+
+`BadElementTest.test_recursive_repr` also exhausts the stack (61,324 frames on
+Darwin) and was NOT skipped pre-emptively: CI died before reaching it, so its
+Linux behaviour was unknown. Measured, it converts there too
+(`deepest=61009`) and passes — a guess would have thrown away a real pass on
+both platforms.
+
+### Two lessons, one of them a gap
+
+The first is procedural: the module was verified only on Darwin, and a recursion
+limit that is a physical stack is exactly the thing that differs between the two
+platforms. A module that drives recursion deliberately wants a Linux run before
+it is called done — `workflow_dispatch` with `modules=` does that in minutes.
+
+The second is a gap in the gate. The nightly that first measured the crash
+reported `new test.test_xml_etree: CRASH (0 fail+err) -- no baseline` and still
+passed with 0 regressions: a NEW module that enters the board as CRASH, STERROR
+or TIMEOUT is never flagged, so this sat for three days behind green nightlies.
+Still open.
