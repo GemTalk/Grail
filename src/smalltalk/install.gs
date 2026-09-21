@@ -1172,6 +1172,7 @@ run
 	at: #'SelfNamedClassTestCase' put: nil;
 	at: #'SelfReboundInMethodTestCase' put: nil;
 	at: #'SelfSendOverrideTestCase' put: nil;
+	at: #'SetDisplayUnpackTestCase' put: nil;
 	at: #'SetTestCase' put: nil;
 	at: #'SetUpBridgeFixture' put: nil;
 	at: #'SetUpBridgeTestCase' put: nil;
@@ -2493,6 +2494,7 @@ input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
 input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs
 input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
+input src/smalltalk/PythonTests/SetDisplayUnpackTestCase.gs
 input src/smalltalk/PythonTests/SetTestCase.gs
 input src/smalltalk/PythonTests/SetUpBridgeTestCase.gs
 input src/smalltalk/PythonTests/ShimForeignObjectTestCase.gs
