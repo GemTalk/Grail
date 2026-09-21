@@ -3,7 +3,9 @@
 *For Python developers using Grail with GemDB. The implementation is in
 [Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md);
 the review of it, with the proposals this page marks as **proposed**, is
-[Schema_Evolution_Review.md](Schema_Evolution_Review.md). Every claim on this
+[Schema_Evolution_Review.md](Schema_Evolution_Review.md), and the decisions
+and cuts that will change §3.2, §3.5 and §4 are in
+[Schema_Evolution_Design.md](Schema_Evolution_Design.md). Every claim on this
 page is one of the runnable examples in
 [experiments/schema_changes/](../experiments/schema_changes/) or
 [experiments/schema/](../experiments/schema/).*
