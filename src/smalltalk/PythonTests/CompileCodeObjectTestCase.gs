@@ -46,12 +46,13 @@ CompileCodeObjectTestCase category: 'Grail-SUnit'
 ! a comprehension is SEARCHED, because ``[x async for x in a]'' at module level
 ! really does await.
 !
-! ONE LIMIT IS RECORDED AS AN XFAIL rather than fixed: Grail's parser still
-! refuses a genuine top-level ``await'' with ``SyntaxError: 'await' outside
-! function'' whatever flags compile() was given, so the flag is honoured for
-! co_flags and not yet for parsing.  testTheTopLevelAwaitParseGapIsStillThere
-! pins that, and goes RED when the parser learns it -- which is the signal to
-! retire the XFAIL and take another look at test_compile_top_level_await.
+! THE ONE LIMIT THIS RECORDED HAS BEEN CLOSED.  Grail's parser used to refuse a
+! genuine top-level ``await'' whatever flags compile() was given, so the flag was
+! honoured for co_flags and not for parsing; that was an XFAIL here, pinned by a
+! test written to go RED when the parser learned it.  It did go red, which is how
+! the retirement happened -- see CompileTopLevelAwaitTestCase.  The row stays, as
+! an ordinary check now, because it is the cheapest statement of the feature and
+! it has to stay consistent with the no_coro rows beside it.
 !
 ! Drives tests/python/compile_code_object.py, whose EXPECTED table was measured
 ! by RUNNING CPython 3.14.6.
@@ -152,20 +153,14 @@ testTheCompilerFlagsHaveCPythonsValues
 	self assertMatchesCPythonAt: 'optimized_ast_value'.
 %
 
-category: 'Grail-Tests - Recorded gaps'
+category: 'Grail-Tests - CO_COROUTINE'
 method: CompileCodeObjectTestCase
-testTheTopLevelAwaitParseGapIsStillThere
-	"The fixture's XFAIL.  PyCF_ALLOW_TOP_LEVEL_AWAIT is honoured for
-	co_flags and NOT for parsing: Grail's parser refuses a genuine top-level
-	await whatever flags it was given.  When the parser learns it this goes
-	RED, which is the signal to retire the XFAIL -- and to look again at
-	test_compile_top_level_await, which this is what blocks."
+testAGenuineTopLevelAwaitCompilesAndIsMarked
+	"What used to be this file's XFAIL.  A real module-level await now
+	compiles under the flag and carries CO_COROUTINE, so the row is asserted
+	the same way as every other -- against CPython's own answer."
 
-	self
-		assert: ((self ___reprOf___: 'top_level_await_parses')
-			includesString: 'SyntaxError')
-		description: 'the top-level-await parse gap closed -- retire the '
-			, 'fixture''s XFAIL: ' , (self ___reprOf___: 'top_level_await_parses')
+	self assertMatchesCPythonAt: 'top_level_await_parses'.
 %
 
 category: 'Grail-Tests - Controls'
@@ -190,5 +185,5 @@ testEveryCheckIsPresentAndAgreesWithCPython
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '20 checks, 1 xfail, 0 disagreeing [], keys match: True'
+		equals: '20 checks, 0 xfail, 0 disagreeing [], keys match: True'
 %
