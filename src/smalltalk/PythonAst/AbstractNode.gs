@@ -153,7 +153,7 @@ setParent: aNode
 	"Set parent and recursively set parent on all child AST nodes."
 
 	parent := aNode.
-	2 to: self class allInstVarNames size do: [:i |
+	2 to: self class instSize do: [:i |
 		| val |
 		val := self instVarAt: i.
 		(val isKindOf: AbstractNode) ifTrue: [
@@ -213,7 +213,7 @@ ___rejectExceptStarFlowControl___: loopExitAllowed
 		or: [(self isKindOf: ForAst) or: [self isKindOf: WhileAst]].
 	"Same instVar traversal setParent: uses -- a node's children are its
 	AbstractNode-valued instVars plus the ones held in collections."
-	2 to: self class allInstVarNames size do: [:i |
+	2 to: self class instSize do: [:i |
 		| val |
 		val := self instVarAt: i.
 		(val isKindOf: AbstractNode)
@@ -272,7 +272,7 @@ ___collectModuleScopeStarImportsInto___: aCollection
 	((self isKindOf: ImportFromAst)
 		and: [self names size = 1 and: [(self names first name) == #'*']])
 			ifTrue: [aCollection add: self].
-	2 to: self class allInstVarNames size do: [:i |
+	2 to: self class instSize do: [:i |
 		| val |
 		val := self instVarAt: i.
 		(val isKindOf: AbstractNode)
@@ -315,7 +315,7 @@ ___importBoundNamesInto___: aSet
 
 	((self isKindOf: ImportAst) or: [self isKindOf: ImportFromAst]) ifTrue: [
 		self ___boundTargetNames___ do: [:each | aSet add: each asSymbol]].
-	2 to: self class allInstVarNames size do: [:i |
+	2 to: self class instSize do: [:i |
 		| v |
 		v := self instVarAt: i.
 		self ___importScanInto___: aSet value: v].
@@ -410,7 +410,7 @@ ___markFragmentPositions___
 	no node class grows a slot for something only f-strings ever set."
 
 	self dynamicInstVarAt: #'___fragmentPositions___' put: true.
-	2 to: self class allInstVarNames size do: [:i |
+	2 to: self class instSize do: [:i |
 		| val |
 		val := self instVarAt: i.
 		(val isKindOf: AbstractNode) ifTrue: [val ___markFragmentPositions___].
@@ -438,7 +438,7 @@ ___rebaseFragmentPositionsBy: dPos line: dLine
 
 	(self isKindOf: AbstractLocationNode) ifTrue: [
 		self ___rebasePositionsBy: dPos line: dLine].
-	2 to: self class allInstVarNames size do: [:i |
+	2 to: self class instSize do: [:i |
 		| val |
 		val := self instVarAt: i.
 		(val isKindOf: AbstractNode) ifTrue: [
@@ -2495,12 +2495,7 @@ ___emitIRFreeVariableRead___: aSymbol parent: aNode on: aBuilder
 	answers, no IR, and nothing in the census to say so.  Measured that way
 	first -- two fallbacks on a fixture whose results were already right.
 	The call site is also the honest position: this read IS emitted there."
-	#(#'beginPosition' #'endPosition' #'beginLine' #'endLine') do: [:slot |
-		| idx |
-		idx := NameAst allInstVarNames indexOf: slot.
-		idx = 0 ifFalse: [
-			nameNode instVarAt: idx
-				put: (self instVarAt: (CallAst allInstVarNames indexOf: slot))]].
+  nameNode setPositionFrom: self .
 	^ nameNode ___emitIRValueOn___: aBuilder
 %
 
