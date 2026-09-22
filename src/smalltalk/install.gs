@@ -162,13 +162,34 @@ input src/smalltalk/RepairHostExtent.gs
 ! at the failure point the term was 8176.8 MB // 1024 = 7, and at the ceiling
 ! itself it is 8 -- neither greater than 8.  The MFC had never once run.
 run
-| capMB usedMB freeMB |
+| capMB usedMB freeMB headroomMB |
 capMB := (System stoneConfigurationAt: #StnMaxReposSize) * 16384 / 1048576.
 usedMB := (SystemRepository fileSizeOfExtent: SystemRepository fileNames first)
 	/ 1048576.
 freeMB := SystemRepository freeSpace / 1048576.
+"ZERO MEANS UNLIMITED, NOT A ZERO CAP.  StnMaxReposSize is 0 when
+ STN_MAX_REPOSITORY_SIZE is unset -- the stone then bounds the repository by the
+ KEYFILE limit instead and says so in its log (``REPOS MAX: ... Mbytes'').  Read
+ literally, a 0 cap makes the headroom term NEGATIVE for any non-empty
+ repository -- measured on gs40: (0 - 7504) + 6031 = -1473 -- so the test below
+ was true on every install and the MFC ran every time, on a stone with 6 GB
+ free.  That is the mirror image of the bug this guard was written for, where
+ the term could never be true and the MFC had never once run.
+
+ It stopped being harmless once the stone's session limit was raised: an MFC
+ needs every session to VOTE, and with several worktrees holding idle sessions
+ the vote does not complete, so install.sh died with
+
+     Request for MFC gclock ... denied, reason: vote state is voting
+     ERROR 2501 ... Request for gcLock timed out
+
+ in Repository >> markForCollection, aborting the install.  With no configured
+ cap the only meaningful headroom is the free space itself."
+headroomMB := capMB <= 0
+	ifTrue: [freeMB]
+	ifFalse: [(capMB - usedMB) + freeMB].
 "1 GB is what MFC needs to work in; the failed install had 16 MB."
-((capMB - usedMB) + freeMB) < 1024 ifTrue: [
+headroomMB < 1024 ifTrue: [
 	SystemRepository markForCollection; reclaimAll.
 	System abort.
 ]
