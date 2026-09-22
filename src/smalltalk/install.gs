@@ -1043,6 +1043,7 @@ run
 	at: #'ModuleAttrCallTestCase' put: nil;
 	at: #'ModuleDocstringTestCase' put: nil;
 	at: #'ModuleSpecTestCase' put: nil;
+	at: #'GlobalsShadowBuiltinTestCase' put: nil;
 	at: #'ModuleCachedAbsentTestCase' put: nil;
 	at: #'ModuleAttrZeroArgCallTestCase' put: nil;
 	at: #'ModuleDictItemTestCase' put: nil;
@@ -2365,6 +2366,7 @@ input src/smalltalk/PythonTests/MockTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
+input src/smalltalk/PythonTests/GlobalsShadowBuiltinTestCase.gs
 input src/smalltalk/PythonTests/ModuleCachedAbsentTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrZeroArgCallTestCase.gs

@@ -1764,13 +1764,114 @@ printFunctionLocalsSnapshotOn: aStream
 	aStream nextPutAll: '})'
 %
 
+category: 'Grail-Global Shadow Probe'
+method: CallAst
+___moduleGlobalShadowName___
+	"The module-global name a bare BUILTIN call must probe before falling back to
+	the direct builtins send -- or nil when no probe is needed.
+
+	CPython's LOAD_GLOBAL reads the module's OWN globals first and only then
+	builtins, so ``globals()['len'] = f'' at run time shadows the builtin for
+	every function in that module.  Grail classified the name at COMPILE time and
+	emitted a direct send to the builtins singleton, so a name the module did not
+	assign statically could never be shadowed afterwards: the write landed in the
+	namespace (``'len' in globals()'' answered true) and nothing ever consulted
+	it.  test_dynamic's test_globals_shadow_builtins is exactly that case, and it
+	was the one test of its family to fail -- ``builtins.len = f'' already worked,
+	through builtins >> ___syncBuiltinOverride___:, which recompiles the builtins
+	class's own selector surface.  That mechanism cannot serve here: the shadow
+	belongs to ONE module and the builtins singleton is shared by all of them.
+
+	A STATIC shadow needs no probe and never did: when the module assigns the
+	name at top level, the name is a module global at compile time and the call
+	never takes the builtin path at all.
+
+	Declines where a probe would be wrong or redundant:
+	  * outside a user module -- there is no module instance to probe, and a doit
+	    has no module class at all,
+	  * inside a class body, where bare names already resolve through the module
+	    singleton rather than as a self-send,
+	  * a top-level def of the same name, which takes the moduleSelfSend path and
+	    already probes this very slot,
+	  * a genuine local binding, which shadows the global outright."
+
+	| nm |
+	self class moduleClassBeingCompiled ifNil: [^ nil].
+	self class classBeingCompiled ifNotNil: [^ nil].
+	(function isKindOf: NameAst) ifFalse: [^ nil].
+	nm := function id.
+	(self class moduleFunctionNames includes: nm) ifTrue: [^ nil].
+	(function ___localBindingShadows___: nm) ifTrue: [^ nil].
+	^ nm asString
+%
+
+category: 'Grail-Global Shadow Probe'
+method: CallAst
+printGlobalShadowProbeOn: aStream name: aName then: aBlock
+	"Wrap a builtin-call emit in the runtime-globals probe:
+
+		((self @env0:dynamicInstVarAt: #'len') isNil
+			ifTrue: [ <the direct builtins send> ]
+			ifFalse: [(self @env0:dynamicInstVarAt: #'len')
+				@env1:___pyCallValue___: { args } kw: kw])
+
+	NO BLOCK ACTIVATION AND NO ALLOCATION ON THE COMMON PATH.  ``ifTrue:ifFalse:''
+	on literal blocks is inlined by GemStone's source compiler, so an unshadowed
+	call costs one dynamicInstVarAt: probe and an isNil test on top of the send it
+	already made -- this sits at the hottest emit in the language, so a shape that
+	added a frame would trade recursion depth for the fix.  The module self-send
+	twin (printModuleSelfSendOn:) passes its probe as a BLOCK PARAMETER; that is
+	sound there and would be here too, but only because GemStone inlines a
+	literal-block ``value:'' -- writing the test as a plain conditional needs no
+	such guarantee.
+
+	THE SLOT IS READ TWICE ON THE SHADOWED BRANCH, deliberately: it keeps the
+	probe out of a temp (which would widen every compiled method's frame) and the
+	second read only happens on the rare path that a shadow actually exists.
+
+	The ARGUMENTS ARE PRINTED ONCE PER BRANCH, as the module self-send twin does
+	and for the same reason -- only one branch runs, so each is still evaluated at
+	most once.  The cost is generated SOURCE, which doubles per nested probed
+	call; measured over the stdlib corpus that is a few per cent, because real
+	nesting is shallow and the duplicated text is usually a bare name."
+
+	aStream nextPutAll: '((self @env0:dynamicInstVarAt: #'''.
+	aStream nextPutAll: aName.
+	aStream nextPutAll: ''') isNil ifTrue: ['.
+	aBlock value.
+	aStream nextPutAll: '] ifFalse: [(self @env0:dynamicInstVarAt: #'''.
+	aStream nextPutAll: aName.
+	aStream nextPutAll: ''') @env1:___pyCallValue___: '.
+	self printArgumentsArrayOn: aStream.
+	aStream nextPutAll: ' kw: '.
+	self printKeywordsDictOn: aStream.
+	aStream nextPutAll: '])'
+%
+
 category: 'Grail-other'
 method: CallAst
 printBareCallFastPathOn: aStream selector: aSelector
 	"Emit a fixed-arity keyword send to the builtins instance:
 		((builtins instance) funcName: arg1 _: arg2 _: arg3 ...)
 	`builtins` resolves to the class via the symbol list (Python dict);
-	`instance` is the env-1 class method that returns the singleton."
+	`instance` is the env-1 class method that returns the singleton.
+
+	Inside a user module the send is wrapped in the runtime-globals probe --
+	see ___moduleGlobalShadowName___ for why CPython requires it."
+
+	| shadow |
+	shadow := self ___moduleGlobalShadowName___.
+	shadow isNil ifTrue: [
+		^ self printBareCallDirectOn: aStream selector: aSelector].
+	^ self printGlobalShadowProbeOn: aStream name: shadow then: [
+		self printBareCallDirectOn: aStream selector: aSelector]
+%
+
+category: 'Grail-other'
+method: CallAst
+printBareCallDirectOn: aStream selector: aSelector
+	"The unconditional builtins send -- the then-branch of the probe above, and
+	the whole emit where no probe applies."
 
 	| funcName |
 	funcName := function id asString.
@@ -1791,7 +1892,24 @@ printBareCallVarargsOn: aStream selector: aSelector
 		((builtins instance) _funcName: { arg1. arg2. } kw: kwargDict)
 	The receiver method takes (positionalArray, keywordsDict) — same
 	calling convention as the legacy block form, but as a real method
-	with a fixed selector instead of a SymbolDictionary lookup."
+	with a fixed selector instead of a SymbolDictionary lookup.
+
+	Wrapped in the runtime-globals probe inside a user module, exactly as the
+	fixed-arity twin is -- ``print'' is varargs, and shadowing it from globals()
+	is as legal as shadowing ``len''."
+
+	| shadow |
+	shadow := self ___moduleGlobalShadowName___.
+	shadow isNil ifTrue: [
+		^ self printBareCallVarargsDirectOn: aStream selector: aSelector].
+	^ self printGlobalShadowProbeOn: aStream name: shadow then: [
+		self printBareCallVarargsDirectOn: aStream selector: aSelector]
+%
+
+category: 'Grail-other'
+method: CallAst
+printBareCallVarargsDirectOn: aStream selector: aSelector
+	"The unconditional varargs builtins send -- the then-branch of the probe."
 
 	| funcName |
 	funcName := function id asString.
@@ -4043,6 +4161,18 @@ ___irCallShapeUnguarded___
 		messages, and an explicit two-argument super naming a DIFFERENT
 		method-local class.  See ___irSuperStaysOnText___."
 		self ___irSuperStaysOnText___ ifTrue: [^ nil].
+		"A builtin call inside a user module now carries the runtime-globals probe
+		(printBareCallFastPathOn: / printBareCallVarargsOn:) -- a CONDITIONAL shape
+		this path does not spell.  Declining keeps the IR twin honest: emitting the
+		bare send here would reintroduce test_globals_shadow_builtins' defect under
+		GRAIL_IR_CODEGEN=1 while the text path had it fixed, which is exactly the
+		kind of silent text/IR divergence the shape table exists to prevent.  The
+		twin is a small cut and its model already exists --
+		___emitIRModuleSelfSendOn___:varargs: builds this same conditional with a
+		temp -- so this is a census row to close, not a dead end.  Gated on the
+		builtin selectors so it declines only the shapes that actually changed."
+		((self bareCallFastPathSelector notNil or: [self bareCallVarargsSelector notNil])
+			and: [self ___moduleGlobalShadowName___ notNil]) ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
 		self bareCallClassNewSelector notNil ifTrue: [^ #classNew].
