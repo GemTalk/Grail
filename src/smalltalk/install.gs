@@ -1111,6 +1111,7 @@ run
 	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'OsRemoveDollarPathTestCase' put: nil;
+	at: #'OsRenameErrorsTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
 	at: #'OsTestCase' put: nil;
 	at: #'OsUtimeTestCase' put: nil;
@@ -2448,6 +2449,7 @@ input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/OSErrorTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/OsRemoveDollarPathTestCase.gs
+input src/smalltalk/PythonTests/OsRenameErrorsTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs

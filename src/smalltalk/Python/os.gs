@@ -825,15 +825,11 @@ ___signalDirectoryNotCreated: path
 	filesystem cannot tell -- a directory that exists but refuses the entry --
 	keeps the plain OSError."
 
-	| errno classAndStrerror |
+	| errno |
 
 	errno := self ___errnoOfDirectoryNotCreated: path.
-	classAndStrerror := self @env0:class ___errorClassAndStrerrorByErrno
-		@env0:at: errno
-		ifAbsent: [^ OSError ___signal___: (self @env0:class ___directoryNotCreatedMessage: path)].
-	^ (classAndStrerror @env0:at: 1)
-		___signalNew___: { errno. classAndStrerror @env0:at: 2. path }
-		kw: nil
+	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotCreatedMessage: path)].
+	^ self ___signalErrno: errno filename: path
 %
 
 category: 'Grail-File and Directory Operations'
@@ -864,18 +860,88 @@ ___parentDirectoryOf: path
 	^ parent @env0:isEmpty ifTrue: ['.'] ifFalse: [parent]
 %
 
+category: 'Grail-File and Directory Operations'
+method: os
+___signalErrno: anErrno filename: aPath
+	"CPython's OSError for a call on one path that failed with anErrno: the
+	errno's own subclass, carrying errno, strerror and filename."
+
+	^ (self @env0:class ___errorClassForErrno: anErrno)
+		___signalNew___: { anErrno. self strerror: anErrno. aPath }
+		kw: nil
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___signalErrno: anErrno filename: aPath filename2: anotherPath
+	"As ___signalErrno:filename:, for a call on two paths.  The fourth argument
+	is winerror, which is None off Windows; CPython prints both names:
+	``[Errno 2] No such file or directory: 'a' -> 'b'''."
+
+	^ (self @env0:class ___errorClassForErrno: anErrno)
+		___signalNew___: { anErrno. self strerror: anErrno. aPath. None. anotherPath }
+		kw: nil
+%
+
 category: 'Grail-Error Messages'
 classmethod: os
-___errorClassAndStrerrorByErrno
-	"The errnos ___errnoOfDirectoryNotCreated: can answer that have a class of
-	their own in CPython, numbered as Darwin and Linux both number them."
+___errorClassForErrno: anErrno
+	"The OSError subclass CPython raises for an errno a FILE operation reports.
+	These errnos are numbered alike on Darwin and Linux.  The network ones are
+	not, so they are not mapped here: every other errno is a plain OSError."
+
+	^ self ___fileErrorClassesByErrno @env0:at: anErrno ifAbsent: [OSError]
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___fileErrorClassesByErrno
 
 	^ Dictionary @env0:new
-		@env0:at: 2 put: { FileNotFoundError. 'No such file or directory' };
-		@env0:at: 13 put: { PermissionError. 'Permission denied' };
-		@env0:at: 17 put: { FileExistsError. 'File exists' };
-		@env0:at: 20 put: { NotADirectoryError. 'Not a directory' };
+		@env0:at: 1 put: PermissionError;
+		@env0:at: 2 put: FileNotFoundError;
+		@env0:at: 13 put: PermissionError;
+		@env0:at: 17 put: FileExistsError;
+		@env0:at: 20 put: NotADirectoryError;
+		@env0:at: 21 put: IsADirectoryError;
 		@env0:yourself
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+strerror: code
+	"os.strerror(code) -- libc's own strerror(), so the text is the platform's.
+	Darwin and Linux word some errnos differently, and a table here would be
+	right on one of them."
+
+	^ self @env0:class ___strerrorCallout @env0:callWith: { code }
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___strerrorCallout
+	"A CCallout wraps per-process C state, so it is cached in SessionTemps and
+	each gem builds its own on first use, as zlib's callouts are."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_strerror_callout'
+		ifAbsentPut: [
+			CCallout
+				@env0:library: (CLibrary @env0:named: self ___libcName)
+				name: 'strerror'
+				result: #'char*'
+				args: #(#'int32')]
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___libcName
+	"By the soname the loader resolves, as zlib names libz: glibc's runtime
+	soname on Linux."
+
+	^ (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
+		ifTrue: ['libc.dylib']
+		ifFalse: ['libc.so.6']
 %
 
 category: 'Grail-Error Messages'
@@ -1105,9 +1171,14 @@ unlink: path
 category: 'Grail-File and Directory Operations'
 method: os
 rename: anOldPath _: aNewPath
-	"os.rename(old, new) — rename a file or directory."
+	"os.rename(old, new) — rename a file or directory.
 
-	| result msg oldPath newPath |
+	The primitive answers 0 on success and the errno on failure.  This used to
+	test only for nil, which it answers for neither, so a rename that FAILED
+	returned normally: renaming a file that did not exist moved nothing and
+	said nothing, and pathlib's Path.rename inherited it."
+
+	| result oldPath newPath |
 	oldPath := self ___fsPath___: anOldPath.
 	newPath := self ___fsPath___: aNewPath.
 	"Both ends: a rename can destroy the destination as surely as remove does,
@@ -1115,11 +1186,27 @@ rename: anOldPath _: aNewPath
 	self ___refuseShellExpandedPath___: oldPath for: 'rename'.
 	self ___refuseShellExpandedPath___: newPath for: 'rename'.
 	result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
-	result == nil ifTrue: [
-		msg := ((oldPath @env0:printString) @env0:, ' to ') @env0:, (newPath @env0:printString).
-		OSError ___signal___: ('Cannot rename: ' @env0:, msg)
-	].
-	^ None
+	result == 0 ifTrue: [^ None].
+	(result @env0:isKindOf: SmallInteger) ifFalse: [
+		^ OSError ___signal___: (self @env0:class ___renameFailedMessage: oldPath to: newPath)].
+	^ self ___signalErrno: result filename: oldPath filename2: newPath
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+replace: aSource _: aDestination
+	"os.replace(src, dst).  On POSIX this is rename(2) itself, which already
+	replaces an existing destination -- CPython's posixmodule makes the same
+	call for both.  pathlib's Path.replace and Path.move reach os through it."
+
+	^ self rename: aSource _: aDestination
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___renameFailedMessage: anOldPath to: aNewPath
+
+	^ 'Cannot rename: ' @env0:, anOldPath @env0:printString @env0:, ' to ' @env0:, aNewPath @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'

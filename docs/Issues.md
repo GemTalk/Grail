@@ -6199,13 +6199,54 @@ a call the real pathlib now makes and Grail cannot yet answer.
   reason.
 * **`os.rename` of a missing file returns normally.**
   `GsFile renameFileOnServer:to:` answers an errno on failure, and `os.rename`
-  tests only for `nil`. `Path.rename` inherits it.
+  tests only for `nil`. `Path.rename` inherits it. — FIXED below.
 * **`OSError(2, 'msg')` stays an `OSError`.** CPython's `OSError.__new__` picks
   the subclass from the errno. `BaseException class >> ___classForArgs___:` is
   the hook for exactly this, but only the two-argument constructor consults it.
 * **Missing `os` support for other `Path` methods:** `replace`/`move`
-  (`os.replace`), `walk` (`os._walk_symlinks_as_files`), `is_mount`
+  (`os.replace` — FIXED below), `walk` (`os._walk_symlinks_as_files`), `is_mount`
   (`os.path.ismount`), `is_junction` (`os.path.isjunction`), and
   `as_uri`/`from_uri` (`urllib.request.pathname2url`/`url2pathname`).
 * **`abc.ABC` does not carry `ABCMeta`.** That is why `pathlib.types` needs its
   adaptation; `abc.py` records why the switch is deferred.
+
+## os.rename said nothing when it failed
+
+`os.rename` of a file that does not exist returned `None`, moved nothing, and
+raised nothing. `GsFile renameFileOnServer:to:` answers `0` on success and the
+errno on failure; `os.rename` tested only for `nil`, the one answer it never
+gives. A failed rename was indistinguishable from a successful one, and every
+caller inherited that: `Path.rename`, and Grail's `shutil.move`.
+
+It now raises what CPython raises — the errno's own subclass, with `errno`,
+`strerror`, `filename` and `filename2`:
+
+```
+FileNotFoundError: [Errno 2] No such file or directory: 'a' -> 'b'
+```
+
+Two pieces came with it. `os.replace` did not exist, and it is `rename(2)` itself
+on POSIX; `Path.replace` and `Path.move` call it, and so does Jinja2's
+`FileSystemBytecodeCache`, which had been getting `AttributeError` where it
+catches `OSError`. `os.strerror` did not exist either, and it is what the
+messages above need. It is libc's own `strerror()` through a `CCallout`, not a
+table, because Darwin and Linux word several errnos differently.
+
+The subclass is chosen only for the six errnos a FILE operation reports that
+Darwin and Linux number alike (`EPERM`, `ENOENT`, `EACCES`, `EEXIST`, `ENOTDIR`,
+`EISDIR`). Directory-not-empty is 66 on one and 39 on the other and has no class
+of its own; it stays a plain `OSError`, with the platform's text. `os.mkdir`'s
+failures, from #1104, now go through the same helper, which retired the four-row
+class-and-text table that change added.
+
+### Still open in the same area
+
+* **Twelve raises in `os.gs` (and three in `io`) carry the message but not the
+  errno.** They are spelled `FileNotFoundError ___signal___: '[Errno 2] ...'`:
+  the class and the text are CPython's, but `e.errno`, `e.strerror` and
+  `e.filename` are all `None`. `___signalErrno:filename:` is the one-line fix
+  for each, taken one at a time since each is a separate call site.
+* **`OSError(2, 'msg')` still stays an `OSError`** (the pathlib entry above).
+  Not done here: it changes the exception constructors every exception shares,
+  which is a tier-2 change of its own.
+
