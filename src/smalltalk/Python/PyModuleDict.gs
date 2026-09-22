@@ -164,7 +164,8 @@ ___doitNamesAndValuesDo___: aBlock
 	nil as absent is the convention PyInstanceDict >> ___rawAt___: documents."
 
 	source @env0:keysAndValuesDo: [:k :v |
-		((k @env0:== #'___pyGlobals___') @env0:or: [v @env0:== nil])
+		((k @env0:== #'___pyGlobals___')
+			@env0:or: [(k @env0:== #'___pyGlobalsView___') @env0:or: [v @env0:== nil]])
 			@env0:ifFalse: [
 				aBlock @env0:value: (NameAst @env0:doitScopeNameToPythonName: k) @env0:asSymbol
 					value: v]]

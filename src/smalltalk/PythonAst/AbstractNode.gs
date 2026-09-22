@@ -1308,6 +1308,28 @@ ___globalsViewReceiverExpr___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___globalsOnlyViewReceiverExpr___
+	"Receiver expression for ``globals()'' ALONE -- not for module-scope
+	locals()/vars() or bare dir(), which keep ___globalsViewReceiverExpr___.
+
+	The three coincide in a module and in almost every doit, and they come
+	apart in exactly one case: exec()/eval() handed a ``locals'' mapping that
+	is not the ``globals'' one.  The doit scope is then the two MERGED --
+	locals over globals, which is the lookup order a name wants and what
+	locals() should report -- while globals() is defined to answer the globals
+	mapping alone.
+
+	The fork is made at RUN TIME rather than here, by
+	builtins >> ___doitGlobalsView___:, because compiling the source says
+	nothing about whether the caller will pass one mapping or two."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitGlobalsView___: ___pyGlobals___)']
+		ifFalse: [self ___moduleStoreReceiverExpr___]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___functionBindsPythonLocal___: funcAst named: aSymbol
 	"True iff aSymbol is a TRUE PYTHON LOCAL of the given FunctionDefAst
 	or LambdaAst: a parameter, or a genuine body binding (the block's
