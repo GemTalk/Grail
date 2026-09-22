@@ -5955,6 +5955,29 @@ Safe to land today: the manifest and the committed board agree row for row
 red by itself. It fires the next time someone adds a module that crashes — which
 is exactly when it should.
 
+## A plain with ran the generator __enter__ returned
+
+`with contextlib.closing(gen()) as it:` bound `None`.
+
+Every `with` was compiled through the await helper `async with` needs
+(`PythonCoroutine >> ___grailAwait___:`), on reasoning written into three comments:
+the helper "passes a non-coroutine straight through, so the synchronous path is
+untouched". It does not pass a GENERATOR through. It drives anything
+generator-shaped to completion, as an `await` must for a generator-based
+coroutine — so an `__enter__` that returned a generator had it RUN, and the `as`
+target got its return value, `None`. A coroutine returned from `__enter__` was
+likewise awaited where CPython binds it unawaited.
+
+A plain `with` now has no await at all, as CPython has none. The class-side await
+was really `async with` knowledge that `WithAst` held only so `AsyncWithAst` could
+inherit it through `super`; it now lives in `AsyncWithAst`, which keeps it for an
+`async with` outside a wrapped body. Both codegen arms change and both were
+measured: the corpus (tier 2) and the text arm do not move, and the IR arm is 53
+failures before and after with an empty name diff — this changes the code emitted
+for every `with` in the corpus, and nothing moved.
+
+Found through CPython's glob, which lists a directory with exactly
+`contextlib.closing(_iterdir(...))`.
 ## A def __new__ under an if in a class body crashed the gem
 
 ```python

@@ -90,8 +90,9 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: '| ___val___ |'; lf.
 	"``async with'' runs the SAME shape over __aenter__/__aexit__, and those are
 	coroutines -- so the call has to be DRIVEN, which is what CPython's
-	``await mgr.__aenter__()'' means.  ___grailAwait___: passes a non-coroutine
-	through unchanged, so the sync path is untouched."
+	``await mgr.__aenter__()'' means.  A plain ``with'' drives NOTHING: its
+	prefix is empty (___awaitPrefix___), because the await helper would run a
+	generator that __enter__ merely returned."
 	self ___emitProtocolPreflightOn___: aStream.
 	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___enterAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
 	aStream nextPutAll: self ___enterSelector___.
@@ -224,14 +225,21 @@ type_comment: newValue
 category: 'Grail-Code Generation'
 method: WithAst
 ___awaitPrefix___
-	"How the __enter__/__exit__ call is DRIVEN.
+	"How the __enter__/__exit__ call is DRIVEN.  A plain ``with'' awaits
+	NOTHING, as in CPython, so there is no prefix at all.
 
-	A plain ``with'' awaits nothing, so the CLASS-side helper is right here: it
-	passes a non-coroutine straight through, which is every synchronous manager.
-	AsyncWithAst overrides it, because ``async with'' genuinely has to be able to
-	SUSPEND -- see there."
+	It used to route through the class-side ``PythonCoroutine ___grailAwait___:''
+	on the reasoning that the helper passes a non-coroutine straight through.
+	It does not pass a GENERATOR through: it drives anything generator-shaped
+	to completion, as await must for a generator-based coroutine.  So a
+	synchronous manager whose __enter__ returned a generator had it RUN, and
+	the ``as'' target got the generator's return value -- None.  That is
+	``with contextlib.closing(gen) as it'', a common idiom, and it is exactly
+	what CPython's glob does to list a directory.
 
-	^ 'PythonCoroutine @env0:___grailAwait___: '
+	AsyncWithAst overrides this, because ``async with'' genuinely awaits."
+
+	^ ''
 %
 
 category: 'Grail-Code Generation'
@@ -528,13 +536,11 @@ ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBu
 category: 'Grail-IR Codegen'
 method: WithAst
 ___emitIRAwait___: callNode site: aSiteSymbol on: aBuilder
-	"``PythonCoroutine @env0:___grailAwait___: (call)'' -- ___awaitPrefix___'s
-	class-side form, which passes every synchronous manager's result straight
-	through.  AsyncWithAst overrides with the suspending instance-side pair."
+	"___awaitPrefix___'s IR twin: a plain ``with'' awaits nothing, so the call's
+	value is the enter / exit value itself.  See ___awaitPrefix___ for why it
+	must not go through ___grailAwait___:.  AsyncWithAst overrides."
 
-	^ aBuilder
-		send: #'___grailAwait___:' to: (aBuilder globalNamed: #PythonCoroutine)
-		with: { callNode } env: 0
+	^ callNode
 %
 
 category: 'Grail-IR Codegen'
