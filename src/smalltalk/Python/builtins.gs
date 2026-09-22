@@ -5296,6 +5296,30 @@ _breakpoint: positional kw: kwargs
 	breakpoint() with RuntimeError rather than the AttributeError the missing
 	read would otherwise produce -- so the read is guarded, not just its
 	result."
+	"ASKED OF THE BINDING, not of the attribute.  A module's attribute read
+	lazy-wraps a class method when no binding is found, and sys still HAS a
+	``_breakpointhook:kw:'' method -- it is the default hook's implementation
+	-- so after ``del sys.breakpointhook'' the read happily wrapped it again
+	and breakpoint() ran the default instead of raising.  The attribute was
+	deleted and the attribute lookup still answered something.
+
+	A binding lives in one of the module's two stores: a dynamic instVar (what
+	``sys.breakpointhook = f'' creates) or a dictionary entry (what sys's own
+	initialize puts there).  Both are checked, because either can be the one
+	that was removed.
+
+	NOT ___globalNames___, which is the list vars(sys) and dir(sys) report and
+	looks like the tidier question.  It is a different question: that list
+	includes every name the module's own METHODS could be lazily wrapped
+	under, and sys keeps a ``_breakpointhook:kw:'' method -- the default hook's
+	own implementation -- so ``breakpointhook'' is in it whether or not a
+	binding exists.  A guard written that way can never fire, and the
+	consequence is not a failed test: breakpoint() runs the default hook,
+	reaches pdb.set_trace(), and HALTS into the GemStone debugger, which takes
+	the whole module down.  test.test_builtin went to CRASH."
+	(((sysInst @env0:dynamicInstVarAt: #'breakpointhook') @env0:notNil)
+		@env0:or: [sysInst @env0:includesKey: #'breakpointhook']) ifFalse: [
+			^ RuntimeError ___signal___: 'lost sys.breakpointhook'].
 	hook := [sysInst @env1:___pyAttrLoad___: #'breakpointhook']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(hook == nil or: [hook @env0:== None]) ifTrue: [
