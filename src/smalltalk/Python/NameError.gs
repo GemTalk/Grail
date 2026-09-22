@@ -76,6 +76,25 @@ ___resolveBuiltinOrSignal___: aName
 	b == nil ifTrue: [^ self ___signalUndefined___: aName].
 	inst := [b @env0:___instance___] @env0:on: Error do: [:ex | nil].
 	inst == nil ifTrue: [^ self ___signalUndefined___: aName].
+	"A RUNNING exec()/eval() MAY HAVE BEEN HANDED A LIVE LOCALS MAPPING, one
+	Grail could not copy into the doit's scope -- so the name misses the scope
+	and arrives here.  It is a LOCAL, so it is looked up before builtins and
+	before the override, exactly where the scope copy would have put it."
+	(inst @env1:___grailLiveLocals___) @env0:isNil ifFalse: [
+		| found |
+		found := inst
+			@env1:___lookUpInLiveLocals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		(found @env0:== #'___grailLiveLocalsMiss___') ifFalse: [^ found]].
+	"AND THE GLOBALS MAPPING MAY BE LIVE TOO, for the same reason and one
+	argument over.  After the locals, before builtins -- that is the order a
+	seeded scope would have produced."
+	(inst @env1:___grailLiveGlobals___) @env0:isNil ifFalse: [
+		| found |
+		found := inst
+			@env1:___lookUpInLiveGlobals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		(found @env0:== #'___grailLiveLocalsMiss___') ifFalse: [^ found]].
 	"A RUNNING exec()/eval() MAY HAVE REPLACED BUILTINS ENTIRELY.  CPython
 	takes a piece of code's builtins namespace from its globals, so
 	``exec(src, {'__builtins__': {}})'' runs source with none, and

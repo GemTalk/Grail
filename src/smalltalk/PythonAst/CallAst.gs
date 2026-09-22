@@ -1413,6 +1413,11 @@ printLocalsCallOn: aStream
 			self ___printCompTargetLocalsOn___: aStream names: compNames.
 			aStream nextPutAll: ')'.
 			^ self].
+		"A DOIT handed a live locals mapping answers THAT OBJECT from locals(),
+		not a view of it -- see AbstractNode >> ___localsOnlyViewExpr___."
+		self ___localsOnlyViewExpr___ ifNotNil: [:expr |
+			aStream nextPutAll: expr.
+			^ self].
 		aStream
 			nextPutAll: '(PyModuleDict @env0:on: ';
 			nextPutAll: self ___globalsViewReceiverExpr___;
