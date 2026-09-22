@@ -177,3 +177,24 @@ testALocalBindingStillWinsOverBoth
 
 	self assertMatchesCPythonAt: 'local_shadow'.
 %
+
+category: 'Grail-Tests'
+method: GlobalsShadowBuiltinTestCase
+testTheShadowIsSeenFromInsideAClassMethod
+	"THE UPSTREAM NESTING, and the case a module-level fixture cannot reach.
+
+	test_dynamic's test_globals_shadow_builtins defines its function inside a
+	unittest.TestCase METHOD.  That is a different codegen context: in a class
+	method ``self'' is the Python instance, not the module, so a probe emitted
+	against ``self'' reads a dynamic instVar that is simply absent there and
+	never fires -- no error, just the old answer.  The first cut of this fix
+	declined the class context outright and scored 7/7 on a module-level
+	fixture while the suite row it was written for still read
+	``AssertionError: 3 != 7''.
+
+	The emit now takes its receiver from ___moduleStoreReceiverExpr___, the
+	same helper a ``global x'' store uses: ``self'' in the module body and its
+	top-level defs, the module singleton spelled out inside a class method."
+
+	self assertMatchesCPythonAt: 'shadow_inside_class_method'.
+%

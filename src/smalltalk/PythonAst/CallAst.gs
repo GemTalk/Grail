@@ -1789,15 +1789,21 @@ ___moduleGlobalShadowName___
 	Declines where a probe would be wrong or redundant:
 	  * outside a user module -- there is no module instance to probe, and a doit
 	    has no module class at all,
-	  * inside a class body, where bare names already resolve through the module
-	    singleton rather than as a self-send,
 	  * a top-level def of the same name, which takes the moduleSelfSend path and
 	    already probes this very slot,
-	  * a genuine local binding, which shadows the global outright."
+	  * a genuine local binding, which shadows the global outright.
+
+	A CLASS BODY IS NOT EXCLUDED, and excluding it was this fix's first mistake.
+	The module self-send twin declines there because a class method's ``self'' is
+	the Python instance, not the module -- but that is an argument about the
+	RECEIVER, not about whether the shadow applies, and
+	___moduleStoreReceiverExpr___ already answers it.  The test that prompted all
+	this, test_dynamic's test_globals_shadow_builtins, defines its function inside
+	a TestCase METHOD, so a module-only probe left the real case broken while a
+	module-level fixture passed."
 
 	| nm |
 	self class moduleClassBeingCompiled ifNil: [^ nil].
-	self class classBeingCompiled ifNotNil: [^ nil].
 	(function isKindOf: NameAst) ifFalse: [^ nil].
 	nm := function id.
 	(self class moduleFunctionNames includes: nm) ifTrue: [^ nil].
@@ -1835,11 +1841,20 @@ printGlobalShadowProbeOn: aStream name: aName then: aBlock
 	call; measured over the stdlib corpus that is a few per cent, because real
 	nesting is shallow and the duplicated text is usually a bare name."
 
-	aStream nextPutAll: '((self @env0:dynamicInstVarAt: #'''.
+	| recv |
+	"``self'' inside the module body and its top-level defs, the module singleton
+	spelled out inside a user class METHOD -- where self is the Python instance.
+	The same helper the ``global x'' store uses, and getting this wrong is not a
+	compile error: ``self dynamicInstVarAt:'' on a Python instance simply answers
+	nil, so the probe would silently never fire."
+	recv := self ___moduleStoreReceiverExpr___.
+	aStream nextPutAll: '(('; nextPutAll: recv.
+	aStream nextPutAll: ' @env0:dynamicInstVarAt: #'''.
 	aStream nextPutAll: aName.
 	aStream nextPutAll: ''') isNil ifTrue: ['.
 	aBlock value.
-	aStream nextPutAll: '] ifFalse: [(self @env0:dynamicInstVarAt: #'''.
+	aStream nextPutAll: '] ifFalse: [('; nextPutAll: recv.
+	aStream nextPutAll: ' @env0:dynamicInstVarAt: #'''.
 	aStream nextPutAll: aName.
 	aStream nextPutAll: ''') @env1:___pyCallValue___: '.
 	self printArgumentsArrayOn: aStream.
@@ -4161,18 +4176,6 @@ ___irCallShapeUnguarded___
 		messages, and an explicit two-argument super naming a DIFFERENT
 		method-local class.  See ___irSuperStaysOnText___."
 		self ___irSuperStaysOnText___ ifTrue: [^ nil].
-		"A builtin call inside a user module now carries the runtime-globals probe
-		(printBareCallFastPathOn: / printBareCallVarargsOn:) -- a CONDITIONAL shape
-		this path does not spell.  Declining keeps the IR twin honest: emitting the
-		bare send here would reintroduce test_globals_shadow_builtins' defect under
-		GRAIL_IR_CODEGEN=1 while the text path had it fixed, which is exactly the
-		kind of silent text/IR divergence the shape table exists to prevent.  The
-		twin is a small cut and its model already exists --
-		___emitIRModuleSelfSendOn___:varargs: builds this same conditional with a
-		temp -- so this is a census row to close, not a dead end.  Gated on the
-		builtin selectors so it declines only the shapes that actually changed."
-		((self bareCallFastPathSelector notNil or: [self bareCallVarargsSelector notNil])
-			and: [self ___moduleGlobalShadowName___ notNil]) ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
 		self bareCallClassNewSelector notNil ifTrue: [^ #classNew].
@@ -4372,6 +4375,105 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 
 category: 'Grail-IR Codegen'
 method: CallAst
+___irShadowProbeTempSymbol___
+	"The per-NESTING-DEPTH name of the builtin runtime-globals probe temp, derived
+	exactly as ___irProbeTempSymbol___ derives ``___f<d>___'' and sound for the
+	same reason -- see there for why depth, and not one shared name, is what makes
+	a temp safe when calls nest.
+
+	A SEPARATE PREFIX from the module self-send's: a given CallAst takes exactly
+	one shape, so the two could in principle share, but builtin calls nest inside
+	module self-sends constantly (``foo(len(x))'') and a reader tracing one probe
+	through generated IR should not have to prove which shape owns ``___f2___''."
+
+	| depth p |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: CallAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	^ ('___bs' , depth printString , '___') asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRModuleInstanceOn___: aBuilder
+	"The module singleton as an IR node -- ``self'' in the module body and its
+	top-level defs, ``<ModuleClass> @env0:___instance___'' inside a user class
+	method where self is the Python instance.  The IR twin of
+	___moduleStoreReceiverExpr___, and wrong in the SILENT direction if confused:
+	``dynamicInstVarAt:'' on a Python instance answers nil rather than raising, so
+	a probe built on the wrong receiver never fires and never complains."
+
+	self class classBeingCompiled isNil ifTrue: [^ aBuilder selfNode].
+	^ aBuilder
+		send: #'___instance___'
+		to: (aBuilder globalNamed: self class moduleClassBeingCompiled name asSymbol)
+		with: { } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRBuiltinShadowProbeOn___: aBuilder varargs: isVarargs name: aName
+	"printGlobalShadowProbeOn:name:then: -- the IR twin:
+
+	  ___bs<d>___ := <module> dynamicInstVarAt: #name.
+	  ___bs<d>___ == nil
+	      ifTrue:  [((Python at: #builtins) instance) name: a _: b]   -- or _name:kw:
+	      ifFalse: [___bs<d>___ ___pyCallValue___: { args } kw: kw]
+
+	THE PROBE GOES IN A TEMP, NOT A BLOCK PARAMETER, for the reason
+	___emitIRModuleSelfSendOn___:varargs: records at length: the IR generator
+	builds a REAL ExecBlock where the source compiler would have inlined the
+	literal-block value:, so a block here would cost two frames on every builtin
+	call -- the hottest emit in the language.  ``ifValue:then:else:'' is inlined,
+	so a temp plus the conditional is the same shape at no frame cost.
+
+	The argument nodes are built once PER BRANCH because IR nodes cannot be
+	shared; only one branch runs, so each argument is still evaluated at most
+	once.  The text twin duplicates its argument SOURCE for the same reason."
+
+	| bLeaf probeVal cond |
+	bLeaf := aBuilder tempNamed: self ___irShadowProbeTempSymbol___.
+	probeVal := aBuilder
+		send: #'dynamicInstVarAt:'
+		to: (self ___emitIRModuleInstanceOn___: aBuilder)
+		with: { aBuilder obj: aName asSymbol } env: 0.
+	aBuilder add: (aBuilder assign: bLeaf from: probeVal).
+	cond := aBuilder
+		send: #==
+		to: (aBuilder var: bLeaf)
+		with: { aBuilder nilLit } env: 0.
+	^ aBuilder
+			ifValue: cond
+			then: [
+				isVarargs
+					ifTrue: [| a k binst |
+						a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+						k := self ___emitIRKeywordsOn___: aBuilder.
+						aBuilder atNode: self.
+						binst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
+						aBuilder add: (aBuilder
+							send: self bareCallVarargsSelector to: binst with: { a. k } env: 1)]
+					ifFalse: [| argVals binst |
+						argVals := (arguments collect: [:a | a ___emitIRValueOn___: aBuilder]) asArray.
+						aBuilder atNode: self.
+						binst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
+						aBuilder add: (aBuilder
+							send: self bareCallFastPathSelector to: binst with: argVals env: 1)]]
+			else: [| a k |
+				a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+				k := self ___emitIRKeywordsOn___: aBuilder.
+				aBuilder atNode: self.
+				aBuilder add: (aBuilder
+					send: #'___pyCallValue___:kw:'
+					to: (aBuilder var: bLeaf)
+					with: { a. k }
+					env: 1)]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
 ___irProbeTempSymbol___
 	"The per-NESTING-DEPTH name of the module-function probe temp, derived the way
 	ForAst>>___irIterTempSymbol___ derives ``___iter<d>___'': walk the parent
@@ -4436,15 +4538,26 @@ ___emitIRValueOn___: aBuilder
 	shape == #arityMismatch ifTrue: [^ self ___emitIRArityMismatchOn___: aBuilder].
 	shape == #superExplicit ifTrue: [^ self ___emitIRSuperExplicitOn___: aBuilder].
 	shape == #builtinFixed ifTrue: [
-		| builtinsInst |
+		| builtinsInst shadow |
+		"The runtime-globals probe, when this call is inside a user module --
+		see printGlobalShadowProbeOn:name:then: and its IR twin below.  Without
+		this arm the IR would emit the bare send and GRAIL_IR_CODEGEN=1 would
+		reintroduce test_globals_shadow_builtins' defect while the text path had
+		it fixed."
+		shadow := self ___moduleGlobalShadowName___.
+		shadow notNil ifTrue: [
+			^ self ___emitIRBuiltinShadowProbeOn___: aBuilder varargs: false name: shadow].
 		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
 		aBuilder atNode: self.
 		builtinsInst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
 		^ aBuilder send: self bareCallFastPathSelector to: builtinsInst with: argVals env: 1].
 	shape == #builtinVarargs ifTrue: [
-		| builtinsInst argsArray kw |
+		| builtinsInst argsArray kw shadow |
 		"printBareCallVarargsOn: prints the arguments through
 		printArgumentsArrayOn:, so a ``*x'' splat rides this shape too."
+		shadow := self ___moduleGlobalShadowName___.
+		shadow notNil ifTrue: [
+			^ self ___emitIRBuiltinShadowProbeOn___: aBuilder varargs: true name: shadow].
 		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
 		kw := self ___emitIRKeywordsOn___: aBuilder.
 		aBuilder atNode: self.

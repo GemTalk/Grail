@@ -78,6 +78,28 @@ def local_wins():
 rec('local_shadow', local_wins)
 
 
+# --- THE UPSTREAM NESTING: the shadowed function lives in a CLASS METHOD -----
+# test_dynamic's test_globals_shadow_builtins defines its function inside a
+# unittest.TestCase method, not at module level.  That is a DIFFERENT codegen
+# context: inside a class method ``self'' is the Python instance, not the
+# module, so a probe written against ``self'' silently never fires -- it reads
+# a dynamic instVar that is simply absent on the instance.  A module-level
+# spelling of this test passes while the real one fails, so both are here.
+class _Holder:
+    def run(self):
+        def uses_len_in_method():
+            return len([1, 2, 3])
+        before = uses_len_in_method()
+        globals()['len'] = lambda x: 7
+        after = uses_len_in_method()
+        del globals()['len']
+        restored = uses_len_in_method()
+        return [before, after, restored]
+
+
+rec('shadow_inside_class_method', lambda: _Holder().run())
+
+
 EXPECTED = {
     'baseline_len': 3,
     'baseline_sorted': [3, 2, 1],
@@ -90,6 +112,7 @@ EXPECTED = {
     'builtins_patched_len': 4,
     'after_restore_len': 3,
     'local_shadow': 99,
+    'shadow_inside_class_method': [3, 7, 3],
 }
 
 
