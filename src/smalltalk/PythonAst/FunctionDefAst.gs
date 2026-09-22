@@ -774,9 +774,14 @@ printSmalltalkOn: aStream
 	self hasAnnotations ifTrue: [
 		aStream nextPutAll: ' annotate: '.
 		self emitAnnotateBlockOn: aStream].
-	self ___docString___ ifNotNil: [:doc |
-		aStream nextPutAll: ' doc: '.
-		self emitStringLiteral: doc on: aStream].
+	"NO DOCSTRING AT optimize >= 2.  ``python -OO'' strips them, and
+	compile(..., optimize=2) is the same request one compile at a time --
+	test_compile reads ``f.__doc__'' back at each level and expects None only
+	at 2."
+	(self ___docString___ notNil and: [self ___grailOptimizeLevel___ < 2])
+		ifTrue: [
+			aStream nextPutAll: ' doc: '.
+			self emitStringLiteral: self ___docString___ on: aStream].
 		"Stamp func.__code__ (a PyCode) at def-time -- a CASCADE onto the same
 		block receiver as ___pyNamed___ (chaining another keyword send would
 		instead form one combined selector).  ___pyCode___: returns self, so the

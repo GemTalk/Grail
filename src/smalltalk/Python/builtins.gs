@@ -247,7 +247,8 @@ _exec: positional kw: kwargs
 	step regardless of how much of the compiler runs."
 
 	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
-	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
+	  optLevel savedOpt |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -262,6 +263,14 @@ _exec: positional kw: kwargs
 	catchable TypeError CPython raises for the case that actually reaches here
 	(a code object carrying free variables -- test_scope
 	testEvalExecFreeVars)."
+	"THE OPTIMIZE LEVEL RIDES ON THE CODE OBJECT.  compile() chose it and
+	codegen has to see it, and everything between is ordinary parse and emit
+	with no argument to carry it -- so it is read here, off the object, and
+	installed around the evaluation."
+	optLevel := (source @env0:isKindOf: PyCode)
+		ifTrue: [source @env0:___grailOptimizeLevel___]
+		ifFalse: [-1].
+	savedOpt := self ___grailOptimizeLevel___.
 	source := self ___sourceTextFor___: source what: 'exec'.
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
@@ -365,6 +374,7 @@ _exec: positional kw: kwargs
 		self ___grailLiveGlobals___: liveGlobals.
 		self ___grailExecGlobals___: globalsDict.
 		self ___grailExecLocals___: localsDict.
+		self ___grailOptimizeLevel___: optLevel.
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
@@ -377,7 +387,8 @@ _exec: positional kw: kwargs
 		self ___grailLiveLocals___: savedLive.
 		self ___grailLiveGlobals___: savedLiveGlobals.
 		self ___grailExecGlobals___: savedExecGlobals.
-		self ___grailExecLocals___: savedExecLocals].
+		self ___grailExecLocals___: savedExecLocals.
+		self ___grailOptimizeLevel___: savedOpt].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
 	^ None
@@ -535,13 +546,19 @@ _eval: positional kw: kwargs
 	inside the expression land where CPython puts them."
 
 	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins
-	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
+	  optLevel savedOpt |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
 	"Source TEXT, in any spelling CPython accepts -- see the matching call in
 	_exec: for what ___sourceTextFor___:what: does with the byte forms, and
 	for why a PyCode still fails."
+	"See _exec: -- the level rides on the code object."
+	optLevel := (source @env0:isKindOf: PyCode)
+		ifTrue: [source @env0:___grailOptimizeLevel___]
+		ifFalse: [-1].
+	savedOpt := self ___grailOptimizeLevel___.
 	source := self ___sourceTextFor___: source what: 'eval'.
 	"LEADING WHITESPACE IS STRIPPED, which is eval()'s own rule and not the
 	parser's: ``compile(' 1+1', '<s>', 'eval')'' raises IndentationError, and
@@ -692,6 +709,7 @@ _eval: positional kw: kwargs
 		self ___grailLiveGlobals___: liveGlobals.
 		self ___grailExecGlobals___: globalsDict.
 		self ___grailExecLocals___: localsDict.
+		self ___grailOptimizeLevel___: optLevel.
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
 			filename: filename
 	] @env0:ensure: [
@@ -700,9 +718,102 @@ _eval: positional kw: kwargs
 		self ___grailLiveLocals___: savedLive.
 		self ___grailLiveGlobals___: savedLiveGlobals.
 		self ___grailExecGlobals___: savedExecGlobals.
-		self ___grailExecLocals___: savedExecLocals].
+		self ___grailExecLocals___: savedExecLocals.
+		self ___grailOptimizeLevel___: savedOpt].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailOptimizeLevel___
+	"The ``optimize'' level the compile now running was given: 0, 1 or 2, or
+	-1 for ``whatever the interpreter is''.
+
+	Session-local because codegen has no other way to see it -- the level is
+	chosen by compile() and read by the emitters, and everything between is
+	ordinary parse and emit with no argument to thread it through.  Saved and
+	restored around each evaluation, like the doit scope beside it."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailOptimizeLevel' otherwise: -1
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailOptimizeLevel___: aLevel
+	SessionTemps @env0:current @env0:at: #'GrailOptimizeLevel'
+		put: (aLevel @env0:isNil ifTrue: [-1] ifFalse: [aLevel])
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___asExpressionTree___: aModuleTree source: aSource
+	"An ``Expression'' root around a module tree's single expression -- what
+	``ast.parse(s, mode='eval')'' answers.
+
+	Grail's parser always builds a module body, so the eval shape is made here
+	rather than in the parser: it is the same tree with a different root, and
+	the root is what compile() checks."
+
+	| astMod cls out body |
+	astMod := [self ___import__: { 'ast' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	astMod @env0:isNil ifTrue: [^ aModuleTree].
+	cls := [astMod @env1:___pyAttrLoad___: #'Expression']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cls @env0:isNil ifTrue: [^ aModuleTree].
+	body := [(aModuleTree @env1:___pyAttrLoad___: #'body') @env1:__getitem__: 0]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	body @env0:isNil ifTrue: [^ aModuleTree].
+	"An Expression's body is the EXPRESSION, not the Expr statement wrapping it."
+	body := [body @env1:___pyAttrLoad___: #'value']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: body].
+	out := cls @env1:___pyCallValue___: #() kw: nil.
+	out @env1:___pyAttrStore___: #'body' put: body.
+	out @env1:___pyAttrStore___: #'___grailSource___' put: aSource.
+	^ out
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireAstRoot___: aTree forMode: aMode
+	"CPython refuses a tree whose ROOT does not match the mode:
+	``compile(ast.parse(s), f, 'eval')'' is ``expected Expression node, got
+	Module''.  The check is worth having because the two trees are otherwise
+	interchangeable -- accepting the wrong one runs a module body as an
+	expression and answers something, which is a wrong answer rather than an
+	error."
+
+	| wanted got |
+	wanted := aMode @env0:= 'eval'
+		ifTrue: ['Expression']
+		ifFalse: [aMode @env0:= 'single' ifTrue: ['Interactive'] ifFalse: ['Module']].
+	got := [(aTree @env1:__class__) @env1:__name__]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	got @env0:isNil ifTrue: [^ self].
+	got @env0:asString @env0:= wanted ifTrue: [^ self].
+	"``single'' has no separate root here -- Grail parses it as a module -- so
+	only the eval/exec mismatch is refused, which is the one CPython's own
+	tests exercise."
+	(wanted @env0:= 'Interactive') ifTrue: [^ self].
+	^ TypeError ___signal___: 'expected ' @env0:, wanted @env0:,
+		' node, got ' @env0:, got @env0:asString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___astSourceOf___: anObject
+	"The source text an ast tree was parsed from, or nil.
+
+	Set by ___astTreeFor___:optimized: on the Module it builds, so
+	``compile(ast.parse(src), f, mode)'' can answer an executable code object
+	-- Grail compiles from text and has no AST-to-code path.  Nil for anything
+	that is not such a tree, which includes a tree the caller built by hand."
+
+	anObject @env0:isNil ifTrue: [^ nil].
+	(anObject @env0:isKindOf: CharacterCollection) ifTrue: [^ nil].
+	^ [anObject @env1:___pyAttrLoad___: #'___grailSource___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Built-in Functions'
@@ -727,7 +838,7 @@ ___foldAstDebug___: aTree
 
 category: 'Grail-Built-in Functions'
 method: builtins
-___astTreeFor___: aSource optimized: wantOptimized
+___astTreeFor___: aSource mode: aMode optimized: wantOptimized
 	"The Python ``ast'' tree for a source, as PyCF_ONLY_AST asks for.
 
 	Grail's parser builds its own node hierarchy;
@@ -743,6 +854,22 @@ ___astTreeFor___: aSource optimized: wantOptimized
 	tree := (ModuleAst @env0:parseSource: aSource) @env0:___asPythonAst___.
 	tree @env0:isNil ifTrue: [
 		^ TypeError ___signal___: 'compile(): cannot build an AST for this source'].
+	"THE TREE REMEMBERS ITS SOURCE.  ``compile(ast.parse(src), f, mode)'' has to
+	answer something EXECUTABLE, and Grail compiles from text -- it has no
+	AST-to-code path and no bytecode to build.  Carrying the source on the
+	Module is what makes the round trip work at all, and it is exact rather than
+	an approximation: it is the same text, not an unparse of the tree.
+
+	A tree the caller BUILT rather than parsed has no source and still cannot
+	be compiled; that is a narrower gap than the whole round trip being
+	impossible, and it is what CPython users of ast.parse actually do."
+	tree @env1:___pyAttrStore___: #'___grailSource___' put: aSource.
+	"THE ROOT NODE FOLLOWS THE MODE.  CPython's ``exec'' parse is a Module and
+	its ``eval'' parse an Expression, and compile() REFUSES the wrong one --
+	``compile(ast.parse(s), f, 'eval')'' is a TypeError naming both.  Grail's
+	parser always builds a module body, so the eval form is re-rooted here."
+	aMode @env0:= 'eval' ifTrue: [
+		tree := self ___asExpressionTree___: tree source: aSource].
 	wantOptimized ifFalse: [^ tree].
 	astMod := [self ___import__: { 'ast' } kw: nil]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
@@ -1057,15 +1184,17 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 		((args @env0:size @env0:>= 4)
 			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r400) @env0:~= 0]])
-			ifTrue: [^ self ___astTreeFor___: copy optimized:
+			ifTrue: [^ self ___astTreeFor___: copy mode: mode optimized:
 				(((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0)].
 		flags := ((args @env0:size @env0:>= 4)
 			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])
 			ifTrue: [self ___topLevelAwaitFlagsFor___: copy]
 			ifFalse: [0].
-		^ PyCode @env0:___forCompiledSource___: copy filename: fname
-			mode: mode flags: flags].
+		^ (PyCode @env0:___forCompiledSource___: copy filename: fname
+			mode: mode flags: flags)
+				@env0:___setOptimize___: ((args @env0:size @env0:>= 6)
+					ifTrue: [args @env0:at: 6] ifFalse: [-1])].
 	"AN AST ARGUMENT WITH PyCF_OPTIMIZED_AST IS FOLDED AND HANDED BACK.
 	``compile(ast.parse(src), f, mode, flags=PyCF_OPTIMIZED_AST)'' is how a
 	caller asks to see an already-parsed tree AFTER the optimiser, and
@@ -1076,6 +1205,15 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 		@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 			@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0]])
 		ifTrue: [^ self ___foldAstDebug___: source].
+	"AN AST WITHOUT THAT FLAG IS COMPILED, not handed back.  The tree carries
+	the source it was parsed from, so this is the ordinary string compile with
+	the text read back out of it."
+	(self ___astSourceOf___: source) @env0:ifNotNil: [:text |
+		| rest |
+		self ___requireAstRoot___: source forMode: mode.
+		rest := args @env0:copy.
+		rest @env0:at: 1 put: text.
+		^ self _compile: rest kw: nil].
 	^ source
 %
 
