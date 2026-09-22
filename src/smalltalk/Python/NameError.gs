@@ -129,6 +129,34 @@ ___resolveBuiltinOrSignal___: aName
 
 category: 'Grail-Name Errors'
 classmethod: NameError
+___requireBuildClass___
+	"Refuse a class statement whose builtins namespace has no
+	``__build_class__''.
+
+	CPython's LOAD_BUILD_CLASS looks the name up in the code's builtins and
+	raises NameError with the bare text ``__build_class__ not found'' -- not
+	the usual ``name '...' is not defined'', which is why this does not go
+	through ___signalUndefined___:.
+
+	Emitted by ClassDefAst only inside a doit under a ``__builtins__''
+	override, so an ordinary class definition never reaches it."
+
+	| b inst |
+	b := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #builtins.
+	b == nil ifTrue: [^ nil].
+	inst := [b @env0:___instance___] @env0:on: Error do: [:ex | nil].
+	inst == nil ifTrue: [^ nil].
+	(inst @env1:___grailBuiltinsOverride___) @env0:isNil ifTrue: [^ nil].
+	^ inst
+		@env1:___lookUpInBuiltinsOverride___: '__build_class__'
+		ifAbsent: [ | instance |
+			instance := self @env1:___new___.
+			instance @env1:___args___: { '__build_class__ not found' }.
+			instance @env1:___signal___: '__build_class__ not found']
+%
+
+category: 'Grail-Name Errors'
+classmethod: NameError
 ___signalUndefined___: aName
 	"Raise NameError for an unbound name, carrying CPython's ``name'' attribute.
 

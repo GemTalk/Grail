@@ -83,6 +83,26 @@ printSmalltalkOn: aStream
 	real Smalltalk class, MRO, descriptors, isinstance -- rather than a
 	second, shallower class model."
 
+	"A CLASS STATEMENT NEEDS __build_class__, and under a ``__builtins__''
+	override it may not have one.  CPython compiles ``class A: pass'' to a
+	LOAD_BUILD_CLASS, which looks __build_class__ up in the code's builtins
+	and raises ``NameError: __build_class__ not found'' when it is absent --
+	so an empty __builtins__ forbids class definitions, which is most of the
+	point of passing one.
+
+	Grail does not route class creation through a builtin at all; it emits
+	importlib sends directly, so there was nothing for the override to
+	withhold.  The requirement is asserted explicitly instead, and only where
+	it can apply: inside a doit whose builtins were replaced.
+
+	THIS ONLY WORKS BECAUSE builtins NOW HAS THE NAME.  An override is very
+	often a COPY of the real builtins -- a bare ``exec(src)'' inside a
+	function gets one -- and while Grail listed __build_class__ in
+	___builtinNamespaceNames___ without implementing it, every such copy came
+	out without the name and this gate refused a class definition CPython
+	allows.  It cost test_scope two tests the first time it was written."
+	self ___builtinsAreOverridden___ ifTrue: [
+		aStream nextPutAll: '(NameError @env0:___requireBuildClass___). '].
 	^self printSmalltalkRuntimeOn: aStream
 %
 
