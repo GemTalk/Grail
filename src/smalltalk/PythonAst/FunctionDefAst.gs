@@ -2061,6 +2061,11 @@ emitCodeExtrasOpenOn: aStream nested: isNested
 	(CallAst ___freeVariableNamesFor___: self) isEmpty ifFalse: [
 		aStream nextPutAll: '('].
 	self ___codeConstScopes___ isEmpty ifFalse: [
+		aStream nextPutAll: '('].
+	"One more for the body-source setter, on the same rule as the others: each
+	cascaded setter needs the constructor parenthesised before it, or the
+	parser reads one long keyword selector ending in the setter's own name."
+	self ___emitsBodySource___ ifTrue: [
 		aStream nextPutAll: '(']
 %
 
@@ -2083,7 +2088,104 @@ emitCodeExtrasOn: aStream nested: isNested
 		freeNames do: [:each |
 			aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
 		aStream nextPutAll: '))'].
-	self emitCodeConstsOn: aStream
+	self emitCodeConstsOn: aStream.
+	self emitCodeBodySourceOn: aStream
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeBodySourceOn: aStream
+	"Cascade this def's BODY TEXT onto the PyCode just emitted, when it has
+	free variables.
+
+	Only then, deliberately: the one caller is ``exec(f.__code__, g,
+	closure=cells)'', which CPython refuses outright for a code object with no
+	free variables, so carrying the text for every def in the corpus would be
+	a copy per def bought for nothing.
+
+	The text is what makes a substituted closure observable at all -- Grail's
+	free variables are Smalltalk temps captured at def time, so a compiled
+	closure cannot be re-entered with different cells.  Running the body again
+	against a namespace backed by them can."
+
+	| text |
+	"``body'' is an instVar here, so the temp has another name."
+	self ___emitsBodySource___ ifFalse: [^ self].
+	text := self ___grailBodySourceText___.
+	aStream nextPutAll: ' @env0:___setBodySource___: '.
+	self emitStringLiteral: text on: aStream.
+	aStream nextPutAll: ')'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___emitsBodySource___
+	"Whether this def will carry its body text on its code object.
+
+	ONE predicate, asked by both the paren-opener and the emitter.  They were
+	two conditions that looked equivalent and were not -- the opener asked only
+	whether the text exists and the emitter also required free variables -- so
+	a def with a body and no free variables opened a parenthesis nothing
+	closed, and the whole module failed to compile."
+
+	(CallAst ___freeVariableNamesFor___: self) isEmpty ifTrue: [^ false].
+	^ self ___grailBodySourceText___ notNil
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___grailBodySourceText___
+	"This def's body as source text, DEDENTED to column zero and with its
+	``nonlocal'' declarations removed.
+
+	Dedented because the body is indented inside the def and has to compile on
+	its own.  The nonlocal lines go because the names they declare are supplied
+	by the closure instead -- and because ``nonlocal'' at module level, which is
+	what exec()ing the body makes it, is a SyntaxError."
+
+	| text first |
+	"THE BODY HAS NO POSITION OF ITS OWN -- a Block descends from AbstractNode,
+	not AbstractLocationNode -- so the span runs from the first STATEMENT's
+	line to this def's last.  Using the def's own first line instead would
+	include the ``def'' header, which does not compile on its own."
+	(body isNil or: [body body isNil or: [body body isEmpty]]) ifTrue: [^ nil].
+	first := [body body first beginLine]
+		on: AbstractException do: [:ex | ex return: nil].
+	text := self ___grailSourceLinesFrom___: first to:
+		([self endLine] on: AbstractException do: [:ex | ex return: nil]).
+	text isNil ifTrue: [^ nil].
+	^ self ___grailDedentAndStripNonlocal___: text
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___grailDedentAndStripNonlocal___: aString
+	"Remove the common leading indentation, and drop ``nonlocal'' lines."
+
+	| lines kept indent out lf |
+	lf := Character lf.
+	lines := aString subStrings: (String with: lf).
+	kept := OrderedCollection new.
+	lines do: [:each |
+		| trimmed |
+		trimmed := each trimSeparators.
+		((trimmed size >= 8) and: [(trimmed copyFrom: 1 to: 8) = 'nonlocal'])
+			ifFalse: [kept add: each]].
+	indent := nil.
+	kept do: [:each |
+		| n |
+		each trimSeparators isEmpty ifFalse: [
+			n := 0.
+			[(n < each size) and: [(each at: n + 1) = $ ]] whileTrue: [n := n + 1].
+			(indent isNil or: [n < indent]) ifTrue: [indent := n]]].
+	indent isNil ifTrue: [^ ''].
+	out := WriteStream on: String new.
+	kept do: [:each |
+		out nextPutAll: (each size > indent
+			ifTrue: [each copyFrom: indent + 1 to: each size]
+			ifFalse: ['']).
+		out nextPut: lf].
+	^ out contents
 %
 
 category: 'Grail-code generation'

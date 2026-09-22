@@ -271,6 +271,14 @@ _exec: positional kw: kwargs
 		ifTrue: [source @env0:___grailOptimizeLevel___]
 		ifFalse: [-1].
 	savedOpt := self ___grailOptimizeLevel___.
+	"``closure='' RUNS A def's BODY WITH SUPPLIED CELLS.  Handled before the
+	source normalisation, because it is the one exec() shape whose arg 1 is a
+	def's code object rather than text -- ___sourceTextFor___ would refuse it."
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'closure']) ifTrue: [
+		^ self ___execWithClosure___: source
+			globals: ((positional @env0:size @env0:>= 2)
+				ifTrue: [positional @env0:at: 2] ifFalse: [nil])
+			closure: (kwargs @env0:at: 'closure')].
 	source := self ___sourceTextFor___: source what: 'exec'.
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
@@ -798,6 +806,128 @@ ___requireAstRoot___: aTree forMode: aMode
 	(wanted @env0:= 'Interactive') ifTrue: [^ self].
 	^ TypeError ___signal___: 'expected ' @env0:, wanted @env0:,
 		' node, got ' @env0:, got @env0:asString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___execWithClosure___: aCode globals: globalsDict closure: aClosure
+	"``exec(code, globals, closure=cells)'' -- run a def's body with the given
+	free-variable cells.
+
+	GRAIL CANNOT RE-ENTER A COMPILED CLOSURE WITH DIFFERENT CELLS: its free
+	variables are Smalltalk temps captured when the def ran, so there is
+	nothing to substitute into.  What it can do is run the body's SOURCE again
+	against a namespace built from the cells, which is why a def with free
+	variables carries its body text on its code object.  The observable
+	behaviour is CPython's -- the body reads the supplied cells and writes back
+	through them -- and the mechanism is different.
+
+	The cells are copied in and written back out rather than read live.  A cell
+	is a one-slot box, and the body cannot change WHICH box a name refers to,
+	so a copy at entry and a store at exit are indistinguishable from reading
+	through it -- and it keeps the namespace an ordinary dict, which is what
+	the exec path is built for.
+
+	Every refusal below is CPython's, and there are more refusals than there is
+	execution: six of test_exec_closure's nine assertions are TypeErrors about
+	a closure that does not match its code object."
+
+	| freevars cells ns result |
+	"A STRING SOURCE takes no closure at all, whatever its value."
+	(aCode @env0:isKindOf: PyCode) ifFalse: [
+		^ TypeError ___signal___:
+			'closure can only be used when source is a code object'].
+	freevars := [aCode @env1:___pyAttrLoad___: #'co_freevars']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	freevars := freevars @env0:isNil
+		ifTrue: [Array @env0:new: 0]
+		ifFalse: [Array @env0:withAll: freevars].
+	(aClosure @env0:isNil @env0:or: [aClosure @env0:== None]) ifTrue: [
+		freevars @env0:isEmpty ifTrue: [
+			^ self _exec: { aCode. globalsDict } kw: nil].
+		^ TypeError ___signal___: 'code object requires a closure of exactly length '
+			@env0:, freevars @env0:size @env0:printString].
+	freevars @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'cannot use a closure with this code object'].
+	"ONE MESSAGE FOR EVERY MALFORMED CLOSURE, and that is CPython's doing, not
+	a simplification here.  A LIST of the right length, and a tuple of the
+	right length holding a non-cell, both report ``requires a closure of
+	exactly length N'' -- the length is what the message names whatever the
+	fault was.  Three separate, more descriptive messages read better and are
+	wrong.
+
+	A tuple, not any sequence: accepting a list would make
+	``closure=list(cells)'' work where CPython refuses it."
+	((aClosure @env0:isKindOf: tuple)
+		@env0:and: [(Array @env0:withAll: aClosure) @env0:size @env0:= freevars @env0:size])
+		ifFalse: [^ self ___refuseClosureLength___: freevars].
+	cells := Array @env0:withAll: aClosure.
+	cells @env0:do: [:each |
+		(self ___isCellObject___: each) ifFalse: [
+			^ self ___refuseClosureLength___: freevars]].
+	^ self ___runClosureBody___: aCode globals: globalsDict
+		freevars: freevars cells: cells
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___refuseClosureLength___: freevars
+	"CPython's one refusal for a closure that is not a tuple of exactly the
+	right number of cells."
+
+	^ TypeError ___signal___: 'code object requires a closure of exactly length '
+		@env0:, freevars @env0:size @env0:printString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isCellObject___: anObject
+	"Whether anObject is a cell -- what a closure tuple must hold.
+
+	Asked by CLASS NAME rather than by a Smalltalk kind test, because a cell is
+	a Python-visible type and the check has to agree with ``isinstance(x,
+	CellType)'' as the caller sees it."
+
+	^ [((anObject @env1:__class__) @env1:__name__) @env0:asString @env0:= 'cell']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___runClosureBody___: aCode globals: globalsDict freevars: freevars cells: cells
+	"Run the def body aCode carries, with freevars bound to the cells'
+	contents, then write the results back into the cells.
+
+	A code object with no body text -- one from compile() rather than a def, or
+	a def compiled before this was recorded -- is refused rather than run
+	empty: answering None for an exec that did nothing is the kind of quiet
+	wrong answer this whole file is about."
+
+	| src ns |
+	src := aCode @env0:___grailBodySource___.
+	src @env0:isNil ifTrue: [
+		^ TypeError ___signal___:
+			'exec() cannot run this code object with a closure'].
+	ns := dict ___new___.
+	1 @env0:to: freevars @env0:size do: [:i |
+		ns @env1:__setitem__: (freevars @env0:at: i) @env0:asString
+			_: ((cells @env0:at: i) @env1:___pyAttrLoad___: #'cell_contents')].
+	self _exec: { src. globalsDict. ns } kw: nil.
+	"WRITE BACK.  A cell is a one-slot box and the body cannot change which box
+	a name refers to, so storing the final value is exactly what reading
+	through the cell would have produced."
+	1 @env0:to: freevars @env0:size do: [:i |
+		| v |
+		v := [ns @env1:__getitem__: (freevars @env0:at: i) @env0:asString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		v @env0:isNil ifFalse: [
+			"__setattr__, not ___pyAttrStore___.  ``cell.cell_contents = v'' is
+			what makes a cell write reach the variable it boxes -- the store
+			goes through the cell's own setter -- and a dynamic-instVar store
+			writes past it, leaving the enclosing scope untouched.  The exec
+			above produced the right value and nothing could see it."
+			(cells @env0:at: i) @env1:__setattr__: 'cell_contents' _: v]].
+	^ None
 %
 
 category: 'Grail-Built-in Functions'

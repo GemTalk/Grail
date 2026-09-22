@@ -340,6 +340,13 @@ parseSource: sourceString
 
 	| module |
 	module := PythonParser parse: sourceString.
+	"THE MODULE REMEMBERS ITS SOURCE.  A def's body text is not recoverable
+	from the tree -- Grail has no unparse -- and exec() of a def's code object
+	with a substituted closure has to run that text.  Recording it here, on the
+	root, is the one place every entry (import, exec, eval, compile) passes
+	through, and it costs a reference rather than a copy."
+	module source isNil ifTrue: [module source: sourceString].
+	AbstractNode ___currentModuleSource___: sourceString.
 	self ___validateAsyncPlacement___: module scope: #module.
 	^module
 %
