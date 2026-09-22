@@ -102,16 +102,36 @@ onceregistry
 
 	Read through ___moduleHook___ so that ``warnings.onceregistry = {}'' is
 	honoured: a Python assignment lands in the dynamic-instVar holder, and
-	reading only the SymbolDictionary made the reset invisible.  DELETING it
-	falls back to the SymbolDictionary copy, which still holds what was
-	recorded -- the same shape as CPython, where removing the attribute
-	leaves the C module's own registry in place."
+	reading only the SymbolDictionary made the reset invisible.
 
-	| v d |
+	DELETING it must not lose the registry, which is CPython's behaviour --
+	removing the attribute leaves the C module's own registry in place, so
+	``once'' keeps meaning once (test_warnings test_onceregistry deletes it
+	mid-test and expects the next warning still suppressed).
+
+	This used to fall back to the SymbolDictionary copy, on the stated grounds
+	that a Python delete could not reach it.  That stopped being true when
+	module attribute deletion became real, and the fallback then built a FRESH
+	EMPTY registry -- so ``once'' silently became ``every time''.  The
+	reference now lives in SessionTemps, which is Grail's equivalent of the C
+	module's: not reachable from Python, so no attribute delete can take it.
+
+	Same treatment as _filters, and for the same reason.  defaultaction needs
+	none: it is a VALUE with a documented default, so re-materialising
+	'default' after a delete is exactly right, where these two are stateful
+	containers whose IDENTITY has to survive."
+
+	| v d cached |
 	v := self ___moduleHook___: #onceregistry.
-	v @env0:isNil ifFalse: [^ v].
+	v @env0:isNil ifFalse: [
+		SessionTemps @env0:current @env0:at: #'GrailWarningsOnceRegistry' put: v.
+		^ v].
+	cached := SessionTemps @env0:current @env0:at: #'GrailWarningsOnceRegistry'
+		otherwise: nil.
+	cached @env0:isNil ifFalse: [^ cached].
 	d := KeyValueDictionary @env0:new.
 	self @env0:at: #onceregistry put: d.
+	SessionTemps @env0:current @env0:at: #'GrailWarningsOnceRegistry' put: d.
 	^ d
 %
 
@@ -384,11 +404,36 @@ _filters
 	prefers.  Reading only the SymbolDictionary meant an assigned list was
 	visible to Python and invisible to the filtering."
 
-	| existing oc |
+	| existing oc cached |
 	existing := self ___moduleHook___: #filters.
-	existing @env0:isNil ifFalse: [^ existing].
+	existing @env0:isNil ifFalse: [
+		"Remembered on every successful read, so the reference outlives the
+		module attribute -- see below."
+		SessionTemps @env0:current @env0:at: #'GrailWarningsFilters' put: existing.
+		^ existing].
+	"THE ATTRIBUTE IS GONE, and that does NOT disable filtering.  ``del
+	warnings.filters'' is legal, and in CPython the filtering keeps working
+	because the C _warnings module holds its OWN reference to the list -- the
+	Python-level name is one of two references, and deleting it drops only
+	that one (test_warnings, and tests/python/warning_registry.py's
+	filters_can_be_deleted, which measures CPython answering ('raised',
+	'raised') across the delete).
+
+	Grail used to match that by ACCIDENT: a Python delete could not reach the
+	module's SymbolDictionary entry, so the attribute never actually went
+	away.  Now that it does, this is the reference that has to survive, and
+	SessionTemps is where it goes for the same reason the C module is: it is
+	not reachable from Python, so no attribute delete can take it.
+
+	Falling through to a FRESH EMPTY list, which is what happened once the
+	delete became real, is the worst of the three outcomes -- filtering
+	silently stops, so a warning configured as an error is merely printed."
+	cached := SessionTemps @env0:current @env0:at: #'GrailWarningsFilters'
+		otherwise: nil.
+	cached @env0:isNil ifFalse: [^ cached].
 	oc := OrderedCollection @env0:new.
 	self @env0:at: #filters put: oc.
+	SessionTemps @env0:current @env0:at: #'GrailWarningsFilters' put: oc.
 	^ oc
 %
 
