@@ -4857,6 +4857,30 @@ value: positional value: kwargs
 		^ self _new: positional kw: kwargs
 	].
 	nargs := positional @env0:size.
+	"A SCALAR BUILT-IN SUBCLASS -- int, float, str -- must NOT take the
+	fixed-arity shortcuts: its root's constructor is the varargs
+	``___new__:kw:'', an INSTANCE-side method whose ``self'' is the class, and
+	``__new__:'' means something else entirely on those roots.  They declare
+	none of their own, so it resolves to ``object class >> __new__: cls'',
+	which treats its argument as the CLASS to instantiate:
+	``type('D', (int,), {})(7)'' became ``7 new'', an uncatchable Smalltalk
+	MessageNotUnderstood.
+
+	___allocateInstance___ is the method that knows how to reach an
+	instance-side __new__ -- through UnboundMethod, since a plain send from a
+	class receiver lands on the metaclass instead -- so this delegates rather
+	than restating it.
+
+	Only a subclass built by ``type(name, bases, ns)'' gets here: a class
+	STATEMENT takes ClassDefAst's firstBaseIsX path and constructs directly,
+	which is why the common spelling worked and the dynamic one crashed.  The
+	roots are the SUBSTITUTES, not the Python classes -- a Grail subclass of
+	int is rooted at AbstractPyInt, because Integer is sealed and its instances
+	have no room for instance variables."
+	((self @env0:inheritsFrom: AbstractPyInt)
+		@env0:or: [(self @env0:inheritsFrom: AbstractPyFloat)
+			@env0:or: [self @env0:inheritsFrom: AbstractPyStr]]) ifTrue: [
+		^ self ___allocateInstance___: positional kw: kwargs].
 	nargs @env0:= 0 ifTrue: [^ self __new__].
 	nargs @env0:= 1 ifTrue: [^ self __new__: (positional @env0:at: 1)].
 	sel := AppendStream @env0:on: String @env0:new.
@@ -6316,25 +6340,49 @@ ___classDict___
 		holder == nil ifFalse: [
 			pairs := [holder @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
 			1 @env0:to: pairs @env0:size @env0:- 1 by: 2 do: [:i |
-				| v |
+				| v nm |
 				v := pairs @env0:at: i @env0:+ 1.
-				v == nil ifFalse: [
-					d @env0:at: (pairs @env0:at: i) @env0:asString put: v]]]].
+				nm := (pairs @env0:at: i) @env0:asString.
+				"GRAIL-INTERNAL NAMES ARE EXCLUDED HERE TOO.  The method walks
+				below already drop ``___...___''; the holder did not, so
+				``___name___'' and ``___qualname___'' -- which type() stores
+				because a class's Smalltalk name and its Python name are two
+				things -- showed up in every ``type(name, bases, ns)'' class's
+				__dict__."
+				(v == nil @env0:or: [
+					(nm @env0:size @env0:>= 3)
+						@env0:and: [(nm @env0:copyFrom: 1 to: 3) @env0:= '___']])
+					ifFalse: [d @env0:at: nm put: v]]]].
 	"(c)/(b) shared: collapse a selector to its Python name and store an
 	UnboundMethod wrapper unless a data value already claimed the name.
 	``allowed'' is nil for a class whose method dictionary IS its Python
 	namespace, or the set of names to keep for one where it is not -- see
 	___grailPythonDictNames___."
 	addSel := [:sel :defCls :allowed |
-		| nm |
+		| nm merged |
 		nm := sel @env0:asString.
 		(nm @env0:includes: $:) ifTrue: [
 			nm := nm @env0:copyFrom: 1 to: (nm @env0:indexOf: $:) @env0:- 1].
+		"A METHOD MERGED FROM A SECONDARY BASE IS NOT THE CLASS'S OWN.  Grail is
+		single-inheritance underneath, so ___mergeSecondaryBases___ COPIES the
+		other bases' methods onto the class -- which makes them indistinguishable
+		from its own by method dictionary alone, and put them in __dict__.
+		``type('C', (B, int), {'spam': ...}).__dict__'' then held B's ``ham'',
+		which CPython finds only on B; test_builtin's test_new_type asserts
+		``'ham' not in C.__dict__'' for exactly that reason.
+
+		The merge files them under its own CATEGORY, so the class already
+		records which they are -- no new bookkeeping, and it cannot drift from
+		the merge because the merge is what writes it."
+		merged := [(defCls @env0:categoryOfSelector: sel environmentId: 1)
+			@env0:= #'Grail-MI-Inherited']
+			@env0:on: AbstractException do: [:e | e @env0:return: false].
 		(((nm @env0:size) @env0:> 0)
+			and: [merged not
 			and: [(nm @env0:copyFrom: 1 to: (3 @env0:min: nm @env0:size)) @env0:~= '___'
 			and: [nm @env0:~= '___dynInstVars___'
 			and: [(d @env0:includesKey: nm) @env0:not
-			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]) ifTrue: [
+			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]) ifTrue: [
 			d @env0:at: nm put:
 				(UnboundMethod definingClass: defCls selector: nm @env0:asSymbol)]].
 	"(c) own instance-side methods."

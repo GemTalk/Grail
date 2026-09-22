@@ -1490,7 +1490,7 @@ to_bytes: length _: byteorder _: signed
 	"int.to_bytes(length, byteorder='big', *, signed=False)
 	Return an array of bytes representing an integer."
 
-	| numBytes isBigEndian isSigned val |
+	| numBytes isBigEndian isSigned val bytes |
 	numBytes := length.
 	isBigEndian := (byteorder @env0:= 'big').
 	isSigned := (signed == true) or: [signed == true].
@@ -1513,18 +1513,24 @@ to_bytes: length _: byteorder _: signed
 		OverflowError ___signal___: 'int too big to convert'
 	].
 
-	"Convert to bytes - #'new:fill:' freezes it"
-	^ tuple @env0:new: numBytes fill: [:t |
-		1 @env0:to: numBytes do: [:i |
-			| byteVal idx |
-			byteVal := (val @env0:bitAnd: 16rFF).
-			idx := isBigEndian
-				ifTrue: [(numBytes @env0:- (i @env0:- 1))]
-				ifFalse: [i].
-			t @env0:at: idx put: byteVal.
-			val := val @env0:bitShift: -8.
-		].
-	]
+	"A BYTES OBJECT, not a tuple.  The method built a ``tuple'' of the byte
+	VALUES, so ``(42).to_bytes(2, 'little')'' answered ``(42, 0)'' where CPython
+	answers ``b'*\\x00''' -- the same numbers, the wrong type, and a wrong type
+	that prints plausibly.  Anything that then indexed or concatenated the
+	result got a tuple and said so somewhere else entirely.
+
+	ByteArray is Grail's bytes; each element is already the 0..255 value the
+	loop computes."
+	bytes := ByteArray @env0:new: numBytes.
+	1 @env0:to: numBytes do: [:i |
+		| byteVal idx |
+		byteVal := (val @env0:bitAnd: 16rFF).
+		idx := isBigEndian
+			ifTrue: [(numBytes @env0:- (i @env0:- 1))]
+			ifFalse: [i].
+		bytes @env0:at: idx put: byteVal.
+		val := val @env0:bitShift: -8].
+	^ bytes
 %
 
 set compile_env: 0

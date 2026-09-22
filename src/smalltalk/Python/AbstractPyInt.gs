@@ -343,6 +343,34 @@ set compile_env: 1
 
 category: 'Grail-Attributes'
 method: AbstractPyInt
+___grailValueImplements___: aSym
+	"Whether the wrapped value's class implements aSym at ANY arity.
+
+	The probe used to ask for the UNARY selector only, which is every method
+	that takes no arguments and none of the ones that do: ``to_bytes'' is
+	filed as ``to_bytes:_:'' and ``to_bytes:_:_:'', so
+	``F(42).to_bytes(2, 'little')'' raised AttributeError for a method sitting
+	right there, while ``F(42).bit_length()'' -- unary -- forwarded fine.  A
+	suite half of which forwards is worse than one that does not, because the
+	half that works hides the half that does not.
+
+	The four fixed arities plus the varargs form are the shapes Grail compiles
+	a Python method into; the same family module attribute resolution walks."
+
+	| cls nm |
+	cls := self @env0:value @env0:class.
+	nm := aSym @env0:asString.
+	(cls @env0:whichClassIncludesSelector: aSym environmentId: 1) @env0:notNil
+		ifTrue: [^ true].
+	#(':' ':_:' ':_:_:' ':_:_:_:') @env0:do: [:suffix |
+		(cls @env0:whichClassIncludesSelector: (nm @env0:, suffix) @env0:asSymbol
+			environmentId: 1) @env0:notNil ifTrue: [^ true]].
+	^ (cls @env0:whichClassIncludesSelector: ('_' @env0:, nm @env0:, ':kw:') @env0:asSymbol
+		environmentId: 1) @env0:notNil
+%
+
+category: 'Grail-Python Attribute Hook'
+method: AbstractPyInt
 ___pyAttrLoad___: aSym
 	"Let an ATTRIBUTE LOAD reach the wrapped value's method suite.
 
@@ -367,8 +395,7 @@ ___pyAttrLoad___: aSym
 	^ [super ___pyAttrLoad___: aSym]
 		@env0:on: AttributeError
 		do: [:ex |
-			((self @env0:value @env0:class
-				@env0:whichClassIncludesSelector: aSym environmentId: 1) @env0:notNil)
+			(self ___grailValueImplements___: aSym)
 				ifTrue: [ex @env0:return: (BoundMethod receiver: self @env0:value selector: aSym)]
 				ifFalse: [ex @env0:pass]]
 %
