@@ -372,6 +372,10 @@ gemdb.schema.report()                           # classes holding unused attribu
 gemdb.schema.drop(Account, "balance")           # delete an attribute's values
 gemdb.schema.rename(Account, "phone", "phones")
 gemdb.schema.compact(Account)                   # reclaim the holes a drop left
+
+gemdb.schema.rebase("billing.Account")          # the class changed its bases
+gemdb.schema.rename_class("billing.Person", "Customer")
+gemdb.schema.drop_class("billing.Invoice")      # the class is gone from the source
 ```
 
 The point of the submodule is how little is in it. Grail stores an
@@ -406,6 +410,20 @@ refuse a name this class only *inherits*, naming the class that handed
 the position out: a layout is copied downwards, so freeing or
 relabelling a position on a subclass alone would leave that one position
 with two names.
+
+**The class-level half** answers the three edits Grail refuses at import,
+because each of them replaces the class object and would otherwise leave
+its instances on the old one: a changed base, a class the source no longer
+defines, and a class renamed. Each refusal is an `ImportError` naming the
+class and its command. `rebase`, `rename_class` and `drop_class` rebuild the
+module and move every instance onto the class the new source defines, by
+**name** rather than by position, so an edit that also reorders or removes
+attributes is safe. `drop_class` refuses while any instance exists, and its
+count is what the repository *holds* — an object unlinked in an earlier
+transaction is there until it is collected, so
+`gemdb.admin.garbage_collect()` may be the step between. A computed base
+(`class Point(namedtuple(...))`) is never refused: it builds a fresh class
+on every import by construction.
 
 **A rename usually needs no call at all.** `__renamed__ = {"old":
 "new"}` in the class body does the free relabel at import, beside the
@@ -466,6 +484,11 @@ is now `gemdb.schema`, above.
   batched drop, a relabel-rename, a compaction and the declared
   `__renamed__` over a committed class, with its two import refusals.
   Commits, for the same reason.
+* `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
+  — the class-level half over a fixture module with a committed instance:
+  the refusals for a changed base, a removed class and a renamed one, and
+  `rebase`, `drop_class` and `rename_class` answering each. Session 2 checks
+  that a fresh session then imports the edited source cleanly.
 * `tests/scripts/run_gemdb_conflict_test.sh` /
   `runGemdbConflictRpc.gs` (wired in as `gemdb-conflict`) — two RPC
   sessions interleaved with `set session:`; a real write-write conflict
