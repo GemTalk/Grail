@@ -5522,6 +5522,55 @@ type: className _: bases _: namespace
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___build_class__: positional kw: kwargs
+	"Python builtin ``__build_class__(func, name, *bases, metaclass=None,
+	**kwds)'' -- what CPython's class STATEMENT compiles to.
+
+	GRAIL'S CLASS STATEMENT DOES NOT ROUTE THROUGH IT.  ClassDefAst emits
+	importlib sends directly, so this exists for two reasons and neither is
+	the class statement:
+
+	  * it must BE in the builtins namespace.  ``__builtins__'' handed to
+	    exec() is often a copy of the real builtins, and CPython's class
+	    statement then finds __build_class__ in it -- so a copy that lacks the
+	    name forbids class definitions that CPython allows.  Grail listed the
+	    name in ___builtinNamespaceNames___ (the spec of dir(builtins)) but
+	    implemented no method, and dir()/__dict__ enumerate METHODS, so every
+	    copy of builtins came out without it.  test_exec_globals_frozen
+	    copies builtins and then defines a class.
+	  * Python code may call it directly.
+
+	What it does is CPython's own sequence: make a namespace, run the body
+	function against it, then call the metaclass with (name, bases, ns).  The
+	body function is given the namespace as its argument, which is what a
+	plain function written by hand receives; CPython instead binds it as the
+	frame's locals, which needs a class-body code object Grail does not
+	produce.  So a hand-written body that assigns into its argument works and
+	one that relies on bare assignment does not -- the same limit every other
+	part of Grail's class model has, and better than the NameError that was
+	there before."
+
+	| func name bases ns metacls rest |
+	self ___requireArgs___: positional atLeast: 2
+		message: '__build_class__: not enough arguments'.
+	func := positional @env0:at: 1.
+	name := (positional @env0:at: 2) @env0:asString.
+	bases := positional @env0:copyFrom: 3 to: positional @env0:size.
+	ns := dict ___new___.
+	func ___pyCallValue___: { ns } kw: nil.
+	metacls := nil.
+	rest := nil.
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'metaclass']) ifTrue: [
+		metacls := kwargs @env0:at: 'metaclass'.
+		rest := kwargs @env0:copy.
+		rest @env0:removeKey: 'metaclass' ifAbsent: []].
+	metacls @env0:isNil ifTrue: [
+		^ self _type: { name. tuple @env0:withAll: bases. ns } kw: kwargs].
+	^ metacls ___pyCallValue___: { name. tuple @env0:withAll: bases. ns } kw: rest
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___import__: positional kw: kwargs
 	"Python builtin __import__(name, globals, locals, fromlist, level)
 	— varargs fast path. Delegates to importlib's ___import__:kw:

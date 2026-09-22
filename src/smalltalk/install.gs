@@ -676,6 +676,7 @@ run
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
 	at: #'BufferedIoTestCase' put: nil;
+	at: #'BuildClassBuiltinTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
 	at: #'BuiltinArityMismatchTestCase' put: nil;
 	at: #'BuiltinExtrasTestCase' put: nil;
@@ -2001,6 +2002,7 @@ input src/smalltalk/PythonTests/BreakpointBuiltinTestCase.gs
 input src/smalltalk/PythonTests/BrokenPipeErrorTestCase.gs
 input src/smalltalk/PythonTests/BufferedIoTestCase.gs
 input src/smalltalk/PythonTests/BufferErrorTestCase.gs
+input src/smalltalk/PythonTests/BuildClassBuiltinTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArityMismatchTestCase.gs
 input src/smalltalk/PythonTests/BuiltinExtrasTestCase.gs

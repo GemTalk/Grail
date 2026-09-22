@@ -402,7 +402,7 @@ __dir__
 	(cls @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
 		| s index skip |
 		s := sel @env0:asString.
-		skip := (s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'].
+		skip := self ___isGrailInternalSelector___: s.
 		"The module BODY is compiled as an env-1 ``initialize'' method in
 		category 'Grail-Module Body' (importlib class >>
 		___defineModuleClass___).  It is an implementation artifact, not a
@@ -1025,6 +1025,70 @@ ___globalAt___: aSym otherwise: aBlock
 
 category: 'Grail-Attribute Access'
 method: module
+___isBuiltinsModule___
+	"Whether this module is ``builtins'' -- the one module whose namespace
+	___builtinNamespaceNames___ describes."
+
+	^ [self @env0:== ((Python @env0:at: #builtins) @env1:instance)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___isGrailInternalSelector___: aSelectorString
+	"Whether a selector is Grail MACHINERY rather than a Python name, for the
+	two enumerations -- __dir__ and ___globalNames___ -- that must agree.
+
+	Three leading underscores was the whole test, and it is one underscore too
+	greedy.  Grail's internal names are ``___name___'': three leading AND
+	three trailing.  A varargs Python builtin compiles to ``_<name>:kw:'', so
+	a Python DUNDER builtin becomes ``___import__:kw:'' /
+	``___build_class__:kw:'' -- three leading and only TWO trailing, which the
+	old test could not tell apart from machinery.
+
+	Both were therefore missing from builtins.__dict__ while dir(builtins)
+	listed them, because dir() for that module answers the curated
+	___builtinNamespaceNames___ spec instead.  The cost is not cosmetic: an
+	exec() handed a COPY of builtins as its ``__builtins__'' got a copy with
+	no __build_class__ and no __import__ in it, so class definitions and
+	imports were forbidden in code CPython runs fine.
+
+	Requiring the trailing ``___'' separates the two cleanly:
+	___pyAttrLoad___: is machinery, ___import__:kw: is __import__."
+
+	| base i |
+	(aSelectorString @env0:size @env0:>= 3) ifFalse: [^ false].
+	(aSelectorString @env0:copyFrom: 1 to: 3) @env0:= '___' ifFalse: [^ false].
+	base := aSelectorString.
+	i := base @env0:indexOf: $:.
+	i @env0:== 0 ifFalse: [base := base @env0:copyFrom: 1 to: i @env0:- 1].
+	"A base ending in exactly two underscores, with three at the front, is a
+	Python dunder that picked up the varargs prefix -- not machinery."
+	(base @env0:size @env0:>= 5) ifTrue: [
+		| endsTwo endsThree pyName |
+		endsTwo := (base @env0:copyFrom: base @env0:size @env0:- 1 to: base @env0:size) @env0:= '__'.
+		endsThree := (base @env0:copyFrom: base @env0:size @env0:- 2 to: base @env0:size) @env0:= '___'.
+		(endsTwo @env0:and: [endsThree @env0:not]) ifTrue: [
+			"IT STILL HAS TO BE A NAME PYTHON HAS.  The shape alone is not
+			enough: ``___reload__:kw:'' is Grail's own helper behind
+			importlib.reload, spelled like a dunder and belonging to no Python
+			namespace, and admitting it put ``__reload__'' into
+			dir(builtins).  ___builtinNamespaceNames___ is the spec of what
+			CPython's builtins hold, so it is the thing to ask -- and asking
+			it means a future Grail-private dunder needs no maintenance here.
+
+			Only for the BUILTINS module: that spec says nothing about any
+			other module's namespace, so elsewhere the shape stands on its
+			own."
+			pyName := base @env0:copyFrom: 2 to: base @env0:size.
+			self ___isBuiltinsModule___ ifFalse: [^ false].
+			^ (((Python @env0:at: #builtins) @env0:___builtinNamespaceNames___)
+					@env0:includes: pyName @env0:asSymbol) @env0:not]].
+	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: module
 ___globalNames___
 	"Ordered key list for the module's global namespace (the globals()
 	live view -- PyModuleDict).  Union of the three stores the
@@ -1068,7 +1132,7 @@ ___globalNames___
 
 		Nothing changes for a module written in PYTHON: its top-level defs all
 		compile into 'Grail-Methods', which neither rule excludes."
-		skip := (s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'].
+		skip := self ___isGrailInternalSelector___: s.
 		skip ifFalse: [
 			| cat |
 			cat := self @env0:class @env0:categoryOfSelector: sel environmentId: 1.
