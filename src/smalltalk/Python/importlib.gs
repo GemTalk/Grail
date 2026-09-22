@@ -7394,7 +7394,7 @@ ___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: classSideBo
 	    functionBeingCompiled, the scope stack, classBeingCompiled and
 	    selfParameterName are the ones the text path would have used."
 
-	| temps id table ids builder |
+	| id table ids builder |
 	CallAst classDefIsModuleScope == false ifTrue: [
 		builder := [| b |
 				b := aDef ___irBuilderFor___: (classSideBool
@@ -7416,9 +7416,8 @@ ___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: classSideBo
 		``compiled'' means defs whose IR was built, and this one is built once
 		however many classes it goes on to serve."
 		self ___irNoteCompiled___: aDef].
-	temps := SessionTemps current.
-	id := (temps at: #'___grailIRDefCounter___' otherwise: 0) + 1.
-	temps at: #'___grailIRDefCounter___' put: id.
+	id := self ___irDefIdFor___: aDef inClass: aClassDefAst name: aName
+		classSide: classSideBool.
 	builder isNil
 		ifTrue: [
 			table := self ___irDefTable___.
@@ -7431,6 +7430,57 @@ ___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: classSideBo
 	source table is keyed by, and only here is the method-mode context live."
 	ids at: aName asString put: { id. aDef ___irSelector___ }.
 	^ id
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irDefIdFor___: aDef inClass: aClassDefAst name: aName classSide: classSideBool
+	"The registration id for a class-body def: DETERMINISTIC and
+	SELF-IDENTIFYING -- ``<module>|<classOffset>|<defOffset>|<name>|<side>''.
+
+	THIS USED TO BE A PER-SESSION COUNTER, and that is a silent corruption
+	rather than a stale-lookup problem.  The id is compiled as a LITERAL into
+	the class-build statement (ClassDefAst>>emitIRInstallOn:id:...), and that
+	statement lives in a method which is COMMITTED -- a deployed framework, a
+	canonical module -- and re-run in later sessions, and on every CALL of the
+	enclosing def for a method-local class.  A later session's counter restarts
+	at 1, so the embedded id names whatever that session happened to register
+	in that position.
+
+	___irInstallDef:on:or:category: guards the id being UNKNOWN (it falls back
+	to the text source, which is safe and documented).  It cannot guard the id
+	being KNOWN AND WRONG, and a selector check would not catch it either:
+	measured on shard 5, `chain' took `SeqIter''s ___init__:kw: because both
+	defs are named __init__.  The trace read
+
+	    id=939 class=chain shared=__bool__       src=___init__:...
+	    id=940 class=chain shared=___init__:kw:  src=__iter__
+
+	-- the whole sequence shifted by one against the deployed code's ids.
+
+	A deterministic key removes the failure mode rather than detecting it: an
+	id from another session names the SAME logical def, so it either finds that
+	def (correct) or finds nothing (the safe text fallback).
+
+	A DOIT KEEPS THE COUNTER.  With no module name there is nothing to make the
+	key unique -- two exec'd strings can both hold a class at offset 10 with an
+	__init__ at offset 30 -- and a doit's method is not committed, so the
+	cross-session recycling this fixes cannot reach it."
+
+	| mod ws temps n |
+	mod := [CallAst moduleNameBeingCompiled] on: Error do: [:ex | ex return: nil].
+	(mod isNil or: [mod asString isEmpty]) ifTrue: [
+		temps := SessionTemps current.
+		n := (temps at: #'___grailIRDefCounter___' otherwise: 0) + 1.
+		temps at: #'___grailIRDefCounter___' put: n.
+		^ ('<doit>|' , n printString) asSymbol].
+	ws := WriteStream on: String new.
+	ws nextPutAll: mod asString;
+		nextPut: $|; nextPutAll: (aClassDefAst beginPosition ifNil: [0]) printString;
+		nextPut: $|; nextPutAll: (aDef beginPosition ifNil: [0]) printString;
+		nextPut: $|; nextPutAll: aName asString;
+		nextPut: $|; nextPutAll: (classSideBool ifTrue: ['c'] ifFalse: ['i']).
+	^ ws contents asSymbol
 %
 
 category: 'Grail-Class Compilation'
