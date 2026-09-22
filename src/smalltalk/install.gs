@@ -1128,6 +1128,7 @@ run
 	at: #'PickleProtocolTestCase' put: nil;
 	at: #'PkgRelativeInitTestCase' put: nil;
 	at: #'PositionalOnlyDefaultsTestCase' put: nil;
+	at: #'PowSemanticsTestCase' put: nil;
 	at: #'PosonlyAndReflectedEqTestCase' put: nil;
 	at: #'PosonlySyntaxAndArityTestCase' put: nil;
 	at: #'PrintOutputRoutingTestCase' put: nil;
@@ -2463,6 +2464,7 @@ input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
 input src/smalltalk/PythonTests/PkgRelativeInitTestCase.gs
 input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
+input src/smalltalk/PythonTests/PowSemanticsTestCase.gs
 input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
 input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
 input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs

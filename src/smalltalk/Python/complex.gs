@@ -1292,6 +1292,22 @@ __pow__: other
 					ifTrue: [f := other __float__]
 					ifFalse: [^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:']].
 			bre := f. bim := 0.0].
+	"ZERO TO A NEGATIVE OR COMPLEX POWER, which is CPython's explicit guard in
+	complex_pow and not something the arithmetic below produces: the polar
+	form takes log(0) and the integer form inverts 0, so both answer nan+nanj
+	where CPython raises.  A nan is the shape of failure that travels -- it
+	propagates through every later operation and is reported far from the
+	division that made it.
+
+	Exponent zero is EXCLUDED, and deliberately: ``0j ** 0'' is 1+0j in
+	CPython, so the test is on the exponent being negative or having an
+	imaginary part, not on it being non-zero.
+
+	test_builtin test_pow."
+	((self @env1:real @env0:= 0.0) @env0:and: [self @env1:imag @env0:= 0.0]) ifTrue: [
+		((bim @env0:~= 0.0) @env0:or: [bre @env0:< 0.0]) ifTrue: [
+			^ ZeroDivisionError ___signal___:
+				'zero to a negative or complex power']].
 	((bim @env0:= 0.0)
 		and: [(self ___isFinite___: bre)
 		and: [((bre @env0:fractionPart) @env0:= 0.0)
