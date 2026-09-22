@@ -300,13 +300,68 @@ its own layout that *continues* its parent's, so a name can sit at position
 2 in the parent and position 3 in a child that had already used slot 2; each
 class compiles its own accessors for its own positions.
 
-### 3.8 What still re-mints the class
+### 3.8 Change a class's bases, rename it, or remove it
 
-Changing a class's **bases** produces a new class object, and existing
-instances stay on the old one. That is the one edit for which you still need
-a migration in the SQL sense: walk the old instances, build new ones, replace
-the references, commit. Renaming a class, or moving it to another module, is
-the same situation, because the class is found by its name and module.
+These three are different from everything above, and they share one reason:
+the class object itself cannot survive the edit. A class is found by its
+name and module, and its bases are fixed when it is built, so changing
+either means a *different* class — and every instance already in the
+repository would be left on the old one, reachable through whatever holds
+it and named by nothing in your source.
+
+Grail will not let that happen quietly. Each of the three is an
+**`ImportError`** that names the class and the command that performs the
+migration:
+
+```
+class billing.Account changed its bases (Base -> Ledger), and its instances
+are stored against the old class: run gemdb.schema.rebase('billing.Account')
+under a clean transaction, or restore the base
+```
+
+```
+module billing no longer defines billing.Invoice, and instances of it stay
+in the repository: run gemdb.schema.drop_class for each (it refuses while
+any instance exists), or gemdb.schema.rename_class when the class was
+renamed rather than removed
+```
+
+Edit the source first — the refusal is about the source you have already
+written — then run the command it names, under a clean transaction:
+
+```python
+gemdb.commit()
+gemdb.schema.rebase("billing.Account")              # {'classes': 1, 'instances': 12034, 'left_behind': 0}
+gemdb.schema.rename_class("billing.Person", "Customer")
+gemdb.schema.drop_class("billing.Invoice")
+```
+
+Each rebuilds the module and moves every instance onto the class the new
+source defines. **Values travel by name**, not by position, so an edit that
+also adds, reorders or removes attributes is safe; anything the new layout
+has no position for becomes a per-object attribute rather than being lost.
+
+Three things worth knowing:
+
+* **`drop_class` refuses while any instance exists**, and says how many.
+  Grail cannot make an object unreachable — an instance in `gemdb.root`, or
+  held by another object, is live data whatever your source says. The count
+  comes from a repository scan, so it is what the repository *holds*: an
+  object you unlinked in an earlier transaction is still there until it is
+  collected, and `gemdb.admin.garbage_collect()` is the step between.
+* **`rename_class` is a command, not a declaration**, unlike the attribute
+  rename of §3.5. GemStone refuses to rename a class at all, so the existing
+  class object cannot be relabelled the way a slot position can; the new
+  class has to be built and the instances moved. That is the line this whole
+  design draws — a declaration does what is free, a command does what writes
+  instances.
+* **`left_behind`** counts instances whose own class the rebuild did not
+  reach: a subclass defined in *another* module. Importing that module
+  rebuilds it, and refuses in its turn with its own name.
+
+A computed base — `class Point(namedtuple("Point", "x y"))` — is not a base
+change and is never refused. It builds a fresh class every time the module
+runs, which Grail has always allowed and still does.
 
 A class rooted at a built-in (`Exception`, `dict`, `list`, `str`) stores its
 attributes per object, not by position, since its indexed part is its
@@ -337,7 +392,9 @@ behind unread; it is invisible and goes with the next `del`.
 | rename after the code shipped | `gemdb.schema.rename(Cls, "old", "new")` | every instance's value moved, one transaction | none |
 | change the value's shape | lazy normaliser, or a batch rewrite | untouched until read or rewritten | none |
 | move between parent and child | just move the assignment | untouched | none |
-| change the bases / rename the class | a real migration: new instances, replace references | stranded on the old class | none, but manual |
+| change a class's bases | edit, then `gemdb.schema.rebase("mod.Cls")` | every instance moved onto the rebuilt class | none |
+| rename a class | edit, then `gemdb.schema.rename_class("mod.Old", "New")` | every instance moved | none |
+| remove a class | edit, then `gemdb.schema.drop_class("mod.Cls")` | refused while any instance exists | none |
 
 Where every row says "untouched": the instance's bytes on disk do not change
 on import. An instance grows only when *you* assign a position it lacks, and

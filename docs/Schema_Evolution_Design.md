@@ -271,21 +271,60 @@ parent's declaration reaches every subclass layout.
 
 Detection needs no scan. At rebuild the module's deployment record knows
 its previous class set, and `___canonicalSubclassOf:…` already refuses
-identity reuse when the parent differs. Three refusals, each an
-`ImportError` that names the class and the command:
+identity reuse when the parent differs.
+
+**A blanket base-change refusal is wrong, and measurement is what said so.**
+The obvious condition — "the registry's class for this key has a different
+superclass than the body just named" — fires on two things that are not
+schema changes at all, both measured on 2026-09-21:
+
+* **a computed base.** `class Point(namedtuple("Point", "x y"))` builds a
+  fresh local class every time the body runs, so its subclass has always
+  re-minted on every rebuild and must keep doing so. Probe:
+  `grail_remint_nt.Point|old=_NT|new=_NT` — same name, different object.
+* **the cascade.** A subclass of a re-minted class sees a different parent
+  object under the same name at its own class statement. With
+  `class Mid(namedtuple(...))` and `class Leaf(Mid)`, the probe logged both:
+  `Mid|old=_NT|new=_NT` and then `Leaf|old=Mid|new=Mid`.
+
+So the refusal takes three conditions together: the previous class is live
+and this load has not already bound it, the **new parent is a canonical**
+(registry-backed) class — a class built inside a function is not — and the
+new parent was **not itself re-minted earlier in this session**
+(`___remintedThisSession___`, session-local and never reset; suppressing a
+refusal about a descendant of an already-stranded class is the safe
+direction, where a false refusal makes a module un-importable).
+
+Instrumented with the refusal off, the whole CPython corpus reaches that
+branch **zero** times, because a module whose source is unchanged binds warm
+and never enters the build path at all. The refusal therefore fires on an
+edit, in the session of the developer who made it. (The zero was only
+believed after a control: a module whose class genuinely changes base logged
+exactly one line, so the instrument was known to be able to see the thing it
+reported none of.)
+
+Three refusals, each an `ImportError` that names the class and the command:
 
 - **a class present in the previous deployment and absent from the new
   body**, not covered by a module-level `__renamed__`: "class Person was
   removed; run gemdb.schema.drop_class('mod.Person') or declare
   __renamed__";
 
-**Module-level `__renamed__`** (deferred here from cut 3, since it is the
-answer to that first refusal): `{"Person": "Customer"}`, or
-`{"other_mod.Person": "Customer"}` for a move, re-keys the canonical class
-registry entry to the new name and module and renames the Smalltalk class,
-keeping its identity. To probe first: what renaming a class whose name is
-part of generated selectors (the `___pyDefinedClass___` marker, the class
-attribute holder) actually requires on 4.0.
+**Module-level `__renamed__` is WITHDRAWN, on a measurement.** The plan was
+to re-key the canonical registry entry and rename the Smalltalk class,
+keeping its identity, so a class rename would be as free as an attribute
+relabel. GemStone 4.0 does not allow it: `Behavior >> name:` answers
+*"illegal attempt to change name of a Module"* for a String and a Symbol
+alike, and `_name:` does not exist. A class object therefore cannot be
+reused under a new name, so the new class must be MINTED by the new source
+and every instance moved onto it — a repository scan that must own its
+transaction, which an import cannot have.
+
+That makes a class rename a command, `gemdb.schema.rename_class("mod.Old",
+"New")`, and it falls on exactly the line the rest of this design draws: **a
+declaration does what is free, a command does what writes instances.** The
+attribute relabel is free, so `__renamed__` does it at import; the attribute
+MOVE and the class rename both write every instance, so both are commands.
 - **a class whose bases changed**: "class Customer changed its bases; run
   gemdb.schema.rebase('mod.Customer')";
 - a `__renamed__` target that already exists.
@@ -304,8 +343,17 @@ The commands, both owning a clean transaction:
   (`gemdb.root["cls"] = Person`); `rebase` reports their count from
   `listReferences:` and leaves them, since only the developer knows what
   they mean.
+- `gemdb.schema.rename_class(oldDottedName, newName)`: the same machinery as
+  `rebase` with one explicit old-class -> new-class mapping, since a renamed
+  class cannot be matched by name. It removes the old registry entry
+  afterwards, or the very next import is refused again for a class whose
+  data has already moved.
 - `gemdb.schema.drop_class(name)`: scans, reports the instance count, and
-  removes the registry entry only when it is zero. Grail cannot make an
+  removes the registry entry only when it is zero. The count is what the
+  repository HOLDS, not what is reachable: an instance unlinked in an earlier
+  transaction is still there until a garbage collection reclaims it, and the
+  refusal says so rather than looking like a bug. Reachability is not a
+  question GemStone answers more cheaply than by collecting. Grail cannot make an
   instance unreachable; a class with live instances stays until the
   developer unlinks them. This is the answer to "references to objects the
   user does not have in their schema": the class cannot leave the schema
