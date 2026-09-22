@@ -623,6 +623,7 @@ run
 	at: #'ArchiveMetadataTestCase' put: nil;
 	at: #'ArgparseTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
+	at: #'AstExportTestCase' put: nil;
 	at: #'AsendLifecycleTestCase' put: nil;
 	at: #'AsgiServerTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
@@ -1957,6 +1958,7 @@ input src/smalltalk/PythonTests/AbstractBasesProtocolTestCase.gs
 input src/smalltalk/PythonTests/ArchiveMetadataTestCase.gs
 input src/smalltalk/PythonTests/ArgparseTestCase.gs
 input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
+input src/smalltalk/PythonTests/AstExportTestCase.gs
 input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
 input src/smalltalk/PythonTests/AsgiServerTestCase.gs
 input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
