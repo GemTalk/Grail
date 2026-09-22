@@ -433,8 +433,30 @@ ___pyAttrDelete___: aName
 	((self @env0:dynamicInstVarAt: sym) @env0:== nil) ifFalse: [
 		self @env0:removeDynamicInstVar: sym.
 		removed := true].
-	removed ifTrue: [^ None].
-	^ super ___pyAttrDelete___: aName
+	"A THIRD HOME: a lazily-wrapped class METHOD.  Neither store holds it and
+	unfiling the method is not an option -- it is shared by every session and
+	by every other module in the image -- so the name is TOMBSTONED instead,
+	which is what makes ``del sys.stdout'' mean anything.
+
+	Session-local, deliberately.  A module is a persistent object here, so
+	removing a built-in attribute for good would outlive the program that did
+	it; CPython's del touches one process's module object and nothing else."
+	"UNCONDITIONALLY, not only when the stores had nothing.  Removing the
+	dynamic instVar that shadowed a method does not delete the name -- it
+	REVEALS the method underneath, so ``sys.stdout = f; del sys.stdout''
+	quietly restored the original stdout and reported success."
+	(self ___hasMethodBackedGlobal___: sym) ifTrue: [
+		self ___markGlobalDeleted___: sym.
+		removed := true].
+	removed ifTrue: [
+		self ___clearWrappedGlobal___: sym.
+		^ None].
+	"CPython's message for delattr, which is NOT its message for getattr: a
+	failed READ says ``module 'sys' has no attribute 'x''' and a failed DELETE
+	says ``'module' object has no attribute 'x'''.  object's version answers
+	the bare name and nothing else, which is not a sentence."
+	^ AttributeError ___signal___: '''module'' object has no attribute '''
+		@env0:, aName @env0:asString @env0:, ''''
 %
 
 category: 'Grail-Attribute Access'
@@ -480,7 +502,8 @@ __dir__
 	(cls @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
 		| s index skip |
 		s := sel @env0:asString.
-		skip := self ___isGrailInternalSelector___: s.
+		skip := (self ___isGrailInternalSelector___: s)
+			@env0:or: [self ___isDeletedGlobal___: sel].
 		"The module BODY is compiled as an env-1 ``initialize'' method in
 		category 'Grail-Module Body' (importlib class >>
 		___defineModuleClass___).  It is an implementation artifact, not a
@@ -987,8 +1010,30 @@ ___globalAt___: aSym otherwise: aBlock
 	attributes)."
 
 	| val s sym1 sym2 sym3 symVA cls owner |
+	"A DELETED name stays deleted, even when a METHOD would answer it.  A
+	module keeps its globals in three places -- dynamic instVars, dictionary
+	entries and lazily-wrapped class methods -- and only the first two can be
+	removed.  ``del sys.stdout'' therefore answered None and left stdout
+	exactly where it was, because sys is written in Smalltalk and its stdout
+	is a method; the caller was told the delete worked.  A tombstone is the
+	only way a method-backed name can be made absent without unfiling a method
+	every session shares."
 	val := self @env0:dynamicInstVarAt: aSym.
 	val == nil ifFalse: [^ val].
+	"A DELETED name stays deleted, even when a METHOD would answer it.  A
+	module keeps its globals in three places -- dynamic instVars, dictionary
+	entries and lazily-wrapped class methods -- and only the first two can be
+	removed.  ``del sys.stdout'' therefore answered None and left stdout
+	exactly where it was, because sys is written in Smalltalk and its stdout
+	is a method; the caller was told the delete worked.  A tombstone is the
+	only way a method-backed name can be made absent without unfiling a method
+	every session shares.
+
+	CHECKED AFTER the dynamic-instVar probe, not before, and that ordering is
+	what makes a later assignment revive the name: ``m.x = v'' stores a
+	dynamic instVar, which is found above and never reaches the tombstone.  No
+	store hook is needed, and none can be forgotten."
+	(self ___isDeletedGlobal___: aSym) ifTrue: [^ aBlock @env0:value].
 	cls := self @env0:class.
 	s := aSym @env0:asString.
 	"Value-attribute accessors (the ``__name__'' / ``__doc__'' / …
@@ -1103,6 +1148,127 @@ ___globalAt___: aSym otherwise: aBlock
 
 category: 'Grail-Attribute Access'
 method: module
+___pyAttrStore___: aName put: aValue
+	"``m.x = v'' on a module, which also REVIVES a name ``del m.x'' removed.
+
+	The revival cannot be left to the read order, and that is the lesson
+	here.  A module has three homes for a global -- dynamic instVars,
+	dictionary entries and class methods -- and a store does not always pick
+	the first: sys.stdout has a compiled ACCESSOR PAIR, so assigning it
+	performs the setter and writes neither store.  A tombstone checked after
+	the dynamic-instVar probe therefore still hid a name that had just been
+	assigned, and ``sys.stdout = f'' after a delete kept raising.
+
+	Clearing the mark HERE is independent of where the value lands, which is
+	the only version of this that cannot be wrong."
+
+	self ___unmarkGlobalDeleted___: aName @env0:asString @env0:asSymbol.
+	^ super ___pyAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Attribute Access'
+method: module
+__setattr__: aName _: aValue
+	"``m.x = v'' as codegen emits it -- and the path that actually matters for
+	reviving a deleted name.
+
+	An assignment to a module attribute compiles to ``__setattr__'', not to
+	___pyAttrStore___, so hooking only the latter left ``sys.stdout = f''
+	after a ``del sys.stdout'' still raising.  Both are hooked; this is the
+	one the language uses."
+
+	self ___unmarkGlobalDeleted___: aName @env0:asString @env0:asSymbol.
+	^ super __setattr__: aName _: aValue
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___deletedGlobals___
+	"The names ``del m.x'' has removed from this module although a class
+	METHOD still answers them -- a set, or nil when nothing was deleted.
+
+	Held in SessionTemps, keyed by module identity, because a Grail module is
+	a PERSISTENT object: unfiling the method or recording the deletion on the
+	module itself would outlive the program that did it, while CPython's del
+	touches one process's module and nothing else."
+
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #'GrailDeletedGlobals' otherwise: nil.
+	reg @env0:isNil ifTrue: [^ nil].
+	^ reg @env0:at: self otherwise: nil
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___isDeletedGlobal___: aSym
+	"Whether aSym has been deleted from this module.  Read on EVERY global
+	resolution, so it answers nil-fast when nothing was ever deleted."
+
+	| set |
+	set := self ___deletedGlobals___.
+	set @env0:isNil ifTrue: [^ false].
+	^ set @env0:includes: aSym
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___markGlobalDeleted___: aSym
+	"Record that aSym is gone, and make a later assignment revive it: a store
+	goes to a dynamic instVar, which the read probes BEFORE the tombstone
+	would matter, so ___pyAttrStore___ clears the mark rather than leaving a
+	name that can be written and not read."
+
+	| reg set |
+	reg := SessionTemps @env0:current @env0:at: #'GrailDeletedGlobals' otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailDeletedGlobals' put: reg].
+	set := reg @env0:at: self otherwise: nil.
+	set @env0:isNil ifTrue: [
+		set := IdentitySet @env0:new.
+		reg @env0:at: self put: set].
+	set @env0:add: aSym
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___unmarkGlobalDeleted___: aSym
+	"Storing a name revives it."
+
+	| set |
+	set := self ___deletedGlobals___.
+	set @env0:isNil ifFalse: [set @env0:remove: aSym ifAbsent: []]
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___hasMethodBackedGlobal___: aSym
+	"Whether a class METHOD would answer aSym -- the third home, the one no
+	store can remove."
+
+	| cls s |
+	cls := self @env0:class.
+	s := aSym @env0:asString.
+	(cls @env0:whichClassIncludesSelector: aSym environmentId: 1) @env0:notNil
+		ifTrue: [^ true].
+	((cls @env0:whichClassIncludesSelector: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol
+		environmentId: 1) @env0:notNil) ifTrue: [^ true].
+	^ (cls @env0:whichClassIncludesSelector: (s @env0:, ':') @env0:asSymbol
+		environmentId: 1) @env0:notNil
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___clearWrappedGlobal___: aSym
+	"Drop the cached BoundMethod a lazy wrap left in the dynamic slot, so a
+	delete is not undone by the wrap the last read stored there."
+
+	(self @env0:dynamicInstVarAt: aSym) @env0:isNil ifFalse: [
+		self @env0:removeDynamicInstVar: aSym]
+%
+
+category: 'Grail-Attribute Access'
+method: module
 ___isBuiltinsModule___
 	"Whether this module is ``builtins'' -- the one module whose namespace
 	___builtinNamespaceNames___ describes."
@@ -1210,7 +1376,8 @@ ___globalNames___
 
 		Nothing changes for a module written in PYTHON: its top-level defs all
 		compile into 'Grail-Methods', which neither rule excludes."
-		skip := self ___isGrailInternalSelector___: s.
+		skip := (self ___isGrailInternalSelector___: s)
+			@env0:or: [self ___isDeletedGlobal___: sel].
 		skip ifFalse: [
 			| cat |
 			cat := self @env0:class @env0:categoryOfSelector: sel environmentId: 1.

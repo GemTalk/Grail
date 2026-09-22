@@ -5831,6 +5831,9 @@ _input: positional kw: kwargs
 			@env0:on: MessageNotUnderstood do: [:ex | promptText := obj __repr__].
 		promptText := promptText @env0:asString].
 
+	"REFUSE BEFORE READING when a stream input() needs has been deleted."
+	self ___requireSysStream___: 'stdout' forPrompt: (positional @env0:size @env0:>= 1).
+	self ___requireSysStream___: 'stdin' forPrompt: true.
 	stdinObj := self ___sysStdin___.
 	stdinObj @env0:notNil ifTrue: [
 		((stdinObj ___respondsTo___: #'readline')
@@ -5929,6 +5932,42 @@ ___inputLine___: lineOrNil
 	(size @env0:> 0 and: [(line @env0:at: size) @env0:== (Character @env0:lf)])
 		ifTrue: [line := line @env0:copyFrom: 1 to: size @env0:- 1].
 	^ line
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireSysStream___: aName forPrompt: hasPrompt
+	"CPython's ``RuntimeError: lost sys.stdout'' / ``lost sys.stdin'': input()
+	refuses to run when the stream it needs is GONE from the sys module.
+
+	KEYED ON DELETED, NOT ON None, and that is the whole difficulty.  CPython
+	treats a missing attribute and a None one alike, and Grail cannot: it
+	INITIALISES sys.stdin and sys.stdout to None and reads the console through
+	its own provider when they are, so ``None means lost'' would refuse every
+	ordinary interactive input().  A deleted attribute is unambiguous, and it
+	is the case test_input exercises -- ``del sys.stdout; input('prompt')''.
+
+	stdout is required only when there IS a prompt, because that is the only
+	thing input() writes."
+
+	(aName @env0:= 'stdout' @env0:and: [hasPrompt @env0:not]) ifTrue: [^ self].
+	(self ___sysHasAttribute___: aName) ifTrue: [^ self].
+	^ RuntimeError ___signal___: 'lost sys.' @env0:, aName
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___sysHasAttribute___: aName
+	"Whether the sys module still HAS aName -- false once ``del sys.x'' has
+	tombstoned it.  Distinct from its VALUE being None, which is Grail's
+	ordinary un-redirected state."
+
+	| sysMod |
+	sysMod := Python @env0:at: #'sys' otherwise: nil.
+	sysMod @env0:isNil ifTrue: [^ false].
+	^ [(sysMod @env0:___instance___ @env1:___pyAttrLoad___: aName @env0:asSymbol)
+		@env0:notNil @env0:or: [true]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
 %
 
 category: 'Grail-Built-in Functions'

@@ -7761,6 +7761,22 @@ ___pyAttrLoad___: aSym
 		Per the nil-as-absent convention, a nil read means unset."
 		dValue := self @env0:dynamicInstVarAt: aSym.
 		dValue == nil ifFalse: [^ dValue].
+		"A DELETED NAME STAYS DELETED.  ``del m.x'' can remove a dynamic
+		instVar and a dictionary entry, and cannot remove the class METHOD
+		that is a module's third home -- so deleting an ASSIGNED sys.stdout
+		merely revealed the compiled accessor underneath and the read carried
+		on working.  module >> ___pyAttrDelete___: tombstones the name and
+		this read respects it; module >> ___globalAt___ is the OTHER
+		resolution chain (bare names and globals()), which does the same.
+
+		AFTER the dynamic-instVar probe, so a later assignment REVIVES the
+		name: a store lands in that slot and is found above, which is why no
+		store hook is needed and none can be forgotten."
+		(self ___isDeletedGlobal___: aSym @env0:asSymbol) ifTrue: [
+			^ AttributeError ___signal___: 'module ''' @env0:,
+				([self @env1:__name__] @env0:on: AbstractException
+					do: [:ex | ex @env0:return: '?']) @env0:asString @env0:,
+				''' has no attribute ''' @env0:, aSym @env0:asString @env0:, ''''].
 		"Cache the wrapper in the slot so repeated reads of the same
 		module function return the SAME object -- CPython functions are
 		first-class module attributes with stable identity
