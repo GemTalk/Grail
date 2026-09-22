@@ -711,6 +711,7 @@ run
 	at: #'ChainedIdentityCompareTestCase' put: nil;
 	at: #'CheckWarningsHelperTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
+	at: #'ClassTypeParamsTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'ClassAttrSingleHomeTestCase' put: nil;
@@ -2042,6 +2043,7 @@ input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
 input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
+input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs

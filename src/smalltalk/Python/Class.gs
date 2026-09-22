@@ -338,6 +338,60 @@ __subclasses__
 
 category: 'Grail-Reflection'
 method: Behavior
+__type_params__
+	"``cls.__type_params__'': the PEP 695 type parameters, as a tuple of
+	typing.TypeVar -- and an EMPTY tuple for a class that declares none, which
+	is what CPython gives every ordinary class.
+
+	BUILT ON FIRST READ, from the NAMES ClassDefAst recorded at class creation.
+	That laziness is the design and not an optimisation: materialising a
+	TypeVar means importing typing, and typing defines its own generic classes
+	(``SupportsAbs[T]'', ``SupportsRound[T]''), so doing it while a class is
+	being defined re-enters typing's own import and breaks ForwardRef --
+	deterministically, and far from here.  An earlier cut did it eagerly and
+	had to be reverted for exactly that.
+
+	An ASSIGNED value wins, because ``A.__type_params__ = whatever'' is legal
+	and lands in the class-attribute holder, which ___pyAttrLoad___ reads
+	before it reaches a method like this one.
+
+	A name that cannot be turned into a TypeVar -- typing missing, or the
+	import failing -- answers the empty tuple rather than raising: this is
+	introspection, and a reader that cannot get the parameters is better served
+	by ``none'' than by an exception from an attribute read."
+
+	| names il vars tv holder assigned |
+	holder := [self @env0:perform: #___dynInstVars___ env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"AN ASSIGNED VALUE WINS.  ``A.__type_params__ = whatever'' is legal and
+	lands in the holder; the class-level value-attribute branch that routes
+	here runs BEFORE the holder is consulted, so the assignment has to be
+	honoured from inside rather than around."
+	assigned := [self @env1:___classAttrOverlayLookup___: self name: #'__type_params__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	assigned @env0:isNil ifFalse: [^ assigned].
+	holder @env0:isNil ifFalse: [
+		assigned := [holder @env0:dynamicInstVarAt: #'__type_params__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		assigned @env0:isNil ifFalse: [^ assigned]].
+	names := holder @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [[holder @env0:dynamicInstVarAt: #'___typeParamNames___']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(names @env0:isNil @env0:or: [names @env0:isEmpty])
+		ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
+	il := Python @env0:at: #builtins otherwise: nil.
+	tv := [((il @env1:instance) @env1:___import__: { 'typing' } kw: nil)
+		@env1:___pyAttrLoad___: #'TypeVar']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	tv @env0:isNil ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
+	vars := names @env0:collect: [:n |
+		tv ___pyCallValue___: { n @env0:asString } kw: nil].
+	^ tuple @env0:withAll: (Array @env0:withAll: vars)
+%
+
+category: 'Grail-Reflection'
+method: Behavior
 ___grailInheritsStorageOf___: aBase
 	"Whether this class carries aBase's storage -- the test __base__ uses to
 	pick the SOLID BASE out of a declared base list.

@@ -1290,6 +1290,24 @@ printSmalltalkRuntimeOn: aStream
 	and ___resetClassAttrOverlay___, emitted just after the class-build
 	guard, then wipes the overlay.  See object >> ___classHolderAttrStore___,
 	whose method-decorator caller was bitten by exactly this."
+	"PEP 695 TYPE PARAMETERS, as NAMES.  ``class A[T]'' must answer
+	``(T,)'' from __type_params__, where T is a typing.TypeVar.
+
+	The NAMES are stored, and the TypeVars are built on the first READ --
+	which is the whole design, not an optimisation.  Materialising them here
+	means importing typing while a class is being defined, and typing defines
+	its own generic classes (``SupportsAbs[T]'', ``SupportsRound[T]''): the
+	import re-enters itself and ForwardRef breaks, deterministically.  An
+	earlier cut did it eagerly and had to be reverted for exactly that.
+
+	Under a Grail-internal name, so it does not surface in __dict__ -- the
+	holder walk excludes ``___...___''."
+	(type_params notNil and: [type_params notEmpty]) ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''___typeParamNames___'' put: #('.
+		type_params do: [:n |
+			aStream nextPutAll: ''''; nextPutAll: n asString; nextPutAll: ''' '].
+		aStream nextPutAll: ').'; lf].
 	(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:nested |
 		aStream nextPutAll: '[ | '; nextPutAll: nested ___stVarName___;
 			nextPutAll: ' |'; lf.

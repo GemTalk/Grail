@@ -8162,7 +8162,7 @@ ___pyAttrLoad___: aSym
 		on any class would wrap the inherited Behavior-side getter
 		and break visitor dispatch
 		(``getattr(self, 'visit_' + type(node).__name__)``)."
-		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
+		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__' or: [s @env0:= '__type_params__']]]]]])
 			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
 		"A METACLASS reaches neither accessor: __name__ and __qualname__ are
@@ -12100,6 +12100,17 @@ ___pyAttrDelete___: aName
 	| sym owned enumCls rec |
 	sym := aName @env0:asSymbol.
 	(self isKindOf: Behavior) ifTrue: [
+		"``__type_params__'' CANNOT BE DELETED.  CPython refuses with a
+		TypeError -- not the AttributeError a missing attribute gets -- because
+		the slot is part of the type rather than an entry in its namespace: it
+		always reads, as an empty tuple for a class that declares no type
+		parameters, so there is nothing for a delete to remove.  A class may
+		ASSIGN over it, which test_builtin's test_type_typeparams does
+		immediately before trying the delete and then checks the assignment
+		SURVIVED the refusal."
+		sym @env0:== #'__type_params__' ifTrue: [
+			^ TypeError ___signal___: 'cannot delete ''__type_params__'' attribute of '
+				@env0:, self ___grailPythonClassNameForError___].
 		"Enum members are undeletable: ``del Color.RED'' raises AttributeError
 		(CPython EnumType.__delattr__), the mirror of the reassignment guard in
 		__setattr__:_:.  Needed HERE now that a member is a holder entry like
