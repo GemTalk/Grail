@@ -117,9 +117,25 @@ ___builtinNamed___: aSymbol
 	calling and pickles by reference as builtins.map. Reconstruction re-enters
 	map()/filter()/zip() with the SOURCE ITERATORS, and iter() answers an
 	iterator unchanged, so a partially consumed position survives the round trip
-	-- which is what check_iter_pickle resumes and compares."
+	-- which is what check_iter_pickle resumes and compares.
 
-	^ (importlib @env0:___builtinsModuleOrNil___) @env1:___pyAttrLoad___: aSymbol
+	A RUNNING exec()/eval() MAY HAVE REPLACED BUILTINS, and then this has to
+	read the replacement: CPython's list_iterator.__reduce__ calls
+	_PyEval_GetBuiltin on the name, which looks in the FRAME's builtins, so
+	``eval('x.__reduce__()', {'__builtins__': {}, 'x': iter([1,2])})'' raises
+	AttributeError for the missing name rather than answering the real iter.
+	The AttributeError carries the bare name, which is what CPython's
+	_PyEval_GetBuiltin produces and what the test matches on."
+
+	| b override |
+	b := importlib @env0:___builtinsModuleOrNil___.
+	override := (Python @env0:at: #builtins) @env1:instance
+		@env1:___grailBuiltinsOverride___.
+	override @env0:isNil ifFalse: [
+		^ (Python @env0:at: #builtins) @env1:instance
+			@env1:___lookUpInBuiltinsOverride___: aSymbol @env0:asString
+			ifAbsent: [AttributeError @env1:___signal___: aSymbol @env0:asString]].
+	^ b @env1:___pyAttrLoad___: aSymbol
 %
 
 category: 'Grail-Private'

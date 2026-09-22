@@ -104,6 +104,38 @@ _getstate
 	^ tuple @env0:withAll: { collection. position. reverse. exhausted }
 %
 
+category: 'Grail-Pickle Support'
+method: list_iterator
+__reduce__
+	"CPython's listiter_reduce / listreviter_reduce.  Measured on 3.14.6:
+
+	    iter([1,2]).__reduce__()        -> (iter, ([1, 2],), 0)
+	    it = iter([1,2,3]); next(it)    -> (iter, ([1, 2, 3],), 1)
+	    a spent forward iterator        -> (iter, ([],))
+	    reversed([1,2,3]).__reduce__()  -> (reversed, ([1, 2, 3],), 2)
+	    a spent reverse iterator        -> (reversed, ([],))
+
+	THREE THINGS THE SHAPE SAYS.  The callable differs by direction -- iter
+	for forward, reversed for backward.  A SPENT iterator answers a
+	two-element tuple over an EMPTY list and no position at all, which is how
+	CPython pickles ``there is nothing left'' without having to encode an
+	index that would be wrong after the list changed.  And a live one hands
+	back the WHOLE collection plus the index, not the remainder, so the
+	reconstructed iterator shares the list's identity semantics.
+
+	list_iterator had no __reduce__ and fell through to the inherited
+	NotImplemented, so an iterator over a list simply did not pickle."
+
+	exhausted ifTrue: [
+		^ tuple @env0:withAll: {
+			self ___builtinNamed___: (reverse ifTrue: [#'reversed'] ifFalse: [#'iter']).
+			tuple @env0:withAll: { list @env1:___new___ } }].
+	^ tuple @env0:withAll: {
+		self ___builtinNamed___: (reverse ifTrue: [#'reversed'] ifFalse: [#'iter']).
+		tuple @env0:withAll: { collection }.
+		position }
+%
+
 category: 'Grail-Iterator Protocol'
 method: list_iterator
 __length_hint__

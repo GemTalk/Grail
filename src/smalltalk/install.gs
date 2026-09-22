@@ -684,6 +684,7 @@ run
 	at: #'BuiltinSubclassOverrideTestCase' put: nil;
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'BuiltinSubclassPropertyTestCase' put: nil;
+	at: #'BuiltinsReduceAndImportTestCase' put: nil;
 	at: #'BuiltinsRebindingTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'ByteArrayReceiverTypeTestCase' put: nil;
@@ -2004,6 +2005,7 @@ input src/smalltalk/PythonTests/BuiltinArityMismatchTestCase.gs
 input src/smalltalk/PythonTests/BuiltinExtrasTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNamespaceNarrowingTestCase.gs
 input src/smalltalk/PythonTests/BuiltinRefusalsTestCase.gs
+input src/smalltalk/PythonTests/BuiltinsReduceAndImportTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsRebindingTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
