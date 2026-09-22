@@ -99,6 +99,29 @@ ___setNext: aNext
 
 set compile_env: 1
 
+category: 'Grail-Introspection'
+method: PyTraceback
+__dir__
+	"``dir(tb)'' is EXACTLY the four traceback members and nothing else.
+
+	CPython's traceback type reports no dunders at all -- measured on 3.14.6,
+	``dir(e.__traceback__)'' is ['tb_frame', 'tb_lasti', 'tb_lineno',
+	'tb_next'] -- and test_dir asserts the LENGTH, so an extra name is a
+	failure and not a cosmetic difference.
+
+	Grail's generic __dir__ answered 29: every dunder object contributes, and
+	NONE of the four, because they are read through the attribute chain rather
+	than compiled as plain selectors.  So the list was both too long and
+	missing the only names anyone asks a traceback for."
+
+	^ (Array @env0:new: 4)
+		@env0:at: 1 put: 'tb_frame';
+		@env0:at: 2 put: 'tb_lasti';
+		@env0:at: 3 put: 'tb_lineno';
+		@env0:at: 4 put: 'tb_next';
+		@env0:yourself
+%
+
 category: 'Grail-Instance Creation'
 classmethod: PyTraceback
 __new__: aNext _: aFrame _: aLasti _: aLineno

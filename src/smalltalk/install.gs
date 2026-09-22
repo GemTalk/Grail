@@ -820,6 +820,7 @@ run
 	at: #'DictKwargsTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
 	at: #'DictUnpackingTestCase' put: nil;
+	at: #'DirSlotsAndTracebackTestCase' put: nil;
 	at: #'DirExcludesInternalsTestCase' put: nil;
 	at: #'DirOfAClassTestCase' put: nil;
 	at: #'DirectCallsTestCase' put: nil;
@@ -2155,6 +2156,7 @@ input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
 input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
 input src/smalltalk/PythonTests/DirectCallsTestCase.gs
+input src/smalltalk/PythonTests/DirSlotsAndTracebackTestCase.gs
 input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
 input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/DjangoTestCase.gs
