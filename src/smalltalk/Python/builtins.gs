@@ -4662,18 +4662,56 @@ _pow: positional kw: kwargs
 	with two arguments); this method is the fallback for 3-arg and
 	BoundMethod indirect calls."
 
-	| nargs x y z |
-	nargs := positional @env0:size.
+	| nargs x y z args |
+	"BASE, EXP AND MOD ARE ALL NAMEABLE.  CPython gave pow()'s parameters
+	names in 3.8 precisely so it composes with functools.partial, and
+	test_pow exercises that -- ``partial(pow, base=2)(exp=5)'' and
+	``partial(pow, mod=10)(exp=6, base=2)''.  Grail read none of them, so
+	every keyword spelling reported ``pow expected 2 or 3 arguments''.
+
+	Merged into the POSITIONAL list rather than handled separately, so the
+	arity checks below see one uniform shape and a call that mixes the two
+	(``mod10(2, 6)'') works without a second set of rules.  A keyword that
+	duplicates a positional is left to the arity check, which then reports
+	too many arguments -- CPython says ``got multiple values'', a wording
+	difference in an error either way."
+	"``args'' rather than ``positional'': GemStone does not allow assignment to
+	a method ARGUMENT, which is the same constraint float>>__round__: records
+	for its own coerced ndigits."
+	args := positional.
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		| slots names filled |
+		"THREE SLOTS, filled by POSITION first and then by NAME -- which is
+		what lets the two spellings mix in one call, as partial() makes them:
+		``partial(pow, mod=10)(2, 6)'' supplies slots 1 and 2 positionally and
+		slot 3 by name."
+		names := #('base' 'exp' 'mod').
+		slots := Array @env0:new: 3.
+		1 @env0:to: (positional @env0:size @env0:min: 3) do: [:i |
+			slots @env0:at: i put: (positional @env0:at: i)].
+		1 @env0:to: 3 do: [:i |
+			((slots @env0:at: i) @env0:isNil
+				@env0:and: [kwargs @env0:includesKey: (names @env0:at: i)]) ifTrue: [
+					slots @env0:at: i put: (kwargs @env0:at: (names @env0:at: i))]].
+		"Count the run of filled slots FROM THE LEFT.  A gap means an argument
+		was skipped (``pow(mod=3)''), which is not a 1-argument call -- leaving
+		it short lets the arity check below report it instead of computing
+		something from a hole."
+		filled := 0.
+		[filled @env0:< 3 @env0:and: [(slots @env0:at: filled @env0:+ 1) @env0:notNil]]
+			@env0:whileTrue: [filled := filled @env0:+ 1].
+		args := slots @env0:copyFrom: 1 to: filled].
+	nargs := args @env0:size.
 	(nargs == 2) ifTrue: [
-		x := positional @env0:at: 1.
-		y := positional @env0:at: 2.
+		x := args @env0:at: 1.
+		y := args @env0:at: 2.
 		^ x __pow__: y
 	].
 	(nargs == 3) ifTrue: [
 		| tn ni r |
-		x := positional @env0:at: 1.
-		y := positional @env0:at: 2.
-		z := positional @env0:at: 3.
+		x := args @env0:at: 1.
+		y := args @env0:at: 2.
+		z := args @env0:at: 3.
 		"3-arg pow is modular exponentiation, defined only for integers.  Any
 		non-int operand raises CPython's TypeError naming all three types
 		(test_fractions test_three_argument_pow), rather than silently doing
@@ -4729,13 +4767,37 @@ _pow: positional kw: kwargs
 		(r @env0:~~ ni) ifTrue: [^ r].
 		r := self ___pow3Dunder___: y args: { x. z } base: '__rpow__'.
 		(r @env0:~~ ni) ifTrue: [^ r].
-		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
-			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
-				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
+		"TWO MESSAGES, and which one CPython uses depends on the offending
+		type.  A FLOAT operand is refused by pow()'s own check -- ``pow() 3rd
+		argument not allowed unless all arguments are integers'' -- while
+		anything else falls through to the operator protocol and gets the
+		generic ``unsupported operand type(s)''.  Grail gave the generic one
+		to both, which is right for a Fraction (test_fractions
+		test_three_argument_pow asserts exactly that wording) and wrong for
+		the far more common float."
+		((x @env0:isKindOf: Float) @env0:or: [(y @env0:isKindOf: Float)
+			@env0:or: [z @env0:isKindOf: Float]]) ifTrue: [
+			^ TypeError ___signal___:
+				'pow() 3rd argument not allowed unless all arguments are integers'].
+		"Through ___pyTypeNameForError___ rather than a local Integer table:
+		that table mapped the integer classes to ``int'' and left every other
+		Smalltalk name to leak, so a float read 'SmallDouble' -- which is also
+		why the float case above was hard to recognise as a wrong message
+		rather than a wrong type name."
+		tn := [:v | (v ___pyTypeNameForError___) @env0:asString].
 		TypeError ___signal___: ('unsupported operand type(s) for ** or pow(): '''
 			@env0:, (tn @env0:value: x) @env0:, ''', ''' @env0:, (tn @env0:value: y)
 			@env0:, ''', ''' @env0:, (tn @env0:value: z) @env0:, '''')
 	].
+	"CPython names the MISSING PARAMETER rather than the arity, which is the
+	more useful report once the parameters have names a caller can use -- and
+	the reason it matters here is partial(): ``partial(pow, mod=10)()'' is a
+	call that supplies an argument and is still short two, and ``expected 2 or
+	3 arguments'' does not say which."
+	args @env0:size @env0:= 0 ifTrue: [
+		^ TypeError ___signal___: 'pow() missing required argument ''base'' (pos 1)'].
+	args @env0:size @env0:= 1 ifTrue: [
+		^ TypeError ___signal___: 'pow() missing required argument ''exp'' (pos 2)'].
 	TypeError ___signal___: 'pow expected 2 or 3 arguments'
 %
 
