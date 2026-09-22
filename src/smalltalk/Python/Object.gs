@@ -4943,6 +4943,69 @@ ___pyAnd___: alternativeBlock
 	^ self ___isTruthy___ ifTrue: [alternativeBlock value] ifFalse: [self]
 %
 
+category: 'Grail-Slots'
+method: object
+___grailInstanceOwnAttributeNames___
+	"The instance's OWN attribute names, sorted -- what __dir__ is left with
+	when the type cannot be reached.
+
+	CPython's object.__dir__ reads the type through ``getattr(self,
+	'__class__')'', so a class whose __slots__ declares ``__class__'' can make
+	that read fail; dir() then reports the instance dict alone.  This is that
+	answer, taken from the same live view ``obj.__dict__'' uses so the two
+	cannot disagree."
+
+	| names |
+	names := OrderedCollection @env0:new.
+	[(PyInstanceDict @env0:on: self) @env0:keysAndValuesDo: [:k :v |
+		names @env0:add: k @env0:asString]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ (names @env0:asSet @env0:asSortedCollection) @env0:asArray
+%
+
+category: 'Grail-Slots'
+method: object
+___declaresOwnSlotNamed___: aName
+	"Whether this object's class declares aName as a __slots__ entry.
+
+	Evidenced by the ACCESSOR PAIR the slot installer compiles -- a declared
+	slot ``x'' gets ``___pyattr_x___'' -- which is the same thing every read of
+	a slot goes through, so the predicate cannot drift from the storage it is
+	about.
+
+	Asked only where a class-level dunder shortcut is about to win, so it costs
+	one respondsTo: on ``__class__'' and nothing anywhere else."
+
+	^ self ___respondsTo___: ('___pyattr_' @env0:, aName @env0:asString @env0:, '___') @env0:asSymbol
+%
+
+category: 'Grail-Slots'
+method: object
+___grailRawSlotValue___: aName
+	"The value in aName's slot, or nil when the slot is UNSET -- read straight
+	from the storage, never through the accessor pair.
+
+	The accessor cannot be used here, and that is the whole point of this
+	method.  A compiled getter ends ``ifNil: [self ___pyAttrLoad___: #'x']'':
+	nil is the unbound token and the loader is what turns it into the right
+	error.  A caller that is ITSELF inside ___pyAttrLoad___ -- the __class__
+	shortcut, which has to know whether a declared slot holds anything -- would
+	re-enter it and recurse until the stack gave out.
+
+	___pySlotIndexFor___: answers a NAMED instVar index positive, an indexed
+	position negated, and 0 for a name this class has no slot for.  An instance
+	built under an older, shorter layout is guarded: reading past _basicSize
+	raises rather than answering nil."
+
+	| idx pos |
+	idx := self @env1:___pySlotIndexFor___: aName @env0:asString @env0:asSymbol.
+	idx @env0:= 0 ifTrue: [^ nil].
+	idx @env0:> 0 ifTrue: [^ self @env0:instVarAt: idx].
+	pos := idx @env0:negated.
+	pos @env0:> (self @env0:_basicSize) ifTrue: [^ nil].
+	^ self @env0:at: pos
+%
+
 category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___declaresOwnClassAttr___: aSym
@@ -7995,6 +8058,26 @@ ___pyAttrLoad___: aSym
 	raised'' failures).  ``__doc__'' is NOT gated: ClassDefAst gives EVERY class
 	a __doc__ accessor, so the same test would skip the shortcut for every
 	object."
+	"A DECLARED __slots__ ENTRY SHADOWS THE TYPE'S ``__class__''.
+	``__slots__ = ['__class__']'' names a real per-instance slot, and CPython
+	lets it shadow exactly as a property does -- the slot starts UNSET, so
+	``f.__class__'' raises AttributeError until something assigns it.  test_dir
+	calls that ``an ugly trick to cause getattr(f, '__class__') to fail'' and
+	asserts dir() then degrades to the instance's own names.
+
+	The class-attribute gate below does not see it: a slot is not a class
+	attribute, so the shortcut answered the real Smalltalk class and the trick
+	did nothing.  Read RAW rather than through the accessor pair: a compiled
+	getter ends ``ifNil: [self ___pyAttrLoad___: #'x']'', so asking it from
+	inside ___pyAttrLoad___ recurses until the stack gives out -- measured."
+	((s @env0:= '__class__') @env0:and: [self ___declaresOwnSlotNamed___: s]) ifTrue: [
+		| v |
+		v := self ___grailRawSlotValue___: s.
+		v @env0:isNil ifTrue: [
+			^ AttributeError ___signal___: ''''
+				@env0:, (self @env0:class @env0:___pyClassNameForError___) @env0:asString
+				@env0:, ''' object has no attribute ''__class__'''].
+		^ v].
 	((s @env0:= '__class__' or: [s @env0:= '__doc__'])
 		and: [(self ___respondsTo___: aSym)
 			and: [(s @env0:= '__class__') @env0:not
@@ -9074,6 +9157,23 @@ __dir__
 
 	| selectors result myClass strs others walker |
 	myClass := self @env0:class.
+	"A DECLARED ``__class__'' SLOT THAT IS UNSET LEAVES dir() WITH THE
+	INSTANCE'S OWN NAMES.  CPython reaches the type through ``getattr(self,
+	'__class__')'', so a class whose __slots__ declares ``__class__'' makes
+	that read raise and dir() reports the instance dict alone -- test_dir
+	calls it ``an ugly trick to cause getattr(f, '__class__') to fail''.
+
+	ASKED AS A PREDICATE rather than by routing every __dir__ through the
+	attribute read, and the difference is not stylistic.  Reading ``self
+	class'' and reading ``self.__class__'' are the same answer for an ordinary
+	instance and DIFFERENT for a class -- ``self class'' is the metaclass,
+	which is where a class body's data attributes live, and the chain below
+	depends on that.  Routing everything through the attribute read cost 31
+	tests across five cases, none of them about slots.  So the ordinary path
+	is untouched and only the trick degrades."
+	((self ___declaresOwnSlotNamed___: '__class__')
+		@env0:and: [(self ___grailRawSlotValue___: '__class__') @env0:isNil])
+			ifTrue: [^ self ___grailInstanceOwnAttributeNames___].
 	"A CLASS receiver needs BOTH chains, because Grail splits in two what CPython
 	keeps in one dict.  ``self class'' is the metaclass, which is where a class
 	body's DATA attributes live (``data = 42'' compiles to a data/data: accessor
