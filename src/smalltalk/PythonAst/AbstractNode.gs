@@ -1330,6 +1330,21 @@ ___globalsOnlyViewReceiverExpr___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___localsOnlyViewExpr___
+	"The whole ``locals()'' expression for a DOIT -- receiver and wrap
+	together, unlike its two siblings, because a live locals mapping is
+	answered AS ITSELF and so there is no wrap to put round it.
+
+	Answers nil outside a doit, where locals() at module scope IS globals()
+	and the existing emit is already right."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitLocalsView___: ___pyGlobals___)']
+		ifFalse: [nil]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___builtinsAreOverridden___
 	"True while compiling a DOIT whose globals mapping supplied its own
 	``__builtins__''.

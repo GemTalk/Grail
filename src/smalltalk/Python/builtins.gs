@@ -246,7 +246,8 @@ _exec: positional kw: kwargs
 	Without exec, jinja2 template rendering can't progress past the from_code
 	step regardless of how much of the compiler runs."
 
-	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins |
+	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
+	  live savedLive liveGlobals savedLiveGlobals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -288,10 +289,34 @@ _exec: positional kw: kwargs
 	"CPython: locals defaults to globals, so the 2-argument form keeps
 	reflecting into globals exactly as before."
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
+	"A LOCALS MAPPING GRAIL CANNOT COPY is not seeded -- it is read LIVE.
+	CPython reads the locals argument through __getitem__ as the code runs, so
+	``eval('a', g, m)'' calls ``m['a']''.  Grail copies the caller's mapping
+	into the doit's scope, which is indistinguishable from a live read for a
+	plain dict and wrong for every mapping that COMPUTES something: a class
+	with a __getitem__ and no storage behind it, a dict subclass overriding
+	it, one whose keys() is not its contents.  Those were read once, at
+	seeding, through an enumeration they may not even implement.
+
+	Leaving such a mapping UNSEEDED is what makes the live read happen: every
+	name then misses the doit scope, and a miss is what reaches the resolver."
+	self ___requireDictGlobals___: globalsDict.
+	live := (self ___isPlainCopyableMapping___: localsDict)
+		ifTrue: [nil]
+		ifFalse: [self ___requireMappingLocals___: localsDict].
+	"THE GLOBALS ARGUMENT GETS THE SAME TREATMENT.  A dict subclass is a legal
+	globals mapping and may override __getitem__ -- seeding reads the storage
+	behind it and never calls the override, so the mapping's own error never
+	fires (test_exec_globals_error_on_get)."
+	liveGlobals := (self ___isPlainCopyableMapping___: globalsDict)
+		ifTrue: [nil]
+		ifFalse: [globalsDict].
 	scope := SymbolDictionary @env0:new.
-	seeded := self ___seedDoitScope___: scope from: globalsDict.
+	seeded := liveGlobals @env0:isNil
+		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
+		ifFalse: [KeyValueDictionary @env0:new].
 	"Locals on top: a name bound in both resolves to the locals value."
-	(localsDict @env0:== globalsDict) @env0:ifFalse: [
+	((localsDict @env0:== globalsDict) @env0:or: [live @env0:notNil]) @env0:ifFalse: [
 		| globalsOnly |
 		self ___seedDoitScope___: scope from: localsDict.
 		"...but globals() must NOT see them.  The merged scope is the lookup
@@ -329,8 +354,12 @@ _exec: positional kw: kwargs
 	savedPath := CallAst @env0:sourcePath.
 	savedScope := self ___grailDoitScope___.
 	savedBuiltins := self ___grailBuiltinsOverride___.
+	savedLive := self ___grailLiveLocals___.
+	savedLiveGlobals := self ___grailLiveGlobals___.
 	[
 		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
+		self ___grailLiveLocals___: live.
+		self ___grailLiveGlobals___: liveGlobals.
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
@@ -339,7 +368,9 @@ _exec: positional kw: kwargs
 	] @env0:ensure: [
 		CallAst @env0:sourcePath: savedPath.
 		self ___grailDoitScope___: savedScope.
-		self ___grailBuiltinsOverride___: savedBuiltins].
+		self ___grailBuiltinsOverride___: savedBuiltins.
+		self ___grailLiveLocals___: savedLive.
+		self ___grailLiveGlobals___: savedLiveGlobals].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
 	^ None
@@ -374,6 +405,24 @@ ___seedDoitScope___: aScope from: aDict
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___doitLocalsView___: aScope
+	"What ``locals()'' -- and the bare ``dir()'' built on it -- answers inside
+	a doit.
+
+	When exec()/eval() was handed a LIVE locals mapping, it answers THAT
+	OBJECT, not a view of it.  CPython's contract is identity, not contents:
+	``eval('locals()', g, m)'' IS m, and test_general_eval compares it with a
+	mapping that defines no __eq__, so anything but the object itself fails
+	however right its contents are.
+
+	Otherwise the doit's scope, wrapped as a live namespace view, exactly as
+	before."
+
+	^ self ___grailLiveLocals___ @env0:ifNil: [PyModuleDict @env0:on: aScope]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___doitGlobalsView___: aScope
 	"What ``globals()'' answers inside a doit: the globals-only view that
 	_exec:/_eval: parked when they were handed a SEPARATE ``locals'' mapping,
@@ -392,6 +441,26 @@ ___doitGlobalsView___: aScope
 	one mapping, or none -- on exactly the path it was on before."
 
 	^ aScope @env0:at: #'___pyGlobalsView___' otherwise: aScope
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___storeReflected___: value at: pyName into: target
+	"Write one binding the exec'd source produced back into the caller's
+	mapping.
+
+	THROUGH __setitem__ when the mapping is not a plain dict, because that is
+	the only way a mapping's own store can refuse.  CPython's
+	``exec('x=1', frozendict({}))'' raises the frozendict's error; a direct
+	env-0 at:put: writes past the override and the exec succeeds silently,
+	which is a wrong answer rather than a missing feature.
+
+	A plain dict keeps the direct store: it has no __setitem__ of its own to
+	honour, and this runs once per binding for every exec in the corpus."
+
+	(self ___isPlainCopyableMapping___: target)
+		ifTrue: [target @env0:at: pyName put: value]
+		ifFalse: [target @env1:__setitem__: pyName _: value]
 %
 
 category: 'Grail-Built-in Functions'
@@ -441,7 +510,7 @@ ___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: glob
 					@env0:and: [globalNames @env0:includes: pyName @env0:asString @env0:asSymbol])
 					ifTrue: [globalsDict]
 					ifFalse: [targetDict].
-				target @env0:at: pyName put: value]]]
+				self ___storeReflected___: value at: pyName into: target]]]
 %
 
 category: 'Grail-Built-in Functions'
@@ -458,7 +527,8 @@ _eval: positional kw: kwargs
 	walrus bindings (``(x := 5) + 1'') and any other side-effect binding
 	inside the expression land where CPython puts them."
 
-	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins |
+	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins
+	  live savedLive liveGlobals savedLiveGlobals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -551,9 +621,33 @@ _eval: positional kw: kwargs
 	globalsDict @env0:isNil ifTrue: [
 		globalsDict := self ___grailCallerNamespace___].
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
+	"A LOCALS MAPPING GRAIL CANNOT COPY is not seeded -- it is read LIVE.
+	CPython reads the locals argument through __getitem__ as the code runs, so
+	``eval('a', g, m)'' calls ``m['a']''.  Grail copies the caller's mapping
+	into the doit's scope, which is indistinguishable from a live read for a
+	plain dict and wrong for every mapping that COMPUTES something: a class
+	with a __getitem__ and no storage behind it, a dict subclass overriding
+	it, one whose keys() is not its contents.  Those were read once, at
+	seeding, through an enumeration they may not even implement.
+
+	Leaving such a mapping UNSEEDED is what makes the live read happen: every
+	name then misses the doit scope, and a miss is what reaches the resolver."
+	self ___requireDictGlobals___: globalsDict.
+	live := (self ___isPlainCopyableMapping___: localsDict)
+		ifTrue: [nil]
+		ifFalse: [self ___requireMappingLocals___: localsDict].
+	"THE GLOBALS ARGUMENT GETS THE SAME TREATMENT.  A dict subclass is a legal
+	globals mapping and may override __getitem__ -- seeding reads the storage
+	behind it and never calls the override, so the mapping's own error never
+	fires (test_exec_globals_error_on_get)."
+	liveGlobals := (self ___isPlainCopyableMapping___: globalsDict)
+		ifTrue: [nil]
+		ifFalse: [globalsDict].
 	scope := SymbolDictionary @env0:new.
-	seeded := self ___seedDoitScope___: scope from: globalsDict.
-	(localsDict @env0:== globalsDict) @env0:ifFalse: [
+	seeded := liveGlobals @env0:isNil
+		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
+		ifFalse: [KeyValueDictionary @env0:new].
+	((localsDict @env0:== globalsDict) @env0:or: [live @env0:notNil]) @env0:ifFalse: [
 		| globalsOnly |
 		self ___seedDoitScope___: scope from: localsDict.
 		"globals() MUST NOT SEE THE LOCALS.  The scope above is the lookup
@@ -581,14 +675,20 @@ _eval: positional kw: kwargs
 	inner one must not strip the outer one's builtins when it finishes."
 	savedScope := self ___grailDoitScope___.
 	savedBuiltins := self ___grailBuiltinsOverride___.
+	savedLive := self ___grailLiveLocals___.
+	savedLiveGlobals := self ___grailLiveGlobals___.
 	result := [
 		self ___grailDoitScope___: scope.
 		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
+		self ___grailLiveLocals___: live.
+		self ___grailLiveGlobals___: liveGlobals.
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
 			filename: filename
 	] @env0:ensure: [
 		self ___grailDoitScope___: savedScope.
-		self ___grailBuiltinsOverride___: savedBuiltins].
+		self ___grailBuiltinsOverride___: savedBuiltins.
+		self ___grailLiveLocals___: savedLive.
+		self ___grailLiveGlobals___: savedLiveGlobals].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
 %
@@ -849,6 +949,195 @@ category: 'Grail-Built-in Functions'
 method: builtins
 ___grailBuiltinsOverride___: aMappingOrNil
 	SessionTemps @env0:current @env0:at: #'GrailBuiltinsOverride' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveLocals___
+	"The LOCALS MAPPING a running exec()/eval() was handed, when that mapping
+	is one Grail cannot simply copy -- or nil.
+
+	CPython's locals argument may be ANY mapping, and the code reads it
+	through __getitem__ as it runs: ``eval('a', g, m)'' calls ``m['a']''.
+	Grail copies the caller's mapping into the SymbolDictionary the doit is
+	compiled against, which is right for a plain dict -- a copy and a live
+	read cannot be told apart -- and wrong for every mapping that COMPUTES
+	something: a class with a __getitem__ and no storage behind it, a dict
+	subclass that overrides __getitem__, a mapping whose keys() is not its
+	contents.  Those were read once, at seeding, through an enumeration they
+	may not even implement.
+
+	Parked here for the doit's name resolution, locals() and dir() to find.
+	Session-local, saved and restored around each evaluation: the canonical
+	user is a nested one (test_general_eval's SpreadSheet evaluates a cell
+	formula from inside its own __getitem__)."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailLiveLocals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveLocals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailLiveLocals' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveGlobals___
+	"The GLOBALS mapping a running exec()/eval() was handed, when that mapping
+	is one Grail cannot simply copy -- or nil.
+
+	The same story as ___grailLiveLocals___, one argument over.  CPython reads
+	globals through __getitem__ as the code runs too, and a dict SUBCLASS that
+	overrides __getitem__ is a legal globals argument: ``exec(code,
+	setonlydict({'globalname': 1}))'' must raise that mapping's own error when
+	the name is read, and a seeded copy never reads it at all."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailLiveGlobals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveGlobals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailLiveGlobals' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___lookUpInLiveGlobals___: aName ifAbsent: aBlock
+	"Read aName from the parked live globals mapping, or evaluate aBlock.
+	Only KeyError is absorbed -- see ___lookUpInLiveLocals___:ifAbsent:."
+
+	| live |
+	live := self ___grailLiveGlobals___.
+	live @env0:isNil ifTrue: [^ aBlock @env0:value].
+	^ [live @env1:__getitem__: aName @env0:asString]
+		@env0:on: KeyError do: [:ex | ex @env0:return: aBlock @env0:value]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isAbsentMapping___: anObject
+	"True when anObject is not a mapping the caller supplied: Smalltalk nil,
+	or Python's None.
+
+	Both spellings occur.  ``exec(src)'' leaves the argument off and _exec:
+	sees nil; ``exec(src, None)'' passes the None SINGLETON, which is an
+	ordinary object and is nil to nothing.  Every check that asks whether a
+	mapping was given has to accept both, and the second is the one that gets
+	forgotten -- it reads as absent in Python and as present in Smalltalk."
+
+	anObject @env0:isNil ifTrue: [^ true].
+	^ anObject @env0:== None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isPlainCopyableMapping___: anObject
+	"True when seeding from anObject reproduces it exactly, so the copy Grail
+	has always made is indistinguishable from reading it live.
+
+	A plain dict and a module qualify: enumerating them IS their contents.
+	A dict SUBCLASS does not, however ordinary it looks -- it may override
+	__getitem__ or keys(), and the whole point of the tests here is that it
+	does.  Answering false costs a slower path and nothing else; answering
+	true wrongly silently reads the wrong values."
+
+	(self ___isAbsentMapping___: anObject) ifTrue: [^ true].
+	(anObject @env0:isKindOf: module) ifTrue: [^ true].
+	(anObject @env0:isKindOf: PyInstanceDict) ifTrue: [^ true].
+	(anObject @env0:isKindOf: PyModuleDict) ifTrue: [^ true].
+	"EXACTLY ``dict'' -- the class a Python ``{}'' has, which is PyDict, NOT
+	the KeyValueDictionary it inherits from and which nothing Python creates.
+	Testing for the superclass's identity classified every dict as exotic,
+	which is not a subtle mistake: it put the whole corpus on the slow live
+	path, and since an unseeded scope holds nothing, globals() answered
+	empty.  An exact-class test has to name the class Python instantiates."
+	^ (anObject @env0:class @env0:== dict)
+		@env0:or: [anObject @env0:class @env0:== KeyValueDictionary]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___respondsToPythonName___: anObject named: aSymbol
+	"Whether anObject has aSymbol as a Python attribute, answered as a
+	BOOLEAN rather than by raising.
+
+	___pyAttrLoad___: raises AttributeError for a miss, which is the right
+	thing for an attribute READ and the wrong thing for a predicate: the
+	caller here is deciding which TypeError to raise, and letting the probe's
+	own AttributeError escape reports ``'A' object has no attribute 'keys'''
+	where CPython says ``locals must be a mapping''."
+
+	^ [(anObject @env1:___pyAttrLoad___: aSymbol) @env0:notNil]
+		@env0:on: Exception do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireDictGlobals___: anObject
+	"CPython refuses a globals argument that is not a real dict -- a mapping
+	is allowed for LOCALS and not for globals, and the message says so:
+	``globals must be a real dict; try eval(expr, {}, mapping)''.
+
+	A dict SUBCLASS is a real dict and is accepted; test_exec_globals_frozen
+	passes a frozendict as globals and expects the write to raise from its
+	__setitem__, which can only happen if it got that far."
+
+	"NIL OR THE ``None'' SINGLETON.  ``exec(src, None)'' reaches here holding
+	Python's None, not Smalltalk nil -- _exec: tests only for nil, so None
+	arrives as an ordinary argument value.  It means the same thing as a
+	missing argument and must not be refused; what Grail then does with it is
+	a separate, older gap that eval_in_nested_scope.py records as an XFAIL."
+	(self ___isAbsentMapping___: anObject) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: KeyValueDictionary) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: module) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: PyModuleDict) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: PyInstanceDict) ifTrue: [^ anObject].
+	^ TypeError ___signal___:
+		'globals must be a real dict; try eval(expr, {}, mapping)'
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireMappingLocals___: anObject
+	"CPython refuses a locals argument that is not a mapping -- ``eval('a', g,
+	A())'' where A is an ordinary class raises TypeError before a name is
+	looked up.
+
+	__getitem__, NOT keys.  keys is the obvious spelling and it is the wrong
+	one: test_general_eval's SpreadSheet has a __getitem__ and a __setitem__
+	and no keys at all, and CPython evaluates cell formulas against it
+	happily.  keys is required only by dir(), which is a different question
+	asked later.
+
+	ASKED OF THE TYPE, not of the instance.  Grail answers ``obj.__getitem__''
+	with a BoundMethod for ANY object -- there is an inherited implementation
+	behind it -- so an instance probe says yes to everything and this refusal
+	never fires at all.  ``hasattr(type(obj), '__getitem__')'' is the question
+	CPython is really asking, and it is what separates the two classes
+	test_general_eval means to separate."
+
+	(self ___respondsToPythonName___: (anObject @env1:__class__) named: #'__getitem__')
+		ifFalse: [^ TypeError ___signal___: 'locals must be a mapping'].
+	^ anObject
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___lookUpInLiveLocals___: aName ifAbsent: aBlock
+	"Read aName from the parked live locals mapping, or evaluate aBlock.
+
+	Only KeyError is absorbed, for the reason it is everywhere else here: it
+	is the one exception that means ``no such name''.  A mapping that raises
+	something else is saying something, and turning that into a NameError
+	would report the wrong thing (test_exec_globals_error_on_get)."
+
+	| live |
+	live := self ___grailLiveLocals___.
+	live @env0:isNil ifTrue: [^ aBlock @env0:value].
+	^ [live @env1:__getitem__: aName @env0:asString]
+		@env0:on: KeyError do: [:ex | ex @env0:return: aBlock @env0:value]
 %
 
 category: 'Grail-Built-in Functions'
@@ -1235,6 +1524,19 @@ ___dirOfNamespace___: aMapping
 	scope -- so this only has to order the keys.  Sorted because dir() is
 	documented to be, and callers compare the result."
 
+	"A LIVE LOCALS MAPPING IS ASKED FOR ITS keys().  ``list(m)'' iterates a
+	mapping, and an arbitrary one need not be iterable at all -- CPython's
+	dir() calls keys() explicitly, which is why test_general_eval's M can
+	define keys() returning list('xyz') while its __getitem__ knows only 'a'
+	and dir() answers xyz.  The two need not agree, and dir() reports the
+	keys.
+
+	keys() RETURNING A NON-SEQUENCE is CPython's TypeError, raised by trying
+	to build the list from it rather than by a check here, so the message is
+	the one the object's own shape produces."
+	(self ___isPlainCopyableMapping___: aMapping) ifFalse: [
+		(self ___respondsToPythonName___: aMapping named: #'keys') ifTrue: [
+			^ self sorted: (list @env1:__new__: (aMapping @env1:keys))]].
 	^ self sorted: (list @env1:__new__: aMapping)
 %
 

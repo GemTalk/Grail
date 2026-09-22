@@ -175,8 +175,16 @@ __repr__
 	out @env0:nextPutAll: nm @env0:printString.
 	out @env0:nextPutAll: ', loader='.
 	out @env0:nextPutAll: (self @env0:dynamicInstVarAt: #'loader') @env0:printString.
-	(org isNil or: [org == (System myUserProfile symbolList objectNamed: #'None')])
-		ifFalse: [
+	"EVERY SEND HERE IS ENV-QUALIFIED, and the three that were not made this
+	method die rather than answer.  It is compiled in env 1, where
+	``System myUserProfile'' is a MessageNotUnderstood sent to a Metaclass3 --
+	and one Python code cannot catch, so repr() of any spec carrying an origin
+	took the process down.  Every module Grail imports from a file has an
+	origin, so this was every spec but the built-in ones."
+	(org @env0:isNil @env0:or: [
+		org @env0:== (System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: #'None')])
+		@env0:ifFalse: [
 			out @env0:nextPutAll: ', origin='.
 			out @env0:nextPutAll: org @env0:printString].
 	out @env0:nextPutAll: ')'.
