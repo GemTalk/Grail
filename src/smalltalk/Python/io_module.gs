@@ -1050,6 +1050,24 @@ ___renormaliseMode___
 
 category: 'Grail-Opening'
 classmethod: FileIO
+___pathHasNul___: aPath
+	"True when a path argument carries an embedded NUL.
+
+	Asked of BOTH the coerced string and the ORIGINAL argument, because
+	``open(b'a\\x00b')'' arrives as bytes and the coercion turns it into the
+	bytes object's printString, in which the NUL is no longer a NUL.  Checking
+	only the coerced form lets the bytes spelling through, which is the half
+	test_open checks second."
+
+	(aPath @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ aPath @env0:anySatisfy: [:c | c @env0:codePoint @env0:= 0]].
+	(aPath @env0:isKindOf: ByteArray) ifTrue: [
+		^ aPath @env0:includes: 0].
+	^ false
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
 ___open___: fileArg mode: modeArg encoding: encodingArg
 	"Master entry point behind the open() builtin and io.open().
 	Parses the Python mode string, maps it to a GsFile fopen mode
@@ -1069,6 +1087,18 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 		otherwise be opened under whatever its repr-ish text happened to be."
 		file := (os instance) ___fsPath___: file.
 		(file isKindOf: CharacterCollection) ifFalse: [file := file __str__]].
+	"AN EMBEDDED NUL IS A BAD ARGUMENT, not a missing file.  A path cannot
+	hold one -- the OS call takes a NUL-terminated string, so everything after
+	it is silently dropped -- and CPython refuses up front with ``ValueError:
+	embedded null byte''.
+
+	Grail passed it through, and the open then failed as a FileNotFoundError
+	naming a path the caller did not ask for (the truncated one).  Wrong
+	exception for the wrong reason: a caller catching FileNotFoundError to
+	CREATE the file would go on to create it under the truncated name.
+	test_builtin test_open checks the str and the bytes spelling."
+	((FileIO ___pathHasNul___: file) @env0:or: [FileIO ___pathHasNul___: fileArg]) ifTrue: [
+		^ ValueError ___signal___: 'embedded null byte'].
 	mode := (modeArg == nil @env0:or: [modeArg == None]) ifTrue: ['r'] ifFalse: [modeArg].
 	(mode isKindOf: CharacterCollection) ifFalse: [
 		TypeError ___signal___: 'open() argument ''mode'' must be str'].

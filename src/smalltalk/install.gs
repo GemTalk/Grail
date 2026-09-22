@@ -960,6 +960,7 @@ run
 	at: #'IPv6AddressTestCase' put: nil;
 	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
+	at: #'ImportAndOpenArgsTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
 	at: #'IndexTypeErrorNamesTestCase' put: nil;
@@ -2287,6 +2288,7 @@ input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/IndexTypeErrorNamesTestCase.gs
 input src/smalltalk/PythonTests/MapFilterZipPickleTestCase.gs
 input src/smalltalk/PythonTests/ImportErrorTestCase.gs
+input src/smalltalk/PythonTests/ImportAndOpenArgsTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
