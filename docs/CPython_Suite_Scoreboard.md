@@ -85,9 +85,9 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_funcattrs | OK | 35 | 0 | 0 | 4 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 21 | 30 | 15 |  |
+| test.test_builtin | ERROR | 133 | 10 | 20 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
-| test.test_dynamic | ERROR | 11 | 1 | 1 | 0 |  |
+| test.test_dynamic | OK | 11 | 0 | 0 | 2 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
 | test.test_global | OK | 20 | 0 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
@@ -124,8 +124,8 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
-| test.test_xml_etree | CRASH | 0 | 0 | 0 | 0 | topaz exit 1, no result line (see out/cpython/test.test_xml_etree.out) |
-| test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
+| test.test_xml_etree | ERROR | 226 | 14 | 34 | 3 |  |
+| test.test_zipapp | ERROR | 35 | 0 | 11 | 0 |  |
 | test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
