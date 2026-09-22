@@ -1345,6 +1345,24 @@ ___localsOnlyViewExpr___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___importSelectorPrefix___
+	"The builtins selector an ``import'' statement compiles to: the ordinary
+	``___import__'' or, under a ``__builtins__'' override, ``___gatedImport___''.
+
+	Chosen at EMIT TIME rather than checked inside ___import__:kw: so that
+	only an import the exec'd SOURCE wrote is gated.  A check in the shared
+	method also catches Grail's own lazy imports -- raising a NameError inside
+	exec'd code imports ``re'' for the traceback -- and replaces the
+	exception the caller was waiting for with an ImportError about a module
+	the source never mentions."
+
+	^ self ___builtinsAreOverridden___
+		ifTrue: ['___gatedImport___']
+		ifFalse: ['___import__']
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___builtinsAreOverridden___
 	"True while compiling a DOIT whose globals mapping supplied its own
 	``__builtins__''.

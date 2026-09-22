@@ -191,7 +191,9 @@ printSmalltalkOn: aStream
 		rather than the top-level package, which is what an empty
 		fromlist on a dotted name would yield."
 		aStream
-			nextPutAll: 'self @env1:___mergePublicAttrsFrom: (((Python @env0:at: #builtins) instance) ___import__: { ''';
+			nextPutAll: 'self @env1:___mergePublicAttrsFrom: (((Python @env0:at: #builtins) instance) ';
+			nextPutAll: self ___importSelectorPrefix___;
+			nextPutAll: ': { ''';
 			nextPutAll: absoluteName;
 			nextPutAll: '''. nil. nil. { ''*'' }. 0 } kw: nil).'.
 	].
@@ -223,7 +225,9 @@ valueSourceFor: anAlias
 		ifTrue: [
 			"Callable on a converted module — wrap in BoundMethod."
 			stream
-				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) instance) ___import__: { ''';
+				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) instance) ';
+				nextPutAll: self ___importSelectorPrefix___;
+				nextPutAll: ': { ''';
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;
@@ -240,7 +244,9 @@ valueSourceFor: anAlias
 			and a bare unary send would dispatch the env-1 ``auto'' method,
 			returning an integer."
 			stream
-				nextPutAll: '((((Python @env0:at: #builtins) instance) ___import__: { ''';
+				nextPutAll: '((((Python @env0:at: #builtins) instance) ';
+				nextPutAll: self ___importSelectorPrefix___;
+				nextPutAll: ': { ''';
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;

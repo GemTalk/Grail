@@ -247,7 +247,7 @@ _exec: positional kw: kwargs
 	step regardless of how much of the compiler runs."
 
 	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
-	  live savedLive liveGlobals savedLiveGlobals |
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -356,10 +356,14 @@ _exec: positional kw: kwargs
 	savedBuiltins := self ___grailBuiltinsOverride___.
 	savedLive := self ___grailLiveLocals___.
 	savedLiveGlobals := self ___grailLiveGlobals___.
+	savedExecGlobals := self ___grailExecGlobals___.
+	savedExecLocals := self ___grailExecLocals___.
 	[
 		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
 		self ___grailLiveLocals___: live.
 		self ___grailLiveGlobals___: liveGlobals.
+		self ___grailExecGlobals___: globalsDict.
+		self ___grailExecLocals___: localsDict.
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
@@ -370,7 +374,9 @@ _exec: positional kw: kwargs
 		self ___grailDoitScope___: savedScope.
 		self ___grailBuiltinsOverride___: savedBuiltins.
 		self ___grailLiveLocals___: savedLive.
-		self ___grailLiveGlobals___: savedLiveGlobals].
+		self ___grailLiveGlobals___: savedLiveGlobals.
+		self ___grailExecGlobals___: savedExecGlobals.
+		self ___grailExecLocals___: savedExecLocals].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
 	^ None
@@ -528,7 +534,7 @@ _eval: positional kw: kwargs
 	inside the expression land where CPython puts them."
 
 	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins
-	  live savedLive liveGlobals savedLiveGlobals |
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -677,18 +683,24 @@ _eval: positional kw: kwargs
 	savedBuiltins := self ___grailBuiltinsOverride___.
 	savedLive := self ___grailLiveLocals___.
 	savedLiveGlobals := self ___grailLiveGlobals___.
+	savedExecGlobals := self ___grailExecGlobals___.
+	savedExecLocals := self ___grailExecLocals___.
 	result := [
 		self ___grailDoitScope___: scope.
 		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
 		self ___grailLiveLocals___: live.
 		self ___grailLiveGlobals___: liveGlobals.
+		self ___grailExecGlobals___: globalsDict.
+		self ___grailExecLocals___: localsDict.
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
 			filename: filename
 	] @env0:ensure: [
 		self ___grailDoitScope___: savedScope.
 		self ___grailBuiltinsOverride___: savedBuiltins.
 		self ___grailLiveLocals___: savedLive.
-		self ___grailLiveGlobals___: savedLiveGlobals].
+		self ___grailLiveGlobals___: savedLiveGlobals.
+		self ___grailExecGlobals___: savedExecGlobals.
+		self ___grailExecLocals___: savedExecLocals].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
 %
@@ -5397,6 +5409,96 @@ ___importLevelOf___: positional kw: kwargs
 	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'level'])
 		ifTrue: [^ kwargs @env0:at: 'level'].
 	^ 0
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___gatedImport___: positional kw: kwargs
+	"``__import__'' for code running under a ``__builtins__'' OVERRIDE.
+
+	CPython's IMPORT_NAME looks __import__ up in the code's builtins, so an
+	empty mapping forbids importing -- ``ImportError: __import__ not found'' --
+	and a mapping supplying one has THAT called, with the five arguments
+	CPython passes: (name, globals, locals, fromlist, level).
+
+	A SEPARATE METHOD, not a check inside ___import__:kw:, and the difference
+	is not cosmetic.  Putting the check there gates every import issued while
+	an override is installed, including GRAIL'S OWN: raising a NameError
+	inside the exec'd code makes the traceback machinery import ``re'', which
+	then became ``ImportError: __import__ not found'' and replaced the
+	exception the test was waiting for.  Three tests that had been closed
+	regressed that way, all reporting a module the source never mentions.
+
+	ImportAst and ImportFromAst emit this selector in place of the ordinary
+	one when compiling a doit under an override, so it is reached only by an
+	``import'' the exec'd SOURCE wrote."
+
+	| fn |
+	fn := self ___lookUpInBuiltinsOverride___: '__import__'
+		ifAbsent: [^ ImportError ___signal___: '__import__ not found'].
+	^ fn ___pyCallValue___: (self ___importArgsFor___: positional) kw: kwargs
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___importArgsFor___: positional
+	"The five arguments CPython's IMPORT_NAME passes to __import__:
+	(name, globals, locals, fromlist, level).
+
+	Codegen emits only what it needs -- often just the name -- so the rest are
+	filled in here from what the running exec() was handed.  A CUSTOM
+	__import__ is the only caller that can observe them, and it observes them
+	by identity: test_exec_builtins_mapping_import asserts the tuple is
+	``('foo.bar', ns, ns, None, 0)'' with ns the very dict passed to exec()."
+
+	| args g l |
+	g := self ___grailExecGlobals___.
+	l := self ___grailExecLocals___ @env0:ifNil: [g].
+	args := Array @env0:new: 5.
+	args @env0:at: 1 put: (positional @env0:at: 1).
+	args @env0:at: 2 put: (g @env0:ifNil: [None]).
+	args @env0:at: 3 put: (l @env0:ifNil: [None]).
+	args @env0:at: 4 put: ((positional @env0:size @env0:>= 4)
+		ifTrue: [positional @env0:at: 4] ifFalse: [None]).
+	args @env0:at: 5 put: ((positional @env0:size @env0:>= 5)
+		ifTrue: [positional @env0:at: 5] ifFalse: [0]).
+	^ args
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecGlobals___
+	"The globals mapping the running exec()/eval() was GIVEN -- the caller's
+	object, not the doit scope derived from it.
+
+	Distinct from ___grailLiveGlobals___, which is parked only for a mapping
+	Grail cannot copy and drives name RESOLUTION.  This one is parked always
+	and is read by a single caller: a custom __import__ from a __builtins__
+	override, which CPython hands the real mappings and which
+	test_exec_builtins_mapping_import compares by identity."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailExecGlobals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecGlobals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailExecGlobals' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecLocals___
+	"The locals mapping the running exec()/eval() was given -- see
+	___grailExecGlobals___."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailExecLocals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecLocals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailExecLocals' put: aMappingOrNil
 %
 
 category: 'Grail-Built-in Functions'

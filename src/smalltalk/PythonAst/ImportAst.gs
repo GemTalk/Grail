@@ -109,7 +109,9 @@ valueSourceFor: anAlias
 	stream := WriteStream on: String new.
 	walks ifTrue: [stream nextPut: $(].
 	stream
-		nextPutAll: '((Python @env0:at: #builtins) instance) ___import__: { ''';
+		nextPutAll: '((Python @env0:at: #builtins) instance) ';
+		nextPutAll: self ___importSelectorPrefix___;
+		nextPutAll: ': { ''';
 		nextPutAll: importName;
 		nextPutAll: ''' } kw: nil'.
 	walks ifTrue: [
