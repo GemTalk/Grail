@@ -510,13 +510,17 @@ def coroutine(func):
     return wrapper
 
 
-class MappingProxyType:
-    """``MappingProxyType(d)`` returns a read-only view of dict d.
-    Stubbed to just return the dict — Grail's dispatch doesn't
-    distinguish a read-only mapping from a regular one."""
-
-    def __new__(cls, mapping):
-        return mapping
+# CPython's own spelling: the class has no name of its own at module level,
+# so types.py names it by asking for the type of a class's __dict__.
+#
+# This REPLACED a stub that answered the dict unchanged, on the grounds that
+# "Grail's dispatch doesn't distinguish a read-only mapping from a regular
+# one".  That stopped being true when the mappingproxy class was written --
+# ``SomeClass.__dict__`` has been a real proxy for some time -- so the stub
+# was handing back a WRITABLE dict under a name whose entire purpose is that
+# it is read-only, and ``type('A', (), types.MappingProxyType({}))`` was
+# accepted where CPython refuses it (test_builtin test_bad_args).
+MappingProxyType = type(type.__dict__)
 
 
 class SimpleNamespace:

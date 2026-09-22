@@ -977,6 +977,30 @@ __pow__: other
 		not Grail's capacity OverflowError or an IEEE infinity."
 		((self @env0:= 0) and: [other @env0:< 0]) ifTrue: [
 			^ ZeroDivisionError ___signal___: 'zero to a negative power'].
+		"A NEGATIVE BASE TO A NON-INTEGER POWER IS COMPLEX, and float>>__pow__:
+		beside this already knows that -- the angle of a negative real is pi,
+		so the result is |self|**other * (cos + i*sin)(other*pi).  int did not,
+		and GemStone's raisedTo: answers NaN, so the SAME expression gave two
+		different answers depending on how the base was spelled:
+
+		    (-1.0) ** 0.5     (6.123233995736766e-17+1j)
+		    (-1)   ** 0.5     nan
+
+		Deferred to the float method rather than restated here, so the special
+		cases it documents (``(-inf) ** -0.5'' is the real 0.0; pow(x, NAN) is
+		the real NAN, neither going through the complex branch -- C99 F.9.4.4)
+		stay in one place.  Reached only for a negative base with a finite
+		non-integral exponent; every other combination keeps the integer
+		arithmetic below, which is exact where a float would not be.
+
+		test_builtin test_pow."
+		((self @env0:< 0)
+			@env0:and: [(other @env0:isKindOf: Integer) @env0:not
+			@env0:and: [(other @env0:isKindOf: Float)
+			@env0:and: [(((other @env0:_getKind) @env0:== 3)
+				@env0:or: [(other @env0:_getKind) @env0:> 4]) @env0:not
+			@env0:and: [(other @env0:fractionPart) @env0:~= 0]]]]) ifTrue: [
+				^ self @env0:asFloat __pow__: other].
 		^ [ | r |
 			r := self @env0:raisedTo: other.
 			"Python: int ** a NEGATIVE int is a float (``4 ** -3`` == 0.015625),
@@ -1131,13 +1155,23 @@ method: int
 __round__: ndigits
 	"Round to n digits."
 
-	ndigits ifNil: [ ^ self ].
+	"PYTHON None, not Smalltalk nil.  ``round(x, None)'' is defined to mean
+	the same as ``round(x)'', and None is a distinct OBJECT here -- so the
+	bare ``ifNil:'' missed it and fell through to ``None < 0'', an
+	uncatchable-looking TypeError about comparing NoneType with int.  float's
+	__round__: documents this same trap and checks for both; int did not.
+	test_builtin test_bug_27936, which passes None for an int, a float, a
+	Decimal and a Fraction -- and only the int leg failed."
+	((ndigits @env0:== None) or: [ndigits @env0:isNil]) ifTrue: [ ^ self ].
 
 	"If ndigits is negative, round to that many places left of decimal"
 	(ndigits @env0:< 0) ifTrue: [
 		| divisor |
 		divisor := (10 @env0:raisedTo: (ndigits @env0:abs)).
-		^ ((self @env0:/ divisor) @env0:rounded)
+		"TIES TO EVEN here too: ``round(25, -1)'' is 20, not 30.  The quotient
+		is a Fraction, so the helper's exact tie test matters -- see
+		object>>___roundHalfToEven___."
+		^ ((self @env0:/ divisor) @env1:___roundHalfToEven___)
 			@env0:* divisor
 	].
 

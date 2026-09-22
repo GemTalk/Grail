@@ -372,7 +372,29 @@ __dir__
 	their side effects.  unittest.TestLoader.loadTestsFromModule was
 	the first caller to trip over this."
 
-	| names cls |
+	| names cls declared |
+	"CPython's module.__dir__ reads self.__dict__ and REFUSES when it is not a
+	dictionary -- ``class Foo(ModuleType): __dict__ = 8'' is a real shape
+	(test_builtin test_dir builds exactly it) and a module whose __dict__ has
+	been replaced by something else cannot answer for its own names.  Grail
+	ignored __dict__ entirely and enumerated selectors, so it answered a
+	plausible-looking list for a module that is broken.
+
+	Asked of the CLASS ATTRIBUTE rather than of ``self.__dict__'': an ordinary
+	module has no stored __dict__ at all, so ___pyAttrLoad___ falls through to
+	its method-wrap fallback and hands back a CALLABLE -- which is not a
+	dictionary either, so reading it here condemned every module in the
+	corpus and test_builtin could not even be imported.  The shape the test
+	builds puts a real class attribute there (``class Foo(ModuleType):
+	__dict__ = 8''), and ___dynamicClassAttr___ answers nil when none was
+	declared, which is exactly the discrimination needed."
+	declared := [self @env0:class @env1:___dynamicClassAttr___: #'__dict__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(declared @env0:notNil @env0:and: [
+		((declared @env0:isKindOf: AbstractDictionary)
+			@env0:or: [(declared @env0:isKindOf: KeyValueDictionary)
+			@env0:or: [declared @env0:isKindOf: mappingproxy]]) @env0:not]) ifTrue: [
+		^ TypeError ___signal___: '<module>.__dict__ is not a dictionary'].
 	names := Set @env0:new.
 	cls := self @env0:class.
 	self @env0:keysDo: [:k | names @env0:add: k @env0:asString].
@@ -1028,8 +1050,30 @@ ___globalNames___
 	(self @env0:class @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
 		| s index skip |
 		s := sel @env0:asString.
-		skip := ((s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'])
-			@env0:or: [(self @env0:class @env0:categoryOfSelector: sel environmentId: 1) ~~ #'Grail-Methods'].
+		"THE SAME CATEGORY RULE AS __dir__, which EXCLUDES the two artifact
+		categories rather than REQUIRING 'Grail-Methods'.
+
+		Requiring it was too narrow by exactly the modules written in
+		Smalltalk: sys's functions (exit, exc_info, _getframe, ...) are
+		hand-written in a .gs file under their own categories, so they were
+		reported by dir(sys) and by getattr, and NOT by vars(sys) /
+		sys.__dict__ / globals().  CPython's invariant is that those agree --
+		test_builtin test_vars asserts ``set(vars(sys)) == set(dir(sys))'' --
+		and 32 of sys's 82 names were missing from one side.
+
+		Worse than missing: PyModuleDict's __contains__ answers from the
+		attribute chain rather than from this list, so ``'exit' in vars(sys)''
+		was TRUE while ``'exit' in set(vars(sys))'' was False.  A membership
+		test and an enumeration of the same mapping disagreed.
+
+		Nothing changes for a module written in PYTHON: its top-level defs all
+		compile into 'Grail-Methods', which neither rule excludes."
+		skip := (s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'].
+		skip ifFalse: [
+			| cat |
+			cat := self @env0:class @env0:categoryOfSelector: sel environmentId: 1.
+			skip := (cat @env0:= #'Grail-Module Body')
+				@env0:or: [cat @env0:= #'Grail-Initialization']].
 		skip ifFalse: [
 			index := s @env0:indexOf: $:.
 			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].

@@ -1045,7 +1045,12 @@ __round__
 	kind := self @env0:_getKind.
 	(kind @env0:> 4) ifTrue: [ValueError ___signal___: 'cannot convert float NaN to integer'].
 	(kind @env0:== 3) ifTrue: [OverflowError ___signal___: 'cannot convert float infinity to integer'].
-	^ self @env0:rounded
+	"TIES TO EVEN, which ``rounded'' does not do -- see
+	object>>___roundHalfToEven___.  The sibling __round__: below has always
+	been right, by its own exact-rational route, so ``round(2.5)'' answered 3
+	while ``round(2.5, 0)'' answered 2.0: one function, two tie rules,
+	depending on whether the caller passed a second argument."
+	^ self @env1:___roundHalfToEven___
 %
 
 category: 'Grail-Rounding'

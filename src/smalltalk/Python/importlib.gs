@@ -946,7 +946,7 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	    reuses the identity like a dropped one
 	    (docs/Class_Attribute_Single_Home.md)."
 
-	| key reg existing minted |
+	| key reg existing minted supersedesLive |
 	key := aModuleName asString , '.' , aName asString.
 	reg := self ___canonicalClassRegistry___.
 	existing := reg at: key otherwise: nil.
@@ -971,10 +971,462 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 				import.  Idempotent, like the registration itself."
 				self ___registerSubclass___: existing of: aParent.
 				^ existing].
+	"A DECLARED BASE CHANGE is refused (docs/Schema_Evolution_Design.md cut 4).
+	Re-minting strands every persisted instance on the old class, silently:
+	the new class is a different object, the registry forgets the old one, and
+	only the developer can say what should happen to the data.  Three
+	conditions, each measured on 2026-09-21, and the last two are what keep
+	ordinary code importable:
+
+	  - the registry holds a live class for this key that this load has not
+	    already bound, and its superclass is not the one the body just named
+	    (the two tests above, which otherwise fall through to the re-mint);
+	  - the NEW parent is a CANONICAL class.  A computed base is not: ``class
+	    Point(namedtuple('Point', 'x y'))'' builds a fresh local class every
+	    time the body runs, so its subclass has always re-minted on every
+	    rebuild and must keep doing so;
+	  - the new parent was not itself re-minted earlier in this session.  A
+	    re-mint CASCADES -- a subclass of a re-minted class sees a different
+	    parent object under the same name at its own class statement, which is
+	    not a base change of its own.  Measured: Mid(namedtuple(...)) re-mints,
+	    and then Leaf(Mid) does too.
+
+	Measured with the refusal off over the whole CPython corpus: ZERO classes
+	reach this branch with a live previous class, because a module whose source
+	is unchanged binds warm and never enters the build path. The refusal
+	therefore fires on an EDIT, in the session of the developer who made it."
+	(((existing isKindOf: Behavior) and: [(minted includes: key) not])
+		and: [existing superclass ~~ aParent
+		and: [(self ___canonicalClassKnown___: aParent)
+		and: [(self ___remintedThisSession___ includes: aParent) not
+		and: [(self ___baseChangeAllowed___: key) not]]]]) ifTrue: [
+			^ ImportError @env1:___signal___:
+				'class ' , key , ' changed its bases (' ,
+				(existing superclass isNil ifTrue: ['nil'] ifFalse: [existing superclass name asString]) ,
+				' -> ' , (aParent isNil ifTrue: ['nil'] ifFalse: [aParent name asString]) ,
+				'), and its instances are stored against the old class: run ' ,
+				'gemdb.schema.rebase(''' , key , ''') under a clean transaction, or restore the base'].
+	"A re-mint that supersedes a LIVE class is recorded, so the subclasses
+	whose class statements follow are not refused for inheriting the change."
+	supersedesLive := (existing isKindOf: Behavior) and: [(minted includes: key) not].
 	existing := aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames.
+	supersedesLive ifTrue: [self ___remintedThisSession___ add: existing].
 	reg at: key put: existing.
 	minted add: key.
 	^ existing
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___baseChangeAllowed___: aKey
+	"Whether the base-change refusal is lifted for this registry key -- set for
+	the duration of the reload gemdb.schema.rebase drives, and cleared in its
+	ensure: block.  A session-local flag, because the allowance belongs to the
+	one operation that knows what to do with the stranded instances."
+
+	| allowed |
+	allowed := SessionTemps current at: #'GrailBaseChangeAllowed' otherwise: nil.
+	allowed isNil ifTrue: [^ false].
+	^ allowed includes: aKey asString
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___allowBaseChange___: aKey while: aBlock
+	"Run aBlock with the base-change refusal lifted for aKey."
+
+	| st allowed |
+	st := SessionTemps current.
+	allowed := st at: #'GrailBaseChangeAllowed' otherwise: nil.
+	allowed isNil ifTrue: [allowed := Set new. st at: #'GrailBaseChangeAllowed' put: allowed].
+	allowed add: aKey asString.
+	^ aBlock ensure: [allowed remove: aKey asString ifAbsent: []]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRebaseClass___: aKey
+	"Perform the base change the import refuses (docs/Schema_Evolution_Design.md
+	cut 4), moving the data across instead of stranding it.  aKey is
+	``module.Class''.  Answers { classes rebased . instances moved . instances
+	left behind }.  Runs in the CALLER's transaction and does not commit; the
+	Python wrapper owns that, and needs a clean one because the instance
+	enumeration is a repository scan.
+
+	Order, and every step of it is load-bearing:
+
+	  1. capture the instances of the old class AND of every class below it,
+	     each as a NAME -> value map read through its old layout.  Positions
+	     are about to be recomputed from a different parent, so a position is
+	     not a durable way to carry a value across this operation;
+	  2. reload the module with the refusal lifted for this key, which re-mints
+	     the class against its new bases and rebuilds its subclasses;
+	  3. changeClassTo: each captured instance -- the kernel operation Grail
+	     already uses for ``obj.__class__ = C'' (object >> ___pyChangeClassOf:to:),
+	     legal here because every PythonInstance-rooted class has the same
+	     shape: indexable, no named instVars -- and write each captured value
+	     at the position the NEW layout gives its name.
+
+	An instance whose class the reload did NOT re-mint -- a subclass defined in
+	another module, which this reload never reached -- is counted and left
+	alone.  Importing that module is what rebuilds it, and it will be refused
+	in its turn with its own key."
+
+	| reg oldCls modName captured |
+	reg := self ___canonicalClassRegistry___.
+	oldCls := reg at: aKey asString otherwise: nil.
+	(oldCls isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'no canonical class named ' , aKey asString , ' (the name is module.Class)'].
+	modName := self ___grailModulePartOf___: aKey asString.
+	captured := self ___grailCaptureSubtreeOf___: oldCls.
+	self ___allowBaseChange___: aKey asString while: [
+		self ___grailReloadModule___: modName].
+	(reg at: aKey asString otherwise: nil) == oldCls ifTrue: [
+		^ ValueError @env1:___signal___:
+			'the rebuild left ' , aKey asString , ' on the same class: its bases did not change'].
+	^ self ___grailRestoreCaptured___: captured module: modName mapping: nil
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRenameCanonicalClass___: aKey to: newName
+	"Rename a persistent class, moving its instances onto the class the new
+	source defines.  aKey is ``module.OldName'', newName the bare new name.
+	Answers { classes moved . instances moved . instances left behind }.
+
+	Why this is a COMMAND and not a declaration, unlike the attribute rename of
+	cut 3: GemStone 4.0 refuses to rename a class at all -- measured,
+	``illegal attempt to change name of a Module'' from Behavior >> name: with
+	either a String or a Symbol -- so the class object cannot simply be re-keyed
+	and reused under the new name the way a slot position is relabelled.  The
+	new class has to be MINTED by the new source and every instance moved onto
+	it, which is a repository scan that must own its transaction.  That is the
+	same line the rest of this design draws: a declaration does what is free, a
+	command does what writes instances.
+
+	The module is reloaded with the vanished-class refusal lifted -- the old
+	name really has gone from the source, and this is the operation that says
+	what becomes of its data."
+
+	| reg oldCls modName newKey captured result |
+	reg := self ___canonicalClassRegistry___.
+	oldCls := reg at: aKey asString otherwise: nil.
+	(oldCls isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'no canonical class named ' , aKey asString , ' (the name is module.Class)'].
+	(newName asString includes: $.) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'the new name is a bare class name, not a dotted one: ' , newName asString].
+	modName := self ___grailModulePartOf___: aKey asString.
+	newKey := modName , '.' , newName asString.
+	captured := self ___grailCaptureSubtreeOf___: oldCls.
+	self ___allowVanished___: modName while: [
+		self ___grailReloadModule___: modName].
+	((reg at: newKey otherwise: nil) isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'the reloaded source does not define ' , newKey ,
+			': add the renamed class to the module first, then run this'].
+	result := self ___grailRestoreCaptured___: captured module: modName
+		mapping: (Array with: (Array with: oldCls with: (reg at: newKey))).
+	"The old name leaves the schema, or the very next import of this source is
+	refused again for a class whose data has already moved."
+	reg removeKey: aKey asString ifAbsent: [].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		[bag removeAll: (Array with: oldCls)] on: Error do: [:e | e return: nil]].
+	^ result
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailDropCanonicalClass___: aKey
+	"Forget a class the source no longer defines -- but only once nothing is
+	stored against it.  aKey is ``module.Class''.  Answers { classes removed .
+	instances found }.  Runs in the caller's transaction; gemdb.schema.drop_class
+	owns the clean-transaction check and the commit.
+
+	REFUSES while any instance of the class or of its subtree exists, and says
+	how many.  Grail cannot make an object unreachable -- an instance held in
+	gemdb.root, or by another instance, is live data whatever the source says
+	-- so a class with instances stays in the schema until the developer
+	unlinks them.  That is the whole answer to ``references to objects the user
+	does not have in their schema'': the class cannot leave while data still
+	points at it.
+
+	The count comes from a repository SCAN, so it is what the repository holds,
+	not what is reachable: an instance unlinked in an earlier transaction is
+	still there until a garbage collection reclaims it, and the refusal says so
+	rather than looking like a bug.  Reachability is not a question GemStone
+	can answer more cheaply than by collecting."
+
+	| reg cls tree byClass found |
+	reg := self ___canonicalClassRegistry___.
+	cls := reg at: aKey asString otherwise: nil.
+	(cls isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'no canonical class named ' , aKey asString , ' (the name is module.Class)'].
+	tree := cls @env1:___grailSlotSubtree___.
+	byClass := cls @env1:___grailInstancesOf___: tree inMemoryOnly: false.
+	found := 0.
+	tree do: [:c | found := found + (byClass at: c otherwise: #()) size].
+	found > 0 ifTrue: [
+		^ ValueError @env1:___signal___:
+			aKey asString , ' still has ' , found printString ,
+			' instance(s) in the repository, so it cannot leave the schema: ' ,
+			'unlink them (gemdb.root, and whatever else holds them), and if you already ' ,
+			'have, run gemdb.admin.garbage_collect() -- this counts what the repository ' ,
+			'HOLDS, and an unlinked object stays there until it is collected'].
+	reg removeKey: aKey asString ifAbsent: [].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]].
+	^ Array with: 1 with: 0
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailModulePartOf___: aKey
+	"``module.Class'' -> ``module''.  String has no lastIndexOf: here."
+
+	| dot |
+	dot := 0.
+	1 to: aKey size do: [:i | ((aKey at: i) == $.) ifTrue: [dot := i]].
+	dot = 0 ifTrue: [
+		^ ValueError @env1:___signal___:
+			'this takes the dotted name, module.Class, not ' , aKey].
+	^ aKey copyFrom: 1 to: dot - 1
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailReloadModule___: modName
+	"Re-execute a deployed module's body from its source, for the schema
+	commands.  The module instance comes from the canonical registry (it need
+	not be in this session's sys.modules), and reload: is the supported
+	re-execution path."
+
+	| mod |
+	mod := self ___canonicalModules___ at: modName otherwise: nil.
+	mod isNil ifTrue: [mod := (self @env1:modules) at: modName asSymbol otherwise: nil].
+	mod isNil ifTrue: [
+		^ ValueError @env1:___signal___:
+			'module ' , modName , ' is not deployed in this repository, so there is nothing to rebuild it from'].
+	^ (importlib @env1:instance) @env1:reload: mod
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailCaptureSubtreeOf___: aClass
+	"Every instance of aClass and of the classes below it, each as
+	{ instance . its class . { name . value } pairs } read through the layout
+	that class has RIGHT NOW.  Taken before a rebuild, because positions are
+	about to be recomputed and a position is not a durable way to carry a value
+	across one.  A hole contributes nothing."
+
+	| tree byClass captured |
+	tree := aClass @env1:___grailSlotSubtree___.
+	byClass := aClass @env1:___grailInstancesOf___: tree inMemoryOnly: false.
+	captured := OrderedCollection new.
+	tree do: [:c | | lay |
+		lay := (c class whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) isNil
+			ifTrue: [#()]
+			ifFalse: [(c perform: #'___pySlotLayout___' env: 1) asArray].
+		(byClass at: c otherwise: #()) do: [:inst | | vals |
+			vals := OrderedCollection new.
+			lay doWithIndex: [:n :p |
+				((n asString first ~~ $~) and: [p <= inst _basicSize and: [(inst at: p) notNil]])
+					ifTrue: [vals add: (Array with: n asSymbol with: (inst at: p))]].
+			captured add: (Array with: inst with: c with: vals)]].
+	^ captured
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRestoreCaptured___: captured module: modName mapping: explicitOrNil
+	"Put each captured instance on the class that replaced its own and write
+	its values back BY NAME, at whatever position the new layout gives them.
+	explicitOrNil is a list of { oldClass . newClass } pairs for a class whose
+	NAME changed, which cannot be matched by name; everything else is matched
+	by ___grailRebaseTargetFor___:module:.
+
+	A name the new layout has no position for becomes a per-object attribute
+	rather than being dropped -- the same rule a name the class stops assigning
+	follows (cut 1), so a rebuild that also removes an attribute loses nothing
+	silently.  Answers { classes . instances moved . instances left behind }."
+
+	| moved leftBehind classesTouched |
+	moved := 0. leftBehind := 0.
+	classesTouched := IdentitySet new.
+	captured do: [:triple | | inst oldC target lay |
+		inst := triple at: 1.
+		oldC := triple at: 2.
+		target := nil.
+		explicitOrNil isNil ifFalse: [
+			explicitOrNil do: [:pair | (pair at: 1) == oldC ifTrue: [target := pair at: 2]]].
+		target isNil ifTrue: [
+			target := self ___grailRebaseTargetFor___: oldC module: modName].
+		target isNil
+			ifTrue: [leftBehind := leftBehind + 1]
+			ifFalse: [
+				classesTouched add: oldC.
+				inst changeClassTo: target.
+				inst size: 0.
+				lay := (target class whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) isNil
+					ifTrue: [#()]
+					ifFalse: [(target perform: #'___pySlotLayout___' env: 1) asArray].
+				(triple at: 3) do: [:pair | | n v pos |
+					n := pair at: 1. v := pair at: 2.
+					pos := lay indexOf: n.
+					pos > 0
+						ifTrue: [
+							pos > inst _basicSize ifTrue: [inst size: pos].
+							inst at: pos put: v]
+						ifFalse: [inst dynamicInstVarAt: n put: v]].
+				moved := moved + 1]].
+	^ Array with: classesTouched size with: moved with: leftBehind
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRebaseTargetFor___: anOldClass module: modName
+	"The class the reload re-minted in place of anOldClass, or nil when the
+	reload did not reach it (a subclass from another module).  Matched by
+	registry KEY: the old class is gone from the registry, so the key it held
+	is the one whose class now has the same Python name and belongs to the
+	rebuilt module."
+
+	| reg nm prefix hit |
+	reg := self ___canonicalClassRegistry___.
+	nm := anOldClass name asString.
+	prefix := modName asString , '.'.
+	hit := nil.
+	reg keysAndValuesDo: [:k :v | | ks |
+		ks := k asString.
+		((ks size > prefix size and: [(ks copyFrom: 1 to: prefix size) = prefix])
+			and: [(ks copyFrom: prefix size + 1 to: ks size) = nm
+			and: [(v isKindOf: Behavior) and: [v ~~ anOldClass]]]) ifTrue: [hit := v]].
+	^ hit
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___vanishedAllowed___: aModuleName
+	"Whether the vanished-class refusal is lifted for this module -- set for the
+	duration of the reload gemdb.schema.rename_class drives, and cleared in its
+	ensure: block.  The class really has gone from the source; the operation
+	that lifted this is the one moving its instances to the class that replaced
+	it."
+
+	| allowed |
+	allowed := SessionTemps current at: #'GrailVanishedAllowed' otherwise: nil.
+	allowed isNil ifTrue: [^ false].
+	^ allowed includes: aModuleName asString
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___allowVanished___: aModuleName while: aBlock
+	"Run aBlock with the vanished-class refusal lifted for aModuleName."
+
+	| st allowed |
+	st := SessionTemps current.
+	allowed := st at: #'GrailVanishedAllowed' otherwise: nil.
+	allowed isNil ifTrue: [allowed := Set new. st at: #'GrailVanishedAllowed' put: allowed].
+	allowed add: aModuleName asString.
+	^ aBlock ensure: [allowed remove: aModuleName asString ifAbsent: []]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRefuseVanishedClasses___: aModuleName
+	"A class the PREVIOUS deployment of this module defined, and the body that
+	has just run does not, is refused (docs/Schema_Evolution_Design.md cut 4).
+	Forgetting it silently leaves its instances in the repository -- reachable
+	through whatever holds them, named by nothing in the source -- which is the
+	``references to objects the user does not have in their schema'' this cut
+	exists to prevent.
+
+	Detection needs no scan.  The registry is keyed ``module.Class'' and
+	___mintedThisLoad___: holds every key THIS body execution bound (the
+	identity-reuse branch registers as well as the mint branch, which is why it
+	can be read this way).  A key carrying this module's prefix that the run
+	did not bind names a class the source no longer defines.
+
+	The answer is gemdb.schema.drop_class, which succeeds at once when nothing
+	is stored against the class and refuses with a count when something is --
+	or a module-level __renamed__, when the class was renamed rather than
+	removed.
+
+	Skipped when the run bound NOTHING: that is indistinguishable from a
+	registry that is not in play at all, and refusing there would fail an
+	import over a question this method cannot answer."
+
+	| prefix minted reg vanished names |
+	(self ___vanishedAllowed___: aModuleName) ifTrue: [^ self].
+	minted := self ___mintedThisLoad___: aModuleName.
+	minted isEmpty ifTrue: [^ self].
+	prefix := aModuleName asString , '.'.
+	reg := self ___canonicalClassRegistry___.
+	vanished := OrderedCollection new.
+	reg keysAndValuesDo: [:k :v | | ks tail |
+		ks := k asString.
+		(ks size > prefix size and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
+			"The tail must be a bare class name.  A registry key is
+			``<module>.<Class>'', and a SUBMODULE's keys carry this module's
+			name as their prefix too -- ``collections.abc.Awaitable'' begins
+			with ``collections.'' -- so without this every class of every
+			submodule looked as though the package had stopped defining it.
+			Measured the hard way: 103 corpus regressions and 113 suite
+			errors, all of them this one line."
+			tail := ks copyFrom: prefix size + 1 to: ks size.
+			(((tail includes: $.) not and: [(minted includes: ks) not])
+				and: [v isKindOf: Behavior]) ifTrue: [vanished add: ks]]].
+	vanished isEmpty ifTrue: [^ self].
+	names := ''.
+	vanished asSortedCollection do: [:n |
+		names := names isEmpty ifTrue: [n] ifFalse: [names , ', ' , n]].
+	^ ImportError @env1:___signal___:
+		'module ' , aModuleName asString , ' no longer defines ' , names ,
+		', and instances of it stay in the repository: run ' ,
+		'gemdb.schema.drop_class for each (it refuses while any instance exists), ' ,
+		'or gemdb.schema.rename_class when the class was renamed rather than removed'
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___remintedThisSession___
+	"Classes this session RE-MINTED -- minted while a live previous class of the
+	same registry key existed.  Read by the base-change refusal in
+	___canonicalSubclassOf:name:module:instVarNames:classInstVarNames:, because
+	a re-mint cascades: a subclass of a re-minted class sees a different parent
+	object under the same name and is not changing its own bases.
+
+	Session-local and never reset. Suppressing a later refusal about a
+	descendant of a class whose instances are already stranded is the safe
+	direction; a false refusal would make a module un-importable."
+
+	| st set |
+	st := SessionTemps current.
+	set := st at: #'GrailRemintedClasses' otherwise: nil.
+	set isNil ifTrue: [
+		set := IdentitySet new.
+		st at: #'GrailRemintedClasses' put: set].
+	^ set
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalClassKnown___: aClass
+	"Whether aClass is a canonical class -- a module-level class the registry
+	backs, registered by ___canonicalClassRegister___. A class built inside a
+	FUNCTION is not (collections.namedtuple's is the one that matters), and a
+	subclass of one re-mints on every rebuild by construction, so the
+	base-change refusal must not fire for it."
+
+	| set |
+	aClass isNil ifTrue: [^ false].
+	set := UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil.
+	set isNil ifTrue: [^ false].
+	^ set includes: aClass
 %
 
 category: 'Grail-Canonical Classes'
@@ -2333,6 +2785,9 @@ loadModuleFromPath: pathString name: moduleName
 			self ___irPurgeDefTableForModule___: moduleName].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
+	"A class the PREVIOUS deployment defined and this body does not is refused --
+	after the body, because only a completed run knows what it defined."
+	self ___grailRefuseVanishedClasses___: moduleName.
 	self ___syncPersistentState___: moduleInstance.
 	"Session tier (par.10.4): runs on the cold path too, so a module author
 	gets ONE uniform per-session hook regardless of how the session

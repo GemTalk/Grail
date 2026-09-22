@@ -5978,6 +5978,34 @@ for every `with` in the corpus, and nothing moved.
 
 Found through CPython's glob, which lists a directory with exactly
 `contextlib.closing(_iterdir(...))`.
+## A def __new__ under an if in a class body crashed the gem
+
+```python
+class A:
+    if True:
+        def __new__(cls, *args, **kwargs):
+            ...
+```
+
+Uncatchable `ExecBlock does not understand #new`. A def at the TOP of a class
+body compiles to a method; a def inside an `if` is a conditional binding, so it
+reaches `object >> ___classBodyDefinitionalStore___:put:`. That store tested only
+the getter/setter SHAPE, and every class answers both `__new__` and `__new__:` —
+so it read them as an accessor pair and CALLED `object.__new__` with the function
+standing in for the class.
+
+**The gate that knew better already existed.** `___mayDispatchToSetter___:`
+excludes `__new__`, because the one-argument `__new__` takes a CLASS, not a value
+to store; it was added when PEP 702's `@deprecated` failed on the same shape.
+`__setattr__` and `___pyAttrStore___` consult it. This third store never did, and
+the gate's own comment named only the two it knew about — the same "two copies of
+one decision, one of them never updated" that `os.fspath` had.
+
+Narrow, measured: an unconditional `def __new__`, a conditional `def __init__` and
+a conditional ordinary method all worked; only a conditional `__new__` failed.
+
+Found through CPython's pathlib, whose `WindowsPath` defines `__new__` only off
+Windows, so the real pathlib could not be imported at all.
 ## zipfile is CPython's own, and it can write
 
 Started as "`test.test_zipapp` cannot import: no `zipapp`". Vendoring the 231-line

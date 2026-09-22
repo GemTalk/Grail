@@ -974,48 +974,8 @@ __repr__
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: quote.
 	self @env0:do: [:char |
-		| cp |
-		cp := char @env0:codePoint.
-		(cp == quoteCp) ifTrue: [  "the active delimiter -> escaped"
-			stream @env0:nextPutAll: '\'.
-			stream @env0:nextPut: quote.
-		] ifFalse: [ (cp == 92) ifTrue: [  "backslash -> \\"
-			stream @env0:nextPutAll: '\\'.
-		] ifFalse: [ (cp == 10) ifTrue: [  "newline -> \n"
-			stream @env0:nextPutAll: '\n'.
-		] ifFalse: [ (cp == 13) ifTrue: [  "carriage return -> \r"
-			stream @env0:nextPutAll: '\r'.
-		] ifFalse: [ (cp == 9) ifTrue: [  "tab -> \t"
-			stream @env0:nextPutAll: '\t'.
-		] ifFalse: [ ((self ___pyIsPrintableCodePoint___: cp) @env0:not) ifTrue: [
-			"Any NON-PRINTABLE code point -> \xNN / \uNNNN / \UNNNNNNNN, the
-			same three widths CPython's unicode_repr picks by magnitude.
-			This used to test ``cp < 32 or cp = 127'', i.e. ASCII control
-			characters only, so repr() emitted every other non-printable
-			VERBATIM -- unassigned code points, private-use, format
-			characters and the non-ASCII separators
-			(test_format test_str_format: repr('͸') must be the seven
-			characters ''͸'', not a lone undisplayable character).
-
-			Load-bearing beyond conformance: jinja2's compiler embeds
-			template literals via repr(); without escaping the embedded
-			newlines a multi-line template compiles to
-			``yield 'line1<NL>line2''' -- an unterminated string literal
-			that the tokenizer rejects."
-			| hex marker digits |
-			hex := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
-			cp @env0:<= 16rFF
-				ifTrue: [marker := '\x'. digits := 2]
-				ifFalse: [cp @env0:<= 16rFFFF
-					ifTrue: [marker := '\u'. digits := 4]
-					ifFalse: [marker := '\U'. digits := 8]].
-			stream @env0:nextPutAll: marker.
-			[hex @env0:size @env0:< digits] @env0:whileTrue: [hex := '0' @env0:, hex].
-			stream @env0:nextPutAll: hex.
-		] ifFalse: [
-			stream @env0:nextPut: char.
-		]]]]]]
-	].
+		self ___pyReprEscapeCodePoint___: char @env0:codePoint
+			quote: quoteCp on: stream].
 	stream @env0:nextPut: quote.
 	^ stream @env0:contents
 %
@@ -2280,6 +2240,49 @@ isnumeric
 	"Return True if all characters are numeric characters."
 
 	^ self isdecimal
+%
+
+category: 'Grail-String Representation'
+method: CharacterCollection
+___pyReprEscapeCodePoint___: cp quote: quoteCp on: aStream
+	"ONE code point, escaped as repr() escapes it.  Extracted from __repr__ so
+	PyStrSurrogate's own repr can apply the SAME rule.
+
+	A string holding a lone surrogate is a different CLASS in Grail, and its
+	repr was written separately: it emitted every non-surrogate code point
+	VERBATIM.  So a string containing a surrogate came back with a real NUL, a
+	real newline and a real tab in it, where the same string WITHOUT the
+	surrogate escaped all three -- one rule, two implementations, and only one
+	of them maintained.  test_builtin test_ascii is that string.
+
+	A pure function of the code point -- the receiver is not consulted -- but
+	an instance method, because the printability rule it defers to is one.
+
+	The three escape widths are CPython's unicode_repr, picked by magnitude.
+	Non-printable is the Unicode-CATEGORY rule and not ``cp < 32 or cp = 127'':
+	unassigned, private-use, format characters and the non-ASCII separators
+	escape too."
+
+	| hex marker digits |
+	cp @env0:== quoteCp ifTrue: [
+		aStream @env0:nextPutAll: '\'.
+		aStream @env0:nextPut: (Character @env0:codePoint: cp).
+		^ self].
+	cp @env0:== 92 ifTrue: [^ aStream @env0:nextPutAll: '\\'].
+	cp @env0:== 10 ifTrue: [^ aStream @env0:nextPutAll: '\n'].
+	cp @env0:== 13 ifTrue: [^ aStream @env0:nextPutAll: '\r'].
+	cp @env0:== 9 ifTrue: [^ aStream @env0:nextPutAll: '\t'].
+	(self ___pyIsPrintableCodePoint___: cp) ifTrue: [
+		^ aStream @env0:nextPut: (Character @env0:codePoint: cp)].
+	hex := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
+	cp @env0:<= 16rFF
+		ifTrue: [marker := '\x'. digits := 2]
+		ifFalse: [cp @env0:<= 16rFFFF
+			ifTrue: [marker := '\u'. digits := 4]
+			ifFalse: [marker := '\U'. digits := 8]].
+	aStream @env0:nextPutAll: marker.
+	[hex @env0:size @env0:< digits] @env0:whileTrue: [hex := '0' @env0:, hex].
+	^ aStream @env0:nextPutAll: hex
 %
 
 category: 'Grail-String Test Methods'

@@ -15,6 +15,9 @@ effect and always something a person ran by name::
     gemdb.schema.drop(Account, "balance")     # delete an attribute's values
     gemdb.schema.rename(Account, "phone", "phones")
     gemdb.schema.compact(Account)             # reclaim the holes a drop left
+    gemdb.schema.rebase("billing.Account")    # the class changed its bases
+    gemdb.schema.drop_class("billing.Old")    # the class is gone from the source
+    gemdb.schema.rename_class("billing.Person", "Customer")
 
 The model, in one paragraph.  Grail stores an instance's attributes by
 POSITION, from a per-class layout that only ever grows, which is why an
@@ -199,7 +202,90 @@ def compact(cls):
     return {"classes": r[0], "instances": r[1]}
 
 
-__all__ = ["layout", "report", "drop", "rename", "compact"]
+def rebase(name):
+    """Perform the base change an import refuses, for ``"module.Class"``.
+
+    Changing a class's bases is the one edit Grail cannot absorb: the
+    class is rebuilt as a different object, so every instance already in
+    the repository would be left on the old one, reachable only through
+    whatever still holds it.  The import therefore refuses with an
+    ``ImportError`` naming the class and this call.
+
+    This runs the rebuild with that refusal lifted and moves the data
+    across: every instance of the class and of the classes below it is
+    read through its old layout, put on the rebuilt class, and written
+    back at the positions the new layout gives those names.  An attribute
+    the new layout has no position for becomes a per-object attribute
+    rather than being dropped -- the same rule a name the class stops
+    assigning follows.
+
+    Returns ``{"classes", "instances", "left_behind"}``.  ``left_behind``
+    counts instances whose own class this rebuild did not reach -- a
+    subclass defined in another module, which is rebuilt, and refused in
+    its turn, when that module is imported.
+    """
+    _require_clean("rebase")
+    r = _gemstone.repository.schema_rebase(str(name))
+    _gemdb.commit()
+    return {"classes": r[0], "instances": r[1], "left_behind": r[2]}
+
+
+def drop_class(name):
+    """Forget ``"module.Class"``, once nothing is stored against it.
+
+    The companion refusal: a class that was in the previous deployment and
+    is absent from the new source is an ``ImportError`` at import, because
+    silently forgetting it would leave its instances reachable but
+    unnamed.  This is how you say you meant it.
+
+    REFUSES while any instance of the class or of its subtree exists, and
+    says how many.  Grail cannot make an object unreachable -- an instance
+    held in ``gemdb.root``, or by another object, is live data whatever
+    the source says -- so unlink them first.
+
+    The count is what the repository HOLDS, from a scan, not what is
+    reachable: an object you unlinked in an earlier transaction is still
+    there until it is collected, so ``gemdb.admin.garbage_collect()`` may
+    be the step between unlinking and this call.  Returns
+    ``{"classes", "instances"}``.
+    """
+    _require_clean("drop_class")
+    r = _gemstone.repository.schema_drop_class(str(name))
+    _gemdb.commit()
+    return {"classes": r[0], "instances": r[1]}
+
+
+def rename_class(name, new_name):
+    """Rename a persistent class: ``rename_class("billing.Person", "Customer")``.
+
+    A class rename is a COMMAND and not a declaration, unlike the
+    attribute rename of :data:`__renamed__`, and the reason is measured:
+    GemStone refuses to rename a class at all -- *illegal attempt to
+    change name of a Module* -- so the existing class object cannot be
+    reused under the new name the way a slot position is relabelled.  The
+    new class has to be built by the new source and every instance moved
+    onto it, which reads the whole repository and must own its
+    transaction.
+
+    Edit the source first, so the module defines the new name and no
+    longer defines the old one, then run this.  The import of that source
+    refuses in the meantime -- a class that was in the previous
+    deployment and is absent from the new one is an ``ImportError`` --
+    and this call is what the refusal names.
+
+    Values travel by NAME, so a rename that also reorders or drops
+    attributes is safe; anything the new layout has no position for
+    becomes a per-object attribute rather than being lost.  Returns
+    ``{"classes", "instances", "left_behind"}``.
+    """
+    _require_clean("rename_class")
+    r = _gemstone.repository.schema_rename_class(str(name), str(new_name))
+    _gemdb.commit()
+    return {"classes": r[0], "instances": r[1], "left_behind": r[2]}
+
+
+__all__ = ["layout", "report", "drop", "rename", "compact", "rebase",
+           "drop_class", "rename_class"]
 
 # Warm the getattr cache for this module's own names, during the deploy
 # commit, for the reason gemdb/__init__.py warms its own: the getattr path
@@ -213,6 +299,7 @@ __all__ = ["layout", "report", "drop", "rename", "compact"]
 import sys as _sys
 
 _self = _sys.modules[__name__]
-for _name in ("layout", "report", "drop", "rename", "compact", "_require_clean", "_rows"):
+for _name in ("layout", "report", "drop", "rename", "compact", "rebase",
+              "drop_class", "rename_class", "_require_clean", "_rows"):
     getattr(_self, _name)
 del _self, _name, _sys

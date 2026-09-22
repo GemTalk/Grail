@@ -279,6 +279,87 @@ str(res["classes"]) + " " + la + " " + lb + " " + \
 check value: 'compact() frees the hole across the subtree and moves every value'
   value: r = '2 y:zz y:zz:b1 2,3,7'.
 check value: 'compact() committed itself' value: System needsCommit not.
+"8.  __renamed__ -- the declared rename, applied to a class whose instances
+are already committed.  Revision 3 renames y to label and assigns the new
+name; the import relabels the position across the subtree and both committed
+instances answer the new name with nothing moved."
+f := GsFile openWriteOnServer: path.
+f nextPutAll: 'import gemdb
+
+
+class A:
+    __renamed__ = {"y": "label"}
+
+    def __init__(self):
+        self.label = 2
+
+
+class B(A):
+    def __init__(self):
+        super().__init__()
+        self.b1 = 7
+'.
+f close.
+(importlib @env1:modules) removeKey: modName asSymbol ifAbsent: [].
+importlib loadModuleFromPath: path name: modName.
+System commitTransaction ifFalse: [^ self error: 'the revision-3 commit failed'].
+r := evalPython value: '
+import gemdb, gemdb.schema
+A = gemdb.root["grail_schema_A"]
+B = gemdb.root["grail_schema_B"]
+a = gemdb.root["grail_schema_a"]
+b = gemdb.root["grail_schema_b"]
+la = ":".join(r["name"] + "/" + r["kind"] for r in gemdb.schema.layout(A))
+lb = ":".join(r["name"] for r in gemdb.schema.layout(B))
+la + " " + lb + " " + str(a.label) + "," + str(b.label) + " " + str(hasattr(a, "y"))
+'.
+check value: '__renamed__ relabels the committed position across the subtree'
+  value: r = 'label/assigned:zz/unassigned label:zz:b1 2,2 False'.
+noteAndClean value: '__renamed__'.
+
+"The two refusals, each an ImportError naming the class.  Both leave the
+repository as it was -- the import is undone by the abort below, and the
+committed state the earlier steps built is what session 2 reads."
+r := [
+  f := GsFile openWriteOnServer: path.
+  f nextPutAll: 'import gemdb
+
+
+class A:
+    __renamed__ = {"zz": "label"}
+
+    def __init__(self):
+        self.label = 2
+'.
+  f close.
+  (importlib @env1:modules) removeKey: modName asSymbol ifAbsent: [].
+  importlib loadModuleFromPath: path name: modName.
+  'ran']
+    on: ImportError do: [:ex | ex return: 'refused'].
+check value: '__renamed__ into a name that already has a position is refused at import'
+  value: r = 'refused'.
+System abortTransaction.
+
+r := [
+  f := GsFile openWriteOnServer: path.
+  f nextPutAll: 'import gemdb
+
+
+class A:
+    __renamed__ = {"label": "caption"}
+
+    def __init__(self):
+        self.label = 2
+        self.caption = 3
+'.
+  f close.
+  (importlib @env1:modules) removeKey: modName asSymbol ifAbsent: [].
+  importlib loadModuleFromPath: path name: modName.
+  'ran']
+    on: ImportError do: [:ex | ex return: 'refused'].
+check value: '__renamed__ of a name the body still assigns is refused at import'
+  value: r = 'refused'.
+System abortTransaction.
 ] ensure: [
   evalPython value: '
 import gemdb

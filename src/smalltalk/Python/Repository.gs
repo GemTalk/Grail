@@ -139,4 +139,44 @@ schema_report
 	^ object ___grailSchemaReport___
 %
 
+category: 'Grail-Repository Administration'
+method: Repository
+schema_rebase: aName
+	"Python repository.schema_rebase('module.Class') -- perform the base change
+	an import refuses, moving every instance of the class and of its subtree
+	onto the rebuilt class instead of stranding them
+	(importlib class >> ___grailRebaseClass___:; docs/Schema_Evolution_Design.md).
+	gemdb.schema.rebase() wraps it, owns the clean-transaction check and
+	commits.
+
+	A KEYWORD method, so the module-class hazard schema_report's comment
+	describes does not arise here -- nothing performs it by a bare attribute
+	read -- but it stays beside its sibling on the Repository instance so the
+	whole schema surface has one home."
+
+	^ importlib @env0:___grailRebaseClass___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+schema_drop_class: aName
+	"Python repository.schema_drop_class('module.Class') -- forget a class the
+	source no longer defines, but only once nothing is stored against it
+	(importlib class >> ___grailDropCanonicalClass___:).  gemdb.schema.drop_class()
+	wraps it."
+
+	^ importlib @env0:___grailDropCanonicalClass___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+schema_rename_class: aName _: newName
+	"Python repository.schema_rename_class('module.Old', 'New') -- move a
+	renamed class's instances onto the class the new source defines
+	(importlib class >> ___grailRenameCanonicalClass___:to:).
+	gemdb.schema.rename_class() wraps it."
+
+	^ importlib @env0:___grailRenameCanonicalClass___: aName to: newName
+%
+
 set compile_env: 0

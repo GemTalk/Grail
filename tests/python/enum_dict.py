@@ -75,13 +75,18 @@ try:
 except TypeError as e:
     r['member_then_descriptor'] = str(e)
 
-# --- KNOWN GAP, recorded rather than endorsed ------------------------------------
+# --- WAS a known gap; now closed --------------------------------------------
 # CPython's dict.__ior__ mutates in place, so the object stays an EnumDict.
-# Grail's ``|=`` builds a new plain dict, so the tracking is lost.  The value
-# assertion above is what test_enum_dict_standalone checks, and it holds either
-# way; this pins the difference so it is not mistaken for intended behaviour.
+# Grail's ``|=`` built a NEW plain dict and the tracking was lost -- recorded
+# here rather than endorsed, so it would not be mistaken for intended
+# behaviour.
+#
+# The cause turned out to have nothing to do with EnumDict: AugAssignAst
+# emitted the bare BINARY operator for a module-scope target, so ``|=`` never
+# reached __ior__ at all and every mutable type at module scope was replaced
+# rather than mutated.  See augmented_assignment.py.
 
 d6 = EnumDict()
 d6['a'] = 1
 d6 |= {'b': 2}
-r['ior_type_is_a_known_gap'] = type(d6).__name__
+r['ior_keeps_the_class'] = type(d6).__name__

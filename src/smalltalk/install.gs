@@ -658,6 +658,7 @@ run
 	at: #'AugAssignModuleTargetTestCase' put: nil;
 	at: #'AugAssignSliceTargetTestCase' put: nil;
 	at: #'AugmentedBinaryFallbackTestCase' put: nil;
+	at: #'AugmentedAssignmentTestCase' put: nil;
 	at: #'AwaitProtocolTestCase' put: nil;
 	at: #'AwaitablePlumbingTestCase' put: nil;
 	at: #'BareEvalExecScopeTestCase' put: nil;
@@ -714,6 +715,7 @@ run
 	at: #'ClassAttrsTestCase' put: nil;
 	at: #'ClassBodyAugAssignTestCase' put: nil;
 	at: #'ClassBodyClosureCellTestCase' put: nil;
+	at: #'ClassBodyConditionalNewTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
 	at: #'ClassBodyControlFlowTestCase' put: nil;
 	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
@@ -1042,6 +1044,7 @@ run
 	at: #'ModuleAttrCallTestCase' put: nil;
 	at: #'ModuleDocstringTestCase' put: nil;
 	at: #'ModuleSpecTestCase' put: nil;
+	at: #'GlobalsShadowBuiltinTestCase' put: nil;
 	at: #'ModuleCachedAbsentTestCase' put: nil;
 	at: #'ModuleAttrZeroArgCallTestCase' put: nil;
 	at: #'ModuleDictItemTestCase' put: nil;
@@ -1068,6 +1071,7 @@ run
 	at: #'NamespaceNonStringKeyTestCase' put: nil;
 	at: #'NamespacePackageTestCase' put: nil;
 	at: #'NativeStarImportTestCase' put: nil;
+	at: #'ExceptStarReraisePositionTestCase' put: nil;
 	at: #'ClassInMethodLocalClassMethodTestCase' put: nil;
 	at: #'NestedClassInMethodLocalClassTestCase' put: nil;
 	at: #'NestedDefExplicitSuperTestCase' put: nil;
@@ -1125,6 +1129,7 @@ run
 	at: #'PkgRelativeInitTestCase' put: nil;
 	at: #'PlainWithDoesNotAwaitTestCase' put: nil;
 	at: #'PositionalOnlyDefaultsTestCase' put: nil;
+	at: #'PowSemanticsTestCase' put: nil;
 	at: #'PosonlyAndReflectedEqTestCase' put: nil;
 	at: #'PosonlySyntaxAndArityTestCase' put: nil;
 	at: #'PrintOutputRoutingTestCase' put: nil;
@@ -1148,6 +1153,7 @@ run
 	at: #'RaiseSpanTestCase' put: nil;
 	at: #'RaiseTestCase' put: nil;
 	at: #'RandomTestCase' put: nil;
+	at: #'RoundDirFormatTestCase' put: nil;
 	at: #'RangeTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
 	at: #'RawUnicodeEscapeTestCase' put: nil;
@@ -1159,6 +1165,7 @@ run
 	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
 	at: #'ReprAndRangeTestCase' put: nil;
+	at: #'ReprAndVarsTestCase' put: nil;
 	at: #'ReprlibTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
 	at: #'ReservedNameClassAttrTestCase' put: nil;
@@ -1277,6 +1284,7 @@ run
 	at: #'TwilioShapeTestCase' put: nil;
 	at: #'TwilioTier1TestCase' put: nil;
 	at: #'TypeAliasTestCase' put: nil;
+	at: #'TypeThreeArgTestCase' put: nil;
 	at: #'TypeCallMroEntriesTestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
 	at: #'TypeInCallPositionTestCase' put: nil;
@@ -1971,6 +1979,7 @@ input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/AugAssignModuleTargetTestCase.gs
 input src/smalltalk/PythonTests/AugAssignSliceTargetTestCase.gs
 input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
+input src/smalltalk/PythonTests/AugmentedAssignmentTestCase.gs
 input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
 input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
 input src/smalltalk/PythonTests/BareEvalExecScopeTestCase.gs
@@ -2027,6 +2036,7 @@ input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyAugAssignTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyConditionalNewTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyControlFlowTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
@@ -2364,6 +2374,7 @@ input src/smalltalk/PythonTests/MockTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
+input src/smalltalk/PythonTests/GlobalsShadowBuiltinTestCase.gs
 input src/smalltalk/PythonTests/ModuleCachedAbsentTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrZeroArgCallTestCase.gs
@@ -2391,6 +2402,7 @@ input src/smalltalk/PythonTests/NameErrorTestCase.gs
 input src/smalltalk/PythonTests/NamespaceNonStringKeyTestCase.gs
 input src/smalltalk/PythonTests/NamespacePackageTestCase.gs
 input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
+input src/smalltalk/PythonTests/ExceptStarReraisePositionTestCase.gs
 input src/smalltalk/PythonTests/ClassInMethodLocalClassMethodTestCase.gs
 input src/smalltalk/PythonTests/NestedClassInMethodLocalClassTestCase.gs
 input src/smalltalk/PythonTests/NestedDefExplicitSuperTestCase.gs
@@ -2455,6 +2467,7 @@ input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
 input src/smalltalk/PythonTests/PkgRelativeInitTestCase.gs
 input src/smalltalk/PythonTests/PlainWithDoesNotAwaitTestCase.gs
 input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
+input src/smalltalk/PythonTests/PowSemanticsTestCase.gs
 input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
 input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
 input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs
@@ -2477,6 +2490,7 @@ input src/smalltalk/PythonTests/RaiseSemanticsTestCase.gs
 input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
 input src/smalltalk/PythonTests/RaiseTestCase.gs
 input src/smalltalk/PythonTests/RandomTestCase.gs
+input src/smalltalk/PythonTests/RoundDirFormatTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
@@ -2487,6 +2501,7 @@ input src/smalltalk/PythonTests/ReferenceErrorTestCase.gs
 input src/smalltalk/PythonTests/ReModuleTestCase.gs
 input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
 input src/smalltalk/PythonTests/ReprAndRangeTestCase.gs
+input src/smalltalk/PythonTests/ReprAndVarsTestCase.gs
 input src/smalltalk/PythonTests/ReprlibTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
@@ -2608,6 +2623,7 @@ input src/smalltalk/PythonTests/TwilioClientTestCase.gs
 input src/smalltalk/PythonTests/TwilioShapeTestCase.gs
 input src/smalltalk/PythonTests/TwilioTier1TestCase.gs
 input src/smalltalk/PythonTests/TypeAliasTestCase.gs
+input src/smalltalk/PythonTests/TypeThreeArgTestCase.gs
 input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
 input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
