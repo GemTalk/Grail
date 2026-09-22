@@ -1131,13 +1131,23 @@ method: int
 __round__: ndigits
 	"Round to n digits."
 
-	ndigits ifNil: [ ^ self ].
+	"PYTHON None, not Smalltalk nil.  ``round(x, None)'' is defined to mean
+	the same as ``round(x)'', and None is a distinct OBJECT here -- so the
+	bare ``ifNil:'' missed it and fell through to ``None < 0'', an
+	uncatchable-looking TypeError about comparing NoneType with int.  float's
+	__round__: documents this same trap and checks for both; int did not.
+	test_builtin test_bug_27936, which passes None for an int, a float, a
+	Decimal and a Fraction -- and only the int leg failed."
+	((ndigits @env0:== None) or: [ndigits @env0:isNil]) ifTrue: [ ^ self ].
 
 	"If ndigits is negative, round to that many places left of decimal"
 	(ndigits @env0:< 0) ifTrue: [
 		| divisor |
 		divisor := (10 @env0:raisedTo: (ndigits @env0:abs)).
-		^ ((self @env0:/ divisor) @env0:rounded)
+		"TIES TO EVEN here too: ``round(25, -1)'' is 20, not 30.  The quotient
+		is a Fraction, so the helper's exact tie test matters -- see
+		object>>___roundHalfToEven___."
+		^ ((self @env0:/ divisor) @env1:___roundHalfToEven___)
 			@env0:* divisor
 	].
 
