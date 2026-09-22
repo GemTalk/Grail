@@ -50,6 +50,25 @@ enumeratedClassNamed: aString
 		ifNone: [nil]
 %
 
+category: 'Grail-helpers'
+method: PythonClassEnumerationTestCase
+forgetInstanceBindingModule
+
+	self ___forgetCanonicalModule___: 'class_statement_binding_an_instance'.
+	importlib @env1:modules removeKey: #'class_statement_binding_an_instance' ifAbsent: []
+%
+
+category: 'Grail-helpers'
+method: PythonClassEnumerationTestCase
+loadInstanceBindingModule
+	"Cold, so its class statement runs and registers the instance it bound."
+
+	self forgetInstanceBindingModule.
+	importlib
+		loadModuleFromPath: importlib grailDir , '/tests/python/class_statement_binding_an_instance.py'
+		name: 'class_statement_binding_an_instance'
+%
+
 category: 'Grail-Tests-ClassEnumeration'
 method: PythonClassEnumerationTestCase
 test_enumerates_a_module_scope_class
@@ -157,6 +176,32 @@ test_census_sources_do_not_exceed_the_total
 	self assert: (census at: #fromSubclassRegistry) <= total.
 	self assert: (census at: #fromMiRegistry) <= total.
 	self assert: (census at: #fromCanonicalClasses) <= total.
+%
+
+category: 'Grail-Tests-ClassEnumeration'
+method: PythonClassEnumerationTestCase
+test_a_class_statement_that_binds_an_instance_adds_no_instance_to_the_enumeration
+	"A class decorator may bind something that is not a class, and the canonical
+	registry keeps that FINAL object -- CPython's genericpath binds ALLOW_MISSING
+	with ``@object.__new__''.  Every consumer of the enumeration sends its
+	members class messages; ``name'' was the first to fail."
+
+	self loadInstanceBindingModule.
+	self deny: (importlib pythonClasses anySatisfy: [:each | (each isKindOf: Behavior) not])
+%
+
+category: 'Grail-Tests-ClassEnumeration'
+method: PythonClassEnumerationTestCase
+test_the_census_counts_no_instance_a_class_statement_bound
+
+	| canonicalClassesBefore |
+
+	self forgetInstanceBindingModule.
+	canonicalClassesBefore := importlib pythonClassCensus at: #fromCanonicalClasses.
+	self loadInstanceBindingModule.
+	self
+		assert: (importlib pythonClassCensus at: #fromCanonicalClasses)
+		equals: canonicalClassesBefore
 %
 
 category: 'Grail-Tests-ClassEnumeration'
