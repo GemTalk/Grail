@@ -324,6 +324,30 @@ nextSeqFor: aKind
 
 category: 'Grail-parsing'
 classmethod: ModuleAst
+parseSource: sourceString allowTopLevelAwait: allowAwait
+	"parseSource:, with the module body validated as an ASYNC scope when
+	allowAwait is true.
+
+	That is the whole of what PyCF_ALLOW_TOP_LEVEL_AWAIT changes about
+	PARSING: ``await'' at module level is a SyntaxError only because the
+	module is a synchronous scope, and the flag says to treat it as an async
+	one.  The grammar is identical either way.
+
+	The caller still has to decide what to DO with such a module -- Grail runs
+	it by wrapping the source in an async def -- but it cannot decide until it
+	has a tree to look at, which is what this is for."
+
+	| module |
+	allowAwait ifFalse: [^ self parseSource: sourceString].
+	module := PythonParser parse: sourceString.
+	module source isNil ifTrue: [module source: sourceString].
+	AbstractNode ___currentModuleSource___: sourceString.
+	self ___validateAsyncPlacement___: module scope: #async.
+	^ module
+%
+
+category: 'Grail-parsing'
+classmethod: ModuleAst
 parseSource: sourceString
 	"Parse Python source code and return a ModuleAst.
 

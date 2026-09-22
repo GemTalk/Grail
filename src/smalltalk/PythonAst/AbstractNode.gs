@@ -264,6 +264,12 @@ ___hasModuleScopeAwait___
 	((self isKindOf: AwaitAst)
 		or: [(self isKindOf: AsyncForAst) or: [self isKindOf: AsyncWithAst]])
 			ifTrue: [^ true].
+	"``[x async for x in ait]'' AWAITS TOO, and its async-ness is a FLAG on the
+	comprehension clause rather than a node kind -- there is no AsyncForAst in
+	a comprehension.  Without this the three shapes test_compile_top_level_await
+	spells as comprehensions compiled with the coroutine bit clear, so the
+	caller was told to exec code that has to be awaited."
+	((self isKindOf: ComprehensionAst) and: [self is_async = 1]) ifTrue: [^ true].
 	2 to: self class allInstVarNames size do: [:i |
 		| val |
 		val := self instVarAt: i.

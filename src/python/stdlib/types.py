@@ -52,6 +52,33 @@ class _FunctionTypeMeta(type):
         # stay in the tuple for anything that escapes the mapping.
         return type(obj).__name__ in ('function', 'ExecBlock', 'UnboundMethod')
 
+    def __call__(cls, *args, **kwargs):
+        """FunctionType(code, globals) -- a callable built from a code object.
+
+        CPython's function type is constructible, and that is the documented
+        way to run a module compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT: the code
+        object carries CO_COROUTINE, so calling the function it wraps answers a
+        coroutine to drive.  Grail has no bytecode to bind, so the callable
+        re-enters the code object through eval(), which is the same execution
+        path and answers the same thing -- including that coroutine.
+
+        The arguments CPython accepts beyond globals (name, argdefs, closure)
+        describe a binding Grail does not have; they are accepted and ignored
+        rather than refused, because a code object compiled at module level --
+        the only kind this can be handed -- takes no parameters for them to
+        name.  There is no fall-through to ordinary instantiation because
+        CPython has none either: a function is never made any other way."""
+        if len(args) + len(kwargs) < 2:
+            raise TypeError('function expected at least 2 arguments, got %d'
+                            % (len(args) + len(kwargs)))
+        code = args[0] if args else kwargs.get('code')
+        if not isinstance(code, CodeType):
+            raise TypeError('function() arg 1 must be a code object')
+        glb = args[1] if len(args) > 1 else kwargs.get('globals')
+        if not isinstance(glb, dict):
+            raise TypeError('function() arg 2 must be a dict')
+        return lambda *a, **k: eval(code, glb)
+
 
 class FunctionType(metaclass=_FunctionTypeMeta):
     pass
