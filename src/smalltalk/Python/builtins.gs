@@ -996,9 +996,51 @@ chr: anInteger
 category: 'Grail-Built-in Functions'
 method: builtins
 dir: anObject
-	"Python builtin dir(x) — fixed-arity fast path."
+	"Python builtin dir(x) — fixed-arity fast path.
 
-	^ anObject __dir__
+	THE RESULT OF __dir__ IS NOT THE RESULT OF dir().  CPython takes what
+	__dir__ answers, converts it to a LIST and SORTS it, so dir() always
+	answers a sorted list of names whatever the object's own hook returned.
+	Grail handed the hook's value straight back, which cost three things at
+	once (test_builtin test_dir):
+
+	    def __dir__(self): return ('b', 'c', 'a')   dir() -> ('b','c','a')
+	                                                -- a TUPLE, unsorted
+	    def __dir__(self): return {'b', 'c', 'a'}   dir() -> a SET
+	    def __dir__(self): return 7                 dir() -> 7
+
+	The last is the one that matters: dir() is documented to answer a list,
+	so every caller that indexes or sorts the result got an error far from
+	the class that caused it.  CPython raises ``'int' object is not iterable''
+	at the dir() call.
+
+	SORTED ONLY WHEN IT CAN BE, which is a DELIBERATE divergence and not an
+	oversight.  CPython's dir() sorts unconditionally, so a custom __dir__ that
+	mixes non-strings in with strings makes dir() ITSELF raise TypeError.
+	Upstream treats that as a wart -- gh-131001 and gh-139933 were fixed by
+	giving traceback.py a ``_get_safe___dir__'' that calls obj.__dir__()
+	directly, NOT by changing dir() -- and Grail already decided to tolerate
+	it (EllipsisSingletonTestCase testGrailDirDoesNotRaiseOnAnUnsortableDir,
+	which is what caught an earlier draft of this method reintroducing the
+	raise).  Matching CPython here would mean making a working call start
+	raising, for a behaviour upstream itself routes around.
+
+	The ITERATION is not protected, only the sort: a __dir__ that answers
+	something not iterable at all is a different fault, and CPython's
+	``'int' object is not iterable'' is the right report for it."
+
+	| lst iter done sortedArray |
+	lst := list ___new___.
+	iter := anObject __dir__ __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[lst append: iter __next__]
+			@env0:on: StopIteration do: [:ex | done := true]].
+	sortedArray := [lst ___stableSortedArray: nil reverse: false]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	sortedArray @env0:notNil ifTrue: [
+		lst @env0:replaceFrom: 1 to: lst @env0:size with: sortedArray startingAt: 1].
+	^ lst
 %
 
 category: 'Grail-Built-in Functions'
@@ -2699,7 +2741,7 @@ method: builtins
 format: aValue
 	"Python builtin format(value) — defaults to format-spec ''''."
 
-	^ aValue __format__: ''
+	^ self format: aValue _: ''
 %
 
 category: 'Grail-Built-in Functions'
@@ -2714,10 +2756,21 @@ format: aValue _: aFormatSpec
 	``format(1, 2)'' answered ``a SmallInteger does not understand
 	#isEmpty'', an uncatchable Smalltalk error out of a builtin."
 
+	| result |
 	(aFormatSpec @env0:isKindOf: CharacterCollection) ifFalse: [
 		^ TypeError ___signal___: ('format() argument 2 must be str, not '
 			@env0:, (self ___pyArgTypeName___: aFormatSpec))].
-	^ aValue __format__: aFormatSpec
+	"AND SO IS THE RESULT.  __format__ is required to answer a str; CPython
+	checks and raises rather than passing a non-str on to whatever asked for
+	the formatted text.  Grail returned it unchecked, so ``format(x)'' could
+	answer an int -- and the f-string codegen calls straight through here, so
+	``f'{x}''' would then try to concatenate one."
+	result := aValue __format__: aFormatSpec.
+	((result @env0:isKindOf: CharacterCollection)
+		@env0:or: [result @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+		^ TypeError ___signal___: ('__format__ must return a str, not '
+			@env0:, (result ___pyTypeNameForError___) @env0:asString)].
+	^ result
 %
 
 category: 'Grail-Built-in Functions'
@@ -5309,9 +5362,23 @@ _round: positional kw: kwargs
 	handles 2-arg calls and the kwarg form `round(x, ndigits=n)`."
 
 	| number ndigits multiplier |
-	self ___requireArgs___: positional atLeast: 1
-		message: 'round() missing required argument ''number'' (pos 1)'.
-	number := positional @env0:at: 1.
+	"BOTH PARAMETERS ARE NAMEABLE.  ``round(number=-8.0, ndigits=-1)'' is
+	CPython's own spelling and test_round asserts it; Grail read ``ndigits''
+	from the keywords but not ``number'', so the arity check below fired first
+	and reported the argument as missing when it had been supplied by name."
+	((positional @env0:size @env0:= 0)
+		@env0:and: [kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'number']])
+		ifTrue: [number := kwargs @env0:at: 'number']
+		ifFalse: [
+			self ___requireArgs___: positional atLeast: 1
+				message: 'round() missing required argument ''number'' (pos 1)'.
+			number := positional @env0:at: 1].
+	"...and there are at most two.  Extra positionals were silently DROPPED, so
+	``round(1, 2, 3)'' answered 1 rather than raising -- a wrong answer to a
+	call that cannot mean anything."
+	positional @env0:size @env0:> 2 ifTrue: [
+		^ TypeError ___signal___: 'round() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)'].
 	ndigits := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
@@ -5331,17 +5398,31 @@ _round: positional kw: kwargs
 			withArguments: { (ndigits @env0:isNil ifTrue: [{ }] ifFalse: [{ ndigits }]). nil }].
 	((number @env0:class @env0:whichClassIncludesSelector: #'__round__:' environmentId: 1) @env0:notNil)
 		ifTrue: [^ number perform: #'__round__:' env: 1 withArguments: { ndigits }].
-	ndigits ifNil: [^ number @env0:rounded].
+	"NO __round__ ON THE TYPE and not a number either: CPython's message names
+	the type and the method, and Grail fell straight into the arithmetic below
+	-- which MNU'd on ``number * multiplier'' with an UNCATCHABLE ``a
+	TestNoRound does not understand #'*'''.
+
+	The lookups above are on the TYPE (whichClassIncludesSelector:), which is
+	CPython's rule and the point of test_round's last two lines: an INSTANCE
+	attribute named __round__ must not be honoured, so ``t.__round__ = lambda
+	*args: args'' still raises.  Landing in the arithmetic made that raise the
+	wrong exception, uncatchably."
+	(number @env0:isKindOf: Number) ifFalse: [
+		^ TypeError ___signal___: 'type ' @env0:,
+			(number ___pyTypeNameForError___) @env0:asString @env0:,
+			' doesn''t define __round__ method'].
+	ndigits ifNil: [^ number @env1:___roundHalfToEven___].
 	multiplier := 10 @env0:raisedTo: ndigits.
 	"Match CPython: ``round(1.234, 2)'' returns the Float 1.23.
 	Smalltalk's ``Integer / Integer'' returns a Fraction, so divide
 	by the Float form of the multiplier when the input is a Float."
 	^ (number isKindOf: Float)
 		@env0:ifTrue: [
-			((number @env0:* multiplier) @env0:rounded @env0:asFloat)
+			((number @env0:* multiplier) @env1:___roundHalfToEven___ @env0:asFloat)
 				@env0:/ multiplier @env0:asFloat]
 		@env0:ifFalse: [
-			((number @env0:* multiplier) @env0:rounded) @env0:/ multiplier]
+			((number @env0:* multiplier) @env1:___roundHalfToEven___) @env0:/ multiplier]
 %
 
 category: 'Grail-Built-in Functions'

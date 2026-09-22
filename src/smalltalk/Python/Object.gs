@@ -7513,6 +7513,42 @@ ___unboundMethodClosure___: aSym
 				]]]]]]
 %
 
+category: 'Grail-Rounding'
+method: object
+___roundHalfToEven___
+	"The integer nearest the receiver, ties going to the EVEN one -- Python's
+	rule for round(), and not GemStone's.
+
+	``rounded'' is half-away-from-zero, so every site that used it was wrong
+	on exactly the inputs a rounding test checks:
+
+	    round(0.5)      1 where CPython answers 0
+	    round(2.5)      3                       2
+	    round(-0.5)    -1                       0
+	    round(25, -1)  30                      20
+
+	-- a half-unit out, in the direction that makes a long series of roundings
+	drift upward instead of cancelling, which is the whole reason Python picked
+	ties-to-even.
+
+	Receiver is any real number: a Float for ``round(x)'', a Fraction for
+	``round(n, -k)'' (which divides first).  The tie test is ``2 * diff = 1''
+	rather than ``diff = 0.5'' so it stays EXACT for a Fraction -- comparing a
+	Fraction against a Float would coerce, and the coercion is what the
+	exact-arithmetic path in float>>__round__: exists to avoid.
+
+	float>>__round__: (the ndigits form) already rounds correctly by its own
+	exact-rational route; this is for the forms that reached ``rounded''."
+
+	| fl diff twice |
+	fl := self @env0:floor.
+	diff := self @env0:- fl.
+	twice := diff @env0:* 2.
+	twice @env0:> 1 ifTrue: [^ fl @env0:+ 1].
+	twice @env0:< 1 ifTrue: [^ fl].
+	^ fl @env0:even ifTrue: [fl] ifFalse: [fl @env0:+ 1]
+%
+
 category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___requireClassNameString___: aValue for: aSlotName
@@ -8999,9 +9035,8 @@ __dir__
 	Returns an Array of Strings containing all method names for environment 1 (Python).
 	Excludes convenience methods (those starting with ___) that are internal implementation helpers."
 
-	| selectors result myClass strs others |
+	| selectors result myClass strs others walker |
 	myClass := self @env0:class.
-	selectors := (myClass @env0:allSelectorsForEnvironment: 1) @env0:asSet.
 	"A CLASS receiver needs BOTH chains, because Grail splits in two what CPython
 	keeps in one dict.  ``self class'' is the metaclass, which is where a class
 	body's DATA attributes live (``data = 42'' compiles to a data/data: accessor
@@ -9015,8 +9050,67 @@ __dir__
 	the answer is stored -- so the union is the closest reachable thing, and it
 	costs the metaclass's own selectors leaking in.  They leaked in before this
 	change too; what changes is that the class's methods are now there as well."
-	self @env0:isBehavior ifTrue: [
-		selectors @env0:addAll: (self @env0:allSelectorsForEnvironment: 1)].
+	"THE METACLASS CHAIN STOPS BELOW ``Object class''.  Walking all of it
+	dragged in the KERNEL's own class-side protocol, so dir(str) reported
+	seven names CPython does not have and one of them is asserted absent:
+
+	    __mro__  mro  __bases__  __base__  __subclasses__    (on Behavior)
+
+	CPython's type.__dir__ merges cls.__dict__ with each base's and
+	DELIBERATELY omits the metaclass -- ``methods belonging to the metaclass
+	would probably be more confusing than helpful''.  Grail cannot omit the
+	metaclass outright, because a class body's DATA attributes live there
+	(``data = 42'' compiles to a data/data: accessor pair on C class), and
+	that is what the union was for.  But those attributes live on the
+	metaclasses of PYTHON classes -- C class, its bases' metaclasses -- all of
+	which sit BELOW Object class in the chain.  Everything at or above Object
+	class is GemStone's, and none of it is a Python class attribute.
+
+	So the walk keeps what the union was added to keep and drops what it was
+	never meant to include.  test_builtin test_dir asserts __mro__ is absent
+	from dir(str).
+
+	``Object class'' IS INCLUDED, and the boundary sits just above it: that is
+	where object's own CLASS-SIDE Python protocol lives (__new__, __name__,
+	__qualname__), and it belongs to every Python class.  Excluding it dropped
+	__new__ from dir() for Python classes while kernel-backed ones kept their
+	own, so dir(UserDict) stopped being a superset of dir(dict) --
+	DirOfAClassTestCase's regression guard, which is what caught it.  The
+	classes ABOVE it -- Class, Metaclass3, Module, Behavior -- are GemStone's
+	metaclass machinery, and none of it is a Python class attribute.
+
+	Expressed as ``still at or under Object class'' rather than as a list of
+	classes to stop at, so it needs no maintenance if the kernel chain
+	changes."
+	selectors := Set @env0:new.
+	self @env0:isBehavior
+		ifTrue: [
+			walker := myClass.
+			[walker @env0:notNil @env0:and: [
+				(walker @env0:== (Object @env0:class))
+					@env0:or: [walker @env0:inheritsFrom: (Object @env0:class)]]]
+				@env0:whileTrue: [
+					selectors @env0:addAll: (walker @env0:selectorsForEnvironment: 1).
+					walker := walker @env0:superclass].
+			"The class's own env-1 selectors are its METHODS -- the scan above
+			finds only the accessor pairs the metaclass holds, so without this
+			dir(C) answered ``data'' but not ``meth'' while dir(C()) answered
+			both."
+			selectors @env0:addAll: (self @env0:allSelectorsForEnvironment: 1).
+			"TWO NAMES FROM ``Object class'' ARE STILL DROPPED, and by name
+			rather than by where they live, because Object class holds a
+			MIXTURE: __new__ belongs to object and every Python class has it,
+			while __name__ and __qualname__ are what CPython keeps in
+			type.__dict__ -- reachable as attributes, absent from dir().  No
+			class boundary separates them here, so the list does.
+
+			It is a list of two and it is not expected to grow: everything else
+			CPython attributes to type is defined on Behavior, which the walk
+			above already stops short of."
+			selectors @env0:remove: #'__name__' ifAbsent: [nil].
+			selectors @env0:remove: #'__qualname__' ifAbsent: [nil]]
+		ifFalse: [
+			selectors @env0:addAll: (myClass @env0:allSelectorsForEnvironment: 1)].
 	selectors := selectors @env0:asArray.
 	"Filter out convenience methods (starting with ___)"
 	selectors := selectors @env0:reject: [:selector |
