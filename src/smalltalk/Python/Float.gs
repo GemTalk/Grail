@@ -587,10 +587,37 @@ __format__: formatSpec
 
 category: 'Grail-Arithmetic'
 method: float
+___checkedOperand___: other
+	"An arithmetic operand, with an integer too large for a float turned into
+	CPython's OverflowError instead of an infinity.
+
+	GemStone coerces silently, so ``1.0 + 10**1000'' answered inf where CPython
+	raises ``int too large to convert to float''.  An inf is the shape of
+	failure that TRAVELS: it propagates through every later operation and is
+	reported far from the addition that produced it, and sum() is the common
+	way to reach it -- test_builtin test_sum adds a float to 10**1000 and
+	expects the raise.
+
+	float(x) has always raised here (float class >> ___intToFloatChecked___);
+	it was only MIXED ARITHMETIC that coerced, so the same conversion answered
+	two different things depending on whether the caller spelled it out.  This
+	is that method, applied to the operand.
+
+	Only an Integer is checked.  A Fraction or a ScaledDecimal is left to
+	GemStone's own coercion, which is what it was before; widening this is a
+	separate question about those types rather than about int."
+
+	(other @env0:isKindOf: Integer) ifTrue: [
+		^ float ___intToFloatChecked___: other].
+	^ other
+%
+
+category: 'Grail-Arithmetic'
+method: float
 __add__: other
 	"Add two floats or float and other number."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:+ (self ___checkedOperand___: other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
@@ -817,7 +844,7 @@ __floordiv__: other
 
 	| d |
 	d := nil.
-	(other isKindOf: Number) ifTrue: [d := other]
+	(other isKindOf: Number) ifTrue: [d := self ___checkedOperand___: other]
 	ifFalse: [
 		((other @env0:class @env0:methodDictForEnv: 1)
 			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
@@ -906,7 +933,7 @@ __mod__: other
 
 	| d |
 	d := nil.
-	(other isKindOf: Number) ifTrue: [d := other]
+	(other isKindOf: Number) ifTrue: [d := self ___checkedOperand___: other]
 	ifFalse: [
 		((other @env0:class @env0:methodDictForEnv: 1)
 			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
@@ -922,7 +949,7 @@ method: float
 __mul__: other
 	"Multiply two floats or float and other number."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:* (self ___checkedOperand___: other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
@@ -1150,7 +1177,7 @@ method: float
 __sub__: other
 	"Subtract other from self."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:- (other)].
+	(other isKindOf: Number) ifTrue: [^ self @env0:- (self ___checkedOperand___: other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
@@ -1167,7 +1194,7 @@ __truediv__: other
 
 	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 		ZeroDivisionError ___signal___: 'division by zero'].
-	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:/ (self ___checkedOperand___: other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 			| idx |

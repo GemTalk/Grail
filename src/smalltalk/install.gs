@@ -989,6 +989,7 @@ run
 	at: #'InspectSignatureObjectsTestCase' put: nil;
 	at: #'InstanceDocstringTestCase' put: nil;
 	at: #'IntegerTestCase' put: nil;
+	at: #'IntFloatOverflowTestCase' put: nil;
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorLengthHintTestCase' put: nil;
@@ -2311,6 +2312,7 @@ input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
 input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
 input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
+input src/smalltalk/PythonTests/IntFloatOverflowTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
