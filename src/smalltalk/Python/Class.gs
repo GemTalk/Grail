@@ -338,6 +338,30 @@ __subclasses__
 
 category: 'Grail-Reflection'
 method: Behavior
+___grailInheritsStorageOf___: aBase
+	"Whether this class carries aBase's storage -- the test __base__ uses to
+	pick the SOLID BASE out of a declared base list.
+
+	Direct inheritance is not enough, because a scalar built-in is not in any
+	subclass's chain: Grail substitutes AbstractPyInt for int, AbstractPyFloat
+	for float and AbstractPyStr for str, since those kernel classes are sealed.
+	So the substitute is what the chain holds and the declared base is what the
+	caller named."
+
+	| sub |
+	(aBase @env0:isKindOf: Behavior) ifFalse: [^ false].
+	sub := aBase.
+	aBase @env0:== int ifTrue: [sub := AbstractPyInt].
+	aBase @env0:== float ifTrue: [sub := AbstractPyFloat].
+	aBase @env0:== str ifTrue: [
+		"Either str substitute counts; see __base__ for why there are two."
+		^ ((self @env0:== AbstractPyStr) @env0:or: [self @env0:inheritsFrom: AbstractPyStr])
+			@env0:or: [(self @env0:== Unicode32) @env0:or: [self @env0:inheritsFrom: Unicode32]]].
+	^ (self @env0:== sub) @env0:or: [self @env0:inheritsFrom: sub]
+%
+
+category: 'Grail-Reflection'
+method: Behavior
 __base__
 	"Python ``cls.__base__'': the primary (first) base class.  Grail
 	classes are single-inheritance Smalltalk classes, so this is the
@@ -351,13 +375,48 @@ __base__
 	(when it exists) rather than referencing the bare ``None'' symbol
 	(which would be an undefined-symbol compile error here)."
 
-	| s |
+	| s il entry |
+	"A MULTI-BASE CLASS REPORTS ONE OF ITS DECLARED BASES, not the Smalltalk
+	superclass that was chosen to carry its storage.  CPython's __base__ is the
+	SOLID BASE -- the base whose instance layout the class uses -- and for
+	``type('C', (B, int), {})'' that is int.
+
+	__bases__ already reads the MI registry for exactly this reason; __base__
+	did not, so it answered whatever ___selectStorageBase___ picked, which is
+	an internal substitute.  The two disagreed about the same class."
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifFalse: [
+		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
+		entry == nil ifFalse: [
+			| declared |
+			declared := (entry @env0:at: 1) @env0:collect: [:b |
+				b @env0:== PythonInstance @env0:ifTrue: [Object] @env0:ifFalse: [b]].
+			declared @env0:isEmpty @env0:ifFalse: [
+				^ declared
+					@env0:detect: [:b | self ___grailInheritsStorageOf___: b]
+					ifNone: [declared @env0:at: 1]]]].
 	s := self @env0:superclass.
 	"A Python-defined class's Smalltalk superclass is ``PythonInstance'', which
 	is Grail's implementation of the role CPython gives to ``object'' -- so that
 	is the name to report.  See
 	importlib class >> ___withoutImplementationRoots___:for:."
 	s == PythonInstance ifTrue: [^ Object].
+	"AND THE SCALAR SUBSTITUTES ARE INTERNAL TOO.  A Grail subclass of int is
+	rooted at AbstractPyInt -- Integer is sealed and its instances have no room
+	for instance variables -- so ``class D(int): pass'' reported a class whose
+	__name__ prints ``int'' and which IS NOT int.  ``D.__base__ is int'' was
+	False while its repr read ``<class 'int'>'', which is the worst way for a
+	value to be wrong.  __mro__ and __bases__ already hide the general roots;
+	these three are the ones __base__ can reach."
+	s == AbstractPyInt ifTrue: [^ int].
+	s == AbstractPyFloat ifTrue: [^ float].
+	"str has TWO substitutes.  AbstractPyStr is the sealed-kernel stand-in, and
+	___widenStrBase___ widens a str base to Unicode32 so a subclass can hold
+	any code point -- so that is what a ``class E(str)'' is actually rooted at.
+	Neither is a Python-visible type; both print as ``str''."
+	((s @env0:== AbstractPyStr)
+		@env0:or: [(s @env0:== Unicode32) @env0:or: [s @env0:== Unicode16]])
+			ifTrue: [^ str].
 	^ s == nil
 		ifTrue: [System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None']
 		ifFalse: [s]

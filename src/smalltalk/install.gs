@@ -1321,6 +1321,7 @@ run
 	at: #'TwilioClientTestCase' put: nil;
 	at: #'TwilioShapeTestCase' put: nil;
 	at: #'TwilioTier1TestCase' put: nil;
+	at: #'TypeWithScalarMixinTestCase' put: nil;
 	at: #'TypeAliasTestCase' put: nil;
 	at: #'TypeThreeArgTestCase' put: nil;
 	at: #'TypeCallMroEntriesTestCase' put: nil;
@@ -2677,6 +2678,7 @@ input src/smalltalk/PythonTests/TupleTestCase.gs
 input src/smalltalk/PythonTests/TwilioClientTestCase.gs
 input src/smalltalk/PythonTests/TwilioShapeTestCase.gs
 input src/smalltalk/PythonTests/TwilioTier1TestCase.gs
+input src/smalltalk/PythonTests/TypeWithScalarMixinTestCase.gs
 input src/smalltalk/PythonTests/TypeAliasTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgTestCase.gs
 input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
