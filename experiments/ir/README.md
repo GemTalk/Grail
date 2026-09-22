@@ -125,7 +125,8 @@ level (`01_ladder.tpz` rungs 5–6 demonstrate both halves).
 
 These probe scripts test hand-built IR. The *production* path
 (`GRAIL_IR_CODEGEN`, wired into `importlib>>___buildModuleClassBody:name:`) is
-tested two ways, and only the second one needs the flag in your environment.
+tested two ways. Since cut 131 it is ON by default, so neither needs the flag
+set; what needs the variable now is running the TEXT path (`GRAIL_IR_CODEGEN=0`).
 
 ### 1. The targeted class — runs by default, no env var
 
@@ -197,15 +198,19 @@ against the three-shard one: the boards are identical line for line apart from
 the example names, which importlib caps at five per reason per session and which
 are illustrative only.
 
-### 2. The whole-suite sweep — the flag-on differential
+### 2. The whole-suite sweep — the differential against text
 
-With the flag set, every module's eligible top-level defs compile through IR, so
-the whole suite becomes a differential test of IR against text. This is NOT in
-CI; run it by hand:
+With IR on, every module's eligible top-level defs compile through IR, so the
+whole suite becomes a differential test of IR against text. Since cut 131 that
+is simply what `ci.yml` runs, because IR is the default; before it, the IR arm
+ran pre-merge only through `.github/workflows/ir-flag-on.yml` (#1148), which
+sets `GRAIL_IR_CODEGEN=1` explicitly. The arm that now needs asking for is the
+TEXT one. By hand:
 
 ```bash
-./scripts/run_tests.sh                                        # flag-off: the real gate
-GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh   # flag-on sweep
+./scripts/run_tests.sh                                        # IR (the default since cut 131)
+GRAIL_TEST_COLD=1 ./scripts/run_tests.sh                      # IR, cold frameworks
+GRAIL_IR_CODEGEN=0 ./scripts/run_tests.sh                     # the text path, for a comparison
 ```
 
 `GRAIL_TEST_COLD=1` is not optional. `run_tests.sh` normally runs
@@ -216,11 +221,12 @@ image, and the next flag-off run is silently measuring IR code.
 `GRAIL_TEST_COLD=1` skips the deploy, so nothing is committed and each shard
 compiles cold in-session — which also widens the IR surface under test.
 
-Flag-off must be perfectly green; that is the gate. Flag-on has three known
-residuals, all documented in `MIGRATION.md`: the inherent
-`testTheTempsFastPathNeedsNoSource`, PEP 657 column spans for exceptions raised
-inside IR frames, and a `test_recursion_raises_recursion_error` stack-geometry
-flap.
+Both arms must be perfectly green; that is the gate. The recursion checks that
+used to flap under IR on a Mac (`test_recursion_raises_recursion_error`'s
+mutual case, and the private-name recursion) are a GemStone VM defect, Kermit
+52108: `resignalAs:` from the stack-overflow handler can re-trip the limit in
+the INTERPRETER. They are skipped on interpreted gems -- every Darwin arm64 gem
+-- and still run where native code is on, which is what CI runs.
 
 The env var reaches the gem because the runner uses linked topaz (`topaz -lq`),
 so the gem inherits the shell environment; it is registered in the passthrough

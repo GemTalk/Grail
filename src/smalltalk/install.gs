@@ -1001,6 +1001,7 @@ run
 	at: #'HttpCookiesTestCase' put: nil;
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'IPv6AddressTestCase' put: nil;
+	at: #'IRCodegenFlagDefaultTestCase' put: nil;
 	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'IRClassDeferredNonlocalTestCase' put: nil;
 	at: #'IRDefIdStableTestCase' put: nil;
@@ -2425,6 +2426,7 @@ input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IntFloatOverflowTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
+input src/smalltalk/PythonTests/IRCodegenFlagDefaultTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
 input src/smalltalk/PythonTests/IRClassDeferredNonlocalTestCase.gs
 input src/smalltalk/PythonTests/IRDefIdStableTestCase.gs

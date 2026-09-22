@@ -70,6 +70,13 @@ House style is a memoized env-var read — copy
 paired `___Invalidate___` for tests): **`GRAIL_IR_CODEGEN`**, registered in
 the env-var list in `os.gs`.
 
+**Since cut 131 the default is ON and the variable DISABLES the path.** Unset
+or empty means IR; `GRAIL_IR_CODEGEN=0` (or `false` / `no` / `off`, any case)
+means text. `GRAIL_IR_CODEGEN=1` still means what it always did, so nothing
+that sets it needed changing — but the flag-OFF arm of any comparison now has
+to say `GRAIL_IR_CODEGEN=0`, and a script that forgets measures IR twice. That
+failure is quiet: the two arms simply agree.
+
 ## The traceback obligation (part of the first cut, not a follow-up)
 
 Today Python line numbers are *baked into the generated text*: every
