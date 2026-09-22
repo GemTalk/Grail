@@ -2329,6 +2329,27 @@ ___allocateInstance___: positional kw: keywords
 			^ positional @env0:isEmpty
 				ifTrue: [self @env1:__new__]
 				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
+		"StringIO/BytesIO build their ENTIRE content in ``__new__:'' too -- the
+		buffer, the position and the closed flag are all set there, and there
+		is no ``__init__:'' at all -- so a subclass with no __init__ of its own
+		needs the same routing as tuple/bytes above.
+
+		Without it ``class A(io.StringIO): pass; A('x')'' took the generic
+		path, which PREPENDS the class as CPython's implicit-staticmethod
+		``cls'' argument.  Grail's builtin ``__new__:'' classmethods take the
+		VALUE and not a cls, so the two conventions collide: the class itself
+		became the initial value (``A.__new__(A).getvalue()'' answered 'A'),
+		and the no-argument form set no buffer at all -- every method on the
+		instance then read nil and died uncatchably.  Subclassing io.StringIO
+		did not work, which is what test_builtin's test_input_gh130163 does
+		three times over."
+		((self @env0:inheritsFrom: StringIO) @env0:or: [self @env0:inheritsFrom: BytesIO]) ifTrue: [
+			((positional @env0:size @env0:> 1) @env0:and: [(self ___hasUserInit___) @env0:not])
+				ifTrue: [TypeError ___signal___: (self @env0:name @env0:asString
+					@env0:, ' expected at most 1 argument, got ' @env0:, positional @env0:size @env0:printString)].
+			^ positional @env0:isEmpty
+				ifTrue: [self @env1:__new__]
+				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
 		"bytes/bytearray build their ENTIRE content in a classmethod
 		``__new__:'' too (bytes is immutable; Bytearray.gs likewise does
 		the whole copy there -- there is no ``__init__:'' for either), so
