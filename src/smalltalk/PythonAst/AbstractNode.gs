@@ -278,6 +278,55 @@ ___hasModuleScopeAwait___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___collectCodeConstScopesInto___: aCollection
+	"Add to aCollection every node in this subtree that CPython gives its own
+	CODE OBJECT in the enclosing function's co_consts -- a generator
+	expression, a nested def, a lambda -- WITHOUT descending into one.
+
+	Since 3.12 that list is shorter than it used to be: list, set and dict
+	comprehensions are INLINED and no longer appear, so counting them would
+	answer three where CPython answers zero.  Measured on 3.14.6.
+
+	A nested scope is collected but not entered, because its own comprehensions
+	belong to ITS co_consts and not to this one.
+
+	Generic instVar traversal, the same one
+	___collectModuleScopeStarImportsInto___ uses; ``parent'' points UP and is
+	skipped by index."
+
+	((self isKindOf: GeneratorExpAst)
+		or: [(self isKindOf: FunctionDefAst)
+			or: [(self isKindOf: AsyncFunctionDefAst)
+				or: [self isKindOf: LambdaAst]]])
+		ifTrue: [
+			aCollection add: self.
+			^ self].
+	(self isKindOf: ClassDefAst) ifTrue: [^ self].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode)
+			ifTrue: [val ___collectCodeConstScopesInto___: aCollection].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode)
+					ifTrue: [each ___collectCodeConstScopesInto___: aCollection]]]]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___codeConstNameFor___
+	"The ``co_name'' of the code object this node contributes to an enclosing
+	function's co_consts.  CPython names a genexp ``<genexpr>'' and a lambda
+	``<lambda>''; a def is named after itself."
+
+	(self isKindOf: GeneratorExpAst) ifTrue: [^ '<genexpr>'].
+	(self isKindOf: LambdaAst) ifTrue: [^ '<lambda>'].
+	^ [self name asString] on: AbstractException do: [:ex | ex return: '<unknown>']
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___collectModuleScopeStarImportsInto___: aCollection
 	"Add to aCollection every ``from X import *'' statement reachable from
 	this node WITHOUT leaving module scope, in source order.

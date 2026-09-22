@@ -2279,7 +2279,28 @@ classNewSelectorForArity: nargs
 category: 'Grail-Class-Call Fast Path'
 method: CallAst
 printBareCallClassNewOn: aStream selector: aSelector
-	"Emit a class-call fast path:
+	"A class call takes the SAME runtime-globals probe its function siblings
+	take.  CPython's LOAD_GLOBAL reads the module's own globals before
+	builtins, so ``tuple = lambda x: 'tuple''' at module level shadows the type
+	for every call in that module -- and the fixed-arity and varargs builtin
+	paths already probe for exactly that (___moduleGlobalShadowName___).  This
+	one did not, so of ``all(...)'', ``any(...)'' and ``tuple(...)'' the first
+	two honoured the shadow and the third quietly built a real tuple.
+	test_builtin's test_all_any_tuple_optimization overrides all three together
+	and compares the three answers, which is how the odd one out shows."
+
+	| shadow |
+	shadow := self ___moduleGlobalShadowName___.
+	shadow isNil ifTrue: [
+		^ self printBareCallClassNewDirectOn: aStream selector: aSelector].
+	^ self printGlobalShadowProbeOn: aStream name: shadow then: [
+		self printBareCallClassNewDirectOn: aStream selector: aSelector]
+%
+
+category: 'Grail-other'
+method: CallAst
+printBareCallClassNewDirectOn: aStream selector: aSelector
+	"The unconditional class-call fast path -- the then-branch of the probe:
 	  0-arg: `(cls @env1:__new__)`
 	  1-arg: `(cls @env1:__new__: arg)`
 	  N-arg: `(cls @env1:__new__: arg1 _: arg2 _: ...)`

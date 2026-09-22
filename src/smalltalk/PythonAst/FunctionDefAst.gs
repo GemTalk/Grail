@@ -2054,6 +2054,8 @@ emitCodeExtrasOpenOn: aStream nested: isNested
 
 	aStream nextPutAll: '('.
 	(CallAst ___freeVariableNamesFor___: self) isEmpty ifFalse: [
+		aStream nextPutAll: '('].
+	self ___codeConstScopes___ isEmpty ifFalse: [
 		aStream nextPutAll: '(']
 %
 
@@ -2071,11 +2073,59 @@ emitCodeExtrasOn: aStream nested: isNested
 		nextPutAll: (self ___coFlags___: isNested) printString;
 		nextPutAll: ')'.
 	freeNames := CallAst ___freeVariableNamesFor___: self.
-	freeNames isEmpty ifTrue: [^ self].
-	aStream nextPutAll: ' @env0:___setFreevars___: #( '.
-	freeNames do: [:each |
-		aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
-	aStream nextPutAll: '))'
+	freeNames isEmpty ifFalse: [
+		aStream nextPutAll: ' @env0:___setFreevars___: #( '.
+		freeNames do: [:each |
+			aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
+		aStream nextPutAll: '))'].
+	self emitCodeConstsOn: aStream
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeConstsOn: aStream
+	"Cascade this def's co_consts onto the PyCode just emitted: one code object
+	per nested scope CPython gives one.
+
+	Since 3.12 that is a GENERATOR EXPRESSION and a nested def or lambda; list,
+	set and dict comprehensions were INLINED and no longer appear, so counting
+	them would answer three where CPython answers zero.  Grail keeps no
+	constant pool at all, so this is the observable part of co_consts and
+	nothing else -- which is what code actually asks of it: test_builtin's
+	test_all_any_tuple_optimization counts the code objects a genexp leaves, as
+	its way of checking the comprehension was not duplicated."
+
+	| scopes |
+	scopes := self ___codeConstScopes___.
+	scopes isEmpty ifTrue: [^ self].
+	"EVERY SEND IN THE GENERATED TEXT IS ENV-QUALIFIED.  This is emitted into
+	env-1 source, where a bare ``Array with:'' is a MessageNotUnderstood on a
+	Metaclass3.  The result is a TUPLE, which is what co_consts is."
+	aStream nextPutAll: ' @env0:___setConsts___: (tuple @env0:withAll: (Array @env0:with: '.
+	scopes doWithIndex: [:node :i |
+		i > 1 ifTrue: [aStream nextPutAll: ' with: '].
+		aStream nextPutAll: '(PyCode @env0:name: '''.
+		aStream nextPutAll: node ___codeConstNameFor___.
+		aStream nextPutAll: ''' filename: '.
+		self emitSourceFilenameLiteralOn: aStream.
+		aStream nextPutAll: ' firstlineno: '.
+		aStream nextPutAll: node beginLine printString.
+		aStream nextPutAll: ')'].
+	aStream nextPutAll: ')))'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___codeConstScopes___
+	"The nested scopes this def contributes to its own co_consts, in source
+	order.  Capped at four: ``Array with:...'' has no five-argument form, and a
+	function with five genexps in it is not what the count is asked about."
+
+	| found |
+	found := OrderedCollection new.
+	body ifNotNil: [body ___collectCodeConstScopesInto___: found].
+	found size > 4 ifTrue: [^ found copyFrom: 1 to: 4].
+	^ found
 %
 
 category: 'Grail-code generation'
