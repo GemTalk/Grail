@@ -6241,12 +6241,61 @@ class-and-text table that change added.
 
 ### Still open in the same area
 
-* **Twelve raises in `os.gs` (and three in `io`) carry the message but not the
-  errno.** They are spelled `FileNotFoundError ___signal___: '[Errno 2] ...'`:
-  the class and the text are CPython's, but `e.errno`, `e.strerror` and
-  `e.filename` are all `None`. `___signalErrno:filename:` is the one-line fix
-  for each, taken one at a time since each is a separate call site.
+* **Raises in `os.gs` and `io` carried the message but not the errno** — FIXED
+  below.
 * **`OSError(2, 'msg')` still stays an `OSError`** (the pathlib entry above).
   Not done here: it changes the exception constructors every exception shares,
   which is a tier-2 change of its own.
 
+## A failing os call carried no errno
+
+`os.stat`, `os.lstat`, `os.listdir`, `os.symlink`, `os.readlink`, `os.utime`,
+`os.chmod`, `os.remove`, `open()` and `gzip.open()` raised the right `OSError`
+subclass with CPython's message, but built it from the text alone, like this:
+`FileNotFoundError('[Errno 2] No such file or directory: ...')`. So `e.errno`,
+`e.strerror` and `e.filename` were all `None`. Code that reads them got nothing
+back: `except FileNotFoundError as e: missing.add(e.filename)` added `None`, and
+`e.errno == errno.ENOENT` was false for a missing file. `open()` had the same
+problem, because the stat it runs to find out why a file will not open was one
+of these raises.
+
+They now go through `___signalErrno:filename:`, the helper `os.rename` and
+`os.mkdir` use. Three call sites also answered the wrong thing:
+
+* **`os.symlink` named only the link.** CPython names both paths
+  (`[Errno 17] File exists: 'src' -> 'dst'`). It also raised
+  `FileNotFoundError` for a link under a plain file, where CPython raises
+  `NotADirectoryError`. The check before the `ln -s` now uses the same
+  filesystem diagnosis as `os.mkdir`.
+* **`os.readlink` of a path under a file** was `FileNotFoundError`; it is
+  `NotADirectoryError`, the lstat's own errno.
+* **`os.remove` of a path under a file** was `FileNotFoundError` too, and its
+  message had no `[Errno 2]` prefix at all.
+
+`os.strerror(None)` raised a Smalltalk `ArgumentError` from the C callout, and
+Python code cannot catch that. It now raises CPython's `TypeError`, and
+`OverflowError` outside a C int.
+
+`os.utime` and `os.chmod` check afterwards whether the change took, and when it
+did not they raised a plain `OSError` carrying the text "[Errno 1]". That is
+now a real `EPERM`, which is `PermissionError`: CPython's class for the usual
+cause, not owning the file. The shell command reports no status, so a read-only
+filesystem is reported the same way, where CPython would say `EROFS`.
+
+### Still open in the same area
+
+* **`os.chdir`, `os.rmdir`, and `os.remove` of a directory** say
+  `Cannot change directory` / `Cannot remove ...` as a plain `OSError` with no
+  errno. Their primitives answer only nil, so each needs a filesystem diagnosis,
+  like the one `mkdir` has. `os.remove` of a directory is also a platform
+  split: `EPERM` on Darwin and `EISDIR` on Linux.
+* **`subprocess` of a missing program** raises
+  `FileNotFoundError('[Errno 2] ...')` from the text alone. CPython sets
+  `filename` to the program.
+* **The socket layer's errors** use the same one-argument form. Network
+  errnos are numbered differently on Darwin and Linux, so there is no shared
+  table to borrow.
+* **Grail's `shutil.py`** raises `FileExistsError("[Errno 17] File exists: ...")`
+  as a message too.
+* **`OSError(2, 'msg')` still stays an `OSError`** (see the pathlib entry):
+  a tier-2 change to the constructors every exception shares.
