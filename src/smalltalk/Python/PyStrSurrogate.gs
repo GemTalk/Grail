@@ -345,19 +345,44 @@ ___pyRepr___
 	"CPython's repr: printable characters verbatim, a surrogate as \\udXXX.
 	``repr(''a\\udc80b'')'' is ``''a\\udc80b'''' -- lower-case hex, four digits."
 
-	| ws |
+	| ws quote quoteCp hasSingle hasDouble escaper |
+	"THE SAME ESCAPING AS str's repr, through the same method.  This used to
+	emit every non-surrogate code point VERBATIM, so a string holding both a
+	surrogate and a control character came back with a real NUL, a real
+	newline and a real tab in it -- while the same string WITHOUT the
+	surrogate escaped all three, because that one took CharacterCollection's
+	repr instead.  One rule, two implementations, and only one maintained.
+
+	The DELIMITER is chosen the same way too: single quotes unless the string
+	contains a single quote and no double quote, so the delimiter need not be
+	escaped.  This always used a single quote and escaped it.
+
+	``escaper'' is an empty plain string, and the receiver is why it is here:
+	___pyReprEscapeCodePoint___ is a pure function of the code point, but it
+	is an instance method on CharacterCollection (the printability rule it
+	defers to is one), and PyStrSurrogate is not a CharacterCollection.  Held
+	in a temp so the allocation happens once per repr rather than once per
+	character."
+	hasSingle := false.
+	hasDouble := false.
+	codePoints do: [:cp |
+		cp = 39 ifTrue: [hasSingle := true].
+		cp = 34 ifTrue: [hasDouble := true]].
+	quote := (hasSingle and: [hasDouble not]) ifTrue: [$"] ifFalse: [$'].
+	quoteCp := quote codePoint.
+	escaper := Unicode7 new.
 	ws := WriteStream on: Unicode7 new.
-	ws nextPut: $'.
+	ws nextPut: quote.
 	codePoints do: [:cp |
 		(self ___isSurrogate___: cp)
 			ifTrue: [
+				"A lone surrogate is spelled \udXXX whatever its printability
+				-- it has no character to emit."
 				ws nextPutAll: '\u'.
 				ws nextPutAll: (self ___hex4___: cp)]
 			ifFalse: [
-				cp = 39 ifTrue: [ws nextPutAll: '\''']
-				ifFalse: [cp = 92 ifTrue: [ws nextPutAll: '\\']
-				ifFalse: [ws nextPut: (Character codePoint: cp)]]]].
-	ws nextPut: $'.
+				escaper @env1:___pyReprEscapeCodePoint___: cp quote: quoteCp on: ws]].
+	ws nextPut: quote.
 	^ ws contents
 %
 

@@ -3003,6 +3003,28 @@ _filter: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+_vars: positional kw: kwargs
+	"Varargs entry, which exists only to REFUSE -- the same reason _dir: does,
+	and worded the same way CPython words it.  Without it the extra argument
+	fell through to the generic arity dispatcher, whose ``vars() takes wrong
+	number of arguments (2 positional, 0 keyword) - no matching method'' is
+	Grail's phrasing for a MISSING METHOD rather than CPython's for a bad
+	call, and says ``no matching method'' about a builtin that is present.
+
+	The zero-argument vars() is rewritten to locals() at compile time
+	(CallAst), so it does not arrive here."
+
+	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		^ TypeError ___signal___: 'vars() takes no keyword arguments'].
+	(positional @env0:size @env0:> 1) ifTrue: [
+		^ TypeError ___signal___: ('vars expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString)].
+	positional @env0:isEmpty ifTrue: [^ self vars].
+	^ self vars: (positional @env0:at: 1)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 vars: anObject
 	"Python builtin vars(obj) — the instance namespace as a fresh
 	dict: dynamic instVars plus non-nil named instVars (nil means
@@ -3039,6 +3061,23 @@ vars: anObject
 	overlay (object >> ___classDict___)."
 	(anObject isKindOf: Behavior) ifTrue: [
 		^ anObject ___pyAttrLoad___: #'__dict__'].
+	"A TYPE THAT SUPPLIES ITS OWN __dict__ decides the answer, because vars(obj)
+	IS obj.__dict__ in CPython -- not an enumeration that usually agrees with
+	it.  The walk below reads the receiver's instVars, so a class whose
+	__dict__ is a property or any other descriptor was ignored entirely and
+	vars() answered {} while ``obj.__dict__'' answered the property's value.
+
+	    class C:
+	        def getDict(self): return {'a': 2}
+	        __dict__ = property(fget=getDict)
+
+	Gated on the type DECLARING the name, not on the attribute being readable:
+	every object can be asked for __dict__ and ordinary ones fall through
+	___pyAttrLoad___ to a synthesized view or a method wrap, so reading it
+	unconditionally would replace the walk for every receiver -- and hand back
+	a callable for the ones that have no view.  test_builtin test_vars."
+	((anObject @env0:class @env1:___dynamicClassAttr___: #'__dict__') @env0:notNil)
+		ifTrue: [^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |

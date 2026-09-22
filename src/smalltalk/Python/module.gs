@@ -1050,8 +1050,30 @@ ___globalNames___
 	(self @env0:class @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
 		| s index skip |
 		s := sel @env0:asString.
-		skip := ((s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'])
-			@env0:or: [(self @env0:class @env0:categoryOfSelector: sel environmentId: 1) ~~ #'Grail-Methods'].
+		"THE SAME CATEGORY RULE AS __dir__, which EXCLUDES the two artifact
+		categories rather than REQUIRING 'Grail-Methods'.
+
+		Requiring it was too narrow by exactly the modules written in
+		Smalltalk: sys's functions (exit, exc_info, _getframe, ...) are
+		hand-written in a .gs file under their own categories, so they were
+		reported by dir(sys) and by getattr, and NOT by vars(sys) /
+		sys.__dict__ / globals().  CPython's invariant is that those agree --
+		test_builtin test_vars asserts ``set(vars(sys)) == set(dir(sys))'' --
+		and 32 of sys's 82 names were missing from one side.
+
+		Worse than missing: PyModuleDict's __contains__ answers from the
+		attribute chain rather than from this list, so ``'exit' in vars(sys)''
+		was TRUE while ``'exit' in set(vars(sys))'' was False.  A membership
+		test and an enumeration of the same mapping disagreed.
+
+		Nothing changes for a module written in PYTHON: its top-level defs all
+		compile into 'Grail-Methods', which neither rule excludes."
+		skip := (s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'].
+		skip ifFalse: [
+			| cat |
+			cat := self @env0:class @env0:categoryOfSelector: sel environmentId: 1.
+			skip := (cat @env0:= #'Grail-Module Body')
+				@env0:or: [cat @env0:= #'Grail-Initialization']].
 		skip ifFalse: [
 			index := s @env0:indexOf: $:.
 			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].

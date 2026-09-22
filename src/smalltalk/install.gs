@@ -1163,6 +1163,7 @@ run
 	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
 	at: #'ReprAndRangeTestCase' put: nil;
+	at: #'ReprAndVarsTestCase' put: nil;
 	at: #'ReprlibTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
 	at: #'ReservedNameClassAttrTestCase' put: nil;
@@ -2496,6 +2497,7 @@ input src/smalltalk/PythonTests/ReferenceErrorTestCase.gs
 input src/smalltalk/PythonTests/ReModuleTestCase.gs
 input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
 input src/smalltalk/PythonTests/ReprAndRangeTestCase.gs
+input src/smalltalk/PythonTests/ReprAndVarsTestCase.gs
 input src/smalltalk/PythonTests/ReprlibTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
