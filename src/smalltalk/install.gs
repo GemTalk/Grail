@@ -768,6 +768,7 @@ run
 	at: #'ClosureAttributeTestCase' put: nil;
 	at: #'ClosureCellTestCase' put: nil;
 	at: #'ClosureCellsPerActivationTestCase' put: nil;
+	at: #'CoConstsAndShadowedTypeTestCase' put: nil;
 	at: #'CodeFlagsTestCase' put: nil;
 	at: #'CodeFreevarsAndMethodTypeTestCase' put: nil;
 	at: #'CodecNoteCarrierTestCase' put: nil;
@@ -2107,6 +2108,7 @@ input src/smalltalk/PythonTests/CodecNoteCarrierTestCase.gs
 input src/smalltalk/PythonTests/CodecRegistryReachTestCase.gs
 input src/smalltalk/PythonTests/CodecsEscapeHelpersTestCase.gs
 input src/smalltalk/PythonTests/CodecsRegistryTestCase.gs
+input src/smalltalk/PythonTests/CoConstsAndShadowedTypeTestCase.gs
 input src/smalltalk/PythonTests/CodeFlagsTestCase.gs
 input src/smalltalk/PythonTests/CodeFreevarsAndMethodTypeTestCase.gs
 input src/smalltalk/PythonTests/CompileAndEvalArgumentsTestCase.gs

@@ -285,6 +285,25 @@ ___codeKindBits___
 
 category: 'Instance Creation'
 method: PyCode
+___setConsts___: anArray
+	"Record ``co_consts'' and answer self, so the emitters can chain it onto
+	the constructor.
+
+	Grail keeps no constant POOL -- it compiles Python to Smalltalk methods --
+	so what goes in here is the part of co_consts that is OBSERVABLE and
+	stable: one code object per nested scope that CPython gives one.  Since
+	3.12 that is a GENERATOR EXPRESSION and a nested def or lambda; list, set
+	and dict comprehensions were inlined and no longer appear.  Counting them
+	is a real question code asks -- test_builtin's
+	test_all_any_tuple_optimization checks that a genexp leaves exactly one,
+	which is how it verifies the comprehension was not duplicated."
+
+	self dynamicInstVarAt: #'co_consts' put: anArray.
+	^ self
+%
+
+category: 'Instance Creation'
+method: PyCode
 ___setFreevars___: anArrayOfNames
 	"Record this def's FREE VARIABLE names -- the ones CPython reports as
 	``co_freevars'' -- and answer self so the emitters can cascade it onto the
