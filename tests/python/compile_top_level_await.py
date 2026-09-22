@@ -218,5 +218,5 @@ if __name__ == '__main__':
         got = r.get(key)
         want = EXPECTED[key]
         print('%-36s %-10s got=%r want=%r' % (
-            key, 'PASS' if got == want else 'FAIL', got, want))
+            key, 'OK' if got == want else 'FAIL', got, want))
     print(SUMMARY)
