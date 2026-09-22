@@ -771,6 +771,7 @@ run
 	at: #'CodecRegistryReachTestCase' put: nil;
 	at: #'CodecsEscapeHelpersTestCase' put: nil;
 	at: #'CodecsRegistryTestCase' put: nil;
+	at: #'CompileAndEvalArgumentsTestCase' put: nil;
 	at: #'ComparisonBlockingTestCase' put: nil;
 	at: #'ComparisonProtocolTestCase' put: nil;
 	at: #'CompatPickleAndNetrcTestCase' put: nil;
@@ -2097,6 +2098,7 @@ input src/smalltalk/PythonTests/CodecsEscapeHelpersTestCase.gs
 input src/smalltalk/PythonTests/CodecsRegistryTestCase.gs
 input src/smalltalk/PythonTests/CodeFlagsTestCase.gs
 input src/smalltalk/PythonTests/CodeFreevarsAndMethodTypeTestCase.gs
+input src/smalltalk/PythonTests/CompileAndEvalArgumentsTestCase.gs
 input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
 input src/smalltalk/PythonTests/ComparisonProtocolTestCase.gs
 input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs

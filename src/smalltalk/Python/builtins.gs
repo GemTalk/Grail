@@ -251,17 +251,18 @@ _exec: positional kw: kwargs
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
-	"exec() takes source TEXT here.  A PyCode -- what ``f.__code__'' answers --
-	is metadata (name, filename, line, arg counts), not executable code: Grail
-	compiles Python to Smalltalk methods and keeps no bytecode to re-enter.
-	Without this guard the object fell through to the parser and died in a
-	string concatenation with a Smalltalk MessageNotUnderstood, which Python
-	code cannot catch; a TypeError is both catchable and what CPython raises
-	for the case that actually reaches here (a code object carrying free
-	variables -- test_scope testEvalExecFreeVars)."
-	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
-		^ TypeError ___signal___:
-			'exec() arg 1 must be a string; a code object is metadata only in Grail'].
+	"exec() takes source TEXT, in any of the spellings CPython accepts: str,
+	bytes, bytearray or a buffer.  ___sourceTextFor___:what: decodes the
+	byte forms, strips a UTF-8 BOM and raises CPython's own errors for a
+	non-UTF-8 source and for an embedded NUL.
+
+	A PyCode -- what ``f.__code__'' answers -- is metadata (name, filename,
+	line, arg counts), not executable code: Grail compiles Python to Smalltalk
+	methods and keeps no bytecode to re-enter, so it still fails, as the
+	catchable TypeError CPython raises for the case that actually reaches here
+	(a code object carrying free variables -- test_scope
+	testEvalExecFreeVars)."
+	source := self ___sourceTextFor___: source what: 'exec'.
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
@@ -538,11 +539,10 @@ _eval: positional kw: kwargs
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
-	"Source TEXT only -- see the matching guard in _exec: for why a PyCode
-	cannot be evaluated and must fail as a catchable TypeError."
-	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
-		^ TypeError ___signal___:
-			'eval() arg 1 must be a string; a code object is metadata only in Grail'].
+	"Source TEXT, in any spelling CPython accepts -- see the matching call in
+	_exec: for what ___sourceTextFor___:what: does with the byte forms, and
+	for why a PyCode still fails."
+	source := self ___sourceTextFor___: source what: 'eval'.
 	"LEADING WHITESPACE IS STRIPPED, which is eval()'s own rule and not the
 	parser's: ``compile(' 1+1', '<s>', 'eval')'' raises IndentationError, and
 	so does ``exec(' x = 1')''.  The documentation says the source ``will be
@@ -707,6 +707,132 @@ _eval: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___mergeCompileKeywords___: positional kw: kwargs
+	"compile()'s six parameters as one positional array, whichever way the
+	caller spelled them: (source, filename, mode, flags, dont_inherit,
+	optimize).
+
+	Every one has been keyword-able for a long time, and Grail read only
+	positionals -- so ``compile(source='pass', filename='?', mode='exec')''
+	raised ``missing required argument 'source''' about an argument that was
+	right there.
+
+	Supplying one BOTH ways is CPython's TypeError, not a silent preference;
+	test_compile writes that out in full."
+
+	| names args n |
+	kwargs @env0:isNil ifTrue: [^ positional].
+	names := #('source' 'filename' 'mode' 'flags' 'dont_inherit' 'optimize').
+	n := positional @env0:size.
+	1 @env0:to: names @env0:size do: [:i |
+		(kwargs @env0:includesKey: (names @env0:at: i)) ifTrue: [
+			i @env0:<= positional @env0:size ifTrue: [
+				"CPython's own wording for compile(), which is NOT the generic
+				``got multiple values'' text -- it names the position too."
+				^ TypeError ___signal___:
+					'argument for compile() given by name (''' @env0:,
+					(names @env0:at: i) @env0:, ''') and position (' @env0:,
+					i @env0:printString @env0:, ')'].
+			n := n @env0:max: i]].
+	args := Array @env0:new: n.
+	1 @env0:to: n do: [:i |
+		args @env0:at: i put: (i @env0:<= positional @env0:size
+			ifTrue: [positional @env0:at: i]
+			ifFalse: [kwargs @env0:at: (names @env0:at: i) otherwise: nil])].
+	^ args
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___sourceTextFor___: source what: aName
+	"The SOURCE TEXT of a compile()/exec()/eval() argument, or a TypeError.
+
+	CPython accepts str, bytes, bytearray and anything with the buffer
+	protocol -- ``compile(memoryview(b'text'), ...)'' is in test_compile and
+	``eval(b'a', g, l)'' in test_eval.  Grail accepted a str and nothing else,
+	so every bytes source came back as the ``a code object is metadata only''
+	TypeError: a message about the wrong thing entirely, since a bytes source
+	is not a code object and CPython compiles it.
+
+	THREE THINGS A BYTES SOURCE NEEDS, and each is a separate CPython error:
+
+	  * a UTF-8 BOM is STRIPPED.  Python source may carry one and it is not
+	    part of the program;
+	  * bytes that are not UTF-8 are a SyntaxError about the ENCODING, quoting
+	    the first offending byte -- ``b'\xef\xbb' + b'a''', a truncated BOM,
+	    is the case test_eval pins;
+	  * a NUL anywhere is a SyntaxError, in a str source as much as a bytes
+	    one.  Grail let it through to the tokenizer, which reported an
+	    ``Unexpected token'' about a character the message could not print."
+
+	| bytes str |
+	(source @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ self ___rejectNulBytesIn___: source].
+	bytes := nil.
+	(source @env0:isKindOf: ByteArray) ifTrue: [bytes := source].
+	bytes @env0:isNil ifTrue: [
+		"AbstractException, not Python's Exception: an object with no
+		``tobytes'' at all fails with a Smalltalk MessageNotUnderstood, which
+		is not a Python exception and which ``on: Exception'' does not see --
+		so ``eval(())'' died uncatchably instead of raising TypeError."
+		bytes := [source @env1:tobytes]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(bytes @env0:isKindOf: ByteArray) ifFalse: [
+		^ TypeError ___signal___:
+			aName @env0:, '() arg 1 must be a string, bytes or code object'].
+	"The BOM, and only a COMPLETE one."
+	((bytes @env0:size @env0:>= 3)
+		@env0:and: [((bytes @env0:at: 1) @env0:= 239)
+			@env0:and: [((bytes @env0:at: 2) @env0:= 187)
+				@env0:and: [(bytes @env0:at: 3) @env0:= 191]]]) ifTrue: [
+		bytes := bytes @env0:copyFrom: 4 to: bytes @env0:size].
+	str := [bytes @env1:decode]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	str @env0:isNil ifTrue: [
+		^ self ___signalNonUtf8Source___: bytes].
+	^ self ___rejectNulBytesIn___: str @env0:asString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___rejectNulBytesIn___: aString
+	"CPython: ``ValueError''? No -- SyntaxError, and with this exact text.
+	``compile(chr(0), 'f', 'exec')'' is one line of test_compile."
+
+	(aString @env0:includesValue: (Character @env0:codePoint: 0)) ifTrue: [
+		^ SyntaxError ___signal___: 'source code string cannot contain null bytes'].
+	^ aString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___signalNonUtf8Source___: bytes
+	"CPython's decoding error for source, which names the first byte that is
+	not valid UTF-8 and points at PEP 263 -- the encoding-declaration PEP,
+	because declaring one is the fix."
+
+	| bad i |
+	i := 1.
+	bad := 0.
+	[i @env0:<= bytes @env0:size] @env0:whileTrue: [
+		(bytes @env0:at: i) @env0:> 127 ifTrue: [bad := bytes @env0:at: i. i := bytes @env0:size].
+		i := i @env0:+ 1].
+	"WITH A LOCATION, because str(e) prints it: CPython's text ends
+	``(<string>, line 1)'', which comes from the exception's filename and
+	lineno rather than from the message.  A bare ___signal___: leaves both
+	None and the printed form is a character-for-character mismatch."
+	^ SyntaxError @env1:___signalNew___: (Array
+		@env0:with: ('Non-UTF-8 code starting with ''\x' @env0:,
+			(bad @env0:printStringRadix: 16) @env0:asLowercase @env0:,
+			''' on line 1, but no encoding declared; ' @env0:,
+			'see https://peps.python.org/pep-0263/ for details')
+		@env0:with: (tuple @env0:withAll: { '<string>'. 1. None. None. None. None }))
+		kw: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 _compile: positional kw: kwargs
 	"Python builtin compile(source, filename, mode, ...).  Grail has
 	no real bytecode compiler, so the compiled result is the source
@@ -722,10 +848,56 @@ _compile: positional kw: kwargs
 	(test_augassign.test_with_unpacking).  Only strings are parsed; a
 	non-string source (already an AST/code object) is returned as-is."
 
-	| source |
-	self ___requireArgs___: positional atLeast: 1
+	| source args mode |
+	"COMPILE() TAKES ITS ARGUMENTS BY KEYWORD TOO, and all six of them:
+	``compile(source='pass', filename='?', mode='exec')'' and
+	``compile(dont_inherit=False, filename='tmp', source='0', mode='eval')''
+	are both in test_compile.  Only positionals were read, so either form
+	raised ``missing required argument 'source''' about an argument that was
+	right there.  Folded into one positional array here, so everything below
+	sees the same shape whichever way it was written."
+	args := self ___mergeCompileKeywords___: positional kw: kwargs.
+	self ___requireArgs___: args atLeast: 1
 		message: 'compile() missing required argument ''source'' (pos 1)'.
-	source := positional @env0:at: 1.
+	source := args @env0:at: 1.
+	"Bytes, bytearray and buffers are legal sources, and so is a str with no
+	NUL in it -- ___sourceTextFor___:what: is the one place that decides.  A
+	non-string that is none of those falls through untouched, which is what
+	keeps an AST argument working."
+	((source @env0:isKindOf: CharacterCollection)
+		@env0:or: [(source @env0:isKindOf: ByteArray)
+			@env0:or: [source @env0:isKindOf: memoryview]]) ifTrue: [
+		source := self ___sourceTextFor___: source what: 'compile'.
+		args := args @env0:copy.
+		args @env0:at: 1 put: source].
+	"THE MODE IS VALIDATED, and it was not: ``compile(src, '<string>',
+	'badmode')'' answered the source unchanged, so the ValueError CPython
+	raises before doing any work never came and whatever ran next ran under a
+	mode nothing had agreed to."
+	mode := (args @env0:size @env0:>= 3)
+		ifTrue: [(args @env0:at: 3) @env0:asString]
+		ifFalse: ['exec'].
+	(#('exec' 'eval' 'single' 'func_type') @env0:includes: mode) ifFalse: [
+		^ ValueError ___signal___:
+			'compile() mode must be ''exec'', ''eval'' or ''single'''].
+	"AND SO ARE THE FLAGS.  ``compile(src, '<string>', 'single', 0xff)'' is a
+	ValueError in CPython: 0xff is made of CO_ bits, which describe a code
+	object and are not compiler directives.  Only the PyCF_ bits and the
+	__future__ feature bits are accepted, and an unknown one is refused
+	rather than ignored -- ignoring it means the caller asked for a
+	compilation mode and silently did not get it.
+
+	The mask is the PyCF_ constants Grail publishes (ONLY_AST 0x400,
+	TYPE_COMMENTS 0x1000, ALLOW_TOP_LEVEL_AWAIT 0x2000, OPTIMIZED_AST 0x8400)
+	together with the __future__ compiler flags, which occupy the low bits
+	CPython's __future__ module defines."
+	((args @env0:size @env0:>= 4) @env0:and: [(args @env0:at: 4) @env0:isNil @env0:not])
+		ifTrue: [
+			| f |
+			f := args @env0:at: 4.
+			(f @env0:isKindOf: Integer) ifTrue: [
+				((f @env0:bitAnd: 16r3FF) @env0:= 0) ifFalse: [
+					^ ValueError ___signal___: 'compile(): unrecognised flags']]].
 	(source isKindOf: CharacterCollection)
 		ifTrue: [
 			[ModuleAst @env0:parseSource: source]
@@ -771,8 +943,8 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 	in practice by how many distinct sources a session compiles."
 	(source isKindOf: CharacterCollection) ifTrue: [
 		| copy mode |
-		mode := (positional @env0:size @env0:>= 3)
-			ifTrue: [(positional @env0:at: 3) @env0:asString @env0:asSymbol]
+		mode := (args @env0:size @env0:>= 3)
+			ifTrue: [(args @env0:at: 3) @env0:asString @env0:asSymbol]
 			ifFalse: [#'exec'].
 		copy := source @env0:copy.
 		self ___grailCompiledModeRegistry___ @env0:at: copy put: mode.
@@ -782,9 +954,9 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 		of them reported '<grail>' where CPython reports whatever the caller
 		passed -- test_traceback's test_exception_angle_bracketed_filename
 		compiles under '<does not exist>' and asserts it comes back."
-		(positional @env0:size @env0:>= 2) ifTrue: [
+		(args @env0:size @env0:>= 2) ifTrue: [
 			| fn |
-			fn := positional @env0:at: 2.
+			fn := args @env0:at: 2.
 			(fn @env0:isKindOf: CharacterCollection) ifTrue: [
 				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fn @env0:asString]].
 		^ copy].
