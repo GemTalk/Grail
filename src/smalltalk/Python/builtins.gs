@@ -4883,9 +4883,55 @@ ___import__: positional kw: kwargs
 	to the name and appends `:kw:`, giving `___import__:kw:` — three
 	leading underscores, two trailing before `:kw:`."
 
-	self ___requireArgs___: positional atLeast: 1
+	| args nm |
+	"``name'' IS NAMEABLE.  CPython's __import__ takes name / globals / locals
+	/ fromlist / level as ordinary parameters, so ``__import__(name='sys')''
+	is legal; Grail read only positionals and reported the argument MISSING
+	when it had been supplied.  Merged into the positional list so the rest of
+	this method, and importlib below, see one shape."
+	args := positional.
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'name']) ifTrue: [
+		positional @env0:isEmpty
+			ifTrue: [args := { kwargs @env0:at: 'name' }]
+			ifFalse: [
+				^ TypeError ___signal___: 'argument for __import__() given by name '
+					@env0:, '(''name'') and position (1)']].
+	self ___requireArgs___: args atLeast: 1
 		message: '__import__() missing required argument ''name'' (pos 1)'.
-	^ (importlib instance) ___import__: positional kw: kwargs
+	"THE NAME MUST BE A STRING, and that is not decoration: a non-string fell
+	through to importlib's own scan and died with ``a SmallInteger does not
+	understand #indexOf:startingAt:'' -- an UNCATCHABLE Smalltalk error out of
+	a builtin, where CPython raises a TypeError the caller can handle.
+	test_builtin test_import passes 1 deliberately."
+	nm := args @env0:at: 1.
+	((nm @env0:isKindOf: CharacterCollection)
+		@env0:or: [nm @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+			^ TypeError ___signal___: 'module name must be a string'].
+	"An EMPTY name is a ValueError rather than a failed import -- there is no
+	module it could name -- but ONLY for an ABSOLUTE import.
+	``__import__('', globals, locals, ('foo',), 1)'' is the spelling of
+	``from . import foo'': at level 1 an empty name means the package itself,
+	which is legal and must fail (if it fails) as an ImportError about the
+	missing parent.  test_import makes exactly that call and expects
+	ImportError, so a ValueError here would turn a handled case into an
+	unhandled one."
+	(nm @env0:isEmpty @env0:and: [(self ___importLevelOf___: args kw: kwargs) @env0:= 0])
+		ifTrue: [^ ValueError ___signal___: 'Empty module name'].
+	^ (importlib instance) ___import__: args kw: kwargs
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___importLevelOf___: positional kw: kwargs
+	"__import__'s ``level'' argument, by position (5th) or by name, 0 when
+	absent.  Read here rather than left to importlib because the empty-name
+	check above has to know it: an empty name is a bad argument at level 0 and
+	an ordinary relative import above it."
+
+	positional @env0:size @env0:>= 5 ifTrue: [^ positional @env0:at: 5].
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'level'])
+		ifTrue: [^ kwargs @env0:at: 'level'].
+	^ 0
 %
 
 category: 'Grail-Built-in Functions'

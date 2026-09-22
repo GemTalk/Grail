@@ -6737,26 +6737,74 @@ ___import__: positional kw: kwargs
 	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module"
 
 	| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath |
+	"EVERY KEYWORD READ IS DEFAULTED.  These were bare ``__getitem__'' sends,
+	which raise KeyError for a key that is not there -- so supplying ANY
+	keyword without supplying all of them failed on the first one missing:
+
+	    __import__('sys', fromlist=['path'])    KeyError: 'globals'
+
+	It survived because callers in the corpus pass either no keywords at all
+	(kwargs nil, which the ifNil: branch covers) or the whole set.  A partial
+	call is the ordinary spelling, and ``__import__(name='sys')'' is the
+	smallest one."
 	name := positional @env0:at: 1.
 	globals := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'globals'] ifNil: [None]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'globals' _: None] ifNil: [None]].
 	locals := (positional __len__ @env0:> 2)
 		ifTrue: [positional @env0:at: 3]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'locals'] ifNil: [None]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'locals' _: None] ifNil: [None]].
 	fromlist := (positional __len__ @env0:> 3)
 		ifTrue: [positional @env0:at: 4]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'fromlist'] ifNil: [{}]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'fromlist' _: {}] ifNil: [{}]].
 	level := (positional __len__ @env0:> 4)
 		ifTrue: [positional @env0:at: 5]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'level'] ifNil: [0]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'level' _: 0] ifNil: [0]].
 
 	"Handle relative imports"
 	absoluteName := (level @env0:> 0)
 		ifTrue: [
-			| package |
-			package := globals ifNotNil: [globals __getitem__: '__package__'] ifNil: [None].
+			| package spec |
+			"CPython's _calc___package__, including the WARNING it emits before
+			giving up.  Three sources, in order: __package__, then __spec__'s
+			parent, and only then a fallback to __name__ -- and the fallback is
+			warned about (bpo-37409, ImportWarning) because it is a guess that
+			can silently resolve to the wrong package.
+
+			Grail read __package__ alone and raised immediately, so a relative
+			import from a namespace with only __spec__ failed where CPython
+			succeeds, and the documented warning never appeared.
+			test_builtin test_import asserts the warning AND the ImportError
+			together, which is what says the fallback was attempted rather than
+			skipped."
+			package := globals ifNotNil: [globals @env1:get: '__package__' _: None] ifNil: [None].
+			spec := globals ifNotNil: [globals @env1:get: '__spec__' _: None] ifNil: [None].
+			(package == None @env0:and: [spec ~~ None @env0:and: [spec ~~ nil]]) ifTrue: [
+				package := [spec @env1:___pyAttrLoad___: #'parent']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: None]].
 			package == None ifTrue: [
+				((Python @env0:at: #warnings) @env0:___instance___)
+					@env1:warn: 'can''t resolve package from __spec__ or __package__, '
+						@env0:, 'falling back on __name__ and __path__'
+					_: (Python @env0:at: #'ImportWarning').
+				package := globals
+					ifNotNil: [globals @env1:get: '__name__' _: None]
+					ifNil: [None].
+				"No __path__ means __name__ names a MODULE rather than a package,
+				so the package is everything before its last dot -- which for a
+				top-level module is nothing at all, and that is the case that
+				then raises."
+				((package ~~ None @env0:and: [package ~~ nil])
+					@env0:and: [(globals @env1:__contains__: '__path__') @env0:not]) ifTrue: [
+						| idx |
+						idx := 0.
+						1 @env0:to: package @env0:asString @env0:size do: [:i |
+							((package @env0:asString @env0:at: i) @env0:== $.) ifTrue: [idx := i]].
+						package := idx @env0:= 0
+							ifTrue: ['']
+							ifFalse: [package @env0:asString @env0:copyFrom: 1 to: idx @env0:- 1]]].
+			((package == None) @env0:or: [package @env0:isNil
+				@env0:or: [package @env0:asString @env0:isEmpty]]) ifTrue: [
 				ImportError ___signal___: 'attempted relative import with no known parent package'
 			].
 			self ___resolve_name___: name package: package level: level
