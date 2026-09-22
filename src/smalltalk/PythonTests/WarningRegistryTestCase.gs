@@ -166,8 +166,19 @@ category: 'Grail-Tests - the module attributes'
 method: WarningRegistryTestCase
 testFiltersCanBeDeleted
 	"``del warnings.filters'' is legal and the filtering keeps working --
-	CPython keeps its own reference, and here the SymbolDictionary copy is
-	what a Python delete cannot reach."
+	CPython's C _warnings module holds its OWN reference to the list, so
+	deleting the Python-level name drops one of two references.  Measured:
+	CPython answers ('raised', 'raised') across the delete.
+
+	THE REASON THIS PASSED USED TO BE DIFFERENT, and it is worth saying so:
+	a Python delete could not reach the module's SymbolDictionary entry, so
+	the attribute never actually went away and the filters were never at
+	risk.  Once module attribute deletion became real (the same change that
+	let ``del sys.breakpointhook'' work), _filters fell through to a FRESH
+	EMPTY list and filtering silently stopped -- a warning configured as an
+	error merely printed.  warnings>>_filters now keeps its reference in
+	SessionTemps, which is Grail's equivalent of the C module's: not
+	reachable from Python, so no attribute delete can take it."
 
 	self assertAll: #('filters_can_be_deleted')
 %

@@ -414,7 +414,26 @@ __getitem__: key
 category: 'Grail-Python-Protocol'
 method: PyModuleDict
 __contains__: key
+	"MEMBERSHIP AGREES WITH ENUMERATION.  This asked the VALUE chain, which
+	lazy-wraps a class method when no binding is found, while keys / __len__ /
+	__iter__ all come from ___moduleKeys___.  So the same mapping answered
+
+	    'exit' in vars(sys)        True
+	    'exit' in set(vars(sys))   False
+
+	-- and after ``del sys.breakpointhook'' the deleted name was still ``in''
+	the dict it had been deleted from.  A membership test that disagrees with
+	iteration is worse than either answer on its own: every check that asks
+	about ONE name agrees, and only a set comparison reveals it.
+
+	Only STRING keys take the key route.  A module can hold a non-string key
+	in its overflow store, and those are matched by value as before."
+
 	| absent |
+	(key @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ ((self @env0:___moduleKeys___)
+			@env0:detect: [:k | k @env0:asString @env0:= key @env0:asString]
+			ifNone: [nil]) @env0:notNil].
 	absent := Object @env0:new.
 	^ (self @env0:___moduleValueAt___: key ifAbsent: [absent]) ~~ absent
 %

@@ -361,6 +361,84 @@ __doc__
 
 category: 'Grail-Attribute Access'
 method: module
+___mayDispatchToSetter___: aSym
+	"A MODULE's ordinary attributes are NAMESPACE BINDINGS, never accessor
+	pairs, so an assignment to one must STORE and never dispatch.
+
+	object's rule reads (name, name:) as a getter/setter pair wherever both
+	exist.  On a module that shape is an ARITY FAMILY far more often than an
+	accessor: sys has ``exit'' and ``exit:'' because sys.exit() and
+	sys.exit(code) are both legal, and the same holds for audit, excepthook
+	and friends.  So
+
+	    sys.exit = Mock()
+
+	did not replace sys.exit -- it CALLED sys.exit(Mock()), terminating the
+	program with the Mock as its exit status.  unittest.mock.patch('sys.exit')
+	is exactly that assignment, which is how test_builtin's TestBreakpoint
+	tests reported ``aMock'' as a Smalltalk error: the test process was being
+	asked to exit.
+
+	It is the same failure object>>___mayDispatchToSetter___ already carves
+	``__new__'' out for, and for the same stated reason -- the pair shape lies
+	when the one-argument form takes an argument rather than a value.
+
+	DUNDERS KEEP THE OLD PATH.  ``__name__'', ``__doc__'' and the other
+	value-attribute accessors are genuine getter/setter pairs that Grail's own
+	module machinery reads back through the accessor, so narrowing this to
+	non-dunder names fixes the arity families without moving where a module's
+	identity is stored."
+
+	| s |
+	s := aSym @env0:asString.
+	((s @env0:size @env0:> 4)
+		@env0:and: [(s @env0:copyFrom: 1 to: 2) @env0:= '__'
+		@env0:and: [(s @env0:copyFrom: s @env0:size @env0:- 1 to: s @env0:size) @env0:= '__']])
+		ifTrue: [^ super ___mayDispatchToSetter___: aSym].
+	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___pyAttrDelete___: aName
+	"``del m.x'' removes the binding WHEREVER the module keeps it.
+
+	A module is a SymbolDictionary subclass and its globals live in two
+	places: dictionary entries (built-in module data set up at import, which
+	is where sys puts breakpointhook, excepthook, displayhook and friends) and
+	dynamic instVars (globals a Python module body assigns).  object's
+	___pyAttrDelete___ knows only the second, so deleting one of the first
+	SILENTLY did nothing -- ``del sys.breakpointhook'' answered None and the
+	attribute was still there on the next read.
+
+	That is the worst shape a delete can have: the caller is told it worked.
+	PEP 553 makes it load-bearing -- breakpoint() is specified to raise
+	RuntimeError once the hook has been deleted, and it cannot, because the
+	hook was never gone (test_builtin TestBreakpoint
+	test_runtime_error_when_hook_is_lost).
+
+	Both stores are tried before giving up, because a name can legitimately be
+	in either: a module body that assigns over a built-in name creates a
+	dynamic instVar shadowing the dictionary entry, and deleting it must clear
+	both or the read falls back to the value the program replaced.  Falling
+	through to super when neither has it keeps the AttributeError a missing
+	name is supposed to raise."
+
+	| sym removed |
+	sym := aName @env0:asString @env0:asSymbol.
+	removed := false.
+	(self @env0:includesKey: sym) ifTrue: [
+		self @env0:removeKey: sym.
+		removed := true].
+	((self @env0:dynamicInstVarAt: sym) @env0:== nil) ifFalse: [
+		self @env0:removeDynamicInstVar: sym.
+		removed := true].
+	removed ifTrue: [^ None].
+	^ super ___pyAttrDelete___: aName
+%
+
+category: 'Grail-Attribute Access'
+method: module
 __dir__
 	"Module attribute names ONLY: dict entries (module-level value
 	bindings), dynamic instVars, and the module class's OWN env-1

@@ -197,14 +197,23 @@ sys_int_info class removeAllMethods: 1.
 set compile_env: 1
 
 category: 'Grail-Accessors'
-classmethod: sys
+method: sys
 breakpoint
    "Signal a Smalltalk Halt that will be signalled with _signalToDebugger, to be handled by the
     controlling GCI debugger.  Exception handlers on the stack will not be executed.
 
     Python invocation is like
       sys.breakpoint()
-   "
+
+    AN INSTANCE METHOD, because ``sys'' in Python is the module OBJECT and an
+    attribute read resolves against it.  This was a classmethod, so the method
+    existed and was unreachable from the only place that calls it: pdb's
+    set_trace() -- the default breakpointhook's target -- did ``sys.breakpoint()''
+    and got ``'sys' object has no attribute 'breakpoint'.  Did you mean:
+    'breakpointhook'?''.  So a bare breakpoint() with $PYTHONBREAKPOINT unset,
+    which is the ordinary way to use it, raised an AttributeError naming the
+    hook it had just come through.  Every other sys function here is an
+    instance method for the same reason."
    self @env0:pause
 %
 

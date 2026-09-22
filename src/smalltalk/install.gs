@@ -673,6 +673,7 @@ run
 	at: #'BoundMethodBindingTestCase' put: nil;
 	at: #'BoundMethodNameTestCase' put: nil;
 	at: #'BreakpointBuiltinTestCase' put: nil;
+	at: #'BreakpointHookTestCase' put: nil;
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
 	at: #'BufferedIoTestCase' put: nil;
@@ -2000,6 +2001,7 @@ input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodBindingTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BreakpointBuiltinTestCase.gs
+input src/smalltalk/PythonTests/BreakpointHookTestCase.gs
 input src/smalltalk/PythonTests/BrokenPipeErrorTestCase.gs
 input src/smalltalk/PythonTests/BufferedIoTestCase.gs
 input src/smalltalk/PythonTests/BufferErrorTestCase.gs
