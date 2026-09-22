@@ -7850,7 +7850,7 @@ pythonClasses
 	would shrink the answer, which is the opposite of what an honest coverage
 	count needs.  Use ``pythonClassCensus'' for the per-source breakdown."
 
-	| out todo reg mi canon |
+	| out todo reg mi |
 	out := IdentitySet new.
 	todo := OrderedCollection new.
 	reg := self ___subclassRegistry___.
@@ -7861,13 +7861,7 @@ pythonClasses
 	mi keysAndValuesDo: [:sub :entry |
 		todo add: sub.
 		self ___addMiEntry___: entry to: todo].
-	"Read the committed registry WITHOUT ___canonicalClassRegistry___, which would
-	create an empty RcKeyValueDictionary in UserGlobals and dirty the transaction
-	for what is supposed to be a read.  The generation check still runs, so a
-	registry left over from a previous runtime is dropped rather than over-reported."
-	self ___canonicalGenerationCheck___.
-	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
-	canon ifNotNil: [canon keysAndValuesDo: [:k :c | todo add: c]].
+	self ___committedCanonicalClassesDo: [:each | todo add: each].
 	[todo isEmpty] whileFalse: [ | c |
 		c := todo removeLast.
 		(c notNil and: [(out includes: c) not]) ifTrue: [
@@ -7899,7 +7893,7 @@ pythonClassCensus
 	appears in more than one, and the closure can reach classes named by none of
 	them directly."
 
-	| out reg mi canon seen |
+	| out reg mi seen |
 	out := IdentityKeyValueDictionary new.
 	reg := self ___subclassRegistry___.
 	mi := self ___miRegistry___.
@@ -7913,12 +7907,12 @@ pythonClassCensus
 		seen add: sub.
 		self ___addMiEntry___: entry to: seen].
 	out at: #fromMiRegistry put: seen size.
-	self ___canonicalGenerationCheck___.
-	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
-	out at: #canonicalRegistryPresent put: canon notNil.
 	seen := IdentitySet new.
-	canon ifNotNil: [canon keysAndValuesDo: [:k :c | c ifNotNil: [seen add: c]]].
+	self ___committedCanonicalClassesDo: [:each | seen add: each].
 	out at: #fromCanonicalClasses put: seen size.
+	out
+		at: #canonicalRegistryPresent
+		put: (UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) notNil.
 	out at: #total put: self pythonClasses size.
 	^ out
 %
@@ -7941,6 +7935,30 @@ pythonDirectSubclassesOf: aClass
 	Class.gs>>__subclasses__, which is the other caller."
 
 	^ functools ___instance___ @env1:___pyDirectSubclassesOf___: aClass
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+___committedCanonicalClassesDo: aBlock
+	"Private to the enumeration API: evaluate aBlock with every CLASS in the
+	committed canonical registry.
+
+	Not every value there is a class.  The registry keeps the FINAL object a
+	module-scope class statement bound, after its decorators, and a decorator
+	may bind something else: CPython's own genericpath declares ALLOW_MISSING
+	with ``@object.__new__'', which binds an instance.  The registry is right to
+	keep it -- a warm probe must hand back exactly what the build produced -- and
+	an enumeration of classes is right to skip it.
+
+	Read WITHOUT ___canonicalClassRegistry___, which would create an empty
+	RcKeyValueDictionary in UserGlobals and dirty the transaction for what is
+	supposed to be a read.  The generation check still runs, so a registry left
+	over from a previous runtime is dropped rather than over-reported."
+
+	self ___canonicalGenerationCheck___.
+	(UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) ifNotNil: [:registry |
+		registry keysAndValuesDo: [:key :value |
+			(value isKindOf: Behavior) ifTrue: [aBlock value: value]]]
 %
 
 category: 'Grail-Class Enumeration'

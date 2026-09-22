@@ -1,138 +1,209 @@
-# Minimal `fnmatch` for Grail.  CPython's fnmatch translates
-# glob-style patterns to regex; we match directly so the import path
-# doesn't depend on the (heavier) re.compile path.  Supports ``*``,
-# ``?`` and ``[seq]`` / ``[!seq]`` character classes incl. ranges
-# (``[a-z]``).  An unterminated ``[`` is treated as a literal, like
-# CPython.  Case-sensitive (POSIX normcase is the identity).
+"""Filename matching with shell patterns.
+
+fnmatch(FILENAME, PATTERN) matches according to the local convention.
+fnmatchcase(FILENAME, PATTERN) always takes case in account.
+
+The functions operate by translating the pattern into a regular
+expression.  They cache the compiled regular expressions for speed.
+
+The function translate(PATTERN) returns a regular expression
+corresponding to PATTERN.  (It does not compile it.)
+"""
+
+import functools
+import itertools
+import os
+import posixpath
+import re
+
+__all__ = ["filter", "filterfalse", "fnmatch", "fnmatchcase", "translate"]
 
 
-def _match(name, pattern, i=0, j=0):
-    n = len(name)
-    m = len(pattern)
-    while j < m:
-        c = pattern[j]
-        if c == "*":
-            # Collapse runs of '*'; '*' matches any (possibly empty) substring.
-            while j < m and pattern[j] == "*":
-                j += 1
-            if j == m:
-                return True
-            # Try every split point.
-            for k in range(i, n + 1):
-                if _match(name, pattern, k, j):
-                    return True
-            return False
-        if i >= n:
-            return False
-        if c == "?":
-            i += 1
-            j += 1
-            continue
-        if c == "[":
-            close = _find_close(pattern, j)
-            if close < 0:
-                # Unterminated class: literal '['.
-                if name[i] != "[":
-                    return False
-                i += 1
-                j += 1
-                continue
-            if not _in_class(name[i], pattern[j + 1:close]):
-                return False
-            i += 1
-            j = close + 1
-            continue
-        if name[i] != c:
-            return False
-        i += 1
-        j += 1
-    return i == n
+def fnmatch(name, pat):
+    """Test whether FILENAME matches PATTERN.
+
+    Patterns are Unix shell style:
+
+    *       matches everything
+    ?       matches any single character
+    [seq]   matches any character in seq
+    [!seq]  matches any char not in seq
+
+    An initial period in FILENAME is not special.
+    Both FILENAME and PATTERN are first case-normalized
+    if the operating system requires it.
+    If you don't want this, use fnmatchcase(FILENAME, PATTERN).
+    """
+    name = os.path.normcase(name)
+    pat = os.path.normcase(pat)
+    return fnmatchcase(name, pat)
 
 
-def _find_close(pattern, j):
-    """Index of the ']' closing the class whose '[' is at j, or -1.
-
-    A ']' that is the first body character (or first after '!') is a
-    literal member of the class, not the terminator."""
-    m = len(pattern)
-    k = j + 1
-    if k < m and pattern[k] == "!":
-        k += 1
-    if k < m and pattern[k] == "]":
-        k += 1
-    while k < m and pattern[k] != "]":
-        k += 1
-    if k >= m:
-        return -1
-    return k
+@functools.lru_cache(maxsize=32768, typed=True)
+def _compile_pattern(pat):
+    if isinstance(pat, bytes):
+        pat_str = str(pat, 'ISO-8859-1')
+        res_str = translate(pat_str)
+        res = bytes(res_str, 'ISO-8859-1')
+    else:
+        res = translate(pat)
+    return re.compile(res).match
 
 
-def _in_class(ch, body):
-    negate = False
-    if body.startswith("!"):
-        negate = True
-        body = body[1:]
-    matched = False
-    k = 0
-    blen = len(body)
-    while k < blen:
-        if k + 2 < blen and body[k + 1] == "-":
-            lo = body[k]
-            hi = body[k + 2]
-            if ord(lo) <= ord(ch) and ord(ch) <= ord(hi):
-                matched = True
-            k += 3
-        else:
-            if body[k] == ch:
-                matched = True
-            k += 1
-    if negate:
-        return not matched
-    return matched
+def filter(names, pat):
+    """Construct a list from those elements of the iterable NAMES that match PAT."""
+    result = []
+    pat = os.path.normcase(pat)
+    match = _compile_pattern(pat)
+    if os.path is posixpath:
+        # normcase on posix is NOP. Optimize it away from the loop.
+        for name in names:
+            if match(name):
+                result.append(name)
+    else:
+        for name in names:
+            if match(os.path.normcase(name)):
+                result.append(name)
+    return result
 
 
-def fnmatch(name, pattern):
-    return _match(name, pattern)
+def filterfalse(names, pat):
+    """Construct a list from those elements of the iterable NAMES that do not match PAT."""
+    pat = os.path.normcase(pat)
+    match = _compile_pattern(pat)
+    if os.path is posixpath:
+        # normcase on posix is NOP. Optimize it away from the loop.
+        return list(itertools.filterfalse(match, names))
+
+    result = []
+    for name in names:
+        if match(os.path.normcase(name)) is None:
+            result.append(name)
+    return result
 
 
-def fnmatchcase(name, pattern):
-    return _match(name, pattern)
+def fnmatchcase(name, pat):
+    """Test whether FILENAME matches PATTERN, including case.
+
+    This is a version of fnmatch() which doesn't case-normalize
+    its arguments.
+    """
+    match = _compile_pattern(pat)
+    return match(name) is not None
 
 
-def filter(names, pattern):
-    return [n for n in names if _match(n, pattern)]
+def translate(pat):
+    """Translate a shell PATTERN to a regular expression.
+
+    There is no way to quote meta-characters.
+    """
+
+    parts, star_indices = _translate(pat, '*', '.')
+    return _join_translated_parts(parts, star_indices)
 
 
-def translate(pattern):
-    """Returns a regex string that approximates the glob — kept for
-    API parity.  Grail callers should prefer fnmatch / filter (which
-    match directly)."""
-    out = []
-    i = 0
-    n = len(pattern)
+_re_setops_sub = re.compile(r'([&~|])').sub
+_re_escape = functools.lru_cache(maxsize=512)(re.escape)
+
+
+def _translate(pat, star, question_mark):
+    res = []
+    add = res.append
+    star_indices = []
+
+    i, n = 0, len(pat)
     while i < n:
-        c = pattern[i]
-        if c == "*":
-            out.append(".*")
-            i += 1
-        elif c == "?":
-            out.append(".")
-            i += 1
-        elif c == "[":
-            close = _find_close(pattern, i)
-            if close < 0:
-                out.append("\\[")
+        c = pat[i]
+        i = i+1
+        if c == '*':
+            # store the position of the wildcard
+            star_indices.append(len(res))
+            add(star)
+            # compress consecutive `*` into one
+            while i < n and pat[i] == '*':
                 i += 1
+        elif c == '?':
+            add(question_mark)
+        elif c == '[':
+            j = i
+            if j < n and pat[j] == '!':
+                j = j+1
+            if j < n and pat[j] == ']':
+                j = j+1
+            while j < n and pat[j] != ']':
+                j = j+1
+            if j >= n:
+                add('\\[')
             else:
-                body = pattern[i + 1:close]
-                if body.startswith("!"):
-                    body = "^" + body[1:]
-                out.append("[" + body + "]")
-                i = close + 1
-        elif c in r".^$+(){}|\\":
-            out.append("\\" + c)
-            i += 1
+                stuff = pat[i:j]
+                if '-' not in stuff:
+                    stuff = stuff.replace('\\', r'\\')
+                else:
+                    chunks = []
+                    k = i+2 if pat[i] == '!' else i+1
+                    while True:
+                        k = pat.find('-', k, j)
+                        if k < 0:
+                            break
+                        chunks.append(pat[i:k])
+                        i = k+1
+                        k = k+3
+                    chunk = pat[i:j]
+                    if chunk:
+                        chunks.append(chunk)
+                    else:
+                        chunks[-1] += '-'
+                    # Remove empty ranges -- invalid in RE.
+                    for k in range(len(chunks)-1, 0, -1):
+                        if chunks[k-1][-1] > chunks[k][0]:
+                            chunks[k-1] = chunks[k-1][:-1] + chunks[k][1:]
+                            del chunks[k]
+                    # Escape backslashes and hyphens for set difference (--).
+                    # Hyphens that create ranges shouldn't be escaped.
+                    stuff = '-'.join(s.replace('\\', r'\\').replace('-', r'\-')
+                                     for s in chunks)
+                i = j+1
+                if not stuff:
+                    # Empty range: never match.
+                    add('(?!)')
+                elif stuff == '!':
+                    # Negated empty range: match any character.
+                    add('.')
+                else:
+                    # Escape set operations (&&, ~~ and ||).
+                    stuff = _re_setops_sub(r'\\\1', stuff)
+                    if stuff[0] == '!':
+                        stuff = '^' + stuff[1:]
+                    elif stuff[0] in ('^', '['):
+                        stuff = '\\' + stuff
+                    add(f'[{stuff}]')
         else:
-            out.append(c)
-            i += 1
-    return "(?s:" + "".join(out) + ")\\Z"
+            add(_re_escape(c))
+    assert i == n
+    return res, star_indices
+
+
+def _join_translated_parts(parts, star_indices):
+    if not star_indices:
+        return fr'(?s:{"".join(parts)})\z'
+    iter_star_indices = iter(star_indices)
+    j = next(iter_star_indices)
+    buffer = parts[:j]  # fixed pieces at the start
+    append, extend = buffer.append, buffer.extend
+    i = j + 1
+    for j in iter_star_indices:
+        # Now deal with STAR fixed STAR fixed ...
+        # For an interior `STAR fixed` pairing, we want to do a minimal
+        # .*? match followed by `fixed`, with no possibility of backtracking.
+        # Atomic groups ("(?>...)") allow us to spell that directly.
+        # Note: people rely on the undocumented ability to join multiple
+        # translate() results together via "|" to build large regexps matching
+        # "one of many" shell patterns.
+        append('(?>.*?')
+        extend(parts[i:j])
+        append(')')
+        i = j + 1
+    append('.*')
+    extend(parts[i:])
+    res = ''.join(buffer)
+    return fr'(?s:{res})\z'

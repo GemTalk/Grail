@@ -254,6 +254,11 @@ initialize
 	"``os.DirEntry'' is a real module attribute in CPython -- code type-tests
 	scandir results against it -- even though nothing can construct one."
 	self @env0:at: #DirEntry put: os_DirEntry.
+	"``os.stat_result'' is the TYPE os.stat() answers.  CPython's pathlib reads
+	it in a class body -- ``hasattr(os.stat_result, 'st_flags')'' decides whether
+	_PosixPathInfo gets _bsd_flags -- so without it pathlib failed at import.
+	PyStatResult has no st_flags, which is Linux CPython's answer too."
+	self @env0:at: #stat_result put: PyStatResult.
 	"Pre-store fsdecode as a BoundMethod so ``from os import
 	fsdecode'' (werkzeug's file_storage) reads the callable
 	directly via the ImportFromAst __pyAttrLoad path."
@@ -279,6 +284,44 @@ __instancecheck__: instance
 	is still recognised."
 
 	^ (instance @env0:class @env0:whichClassIncludesSelector: #'__fspath__' environmentId: 1) notNil
+		or: [self ___isRegistered___: instance @env0:class]
+%
+
+category: 'Grail-ABC'
+classmethod: os_PathLike
+register: aClass
+	"os.PathLike.register(cls) -- ABCMeta's virtual-subclass registration.
+	CPython's pathlib calls it at import, ``os.PathLike.register(PurePath)'', so
+	without it pathlib could not be imported at all.
+
+	For that call it changes nothing: PurePath defines __fspath__, which the
+	structural check above already accepts.  It matters for a class registered
+	WITHOUT __fspath__, which CPython then treats as PathLike and so does this.
+	Answers aClass, as ABCMeta.register does, so it also works as a decorator."
+
+	(self ___registeredClasses___) @env0:add: aClass.
+	^ aClass
+%
+
+category: 'Grail-ABC'
+classmethod: os_PathLike
+___isRegistered___: aClass
+	"Whether aClass, or a superclass of it, was passed to register:."
+
+	^ (self ___registeredClasses___) @env0:anySatisfy: [:registered |
+		aClass == registered or: [aClass @env0:inheritsFrom: registered]]
+%
+
+category: 'Grail-ABC'
+classmethod: os_PathLike
+___registeredClasses___
+	"Session-local, like an import is: the registered classes are Python
+	classes of this session, and must never be committed into this persistent
+	class."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_PathLike_registered'
+		ifAbsentPut: [IdentitySet @env0:new]
 %
 
 category: 'Grail-Filesystem'
@@ -750,9 +793,7 @@ mkdir: aPath
 	| result path |
 	path := self ___fsPath___: aPath.
 	result := GsFile @env0:createServerDirectory: path.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
-	].
+	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
 %
 
@@ -764,10 +805,84 @@ mkdir: aPath _: mode
 	| result path |
 	path := self ___fsPath___: aPath.
 	result := GsFile @env0:createServerDirectory: path mode: mode.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
-	].
+	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___signalDirectoryNotCreated: path
+	"Raise what CPython's os.mkdir raises: the errno's own OSError subclass,
+	carrying errno, strerror and filename.  CPython's Path.mkdir(parents=True)
+	catches FileNotFoundError to create the missing parents, so the plain
+	OSError raised here before broke it -- where the old pathlib stub, which
+	called makedirs instead, had worked.
+
+	The primitive answers only nil, so the errno is read back from the
+	filesystem, not from GsFile's error text.  That text was tried first: its
+	form is not the same on every platform, and parsing it worked on Darwin
+	and fell through to the plain OSError on CI's Linux gem.  What the
+	filesystem cannot tell -- a directory that exists but refuses the entry --
+	keeps the plain OSError."
+
+	| errno classAndStrerror |
+
+	errno := self ___errnoOfDirectoryNotCreated: path.
+	classAndStrerror := self @env0:class ___errorClassAndStrerrorByErrno
+		@env0:at: errno
+		ifAbsent: [^ OSError ___signal___: (self @env0:class ___directoryNotCreatedMessage: path)].
+	^ (classAndStrerror @env0:at: 1)
+		___signalNew___: { errno. classAndStrerror @env0:at: 2. path }
+		kw: nil
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoOfDirectoryNotCreated: path
+	"Why mkdir of path failed: the path is already there, or its parent cannot
+	be stat'd (that stat's own errno), or the parent is not a directory.  0
+	when none of those holds."
+
+	| parentStat |
+
+	((GsFile @env0:stat: path isLstat: true) @env0:isKindOf: GsFileStat) ifTrue: [^ 17].
+	parentStat := GsFile @env0:stat: (self ___parentDirectoryOf: path) isLstat: false.
+	(parentStat @env0:isKindOf: SmallInteger) ifTrue: [^ parentStat].
+	((parentStat @env0:isKindOf: GsFileStat) and: [parentStat @env0:isDirectory @env0:not])
+		ifTrue: [^ 20].
+	^ 0
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___parentDirectoryOf: path
+	"The directory mkdir would create path in: '.' for a bare name."
+
+	| parent |
+
+	parent := (os_path instance) dirname: ((os_path instance) normpath: path).
+	^ parent @env0:isEmpty ifTrue: ['.'] ifFalse: [parent]
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___errorClassAndStrerrorByErrno
+	"The errnos ___errnoOfDirectoryNotCreated: can answer that have a class of
+	their own in CPython, numbered as Darwin and Linux both number them."
+
+	^ Dictionary @env0:new
+		@env0:at: 2 put: { FileNotFoundError. 'No such file or directory' };
+		@env0:at: 13 put: { PermissionError. 'Permission denied' };
+		@env0:at: 17 put: { FileExistsError. 'File exists' };
+		@env0:at: 20 put: { NotADirectoryError. 'Not a directory' };
+		@env0:yourself
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___directoryNotCreatedMessage: path
+
+	^ 'Cannot create directory: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -821,25 +936,56 @@ _makedirs: positional kw: kwargs
 	docs/Issues.md rather than changed here.  mode is accepted and, as by
 	makedirs:, not applied."
 
-	^ self makedirs: (self ___makedirsName: positional kw: kwargs)
+	^ self makedirs:
+		(self ___requiredArgument: 'name' at: 1 in: positional kw: kwargs for: 'makedirs')
 %
 
 category: 'Grail-File and Directory Operations'
 method: os
-___makedirsName: positional kw: kwargs
-	"The path argument of makedirs, by position or by its keyword ``name''."
+___requiredArgument: aName at: anIndex in: positional kw: kwargs for: aFunctionName
+	"A required argument, by position or else by keyword, as CPython binds it."
 
-	positional @env0:ifNotEmpty: [:arguments | ^ arguments @env0:at: 1].
-	(kwargs notNil and: [kwargs @env0:includesKey: 'name'])
-		ifTrue: [^ kwargs @env0:at: 'name'].
-	^ TypeError ___signal___: self @env0:class ___makedirsMissingNameMessage
+	positional @env0:size @env0:>= anIndex ifTrue: [^ positional @env0:at: anIndex].
+	(kwargs notNil and: [kwargs @env0:includesKey: aName])
+		ifTrue: [^ kwargs @env0:at: aName].
+	^ TypeError ___signal___:
+		(self @env0:class ___missingArgumentMessage: aName at: anIndex for: aFunctionName)
 %
 
 category: 'Grail-Error Messages'
 classmethod: os
-___makedirsMissingNameMessage
+___missingArgumentMessage: aName at: anIndex for: aFunctionName
 
-	^ 'makedirs() missing required argument ''name'' (pos 1)'
+	^ aFunctionName @env0:, '() missing required argument ''' @env0:, aName
+		@env0:, ''' (pos ' @env0:, anIndex @env0:printString @env0:, ')'
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___dirFdUnavailableMessage: aFunctionName
+
+	^ aFunctionName @env0:, ': dir_fd unavailable on this platform'
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+_stat: positional kw: kwargs
+	"os.stat(path, *, dir_fd=None, follow_symlinks=True), for a call that passes
+	a keyword.  CPython's pathlib stats with ``os.stat(path,
+	follow_symlinks=...)'', so Path.stat() matched no selector at all before
+	this.  follow_symlinks=False IS lstat, as CPython defines it.
+
+	dir_fd is refused rather than ignored: os.supports_dir_fd is empty on
+	purpose, and silently statting a path relative to the wrong directory
+	would answer about a different file."
+
+	| path |
+
+	path := self ___requiredArgument: 'path' at: 1 in: positional kw: kwargs for: 'stat'.
+	(kwargs notNil and: [(kwargs @env0:at: 'dir_fd' ifAbsent: [None]) ~~ None])
+		ifTrue: [^ NotImplementedError ___signal___: (self @env0:class ___dirFdUnavailableMessage: 'stat')].
+	(self ___followsSymlinks: kwargs) ifFalse: [^ self lstat: path].
+	^ self stat: path
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1298,7 +1444,15 @@ ___scandirFollowArg___: positional kw: kwargs for: aName
 	positional @env0:isEmpty ifFalse: [
 		TypeError ___signal___:
 			(aName @env0:, '() takes no positional arguments')].
-	((kwargs @env0:isNil) @env0:not and: [kwargs @env0:includesKey: 'follow_symlinks'])
+	^ self ___followsSymlinks: kwargs
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___followsSymlinks: kwargs
+	"The keyword-only follow_symlinks argument, true when absent."
+
+	(kwargs notNil and: [kwargs @env0:includesKey: 'follow_symlinks'])
 		ifTrue: [^ (kwargs @env0:at: 'follow_symlinks') ___isTruthy___].
 	^ true
 %

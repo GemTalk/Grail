@@ -6107,3 +6107,105 @@ silently compressing without the dictionary.
 * **`cp437` cannot ENCODE**: `'é'.encode('cp437')` raises where CPython answers
   `b'\x82'`. Decoding works, and zipfile only decodes with it (it writes names
   as ASCII or UTF-8), but the dict-based `charmap_encode` path is wrong.
+
+## pathlib is CPython's own package
+
+Grail's `pathlib` was a 272-line hand-written stub whose header called itself
+"the minimum Path / PurePath surface" Flask needed. It is now CPython 3.14's
+package (`src/python/stdlib/pathlib/`), vendored with two adaptations marked
+`GRAIL`, and the modules it imports came with it: `glob`, `fnmatch` and
+`posixpath` replace hand-written versions (110, 138 and 114 lines), and
+`ntpath`, `genericpath` and a `_collections_abc` bridge are new. The same route
+as ElementTree and zipfile: vendor the real module verbatim, and let it find out
+what the rest of Grail is missing.
+
+| blocked | missing | fixed by |
+| --- | --- | --- |
+| import | a class-body `def __new__` under an `if` was CALLED (`WindowsPath`) | #1081 |
+| listing a directory | a plain `with` ran the generator `__enter__` returned | #1082 |
+| import (`glob`) | `os.path.lexists` | `os_path.gs` |
+| import | `_collections_abc` | a bridge onto `collections.abc` |
+| `isinstance(x, os.PathLike)` | `os.PathLike.register` | `os.gs` |
+| `isinstance(st, os.stat_result)` | the name `os.stat_result` | `os.gs` |
+| `Path.stat(follow_symlinks=False)`, `Path.lstat` | a keyword form of `os.stat` | `os.gs` |
+| `Path.touch` | `os.open` | GRAIL adaptation: builtin `open` in `'x'`/`'a'`, then `chmod` |
+| `import pathlib.types` | `register()` on an `ABC` subclass | GRAIL adaptation: name `ABCMeta` |
+| **`Path.resolve()`** | `os.path.realpath(p, strict=...)` | a keyword form |
+| **`Path.mkdir(parents=True)`** | `os.mkdir` raising `FileNotFoundError` | the errno's own subclass |
+
+### Two of those were regressions against the stub
+
+`resolve()` and `mkdir(parents=True)` both worked with the stub, because it
+reached `os` by a different road: its `mkdir` called `os.makedirs`, and its
+`resolve` called `os.path.abspath`. The real module calls
+`realpath(path, strict=strict)`, which matched no selector, and it creates
+parents by catching the `FileNotFoundError` that `os.mkdir` raises for a
+missing one — where Grail's raised a plain `OSError`, so the catch never fired.
+
+Neither showed at import time, and neither showed in the first spike. They
+surfaced only once a fixture made the calls a real caller makes, which is the
+argument for `tests/python/real_pathlib.py` checking CALLS rather than names.
+
+`os.mkdir` now raises what CPython's does: `FileNotFoundError`,
+`FileExistsError`, `NotADirectoryError` or `PermissionError`, with `errno`,
+`strerror` and `filename` set. The kernel primitive answers only `nil`, so the
+errno is read back from the filesystem: the path already exists (`EEXIST`), its
+parent cannot be stat'd (that stat's own errno), or the parent is not a
+directory (`ENOTDIR`). The first version parsed the strerror text `GsFile`
+leaves in its class error buffer instead. That passed every run on Darwin and
+fell through to a plain `OSError` on CI's Linux gem — the text is not portable,
+and a Mac run cannot say so. A directory that exists but refuses the entry
+(`EACCES` on the final component) still raises a plain `OSError`.
+
+### A class enumeration assumed every canonical value is a class
+
+The full SUnit run found one more, outside pathlib entirely: five
+`PythonClassEnumerationTestCase` errors, `a ALLOW_MISSING does not understand
+#name`. genericpath declares its sentinel as
+
+```python
+@object.__new__
+class ALLOW_MISSING: ...
+```
+
+and the canonical class registry keeps the FINAL object a module-scope class
+statement bound, after its decorators — here an instance. The registry is right
+to: a warm probe must hand back exactly what the build produced, and two readers
+in `Object.gs` already guard with `isKindOf: Behavior`. `importlib pythonClasses`
+and `pythonClassCensus` (#885) did not, so once any session had imported pathlib
+and committed, the enumeration answered an instance among its classes. Both now
+read the registry through one helper that yields classes only.
+`tests/python/class_statement_binding_an_instance.py` puts such an instance in the
+registry on purpose, so the two new tests do not depend on what some earlier
+session happened to commit.
+
+### A tripwire replaced
+
+`GlobTestCase>>testDoubleStarRaises` pinned the stub's refusal of `**`. Real
+`glob` recurses when asked, so the test became
+`testDoubleStarRecursesOnlyWhenAsked`, and the two tests that compared listings
+now compare `sorted(...)`: CPython's `glob` answers in directory order, which is
+unspecified, and the stub had happened to sort.
+
+### Still open, found on the way
+
+None of these is a regression — the stub had none of these methods — but each is
+a call the real pathlib now makes and Grail cannot yet answer.
+
+* **`os.path.realpath` does not resolve symlinks.** `os.readlink` exists, so this
+  is a gap, not a platform limit. On macOS every `tempfile` directory sits under
+  `/var -> /private/var`, so `Path(tempfile.mkdtemp()).resolve()` differs from
+  CPython there. `real_pathlib.py` compares paths relative to its root for this
+  reason.
+* **`os.rename` of a missing file returns normally.**
+  `GsFile renameFileOnServer:to:` answers an errno on failure, and `os.rename`
+  tests only for `nil`. `Path.rename` inherits it.
+* **`OSError(2, 'msg')` stays an `OSError`.** CPython's `OSError.__new__` picks
+  the subclass from the errno. `BaseException class >> ___classForArgs___:` is
+  the hook for exactly this, but only the two-argument constructor consults it.
+* **Missing `os` support for other `Path` methods:** `replace`/`move`
+  (`os.replace`), `walk` (`os._walk_symlinks_as_files`), `is_mount`
+  (`os.path.ismount`), `is_junction` (`os.path.isjunction`), and
+  `as_uri`/`from_uri` (`urllib.request.pathname2url`/`url2pathname`).
+* **`abc.ABC` does not carry `ABCMeta`.** That is why `pathlib.types` needs its
+  adaptation; `abc.py` records why the switch is deferred.
