@@ -24,7 +24,7 @@
 # genuine top-level ``await'' with ``SyntaxError: 'await' outside function'',
 # whatever flags compile() was given, so PyCF_ALLOW_TOP_LEVEL_AWAIT is
 # honoured for co_flags and not yet for parsing. That is what still blocks
-# test_compile_top_level_await, and the row below states it.
+# test_compile_top_level_await, and the row below states it -- it no longer is.
 #
 # test_builtin's test_compile_async_generator,
 # test_compile_top_level_await_no_coro and
@@ -114,13 +114,15 @@ def _async_generator_still_works():
 
 r['async_generator_runs'] = outcome(_async_generator_still_works)
 
-# --- the recorded limit -----------------------------------------------------------
+# --- a genuine top-level await ------------------------------------------------
 #
-# A genuine top-level await is still a parse error in Grail; CPython compiles
-# it and sets the bit.  Stated as the exception TYPE so the row is honest in
-# both runtimes about what is being compared -- CPython raises nothing.
+# This was an XFAIL: Grail's parser refused a real top-level ``await'' whatever
+# flags compile() was given, so the flag was honoured for co_flags and not for
+# parsing.  CompileTopLevelAwaitTestCase closed that, and the row is now an
+# ordinary check -- kept here as the CHEAPEST statement of the whole feature,
+# beside the no_coro rows it has to stay consistent with.
 
-XFAIL = {'top_level_await_parses'}
+XFAIL = set()
 
 r['top_level_await_parses'] = outcome(
     lambda: compile('a = await f()', '?', 'exec',
@@ -166,9 +168,6 @@ EXPECTED = {
     'string_eval_unaffected': 'ok -> 2',
     'string_exec_unaffected': 'ok -> 8',
     'syntax_error_still_raised': 'SyntaxError',
-    # XFAIL -- holds CPython's answer.  Grail's parser refuses a genuine
-    # top-level await whatever flags compile() was given, so the flag is
-    # honoured for co_flags and not yet for parsing.
     'top_level_await_parses': 'ok -> 128',
     'top_level_await_value': 8192,
     'type_comments_value': 4096,

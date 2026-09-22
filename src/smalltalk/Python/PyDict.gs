@@ -285,6 +285,27 @@ removeKey: aKey ifAbsent: aBlock
 
 category: 'Grail-Mutation'
 method: PyDict
+removeKey: aKey otherwise: aValue
+	"The kernel's third removal spelling, overridden for the same reason as the
+	two above: ``___order___'' is what iteration walks, and a key removed from
+	the dictionary alone leaves the order list one entry LONGER than the
+	dictionary.  The next walk then compares the two and reports ``dictionary
+	changed size during iteration'' about a change nobody made -- and it says
+	so however long afterwards the walk happens, so the report names the
+	innocent caller.
+
+	Measured: eval() of a top-level-await code object removes the wrapper name
+	it exec'd into the caller's globals, this way, and the globals dict became
+	un-iterable from that point on."
+
+	(self includesKey: aKey) ifTrue: [
+		self ___order___ remove: aKey ifAbsent: [].
+		self ___bumpVersion___].
+	^ super removeKey: aKey otherwise: aValue
+%
+
+category: 'Grail-Mutation'
+method: PyDict
 removeAllKeys: aCollection
 	aCollection do: [:k | self ___order___ remove: k ifAbsent: []].
 	self ___bumpVersion___.
