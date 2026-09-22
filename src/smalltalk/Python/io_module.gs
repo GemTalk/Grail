@@ -1134,21 +1134,21 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 	the old existsOnServer: pre-guard: isServerDirectory: answers nil for a
 	path that is not there, which is not true."
 	((GsFile @env0:isServerDirectory: file) == true) ifTrue: [
-		IsADirectoryError ___signal___: ('[Errno 21] Is a directory: ''' @env0:, file @env0:, '''')].
+		(os instance) ___signalErrno: 21 filename: file].
 	hasX ifTrue: [
 		((GsFile @env0:existsOnServer: file) == true) ifTrue: [
-			FileExistsError ___signal___: ('[Errno 17] File exists: ''' @env0:, file @env0:, '''')]].
+			(os instance) ___signalErrno: 17 filename: file]].
 	gsMode := hasR ifTrue: ['r'] ifFalse: [hasA ifTrue: ['a'] ifFalse: ['w']].
 	hasPlus ifTrue: [gsMode := gsMode @env0:, '+'].
 	gsMode := gsMode @env0:, 'b'.
 	gsfile := GsFile @env0:openOnServer: file mode: gsMode.
 	gsfile == nil ifTrue: [
 		"Ask STAT why, rather than re-testing existence: os >>
-		___statOrSignal___: already maps the errno to CPython's OSError
-		subclass (ENOENT -> FileNotFoundError, ENOTDIR ->
-		NotADirectoryError, EACCES -> PermissionError) with CPython's
-		message text, so a shadowed path reports what is actually wrong
-		instead of ``No such file''.  It raises whenever the stat fails;
+		___statOrSignal___: already raises the errno as CPython does (ENOENT
+		-> FileNotFoundError, ENOTDIR -> NotADirectoryError, EACCES ->
+		PermissionError, each carrying errno, strerror and filename), so a
+		shadowed path reports what is actually wrong instead of ``No such
+		file''.  It raises whenever the stat fails;
 		reaching past it means the file IS there and the open failed for
 		another reason."
 		(os instance) ___statOrSignal___: file isLstat: false.
@@ -1206,7 +1206,7 @@ ___openCompressedPath___: fileArg mode: modeArg
 	OSError subclass."
 	((GsFile @env0:existsOnServer: file) ~~ true @env0:and: [reading]) ifTrue: [
 		(os instance) ___statOrSignal___: file isLstat: false.
-		FileNotFoundError ___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
+		(os instance) ___signalErrno: 2 filename: file].
 	gsfile := GsFile @env0:openOnServerCompressed: file mode: base.
 	gsfile == nil ifTrue: [
 		OSError ___signal___: ('could not open compressed file: ''' @env0:, file @env0:, '''')].

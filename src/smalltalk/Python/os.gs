@@ -827,17 +827,18 @@ ___signalDirectoryNotCreated: path
 
 	| errno |
 
-	errno := self ___errnoOfDirectoryNotCreated: path.
+	errno := self ___errnoPreventingCreationOf: path.
 	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotCreatedMessage: path)].
 	^ self ___signalErrno: errno filename: path
 %
 
 category: 'Grail-File and Directory Operations'
 method: os
-___errnoOfDirectoryNotCreated: path
-	"Why mkdir of path failed: the path is already there, or its parent cannot
-	be stat'd (that stat's own errno), or the parent is not a directory.  0
-	when none of those holds."
+___errnoPreventingCreationOf: path
+	"Why an entry cannot be created at path: the path is already there, or its
+	parent cannot be stat'd (that stat's own errno), or the parent is not a
+	directory.  0 when none of those holds.  mkdir asks after its primitive
+	failed; symlink asks before, since its shell command reports nothing."
 
 	| parentStat |
 
@@ -852,7 +853,7 @@ ___errnoOfDirectoryNotCreated: path
 category: 'Grail-File and Directory Operations'
 method: os
 ___parentDirectoryOf: path
-	"The directory mkdir would create path in: '.' for a bare name."
+	"The directory an entry at path is created in: '.' for a bare name."
 
 	| parent |
 
@@ -914,7 +915,30 @@ strerror: code
 	Darwin and Linux word some errnos differently, and a table here would be
 	right on one of them."
 
-	^ self @env0:class ___strerrorCallout @env0:callWith: { code }
+	^ self @env0:class ___strerrorCallout @env0:callWith: { self ___asCInt: code }
+%
+
+category: 'Grail-Private'
+method: os
+___asCInt: anObject
+	"anObject as the C int a libc call takes, raising what CPython's argument
+	conversion raises.  The callout itself answers a Smalltalk ArgumentError
+	for anything else, which Python code cannot catch."
+
+	| integer |
+
+	integer := anObject ___asIndex___.
+	(integer @env0:between: -2147483648 and: 2147483647) ifFalse: [
+		^ OverflowError ___signal___: self @env0:class ___cIntOverflowMessage].
+	^ integer
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___cIntOverflowMessage
+	"CPython says ``too large'' on both sides of the range."
+
+	^ 'Python int too large to convert to C int'
 %
 
 category: 'Grail-Error Messages'
@@ -1135,16 +1159,11 @@ remove: aPath
 	"BEFORE the existence check, which is itself expanding and would otherwise
 	report on whatever the expansion names -- see ___refuseShellExpandedPath___."
 	self ___refuseShellExpandedPath___: path for: 'remove'.
-	"``exists'' FOLLOWS a symlink, so a DANGLING one -- a link whose target is
-	gone, which is legal and which os.symlink can create deliberately -- looked
-	absent and raised FileNotFoundError instead of being unlinked.  CPython
-	removes the LINK, and never consults the target at all.  The extra islink
-	test is what makes the link itself visible here; a bare exists() cannot see
-	one whose target does not exist."
-	((self exists: path) @env0:or: [self ___isLink___: path]) ifFalse: [
-		FileNotFoundError ___signal___:
-			('No such file or directory: ' @env0:, (path @env0:printString))
-	].
+	"lstat, not exists: ``exists'' FOLLOWS a symlink, so a DANGLING one -- a
+	link whose target is gone, which is legal and which os.symlink can create
+	deliberately -- looked absent and raised FileNotFoundError instead of being
+	unlinked.  CPython removes the LINK, and never consults the target at all."
+	self ___statOrSignal___: path isLstat: true.
 	result := GsFile @env0:removeServerFile: path.
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot remove file: ' @env0:, (path @env0:printString))
@@ -1241,9 +1260,9 @@ _listdir: positional kw: kwargs
 	    NotADirectoryError.  That one is the more dangerous of the two: a
 	    recursive walker reads it as a directory containing itself.
 
-	So the check is on the path, before listing.  Errno text matches
-	___statOrSignal___:isLstat:, which had to learn the same lesson about this
-	API answering a non-error on failure.
+	So the check is on the path, before listing.  Its errors are raised as
+	___statOrSignal___:isLstat: raises them; that method had to learn the same
+	lesson about this API answering a non-error on failure.
 
 	NOT a complete errno mapping: an unreadable directory still answers an
 	empty listing rather than PermissionError, because the pattern expansion
@@ -1263,22 +1282,10 @@ _listdir: positional kw: kwargs
 	Going to the primitive answers all of that at once: real errnos (including
 	EACCES, which the wrapper could not distinguish at all), names that survive
 	a ``$'', and no per-entry path stripping to undo."
+	(dirContents @env0:isKindOf: SmallInteger) ifTrue: [
+		^ self ___signalErrno: dirContents filename: actualPath].
 	(dirContents @env0:isKindOf: Array) ifFalse: [
-		| errno |
-		errno := (dirContents @env0:isKindOf: SmallInteger) ifTrue: [dirContents] ifFalse: [0].
-		errno @env0:= 2 ifTrue: [
-			FileNotFoundError ___signal___:
-				('[Errno 2] No such file or directory: ' @env0:, (actualPath @env0:printString))].
-		errno @env0:= 13 ifTrue: [
-			PermissionError ___signal___:
-				('[Errno 13] Permission denied: ' @env0:, (actualPath @env0:printString))].
-		errno @env0:= 20 ifTrue: [
-			NotADirectoryError ___signal___:
-				('[Errno 20] Not a directory: ' @env0:, (actualPath @env0:printString))].
-		OSError ___signal___:
-			('[Errno ' @env0:, (errno @env0:printString) @env0:, '] Cannot list directory: '
-				@env0:, (actualPath @env0:printString))
-	].
+		^ OSError ___signal___: (self @env0:class ___listingFailedMessage: actualPath)].
 	result := list ___new___.
 	"The names arrive BARE from the primitive -- the public wrapper answered
 	full paths, and the basename stripping that undid them is gone with it."
@@ -1648,38 +1655,31 @@ symlink: src _: dst
 	paths are shell-quoted (___shellQuote___:) and passed after ``--'', so a
 	path containing a space or a ``;'' cannot be re-parsed as shell syntax.
 
-	The two errors CPython raises are checked BEFORE the command, since the
-	command reports no status: dst already existing is FileExistsError, and a
-	missing parent directory is FileNotFoundError.  Anything else that goes
-	wrong is caught after the fact by asking whether the link now exists."
+	The errors CPython raises are predicted BEFORE the command, since the
+	command reports no status: an occupied dst is FileExistsError -- a
+	DANGLING symlink included, which is why the probe is an lstat -- a missing
+	parent FileNotFoundError, and a parent that is a file NotADirectoryError.
+	CPython names both paths in them.  Anything else that goes wrong is caught
+	after the fact by asking whether the link now exists."
 
-	| dstPath parent |
+	| srcPath dstPath errno |
+	srcPath := self ___fsPath___: src.
 	dstPath := self ___fsPath___: dst.
-	"lstat, not exists: a DANGLING symlink already occupying dst is still an
-	occupant, and exists() would follow it and answer false."
-	"``== true'' on the exists probe too: it answers nil (not false) when the
-	probe errors -- a dst under a plain file -- and nil as the or: argument is
-	the same error 2085 the parent check below explains."
-	((self ___isLink___: dstPath) @env0:or: [(GsFile @env0:existsOnServer: dstPath) == true])
-		ifTrue: [
-			FileExistsError ___signal___:
-				('[Errno 17] File exists: ' @env0:, (dstPath @env0:printString))].
-	parent := (os_path instance) dirname: dstPath.
-	"``== true'' is not belt-and-braces: GsFile>>isServerDirectory: answers NIL
-	for a path that does not exist -- which is exactly the case being tested
-	here -- and nil reaching ifFalse: is an ImproperOperation, an uncatchable
-	Smalltalk error where a FileNotFoundError was due."
-	(parent @env0:isEmpty @env0:or: [(GsFile @env0:isServerDirectory: parent) == true])
-		ifFalse: [
-			FileNotFoundError ___signal___:
-				('[Errno 2] No such file or directory: ' @env0:, (dstPath @env0:printString))].
+	errno := self ___errnoPreventingCreationOf: dstPath.
+	errno == 0 ifFalse: [^ self ___signalErrno: errno filename: srcPath filename2: dstPath].
 	self ___runShell___: 'ln -s -- ' @env0:,
-		(self ___shellQuote___: src) @env0:, ' ' @env0:,
+		(self ___shellQuote___: srcPath) @env0:, ' ' @env0:,
 		(self ___shellQuote___: dstPath).
 	(self ___isLink___: dstPath) ifFalse: [
-		OSError ___signal___:
-			('Cannot create symbolic link: ' @env0:, (dstPath @env0:printString))].
+		OSError ___signal___: (self @env0:class ___symlinkNotCreatedMessage: dstPath)].
 	^ None
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___symlinkNotCreatedMessage: path
+
+	^ 'Cannot create symbolic link: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1710,13 +1710,8 @@ readlink: aPath
 
 	| path out |
 	path := self ___fsPath___: aPath.
-	((GsFile @env0:stat: path isLstat: true) @env0:isKindOf: GsFileStat)
-		ifFalse: [
-			FileNotFoundError ___signal___:
-				('[Errno 2] No such file or directory: ' @env0:, (path @env0:printString))].
-	(self ___isLink___: path) ifFalse: [
-		OSError ___signal___:
-			('[Errno 22] Invalid argument: ' @env0:, (path @env0:printString))].
+	self ___statOrSignal___: path isLstat: true.
+	(self ___isLink___: path) ifFalse: [^ self ___signalErrno: 22 filename: path].
 	out := self ___runShell___: 'readlink -- ' @env0:, (self ___shellQuote___: path).
 	"readlink(1) terminates its answer with a newline; the syscall does not."
 	[out @env0:size @env0:> 0
@@ -1997,25 +1992,30 @@ ___statOrSignal___: path isLstat: isLstat
 	never fired for a missing file: it never got an exception at all.
 
 	Test on the SUCCESS shape, so any other unexpected answer also becomes a
-	Python-level error instead of a stray message send.  Map the errnos that
-	have dedicated CPython subclasses; ``except OSError'' catches all of them."
+	Python-level error instead of a stray message send.  The errno is raised
+	as CPython raises it -- its own subclass, carrying errno, strerror and
+	filename.  open() and gzip.open() ask here why a file will not open, so
+	that is where their ``e.filename'' comes from too."
 
-	| result errno |
+	| result |
 	result := GsFile @env0:stat: path isLstat: isLstat.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
-	errno := (result @env0:isKindOf: SmallInteger) ifTrue: [result] ifFalse: [0].
-	errno == 2 ifTrue: [
-		FileNotFoundError ___signal___:
-			('[Errno 2] No such file or directory: ' @env0:, (path @env0:printString))].
-	errno == 13 ifTrue: [
-		PermissionError ___signal___:
-			('[Errno 13] Permission denied: ' @env0:, (path @env0:printString))].
-	errno == 20 ifTrue: [
-		NotADirectoryError ___signal___:
-			('[Errno 20] Not a directory: ' @env0:, (path @env0:printString))].
-	^ OSError ___signal___:
-		('[Errno ' @env0:, (errno @env0:printString) @env0:, '] Cannot stat: '
-			@env0:, (path @env0:printString))
+	(result @env0:isKindOf: SmallInteger) ifTrue: [^ self ___signalErrno: result filename: path].
+	^ OSError ___signal___: (self @env0:class ___statFailedMessage: path)
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___statFailedMessage: path
+
+	^ 'Cannot stat: ' @env0:, path @env0:printString
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___listingFailedMessage: path
+
+	^ 'Cannot list directory: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -2194,10 +2194,7 @@ ___applyUtime___: aPath atime: at mtime: mt follow: followSymlinks
 	reports them in: argument conversion, then the syscall."
 	atIso := self ___isoUtcFromEpochSeconds___: at.
 	mtIso := self ___isoUtcFromEpochSeconds___: mt.
-	st := self ___statOrNil___: path lstat: followSymlinks @env0:not.
-	st @env0:isNil ifTrue: [
-		FileNotFoundError ___signal___:
-			('[Errno 2] No such file or directory: ' @env0:, (path @env0:printString))].
+	self ___statOrSignal___: path isLstat: followSymlinks @env0:not.
 	q := self ___shellQuote___: path.
 	base := followSymlinks ifTrue: ['touch '] ifFalse: ['touch -h '].
 	at @env0:= mt
@@ -2213,9 +2210,7 @@ ___applyUtime___: aPath atime: at mtime: mt follow: followSymlinks
 	(st @env0:notNil @env0:and: [
 		(st @env0:mtimeUtcSeconds @env0:= mt) @env0:and: [
 			st @env0:atimeUtcSeconds @env0:= at]])
-		ifFalse: [
-			OSError ___signal___: ('[Errno 1] Operation not permitted: '
-				@env0:, (path @env0:printString))].
+		ifFalse: [^ self ___signalErrno: 1 filename: path].
 	^ None
 %
 
@@ -2250,11 +2245,11 @@ _utime: positional kw: kwargs
 	a module method here builds a fresh BoundMethod each time, so the set could
 	only ever answer false.
 
-	DEVIATION: a failure to apply the times -- most often no write permission,
-	which CPython reports as PermissionError -- surfaces as a plain OSError,
-	because performOnServer: hands back no exit status to tell the cases apart.
-	``except OSError'' catches both spellings; ``except PermissionError'' would
-	not."
+	A failure to apply the times raises PermissionError, which is CPython's
+	class for the usual causes: not owning the file, or not being allowed to
+	write it.  performOnServer: hands back no exit status to tell the causes
+	apart, so the errno is always EPERM, and a read-only filesystem (EROFS
+	in CPython, a plain OSError) is reported the same way."
 
 	| n path times ns timesGiven nsGiven follow at mt pair |
 	n := positional @env0:size.
@@ -2413,20 +2408,14 @@ ___applyChmod___: aPath mode: aMode
 
 	| path st want |
 	want := aMode @env0:bitAnd: 8r7777.
-	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: false.
-	st @env0:isNil ifTrue: [
-		FileNotFoundError ___signal___:
-			('[Errno 2] No such file or directory: '
-				@env0:, ((self ___fsPath___: aPath) @env0:printString))].
-	(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want ifTrue: [^ None].
 	path := self ___fsPath___: aPath.
+	st := self ___statOrSignal___: path isLstat: false.
+	(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want ifTrue: [^ None].
 	self ___runShell___: 'chmod ' @env0:, (self ___octalString___: want)
 		@env0:, ' ' @env0:, (self ___shellPathArg___: path).
 	st := self ___statOrNil___: path lstat: false.
 	(st @env0:notNil @env0:and: [(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want])
-		ifFalse: [
-			OSError ___signal___: ('[Errno 1] Operation not permitted: '
-				@env0:, (path @env0:printString))].
+		ifFalse: [^ self ___signalErrno: 1 filename: path].
 	^ None
 %
 
@@ -2460,11 +2449,11 @@ _chmod: positional kw: kwargs
 	object identity and an attribute load here builds a fresh BoundMethod each
 	time.
 
-	DEVIATION: a failure to apply the mode -- most often not owning the file,
-	which CPython reports as PermissionError -- surfaces as a plain OSError,
-	because performOnServer: hands back no exit status to tell the cases apart.
-	``except OSError'' catches both spellings; ``except PermissionError'' would
-	not."
+	A failure to apply the mode raises PermissionError with EPERM, which is
+	what CPython raises for the usual cause, not owning the file.
+	performOnServer: hands back no exit status to tell the causes apart, so a
+	read-only filesystem (EROFS in CPython, a plain OSError) is reported the
+	same way."
 
 	| n path mode |
 	n := positional @env0:size.
