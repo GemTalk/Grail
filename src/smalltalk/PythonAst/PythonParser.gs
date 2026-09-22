@@ -1091,13 +1091,16 @@ method: PythonParser
 parseClassDefWithDecorators: decorators
 	"Parse a class definition with already-parsed decorators."
 
-	| tok nameTok bases keywords body block variables writes blocking scope |
-	tok := self advance. "consume 'class'"
+	| tok nameTok bases keywords body block variables writes blocking scope  classTypeParams |	tok := self advance. "consume 'class'"
 	nameTok := self expectType: #NAME.
 	"``class _:`` -- same parse-time rename as def _ / NameAst reads."
 	nameTok value = '_' ifTrue: [nameTok value: self underscoreDefName asString].
 	self declareWrite: nameTok value asSymbol.
-	self skipTypeParams.
+	"KEEP the PEP 695 parameter names.  skipTypeParams already ANSWERS them --
+	the def parser has stored them since __type_params__ became observable --
+	and the class parser threw them away and set an empty array, so
+	``class A[T]'' recorded nothing and A.__type_params__ could not exist."
+	classTypeParams := self skipTypeParams.
 	bases := Array new.
 	keywords := Array new.
 	(self matchOp: '(') ifTrue: [
@@ -1131,7 +1134,7 @@ parseClassDefWithDecorators: decorators
 		keywords: keywords;
 		body: block;
 		decorator_list: decorators;
-		type_params: Array new;
+		type_params: (classTypeParams ifNil: [Array new]);
 		from: tok to: self lastSpanToken ; yourself
 %
 
