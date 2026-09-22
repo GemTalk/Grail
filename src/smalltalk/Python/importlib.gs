@@ -6737,26 +6737,74 @@ ___import__: positional kw: kwargs
 	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module"
 
 	| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath |
+	"EVERY KEYWORD READ IS DEFAULTED.  These were bare ``__getitem__'' sends,
+	which raise KeyError for a key that is not there -- so supplying ANY
+	keyword without supplying all of them failed on the first one missing:
+
+	    __import__('sys', fromlist=['path'])    KeyError: 'globals'
+
+	It survived because callers in the corpus pass either no keywords at all
+	(kwargs nil, which the ifNil: branch covers) or the whole set.  A partial
+	call is the ordinary spelling, and ``__import__(name='sys')'' is the
+	smallest one."
 	name := positional @env0:at: 1.
 	globals := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'globals'] ifNil: [None]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'globals' _: None] ifNil: [None]].
 	locals := (positional __len__ @env0:> 2)
 		ifTrue: [positional @env0:at: 3]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'locals'] ifNil: [None]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'locals' _: None] ifNil: [None]].
 	fromlist := (positional __len__ @env0:> 3)
 		ifTrue: [positional @env0:at: 4]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'fromlist'] ifNil: [{}]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'fromlist' _: {}] ifNil: [{}]].
 	level := (positional __len__ @env0:> 4)
 		ifTrue: [positional @env0:at: 5]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'level'] ifNil: [0]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'level' _: 0] ifNil: [0]].
 
 	"Handle relative imports"
 	absoluteName := (level @env0:> 0)
 		ifTrue: [
-			| package |
-			package := globals ifNotNil: [globals __getitem__: '__package__'] ifNil: [None].
+			| package spec |
+			"CPython's _calc___package__, including the WARNING it emits before
+			giving up.  Three sources, in order: __package__, then __spec__'s
+			parent, and only then a fallback to __name__ -- and the fallback is
+			warned about (bpo-37409, ImportWarning) because it is a guess that
+			can silently resolve to the wrong package.
+
+			Grail read __package__ alone and raised immediately, so a relative
+			import from a namespace with only __spec__ failed where CPython
+			succeeds, and the documented warning never appeared.
+			test_builtin test_import asserts the warning AND the ImportError
+			together, which is what says the fallback was attempted rather than
+			skipped."
+			package := globals ifNotNil: [globals @env1:get: '__package__' _: None] ifNil: [None].
+			spec := globals ifNotNil: [globals @env1:get: '__spec__' _: None] ifNil: [None].
+			(package == None @env0:and: [spec ~~ None @env0:and: [spec ~~ nil]]) ifTrue: [
+				package := [spec @env1:___pyAttrLoad___: #'parent']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: None]].
 			package == None ifTrue: [
+				((Python @env0:at: #warnings) @env0:___instance___)
+					@env1:warn: 'can''t resolve package from __spec__ or __package__, '
+						@env0:, 'falling back on __name__ and __path__'
+					_: (Python @env0:at: #'ImportWarning').
+				package := globals
+					ifNotNil: [globals @env1:get: '__name__' _: None]
+					ifNil: [None].
+				"No __path__ means __name__ names a MODULE rather than a package,
+				so the package is everything before its last dot -- which for a
+				top-level module is nothing at all, and that is the case that
+				then raises."
+				((package ~~ None @env0:and: [package ~~ nil])
+					@env0:and: [(globals @env1:__contains__: '__path__') @env0:not]) ifTrue: [
+						| idx |
+						idx := 0.
+						1 @env0:to: package @env0:asString @env0:size do: [:i |
+							((package @env0:asString @env0:at: i) @env0:== $.) ifTrue: [idx := i]].
+						package := idx @env0:= 0
+							ifTrue: ['']
+							ifFalse: [package @env0:asString @env0:copyFrom: 1 to: idx @env0:- 1]]].
+			((package == None) @env0:or: [package @env0:isNil
+				@env0:or: [package @env0:asString @env0:isEmpty]]) ifTrue: [
 				ImportError ___signal___: 'attempted relative import with no known parent package'
 			].
 			self ___resolve_name___: name package: package level: level
@@ -7850,7 +7898,7 @@ pythonClasses
 	would shrink the answer, which is the opposite of what an honest coverage
 	count needs.  Use ``pythonClassCensus'' for the per-source breakdown."
 
-	| out todo reg mi canon |
+	| out todo reg mi |
 	out := IdentitySet new.
 	todo := OrderedCollection new.
 	reg := self ___subclassRegistry___.
@@ -7861,13 +7909,7 @@ pythonClasses
 	mi keysAndValuesDo: [:sub :entry |
 		todo add: sub.
 		self ___addMiEntry___: entry to: todo].
-	"Read the committed registry WITHOUT ___canonicalClassRegistry___, which would
-	create an empty RcKeyValueDictionary in UserGlobals and dirty the transaction
-	for what is supposed to be a read.  The generation check still runs, so a
-	registry left over from a previous runtime is dropped rather than over-reported."
-	self ___canonicalGenerationCheck___.
-	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
-	canon ifNotNil: [canon keysAndValuesDo: [:k :c | todo add: c]].
+	self ___committedCanonicalClassesDo: [:each | todo add: each].
 	[todo isEmpty] whileFalse: [ | c |
 		c := todo removeLast.
 		(c notNil and: [(out includes: c) not]) ifTrue: [
@@ -7899,7 +7941,7 @@ pythonClassCensus
 	appears in more than one, and the closure can reach classes named by none of
 	them directly."
 
-	| out reg mi canon seen |
+	| out reg mi seen |
 	out := IdentityKeyValueDictionary new.
 	reg := self ___subclassRegistry___.
 	mi := self ___miRegistry___.
@@ -7913,12 +7955,12 @@ pythonClassCensus
 		seen add: sub.
 		self ___addMiEntry___: entry to: seen].
 	out at: #fromMiRegistry put: seen size.
-	self ___canonicalGenerationCheck___.
-	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
-	out at: #canonicalRegistryPresent put: canon notNil.
 	seen := IdentitySet new.
-	canon ifNotNil: [canon keysAndValuesDo: [:k :c | c ifNotNil: [seen add: c]]].
+	self ___committedCanonicalClassesDo: [:each | seen add: each].
 	out at: #fromCanonicalClasses put: seen size.
+	out
+		at: #canonicalRegistryPresent
+		put: (UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) notNil.
 	out at: #total put: self pythonClasses size.
 	^ out
 %
@@ -7941,6 +7983,30 @@ pythonDirectSubclassesOf: aClass
 	Class.gs>>__subclasses__, which is the other caller."
 
 	^ functools ___instance___ @env1:___pyDirectSubclassesOf___: aClass
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+___committedCanonicalClassesDo: aBlock
+	"Private to the enumeration API: evaluate aBlock with every CLASS in the
+	committed canonical registry.
+
+	Not every value there is a class.  The registry keeps the FINAL object a
+	module-scope class statement bound, after its decorators, and a decorator
+	may bind something else: CPython's own genericpath declares ALLOW_MISSING
+	with ``@object.__new__'', which binds an instance.  The registry is right to
+	keep it -- a warm probe must hand back exactly what the build produced -- and
+	an enumeration of classes is right to skip it.
+
+	Read WITHOUT ___canonicalClassRegistry___, which would create an empty
+	RcKeyValueDictionary in UserGlobals and dirty the transaction for what is
+	supposed to be a read.  The generation check still runs, so a registry left
+	over from a previous runtime is dropped rather than over-reported."
+
+	self ___canonicalGenerationCheck___.
+	(UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) ifNotNil: [:registry |
+		registry keysAndValuesDo: [:key :value |
+			(value isKindOf: Behavior) ifTrue: [aBlock value: value]]]
 %
 
 category: 'Grail-Class Enumeration'

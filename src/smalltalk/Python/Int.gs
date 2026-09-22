@@ -541,10 +541,29 @@ __abs__
 
 category: 'Grail-Arithmetic'
 method: int
+___checkedAgainst___: other
+	"Self, having checked that it can take part in arithmetic with ``other''.
+
+	The MIRROR of float>>___checkedOperand___, and needed because either side
+	can be the huge one: ``1.0 + 10**1000'' coerces the OPERAND and
+	``10**1000 + 1.0'' coerces the RECEIVER, and GemStone answers an infinity
+	for both where CPython raises ``int too large to convert to float''.
+
+	Only fires when the other side is a Float -- integer arithmetic is exact
+	and unbounded up to GemStone's own LargeInteger ceiling, which raises its
+	own OverflowError elsewhere."
+
+	(other @env0:isKindOf: Float) ifTrue: [
+		float ___intToFloatChecked___: self].
+	^ self
+%
+
+category: 'Grail-Arithmetic'
+method: int
 __add__: other
 	"Add two integers or integer and other number."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:+ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
@@ -911,7 +930,7 @@ method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:* other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
 	"Sequence repetition is commutative: ``2 * 'ab''' / ``2 * [1]''
@@ -1317,7 +1336,7 @@ method: int
 __sub__: other
 	"Subtract other from self."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:- (other)].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:- (other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
@@ -1336,7 +1355,7 @@ __truediv__: other
 		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Integer) ifTrue: [^ self ___intTrueDivFloat___: other].
-	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 			^ self ___intTrueDivFloat___: (other __index__)].

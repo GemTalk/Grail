@@ -3203,6 +3203,66 @@ isupper
 
 category: 'Grail-String-like Methods'
 method: bytes
+___beginBufferExport___
+	"Mark the receiver as having a live buffer export, and answer a block that
+	releases it.
+
+	CPython's buffer protocol is what makes ``bytearray.join'' refuse a
+	separator that the iterable MUTATES: join holds a buffer view of self
+	while it consumes the iterable, and resizing an object with a live export
+	raises BufferError.  Grail has no buffer protocol, so it simply used
+	whatever self had become AFTER the iterable ran:
+
+	    array = bytearray(b',')
+	    def it():
+	        array.clear()
+	        yield b'A'; yield b'B'
+	    array.join(it())      -- bytearray(b'AB'), the separator gone
+
+	A wrong answer rather than an error, and a silent one: the separator
+	vanishes and the join looks like it worked.
+
+	A COUNT rather than a flag, because joins can nest -- ``sep.join(x for x
+	in [sep.join(...)])'' -- and a flag would be cleared by the inner one
+	while the outer export is still live.
+
+	Keyed by identity in SessionTemps: a bytearray is a byte object and
+	cannot carry a dynamic instVar (that is the same no-__dict__ property
+	object>>___pyStoreDynamic___ refuses stores for), so the mark cannot live
+	on the object itself."
+
+	| reg n |
+	reg := SessionTemps @env0:current @env0:at: #'GrailBufferExports' otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailBufferExports' put: reg].
+	n := reg @env0:at: self otherwise: 0.
+	reg @env0:at: self put: n @env0:+ 1.
+	^ [ | m |
+		m := reg @env0:at: self otherwise: 1.
+		m @env0:<= 1
+			ifTrue: [reg @env0:removeKey: self ifAbsent: [nil]]
+			ifFalse: [reg @env0:at: self put: m @env0:- 1] ]
+%
+
+category: 'Grail-Buffer Protocol'
+method: bytes
+___refuseIfBufferExported___
+	"Raise CPython's BufferError when the receiver is being resized while a
+	buffer export is live.  Checked by every bytearray operation that changes
+	the SIZE; reads and in-place byte writes are unaffected, which is what the
+	buffer protocol allows."
+
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #'GrailBufferExports' otherwise: nil.
+	(reg @env0:notNil @env0:and: [(reg @env0:at: self otherwise: 0) @env0:> 0]) ifTrue: [
+		^ BufferError ___signal___:
+			'Existing exports of data: object cannot be re-sized'].
+	^ self
+%
+
+category: 'Grail-Sequence Methods'
+method: bytes
 join: iterable
 	"Join iterable of bytes with self as separator"
 	| iterClass parts resolvedParts totalSize result offset |
@@ -3216,7 +3276,14 @@ join: iterable
 		ifTrue: [iterable]
 		ifFalse: [
 			(iterClass @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil
-				ifTrue: [list __new__: iterable]
+				ifTrue: [
+					"THE EXPORT IS HELD ACROSS THE MATERIALISATION, which is
+					where the iterable's own code runs and so the only window
+					in which it can mutate the separator.  Everything after
+					this point reads a list that is already built."
+					| release |
+					release := self ___beginBufferExport___.
+					[list __new__: iterable] @env0:ensure: [release @env0:value]]
 				ifFalse: [TypeError ___signal___: 'can only join an iterable']].
 
 	"Empty iterable -- still a NEW object of the receiver's base type

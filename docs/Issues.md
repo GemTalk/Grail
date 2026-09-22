@@ -5955,6 +5955,29 @@ Safe to land today: the manifest and the committed board agree row for row
 red by itself. It fires the next time someone adds a module that crashes — which
 is exactly when it should.
 
+## A plain with ran the generator __enter__ returned
+
+`with contextlib.closing(gen()) as it:` bound `None`.
+
+Every `with` was compiled through the await helper `async with` needs
+(`PythonCoroutine >> ___grailAwait___:`), on reasoning written into three comments:
+the helper "passes a non-coroutine straight through, so the synchronous path is
+untouched". It does not pass a GENERATOR through. It drives anything
+generator-shaped to completion, as an `await` must for a generator-based
+coroutine — so an `__enter__` that returned a generator had it RUN, and the `as`
+target got its return value, `None`. A coroutine returned from `__enter__` was
+likewise awaited where CPython binds it unawaited.
+
+A plain `with` now has no await at all, as CPython has none. The class-side await
+was really `async with` knowledge that `WithAst` held only so `AsyncWithAst` could
+inherit it through `super`; it now lives in `AsyncWithAst`, which keeps it for an
+`async with` outside a wrapped body. Both codegen arms change and both were
+measured: the corpus (tier 2) and the text arm do not move, and the IR arm is 53
+failures before and after with an empty name diff — this changes the code emitted
+for every `with` in the corpus, and nothing moved.
+
+Found through CPython's glob, which lists a directory with exactly
+`contextlib.closing(_iterdir(...))`.
 ## A def __new__ under an if in a class body crashed the gem
 
 ```python
@@ -6084,3 +6107,195 @@ silently compressing without the dictionary.
 * **`cp437` cannot ENCODE**: `'é'.encode('cp437')` raises where CPython answers
   `b'\x82'`. Decoding works, and zipfile only decodes with it (it writes names
   as ASCII or UTF-8), but the dict-based `charmap_encode` path is wrong.
+
+## pathlib is CPython's own package
+
+Grail's `pathlib` was a 272-line hand-written stub whose header called itself
+"the minimum Path / PurePath surface" Flask needed. It is now CPython 3.14's
+package (`src/python/stdlib/pathlib/`), vendored with two adaptations marked
+`GRAIL`, and the modules it imports came with it: `glob`, `fnmatch` and
+`posixpath` replace hand-written versions (110, 138 and 114 lines), and
+`ntpath`, `genericpath` and a `_collections_abc` bridge are new. The same route
+as ElementTree and zipfile: vendor the real module verbatim, and let it find out
+what the rest of Grail is missing.
+
+| blocked | missing | fixed by |
+| --- | --- | --- |
+| import | a class-body `def __new__` under an `if` was CALLED (`WindowsPath`) | #1081 |
+| listing a directory | a plain `with` ran the generator `__enter__` returned | #1082 |
+| import (`glob`) | `os.path.lexists` | `os_path.gs` |
+| import | `_collections_abc` | a bridge onto `collections.abc` |
+| `isinstance(x, os.PathLike)` | `os.PathLike.register` | `os.gs` |
+| `isinstance(st, os.stat_result)` | the name `os.stat_result` | `os.gs` |
+| `Path.stat(follow_symlinks=False)`, `Path.lstat` | a keyword form of `os.stat` | `os.gs` |
+| `Path.touch` | `os.open` | GRAIL adaptation: builtin `open` in `'x'`/`'a'`, then `chmod` |
+| `import pathlib.types` | `register()` on an `ABC` subclass | GRAIL adaptation: name `ABCMeta` |
+| **`Path.resolve()`** | `os.path.realpath(p, strict=...)` | a keyword form |
+| **`Path.mkdir(parents=True)`** | `os.mkdir` raising `FileNotFoundError` | the errno's own subclass |
+
+### Two of those were regressions against the stub
+
+`resolve()` and `mkdir(parents=True)` both worked with the stub, because it
+reached `os` by a different road: its `mkdir` called `os.makedirs`, and its
+`resolve` called `os.path.abspath`. The real module calls
+`realpath(path, strict=strict)`, which matched no selector, and it creates
+parents by catching the `FileNotFoundError` that `os.mkdir` raises for a
+missing one — where Grail's raised a plain `OSError`, so the catch never fired.
+
+Neither showed at import time, and neither showed in the first spike. They
+surfaced only once a fixture made the calls a real caller makes, which is the
+argument for `tests/python/real_pathlib.py` checking CALLS rather than names.
+
+`os.mkdir` now raises what CPython's does: `FileNotFoundError`,
+`FileExistsError`, `NotADirectoryError` or `PermissionError`, with `errno`,
+`strerror` and `filename` set. The kernel primitive answers only `nil`, so the
+errno is read back from the filesystem: the path already exists (`EEXIST`), its
+parent cannot be stat'd (that stat's own errno), or the parent is not a
+directory (`ENOTDIR`). The first version parsed the strerror text `GsFile`
+leaves in its class error buffer instead. That passed every run on Darwin and
+fell through to a plain `OSError` on CI's Linux gem — the text is not portable,
+and a Mac run cannot say so. A directory that exists but refuses the entry
+(`EACCES` on the final component) still raises a plain `OSError`.
+
+### A class enumeration assumed every canonical value is a class
+
+The full SUnit run found one more, outside pathlib entirely: five
+`PythonClassEnumerationTestCase` errors, `a ALLOW_MISSING does not understand
+#name`. genericpath declares its sentinel as
+
+```python
+@object.__new__
+class ALLOW_MISSING: ...
+```
+
+and the canonical class registry keeps the FINAL object a module-scope class
+statement bound, after its decorators — here an instance. The registry is right
+to: a warm probe must hand back exactly what the build produced, and two readers
+in `Object.gs` already guard with `isKindOf: Behavior`. `importlib pythonClasses`
+and `pythonClassCensus` (#885) did not, so once any session had imported pathlib
+and committed, the enumeration answered an instance among its classes. Both now
+read the registry through one helper that yields classes only.
+`tests/python/class_statement_binding_an_instance.py` puts such an instance in the
+registry on purpose, so the two new tests do not depend on what some earlier
+session happened to commit.
+
+### A tripwire replaced
+
+`GlobTestCase>>testDoubleStarRaises` pinned the stub's refusal of `**`. Real
+`glob` recurses when asked, so the test became
+`testDoubleStarRecursesOnlyWhenAsked`, and the two tests that compared listings
+now compare `sorted(...)`: CPython's `glob` answers in directory order, which is
+unspecified, and the stub had happened to sort.
+
+### Still open, found on the way
+
+None of these is a regression — the stub had none of these methods — but each is
+a call the real pathlib now makes and Grail cannot yet answer.
+
+* **`os.path.realpath` does not resolve symlinks.** `os.readlink` exists, so this
+  is a gap, not a platform limit. On macOS every `tempfile` directory sits under
+  `/var -> /private/var`, so `Path(tempfile.mkdtemp()).resolve()` differs from
+  CPython there. `real_pathlib.py` compares paths relative to its root for this
+  reason.
+* **`os.rename` of a missing file returns normally.**
+  `GsFile renameFileOnServer:to:` answers an errno on failure, and `os.rename`
+  tests only for `nil`. `Path.rename` inherits it. — FIXED below.
+* **`OSError(2, 'msg')` stays an `OSError`.** CPython's `OSError.__new__` picks
+  the subclass from the errno. `BaseException class >> ___classForArgs___:` is
+  the hook for exactly this, but only the two-argument constructor consults it.
+* **Missing `os` support for other `Path` methods:** `replace`/`move`
+  (`os.replace` — FIXED below), `walk` (`os._walk_symlinks_as_files`), `is_mount`
+  (`os.path.ismount`), `is_junction` (`os.path.isjunction`), and
+  `as_uri`/`from_uri` (`urllib.request.pathname2url`/`url2pathname`).
+* **`abc.ABC` does not carry `ABCMeta`.** That is why `pathlib.types` needs its
+  adaptation; `abc.py` records why the switch is deferred.
+
+## os.rename said nothing when it failed
+
+`os.rename` of a file that does not exist returned `None`, moved nothing, and
+raised nothing. `GsFile renameFileOnServer:to:` answers `0` on success and the
+errno on failure; `os.rename` tested only for `nil`, the one answer it never
+gives. A failed rename was indistinguishable from a successful one, and every
+caller inherited that: `Path.rename`, and Grail's `shutil.move`.
+
+It now raises what CPython raises — the errno's own subclass, with `errno`,
+`strerror`, `filename` and `filename2`:
+
+```
+FileNotFoundError: [Errno 2] No such file or directory: 'a' -> 'b'
+```
+
+Two pieces came with it. `os.replace` did not exist, and it is `rename(2)` itself
+on POSIX; `Path.replace` and `Path.move` call it, and so does Jinja2's
+`FileSystemBytecodeCache`, which had been getting `AttributeError` where it
+catches `OSError`. `os.strerror` did not exist either, and it is what the
+messages above need. It is libc's own `strerror()` through a `CCallout`, not a
+table, because Darwin and Linux word several errnos differently.
+
+The subclass is chosen only for the six errnos a FILE operation reports that
+Darwin and Linux number alike (`EPERM`, `ENOENT`, `EACCES`, `EEXIST`, `ENOTDIR`,
+`EISDIR`). Directory-not-empty is 66 on one and 39 on the other and has no class
+of its own; it stays a plain `OSError`, with the platform's text. `os.mkdir`'s
+failures, from #1104, now go through the same helper, which retired the four-row
+class-and-text table that change added.
+
+### Still open in the same area
+
+* **Raises in `os.gs` and `io` carried the message but not the errno** — FIXED
+  below.
+* **`OSError(2, 'msg')` still stays an `OSError`** (the pathlib entry above).
+  Not done here: it changes the exception constructors every exception shares,
+  which is a tier-2 change of its own.
+
+## A failing os call carried no errno
+
+`os.stat`, `os.lstat`, `os.listdir`, `os.symlink`, `os.readlink`, `os.utime`,
+`os.chmod`, `os.remove`, `open()` and `gzip.open()` raised the right `OSError`
+subclass with CPython's message, but built it from the text alone, like this:
+`FileNotFoundError('[Errno 2] No such file or directory: ...')`. So `e.errno`,
+`e.strerror` and `e.filename` were all `None`. Code that reads them got nothing
+back: `except FileNotFoundError as e: missing.add(e.filename)` added `None`, and
+`e.errno == errno.ENOENT` was false for a missing file. `open()` had the same
+problem, because the stat it runs to find out why a file will not open was one
+of these raises.
+
+They now go through `___signalErrno:filename:`, the helper `os.rename` and
+`os.mkdir` use. Three call sites also answered the wrong thing:
+
+* **`os.symlink` named only the link.** CPython names both paths
+  (`[Errno 17] File exists: 'src' -> 'dst'`). It also raised
+  `FileNotFoundError` for a link under a plain file, where CPython raises
+  `NotADirectoryError`. The check before the `ln -s` now uses the same
+  filesystem diagnosis as `os.mkdir`.
+* **`os.readlink` of a path under a file** was `FileNotFoundError`; it is
+  `NotADirectoryError`, the lstat's own errno.
+* **`os.remove` of a path under a file** was `FileNotFoundError` too, and its
+  message had no `[Errno 2]` prefix at all.
+
+`os.strerror(None)` raised a Smalltalk `ArgumentError` from the C callout, and
+Python code cannot catch that. It now raises CPython's `TypeError`, and
+`OverflowError` outside a C int.
+
+`os.utime` and `os.chmod` check afterwards whether the change took, and when it
+did not they raised a plain `OSError` carrying the text "[Errno 1]". That is
+now a real `EPERM`, which is `PermissionError`: CPython's class for the usual
+cause, not owning the file. The shell command reports no status, so a read-only
+filesystem is reported the same way, where CPython would say `EROFS`.
+
+### Still open in the same area
+
+* **`os.chdir`, `os.rmdir`, and `os.remove` of a directory** say
+  `Cannot change directory` / `Cannot remove ...` as a plain `OSError` with no
+  errno. Their primitives answer only nil, so each needs a filesystem diagnosis,
+  like the one `mkdir` has. `os.remove` of a directory is also a platform
+  split: `EPERM` on Darwin and `EISDIR` on Linux.
+* **`subprocess` of a missing program** raises
+  `FileNotFoundError('[Errno 2] ...')` from the text alone. CPython sets
+  `filename` to the program.
+* **The socket layer's errors** use the same one-argument form. Network
+  errnos are numbered differently on Darwin and Linux, so there is no shared
+  table to borrow.
+* **Grail's `shutil.py`** raises `FileExistsError("[Errno 17] File exists: ...")`
+  as a message too.
+* **`OSError(2, 'msg')` still stays an `OSError`** (see the pathlib entry):
+  a tier-2 change to the constructors every exception shares.

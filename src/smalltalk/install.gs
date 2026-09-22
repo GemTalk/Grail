@@ -662,6 +662,7 @@ run
 	at: #'AwaitProtocolTestCase' put: nil;
 	at: #'AwaitablePlumbingTestCase' put: nil;
 	at: #'BareEvalExecScopeTestCase' put: nil;
+	at: #'BufferExportOnJoinTestCase' put: nil;
 	at: #'BareEvalNestedScopeTestCase' put: nil;
 	at: #'BaseExceptionGroupTestCase' put: nil;
 	at: #'BaseExceptionTestCase' put: nil;
@@ -967,6 +968,7 @@ run
 	at: #'IPv6AddressTestCase' put: nil;
 	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
+	at: #'ImportAndOpenArgsTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
 	at: #'IndexTypeErrorNamesTestCase' put: nil;
@@ -997,6 +999,7 @@ run
 	at: #'InspectSignatureObjectsTestCase' put: nil;
 	at: #'InstanceDocstringTestCase' put: nil;
 	at: #'IntegerTestCase' put: nil;
+	at: #'IntFloatOverflowTestCase' put: nil;
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorLengthHintTestCase' put: nil;
@@ -1115,6 +1118,8 @@ run
 	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'OsRemoveDollarPathTestCase' put: nil;
+	at: #'OsRenameErrorsTestCase' put: nil;
+	at: #'OsErrorsCarryErrnoTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
 	at: #'OsTestCase' put: nil;
 	at: #'OsUtimeTestCase' put: nil;
@@ -1136,6 +1141,7 @@ run
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'PickleProtocolTestCase' put: nil;
 	at: #'PkgRelativeInitTestCase' put: nil;
+	at: #'PlainWithDoesNotAwaitTestCase' put: nil;
 	at: #'PositionalOnlyDefaultsTestCase' put: nil;
 	at: #'PowSemanticsTestCase' put: nil;
 	at: #'PosonlyAndReflectedEqTestCase' put: nil;
@@ -1169,6 +1175,7 @@ run
 	at: #'ReModuleTestCase' put: nil;
 	at: #'ReNonAsciiSubTestCase' put: nil;
 	at: #'ReSubCallableTestCase' put: nil;
+	at: #'RealPathlibTestCase' put: nil;
 	at: #'RecursionErrorTestCase' put: nil;
 	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
@@ -1991,6 +1998,7 @@ input src/smalltalk/PythonTests/AugmentedAssignmentTestCase.gs
 input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
 input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
 input src/smalltalk/PythonTests/BareEvalExecScopeTestCase.gs
+input src/smalltalk/PythonTests/BufferExportOnJoinTestCase.gs
 input src/smalltalk/PythonTests/BareEvalNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionGroupTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionTestCase.gs
@@ -2300,6 +2308,7 @@ input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/IndexTypeErrorNamesTestCase.gs
 input src/smalltalk/PythonTests/MapFilterZipPickleTestCase.gs
 input src/smalltalk/PythonTests/ImportErrorTestCase.gs
+input src/smalltalk/PythonTests/ImportAndOpenArgsTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
@@ -2328,6 +2337,7 @@ input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
 input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
 input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
+input src/smalltalk/PythonTests/IntFloatOverflowTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
@@ -2454,6 +2464,8 @@ input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/OSErrorTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/OsRemoveDollarPathTestCase.gs
+input src/smalltalk/PythonTests/OsRenameErrorsTestCase.gs
+input src/smalltalk/PythonTests/OsErrorsCarryErrnoTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
@@ -2482,6 +2494,7 @@ input src/smalltalk/PythonTests/PermissionErrorTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
 input src/smalltalk/PythonTests/PkgRelativeInitTestCase.gs
+input src/smalltalk/PythonTests/PlainWithDoesNotAwaitTestCase.gs
 input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
 input src/smalltalk/PythonTests/PowSemanticsTestCase.gs
 input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
@@ -2510,6 +2523,7 @@ input src/smalltalk/PythonTests/RoundDirFormatTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
+input src/smalltalk/PythonTests/RealPathlibTestCase.gs
 input src/smalltalk/PythonTests/ReConstantsTestCase.gs
 input src/smalltalk/PythonTests/RecursionErrorTestCase.gs
 input src/smalltalk/PythonTests/ReduceAndBuiltinBindingTestCase.gs

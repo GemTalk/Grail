@@ -1,16 +1,16 @@
-"""The methods Grail's ``pathlib`` stub grew, checked against the real one.
+"""The pathlib surface real callers needed, checked against CPython's.
 
-``src/python/stdlib/pathlib.py`` is an explicit MINIMAL stub -- its own
-header says it exposes "the minimum Path / PurePath surface" Flask needs.
-That is a reasonable place to start and a bad place to stay: the missing
-methods do not announce themselves as missing, they announce themselves
-as ``AttributeError: 'Path' object has no attribute 'touch'`` from inside
-whatever library reached for one.
+This fixture was written for Grail's former ``pathlib.py``, an explicit
+MINIMAL stub whose own header said it exposed "the minimum Path / PurePath
+surface" Flask needed.  Grail's pathlib is now CPython's own package,
+vendored, so the stub is gone -- and this fixture stays, as the record of the
+surface callers actually reached for and as a check that the real module
+still answers it.
 
 Everything here is asserted against CPython's OWN pathlib, because this
-fixture imports ``pathlib`` rather than a copy -- so under the fixture
-gate it is checking the real implementation, and under Grail it is
-checking that the stub agrees with what the gate measured.
+fixture imports ``pathlib`` rather than a copy -- so under the fixture gate
+it checks the real implementation, and under Grail it checks that Grail's
+pathlib agrees with what the gate measured.
 
 The methods are not a wish list.  Each one is here because a real caller
 hit it:

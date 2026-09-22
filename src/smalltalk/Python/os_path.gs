@@ -171,9 +171,36 @@ normcase: aPath
 category: 'Grail-Path Manipulation'
 method: os_path
 realpath: path
-	"No symlink resolution in Grail — same as abspath."
+	"Symlinks are not resolved yet -- same as abspath.  os.readlink exists,
+	so this is a gap rather than a platform limit; see docs/Issues.md."
 
 	^ self abspath: path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+_realpath: positional kw: kwargs
+	"os.path.realpath(filename, *, strict=False), for a call that passes a
+	keyword.  CPython's pathlib resolves with ``os.path.realpath(self,
+	strict=strict)'', so without this Path.resolve() matched no selector --
+	and resolve() is the one call there the old hand-written pathlib had.
+
+	strict asks that the path exist.  With no symlink resolved (see
+	realpath:) that is all it can ask, so stat's own FileNotFoundError is
+	the answer, as it is in CPython."
+
+	| resolved |
+
+	resolved := self realpath: ((os instance) ___requiredArgument: 'filename' at: 1 in: positional kw: kwargs for: 'realpath').
+	(self ___isStrict: kwargs) ifTrue: [(os instance) stat: resolved].
+	^ resolved
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___isStrict: kwargs
+
+	^ kwargs notNil and: [(kwargs @env0:at: 'strict' ifAbsent: [false]) ___isTruthy___]
 %
 
 category: 'Grail-Path Manipulation'
@@ -457,6 +484,21 @@ islink: path
 	follows the link and would report the target's type."
 
 	^ (os instance) ___isLink___: path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+lexists: path
+	"os.path.lexists(path) -- true when path exists, a BROKEN symbolic link
+	included: CPython lstats rather than stats, so the link itself is enough.
+	Only OSError and ValueError mean no, as in CPython.  CPython's glob binds
+	this in a class body (_StringGlobber.lexists), so without it glob -- and
+	pathlib, which imports glob -- could not even be imported."
+
+	^ [(os instance) lstat: path.
+		true]
+			@env0:on: (OSError @env0:, ValueError)
+			do: [:ex | ex @env0:return: false]
 %
 
 ! ===============================================================================
