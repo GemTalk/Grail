@@ -989,6 +989,7 @@ run
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'IPv6AddressTestCase' put: nil;
 	at: #'IRCodegenSmokeTestCase' put: nil;
+	at: #'IRDefIdStableTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
 	at: #'ImportAndOpenArgsTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
@@ -2366,6 +2367,7 @@ input src/smalltalk/PythonTests/IntFloatOverflowTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
+input src/smalltalk/PythonTests/IRDefIdStableTestCase.gs
 input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
