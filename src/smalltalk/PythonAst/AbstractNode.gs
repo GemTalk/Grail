@@ -237,6 +237,47 @@ ___signalExceptStarFlowControl___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___hasModuleScopeAwait___
+	"Whether this subtree AWAITS at module scope -- an ``await'', an ``async
+	for'' or an ``async with'' reachable without entering a def, a lambda or a
+	class body.
+
+	That is exactly CPython's condition for setting CO_COROUTINE on a module
+	compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT, and the careful half is what it
+	must NOT match: an ``async def'' whose awaits are all inside it is an
+	ordinary module, and so is a comprehension with no async in it.
+	test_compile_top_level_await_no_coro asserts the bit is clear for five
+	shapes that each contain something async-looking.
+
+	A comprehension IS searched, and deliberately: ``[x async for x in
+	arange(2)]'' at module level awaits, and CPython marks it.  Only the three
+	node kinds that introduce a new FUNCTION scope end the walk.
+
+	Generic instVar traversal, the same one
+	___collectModuleScopeStarImportsInto___ uses; ``parent'' points UP and is
+	skipped by index."
+
+	((self isKindOf: FunctionDefAst)
+		or: [(self isKindOf: AsyncFunctionDefAst)
+			or: [(self isKindOf: LambdaAst) or: [self isKindOf: ClassDefAst]]])
+				ifTrue: [^ false].
+	((self isKindOf: AwaitAst)
+		or: [(self isKindOf: AsyncForAst) or: [self isKindOf: AsyncWithAst]])
+			ifTrue: [^ true].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		((val isKindOf: AbstractNode)
+			and: [val ___hasModuleScopeAwait___]) ifTrue: [^ true].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				((each isKindOf: AbstractNode)
+					and: [each ___hasModuleScopeAwait___]) ifTrue: [^ true]]]].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___collectModuleScopeStarImportsInto___: aCollection
 	"Add to aCollection every ``from X import *'' statement reachable from
 	this node WITHOUT leaving module scope, in source order.

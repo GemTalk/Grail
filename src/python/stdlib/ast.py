@@ -300,3 +300,23 @@ class NodeVisitor:
 
 class NodeTransformer(NodeVisitor):
     pass
+
+
+# ---------------------------------------------------------------------------
+# Compiler flags.
+#
+# These are the ``flags`` argument of the builtin ``compile()``: bits that
+# direct the COMPILE, as distinct from the CO_ bits that describe the code
+# object it produces.  compile() validates against them, so an unrecognised
+# value is a ValueError rather than being silently ignored.
+#
+# Only PyCF_ALLOW_TOP_LEVEL_AWAIT changes what Grail does: a module compiled
+# with it whose body awaits at module scope gets CO_COROUTINE in co_flags,
+# which is how a caller knows to run the result with ``await`` instead of
+# exec().  The other three are accepted and recorded; Grail's parser produces
+# its own Smalltalk-side node hierarchy, which this module does not export, so
+# asking for an AST back cannot yet be honoured.
+PyCF_ONLY_AST = 0x400
+PyCF_TYPE_COMMENTS = 0x1000
+PyCF_ALLOW_TOP_LEVEL_AWAIT = 0x2000
+PyCF_OPTIMIZED_AST = 0x8400

@@ -707,6 +707,25 @@ _eval: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___topLevelAwaitFlagsFor___: aSource
+	"``co_flags'' for a source compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT:
+	CO_COROUTINE (128) when the body awaits at MODULE scope, 0 otherwise.
+
+	The bit is how a caller knows to run the result with ``await'' rather than
+	exec(), so setting it where CPython would not is a wrong instruction, not
+	a cosmetic difference.  The AST walk is what tells the two apart -- an
+	``async def'' whose awaits are all inside it is an ordinary module.
+
+	A source that will not parse answers 0 rather than raising: compile()
+	raises the SyntaxError itself, above, and this runs after that."
+
+	^ [(ModuleAst @env0:parseSource: aSource) ___hasModuleScopeAwait___
+		ifTrue: [128] ifFalse: [0]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: 0]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___mergeCompileKeywords___: positional kw: kwargs
 	"compile()'s six parameters as one positional array, whichever way the
 	caller spelled them: (source, filename, mode, flags, dont_inherit,
@@ -768,6 +787,18 @@ ___sourceTextFor___: source what: aName
 	| bytes str |
 	(source @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ self ___rejectNulBytesIn___: source].
+	"A CODE OBJECT compile() PRODUCED carries its source, and running it is
+	running that text -- which is what exec()/eval() on the string already did,
+	back when compile() answered the string itself.  A PyCode that is a def's
+	METADATA carries none, and still fails: Grail keeps no bytecode to re-enter,
+	so ``exec(f.__code__)'' is the catchable TypeError CPython raises for a code
+	object with free variables (test_scope testEvalExecFreeVars)."
+	(source @env0:isKindOf: PyCode) ifTrue: [
+		| text |
+		text := source @env0:___grailCompiledSource___.
+		text @env0:isNil ifFalse: [^ text].
+		^ TypeError ___signal___:
+			aName @env0:, '() arg 1 must be a string; a code object is metadata only in Grail'].
 	bytes := nil.
 	(source @env0:isKindOf: ByteArray) ifTrue: [bytes := source].
 	bytes @env0:isNil ifTrue: [
@@ -930,36 +961,51 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 	test_decorators test_errors is the case -- it compiles a three-statement
 	source in ``exec'' mode and eval()s it, expecting the DECORATOR's error.
 
-	The copy exists to make identity a safe key.  Answering ``source'' itself
-	would key on an object the caller already holds and may share -- two call
-	sites can name the same literal -- so a string compiled once in ``exec''
-	mode could make an unrelated eval() of an equal string run as statements.
-	A fresh copy is reachable only through this call's return value.
+	THE RESULT IS A CODE OBJECT, not the source string.  Answering the string
+	worked -- exec()/eval() on a string already run through the AST loader --
+	and it meant a compile() result had no co_filename, no co_name and no
+	co_flags: anything that introspected it saw a str, and jinja2 still
+	carries a ``hasattr(code, 'co_filename')'' fallback written for that.  The
+	PyCode carries the source, so exec()/eval() read it back out and run the
+	text exactly as before.
 
-	Session-local, and it GROWS with the number of compile() calls: there is
-	nowhere on a GemStone byte object to hang the mode (no named instVars on a
-	String), and dropping entries would silently revert a live code object to
-	string semantics, which is a wrong answer rather than a slow one.  Bounded
-	in practice by how many distinct sources a session compiles."
+	co_flags carries CO_COROUTINE (128) when the caller passed
+	PyCF_ALLOW_TOP_LEVEL_AWAIT and the body actually awaits at module level.
+	That bit is how a caller knows to run the result with ``await'' instead of
+	exec(), and CPython is careful that it is NOT set otherwise -- not for an
+	``async def'' whose awaits are all inside it, and not for a comprehension.
+	test_compile_top_level_await_no_coro is that claim.
+
+	The mode/filename side tables are still filled, keyed by the source copy
+	the code object holds, because eval() of a STRING (the common case, and
+	every eval() written by hand) still reads them."
 	(source isKindOf: CharacterCollection) ifTrue: [
-		| copy mode |
+		| copy mode fname flags |
 		mode := (args @env0:size @env0:>= 3)
 			ifTrue: [(args @env0:at: 3) @env0:asString @env0:asSymbol]
 			ifFalse: [#'exec'].
 		copy := source @env0:copy.
 		self ___grailCompiledModeRegistry___ @env0:at: copy put: mode.
-		"AND THE FILENAME, in a side table keyed the same way.  It is the second
-		argument of compile() and the only thing that can name exec'd code: the
-		frames it produces have no file behind them, so without this every one
-		of them reported '<grail>' where CPython reports whatever the caller
-		passed -- test_traceback's test_exception_angle_bracketed_filename
-		compiles under '<does not exist>' and asserts it comes back."
+		"THE FILENAME is compile()'s second argument and the only thing that can
+		name exec'd code: the frames it produces have no file behind them, so
+		without it every one reported '<grail>' where CPython reports whatever
+		the caller passed -- test_traceback's
+		test_exception_angle_bracketed_filename compiles under
+		'<does not exist>' and asserts it comes back."
+		fname := '<string>'.
 		(args @env0:size @env0:>= 2) ifTrue: [
 			| fn |
 			fn := args @env0:at: 2.
 			(fn @env0:isKindOf: CharacterCollection) ifTrue: [
-				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fn @env0:asString]].
-		^ copy].
+				fname := fn @env0:asString.
+				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fname]].
+		flags := ((args @env0:size @env0:>= 4)
+			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])
+			ifTrue: [self ___topLevelAwaitFlagsFor___: copy]
+			ifFalse: [0].
+		^ PyCode @env0:___forCompiledSource___: copy filename: fname
+			mode: mode flags: flags].
 	^ source
 %
 
