@@ -195,21 +195,36 @@ testCountIsReadFromKwargs
 	self assertAll: #('replace_count_keyword')
 %
 
-category: 'Grail-Tests - Why jinja2 reaches it'
+category: 'Grail-Tests - Why jinja2 no longer reaches it'
 method: StrMethodKeywordArgsTestCase
-testCompileAnswersAStrThatShadowsCodeReplace
-	"The misrouting, pinned as three facts.  compile() answers source text, so
-	the result has no ``co_name'' but DOES have ``replace'' -- str''s.  That
-	collision is what turns jinja2''s ``code.replace(co_name=location)'' into a
-	keyword-only call on a string.
+testCompileAnswersACodeObjectWithItsOwnReplace
+	"THIS METHOD USED TO ASSERT THE OPPOSITE, and it was written to.
 
-	If compile() ever answers a real code object these break HERE, which is the
-	point: the change would otherwise silently move jinja2 onto a different
-	method and this whole case would stop testing what it says it tests."
+	compile() answered source TEXT, so its result had no ``co_name'' and DID
+	have ``replace'' -- str's.  That collision is what turned jinja2's
+	``code.replace(co_name=location)'' into a keyword-only call on a string,
+	and the note here said: if compile() ever answers a real code object these
+	break HERE rather than quietly moving jinja2 onto a different method.
 
-	self assertAll: #('compile_answers_a_str' 'compiled_has_no_co_name'
-		'compiled_has_replace')
+	It did, and this is that change.  compile() answers a code object carrying
+	its source; the code object has co_name, co_filename and a ``replace'' of
+	its own, so the call lands where jinja2 meant it to."
+
+	self assertFalseAt: 'compile_answers_a_str'.
+	self assertAll: #('compiled_has_co_name' 'compiled_has_replace').
+	self
+		assert: (self resultAt: 'compiled_co_filename') asString
+		equals: '<fixture>'
 %
+
+category: 'Grail-Tests - Why jinja2 no longer reaches it'
+method: StrMethodKeywordArgsTestCase
+assertFalseAt: key
+	| v |
+	v := self resultAt: key.
+	self assert: v == false description: key , ' -> ' , v printString
+%
+
 
 category: 'Grail-Helpers'
 method: StrMethodKeywordArgsTestCase
@@ -244,5 +259,14 @@ testTheFormerlyFatalKeywordCallsAreTypeErrors
 
 	self assertTypeErrorAt: 'all_keywords'.        "was max:0 actual:1"
 	self assertTypeErrorAt: 'partial_keyword'.     "was max:1 actual:2"
-	self assertTypeErrorAt: 'as_jinja2_calls_it'   "was jinja2/debug.py:122"
+	"THE THIRD NO LONGER RAISES, and that is the fix rather than a regression.
+	It is jinja2/debug.py:122 exactly, and it only ever landed on str.replace
+	because compile() answered text.  Now that compile() answers a code object
+	with its own ``replace'', the call does what jinja2 wrote it to do: answer
+	a copy named for the template.  The row is kept here, beside the two calls
+	that still raise, because it is the same line -- what changed is which
+	method it reaches."
+	self
+		assert: (self resultAt: 'as_jinja2_calls_it') asString
+		equals: 'template'
 %

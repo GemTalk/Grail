@@ -194,7 +194,62 @@ ___pythonValueAttrs___
 
 	^ IdentitySet new
 		add: #'co_freevars';
+		add: #'co_consts';
 		yourself
+%
+
+category: 'Instance Creation'
+classmethod: PyCode
+___forCompiledSource___: aString filename: aFilename mode: aModeSymbol flags: anInteger
+	"The code object ``compile()'' answers.
+
+	Grail has no bytecode, so what makes this object EXECUTABLE is the source
+	it carries: exec()/eval() read it back out and run the text.  Before this,
+	compile() answered the source STRING itself and kept its mode and filename
+	in two identity-keyed side tables -- which worked, and meant the result had
+	no co_filename, no co_flags and no co_name, so anything that introspected a
+	code object saw a str.  jinja2 carries a ``hasattr(code, 'co_filename')''
+	fallback for exactly that.
+
+	``co_flags'' matters beyond introspection: CPython sets CO_COROUTINE on a
+	module compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT whose body actually awaits,
+	and that bit is how a caller knows to run the result with ``await'' rather
+	than exec().  test_compile_top_level_await_no_coro asserts it is NOT set
+	for ordinary code, which is a claim about every compile in the suite.
+
+	The source and mode live under Grail-internal names so they do not surface
+	as Python attributes of the code object; the four co_ fields do."
+
+	| inst |
+	inst := self new.
+	inst dynamicInstVarAt: #'co_name' put: '<module>'.
+	inst dynamicInstVarAt: #'co_qualname' put: '<module>'.
+	inst dynamicInstVarAt: #'co_filename' put: aFilename.
+	inst dynamicInstVarAt: #'co_firstlineno' put: 1.
+	inst dynamicInstVarAt: #'co_flags' put: anInteger.
+	inst dynamicInstVarAt: #'___grailSource___' put: aString.
+	inst dynamicInstVarAt: #'___grailMode___' put: aModeSymbol.
+	^ inst
+%
+
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___grailCompiledSource___
+	"The source text this code object carries, or nil when it is a def's
+	metadata rather than a compile() result."
+
+	^ [self dynamicInstVarAt: #'___grailSource___']
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___grailCompiledMode___
+	"The mode compile() was given -- #exec, #eval or #single -- or nil."
+
+	^ [self dynamicInstVarAt: #'___grailMode___']
+		on: AbstractException do: [:ex | ex return: nil]
 %
 
 category: 'Instance Creation'
@@ -248,6 +303,84 @@ ___setFreevars___: anArrayOfNames
 
 set compile_env: 1
 
+category: 'Grail-Python Protocol'
+method: PyCode
+co_consts
+	"``code.co_consts'': the constants the code references, with any NESTED
+	code objects among them.
+
+	Grail compiles Python to Smalltalk methods and keeps no constant pool, so
+	this is EMPTY -- and empty is the honest answer rather than a placeholder:
+	there is nothing to enumerate, not an unknown number of things.
+
+	It has to exist, though, and the reason is worth recording.  While
+	compile() answered a str, code that walks a code object's constants took
+	its ``isinstance(maybe_code, types.CodeType)'' guard and skipped -- which
+	looked like passing.  test_listcomps' _recursive_replace is exactly that
+	shape, and the moment compile() answered a real code object it went
+	through the guard and reached here.  A missing attribute would have turned
+	a correct change into a regression in a module that never mentions
+	compile().
+
+	What an empty tuple costs is a test that COUNTS what is in there:
+	test_builtin's test_all_any_tuple_optimization asserts a genexp leaves
+	exactly one nested code object, and gets none."
+
+	| v |
+	"dynamicInstVarAt: answers NIL for a name that was never stored rather
+	than raising, so the handler alone is not enough -- an unset slot came
+	back as Smalltalk nil, which Python saw as an UndefinedObject and could
+	not iterate."
+	v := [self @env0:dynamicInstVarAt: #'co_consts']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	v @env0:isNil ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
+	^ v
+%
+
+category: 'Grail-Python Protocol'
+method: PyCode
+_replace: positional kw: kwargs
+	"``code.replace(**kwargs)'': a COPY with the named co_ fields changed.
+
+	jinja2's debug.py calls ``code.replace(co_name=location)'' on every
+	compile() result to name a template frame, and that call is the reason
+	this exists.  While compile() answered the SOURCE STRING it reached
+	str.replace instead -- ``replace'' is in both APIs, and the collision made
+	a keyword-only call on a string, which used to kill a Flask app rendering
+	a template that named a missing filter.  Now that compile() answers a real
+	code object the call has to land somewhere, and this is where.
+
+	A COPY, never a mutation: CPython's code objects are immutable, and
+	jinja2 keeps the original.  Unknown keywords are refused rather than
+	ignored, because a silently-dropped co_ field is a wrong frame name rather
+	than a missing one.
+
+	Only the fields Grail carries can be set; the rest of CPython's code
+	object -- bytecode, constants, line tables -- does not exist here, so
+	asking for one is a TypeError naming it."
+
+	| copy known |
+	positional @env0:isEmpty @env0:ifFalse: [
+		^ TypeError ___signal___:
+			'replace() takes no positional arguments'].
+	known := #('co_name' 'co_qualname' 'co_filename' 'co_firstlineno' 'co_flags'
+		'co_consts').
+	copy := self @env0:class @env0:new.
+	#('co_name' 'co_qualname' 'co_filename' 'co_firstlineno' 'co_flags'
+	  'co_consts' '___grailSource___' '___grailMode___') @env0:do: [:n |
+		| v |
+		v := [self @env0:dynamicInstVarAt: n @env0:asSymbol]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		v @env0:isNil @env0:ifFalse: [
+			copy @env0:dynamicInstVarAt: n @env0:asSymbol put: v]].
+	kwargs @env0:isNil @env0:ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v |
+			(known @env0:includes: k @env0:asString) @env0:ifFalse: [
+				^ TypeError ___signal___: ('replace() got an unexpected keyword argument '''
+					@env0:, k @env0:asString @env0:, '''')].
+			copy @env0:dynamicInstVarAt: k @env0:asString @env0:asSymbol put: v]].
+	^ copy
+%
 category: 'Grail-Attribute Access'
 method: PyCode
 co_freevars

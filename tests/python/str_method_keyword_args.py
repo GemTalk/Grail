@@ -12,12 +12,19 @@
 # file ended the session -- which is why they used to sit in uncalled functions
 # with a note.  They are still functions, so a reader can see each one alone.
 #
-# Reached in real code through jinja2: Grail's compile() answers SOURCE TEXT
-# rather than a code object, so jinja2/debug.py's fake_traceback() finds a
-# str where it expects a CodeType, `hasattr(code, "replace")' is True because
-# str.replace exists, and `code.replace(co_name=location)' becomes exactly
-# this call.  The facts that make that misrouting possible are pinned here
-# too, so a future real compile() breaks these instead of passing silently.
+# HOW IT WAS REACHED IN REAL CODE, and why that route is now gone.  Grail's
+# compile() used to answer SOURCE TEXT rather than a code object, so
+# jinja2/debug.py's fake_traceback() found a str where it expected a CodeType,
+# `hasattr(code, "replace")' was True because str.replace exists, and
+# `code.replace(co_name=location)' became exactly this call.  The bounds check
+# turned that from a dead session into a TypeError -- but jinja2 still could
+# not name the frame.
+#
+# compile() now answers a real code object with a `replace' of its own, so the
+# call lands where jinja2 meant it to and returns a renamed copy.  The rows
+# below record that, and they are deliberately the rows that BROKE when
+# compile() changed: they were written to break rather than quietly move
+# jinja2 onto a different method, and they did.
 
 RESULTS = {}
 
@@ -42,14 +49,15 @@ _record("replace_three_positional", lambda: "abcabc".replace("a", "X", 1) == "Xb
 # limitation.
 _record("replace_count_keyword", lambda: "abcabc".replace("a", "X", count=1) == "Xbcabc")
 
-# --- why jinja2 ends up here ----------------------------------------------
-# compile() answers the source string, so every code-object attribute is
-# missing while every str method is present.  `replace' is in both APIs, and
-# that collision is the whole accident.
+# --- why jinja2 no longer ends up here -------------------------------------
+# compile() answers a code object, so the code-object attributes are present
+# and `replace' is the code object's own.  `replace' being in BOTH APIs is
+# what made the collision possible; these rows say which one now answers.
 _compiled = compile("pass", "<fixture>", "exec")
 _record("compile_answers_a_str", lambda: isinstance(_compiled, str))
-_record("compiled_has_no_co_name", lambda: not hasattr(_compiled, "co_name"))
+_record("compiled_has_co_name", lambda: hasattr(_compiled, "co_name"))
 _record("compiled_has_replace", lambda: hasattr(_compiled, "replace"))
+_record("compiled_co_filename", lambda: _compiled.co_filename)
 
 
 # --- the spellings that used to be fatal -----------------------------------
@@ -72,11 +80,14 @@ def partial_keyword():
 
 
 def as_jinja2_calls_it():
-    """The call jinja2/debug.py:122 makes on a compile() result it believes is
-    a CodeType.  This is the line that used to kill a Flask app rendering a
-    template that named a filter the environment did not have; it now raises,
-    so jinja2's error reporting can report the real error instead."""
-    return compile("pass", "<fixture>", "exec").replace(co_name="template")
+    """The call jinja2/debug.py:122 makes on a compile() result.
+
+    It used to kill a Flask app rendering a template that named a filter the
+    environment did not have: the result was a str, `replace' was str.replace,
+    and a keyword-only call on it ended the session.  The bounds check made it
+    a TypeError; a real code object makes it WORK, which is what jinja2 wanted
+    -- it answers a copy named for the template."""
+    return compile("pass", "<fixture>", "exec").replace(co_name="template").co_name
 
 
 # --- and the results, which is the regression test ------------------------
