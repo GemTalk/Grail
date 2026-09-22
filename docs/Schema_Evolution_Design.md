@@ -1,9 +1,10 @@
 # Schema evolution: decisions and cuts
 
-**Status:** design, 2026-09-20; **cuts 1-3 implemented 2026-09-21**
+**Status:** design, 2026-09-20; **all five cuts closed 2026-09-21**
 (cut 1: survivors, holes, the class-side drop, one home per name, strict
 slots on the current declaration; cut 2: `gemdb.schema`; cut 3: the declared
-`__renamed__`), cuts 4-5 open.
+`__renamed__`; cut 4: the class-level refusals with `rebase`, `drop_class`
+and `rename_class`; cut 5: already delivered, and now verified and pinned).
 Follows
 [Schema_Evolution_Review.md](Schema_Evolution_Review.md), whose proposals
 James reviewed the same day; the decisions below supersede that note's
@@ -365,6 +366,49 @@ the subtree and a class reference in the root.
 ### Cut 5. Instance attributes that shadow a method
 
 *Tier 2 (Object.gs and codegen), and the riskiest cut; last.*
+**Already delivered — verified and pinned 2026-09-21, no product change.**
+
+The cut was written against a defect that has since been fixed, by the
+class-attribute single-home work this same line of cuts grew out of.
+`___pyAttrStore___:put:` already calls
+`object class >> ___grailInstallSelfSendDispatchers___:`, and
+`___grailSelfSendOverrideFor___:` already reads the INSTANCE's dynamic
+instVar before the class chain, which is CPython's order. So the store
+already installs the dispatcher and the dispatcher already honours an
+instance override.
+
+Measured against CPython on all seventeen shapes below, with
+`tests/python/instance_method_override.py` added to pin them — 17 of 17
+under Grail and under real CPython:
+
+* `self.m(x)` inside another method sees the instance override, and a second
+  instance of the same class does not (the dispatcher falls through to the
+  shadow for everyone who has no override);
+* a zero-argument method, a class attribute that BINDS self, and an instance
+  attribute that does not, all in CPython's precedence;
+* `super().m()` ignores the instance override, before and after the store;
+* `del obj.m` restores the class method;
+* a traceback through a patched method does not show the `___grailOrig_`
+  shadow selector;
+* `mock.patch.object(obj, 'm', wraps=obj.m)` records the call a method of
+  `obj` makes through `self.m(...)` — the case the whole cut existed for, and
+  the one the shadow-selector PINNING is needed for: `wraps=obj.m` captures a
+  bound method before the store, and a BoundMethod holds a selector, so
+  without pinning the capture re-sends by name into the dispatcher it is
+  running inside.
+
+The design's four named risks were all resolved when the mechanism was built:
+an IR-built method is copied through `importlib ___copyMethod___:` rather
+than recompiled from source, the dispatcher is compiled under the original
+selector so frames keep their names, `super()` never consults the instance,
+and the varargs forward is rewritten to reach the twin's shadow.
+
+What the plan got wrong was the premise, not the design: it proposed building
+a monotonic per-selector marker and a prologue, and both already existed. The
+lesson is the one the memory now carries — **a recorded trade can expire**;
+re-measure before building on one.
+
+The original statement of the problem, kept for the record:
 
 Today a foreign `obj.m` honours an instance override (the dynamic probe
 runs before the selector family) while `self.m()` inside the class is a
