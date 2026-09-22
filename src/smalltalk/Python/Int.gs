@@ -541,10 +541,29 @@ __abs__
 
 category: 'Grail-Arithmetic'
 method: int
+___checkedAgainst___: other
+	"Self, having checked that it can take part in arithmetic with ``other''.
+
+	The MIRROR of float>>___checkedOperand___, and needed because either side
+	can be the huge one: ``1.0 + 10**1000'' coerces the OPERAND and
+	``10**1000 + 1.0'' coerces the RECEIVER, and GemStone answers an infinity
+	for both where CPython raises ``int too large to convert to float''.
+
+	Only fires when the other side is a Float -- integer arithmetic is exact
+	and unbounded up to GemStone's own LargeInteger ceiling, which raises its
+	own OverflowError elsewhere."
+
+	(other @env0:isKindOf: Float) ifTrue: [
+		float ___intToFloatChecked___: self].
+	^ self
+%
+
+category: 'Grail-Arithmetic'
+method: int
 __add__: other
 	"Add two integers or integer and other number."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:+ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
@@ -609,15 +628,30 @@ ___floorQuotientOf___: aDividend by: aDivisor
 category: 'Grail-Arithmetic'
 method: int
 __divmod__: other
-	"Return (quotient, remainder) tuple."
-	| quot rem |
-	"CPython: division/modulo by zero raises catchable
-	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
-	quot := self ___floorQuotientOf___: self by: other.
-	rem := self @env0:\\ other.
-	^ tuple @env0:with: quot with: rem
+	"Return (quotient, remainder) tuple.
+
+	Computed by DELEGATING to __floordiv__ and __mod__ rather than repeating
+	their arithmetic.  Repeating it is what broke test_fractions: those two
+	carry real special-case handling -- an infinite divisor, Python's
+	divisor-signed zero, the int/float result types -- and a __divmod__ that
+	went straight to the kernel's // and \\ answered (0.0, nan) for
+	``divmod(0.1, float('inf'))'' where CPython answers (0.0, 0.1).
+	Delegating keeps the pair bit-identical to what divmod() produced before it
+	started dispatching here; the ONLY thing that changed is who gets asked.
+
+	The operand guard stays here, ahead of the delegation, because
+	__floordiv__ declines by RAISING (naming ``//''), and a divmod() call must
+	report divmod()."
+
+	| d |
+	d := nil.
+	(other isKindOf: Number) ifTrue: [d := other]
+	ifFalse: [
+		((other @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+	d == nil ifTrue: [
+		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
+	^ tuple @env0:with: (self __floordiv__: d) with: (self __mod__: d)
 %
 
 category: 'Grail-Documentation'
@@ -896,7 +930,7 @@ method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:* other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
 	"Sequence repetition is commutative: ``2 * 'ab''' / ``2 * [1]''
@@ -962,6 +996,30 @@ __pow__: other
 		not Grail's capacity OverflowError or an IEEE infinity."
 		((self @env0:= 0) and: [other @env0:< 0]) ifTrue: [
 			^ ZeroDivisionError ___signal___: 'zero to a negative power'].
+		"A NEGATIVE BASE TO A NON-INTEGER POWER IS COMPLEX, and float>>__pow__:
+		beside this already knows that -- the angle of a negative real is pi,
+		so the result is |self|**other * (cos + i*sin)(other*pi).  int did not,
+		and GemStone's raisedTo: answers NaN, so the SAME expression gave two
+		different answers depending on how the base was spelled:
+
+		    (-1.0) ** 0.5     (6.123233995736766e-17+1j)
+		    (-1)   ** 0.5     nan
+
+		Deferred to the float method rather than restated here, so the special
+		cases it documents (``(-inf) ** -0.5'' is the real 0.0; pow(x, NAN) is
+		the real NAN, neither going through the complex branch -- C99 F.9.4.4)
+		stay in one place.  Reached only for a negative base with a finite
+		non-integral exponent; every other combination keeps the integer
+		arithmetic below, which is exact where a float would not be.
+
+		test_builtin test_pow."
+		((self @env0:< 0)
+			@env0:and: [(other @env0:isKindOf: Integer) @env0:not
+			@env0:and: [(other @env0:isKindOf: Float)
+			@env0:and: [(((other @env0:_getKind) @env0:== 3)
+				@env0:or: [(other @env0:_getKind) @env0:> 4]) @env0:not
+			@env0:and: [(other @env0:fractionPart) @env0:~= 0]]]]) ifTrue: [
+				^ self @env0:asFloat __pow__: other].
 		^ [ | r |
 			r := self @env0:raisedTo: other.
 			"Python: int ** a NEGATIVE int is a float (``4 ** -3`` == 0.015625),
@@ -1015,14 +1073,20 @@ __rand__: other
 category: 'Grail-Arithmetic - Reverse'
 method: int
 __rdivmod__: other
-	"Reverse divmod (divmod(other, self))."
-	| quot rem |
-	"Reverse form: other OP self -- self is the divisor."
-	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
-	quot := self ___floorQuotientOf___: other by: self.
-	rem := other @env0:\\ self.
-	^ tuple @env0:with: quot with: rem
+	"Reverse divmod (divmod(other, self)) -- self is the DIVISOR.
+
+	Delegates to __rfloordiv__/__rmod__ for the reason __divmod__ gives.  The
+	forward direction has already had its chance, so a non-numeric dividend
+	raises here rather than reflecting again."
+
+	| n |
+	n := nil.
+	(other isKindOf: Number) ifTrue: [n := other]
+	ifFalse: [
+		((other @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__') ifTrue: [n := other __index__]].
+	n == nil ifTrue: [^ self ___rbinOpFallback___: other op: 'divmod()'].
+	^ tuple @env0:with: (self __rfloordiv__: n) with: (self __rmod__: n)
 %
 
 category: 'Grail-String Representation'
@@ -1110,13 +1174,23 @@ method: int
 __round__: ndigits
 	"Round to n digits."
 
-	ndigits ifNil: [ ^ self ].
+	"PYTHON None, not Smalltalk nil.  ``round(x, None)'' is defined to mean
+	the same as ``round(x)'', and None is a distinct OBJECT here -- so the
+	bare ``ifNil:'' missed it and fell through to ``None < 0'', an
+	uncatchable-looking TypeError about comparing NoneType with int.  float's
+	__round__: documents this same trap and checks for both; int did not.
+	test_builtin test_bug_27936, which passes None for an int, a float, a
+	Decimal and a Fraction -- and only the int leg failed."
+	((ndigits @env0:== None) or: [ndigits @env0:isNil]) ifTrue: [ ^ self ].
 
 	"If ndigits is negative, round to that many places left of decimal"
 	(ndigits @env0:< 0) ifTrue: [
 		| divisor |
 		divisor := (10 @env0:raisedTo: (ndigits @env0:abs)).
-		^ ((self @env0:/ divisor) @env0:rounded)
+		"TIES TO EVEN here too: ``round(25, -1)'' is 20, not 30.  The quotient
+		is a Fraction, so the helper's exact tie test matters -- see
+		object>>___roundHalfToEven___."
+		^ ((self @env0:/ divisor) @env1:___roundHalfToEven___)
 			@env0:* divisor
 	].
 
@@ -1262,7 +1336,7 @@ method: int
 __sub__: other
 	"Subtract other from self."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:- (other)].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:- (other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
@@ -1281,7 +1355,7 @@ __truediv__: other
 		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Integer) ifTrue: [^ self ___intTrueDivFloat___: other].
-	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 			^ self ___intTrueDivFloat___: (other __index__)].
@@ -1435,7 +1509,7 @@ to_bytes: length _: byteorder _: signed
 	"int.to_bytes(length, byteorder='big', *, signed=False)
 	Return an array of bytes representing an integer."
 
-	| numBytes isBigEndian isSigned val |
+	| numBytes isBigEndian isSigned val bytes |
 	numBytes := length.
 	isBigEndian := (byteorder @env0:= 'big').
 	isSigned := (signed == true) or: [signed == true].
@@ -1458,18 +1532,24 @@ to_bytes: length _: byteorder _: signed
 		OverflowError ___signal___: 'int too big to convert'
 	].
 
-	"Convert to bytes - #'new:fill:' freezes it"
-	^ tuple @env0:new: numBytes fill: [:t |
-		1 @env0:to: numBytes do: [:i |
-			| byteVal idx |
-			byteVal := (val @env0:bitAnd: 16rFF).
-			idx := isBigEndian
-				ifTrue: [(numBytes @env0:- (i @env0:- 1))]
-				ifFalse: [i].
-			t @env0:at: idx put: byteVal.
-			val := val @env0:bitShift: -8.
-		].
-	]
+	"A BYTES OBJECT, not a tuple.  The method built a ``tuple'' of the byte
+	VALUES, so ``(42).to_bytes(2, 'little')'' answered ``(42, 0)'' where CPython
+	answers ``b'*\\x00''' -- the same numbers, the wrong type, and a wrong type
+	that prints plausibly.  Anything that then indexed or concatenated the
+	result got a tuple and said so somewhere else entirely.
+
+	ByteArray is Grail's bytes; each element is already the 0..255 value the
+	loop computes."
+	bytes := ByteArray @env0:new: numBytes.
+	1 @env0:to: numBytes do: [:i |
+		| byteVal idx |
+		byteVal := (val @env0:bitAnd: 16rFF).
+		idx := isBigEndian
+			ifTrue: [(numBytes @env0:- (i @env0:- 1))]
+			ifFalse: [i].
+		bytes @env0:at: idx put: byteVal.
+		val := val @env0:bitShift: -8].
+	^ bytes
 %
 
 set compile_env: 0

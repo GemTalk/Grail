@@ -1655,8 +1655,24 @@ loadDynamicModule: moduleName fromPath: pathString
 	].
 	"Create and initialize the instance"
 	moduleInstance := moduleClass new.
-	moduleInstance @env1:__name__: moduleName;
-		 @env1:__package__: nil.
+	"PEP 451, through importlib's shared seam, so a C-extension module carries a
+	real ``__spec__'' like every other module rather than None.
+
+	ORIGIN IS THE .so PATH when the caller knows it, and that is what makes
+	``__file__'' right here -- CPython gives an extension module the shared
+	library's path.  When the path is unknown the spec has no location and
+	__file__ comes out None, which is the built-in shape.
+
+	``__package__'' was nil, which is not None and not '' -- a raw Smalltalk nil
+	reaching Python.  The spec's ``parent'' replaces it with '' for a top-level
+	extension, which is what CPython reports."
+	importlib
+		___initModuleAttrsFrom___: (importlib
+			___specFor___: moduleName
+			origin: (pathString ifNil: ['built-in'])
+			loader: nil
+			locations: nil)
+		on: moduleInstance.
 	"Expose module-level constants (PyModule_AddIntConstant /
 	AddStringConstant / AddObjectRef) as dynamic instVars so Python
 	attribute reads (mymod.CONST) resolve through the

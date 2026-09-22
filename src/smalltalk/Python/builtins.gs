@@ -246,21 +246,23 @@ _exec: positional kw: kwargs
 	Without exec, jinja2 template rendering can't progress past the from_code
 	step regardless of how much of the compiler runs."
 
-	| source globalsDict localsDict scope seeded globalNames savedPath savedScope |
+	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
-	"exec() takes source TEXT here.  A PyCode -- what ``f.__code__'' answers --
-	is metadata (name, filename, line, arg counts), not executable code: Grail
-	compiles Python to Smalltalk methods and keeps no bytecode to re-enter.
-	Without this guard the object fell through to the parser and died in a
-	string concatenation with a Smalltalk MessageNotUnderstood, which Python
-	code cannot catch; a TypeError is both catchable and what CPython raises
-	for the case that actually reaches here (a code object carrying free
-	variables -- test_scope testEvalExecFreeVars)."
-	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
-		^ TypeError ___signal___:
-			'exec() arg 1 must be a string; a code object is metadata only in Grail'].
+	"exec() takes source TEXT, in any of the spellings CPython accepts: str,
+	bytes, bytearray or a buffer.  ___sourceTextFor___:what: decodes the
+	byte forms, strips a UTF-8 BOM and raises CPython's own errors for a
+	non-UTF-8 source and for an embedded NUL.
+
+	A PyCode -- what ``f.__code__'' answers -- is metadata (name, filename,
+	line, arg counts), not executable code: Grail compiles Python to Smalltalk
+	methods and keeps no bytecode to re-enter, so it still fails, as the
+	catchable TypeError CPython raises for the case that actually reaches here
+	(a code object carrying free variables -- test_scope
+	testEvalExecFreeVars)."
+	source := self ___sourceTextFor___: source what: 'exec'.
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
@@ -288,11 +290,52 @@ _exec: positional kw: kwargs
 	"CPython: locals defaults to globals, so the 2-argument form keeps
 	reflecting into globals exactly as before."
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
+	"A LOCALS MAPPING GRAIL CANNOT COPY is not seeded -- it is read LIVE.
+	CPython reads the locals argument through __getitem__ as the code runs, so
+	``eval('a', g, m)'' calls ``m['a']''.  Grail copies the caller's mapping
+	into the doit's scope, which is indistinguishable from a live read for a
+	plain dict and wrong for every mapping that COMPUTES something: a class
+	with a __getitem__ and no storage behind it, a dict subclass overriding
+	it, one whose keys() is not its contents.  Those were read once, at
+	seeding, through an enumeration they may not even implement.
+
+	Leaving such a mapping UNSEEDED is what makes the live read happen: every
+	name then misses the doit scope, and a miss is what reaches the resolver."
+	self ___requireDictGlobals___: globalsDict.
+	live := (self ___isPlainCopyableMapping___: localsDict)
+		ifTrue: [nil]
+		ifFalse: [self ___requireMappingLocals___: localsDict].
+	"THE GLOBALS ARGUMENT GETS THE SAME TREATMENT.  A dict subclass is a legal
+	globals mapping and may override __getitem__ -- seeding reads the storage
+	behind it and never calls the override, so the mapping's own error never
+	fires (test_exec_globals_error_on_get)."
+	liveGlobals := (self ___isPlainCopyableMapping___: globalsDict)
+		ifTrue: [nil]
+		ifFalse: [globalsDict].
 	scope := SymbolDictionary @env0:new.
-	seeded := self ___seedDoitScope___: scope from: globalsDict.
+	seeded := liveGlobals @env0:isNil
+		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
+		ifFalse: [KeyValueDictionary @env0:new].
 	"Locals on top: a name bound in both resolves to the locals value."
-	(localsDict @env0:== globalsDict) @env0:ifFalse: [
-		self ___seedDoitScope___: scope from: localsDict].
+	((localsDict @env0:== globalsDict) @env0:or: [live @env0:notNil]) @env0:ifFalse: [
+		| globalsOnly |
+		self ___seedDoitScope___: scope from: localsDict.
+		"...but globals() must NOT see them.  The merged scope is the lookup
+		ORDER; globals() is defined to answer the globals mapping ALONE.
+
+		A SEPARATE KEY, not ___pyGlobals___.  That one is the storage handle
+		for a global-declared slot -- codegen both READS and WRITES a
+		``global x'' through it -- so pointing it at a globals-only copy
+		splits a name's write from its read and the name stops existing
+		(GlobalDeclarationScopeTestCase's three-argument exec).  The view is
+		read by globals() and by nothing else; ___doitGlobalsView___: falls
+		back to the scope when it is absent, which is every other doit.
+
+		Same reasoning as _eval:'s, and reached only when the mappings
+		differ."
+		globalsOnly := SymbolDictionary @env0:new.
+		self ___seedDoitScope___: globalsOnly from: globalsDict.
+		scope @env0:at: #'___pyGlobalsView___' put: globalsOnly].
 	"Run the source as a module body in the seeded scope.  Tag the
 	debug capture as #exec so the .tpz / .ir files under $TMP/codegen/
 	carry the ___exec_N___ prefix.  globalNamesInto: collects the names the
@@ -304,9 +347,24 @@ _exec: positional kw: kwargs
 	on this path -- exec'd code has no file -- so the frames came out named
 	'<grail>'.  Restored afterwards rather than cleared, since exec() can be
 	called from inside a module compilation."
+	"INSTALL THE ``__builtins__'' OVERRIDE, if the globals mapping carries one.
+	CPython takes a piece of code's builtins namespace from its globals, so
+	``{'__builtins__': {}}'' is how source is run with no builtins at all.
+	Saved and restored rather than cleared: one exec can call another, and the
+	inner one must not strip the outer one's builtins when it finishes."
 	savedPath := CallAst @env0:sourcePath.
 	savedScope := self ___grailDoitScope___.
+	savedBuiltins := self ___grailBuiltinsOverride___.
+	savedLive := self ___grailLiveLocals___.
+	savedLiveGlobals := self ___grailLiveGlobals___.
+	savedExecGlobals := self ___grailExecGlobals___.
+	savedExecLocals := self ___grailExecLocals___.
 	[
+		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
+		self ___grailLiveLocals___: live.
+		self ___grailLiveGlobals___: liveGlobals.
+		self ___grailExecGlobals___: globalsDict.
+		self ___grailExecLocals___: localsDict.
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
@@ -314,7 +372,12 @@ _exec: positional kw: kwargs
 			globalNamesInto: globalNames
 	] @env0:ensure: [
 		CallAst @env0:sourcePath: savedPath.
-		self ___grailDoitScope___: savedScope].
+		self ___grailDoitScope___: savedScope.
+		self ___grailBuiltinsOverride___: savedBuiltins.
+		self ___grailLiveLocals___: savedLive.
+		self ___grailLiveGlobals___: savedLiveGlobals.
+		self ___grailExecGlobals___: savedExecGlobals.
+		self ___grailExecLocals___: savedExecLocals].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
 	^ None
@@ -345,6 +408,66 @@ ___seedDoitScope___: aScope from: aDict
 			aScope @env0:at: sym put: value.
 			seeded @env0:at: sym put: value]].
 	^ seeded
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___doitLocalsView___: aScope
+	"What ``locals()'' -- and the bare ``dir()'' built on it -- answers inside
+	a doit.
+
+	When exec()/eval() was handed a LIVE locals mapping, it answers THAT
+	OBJECT, not a view of it.  CPython's contract is identity, not contents:
+	``eval('locals()', g, m)'' IS m, and test_general_eval compares it with a
+	mapping that defines no __eq__, so anything but the object itself fails
+	however right its contents are.
+
+	Otherwise the doit's scope, wrapped as a live namespace view, exactly as
+	before."
+
+	^ self ___grailLiveLocals___ @env0:ifNil: [PyModuleDict @env0:on: aScope]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___doitGlobalsView___: aScope
+	"What ``globals()'' answers inside a doit: the globals-only view that
+	_exec:/_eval: parked when they were handed a SEPARATE ``locals'' mapping,
+	or the scope itself -- which is its own globals -- when they were not.
+
+	Two questions shared one dictionary, and must not share it in this case.
+	``___pyGlobals___'' is the STORAGE handle: codegen names a global-declared
+	slot through it, for the read AND the write, because a bare identifier
+	there can be captured by an enclosing block temp.  ``globals()'' is a
+	VIEW.  Pointing the storage handle at a globals-only copy separated a
+	``global x'' write from its read and the name ceased to exist
+	(GlobalDeclarationScopeTestCase's three-argument exec), so the view gets a
+	key of its own and the storage handle is left alone.
+
+	Answering aScope when the key is absent is what keeps every other doit --
+	one mapping, or none -- on exactly the path it was on before."
+
+	^ aScope @env0:at: #'___pyGlobalsView___' otherwise: aScope
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___storeReflected___: value at: pyName into: target
+	"Write one binding the exec'd source produced back into the caller's
+	mapping.
+
+	THROUGH __setitem__ when the mapping is not a plain dict, because that is
+	the only way a mapping's own store can refuse.  CPython's
+	``exec('x=1', frozendict({}))'' raises the frozendict's error; a direct
+	env-0 at:put: writes past the override and the exec succeeds silently,
+	which is a wrong answer rather than a missing feature.
+
+	A plain dict keeps the direct store: it has no __setitem__ of its own to
+	honour, and this runs once per binding for every exec in the corpus."
+
+	(self ___isPlainCopyableMapping___: target)
+		ifTrue: [target @env0:at: pyName put: value]
+		ifFalse: [target @env1:__setitem__: pyName _: value]
 %
 
 category: 'Grail-Built-in Functions'
@@ -384,7 +507,8 @@ ___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: glob
 		identifier would be captured by an enclosing block temp.  It is
 		machinery, not a binding the source produced, and must not surface in
 		the caller's namespace."
-		(key @env0:== #'___pyGlobals___') @env0:ifFalse: [
+		((key @env0:== #'___pyGlobals___')
+			@env0:or: [key @env0:== #'___pyGlobalsView___']) @env0:ifFalse: [
 		((seeded @env0:includesKey: key)
 			@env0:and: [(seeded @env0:at: key) @env0:== value])
 			@env0:ifFalse: [ | pyName target |
@@ -393,7 +517,7 @@ ___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: glob
 					@env0:and: [globalNames @env0:includes: pyName @env0:asString @env0:asSymbol])
 					ifTrue: [globalsDict]
 					ifFalse: [targetDict].
-				target @env0:at: pyName put: value]]]
+				self ___storeReflected___: value at: pyName into: target]]]
 %
 
 category: 'Grail-Built-in Functions'
@@ -410,15 +534,15 @@ _eval: positional kw: kwargs
 	walrus bindings (``(x := 5) + 1'') and any other side-effect binding
 	inside the expression land where CPython puts them."
 
-	| source globalsDict localsDict scope seeded result savedScope filename |
+	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
-	"Source TEXT only -- see the matching guard in _exec: for why a PyCode
-	cannot be evaluated and must fail as a catchable TypeError."
-	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
-		^ TypeError ___signal___:
-			'eval() arg 1 must be a string; a code object is metadata only in Grail'].
+	"Source TEXT, in any spelling CPython accepts -- see the matching call in
+	_exec: for what ___sourceTextFor___:what: does with the byte forms, and
+	for why a PyCode still fails."
+	source := self ___sourceTextFor___: source what: 'eval'.
 	"LEADING WHITESPACE IS STRIPPED, which is eval()'s own rule and not the
 	parser's: ``compile(' 1+1', '<s>', 'eval')'' raises IndentationError, and
 	so does ``exec(' x = 1')''.  The documentation says the source ``will be
@@ -503,18 +627,239 @@ _eval: positional kw: kwargs
 	globalsDict @env0:isNil ifTrue: [
 		globalsDict := self ___grailCallerNamespace___].
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
+	"A LOCALS MAPPING GRAIL CANNOT COPY is not seeded -- it is read LIVE.
+	CPython reads the locals argument through __getitem__ as the code runs, so
+	``eval('a', g, m)'' calls ``m['a']''.  Grail copies the caller's mapping
+	into the doit's scope, which is indistinguishable from a live read for a
+	plain dict and wrong for every mapping that COMPUTES something: a class
+	with a __getitem__ and no storage behind it, a dict subclass overriding
+	it, one whose keys() is not its contents.  Those were read once, at
+	seeding, through an enumeration they may not even implement.
+
+	Leaving such a mapping UNSEEDED is what makes the live read happen: every
+	name then misses the doit scope, and a miss is what reaches the resolver."
+	self ___requireDictGlobals___: globalsDict.
+	live := (self ___isPlainCopyableMapping___: localsDict)
+		ifTrue: [nil]
+		ifFalse: [self ___requireMappingLocals___: localsDict].
+	"THE GLOBALS ARGUMENT GETS THE SAME TREATMENT.  A dict subclass is a legal
+	globals mapping and may override __getitem__ -- seeding reads the storage
+	behind it and never calls the override, so the mapping's own error never
+	fires (test_exec_globals_error_on_get)."
+	liveGlobals := (self ___isPlainCopyableMapping___: globalsDict)
+		ifTrue: [nil]
+		ifFalse: [globalsDict].
 	scope := SymbolDictionary @env0:new.
-	seeded := self ___seedDoitScope___: scope from: globalsDict.
-	(localsDict @env0:== globalsDict) @env0:ifFalse: [
-		self ___seedDoitScope___: scope from: localsDict].
+	seeded := liveGlobals @env0:isNil
+		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
+		ifFalse: [KeyValueDictionary @env0:new].
+	((localsDict @env0:== globalsDict) @env0:or: [live @env0:notNil]) @env0:ifFalse: [
+		| globalsOnly |
+		self ___seedDoitScope___: scope from: localsDict.
+		"globals() MUST NOT SEE THE LOCALS.  The scope above is the lookup
+		order -- locals laid over globals -- and it is the right thing for
+		resolving a NAME.  It is the wrong thing for globals(), which is
+		defined to answer the globals mapping alone:
+
+		    eval(expr, globals=data)   sees data through globals()
+		    eval(expr, locals=data)    does NOT
+
+		globals() used to read the lookup scope itself, so seeding one
+		dictionary from both made a name supplied as a LOCAL visible through
+		globals().  Parking a globals-only view under its OWN key -- not
+		___pyGlobals___, which is the storage handle a ``global x'' both reads
+		and writes through -- gives globals() the globals alone while the name
+		lookup keeps the merged scope.  Reached only when the two mappings
+		differ, so the common case is untouched."
+		globalsOnly := SymbolDictionary @env0:new.
+		self ___seedDoitScope___: globalsOnly from: globalsDict.
+		scope @env0:at: #'___pyGlobalsView___' put: globalsOnly].
+	"INSTALL THE ``__builtins__'' OVERRIDE, if the globals mapping carries one.
+	CPython takes a piece of code's builtins namespace from its globals, so
+	``{'__builtins__': {}}'' is how source is run with no builtins at all.
+	Saved and restored rather than cleared: one exec can call another, and the
+	inner one must not strip the outer one's builtins when it finishes."
 	savedScope := self ___grailDoitScope___.
+	savedBuiltins := self ___grailBuiltinsOverride___.
+	savedLive := self ___grailLiveLocals___.
+	savedLiveGlobals := self ___grailLiveGlobals___.
+	savedExecGlobals := self ___grailExecGlobals___.
+	savedExecLocals := self ___grailExecLocals___.
 	result := [
 		self ___grailDoitScope___: scope.
+		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
+		self ___grailLiveLocals___: live.
+		self ___grailLiveGlobals___: liveGlobals.
+		self ___grailExecGlobals___: globalsDict.
+		self ___grailExecLocals___: localsDict.
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
 			filename: filename
-	] @env0:ensure: [self ___grailDoitScope___: savedScope].
+	] @env0:ensure: [
+		self ___grailDoitScope___: savedScope.
+		self ___grailBuiltinsOverride___: savedBuiltins.
+		self ___grailLiveLocals___: savedLive.
+		self ___grailLiveGlobals___: savedLiveGlobals.
+		self ___grailExecGlobals___: savedExecGlobals.
+		self ___grailExecLocals___: savedExecLocals].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___topLevelAwaitFlagsFor___: aSource
+	"``co_flags'' for a source compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT:
+	CO_COROUTINE (128) when the body awaits at MODULE scope, 0 otherwise.
+
+	The bit is how a caller knows to run the result with ``await'' rather than
+	exec(), so setting it where CPython would not is a wrong instruction, not
+	a cosmetic difference.  The AST walk is what tells the two apart -- an
+	``async def'' whose awaits are all inside it is an ordinary module.
+
+	A source that will not parse answers 0 rather than raising: compile()
+	raises the SyntaxError itself, above, and this runs after that."
+
+	^ [(ModuleAst @env0:parseSource: aSource) ___hasModuleScopeAwait___
+		ifTrue: [128] ifFalse: [0]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: 0]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___mergeCompileKeywords___: positional kw: kwargs
+	"compile()'s six parameters as one positional array, whichever way the
+	caller spelled them: (source, filename, mode, flags, dont_inherit,
+	optimize).
+
+	Every one has been keyword-able for a long time, and Grail read only
+	positionals -- so ``compile(source='pass', filename='?', mode='exec')''
+	raised ``missing required argument 'source''' about an argument that was
+	right there.
+
+	Supplying one BOTH ways is CPython's TypeError, not a silent preference;
+	test_compile writes that out in full."
+
+	| names args n |
+	kwargs @env0:isNil ifTrue: [^ positional].
+	names := #('source' 'filename' 'mode' 'flags' 'dont_inherit' 'optimize').
+	n := positional @env0:size.
+	1 @env0:to: names @env0:size do: [:i |
+		(kwargs @env0:includesKey: (names @env0:at: i)) ifTrue: [
+			i @env0:<= positional @env0:size ifTrue: [
+				"CPython's own wording for compile(), which is NOT the generic
+				``got multiple values'' text -- it names the position too."
+				^ TypeError ___signal___:
+					'argument for compile() given by name (''' @env0:,
+					(names @env0:at: i) @env0:, ''') and position (' @env0:,
+					i @env0:printString @env0:, ')'].
+			n := n @env0:max: i]].
+	args := Array @env0:new: n.
+	1 @env0:to: n do: [:i |
+		args @env0:at: i put: (i @env0:<= positional @env0:size
+			ifTrue: [positional @env0:at: i]
+			ifFalse: [kwargs @env0:at: (names @env0:at: i) otherwise: nil])].
+	^ args
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___sourceTextFor___: source what: aName
+	"The SOURCE TEXT of a compile()/exec()/eval() argument, or a TypeError.
+
+	CPython accepts str, bytes, bytearray and anything with the buffer
+	protocol -- ``compile(memoryview(b'text'), ...)'' is in test_compile and
+	``eval(b'a', g, l)'' in test_eval.  Grail accepted a str and nothing else,
+	so every bytes source came back as the ``a code object is metadata only''
+	TypeError: a message about the wrong thing entirely, since a bytes source
+	is not a code object and CPython compiles it.
+
+	THREE THINGS A BYTES SOURCE NEEDS, and each is a separate CPython error:
+
+	  * a UTF-8 BOM is STRIPPED.  Python source may carry one and it is not
+	    part of the program;
+	  * bytes that are not UTF-8 are a SyntaxError about the ENCODING, quoting
+	    the first offending byte -- ``b'\xef\xbb' + b'a''', a truncated BOM,
+	    is the case test_eval pins;
+	  * a NUL anywhere is a SyntaxError, in a str source as much as a bytes
+	    one.  Grail let it through to the tokenizer, which reported an
+	    ``Unexpected token'' about a character the message could not print."
+
+	| bytes str |
+	(source @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ self ___rejectNulBytesIn___: source].
+	"A CODE OBJECT compile() PRODUCED carries its source, and running it is
+	running that text -- which is what exec()/eval() on the string already did,
+	back when compile() answered the string itself.  A PyCode that is a def's
+	METADATA carries none, and still fails: Grail keeps no bytecode to re-enter,
+	so ``exec(f.__code__)'' is the catchable TypeError CPython raises for a code
+	object with free variables (test_scope testEvalExecFreeVars)."
+	(source @env0:isKindOf: PyCode) ifTrue: [
+		| text |
+		text := source @env0:___grailCompiledSource___.
+		text @env0:isNil ifFalse: [^ text].
+		^ TypeError ___signal___:
+			aName @env0:, '() arg 1 must be a string; a code object is metadata only in Grail'].
+	bytes := nil.
+	(source @env0:isKindOf: ByteArray) ifTrue: [bytes := source].
+	bytes @env0:isNil ifTrue: [
+		"AbstractException, not Python's Exception: an object with no
+		``tobytes'' at all fails with a Smalltalk MessageNotUnderstood, which
+		is not a Python exception and which ``on: Exception'' does not see --
+		so ``eval(())'' died uncatchably instead of raising TypeError."
+		bytes := [source @env1:tobytes]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(bytes @env0:isKindOf: ByteArray) ifFalse: [
+		^ TypeError ___signal___:
+			aName @env0:, '() arg 1 must be a string, bytes or code object'].
+	"The BOM, and only a COMPLETE one."
+	((bytes @env0:size @env0:>= 3)
+		@env0:and: [((bytes @env0:at: 1) @env0:= 239)
+			@env0:and: [((bytes @env0:at: 2) @env0:= 187)
+				@env0:and: [(bytes @env0:at: 3) @env0:= 191]]]) ifTrue: [
+		bytes := bytes @env0:copyFrom: 4 to: bytes @env0:size].
+	str := [bytes @env1:decode]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	str @env0:isNil ifTrue: [
+		^ self ___signalNonUtf8Source___: bytes].
+	^ self ___rejectNulBytesIn___: str @env0:asString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___rejectNulBytesIn___: aString
+	"CPython: ``ValueError''? No -- SyntaxError, and with this exact text.
+	``compile(chr(0), 'f', 'exec')'' is one line of test_compile."
+
+	(aString @env0:includesValue: (Character @env0:codePoint: 0)) ifTrue: [
+		^ SyntaxError ___signal___: 'source code string cannot contain null bytes'].
+	^ aString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___signalNonUtf8Source___: bytes
+	"CPython's decoding error for source, which names the first byte that is
+	not valid UTF-8 and points at PEP 263 -- the encoding-declaration PEP,
+	because declaring one is the fix."
+
+	| bad i |
+	i := 1.
+	bad := 0.
+	[i @env0:<= bytes @env0:size] @env0:whileTrue: [
+		(bytes @env0:at: i) @env0:> 127 ifTrue: [bad := bytes @env0:at: i. i := bytes @env0:size].
+		i := i @env0:+ 1].
+	"WITH A LOCATION, because str(e) prints it: CPython's text ends
+	``(<string>, line 1)'', which comes from the exception's filename and
+	lineno rather than from the message.  A bare ___signal___: leaves both
+	None and the printed form is a character-for-character mismatch."
+	^ SyntaxError @env1:___signalNew___: (Array
+		@env0:with: ('Non-UTF-8 code starting with ''\x' @env0:,
+			(bad @env0:printStringRadix: 16) @env0:asLowercase @env0:,
+			''' on line 1, but no encoding declared; ' @env0:,
+			'see https://peps.python.org/pep-0263/ for details')
+		@env0:with: (tuple @env0:withAll: { '<string>'. 1. None. None. None. None }))
+		kw: nil
 %
 
 category: 'Grail-Built-in Functions'
@@ -534,10 +879,56 @@ _compile: positional kw: kwargs
 	(test_augassign.test_with_unpacking).  Only strings are parsed; a
 	non-string source (already an AST/code object) is returned as-is."
 
-	| source |
-	self ___requireArgs___: positional atLeast: 1
+	| source args mode |
+	"COMPILE() TAKES ITS ARGUMENTS BY KEYWORD TOO, and all six of them:
+	``compile(source='pass', filename='?', mode='exec')'' and
+	``compile(dont_inherit=False, filename='tmp', source='0', mode='eval')''
+	are both in test_compile.  Only positionals were read, so either form
+	raised ``missing required argument 'source''' about an argument that was
+	right there.  Folded into one positional array here, so everything below
+	sees the same shape whichever way it was written."
+	args := self ___mergeCompileKeywords___: positional kw: kwargs.
+	self ___requireArgs___: args atLeast: 1
 		message: 'compile() missing required argument ''source'' (pos 1)'.
-	source := positional @env0:at: 1.
+	source := args @env0:at: 1.
+	"Bytes, bytearray and buffers are legal sources, and so is a str with no
+	NUL in it -- ___sourceTextFor___:what: is the one place that decides.  A
+	non-string that is none of those falls through untouched, which is what
+	keeps an AST argument working."
+	((source @env0:isKindOf: CharacterCollection)
+		@env0:or: [(source @env0:isKindOf: ByteArray)
+			@env0:or: [source @env0:isKindOf: memoryview]]) ifTrue: [
+		source := self ___sourceTextFor___: source what: 'compile'.
+		args := args @env0:copy.
+		args @env0:at: 1 put: source].
+	"THE MODE IS VALIDATED, and it was not: ``compile(src, '<string>',
+	'badmode')'' answered the source unchanged, so the ValueError CPython
+	raises before doing any work never came and whatever ran next ran under a
+	mode nothing had agreed to."
+	mode := (args @env0:size @env0:>= 3)
+		ifTrue: [(args @env0:at: 3) @env0:asString]
+		ifFalse: ['exec'].
+	(#('exec' 'eval' 'single' 'func_type') @env0:includes: mode) ifFalse: [
+		^ ValueError ___signal___:
+			'compile() mode must be ''exec'', ''eval'' or ''single'''].
+	"AND SO ARE THE FLAGS.  ``compile(src, '<string>', 'single', 0xff)'' is a
+	ValueError in CPython: 0xff is made of CO_ bits, which describe a code
+	object and are not compiler directives.  Only the PyCF_ bits and the
+	__future__ feature bits are accepted, and an unknown one is refused
+	rather than ignored -- ignoring it means the caller asked for a
+	compilation mode and silently did not get it.
+
+	The mask is the PyCF_ constants Grail publishes (ONLY_AST 0x400,
+	TYPE_COMMENTS 0x1000, ALLOW_TOP_LEVEL_AWAIT 0x2000, OPTIMIZED_AST 0x8400)
+	together with the __future__ compiler flags, which occupy the low bits
+	CPython's __future__ module defines."
+	((args @env0:size @env0:>= 4) @env0:and: [(args @env0:at: 4) @env0:isNil @env0:not])
+		ifTrue: [
+			| f |
+			f := args @env0:at: 4.
+			(f @env0:isKindOf: Integer) ifTrue: [
+				((f @env0:bitAnd: 16r3FF) @env0:= 0) ifFalse: [
+					^ ValueError ___signal___: 'compile(): unrecognised flags']]].
 	(source isKindOf: CharacterCollection)
 		ifTrue: [
 			[ModuleAst @env0:parseSource: source]
@@ -570,36 +961,51 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 	test_decorators test_errors is the case -- it compiles a three-statement
 	source in ``exec'' mode and eval()s it, expecting the DECORATOR's error.
 
-	The copy exists to make identity a safe key.  Answering ``source'' itself
-	would key on an object the caller already holds and may share -- two call
-	sites can name the same literal -- so a string compiled once in ``exec''
-	mode could make an unrelated eval() of an equal string run as statements.
-	A fresh copy is reachable only through this call's return value.
+	THE RESULT IS A CODE OBJECT, not the source string.  Answering the string
+	worked -- exec()/eval() on a string already run through the AST loader --
+	and it meant a compile() result had no co_filename, no co_name and no
+	co_flags: anything that introspected it saw a str, and jinja2 still
+	carries a ``hasattr(code, 'co_filename')'' fallback written for that.  The
+	PyCode carries the source, so exec()/eval() read it back out and run the
+	text exactly as before.
 
-	Session-local, and it GROWS with the number of compile() calls: there is
-	nowhere on a GemStone byte object to hang the mode (no named instVars on a
-	String), and dropping entries would silently revert a live code object to
-	string semantics, which is a wrong answer rather than a slow one.  Bounded
-	in practice by how many distinct sources a session compiles."
+	co_flags carries CO_COROUTINE (128) when the caller passed
+	PyCF_ALLOW_TOP_LEVEL_AWAIT and the body actually awaits at module level.
+	That bit is how a caller knows to run the result with ``await'' instead of
+	exec(), and CPython is careful that it is NOT set otherwise -- not for an
+	``async def'' whose awaits are all inside it, and not for a comprehension.
+	test_compile_top_level_await_no_coro is that claim.
+
+	The mode/filename side tables are still filled, keyed by the source copy
+	the code object holds, because eval() of a STRING (the common case, and
+	every eval() written by hand) still reads them."
 	(source isKindOf: CharacterCollection) ifTrue: [
-		| copy mode |
-		mode := (positional @env0:size @env0:>= 3)
-			ifTrue: [(positional @env0:at: 3) @env0:asString @env0:asSymbol]
+		| copy mode fname flags |
+		mode := (args @env0:size @env0:>= 3)
+			ifTrue: [(args @env0:at: 3) @env0:asString @env0:asSymbol]
 			ifFalse: [#'exec'].
 		copy := source @env0:copy.
 		self ___grailCompiledModeRegistry___ @env0:at: copy put: mode.
-		"AND THE FILENAME, in a side table keyed the same way.  It is the second
-		argument of compile() and the only thing that can name exec'd code: the
-		frames it produces have no file behind them, so without this every one
-		of them reported '<grail>' where CPython reports whatever the caller
-		passed -- test_traceback's test_exception_angle_bracketed_filename
-		compiles under '<does not exist>' and asserts it comes back."
-		(positional @env0:size @env0:>= 2) ifTrue: [
+		"THE FILENAME is compile()'s second argument and the only thing that can
+		name exec'd code: the frames it produces have no file behind them, so
+		without it every one reported '<grail>' where CPython reports whatever
+		the caller passed -- test_traceback's
+		test_exception_angle_bracketed_filename compiles under
+		'<does not exist>' and asserts it comes back."
+		fname := '<string>'.
+		(args @env0:size @env0:>= 2) ifTrue: [
 			| fn |
-			fn := positional @env0:at: 2.
+			fn := args @env0:at: 2.
 			(fn @env0:isKindOf: CharacterCollection) ifTrue: [
-				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fn @env0:asString]].
-		^ copy].
+				fname := fn @env0:asString.
+				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fname]].
+		flags := ((args @env0:size @env0:>= 4)
+			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])
+			ifTrue: [self ___topLevelAwaitFlagsFor___: copy]
+			ifFalse: [0].
+		^ PyCode @env0:___forCompiledSource___: copy filename: fname
+			mode: mode flags: flags].
 	^ source
 %
 
@@ -743,6 +1149,282 @@ category: 'Grail-Built-in Functions'
 method: builtins
 ___grailDoitScope___: aScopeOrNil
 	SessionTemps @env0:current @env0:at: #'GrailDoitScope' put: aScopeOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailBuiltinsOverride___
+	"The mapping a running exec()/eval() was told to use AS BUILTINS, or nil.
+
+	CPython takes the builtins namespace for a piece of code from its globals:
+	``__builtins__'' in the globals mapping REPLACES the real builtins for
+	that code, and an empty one leaves it with none at all.  That is the whole
+	of the sandboxing story -- ``exec(src, {'__builtins__': {}})'' is how you
+	run source that cannot reach print, open or __import__.
+
+	Grail resolved builtins against the one real builtins singleton and never
+	looked, so every such call ran with the FULL builtins available: the
+	restriction was accepted and then silently ignored, which is worse than
+	refusing it.
+
+	Session-local and saved/restored around each evaluation rather than
+	cleared, for the same reason ___grailDoitScope___ is: one exec can call
+	another, and the inner one must not strip the outer one's builtins when
+	it finishes."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailBuiltinsOverride' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailBuiltinsOverride___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailBuiltinsOverride' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveLocals___
+	"The LOCALS MAPPING a running exec()/eval() was handed, when that mapping
+	is one Grail cannot simply copy -- or nil.
+
+	CPython's locals argument may be ANY mapping, and the code reads it
+	through __getitem__ as it runs: ``eval('a', g, m)'' calls ``m['a']''.
+	Grail copies the caller's mapping into the SymbolDictionary the doit is
+	compiled against, which is right for a plain dict -- a copy and a live
+	read cannot be told apart -- and wrong for every mapping that COMPUTES
+	something: a class with a __getitem__ and no storage behind it, a dict
+	subclass that overrides __getitem__, a mapping whose keys() is not its
+	contents.  Those were read once, at seeding, through an enumeration they
+	may not even implement.
+
+	Parked here for the doit's name resolution, locals() and dir() to find.
+	Session-local, saved and restored around each evaluation: the canonical
+	user is a nested one (test_general_eval's SpreadSheet evaluates a cell
+	formula from inside its own __getitem__)."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailLiveLocals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveLocals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailLiveLocals' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveGlobals___
+	"The GLOBALS mapping a running exec()/eval() was handed, when that mapping
+	is one Grail cannot simply copy -- or nil.
+
+	The same story as ___grailLiveLocals___, one argument over.  CPython reads
+	globals through __getitem__ as the code runs too, and a dict SUBCLASS that
+	overrides __getitem__ is a legal globals argument: ``exec(code,
+	setonlydict({'globalname': 1}))'' must raise that mapping's own error when
+	the name is read, and a seeded copy never reads it at all."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailLiveGlobals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailLiveGlobals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailLiveGlobals' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___lookUpInLiveGlobals___: aName ifAbsent: aBlock
+	"Read aName from the parked live globals mapping, or evaluate aBlock.
+	Only KeyError is absorbed -- see ___lookUpInLiveLocals___:ifAbsent:."
+
+	| live |
+	live := self ___grailLiveGlobals___.
+	live @env0:isNil ifTrue: [^ aBlock @env0:value].
+	^ [live @env1:__getitem__: aName @env0:asString]
+		@env0:on: KeyError do: [:ex | ex @env0:return: aBlock @env0:value]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isAbsentMapping___: anObject
+	"True when anObject is not a mapping the caller supplied: Smalltalk nil,
+	or Python's None.
+
+	Both spellings occur.  ``exec(src)'' leaves the argument off and _exec:
+	sees nil; ``exec(src, None)'' passes the None SINGLETON, which is an
+	ordinary object and is nil to nothing.  Every check that asks whether a
+	mapping was given has to accept both, and the second is the one that gets
+	forgotten -- it reads as absent in Python and as present in Smalltalk."
+
+	anObject @env0:isNil ifTrue: [^ true].
+	^ anObject @env0:== None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isPlainCopyableMapping___: anObject
+	"True when seeding from anObject reproduces it exactly, so the copy Grail
+	has always made is indistinguishable from reading it live.
+
+	A plain dict and a module qualify: enumerating them IS their contents.
+	A dict SUBCLASS does not, however ordinary it looks -- it may override
+	__getitem__ or keys(), and the whole point of the tests here is that it
+	does.  Answering false costs a slower path and nothing else; answering
+	true wrongly silently reads the wrong values."
+
+	(self ___isAbsentMapping___: anObject) ifTrue: [^ true].
+	(anObject @env0:isKindOf: module) ifTrue: [^ true].
+	(anObject @env0:isKindOf: PyInstanceDict) ifTrue: [^ true].
+	(anObject @env0:isKindOf: PyModuleDict) ifTrue: [^ true].
+	"EXACTLY ``dict'' -- the class a Python ``{}'' has, which is PyDict, NOT
+	the KeyValueDictionary it inherits from and which nothing Python creates.
+	Testing for the superclass's identity classified every dict as exotic,
+	which is not a subtle mistake: it put the whole corpus on the slow live
+	path, and since an unseeded scope holds nothing, globals() answered
+	empty.  An exact-class test has to name the class Python instantiates."
+	^ (anObject @env0:class @env0:== dict)
+		@env0:or: [anObject @env0:class @env0:== KeyValueDictionary]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___respondsToPythonName___: anObject named: aSymbol
+	"Whether anObject has aSymbol as a Python attribute, answered as a
+	BOOLEAN rather than by raising.
+
+	___pyAttrLoad___: raises AttributeError for a miss, which is the right
+	thing for an attribute READ and the wrong thing for a predicate: the
+	caller here is deciding which TypeError to raise, and letting the probe's
+	own AttributeError escape reports ``'A' object has no attribute 'keys'''
+	where CPython says ``locals must be a mapping''."
+
+	^ [(anObject @env1:___pyAttrLoad___: aSymbol) @env0:notNil]
+		@env0:on: Exception do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireDictGlobals___: anObject
+	"CPython refuses a globals argument that is not a real dict -- a mapping
+	is allowed for LOCALS and not for globals, and the message says so:
+	``globals must be a real dict; try eval(expr, {}, mapping)''.
+
+	A dict SUBCLASS is a real dict and is accepted; test_exec_globals_frozen
+	passes a frozendict as globals and expects the write to raise from its
+	__setitem__, which can only happen if it got that far."
+
+	"NIL OR THE ``None'' SINGLETON.  ``exec(src, None)'' reaches here holding
+	Python's None, not Smalltalk nil -- _exec: tests only for nil, so None
+	arrives as an ordinary argument value.  It means the same thing as a
+	missing argument and must not be refused; what Grail then does with it is
+	a separate, older gap that eval_in_nested_scope.py records as an XFAIL."
+	(self ___isAbsentMapping___: anObject) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: KeyValueDictionary) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: module) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: PyModuleDict) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: PyInstanceDict) ifTrue: [^ anObject].
+	^ TypeError ___signal___:
+		'globals must be a real dict; try eval(expr, {}, mapping)'
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireMappingLocals___: anObject
+	"CPython refuses a locals argument that is not a mapping -- ``eval('a', g,
+	A())'' where A is an ordinary class raises TypeError before a name is
+	looked up.
+
+	__getitem__, NOT keys.  keys is the obvious spelling and it is the wrong
+	one: test_general_eval's SpreadSheet has a __getitem__ and a __setitem__
+	and no keys at all, and CPython evaluates cell formulas against it
+	happily.  keys is required only by dir(), which is a different question
+	asked later.
+
+	ASKED OF THE TYPE, not of the instance.  Grail answers ``obj.__getitem__''
+	with a BoundMethod for ANY object -- there is an inherited implementation
+	behind it -- so an instance probe says yes to everything and this refusal
+	never fires at all.  ``hasattr(type(obj), '__getitem__')'' is the question
+	CPython is really asking, and it is what separates the two classes
+	test_general_eval means to separate."
+
+	(self ___respondsToPythonName___: (anObject @env1:__class__) named: #'__getitem__')
+		ifFalse: [^ TypeError ___signal___: 'locals must be a mapping'].
+	^ anObject
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___lookUpInLiveLocals___: aName ifAbsent: aBlock
+	"Read aName from the parked live locals mapping, or evaluate aBlock.
+
+	Only KeyError is absorbed, for the reason it is everywhere else here: it
+	is the one exception that means ``no such name''.  A mapping that raises
+	something else is saying something, and turning that into a NameError
+	would report the wrong thing (test_exec_globals_error_on_get)."
+
+	| live |
+	live := self ___grailLiveLocals___.
+	live @env0:isNil ifTrue: [^ aBlock @env0:value].
+	^ [live @env1:__getitem__: aName @env0:asString]
+		@env0:on: KeyError do: [:ex | ex @env0:return: aBlock @env0:value]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___builtinsOverrideIn___: globalsDict
+	"The ``__builtins__'' entry of a globals mapping, or nil when it has none.
+
+	CPython INSERTS a real ``__builtins__'' into any globals mapping that
+	lacks one, so the absent case means ``use the real builtins'' rather than
+	``use nothing''; only an entry the caller supplied restricts anything.
+
+	NO TYPE CHECK HERE, deliberately.  It is tempting to refuse a non-mapping
+	up front, and CPython does not: ``exec('x=1', {'__builtins__': 123})''
+	runs to completion, because nothing in it ever asks builtins for a name.
+	The error appears at the first LOOKUP, and is simply whatever subscripting
+	that object raises -- ``'int' object is not subscriptable'' for 123, a
+	different message for a str and another again for a list.  Checking
+	eagerly would both raise where CPython does not and replace three accurate
+	messages with one invented one."
+
+	globalsDict @env0:isNil ifTrue: [^ nil].
+	(globalsDict @env0:isKindOf: KeyValueDictionary) ifFalse: [^ nil].
+	^ globalsDict @env0:at: '__builtins__' otherwise: nil
+%
+
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___lookUpInBuiltinsOverride___: aName ifAbsent: aBlock
+	"Resolve aName through the ACTIVE ``__builtins__'' override, or evaluate
+	aBlock when it has no such name.
+
+	Through __getitem__, not through a class-specific read, because the point
+	of the override is that the caller chose the mapping: a MappingProxyType,
+	a dict subclass, a mapping whose __getitem__ RAISES.  The last is a real
+	test (test_exec_globals_error_on_get) and it is why only KeyError is
+	absorbed here -- any other exception is the caller's mapping saying
+	something, and swallowing it would turn a deliberate error into a
+	NameError about the wrong thing."
+
+	| override |
+	override := self ___grailBuiltinsOverride___.
+	override @env0:isNil ifTrue: [^ aBlock @env0:value].
+	"A MODULE is a legal __builtins__ -- CPython's own is the builtins module
+	at module scope and a dict inside exec, and test_exec_globals_frozen
+	branches on exactly that."
+	(override @env0:isKindOf: module) ifTrue: [
+		^ override @env1:___globalAt___: aName @env0:asSymbol otherwise: aBlock].
+	"Anything else is SUBSCRIPTED, and whatever that raises is the answer.
+	That is what CPython does: a non-mapping __builtins__ surfaces as its own
+	subscript error at the first lookup, not as a check at exec() time.  Only
+	KeyError is absorbed, because only KeyError means ``no such name''; the
+	rest -- a TypeError from an int, a caller's own exception from a mapping
+	whose __getitem__ raises -- is the mapping saying something, and
+	swallowing it would report a NameError about the wrong thing."
+	^ [override @env1:__getitem__: aName @env0:asString]
+		@env0:on: KeyError do: [:ex | ex @env0:return: aBlock @env0:value]
 %
 
 category: 'Grail-Built-in Functions'
@@ -996,9 +1678,51 @@ chr: anInteger
 category: 'Grail-Built-in Functions'
 method: builtins
 dir: anObject
-	"Python builtin dir(x) — fixed-arity fast path."
+	"Python builtin dir(x) — fixed-arity fast path.
 
-	^ anObject __dir__
+	THE RESULT OF __dir__ IS NOT THE RESULT OF dir().  CPython takes what
+	__dir__ answers, converts it to a LIST and SORTS it, so dir() always
+	answers a sorted list of names whatever the object's own hook returned.
+	Grail handed the hook's value straight back, which cost three things at
+	once (test_builtin test_dir):
+
+	    def __dir__(self): return ('b', 'c', 'a')   dir() -> ('b','c','a')
+	                                                -- a TUPLE, unsorted
+	    def __dir__(self): return {'b', 'c', 'a'}   dir() -> a SET
+	    def __dir__(self): return 7                 dir() -> 7
+
+	The last is the one that matters: dir() is documented to answer a list,
+	so every caller that indexes or sorts the result got an error far from
+	the class that caused it.  CPython raises ``'int' object is not iterable''
+	at the dir() call.
+
+	SORTED ONLY WHEN IT CAN BE, which is a DELIBERATE divergence and not an
+	oversight.  CPython's dir() sorts unconditionally, so a custom __dir__ that
+	mixes non-strings in with strings makes dir() ITSELF raise TypeError.
+	Upstream treats that as a wart -- gh-131001 and gh-139933 were fixed by
+	giving traceback.py a ``_get_safe___dir__'' that calls obj.__dir__()
+	directly, NOT by changing dir() -- and Grail already decided to tolerate
+	it (EllipsisSingletonTestCase testGrailDirDoesNotRaiseOnAnUnsortableDir,
+	which is what caught an earlier draft of this method reintroducing the
+	raise).  Matching CPython here would mean making a working call start
+	raising, for a behaviour upstream itself routes around.
+
+	The ITERATION is not protected, only the sort: a __dir__ that answers
+	something not iterable at all is a different fault, and CPython's
+	``'int' object is not iterable'' is the right report for it."
+
+	| lst iter done sortedArray |
+	lst := list ___new___.
+	iter := anObject __dir__ __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[lst append: iter __next__]
+			@env0:on: StopIteration do: [:ex | done := true]].
+	sortedArray := [lst ___stableSortedArray: nil reverse: false]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	sortedArray @env0:notNil ifTrue: [
+		lst @env0:replaceFrom: 1 to: lst @env0:size with: sortedArray startingAt: 1].
+	^ lst
 %
 
 category: 'Grail-Built-in Functions'
@@ -1030,6 +1754,19 @@ ___dirOfNamespace___: aMapping
 	scope -- so this only has to order the keys.  Sorted because dir() is
 	documented to be, and callers compare the result."
 
+	"A LIVE LOCALS MAPPING IS ASKED FOR ITS keys().  ``list(m)'' iterates a
+	mapping, and an arbitrary one need not be iterable at all -- CPython's
+	dir() calls keys() explicitly, which is why test_general_eval's M can
+	define keys() returning list('xyz') while its __getitem__ knows only 'a'
+	and dir() answers xyz.  The two need not agree, and dir() reports the
+	keys.
+
+	keys() RETURNING A NON-SEQUENCE is CPython's TypeError, raised by trying
+	to build the list from it rather than by a check here, so the message is
+	the one the object's own shape produces."
+	(self ___isPlainCopyableMapping___: aMapping) ifFalse: [
+		(self ___respondsToPythonName___: aMapping named: #'keys') ifTrue: [
+			^ self sorted: (list @env1:__new__: (aMapping @env1:keys))]].
 	^ self sorted: (list @env1:__new__: aMapping)
 %
 
@@ -2699,7 +3436,7 @@ method: builtins
 format: aValue
 	"Python builtin format(value) — defaults to format-spec ''''."
 
-	^ aValue __format__: ''
+	^ self format: aValue _: ''
 %
 
 category: 'Grail-Built-in Functions'
@@ -2714,10 +3451,21 @@ format: aValue _: aFormatSpec
 	``format(1, 2)'' answered ``a SmallInteger does not understand
 	#isEmpty'', an uncatchable Smalltalk error out of a builtin."
 
+	| result |
 	(aFormatSpec @env0:isKindOf: CharacterCollection) ifFalse: [
 		^ TypeError ___signal___: ('format() argument 2 must be str, not '
 			@env0:, (self ___pyArgTypeName___: aFormatSpec))].
-	^ aValue __format__: aFormatSpec
+	"AND SO IS THE RESULT.  __format__ is required to answer a str; CPython
+	checks and raises rather than passing a non-str on to whatever asked for
+	the formatted text.  Grail returned it unchecked, so ``format(x)'' could
+	answer an int -- and the f-string codegen calls straight through here, so
+	``f'{x}''' would then try to concatenate one."
+	result := aValue __format__: aFormatSpec.
+	((result @env0:isKindOf: CharacterCollection)
+		@env0:or: [result @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+		^ TypeError ___signal___: ('__format__ must return a str, not '
+			@env0:, (result ___pyTypeNameForError___) @env0:asString)].
+	^ result
 %
 
 category: 'Grail-Built-in Functions'
@@ -2950,6 +3698,28 @@ _filter: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+_vars: positional kw: kwargs
+	"Varargs entry, which exists only to REFUSE -- the same reason _dir: does,
+	and worded the same way CPython words it.  Without it the extra argument
+	fell through to the generic arity dispatcher, whose ``vars() takes wrong
+	number of arguments (2 positional, 0 keyword) - no matching method'' is
+	Grail's phrasing for a MISSING METHOD rather than CPython's for a bad
+	call, and says ``no matching method'' about a builtin that is present.
+
+	The zero-argument vars() is rewritten to locals() at compile time
+	(CallAst), so it does not arrive here."
+
+	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		^ TypeError ___signal___: 'vars() takes no keyword arguments'].
+	(positional @env0:size @env0:> 1) ifTrue: [
+		^ TypeError ___signal___: ('vars expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString)].
+	positional @env0:isEmpty ifTrue: [^ self vars].
+	^ self vars: (positional @env0:at: 1)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 vars: anObject
 	"Python builtin vars(obj) — the instance namespace as a fresh
 	dict: dynamic instVars plus non-nil named instVars (nil means
@@ -2986,6 +3756,23 @@ vars: anObject
 	overlay (object >> ___classDict___)."
 	(anObject isKindOf: Behavior) ifTrue: [
 		^ anObject ___pyAttrLoad___: #'__dict__'].
+	"A TYPE THAT SUPPLIES ITS OWN __dict__ decides the answer, because vars(obj)
+	IS obj.__dict__ in CPython -- not an enumeration that usually agrees with
+	it.  The walk below reads the receiver's instVars, so a class whose
+	__dict__ is a property or any other descriptor was ignored entirely and
+	vars() answered {} while ``obj.__dict__'' answered the property's value.
+
+	    class C:
+	        def getDict(self): return {'a': 2}
+	        __dict__ = property(fget=getDict)
+
+	Gated on the type DECLARING the name, not on the attribute being readable:
+	every object can be asked for __dict__ and ordinary ones fall through
+	___pyAttrLoad___ to a synthesized view or a method wrap, so reading it
+	unconditionally would replace the walk for every receiver -- and hand back
+	a callable for the ones that have no view.  test_builtin test_vars."
+	((anObject @env0:class @env1:___dynamicClassAttr___: #'__dict__') @env0:notNil)
+		ifTrue: [^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
@@ -2996,9 +3783,15 @@ vars: anObject
 	1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
 		d __setitem__: ((inferredPairs @env0:at: i) @env0:asString @env0:asUnicodeString)
 			_: (inferredPairs @env0:at: i @env0:+ 1)].
-	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm |
-		d __setitem__: (nm @env0:asString @env0:asUnicodeString)
-			_: (anObject @env0:dynamicInstVarAt: nm)].
+	"A dynamic instVar named like a SET slot is a promotion leftover: the slot
+	is the home the read answers from, so it is reported once, above."
+	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm | | shadowed |
+		shadowed := false.
+		1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
+			(inferredPairs @env0:at: i) == nm ifTrue: [shadowed := true]].
+		shadowed ifFalse: [
+			d __setitem__: (nm @env0:asString @env0:asUnicodeString)
+				_: (anObject @env0:dynamicInstVarAt: nm)]].
 	(anObject @env0:class @env0:allInstVarNames) @env0:doWithIndex: [:nm :i |
 		| v |
 		v := anObject @env0:instVarAt: i.
@@ -3356,20 +4149,28 @@ type: anObject
 category: 'Grail-Built-in Functions'
 method: builtins
 divmod: x _: y
-	"Python builtin divmod(x, y) = (x // y, x % y).  A complex operand has no
-	divmod: CPython raises TypeError naming ``divmod()'' (not ``//'' from the
-	pair below) -- test_fractions test_complex_handling."
+	"Python builtin divmod(x, y).  A complex operand has no divmod: CPython
+	raises TypeError naming ``divmod()'' -- test_fractions
+	test_complex_handling."
 
-	| quotient remainder tn |
+	| tn |
 	((x @env0:isKindOf: complex) or: [y @env0:isKindOf: complex]) ifTrue: [
 		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
 			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
 				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
 		^ TypeError ___signal___: ('unsupported operand type(s) for divmod(): '''
 			@env0:, (tn @env0:value: x) @env0:, ''' and ''' @env0:, (tn @env0:value: y) @env0:, '''')].
-	quotient := x ___binOpFloorDiv___: y.
-	remainder := x ___binOpMod___: y.
-	^ tuple @env0:withAll: {quotient. remainder}
+	"__divmod__/__rdivmod__ FIRST, because that is the protocol CPython
+	dispatches divmod() on -- computing the pair here asks __floordiv__ and
+	__mod__ instead, so a class defining __divmod__ and neither of those got
+	``unsupported operand type(s) for //'' from a divmod() call
+	(test_decimal's test_rop).  Int, Float and complex all define __divmod__,
+	and a class that defines none of them reaches the same TypeError through
+	___binOpFallback___, now naming divmod() as CPython does.
+
+	The pair is still what builds the RESULT for the numeric types whose
+	__divmod__ is itself the pair; this only changes WHO is asked."
+	^ x ___binOpDivMod___: y
 %
 
 category: 'Grail-Built-in Functions'
@@ -4297,6 +5098,267 @@ setattr: anObject _: aName _: aValue
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___validateTypeArgs___: className bases: bases namespace: namespace
+	"CPython's type.__new__ argument checking, which Grail did not do at all.
+
+	Each refusal below is one CPython raises and Grail did not; the message is
+	CPython's, because a caller that greps for it (or an assertRaisesRegex)
+	should not have to know which implementation raised.  Ordered as CPython
+	orders them, so a call that is wrong in two ways reports the same one."
+
+	| seen |
+	"NAME.  ``type(b'A', (), {})'' built a class called 'aByteArray' -- the
+	printString of the bytes object -- which is the shape of bug that looks
+	like it worked."
+	"PyStrSurrogate IS a str -- it is the class Grail switches to the moment a
+	string holds a lone surrogate -- but it does not answer to
+	``isKindOf: CharacterCollection''.  Testing only that rejected
+	``type('A\udcdcB', (), {})'' as ``argument 1 must be str, not str'',
+	which is both wrong and unreadable; the right answer is the
+	UnicodeEncodeError raised just below."
+	((className @env0:isKindOf: CharacterCollection)
+		@env0:or: [className @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+		^ TypeError ___signal___: 'type.__new__() argument 1 must be str, not '
+			@env0:, (className ___pyTypeNameForError___) @env0:asString].
+	"A NUL in a class name is a ValueError, not a TypeError -- CPython
+	separates ``wrong kind of thing'' from ``right kind, impossible value'',
+	and test_type_name asserts the distinction.  Grail reported neither: the
+	name reached the Smalltalk class builder and failed there with ``Grail
+	cannot subclass sealed kernel class 'PythonInstance''', which names
+	nothing the caller did."
+	"Asked through ___codePointsOf___ rather than asString: PyStrSurrogate
+	refuses asString on purpose, and does not answer the Collection protocol
+	either, so either route would turn a surrogate name into a refusal about
+	the wrong thing instead of into the UnicodeEncodeError below."
+	((self ___codePointsOf___: className) @env0:includes: 0) ifTrue: [
+		^ ValueError ___signal___: 'type name must not contain null characters'].
+	self ___requireEncodable___: className what: 'the type name'.
+	(namespace @env0:notNil @env0:and: [namespace @env1:__contains__: '__doc__']) ifTrue: [
+		self ___requireEncodable___: (namespace @env1:__getitem__: '__doc__')
+			what: 'the docstring'].
+	"BASES must be a TUPLE, not merely iterable.  Grail said ``Array withAll:
+	bases'', which accepts a list, a set or a string -- and a string would have
+	been taken apart into one base per character."
+	(bases @env0:isKindOf: tuple) ifFalse: [
+		^ TypeError ___signal___: 'type.__new__() argument 2 must be tuple, not '
+			@env0:, (bases ___pyTypeNameForError___) @env0:asString].
+	"NAMESPACE must be a dict.  A mappingproxy is the case that matters and
+	the one CPython's own test names: it is a READ-ONLY view, so accepting it
+	silently promises a class whose namespace cannot be written back."
+	((namespace @env0:isKindOf: mappingproxy) @env0:not
+		@env0:and: [(namespace @env0:isKindOf: AbstractDictionary)
+			@env0:or: [namespace @env0:isKindOf: KeyValueDictionary]]) ifFalse: [
+		^ TypeError ___signal___: 'type.__new__() argument 3 must be dict, not '
+			@env0:, (namespace ___pyTypeNameForError___) @env0:asString].
+	"TWO BASES THAT EACH CARRY STORAGE cannot both be the Smalltalk
+	superclass, and CPython refuses the same combination for the same reason
+	-- ``multiple bases have instance lay-out conflict''.  Grail's
+	___selectStorageBase___ simply picked the leftmost, so ``type('A', (int,
+	str), {})'' answered an int-backed class that claimed str in its bases and
+	behaved as neither.
+
+	Asked of the STORAGE roots rather than the bases themselves, because two
+	bases in a subclass relationship (int and a subclass of int) are
+	compatible -- it is unrelated storage that cannot be merged."
+	seen := nil.
+	(Array @env0:withAll: bases) @env0:do: [:b |
+		((b @env0:isKindOf: Behavior)
+			@env0:and: [(Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b]) ifTrue: [
+				seen @env0:isNil
+					ifTrue: [seen := b]
+					ifFalse: [
+						((seen @env0:== b) @env0:or: [(seen @env0:inheritsFrom: b)
+							@env0:or: [b @env0:inheritsFrom: seen]]) ifFalse: [
+								^ TypeError ___signal___:
+									'multiple bases have instance lay-out conflict']]]].
+	^ self ___validateSlots___: namespace bases: bases
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___validateSlots___: namespace bases: bases
+	"CPython's __slots__ checking, none of which Grail did.
+
+	Every refusal here is one that otherwise produces a class with a slot
+	nobody can use -- a slot named '42' is unreachable from Python source, and
+	a slot that collides with a class variable silently loses one of the two."
+
+	| slots names |
+	namespace @env0:isNil ifTrue: [^ self].
+	(namespace @env1:__contains__: '__slots__') ifFalse: [^ self].
+	slots := namespace @env1:__getitem__: '__slots__'.
+	"A bare STRING is ONE slot name rather than a sequence of one-character
+	ones, so it is taken first and never iterated.
+
+	Everything else is iterated, and bytes needs no special case: b'x'
+	iterates to INTEGERS, which the per-item string check below refuses with
+	the message CPython uses for exactly that input -- ``__slots__ items must
+	be strings, not 'int'''.  An earlier draft named the bytes class
+	explicitly and was both redundant and wrong about the class's name."
+	names := (slots @env0:isKindOf: CharacterCollection)
+		ifTrue: [{ slots }]
+		ifFalse: [[Array @env0:withAll: slots]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
+	"NOT ITERABLE AT ALL is a different complaint, and CPython words it as one
+	-- ``'int' object is not iterable'' -- because the fault is the object's
+	rather than __slots__'s."
+	names @env0:isNil ifTrue: [
+		^ TypeError ___signal___: '''' @env0:,
+			(slots ___pyTypeNameForError___) @env0:asString
+			@env0:, ''' object is not iterable'].
+	"A SLOT ON A BUILT-IN-STORAGE BASE has nowhere to live: the instance's
+	storage is the primitive one, so CPython refuses rather than producing an
+	object whose slot writes go nowhere."
+	(Array @env0:withAll: bases) @env0:do: [:b |
+		((b @env0:isKindOf: Behavior)
+			@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b)
+			@env0:and: [names @env0:isEmpty @env0:not]]) ifTrue: [
+				^ TypeError ___signal___: 'nonempty __slots__ not supported for subtype of '''
+					@env0:, (b @env1:__name__) @env0:asString @env0:, '''']].
+	names @env0:do: [:each |
+		(each @env0:isKindOf: CharacterCollection) ifFalse: [
+			^ TypeError ___signal___: '__slots__ items must be strings, not '''
+				@env0:, (each ___pyTypeNameForError___) @env0:asString @env0:, ''''].
+		(self ___isPythonIdentifier___: each @env0:asString) ifFalse: [
+			^ TypeError ___signal___: '__slots__ must be identifiers'].
+		"A NAME THAT IS ALSO A CLASS VARIABLE is a ValueError, not a TypeError:
+		both halves are well-formed, and it is the COMBINATION that cannot
+		work -- the slot descriptor and the class variable would occupy the
+		same name."
+		(namespace @env1:__contains__: each @env0:asString) ifTrue: [
+			^ ValueError ___signal___: '''' @env0:, each @env0:asString @env0:,
+				''' in __slots__ conflicts with class variable']].
+	"__dict__ AND __weakref__ are slots a class gets at most once.  Listing
+	either twice, or listing one a base already supplies, is CPython's
+	``...slot disallowed: we already got one''."
+	#('__dict__' '__weakref__') @env0:do: [:special |
+		| count |
+		count := 0.
+		names @env0:do: [:each |
+			((each @env0:isKindOf: CharacterCollection)
+				@env0:and: [each @env0:asString @env0:= special]) ifTrue: [count := count @env0:+ 1]].
+		count @env0:> 0 ifTrue: [
+			count @env0:> 1 ifTrue: [
+				^ TypeError ___signal___: special @env0:,
+					' slot disallowed: we already got one'].
+			(Array @env0:withAll: bases) @env0:do: [:b |
+				((b @env0:isKindOf: Behavior)
+					@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b) @env0:not]) ifTrue: [
+						^ TypeError ___signal___: special @env0:,
+							' slot disallowed: we already got one']]]].
+	^ self
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___codePointsOf___: aString
+	"The code points of a Python str, whichever class is carrying it.
+
+	Grail switches a string holding a lone surrogate to PyStrSurrogate, which
+	deliberately answers almost nothing a CharacterCollection does -- not
+	asString, not do:, not anySatisfy: -- so every scan of a str that might
+	hold one has to come through here or it raises about the wrong thing."
+
+	(aString @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ Array @env0:withAll: (aString @env0:___codePoints___)].
+	^ (1 @env0:to: aString @env0:size) @env0:collect: [:i |
+		(aString @env0:at: i) @env0:codePoint]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___smalltalkClassNameFor___: aPythonName
+	"A symbol GemStone will accept as a class name, for a Python class name
+	that may be anything at all.
+
+	The usual transform is kept whenever its result is a legal identifier, so
+	nothing about the common case changes -- the Smalltalk class is still
+	called what the Python class is called, which is what makes a Smalltalk
+	stack trace readable.  Only a name GemStone would refuse is replaced, and
+	then ___name___ carries the real one."
+
+	| mangled ok |
+	mangled := [(Python @env0:at: #importlib)
+		@env0:___asSmalltalkClassName___: aPythonName @env0:asString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	ok := false.
+	mangled @env0:notNil ifTrue: [
+		ok := self ___isAsciiIdentifier___: mangled @env0:asString].
+	ok ifTrue: [^ mangled @env0:asSymbol].
+	"Unique per class, because two classes named '42' in one session must not
+	collide in the Smalltalk namespace the way their Python names may."
+	^ ('GrailAnonClass_' @env0:, (System @env0:_zeroArgPrim: 50) @env0:printString
+		@env0:, '_' @env0:, (Object @env0:new @env0:asOop) @env0:printString) @env0:asSymbol
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isAsciiIdentifier___: aString
+	"GemStone's rule for a class name, which is ASCII-only: a letter or
+	underscore, then letters, digits or underscores.  Deliberately stricter
+	than ___isPythonIdentifier___ beside it -- Python accepts '\xc4' as an
+	identifier character and GemStone does not."
+
+	| c |
+	aString @env0:isEmpty ifTrue: [^ false].
+	c := (aString @env0:at: 1) @env0:codePoint.
+	((c @env0:>= 65 @env0:and: [c @env0:<= 90])
+		@env0:or: [(c @env0:>= 97 @env0:and: [c @env0:<= 122])
+		@env0:or: [c @env0:= 95]]) ifFalse: [^ false].
+	2 @env0:to: aString @env0:size do: [:i |
+		| k |
+		k := (aString @env0:at: i) @env0:codePoint.
+		((k @env0:>= 65 @env0:and: [k @env0:<= 90])
+			@env0:or: [(k @env0:>= 97 @env0:and: [k @env0:<= 122])
+			@env0:or: [(k @env0:>= 48 @env0:and: [k @env0:<= 57])
+			@env0:or: [k @env0:= 95]]]) ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireEncodable___: aValue what: aLabel
+	"CPython stores a class's name and docstring as UTF-8, so a lone surrogate
+	in either is a UnicodeEncodeError at CLASS-CREATION time rather than later
+	at the point something tries to print it.  test_type_name and test_type_doc
+	both assert that, and Grail raised nothing: the surrogate travelled into
+	the class and surfaced, much later, wherever the name was next encoded.
+
+	Only strings are checked -- __doc__ takes any object in CPython (``type('A',
+	(), {'__doc__': 42})'' is legal and answers 42), so a non-string is not an
+	error here."
+
+	((aValue @env0:isKindOf: CharacterCollection)
+		@env0:or: [aValue @env0:isKindOf: PyStrSurrogate]) ifFalse: [^ self].
+	(self ___codePointsOf___: aValue) @env0:do: [:cp |
+		(cp @env0:>= 16rD800 @env0:and: [cp @env0:<= 16rDFFF]) ifTrue: [
+			^ UnicodeEncodeError ___signal___:
+				'''utf-8'' codec can''t encode character in ' @env0:, aLabel
+					@env0:, ': surrogates not allowed']].
+	^ self
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isPythonIdentifier___: aString
+	"``str.isidentifier()'' without going through the Python layer -- this runs
+	inside type()'s argument checking, where a raise from the check itself
+	would be reported as the caller's error."
+
+	| c |
+	aString @env0:isEmpty ifTrue: [^ false].
+	c := aString @env0:at: 1.
+	((c @env0:isLetter) @env0:or: [c @env0:== $_]) ifFalse: [^ false].
+	2 @env0:to: aString @env0:size do: [:i |
+		| ch |
+		ch := aString @env0:at: i.
+		((ch @env0:isLetter) @env0:or: [(ch @env0:isDigit) @env0:or: [ch @env0:== $_]])
+			ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 type: className _: bases _: namespace
 	"Python builtin type(name, bases, namespace) — the 3-argument
 	metaclass form that builds a class dynamically.  Mirrors the
@@ -4318,6 +5380,14 @@ type: className _: bases _: namespace
 	path in ClassDefAst emits for every class it builds.  Ensured below."
 
 	| il baseArray storageBase nameSym newClass ownAttrNames orderedKeys |
+	"VALIDATE FIRST.  type() built a class from almost anything -- a bytes
+	name, a list of bases, a mappingproxy namespace, a __slots__ of '42' --
+	and every one of those is a TypeError in CPython.  Building instead of
+	refusing is not a lenient version of the same thing: the caller asked for
+	a class it cannot have, and gets one that is subtly wrong (``type(b'A',
+	(), {})'' made a class NAMED 'aByteArray') instead of being told.
+	test_builtin test_bad_args and test_bad_slots."
+	self ___validateTypeArgs___: className bases: bases namespace: namespace.
 	il := Python @env0:at: #importlib.
 	baseArray := Array @env0:withAll: bases.
 	"CPython REFUSES to resolve __mro_entries__ here: ``type('Bad', (c,),
@@ -4338,7 +5408,21 @@ type: className _: bases _: namespace
 					'type() doesn''t support MRO entry resolution; use types.new_class()']].
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
-	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
+	"THE SMALLTALK NAME AND THE PYTHON NAME ARE NOW TWO THINGS.
+
+	They used to be one: ___asSmalltalkClassName___ only turns `.' into `_',
+	and cls.__name__ read the Smalltalk class name straight back.  That works
+	for the names Python programs usually pick and fails for the ones CPython
+	explicitly allows -- ``type('42', (), {})'', ``type('', (), {})'' and
+	``type('\U0001f40d', (), {})'' are all legal there and all rejected by
+	GemStone, which requires an identifier; and ``type('B.A', (), {})''
+	silently answered a class whose __name__ was 'B_A'.
+
+	So the class gets a name GemStone will take, and the name the CALLER asked
+	for is stored in ___name___ / ___qualname___ -- the same two slots
+	``cls.__name__ = ...'' has written since namedtuple needed them, read by
+	the same accessors.  test_builtin test_type_name."
+	nameSym := self ___smalltalkClassNameFor___: className.
 	"``___dynInstVars___'' is the class-side SLOT the class-attribute holder lives in,
 	and it is requested here rather than added later because a Smalltalk class's
 	instVars are fixed at creation.  ClassDefAst declares it for every class it
@@ -4398,6 +5482,39 @@ type: className _: bases _: namespace
 	off Response, and ``type('Derived', (Base,), {'kind': 'derived'})'' keeps its
 	own namespace store because nothing overwrites it afterwards
 	(docs/Class_Attribute_Single_Home.md)."
+	"EVERY CLASS CARRIES A __doc__, which is how CPython makes an undocumented
+	class answer None rather than inheriting its base's docstring:
+
+	    class Base: 'bdoc'
+	    class Sub(Base): pass
+	    Sub.__doc__        -- None, not 'bdoc'
+
+	ClassDefAst emits a __doc__ accessor for every class the class STATEMENT
+	builds, so those have been right all along.  A class built here had no
+	entry and no accessor, so the read fell through to object>>__doc__ and
+	every one of them claimed object's own docstring -- ``The base class of
+	the class hierarchy...'' -- whatever the caller passed in the namespace.
+	test_builtin test_type_doc."
+	"THE NAME THE CALLER ASKED FOR, kept beside the Smalltalk one.  Stored even
+	when the two agree: the accessors read ___name___ when it is set and fall
+	back to the Smalltalk class otherwise, so writing it unconditionally is
+	what makes the answer independent of how the Smalltalk name was derived.
+	A namespace that supplies __qualname__ has already been copied above, so
+	it wins -- CPython's rule."
+	il @env0:___ensureClassAttrHolder___: newClass.
+	newClass ___classHolderAttrStore___: #'___name___' put: className.
+	(ownAttrNames @env0:includes: #'__qualname__') ifFalse: [
+		newClass ___classHolderAttrStore___: #'___qualname___' put: className].
+	(ownAttrNames @env0:includes: #'__doc__') ifFalse: [
+		"ENSURE THE HOLDER FIRST.  The namespace-copy loop above ensures it, but
+		only on the branch it takes when the namespace is NON-EMPTY -- and the
+		class that most needs a __doc__ entry is ``type('A', (), {})'', whose
+		namespace is empty.  Without this the store fell through
+		___pyAttrStore___ to its ``no ___dynInstVars___'' arm and raised
+		``cannot set '__doc__' attribute of immutable type 'A''', which broke
+		type() outright."
+		il @env0:___ensureClassAttrHolder___: newClass.
+		newClass ___pyAttrStore___: #'__doc__' put: None].
 	"__module__ comes from the CALLER, not from the bases.  CPython's type_new
 	stamps it from ``PyEval_GetGlobals()['__name__']'' whenever the namespace
 	did not supply one, and a class statement always supplies one -- so this
@@ -4426,7 +5543,14 @@ type: className _: bases _: namespace
 			modName := il @env1:___callerModuleName___.
 			modName @env0:notNil ifTrue: [
 				il @env0:___ensureClassAttrHolder___: newClass.
-				newClass ___pyAttrStore___: #'__module__' put: modName]].
+				"WRITTEN TO THE HOLDER DIRECTLY, not through ___pyAttrStore___.
+				A ``__module__'' store now clears ``__firstlineno__'' (CPython's
+				rule -- a class that claims a different module has no valid
+				recorded line), and this is type() filling in a DEFAULT, not a
+				caller moving the class.  Routing it through the store made
+				``type('A', (), {'__firstlineno__': 42})'' lose the entry it
+				had just been given."
+				newClass ___classHolderAttrStore___: #'__module__' put: modName]].
 	"``type(name, bases, ns)'' IS type.__new__, so a ``__classcell__'' in the
 	namespace binds here on the same terms as in a class statement -- and is
 	REFUSED when it already points at another class.  test_super
@@ -4444,6 +5568,55 @@ type: className _: bases _: namespace
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___build_class__: positional kw: kwargs
+	"Python builtin ``__build_class__(func, name, *bases, metaclass=None,
+	**kwds)'' -- what CPython's class STATEMENT compiles to.
+
+	GRAIL'S CLASS STATEMENT DOES NOT ROUTE THROUGH IT.  ClassDefAst emits
+	importlib sends directly, so this exists for two reasons and neither is
+	the class statement:
+
+	  * it must BE in the builtins namespace.  ``__builtins__'' handed to
+	    exec() is often a copy of the real builtins, and CPython's class
+	    statement then finds __build_class__ in it -- so a copy that lacks the
+	    name forbids class definitions that CPython allows.  Grail listed the
+	    name in ___builtinNamespaceNames___ (the spec of dir(builtins)) but
+	    implemented no method, and dir()/__dict__ enumerate METHODS, so every
+	    copy of builtins came out without it.  test_exec_globals_frozen
+	    copies builtins and then defines a class.
+	  * Python code may call it directly.
+
+	What it does is CPython's own sequence: make a namespace, run the body
+	function against it, then call the metaclass with (name, bases, ns).  The
+	body function is given the namespace as its argument, which is what a
+	plain function written by hand receives; CPython instead binds it as the
+	frame's locals, which needs a class-body code object Grail does not
+	produce.  So a hand-written body that assigns into its argument works and
+	one that relies on bare assignment does not -- the same limit every other
+	part of Grail's class model has, and better than the NameError that was
+	there before."
+
+	| func name bases ns metacls rest |
+	self ___requireArgs___: positional atLeast: 2
+		message: '__build_class__: not enough arguments'.
+	func := positional @env0:at: 1.
+	name := (positional @env0:at: 2) @env0:asString.
+	bases := positional @env0:copyFrom: 3 to: positional @env0:size.
+	ns := dict ___new___.
+	func ___pyCallValue___: { ns } kw: nil.
+	metacls := nil.
+	rest := nil.
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'metaclass']) ifTrue: [
+		metacls := kwargs @env0:at: 'metaclass'.
+		rest := kwargs @env0:copy.
+		rest @env0:removeKey: 'metaclass' ifAbsent: []].
+	metacls @env0:isNil ifTrue: [
+		^ self _type: { name. tuple @env0:withAll: bases. ns } kw: kwargs].
+	^ metacls ___pyCallValue___: { name. tuple @env0:withAll: bases. ns } kw: rest
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___import__: positional kw: kwargs
 	"Python builtin __import__(name, globals, locals, fromlist, level)
 	— varargs fast path. Delegates to importlib's ___import__:kw:
@@ -4454,9 +5627,145 @@ ___import__: positional kw: kwargs
 	to the name and appends `:kw:`, giving `___import__:kw:` — three
 	leading underscores, two trailing before `:kw:`."
 
-	self ___requireArgs___: positional atLeast: 1
+	| args nm |
+	"``name'' IS NAMEABLE.  CPython's __import__ takes name / globals / locals
+	/ fromlist / level as ordinary parameters, so ``__import__(name='sys')''
+	is legal; Grail read only positionals and reported the argument MISSING
+	when it had been supplied.  Merged into the positional list so the rest of
+	this method, and importlib below, see one shape."
+	args := positional.
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'name']) ifTrue: [
+		positional @env0:isEmpty
+			ifTrue: [args := { kwargs @env0:at: 'name' }]
+			ifFalse: [
+				^ TypeError ___signal___: 'argument for __import__() given by name '
+					@env0:, '(''name'') and position (1)']].
+	self ___requireArgs___: args atLeast: 1
 		message: '__import__() missing required argument ''name'' (pos 1)'.
-	^ (importlib instance) ___import__: positional kw: kwargs
+	"THE NAME MUST BE A STRING, and that is not decoration: a non-string fell
+	through to importlib's own scan and died with ``a SmallInteger does not
+	understand #indexOf:startingAt:'' -- an UNCATCHABLE Smalltalk error out of
+	a builtin, where CPython raises a TypeError the caller can handle.
+	test_builtin test_import passes 1 deliberately."
+	nm := args @env0:at: 1.
+	((nm @env0:isKindOf: CharacterCollection)
+		@env0:or: [nm @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+			^ TypeError ___signal___: 'module name must be a string'].
+	"An EMPTY name is a ValueError rather than a failed import -- there is no
+	module it could name -- but ONLY for an ABSOLUTE import.
+	``__import__('', globals, locals, ('foo',), 1)'' is the spelling of
+	``from . import foo'': at level 1 an empty name means the package itself,
+	which is legal and must fail (if it fails) as an ImportError about the
+	missing parent.  test_import makes exactly that call and expects
+	ImportError, so a ValueError here would turn a handled case into an
+	unhandled one."
+	(nm @env0:isEmpty @env0:and: [(self ___importLevelOf___: args kw: kwargs) @env0:= 0])
+		ifTrue: [^ ValueError ___signal___: 'Empty module name'].
+	^ (importlib instance) ___import__: args kw: kwargs
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___importLevelOf___: positional kw: kwargs
+	"__import__'s ``level'' argument, by position (5th) or by name, 0 when
+	absent.  Read here rather than left to importlib because the empty-name
+	check above has to know it: an empty name is a bad argument at level 0 and
+	an ordinary relative import above it."
+
+	positional @env0:size @env0:>= 5 ifTrue: [^ positional @env0:at: 5].
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'level'])
+		ifTrue: [^ kwargs @env0:at: 'level'].
+	^ 0
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___gatedImport___: positional kw: kwargs
+	"``__import__'' for code running under a ``__builtins__'' OVERRIDE.
+
+	CPython's IMPORT_NAME looks __import__ up in the code's builtins, so an
+	empty mapping forbids importing -- ``ImportError: __import__ not found'' --
+	and a mapping supplying one has THAT called, with the five arguments
+	CPython passes: (name, globals, locals, fromlist, level).
+
+	A SEPARATE METHOD, not a check inside ___import__:kw:, and the difference
+	is not cosmetic.  Putting the check there gates every import issued while
+	an override is installed, including GRAIL'S OWN: raising a NameError
+	inside the exec'd code makes the traceback machinery import ``re'', which
+	then became ``ImportError: __import__ not found'' and replaced the
+	exception the test was waiting for.  Three tests that had been closed
+	regressed that way, all reporting a module the source never mentions.
+
+	ImportAst and ImportFromAst emit this selector in place of the ordinary
+	one when compiling a doit under an override, so it is reached only by an
+	``import'' the exec'd SOURCE wrote."
+
+	| fn |
+	fn := self ___lookUpInBuiltinsOverride___: '__import__'
+		ifAbsent: [^ ImportError ___signal___: '__import__ not found'].
+	^ fn ___pyCallValue___: (self ___importArgsFor___: positional) kw: kwargs
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___importArgsFor___: positional
+	"The five arguments CPython's IMPORT_NAME passes to __import__:
+	(name, globals, locals, fromlist, level).
+
+	Codegen emits only what it needs -- often just the name -- so the rest are
+	filled in here from what the running exec() was handed.  A CUSTOM
+	__import__ is the only caller that can observe them, and it observes them
+	by identity: test_exec_builtins_mapping_import asserts the tuple is
+	``('foo.bar', ns, ns, None, 0)'' with ns the very dict passed to exec()."
+
+	| args g l |
+	g := self ___grailExecGlobals___.
+	l := self ___grailExecLocals___ @env0:ifNil: [g].
+	args := Array @env0:new: 5.
+	args @env0:at: 1 put: (positional @env0:at: 1).
+	args @env0:at: 2 put: (g @env0:ifNil: [None]).
+	args @env0:at: 3 put: (l @env0:ifNil: [None]).
+	args @env0:at: 4 put: ((positional @env0:size @env0:>= 4)
+		ifTrue: [positional @env0:at: 4] ifFalse: [None]).
+	args @env0:at: 5 put: ((positional @env0:size @env0:>= 5)
+		ifTrue: [positional @env0:at: 5] ifFalse: [0]).
+	^ args
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecGlobals___
+	"The globals mapping the running exec()/eval() was GIVEN -- the caller's
+	object, not the doit scope derived from it.
+
+	Distinct from ___grailLiveGlobals___, which is parked only for a mapping
+	Grail cannot copy and drives name RESOLUTION.  This one is parked always
+	and is read by a single caller: a custom __import__ from a __builtins__
+	override, which CPython hands the real mappings and which
+	test_exec_builtins_mapping_import compares by identity."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailExecGlobals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecGlobals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailExecGlobals' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecLocals___
+	"The locals mapping the running exec()/eval() was given -- see
+	___grailExecGlobals___."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailExecLocals' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailExecLocals___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailExecLocals' put: aMappingOrNil
 %
 
 category: 'Grail-Built-in Functions'
@@ -4522,6 +5831,9 @@ _input: positional kw: kwargs
 			@env0:on: MessageNotUnderstood do: [:ex | promptText := obj __repr__].
 		promptText := promptText @env0:asString].
 
+	"REFUSE BEFORE READING when a stream input() needs has been deleted."
+	self ___requireSysStream___: 'stdout' forPrompt: (positional @env0:size @env0:>= 1).
+	self ___requireSysStream___: 'stdin' forPrompt: true.
 	stdinObj := self ___sysStdin___.
 	stdinObj @env0:notNil ifTrue: [
 		((stdinObj ___respondsTo___: #'readline')
@@ -4624,6 +5936,42 @@ ___inputLine___: lineOrNil
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___requireSysStream___: aName forPrompt: hasPrompt
+	"CPython's ``RuntimeError: lost sys.stdout'' / ``lost sys.stdin'': input()
+	refuses to run when the stream it needs is GONE from the sys module.
+
+	KEYED ON DELETED, NOT ON None, and that is the whole difficulty.  CPython
+	treats a missing attribute and a None one alike, and Grail cannot: it
+	INITIALISES sys.stdin and sys.stdout to None and reads the console through
+	its own provider when they are, so ``None means lost'' would refuse every
+	ordinary interactive input().  A deleted attribute is unambiguous, and it
+	is the case test_input exercises -- ``del sys.stdout; input('prompt')''.
+
+	stdout is required only when there IS a prompt, because that is the only
+	thing input() writes."
+
+	(aName @env0:= 'stdout' @env0:and: [hasPrompt @env0:not]) ifTrue: [^ self].
+	(self ___sysHasAttribute___: aName) ifTrue: [^ self].
+	^ RuntimeError ___signal___: 'lost sys.' @env0:, aName
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___sysHasAttribute___: aName
+	"Whether the sys module still HAS aName -- false once ``del sys.x'' has
+	tombstoned it.  Distinct from its VALUE being None, which is Grail's
+	ordinary un-redirected state."
+
+	| sysMod |
+	sysMod := Python @env0:at: #'sys' otherwise: nil.
+	sysMod @env0:isNil ifTrue: [^ false].
+	^ [(sysMod @env0:___instance___ @env1:___pyAttrLoad___: aName @env0:asSymbol)
+		@env0:notNil @env0:or: [true]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___sysStdin___
 	"sys.stdin when something has been assigned over it, else nil meaning
 	``not redirected''.  Same dynamic-store read as ___printTarget___, and
@@ -4648,18 +5996,56 @@ _pow: positional kw: kwargs
 	with two arguments); this method is the fallback for 3-arg and
 	BoundMethod indirect calls."
 
-	| nargs x y z |
-	nargs := positional @env0:size.
+	| nargs x y z args |
+	"BASE, EXP AND MOD ARE ALL NAMEABLE.  CPython gave pow()'s parameters
+	names in 3.8 precisely so it composes with functools.partial, and
+	test_pow exercises that -- ``partial(pow, base=2)(exp=5)'' and
+	``partial(pow, mod=10)(exp=6, base=2)''.  Grail read none of them, so
+	every keyword spelling reported ``pow expected 2 or 3 arguments''.
+
+	Merged into the POSITIONAL list rather than handled separately, so the
+	arity checks below see one uniform shape and a call that mixes the two
+	(``mod10(2, 6)'') works without a second set of rules.  A keyword that
+	duplicates a positional is left to the arity check, which then reports
+	too many arguments -- CPython says ``got multiple values'', a wording
+	difference in an error either way."
+	"``args'' rather than ``positional'': GemStone does not allow assignment to
+	a method ARGUMENT, which is the same constraint float>>__round__: records
+	for its own coerced ndigits."
+	args := positional.
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		| slots names filled |
+		"THREE SLOTS, filled by POSITION first and then by NAME -- which is
+		what lets the two spellings mix in one call, as partial() makes them:
+		``partial(pow, mod=10)(2, 6)'' supplies slots 1 and 2 positionally and
+		slot 3 by name."
+		names := #('base' 'exp' 'mod').
+		slots := Array @env0:new: 3.
+		1 @env0:to: (positional @env0:size @env0:min: 3) do: [:i |
+			slots @env0:at: i put: (positional @env0:at: i)].
+		1 @env0:to: 3 do: [:i |
+			((slots @env0:at: i) @env0:isNil
+				@env0:and: [kwargs @env0:includesKey: (names @env0:at: i)]) ifTrue: [
+					slots @env0:at: i put: (kwargs @env0:at: (names @env0:at: i))]].
+		"Count the run of filled slots FROM THE LEFT.  A gap means an argument
+		was skipped (``pow(mod=3)''), which is not a 1-argument call -- leaving
+		it short lets the arity check below report it instead of computing
+		something from a hole."
+		filled := 0.
+		[filled @env0:< 3 @env0:and: [(slots @env0:at: filled @env0:+ 1) @env0:notNil]]
+			@env0:whileTrue: [filled := filled @env0:+ 1].
+		args := slots @env0:copyFrom: 1 to: filled].
+	nargs := args @env0:size.
 	(nargs == 2) ifTrue: [
-		x := positional @env0:at: 1.
-		y := positional @env0:at: 2.
+		x := args @env0:at: 1.
+		y := args @env0:at: 2.
 		^ x __pow__: y
 	].
 	(nargs == 3) ifTrue: [
-		| tn |
-		x := positional @env0:at: 1.
-		y := positional @env0:at: 2.
-		z := positional @env0:at: 3.
+		| tn ni r |
+		x := args @env0:at: 1.
+		y := args @env0:at: 2.
+		z := args @env0:at: 3.
 		"3-arg pow is modular exponentiation, defined only for integers.  Any
 		non-int operand raises CPython's TypeError naming all three types
 		(test_fractions test_three_argument_pow), rather than silently doing
@@ -4690,14 +6076,82 @@ _pow: positional kw: kwargs
 			(v @env0:isKindOf: complex) or: [v @env0:isKindOf: Float]]
 			ifNone: [nil]) @env0:isKindOf: complex) ifTrue: [
 				ValueError ___signal___: 'complex modulo'].
-		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
-			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
-				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
+		"3-ARG POW IS A DUNDER DISPATCH, not an int-only operation.  CPython
+		asks type(x).__pow__(x, y, z) and then type(y).__rpow__(y, x, z), and
+		decimal depends on it: pow(Decimal(10), 2, 7) and pow(10, Decimal(2), 7)
+		are both 2 (test_decimal's test_implicit_context).  Grail reached the
+		TypeError below for either, because the int fast path above is the only
+		3-arg route there was.
+
+		ONLY the varargs spelling is probed.  A Python dunder with a defaulted
+		third parameter (``def __pow__(self, other, modulo=None, context=None)''
+		in _pydecimal) compiles varargs-only, to ``___pow__:kw:'' -- the same
+		form ___grailBinOpDNU___ probes for fractions' ``__pow__(a, b,
+		modulo=None)''.  The FIXED ``__pow__:_:'' spelling is deliberately NOT
+		probed: Int and Float have one, but it computes ``(self raisedTo: other)
+		\\ mod'' unconditionally instead of declining a non-int modulus the way
+		CPython's slot does, so probing it would answer pow(10, 2, Decimal(7))
+		instead of raising -- and that TypeError is pinned by the same test
+		(``there is no special method to dispatch on the third arg'').
+
+		The MODULUS is never dispatched on, which is exactly why that case
+		still falls through to the TypeError."
+		ni := Python @env0:at: #NotImplemented otherwise: nil.
+		r := self ___pow3Dunder___: x args: { y. z } base: '__pow__'.
+		(r @env0:~~ ni) ifTrue: [^ r].
+		r := self ___pow3Dunder___: y args: { x. z } base: '__rpow__'.
+		(r @env0:~~ ni) ifTrue: [^ r].
+		"TWO MESSAGES, and which one CPython uses depends on the offending
+		type.  A FLOAT operand is refused by pow()'s own check -- ``pow() 3rd
+		argument not allowed unless all arguments are integers'' -- while
+		anything else falls through to the operator protocol and gets the
+		generic ``unsupported operand type(s)''.  Grail gave the generic one
+		to both, which is right for a Fraction (test_fractions
+		test_three_argument_pow asserts exactly that wording) and wrong for
+		the far more common float."
+		((x @env0:isKindOf: Float) @env0:or: [(y @env0:isKindOf: Float)
+			@env0:or: [z @env0:isKindOf: Float]]) ifTrue: [
+			^ TypeError ___signal___:
+				'pow() 3rd argument not allowed unless all arguments are integers'].
+		"Through ___pyTypeNameForError___ rather than a local Integer table:
+		that table mapped the integer classes to ``int'' and left every other
+		Smalltalk name to leak, so a float read 'SmallDouble' -- which is also
+		why the float case above was hard to recognise as a wrong message
+		rather than a wrong type name."
+		tn := [:v | (v ___pyTypeNameForError___) @env0:asString].
 		TypeError ___signal___: ('unsupported operand type(s) for ** or pow(): '''
 			@env0:, (tn @env0:value: x) @env0:, ''', ''' @env0:, (tn @env0:value: y)
 			@env0:, ''', ''' @env0:, (tn @env0:value: z) @env0:, '''')
 	].
+	"CPython names the MISSING PARAMETER rather than the arity, which is the
+	more useful report once the parameters have names a caller can use -- and
+	the reason it matters here is partial(): ``partial(pow, mod=10)()'' is a
+	call that supplies an argument and is still short two, and ``expected 2 or
+	3 arguments'' does not say which."
+	args @env0:size @env0:= 0 ifTrue: [
+		^ TypeError ___signal___: 'pow() missing required argument ''base'' (pos 1)'].
+	args @env0:size @env0:= 1 ifTrue: [
+		^ TypeError ___signal___: 'pow() missing required argument ''exp'' (pos 2)'].
 	TypeError ___signal___: 'pow expected 2 or 3 arguments'
+%
+
+category: 'Grail-Numeric Helpers'
+method: builtins
+___pow3Dunder___: recv args: argArray base: baseName
+	"Call recv's THREE-ARG power dunder if it has one, else answer
+	NotImplemented so the caller can try the next candidate.
+
+	baseName is '__pow__' or '__rpow__'; the selector probed is the varargs
+	form ``___pow__:kw:'' / ``___rpow__:kw:'', derived the same way
+	___grailBinOpDNU___ derives it.  A dunder that declines by RETURNING
+	NotImplemented is indistinguishable here from one that does not exist,
+	which is what the caller wants in both cases."
+
+	| sel ni |
+	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	sel := ('_' @env0:, baseName @env0:, ':kw:') @env0:asSymbol.
+	(recv @env1:___respondsTo___: sel) ifFalse: [^ ni].
+	^ recv @env0:perform: sel env: 1 withArguments: { argArray. nil }
 %
 
 category: 'Grail-Numeric Helpers'
@@ -4761,6 +6215,30 @@ _breakpoint: positional kw: kwargs
 	breakpoint() with RuntimeError rather than the AttributeError the missing
 	read would otherwise produce -- so the read is guarded, not just its
 	result."
+	"ASKED OF THE BINDING, not of the attribute.  A module's attribute read
+	lazy-wraps a class method when no binding is found, and sys still HAS a
+	``_breakpointhook:kw:'' method -- it is the default hook's implementation
+	-- so after ``del sys.breakpointhook'' the read happily wrapped it again
+	and breakpoint() ran the default instead of raising.  The attribute was
+	deleted and the attribute lookup still answered something.
+
+	A binding lives in one of the module's two stores: a dynamic instVar (what
+	``sys.breakpointhook = f'' creates) or a dictionary entry (what sys's own
+	initialize puts there).  Both are checked, because either can be the one
+	that was removed.
+
+	NOT ___globalNames___, which is the list vars(sys) and dir(sys) report and
+	looks like the tidier question.  It is a different question: that list
+	includes every name the module's own METHODS could be lazily wrapped
+	under, and sys keeps a ``_breakpointhook:kw:'' method -- the default hook's
+	own implementation -- so ``breakpointhook'' is in it whether or not a
+	binding exists.  A guard written that way can never fire, and the
+	consequence is not a failed test: breakpoint() runs the default hook,
+	reaches pdb.set_trace(), and HALTS into the GemStone debugger, which takes
+	the whole module down.  test.test_builtin went to CRASH."
+	(((sysInst @env0:dynamicInstVarAt: #'breakpointhook') @env0:notNil)
+		@env0:or: [sysInst @env0:includesKey: #'breakpointhook']) ifFalse: [
+			^ RuntimeError ___signal___: 'lost sys.breakpointhook'].
 	hook := [sysInst @env1:___pyAttrLoad___: #'breakpointhook']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(hook == nil or: [hook @env0:== None]) ifTrue: [
@@ -4928,9 +6406,23 @@ _round: positional kw: kwargs
 	handles 2-arg calls and the kwarg form `round(x, ndigits=n)`."
 
 	| number ndigits multiplier |
-	self ___requireArgs___: positional atLeast: 1
-		message: 'round() missing required argument ''number'' (pos 1)'.
-	number := positional @env0:at: 1.
+	"BOTH PARAMETERS ARE NAMEABLE.  ``round(number=-8.0, ndigits=-1)'' is
+	CPython's own spelling and test_round asserts it; Grail read ``ndigits''
+	from the keywords but not ``number'', so the arity check below fired first
+	and reported the argument as missing when it had been supplied by name."
+	((positional @env0:size @env0:= 0)
+		@env0:and: [kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'number']])
+		ifTrue: [number := kwargs @env0:at: 'number']
+		ifFalse: [
+			self ___requireArgs___: positional atLeast: 1
+				message: 'round() missing required argument ''number'' (pos 1)'.
+			number := positional @env0:at: 1].
+	"...and there are at most two.  Extra positionals were silently DROPPED, so
+	``round(1, 2, 3)'' answered 1 rather than raising -- a wrong answer to a
+	call that cannot mean anything."
+	positional @env0:size @env0:> 2 ifTrue: [
+		^ TypeError ___signal___: 'round() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)'].
 	ndigits := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
@@ -4950,17 +6442,31 @@ _round: positional kw: kwargs
 			withArguments: { (ndigits @env0:isNil ifTrue: [{ }] ifFalse: [{ ndigits }]). nil }].
 	((number @env0:class @env0:whichClassIncludesSelector: #'__round__:' environmentId: 1) @env0:notNil)
 		ifTrue: [^ number perform: #'__round__:' env: 1 withArguments: { ndigits }].
-	ndigits ifNil: [^ number @env0:rounded].
+	"NO __round__ ON THE TYPE and not a number either: CPython's message names
+	the type and the method, and Grail fell straight into the arithmetic below
+	-- which MNU'd on ``number * multiplier'' with an UNCATCHABLE ``a
+	TestNoRound does not understand #'*'''.
+
+	The lookups above are on the TYPE (whichClassIncludesSelector:), which is
+	CPython's rule and the point of test_round's last two lines: an INSTANCE
+	attribute named __round__ must not be honoured, so ``t.__round__ = lambda
+	*args: args'' still raises.  Landing in the arithmetic made that raise the
+	wrong exception, uncatchably."
+	(number @env0:isKindOf: Number) ifFalse: [
+		^ TypeError ___signal___: 'type ' @env0:,
+			(number ___pyTypeNameForError___) @env0:asString @env0:,
+			' doesn''t define __round__ method'].
+	ndigits ifNil: [^ number @env1:___roundHalfToEven___].
 	multiplier := 10 @env0:raisedTo: ndigits.
 	"Match CPython: ``round(1.234, 2)'' returns the Float 1.23.
 	Smalltalk's ``Integer / Integer'' returns a Fraction, so divide
 	by the Float form of the multiplier when the input is a Float."
 	^ (number isKindOf: Float)
 		@env0:ifTrue: [
-			((number @env0:* multiplier) @env0:rounded @env0:asFloat)
+			((number @env0:* multiplier) @env1:___roundHalfToEven___ @env0:asFloat)
 				@env0:/ multiplier @env0:asFloat]
 		@env0:ifFalse: [
-			((number @env0:* multiplier) @env0:rounded) @env0:/ multiplier]
+			((number @env0:* multiplier) @env1:___roundHalfToEven___) @env0:/ multiplier]
 %
 
 category: 'Grail-Built-in Functions'

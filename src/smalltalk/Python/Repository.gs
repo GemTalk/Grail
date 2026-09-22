@@ -115,4 +115,68 @@ mark_for_collection
 	^ r
 %
 
+category: 'Grail-Repository Administration'
+method: Repository
+schema_report
+	"Python repository.schema_report() -- every persistent Python class whose
+	slot layout holds an attribute nothing assigns any more, or a hole a drop
+	left, with the instance counts that say how much data each is carrying
+	(object class >> ___grailSchemaReport___; docs/Schema_Evolution_Design.md).
+	gemdb.schema.report() wraps it.
+
+	ON THE REPOSITORY INSTANCE, not on the gemstone module, and for the reason
+	docs/GemDB_Module.md gives for the administration primitives: a unary
+	method on a MODULE class is performed by a bare attribute read, so a
+	module-level spelling would run this -- a full repository scan -- from
+	``inspect.getmembers(gemstone)'' or a REPL completer.  An instance
+	attribute read only wraps; nothing runs until the caller writes
+	parentheses.
+
+	Needs a session with no uncommitted changes (the scan aborts first);
+	gemdb.schema checks that ahead of the call, so the refusal is a Python
+	exception with advice rather than a kernel error."
+
+	^ object ___grailSchemaReport___
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+schema_rebase: aName
+	"Python repository.schema_rebase('module.Class') -- perform the base change
+	an import refuses, moving every instance of the class and of its subtree
+	onto the rebuilt class instead of stranding them
+	(importlib class >> ___grailRebaseClass___:; docs/Schema_Evolution_Design.md).
+	gemdb.schema.rebase() wraps it, owns the clean-transaction check and
+	commits.
+
+	A KEYWORD method, so the module-class hazard schema_report's comment
+	describes does not arise here -- nothing performs it by a bare attribute
+	read -- but it stays beside its sibling on the Repository instance so the
+	whole schema surface has one home."
+
+	^ importlib @env0:___grailRebaseClass___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+schema_drop_class: aName
+	"Python repository.schema_drop_class('module.Class') -- forget a class the
+	source no longer defines, but only once nothing is stored against it
+	(importlib class >> ___grailDropCanonicalClass___:).  gemdb.schema.drop_class()
+	wraps it."
+
+	^ importlib @env0:___grailDropCanonicalClass___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+schema_rename_class: aName _: newName
+	"Python repository.schema_rename_class('module.Old', 'New') -- move a
+	renamed class's instances onto the class the new source defines
+	(importlib class >> ___grailRenameCanonicalClass___:to:).
+	gemdb.schema.rename_class() wraps it."
+
+	^ importlib @env0:___grailRenameCanonicalClass___: aName to: newName
+%
+
 set compile_env: 0

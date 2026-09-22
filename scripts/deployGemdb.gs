@@ -58,7 +58,7 @@ importlib ___canonicalMetaclasses___.
 "gemdb's __init__ imports the submodules, so loading 'gemdb' pulls them
 in; they are also loaded by name, like deployFrameworks does for
 werkzeug's submodules, so each has its own registry and hash entry."
-names := #('gemdb' 'gemdb.admin' 'gemdb.sessions').
+names := #('gemdb' 'gemdb.admin' 'gemdb.schema' 'gemdb.sessions').
 loaded := 0.
 names do: [:nm | | path |
   path := importlib @env1:___moduleNameToPath___: nm.

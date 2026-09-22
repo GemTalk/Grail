@@ -73,15 +73,48 @@ ___signalMissing___: aName on: anObject
 	wrong in both halves."
 	msg := (anObject @env0:isKindOf: Behavior)
 		ifTrue: ['type object ''' @env0:,
-			(anObject @env0:name @env0:asString) @env0:,
+			(anObject @env0:___pyClassNameForError___) @env0:asString @env0:,
 			''' has no attribute ''' @env0:, aName @env0:asString @env0:, '''']
-		ifFalse: ['''' @env0:, (anObject @env0:class @env0:name @env0:asString) @env0:,
+		ifFalse: ['''' @env0:, (anObject @env0:___pyDnuTypeName___) @env0:asString @env0:,
 			''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
+	^ self ___signalAttr___: aName on: anObject message: msg
+%
+
+category: 'Grail-Attribute Errors'
+classmethod: AttributeError
+___signalAttr___: aName on: anObject message: aMessage
+	"Raise an AttributeError carrying CPython's ``name'' and ``obj'', under a
+	message the caller has already composed.  Extracted so the two refusals
+	that differ ONLY in wording -- a missing attribute and a store onto an
+	object that has no instance dictionary -- cannot drift apart in the part
+	that matters to the stdlib, which is the two stamped attributes rather
+	than the prose."
+
+	| instance |
 	instance := self @env1:___new___.
-	instance @env1:___args___: { msg }.
+	instance @env1:___args___: { aMessage }.
 	instance @env0:dynamicInstVarAt: #'name' put: aName @env0:asString.
 	instance @env0:dynamicInstVarAt: #'obj' put: anObject.
-	^ instance @env1:___signal___: msg
+	^ instance @env1:___signal___: aMessage
+%
+
+category: 'Grail-Attribute Errors'
+classmethod: AttributeError
+___signalNoDict___: aName on: anObject
+	"CPython's refusal for a STORE onto an object with no instance dictionary:
+
+	    'int' object has no attribute 'zz' and no __dict__ for setting new attributes
+
+	The suffix is why this is a second entry point rather than a reuse of
+	___signalMissing___:on:.  From an ASSIGNMENT, ``has no attribute 'zz'''
+	alone reads as a typo and sends the reader looking for the right spelling;
+	the real answer is that the type holds no attributes at all, so no spelling
+	would have worked.  CPython distinguishes the two and so should Grail."
+
+	^ self ___signalAttr___: aName on: anObject
+		message: ('''' @env0:, (anObject @env0:___pyDnuTypeName___) @env0:asString
+			@env0:, ''' object has no attribute ''' @env0:, aName @env0:asString
+			@env0:, ''' and no __dict__ for setting new attributes')
 %
 
 category: 'Grail-Attribute Errors'

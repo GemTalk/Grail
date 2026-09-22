@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'TypeAliasTestCase'
-  instVarNames: #( testModule )
+  instVarNames: #( testModule irRegistrySnapshot )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -144,4 +144,79 @@ testTypeRemainsTheBuiltin
 	self assertMatchesCPythonAt: 'builtin_call'.
 	self assertMatchesCPythonAt: 'builtin_isinstance'.
 	self assertMatchesCPythonAt: 'builtin_as_value'.
+%
+
+category: 'Grail-Tests - type alias'
+method: TypeAliasTestCase
+tearDown
+	importlib ___irCodegenEnabledInvalidate___.
+	(importlib @env1:modules) removeKey: #'type_alias_ir' ifAbsent: [].
+	irRegistrySnapshot ifNotNil: [:snap |
+		importlib ___canonicalRegistryRestore___: snap.
+		irRegistrySnapshot := nil].
+	self ___forgetCanonicalModule___: 'type_alias_ir'
+%
+
+category: 'Grail-Tests - type alias'
+method: TypeAliasTestCase
+___censusAndResultsUnderForcedIR___
+	"Load the same fixture with the seam FORCED on and the census collecting;
+	answer { the census counts. the fixture's r }."
+
+	| census mod |
+	(importlib @env1:modules) removeKey: #'type_alias_ir' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'type_alias_ir'.
+	irRegistrySnapshot ifNil: [
+		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
+	importlib ___irCodegenForce___: true.
+	importlib ___irStatsReset___.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	mod := [importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/type_alias.py')
+		name: 'type_alias_ir'] ensure: [importlib ___irCensusOn: false].
+	census := importlib ___irCensus___.
+	^ { census at: #counts. mod @env1:___pyAttrLoad___: #'r' }
+%
+
+category: 'Grail-Tests - type alias'
+method: TypeAliasTestCase
+testTheStatementCompilesThroughIR
+	"THE TESTS ABOVE PASS ON EITHER PATH.  Neither TypeAliasAst nor
+	TypeAliasValueAst had any IR protocol, so every def holding a type alias
+	refused eligibility and compiled as TEXT -- which handles all of this
+	already, so every value was right and nothing said the IR arm had never
+	run.
+
+	Two assertions.  The CENSUS one says the refusal is gone, naming BOTH rows:
+	giving the statement its protocol first moved `stmt:TypeAliasAst' to
+	`value:TypeAliasValueAst' with cm:eligible unchanged at 660 -- the row
+	moved one node down rather than closing, which a count cannot see.  The
+	RESULTS one says the emit that replaced it is right, over the same keys the
+	text arm checks.
+
+	``lazy_forward_reference'' and ``lazy_in_a_function'' are the two that
+	matter most: the value lives in a THUNK, and an emit that evaluated it
+	eagerly would turn a legal forward reference into a NameError at the point
+	of definition while passing every other check here."
+
+	| pair counts results present |
+	pair := self ___censusAndResultsUnderForcedIR___.
+	counts := pair at: 1.
+	results := pair at: 2.
+	#('repr' 'name' 'type_params' 'none_value' 'none_value_again'
+	  'lazy_forward_reference' 'is_a_module_global' 'in_a_function'
+	  'lazy_in_a_function' 'in_a_method') do: [:key |
+		self assert: ((results @env1:__getitem__: key) @env1:__repr__ @env0:asString)
+			equals: ((testModule @env1:___pyAttrLoad___: #'EXPECTED')
+				@env1:__getitem__: key) @env0:asString
+			description: 'under forced IR: ' , key].
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	present := #('stmt:TypeAliasAst' 'cm:stmt:TypeAliasAst'
+		'value:TypeAliasValueAst' 'cm:value:TypeAliasValueAst') select: [:row |
+			(counts at: row asSymbol otherwise: 0) > 0].
+	self assert: present isEmpty
+		description: 'a type-alias refusal is still in the census: '
+			, (present collect: [:r | r , '=' ,
+				(counts at: r asSymbol otherwise: 0) printString]) asArray printString
 %

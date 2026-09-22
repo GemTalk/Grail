@@ -141,19 +141,53 @@ zlib.compress("not bytes")']
 
 category: 'Grail-Tests - zlib'
 method: ZlibTestCase
-testCompressobjStillUnsupported
-	"The COMPRESSING half of the z_stream API is still a documented gap.
-	Decompression is not: see the streaming tests below."
+testCompressobjRoundTripsThroughDecompressobj
+	"The COMPRESSING half of the z_stream API.  This test used to be
+	testCompressobjStillUnsupported, which pinned compressobj() raising
+	NotImplementedError as a documented gap; ZlibCompress closed the gap, so
+	it now pins the behaviour instead of the absence of it.
 
-	| result |
-	result := self eval: 'import zlib
+	Raw deflate at wbits -15 is the shape asserted because it is what a zip
+	entry holds and what CPython's zipfile asks compressobj for."
+
+	self assert: (self eval: 'import zlib
+payload = b"grail " * 5000
+compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+packed = compressor.compress(payload) + compressor.flush()
+decompressor = zlib.decompressobj(-15)
+(decompressor.decompress(packed) + decompressor.flush() == payload, len(packed) < len(payload))')
+		equals: (self eval: '(True, True)')
+%
+
+category: 'Grail-Tests - zlib'
+method: ZlibTestCase
+testAFinishedCompressorRefusesMoreWorkAsCPythonDoes
+	"After a finishing flush libz has its state back, and CPython reports any
+	further use as zlib.error with this exact text.  Measured against CPython
+	3.14."
+
+	self assert: (self eval: 'import zlib
+compressor = zlib.compressobj()
+compressor.compress(b"x")
+compressor.flush()
 try:
-    zlib.compressobj()
-    b = False
-except NotImplementedError:
-    b = True
-b'.
-	self assert: result
+    compressor.compress(b"y")
+    outcome = "no error"
+except zlib.error as error:
+    outcome = str(error)
+outcome') equals: 'Error -2 while compressing data: inconsistent stream state'
+%
+
+category: 'Grail-Tests - zlib'
+method: ZlibTestCase
+testABadCompressorOptionIsAValueError
+	"libz judges the options itself; its Z_STREAM_ERROR is reported as CPython
+	reports it."
+
+	self
+		should: [self eval: 'import zlib
+zlib.compressobj(10)']
+		raise: ValueError
 %
 
 category: 'Grail-Tests - zlib streaming'
@@ -218,8 +252,17 @@ expected = b"grail streaming inflate fixture\n" * 8
 category: 'Grail-Tests - zlib streaming'
 method: ZlibTestCase
 testMaxLengthAndUnconsumedTail
-	"decompress(data, max_length) caps the OUTPUT and parks the rest of
-	the input in unconsumed_tail, which the next call picks up."
+	"decompress(data, max_length) caps the OUTPUT and parks the rest of the
+	input in unconsumed_tail -- which the CALLER passes back, as CPython's
+	documented protocol has it.
+
+	This test used to feed empty follow-up calls and expect them to continue
+	from the tail, pinning a Grail behaviour CPython does not have: run under
+	CPython 3.14 its own final assertion was False, recovering 533 of 131072
+	bytes.  Grail prepended the tail itself, so a protocol-following caller got
+	it twice and the input grew with every call -- which is how CPython's own
+	zipfile ran the gem out of memory reading a large member.  Both halves are
+	now measured against CPython."
 
 	| result |
 	result := self eval: 'import zlib
@@ -229,13 +272,26 @@ d = zlib.decompressobj()
 first = d.decompress(packed, 100)
 capped = (len(first) == 100 and len(d.unconsumed_tail) > 0 and not d.eof)
 out = first
-while not d.eof:
-    chunk = d.decompress(b"", 4096)
-    if len(chunk) == 0 and len(d.unconsumed_tail) == 0:
-        break
-    out += chunk
+while d.unconsumed_tail:
+    out += d.decompress(d.unconsumed_tail, 4096)
+out += d.flush()
 (capped and out == payload and len(payload) == 131072)'.
 	self assert: result
+%
+
+category: 'Grail-Tests - zlib streaming'
+method: ZlibTestCase
+testAnEmptyFollowUpCallDoesNotResumeFromTheTail
+	"The half that would catch the bug coming back: decompress(b'') does NOT
+	re-read unconsumed_tail, so it cannot fill a 4096-byte cap.  Under the old
+	prepend it did, which is exactly what doubled the tail for every caller
+	that also passed it back."
+
+	self assert: (self eval: 'import zlib
+packed = zlib.compress(("0123456789abcdef" * 8192).encode())
+d = zlib.decompressobj()
+d.decompress(packed, 100)
+len(d.decompress(b"", 4096)) < 4096') equals: true
 %
 
 category: 'Grail-Tests - zlib streaming'

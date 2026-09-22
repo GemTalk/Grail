@@ -392,10 +392,44 @@ testIRPathWasActuallyTaken
 			reading.  The probe's ONLY match statement was text_caller's own IR
 			opt-out, so retiring the refusal moved the count by one and broke
 			testTracebackThroughIRMethod's premise assertion in the same run --
-			the tripwire firing exactly as it was built to.  The opt-out is now
-			a TYPE ALIAS (`stmt:TypeAliasAst', another whole statement family
-			with no IR emit) and the count is back where it was.  Second time
-			that assertion has earned its keep; the first was silent.
+			the tripwire firing exactly as it was built to.  The opt-out became
+			a TYPE ALIAS and the count went back where it was.  Second time that
+			assertion has earned its keep; the first was silent.
+
+			Cut ``type alias'': 642 -> **642**, the same reading as the match
+			cut and for the same reason -- the probe's only type alias was
+			text_caller's opt-out, so retiring the refusal moved the count by
+			one and broke the premise assertion in the same run, and replacing
+			the opt-out moved it back.  THIRD time that assertion has earned its
+			keep.
+
+			The new opt-out is a never-called nested def holding a bare
+			``super()'', which refuses as #'CallAst:super-noClass' --
+			sv_arity_error's module-scope ``super(int, int, int)'' had already
+			proved that row exists.  It is durable in a way the previous three
+			were not: ``super()'' with no enclosing class is a RuntimeError in
+			CPython, so no cut can make it eligible without answering a super
+			where CPython raises.  The three shapes measured and rejected are
+			recorded in the fixture beside it.
+
+			(643 was PREDICTED here and is wrong: the replacement restores the
+			refusal, so the total does not move.  Measured, not reasoned --
+			which is the rule this number exists to enforce.)
+
+			Cut ``super precondition 1'': 642 -> **643**, and the split says
+			which kind of def moved: top-level `compiled' unchanged at 427,
+			class methods 215 -> 216.  That is a zero-parameter method whose
+			body names ``super'' -- `method:noSelfSuper', which refused the def
+			rather than emit a proxy where CPython raises ``super(): no
+			arguments''.  The emit now spells that arm, so the refusal is gone
+			and the method compiles.
+
+			NOTE FOR WHICHEVER OF THIS AND THE TYPE-ALIAS CUT MERGES SECOND:
+			they pin different numbers because they are measured on different
+			opt-outs.  The type-alias cut retires text_caller's type alias and
+			replaces it with a bare ``super()'', netting zero; this one adds a
+			class method, netting +1 from 642.  Together the answer is 643, and
+			the second merge will fire this assertion to say so.
 
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
@@ -403,9 +437,9 @@ testIRPathWasActuallyTaken
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) equals: 642
+			self assert: (stats at: #compiled) equals: 643
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 642']
+					, ', expected 643']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

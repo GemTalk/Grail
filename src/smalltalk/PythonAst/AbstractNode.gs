@@ -237,6 +237,47 @@ ___signalExceptStarFlowControl___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___hasModuleScopeAwait___
+	"Whether this subtree AWAITS at module scope -- an ``await'', an ``async
+	for'' or an ``async with'' reachable without entering a def, a lambda or a
+	class body.
+
+	That is exactly CPython's condition for setting CO_COROUTINE on a module
+	compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT, and the careful half is what it
+	must NOT match: an ``async def'' whose awaits are all inside it is an
+	ordinary module, and so is a comprehension with no async in it.
+	test_compile_top_level_await_no_coro asserts the bit is clear for five
+	shapes that each contain something async-looking.
+
+	A comprehension IS searched, and deliberately: ``[x async for x in
+	arange(2)]'' at module level awaits, and CPython marks it.  Only the three
+	node kinds that introduce a new FUNCTION scope end the walk.
+
+	Generic instVar traversal, the same one
+	___collectModuleScopeStarImportsInto___ uses; ``parent'' points UP and is
+	skipped by index."
+
+	((self isKindOf: FunctionDefAst)
+		or: [(self isKindOf: AsyncFunctionDefAst)
+			or: [(self isKindOf: LambdaAst) or: [self isKindOf: ClassDefAst]]])
+				ifTrue: [^ false].
+	((self isKindOf: AwaitAst)
+		or: [(self isKindOf: AsyncForAst) or: [self isKindOf: AsyncWithAst]])
+			ifTrue: [^ true].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		((val isKindOf: AbstractNode)
+			and: [val ___hasModuleScopeAwait___]) ifTrue: [^ true].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				((each isKindOf: AbstractNode)
+					and: [each ___hasModuleScopeAwait___]) ifTrue: [^ true]]]].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___collectModuleScopeStarImportsInto___: aCollection
 	"Add to aCollection every ``from X import *'' statement reachable from
 	this node WITHOUT leaving module scope, in source order.
@@ -920,6 +961,63 @@ ___scopeNodeDeclaresGlobal___: aScopeNode named: aSymbol
 	^ gset notNil and: [gset includes: aSymbol asSymbol]
 %
 
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRClassObjectOn___: aBuilder
+	"The CLASS OBJECT itself -- the IR twin of
+	CallAst>>___printClassObjectOn___:, and it has to stay in step with it.
+
+	The CONTAINER, not what ``__class__'' reads out of it: a write to the class
+	cell targets the class, and going through the rebindable-cell read would
+	send the setter to whatever the cell currently holds.  test_super puts 42
+	there, which is how the text version of this learned the same lesson.
+
+	Two routes, as everywhere else: a module-scope class is an attribute of the
+	module instance; a METHOD-LOCAL class comes out of the closure cell keyed
+	``___cell_<ClassName>___'', which only the defining class carries."
+
+	CallAst classDefIsModuleScope == false ifFalse: [
+		^ aBuilder
+			send: CallAst classBeingCompiled asSymbol
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
+			with: { } env: 1].
+	CallAst addCapturedClassName: CallAst classBeingCompiled.
+	CallAst classNeedsClassCell: true.
+	^ aBuilder
+		send: #'___classCell___:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString , '___') asSymbol }
+		env: 1
+%
+
+category: 'Grail-Scope'
+method: AbstractNode
+___nearestEnclosingFunctionDeclaresNonlocal___: aSymbol
+	"``nonlocal aSymbol'' declared by the nearest enclosing FUNCTION -- the
+	scope whose declaration decides where a store in this node lands.
+
+	Distinct from ___declaredInEnclosingFunction___:, which answers true for a
+	``global'' declaration too and walks past the nearest scope.  The
+	``__class__'' cell branches need the narrower question: a method declaring
+	the name NONLOCAL shares the class's implicit cell, whereas one declaring
+	it GLOBAL means the module binding and must keep standing down."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				^ node body notNil
+					and: [node body nonlocalNames notNil
+					and: [node body nonlocalNames includes: aSymbol]]].
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		node := node parent].
+	^ false
+%
+
 category: 'Grail-codegen helpers'
 method: AbstractNode
 ___nearestEnclosingScopeDeclaresGlobal___: aSymbol
@@ -1251,6 +1349,89 @@ ___globalsViewReceiverExpr___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___globalsOnlyViewReceiverExpr___
+	"Receiver expression for ``globals()'' ALONE -- not for module-scope
+	locals()/vars() or bare dir(), which keep ___globalsViewReceiverExpr___.
+
+	The three coincide in a module and in almost every doit, and they come
+	apart in exactly one case: exec()/eval() handed a ``locals'' mapping that
+	is not the ``globals'' one.  The doit scope is then the two MERGED --
+	locals over globals, which is the lookup order a name wants and what
+	locals() should report -- while globals() is defined to answer the globals
+	mapping alone.
+
+	The fork is made at RUN TIME rather than here, by
+	builtins >> ___doitGlobalsView___:, because compiling the source says
+	nothing about whether the caller will pass one mapping or two."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitGlobalsView___: ___pyGlobals___)']
+		ifFalse: [self ___moduleStoreReceiverExpr___]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___localsOnlyViewExpr___
+	"The whole ``locals()'' expression for a DOIT -- receiver and wrap
+	together, unlike its two siblings, because a live locals mapping is
+	answered AS ITSELF and so there is no wrap to put round it.
+
+	Answers nil outside a doit, where locals() at module scope IS globals()
+	and the existing emit is already right."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitLocalsView___: ___pyGlobals___)']
+		ifFalse: [nil]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___importSelectorPrefix___
+	"The builtins selector an ``import'' statement compiles to: the ordinary
+	``___import__'' or, under a ``__builtins__'' override, ``___gatedImport___''.
+
+	Chosen at EMIT TIME rather than checked inside ___import__:kw: so that
+	only an import the exec'd SOURCE wrote is gated.  A check in the shared
+	method also catches Grail's own lazy imports -- raising a NameError inside
+	exec'd code imports ``re'' for the traceback -- and replaces the
+	exception the caller was waiting for with an ImportError about a module
+	the source never mentions."
+
+	^ self ___builtinsAreOverridden___
+		ifTrue: ['___gatedImport___']
+		ifFalse: ['___import__']
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___builtinsAreOverridden___
+	"True while compiling a DOIT whose globals mapping supplied its own
+	``__builtins__''.
+
+	CPython takes a piece of code's builtins namespace from its globals, so
+	``exec(src, {'__builtins__': {}})'' runs source that cannot reach print,
+	open or __import__ -- the whole of the sandboxing story.  Grail resolves a
+	builtin CALL at compile time, straight to a send on the one real builtins
+	singleton, so the restriction was accepted and then silently ignored: the
+	generated code never asked.
+
+	Asked HERE, at compile time, because a doit is compiled by the exec() that
+	is about to run it -- the override is already installed when this is
+	consulted, and the answer cannot change under the compiled method.  Module
+	code is never affected: its builtins are not replaceable and its compile
+	long predates any exec.
+
+	The fast paths answer nil when this is true, so the call falls through to
+	the generic read, which resolves the name at RUN time and finds the
+	override.  Slower, and only for code that asked to be sandboxed."
+
+	ModuleAst compilingDoitScope isNil ifTrue: [^ false].
+	^ [(((Python at: #builtins) @env1:instance) @env1:___grailBuiltinsOverride___) notNil]
+		on: Error do: [:ex | ex return: false]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___functionBindsPythonLocal___: funcAst named: aSymbol
 	"True iff aSymbol is a TRUE PYTHON LOCAL of the given FunctionDefAst
 	or LambdaAst: a parameter, or a genuine body binding (the block's
@@ -1443,7 +1624,15 @@ ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
 
 	Shared by the except-as, with-as and for-target bindings exactly as the
 	text helper is, so the three cannot drift apart from each other or from
-	the text."
+	the text.
+
+	ANSWERS A NODE; IT DOES NOT APPEND ONE.  Every arm is a send:/assign:
+	constructor, because ___emitIRMatchCaptureStore___: needs the store as an
+	EXPRESSION inside a pattern's and: chain.  A caller emitting a STATEMENT
+	must therefore wrap the answer in ``aBuilder add:''.  Three call sites
+	once did not, and the ForAst one dropped the drain-guarded fetch of the
+	next item along with the store, so ``global n; for n in ...'' looped
+	forever -- a SUnit shard at 100% CPU for four hours rather than a failure."
 
 	| sym moduleRoute |
 	sym := aNameSymbol asSymbol.
@@ -2561,4 +2750,23 @@ ___emitIRModuleReceiverOn___: aBuilder
 			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
 			with: { } env: 0]
 		ifFalse: [aBuilder selfNode]
+%
+
+category: 'Grail-code generation'
+method: AbstractNode
+emitStringLiteral: aString on: aStream
+	"Emit aString as a Smalltalk string literal, doubling embedded single
+	quotes.
+
+	ON AbstractNode rather than on one node type, because three of them now
+	emit a docstring into generated source: FunctionDefAst (where this started),
+	ClassDefAst, and ModuleAst.  It lived on FunctionDefAst, so the module-level
+	docstring emit reached it as a doesNotUnderstand: -- a compile that died
+	inside ___buildModuleClassBody:name: rather than a missing literal."
+
+	aStream nextPut: $'.
+	aString do: [:ch |
+		ch = $' ifTrue: [aStream nextPut: $'].
+		aStream nextPut: ch].
+	aStream nextPut: $'
 %

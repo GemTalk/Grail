@@ -25,6 +25,10 @@ import contextlib
 r = {}
 
 
+class _Box:
+    """A plain attribute holder for the mixed-target chain."""
+
+
 class Holder:
     """Every binding form, run from inside a method."""
 
@@ -80,6 +84,28 @@ class Holder:
         import contextlib as mg_import
         return globals().get('mg_import') is not None
 
+    def m_chain(self):
+        # A CHAIN binds every target from one evaluation.  Both names are
+        # module-bound, so neither has a temp to assign.
+        global mg_chain_a, mg_chain_b
+        mg_chain_a = mg_chain_b = 'c'
+        return (globals().get('mg_chain_a'), globals().get('mg_chain_b'))
+
+    def m_chain_mixed(self):
+        # The shape the corpus actually has (test_builtin): an ATTRIBUTE target
+        # and a global-declared NAME target in one chain, so the emit has to
+        # take a different branch per target off the same chain temp.
+        global mg_chain_n
+        holder = _Box()
+        holder.attr = mg_chain_n = 'x'
+        return (holder.attr, globals().get('mg_chain_n'))
+
+    def m_for(self):
+        global mg_for
+        for mg_for in (1, 2, 3):
+            pass
+        return globals().get('mg_for')
+
     def m_unpack(self):
         global mg_unpack
         _, mg_unpack = [None, 'v']
@@ -104,6 +130,8 @@ for _label, _fn in [
     ('match_as', _h.m_match_as), ('except_as', _h.m_except_as),
     ('with_as', _h.m_with_as), ('import', _h.m_import),
     ('unpack', _h.m_unpack), ('augassign', _h.m_augassign),
+    ('for', _h.m_for), ('chain', _h.m_chain),
+    ('chain_mixed', _h.m_chain_mixed),
     ('plain', _h.m_plain),
 ]:
     try:
@@ -132,6 +160,14 @@ def f_walrus():
     return globals().get('fg_walrus')
 
 
+def f_chain():
+    # test_xml_etree's setUpModule shape: ``ET = pyET = None'' under a global
+    # declaration, from a plain function rather than a method.
+    global fg_chain_a, fg_chain_b
+    fg_chain_a = fg_chain_b = None
+    return (('fg_chain_a' in globals()), ('fg_chain_b' in globals()))
+
+
 def f_match():
     global fg_match
     match {'k': 9}:
@@ -140,7 +176,8 @@ def f_match():
 
 
 for _label, _fn in [('class', f_class), ('def', f_def),
-                    ('walrus', f_walrus), ('match', f_match)]:
+                    ('walrus', f_walrus), ('match', f_match),
+                    ('chain', f_chain)]:
     try:
         r['func_' + _label] = repr(_fn())
     except BaseException as e:
@@ -172,6 +209,7 @@ r['no_global_stays_local'] = repr(f_local_class())
 
 EXPECTED = {
     'func_class': 'True',
+    'func_chain': '(True, True)',
     'func_def': 'True',
     'func_match': '9',
     'func_walrus': '3',
@@ -182,6 +220,9 @@ EXPECTED = {
     'method_match': '2',
     'method_match_as': '5',
     'method_except_as': "'ZeroDivisionError'",
+    'method_chain': "('c', 'c')",
+    'method_chain_mixed': "('x', 'x')",
+    'method_for': '3',
     'method_with_as': "'w'",
     'method_match_star': '[2, 3]',
     'method_plain': "'ok'",

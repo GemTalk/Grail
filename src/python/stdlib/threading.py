@@ -91,7 +91,7 @@ class Thread:
     background workers: target/args/kwargs, start/run/join/is_alive, daemon."""
 
     def __init__(self, group=None, target=None, name=None, args=(),
-                 kwds=None, daemon=None):
+                 kwds=None, daemon=None, context=None):
         # NB: the keyword-args parameter is named ``kwds`` rather than CPython's
         # ``kwargs`` because Grail treats a parameter literally named ``kwargs``
         # as a ``**kwargs`` catch-all, which would swallow ``target=``/``args=``
@@ -102,6 +102,13 @@ class Thread:
         self._kwargs = kwds if kwds is not None else {}
         self.name = name if name is not None else "Thread"
         self.daemon = bool(daemon)
+        # 3.14's ``context=``: the contextvars.Context the thread's activity
+        # runs in.  Passing one explicitly is how a caller gets a thread with a
+        # KNOWN context rather than whatever sys.flags.thread_inherit_context
+        # would give it -- test_decimal's threading test passes an empty
+        # Context() for exactly that reason.  None keeps the previous
+        # behaviour: run in whatever context is current when the thread runs.
+        self._context = context
         self.ident = None
         self._alive = False
         # A lock held for the thread's lifetime: acquired before start, released
@@ -111,14 +118,37 @@ class Thread:
 
     def start(self):
         self._alive = True
-        _spawn(self._bootstrap, ())
+        # Into _limbo first: start() returns before the thread necessarily
+        # runs, and active_count() must already count it in that window --
+        # which is the whole reason CPython has a second dict here.
+        _limbo[self] = self
+        try:
+            _spawn(self._bootstrap, ())
+        except Exception:
+            del _limbo[self]
+            self._alive = False
+            raise
 
     def _bootstrap(self):
         self.ident = get_ident()
+        _active[self.ident] = self
+        _limbo.pop(self, None)
         try:
-            self.run()
+            # Around run(), not around the bookkeeping: a context is a scope for
+            # the thread's WORK, and Context.run refuses re-entry, so holding it
+            # open across the _active/_limbo updates would widen the window in
+            # which another thread entering the same context object fails.
+            if self._context is not None:
+                self._context.run(self.run)
+            else:
+                self.run()
         finally:
             self._alive = False
+            # Identity-checked rather than a bare delete: an ident can be
+            # reused once a GsProcess has gone, and removing the entry by name
+            # alone would then unregister whoever holds it now.
+            if _active.get(self.ident) is self:
+                del _active[self.ident]
             self._done.release()
 
     def run(self):
@@ -165,20 +195,61 @@ class Event:
 class _MainThreadClass:
     name = "MainThread"
     daemon = False
+    ident = None
 
     def is_alive(self):
         return True
 
+    def __repr__(self):
+        return "<_MainThread(MainThread)>"
+
+
+# The live-thread registry: what active_count() counts, what enumerate()
+# lists, and where current_thread() looks the caller up.
+#
+# CPython guards these two dicts with a lock because its threads are
+# pre-emptive.  Grail's are cooperative GsProcess green threads sharing one OS
+# thread, and neither a dict store nor a dict delete yields, so a lock here
+# would protect nothing -- the same reasoning ``local'' below is built on.
+_active = {}    # ident -> Thread, for threads that are running
+_limbo = {}     # Thread -> Thread, started but not yet running
 
 _MainThread = _MainThreadClass()
+_MainThread.ident = get_ident()
+_active[_MainThread.ident] = _MainThread
 
 
 def current_thread():
-    return _MainThread
+    """The Thread the caller is running on.
+
+    Answered the main thread unconditionally until the registry above existed,
+    which made asgiref's ``current_thread() != self._work_thread'' guard say
+    ``same thread'' everywhere, and left ``current_thread().ident'' -- which
+    django's postgresql backend reads -- with nothing to read."""
+
+    return _active.get(get_ident(), _MainThread)
 
 
 def main_thread():
     return _MainThread
+
+
+def active_count():
+    """The number of Thread objects currently alive.
+
+    Equal to the length of enumerate(), as CPython documents and as
+    test.support.threading_helper.threading_setup() relies on."""
+
+    return len(_active) + len(_limbo)
+
+
+def enumerate():
+    """Every Thread currently alive, the main thread included.
+
+    Shadows the builtin of the same name for the rest of this module, exactly
+    as CPython's threading does; nothing below needs the builtin."""
+
+    return list(_active.values()) + list(_limbo.values())
 
 
 class local:

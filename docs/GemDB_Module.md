@@ -362,6 +362,91 @@ accessor.) Instance attribute reads only wrap; nothing runs
 until the caller writes parentheses. Put destructive primitives on
 kernel instances, never on module classes.
 
+### `gemdb.schema` — changing a class that has instances
+
+```python
+import gemdb.schema
+
+gemdb.schema.layout(Account)                    # what it stores, by position
+gemdb.schema.report()                           # classes holding unused attributes
+gemdb.schema.drop(Account, "balance")           # delete an attribute's values
+gemdb.schema.rename(Account, "phone", "phones")
+gemdb.schema.compact(Account)                   # reclaim the holes a drop left
+
+gemdb.schema.rebase("billing.Account")          # the class changed its bases
+gemdb.schema.rename_class("billing.Person", "Customer")
+gemdb.schema.drop_class("billing.Invoice")      # the class is gone from the source
+```
+
+The point of the submodule is how little is in it. Grail stores an
+instance's attributes by *position*, from a per-class layout that only
+grows, so adding an attribute, no longer using one, or moving one
+between a parent and a child rewrites nothing at all — those are edits,
+not operations ([Schema_Evolution.md](Schema_Evolution.md)). What is
+here are the three operations that genuinely write instances — so none of
+them can happen as a side effect of an import — and the two reports that
+tell you whether to run them.
+
+`layout` answers one row per position with a `kind`: `"assigned"` (a
+current body assigns or declares it), `"unassigned"` (nothing assigns it
+any more, but instances that have a value still read it), `"hole"` (a
+position a drop freed). `report` is the repository-wide version, adding
+`holding` — how many instances still carry a value — which is what a
+decision to `drop` should rest on. Grail deliberately does *not* make an
+unused attribute an import error: the rebuild runs in whichever session
+imports the edited source first, which may be production, and a refactor
+must not halt an application. The report is the record instead.
+
+`drop` is the only thing that removes a stored value. It refuses while
+any method still assigns the name (the next instance would bring it
+back) and commits every `batch` instances, so a large class is handled
+and an interrupted run is safe to repeat. `rename` is free when the new
+name has no position yet — it relabels the position and touches no
+instance — and moves values when the new name was already appended by a
+deploy; it refuses when an instance holds a value under both names.
+`compact` reclaims holes and is the one step that cannot be batched,
+because every instance has to move together. `drop` and `rename` also
+refuse a name this class only *inherits*, naming the class that handed
+the position out: a layout is copied downwards, so freeing or
+relabelling a position on a subclass alone would leave that one position
+with two names.
+
+**The class-level half** answers the three edits Grail refuses at import,
+because each of them replaces the class object and would otherwise leave
+its instances on the old one: a changed base, a class the source no longer
+defines, and a class renamed. Each refusal is an `ImportError` naming the
+class and its command. `rebase`, `rename_class` and `drop_class` rebuild the
+module and move every instance onto the class the new source defines, by
+**name** rather than by position, so an edit that also reorders or removes
+attributes is safe. `drop_class` refuses while any instance exists, and its
+count is what the repository *holds* — an object unlinked in an earlier
+transaction is there until it is collected, so
+`gemdb.admin.garbage_collect()` may be the step between. A computed base
+(`class Point(namedtuple(...))`) is never refused: it builds a fresh class
+on every import by construction.
+
+**A rename usually needs no call at all.** `__renamed__ = {"old":
+"new"}` in the class body does the free relabel at import, beside the
+edit that changes the name, and is a no-op on a repository that has
+already caught up — so one source file deploys everywhere
+([Schema_Evolution.md](Schema_Evolution.md) §3.5). What it will not do is
+*move* values: if a deployed version already appended the new name, the
+import refuses with an `ImportError` naming both, and `gemdb.schema.rename`
+is how that migration runs, under a clean transaction of its own.
+
+Every operation but `layout` scans the repository, and a scan aborts
+first, so each refuses with `PendingChangesError` on a dirty session and
+commits its own work. A refusal about the *request* — dropping a name the
+class still assigns, naming an attribute that is not there, a rename that
+would collide — is a `ValueError`, translated in Smalltalk for the reason
+the administration primitives translate theirs: a Smalltalk
+`ImproperOperation` raised inside Python code is not a Python exception
+and tears through `except Exception`. The repository-wide report is an env-1 method on
+the kernel `Repository` instance (`Repository.gs`), for the reason the
+administration primitives are: a unary method on a *module* class is
+performed by a bare attribute read, so a module-level spelling would run
+a full repository scan from `inspect.getmembers(gemstone)`.
+
 ### `gemdb.sessions` — who is connected
 
 ```python
@@ -383,8 +468,9 @@ gemdb.sessions.all()       # every session, the system's own gems included
 
 Also deliberately deferred: queries and indexed collections (the
 feature Mongo users will ask for first — it deserves its own design,
-not a bolt-on), restore (it is not a live-session operation), and
-schema evolution for persistent instances of user classes.
+not a bolt-on) and restore (it is not a live-session operation). Schema
+evolution for persistent instances of user classes was on this list and
+is now `gemdb.schema`, above.
 
 ## Testing
 
@@ -392,6 +478,17 @@ schema evolution for persistent instances of user classes.
   `gemdb`) — the single-session surface plus the fresh-session
   properties, two logins, leaves the repository clean. Commits and
   aborts, so it cannot be an SUnit test.
+* `tests/scripts/runSchemaTest.gs` (wired in as `gemdb-schema`) — the
+  `gemdb.schema` surface over a two-class fixture: the three layout
+  kinds, the report's holding counts, the dirty-session refusals, a
+  batched drop, a relabel-rename, a compaction and the declared
+  `__renamed__` over a committed class, with its two import refusals.
+  Commits, for the same reason.
+* `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
+  — the class-level half over a fixture module with a committed instance:
+  the refusals for a changed base, a removed class and a renamed one, and
+  `rebase`, `drop_class` and `rename_class` answering each. Session 2 checks
+  that a fresh session then imports the edited source cleanly.
 * `tests/scripts/run_gemdb_conflict_test.sh` /
   `runGemdbConflictRpc.gs` (wired in as `gemdb-conflict`) — two RPC
   sessions interleaved with `set session:`; a real write-write conflict

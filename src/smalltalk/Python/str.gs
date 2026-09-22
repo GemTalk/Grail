@@ -569,8 +569,13 @@ __getitem__: index
 
 		Grail matched list, tuple and bytes exactly and dropped the quotes
 		on this one."
+		"PYTHON type name, through ___pyTypeNameForError___: ``index class name''
+		is the GEMSTONE class backing the value, so this message read ``not
+		Unicode7'' for a str key, ``not SmallDouble'' for a float and ``not
+		ByteArray'' for bytes, where CPython says str / float / bytes.  Bytes.gs
+		and Bytearray.gs already named the type properly; these sites did not."
 		TypeError ___signal___: ('string indices must be integers, not '''
-			@env0:, index @env0:class @env0:name @env0:asString @env0:, '''')].
+			@env0:, (index ___pyTypeNameForError___) @env0:, '''')].
 	"Fetch the index via __index__ -- probing only proved it is index-like
 	(test_index.StringTestCase; env-0 #< on the object is an uncatchable DNU)."
 	idx := index ___asIndex___.
@@ -715,16 +720,21 @@ __mod__: args
 	newly-added ``not all arguments converted'' check is what surfaced it.
 	tuple is an Array subclass, so the Array test covers tuples and the plain
 	Arrays Grail's own call sites build."
+	"A MAPPING is ALSO a single positional value, which is the half this used
+	to get backwards.  CPython keys the two roles off different things: the
+	mapping is kept for ``%(name)s'' lookups, AND, because the right operand
+	is not a tuple, the positional cursor starts one before the single value
+	``args'' itself -- so an UNKEYED specifier consumes the mapping, exactly
+	once.  ``'%s' % {}'' is therefore '{}' and ``'%s' % {'a': 1}'' is
+	""{'a': 1}"", where Grail raised ``format requires a mapping'' for both.
+	A second unkeyed specifier then finds the cursor spent and gets ``not
+	enough arguments for format string'', which falls out of the size test
+	below rather than needing its own case."
 	(isMap not @env0:and: [args isKindOf: Array]) ifTrue: [argSeq := args]
-	ifFalse: [
-		isMap ifTrue: [argSeq := nil]
-		ifFalse: [argSeq := Array @env0:with: args]
-	].
+	ifFalse: [argSeq := Array @env0:with: args].
 	argIdx := 1.
 	"Pull the next positional argument (also used by '*' width/precision)."
 	nextArg := [ | v |
-		argSeq @env0:isNil ifTrue: [
-			TypeError ___signal___: 'format requires a mapping' ].
 		argIdx @env0:> argSeq @env0:size ifTrue: [
 			TypeError ___signal___: 'not enough arguments for format string' ].
 		v := argSeq @env0:at: argIdx.
@@ -824,7 +834,18 @@ __mod__: args
 							showRadix: false) @env0:asLowercase
 						@env0:, ') at index ' @env0:, (i @env0:- 2) @env0:printString)].
 				key @env0:notNil
-					ifTrue: [value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
+					ifTrue: [
+						"``format requires a mapping'' belongs HERE -- it is what
+						CPython raises when a KEYED specifier meets a right operand
+						that is not a mapping, not (as Grail had it) when an unkeyed
+						one meets a mapping.  Without this the lookup below reaches
+						``at:'' on whatever was passed: ``'%(a)s' % [1]'' took an
+						UNCATCHABLE ArgumentTypeError (error 2283) out of
+						OrderedCollection, where CPython raises a TypeError the
+						caller can handle."
+						isMap ifFalse: [
+							TypeError ___signal___: 'format requires a mapping'].
+						value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
 					ifFalse: [value := nextArg @env0:value].
 				stream @env0:nextPutAll: (bi ___printfConvert___: value conv: conv
 					flags: flags width: width precision: precision)
@@ -835,8 +856,11 @@ __mod__: args
 	TypeError in CPython, where Grail silently returned the format string and
 	dropped the argument.  Only the SEQUENCE form is checked: with a mapping
 	on the right, unreferenced keys are fine (``'%(a)s' % {'a': 1, 'b': 2}''),
-	which is exactly the case argSeq is nil for."
-	(argSeq @env0:notNil @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
+	and so is a mapping no specifier reads at all (``'no format' % {}'').  So
+	the test is on isMap, not on whether the cursor was spent: a mapping now
+	also sits in argSeq as a single positional, and reading that size here
+	would make the untouched-mapping case a spurious TypeError."
+	(isMap @env0:not @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
 		TypeError ___signal___:
 			'not all arguments converted during string formatting'].
 	^ stream @env0:contents
@@ -950,48 +974,8 @@ __repr__
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: quote.
 	self @env0:do: [:char |
-		| cp |
-		cp := char @env0:codePoint.
-		(cp == quoteCp) ifTrue: [  "the active delimiter -> escaped"
-			stream @env0:nextPutAll: '\'.
-			stream @env0:nextPut: quote.
-		] ifFalse: [ (cp == 92) ifTrue: [  "backslash -> \\"
-			stream @env0:nextPutAll: '\\'.
-		] ifFalse: [ (cp == 10) ifTrue: [  "newline -> \n"
-			stream @env0:nextPutAll: '\n'.
-		] ifFalse: [ (cp == 13) ifTrue: [  "carriage return -> \r"
-			stream @env0:nextPutAll: '\r'.
-		] ifFalse: [ (cp == 9) ifTrue: [  "tab -> \t"
-			stream @env0:nextPutAll: '\t'.
-		] ifFalse: [ ((self ___pyIsPrintableCodePoint___: cp) @env0:not) ifTrue: [
-			"Any NON-PRINTABLE code point -> \xNN / \uNNNN / \UNNNNNNNN, the
-			same three widths CPython's unicode_repr picks by magnitude.
-			This used to test ``cp < 32 or cp = 127'', i.e. ASCII control
-			characters only, so repr() emitted every other non-printable
-			VERBATIM -- unassigned code points, private-use, format
-			characters and the non-ASCII separators
-			(test_format test_str_format: repr('͸') must be the seven
-			characters ''͸'', not a lone undisplayable character).
-
-			Load-bearing beyond conformance: jinja2's compiler embeds
-			template literals via repr(); without escaping the embedded
-			newlines a multi-line template compiles to
-			``yield 'line1<NL>line2''' -- an unterminated string literal
-			that the tokenizer rejects."
-			| hex marker digits |
-			hex := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
-			cp @env0:<= 16rFF
-				ifTrue: [marker := '\x'. digits := 2]
-				ifFalse: [cp @env0:<= 16rFFFF
-					ifTrue: [marker := '\u'. digits := 4]
-					ifFalse: [marker := '\U'. digits := 8]].
-			stream @env0:nextPutAll: marker.
-			[hex @env0:size @env0:< digits] @env0:whileTrue: [hex := '0' @env0:, hex].
-			stream @env0:nextPutAll: hex.
-		] ifFalse: [
-			stream @env0:nextPut: char.
-		]]]]]]
-	].
+		self ___pyReprEscapeCodePoint___: char @env0:codePoint
+			quote: quoteCp on: stream].
 	stream @env0:nextPut: quote.
 	^ stream @env0:contents
 %
@@ -2256,6 +2240,49 @@ isnumeric
 	"Return True if all characters are numeric characters."
 
 	^ self isdecimal
+%
+
+category: 'Grail-String Representation'
+method: CharacterCollection
+___pyReprEscapeCodePoint___: cp quote: quoteCp on: aStream
+	"ONE code point, escaped as repr() escapes it.  Extracted from __repr__ so
+	PyStrSurrogate's own repr can apply the SAME rule.
+
+	A string holding a lone surrogate is a different CLASS in Grail, and its
+	repr was written separately: it emitted every non-surrogate code point
+	VERBATIM.  So a string containing a surrogate came back with a real NUL, a
+	real newline and a real tab in it, where the same string WITHOUT the
+	surrogate escaped all three -- one rule, two implementations, and only one
+	of them maintained.  test_builtin test_ascii is that string.
+
+	A pure function of the code point -- the receiver is not consulted -- but
+	an instance method, because the printability rule it defers to is one.
+
+	The three escape widths are CPython's unicode_repr, picked by magnitude.
+	Non-printable is the Unicode-CATEGORY rule and not ``cp < 32 or cp = 127'':
+	unassigned, private-use, format characters and the non-ASCII separators
+	escape too."
+
+	| hex marker digits |
+	cp @env0:== quoteCp ifTrue: [
+		aStream @env0:nextPutAll: '\'.
+		aStream @env0:nextPut: (Character @env0:codePoint: cp).
+		^ self].
+	cp @env0:== 92 ifTrue: [^ aStream @env0:nextPutAll: '\\'].
+	cp @env0:== 10 ifTrue: [^ aStream @env0:nextPutAll: '\n'].
+	cp @env0:== 13 ifTrue: [^ aStream @env0:nextPutAll: '\r'].
+	cp @env0:== 9 ifTrue: [^ aStream @env0:nextPutAll: '\t'].
+	(self ___pyIsPrintableCodePoint___: cp) ifTrue: [
+		^ aStream @env0:nextPut: (Character @env0:codePoint: cp)].
+	hex := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
+	cp @env0:<= 16rFF
+		ifTrue: [marker := '\x'. digits := 2]
+		ifFalse: [cp @env0:<= 16rFFFF
+			ifTrue: [marker := '\u'. digits := 4]
+			ifFalse: [marker := '\U'. digits := 8]].
+	aStream @env0:nextPutAll: marker.
+	[hex @env0:size @env0:< digits] @env0:whileTrue: [hex := '0' @env0:, hex].
+	^ aStream @env0:nextPutAll: hex
 %
 
 category: 'Grail-String Test Methods'

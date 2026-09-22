@@ -91,3 +91,43 @@ method: TypeAliasValueAst
 value: newValue
 	value := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: TypeAliasValueAst
+___irEligibleValueLocals___: localNames
+	"printSmalltalkOn:'s ``TypeAliasType @env1:___named___: 'X' valueThunk:
+	[V]'': the alias NAME is a literal, so only V has to be emittable -- and V
+	is judged in the enclosing scope, because the thunk is a Smalltalk block
+	over the same temps, exactly as the text's is."
+
+	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasValueAst
+___emitIRValueOn___: aBuilder
+	"``TypeAliasType @env1:___named___: 'X' valueThunk: [V]'' -- V INSIDE A
+	BLOCK, so it is not evaluated until __value__ is read.  That laziness is
+	the point of the node: ``type X = Undefined'' is legal and only raises when
+	the alias is resolved, so emitting V eagerly here would turn a legal
+	forward reference into an import-time NameError."
+
+	| thunk |
+	thunk := aBuilder inBlockDo: [
+		aBuilder add: (value ___emitIRValueOn___: aBuilder)].
+	aBuilder atNode: self.
+	^ aBuilder
+		send: #'___named___:valueThunk:'
+		to: (aBuilder globalNamed: #TypeAliasType)
+		with: { aBuilder obj: aliasName asString. thunk }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasValueAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"The thunk's body reads in the ENCLOSING scope -- it is a block over the
+	same temps, not a new one."
+
+	^ value ___irReadLocalNamesInto___: aSet locals: localSet
+%

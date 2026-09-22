@@ -51,9 +51,15 @@ for name in ["a.txt", "b.txt", "c.py", ".hidden", "sub/d.txt"]:
 category: 'Grail-Tests - glob'
 method: GlobTestCase
 testStarPattern
+	"Compared SORTED, because glob promises no order: it answers entries in
+	the order the directory yields them.  This used to compare the raw list,
+	which pinned the former hand-written glob's sorting -- measured, CPython
+	3.14 itself answers this tree's *.txt out of order, so the old assertion
+	failed under CPython too."
+
 	| result |
 	result := self eval: 'import glob
-glob.glob("$TMP/glob_test/*.txt") == ["$TMP/glob_test/a.txt", "$TMP/glob_test/b.txt"]'.
+sorted(glob.glob("$TMP/glob_test/*.txt")) == ["$TMP/glob_test/a.txt", "$TMP/glob_test/b.txt"]'.
 	self assert: result
 %
 
@@ -62,8 +68,8 @@ method: GlobTestCase
 testQuestionMarkAndCharClass
 	| result |
 	result := self eval: 'import glob
-q = glob.glob("$TMP/glob_test/?.py")
-c = glob.glob("$TMP/glob_test/[ab].txt")
+q = sorted(glob.glob("$TMP/glob_test/?.py"))
+c = sorted(glob.glob("$TMP/glob_test/[ab].txt"))
 q == ["$TMP/glob_test/c.py"] and c == ["$TMP/glob_test/a.txt", "$TMP/glob_test/b.txt"]'.
 	self assert: result
 %
@@ -114,11 +120,21 @@ next(it) == "$TMP/glob_test/c.py"'.
 
 category: 'Grail-Tests - glob'
 method: GlobTestCase
-testDoubleStarRaises
-	self
-		should: [self eval: 'import glob
-glob.glob("$TMP/glob_test/**/*.txt")']
-		raise: ValueError
+testDoubleStarRecursesOnlyWhenAsked
+	"``**'' as CPython has it.  This used to be testDoubleStarRaises, pinning
+	the former hand-written glob's refusal of recursive patterns; the glob here
+	is now CPython's own.  Without recursive=True a ``**'' is an ordinary
+	``*'' -- it matches exactly one directory level, so only sub/d.txt -- and
+	with it, it also matches zero levels.  Both answers measured against
+	CPython 3.14 on this same tree."
+
+	| result |
+	result := self eval: 'import glob
+flat = sorted(glob.glob("$TMP/glob_test/**/*.txt"))
+deep = sorted(glob.glob("$TMP/glob_test/**/*.txt", recursive=True))
+(flat == ["$TMP/glob_test/sub/d.txt"]
+ and deep == ["$TMP/glob_test/a.txt", "$TMP/glob_test/b.txt", "$TMP/glob_test/sub/d.txt"])'.
+	self assert: result
 %
 
 category: 'Grail-Tests - glob'

@@ -207,6 +207,63 @@ printSmalltalkOn: aStream
 			ifTrue: [
 				^ self printSmalltalkModuleStoreOn: aStream target: tgt
 			].
+		"``nonlocal __class__; __class__ = v'' inside a METHOD writes the class's
+		SHARED CELL, not a frame-local temp.
+
+		CPython gives every method of a class one implicit closure cell holding
+		the class; that cell is what ``__class__'' and zero-argument ``super()''
+		read, and a method declaring the name ``nonlocal'' writes THAT.  So the
+		write is visible to every other method of the class, not just the frame
+		it was written in -- test_super's tearDown repairs the damage
+		test_various___class___pathologies does, and it repairs it for the whole
+		class.
+
+		Grail emitted ``__class__ := v'' against the temp popScope keeps for the
+		declared name (PythonParser exempts ``__class__'' from stripping), so
+		the write landed in a local nobody reads and the cell kept its old
+		value.  Measured before this branch existed, against CPython:
+
+		    class C(B):
+		        def g(self): return super().f()
+		        def damage(self):
+		            nonlocal __class__
+		            __class__ = B
+
+		    CPython  {'before': 'B', 'after': 'A'}
+		    Grail    {'before': 'B', 'after': 'B'}
+
+		The READ side already consults the cell for such a class --
+		ClassDefAst>>___classCellIsRebindable___ counts a METHOD declaring the
+		name, exactly so these reads are switched on -- so only the store was
+		missing.  ___grailSetClassCell___: is the same write the class-body form
+		goes through (ClassDefAst>>___emitNonlocalClassCellWrite___:on:); the
+		receiver is printDefiningClassOn:, the class the method was defined in,
+		which is what the cell belongs to."
+		((tgt isKindOf: NameAst)
+			and: [tgt id asSymbol == #'__class__'
+			and: [CallAst classBeingCompiled notNil
+			and: [CallAst moduleClassBeingCompiled notNil
+			and: [CallAst inClassBodyValueEmit ~~ true
+			and: [CallAst inBasesEmit ~~ true
+			and: [tgt ___declaredInEnclosingFunction___: #'__class__']]]]]])
+			ifTrue: [
+				aStream nextPutAll: '('.
+				"___printClassObjectOn___: and NOT printDefiningClassOn:.  The
+				write targets the CONTAINER, not the contents -- exactly as
+				``del __class__'' does (DeleteAst).  printDefiningClassOn:
+				wraps the class in the rebindable-cell READ, so once anything
+				has put a non-class in the cell the receiver becomes that
+				value: test_super's test_various___class___pathologies puts 42
+				there, and the next write answered ``a SmallInteger class does
+				not understand #'___grailSetClassCell___:''' -- caught by the
+				conformance gate, not by the fixture, which is why the fixture
+				now carries a non-class shape of its own."
+				CallAst ___printClassObjectOn___: aStream.
+				aStream nextPutAll: ') @env1:___grailSetClassCell___: '.
+				value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $..
+				^ self
+			].
 		"``nonlocal x; x = v'' inside a class METHOD: x is an enclosing-function
 		local reached past the class, so the method must write it through its
 		setter closure cell (``___cellSetter_x___'', emitted by ClassDefAst) --
@@ -643,19 +700,40 @@ method: AssignAst
 ___irChainTargetKind___: aTarget locals: localNames
 	"For a CHAINED assignment (cut 63), the printSmalltalkOn: chain branch a
 	target takes, as a Symbol, or nil when the text's branch is one the IR
-	does not emit: #local (a body-local / parameter name; the module-scope,
-	class-body-runtime and closure-cell stores stay on text), #attrSelf,
+	does not emit: #local (a body-local / parameter name), #moduleStore (a name
+	bound to the MODULE -- ``global n'' or a module-level chain -- stored
+	through ___emitIRModuleStoreOf___:to:on:; the class-body-runtime and
+	closure-cell stores still stay on text), #attrSelf,
 	#attrForeign (a receiver that is an emittable value; the ``__class__''
 	type change stays on text), #subscript, #unpack (a tuple / list target the
 	unpack emitter handles, from the chain temp)."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
 		((aTarget ctx) isKindOf: StoreAst) ifFalse: [^ nil].
-		(localNames includes: aTarget id asString) ifFalse: [^ nil].
-		(self isModuleScopeStoreTarget: aTarget) ifTrue: [^ nil].
-		(self isClassBodyRuntimeStoreTarget: aTarget) ifTrue: [^ nil].
+		"THE CLOSURE-CELL STORE IS ASKED FIRST and still refuses: ``nonlocal x''
+		reached past a class writes a setter cell, which is neither a module
+		route nor a temp, and it stays on text."
 		(CallAst classBeingCompiled notNil
 			and: [aTarget ___enclosingFunctionLocalBeyondClass___: aTarget id]) ifTrue: [^ nil].
+		"``global n; a = n = expr'' -- and a module-level chain, where the
+		targets are module variables rather than locals.  Both used to die on
+		the localNames test below, which a name bound to the module never
+		passes; that was the whole of AssignAst:chained-target-NameAst, in the
+		class-method corpus (test_builtin's ``builtins.all = all = ...'' under
+		``global all, any, tuple'') and the top-level one (test_xml_etree's
+		``ET = pyET = None'') alike.
+
+		ASKED WITH THE TEXT'S OWN PREDICATE, not with ___nameStoreRoutesToModule___:.
+		The two differ on a class body's ``global x'' -- isModuleScopeStoreTarget:
+		asks the nearest enclosing SCOPE, the other the nearest enclosing
+		FUNCTION -- and the text's chained branch is the oracle this emit
+		mirrors, so the emit below asks the same question and gets the same
+		answer."
+		(self isModuleScopeStoreTarget: aTarget) ifTrue: [^ #moduleStore].
+		"A class-body runtime store is a THIRD spelling the chain emit does not
+		have; it keeps refusing rather than silently taking the local branch."
+		(self isClassBodyRuntimeStoreTarget: aTarget) ifTrue: [^ nil].
+		(localNames includes: aTarget id asString) ifFalse: [^ nil].
 		^ #local].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
 		aTarget attr asString = '__class__' ifTrue: [^ nil].
@@ -719,7 +797,18 @@ ___emitIRChainOn___: aBuilder
 	targets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [
 			aBuilder atNode: t.
-			aBuilder add: (aBuilder assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))].
+			"A name the store routes to the MODULE has no temp to assign --
+			``<Mod> ___instance___ @env0:dynamicInstVarAt: #n put: ___chain___'',
+			which is character for character what the text's chained branch
+			emits.  ___emitIRModuleStoreOf___:to:on: is the already-emitted-value
+			twin, so it stores the chain temp without re-deciding the route that
+			___irChainTargetKind___:locals: already decided.  It ANSWERS the node
+			and does not append it, hence the add:."
+			(self isModuleScopeStoreTarget: t)
+				ifTrue: [aBuilder add: (self
+					___emitIRModuleStoreOf___: (aBuilder var: chainLeaf) to: t on: aBuilder)]
+				ifFalse: [aBuilder add: (aBuilder
+					assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))]].
 		(t isKindOf: AttributeAst) ifTrue: [
 			((t value isKindOf: NameAst) and: [t value ___irIsSelfReceiver___])
 				ifTrue: [
@@ -787,6 +876,27 @@ ___irClassCellTargetName___: tgt
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___emitIRDunderClassCellStoreOn___: aBuilder
+	"``(<class object>) @env1:___grailSetClassCell___: (v)'' -- the IR twin of
+	printSmalltalkOn:'s ``nonlocal __class__; __class__ = v'' branch, send for
+	send.
+
+	___emitIRClassObjectOn___: and not the ___grailClassCellValue___-wrapped
+	read, for the reason the text branch carries at length: the write targets
+	the CONTAINER.  Reach it through the wrapper and, once anything has put a
+	non-class in the cell, the setter goes to that value instead."
+
+	| v cls |
+	v := value ___emitIRValueOn___: aBuilder.
+	cls := self ___emitIRClassObjectOn___: aBuilder.
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder
+		send: #'___grailSetClassCell___:' to: cls with: { v } env: 1).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___emitIRClassCellStoreOn___: aBuilder name: nm
 	"(self ___classCellSetter___: #'___cellSetter_x___') value: (v)
 
@@ -827,6 +937,18 @@ ___emitIRStatementOn___: aBuilder
 	through the setter cell ClassDefAst emits at definition time.  Checked
 	BEFORE the module-store branch below, which would otherwise catch the same
 	leafless NameAst and bind a module attribute instead."
+	"``nonlocal __class__; __class__ = v'' -- the class's shared cell, BEFORE the
+	ordinary-name cell branch below: ``__class__'' is not an enclosing
+	function's local reached past the class, it is the class's own implicit
+	cell, and the two are written through different setters."
+	((tgt isKindOf: NameAst)
+		and: [tgt id asSymbol == #'__class__'
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [tgt ___declaredInEnclosingFunction___: #'__class__']]]]]])
+		ifTrue: [^ self ___emitIRDunderClassCellStoreOn___: aBuilder].
 	(self ___irClassCellTargetName___: tgt) ifNotNil: [:nm |
 		^ self ___emitIRClassCellStoreOn___: aBuilder name: nm].
 	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [

@@ -83,6 +83,26 @@ printSmalltalkOn: aStream
 	real Smalltalk class, MRO, descriptors, isinstance -- rather than a
 	second, shallower class model."
 
+	"A CLASS STATEMENT NEEDS __build_class__, and under a ``__builtins__''
+	override it may not have one.  CPython compiles ``class A: pass'' to a
+	LOAD_BUILD_CLASS, which looks __build_class__ up in the code's builtins
+	and raises ``NameError: __build_class__ not found'' when it is absent --
+	so an empty __builtins__ forbids class definitions, which is most of the
+	point of passing one.
+
+	Grail does not route class creation through a builtin at all; it emits
+	importlib sends directly, so there was nothing for the override to
+	withhold.  The requirement is asserted explicitly instead, and only where
+	it can apply: inside a doit whose builtins were replaced.
+
+	THIS ONLY WORKS BECAUSE builtins NOW HAS THE NAME.  An override is very
+	often a COPY of the real builtins -- a bare ``exec(src)'' inside a
+	function gets one -- and while Grail listed __build_class__ in
+	___builtinNamespaceNames___ without implementing it, every such copy came
+	out without the name and this gate refused a class definition CPython
+	allows.  It cost test_scope two tests the first time it was written."
+	self ___builtinsAreOverridden___ ifTrue: [
+		aStream nextPutAll: '(NameError @env0:___requireBuildClass___). '].
 	^self printSmalltalkRuntimeOn: aStream
 %
 
@@ -103,7 +123,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet mangledSlotNames savedBackingInstVars
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
-	  slotPropertyNames accessorInferredNames accessorPairsWanted
+	  slotPropertyNames accessorInferredNames accessorPairsWanted renamedPairsOrdered
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
@@ -1473,7 +1493,10 @@ printSmalltalkRuntimeOn: aStream
 									ifFalse: [
 										(nonlocalTargets allSatisfy: [:t |
 											self ___nonlocalTargetIsAssignableHere___: t id asSymbol])
-											ifTrue: [stmt printSmalltalkOn: aStream]]]
+											ifTrue: [
+												stmt printSmalltalkOn: aStream.
+												self ___emitCarriedNonlocalWriteBack___: nonlocalTargets
+													on: aStream]]]
 							ifFalse: [
 								(self ___isClassBodyNamespaceBinding___: stmt)
 									ifTrue: [
@@ -1955,12 +1978,14 @@ printSmalltalkRuntimeOn: aStream
 	ownership questions depend on.  Also emitted when this class infers
 	nothing but declares properties or an attribute hook, for the forwarder
 	cases."
+	renamedPairsOrdered := self renamedNamePairs.
 	(slotNamesOrdered isEmpty not
+		or: [renamedPairsOrdered isEmpty not
 		or: [accessorPairsWanted
 		and: [accessorInferredNames isEmpty not
 			or: [slotPropertyNames isEmpty not
 			or: [self instanceMethodDefs anySatisfy: [:def |
-				#('__setattr__' '__getattribute__') includes: def name asString]]]]]) ifTrue: [
+				#('__setattr__' '__getattribute__') includes: def name asString]]]]]]) ifTrue: [
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailInstallInferredSlots___: '.
 		self printSymbolArray: (accessorPairsWanted ifTrue: [accessorInferredNames] ifFalse: [#()]) on: aStream.
@@ -1968,7 +1993,13 @@ printSmalltalkRuntimeOn: aStream
 		self printSymbolArray: slotNamesOrdered on: aStream.
 		aStream nextPutAll: ' properties: '.
 		self printSymbolArray: (accessorPairsWanted ifTrue: [slotPropertyNames] ifFalse: [#()]) on: aStream.
-		aStream nextPutAll: ' indexed: '; nextPutAll: (inferredSlotNames isEmpty not) printString; nextPutAll: '.'; lf].
+		aStream nextPutAll: ' indexed: '; nextPutAll: (inferredSlotNames isEmpty not) printString.
+		"The fifth keyword only when the body declares __renamed__, so an
+		ordinary class body generates byte-identical source to before."
+		renamedPairsOrdered isEmpty ifFalse: [
+			aStream nextPutAll: ' renamed: '.
+			self printSymbolPairArray: renamedPairsOrdered on: aStream].
+		aStream nextPutAll: '.'; lf].
 
 	"Read accessors for the class's METHODS and class-body DATA attributes
 	(GRAIL_ATTR_ACCESSORS, stage 3): ``c.foo'' / ``c.MAX'' from anywhere
@@ -2763,6 +2794,18 @@ printSymbolArray: names on: aStream
 
 category: 'Grail-code generation'
 method: ClassDefAst
+printSymbolPairArray: pairs on: aStream
+	"Emit a literal array of two-element symbol arrays, #( #( old new ) ... ),
+	the shape object class >> ___grailApplyDeclaredRenames___:assigning: reads
+	a __renamed__ declaration in."
+
+	aStream nextPutAll: '#('.
+	pairs do: [:p | aStream space. self printSymbolArray: p on: aStream].
+	aStream nextPutAll: ' )'.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 ___redirectUnarySelectorIn: sourceString from: oldName to: newName
 	"Rewrite the leading (unary) selector of a generated method source from
 	oldName to newName, keeping the body verbatim.  Used to move a property
@@ -3485,6 +3528,73 @@ slotsValueAst
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+renamedValueAst
+	"Return the value-expression AST of the class body's ``__renamed__''
+	assignment -- plain or annotated -- or nil when the class declares none.
+	A later assignment wins, as slotsValueAst has it for __slots__."
+
+	| result |
+	result := nil.
+	body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [stmt targets size = 1
+			and: [(stmt targets first isKindOf: NameAst)
+			and: [stmt targets first id asString = '__renamed__']]])
+				ifTrue: [result := stmt value].
+		((stmt isKindOf: AnnAssignAst)
+			and: [(stmt target isKindOf: NameAst)
+			and: [stmt target id asString = '__renamed__'
+			and: [stmt value notNil]]])
+				ifTrue: [result := stmt value].
+	].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+renamedNamePairs
+	"Python ``__renamed__ = {'old': 'new', ...}'', Grail's declaration that a
+	STORED attribute changed its name: an ordered collection of
+	{ oldSymbol . newSymbol } pairs in source order, empty when the class
+	declares none.  docs/Schema_Evolution.md.
+
+	Only a dict DISPLAY of string literals is accepted.  A computed dict, a
+	non-string key or value, a ``**'' unpacking -- each is a SyntaxError rather
+	than a silent skip, because this declaration's whole job is to keep stored
+	data reachable: a __renamed__ Grail quietly ignored would strand the values
+	it was written to carry.  (__slots__ is lenient about the same shapes, and
+	can afford to be: a __slots__ Grail cannot read costs an optimisation, not
+	data.)
+
+	Entries are private-name mangled exactly as __slots__ entries are, so
+	``__renamed__ = {'__x': '__y'}'' in class C names _C__x and _C__y, which is
+	what the body's own ``self.__x'' compiled to."
+
+	| valueAst pairs badShape |
+	valueAst := self renamedValueAst.
+	valueAst ifNil: [^ OrderedCollection new].
+	badShape := [:what |
+		SyntaxError @env1:___signal___:
+			'__renamed__ must be a dict of string literals, as in ',
+			'__renamed__ = {''phone'': ''phones''} (', what, ')'].
+	(valueAst isKindOf: DictAst) ifFalse: [^ badShape value: 'not a dict display'].
+	pairs := OrderedCollection new.
+	1 to: valueAst keys size do: [:i | | k v |
+		k := valueAst keys at: i.
+		v := valueAst values at: i.
+		k isNil ifTrue: [^ badShape value: 'a ** unpacking'].
+		((k isKindOf: ConstantAst) and: [k value isKindOf: String])
+			ifFalse: [^ badShape value: 'a key that is not a string literal'].
+		((v isKindOf: ConstantAst) and: [v value isKindOf: String])
+			ifFalse: [^ badShape value: 'a value that is not a string literal'].
+		pairs add: (Array
+			with: (self ___mangleSlotName___: k value) asSymbol
+			with: (self ___mangleSlotName___: v value) asSymbol)].
+	^ pairs
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 slotNames
 	"Python ``__slots__'' declared attribute names, as an ordered,
 	de-duplicated OrderedCollection of Symbols — the names that become
@@ -4011,6 +4121,40 @@ ___nonlocalTargetIsAssignableHere___: aSymbol
 	``__class__ not in X.__dict__'' half keeps holding."
 
 	^ CallAst ___freeVariableIsAssignableTemp___: aSymbol parent: self parent
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___emitCarriedNonlocalWriteBack___: targets on: aStream
+	"Push a class-body ``nonlocal x'' write out to the ENCLOSING frame when the
+	class emit is travelling as cut 78's compiled-text helper.
+
+	Nothing to do on the text path: there the statement was printed into the
+	enclosing scope itself, so ``x := ...'' already wrote the right temp, the
+	capture map is empty and every target falls through.
+
+	Inside the helper it is not.  The helper declares a temp named for each
+	carried name and seeds it from the reader block, so the printed statement
+	writes the helper's COPY -- reads later in the same body then see the new
+	value, which is right, but the enclosing binding never moves, which is not.
+	Emitting the statement AND the push keeps both true; writing only through
+	the setter would leave the copy stale for the rest of the body.
+
+	``___irSetter_<i>___ value: x'' is the same one-argument block
+	___cellSetterSourceFor___: uses, for the same reason: an assignment target
+	cannot be a block call, but handing the frame's own setter block in makes
+	the write land where the reader reads."
+
+	| map |
+	map := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map ifNil: [^ self].
+	targets do: [:t |
+		(map at: t id asString ifAbsent: [nil]) ifNotNil: [:i |
+			aStream lf;
+				nextPutAll: '___irSetter_'; print: i;
+				nextPutAll: '___ @env0:value: ';
+				nextPutAll: t id asString;
+				nextPutAll: '.']]
 %
 
 category: 'Grail-Class Compilation'
@@ -5592,8 +5736,25 @@ ___irMethodLocalClassReason___: localNames
 	"``global C'' in the enclosing def (or module scope, which cannot happen
 	inside a def) makes the class name a MODULE binding, not a local; the
 	helper's ``^ C'' would have nothing to answer."
-	self ___bindsClassNameToModule___ ifTrue: [^ #'classDef:moduleScopeTarget'].
-	self ___classBodyDeclaresOuterBinding___ ifTrue: [^ #'classDef:outerBinding'].
+	"A class name bound to the MODULE no longer refuses: the caller stores it
+	with ___emitIRModuleScopeStoreOf___:from:on: instead of assigning a leaf.
+	What still refuses is the module-SCOPE class def itself -- a class written
+	at module level is not inside a def at all, so there is no enclosing method
+	for this emit to live in."
+	(self ___bindsClassNameToModule___
+		and: [(self ___nameStoreRoutesToModule___: (self ___manglePrivate___: name) asSymbol) not])
+			ifTrue: [^ #'classDef:moduleScopeTarget'].
+	"A class-body ``global'' or ``nonlocal'' is refused only for a name the
+	helper cannot REACH, not for the declaration itself.  A ``global'' name is a
+	module binding, read and written off the module instance, which the helper
+	names as readily as any other scope does.  A ``nonlocal'' one is reachable
+	when it is CARRIED: the frame hands the helper a setter block for it, and
+	___emitCarriedNonlocalWriteBack___:on: pushes the class body's write out
+	through that block.  ``__class__'' is neither -- it is the class's own
+	implicit cell, written by ___emitNonlocalClassCellWrite___:on:, which needs
+	nothing from the enclosing frame."
+	(self ___classBodyOuterBindingUnreachableNames___: localNames) isEmpty
+		ifFalse: [^ #'classDef:outerBinding'].
 	self ___classBodyWalrusNames___ isEmpty ifFalse: [^ #'classDef:walrus'].
 	"A ``nonlocal'' anywhere below (in a body method, not just at class-body
 	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
@@ -5606,9 +5767,17 @@ ___irMethodLocalClassReason___: localNames
 	declaration still refused is one naming something the helper does not
 	carry -- a name the enclosing def does not bind, or one reached past an
 	intervening class, which the two tests below would refuse anyway."
+	"``__class__'' is exempt from the carried test, as it is from the class-body
+	one above: it is not an enclosing local reached through a setter block but
+	the class's OWN implicit cell, written by ___emitNonlocalClassCellWrite___:
+	on: (class body) or the ___grailSetClassCell___: branch (a method).  It can
+	never appear in the carried set, so requiring it there refused every class
+	whose methods mention it -- test_super's test_various___class___pathologies
+	being the case on the suite manifest."
 	((self ___irNonlocalNamesBelow___: body) allSatisfy: [:n |
-		(self ___irCarriedCaptureNames___: localNames)
-			anySatisfy: [:c | c asString = n asString]])
+		n asString = '__class__'
+			or: [(self ___irCarriedCaptureNames___: localNames)
+				anySatisfy: [:c | c asString = n asString]]])
 				ifFalse: [^ #'classDef:nonlocalNotCarried'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
@@ -5628,8 +5797,48 @@ ___irMethodLocalClassReason___: localNames
 		(id = '___irCaptured___') or: [id beginsWith: '___irCell_']])
 			ifTrue: [^ #'classDef:captureNameCollision'].
 	bound := (self ___manglePrivate___: name) asString.
-	(localNames includes: bound) ifFalse: [^ #'classDef:nameNotLocal'].
+	"...and the name need not be a LOCAL when the class binds the MODULE: the
+	parser declared it in the module body's variables precisely because
+	``global C'' said so, which is what makes ``localNames includes:'' false
+	here.  The nested-def cut met the identical guard one level over and
+	answered it the same way (nestedDef:nameNotLocal)."
+	((localNames includes: bound)
+		or: [self ___nameStoreRoutesToModule___: bound asSymbol])
+			ifFalse: [^ #'classDef:nameNotLocal'].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___classBodyOuterBindingUnreachableNames___: localNames
+	"The class-body ``global'' / ``nonlocal'' names the compiled-text helper
+	cannot reach, which is what the refusal is actually about.
+
+	Reachable, and so NOT answered here:
+
+	  * every ``global'' name -- a module binding, stored through the module
+	    instance, which the helper names exactly as the enclosing scope would;
+	  * ``__class__'' -- the class's own implicit cell
+	    (___emitNonlocalClassCellWrite___:on:), needing nothing from the frame;
+	  * any ``nonlocal'' name that is CARRIED, since the frame hands in a
+	    setter block for it.
+
+	What is left is a ``nonlocal'' name with no carried setter: the helper has
+	no way to write the enclosing binding, and emitting the bare assignment
+	would write its own seeded copy and silently drop the write."
+
+	| carried bad |
+	body ifNil: [^ #()].
+	(body body isKindOf: SequenceableCollection) ifFalse: [^ #()].
+	carried := self ___irCarriedCaptureNames___: localNames.
+	bad := OrderedCollection new.
+	body body do: [:st |
+		(st isKindOf: NonlocalAst) ifTrue: [
+			(st names ifNil: [#()]) do: [:n |
+				(n asString = '__class__'
+					or: [carried anySatisfy: [:c | c asString = n asString]])
+					ifFalse: [bad add: n asSymbol]]]].
+	^ bad
 %
 
 category: 'Grail-IR Codegen'
@@ -6203,23 +6412,27 @@ ___emitIRStatementOn___: aBuilder
 	___irEligibleStatementLocals___: for why the class emit travels as a
 	compiled-text helper rather than as transcribed IR nodes.
 
-	The helper is compiled HERE, while the compile context is exactly the one
-	the text would have generated the class under, and installed on the class
-	the enclosing method is being built on.  A compile failure raises, which
-	the seam's handler turns into a fallback to the whole method's text."
+	The helper's SOURCE is generated HERE, while the compile context is exactly
+	the one the text would have generated the class under.  Where it is
+	INSTALLED is the builder's decision (___irNoteClassHelper___:source:): on
+	the target class now for an ordinary build, and once per class at
+	regeneration time for a SHARED build, whose targetClass at this point is
+	importlib's stand-in rather than any class the method will run on.  A
+	compile failure raises, which the seam's handler turns into a fallback to
+	the whole method's text."
 
-	| sel src cls carried args |
+	| sel src carried args routesToModule |
+	"ASK THE ROUTING QUESTION FIRST.  ___irHelperSourceWithSelector___:carrying:
+	below GENERATES THE CLASS BODY'S TEXT, which walks into the class's own
+	scope, and the answer differs on the two sides of that call: eligibility
+	asked it before and got ``module'', this emit asked it after and got
+	``local'', so the method assigned a temp while every read of the name went
+	to the module instance -- NameError under the flag, correct on text."
+	routesToModule := self ___nameStoreRoutesToModule___: (self ___manglePrivate___: name) asSymbol.
 	carried := self ___irCarriedCaptureNames___: (aBuilder localNameSet).
 	sel := self ___irHelperSelector___: carried.
 	src := self ___irHelperSourceWithSelector___: sel carrying: carried.
-	cls := aBuilder targetClass.
-	[cls compileMethod: src
-		dictionaries: importlib ___grailCompileSymbolList___
-		category: 'Grail-IR Class Helpers'
-		environmentId: 1]
-		on: CompileWarning do: [:ex | ex resume].
-	(cls includesSelector: sel environmentId: 1) ifFalse: [
-		Error signal: 'IR class helper did not compile: ' , sel asString].
+	aBuilder ___irNoteClassHelper___: sel source: src.
 	"``at:'', not ``atNode:'': the OFFSET (so the frame reports the ``class''
 	line) without a position-map ENTRY.  A class statement's extent is its whole
 	suite, so recording it would put carets under every line of the class body
@@ -6256,6 +6469,24 @@ ___emitIRStatementOn___: aBuilder
 						from: (aBuilder var: vLeaf))]].
 			{ aBuilder arrayOf: readers. aBuilder arrayOf: setters }].
 	aBuilder at: self beginPosition.
+	"``global C; class C: ...'' binds the MODULE's C, not a temp of the
+	enclosing scope -- the same rule and the same store the assignment, the
+	for-target and the import alias all route through.  Only the binding
+	differs; the helper send above is unchanged, which is what makes this the
+	same cut as those."
+	routesToModule
+		ifTrue: [
+			"THE CALL IS THE WHOLE STATEMENT, with no store around it.  The
+			helper's own text already binds the module -- the class emit routes
+			its binding through the same rule the assignment does, so the
+			generated block ends in ``<mod> ___instance___ dynamicInstVarAt:
+			#C put: C'' -- and its ``^ C'' then answers the method temp that
+			store BYPASSED, which is nil.  Assigning that answer to the module
+			overwrote the class with nil, and the next read of the name raised
+			NameError (test_global test_class_def, flag-on only).  The text
+			path emits no outer store here either; this is the same shape."
+			aBuilder add: (aBuilder send: sel to: aBuilder selfNode with: args env: 1).
+			^ self].
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)
 		from: (aBuilder send: sel to: aBuilder selfNode with: args env: 1)).

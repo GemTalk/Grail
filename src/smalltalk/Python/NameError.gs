@@ -76,6 +76,36 @@ ___resolveBuiltinOrSignal___: aName
 	b == nil ifTrue: [^ self ___signalUndefined___: aName].
 	inst := [b @env0:___instance___] @env0:on: Error do: [:ex | nil].
 	inst == nil ifTrue: [^ self ___signalUndefined___: aName].
+	"A RUNNING exec()/eval() MAY HAVE BEEN HANDED A LIVE LOCALS MAPPING, one
+	Grail could not copy into the doit's scope -- so the name misses the scope
+	and arrives here.  It is a LOCAL, so it is looked up before builtins and
+	before the override, exactly where the scope copy would have put it."
+	(inst @env1:___grailLiveLocals___) @env0:isNil ifFalse: [
+		| found |
+		found := inst
+			@env1:___lookUpInLiveLocals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		(found @env0:== #'___grailLiveLocalsMiss___') ifFalse: [^ found]].
+	"AND THE GLOBALS MAPPING MAY BE LIVE TOO, for the same reason and one
+	argument over.  After the locals, before builtins -- that is the order a
+	seeded scope would have produced."
+	(inst @env1:___grailLiveGlobals___) @env0:isNil ifFalse: [
+		| found |
+		found := inst
+			@env1:___lookUpInLiveGlobals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		(found @env0:== #'___grailLiveLocalsMiss___') ifFalse: [^ found]].
+	"A RUNNING exec()/eval() MAY HAVE REPLACED BUILTINS ENTIRELY.  CPython
+	takes a piece of code's builtins namespace from its globals, so
+	``exec(src, {'__builtins__': {}})'' runs source with none, and
+	``{'__builtins__': m}'' runs it with m's.  That is an exclusive choice,
+	not an extra place to look: falling through to the real builtins after
+	the override missed would hand back exactly the name the caller took
+	away, which is the whole point of passing an empty one."
+	(inst @env1:___grailBuiltinsOverride___) @env0:isNil ifFalse: [
+		^ inst
+			@env1:___lookUpInBuiltinsOverride___: aName
+			ifAbsent: [self ___signalUndefined___: aName]].
 	"INJECTED names first, and UNGATED: anything at all may be written into
 	builtins at run time, so the curated list below must not police this arm."
 	v := inst @env0:dynamicInstVarAt: sym ifAbsent: [nil].
@@ -95,6 +125,34 @@ ___resolveBuiltinOrSignal___: aName
 		^ inst @env1:___globalAt___: sym
 			otherwise: [self ___signalUndefined___: aName]].
 	^ self ___signalUndefined___: aName
+%
+
+category: 'Grail-Name Errors'
+classmethod: NameError
+___requireBuildClass___
+	"Refuse a class statement whose builtins namespace has no
+	``__build_class__''.
+
+	CPython's LOAD_BUILD_CLASS looks the name up in the code's builtins and
+	raises NameError with the bare text ``__build_class__ not found'' -- not
+	the usual ``name '...' is not defined'', which is why this does not go
+	through ___signalUndefined___:.
+
+	Emitted by ClassDefAst only inside a doit under a ``__builtins__''
+	override, so an ordinary class definition never reaches it."
+
+	| b inst |
+	b := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #builtins.
+	b == nil ifTrue: [^ nil].
+	inst := [b @env0:___instance___] @env0:on: Error do: [:ex | nil].
+	inst == nil ifTrue: [^ nil].
+	(inst @env1:___grailBuiltinsOverride___) @env0:isNil ifTrue: [^ nil].
+	^ inst
+		@env1:___lookUpInBuiltinsOverride___: '__build_class__'
+		ifAbsent: [ | instance |
+			instance := self @env1:___new___.
+			instance @env1:___args___: { '__build_class__ not found' }.
+			instance @env1:___signal___: '__build_class__ not found']
 %
 
 category: 'Grail-Name Errors'

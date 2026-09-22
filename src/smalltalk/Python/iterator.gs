@@ -100,6 +100,44 @@ __repr__
 	^ stream @env0:contents
 %
 
+category: 'Grail-Pickle Support'
+method: iterator
+___builtinNamed___: aSymbol
+	"The builtins callable that RECONSTRUCTS this iterator, for __reduce__.
+
+	CPython names the TYPE -- ``(<class 'map'>, (func, it))'' -- because in
+	CPython map IS the type and builtins.map resolves to it. In Grail the two
+	are separate: map() is a BoundMethod on the builtins module and the instance
+	it answers is a map_iterator. Naming the class here would not pickle, because
+	pickle saves a class by module+name and there is no builtins.map_iterator to
+	resolve on the way back in; that is exactly the failure this fixes, reported
+	as ``Can't pickle <class 'map_iterator'>: module '__main__' not found''.
+
+	So the CALLABLE is named instead, which is the same object CPython ends up
+	calling and pickles by reference as builtins.map. Reconstruction re-enters
+	map()/filter()/zip() with the SOURCE ITERATORS, and iter() answers an
+	iterator unchanged, so a partially consumed position survives the round trip
+	-- which is what check_iter_pickle resumes and compares.
+
+	A RUNNING exec()/eval() MAY HAVE REPLACED BUILTINS, and then this has to
+	read the replacement: CPython's list_iterator.__reduce__ calls
+	_PyEval_GetBuiltin on the name, which looks in the FRAME's builtins, so
+	``eval('x.__reduce__()', {'__builtins__': {}, 'x': iter([1,2])})'' raises
+	AttributeError for the missing name rather than answering the real iter.
+	The AttributeError carries the bare name, which is what CPython's
+	_PyEval_GetBuiltin produces and what the test matches on."
+
+	| b override |
+	b := importlib @env0:___builtinsModuleOrNil___.
+	override := (Python @env0:at: #builtins) @env1:instance
+		@env1:___grailBuiltinsOverride___.
+	override @env0:isNil ifFalse: [
+		^ (Python @env0:at: #builtins) @env1:instance
+			@env1:___lookUpInBuiltinsOverride___: aSymbol @env0:asString
+			ifAbsent: [AttributeError @env1:___signal___: aSymbol @env0:asString]].
+	^ b @env1:___pyAttrLoad___: aSymbol
+%
+
 category: 'Grail-Private'
 method: iterator
 ___strictExhausted___: anIndex sources: srcs name: aName

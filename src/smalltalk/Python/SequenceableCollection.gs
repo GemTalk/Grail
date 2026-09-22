@@ -333,8 +333,13 @@ __getitem__: index
 			ifTrue: ['list']
 			ifFalse: [(self @env0:isKindOf: Array) ifTrue: ['tuple']
 				ifFalse: [self @env0:class @env0:name @env0:asString]].
+		"PYTHON type name, through ___pyTypeNameForError___: ``index class name''
+		is the GEMSTONE class backing the value, so this message read ``not
+		Unicode7'' for a str key, ``not SmallDouble'' for a float and ``not
+		ByteArray'' for bytes, where CPython says str / float / bytes.  Bytes.gs
+		and Bytearray.gs already named the type properly; these sites did not."
 		TypeError ___signal___: (seqName @env0:, ' indices must be integers or slices, not '
-			@env0:, index @env0:class @env0:name @env0:asString)].
+			@env0:, (index ___pyTypeNameForError___))].
 	"FETCH the index (PEP 357) -- probing for __index__ above only established
 	that the object is index-LIKE; the arithmetic below needs its value, and
 	sending env-0 #< to the object itself is an uncatchable DNU.  __index__ may

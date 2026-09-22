@@ -120,9 +120,22 @@ def text_caller():
     # ``global'' declaration; ``eval'' would pre-create a module slot per module
     # variable and trip GemStone's 255-dynamic-instVar limit on a module this
     # large.)  It was a ``match'' statement until the cut that built the match
-    # family; a TYPE ALIAS is inert in the same way and refuses as
-    # #'stmt:TypeAliasAst', another whole statement family with no IR emit.
-    type _TextCallerAlias = int
+    # family, then a TYPE ALIAS until the cut that gave TypeAliasAst its IR
+    # protocol -- the tripwire firing a third time.
+    #
+    # It is now a nested def holding a bare ``super()'', which refuses the
+    # ENCLOSING def as #'CallAst:super-noClass'.  Chosen for durability rather
+    # than convenience: a ``super()'' with no enclosing class is a RuntimeError
+    # in CPython, so there is no version of the migration that makes it
+    # ELIGIBLE -- making it "work" would mean answering a super where CPython
+    # raises.  The other still-refusing shapes were measured and rejected: a
+    # set-display ``*''-unpack raises at RUN time on both paths (the text does
+    # not support it either), ``async for'' compiled, and a class nested in a
+    # class body refuses only the INNER method, leaving this def eligible.
+    #
+    # The nested def is never called, so the shape is inert.
+    def _text_caller_optout():
+        return super()
     import traceback
     try:
         ir_raiser()

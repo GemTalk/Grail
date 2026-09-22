@@ -729,7 +729,7 @@ ___connectCode___: sock on: host port: port
 	The answer is deliberately a code rather than an exception so connect and
 	connect_ex cannot disagree about what happened -- they did."
 
-	| addrs status |
+	| addrs status verdict |
 	addrs := [sock @env0:_twoArgPrim: 25 with: host with: port]
 		@env0:on: Error do: [:e | e @env0:return: nil].
 	(addrs @env0:isNil @env0:or: [addrs @env0:size @env0:< 2]) ifTrue: [
@@ -751,7 +751,33 @@ ___connectCode___: sock on: host port: port
 
 	"A poll of a connect already started.  CPython answers EISCONN once it has
 	completed and EALREADY while it is still going -- and EISCONN is NOT a
-	BlockingIOError, so a retry loop terminates instead of silently succeeding."
+	BlockingIOError, so a retry loop terminates instead of silently succeeding.
+
+	READINESS IS CONSULTED FIRST, AND ONLY WHEN IT IS UNAMBIGUOUS.  The primitive
+	above is the oracle this method was built on, and on macOS 27 it stopped being
+	one -- measured, 5 sockets each:
+
+	    open port   prim: false false false false | write=true read=false
+	    refused     prim: false false SELF SELF   | write=nil  read=true
+
+	It never reports success for a connect that SUCCEEDED, and it reports SELF --
+	which this method reads as EISCONN -- for one that was REFUSED.  That is how a
+	refused connect came back from asyncio as ``connected?!''.  Readiness, by
+	contrast, separated the two 5 times out of 5, and the split is the ordinary
+	one: a connected socket is writable, a socket whose connect resolved and
+	FAILED is readable.
+
+	So this defers to readiness only when exactly ONE of the two is true, and
+	falls through to the primitive otherwise.  That is what keeps the older
+	platforms unchanged: on macOS 26.6 a refused connect is readable and not
+	writable, so readiness answers 61 where the primitive also answered 61; on
+	Linux an errored socket tends to report BOTH, which is not unambiguous, so the
+	primitive keeps deciding exactly as before.  The clause that hung CI on Linux
+	inferred refusal from ``not writable'' and failed open to in-progress; this one
+	requires a POSITIVE readable, and anything it cannot call still ends up at the
+	primitive rather than at a guess."
+	verdict := self ___connectVerdictFromReadiness___: sock.
+	verdict @env0:isNil ifFalse: [^ verdict].
 	status @env0:== sock ifTrue: [^ 56].
 	status @env0:== false ifTrue: [^ 37].
 	(status @env0:isKindOf: Integer) ifTrue: [
@@ -781,6 +807,41 @@ ___normalizeConnectErrno___: code
 	((code @env0:= 51) @env0:or: [code @env0:= 101]) ifTrue: [^ 51].   "ENETUNREACH"
 	((code @env0:= 65) @env0:or: [code @env0:= 113]) ifTrue: [^ 65].   "EHOSTUNREACH"
 	^ code
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___connectVerdictFromReadiness___: sock
+	"Answer 56 (EISCONN) for a connect that completed, 61 (ECONNREFUSED) for one
+	that resolved and FAILED, or nil for ``cannot tell'' -- and nil is the common
+	case while a connect is still in flight.
+
+	ONLY AN UNAMBIGUOUS SPLIT COUNTS.  A connected socket is writable and has
+	nothing to read; a failed one is readable (the pending error is what there is
+	to read) and not writable.  When BOTH are true the socket is telling us
+	nothing useful -- a connected socket with data already waiting looks exactly
+	like that, and so does an errored socket on Linux -- so the caller falls back
+	to the primitive rather than guessing here.  Guessing from ``not writable''
+	alone is precisely what once hung CI on Linux.
+
+	nil from either probe means the probe itself failed, which GsSocket reports
+	the same way GsFile does.  It is treated as ``not true'' rather than as an
+	answer, and it is the READABLE half that is load-bearing: measured on macOS
+	27, writeWillNotBlock answered nil on only 1 of 3 sockets at one sampling and
+	5 of 5 at another, while readWillNotBlock answered true every time -- so a
+	rule resting on the nil would be timing-dependent.
+
+	The errno is ECONNREFUSED rather than the real one because there is none to be
+	had: measured on macOS 27, lastErrorCode answers 0, lastErrorSymbol nil, and
+	option: cannot read SO_ERROR.  A connect that TIMED OUT is therefore reported
+	as refused -- the same trade ___connectCodeFallback___ already makes."
+
+	| w r |
+	w := [sock @env0:writeWillNotBlock] @env0:on: Error do: [:e | e @env0:return: nil].
+	r := [sock @env0:readWillNotBlock] @env0:on: Error do: [:e | e @env0:return: nil].
+	(w @env0:== true @env0:and: [r @env0:~~ true]) ifTrue: [^ 56].
+	(r @env0:== true @env0:and: [w @env0:~~ true]) ifTrue: [^ 61].
+	^ nil
 %
 
 category: 'Grail-Private'

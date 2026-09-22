@@ -17,15 +17,14 @@ PythonTestCase subclass: 'PathlibStubSurfaceTestCase'
 expectvalue /Class
 doit
 PathlibStubSurfaceTestCase comment:
-'The methods Grail''s pathlib stub grew, and why a stub is worth growing.
+'The surface Grail''s former pathlib stub grew, checked against the real one.
 
-src/python/stdlib/pathlib.py is an explicit MINIMAL stub -- its own
-header says it exposes "the minimum Path / PurePath surface" Flask
-needs.  That is a reasonable place to start and a bad place to stay,
-because the missing methods do not announce themselves as missing.  They
-announce themselves as ``AttributeError: ''Path'' object has no attribute
-''touch''`` from inside whatever library reached for one, where it reads
-as that library''s fault.
+Grail''s pathlib used to be src/python/stdlib/pathlib.py, an explicit
+MINIMAL stub whose own header said it exposed "the minimum Path / PurePath
+surface" Flask needed.  It is now CPython''s own package, vendored -- see
+RealPathlibTestCase for the calls that took.  This case stays as the record
+of the vocabulary real callers reached for, and as a check that the real
+module still answers it.
 
 THE METHODS ARE NOT A WISH LIST.  Each was found by a real caller:
 vendoring CPython''s test_zipapp turned an IMPORTERROR into 35 running
@@ -34,20 +33,13 @@ tests, and 32 of its 33 errors were ``touch``, ``rglob`` and
 instances of ''Path'' and ''Path''`` -- a bare sorted() over a glob, which
 is simply how you walk a tree reproducibly.  ``unlink``, ``rmdir``,
 ``relative_to`` and ``with_name`` come with them: they are the rest of
-the same small vocabulary, and leaving them out only moves the next
-AttributeError one call along.
+the same small vocabulary.
 
 MEASURED AGAINST THE REAL PATHLIB.  The fixture imports ``pathlib``
 rather than a copy of it, so under the fixture gate every expectation
 here is checked against CPython''s own implementation, and under Grail
-the same assertions check that the stub agrees with what the gate
-measured.  That is what keeps a stub honest: it is not asked to be
-complete, it is asked to be RIGHT about what it claims.
-
-glob() deliberately supports only two shapes -- a plain fnmatch pattern
-and the ``**/`` prefix that means "at any depth" -- because those are
-what the callers use; a pattern with a path separator in it is not
-supported rather than quietly mismatched.'
+the same assertions check that Grail''s pathlib agrees with what the gate
+measured.'
 %
 
 doit

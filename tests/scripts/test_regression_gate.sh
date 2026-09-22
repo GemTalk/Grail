@@ -36,7 +36,30 @@ check() {
     local name="$1" want_exit="$2" want_text="$3"; shift 3
     board "$TMP/base.md" "$1" "$2" "$3" "$4"; shift 4
     board "$TMP/cur.md"  "$1" "$2" "$3" "$4"
+    verdict "$name" "$want_exit" "$want_text"
+}
 
+# enters NAME EXPECTED_EXIT EXPECTED_SUBSTRING  CUR_STATUS CUR_T CUR_F CUR_E
+# The probe module is on the CURRENT board only.  The baseline carries an
+# unrelated module rather than nothing, so these cases take the gate's ordinary
+# path; the empty-baseline shape has its own case below.
+enters() {
+    local name="$1" want_exit="$2" want_text="$3"; shift 3
+    {
+        echo '| Module | Status | Tests | Fail | Error | Skip | Detail |'
+        echo '| --- | --- | --- | --- | --- | --- | --- |'
+        echo '| test.test_other | OK | 10 | 0 | 0 | 0 |  |'
+    } > "$TMP/base.md"
+    {
+        cat "$TMP/base.md"
+        echo "| test.test_probe | $1 | $2 | $3 | $4 | 0 |  |"
+    } > "$TMP/cur.md"
+    verdict "$name" "$want_exit" "$want_text"
+}
+
+# verdict NAME EXPECTED_EXIT EXPECTED_SUBSTRING -- gate base.md against cur.md
+verdict() {
+    local name="$1" want_exit="$2" want_text="$3"
     local out rc
     out=$("$GATE" "$TMP/base.md" "$TMP/cur.md" 2>&1)
     rc=$?
@@ -86,6 +109,25 @@ check "new IMPORTERROR"      1 "-> IMPORTERROR"         ERROR 40 1 1   IMPORTERR
 check "new CRASH"            1 "-> CRASH"               ERROR 40 1 1   CRASH 0 0 0
 check "unchanged"            0 "0 regression"           ERROR 40 1 1   ERROR 40 1 1
 
+# --- a module that ENTERS the board measuring nothing ----------------------
+# Its counts have no baseline to be judged against, but whether it measured
+# anything does not need one: CRASH, TIMEOUT and STERROR mean the harness died,
+# so the 0 fail+err is not a count.  That is the move is_hard() already calls a
+# regression for a module that was on the board, and entering hard is no
+# better.  test.test_xml_etree entered as CRASH and passed three nightlies as
+# ``new ... -- no baseline'' before anyone looked.
+enters "new module enters as CRASH"   1 "entered the board as CRASH"   CRASH   0 0 0
+enters "new module enters as TIMEOUT" 1 "entered the board as TIMEOUT" TIMEOUT 0 0 0
+enters "new module enters as STERROR" 1 "entered the board as STERROR" STERROR 0 0 0
+
+# ...and the rule stays that narrow.  A module that cannot IMPORT is a real
+# measurement -- the manifest carries such modules on purpose, so the detail
+# column can name the missing symbol -- and a module that runs has counts the
+# gate simply has nothing to compare with yet.
+enters "new module enters as IMPORTERROR" 0 "no baseline" IMPORTERROR 0  0 0
+enters "new module enters as ERROR"       0 "no baseline" ERROR      40 9 9
+enters "new module enters as OK"          0 "no baseline" OK         40 0 0
+
 # --- a module absent from the baseline is reported, not silently passed ----
 # This is the shape that once produced a VACUOUS green gate: a truncated
 # scoreboard made every missing module read as "no baseline" and exit 0.  The
@@ -103,6 +145,18 @@ if [ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'no baseline'; then
     pass=$((pass + 1))
 else
     echo "FAIL empty-baseline row not reported: exit $rc, output: $out"
+    fail=$((fail + 1))
+fi
+
+# The empty-baseline shape with a HARD row: every row is new there, and the
+# hard one must still fail rather than hide among the reported ones.
+: > "$TMP/base.md"
+board "$TMP/cur.md" CRASH 0 0 0
+out=$("$GATE" "$TMP/base.md" "$TMP/cur.md" 2>&1); rc=$?
+if [ "$rc" = 1 ] && printf '%s' "$out" | grep -q 'entered the board as CRASH'; then
+    pass=$((pass + 1))
+else
+    echo "FAIL empty-baseline CRASH row not flagged: exit $rc, output: $out"
     fail=$((fail + 1))
 fi
 

@@ -1513,8 +1513,14 @@ lgamma: x
 category: 'Grail-Math Functions'
 method: math
 fmod: x _: y
-	"C fmod: x - n*y with the sign of x (GemStone rem:); y=0 is a domain
-	error."
+	"C fmod: x - n*y with n = trunc(x/y) and the sign of x; y=0 is a domain
+	error.
+
+	Computed by float>>___pyFmod___, which takes n from the EXACT quotient.
+	GemStone's rem: takes it from the rounded one, which is a different n
+	whenever the true quotient sits just below an integer -- so this answered
+	``fmod(1.0, 0.1) = 0.0'' where C and CPython say 0.09999999999999995.  The
+	same substitution was behind float // and %, and the fix is shared."
 
 	| fx fy r |
 	fx := self ___real___: x.
@@ -1525,7 +1531,10 @@ fmod: x _: y
 		ValueError ___signal___: 'math domain error'].
 	"fmod(x, +/-inf) is x for finite x."
 	(fy @env0:_getKind) == 3 ifTrue: [^ fx].
-	r := fx @env0:rem: fy.
+	"A zero dividend has no exact-quotient question to ask, and asFraction
+	would be wasted on it."
+	fx @env0:= 0.0 ifTrue: [^ self copysign: 0.0 _: fx].
+	r := fx ___pyFmod___: fy.
 	"C fmod's result carries x's sign, including the sign of a zero result
 	(fmod(-10, 1) is -0.0)."
 	r @env0:= 0.0 ifTrue: [^ self copysign: 0.0 _: fx].

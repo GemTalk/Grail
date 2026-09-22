@@ -144,13 +144,19 @@ testOrderDunderIsStoredUnderItsModernName
 	self assert: (self resultAt: 'order_rename') asString equals: 'a b;False'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Merge operators'
 method: EnumDictTestCase
-testInPlaceOrLosesTheClassIsAKnownGap
-	"Recorded, NOT endorsed.  CPython's dict.__ior__ mutates in place so the
-	object stays an EnumDict; Grail's |= builds a new plain dict and the
-	tracking is lost.  The VALUE assertion above is what
-	test_enum_dict_standalone checks and it holds either way."
+testInPlaceOrKeepsTheClass
+	"``d |= other'' mutates in place, so the object stays an EnumDict and its
+	member tracking survives.
 
-	self assert: (self resultAt: 'ior_type_is_a_known_gap') asString equals: 'dict'.
+	THIS TEST ASSERTED 'dict' -- the opposite -- and was right to, as a record
+	of a real divergence.  The cause was not EnumDict's: AugAssignAst emitted
+	the bare BINARY operator for a module-scope target, so ``|='' never
+	reached __ior__ at all and EVERY mutable type at module scope was replaced
+	rather than mutated.  Fixing that closed this with nothing here to change.
+	See AugmentedAssignmentTestCase, and note that a recorded gap is worth
+	re-measuring when anything underneath it moves."
+
+	self assert: (self resultAt: 'ior_keeps_the_class') asString equals: 'EnumDict'.
 %

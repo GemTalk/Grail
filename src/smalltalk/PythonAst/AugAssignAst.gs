@@ -85,12 +85,45 @@ printSmalltalkOn: aStream
 	(target isKindOf: SubscriptAst) ifTrue: [
 		^self printSmalltalkSubscriptAugAssignOn: aStream.
 	].
+	"Derive the in-place / binary dunder selectors.  Derived HERE, ahead of
+	every remaining branch, because the module-scope one below needs them too
+	-- it used to sit above this and emit the bare binary operator for want of
+	them."
+	opStream := AppendStream on: Unicode7 new.
+	op printSmalltalkOn: opStream.
+	binSel := opStream _contents trimSeparators.
+	iSel := '__i' , (binSel copyFrom: 3 to: binSel size).
 	"Phase A: when the target is a module-scope name, emit
-	``self @env0:dynamicInstVarAt: #'x' put: ((self @env0:dynamicInstVarAt: #'x' ifAbsent: [NameError]) op value).''
-	so the read AND the store both reach the module instance's
-	dynamic-instVar storage.  We emit the load form explicitly because
-	the target's ctx is Store — calling printSmalltalkOn: on it would
-	yield a bare identifier (the wrong form for a read)."
+	``self @env0:dynamicInstVarAt: #'x' put: ((self @env0:dynamicInstVarAt: #'x'
+	ifAbsent: [NameError]) ___augmentedOp___: value inplace: ... binary: ...).''
+	so the read AND the store both reach the module instance's dynamic-instVar
+	storage.  We emit the load form explicitly because the target's ctx is
+	Store — calling printSmalltalkOn: on it would yield a bare identifier (the
+	wrong form for a read).
+
+	THROUGH ___augmentedOp___ LIKE EVERY OTHER TARGET KIND.  This branch
+	emitted the bare BINARY operator -- ``(read) __or__: value'' -- so at
+	module scope, and only there, an augmented assignment was not an augmented
+	assignment at all.  Two things follow from that, and both are silent:
+
+	  * the IN-PLACE dunder never ran.  ``d |= other'' at module scope built a
+	    NEW dict and rebound the name, where CPython mutates in place -- so any
+	    other name bound to the same object kept the old contents.  Same for
+	    ``l += [x]'' on a list, which is the common spelling.
+
+	  * the REFLECTED dunder never ran.  A forward dunder that DECLINES
+	    (answers NotImplemented) had nothing after it, so NotImplemented was
+	    stored as the result:
+
+	        d = {0: 'a'}
+	        d |= types.MappingProxyType({1: 'c'})   # d is NotImplemented
+
+	    while ``d | proxy'' on the line above answers a dict.  The failure then
+	    surfaces wherever d is next used, not here.
+
+	The same statement inside a FUNCTION was always correct, which is what kept
+	this hidden: the local-name path at the bottom of this method has used
+	___augmentedOp___ since it was written."
 	((target isKindOf: NameAst) and: [self isModuleScopeAugTarget: target])
 		ifTrue: [
 			aStream
@@ -106,18 +139,12 @@ printSmalltalkOn: aStream
 				nextPutAll: target id;
 				nextPut: $';
 				nextPut: $';
-				nextPutAll: ' is not defined''])'.
-			op printSmalltalkOn: aStream.
+				nextPutAll: ' is not defined'']) @env1:___augmentedOp___: '.
 			value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: ').'.
+			aStream nextPutAll: ' inplace: #'''; nextPutAll: iSel;
+				nextPutAll: ''' binary: #'''; nextPutAll: binSel; nextPutAll: ''').'.
 			^ self
 		].
-	"Derive the in-place / binary dunder selectors (shared by the
-	closure-cell and simple-local paths below)."
-	opStream := AppendStream on: Unicode7 new.
-	op printSmalltalkOn: opStream.
-	binSel := opStream _contents trimSeparators.
-	iSel := '__i' , (binSel copyFrom: 3 to: binSel size).
 
 	"CLASS-BODY LEVEL ``x += 1''.  A class body executes sequentially and an
 	augmented assignment there rebinds the class attribute, so both the read
@@ -222,10 +249,38 @@ method: AugAssignAst
 printSmalltalkAttributeAugAssignOn: aStream
 	"Generate augmented attribute assignment.
 
-	When in class method context and target is self.x,
-	emit `x := x op expr.`
-	Otherwise: `obj @env0:at: #'attr' put: (obj attr op value).`"
+	EVERY BRANCH GOES THROUGH ___augmentedOp___, which is what makes
+	``obj.x op= v'' an AUGMENTED assignment rather than a read, a binary
+	operation and a store.  They used to emit the bare binary operator, so for
+	an attribute target -- and for a subscript, and, until this change, for a
+	module-scope name -- two things never happened:
 
+	  * the IN-PLACE dunder.  ``self.data |= other'' built a new object and
+	    stored it, where CPython mutates the existing one, so any other name
+	    bound to it kept the old contents.
+	  * the REFLECTED dunder.  A forward dunder that DECLINES had nothing
+	    after it, and its NotImplemented was STORED -- a value, not an error,
+	    surfacing wherever the attribute was next read.
+
+	Only the plain-local-name branch in printSmalltalkOn: was ever correct,
+	which is why ``d |= proxy'' inside a function worked and the same line at
+	module scope, or as ``self.d |= proxy'', did not.
+
+	The branches, unchanged in how they READ and STORE: a declared/inferred
+	slot goes through its accessor pair, ``self.x'' through the instance's
+	dynamic-instVar storage, and any other receiver through the polymorphic
+	___pyAttrLoad___ / ___pyAttrStore___ protocol -- ``at:put:'' would hit
+	Behavior>>at:put: when the receiver is a CLASS."
+
+	| pair opStream binSel |
+	"Derived the same way printSmalltalkOn: derives it for a local name, so the
+	two branches cannot drift: the op printer answers the binary dunder
+	(``__or__:''), and the in-place one is that with an `i' after the
+	underscores."
+	opStream := AppendStream on: Unicode7 new.
+	op printSmalltalkOn: opStream.
+	binSel := opStream _contents trimSeparators.
+	pair := { '__i' , (binSel copyFrom: 3 to: binSel size). binSel }.
 	((target value isKindOf: NameAst) and: [CallAst isSelfReference: target value id]) ifTrue: [
 		"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS):
 		load and store through the accessor sends --
@@ -237,9 +292,11 @@ printSmalltalkAttributeAugAssignOn: aStream
 			aStream
 				nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ((self ';
 				nextPutAll: acc; nextPut: $).
-			op printSmalltalkOn: aStream.
-			value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: ').'.
+	aStream nextPutAll: ' @env1:___augmentedOp___: '.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' inplace: #'''; nextPutAll: (pair at: 1);
+		nextPutAll: ''' binary: #'''; nextPutAll: (pair at: 2);
+		nextPutAll: ''').'.
 			^self
 		].
 		"Phase B: ``self.attr op= value'' loads and stores through the
@@ -256,9 +313,11 @@ printSmalltalkAttributeAugAssignOn: aStream
 			nextPutAll: ''' ifAbsent: [self @env1:___pyAttrLoad___: #''';
 			nextPutAll: target ___mangledAttr___;
 			nextPutAll: '''])'.
-		op printSmalltalkOn: aStream.
-		value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ').'.
+	aStream nextPutAll: ' @env1:___augmentedOp___: '.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' inplace: #'''; nextPutAll: (pair at: 1);
+		nextPutAll: ''' binary: #'''; nextPutAll: (pair at: 2);
+		nextPutAll: ''').'.
 		^self
 	].
 	"General receiver: route through the polymorphic attribute
@@ -273,16 +332,29 @@ printSmalltalkAttributeAugAssignOn: aStream
 	aStream nextPutAll: ' @env1:___pyAttrLoad___: #''';
 		nextPutAll: target ___mangledAttr___;
 		nextPutAll: ''')'.
-	op printSmalltalkOn: aStream.
+	aStream nextPutAll: ' @env1:___augmentedOp___: '.
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ').'.
+	aStream nextPutAll: ' inplace: #'''; nextPutAll: (pair at: 1);
+		nextPutAll: ''' binary: #'''; nextPutAll: (pair at: 2);
+		nextPutAll: ''').'.
 %
 
 category: 'Grail-other'
 method: AugAssignAst
 printSmalltalkSubscriptAugAssignOn: aStream
-	"Generate: obj __setitem__: slice _: (obj __getitem__: slice op value)."
+	"Generate: obj __setitem__: slice _: ((obj __getitem__: slice)
+	___augmentedOp___: value inplace: ... binary: ...).
 
+	Through ___augmentedOp___ for the same reason the attribute emitter above
+	is -- ``d[k] += [x]'' must extend the list already at d[k] rather than
+	build a new one and store it over the top, and a forward dunder that
+	DECLINES must reach the reflected one instead of storing NotImplemented
+	under the key.  The read and the store are unchanged."
+
+	| opStream binSel |
+	opStream := AppendStream on: Unicode7 new.
+	op printSmalltalkOn: opStream.
+	binSel := opStream _contents trimSeparators.
 	target value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __setitem__: '.
 	target slice printSmalltalkWithParenthesisOn: aStream.
@@ -291,9 +363,11 @@ printSmalltalkSubscriptAugAssignOn: aStream
 	aStream nextPutAll: ' __getitem__: '.
 	target slice printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPut: $).
-	op printSmalltalkOn: aStream.
+	aStream nextPutAll: ' @env1:___augmentedOp___: '.
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ').'.
+	aStream nextPutAll: ' inplace: #''';
+		nextPutAll: '__i' , (binSel copyFrom: 3 to: binSel size);
+		nextPutAll: ''' binary: #'''; nextPutAll: binSel; nextPutAll: ''').'.
 %
 category: 'Grail-IR Codegen'
 method: AugAssignAst
@@ -348,9 +422,10 @@ ___irComplexTargetKind___: localNames
 	dynamic-instVar-first load and store, or the accessor pair for one of the
 	class's slots -- decided at emit by ___irSelfInferredSlotAccessor___),
 	#attrForeign for any other receiver (``___pyAttrStore___:put:'' around
-	``___pyAttrLoad___:''), #subscript for ``obj[i] op= v'' with a plain index
-	(``__setitem__:_:'' around ``__getitem__:''; a slice index stays on text,
-	the text's SliceAst spelling is SubscriptAst's own)."
+	``___pyAttrLoad___:''), #subscript for ``obj[i] op= v'', a plain index or a
+	SLICE (``__setitem__:_:'' around ``__getitem__:''; a slice index emits
+	SliceAst's own slice object, which is what the text prints here -- see
+	___irComplexTargetShape___)."
 
 	| shape |
 	shape := self ___irComplexTargetShape___.
@@ -377,7 +452,16 @@ ___irComplexTargetShape___
 		^ #attrForeign].
 	(target isKindOf: SubscriptAst) ifTrue: [
 		((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].
-		(target slice isKindOf: SliceAst) ifTrue: [^ nil].
+		"A SLICE index needs nothing of its own.  The stand-down here read
+		``the text's SliceAst spelling is SubscriptAst's own'', which is true
+		of a subscript LOAD -- xs[i:j] compiles to the env-0 fast path
+		``slice @env0:___newStart:stop:step:'' with nil for an omitted bound
+		-- but not of this statement.  printSmalltalkSubscriptAugAssignOn:
+		never prints the TARGET (its ctx is Store); it prints ``target
+		slice'' directly, which is SliceAst's OWN ``slice @env1:__new__: lo
+		_: hi _: st'' with None.  That is exactly what ___emitIRValueOn___:
+		answers for a SliceAst, on both halves, so the #subscript arm
+		mirrors the text for a slice without a line of its own."
 		^ #subscript].
 	^ nil
 %

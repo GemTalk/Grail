@@ -165,7 +165,15 @@ ___irNonLocalLoadKind___: localNames
 	found the late-binding case blocking 32 stdlib defs, re._compiler's star
 	import of _constants foremost.  Guarded: eligibility must never raise."
 
-	^ [(localNames includes: id asString) ifTrue: [nil] ifFalse: [
+	"``nonlocal __class__'' is the ONE local that is not this frame's: popScope
+	exempts the name from stripping, so a temp is declared and this
+	short-circuit would answer nil for it -- leaving the read on the temp while
+	the store goes to the class's shared cell.  The text read makes the same
+	exception."
+	^ [((localNames includes: id asString)
+			and: [(id asSymbol == #'__class__'
+				and: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']) not])
+		ifTrue: [nil] ifFalse: [
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
@@ -212,7 +220,14 @@ ___irDunderClassLoadKind___
 	CallAst classBeingCompiled isNil ifTrue: [^ nil].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ nil].
-	(self ___declaredInEnclosingFunction___: #'__class__') ifTrue: [^ nil].
+	"Widened with printSmalltalkOn:'s twin: a method DECLARING the name
+	``nonlocal'' shares the class's cell rather than owning a temp, so its read
+	goes through the cell too.  A ``global __class__'' declaration still stands
+	the branch down -- that names the module binding, which is not what the
+	cell reads."
+	((self ___declaredInEnclosingFunction___: #'__class__')
+		and: [(self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__') not])
+		ifTrue: [^ nil].
 	"A METHOD-LOCAL class is not a module attribute, so the class is recovered
 	from the INJECTED cell instead -- printClassObjectOn:cellSelector:'s other
 	branch, one send.  ___dunderClassCell___ rather than the plain
@@ -248,7 +263,25 @@ ___irSuperLoadKind___
 	nothing."
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
-	(self ___declaredInEnclosingFunction___: #'super') ifTrue: [^ nil].
+	(self ___declaredInEnclosingFunction___: #'super') ifTrue: [
+		"...and when that declaration is reached THROUGH THE CLASS CELL, the
+		read is an ordinary captured enclosing-function local and the cell
+		read spells it.  ``super'' is a Smalltalk reserved identifier, so it
+		would have taken ___irNonLocalLoadKind___:'s reserved-name branch --
+		which already answers #classCell for exactly this shape, and whose
+		comment records that ``(self ___classCell___: #'___cell_x___')'' is
+		NAME-AGNOSTIC -- except that the ``super'' test above it claims the
+		name first and refused outright.
+
+		test_super's test_shadowed_local is the shape: ``class super:'' in a
+		test method, then a method-local class whose method calls
+		``super()''.  The call is NOT the zero-argument rewrite -- CallAst's
+		___superNameIsShadowed___ declines it -- so it is an ordinary call of
+		whatever the name holds, and the name is a captured local.
+
+		Without a cell the read is the text's reserved-name TRANSPORT rename,
+		which is a different emit, so that keeps refusing."
+		^ self ___readsThroughClassCell___ ifTrue: [#classCell] ifFalse: [nil]].
 	(self isModuleVariableName: #'super') ifTrue: [^ nil].
 	"No module class means nothing could have been patched, so the text emits
 	Super directly rather than probing for a shadow."
@@ -312,7 +345,14 @@ ___emitIRValueOn___: aBuilder
 			^ aBuilder
 				send: #'___moduleAttrLoad___:' to: recv
 				with: { aBuilder obj: id asSymbol }].
-	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
+	"Tested before the leaf for the same reason the ``global'' declaration above
+	is: ``nonlocal __class__'' names the class's shared cell for the whole
+	scope, never this frame's temp -- and a temp IS registered for it, so the
+	leaf would otherwise win and read nil."
+	(((aBuilder leafFor: id asSymbol) notNil)
+		and: [(id asSymbol == #'__class__'
+			and: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']) not])
+		ifTrue: [
 		| read |
 		read := aBuilder localVar: id asSymbol.
 		"Two reasons a local read carries the text's unbound guard ``(x ifNil:
@@ -373,18 +413,36 @@ ___emitIRValueOn___: aBuilder
 
 		addCapturedClassName: is what makes ClassDefAst emit the cell store, so
 		it fires here exactly as it does on the text branch; without it the
-		class carries no ___cell_<Cls>___ and the read finds nothing.  The
-		rebindable wrapper the module-scope arm applies is NOT wanted: this
-		read already goes through the cell, which is the thing a rebind
-		changes."
+		class carries no ___cell_<Cls>___ and the read finds nothing.
+
+		AND THE REBINDABLE WRAPPER APPLIES HERE TOO.  This arm used to
+		decline it, reasoning that the read ``already goes through the cell,
+		which is the thing a rebind changes''.  It does not: the two sends
+		ask different questions.  ``___dunderClassCell___:'' answers the cell's
+		OWNER -- the class -- and ``___grailClassCellValue___'' answers what the
+		cell HOLDS, which is the class until something rebinds it.  So the
+		one-send form is right for every class whose cell is never written
+		and silently wrong for one that is: ``nonlocal __class__; __class__ =
+		'shadowed' '' stored the cell and the read handed back the class
+		(SuperTwoArgLocalTestCase>>testExplicitLocalShadowsClassNameCell,
+		flag-on only).  The text has no such split -- both arms go through
+		___printClassCellReadOn___:selector:around:, whose whole purpose is
+		that the two class expressions ``cannot end up disagreeing about
+		whether the cell matters'' -- so this is the same guard the arm above
+		applies, on the same flag."
+		| classRead |
 		CallAst addCapturedClassName: CallAst classBeingCompiled.
 		CallAst classNeedsClassCell: true.
 		CallAst ___recordClassCellMethod___.
-		^ aBuilder
+		classRead := aBuilder
 			send: #'___dunderClassCell___:' to: aBuilder selfNode
 			with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString
 				, '___') asSymbol }
-			env: 1].
+			env: 1.
+		CallAst classCellRebindable ifTrue: [
+			classRead := aBuilder
+				send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
+		^ classRead].
 	kind == #superClass ifTrue: [^ aBuilder globalNamed: #Super].
 	kind == #superShadowed ifTrue: [
 		"``((<Mod> @env0:___instance___ @env1:___grailShadowedSuper___) ifNil:
@@ -703,7 +761,8 @@ ___emitSmalltalkOn___: aStream
 		and: [CallAst classBeingCompiled notNil
 		and: [CallAst moduleClassBeingCompiled notNil
 		and: [CallAst inClassBodyValueEmit ~~ true
-		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not]]]]])
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
+			or: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']]]]]])
 		ifTrue: [
 			CallAst printDefiningClassOn: aStream.
 			^ self
@@ -1548,6 +1607,16 @@ emitBuiltinFirstClassRead: aName on: aStream
 	for a name the family probe cannot wrap it behaves exactly as every
 	read did before."
 
+	"UNDER A ``__builtins__'' OVERRIDE the chain below is the wrong namespace
+	entirely: it reads the one real builtins singleton, which is exactly what
+	the caller replaced.  Route to the runtime resolver instead, which
+	consults the override and raises NameError when it has no such name."
+	self ___builtinsAreOverridden___ ifTrue: [
+		aStream
+			nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
+			nextPutAll: aName;
+			nextPutAll: ''')'.
+		^ self].
 	aStream
 		nextPutAll: '(((Python @env0:at: #builtins) instance) @env1:___globalAt___: #''';
 		nextPutAll: aName;
@@ -1742,6 +1811,28 @@ doitScopeNameToPythonName: aSymbol
 
 category: 'other'
 method: NameAst
+___defScopesName___: aFunctionNode enteredFrom: aChildNode
+	"A def's parameters scope its BODY, not its own DEFAULTS.
+
+	``def h(y, self=self)'' evaluates that default at def time, in the scope
+	that CONTAINS h -- so a name inside h's arguments node must walk past h
+	rather than bind to h's own parameter of the same name.  Both walks below
+	consult this, because both were reading the inner def's parameters for a
+	name that is not in its scope: the default emitted h's transport temp
+	(``_self'') into the enclosing method, where no such temp exists, and the
+	whole method then failed to compile.
+
+	Answers true for every step that is not an arguments node, so the ordinary
+	body walk is unchanged."
+
+	| argsIndex |
+	argsIndex := aFunctionNode class allInstVarNames indexOf: #args.
+	argsIndex = 0 ifTrue: [^ true].
+	^ (aFunctionNode instVarAt: argsIndex) ~~ aChildNode
+%
+
+category: 'other'
+method: NameAst
 ___boundInNestedFunction___: aSymbol
 	"True when the nearest enclosing binder of aSymbol is a NESTED
 	plain function or lambda (not the class method itself).  Walk
@@ -1750,13 +1841,15 @@ ___boundInNestedFunction___: aSymbol
 	hitting the method (Instance/Class/StaticFunctionDefAst) first
 	means the name is the receiver parameter."
 
-	| node ivars idx argsNode blockNode writesSet |
+	| node ivars idx argsNode blockNode writesSet child |
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: InstanceFunctionDefAst)
 			or: [(node isKindOf: ClassFunctionDefAst)
 			or: [node isKindOf: StaticFunctionDefAst]]) ifTrue: [^ false].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+		(((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			and: [self ___defScopesName___: node enteredFrom: child]) ifTrue: [
 			ivars := node class allInstVarNames.
 			idx := ivars indexOf: #args.
 			argsNode := idx > 0 ifTrue: [node instVarAt: idx] ifFalse: [nil].
@@ -1791,6 +1884,7 @@ ___boundInNestedFunction___: aSymbol
 				]
 			]
 		].
+		child := node.
 		node := node parent.
 	].
 	^ false
@@ -1842,9 +1936,10 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 	the ``_self'' temp the method generator initialised from the
 	receiver."
 
-	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet |
+	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet child |
 	(NameAst isReservedSmalltalkIdentifier: aSymbol) ifFalse: [^ false].
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		"An enclosing INSTANCE METHOD whose self-param is aSymbol and is
@@ -1865,7 +1960,8 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 			and: [node allParameterNames first asSymbol == aSymbol
 			and: [(node assignedNamesInBody includes: aSymbol) not]]]])
 			ifTrue: [^ false].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+		(((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			and: [self ___defScopesName___: node enteredFrom: child])
 			ifTrue: [
 				ivars := node class allInstVarNames.
 				idx := ivars indexOf: #args.
@@ -1907,6 +2003,7 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 					]
 				]
 			].
+		child := node.
 		node := node parent.
 	].
 	^ false

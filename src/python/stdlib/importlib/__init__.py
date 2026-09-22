@@ -91,18 +91,20 @@ class _Loader:
         self.path = path
 
 
-class _ModuleSpec:
-    def __init__(self, name, loader, origin, submodule_search_locations=None):
-        self.name = name
-        self.loader = loader
-        self.origin = origin
-        self.submodule_search_locations = submodule_search_locations
-
-
-# The public CPython spelling of the same class.  ``from importlib.machinery
-# import ModuleSpec`` is how third-party code names it, and there is no
-# machinery module here to hold it.
-ModuleSpec = _ModuleSpec
+# ``_ModuleSpec`` and ``ModuleSpec`` are NOT defined here.  They are the one
+# Smalltalk ModuleSpec class (src/smalltalk/Python/ModuleSpec.gs), stamped into
+# this module's namespace by importlib class >> registerModule:with: before this
+# body runs.
+#
+# There used to be a four-slot Python class here.  Once the import machinery
+# started building real specs of its own, defining a second class with the same
+# name would have made ``isinstance(mod.__spec__, ModuleSpec)`` FALSE for every
+# spec the machinery built -- two types, one name.  The machinery's class has to
+# be the Smalltalk one, because it needs a spec for modules that load before any
+# .py has run, so this side is the one that gives way.
+#
+# ``from importlib.machinery import ModuleSpec``, ``spec_from_file_location``
+# and ``mod.__spec__`` therefore all answer the same type.
 
 
 def spec_from_loader(name, loader, origin=None, is_package=None):

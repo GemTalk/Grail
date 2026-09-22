@@ -147,7 +147,7 @@ __delitem__: index
 	((index isKindOf: Integer)
 		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: ('list indices must be integers or slices, not '
-			@env0:, index @env0:class @env0:name @env0:asString)].
+			@env0:, (index ___pyTypeNameForError___))].
 	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):
 	probing only proved it is index-like, and __index__ may resize self, so
 	read the size afterward."
@@ -376,7 +376,7 @@ __setitem__: index _: value
 	((index isKindOf: Integer)
 		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: ('list indices must be integers or slices, not '
-			@env0:, index @env0:class @env0:name @env0:asString)].
+			@env0:, (index ___pyTypeNameForError___))].
 	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):
 	probing only proved it is index-like, and __index__ may resize self, so
 	read the size afterward."

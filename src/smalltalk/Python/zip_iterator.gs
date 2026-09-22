@@ -96,4 +96,36 @@ __next__
 	^ tuple @env0:withAll: items
 %
 
+category: 'Grail-Pickle Support'
+method: zip_iterator
+__reduce__
+	"CPython's zip_reduce: ``(type(self), tuple_of_iterators)'', plus a
+	trailing ``True'' state when strict= is set.  Measured on 3.14.6:
+
+	    zip([1],[2]).__reduce__()              -> (zip, (<it>, <it>))
+	    zip([1],[2], strict=True).__reduce__()  -> (zip, (<it>, <it>), True)
+
+	Unlike map there is no leading function, so the argument tuple is the
+	sources themselves.  See map_iterator>>__reduce__ for why strict needs the
+	state slot rather than an argument."
+
+	strict @env0:== true ifTrue: [
+		^ tuple @env0:withAll: {
+			self ___builtinNamed___: #'zip'.
+			tuple @env0:withAll: sources.
+			true }].
+	^ tuple @env0:withAll: {
+		self ___builtinNamed___: #'zip'.
+		tuple @env0:withAll: sources }
+%
+
+category: 'Grail-Pickle Support'
+method: zip_iterator
+__setstate__: aState
+	"Restore the strict flag; see map_iterator>>__setstate__:."
+
+	aState @env0:== true ifTrue: [strict := true].
+	^ None
+%
+
 set compile_env: 0

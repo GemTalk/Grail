@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'SuperTwoArgLocalTestCase'
-  instVarNames: #( probe )
+  instVarNames: #( probe irRegistrySnapshot )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -265,4 +265,64 @@ testTwoArgSuperAcceptsNonModuleClasses
 	self assert: (probe @env1:__getitem__: 'super_two_arg_local_class')
 		equals: true.
 	self assert: (probe @env1:__getitem__: 'super_two_arg_builtin') equals: true
+%
+
+category: 'Grail-Setup'
+method: SuperTwoArgLocalTestCase
+tearDown
+	importlib ___irCodegenEnabledInvalidate___.
+	(importlib @env1:modules) removeKey: #'stal_ir' ifAbsent: [].
+	irRegistrySnapshot ifNotNil: [:snap |
+		importlib ___canonicalRegistryRestore___: snap.
+		irRegistrySnapshot := nil].
+	self ___forgetCanonicalModule___: 'stal_ir'
+%
+
+category: 'Grail-Tests - Under forced IR'
+method: SuperTwoArgLocalTestCase
+testTheClassCellShapesAgreeUnderForcedIR
+	"THE SAME REPORT WITH THE SEAM FORCED ON, because every test above reads
+	whatever arm the run is configured for -- so on the ordinary flag-off gate
+	they exercise the text path only, and the class cell is where the two paths
+	have now diverged twice.
+
+	The divergence this pins: the IR ``__class__'' read for a METHOD-LOCAL
+	class emitted ``self ___dunderClassCell___: #'___cell_C___''' alone, which
+	answers the cell's OWNER, where the text wraps it in
+	``___grailClassCellValue___'' -- what the cell HOLDS -- whenever the cell
+	is rebindable.  The two agree for every class whose cell is never written,
+	so the defect was invisible until a shape that WRITES it became IR-eligible
+	(#1048), and then ``nonlocal __class__; __class__ = 'shadowed' '' read back
+	the class.  A flag-off run cannot see any of that.
+
+	Every key, not just the cell ones: a wrapper applied in the wrong place
+	would break the ordinary reads instead, and those are the rest of this
+	table."
+
+	| irProbe bad keys |
+	(importlib @env1:modules) removeKey: #'stal_ir' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'stal_ir'.
+	irRegistrySnapshot ifNil: [
+		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
+	importlib ___irCodegenForce___: true.
+	importlib ___irStatsReset___.
+	irProbe := ((importlib
+		loadModuleFromPath: (importlib grailDir
+			, '/tests/python/super_two_arg_local.py')
+		name: 'stal_ir') @env1:___pyAttrLoad___: #'report')
+			@env1:___pyCallValue___: #() kw: nil.
+	keys := (probe @env1:keys) asArray.
+	bad := OrderedCollection new.
+	keys do: [:k | | got want |
+		got := (irProbe @env1:__getitem__: k) asString.
+		want := (probe @env1:__getitem__: k) asString.
+		got = want ifFalse: [bad add: k asString , ': IR ' , got , ' vs text ' , want]].
+	self assert: bad isEmpty
+		description: 'the IR arm disagrees with the text arm: '
+			, bad asArray printString.
+	importlib ___irCodegenSupported___ ifTrue: [
+		self assert: (importlib ___irStats___ at: #fallbacks) = 0
+			description: 'IR fell back to text, so the comparison above proves '
+				, 'nothing: fallbacks = '
+				, (importlib ___irStats___ at: #fallbacks) printString]
 %

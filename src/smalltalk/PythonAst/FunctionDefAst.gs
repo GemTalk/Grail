@@ -512,12 +512,23 @@ printSmalltalkOn: aStream
 		firstWithDefault := positionals size - numDefaults + 1.
 		aStream nextPut: $[; lf; nextPutAll: '| '.
 		1 to: numDefaults do: [:i |
-			aStream nextPutAll: '___default_'; nextPutAll: (positionals at: firstWithDefault + i - 1) name; nextPutAll: '___ '].
+			aStream
+				nextPutAll: '___default_';
+				nextPutAll: (self transportParamName: (positionals at: firstWithDefault + i - 1) name);
+				nextPutAll: '___ '].
 		hasKwonly ifTrue: [aStream nextPutAll: '___kwdefaults___ '].
 		aStream nextPutAll: '|'; lf.
 		1 to: numDefaults do: [:i |
 			| pname |
-			pname := (positionals at: firstWithDefault + i - 1) name.
+			"THE TRANSPORT NAME, not the Python one.  printPositionalUnpackingOn:
+			is handed transported names and spells the read as
+			``___default_<transported>___'', so declaring the temp under the
+			Python name left the two disagreeing -- invisibly, because the two
+			are the SAME string for every name that is not a Smalltalk reserved
+			word.  ``def handler(x, self=self)'' declared ___default_self___ and
+			read ___default__self___, and the whole method then failed to
+			compile."
+			pname := self transportParamName: (positionals at: firstWithDefault + i - 1) name.
 			aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___ := '.
 			(args defaults at: i) printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf].
@@ -2523,19 +2534,6 @@ ___docString___
 		ifFalse: [nil]
 %
 
-category: 'Grail-code generation'
-method: FunctionDefAst
-emitStringLiteral: aString on: aStream
-	"Emit aString as a Smalltalk string literal, doubling embedded
-	single quotes."
-
-	aStream nextPut: $'.
-	aString do: [:ch |
-		ch = $' ifTrue: [aStream nextPut: $'].
-		aStream nextPut: ch].
-	aStream nextPut: $'
-%
-
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 isSimplePositionalArgs
@@ -4350,8 +4348,14 @@ ___irMethodModeReason___
 		super where CPython raises.  SuperPreconditionErrorsTestCase >>
 		testAZeroParameterMethodIsCallableThroughItsClass pins that message, and
 		caught this exact widening."
-		(self ___irNestedBodyMentions___: #'super' in: body)
-			ifTrue: [^ #'method:noSelfSuper'].
+		"NO LONGER REFUSED.  ___emitIRSuperZeroOn___: now emits CPython's
+		precondition 1 -- ``Super @env1:___noArguments___'', the text's own
+		arm -- when the enclosing def declares no positional parameter, which
+		is a COMPILE-TIME fact.  This refusal was standing in for that
+		missing arm: without it the shape reached the proxy and answered a
+		working super where CPython raises, which is what
+		SuperPreconditionErrorsTestCase >>
+		testAZeroParameterMethodIsCallableThroughItsClass caught."
 		^ self ___irMethodModeTailReason___].
 	"The receiver is the def's FIRST parameter whatever it is called (cut 60):
 	ClassDefAst switches selfParameterName to it per def, the text's
@@ -4451,14 +4455,58 @@ ___irMethodLocalClassMethodReason___
 
 	A class statement INSIDE such a method was a fourth refusal
 	(``method:methodLocalNestedClass'', an undocumented exit through
-	___irSubtreeContainsClassDef___).  Removing the guard was the whole of that
-	cut: the inner class takes the same compiled-text transport it takes
-	anywhere else, so the refusal was turning away a shape that already worked."
+	___irSubtreeContainsClassDef___).  #983 removed it on the grounds that the
+	inner class takes the same compiled-text transport it takes anywhere else.
+
+	IT DID NOT, QUITE.  That transport compiles its helper onto ``aBuilder
+	targetClass'', which for this shape is the stand-in a shared build carries
+	instead of a class -- so the helper landed where the method would never
+	look and test.test_datetime raised a DNU under the flag (bisected to #983,
+	cut note 128).  The transport now DEFERS the helper for a shared build and
+	files it per class in ___irRegenerateOn___:, which is what makes the claim
+	true rather than nearly true."
 
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
 	(self ___irEnclosingClassIsMethodLocal___
-		or: [self ___irEnclosingClassChainIsStatic___]) ifFalse: [^ #'method:classInClassBody'].
+		or: [self ___irEnclosingClassChainIsStatic___
+		or: [self ___irEnclosingClassChainReachesADef___]]) ifFalse: [^ #'method:classInClassBody'].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEnclosingClassChainReachesADef___
+	"Does this def's enclosing class chain reach a DEF or LAMBDA, passing
+	through class bodies on the way?
+
+	The two tests beside this one are the ends of a range and leave a gap
+	in the middle.  ___irEnclosingClassIsMethodLocal___ answers false at
+	the FIRST enclosing class, so it sees only a class written DIRECTLY in
+	a def; ___irEnclosingClassChainIsStatic___ answers false at the first
+	def, so it sees only a chain that reaches module scope.  A class in a
+	class body that is itself inside a def is NEITHER, and that is the one
+	row `method:classInClassBody' had left -- the comment on
+	___irEnclosingClassChainIsStatic___ names it exactly (69 -> 1, ``the
+	surviving 1 is a class in a class body that is itself inside a def'').
+	It is test_traceback's A.B.X.__str__.
+
+	ITS LIFETIME IS THE METHOD-LOCAL ONE, which is what settles which of
+	the two neighbours it should join.  The outer class is built once per
+	CALL and its body builds the inner ones, so every class on the chain
+	shares that lifetime -- the property cut 79's machinery turns on."
+
+	| node cls |
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ false].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ true].
+		node := node parent].
+	^ false
 %
 
 category: 'Grail-IR Codegen'
@@ -4499,13 +4547,25 @@ method: FunctionDefAst
 ___irSubtreeContainsClassDef___
 	"Does a ``class'' statement appear anywhere beneath this def's body?
 
-	Only cut 79's shared build asks, and it is a refusal there rather than a
-	shape it cannot emit: cut 76 carries a class statement inside an IR method by
-	compiling a helper method onto ``aBuilder targetClass'', and for a SHARED
-	build that class is the stand-in PythonInstance -- so the helper would be
-	installed on the root of every Python class, once per such statement.  A
-	class inside a method of a method-local class therefore stays on text, which
-	is where it is today."
+	NO SENDERS.  #983 removed the one call (the
+	``method:methodLocalNestedClass'' refusal in
+	___irMethodLocalClassMethodReason___) and this predicate was left behind.
+
+	What it used to guard, and why the guard was not enough: cut 76 carries a
+	class statement inside an IR method by compiling a helper onto ``aBuilder
+	targetClass'', and for a SHARED build (cut 79) that class is importlib's
+	stand-in rather than any class the method runs on.  Removing the refusal
+	therefore let the helper be installed where it would never be found, and
+	the send -- whose selector is derived from the class's source offset, so it
+	is identical on every regeneration -- raised
+	``a MyTzInfo class does not understand #'___irClassDef_91742_MyStr___'''
+	on test.test_datetime under the flag.
+
+	That is fixed at the install site rather than restored here:
+	PyMethodIRBuilder>>___irNoteClassHelper___:source: defers the helper for a
+	shared build and ___irRegenerateOn___: files it once per class.  The
+	predicate is kept because it is the cheapest way to find this shape in a
+	tree, not because anything refuses on it."
 
 	^ self ___irNodeContainsClassDef___: body
 %
@@ -5169,6 +5229,14 @@ generateModuleMethodSourceOn: aStream
 			assignedNames := (IdentitySet withAll: assignedNames)
 				addAll: self deletedNamesInSubtree;
 				yourself].
+		"...and a nested scope's ``nonlocal x; x = v'' binds OUR x for exactly
+		the same reason the del does.  Only the del half was covered, so a
+		nested WRITE to a parameter emitted a store against the method argument
+		and failed to compile."
+		self nonlocalDeclaredNamesInSubtree isEmpty ifFalse: [
+			assignedNames := (IdentitySet withAll: assignedNames)
+				addAll: self nonlocalDeclaredNamesInSubtree;
+				yourself].
 		needsTemp := paramNames collect: [:each |
 			canOptimise
 				ifTrue: [self paramNeedsTemp: each assigned: assignedNames instVars: instVarNames]
@@ -5625,6 +5693,60 @@ deletedNamesInSubtree
 		deletedNamesCache := IdentitySet new.
 		self collectDeletedNamesFrom: body into: deletedNamesCache].
 	^ deletedNamesCache
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+nonlocalDeclaredNamesInSubtree
+	"The IdentitySet of names declared ``nonlocal'' anywhere beneath this def.
+
+	The ASSIGNMENT twin of deletedNamesInSubtree, and it exists for the same
+	reason: a nested scope's write through such a declaration binds THIS def's
+	name, so if that name is a parameter it needs a writable temp -- a
+	Smalltalk method argument is read-only.  Only the ``del'' half was covered,
+	so
+
+	    def f(x):
+	        def inner():
+	            nonlocal x
+	            x += 1
+
+	compiled ``x := ...'' against the method argument and died with
+	CompileError 1001, ``expected an assignable variable'', taking the whole
+	module down.  A nested CLASS body declaring it does the same thing
+	(test_scope's testNonLocalClass shape).
+
+	OVER-APPROXIMATES deliberately, as its twin does: a nested def with its own
+	unrelated local of the same name also counts.  The cost is one needless
+	temp copy; a miss is a module that will not compile.
+
+	Not memoised -- asked once per def while its source is generated, where the
+	del walk is asked once per name READ."
+
+	| names |
+	names := IdentitySet new.
+	self collectNonlocalNamesFrom: body into: names.
+	^ names
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+collectNonlocalNamesFrom: node into: aSet
+	"Recursive walk collecting ``nonlocal'' declared names into aSet.
+	The twin of collectDeletedNamesFrom:into:, and traverses identically."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self collectNonlocalNamesFrom: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	(node isKindOf: NonlocalAst) ifTrue: [
+		node names ifNotNil: [:ns |
+			ns do: [:n | aSet add: n asSymbol]]].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self collectNonlocalNamesFrom: (node instVarAt: i) into: aSet]].
 %
 
 category: 'Grail-Module Method Compilation'
@@ -7040,7 +7162,20 @@ ___irNestedDefReasonUnguarded___: localNames
 
 	A bare mention of the NAME with no call (``callable(super)'') is likewise
 	not a rewrite and is left to the ordinary value path."
-	(self ___irNestedBodyBareSuperCall___: body) ifTrue: [^ #'nestedDef:super'].
+	"A bare ``super()'' in a nested def refuses only when it would need the
+	RUN-TIME machinery.  When this def declares no positional parameter the
+	answer is CPython's precondition 1, which is a COMPILE-TIME fact --
+	``Super @env1:___noArguments___'', the arm ___emitIRSuperZeroOn___: now
+	emits -- so there is nothing left to refuse.  That is the whole of
+	test_super's ``def f(): super()'' (test_obscure_super_errors).
+
+	Narrowed CONSERVATIVELY: a def nested deeper inside this one has its own
+	parameter list and its own answer, and this walk cannot tell whose bare
+	super it found, so the presence of any further def or lambda keeps the
+	refusal."
+	((self ___irNestedBodyBareSuperCall___: body)
+		and: [self ___irBodyHoldsANestedScope___: body])
+			ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].
@@ -7946,6 +8081,28 @@ ___irNestedBodyMentions___: aSymbol in: node
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			(self ___irNestedBodyMentions___: aSymbol in: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irBodyHoldsANestedScope___: node
+	"Is there a def or a lambda anywhere under node?  Asked only to keep
+	___irNestedDefReason___'s bare-super narrowing conservative: a deeper
+	scope has its own parameter list, so a bare super found by the walk
+	might belong to it rather than to this def, and the walk does not say
+	which."
+
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irBodyHoldsANestedScope___: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+		ifTrue: [^ true].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irBodyHoldsANestedScope___: (node instVarAt: i)) ifTrue: [^ true]]].
 	^ false
 %
 

@@ -171,6 +171,81 @@ def a_loop_variable_is_written():
     return out
 
 
+# --------------------------------------------------------------------------
+# ``del'' IS THAT WRITE WITH NOTHING IN IT.  ``nonlocal x; del x'' inside a
+# method of a method-local class unbinds the ENCLOSING function's local, so a
+# later read there raises UnboundLocalError -- and a later WRITE rebinds it as
+# if nothing had happened.
+#
+# Grail could not spell this on either path.  The name has no temp in the
+# method, so the emit produced ``x := nil'' against an undeclared identifier,
+# the method failed to COMPILE, and the class-build fallback installed a stub
+# that raised ``codegen gap'' when it was called.  The corpus site
+# (test_dict's ClearOnDelete.__del__) never reads the name afterwards, so it
+# never noticed.
+# --------------------------------------------------------------------------
+
+
+def a_delete_unbinds_the_enclosing_local():
+    class C:
+        def clear(self):
+            nonlocal x
+            del x
+
+    x = 'outer'
+    C().clear()
+    try:
+        return x
+    except UnboundLocalError:
+        return 'UnboundLocalError'
+    except NameError:
+        return 'NameError'
+
+
+def a_delete_then_a_write_rebinds():
+    class C:
+        def clear(self):
+            nonlocal x
+            del x
+
+        def setit(self):
+            nonlocal x
+            x = 'rebound'
+
+    x = 'outer'
+    c = C()
+    c.clear()
+    c.setit()
+    return x
+
+
+def a_delete_leaves_a_second_name_alone():
+    # The setter cells are per name; deleting one must not empty the other.
+    class C:
+        def clear(self):
+            nonlocal x
+            del x
+
+    x = 'gone'
+    y = 'kept'
+    C().clear()
+    return y
+
+
+def a_delete_inside_a_method_that_also_reads():
+    # The method reads the cell BEFORE deleting it, so the read path and the
+    # delete path are exercised against the same binding in one method.
+    class C:
+        def take(self):
+            nonlocal x
+            seen = x
+            del x
+            return seen
+
+    x = 'taken'
+    return C().take()
+
+
 r = {
     'read_and_write': read_and_write(),
     'write_only': write_only(),
@@ -180,6 +255,10 @@ r = {
     'a_read_only_capture_still_works': a_read_only_capture_still_works(),
     'read_and_write_the_same_name': read_and_write_the_same_name(),
     'a_loop_variable_is_written': a_loop_variable_is_written(),
+    'a_delete_unbinds_the_enclosing_local': a_delete_unbinds_the_enclosing_local(),
+    'a_delete_then_a_write_rebinds': a_delete_then_a_write_rebinds(),
+    'a_delete_leaves_a_second_name_alone': a_delete_leaves_a_second_name_alone(),
+    'a_delete_inside_a_method_that_also_reads': a_delete_inside_a_method_that_also_reads(),
 }
 
 
@@ -192,6 +271,10 @@ EXPECTED = {
     'a_read_only_capture_still_works': 101,
     'read_and_write_the_same_name': [10, 10],
     'a_loop_variable_is_written': [11, 12],
+    'a_delete_unbinds_the_enclosing_local': 'UnboundLocalError',
+    'a_delete_then_a_write_rebinds': 'rebound',
+    'a_delete_leaves_a_second_name_alone': 'kept',
+    'a_delete_inside_a_method_that_also_reads': 'taken',
 }
 
 

@@ -488,7 +488,47 @@ ___exceptStarClauseSpanLiteralFor___: aHandler
 	scanning for it is both shorter and right: the clause runs to the last
 	non-blank line indented past the keyword."
 
-	| spanLine spanCol spanEndLine src ws lineCount probe text |
+	| spanLine spanCol spanEndLine src ws fields text |
+	fields := self ___exceptStarClauseSpanFieldsFor___: aHandler.
+	spanLine := fields at: 1.
+	spanCol := fields at: 2.
+	spanEndLine := fields at: 3.
+	src := aHandler sourceString.
+	ws := WriteStream on: String new.
+	ws nextPutAll: '#('; print: spanLine; space; print: spanCol; space;
+		print: spanEndLine; space;
+		print: (fields at: 4); space.
+	text := [aHandler sourceLine] on: Error do: [:ex | nil].
+	text isNil
+		ifTrue: [ws nextPutAll: 'nil']
+		ifFalse: [
+			ws nextPut: $'.
+			text do: [:c | c == $' ifTrue: [ws nextPut: $']. ws nextPut: c].
+			ws nextPut: $'].
+	ws nextPut: $).
+	^ ws contents
+%
+
+category: 'Grail-code generation'
+method: TryAst
+___exceptStarClauseSpanFieldsFor___: aHandler
+	"``{ beginLine. beginColumn. endLine. endColumn }'' for a whole ``except*''
+	CLAUSE -- the keyword through the last character of its body.
+
+	SHARED BY BOTH PATHS deliberately.  The text turns it into the PEP 657
+	literal it stores in ___curPos___; the IR path turns it into a position-map
+	entry.  They have to agree, because CPython blames the clause for a re-raise
+	out of it and both paths are answering the same question -- so the scan
+	lives here once rather than being reproduced on the IR side.
+
+	The extent is read from the SOURCE TEXT rather than from the AST, because
+	neither node that looks like it should know it does.  The handler's own
+	endPosition is wherever the clause is followed by, which is the next line
+	for a def at column 0 and the next STATEMENT for anything indented; and its
+	last statement's is no better -- a bare ``raise'' answers one character past
+	its START.  Where an indented block ends is a fact about the text."
+
+	| spanLine spanCol spanEndLine src lineCount probe text |
 	spanLine := aHandler beginLine.
 	spanCol := aHandler column.
 	src := aHandler sourceString.
@@ -501,20 +541,42 @@ ___exceptStarClauseSpanLiteralFor___: aHandler
 				or: [(self ___indentOf___: text) > spanCol]]] whileTrue: [
 		text trimSeparators isEmpty ifFalse: [spanEndLine := probe].
 		probe := probe + 1].
-	ws := WriteStream on: String new.
-	ws nextPutAll: '#('; print: spanLine; space; print: spanCol; space;
-		print: spanEndLine; space;
-		print: (self ___rstrippedSizeOf___:
-			(self ___sourceLineAt___: spanEndLine in: src)); space.
-	text := [aHandler sourceLine] on: Error do: [:ex | nil].
-	text isNil
-		ifTrue: [ws nextPutAll: 'nil']
-		ifFalse: [
-			ws nextPut: $'.
-			text do: [:c | c == $' ifTrue: [ws nextPut: $']. ws nextPut: c].
-			ws nextPut: $'].
-	ws nextPut: $).
-	^ ws contents
+	^ { spanLine. spanCol. spanEndLine.
+		self ___rstrippedSizeOf___: (self ___sourceLineAt___: spanEndLine in: src) }
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___irExceptStarClauseSpanFor___: aHandler
+	"The clause span as a POSITION-MAP ENTRY --
+	``{ beginOffset. endOffset. beginLine. beginColumn. endLine. endColumn }'',
+	module offsets -- which is the IR spelling of the literal the text stores in
+	___curPos___ for the same frame.
+
+	A single offset cannot say this.  ``at:'' stamps a point, and the reader
+	then answers with the smallest RECORDED range containing it; no node has the
+	clause's extent (that is what ___exceptStarClauseSpanFieldsFor___: exists to
+	work out), so the point fell inside the enclosing def's range and the frame
+	rendered the whole def.  An explicit entry is the narrowest range containing
+	the stamp, so it wins the innermost contest and draws the two lines CPython
+	draws."
+
+	"``lastLine'' rather than ``endLine'': AbstractLocationNode already declares
+	 instance variables of that name, and a temp shadowing one is CompileError
+	 1030 rather than a shadow."
+	| fields srcText lastLine lastCol lineStart |
+	fields := self ___exceptStarClauseSpanFieldsFor___: aHandler.
+	srcText := aHandler sourceString.
+	lastLine := fields at: 3.
+	lastCol := fields at: 4.
+	"The offset of the character BEFORE the line's first, the way
+	 ___sourceLineAt___:in: walks to it; the line then starts at lineStart + 1
+	 and its last code character is at lineStart + lastCol."
+	lineStart := 0.
+	lastLine - 1 timesRepeat: [
+		lineStart := srcText indexOf: Character lf startingAt: lineStart + 1].
+	^ { aHandler beginPosition. lineStart + lastCol.
+		fields at: 1. fields at: 2. lastLine. lastCol }
 %
 
 category: 'Grail-code generation'
@@ -962,16 +1024,26 @@ ___emitIRExceptStarPartOn___: aBuilder
 	remainder is consumed clause by clause and the final merge needs the whole
 	group back to project onto.
 
-	WHAT THIS EMIT DOES NOT REPRODUCE, and why that is right rather than a gap:
-	the text stores ___curPos___ between the two finish calls so its backwards
-	text scan blames the ``except*'' CLAUSE for a re-raise and the try body for
-	an unhandled remainder.  That is a TEXT mechanism -- the IR path passes
-	``pos: nil'' to ___pushCatchingFrame___ throughout and derives every line
-	from the captured ips instead.  The builder stamp before the second send is
-	the same distinction expressed the way this path expresses positions, and
-	it is applied under the text's own condition (one clause, in a function),
-	because CPython's answer is which clause actually re-raised and a single
-	stamp cannot name a different one per run."
+	THE TWO FINISH CALLS ARE BLAMED ON DIFFERENT SOURCE, and reproducing that is
+	this emit's one subtlety.  The text stores a literal PEP 657 span in
+	___curPos___ between them, so its backwards scan blames the ``except*''
+	CLAUSE for a re-raise and the try body for an unhandled remainder.
+
+	THIS USED TO SAY THE IR PATH OWED NOTHING HERE -- that ``pos: nil'' plus
+	lines derived from the captured ips was the same distinction expressed
+	differently.  It is not, and test_traceback's
+	test_exception_group_wrapped_naked is the measurement: deriving from an ip
+	works for a real frame, and the frame in question is a SYNTHESISED catching
+	frame, which has no ip of its own.  The builder stamp alone is a POINT, and
+	the reader answers a point with the smallest recorded RANGE containing it --
+	the enclosing def's, since no node carries the clause's extent.  So the
+	stamp now comes with an explicit position-map entry
+	(___irExceptStarClauseSpanFor___:, over the scan the text's literal uses),
+	which is the narrowest range containing it.
+
+	Still under the text's own condition (one clause, in a function), because
+	CPython's answer is which clause actually re-raised -- a runtime fact that
+	one compile-time span cannot name per run."
 
 	| hasElse protectedBlk handlerBlk nest |
 	hasElse := orelse notNil and: [orelse size > 0].
@@ -1048,7 +1120,16 @@ ___emitIRExceptStarBodyOn___: aBuilder ex: exLeaf rest: restLeaf norm: normLeaf 
 	"The position the two finish calls are blamed at differs, and this is the
 	IR spelling of that difference -- see ___emitIRExceptStarPartOn___:."
 	(CallAst functionBeingCompiled notNil and: [handlers size = 1]) ifTrue: [
-		aBuilder at: (handlers at: 1) beginPosition].
+		| span |
+		"Guarded the way every other reader of the column accessors is: a node
+		 that cannot say where it is costs PRECISION here, not the compile."
+		span := [self ___irExceptStarClauseSpanFor___: (handlers at: 1)]
+			on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+		span isNil
+			ifTrue: [aBuilder at: (handlers at: 1) beginPosition]
+			ifFalse: [aBuilder at: (handlers at: 1) beginPosition span: span]].
 	aBuilder add: (aBuilder
 		send: #'___exceptStarFinishReraised___:original:reraised:normalized:' to: beg
 		with: { aBuilder var: restLeaf. aBuilder var: exLeaf.

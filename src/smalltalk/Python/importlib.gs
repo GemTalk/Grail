@@ -785,6 +785,42 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			] on: CompileWarning do: [:ex | ex resume].
 		].
 
+		"The module's own docstring, as a class-side method, so ``mod.__doc__''
+		answers the module's docstring instead of inheriting Object's through the
+		superclass chain -- measured before this, EVERY module answered ``The base
+		class of the class hierarchy...''.
+
+		ON THE CLASS, not stamped straight onto an instance, because the AST only
+		exists on a COLD load: a warm bind reuses a committed module class and
+		never parses.  Compiled here, the docstring rides the class, and
+		registerModule:with: copies it onto whichever instance a session ends up
+		with -- so both paths agree.  Same reason ___methodCodeTable___ above sits
+		on the class.
+
+		EMITTED ONLY WHEN THERE IS ONE.  A module without a docstring leaves the
+		selector absent, which module >> __doc__ reads as None -- CPython's answer
+		for that case, and distinguishable from a docstring that is the empty
+		string."
+		(moduleAst ___docString___) ifNotNil: [:docNode |
+			| docSrc |
+			docSrc := WriteStream on: String new.
+			docSrc nextPutAll: '___pyModuleDoc___'; nextPutAll: lf.
+			docSrc nextPutAll: '	^ '.
+			moduleAst emitStringLiteral: docNode value on: docSrc.
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
+					nextPutAll: 'classmethod: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: docSrc contents on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
+			].
+			[moduleClass class compileMethod: docSrc contents
+				dictionaries: sl
+				category: 'Grail-Python Metadata'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
+		].
+
 		"Generate the module body as Smalltalk source for the initialize method.
 		Top-level defs emit BoundMethod assignments; calls emit self-sends."
 		stream := PrettyWriteStream on: Unicode7 new.
@@ -907,7 +943,7 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	    reuses the identity like a dropped one
 	    (docs/Class_Attribute_Single_Home.md)."
 
-	| key reg existing minted |
+	| key reg existing minted supersedesLive |
 	key := aModuleName asString , '.' , aName asString.
 	reg := self ___canonicalClassRegistry___.
 	existing := reg at: key otherwise: nil.
@@ -932,10 +968,462 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 				import.  Idempotent, like the registration itself."
 				self ___registerSubclass___: existing of: aParent.
 				^ existing].
+	"A DECLARED BASE CHANGE is refused (docs/Schema_Evolution_Design.md cut 4).
+	Re-minting strands every persisted instance on the old class, silently:
+	the new class is a different object, the registry forgets the old one, and
+	only the developer can say what should happen to the data.  Three
+	conditions, each measured on 2026-09-21, and the last two are what keep
+	ordinary code importable:
+
+	  - the registry holds a live class for this key that this load has not
+	    already bound, and its superclass is not the one the body just named
+	    (the two tests above, which otherwise fall through to the re-mint);
+	  - the NEW parent is a CANONICAL class.  A computed base is not: ``class
+	    Point(namedtuple('Point', 'x y'))'' builds a fresh local class every
+	    time the body runs, so its subclass has always re-minted on every
+	    rebuild and must keep doing so;
+	  - the new parent was not itself re-minted earlier in this session.  A
+	    re-mint CASCADES -- a subclass of a re-minted class sees a different
+	    parent object under the same name at its own class statement, which is
+	    not a base change of its own.  Measured: Mid(namedtuple(...)) re-mints,
+	    and then Leaf(Mid) does too.
+
+	Measured with the refusal off over the whole CPython corpus: ZERO classes
+	reach this branch with a live previous class, because a module whose source
+	is unchanged binds warm and never enters the build path. The refusal
+	therefore fires on an EDIT, in the session of the developer who made it."
+	(((existing isKindOf: Behavior) and: [(minted includes: key) not])
+		and: [existing superclass ~~ aParent
+		and: [(self ___canonicalClassKnown___: aParent)
+		and: [(self ___remintedThisSession___ includes: aParent) not
+		and: [(self ___baseChangeAllowed___: key) not]]]]) ifTrue: [
+			^ ImportError @env1:___signal___:
+				'class ' , key , ' changed its bases (' ,
+				(existing superclass isNil ifTrue: ['nil'] ifFalse: [existing superclass name asString]) ,
+				' -> ' , (aParent isNil ifTrue: ['nil'] ifFalse: [aParent name asString]) ,
+				'), and its instances are stored against the old class: run ' ,
+				'gemdb.schema.rebase(''' , key , ''') under a clean transaction, or restore the base'].
+	"A re-mint that supersedes a LIVE class is recorded, so the subclasses
+	whose class statements follow are not refused for inheriting the change."
+	supersedesLive := (existing isKindOf: Behavior) and: [(minted includes: key) not].
 	existing := aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames.
+	supersedesLive ifTrue: [self ___remintedThisSession___ add: existing].
 	reg at: key put: existing.
 	minted add: key.
 	^ existing
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___baseChangeAllowed___: aKey
+	"Whether the base-change refusal is lifted for this registry key -- set for
+	the duration of the reload gemdb.schema.rebase drives, and cleared in its
+	ensure: block.  A session-local flag, because the allowance belongs to the
+	one operation that knows what to do with the stranded instances."
+
+	| allowed |
+	allowed := SessionTemps current at: #'GrailBaseChangeAllowed' otherwise: nil.
+	allowed isNil ifTrue: [^ false].
+	^ allowed includes: aKey asString
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___allowBaseChange___: aKey while: aBlock
+	"Run aBlock with the base-change refusal lifted for aKey."
+
+	| st allowed |
+	st := SessionTemps current.
+	allowed := st at: #'GrailBaseChangeAllowed' otherwise: nil.
+	allowed isNil ifTrue: [allowed := Set new. st at: #'GrailBaseChangeAllowed' put: allowed].
+	allowed add: aKey asString.
+	^ aBlock ensure: [allowed remove: aKey asString ifAbsent: []]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRebaseClass___: aKey
+	"Perform the base change the import refuses (docs/Schema_Evolution_Design.md
+	cut 4), moving the data across instead of stranding it.  aKey is
+	``module.Class''.  Answers { classes rebased . instances moved . instances
+	left behind }.  Runs in the CALLER's transaction and does not commit; the
+	Python wrapper owns that, and needs a clean one because the instance
+	enumeration is a repository scan.
+
+	Order, and every step of it is load-bearing:
+
+	  1. capture the instances of the old class AND of every class below it,
+	     each as a NAME -> value map read through its old layout.  Positions
+	     are about to be recomputed from a different parent, so a position is
+	     not a durable way to carry a value across this operation;
+	  2. reload the module with the refusal lifted for this key, which re-mints
+	     the class against its new bases and rebuilds its subclasses;
+	  3. changeClassTo: each captured instance -- the kernel operation Grail
+	     already uses for ``obj.__class__ = C'' (object >> ___pyChangeClassOf:to:),
+	     legal here because every PythonInstance-rooted class has the same
+	     shape: indexable, no named instVars -- and write each captured value
+	     at the position the NEW layout gives its name.
+
+	An instance whose class the reload did NOT re-mint -- a subclass defined in
+	another module, which this reload never reached -- is counted and left
+	alone.  Importing that module is what rebuilds it, and it will be refused
+	in its turn with its own key."
+
+	| reg oldCls modName captured |
+	reg := self ___canonicalClassRegistry___.
+	oldCls := reg at: aKey asString otherwise: nil.
+	(oldCls isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'no canonical class named ' , aKey asString , ' (the name is module.Class)'].
+	modName := self ___grailModulePartOf___: aKey asString.
+	captured := self ___grailCaptureSubtreeOf___: oldCls.
+	self ___allowBaseChange___: aKey asString while: [
+		self ___grailReloadModule___: modName].
+	(reg at: aKey asString otherwise: nil) == oldCls ifTrue: [
+		^ ValueError @env1:___signal___:
+			'the rebuild left ' , aKey asString , ' on the same class: its bases did not change'].
+	^ self ___grailRestoreCaptured___: captured module: modName mapping: nil
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRenameCanonicalClass___: aKey to: newName
+	"Rename a persistent class, moving its instances onto the class the new
+	source defines.  aKey is ``module.OldName'', newName the bare new name.
+	Answers { classes moved . instances moved . instances left behind }.
+
+	Why this is a COMMAND and not a declaration, unlike the attribute rename of
+	cut 3: GemStone 4.0 refuses to rename a class at all -- measured,
+	``illegal attempt to change name of a Module'' from Behavior >> name: with
+	either a String or a Symbol -- so the class object cannot simply be re-keyed
+	and reused under the new name the way a slot position is relabelled.  The
+	new class has to be MINTED by the new source and every instance moved onto
+	it, which is a repository scan that must own its transaction.  That is the
+	same line the rest of this design draws: a declaration does what is free, a
+	command does what writes instances.
+
+	The module is reloaded with the vanished-class refusal lifted -- the old
+	name really has gone from the source, and this is the operation that says
+	what becomes of its data."
+
+	| reg oldCls modName newKey captured result |
+	reg := self ___canonicalClassRegistry___.
+	oldCls := reg at: aKey asString otherwise: nil.
+	(oldCls isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'no canonical class named ' , aKey asString , ' (the name is module.Class)'].
+	(newName asString includes: $.) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'the new name is a bare class name, not a dotted one: ' , newName asString].
+	modName := self ___grailModulePartOf___: aKey asString.
+	newKey := modName , '.' , newName asString.
+	captured := self ___grailCaptureSubtreeOf___: oldCls.
+	self ___allowVanished___: modName while: [
+		self ___grailReloadModule___: modName].
+	((reg at: newKey otherwise: nil) isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'the reloaded source does not define ' , newKey ,
+			': add the renamed class to the module first, then run this'].
+	result := self ___grailRestoreCaptured___: captured module: modName
+		mapping: (Array with: (Array with: oldCls with: (reg at: newKey))).
+	"The old name leaves the schema, or the very next import of this source is
+	refused again for a class whose data has already moved."
+	reg removeKey: aKey asString ifAbsent: [].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		[bag removeAll: (Array with: oldCls)] on: Error do: [:e | e return: nil]].
+	^ result
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailDropCanonicalClass___: aKey
+	"Forget a class the source no longer defines -- but only once nothing is
+	stored against it.  aKey is ``module.Class''.  Answers { classes removed .
+	instances found }.  Runs in the caller's transaction; gemdb.schema.drop_class
+	owns the clean-transaction check and the commit.
+
+	REFUSES while any instance of the class or of its subtree exists, and says
+	how many.  Grail cannot make an object unreachable -- an instance held in
+	gemdb.root, or by another instance, is live data whatever the source says
+	-- so a class with instances stays in the schema until the developer
+	unlinks them.  That is the whole answer to ``references to objects the user
+	does not have in their schema'': the class cannot leave while data still
+	points at it.
+
+	The count comes from a repository SCAN, so it is what the repository holds,
+	not what is reachable: an instance unlinked in an earlier transaction is
+	still there until a garbage collection reclaims it, and the refusal says so
+	rather than looking like a bug.  Reachability is not a question GemStone
+	can answer more cheaply than by collecting."
+
+	| reg cls tree byClass found |
+	reg := self ___canonicalClassRegistry___.
+	cls := reg at: aKey asString otherwise: nil.
+	(cls isKindOf: Behavior) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'no canonical class named ' , aKey asString , ' (the name is module.Class)'].
+	tree := cls @env1:___grailSlotSubtree___.
+	byClass := cls @env1:___grailInstancesOf___: tree inMemoryOnly: false.
+	found := 0.
+	tree do: [:c | found := found + (byClass at: c otherwise: #()) size].
+	found > 0 ifTrue: [
+		^ ValueError @env1:___signal___:
+			aKey asString , ' still has ' , found printString ,
+			' instance(s) in the repository, so it cannot leave the schema: ' ,
+			'unlink them (gemdb.root, and whatever else holds them), and if you already ' ,
+			'have, run gemdb.admin.garbage_collect() -- this counts what the repository ' ,
+			'HOLDS, and an unlinked object stays there until it is collected'].
+	reg removeKey: aKey asString ifAbsent: [].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]].
+	^ Array with: 1 with: 0
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailModulePartOf___: aKey
+	"``module.Class'' -> ``module''.  String has no lastIndexOf: here."
+
+	| dot |
+	dot := 0.
+	1 to: aKey size do: [:i | ((aKey at: i) == $.) ifTrue: [dot := i]].
+	dot = 0 ifTrue: [
+		^ ValueError @env1:___signal___:
+			'this takes the dotted name, module.Class, not ' , aKey].
+	^ aKey copyFrom: 1 to: dot - 1
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailReloadModule___: modName
+	"Re-execute a deployed module's body from its source, for the schema
+	commands.  The module instance comes from the canonical registry (it need
+	not be in this session's sys.modules), and reload: is the supported
+	re-execution path."
+
+	| mod |
+	mod := self ___canonicalModules___ at: modName otherwise: nil.
+	mod isNil ifTrue: [mod := (self @env1:modules) at: modName asSymbol otherwise: nil].
+	mod isNil ifTrue: [
+		^ ValueError @env1:___signal___:
+			'module ' , modName , ' is not deployed in this repository, so there is nothing to rebuild it from'].
+	^ (importlib @env1:instance) @env1:reload: mod
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailCaptureSubtreeOf___: aClass
+	"Every instance of aClass and of the classes below it, each as
+	{ instance . its class . { name . value } pairs } read through the layout
+	that class has RIGHT NOW.  Taken before a rebuild, because positions are
+	about to be recomputed and a position is not a durable way to carry a value
+	across one.  A hole contributes nothing."
+
+	| tree byClass captured |
+	tree := aClass @env1:___grailSlotSubtree___.
+	byClass := aClass @env1:___grailInstancesOf___: tree inMemoryOnly: false.
+	captured := OrderedCollection new.
+	tree do: [:c | | lay |
+		lay := (c class whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) isNil
+			ifTrue: [#()]
+			ifFalse: [(c perform: #'___pySlotLayout___' env: 1) asArray].
+		(byClass at: c otherwise: #()) do: [:inst | | vals |
+			vals := OrderedCollection new.
+			lay doWithIndex: [:n :p |
+				((n asString first ~~ $~) and: [p <= inst _basicSize and: [(inst at: p) notNil]])
+					ifTrue: [vals add: (Array with: n asSymbol with: (inst at: p))]].
+			captured add: (Array with: inst with: c with: vals)]].
+	^ captured
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRestoreCaptured___: captured module: modName mapping: explicitOrNil
+	"Put each captured instance on the class that replaced its own and write
+	its values back BY NAME, at whatever position the new layout gives them.
+	explicitOrNil is a list of { oldClass . newClass } pairs for a class whose
+	NAME changed, which cannot be matched by name; everything else is matched
+	by ___grailRebaseTargetFor___:module:.
+
+	A name the new layout has no position for becomes a per-object attribute
+	rather than being dropped -- the same rule a name the class stops assigning
+	follows (cut 1), so a rebuild that also removes an attribute loses nothing
+	silently.  Answers { classes . instances moved . instances left behind }."
+
+	| moved leftBehind classesTouched |
+	moved := 0. leftBehind := 0.
+	classesTouched := IdentitySet new.
+	captured do: [:triple | | inst oldC target lay |
+		inst := triple at: 1.
+		oldC := triple at: 2.
+		target := nil.
+		explicitOrNil isNil ifFalse: [
+			explicitOrNil do: [:pair | (pair at: 1) == oldC ifTrue: [target := pair at: 2]]].
+		target isNil ifTrue: [
+			target := self ___grailRebaseTargetFor___: oldC module: modName].
+		target isNil
+			ifTrue: [leftBehind := leftBehind + 1]
+			ifFalse: [
+				classesTouched add: oldC.
+				inst changeClassTo: target.
+				inst size: 0.
+				lay := (target class whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) isNil
+					ifTrue: [#()]
+					ifFalse: [(target perform: #'___pySlotLayout___' env: 1) asArray].
+				(triple at: 3) do: [:pair | | n v pos |
+					n := pair at: 1. v := pair at: 2.
+					pos := lay indexOf: n.
+					pos > 0
+						ifTrue: [
+							pos > inst _basicSize ifTrue: [inst size: pos].
+							inst at: pos put: v]
+						ifFalse: [inst dynamicInstVarAt: n put: v]].
+				moved := moved + 1]].
+	^ Array with: classesTouched size with: moved with: leftBehind
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRebaseTargetFor___: anOldClass module: modName
+	"The class the reload re-minted in place of anOldClass, or nil when the
+	reload did not reach it (a subclass from another module).  Matched by
+	registry KEY: the old class is gone from the registry, so the key it held
+	is the one whose class now has the same Python name and belongs to the
+	rebuilt module."
+
+	| reg nm prefix hit |
+	reg := self ___canonicalClassRegistry___.
+	nm := anOldClass name asString.
+	prefix := modName asString , '.'.
+	hit := nil.
+	reg keysAndValuesDo: [:k :v | | ks |
+		ks := k asString.
+		((ks size > prefix size and: [(ks copyFrom: 1 to: prefix size) = prefix])
+			and: [(ks copyFrom: prefix size + 1 to: ks size) = nm
+			and: [(v isKindOf: Behavior) and: [v ~~ anOldClass]]]) ifTrue: [hit := v]].
+	^ hit
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___vanishedAllowed___: aModuleName
+	"Whether the vanished-class refusal is lifted for this module -- set for the
+	duration of the reload gemdb.schema.rename_class drives, and cleared in its
+	ensure: block.  The class really has gone from the source; the operation
+	that lifted this is the one moving its instances to the class that replaced
+	it."
+
+	| allowed |
+	allowed := SessionTemps current at: #'GrailVanishedAllowed' otherwise: nil.
+	allowed isNil ifTrue: [^ false].
+	^ allowed includes: aModuleName asString
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___allowVanished___: aModuleName while: aBlock
+	"Run aBlock with the vanished-class refusal lifted for aModuleName."
+
+	| st allowed |
+	st := SessionTemps current.
+	allowed := st at: #'GrailVanishedAllowed' otherwise: nil.
+	allowed isNil ifTrue: [allowed := Set new. st at: #'GrailVanishedAllowed' put: allowed].
+	allowed add: aModuleName asString.
+	^ aBlock ensure: [allowed remove: aModuleName asString ifAbsent: []]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRefuseVanishedClasses___: aModuleName
+	"A class the PREVIOUS deployment of this module defined, and the body that
+	has just run does not, is refused (docs/Schema_Evolution_Design.md cut 4).
+	Forgetting it silently leaves its instances in the repository -- reachable
+	through whatever holds them, named by nothing in the source -- which is the
+	``references to objects the user does not have in their schema'' this cut
+	exists to prevent.
+
+	Detection needs no scan.  The registry is keyed ``module.Class'' and
+	___mintedThisLoad___: holds every key THIS body execution bound (the
+	identity-reuse branch registers as well as the mint branch, which is why it
+	can be read this way).  A key carrying this module's prefix that the run
+	did not bind names a class the source no longer defines.
+
+	The answer is gemdb.schema.drop_class, which succeeds at once when nothing
+	is stored against the class and refuses with a count when something is --
+	or a module-level __renamed__, when the class was renamed rather than
+	removed.
+
+	Skipped when the run bound NOTHING: that is indistinguishable from a
+	registry that is not in play at all, and refusing there would fail an
+	import over a question this method cannot answer."
+
+	| prefix minted reg vanished names |
+	(self ___vanishedAllowed___: aModuleName) ifTrue: [^ self].
+	minted := self ___mintedThisLoad___: aModuleName.
+	minted isEmpty ifTrue: [^ self].
+	prefix := aModuleName asString , '.'.
+	reg := self ___canonicalClassRegistry___.
+	vanished := OrderedCollection new.
+	reg keysAndValuesDo: [:k :v | | ks tail |
+		ks := k asString.
+		(ks size > prefix size and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
+			"The tail must be a bare class name.  A registry key is
+			``<module>.<Class>'', and a SUBMODULE's keys carry this module's
+			name as their prefix too -- ``collections.abc.Awaitable'' begins
+			with ``collections.'' -- so without this every class of every
+			submodule looked as though the package had stopped defining it.
+			Measured the hard way: 103 corpus regressions and 113 suite
+			errors, all of them this one line."
+			tail := ks copyFrom: prefix size + 1 to: ks size.
+			(((tail includes: $.) not and: [(minted includes: ks) not])
+				and: [v isKindOf: Behavior]) ifTrue: [vanished add: ks]]].
+	vanished isEmpty ifTrue: [^ self].
+	names := ''.
+	vanished asSortedCollection do: [:n |
+		names := names isEmpty ifTrue: [n] ifFalse: [names , ', ' , n]].
+	^ ImportError @env1:___signal___:
+		'module ' , aModuleName asString , ' no longer defines ' , names ,
+		', and instances of it stay in the repository: run ' ,
+		'gemdb.schema.drop_class for each (it refuses while any instance exists), ' ,
+		'or gemdb.schema.rename_class when the class was renamed rather than removed'
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___remintedThisSession___
+	"Classes this session RE-MINTED -- minted while a live previous class of the
+	same registry key existed.  Read by the base-change refusal in
+	___canonicalSubclassOf:name:module:instVarNames:classInstVarNames:, because
+	a re-mint cascades: a subclass of a re-minted class sees a different parent
+	object under the same name and is not changing its own bases.
+
+	Session-local and never reset. Suppressing a later refusal about a
+	descendant of a class whose instances are already stranded is the safe
+	direction; a false refusal would make a module un-importable."
+
+	| st set |
+	st := SessionTemps current.
+	set := st at: #'GrailRemintedClasses' otherwise: nil.
+	set isNil ifTrue: [
+		set := IdentitySet new.
+		st at: #'GrailRemintedClasses' put: set].
+	^ set
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalClassKnown___: aClass
+	"Whether aClass is a canonical class -- a module-level class the registry
+	backs, registered by ___canonicalClassRegister___. A class built inside a
+	FUNCTION is not (collections.namedtuple's is the one that matters), and a
+	subclass of one re-mints on every rebuild by construction, so the
+	base-change refusal must not fire for it."
+
+	| set |
+	aClass isNil ifTrue: [^ false].
+	set := UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil.
+	set isNil ifTrue: [^ false].
+	^ set includes: aClass
 %
 
 category: 'Grail-Canonical Classes'
@@ -2092,7 +2580,7 @@ loadModuleFromPath: pathString name: moduleName
 	sys.modules; the Smalltalk class is only consulted to allocate
 	new instances when the cache is missed."
 
-	| moduleAst moduleClass moduleInstance nameParts packageName
+	| moduleAst moduleClass moduleInstance
 	  srcString srcHash hashes hashState stateMap |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
@@ -2227,30 +2715,36 @@ loadModuleFromPath: pathString name: moduleName
 	the module defines.  See FlaskScaffoldingTestCase >>
 	testModuleSingletonReturnsSameClass for the regression fixture."
 	moduleClass ___adoptInstance___: moduleInstance.
-	nameParts := $. split: moduleName.
-	packageName := (nameParts size > 1)
-		ifTrue: ['.' @env1:join: (nameParts copyFrom: 1 to: nameParts size - 1)]
-		ifFalse: [None].
-	moduleInstance
-		@env1:__name__: moduleName;
-		@env1:__package__: packageName.
-	"Record the source path so importlib.reload(module) can re-read it.  Stored
-	in the Phase-A dynamic-instVar store, so Python ``module.__file__'' reads it
-	through ___pyAttrLoad___ like any other module attribute."
-	moduleInstance dynamicInstVarAt: #'__file__' put: pathString.
-	"PEP 302 ``__loader__''.  Not cosmetic: linecache resolves a filename that
-	is not on disk through the CALLING module's loader (get_source), which is
-	how CPython shows source for a frame whose co_filename does not name a
-	readable file.  With no __loader__ that lookup silently answered [] --
-	see PySourceFileLoader."
-	moduleInstance dynamicInstVarAt: #'__loader__'
-		put: (PySourceFileLoader name: moduleName path: pathString).
-	(pathString endsWith: '__init__.py') ifTrue: [
-		| dirPath |
-		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.
-		moduleInstance @env1:__path__: { dirPath }.
-		moduleInstance @env1:__package__: moduleName.
-	].
+	"PEP 451: build the SPEC, then derive every machinery attribute from it.
+
+	``__name__'', ``__package__'', ``__file__'', ``__loader__'' and ``__path__''
+	used to be written here one by one, each deciding for itself -- and
+	``__spec__'' was never set at all, so ``mod.__spec__'' was None on every
+	module in the corpus.  They now all come out of ___initModuleAttrsFrom___:on:,
+	which is CPython's _init_module_attrs, so the spec and the mirrors cannot
+	disagree.
+
+	A PACKAGE IS ONE INPUT, not a second pass: an ``__init__.py'' path makes the
+	containing directory the spec's submodule_search_locations, and parent,
+	__path__ and __package__ all follow from that single field.  Before, the
+	package case re-wrote __package__ after the fact, which is exactly the kind
+	of second write that lets a mirror drift.
+
+	``__loader__'' stays a PySourceFileLoader and is not cosmetic: linecache
+	resolves a filename that is not on disk through the CALLING module's loader
+	(get_source), which is how CPython shows source for a frame whose
+	co_filename does not name a readable file.  With no __loader__ that lookup
+	silently answered []."
+	moduleInstance @env0:dynamicInstVarAt: #'__spec__' put: nil.
+	self
+		___initModuleAttrsFrom___: (self
+			___specFor___: moduleName
+			origin: pathString
+			loader: (PySourceFileLoader name: moduleName path: pathString)
+			locations: ((pathString endsWith: '__init__.py')
+				ifTrue: [{ pathString copyFrom: 1 to: pathString size - '/__init__.py' size }]
+				ifFalse: [nil]))
+		on: moduleInstance.
 	"Register BEFORE execution so circular imports resolve"
 	self registerModule: moduleName with: moduleInstance.
 	"Execute the module body.  Registration happens BEFORE the body runs (so
@@ -2288,6 +2782,9 @@ loadModuleFromPath: pathString name: moduleName
 			self ___irPurgeDefTableForModule___: moduleName].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
+	"A class the PREVIOUS deployment defined and this body does not is refused --
+	after the body, because only a completed run knows what it defined."
+	self ___grailRefuseVanishedClasses___: moduleName.
 	self ___syncPersistentState___: moduleInstance.
 	"Session tier (par.10.4): runs on the cold path too, so a module author
 	gets ONE uniform per-session hook regardless of how the session
@@ -2555,6 +3052,264 @@ ___forgetHashStateFor___: aName
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___stampDocstringOn___: aModule
+	"Copy aModule's compiled docstring onto the instance, so ``mod.__doc__''
+	and ``mod.__dict__['__doc__']'' both answer it -- CPython's import machinery
+	puts the docstring IN the namespace, not merely within reach of a getattr.
+
+	DOES NOT OVERWRITE an entry already there.  Two cases depend on that: a
+	module body that assigns ``__doc__ = ...'' itself, and types.ModuleType,
+	whose constructor stores None before this runs.  Both must keep what they
+	set.
+
+	Silent when the class carries no ``___pyModuleDoc___'' -- a module with no
+	docstring compiles no such method, and the absence is the answer.  module >>
+	__doc__ turns it into None there, which is what CPython reports."
+
+	| cls |
+	aModule isNil ifTrue: [^ self].
+	[(aModule @env0:includesKey: #'__doc__') ifTrue: [^ self].
+	cls := aModule @env0:class.
+	"environmentId: 1, not canUnderstand:.  The method is compiled in env 1, so
+	an env-0 canUnderstand: answers false for a selector that is plainly there
+	-- the same trap BoundMethod >> ___methodCodeTableFor___: documents for
+	___methodCodeTable___, and walked into again here: every module reported a
+	nil docstring while the compiled method sat on the class."
+	(cls @env0:class @env0:whichClassIncludesSelector: #'___pyModuleDoc___' environmentId: 1)
+		isNil ifTrue: [^ self].
+	aModule @env0:at: #'__doc__' put: (cls @env0:perform: #'___pyModuleDoc___' env: 1)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___specFor___: aName origin: anOrigin loader: aLoader locations: locsOrNil
+	"Build the ModuleSpec for a module Grail is about to create.
+
+	ONE CONSTRUCTION POINT for every loader path, so ``__file__'',
+	``__loader__'', ``__package__'' and ``__path__'' are all computed from the
+	same four inputs rather than each path deciding for itself.  That was the
+	state before: four creation sites each wrote the mirrors independently, and
+	``__spec__'' was None everywhere."
+
+	^ (Python @env0:at: #'ModuleSpec')
+		@env0:name: aName
+		loader: aLoader
+		origin: anOrigin
+		submoduleSearchLocations: locsOrNil
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___initModuleAttrsFrom___: aSpec on: aModule
+	"CPython's importlib._bootstrap._init_module_attrs: set ``__spec__'' and
+	DERIVE the legacy mirrors from it.
+
+	THE SPEC IS THE SOURCE.  CPython assigns ``module.__file__ = spec.origin'',
+	``__loader__ = spec.loader'', ``__package__ = spec.parent'' and
+	``__path__ = spec.submodule_search_locations'', and warns when a mirror
+	disagrees with the spec (``__package__ != __spec__.parent'' is a
+	DeprecationWarning there).  Routing every creation path through here is what
+	makes the two incapable of drifting in Grail.
+
+	__file__ IS KEYED ON has_location, exactly as CPython keys it: a namespace
+	package and a built-in have no location, and must NOT get a __file__ naming
+	one.  A namespace package is the case that makes this non-obvious -- it gets
+	``__file__ = None'' rather than no __file__ at all, which is what
+	___loadNamespacePackage___: already did by hand.
+
+	__cached__ IS DELIBERATELY NOT SET.  CPython sets it only ``if spec.cached
+	is not None'', and Grail's spec.cached is always None because Grail writes
+	no bytecode -- see ModuleSpec's class comment and module >> __cached__."
+
+	| none origin locs |
+	none := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None'.
+	aModule @env0:dynamicInstVarAt: #'__spec__' put: aSpec.
+	aModule @env1:__name__: (self @env1:___specAttr___: aSpec named: #'name').
+	aModule @env1:__package__: (self @env1:___specAttr___: aSpec named: #'parent').
+	aModule @env0:dynamicInstVarAt: #'__loader__'
+		put: (self @env1:___specAttr___: aSpec named: #'loader').
+	origin := self @env1:___specAttr___: aSpec named: #'origin'.
+	(self @env1:___specAttr___: aSpec named: #'has_location') == true
+		ifTrue: [aModule @env0:dynamicInstVarAt: #'__file__' put: origin]
+		ifFalse: [aModule @env0:dynamicInstVarAt: #'__file__' put: none].
+	locs := self @env1:___specAttr___: aSpec named: #'submodule_search_locations'.
+	(locs notNil and: [locs ~~ none]) ifTrue: [
+		aModule @env1:__path__: (self @env1:___stringListFrom___: locs)].
+	^ aModule
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___moduleSpecClass___
+	"The one ModuleSpec class.
+
+	importlib/__init__.py used to define its own four-slot ``_ModuleSpec'' and
+	alias it as ``ModuleSpec''.  That cannot stand beside a Smalltalk one: two
+	classes with one name means ``isinstance(spec, ModuleSpec)'' is false for a
+	spec the machinery built, and third-party code does ask.  The .py now takes
+	its ``_ModuleSpec'' from here, so ``from importlib.machinery import
+	ModuleSpec'', ``importlib.util.spec_from_file_location'' and ``mod.__spec__''
+	are all the same type."
+
+	^ Python @env0:at: #'ModuleSpec'
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___stampBuiltinSpecOn___: aModule
+	"Give a module that has no ``__spec__'' the built-in shape, so every module
+	in sys.modules carries a real spec rather than None.
+
+	FOR SMALLTALK-IMPLEMENTED MODULES (json, string, sys, ...).  They are not
+	produced by any loader -- ``module class >> instance'' mints the singleton
+	directly -- so none of the four spec-driven creation paths sees them, and
+	before this they kept ``__spec__ = None''.  CPython's own C modules are the
+	same kind of thing and DO get a spec: measured on 3.14.6, ``sys.__spec__''
+	is ``ModuleSpec(name='sys', loader=BuiltinImporter, origin='built-in')''.
+	So ``built-in'' here is the correct description, not a placeholder.
+
+	THE MIRRORS ARE LEFT ALONE, unlike ___initModuleAttrsFrom___:on:.  That is
+	the one place in this change where the spec does NOT drive them, and the
+	reason is that for a hand-written Smalltalk module there is no loader that
+	knows better than the module does: the module IS the source, and the spec
+	describes it.  Re-deriving ``__package__'' from the spec's parent here would
+	rewrite a None the module chose into '' on the strength of a spec this
+	method just invented.
+
+	Never overwrites: a module that already has a spec came from a loader path
+	that knew its real origin."
+
+	| nm |
+	aModule isNil ifTrue: [^ self].
+	[(aModule @env0:dynamicInstVarAt: #'__spec__') isNil ifFalse: [^ self].
+	nm := [aModule @env1:__name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	nm isNil ifTrue: [^ self].
+	aModule @env0:dynamicInstVarAt: #'__spec__'
+		put: (self ___specFor___: nm origin: 'built-in' loader: nil locations: nil)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___builtinsModuleOrNil___
+	"The builtins MODULE instance from sys.modules, or nil before it is
+	registered.  Distinct from the PyModuleDict VIEW of it that
+	___stampBuiltinsOn___: writes: the two are never identical, which is
+	exactly what made an earlier guard comparing against the view stamp the
+	builtins module along with every other."
+
+	^ [(self @env1:modules) @env0:at: #'builtins' otherwise: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___stampBuiltinsOn___: aModule
+	"Write ``__builtins__'' into aModule's namespace, as CPython's import
+	machinery does for every module it makes.
+
+	THE VALUE IS THE BUILTINS MODULE'S DICT, not the module.  CPython uses the
+	module only in __main__, and Grail is never __main__: everything here
+	arrives through the import machinery.  It is the one memoised PyModuleDict
+	view, so ``mod.__builtins__ is builtins.__dict__'' and every function's
+	``__builtins__'' are the identical object -- test_funcattrs asserts that
+	chain with assertIs, so a fresh view per module would not do.
+
+	A DYNAMIC INSTVAR, which is what puts the name in ``mod.__dict__'' and
+	makes ``dir(mod)'' and ``vars(mod)'' list it the way CPython does.  The
+	alternative -- computing it on a miss in module >> ___globalAt___:otherwise:
+	-- serves every READ just as well and costs nothing per module, but leaves
+	the name invisible to anything that iterates a module namespace.  Storing
+	it is a few dozen slots per session (a heavy session holds ~71 modules),
+	measured, which is not worth a visible divergence from CPython.
+
+	ORDERING IS WHY THIS CAN ANSWER NIL.  The builtins module is itself
+	registered through here, and the earliest bootstrap modules register before
+	it exists, so the view is genuinely unavailable for a handful of them.
+	Those are left unstamped rather than stamped with a placeholder, and
+	module >> ___globalAt___:otherwise: still answers the name for them by
+	computing it -- so a read never depends on this having run, and only
+	``is it listed in __dict__'' does.  Stamping the builtins module itself is
+	skipped for the same reason CPython does not make that entry meaningful
+	here: it would be the module's own dict, and building it during its own
+	registration is the recursion this guard avoids."
+
+	| view |
+	aModule isNil ifTrue: [^ self].
+	"Already stamped, or the module bound its own -- either way, do not
+	overwrite: a module that rebinds ``__builtins__'' (how a sandbox restricts
+	one) must keep its binding."
+	(aModule @env0:dynamicInstVarAt: #'__builtins__') isNil ifFalse: [^ self].
+	view := [(Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	view isNil ifTrue: [^ self].
+	"THE BUILTINS MODULE ITSELF IS EXCLUDED, because CPython excludes it:
+	measured on 3.14.6, ``'__builtins__' in builtins.__dict__'' is False.
+	Compare against the MODULE, not against ``view'' -- the view is the
+	PyModuleDict wrapper and is never identical to the module, so an earlier
+	``view == aModule'' guard silently matched nothing and stamped builtins
+	along with everything else."
+	self ___builtinsModuleOrNil___ == aModule ifTrue: [^ self].
+	aModule @env0:dynamicInstVarAt: #'__builtins__' put: view.
+	"FIRST TIME THE VIEW EXISTS, CATCH UP THE BOOTSTRAP SET.  Measured before
+	this sweep: 30 of 55 modules in a session carried the name, and the 25
+	missing were exactly the ones a bare session starts with (json, enum,
+	datetime, ...) -- they had registered before the builtins module did, so
+	the guard above skipped them and nothing ever came back.  Triggering off
+	the view becoming available rather than off the builtins module's own
+	registration keeps this correct however builtins gets into sys.modules."
+	(SessionTemps current @env0:at: #GrailModuleBuiltinsSwept otherwise: nil) isNil ifTrue: [
+		SessionTemps current @env0:at: #GrailModuleBuiltinsSwept put: true.
+		self ___sweepBuiltinsIntoLoadedModules___: view].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___sweepBuiltinsIntoLoadedModules___: aView
+	"Stamp ``__builtins__'' onto every module already in sys.modules that does
+	not have it.  Runs once per session, the moment the builtins view first
+	becomes available -- see ___stampBuiltinsOn___:.
+
+	Errors are swallowed per module rather than allowed to escape: this runs
+	inside registerModule:with:, on the import path, and a module whose
+	namespace cannot take the slot must not take an import down with it.  The
+	computed fallback in module >> ___globalAt___:otherwise: still answers the
+	name for anything missed here, so the worst case is the old behaviour for
+	that module rather than a failure."
+
+	| mods selfMod |
+	mods := [self @env1:modules] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mods isNil ifTrue: [^ self].
+	"Excluded for the same reason as in ___stampBuiltinsOn___:, and by the
+	same identity -- the MODULE, not the view."
+	selfMod := self ___builtinsModuleOrNil___.
+	[mods valuesDo: [:m |
+		[(m notNil
+			and: [(m @env0:isKindOf: module)
+			and: [m ~~ selfMod
+			and: [(m @env0:dynamicInstVarAt: #'__builtins__') isNil]]])
+				ifTrue: [m @env0:dynamicInstVarAt: #'__builtins__' put: aView].
+		"``__spec__'' rides the same sweep, for the same reason and with the
+		same measurement behind it: the bootstrap SEED never passes through
+		registerModule:with: in a fresh session, so stamping only there left 25
+		of 35 modules with __spec__ None -- json, string, sys and every other
+		seeded Smalltalk-implemented module among them.
+
+		THE SWEEP COVERS THE SEED, NOT EVERY SMALLTALK MODULE, and reading it as
+		the latter is what hid a second gap.  It fires ONCE, at the first
+		registration of the session; a module minted afterwards by lookupModule:'s
+		symbol-list fallback is past it, and used to be stored bare.  That is
+		fixed at the store instead -- widening the sweep could not have fixed it,
+		because there is no later moment at which the sweep runs."
+		[m notNil ifTrue: [self ___stampBuiltinSpecOn___: m]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 registerModule: aName with: aModule
 	"Register a module in sys.modules and synchronise parent/child
 	attribute bindings.  CPython's import machinery sets ``pkg.sub``
@@ -2577,6 +3332,31 @@ registerModule: aName with: aModule
 	"By NAME: sys.modules keys are genuine ``str'' (PySysModules.gs), which is
 	what lets Python code that reads them back call str methods on them."
 	mods at: aName put: aModule.
+	"``__builtins__'' -- CPython's import machinery writes it into every
+	module's namespace, and this is the one place every Grail entry point that
+	makes a module passes through, so stamping here is what makes the name
+	present on all of them rather than on the subset a particular loader
+	happens to cover.  See ___stampBuiltinsOn___: for the ordering guard and
+	why the value is the builtins module's DICT."
+	self ___stampBuiltinsOn___: aModule.
+	"``__spec__'' for a module that arrived without one -- see
+	___stampBuiltinSpecOn___:."
+	self ___stampBuiltinSpecOn___: aModule.
+	"The importlib module's namespace carries the ModuleSpec CLASS, because its
+	.py facade no longer defines one -- see ___moduleSpecClass___ and the note in
+	importlib/__init__.py.  Stamped BEFORE the body runs, which registration
+	already guarantees -- the comment further down this method says so in as
+	many words -- so the bare names resolve while that body is executing."
+	(aName = 'importlib') ifTrue: [
+		[aModule @env0:at: #'_ModuleSpec' put: self ___moduleSpecClass___.
+		aModule @env0:at: #'ModuleSpec' put: self ___moduleSpecClass___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	"``__doc__'' -- the module's own docstring, copied from the class-side
+	``___pyModuleDoc___'' the compiler stamped at build time.  Here, beside the
+	__builtins__ stamp and for the same reason: this is the one point EVERY path
+	reaches, including the warm bind that reuses a committed class and never
+	parses a line."
+	self ___stampDocstringOn___: aModule.
 	"Provenance for the liveness check every registry read makes
 	(___moduleEntryIsLive___:).  Record the class only when PythonModules
 	names it AT REGISTRATION -- that is what makes the later identity compare
@@ -5202,11 +5982,20 @@ ___loadNamespacePackage___: moduleName portions: dirs
 	its internal structure initialized -- see loadModuleFromPath:name:."
 	moduleInstance := moduleClass @env0:new.
 	moduleClass @env0:___adoptInstance___: moduleInstance.
-	moduleInstance
-		@env1:__name__: moduleName;
-		@env1:__package__: moduleName;
-		@env1:__path__: dirs.
-	moduleInstance @env0:dynamicInstVarAt: #'__file__' put: None.
+	"PEP 451, through the same seam as every other loader path.  A namespace
+	package is the case that makes has_location worth having: origin is None, so
+	the spec reports has_location false and ___initModuleAttrsFrom___:on: sets
+	``__file__'' to None -- present and None, not absent.  CPython does exactly
+	that, and its own comment calls it a hack for consistency (bpo-32305).
+	``__package__'' and ``__path__'' come from submodule_search_locations rather
+	than being written separately."
+	self
+		@env0:___initModuleAttrsFrom___: (self
+			@env0:___specFor___: moduleName
+			origin: nil
+			loader: nil
+			locations: dirs)
+		on: moduleInstance.
 	self @env0:registerModule: moduleName with: moduleInstance.
 	^ moduleInstance
 %
@@ -5782,13 +6571,19 @@ ___emptyModuleNamed___: aName spec: aSpec loader: aLoader
 		ifFalse: [parts @env0:size @env0:< 2
 			ifTrue: ['']
 			ifFalse: ['.' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1)]].
-	inst @env1:__name__: aName.
-	inst @env1:__package__: pkgName.
-	inst @env0:dynamicInstVarAt: #'__file__'
-		put: ((origin == nil or: [origin == None]) ifTrue: [None] ifFalse: [origin]).
-	inst @env0:dynamicInstVarAt: #'__loader__' put: aLoader.
-	inst @env0:dynamicInstVarAt: #'__spec__' put: aSpec.
-	isPkg ifTrue: [inst @env1:__path__: (self ___stringListFrom___: locs)].
+	"Through the shared seam, so a meta_path loader's module gets its attributes
+	by the same rule as every other.  THE FINDER'S OWN SPEC IS KEPT -- it is
+	whatever the finder answered and may be a CPython ModuleSpec, Grail's, or a
+	duck-typed stand-in, and replacing it with one of ours would discard fields
+	the finder set (loader_state especially).  So this derives the mirrors FROM
+	that spec rather than building a new one."
+	self @env0:___initModuleAttrsFrom___: aSpec on: inst.
+	"__package__ is recomputed here rather than taken from the spec's ``parent'':
+	a duck-typed finder spec need not have one, and pkgName above is derived
+	from the same is-it-a-package test CPython uses.  Only overwritten when the
+	spec did not supply a parent."
+	(self ___specAttr___: aSpec named: #'parent') isNil
+		ifTrue: [inst @env1:__package__: pkgName].
 	^ inst
 %
 
@@ -5858,7 +6653,24 @@ lookupModule: aName
 		and: [(cls isKindOf: Behavior)
 		and: [cls @env0:inheritsFrom: module]]) ifTrue: [
 		inst := cls @env0:___instance___.
-		self modules @env0:at: aName put: inst.
+		"THROUGH registerModule:with:, not a bare ``at:put:''.  This is the
+		SECOND way a module reaches sys.modules, and until #1068's follow-up it
+		was the one that silently skipped every stamp: ``__builtins__'' and
+		``__spec__'' are written by ___stampBuiltinsOn___: / ___stampBuiltinSpecOn___:,
+		which are reached ONLY from registerModule:with: and from the one-time
+		sweep -- and the sweep fires at the FIRST registration of the session,
+		so anything minted here afterwards was never stamped and nothing ever
+		came back for it.  Measured before the change, in a session that had
+		already imported a .py module: grail, os.path and _weakref each carried
+		``__spec__'' None and no ``__builtins__''.  (That, not ``created outside
+		the import machinery'', is why the __spec__ coverage count fell short.)
+
+		Registration also gives these modules the parent/child binding the bare
+		store never did -- ``os.path'' on ``os'' -- which happened to be masked
+		because os's own initialize binds ``path'' by hand.
+
+		Env 0: this method is env 1 and registerModule:with: is env 0."
+		self @env0:registerModule: aName with: inst.
 		^ inst].
 	^ nil
 %
@@ -5922,26 +6734,74 @@ ___import__: positional kw: kwargs
 	__import__(name, globals=None, locals=None, fromlist=(), level=0) -> module"
 
 	| name globals locals fromlist level absoluteName moduleInstance filePath result nameParts isDotted prefix parentFilePath |
+	"EVERY KEYWORD READ IS DEFAULTED.  These were bare ``__getitem__'' sends,
+	which raise KeyError for a key that is not there -- so supplying ANY
+	keyword without supplying all of them failed on the first one missing:
+
+	    __import__('sys', fromlist=['path'])    KeyError: 'globals'
+
+	It survived because callers in the corpus pass either no keywords at all
+	(kwargs nil, which the ifNil: branch covers) or the whole set.  A partial
+	call is the ordinary spelling, and ``__import__(name='sys')'' is the
+	smallest one."
 	name := positional @env0:at: 1.
 	globals := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'globals'] ifNil: [None]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'globals' _: None] ifNil: [None]].
 	locals := (positional __len__ @env0:> 2)
 		ifTrue: [positional @env0:at: 3]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'locals'] ifNil: [None]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'locals' _: None] ifNil: [None]].
 	fromlist := (positional __len__ @env0:> 3)
 		ifTrue: [positional @env0:at: 4]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'fromlist'] ifNil: [{}]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'fromlist' _: {}] ifNil: [{}]].
 	level := (positional __len__ @env0:> 4)
 		ifTrue: [positional @env0:at: 5]
-		ifFalse: [kwargs ifNotNil: [kwargs __getitem__: 'level'] ifNil: [0]].
+		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'level' _: 0] ifNil: [0]].
 
 	"Handle relative imports"
 	absoluteName := (level @env0:> 0)
 		ifTrue: [
-			| package |
-			package := globals ifNotNil: [globals __getitem__: '__package__'] ifNil: [None].
+			| package spec |
+			"CPython's _calc___package__, including the WARNING it emits before
+			giving up.  Three sources, in order: __package__, then __spec__'s
+			parent, and only then a fallback to __name__ -- and the fallback is
+			warned about (bpo-37409, ImportWarning) because it is a guess that
+			can silently resolve to the wrong package.
+
+			Grail read __package__ alone and raised immediately, so a relative
+			import from a namespace with only __spec__ failed where CPython
+			succeeds, and the documented warning never appeared.
+			test_builtin test_import asserts the warning AND the ImportError
+			together, which is what says the fallback was attempted rather than
+			skipped."
+			package := globals ifNotNil: [globals @env1:get: '__package__' _: None] ifNil: [None].
+			spec := globals ifNotNil: [globals @env1:get: '__spec__' _: None] ifNil: [None].
+			(package == None @env0:and: [spec ~~ None @env0:and: [spec ~~ nil]]) ifTrue: [
+				package := [spec @env1:___pyAttrLoad___: #'parent']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: None]].
 			package == None ifTrue: [
+				((Python @env0:at: #warnings) @env0:___instance___)
+					@env1:warn: 'can''t resolve package from __spec__ or __package__, '
+						@env0:, 'falling back on __name__ and __path__'
+					_: (Python @env0:at: #'ImportWarning').
+				package := globals
+					ifNotNil: [globals @env1:get: '__name__' _: None]
+					ifNil: [None].
+				"No __path__ means __name__ names a MODULE rather than a package,
+				so the package is everything before its last dot -- which for a
+				top-level module is nothing at all, and that is the case that
+				then raises."
+				((package ~~ None @env0:and: [package ~~ nil])
+					@env0:and: [(globals @env1:__contains__: '__path__') @env0:not]) ifTrue: [
+						| idx |
+						idx := 0.
+						1 @env0:to: package @env0:asString @env0:size do: [:i |
+							((package @env0:asString @env0:at: i) @env0:== $.) ifTrue: [idx := i]].
+						package := idx @env0:= 0
+							ifTrue: ['']
+							ifFalse: [package @env0:asString @env0:copyFrom: 1 to: idx @env0:- 1]]].
+			((package == None) @env0:or: [package @env0:isNil
+				@env0:or: [package @env0:asString @env0:isEmpty]]) ifTrue: [
 				ImportError ___signal___: 'attempted relative import with no known parent package'
 			].
 			self ___resolve_name___: name package: package level: level
@@ -6531,7 +7391,7 @@ ___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: classSideBo
 	    functionBeingCompiled, the scope stack, classBeingCompiled and
 	    selfParameterName are the ones the text path would have used."
 
-	| temps id table ids builder |
+	| id table ids builder |
 	CallAst classDefIsModuleScope == false ifTrue: [
 		builder := [| b |
 				b := aDef ___irBuilderFor___: (classSideBool
@@ -6553,9 +7413,8 @@ ___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: classSideBo
 		``compiled'' means defs whose IR was built, and this one is built once
 		however many classes it goes on to serve."
 		self ___irNoteCompiled___: aDef].
-	temps := SessionTemps current.
-	id := (temps at: #'___grailIRDefCounter___' otherwise: 0) + 1.
-	temps at: #'___grailIRDefCounter___' put: id.
+	id := self ___irDefIdFor___: aDef inClass: aClassDefAst name: aName
+		classSide: classSideBool.
 	builder isNil
 		ifTrue: [
 			table := self ___irDefTable___.
@@ -6568,6 +7427,57 @@ ___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: classSideBo
 	source table is keyed by, and only here is the method-mode context live."
 	ids at: aName asString put: { id. aDef ___irSelector___ }.
 	^ id
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irDefIdFor___: aDef inClass: aClassDefAst name: aName classSide: classSideBool
+	"The registration id for a class-body def: DETERMINISTIC and
+	SELF-IDENTIFYING -- ``<module>|<classOffset>|<defOffset>|<name>|<side>''.
+
+	THIS USED TO BE A PER-SESSION COUNTER, and that is a silent corruption
+	rather than a stale-lookup problem.  The id is compiled as a LITERAL into
+	the class-build statement (ClassDefAst>>emitIRInstallOn:id:...), and that
+	statement lives in a method which is COMMITTED -- a deployed framework, a
+	canonical module -- and re-run in later sessions, and on every CALL of the
+	enclosing def for a method-local class.  A later session's counter restarts
+	at 1, so the embedded id names whatever that session happened to register
+	in that position.
+
+	___irInstallDef:on:or:category: guards the id being UNKNOWN (it falls back
+	to the text source, which is safe and documented).  It cannot guard the id
+	being KNOWN AND WRONG, and a selector check would not catch it either:
+	measured on shard 5, `chain' took `SeqIter''s ___init__:kw: because both
+	defs are named __init__.  The trace read
+
+	    id=939 class=chain shared=__bool__       src=___init__:...
+	    id=940 class=chain shared=___init__:kw:  src=__iter__
+
+	-- the whole sequence shifted by one against the deployed code's ids.
+
+	A deterministic key removes the failure mode rather than detecting it: an
+	id from another session names the SAME logical def, so it either finds that
+	def (correct) or finds nothing (the safe text fallback).
+
+	A DOIT KEEPS THE COUNTER.  With no module name there is nothing to make the
+	key unique -- two exec'd strings can both hold a class at offset 10 with an
+	__init__ at offset 30 -- and a doit's method is not committed, so the
+	cross-session recycling this fixes cannot reach it."
+
+	| mod ws temps n |
+	mod := [CallAst moduleNameBeingCompiled] on: Error do: [:ex | ex return: nil].
+	(mod isNil or: [mod asString isEmpty]) ifTrue: [
+		temps := SessionTemps current.
+		n := (temps at: #'___grailIRDefCounter___' otherwise: 0) + 1.
+		temps at: #'___grailIRDefCounter___' put: n.
+		^ ('<doit>|' , n printString) asSymbol].
+	ws := WriteStream on: String new.
+	ws nextPutAll: mod asString;
+		nextPut: $|; nextPutAll: (aClassDefAst beginPosition ifNil: [0]) printString;
+		nextPut: $|; nextPutAll: (aDef beginPosition ifNil: [0]) printString;
+		nextPut: $|; nextPutAll: aName asString;
+		nextPut: $|; nextPutAll: (classSideBool ifTrue: ['c'] ifFalse: ['i']).
+	^ ws contents asSymbol
 %
 
 category: 'Grail-Class Compilation'
@@ -7035,7 +7945,7 @@ pythonClasses
 	would shrink the answer, which is the opposite of what an honest coverage
 	count needs.  Use ``pythonClassCensus'' for the per-source breakdown."
 
-	| out todo reg mi canon |
+	| out todo reg mi |
 	out := IdentitySet new.
 	todo := OrderedCollection new.
 	reg := self ___subclassRegistry___.
@@ -7046,13 +7956,7 @@ pythonClasses
 	mi keysAndValuesDo: [:sub :entry |
 		todo add: sub.
 		self ___addMiEntry___: entry to: todo].
-	"Read the committed registry WITHOUT ___canonicalClassRegistry___, which would
-	create an empty RcKeyValueDictionary in UserGlobals and dirty the transaction
-	for what is supposed to be a read.  The generation check still runs, so a
-	registry left over from a previous runtime is dropped rather than over-reported."
-	self ___canonicalGenerationCheck___.
-	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
-	canon ifNotNil: [canon keysAndValuesDo: [:k :c | todo add: c]].
+	self ___committedCanonicalClassesDo: [:each | todo add: each].
 	[todo isEmpty] whileFalse: [ | c |
 		c := todo removeLast.
 		(c notNil and: [(out includes: c) not]) ifTrue: [
@@ -7084,7 +7988,7 @@ pythonClassCensus
 	appears in more than one, and the closure can reach classes named by none of
 	them directly."
 
-	| out reg mi canon seen |
+	| out reg mi seen |
 	out := IdentityKeyValueDictionary new.
 	reg := self ___subclassRegistry___.
 	mi := self ___miRegistry___.
@@ -7098,12 +8002,12 @@ pythonClassCensus
 		seen add: sub.
 		self ___addMiEntry___: entry to: seen].
 	out at: #fromMiRegistry put: seen size.
-	self ___canonicalGenerationCheck___.
-	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
-	out at: #canonicalRegistryPresent put: canon notNil.
 	seen := IdentitySet new.
-	canon ifNotNil: [canon keysAndValuesDo: [:k :c | c ifNotNil: [seen add: c]]].
+	self ___committedCanonicalClassesDo: [:each | seen add: each].
 	out at: #fromCanonicalClasses put: seen size.
+	out
+		at: #canonicalRegistryPresent
+		put: (UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) notNil.
 	out at: #total put: self pythonClasses size.
 	^ out
 %
@@ -7126,6 +8030,30 @@ pythonDirectSubclassesOf: aClass
 	Class.gs>>__subclasses__, which is the other caller."
 
 	^ functools ___instance___ @env1:___pyDirectSubclassesOf___: aClass
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+___committedCanonicalClassesDo: aBlock
+	"Private to the enumeration API: evaluate aBlock with every CLASS in the
+	committed canonical registry.
+
+	Not every value there is a class.  The registry keeps the FINAL object a
+	module-scope class statement bound, after its decorators, and a decorator
+	may bind something else: CPython's own genericpath declares ALLOW_MISSING
+	with ``@object.__new__'', which binds an instance.  The registry is right to
+	keep it -- a warm probe must hand back exactly what the build produced -- and
+	an enumeration of classes is right to skip it.
+
+	Read WITHOUT ___canonicalClassRegistry___, which would create an empty
+	RcKeyValueDictionary in UserGlobals and dirty the transaction for what is
+	supposed to be a read.  The generation check still runs, so a registry left
+	over from a previous runtime is dropped rather than over-reported."
+
+	self ___canonicalGenerationCheck___.
+	(UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) ifNotNil: [:registry |
+		registry keysAndValuesDo: [:key :value |
+			(value isKindOf: Behavior) ifTrue: [aBlock value: value]]]
 %
 
 category: 'Grail-Class Enumeration'

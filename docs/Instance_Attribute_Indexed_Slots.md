@@ -5,13 +5,21 @@ as PR #1011 (on top of the class-side PR #1009), cut 3 with the tombstones and
 the compaction as PR #1019: `PythonInstance`
 is pointer-indexable, inferred slots AND declared `__slots__` are layout
 positions, the rebuild merge and the subclass position rule are in
-(`IndexedSlotRebuildTestCase`, with a declared-slot revision), a name a
-rebuild drops becomes a `~name` tombstone (§2, with the semantics chosen
-below), compaction is the explicit `___grailCompactSlots___` (§4 item 5).
+(`IndexedSlotRebuildTestCase`, with a declared-slot revision), compaction is
+the explicit `___grailCompactSlots___` (§4 item 5). **Tombstones were
+replaced on 2026-09-21** (cut 1 of
+[Schema_Evolution_Design.md](Schema_Evolution_Design.md)): a name a rebuilt
+body no longer assigns SURVIVES in the layout, readable and writable, and
+`~name` now marks only a HOLE left by the explicit `___grailDropSlot___:`.
 **The default is ON** since 2026-09-16 (§4 item 6): a user class's inferred
 and declared attributes are positions unless `GRAIL_INFERRED_SLOTS=0`, which
 restores dynamic-instVar storage for every class; bundled stdlib sources stay
 dynamic either way (`___bundledRuntimeSource___:`).
+**See also:** [Schema_Evolution.md](Schema_Evolution.md), the Python-facing guide to
+what each kind of edit does to committed instances, and
+[Schema_Evolution_Review.md](Schema_Evolution_Review.md) (2026-09-20), which reviews
+this design against measured scenarios and proposes reversing the tombstone
+semantics chosen below, a declared rename, and two defect fixes.
 Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
 which did the class side. This is James's indexable-class proposal, scoped as
 the replacement for the **inferred-slot** storage that used to sit behind
@@ -71,9 +79,9 @@ slot is a POSITION in the indexed part, not a named instVar.**
   their indexed part is their *content*, so they keep dynamic storage as now.
 - Each class carries a compiled **layout**, `___pySlotLayout___`, answering the
   ordered names of its positions, own and inherited: `#(x y ~z w)`. A `~`
-  prefix is a tombstone: the position is retired and the name reads as absent,
-  but the offset is kept so existing instances stay valid and a re-added name
-  gets its old position back. `___pySlotIndexFor___:` (which already exists,
+  prefix is a HOLE: a position an explicit drop freed (every instance nilled
+  there), kept so nothing moves, and reused only by a later assignment of the
+  same name. `___pySlotIndexFor___:` (which already exists,
   compiled per class as an `aSym == #x ifTrue: [^ n]` chain) is derived from
   the layout and answers the position, 0 for none.
 - The accessor pair reads and writes by position with a bounds guard, since an
@@ -102,21 +110,19 @@ slot is a POSITION in the indexed part, not a named instVar.**
   slots now.
 
 **Redefinition.** On a rebuild that reuses the class identity, the new layout
-is the OLD layout with: names the new body no longer infers turned into
-tombstones, names re-inferred with their old position, new names appended.
+is the OLD layout with new names appended. Nothing else changes.
 
-*What a tombstone means for an existing instance* (decided 2026-09-16, and
-the one place this deliberately departs from CPython): the retired name reads
-as **absent**. The value is still in the indexed part — nothing rewrites
-instances on an import — but the index table has no entry for the name, the
-class's own pair for it is removed, and `vars()` / `__dict__` / pickling do
-not list it. A foreign `obj.x = v` of a retired name is a per-object attribute
-(dynamic storage), as for any name the class does not know. CPython would
-keep showing the old value, because there the instance dict is the schema;
-here the class is, and an edit that removes an attribute is taken to mean the
-attribute is gone. A later revision that declares or infers the name again
-revives the tombstone in place, and the old instances' old values come back
-with it. Compaction is what actually frees the position.
+*A name the new body no longer assigns SURVIVES* (decided 2026-09-20,
+reversing the 2026-09-16 "reads as absent" tombstone; the reasons are in
+[Schema_Evolution_Review.md](Schema_Evolution_Review.md) F1 and F2): it keeps
+its position, its pair and its index entry, `vars()` lists it, a foreign
+store writes it. The class merely stops assigning it, as CPython leaves an
+old instance's `__dict__` entry alone. Deleting the VALUES is the explicit
+`___grailDropSlot___:` (nil everywhere in the subtree, then a `~name` hole,
+no index entry, no pair, refused while any body still assigns the name), and
+compaction is what frees the hole. A strict class's contract stays its
+CURRENT `__slots__`: a removed declared name survives readable and deletable,
+but a new store of it is refused (`___pyDeclaredSlotInChain___:`).
 The class never changes shape because it has none: the metaclass is constant
 (class side, done) and the instance side is "indexable with no named
 instVars". So `___canonicalSubclassOf:` reuses whenever the superclass matches,
@@ -204,14 +210,32 @@ index on an attribute is the case for a named instVar and a migration.
    refuse a reflective `instVarAt:put:` (`_structuralUpdatesDisallowed`), so
    `___pySlotAt___:put:` stores through the pair's bytecode setter for them; a
    foreign `e.tag = v` on a slotted Exception subclass used to fail outright.
-4. **Tombstones.** Done. `___grailMergedSlotLayout___:` writes `~name` for a
-   position the rebuilt body no longer holds and revives one in place; the
-   index table skips tombstones; the rebuild removes the class's own indexed
-   pair for a retired name; `___grailPropagateSlotLayoutToSubclasses___`
-   retires the name in a subclass that does not hold it itself
-   (`___grailOwnSlotNames___`: its declared and own-inferred tables) and gives
-   a subclass that does its own pair. `IndexedSlotRebuildTestCase` pins the
-   drop, the revival, the per-object fallback and the two-subclass case.
+4. **Survivors, holes and the drop** (replaced tombstones, 2026-09-21).
+   `___grailMergedSlotLayout___:` keeps every entry and appends; nothing is
+   retired on a rebuild and no pair is removed. `___grailDropSlot___:` (and
+   the session-only variant) nils the position across the subtree, writes the
+   `~name` hole, recompiles the index tables (a hole has no entry) and
+   removes the own pairs. One home per name: `___pyAttrStore___:put:` and
+   `___pyAttrDelete___` clear a dynamic instVar of a name that has a
+   position, and the `__dict__` views list such a name once.
+   `IndexedSlotRebuildTestCase` pins the survivor, the parent-stops-assigning
+   case, the promotion, the removed declared slot and the drop.
+   **The rename** (`___grailRenameSlot___:_:`) relabels a position across the
+   subtree when the new name has none — nothing is written, whatever the
+   repository holds — and moves every instance's value when a deploy already
+   appended one, leaving the old name a hole. A class body's
+   `__renamed__ = {"old": "new"}` (`ClassDefAst >> renamedNamePairs`, emitted
+   as the installer's fifth keyword) calls the relabel BEFORE the merge, so
+   the new name binds to the old position instead of being appended beside
+   it; the move is refused at import, because it scans the repository and
+   must own its transaction. The one class the import path does not ask
+   "does a body still assign this?" is the module being imported: the
+   `___pyOwnInferredSlots___` of its classes still describe the previous
+   bodies at that moment — the class statements that refresh them are further
+   down the same file — so the check reads the incoming names instead
+   (`___grailImportRenameSkipSet___`, passed as
+   `___grailRenameSlot___:to:tree:instances:ignoringAssignmentsIn:`). A
+   subclass in another module is answered honestly and still refuses.
 5. **Compaction.** An explicit, developer-invoked maintenance operation, never
    an import side effect: `Cls ___grailCompactSlots___` rewrites the layout of
    the class and of every subclass without tombstones, recompiles the index

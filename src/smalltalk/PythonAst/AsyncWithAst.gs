@@ -15,8 +15,9 @@ WithAst ifNil: [self error: 'WithAst is not defined. Check file ordering.'].
 ! silently instead of raising.
 !
 ! The two calls are coroutines, so the shared emit drives them through
-! ___grailAwait___: (CPython's ``await mgr.__aenter__()''); that helper passes a
-! non-coroutine through unchanged, so the synchronous path is untouched.
+! ___grailAwait___: (CPython's ``await mgr.__aenter__()'').  Only HERE: a plain
+! ``with'' awaits nothing, because that helper runs any generator to completion,
+! including one __enter__ merely returned (WithAst >> ___awaitPrefix___).
 expectvalue /Class
 doit
 WithAst subclass: 'AsyncWithAst'
@@ -103,7 +104,18 @@ ___awaitPrefix___
 	(fn notNil
 		and: [(fn respondsTo: #'___wrapsBody___') and: [fn ___wrapsBody___]])
 		ifTrue: [^ '___gen___ @env1:___grailAwait___: '].
-	^ super ___awaitPrefix___
+	^ self ___classSideAwaitPrefix___
+%
+
+category: 'Grail-Code Generation'
+method: AsyncWithAst
+___classSideAwaitPrefix___
+	"``async with'' outside a wrapped body: there is no ___gen___ to suspend,
+	so the class-side helper drives __aenter__ / __aexit__ once.  This used to
+	be WithAst's own prefix, inherited through super; it is async knowledge,
+	and a plain ``with'' must not await (WithAst >> ___awaitPrefix___)."
+
+	^ 'PythonCoroutine @env0:___grailAwait___: '
 %
 
 category: 'Grail-Code Generation'
@@ -165,12 +177,23 @@ ___emitIRAwait___: callNode site: aSiteSymbol on: aBuilder
 
 	| gen |
 	gen := aBuilder genLeaf.
-	gen isNil ifTrue: [^ super ___emitIRAwait___: callNode site: aSiteSymbol on: aBuilder].
+	gen isNil ifTrue: [^ self ___emitIRClassSideAwait___: callNode on: aBuilder].
 	^ aBuilder
 		send: (aSiteSymbol == #enter
 			ifTrue: [#'___grailAwaitAenter___:'] ifFalse: [#'___grailAwaitAexit___:'])
 		to: (aBuilder var: gen)
 		with: { callNode } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: AsyncWithAst
+___emitIRClassSideAwait___: callNode on: aBuilder
+	"___classSideAwaitPrefix___'s IR twin: ``PythonCoroutine @env0:___grailAwait___:
+	(call)'' for an ``async with'' outside a wrapped body."
+
+	^ aBuilder
+		send: #'___grailAwait___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { callNode } env: 0
 %
 
 category: 'Grail-IR Codegen'
