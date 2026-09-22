@@ -9731,7 +9731,33 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 			(other ___respondsTo___: refSel) ifTrue: [
 				result := other @env0:perform: refSel env: 1 withArguments: { self }.
 				result == niSingleton ifFalse: [^ result]]].
-	^ self @env0:perform: bSel env: 1 withArguments: { other }
+	"DECLINING IS NOT THE SAME AS NOT HAVING ONE, and only the second was
+	handled.  The block above tries the right operand's reflected dunder when
+	self has no forward binary dunder AT ALL; a receiver that HAS one and
+	answers NotImplemented skipped every probe and its NotImplemented was
+	returned as the result of the assignment.
+
+	    d = {0: 'a'}
+	    d |= types.MappingProxyType({1: 'c'})    # d is NotImplemented
+
+	-- where the plain ``d | proxy'' beside it answers a dict, because
+	BinOpAst's path does make the reflected call.  So the two spellings of one
+	operator disagreed, and the augmented one produced a VALUE rather than an
+	error: NotImplemented was stored in d, and the failure surfaced wherever d
+	was next used.
+
+	NotImplemented is still what comes back when neither side handles the
+	operation, which is this method's existing contract; the caller turns it
+	into the TypeError."
+	result := self @env0:perform: bSel env: 1 withArguments: { other }.
+	result == niSingleton ifFalse: [^ result].
+	refSel := ('__r' @env0:, (bSel @env0:asString @env0:copyFrom: 3
+		to: bSel @env0:asString @env0:size)) @env0:asSymbol.
+	((other ~~ nil) @env0:and: [other ___respondsTo___: refSel]) ifTrue: [
+		| reflected |
+		reflected := other @env0:perform: refSel env: 1 withArguments: { self }.
+		reflected == niSingleton ifFalse: [^ reflected]].
+	^ result
 %
 
 category: 'Grail-Comparison'
