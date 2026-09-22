@@ -292,7 +292,24 @@ _exec: positional kw: kwargs
 	seeded := self ___seedDoitScope___: scope from: globalsDict.
 	"Locals on top: a name bound in both resolves to the locals value."
 	(localsDict @env0:== globalsDict) @env0:ifFalse: [
-		self ___seedDoitScope___: scope from: localsDict].
+		| globalsOnly |
+		self ___seedDoitScope___: scope from: localsDict.
+		"...but globals() must NOT see them.  The merged scope is the lookup
+		ORDER; globals() is defined to answer the globals mapping ALONE.
+
+		A SEPARATE KEY, not ___pyGlobals___.  That one is the storage handle
+		for a global-declared slot -- codegen both READS and WRITES a
+		``global x'' through it -- so pointing it at a globals-only copy
+		splits a name's write from its read and the name stops existing
+		(GlobalDeclarationScopeTestCase's three-argument exec).  The view is
+		read by globals() and by nothing else; ___doitGlobalsView___: falls
+		back to the scope when it is absent, which is every other doit.
+
+		Same reasoning as _eval:'s, and reached only when the mappings
+		differ."
+		globalsOnly := SymbolDictionary @env0:new.
+		self ___seedDoitScope___: globalsOnly from: globalsDict.
+		scope @env0:at: #'___pyGlobalsView___' put: globalsOnly].
 	"Run the source as a module body in the seeded scope.  Tag the
 	debug capture as #exec so the .tpz / .ir files under $TMP/codegen/
 	carry the ___exec_N___ prefix.  globalNamesInto: collects the names the
@@ -349,6 +366,28 @@ ___seedDoitScope___: aScope from: aDict
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___doitGlobalsView___: aScope
+	"What ``globals()'' answers inside a doit: the globals-only view that
+	_exec:/_eval: parked when they were handed a SEPARATE ``locals'' mapping,
+	or the scope itself -- which is its own globals -- when they were not.
+
+	Two questions shared one dictionary, and must not share it in this case.
+	``___pyGlobals___'' is the STORAGE handle: codegen names a global-declared
+	slot through it, for the read AND the write, because a bare identifier
+	there can be captured by an enclosing block temp.  ``globals()'' is a
+	VIEW.  Pointing the storage handle at a globals-only copy separated a
+	``global x'' write from its read and the name ceased to exist
+	(GlobalDeclarationScopeTestCase's three-argument exec), so the view gets a
+	key of its own and the storage handle is left alone.
+
+	Answering aScope when the key is absent is what keeps every other doit --
+	one mapping, or none -- on exactly the path it was on before."
+
+	^ aScope @env0:at: #'___pyGlobalsView___' otherwise: aScope
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___reflectDoitScope___: aScope seeded: seeded into: targetDict
 	"Reflect back with no ``global'' overrides -- eval()'s case, since a
 	``global'' statement cannot appear inside an expression."
@@ -384,7 +423,8 @@ ___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: glob
 		identifier would be captured by an enclosing block temp.  It is
 		machinery, not a binding the source produced, and must not surface in
 		the caller's namespace."
-		(key @env0:== #'___pyGlobals___') @env0:ifFalse: [
+		((key @env0:== #'___pyGlobals___')
+			@env0:or: [key @env0:== #'___pyGlobalsView___']) @env0:ifFalse: [
 		((seeded @env0:includesKey: key)
 			@env0:and: [(seeded @env0:at: key) @env0:== value])
 			@env0:ifFalse: [ | pyName target |
@@ -506,7 +546,26 @@ _eval: positional kw: kwargs
 	scope := SymbolDictionary @env0:new.
 	seeded := self ___seedDoitScope___: scope from: globalsDict.
 	(localsDict @env0:== globalsDict) @env0:ifFalse: [
-		self ___seedDoitScope___: scope from: localsDict].
+		| globalsOnly |
+		self ___seedDoitScope___: scope from: localsDict.
+		"globals() MUST NOT SEE THE LOCALS.  The scope above is the lookup
+		order -- locals laid over globals -- and it is the right thing for
+		resolving a NAME.  It is the wrong thing for globals(), which is
+		defined to answer the globals mapping alone:
+
+		    eval(expr, globals=data)   sees data through globals()
+		    eval(expr, locals=data)    does NOT
+
+		globals() used to read the lookup scope itself, so seeding one
+		dictionary from both made a name supplied as a LOCAL visible through
+		globals().  Parking a globals-only view under its OWN key -- not
+		___pyGlobals___, which is the storage handle a ``global x'' both reads
+		and writes through -- gives globals() the globals alone while the name
+		lookup keeps the merged scope.  Reached only when the two mappings
+		differ, so the common case is untouched."
+		globalsOnly := SymbolDictionary @env0:new.
+		self ___seedDoitScope___: globalsOnly from: globalsDict.
+		scope @env0:at: #'___pyGlobalsView___' put: globalsOnly].
 	savedScope := self ___grailDoitScope___.
 	result := [
 		self ___grailDoitScope___: scope.

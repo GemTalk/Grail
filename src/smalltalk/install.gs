@@ -874,6 +874,7 @@ run
 	at: #'EvalAndEscapesTestCase' put: nil;
 	at: #'EvalCallerNamespaceTestCase' put: nil;
 	at: #'EvalExecModeCodeTestCase' put: nil;
+	at: #'EvalGlobalsLocalsTestCase' put: nil;
 	at: #'EvalInNestedScopeTestCase' put: nil;
 	at: #'EventLoopTestCase' put: nil;
 	at: #'ExceptClauseShieldTestCase' put: nil;
@@ -2204,6 +2205,7 @@ input src/smalltalk/PythonTests/EtreeParsingTestCase.gs
 input src/smalltalk/PythonTests/EvalAndEscapesTestCase.gs
 input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs
 input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
+input src/smalltalk/PythonTests/EvalGlobalsLocalsTestCase.gs
 input src/smalltalk/PythonTests/EvalInNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/EventLoopTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs

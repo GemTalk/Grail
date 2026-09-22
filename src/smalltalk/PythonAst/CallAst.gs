@@ -162,7 +162,7 @@ ___emitSmalltalkOn___: aStream
 				ifTrue: [
 					aStream
 						nextPutAll: '(PyModuleDict @env0:on: ';
-						nextPutAll: self ___globalsViewReceiverExpr___;
+						nextPutAll: self ___globalsOnlyViewReceiverExpr___;
 						nextPutAll: ')'.
 					^self].
 
