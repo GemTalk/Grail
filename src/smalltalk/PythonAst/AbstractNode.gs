@@ -1330,6 +1330,34 @@ ___globalsOnlyViewReceiverExpr___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___builtinsAreOverridden___
+	"True while compiling a DOIT whose globals mapping supplied its own
+	``__builtins__''.
+
+	CPython takes a piece of code's builtins namespace from its globals, so
+	``exec(src, {'__builtins__': {}})'' runs source that cannot reach print,
+	open or __import__ -- the whole of the sandboxing story.  Grail resolves a
+	builtin CALL at compile time, straight to a send on the one real builtins
+	singleton, so the restriction was accepted and then silently ignored: the
+	generated code never asked.
+
+	Asked HERE, at compile time, because a doit is compiled by the exec() that
+	is about to run it -- the override is already installed when this is
+	consulted, and the answer cannot change under the compiled method.  Module
+	code is never affected: its builtins are not replaceable and its compile
+	long predates any exec.
+
+	The fast paths answer nil when this is true, so the call falls through to
+	the generic read, which resolves the name at RUN time and finds the
+	override.  Slower, and only for code that asked to be sandboxed."
+
+	ModuleAst compilingDoitScope isNil ifTrue: [^ false].
+	^ [(((Python at: #builtins) @env1:instance) @env1:___grailBuiltinsOverride___) notNil]
+		on: Error do: [:ex | ex return: false]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___functionBindsPythonLocal___: funcAst named: aSymbol
 	"True iff aSymbol is a TRUE PYTHON LOCAL of the given FunctionDefAst
 	or LambdaAst: a parameter, or a genuine body binding (the block's

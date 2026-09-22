@@ -1607,6 +1607,16 @@ emitBuiltinFirstClassRead: aName on: aStream
 	for a name the family probe cannot wrap it behaves exactly as every
 	read did before."
 
+	"UNDER A ``__builtins__'' OVERRIDE the chain below is the wrong namespace
+	entirely: it reads the one real builtins singleton, which is exactly what
+	the caller replaced.  Route to the runtime resolver instead, which
+	consults the override and raises NameError when it has no such name."
+	self ___builtinsAreOverridden___ ifTrue: [
+		aStream
+			nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
+			nextPutAll: aName;
+			nextPutAll: ''')'.
+		^ self].
 	aStream
 		nextPutAll: '(((Python @env0:at: #builtins) instance) @env1:___globalAt___: #''';
 		nextPutAll: aName;
