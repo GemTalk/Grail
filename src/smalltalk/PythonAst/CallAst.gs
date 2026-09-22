@@ -525,7 +525,16 @@ ___emitSmalltalkOn___: aStream
 	form so kwargs-bearing class calls reach the constructor.  Without
 	this, ``property(fget, fset, doc=...)'' would trip the builtin arity
 	error even though PropertyDescriptor has a varargs constructor."
-	knownBuiltinName := self knownBuiltinName.
+	"NOT UNDER A ``__builtins__'' OVERRIDE.  This branch exists because the
+	fast paths above failed to find a matching selector, and it concludes the
+	CALL is malformed.  When the two gates above declined on purpose -- the
+	doit's builtins were replaced, so no builtin may be bound at compile time
+	-- that conclusion is wrong, and it turned ``exec(\'print(1)\', {'__builtins__': {}})''
+	into a TypeError about print's arity where CPython raises NameError for
+	print itself."
+	knownBuiltinName := self ___builtinsAreOverridden___
+		ifTrue: [nil]
+		ifFalse: [self knownBuiltinName].
 	knownBuiltinName ifNotNil: [
 		"If the name ALSO resolves to a class with a varargs
 		``_new:kw:'' / ``___new__:kw:'' constructor, skip the arity
@@ -786,6 +795,9 @@ bareCallFastPathSelector
 
 	| funcName nargs candidate |
 
+	"A doit under a ``__builtins__'' override must not bind a builtin at
+	compile time -- see AbstractNode >> ___builtinsAreOverridden___."
+	self ___builtinsAreOverridden___ ifTrue: [^nil].
 	self hasStarredArgument ifTrue: [^nil].
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
@@ -822,6 +834,8 @@ bareCallVarargsSelector
 	  * `builtins` has an env-1 method `_name:kw:`."
 
 	| funcName candidate |
+	"See bareCallFastPathSelector -- same reason, same gate."
+	self ___builtinsAreOverridden___ ifTrue: [^nil].
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
 	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)

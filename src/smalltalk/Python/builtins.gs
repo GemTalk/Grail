@@ -246,7 +246,7 @@ _exec: positional kw: kwargs
 	Without exec, jinja2 template rendering can't progress past the from_code
 	step regardless of how much of the compiler runs."
 
-	| source globalsDict localsDict scope seeded globalNames savedPath savedScope |
+	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -321,9 +321,16 @@ _exec: positional kw: kwargs
 	on this path -- exec'd code has no file -- so the frames came out named
 	'<grail>'.  Restored afterwards rather than cleared, since exec() can be
 	called from inside a module compilation."
+	"INSTALL THE ``__builtins__'' OVERRIDE, if the globals mapping carries one.
+	CPython takes a piece of code's builtins namespace from its globals, so
+	``{'__builtins__': {}}'' is how source is run with no builtins at all.
+	Saved and restored rather than cleared: one exec can call another, and the
+	inner one must not strip the outer one's builtins when it finishes."
 	savedPath := CallAst @env0:sourcePath.
 	savedScope := self ___grailDoitScope___.
+	savedBuiltins := self ___grailBuiltinsOverride___.
 	[
+		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
@@ -331,7 +338,8 @@ _exec: positional kw: kwargs
 			globalNamesInto: globalNames
 	] @env0:ensure: [
 		CallAst @env0:sourcePath: savedPath.
-		self ___grailDoitScope___: savedScope].
+		self ___grailDoitScope___: savedScope.
+		self ___grailBuiltinsOverride___: savedBuiltins].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
 	^ None
@@ -450,7 +458,7 @@ _eval: positional kw: kwargs
 	walrus bindings (``(x := 5) + 1'') and any other side-effect binding
 	inside the expression land where CPython puts them."
 
-	| source globalsDict localsDict scope seeded result savedScope filename |
+	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -566,12 +574,21 @@ _eval: positional kw: kwargs
 		globalsOnly := SymbolDictionary @env0:new.
 		self ___seedDoitScope___: globalsOnly from: globalsDict.
 		scope @env0:at: #'___pyGlobalsView___' put: globalsOnly].
+	"INSTALL THE ``__builtins__'' OVERRIDE, if the globals mapping carries one.
+	CPython takes a piece of code's builtins namespace from its globals, so
+	``{'__builtins__': {}}'' is how source is run with no builtins at all.
+	Saved and restored rather than cleared: one exec can call another, and the
+	inner one must not strip the outer one's builtins when it finishes."
 	savedScope := self ___grailDoitScope___.
+	savedBuiltins := self ___grailBuiltinsOverride___.
 	result := [
 		self ___grailDoitScope___: scope.
+		self ___grailBuiltinsOverride___: (self ___builtinsOverrideIn___: globalsDict).
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
 			filename: filename
-	] @env0:ensure: [self ___grailDoitScope___: savedScope].
+	] @env0:ensure: [
+		self ___grailDoitScope___: savedScope.
+		self ___grailBuiltinsOverride___: savedBuiltins].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
 %
@@ -802,6 +819,93 @@ category: 'Grail-Built-in Functions'
 method: builtins
 ___grailDoitScope___: aScopeOrNil
 	SessionTemps @env0:current @env0:at: #'GrailDoitScope' put: aScopeOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailBuiltinsOverride___
+	"The mapping a running exec()/eval() was told to use AS BUILTINS, or nil.
+
+	CPython takes the builtins namespace for a piece of code from its globals:
+	``__builtins__'' in the globals mapping REPLACES the real builtins for
+	that code, and an empty one leaves it with none at all.  That is the whole
+	of the sandboxing story -- ``exec(src, {'__builtins__': {}})'' is how you
+	run source that cannot reach print, open or __import__.
+
+	Grail resolved builtins against the one real builtins singleton and never
+	looked, so every such call ran with the FULL builtins available: the
+	restriction was accepted and then silently ignored, which is worse than
+	refusing it.
+
+	Session-local and saved/restored around each evaluation rather than
+	cleared, for the same reason ___grailDoitScope___ is: one exec can call
+	another, and the inner one must not strip the outer one's builtins when
+	it finishes."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailBuiltinsOverride' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailBuiltinsOverride___: aMappingOrNil
+	SessionTemps @env0:current @env0:at: #'GrailBuiltinsOverride' put: aMappingOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___builtinsOverrideIn___: globalsDict
+	"The ``__builtins__'' entry of a globals mapping, or nil when it has none.
+
+	CPython INSERTS a real ``__builtins__'' into any globals mapping that
+	lacks one, so the absent case means ``use the real builtins'' rather than
+	``use nothing''; only an entry the caller supplied restricts anything.
+
+	NO TYPE CHECK HERE, deliberately.  It is tempting to refuse a non-mapping
+	up front, and CPython does not: ``exec('x=1', {'__builtins__': 123})''
+	runs to completion, because nothing in it ever asks builtins for a name.
+	The error appears at the first LOOKUP, and is simply whatever subscripting
+	that object raises -- ``'int' object is not subscriptable'' for 123, a
+	different message for a str and another again for a list.  Checking
+	eagerly would both raise where CPython does not and replace three accurate
+	messages with one invented one."
+
+	globalsDict @env0:isNil ifTrue: [^ nil].
+	(globalsDict @env0:isKindOf: KeyValueDictionary) ifFalse: [^ nil].
+	^ globalsDict @env0:at: '__builtins__' otherwise: nil
+%
+
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___lookUpInBuiltinsOverride___: aName ifAbsent: aBlock
+	"Resolve aName through the ACTIVE ``__builtins__'' override, or evaluate
+	aBlock when it has no such name.
+
+	Through __getitem__, not through a class-specific read, because the point
+	of the override is that the caller chose the mapping: a MappingProxyType,
+	a dict subclass, a mapping whose __getitem__ RAISES.  The last is a real
+	test (test_exec_globals_error_on_get) and it is why only KeyError is
+	absorbed here -- any other exception is the caller's mapping saying
+	something, and swallowing it would turn a deliberate error into a
+	NameError about the wrong thing."
+
+	| override |
+	override := self ___grailBuiltinsOverride___.
+	override @env0:isNil ifTrue: [^ aBlock @env0:value].
+	"A MODULE is a legal __builtins__ -- CPython's own is the builtins module
+	at module scope and a dict inside exec, and test_exec_globals_frozen
+	branches on exactly that."
+	(override @env0:isKindOf: module) ifTrue: [
+		^ override @env1:___globalAt___: aName @env0:asSymbol otherwise: aBlock].
+	"Anything else is SUBSCRIPTED, and whatever that raises is the answer.
+	That is what CPython does: a non-mapping __builtins__ surfaces as its own
+	subscript error at the first lookup, not as a check at exec() time.  Only
+	KeyError is absorbed, because only KeyError means ``no such name''; the
+	rest -- a TypeError from an int, a caller's own exception from a mapping
+	whose __getitem__ raises -- is the mapping saying something, and
+	swallowing it would report a NameError about the wrong thing."
+	^ [override @env1:__getitem__: aName @env0:asString]
+		@env0:on: KeyError do: [:ex | ex @env0:return: aBlock @env0:value]
 %
 
 category: 'Grail-Built-in Functions'

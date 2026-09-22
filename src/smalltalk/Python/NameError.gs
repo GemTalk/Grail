@@ -76,6 +76,17 @@ ___resolveBuiltinOrSignal___: aName
 	b == nil ifTrue: [^ self ___signalUndefined___: aName].
 	inst := [b @env0:___instance___] @env0:on: Error do: [:ex | nil].
 	inst == nil ifTrue: [^ self ___signalUndefined___: aName].
+	"A RUNNING exec()/eval() MAY HAVE REPLACED BUILTINS ENTIRELY.  CPython
+	takes a piece of code's builtins namespace from its globals, so
+	``exec(src, {'__builtins__': {}})'' runs source with none, and
+	``{'__builtins__': m}'' runs it with m's.  That is an exclusive choice,
+	not an extra place to look: falling through to the real builtins after
+	the override missed would hand back exactly the name the caller took
+	away, which is the whole point of passing an empty one."
+	(inst @env1:___grailBuiltinsOverride___) @env0:isNil ifFalse: [
+		^ inst
+			@env1:___lookUpInBuiltinsOverride___: aName
+			ifAbsent: [self ___signalUndefined___: aName]].
 	"INJECTED names first, and UNGATED: anything at all may be written into
 	builtins at run time, so the curated list below must not police this arm."
 	v := inst @env0:dynamicInstVarAt: sym ifAbsent: [nil].
