@@ -46,6 +46,77 @@ ___on: aMapping
 	^ v
 %
 
+category: 'Grail-Initialization'
+classmethod: mappingproxy
+__new__: aMapping
+	"``types.MappingProxyType(d)'' -- the PUBLIC constructor, as distinct from
+	___on: beside it, which is the internal one Grail's own __dict__ accessors
+	use.  Both wrap the live mapping; only this one validates, because only
+	this one can be handed anything.
+
+	Reached because types.py now names this class (``MappingProxyType =
+	type(type.__dict__)'', CPython's own spelling) instead of stubbing the
+	constructor to answer its argument.  Without a __new__: here that call
+	fell through the generic instantiation path and died with ``a PyDict does
+	not understand #'new''', an uncatchable Smalltalk error."
+
+	((aMapping @env0:isKindOf: AbstractDictionary)
+		@env0:or: [aMapping @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+		^ TypeError ___signal___: 'mappingproxy() argument must be a mapping, not '
+			@env0:, (aMapping ___pyTypeNameForError___) @env0:asString].
+	^ self ___on: aMapping
+%
+
+category: 'Grail-Merge Operators'
+method: mappingproxy
+__or__: other
+	"PEP 584 ``mp | other''.  CPython's mappingproxy does not merge anything
+	itself -- it runs the operator against the WRAPPED MAPPING and lets the
+	ordinary binary protocol decide, which is why ``mp | UserDict'' answers a
+	UserDict and ``mp | dict'' a plain dict.
+
+	Reproduced here as the two steps the protocol makes, because Grail's dict
+	refuses a non-AbstractDictionary operand and so returns NotImplemented for
+	the interesting half: without the reflected step, ``mp | UserDict'' would
+	answer NotImplemented instead of a UserDict.
+
+	This did not need to exist while types.MappingProxyType was a stub that
+	answered its argument -- every ``|'' in test_userdict was running against
+	a plain dict, three times over, and the mappingproxy third of
+	test_mixed_or and test_mixed_ior was passing VACUOUSLY."
+
+	| r ni |
+	ni := Python @env0:at: #'NotImplemented' otherwise: nil.
+	r := [mapping @env1:__or__: other]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni].
+	(r @env0:== ni) ifFalse: [^ r].
+	^ [other @env1:__ror__: mapping]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni]
+%
+
+category: 'Grail-Merge Operators'
+method: mappingproxy
+__ror__: other
+	"PEP 584 reflected merge ``other | mp'' -- the proxy's entries win.
+
+	The path that matters is ``UserDict | mp'': UserDict's own __or__ accepts
+	only a UserDict or a dict, so it answers NotImplemented and this is what
+	runs, with the wrapped mapping standing in for the proxy.  That is how
+	CPython keeps the result a UserDict rather than a dict."
+
+	| r ni |
+	ni := Python @env0:at: #'NotImplemented' otherwise: nil.
+	r := [other @env1:__or__: mapping]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni].
+	(r @env0:== ni) ifFalse: [^ r].
+	^ [mapping @env1:__ror__: other]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni]
+%
+
 category: 'Grail-Private'
 method: mappingproxy
 ___setMapping: aMapping
