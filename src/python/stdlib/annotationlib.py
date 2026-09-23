@@ -316,8 +316,7 @@ class ForwardRef:
                 format=format,
             )
             try:
-                result = eval(code, _stringifier_namespace(
-                    self.__forward_arg__, new_locals, new_locals))
+                result = eval(code, globals=globals, locals=new_locals)
             except Exception:
                 return self
             else:
@@ -772,54 +771,6 @@ class _StringifierDict(dict):
         return name
 
 
-def _source_identifiers(source):
-    """Every name the source could look up: identifiers not after a ``.''."""
-    names = []
-    i, n = 0, len(source)
-    while i < n:
-        c = source[i]
-        if c == "_" or c.isalpha():
-            j = i + 1
-            while j < n and (source[j] == "_" or source[j].isalnum()):
-                j += 1
-            word = source[i:j]
-            k = i - 1
-            while k >= 0 and source[k] == " ":
-                k -= 1
-            if not (k >= 0 and source[k] == ".") and not keyword.iskeyword(word):
-                names.append(word)
-            i = j
-        else:
-            i += 1
-    return names
-
-
-def _stringifier_namespace(source, stringifiers, namespace):
-    """A PLAIN dict: namespace, plus a stringifier for every other name in
-    source.
-
-    GRAIL: CPython evaluates against the _StringifierDict itself, whose
-    __missing__ answers a stringifier for whatever the namespace lacks.  Grail's
-    eval consults a dict SUBCLASS only after its builtins and its own module
-    classes (``eval('module', {})'' answers Grail's module class), and ranks a
-    plain-dict globals ahead of a subclass locals -- so the missing names are
-    minted up front, into a plain dict, where they win.  A name in a string
-    literal is minted too and simply never read.
-
-    A BUILTIN name is not minted: it keeps its real value, where CPython's
-    second pass would defer it too.  Grail's generated code names some
-    builtins directly -- a tuple display compiles to a send to ``tuple'' -- and
-    an eval globals entry of that name captures it: ``eval('(1, 2)', {'tuple':
-    5})'' dies with an uncatchable ``SmallInteger does not understand
-    #withAll:''.
-    """
-    result = dict(namespace)
-    for name in _source_identifiers(source):
-        if name not in result and not hasattr(_builtins(), name):
-            result[name] = stringifiers[name]
-    return result
-
-
 def _resolved_text(ref):
     """``ref.__resolved_str__'' without filling its cache, which
     test_evaluate_string_format_extra_names asserts stays empty until read."""
@@ -847,10 +798,12 @@ def _forwardref_value(source, owner, evaluator):
         code = ref.__forward_code__
     except SyntaxError:
         return ref
+    # Every name, builtins included, is looked up in the stringifier mapping
+    # first -- CPython's second pass runs with every global a stringifier.
     names = _StringifierDict({}, owner=owner, is_class=is_class,
                              format=Format.FORWARDREF)
     try:
-        result = eval(code, _stringifier_namespace(source, names, {}))
+        result = eval(code, {}, names)
     except Exception:
         return ref
     names.transmogrify(None)
