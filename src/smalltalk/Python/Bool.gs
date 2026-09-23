@@ -822,6 +822,24 @@ to_bytes: length _: byteorder
 
 category: 'Grail-Class Methods'
 classmethod: bool
+from_bytes: theBytes
+	"``bool.from_bytes(b)'' — see the two-argument form; byteorder defaults
+	to 'big' as int's does."
+
+	^ (int from_bytes: theBytes) @env0:~= 0
+%
+
+category: 'Grail-Class Methods'
+classmethod: bool
+_from_bytes: positional kw: kwargs
+	"``bool.from_bytes(b, signed=True)'' and the other keyword spellings,
+	narrowed as the positional forms are."
+
+	^ (int _from_bytes: positional kw: kwargs) @env0:~= 0
+%
+
+category: 'Grail-Class Methods'
+classmethod: bool
 from_bytes: theBytes _: byteorder
 	"``bool.from_bytes(b, byteorder)'' — bool inherits int's
 	classmethod, and because the constructor is bool the int result
