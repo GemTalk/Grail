@@ -1588,6 +1588,46 @@ real
 
 category: 'Grail-Integer Methods'
 method: int
+to_bytes
+	"``(12).to_bytes()'' -- length defaults to 1 and byteorder to 'big' in
+	CPython since 3.11, and the defaulted spellings are what code written
+	since then uses.  Grail had only the two- and three-argument forms, so
+	CPython's own ipaddress -- which writes ``self._ip.to_bytes(4)'' -- could
+	not run here."
+
+	^ self to_bytes: 1 _: 'big' _: false
+%
+
+category: 'Grail-Integer Methods'
+method: int
+to_bytes: length
+	"``(258).to_bytes(4)'' -- byteorder defaults to 'big'; see to_bytes."
+
+	^ self to_bytes: length _: 'big' _: false
+%
+
+category: 'Grail-Integer Methods'
+method: int
+_to_bytes: positional kw: kwargs
+	"``(258).to_bytes(length=2, byteorder='little', signed=True)'' -- all
+	three are nameable in CPython, and matched no selector here."
+
+	| length byteorder signed |
+
+	length := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [int ___keyword: 'length' in: kwargs ifAbsent: [1]].
+	byteorder := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [int ___keyword: 'byteorder' in: kwargs ifAbsent: ['big']].
+	signed := (positional @env0:size @env0:>= 3)
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [int ___keyword: 'signed' in: kwargs ifAbsent: [false]].
+	^ self to_bytes: length _: byteorder _: signed ___isTruthy___
+%
+
+category: 'Grail-Integer Methods'
+method: int
 to_bytes: length _: byteorder
 	"int.to_bytes(length, byteorder='big', *, signed=False) —
 	2-arg form, delegates to the 3-arg form with signed=false.
