@@ -164,6 +164,44 @@ testEvalLiveLocalsMappingIsAskedFirst
 	self assertMatchesCPythonAt: 'exec_locals_mapping'.
 %
 
+category: 'Grail-Tests - iteration'
+method: BuiltinNameCaptureTestCase
+testSequenceSubclassIterIsHonoured
+	"A list / tuple / dict subclass with its own __iter__ is iterated through
+	it by star displays, star calls, set(), set.update, frozenset(),
+	list.extend and dict.fromkeys -- which all read the kernel storage -- while
+	a subclass that does not override __iter__ keeps the storage fast path."
+
+	self assertMatchesCPythonAt: 'iter_override_star_displays'.
+	self assertMatchesCPythonAt: 'iter_override_star_call'.
+	self assertMatchesCPythonAt: 'iter_override_consumers'.
+	self assertMatchesCPythonAt: 'plain_subclass_iterates_storage'.
+%
+
+category: 'Grail-Tests - rebound self'
+method: BuiltinNameCaptureTestCase
+testPseudoVariableParametersOnEveryDefShape
+	"``nil'' / ``true'' / ``false'' as parameters of a method (fixed-arity,
+	defaulted, varargs, keyword-only), a static or class method, a plain def
+	and a nested def or lambda: declared as the transport identifier, bound by
+	keyword under the Python name."
+
+	self assertMatchesCPythonAt: 'method_reserved_params'.
+	self assertMatchesCPythonAt: 'method_reserved_varargs'.
+	self assertMatchesCPythonAt: 'static_and_class_reserved_params'.
+	self assertMatchesCPythonAt: 'plain_reserved_varargs_and_kwonly'.
+	self assertMatchesCPythonAt: 'nested_and_lambda_reserved_params'.
+%
+
+category: 'Grail-Tests - eval name lookup'
+method: BuiltinNameCaptureTestCase
+testEvalGenexpFirstIterableReadsEnclosingScope
+	"A generator expression's first iterable is evaluated where the genexp is
+	written, so it reads the live mapping; the rest of the genexp does not."
+
+	self assertMatchesCPythonAt: 'eval_genexp_first_iterable'.
+%
+
 category: 'Grail-Tests - Controls'
 method: BuiltinNameCaptureTestCase
 testEveryCheckIsPresentAndAgreesWithCPython
@@ -172,5 +210,5 @@ testEveryCheckIsPresentAndAgreesWithCPython
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '43 checks, 0 disagreeing [], keys match: True'
+		equals: '53 checks, 0 disagreeing [], keys match: True'
 %

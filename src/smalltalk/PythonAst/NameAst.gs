@@ -1841,6 +1841,22 @@ ___doitScopeBinds___: aSymbol
 
 category: 'other'
 classmethod: NameAst
+___pythonNameForTransportIdentifier___: aName
+	"Inverse of ___transportIdentifierFor___: -- ``___nil___'' answers ``nil'',
+	and any other name answers itself."
+
+	| s inner |
+	s := aName asString.
+	(s size > 6 and: [(s copyFrom: 1 to: 3) = '___' and: [(s copyFrom: s size - 2 to: s size) = '___']])
+		ifFalse: [^ s].
+	inner := s copyFrom: 4 to: s size - 3.
+	^ (self isReservedSmalltalkIdentifier: inner asSymbol)
+		ifTrue: [inner]
+		ifFalse: [s]
+%
+
+category: 'other'
+classmethod: NameAst
 doitScopeNameFor: aSymbol
 	"The identifier under which aSymbol is carried in a DOIT (exec/eval)
 	scope: the name itself, unless it collides with a Smalltalk
@@ -2175,24 +2191,45 @@ ___readsDoitLiveMapping___
 	for its own loop variables, which are declared names, as is a walrus
 	target: both keep their temp or scope slot."
 
-	| temps node |
+	| temps node child |
 	(ctx isKindOf: LoadAst) ifFalse: [^ false].
 	ModuleAst compilingDoitScope isNil ifTrue: [^ false].
 	temps := SessionTemps current.
 	((temps at: #'GrailLiveLocals' ifAbsent: [nil]) isNil
 		and: [(temps at: #'GrailLiveGlobals' ifAbsent: [nil]) isNil]) ifTrue: [^ false].
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: FunctionDefAst)
 			or: [(node isKindOf: LambdaAst)
-			or: [(node isKindOf: ClassDefAst)
-			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [^ false].
+			or: [node isKindOf: ClassDefAst]]) ifTrue: [^ false].
+		"A generator expression is its own scope EXCEPT for its first
+		iterable, which CPython evaluates in the enclosing scope and passes
+		in: ``eval('(x for x in [len])', {}, D())'' reads len from D."
+		(node isKindOf: GeneratorExpAst) ifTrue: [
+			(node generators notEmpty
+				and: [child == node generators first
+				and: [self ___isWithin___: node generators first iter]]) ifFalse: [^ false]].
+		child := node.
 		node := node parent].
 	(self ___isDeclaredForThisScope___: id asSymbol) ifTrue: [^ false].
 	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
 	(self isModuleVariableName: id) ifTrue: [^ false].
 	(self ___boundAtTopLevel___: id asSymbol) ifTrue: [^ false].
 	^ true
+%
+
+category: 'other'
+method: NameAst
+___isWithin___: aNode
+	"Is the receiver aNode, or somewhere below it?"
+
+	| node |
+	node := self.
+	[node notNil] whileTrue: [
+		node == aNode ifTrue: [^ true].
+		node := node parent].
+	^ false
 %
 
 category: 'other'
