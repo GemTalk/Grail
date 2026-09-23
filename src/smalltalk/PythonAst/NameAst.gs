@@ -7,7 +7,7 @@ ExpressionAst ifNil: [self error: 'ExpressionAst is not defined. Check file orde
 expectvalue /Class
 doit
 ExpressionAst subclass: 'NameAst'
-  instVarNames: #( id ctx)
+  instVarNames: #( id ctx writtenId)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -129,6 +129,30 @@ method: NameAst
 id: aSymbol
 
 	id := aSymbol
+%
+
+category: 'Grail-name mangling'
+method: NameAst
+writtenId
+	"The name as it appears in the SOURCE -- differs from ``id'' only when the
+	parser private-name mangled it (``__x'' in class Foo has id _Foo__x).
+
+	For DIAGNOSTICS, never for resolution: every scope decision compares ``id'',
+	the mangled spelling, because that is what CPython binds.  But some of
+	CPython's compile-time messages quote the name as written -- measured:
+	``[[(__x:=2) for _ in range(2)] for __x in range(2)]'' inside class Foo
+	raises ``assignment expression cannot rebind comprehension iteration
+	variable '__x''' (test_named_expressions
+	test_named_expression_invalid_mangled_class_variables), where the collision
+	itself is detected between two mangled names."
+
+	^ writtenId ifNil: [id]
+%
+
+category: 'Grail-name mangling'
+method: NameAst
+writtenId: aSymbol
+	writtenId := aSymbol
 %
 
 category: 'Grail-IR Codegen'

@@ -1229,9 +1229,12 @@ printSmalltalkRuntimeOn: aStream
 	savedInBodyEmit := CallAst inClassBodyValueEmit.
 	savedBoundNames := CallAst classBodyBoundNames.
 	savedNestedNames := CallAst classNestedClassNames.
+	"Under the name each nested class BINDS, which is mangled for a private one
+	 (``class __Inner'' in C binds _C__Inner) -- NameAst probes this set with
+	 ___mangledId___, so a raw entry could never match a reference to it."
 	CallAst classNestedClassNames: (IdentitySet withAll:
 		((body body select: [:stmt | stmt isKindOf: ClassDefAst])
-			collect: [:c | c name asSymbol])).
+			collect: [:c | (c ___manglePrivate___: c name) asSymbol])).
 	savedConditionalNames := CallAst classBodyConditionalNames.
 	CallAst classBodyConditionalNames: self ___classBodyConditionalNames___.
 	savedDynamicLocals := CallAst classBodyDynamicLocals.
@@ -1283,6 +1286,31 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
 		nextPutAll: self ___stVarName___;
 		nextPutAll: ' ___dynInstVars___: (GrailClassAttrHolder @env0:new)].'; lf.
+	"PRIVATE METHOD NAMES, for __name__ / __qualname__.  A private def binds
+	 under its mangled selector and must still report the name it was written
+	 with (``def __m'' -> C._C__m, __name__ '__m') -- see UnboundMethod class
+	 >> ___pyDisplayNameOf___:forClass:, which reads this table.  Only defs that
+	 were ACTUALLY mangled are listed, so a def written as ``_C__lit'' keeps its
+	 spelling.  Emitted only when there is at least one."
+	[ | pairs |
+		pairs := OrderedCollection new.
+		(self instanceMethodDefs , self classMethodDefs , self staticMethodDefs) do: [:def |
+			def ___mangledName___ asString = def name asString ifFalse: [
+				pairs add: def ___mangledName___ asString; add: def name asString]].
+		pairs isEmpty ifFalse: [ | src |
+			src := WriteStream on: String new.
+			src nextPutAll: '___pyMangledDefNames___'; lf; tab; nextPutAll: '^ #('.
+			1 to: pairs size by: 2 do: [:i |
+				src nextPutAll: ' #'''; nextPutAll: (pairs at: i);
+					nextPutAll: ''' '''; nextPutAll: (pairs at: i + 1); nextPutAll: ''''].
+			src nextPutAll: ' )'.
+			self
+				emitCompileMethodOn: self ___stVarName___
+				source: src contents
+				category: 'Grail-Class Attrs'
+				env: 1
+				classSide: true
+				onStream: aStream]] value.
 	"___classHolderAttrStore___, not ___pyAttrStore___: this store is
 	DEFINITIONAL and must land on the committed class.  ___pyAttrStore___
 	diverts to the session overlay once the class is in the canonical set,
@@ -1315,7 +1343,11 @@ printSmalltalkRuntimeOn: aStream
 		aStream lf;
 			nextPutAll: self ___stVarName___;
 			nextPutAll: ' @env1:___classHolderAttrStore___: #''';
-			nextPutAll: nested name asString;
+			"The BINDING is mangled (C._C__Inner) while the class's own __name__
+			 and __qualname__ keep the written spelling (__Inner, C.__Inner) --
+			 measured on CPython 3.14.6.  Stored raw, ``C._C__Inner'' was an
+			 AttributeError and the class could not be reached at all."
+			nextPutAll: (nested ___manglePrivate___: nested name) asString;
 			nextPutAll: ''' put: ';
 			nextPutAll: nested ___stVarName___;
 			nextPutAll: '.'; lf.

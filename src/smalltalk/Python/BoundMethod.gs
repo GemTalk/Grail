@@ -837,6 +837,12 @@ __name__
 	receiver class name for an unbound class-method handle."
 
 	selector == nil ifTrue: [^ receiver @env0:class @env0:name @env0:asString].
+	"A private method reports the name it was WRITTEN with (``__m'', not the
+	 binding ``_C__m'') -- see UnboundMethod class >> ___pyDisplayNameOf___:forClass:.
+	 A module function is never mangled, so its receiver is not consulted."
+	(receiver @env0:isKindOf: module) ifFalse: [
+		(UnboundMethod @env0:___pyDisplayNameOf___: selector forClass: receiver)
+			ifNotNil: [:raw | ^ raw]].
 	^ selector @env0:asString
 %
 
