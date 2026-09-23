@@ -177,6 +177,16 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
 
   check value: 'WARM BIND: import returned the committed module instance (identity)'
     value: (mod == committedMod).
+  "A NATIVE module the committed module imported: the reference it holds must
+  be the one this session's sys.modules answers, and a session-set attribute
+  must be visible through it (the deployed-codecs / mock.patch('builtins.open')
+  seam).  Both failed while native instances were minted per session."
+  check value: 'NATIVE: the committed module''s builtins is this session''s builtins (identity)'
+    value: ((mod @env1:builtins) == (importlib @env1:lookupModule: 'builtins')).
+  ((Python at: #builtins) ___instance___) @env1:___pyAttrStore___: #grail_bind_probe put: 42.
+  check value: 'NATIVE: a session-set builtins attribute is visible through the committed reference'
+    value: (((mod @env1:builtins) @env1:___pyAttrLoad___: #grail_bind_probe) = 42).
+  ((Python at: #builtins) ___instance___) @env0:removeDynamicInstVar: #grail_bind_probe.
   check value: 'body did NOT re-run (events = [boot, A], len 2)'
     value: (((mod @env1:events) @env1:__len__) = 2).
   widgetCls := mod @env1:Widget.

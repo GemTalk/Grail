@@ -120,21 +120,30 @@ _new: positional kw: kwargs
 	is object >> ___pyMetaclass___, and the three-argument form is the class
 	builder that learned to honour a non-empty namespace.
 
-	CPython rejects the keyword spelling -- ``type(name='C', bases=(), dict={})''
-	raises TypeError, which test_subclassinit test_type asserts -- so kwargs
-	are refused rather than merged into the positional count."
+	CPython rejects the keyword SPELLING of the three arguments --
+	``type(name='C', bases=(), dict={})'' raises TypeError, which
+	test_subclassinit test_type asserts -- so a keyword cannot stand in for a
+	positional one.
+
+	IT DOES ACCEPT CLASS KEYWORDS ALONGSIDE the three positionals, though, and
+	that is a different thing: ``type(name, bases, ns, **kwds)'' has forwarded
+	kwds to __init_subclass__ since 3.6, exactly as a class header's keywords
+	are forwarded.  Refusing every keyword conflated the two, so the only way
+	to build a class dynamically AND pass it class keywords did not exist --
+	which is what types.new_class needs to do its job."
 
 	| n |
-	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) @env0:ifTrue: [
-		^ TypeError @env1:___signal___: 'type() takes no keyword arguments'].
 	n := positional @env0:size.
-	(n @env0:= 1) @env0:ifTrue: [
-		^ (builtins @env1:instance) @env1:type: (positional @env0:at: 1)].
 	(n @env0:= 3) @env0:ifTrue: [
 		^ (builtins @env1:instance)
 			@env1:type: (positional @env0:at: 1)
 			_: (positional @env0:at: 2)
-			_: (positional @env0:at: 3)].
+			_: (positional @env0:at: 3)
+			kw: kwargs].
+	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) @env0:ifTrue: [
+		^ TypeError @env1:___signal___: 'type() takes no keyword arguments'].
+	(n @env0:= 1) @env0:ifTrue: [
+		^ (builtins @env1:instance) @env1:type: (positional @env0:at: 1)].
 	^ TypeError @env1:___signal___:
 		'type() takes 1 or 3 arguments'
 %

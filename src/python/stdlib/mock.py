@@ -27,7 +27,7 @@ import builtins
 import importlib
 import sys
 
-__all__ = ["Mock", "MagicMock", "NonCallableMock", "patch", "sentinel",
+__all__ = ["Mock", "MagicMock", "NonCallableMock", "patch", "sentinel", "mock_open",
            "call", "DEFAULT", "ANY"]
 
 
@@ -489,6 +489,76 @@ def patch_object(target_obj, attribute, new=DEFAULT, **kwargs):
 
 
 patch.object = patch_object
+
+
+def _to_stream(read_data):
+    if isinstance(read_data, bytes):
+        import io
+        return io.BytesIO(read_data)
+    import io
+    return io.StringIO(read_data)
+
+
+def mock_open(mock=None, read_data=''):
+    """A mock to replace ``open``, as CPython's ``unittest.mock.mock_open``.
+
+    Calling the result answers a file-handle mock whose ``read``,
+    ``readline``, ``readlines``, iteration and ``with`` block serve
+    ``read_data``, and which records every call -- ``write``, ``close`` --
+    for the assertions afterwards.  Each call of the open mock rewinds the
+    data, as upstream's does.
+
+    Adapted to this module's Mock rather than transcribed: a side_effect here
+    must be CALLABLE (upstream also takes an iterator), and a magic method is
+    configured by assigning a callable to it (upstream reads
+    ``handle.__enter__.return_value``), so both are spelled that way.  The
+    behaviour -- what each read answers, and that the data is shared between
+    them and reset per open() -- is upstream's.
+
+    ITERATING the handle does not work yet, and not because of this
+    function: a magic method configured on a Mock here does not reach
+    ``iter()`` or ``len()`` at all (``len(m)`` answers the configured
+    function rather than calling it).  ``__iter__`` is configured anyway, so
+    ``for line in handle`` starts working when Mock's magic methods do."""
+    state = {'data': _to_stream(read_data)}
+
+    def _read(*args, **kwargs):
+        return state['data'].read(*args, **kwargs)
+
+    def _readline(*args, **kwargs):
+        return state['data'].readline(*args, **kwargs)
+
+    def _readlines(*args, **kwargs):
+        return state['data'].readlines(*args, **kwargs)
+
+    def _iter(*args):
+        return iter(state['data'].readline, state['data'].read(0))
+
+    def _next(*args):
+        line = state['data'].readline()
+        if not line:
+            raise StopIteration
+        return line
+
+    if mock is None:
+        mock = MagicMock(name='open')
+    handle = MagicMock(name='open()')
+    handle.__enter__ = Mock(return_value=handle)
+    handle.__exit__ = Mock(return_value=False)
+    handle.__iter__ = Mock(side_effect=_iter)
+    handle.__next__ = Mock(side_effect=_next)
+    handle.write.return_value = None
+    handle.read.side_effect = _read
+    handle.readline.side_effect = _readline
+    handle.readlines.side_effect = _readlines
+
+    def reset_data(*args, **kwargs):
+        state['data'] = _to_stream(read_data)
+        return DEFAULT
+
+    mock.side_effect = reset_data
+    mock.return_value = handle
+    return mock
 
 
 def _register_as_unittest_mock():

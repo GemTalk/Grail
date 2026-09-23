@@ -114,3 +114,43 @@ def name(chr_, default=None):
             return default
         raise ValueError('no such name')
     return found
+
+
+# ``unicodedata.ucd_3_2_0'': the Unicode 3.2.0 database, which stringprep and
+# encodings.idna are specified against (RFC 3454 / RFC 3490 freeze it).  Unlike
+# the stubs above it is REAL -- category, bidirectional, combining,
+# decomposition and all four normalization forms, over tables generated from
+# CPython's own ucd_3_2_0 by scripts/generate_ucd.py and verified against it.
+#
+# Its helpers are imported inside each method, for the deploy reason in the
+# note above: a module-level import here would be bound once at deploy time.
+
+
+class _UCD_3_2_0:
+    unidata_version = '3.2.0'
+
+    def _db(self):
+        import _ucd
+        import _ucd_3_2_0
+        return _ucd.database(_ucd_3_2_0)
+
+    def category(self, ch):
+        return self._db().category(ch)
+
+    def bidirectional(self, ch):
+        return self._db().bidirectional(ch)
+
+    def combining(self, ch):
+        return self._db().combining(ch)
+
+    def decomposition(self, ch):
+        return self._db().decomposition(ch)
+
+    def normalize(self, form, unistr):
+        return self._db().normalize(form, unistr)
+
+    def is_normalized(self, form, unistr):
+        return self._db().is_normalized(form, unistr)
+
+
+ucd_3_2_0 = _UCD_3_2_0()

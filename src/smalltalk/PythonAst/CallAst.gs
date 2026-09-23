@@ -2279,7 +2279,28 @@ classNewSelectorForArity: nargs
 category: 'Grail-Class-Call Fast Path'
 method: CallAst
 printBareCallClassNewOn: aStream selector: aSelector
-	"Emit a class-call fast path:
+	"A class call takes the SAME runtime-globals probe its function siblings
+	take.  CPython's LOAD_GLOBAL reads the module's own globals before
+	builtins, so ``tuple = lambda x: 'tuple''' at module level shadows the type
+	for every call in that module -- and the fixed-arity and varargs builtin
+	paths already probe for exactly that (___moduleGlobalShadowName___).  This
+	one did not, so of ``all(...)'', ``any(...)'' and ``tuple(...)'' the first
+	two honoured the shadow and the third quietly built a real tuple.
+	test_builtin's test_all_any_tuple_optimization overrides all three together
+	and compares the three answers, which is how the odd one out shows."
+
+	| shadow |
+	shadow := self ___moduleGlobalShadowName___.
+	shadow isNil ifTrue: [
+		^ self printBareCallClassNewDirectOn: aStream selector: aSelector].
+	^ self printGlobalShadowProbeOn: aStream name: shadow then: [
+		self printBareCallClassNewDirectOn: aStream selector: aSelector]
+%
+
+category: 'Grail-other'
+method: CallAst
+printBareCallClassNewDirectOn: aStream selector: aSelector
+	"The unconditional class-call fast path -- the then-branch of the probe:
 	  0-arg: `(cls @env1:__new__)`
 	  1-arg: `(cls @env1:__new__: arg)`
 	  N-arg: `(cls @env1:__new__: arg1 _: arg2 _: ...)`
@@ -2382,6 +2403,25 @@ category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleBodyBeingCompiled: aBoolean
 	self ___compileContext___ at: #'moduleBodyBeingCompiled' put: aBoolean
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+futureAnnotations
+	"True while compiling a module that begins ``from __future__ import
+	annotations''.  PEP 563 still governs such a module in 3.14: a class's and
+	the module's __annotations__ are SOURCE STRINGS, stored eagerly, with
+	__annotate__ None; a function's annotate function answers strings.
+	Measured on CPython 3.14.6.  Grail treated the import as a no-op, which went
+	unnoticed while class annotations were strings for every module."
+
+	^ (self ___compileContext___ at: #'futureAnnotations' otherwise: false) == true
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+futureAnnotations: aBoolean
+	self ___compileContext___ at: #'futureAnnotations' put: aBoolean
 %
 
 category: 'Grail-Module Compile Context'

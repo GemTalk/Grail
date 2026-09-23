@@ -264,6 +264,12 @@ ___hasModuleScopeAwait___
 	((self isKindOf: AwaitAst)
 		or: [(self isKindOf: AsyncForAst) or: [self isKindOf: AsyncWithAst]])
 			ifTrue: [^ true].
+	"``[x async for x in ait]'' AWAITS TOO, and its async-ness is a FLAG on the
+	comprehension clause rather than a node kind -- there is no AsyncForAst in
+	a comprehension.  Without this the three shapes test_compile_top_level_await
+	spells as comprehensions compiled with the coroutine bit clear, so the
+	caller was told to exec code that has to be awaited."
+	((self isKindOf: ComprehensionAst) and: [self is_async = 1]) ifTrue: [^ true].
 	2 to: self class allInstVarNames size do: [:i |
 		| val |
 		val := self instVarAt: i.
@@ -274,6 +280,376 @@ ___hasModuleScopeAwait___
 				((each isKindOf: AbstractNode)
 					and: [each ___hasModuleScopeAwait___]) ifTrue: [^ true]]]].
 	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___rootModuleSource___
+	"The source text of the module this node was parsed from, or nil.
+
+	Found by walking ``parent'' to the root, which is the only link a node has
+	upward; ModuleAst records the text in parseSource:.  Nil for a tree built
+	by hand, and for one whose root is not a ModuleAst."
+
+	| node |
+	node := self.
+	[node parent notNil] whileTrue: [node := node parent].
+	((node isKindOf: ModuleAst) and: [node source notNil])
+		ifTrue: [^ node source].
+	"THE PARENT WALK IS NOT ALWAYS AVAILABLE AT EMIT TIME: setParent: runs
+	over the tree after construction, and a def reached through the nested
+	emit path can be generated from a node whose chain does not reach the
+	root.  parseSource: therefore also records the text class-side, for the
+	duration of the compile that is about to happen, and that is what this
+	falls back to."
+	^ AbstractNode ___currentModuleSource___
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
+___currentModuleSource___
+	"The source text of the module now being parsed and emitted, or nil.
+
+	Session-local, set by ModuleAst >> parseSource: -- which every entry
+	(import, exec, eval, compile) passes through -- and read only where a node
+	needs its own text and the parent walk cannot supply it."
+
+	^ SessionTemps current at: #'GrailCurrentModuleSource' otherwise: nil
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
+___currentModuleSource___: aString
+	SessionTemps current at: #'GrailCurrentModuleSource' put: aString
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___grailSourceSpanText___
+	"This node's own source text, sliced out of the module's by LINE.
+
+	Line granularity rather than column: the caller is after a COMPILABLE
+	fragment -- a def's body -- and a body always starts on its own line.  A
+	column slice would cut a statement in half whenever one shared a line with
+	its header, which ``def f(): return 1'' does.
+
+	Answers nil when the module source or this node's span is unavailable,
+	which is what tells the caller to fall back rather than emit a wrong
+	fragment."
+
+	| first last |
+	first := [self beginLine] on: AbstractException do: [:ex | ex return: nil].
+	last := [self endLine] on: AbstractException do: [:ex | ex return: nil].
+	^ self ___grailSourceLinesFrom___: first to: last
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___grailSourceLinesFrom___: first to: last
+	"Lines first..last of the module's source, or nil when either the text or
+	the range is unavailable.
+
+	Split out because the node that WANTS a span is not always the one that
+	HAS one: a Block carries no position -- SuiteAst descends from AbstractNode
+	rather than AbstractLocationNode -- so a def asking for its body's text has
+	to build the range from its first statement and its own end."
+
+	| src lines out lf |
+	(first isNil or: [last isNil]) ifTrue: [^ nil].
+	src := self ___rootModuleSource___.
+	src isNil ifTrue: [^ nil].
+	lf := Character lf.
+	lines := (src asString) subStrings: (String with: lf).
+	((first < 1) or: [(last > lines size) or: [last < first]]) ifTrue: [^ nil].
+	out := WriteStream on: String new.
+	first to: last do: [:i |
+		out nextPutAll: (lines at: i); nextPut: lf].
+	^ out contents
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___grailOptimizeLevel___
+	"The ``optimize'' level the compile now running was given -- -1 when the
+	caller said nothing, which means ``whatever the interpreter is''.
+
+	Read at EMIT time, not at parse time: the three things it changes are all
+	decisions a code generator makes (fold __debug__, drop an assert, drop a
+	docstring), and the level travels on the code object from compile() to the
+	exec() that eventually generates."
+
+	^ [((Python at: #builtins) @env1:instance) @env1:___grailOptimizeLevel___]
+		on: AbstractException do: [:ex | ex return: -1]
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___asPythonAst___
+	"This node as a Python ``ast'' object -- the tree ``ast.parse(source)'' and
+	``compile(source, f, mode, flags=PyCF_ONLY_AST)'' answer.
+
+	GENERIC, not 120 hand-written conversions.  Grail's node class names line up
+	with CPython's almost one for one (``BinOpAst'' -> ``BinOp'',
+	``MultAst'' -> ``Mult''), so the translation is: map the name, instantiate
+	that class from the ast module, and copy every child field across.  Where
+	they do not line up -- Grail's ClassFunctionDef / InstanceFunctionDef /
+	StaticFunctionDef are all a CPython FunctionDef -- a small table says so.
+
+	THE POSITION IVARS ARE NOT FIELDS.  ``parent'' points UP, and beginLine /
+	beginColumn / endLine / endColumn are AbstractLocationNode's; they become
+	``lineno'' / ``col_offset'' / ``end_lineno'' / ``end_col_offset'' on the
+	Python node, which is where a reader looks for them, rather than being
+	copied under Grail's own spellings.
+
+	A node class the ast module does not know still translates -- into a
+	same-named class declared there with no fields -- so an unfamiliar corner of
+	the tree is thin rather than fatal.  Answering nil for a node would make the
+	walker's caller crash somewhere else entirely."
+
+	| astMod cls out |
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ nil].
+	cls := [astMod @env1:___pyAttrLoad___: self ___pythonAstClassName___ asSymbol]
+		on: AbstractException do: [:ex | ex return: nil].
+	cls isNil ifTrue: [
+		cls := [astMod @env1:___pyAttrLoad___: #'AST']
+			on: AbstractException do: [:ex | ex return: nil]].
+	cls isNil ifTrue: [^ nil].
+	"AN OPERATOR-CARRYING NODE IS SPLIT IN TWO.  Grail makes the operator the
+	SUBCLASS -- ``-a'' is a USubAst with an operand, ``a and b'' an AndAst with
+	values -- while CPython has one node with an ``op'' field holding a
+	singleton: UnaryOp(op=USub(), operand=...).  So those translate to the
+	general node with the marker inside, not to a marker with an operand
+	hanging off it, which is what a reader walks for.
+
+	BinOp is already the second shape (its ``op'' holds a MultAst), which is
+	why only these two families need the split."
+	((self isKindOf: UnaryOpAst) and: [(self class == UnaryOpAst) not])
+		ifTrue: [^ self ___asSplitOperatorAst___: 'UnaryOp' operandField: 'operand'].
+	((self isKindOf: BoolOpAst) and: [(self class == BoolOpAst) not])
+		ifTrue: [^ self ___asSplitOperatorAst___: 'BoolOp' operandField: 'values'].
+	out := cls @env1:___pyCallValue___: #() kw: nil.
+	self ___copyAstFieldsInto___: out.
+	^ out
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___asSplitOperatorAst___: outerName operandField: fieldName
+	"A UnaryOp / BoolOp built from a Grail node whose CLASS is the operator."
+
+	| astMod outerCls markerCls out |
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ nil].
+	outerCls := [astMod @env1:___pyAttrLoad___: outerName asSymbol]
+		on: AbstractException do: [:ex | ex return: nil].
+	markerCls := [astMod @env1:___pyAttrLoad___: self ___pythonAstClassName___ asSymbol]
+		on: AbstractException do: [:ex | ex return: nil].
+	(outerCls isNil or: [markerCls isNil]) ifTrue: [^ nil].
+	out := outerCls @env1:___pyCallValue___: #() kw: nil.
+	out @env1:___pyAttrStore___: #'op'
+		put: (markerCls @env1:___pyCallValue___: #() kw: nil).
+	out @env1:___pyAttrStore___: fieldName asSymbol
+		put: (self ___translatedAstValue___:
+			(self instVarAt: (self class allInstVarNames indexOf: fieldName asSymbol))).
+	self ___copyAstPositionInto___: out.
+	^ out
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___pythonAstClassName___
+	"The ast-module class name for this node: the Smalltalk name without its
+	``Ast'' suffix, except where Grail splits one CPython node into several.
+
+	The three FunctionDef variants are Grail's way of recording HOW a def was
+	reached (class body, instance, static); CPython has one node and puts that
+	distinction in the decorator list, so they all report FunctionDef."
+
+	| n |
+	n := self class name asString.
+	(n endsWith: 'Ast') ifTrue: [n := n copyFrom: 1 to: n size - 3].
+	(n = 'ClassFunctionDef' or: [n = 'InstanceFunctionDef' or: [n = 'StaticFunctionDef']])
+		ifTrue: [^ 'FunctionDef'].
+	^ n
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___copyAstFieldsInto___: pyNode
+	"Copy this node's children onto the Python node, translating as it goes,
+	and carry the source position across under CPython's names.
+
+	``parent'' is skipped by NAME rather than by index: it points UP, and
+	following it would translate the whole tree from every node in it."
+
+	| names declared |
+	"THE ast MODULE'S OWN ``_fields'' IS THE SPEC of what to copy.  Grail's
+	nodes carry codegen bookkeeping beside their children -- CompareAst has
+	``rhsTemp'' and ``opTemps'' for the temporaries its emit needs -- and
+	copying every instVar put those in the tree as attributes CPython has no
+	name for.  Filtering against _fields drops them without a list here that
+	would have to be maintained beside the nodes.
+
+	A node whose class declares no fields copies everything, which is what
+	keeps a Grail-only corner of the tree present rather than empty."
+	declared := [pyNode @env1:___pyAttrLoad___: #'_fields']
+		on: AbstractException do: [:ex | ex return: nil].
+	names := self class allInstVarNames.
+	1 to: names size do: [:i |
+		| nm mapped |
+		nm := (names at: i) asString.
+		mapped := self ___pythonAstFieldName___: nm.
+		((self ___isAstLocationName___: nm) not
+			and: [(self ___astDeclares___: declared field: mapped)])
+				ifTrue: [
+					pyNode @env1:___pyAttrStore___: mapped asSymbol
+						put: (self ___translatedAstValue___: (self instVarAt: i))]].
+	self ___copyAstPositionInto___: pyNode
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___astDeclares___: declaredFields field: aName
+	"Whether the Python node declares aName -- true for every name when it
+	declares none, which is how a Grail-only node keeps its children."
+
+	declaredFields isNil ifTrue: [^ true].
+	^ [(declaredFields @env1:__len__) = 0
+		or: [declaredFields @env1:__contains__: aName]]
+		on: AbstractException do: [:ex | ex return: true]
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___pythonAstFieldName___: aName
+	"The CPython field name for one of Grail's instVars.
+
+	Four disagree, and they are the four a reader reaches for first: a call's
+	callee and arguments, and a comparison's operators and operands."
+
+	aName = 'function' ifTrue: [^ 'func'].
+	aName = 'arguments' ifTrue: [^ 'args'].
+	aName = 'cmpopList' ifTrue: [^ 'ops'].
+	aName = 'comparatorList' ifTrue: [^ 'comparators'].
+	^ aName
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___isAstLocationName___: aName
+	"Whether an instVar is bookkeeping rather than a child: the upward link and
+	the four source-position fields."
+
+	^ #('parent' 'beginLine' 'beginColumn' 'endLine' 'endColumn')
+		includes: aName
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___copyAstPositionInto___: pyNode
+	"lineno / col_offset / end_lineno / end_col_offset, under the names a
+	reader looks for.  Absent on a node that carries no location, which is what
+	CPython does for the operator singletons."
+
+	#( #('beginLine' 'lineno') #('beginColumn' 'col_offset')
+	   #('endLine' 'end_lineno') #('endColumn' 'end_col_offset') )
+		do: [:pair |
+			| v |
+			v := [self perform: (pair at: 1) asSymbol]
+				on: AbstractException do: [:ex | ex return: nil].
+			v isNil ifFalse: [
+				pyNode @env1:___pyAttrStore___: (pair at: 2) asSymbol put: v]]
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___translatedAstValue___: aValue
+	"One field value: a node becomes its Python twin, a collection becomes a
+	list of translated elements, everything else goes across unchanged.
+
+	A Symbol becomes a STRING.  Grail stores a name as a Symbol and Python code
+	compares it with ``==`` against a str -- a Symbol passes isinstance(str) and
+	breaks the hash/eq invariant the moment it reaches a dict, so it must not
+	leave here as one."
+
+	| out |
+	aValue isNil ifTrue: [^ nil].
+	"A BLOCK IS NOT A NODE CPYTHON HAS.  Grail wraps a statement list in one --
+	it carries the scope's variable sets -- and CPython's ``body'' IS the list.
+	Translating the Block itself gave ``Module.body'' a Block object, which is
+	not subscriptable, so every reader of a parse tree failed at the first
+	step.  Flattening here rather than at each use keeps the rule in one
+	place: wherever a Block appears, its contents are what belongs there."
+	((aValue isKindOf: BlockAst) or: [aValue isKindOf: SuiteAst]) ifTrue: [
+		^ self ___translatedAstValue___: aValue body].
+	(aValue isKindOf: AbstractNode) ifTrue: [^ aValue ___asPythonAst___].
+	aValue isSymbol ifTrue: [^ aValue asString].
+	((aValue isKindOf: Array) or: [aValue isKindOf: OrderedCollection]) ifTrue: [
+		out := OrderedCollection new.
+		aValue do: [:each | out add: (self ___translatedAstValue___: each)].
+		^ list @env1:__new__: out asArray].
+	^ aValue
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___grailAstModule___
+	"The ``ast'' module, imported on demand.  Nil when it cannot be imported,
+	which leaves the translation answering nil rather than raising out of a
+	parse."
+
+	^ [((Python at: #builtins) @env1:instance) @env1:___import__: { 'ast' } kw: nil]
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___collectCodeConstScopesInto___: aCollection
+	"Add to aCollection every node in this subtree that CPython gives its own
+	CODE OBJECT in the enclosing function's co_consts -- a generator
+	expression, a nested def, a lambda -- WITHOUT descending into one.
+
+	Since 3.12 that list is shorter than it used to be: list, set and dict
+	comprehensions are INLINED and no longer appear, so counting them would
+	answer three where CPython answers zero.  Measured on 3.14.6.
+
+	A nested scope is collected but not entered, because its own comprehensions
+	belong to ITS co_consts and not to this one.
+
+	Generic instVar traversal, the same one
+	___collectModuleScopeStarImportsInto___ uses; ``parent'' points UP and is
+	skipped by index."
+
+	((self isKindOf: GeneratorExpAst)
+		or: [(self isKindOf: FunctionDefAst)
+			or: [(self isKindOf: AsyncFunctionDefAst)
+				or: [self isKindOf: LambdaAst]]])
+		ifTrue: [
+			aCollection add: self.
+			^ self].
+	(self isKindOf: ClassDefAst) ifTrue: [^ self].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode)
+			ifTrue: [val ___collectCodeConstScopesInto___: aCollection].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode)
+					ifTrue: [each ___collectCodeConstScopesInto___: aCollection]]]]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___codeConstNameFor___
+	"The ``co_name'' of the code object this node contributes to an enclosing
+	function's co_consts.  CPython names a genexp ``<genexpr>'' and a lambda
+	``<lambda>''; a def is named after itself."
+
+	(self isKindOf: GeneratorExpAst) ifTrue: [^ '<genexpr>'].
+	(self isKindOf: LambdaAst) ifTrue: [^ '<lambda>'].
+	^ [self name asString] on: AbstractException do: [:ex | ex return: '<unknown>']
 %
 
 category: 'Grail-codegen helpers'
@@ -1182,9 +1558,26 @@ ___manglePrivate___: aName
 	class C both yield _C__x); an all-underscore class name mangles
 	nothing, matching CPython."
 
-	| s cls stripped i |
-	cls := self ___manglingClassName___.
-	cls isNil ifTrue: [^ aName].
+	^ AbstractNode ___mangle___: aName forClass: self ___manglingClassName___
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
+___mangle___: aName forClass: aClassName
+	"CPython's _Py_Mangle as a pure function of the name and the class -- the
+	one copy of the rule.  Shared by codegen (___manglePrivate___:, which finds
+	the class by walking the AST) and by the PARSER (PythonParser >>
+	___mangle___:, which knows it from its own class-name stack), so the two
+	can never disagree about what a name mangles to.
+
+	ANSWERS aName UNCHANGED -- same object, same class -- whenever nothing is
+	mangled, so a Symbol in stays a Symbol out on the common path.  Mangling is
+	IDEMPOTENT: a result has exactly one leading underscore and so never
+	qualifies again, which is what lets codegen's calls run harmlessly over
+	names the parser has already mangled."
+
+	| s stripped i |
+	aClassName isNil ifTrue: [^ aName].
 	s := aName asString.
 	"Must start with two underscores..."
 	(s size > 2 and: [(s at: 1) == $_ and: [(s at: 2) == $_]]) ifFalse: [^ aName].
@@ -1192,7 +1585,7 @@ ___manglePrivate___: aName
 	((s at: s size) == $_ and: [(s at: s size - 1) == $_]) ifTrue: [^ aName].
 	"A dotted name is never mangled (CPython checks this too)."
 	(s includesValue: $.) ifTrue: [^ aName].
-	stripped := cls asString.
+	stripped := aClassName asString.
 	i := 1.
 	[i <= stripped size and: [(stripped at: i) == $_]] whileTrue: [i := i + 1].
 	stripped := stripped copyFrom: i to: stripped size.
@@ -2157,18 +2550,6 @@ ___defaultSourceString___
 	^ self ___annotationSourceString___
 %
 
-category: 'Grail-annotations'
-method: AbstractNode
-___annotationSourceString___
-	"PEP 563-style source string for an annotation expression.  The
-	annotation subset the unparser covers (Name / Attribute / Subscript /
-	Tuple / BinOp union / string+None constants) is handled by per-node
-	overrides; anything else falls back to this placeholder rather than
-	evaluating (annotations are NEVER evaluated -- forward references to
-	not-yet-defined names must not break module load)."
-
-	^ '<annotation>'
-%
 
 category: 'Grail-code generation'
 method: AbstractNode

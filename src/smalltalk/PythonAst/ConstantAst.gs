@@ -95,7 +95,7 @@ printSmalltalkOn: aStream
 	].
 	(value isKindOf: complex) ifTrue: [
 		aStream
-			nextPutAll: '(complex ___new___: ';
+			nextPutAll: '(___complex___ ___new___: ';
 			print: (value @env1:real);
 			nextPutAll: ' _: ';
 			print: (value @env1:imag);
@@ -208,22 +208,32 @@ value
 
 category: 'Grail-annotations'
 method: ConstantAst
-___annotationSourceString___
-	"A string-literal annotation (a forward reference like def
-	f(x: Foo) written with Foo quoted) carries its content verbatim --
-	CPython stores the forward-reference string.  None/other literals
-	stringify.
+___constantRepr___
+	"The literal as Python's repr -- what ast.unparse writes for a Constant:
+	quoted strings, b'...' for bytes, 4j for a complex, True / False / None, and
+	``...'' for the Ellipsis marker.  Rendered through builtins' repr, so the
+	quote choice and escapes are Python's own rather than a second copy of
+	them; Smalltalk's printString gave ``aByteArray( 104, ...)'' for b'hello'
+	and ``acomplex'' for 4j."
 
-	Booleans render PYTHON-side: Smalltalk printString gives ``true''
-	where Python source says ``True'', and this text is read back as
-	Python source -- inspect.signature prints it for a default, so
-	``def f(c=True)'' must render ``c=True''."
-
-	(value isKindOf: CharacterCollection) ifTrue: [^ value asString].
+	value == #'...' ifTrue: [^ '...'].
 	value isNil ifTrue: [^ 'None'].
 	value == true ifTrue: [^ 'True'].
 	value == false ifTrue: [^ 'False'].
-	^ value printString
+	^ [((Python at: #builtins) @env1:instance @env1:repr: value) asString]
+		on: AbstractException do: [:ex | ex return: value printString]
+%
+
+category: 'Grail-annotations'
+method: ConstantAst
+___annotationSourceString___
+	"A string constant at the ROOT of an annotation is a forward reference whose
+	content IS the annotation -- ``x: 'Foo''' renders as Foo, unquoted -- so it stays
+	verbatim here.  Everything else, and a string NESTED in an expression
+	(``Annotated[int, 'doc']''), is rendered by the unparser, which quotes it."
+
+	(value isKindOf: CharacterCollection) ifTrue: [^ value asString].
+	^ self ___unparse___: 4
 %
 method: ConstantAst
 value: newValue

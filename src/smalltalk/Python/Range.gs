@@ -24,6 +24,20 @@ range class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Grail-Python protocol'
+classmethod: range
+__getitem__: index
+	"``range[1]'' -- a TypeError, as in CPython, which gives range no
+	__class_getitem__.  Metaclass3's permissive default answers the class itself
+	for any subscript, which is load-bearing for user classes but hid this for a
+	built-in: ``def f(x: range[1])'' read its annotations without complaint where
+	CPython raises (test_annotationlib test_partial_evaluation_error).  Joins the
+	scalar built-ins Subscript.gs already makes strict (int, float, bool, str,
+	bytes); range cannot be subclassed, so there is no hook to defer to."
+
+	^ TypeError ___signal___: 'type ''range'' is not subscriptable'
+%
+
 category: 'Grail-Initialization'
 classmethod: range
 __new__: start _: stop

@@ -79,12 +79,13 @@ CPython's slot 0 is single and the last program to start owns it. Separate
 entries would let a long session accumulate one stale directory per *kind* of
 start.
 
-**Accepted platform gap: symlinks are not resolved.** CPython resolves the
-script path's symlinks before taking its directory. Grail's
-`os_path >> realpath:` is literally `abspath:` — there is no symlink-reading
-primitive under it to build on — so a symlinked script answers the *link's*
-directory, not the target's. Absolutising is the part that was reachable; this
-part is not, and is left as a known deviation rather than faked.
+**Symlinks were not resolved when this was written, and now are.** CPython
+resolves the script path's symlinks before taking its directory, and Grail's
+`os_path >> realpath:` was literally `abspath:`, so a symlinked script answered
+the *link's* directory. This entry called that a platform gap with "no
+symlink-reading primitive under it to build on"; that was wrong twice over —
+`os.readlink` existed, and CPython's own `posixpath.realpath` was already in
+the tree and already worked. See "os.path.realpath resolved no symlink" below.
 
 Covered by six new `SysPathBootstrapTestCase` tests, including the end-to-end
 one the original fix never had (drive `runPath:` and assert `sys.path[0]`,
@@ -1057,14 +1058,26 @@ left is one cluster plus one unrelated test, diagnosed but not fixed:
 
 Those three are `test_errors` and `test_errors_changed_pep487`.
 
-* **`__init_subclass__` is not resolved along the full MRO.** The
-  cooperative chain walks Smalltalk superclass links, so a diamond whose
-  hook lives on a SECONDARY base is skipped:
-  `class A(Left, Middle, Right, middle="middle")` never reaches Middle's
-  hook and the leftover keyword reaches `object.__init_subclass__`, which
-  rejects it (`test_init_subclass_diamond`). `___grailInitSubclassRoots___`
-  already exists for the mixin case; making the whole cooperative
-  `super()` chain MRO-ordered is the real fix and is a larger job.
+* ~~**`__init_subclass__` is not resolved along the full MRO.**~~ **FIXED**
+  (2026-09-22, PR #1123). The ENTRY searched Smalltalk superclass links, so a
+  diamond whose hook lives on a SECONDARY base was skipped and the leftover
+  keyword reached `object.__init_subclass__`, which rejected it. It now goes
+  through `___grailInitSubclassMroSupplierAfter___`, which reads `__mro__`.
+
+  **The "larger job" this entry predicted did not exist.** It said making the
+  whole cooperative `super()` chain MRO-ordered was the real fix; in fact
+  `Super >> _lookupMethodAndSideFirstOf:` already walked `___mroOf___` from
+  `cls`'s index, assigned hooks included, so the continuation had been right
+  all along. An MRO-ordered hop was written for `Super >> ___pyAttrLoad___:`
+  on the strength of this paragraph and removed again when its control did not
+  discriminate. Read that as a warning about this file: a recorded diagnosis
+  is a measurement with a date on it, and the control is what settles it.
+
+  What the fix did need, and this entry did not predict, was that the search
+  base and the assigned-hook probe become ONE search. Two separate ones
+  disagree exactly on a diamond, and a class whose MRO names an assigned hook
+  on one base while the base walk finds a defined one on another then runs
+  NEITHER.
 
 Noticed in passing, unrelated to the above: a class attribute SET AT
 RUNTIME (including by `__init_subclass__`) is not visible through the
@@ -2506,25 +2519,44 @@ Probing the object model while there did find three real defects in it:
   `___grailInitSubclassRoots___`, the same base list the assigned-hook search
   already used.
 
-### What is still open in the diamond
+### The diamond is closed (2026-09-22, PR #1123)
 
-`___grailInitSubclassSearchBase___` is a **left-to-right walk of the bases,
-each one's superclass chain first** — not a C3 linearization. It agrees with
+`___grailInitSubclassSearchBase___` was **a left-to-right walk of the bases,
+each one's superclass chain first** — not a C3 linearization. It agreed with
 the MRO for every hierarchy whose bases do not SHARE an ancestor, and
-disagrees when they do. `test_subclassinit.test_init_subclass_diamond` is the
-disagreeing shape and still fails, unchanged at ERROR 17/2/1: `class A(Left,
-Middle, Right)` with `Left` and `Right` both deriving from `Base` puts `Base`
-AFTER `Middle` in the real MRO, and the walk reaches `Base` through `Left`
-first.
+disagreed when they do. `test_subclassinit.test_init_subclass_diamond` was the
+disagreeing shape.
 
-That test needs more than a search base in any case. Its hooks chain
-cooperatively with `super().__init_subclass__(**kwargs)`, and Grail's `super()`
-inside a hook walks Smalltalk links too, so `Middle`'s `super()` cannot reach
-`Right` **whatever the entry point is**. So the `__init_subclass__` bullet in
-`## OPEN: metaclass class-keyword plumbing, and type.__new__ keyword rejection`
-is NARROWED, not resolved: reaching a secondary base's hook works; continuing
-the cooperative chain in MRO order does not. That section's other three items were re-measured, and
-two of the three readings have moved:
+The entry now asks `___grailInitSubclassMroSupplierAfter___`, which reads
+`__mro__` and answers the next class that SUPPLIES a hook, defined or
+assigned. The base walk remains as the fallback for a class whose `__mro__`
+cannot be read.
+
+**The second half of what this section claimed was wrong.** It said the test
+needed more than a search base — that `Middle`'s `super()` could not reach
+`Right` whatever the entry point was, because `super()` inside a hook walked
+Smalltalk links too. It does not: `Super >> _lookupMethodAndSideFirstOf:`
+walks `___mroOf___` from `cls`'s index and has all along. A hop written for
+`Super >> ___pyAttrLoad___:` on the strength of that sentence was removed when
+its control turned out not to discriminate.
+
+`test.test_subclassinit` is `OK 17/0/0`.
+
+`types.new_class` forwards its class keywords now too, which was the other
+half of that module. The forwarding is CONDITIONAL, and the reason is worth
+recording: CPython sends the keywords to `meta(...)` and `__init_subclass__`
+sees only what that metaclass's `__new__` passes on to `type.__new__`, so a
+`__new__` carrying `**kwargs` consumes them and the class builds. Grail builds
+through `type()` and cannot call the metaclass, so forwarding ALL of them made
+`test_errors` pass and turned two shapes CPython builds into a spurious
+TypeError — one right row bought with two wrong ones. It now takes a
+Python-level `__new__` at its word and forwards nothing; a metaclass defining
+none forwards all. `__code__` is the discriminator because it answers the same
+in both runtimes — `meta.__new__ is not type.__new__` does not, since Grail
+answers True for a metaclass that defines nothing.
+
+The remaining three items in the section below were re-measured, and two of the
+three readings have moved:
 
 * a metaclass `__new__` naming a class keyword with no default is
   **unchanged** — still `type.__new__() argument 3 must be dict, not
@@ -6192,11 +6224,7 @@ unspecified, and the stub had happened to sort.
 None of these is a regression — the stub had none of these methods — but each is
 a call the real pathlib now makes and Grail cannot yet answer.
 
-* **`os.path.realpath` does not resolve symlinks.** `os.readlink` exists, so this
-  is a gap, not a platform limit. On macOS every `tempfile` directory sits under
-  `/var -> /private/var`, so `Path(tempfile.mkdtemp()).resolve()` differs from
-  CPython there. `real_pathlib.py` compares paths relative to its root for this
-  reason.
+* **`os.path.realpath` did not resolve symlinks** — FIXED below.
 * **`os.rename` of a missing file returns normally.**
   `GsFile renameFileOnServer:to:` answers an errno on failure, and `os.rename`
   tests only for `nil`. `Path.rename` inherits it. — FIXED below.
@@ -6204,9 +6232,9 @@ a call the real pathlib now makes and Grail cannot yet answer.
   the subclass from the errno. `BaseException class >> ___classForArgs___:` is
   the hook for exactly this, but only the two-argument constructor consults it.
 * **Missing `os` support for other `Path` methods:** `replace`/`move`
-  (`os.replace` — FIXED below), `walk` (`os._walk_symlinks_as_files`), `is_mount`
-  (`os.path.ismount`), `is_junction` (`os.path.isjunction`), and
-  `as_uri`/`from_uri` (`urllib.request.pathname2url`/`url2pathname`).
+  (`os.replace`), `walk`, `is_mount`, `is_junction` and `as_uri`/`from_uri`
+  (`urllib.request.pathname2url`/`url2pathname`) — all FIXED below. That is
+  the whole list.
 * **`abc.ABC` does not carry `ABCMeta`.** That is why `pathlib.types` needs its
   adaptation; `abc.py` records why the switch is deferred.
 
@@ -6284,11 +6312,8 @@ filesystem is reported the same way, where CPython would say `EROFS`.
 
 ### Still open in the same area
 
-* **`os.chdir`, `os.rmdir`, and `os.remove` of a directory** say
-  `Cannot change directory` / `Cannot remove ...` as a plain `OSError` with no
-  errno. Their primitives answer only nil, so each needs a filesystem diagnosis,
-  like the one `mkdir` has. `os.remove` of a directory is also a platform
-  split: `EPERM` on Darwin and `EISDIR` on Linux.
+* **`os.chdir`, `os.rmdir`, and `os.remove` of a directory carried no errno** —
+  FIXED below.
 * **`subprocess` of a missing program** raises
   `FileNotFoundError('[Errno 2] ...')` from the text alone. CPython sets
   `filename` to the program.
@@ -6299,3 +6324,248 @@ filesystem is reported the same way, where CPython would say `EROFS`.
   as a message too.
 * **`OSError(2, 'msg')` still stays an `OSError`** (see the pathlib entry):
   a tier-2 change to the constructors every exception shares.
+
+## os.chdir said nothing when it failed
+
+`os.chdir('/nope')` returned `None`, changed nothing, and raised nothing.
+`GsFile _directoryPrim: 0` answers `0` on success and the errno on failure, and
+`os.chdir` tested only for `nil` — the one answer it never gives. That is
+`os.rename`'s defect again, in the one other place a primitive reports this
+way, and it was found by writing the test that covers the two entries beside
+it rather than by a caller hitting it.
+
+`os.rmdir` and `os.remove` of a directory did raise, but a plain `OSError`
+carrying only a sentence Grail wrote itself:
+
+```
+OSError: Cannot remove directory: '/tmp/x'
+```
+
+So `except FileNotFoundError` around an `os.rmdir` never fired, `e.errno` was
+`None`, and rmdir of a NON-EMPTY directory was indistinguishable from rmdir of
+a missing one — the two cases callers most need to tell apart. Both primitives
+answer only nil, so their errno is read back from the filesystem, the way
+`os.mkdir`'s already was: the path's own lstat errno, `ENOTDIR` for something
+that is not a directory (a SYMLINK to one included, which is why the probe is
+an lstat), and `ENOTEMPTY` for a directory that still holds entries.
+
+### Two errnos are numbered per platform
+
+Everything mapped before this point is numbered alike on Darwin and Linux.
+These two are not, and Grail now answers whichever the platform uses:
+
+* a directory that still holds entries is `ENOTEMPTY`, **66** on Darwin and
+  **39** on Linux. It has no `OSError` subclass of its own on either.
+* `unlink(2)` of a directory is `EPERM` on Darwin, so CPython raises
+  `PermissionError`, and `EISDIR` on Linux, so it raises `IsADirectoryError`.
+
+`os class >> ___isDarwin` is what decides, the predicate `___libcName` already
+needed for the `strerror` callout.
+
+### Still open in the same area
+
+* **Grail's `errno` module answers the BSD numbers on every platform.** Its own
+  header says so and calls it self-consistent, which it was while nothing
+  raised a real errno. It no longer is: on Linux, `os.rmdir` of a full
+  directory now raises `e.errno == 39` while `errno.ENOTEMPTY` in the same
+  session is 66, so the comparison Python code actually writes is false.
+  ENOENT, EACCES, EEXIST, ENOTDIR and EISDIR agree on both platforms and are
+  unaffected; the stub's network errnos are where it matters most. Reading the
+  numbers from the platform is the fix.
+* **A directory that cannot be entered or removed for a reason the stat cannot
+  see** — a permission on the directory itself — still falls back to the plain
+  `OSError` with Grail's own sentence, since the primitives report nothing.
+* **`subprocess`, the socket layer and Grail's `shutil.py`** still raise the
+  message-only form (see the entry above).
+* **`shutil.rmtree` followed a symbolic link to a directory** — FIXED below.
+
+## shutil.rmtree followed a symbolic link, and deleted what it pointed at
+
+`_rmtree_inner` asked `os.path.isdir`, which RESOLVES a link. So a link to a
+directory inside the tree was recursed into: `rmtree` deleted the contents of
+what the link POINTED AT — files outside the tree it was asked to remove — and
+then failed on the entries it had already taken away. CPython never looks
+through a link there. It unlinks the link itself and leaves the target alone.
+
+`rmtree` OF a link is refused rather than followed, which is CPython's own
+answer to the same bug (GH-46010: `rmtree(link)` once emptied the directory the
+link named). The exception it raises for that is an odd one, and is reproduced
+as measured rather than as invented: an `OSError` whose `errno` and `strerror`
+are both `None`, with the path as `filename`, printing as
+
+```
+[Errno None] None: '/some/path'
+```
+
+`OSError(None, None, path)` builds exactly that, because the unpacking in
+`OSError >> ___args___:` stores the None SINGLETON for a field supplied as
+None, and `__str__` tests presence rather than truth. A DANGLING link at the
+top is `ENOENT` instead, since CPython opens the target and reports what that
+open said.
+
+### How it was found, which is the part worth keeping
+
+Not by a caller, and not by review: by a fixture's CLEANUP on CI. The
+`os_directory_errors` fixture built a tree holding a symlink and called
+`rmtree` on it at the end. Darwin listed the link AFTER the directory it
+pointed at, so the damage was done to entries already removed and nothing
+failed; Linux listed it BEFORE, and the run died. The same code, the same
+fixture, and a defect visible on one platform only because of DIRECTORY
+LISTING ORDER.
+
+Two things follow. A fixture's cleanup is test surface, not scaffolding — this
+one found a data-loss bug that no assertion was aiming at. And a green local
+run says less than it looks for anything that walks a directory, since the
+order is the filesystem's, not Grail's; `tests/python/rmtree_symlinks.py`
+therefore checks what must SURVIVE a removal, not only what must raise.
+* **`shutil.rmtree` FOLLOWS a symbolic link to a directory**, and deletes what
+  it points at. `_rmtree_inner` asks `os.path.isdir`, which resolves the link,
+  and recurses; CPython asks `os.path.islink` first and unlinks the link
+  itself, and raises rather than recursing when the TOP of the tree is one.
+  So `rmtree` of a tree holding a link can delete files outside that tree.
+  Found by the fixture above on CI: Darwin listed the link after the directory
+  it pointed at, which hid it, and Linux listed it first. That one needs
+  `os.lstat`, not a wider errno map, so it is a change of its own.
+
+## os.path.realpath resolved no symlink, and CPython's own was already there
+
+`realpath` answered `abspath`: it normalised the path and resolved nothing, so
+`realpath(link)` answered the link's own name. `pathlib.Path.resolve()` calls
+`os.path.realpath(self, strict=strict)` and inherited it — the one call there
+the hand-written pathlib had implemented.
+
+**The fix is a delegation, because the implementation was already in the tree
+and already worked.** Grail ships CPython's `posixpath.py` (pathlib imports
+it), and `posixpath.realpath` called directly answers every case correctly
+under Grail today: a link in the middle of a path, a relative target resolved
+against the directory holding the link, a chain, `..` unwound after following,
+and a symlink LOOP. Measured before anything was written — ten cases, all
+matching CPython. What was missing was only the wiring: `os_path >> realpath:`
+never asked it.
+
+So the change is two sends, not an algorithm. Resolving is not one `readlink`:
+it is a component-by-component walk that re-resolves each link against its own
+directory, unwinds `..` AFTER following rather than textually, and has to
+notice a loop and answer differently under `strict`. A second copy of that
+beside the one already shipped would be a second thing to get wrong.
+
+`strict` is posixpath's own now rather than a `stat` bolted on afterwards.
+That is visible in two places: a symlink loop raises `OSError` carrying ELOOP
+where a re-stat produced `FileNotFoundError`, and a missing component in the
+MIDDLE of a path is named by CPython as the component, not as the leaf.
+
+### What this says about the entries above it
+
+Two of them called this a platform gap. The `sys.path[0]` entry said there was
+"no symlink-reading primitive under it to build on", and the pathlib entry
+said `real_pathlib.py` compares paths relative to its root "for this reason".
+Both were written after reading `realpath:` and finding `abspath:`, and
+neither checked what the tree already had. The lesson is cheap to state and
+was expensive to skip: before recording a limit, look for the CPython module
+that already implements it — `pathlib` (#1104) and this are now two cases
+where the answer was a file Grail was already shipping.
+
+## Path.walk, Path.is_mount and Path.is_junction had no os under them
+
+All three raised `AttributeError`. Two were wiring, and one was a real mode
+`os.walk` did not have.
+
+**`os.path.ismount` and `os.path.isjunction` were already written.** CPython's
+`posixpath` implements `ismount` (it compares a path's device and inode against
+its parent's) and re-exports `genericpath`'s `isjunction`, which answers false
+off Windows *after* coercing its argument — so a non-path is still a TypeError
+rather than a bare `false`. Grail ships both files. They are delegations now,
+as `realpath` became in the entry above. **`os.path.relpath` was missing
+outright** and is the same one-line delegation; it turned up because a fixture
+called it.
+
+**`os.walk` needed a third mode.** `Path.walk` passes
+`os._walk_symlinks_as_files` as `followlinks` for its own
+`follow_symlinks=False`. That is a bare sentinel OBJECT, compared by identity,
+and it asks for something neither Boolean gives: a symlink to a directory
+belongs among the FILENAMES and is never descended into. CPython spells it
+
+```python
+if followlinks is _walk_symlinks_as_files:
+    is_dir = entry.is_dir(follow_symlinks=False) and not entry.is_junction()
+```
+
+Grail had no sentinel to compare against, and **an object is truthy**, so had
+one been passed it would have read as `followlinks=True` — descending into
+every link, the exact opposite of what the caller asked for. A missing
+attribute that raises is the lucky failure here; the dangerous one was the
+plausible answer waiting behind it.
+
+The fixture checks all three of `os.walk`'s symlink modes rather than only the
+new one, because the other two share the classification the change touched.
+
+**Its first CI run failed, on listing order again.** The fixture compared the
+walk's rows in the order they were yielded, and the order a walk visits
+SIBLINGS in is the filesystem's listing order: Darwin's put the real directory
+first and Linux's put the symlink first, so two rows swapped and the fixture
+failed on CI having passed locally. Reproduced by re-running it with
+`os.scandir` reversed, which fails the same two checks. The comparisons are
+sorted now, and the two orderings that ARE contracts — bottom-up yielding a
+directory after its children, and pruning by mutating `dirnames` — are
+asserted as sequences on their own. Same lesson as the `rmtree` entry above,
+one entry later.
+
+### Private by name is not private in practice
+
+`_walk_symlinks_as_files` has a leading underscore and no documentation, and
+pathlib — CPython's own, which Grail now uses — depends on its exact identity
+semantics. A name being private says who is expected to call it, not whether
+Grail can skip it.
+
+## Path.as_uri and Path.from_uri, and the urlsplit defect under them
+
+Both raised `ImportError`. `pathlib` does `from urllib.request import
+pathname2url` (and `url2pathname`), and Grail's `urllib.request` is Grail's
+own minimal module rather than CPython's, so it had neither.
+
+Both functions are CPython 3.14's own now, POSIX branches only — the `"nt"`
+halves handle DOS drive letters, UNC shares and backslashes, none of which a
+GemStone server path can be. Everything they stand on already worked here
+(`os.path.splitroot`, `quote`/`unquote`/`urlsplit`,
+`sys.getfilesystemencoding` and its `encodeerrors`), each measured answering
+exactly what CPython answers before any of this was written. Their
+odd-looking corners are kept rather than tidied, and are tested: the THREE
+slashes of an absolute path (an explicitly empty authority, so that
+`//host/x` cannot read as one), a relative path that gains no slashes at all,
+and a query and fragment that `urlsplit` discards rather than decoding into
+the path.
+
+### The port did not work, and what it found was worse
+
+`from_uri` still failed, and the cause was `urlsplit`. It split on `"://"`
+alone, so **every URL whose scheme carries no authority lost its scheme
+entirely** and answered the whole string as a PATH:
+
+```
+urlsplit('mailto:me@example.com')  ->  ('', '', 'mailto:me@example.com', '', '')
+urlsplit('file:/srv/x')            ->  ('', '', 'file:/srv/x', '', '')
+```
+
+A scheme is not the `"://"`. It is everything before the first colon when
+that is a letter followed by letters, digits, `+`, `-` or `.`, which is why
+`data:text/plain,hi` and `urn:isbn:1` have one and `1http://x` does not. The
+authority is still read only after `//`. `url2pathname` builds `'file:' + url`
+and splits it, which is how a pathlib method found a defect in the URL parser
+two modules away.
+
+`urlunsplit` had the matching defect — it wrote `scheme://` unconditionally,
+turning `mailto:me@x` into `mailto://me@x` — so fixing only `urlsplit` would
+have traded a wrong split for a wrong join. Both are CPython's logic now, and
+`uses_netloc` became load-bearing: the list Werkzeug appends to at import
+time, which this module's own comment admitted nothing consulted.
+
+### Two flaky corpus tests, seen while measuring this
+
+The tier-2 cycle reported ONE newly failing test in each after-run, and a
+DIFFERENT one each time — `test_annotationlib`'s
+`test_partially_nonexistent_union`, then `test_codecs`'s
+`test_file_closes_if_lookup_error_raised`. Neither module touches `urllib`,
+and `test_annotationlib` run alone answers 117 tests with no failures. So the
+corpus carries at least two tests that fail occasionally under four
+concurrent workers, and one run's "newly failing" line is not by itself
+evidence of a regression — a second sample is what tells the two apart.

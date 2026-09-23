@@ -257,9 +257,58 @@ __new__: obj _: encoding _: errors
 				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: encoding)].
 		(errors isKindOf: CharacterCollection) ifFalse: [
 			^ TypeError ___signal___: 'str() argument ''errors'' must be str, not '
-				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: errors)]].
+				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: errors)].
+		"DECODE WITH THE POLICY.  This used to validate ``errors'' and then
+		hand only the encoding on, so every policy behaved as strict:
+		``str(b'a\xed\xa0\x80', 'utf-8', 'surrogatepass')'' raised, and
+		test_codecs NameprepTest decodes its RFC 3454 vectors exactly that way.
+		Re-wrapped through the 1-arg allocator for the reason __new__:_:
+		gives (a str subclass must stay one)."
+		^ self __new__: (obj decode: encoding _: errors)].
 
 	^ self __new__: obj _: encoding
+%
+
+category: 'Grail-Initialization'
+classmethod: CharacterCollection
+_new: positional kw: kwargs
+	"``str(object='', encoding='utf-8', errors='strict')'' called with
+	KEYWORDS, which the class-call dispatcher routes here.  A class with no
+	``_new:kw:'' answers ``takes no keyword arguments'', which is what
+	``str(b'x', errors='replace')'' used to raise.
+
+	CPython's contract: any of the three may be a keyword; supplying
+	``encoding'' OR ``errors'' means DECODE, with the other defaulted; and any
+	other keyword is ``str() got an unexpected keyword argument'' -- the
+	wording CPython 3.14 uses."
+
+	| args obj encoding errors |
+	args := OrderedCollection @env0:withAll: positional.
+	kwargs @env0:keysDo: [:k |
+		(#('object' 'encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
+			^ TypeError ___signal___: 'str() got an unexpected keyword argument '''
+				@env0:, k @env0:asString @env0:, '''']].
+	(kwargs @env0:includesKey: 'object') ifTrue: [
+		args @env0:isEmpty ifFalse: [
+			^ TypeError ___signal___: 'argument for str() given by name (''object'') and position (1)'].
+		args @env0:add: (kwargs @env0:at: 'object')].
+	obj := args @env0:isEmpty ifTrue: [''] ifFalse: [args @env0:at: 1].
+	encoding := args @env0:size @env0:>= 2
+		ifTrue: [args @env0:at: 2]
+		ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]].
+	errors := args @env0:size @env0:>= 3
+		ifTrue: [args @env0:at: 3]
+		ifFalse: [kwargs @env0:at: 'errors' ifAbsent: [nil]].
+	(encoding @env0:isNil @env0:and: [errors @env0:isNil]) ifTrue: [
+		^ args @env0:isEmpty ifTrue: [self __new__] ifFalse: [self __new__: obj]].
+	((obj @env0:isKindOf: ByteArray) @env0:or: [obj @env0:isKindOf: memoryview]) ifFalse: [
+		^ TypeError ___signal___: 'decoding to str: need a bytes-like object, '
+			@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: obj) @env0:asString
+			@env0:, ' found'].
+	(obj @env0:isKindOf: memoryview) ifTrue: [obj := obj tobytes].
+	^ self __new__: obj
+		_: (encoding @env0:ifNil: ['utf-8'])
+		_: (errors @env0:ifNil: ['strict'])
 %
 
 category: 'Grail-Initialization'
@@ -1363,6 +1412,36 @@ ___unencodable___: cp at: anIndex encoding: encName errors: errors reason: aReas
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+_encode: positional kw: kwargs
+	"``str.encode(encoding='utf-8', errors='strict')'' with KEYWORDS, the
+	mirror of bytes>>_decode:kw:.  The fixed-arity selectors cover the
+	positional spellings only, so ``s.encode('ascii', errors='replace')'' --
+	the form encodings/idna.py uses to build its UnicodeDecodeError objects --
+	raised ``encode() takes a different number of arguments''.  A keyword
+	outside the two is CPython's ``encode() got an unexpected keyword
+	argument''."
+
+	| encoding errors |
+	kwargs @env0:isNil ifFalse: [
+		kwargs @env0:keysDo: [:k |
+			(#('encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
+				^ TypeError ___signal___: 'encode() got an unexpected keyword argument '''
+					@env0:, k @env0:asString @env0:, '''']]].
+	encoding := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [(kwargs @env0:isNil @env0:not @env0:and: [kwargs @env0:includesKey: 'encoding'])
+			ifTrue: [kwargs @env0:at: 'encoding']
+			ifFalse: ['utf-8']].
+	errors := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(kwargs @env0:isNil @env0:not @env0:and: [kwargs @env0:includesKey: 'errors'])
+			ifTrue: [kwargs @env0:at: 'errors']
+			ifFalse: ['strict']].
+	^ self encode: encoding _: errors
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 encode: encoding _: errors
 	"Encode the receiver to bytes under ``encoding'', honoring ``errors'' --
 	see ___unencodable___:errors:message: for the policies.  UTF-8 is a real
@@ -1431,12 +1510,14 @@ encode: encoding _: errors
 	((enc @env0:= 'utf-32-le') or: [enc @env0:= 'utf-32le']) ifTrue: [^ self ___pyEncodeUTF32___: false be: false errors: errors].
 	((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be']) ifTrue: [^ self ___pyEncodeUTF32___: false be: true errors: errors].
 
-	"Single-byte: ascii / idna (<=127), latin-1 / iso-8859-1 (<=255)."
+	"Single-byte: ascii (<=127), latin-1 / iso-8859-1 (<=255).  ``idna'' used
+	to ride along as ascii, so a non-ASCII host could not be encoded; it now
+	reaches the registry, and the vendored encodings/idna.py, below."
 	((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii')
 		or: [(enc @env0:= 'latin1') or: [(enc @env0:= 'latin-1')
-		or: [(enc @env0:= 'iso-8859-1') or: [enc @env0:= 'idna']]]]]) ifTrue: [
+		or: [enc @env0:= 'iso-8859-1']]]]) ifTrue: [
 		| max ws |
-		max := ((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii') or: [enc @env0:= 'idna']])
+		max := ((enc @env0:= 'ascii') or: [enc @env0:= 'us-ascii'])
 			ifTrue: [127] ifFalse: [255].
 		ws := AppendStream @env0:on: ByteArray @env0:new.
 		1 @env0:to: size do: [:i | | cv |

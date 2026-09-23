@@ -7,7 +7,7 @@ ExpressionAst ifNil: [self error: 'ExpressionAst is not defined. Check file orde
 expectvalue /Class
 doit
 ExpressionAst subclass: 'NameAst'
-  instVarNames: #( id ctx)
+  instVarNames: #( id ctx writtenId)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -129,6 +129,30 @@ method: NameAst
 id: aSymbol
 
 	id := aSymbol
+%
+
+category: 'Grail-name mangling'
+method: NameAst
+writtenId
+	"The name as it appears in the SOURCE -- differs from ``id'' only when the
+	parser private-name mangled it (``__x'' in class Foo has id _Foo__x).
+
+	For DIAGNOSTICS, never for resolution: every scope decision compares ``id'',
+	the mangled spelling, because that is what CPython binds.  But some of
+	CPython's compile-time messages quote the name as written -- measured:
+	``[[(__x:=2) for _ in range(2)] for __x in range(2)]'' inside class Foo
+	raises ``assignment expression cannot rebind comprehension iteration
+	variable '__x''' (test_named_expressions
+	test_named_expression_invalid_mangled_class_variables), where the collision
+	itself is detected between two mangled names."
+
+	^ writtenId ifNil: [id]
+%
+
+category: 'Grail-name mangling'
+method: NameAst
+writtenId: aSymbol
+	writtenId := aSymbol
 %
 
 category: 'Grail-IR Codegen'
@@ -637,6 +661,25 @@ ___emitSmalltalkOn___: aStream
 
 	Direct call sites like `abs(5)` are special-cased in
 	`CallAst>>printSmalltalkOn:` and bypass this method entirely."
+	"``__debug__'' IS A COMPILE-TIME CONSTANT AT optimize >= 1.  CPython folds
+	it -- it cannot change while a program runs -- and ``python -O'' makes it
+	False; compile(..., optimize=1) is the same request one compile at a time.
+	Emitted as the literal rather than read from builtins, because the builtins
+	value is shared by every module and this level belongs to ONE compile.
+
+	At -1 and 0 it is left alone and reads True from builtins, which is what
+	the interpreter's own value is."
+	((id asString = '__debug__') and: [self ___grailOptimizeLevel___ >= 1])
+		ifTrue: [aStream nextPutAll: 'false'. ^ self].
+	"A free read in the TOP-LEVEL code of an exec()/eval() handed a LIVE
+	mapping resolves at run time, in CPython's LOAD_NAME order -- see
+	___readsDoitLiveMapping___."
+	self ___readsDoitLiveMapping___ ifTrue: [
+		aStream
+			nextPutAll: '(NameError @env0:___resolveDoitName___: ''';
+			nextPutAll: id asString;
+			nextPutAll: ''')'.
+		^ self].
 
 	"Class-body name referenced from a class-body METHOD DECORATOR.
 	``@t.register(int)'' names ``t'', a sibling def -- a local of the class
@@ -724,7 +767,7 @@ ___emitSmalltalkOn___: aStream
 	((self ___enclosingFuncDeclaresReservedParam___: id)
 		and: [self ___readsThroughClassCell___ not])
 		ifTrue: [
-		aStream nextPut: $_; nextPutAll: id.
+		aStream nextPutAll: (NameAst ___transportIdentifierFor___: id).
 		^ self
 	].
 	"``__class__'' inside a method is the class the method was DEFINED in --
@@ -1532,10 +1575,16 @@ ___emitSmalltalkOn___: aStream
 
 	Load context only: a store must keep the bare identifier so the surrounding
 	``<name> := <value>'' stays well-formed."
+	"``Bound in the doit'' means bound in a dictionary the DOIT brought -- its
+	scope, seeded from the caller's globals and locals -- not anywhere on the
+	symbol list.  The list goes on to Grail's own Python and PythonModules
+	dictionaries, so the whole-list test counted every implementation class
+	and module class as a doit binding: ``eval('module', {})'' answered
+	Grail's module class and ``exec('json')'' the json module, where CPython
+	raises NameError.  Module code already refused both (isResolvableSymbol:)."
 	((ctx isKindOf: LoadAst)
 		and: [ModuleAst compilingDoitScope notNil
-		and: [(ModuleAst compilingDoitScope
-				objectNamed: (NameAst doitScopeNameFor: id asSymbol)) isNil
+		and: [(NameAst ___doitScopeBinds___: (NameAst doitScopeNameFor: id asSymbol)) not
 		and: [(self ___isDeclaredForThisScope___: id asSymbol) not
 		and: [(self isModuleVariableName: id) not
 		and: [(CallAst moduleFunctionNames notNil
@@ -1744,8 +1793,14 @@ classmethod: NameAst
 ___transportIdentifierFor___: aSymbol
 	"The Smalltalk IDENTIFIER a Python binding travels under.  Six Python names
 	are Smalltalk pseudo-variables and can be neither declared as temps nor
-	assigned, so they carry an underscore: ``super'' -> ``_super''.  Every other
-	name is itself.
+	assigned, so they travel under Grail's own ``___x___'' spelling: ``super''
+	-> ``___super___''.  Every other name is itself.
+
+	The spelling used to be a single underscore, ``_super'', and that is a
+	name Python code uses too: ``def __call__(self, format=None, *, _self=None)
+	... self, format = _self, self'' (test_annotationlib) put the parameter
+	``_self'' and the rebound receiver ``self'' in ONE temp, and the method did
+	not compile.  No Python binding is spelled ``___self___``.
 
 	FunctionDefAst has always declared its params and body locals this way and
 	printSmalltalkOn: has always read them this way.  This is the same rule
@@ -1757,8 +1812,31 @@ ___transportIdentifierFor___: aSymbol
 	spellings must agree or the generated method does not compile."
 
 	^ (self isReservedSmalltalkIdentifier: aSymbol asSymbol)
-		ifTrue: ['_' , aSymbol asString]
+		ifTrue: ['___' , aSymbol asString , '___']
 		ifFalse: [aSymbol asString]
+%
+
+category: 'other'
+classmethod: NameAst
+___doitScopeBinds___: aSymbol
+	"Does a dictionary the DOIT being compiled brought to its symbol list bind
+	aSymbol?  Those are the dictionaries AHEAD of Grail's own Python
+	dictionary on ModuleAst compilingDoitScope: a doit's list is its scope
+	inserted in front of importlib >> ___grailCompileSymbolList___ (Python,
+	PythonModules, the curated kernel dictionary), and what follows the Python
+	dictionary is implementation and module classes, not names the evaluated
+	code can see.  Position rather than identity, because the kernel
+	dictionary is built afresh for every list."
+
+	| scope python |
+	scope := ModuleAst compilingDoitScope.
+	scope isNil ifTrue: [^ false].
+	(scope isKindOf: SymbolDictionary) ifTrue: [^ scope includesKey: aSymbol].
+	python := System myUserProfile symbolList objectNamed: #Python.
+	scope do: [:dict |
+		dict == python ifTrue: [^ false].
+		(dict includesKey: aSymbol) ifTrue: [^ true]].
+	^ false
 %
 
 category: 'other'
@@ -2042,6 +2120,10 @@ ___pythonBindingShadows___: aSymbol
 
 	(self ___localBindingShadows___: aSymbol) ifTrue: [^ true].
 	(self isModuleVariableName: aSymbol) ifTrue: [^ true].
+	"A name read through a live exec()/eval() mapping is whatever that mapping
+	says, builtin or not, so no builtin fast path may claim it."
+	((aSymbol asString = id asString) and: [self ___readsDoitLiveMapping___])
+		ifTrue: [^ true].
 	(CallAst moduleFunctionNames notNil
 		and: [CallAst moduleFunctionNames includes: aSymbol asSymbol]) ifTrue: [^ true].
 	(CallAst inClassBodyValueEmit
@@ -2062,6 +2144,55 @@ ___pythonBindingShadows___: aSymbol
 	is not set: ``abs = 42; abs'' evaluated via ModuleAst
 	evaluateSource: binds abs in the root block's writes."
 	^ self ___boundAtTopLevel___: aSymbol
+%
+
+category: 'other'
+method: NameAst
+___readsDoitLiveMapping___
+	"Is this a free-name LOAD in the top-level code of an exec()/eval() that
+	was handed a LIVE mapping -- a locals (or globals) argument Grail reads
+	through __getitem__ rather than copying into the doit's scope (builtins
+	>> _eval:kw:, ___isPlainCopyableMapping___:)?
+
+	CPython's LOAD_NAME asks the locals mapping FIRST, then globals, then
+	builtins.  Grail bound builtins and the seeded plain-dict globals at
+	compile time and consulted a live mapping only when both had missed, so
+	a dict subclass as locals was the LAST place looked:
+
+	    eval('len', {}, D())               # CPython asks D; Grail: builtin len
+	    eval('a', {'a': 1}, D(a=2))        # CPython 2; Grail 1
+
+	Such a read therefore compiles to NameError >> ___resolveDoitName___:,
+	which runs the lookup in CPython's order as the code runs.  The live
+	mapping is installed before the doit compiles, and a doit is compiled
+	afresh for every call, so this is a compile-time fact.
+
+	TOP-LEVEL only.  Inside a def, a lambda, a generator expression or a class
+	body a free name is LOAD_GLOBAL (or the class namespace), which never
+	consults the locals mapping -- ``eval('(lambda: len)()', {}, D())'' is the
+	builtin in CPython too.  A list, set or dict comprehension is INLINED
+	(PEP 709), so its body reads the mapping like the code around it -- except
+	for its own loop variables, which are declared names, as is a walrus
+	target: both keep their temp or scope slot."
+
+	| temps node |
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	ModuleAst compilingDoitScope isNil ifTrue: [^ false].
+	temps := SessionTemps current.
+	((temps at: #'GrailLiveLocals' ifAbsent: [nil]) isNil
+		and: [(temps at: #'GrailLiveGlobals' ifAbsent: [nil]) isNil]) ifTrue: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst)
+			or: [(node isKindOf: LambdaAst)
+			or: [(node isKindOf: ClassDefAst)
+			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [^ false].
+		node := node parent].
+	(self ___isDeclaredForThisScope___: id asSymbol) ifTrue: [^ false].
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
+	(self isModuleVariableName: id) ifTrue: [^ false].
+	(self ___boundAtTopLevel___: id asSymbol) ifTrue: [^ false].
+	^ true
 %
 
 category: 'other'
@@ -2485,11 +2616,6 @@ setTo: aValue scope: aScope
 	aScope set: id to: aValue.
 %
 
-category: 'Grail-annotations'
-method: NameAst
-___annotationSourceString___
-	^ id asString
-%
 
 category: 'Grail-IR Codegen'
 method: NameAst

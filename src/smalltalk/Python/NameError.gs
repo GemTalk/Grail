@@ -129,6 +129,51 @@ ___resolveBuiltinOrSignal___: aName
 
 category: 'Grail-Name Errors'
 classmethod: NameError
+___resolveDoitName___: aName
+	"A free name read by the top-level code of an exec()/eval() that was handed
+	a LIVE mapping (NameAst >> ___readsDoitLiveMapping___), resolved in
+	CPython's LOAD_NAME order as the code runs: the locals mapping, then the
+	doit's own scope (the seeded plain-dict globals, and anything the source
+	has bound), then the globals mapping if that is live too, then builtins.
+
+	A separate entry from ___resolveBuiltinOrSignal___: because that one is
+	also reached from ordinary MODULE code, which must never see an exec()'s
+	scope just because it was called from inside one."
+
+	| b inst scope v found liveLocals liveGlobals |
+	b := System myUserProfile symbolList objectNamed: #builtins.
+	b == nil ifTrue: [^ self ___signalUndefined___: aName].
+	inst := [b ___instance___] on: Error do: [:ex | nil].
+	inst == nil ifTrue: [^ self ___signalUndefined___: aName].
+	liveLocals := inst @env1:___grailLiveLocals___.
+	liveLocals isNil ifFalse: [
+		found := inst
+			@env1:___lookUpInLiveLocals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		found == #'___grailLiveLocalsMiss___' ifFalse: [^ found]].
+	scope := inst @env1:___grailDoitScope___.
+	(scope isKindOf: SymbolDictionary) ifTrue: [
+		v := scope at: (NameAst doitScopeNameFor: aName asSymbol) ifAbsent: [nil].
+		v == nil ifFalse: [^ v]].
+	liveGlobals := inst @env1:___grailLiveGlobals___.
+	(liveGlobals notNil and: [liveGlobals ~~ liveLocals]) ifTrue: [
+		found := inst
+			@env1:___lookUpInLiveGlobals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		found == #'___grailLiveLocalsMiss___' ifFalse: [^ found]].
+	"Builtins last, exactly as ___resolveBuiltinOrSignal___: finishes -- with
+	the live mappings masked, so it does not ask them a second time (a
+	mapping's __missing__ may have side effects, or answer differently)."
+	^ [inst @env1:___grailLiveLocals___: nil.
+		inst @env1:___grailLiveGlobals___: nil.
+		self ___resolveBuiltinOrSignal___: aName]
+			ensure: [
+				inst @env1:___grailLiveLocals___: liveLocals.
+				inst @env1:___grailLiveGlobals___: liveGlobals]
+%
+
+category: 'Grail-Name Errors'
+classmethod: NameError
 ___requireBuildClass___
 	"Refuse a class statement whose builtins namespace has no
 	``__build_class__''.
@@ -175,4 +220,59 @@ ___signalUndefined___: aName
 	instance @env1:___args___: { msg }.
 	instance @env0:dynamicInstVarAt: #'name' put: aName @env0:asString.
 	^ instance @env1:___signal___: msg
+%
+
+set compile_env: 1
+
+category: 'Grail-Initialization'
+method: NameError
+___init__: positional kw: kwargs
+	"CPython's NameError(*args, name=None) -- see BaseException >>
+	___init__:kw:keywords:displayName:.  BaseException itself takes no keywords,
+	so without this ``NameError('m', name='x')'' was a TypeError."
+
+	^ self ___init__: positional kw: kwargs keywords: #('name') displayName: 'NameError'
+%
+
+
+category: 'Grail-Initialization'
+classmethod: NameError
+_new: positional kw: kwargs
+	"The class-call entry whenever KEYWORDS are present.  The generic class call
+	(Object class >> value:value:) refuses keywords for a class that has no
+	``_new:kw:'', which is right for BaseException and wrong here -- so this is
+	what lets ``NameError('m', name=...)'' reach the keyword-aware
+	___init__:kw: above instead of dying on ``takes no keyword arguments''."
+
+	| instance |
+	instance := (self ___classForArgs___: positional) ___new___.
+	instance ___init__: positional kw: kwargs.
+	^ instance
+%
+
+category: 'Grail-Accessors'
+method: NameError
+name
+	"CPython's ``name'' attribute, None until something stores one.  A stored value
+	is a dynamic instVar of the same name, which attribute loads probe BEFORE
+	the method chain, so this answers only when nothing was stored -- the
+	positional construction paths (__new__: and friends) set ``args'' alone and
+	never run an __init__ that could default it."
+
+	^ (self @env0:dynamicInstVarAt: #'name') @env0:ifNil: [None]
+%
+
+set compile_env: 0
+
+category: 'Grail-Python Attrs'
+classmethod: NameError
+___pythonValueAttrs___
+	"The keyword attributes are VALUES -- ``e.name'' is a string or None, never
+	a callable -- so a load performs the accessor instead of wrapping it as a
+	BoundMethod.  Without this ``ImportError('m').path'' read as a bound method,
+	and so did the ``name'' of every ModuleNotFoundError the importer raised."
+
+	^ super ___pythonValueAttrs___
+		add: #'name';
+		yourself
 %

@@ -1,13 +1,13 @@
 ! ------------------- Superclass check
 set compile_env: 0
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- sys class (Python 'sys' module)
 expectvalue /Class
 doit
-module subclass: 'sys'
+NativeModule subclass: 'sys'
   instVarNames: #()
   classVars: #()
   classInstVars: #('modules')
@@ -46,7 +46,7 @@ sys category: 'Grail-Modules'
 ! ------- sys_flags class (Python 'sys.flags' structseq)
 expectvalue /Class
 doit
-module subclass: 'sys_flags'
+NativeModule subclass: 'sys_flags'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -72,7 +72,7 @@ sys_flags category: 'Grail-Modules'
 ! ------- sys_implementation class (Python 'sys.implementation' namespace)
 expectvalue /Class
 doit
-module subclass: 'sys_implementation'
+NativeModule subclass: 'sys_implementation'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -98,7 +98,7 @@ sys_implementation category: 'Grail-Modules'
 ! ------- sys_float_info class (Python 'sys.float_info' structseq)
 expectvalue /Class
 doit
-module subclass: 'sys_float_info'
+NativeModule subclass: 'sys_float_info'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -124,7 +124,7 @@ sys_float_info category: 'Grail-Modules'
 ! ------- sys_hash_info class (Python 'sys.hash_info' structseq)
 expectvalue /Class
 doit
-module subclass: 'sys_hash_info'
+NativeModule subclass: 'sys_hash_info'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -149,7 +149,7 @@ sys_hash_info category: 'Grail-Modules'
 ! ------- sys_int_info class (Python 'sys.int_info' structseq)
 expectvalue /Class
 doit
-module subclass: 'sys_int_info'
+NativeModule subclass: 'sys_int_info'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

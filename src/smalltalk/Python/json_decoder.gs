@@ -2,13 +2,13 @@ set compile_env: 0
 
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- json_decoder class (Python 'json.decoder' module)
 expectvalue /Class
 doit
-module subclass: 'json_decoder'
+NativeModule subclass: 'json_decoder'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

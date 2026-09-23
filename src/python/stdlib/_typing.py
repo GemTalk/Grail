@@ -281,10 +281,14 @@ class ParamSpec(_Common):
         return _typing_module()._paramspec_prepare_subst(self, alias, args)
 
     def __repr__(self):
+        # infer_variance drops the prefix, as for TypeVar: it is how every PEP
+        # 695 ``**P'' is minted, and CPython prints it as a bare ``P''.
         if self.__covariant__:
             prefix = '+'
         elif self.__contravariant__:
             prefix = '-'
+        elif self.__infer_variance__:
+            prefix = ''
         else:
             prefix = '~'
         return prefix + self.__name__

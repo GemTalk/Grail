@@ -1797,9 +1797,17 @@ ___unpackCheck___: nBefore star: hasStar after: nAfter
 	(test_iter test_unpack_iter).  Only a receiver with a dependable length (the
 	materialized iterator list, or a kernel sequence -- both SequenceableCollection)
 	is checked; a bare custom-__getitem__ receiver has no reliable size and keeps
-	the lenient index path.  Answers self so it chains after ___unpackSequence___."
+	the lenient index path.  Answers self so it chains after ___unpackSequence___.
+
+	With a STAR target the answer is always an exact list, because the starred
+	name is bound by SLICING it and CPython binds a list there whatever was
+	unpacked: ``a, *b = (1, 2, 3)'' makes b ``[2, 3]''.  Sliced as it arrived,
+	a tuple gave a tuple and a str gave a str."
 
 	| sz needed |
+	(hasStar @env0:and: [(self @env0:class == OrderedCollection) @env0:not])
+		@env0:ifTrue: [
+			^ (list @env1:__new__: self) ___unpackCheck___: nBefore star: hasStar after: nAfter].
 	(self @env0:isKindOf: SequenceableCollection) @env0:ifFalse: [^ self].
 	sz := self @env0:size.
 	hasStar @env0:ifTrue: [
@@ -2471,9 +2479,24 @@ ___grailInitSubclass___: kwargs
 	Answers self so the send can sit in the ``C := C ...'' chain if it ever
 	needs to."
 
-	| sup sel instOwner metaOwner found meth assigned kw |
+	| sup sel instOwner metaOwner found meth assigned kw supplier |
 	sel := #'___init_subclass__:kw:'.
-	sup := self ___grailInitSubclassSearchBase___.
+	"ONE SEARCH DECIDES BOTH HALVES BELOW.  The MRO supplier answers which
+	class supplies the hook AND whether it supplies it by definition or by
+	assignment, so the search base and the assigned-hook probe cannot
+	disagree.  Letting them disagree is not a cosmetic problem: the base walk
+	and the MRO differ exactly on a diamond, and a class whose MRO names an
+	ASSIGNED hook on one base while the base walk finds a DEFINED one on
+	another ran NEITHER -- the search base pointed at a class with no compiled
+	method, and the assigned probe, asked separately, had already stopped at
+	the other branch.  Measured on a mixin carrying a runtime-assigned hook.
+
+	The base walk stays as the fallback for a class whose __mro__ cannot be
+	read, and then both halves come from IT, for the same reason."
+	supplier := self ___grailInitSubclassMroSupplierAfter___: nil.
+	sup := supplier @env0:isNil
+		ifTrue: [self ___grailInitSubclassSearchBase___]
+		ifFalse: [supplier @env0:at: 1].
 	sup == nil ifTrue: [^ self].
 	"THE METACLASS EATS ITS KEYWORDS FIRST.  CPython routes the class
 	header's keywords to the metaclass call -- MyMeta(name, bases, ns,
@@ -2505,7 +2528,9 @@ ___grailInitSubclass___: kwargs
 	It is searched from the same place and by the same rule as the compiled
 	spelling: nearest owner walking up from the superclass wins, so a
 	subclass's definition still shadows an ancestor's assignment."
-	assigned := self ___grailAssignedInitSubclass___: sel.
+	assigned := supplier @env0:isNil
+		ifTrue: [self ___grailAssignedInitSubclass___: sel]
+		ifFalse: [supplier @env0:at: 2].
 	assigned == nil ifFalse: [
 		^ self ___grailRunAssignedInitSubclass___: assigned kw: kw].
 	"Two spellings to look for.  A plain ``def __init_subclass__(cls, **kwds)''
@@ -2759,72 +2784,128 @@ ___grailAssignedInitSubclass___: sel
 	    definition first meant the decorator's wrapper never ran on exactly
 	    the classes it was applied to;
 	  * a NEARER class's definition beats a farther class's assignment, so
-	    the walk stops as soon as a class defines one."
+	    the walk stops as soon as a class defines one.
 
-	| walker v holder st ov inner acc |
+	The per-class half is ___grailOwnAssignedInitSubclass___, which the
+	MRO-ordered walk uses too -- two orders of search must not end up with two
+	different ideas of what a single class supplies."
+
+	| walker v |
 	self ___grailInitSubclassRoots___ @env0:do: [:root |
 	walker := root.
 	[walker == nil] whileFalse: [
-		"Assignment first -- same class, assignment wins."
-		nil.
-		"Session-local overlay first -- a runtime setattr on a canonical class
-		lands there -- then the committed per-class store."
-		"Both lookups are sent to SELF, not to the walker: they are object's
-		classmethods and the chain runs up into Smalltalk kernel classes that
-		do not have them.  The walker is the class being examined, which is
-		what the argument is for."
-		"Read the two stores DIRECTLY rather than through
-		___classAttrOverlayLookup___ / ___classChainAttrLookup___: those are
-		instance-side methods on object, and the receiver here is a CLASS, so
-		the send goes to the metaclass chain and is not understood.  Reading
-		them here also gives what those cannot -- an OWN-class answer, which
-		is what ranking an assignment against a definition needs."
-		st := SessionTemps @env0:current.
-		ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
-		v := nil.
-		ov == nil ifFalse: [
-			inner := ov @env0:at: walker otherwise: nil.
-			inner == nil ifFalse: [
-				v := inner @env0:at: #'__init_subclass__' otherwise: nil]].
-		"Probe the committed store by ATTEMPTING it, not by asking first.
-		``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is
-		env-1; and ``___respondsTo___:'' raises outright when the receiver is
-		a CLASS.  Either guard therefore reports ``no store'' for every class
-		in the chain, and the value sitting in the store is never read."
-		v == nil ifFalse: [^ v].
-		"An OWN ACCESSOR PAIR on this class says its BODY bound the name --
-		``__init_subclass__ = hook'' written unconditionally -- and what it holds
-		is PEP 487's implicit classmethod, wrapped to say so: the same rule
-		___classBodyDefinitionalStore___:put: applies to the conditional
-		spelling, at the same moment CPython applies it.  Asked BEFORE the raw
-		holder read below, because the pair's value lives in that same holder
-		(docs/Class_Attribute_Single_Home.md): reading the holder first
-		classified a body assignment as a runtime setattr and called the hook
-		with no class -- ``hook() missing 1 required positional argument:
-		'cls''' (InitSubclassClassBodyTestCase).  A runtime ``Cls.__init_subclass__
-		= f'' on a NON-canonical class also lands in the holder, but through
-		___pyAttrStore___'s setter dispatch when the pair exists, so telling the
-		two apart by the pair alone is the best available reading; CPython would
-		call that runtime f with no class and this calls it with one."
-		acc := self ___grailClassAttrAccessorValue___: walker
-			name: #'__init_subclass__'.
-		acc == nil ifFalse: [^ self ___grailImplicitClassmethod___: acc].
-		"Probe the committed store by ATTEMPTING it, not by asking first.
-		``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is
-		env-1; and ``___respondsTo___:'' raises outright when the receiver is
-		a CLASS.  Either guard therefore reports ``no store'' for every class
-		in the chain, and the value sitting in the store is never read."
-		holder := [walker @env0:perform: #___dynInstVars___ env: 1]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-		holder == nil ifFalse: [
-			v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		v := self ___grailOwnAssignedInitSubclass___: walker.
 		v == nil ifFalse: [^ v].
 		"This class defines it instead -- that definition wins over anything
 		farther up, and the compiled-selector path will run it."
 		(self ___grailDefinesInitSubclass___: walker selector: sel)
 			ifTrue: [^ nil].
 		walker := walker @env0:superClass]].
+	^ nil
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailOwnAssignedInitSubclass___: aClass
+	"The ASSIGNED __init_subclass__ that aClass ITSELF supplies, or nil.
+
+	Three stores, in the order an assignment can reach them.
+
+	Session-local overlay first -- a runtime setattr on a canonical class lands
+	there -- then the class's own accessor pair, then the committed per-class
+	store.
+
+	Read DIRECTLY rather than through ___classAttrOverlayLookup___ /
+	___classChainAttrLookup___: those are instance-side methods on object, and
+	the receiver here is a CLASS, so the send goes to the metaclass chain and
+	is not understood.  Reading them here also gives what those cannot -- an
+	OWN-class answer, which is what ranking an assignment against a definition
+	needs.
+
+	An OWN ACCESSOR PAIR on this class says its BODY bound the name --
+	``__init_subclass__ = hook'' written unconditionally -- and what it holds
+	is PEP 487's implicit classmethod, wrapped to say so: the same rule
+	___classBodyDefinitionalStore___:put: applies to the conditional spelling,
+	at the same moment CPython applies it.  Asked BEFORE the raw holder read
+	below, because the pair's value lives in that same holder
+	(docs/Class_Attribute_Single_Home.md): reading the holder first classified
+	a body assignment as a runtime setattr and called the hook with no class,
+	which InitSubclassClassBodyTestCase pins.  A runtime assignment on a
+	NON-canonical class also lands in the holder, but through
+	___pyAttrStore___'s setter dispatch when the pair exists, so telling the
+	two apart by the pair alone is the best available reading.
+
+	The committed store is probed by ATTEMPTING it, not by asking first.
+	``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is env-1;
+	and ``___respondsTo___:'' raises outright when the receiver is a CLASS.
+	Either guard therefore reports ``no store'' for every class in the chain,
+	and the value sitting in the store is never read."
+
+	| st ov inner v acc holder |
+	st := SessionTemps @env0:current.
+	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	v := nil.
+	ov == nil ifFalse: [
+		inner := ov @env0:at: aClass otherwise: nil.
+		inner == nil ifFalse: [
+			v := inner @env0:at: #'__init_subclass__' otherwise: nil]].
+	v == nil ifFalse: [^ v].
+	acc := self ___grailClassAttrAccessorValue___: aClass
+		name: #'__init_subclass__'.
+	acc == nil ifFalse: [^ self ___grailImplicitClassmethod___: acc].
+	holder := [aClass @env0:perform: #___dynInstVars___ env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	holder == nil ifFalse: [
+		v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	^ v
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInitSubclassMroSupplierAfter___: aClassOrNil
+	"The next class in SELF's MRO, strictly after aClassOrNil, that SUPPLIES an
+	__init_subclass__ -- answered as { thatClass. assignedHookOrNil } -- or nil
+	when the MRO cannot be read or nothing after that point supplies one.
+
+	THIS IS THE C3 ORDER, which is the whole point of it.  Every other search
+	here walks Smalltalk superclass links, base by base, and that agrees with
+	the MRO for any hierarchy whose bases do not SHARE an ancestor.  A diamond
+	is the disagreeing shape: ``class A(Left, Middle, Right)'' with Left and
+	Right both deriving from Base puts Base AFTER Middle in the real MRO, while
+	a left-to-right base walk reaches Base through Left first and never asks
+	Middle.  test_subclassinit's test_init_subclass_diamond is exactly that.
+
+	``aClassOrNil'' is nil for the ENTRY -- start after self, since a class's
+	own hook never runs for itself -- and is the hook's owner for each
+	cooperative ``super().__init_subclass__(**kwargs)'' hop, which is how the
+	chain stays in MRO order all the way down rather than only at its head.
+
+	Answering nil rather than raising: every caller has the base walk to fall
+	back on, and a class whose __mro__ does not read back as a sequence must
+	get the old answer rather than no answer.  ___grailInitSubclassRoots___
+	guards __bases__ the same way and for the same reason -- on some classes
+	the attribute answers a PropertyDescriptor, and iterating that is a raw
+	MessageNotUnderstood escaping into class creation."
+
+	| mro sel started each v |
+	sel := #'___init_subclass__:kw:'.
+	mro := [self ___pyAttrLoad___: #'__mro__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(mro @env0:isNil or: [mro @env0:== None
+		or: [(mro @env0:isKindOf: Collection) @env0:not]]) ifTrue: [^ nil].
+	started := aClassOrNil @env0:isNil.
+	1 @env0:to: mro @env0:size do: [:i |
+		each := mro @env0:at: i.
+		started
+			ifTrue: [
+				((each @env0:isKindOf: Behavior) @env0:and: [each @env0:~~ self])
+					ifTrue: [
+						v := self ___grailOwnAssignedInitSubclass___: each.
+						v == nil ifFalse: [^ { each. v }].
+						(self ___grailDefinesInitSubclass___: each selector: sel)
+							ifTrue: [^ { each. nil }]]]
+			ifFalse: [each @env0:== aClassOrNil ifTrue: [started := true]]].
 	^ nil
 %
 
@@ -4181,10 +4262,27 @@ ___invokeSetNameHooks___: attrNames
 			self ___setNameOn___: v named: sym].
 		^ self].
 	attrNames == nil ifFalse: [
+		"THE HOLDER IS THE FALLBACK HERE TOO, as it is in the ordered branch
+		above.  A name can be listed in attrNames and yet have no accessor
+		pair: that is every entry of a class built by ``type(name, bases,
+		ns)'', whose namespace is copied into the ___dynInstVars___ holder
+		because the dynamic builder emits no accessors.  Reading only the
+		accessor answered nil for each of them, and the holder loop below then
+		SKIPPED them for being named in attrNames -- so a descriptor handed to
+		type() was never told its own name, while the identical class statement
+		told it."
+		holder := (self ___respondsTo___: #___dynInstVars___)
+			ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
+			ifFalse: [nil].
 		attrNames @env0:do: [:nm |
-			| sym |
+			| sym v |
 			sym := nm @env0:asString @env0:asSymbol.
-			self ___setNameOn___: (self ___classBodyValueAt___: sym) named: sym]].
+			v := self ___classBodyValueAt___: sym.
+			(v == nil
+				and: [holder @env0:notNil
+				and: [(holder @env0:dynamicInstanceVariables) @env0:includes: sym]])
+					ifTrue: [v := holder @env0:dynamicInstVarAt: sym].
+			self ___setNameOn___: v named: sym]].
 	holder := (self ___respondsTo___: #___dynInstVars___)
 		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].
@@ -4911,7 +5009,9 @@ value: positional value: kwargs
 	(blocks, BoundMethod, UnboundMethod, partial, classes via the
 	metaclass) define their own value:value: and never reach this."
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+	"The PYTHON type name: the Smalltalk class name printed ``'Unicode7' object
+	is not callable'' for a str."
+	TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
 		@env0:, ''' object is not callable')
 %
 
@@ -6502,6 +6602,32 @@ ___classCell___: aSym
 	blk @env0:isNil ifTrue: [
 		meta := self ___grailMetaclass___.
 		meta == nil ifFalse: [blk := meta ___dynamicClassAttr___: aSym]].
+	"A method inherited from a SECONDARY base.  A multiple-inheritance class is
+	one Smalltalk class whose superclass is only its primary base, and
+	importlib ___mergeSecondaryBases___ recompiles the other bases' methods onto
+	it -- so the copy runs with a receiver whose chain never reaches the base
+	that holds the cell:
+
+	    def t():
+	        tested = []
+	        class C:
+	            def m(self): return tested
+	        class D(A, C): ...
+	        D().m()          # NameError: free variable 'tested' ...
+
+	Search the true MRO, which does reach it (test_genericclass
+	test_mro_entry).  Only on a miss, where the chain walk was about to answer
+	nil anyway, so single inheritance never pays for the C3 lookup."
+	blk @env0:isNil ifTrue: [ | il chain |
+		il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+		il == nil ifFalse: [
+			chain := [il @env0:___methodLookupChainFor___:
+					((self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class])]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			chain == nil ifFalse: [
+				chain @env0:detect: [:c |
+					blk := c ___dynamicClassAttr___: aSym.
+					blk @env0:notNil] ifNone: [nil]]]].
 	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
 	"MISSED.  For the cell that holds the DEFINING CLASS ITSELF -- what
 	``__class__'' and zero-arg ``super()'' read -- a miss does not mean the name
@@ -8157,12 +8283,37 @@ ___pyAttrLoad___: aSym
 			^ AttributeError ___signal___: ('type object '''
 				@env0:, (self ___grailPythonClassNameForError___)
 				@env0:, ''' has no attribute ''' @env0:, s @env0:, '''')].
+		"PEP 649 ``__annotate__'' / ``__annotations__'' exist on a CLASS only, and
+		only on one Grail generated: see object class >> ___pyClassAnnotate___.
+		A built-in type answers AttributeError here, as it does in CPython."
+		(((s @env0:= '__annotate__') or: [s @env0:= '__annotations__'])
+			"A class body that DEFINES its own ``def __annotate__(format)'' keeps
+			 it: CPython's getter answers the class dict's __annotate__ first.  So
+			 the generic one steps aside when the class's OWN method dictionary
+			 has the def, and the ordinary lookup below finds it."
+			"Both selector shapes: ``def __annotate__(format)'' has no ``self'', so
+			 its one parameter is the receiver and it compiles UNARY."
+			and: [(s @env0:= '__annotate__') @env0:not
+				or: [((self @env0:compiledMethodAt: #'__annotate__:' environmentId: 1 otherwise: nil) == nil)
+					and: [(self @env0:compiledMethodAt: #'__annotate__' environmentId: 1 otherwise: nil) == nil]]])
+			ifTrue: [
+			(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+				"The PYTHON name, read through __name__ -- the error helper answers
+				 the GemStone class name, so int printed as 'Integer'."
+				^ AttributeError ___signal___: ('type object '''
+					@env0:, ([(self @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+						@env0:on: AbstractException
+						do: [:ex | ex @env0:return: self @env0:name @env0:asString])
+					@env0:, ''' has no attribute ''' @env0:, s @env0:, '''')].
+			^ (s @env0:= '__annotate__')
+				ifTrue: [self @env1:___pyClassAnnotate___]
+				ifFalse: [self @env1:___pyClassAnnotations___]].
 		"Class-level dunders that should always read as values, never
 		wrap as BoundMethods.  Without this, ``type(node).__name__``
 		on any class would wrap the inherited Behavior-side getter
 		and break visitor dispatch
 		(``getattr(self, 'visit_' + type(node).__name__)``)."
-		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
+		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__' or: [s @env0:= '__type_params__']]]]]])
 			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
 		"A METACLASS reaches neither accessor: __name__ and __qualname__ are
@@ -12074,7 +12225,7 @@ ___pyCallValue___: positional kw: kwargs
 	(self isKindOf: Behavior) ifTrue: [
 		^ self @env1:value: positional value: kwargs].
 	TypeError ___signal___:
-		'''' @env0:, self @env0:class @env0:name @env0:asString
+		'''' @env0:, self ___pyTypeNameForError___
 			@env0:, ''' object is not callable'
 %
 
@@ -12100,6 +12251,17 @@ ___pyAttrDelete___: aName
 	| sym owned enumCls rec |
 	sym := aName @env0:asSymbol.
 	(self isKindOf: Behavior) ifTrue: [
+		"``__type_params__'' CANNOT BE DELETED.  CPython refuses with a
+		TypeError -- not the AttributeError a missing attribute gets -- because
+		the slot is part of the type rather than an entry in its namespace: it
+		always reads, as an empty tuple for a class that declares no type
+		parameters, so there is nothing for a delete to remove.  A class may
+		ASSIGN over it, which test_builtin's test_type_typeparams does
+		immediately before trying the delete and then checks the assignment
+		SURVIVED the refusal."
+		sym @env0:== #'__type_params__' ifTrue: [
+			^ TypeError ___signal___: 'cannot delete ''__type_params__'' attribute of '
+				@env0:, self ___grailPythonClassNameForError___].
 		"Enum members are undeletable: ``del Color.RED'' raises AttributeError
 		(CPython EnumType.__delattr__), the mirror of the reassignment guard in
 		__setattr__:_:.  Needed HERE now that a member is a holder entry like
@@ -13233,6 +13395,15 @@ ___pyAttrStore___: aName put: aValue
 		for every program that never does this."
 		(aName @env0:asString @env0:= '__hash__') ifTrue: [
 			SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' put: true].
+		"``C.__annotate__ = f'' / ``C.__annotations__ = d'' -- the setters of the
+		class-only PEP 649 pair; see object class >> ___pyClassAnnotate___."
+		(((aName @env0:asString @env0:= '__annotate__')
+			or: [aName @env0:asString @env0:= '__annotations__'])
+			and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
+				(aName @env0:asString @env0:= '__annotate__')
+					ifTrue: [self @env1:___pyClassAnnotate___: aValue]
+					ifFalse: [self @env1:___pyClassAnnotations___: aValue].
+				^ aValue].
 		"``cls.__qualname__ = 'Outer.Inner''' is a WRITABLE slot in CPython, and
 		pickle depends on it: a class defined in a function body is pickled by
 		walking its dotted qualname from the module, so the idiom is to attach
@@ -13532,9 +13703,14 @@ ___pyStarToArray___
 	``list''s __iter__/__next__ constructor.  Replaces a bare ``asArray''
 	in the splat codegen, which a Python iterator does not understand —
 	the crash flask's ``preprocess_request'' hit via
-	``(None, *reversed(request.blueprints))''."
+	``(None, *reversed(request.blueprints))''.
 
-	(self isKindOf: SequenceableCollection) ifTrue: [^ self asArray].
+	A str is a SequenceableCollection too, but its asArray is an Array of
+	Smalltalk Characters -- ``(*'ab',)'' answered two Character objects, where
+	iterating a str yields one-character strs.  It takes the iteration path."
+
+	((self isKindOf: SequenceableCollection)
+		and: [(self isKindOf: CharacterCollection) not]) ifTrue: [^ self asArray].
 	^ (list @env1:__new__: self) asArray
 %
 
@@ -14481,6 +14657,108 @@ ___grailClassDefault___: aSymbol
 	and so cannot be shadowed by a Python local; see ___grailClassDefaultPut___:."
 
 	^ module @env0:___classDefaultOwnedBy: self at: aSymbol
+%
+
+set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotate___
+	"PEP 649: the class's annotate function, or None -- what ``Cls.__annotate__''
+	reads.  REACHED ONLY THROUGH ___pyAttrLoad___'s class branch, never by the
+	name itself: CPython's __annotate__ and __annotations__ are data
+	descriptors on the METACLASS, so an INSTANCE cannot see them
+	(``A().__annotate__'' is an AttributeError) and neither can a built-in
+	type.  A class-side method called __annotate__ was visible to both --
+	performed for an instance, wrapped as a bound method for int -- and
+	``get_annotations(CustomClass())'' answered {} where CPython raises
+	TypeError.  So the Python names are recognised only when the receiver is a
+	Grail-generated CLASS, and routed here.
+
+	EVERY Python class answers it -- None when it has no annotations of its
+	own (measured: ``class D: pass; D.__annotate__ is None'').  A class
+	inherits none from its bases; this reads the receiver's OWN holder only,
+	under CPython's class-dict key ``__annotate_func__''.  A class Grail did
+	not generate -- int, str, a kernel class -- has no holder and answers
+	AttributeError, as ``int.__annotate__'' does in CPython.
+
+	Class-side because an INSTANCE must not see it: ``A().__annotate__'' is an
+	AttributeError in CPython too."
+
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotate__' on: self].
+	^ (self ___classBodyDynamicRead___: #'__annotate_func__') @env0:ifNil: [None]
+%
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotate___: aValue
+	"``C.__annotate__ = f'' -- replaces the annotate function and INVALIDATES the
+	cached __annotations__, so the next read recomputes from the new function
+	(measured: after the assignment, __annotations__ answers the new dict).
+	CPython refuses a value that is neither callable nor None."
+
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotate__' on: self].
+	((aValue == None) or: [(builtins @env1:instance) @env1:callable: aValue]) ifFalse: [
+		^ TypeError ___signal___: '__annotate__ must be callable or None'].
+	self ___classHolderAttrStore___: #'__annotate_func__' put: aValue.
+	self ___classHolderAttrStore___: #'__annotations_cache__' put: nil.
+	^ None
+%
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotations___
+	"PEP 649: the class's OWN annotations, computed on first read and cached.
+
+	LAZY, and that is the point: CPython 3.14 evaluates class annotations when
+	they are read, not when the class statement runs, so ``class Late: x:
+	Undefined'' defines cleanly and raises NameError only at the read.
+	Evaluating at class creation would break every forward reference CPython
+	accepts.  Grail used to store PEP 563 SOURCE STRINGS here instead, so
+	``A.__annotations__'' answered {'a': 'int'} where CPython answers
+	{'a': <class 'int'>} -- and in an unordered dictionary, so the keys came back
+	in the wrong order as well.
+
+	Resolution order: an EXPLICIT ``__annotations__'' the class body or a
+	caller stored; then the cache; then the annotate function called with
+	Format.VALUE, whose result is cached.  The cache is the object returned, so
+	mutating it persists, as it does in CPython.  A class with no annotate
+	function answers an empty dict, and a class Grail did not generate answers
+	AttributeError."
+
+	| explicit cached annotate ann |
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotations__' on: self].
+	explicit := self ___classBodyDynamicRead___: #'__annotations__'.
+	explicit @env0:notNil ifTrue: [^ explicit].
+	cached := self ___classBodyDynamicRead___: #'__annotations_cache__'.
+	cached @env0:notNil ifTrue: [^ cached].
+	annotate := self ___classBodyDynamicRead___: #'__annotate_func__'.
+	((annotate @env0:isNil) or: [annotate == None])
+		ifTrue: [ann := PyDict @env0:new]
+		ifFalse: [
+			ann := annotate @env1:___pyCallValue___: { 1 } kw: nil.
+			(ann @env0:isKindOf: KeyValueDictionary) ifFalse: [
+				^ TypeError ___signal___: ('__annotate__ returned non-dict of type '''
+					@env0:, (bytes ___pyTypeNameOf___: ann) @env0:, '''')]].
+	self ___classHolderAttrStore___: #'__annotations_cache__' put: ann.
+	^ ann
+%
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotations___: aValue
+	"``C.__annotations__ = d'' -- an explicit dict, which the getter answers
+	ahead of any computed one."
+
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotations__' on: self].
+	self ___classHolderAttrStore___: #'__annotations__' put: aValue.
+	^ None
 %
 
 set compile_env: 0

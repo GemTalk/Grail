@@ -217,3 +217,84 @@ ___setMsgFrom___: anArray
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Initialization'
+method: ImportError
+___init__: positional kw: kwargs
+	"CPython's ImportError(*args, name=None, path=None, name_from=None) -- see BaseException >>
+	___init__:kw:keywords:displayName:.  BaseException itself takes no keywords,
+	so without this ``ImportError('m', name='x')'' was a TypeError."
+
+	^ self ___init__: positional kw: kwargs keywords: #('name' 'path' 'name_from') displayName: 'ImportError'
+%
+
+
+category: 'Grail-Initialization'
+classmethod: ImportError
+_new: positional kw: kwargs
+	"The class-call entry whenever KEYWORDS are present.  The generic class call
+	(Object class >> value:value:) refuses keywords for a class that has no
+	``_new:kw:'', which is right for BaseException and wrong here -- so this is
+	what lets ``ImportError('m', name=...)'' reach the keyword-aware
+	___init__:kw: above instead of dying on ``takes no keyword arguments''."
+
+	| instance |
+	instance := (self ___classForArgs___: positional) ___new___.
+	instance ___init__: positional kw: kwargs.
+	^ instance
+%
+
+category: 'Grail-Accessors'
+method: ImportError
+name
+	"CPython's ``name'' attribute, None until something stores one.  A stored value
+	is a dynamic instVar of the same name, which attribute loads probe BEFORE
+	the method chain, so this answers only when nothing was stored -- the
+	positional construction paths (__new__: and friends) set ``args'' alone and
+	never run an __init__ that could default it."
+
+	^ (self @env0:dynamicInstVarAt: #'name') @env0:ifNil: [None]
+%
+
+category: 'Grail-Accessors'
+method: ImportError
+path
+	"CPython's ``path'' attribute, None until something stores one.  A stored value
+	is a dynamic instVar of the same name, which attribute loads probe BEFORE
+	the method chain, so this answers only when nothing was stored -- the
+	positional construction paths (__new__: and friends) set ``args'' alone and
+	never run an __init__ that could default it."
+
+	^ (self @env0:dynamicInstVarAt: #'path') @env0:ifNil: [None]
+%
+
+category: 'Grail-Accessors'
+method: ImportError
+name_from
+	"CPython's ``name_from'' attribute, None until something stores one.  A stored value
+	is a dynamic instVar of the same name, which attribute loads probe BEFORE
+	the method chain, so this answers only when nothing was stored -- the
+	positional construction paths (__new__: and friends) set ``args'' alone and
+	never run an __init__ that could default it."
+
+	^ (self @env0:dynamicInstVarAt: #'name_from') @env0:ifNil: [None]
+%
+
+set compile_env: 0
+
+category: 'Grail-Python Attrs'
+classmethod: ImportError
+___pythonValueAttrs___
+	"The keyword attributes are VALUES -- ``e.name'' is a string or None, never
+	a callable -- so a load performs the accessor instead of wrapping it as a
+	BoundMethod.  Without this ``ImportError('m').path'' read as a bound method,
+	and so did the ``name'' of every ModuleNotFoundError the importer raised."
+
+	^ super ___pythonValueAttrs___
+		add: #'name';
+		add: #'path';
+		add: #'name_from';
+		yourself
+%

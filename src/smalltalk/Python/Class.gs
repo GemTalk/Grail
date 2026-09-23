@@ -244,9 +244,14 @@ __mro__
 	Integer-chained; a subclass of E must keep Flag/Enum -- Enum
 	___grailIsFlagClass: reads __mro__, so auto() numbering and
 	issubclass(sub, Flag) both hinge on it).  Fall back to the bare chain
-	only before importlib exists (Class.gs loads early)."
+	only before importlib exists (Class.gs loads early).
+
+	The VISIBLE view (___visibleMroOf___:), not ___mroOf___: itself: the
+	kernel classes a built-in is implemented on -- KeyValueDictionary and
+	Collection above dict, the kernel Exception above BaseException -- are
+	not bases Python has, while super() and isinstance still need them."
 	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il == nil ifFalse: [^ self ___grailAsTuple___: (il @env0:___mroOf___: self)].
+	il == nil ifFalse: [^ self ___grailAsTuple___: (il @env0:___visibleMroOf___: self)].
 	result := OrderedCollection @env0:new.
 	c := self.
 	[c == nil] whileFalse: [
@@ -334,6 +339,67 @@ __subclasses__
 	lst := Python @env0:at: #list otherwise: nil.
 	lst == nil ifTrue: [^ Array @env0:withAll: out].
 	^ lst @env0:withAll: out
+%
+
+category: 'Grail-Reflection'
+method: Behavior
+__type_params__
+	"``cls.__type_params__'': the PEP 695 type parameters, as a tuple of
+	typing.TypeVar -- and an EMPTY tuple for a class that declares none, which
+	is what CPython gives every ordinary class.
+
+	BUILT ON FIRST READ, from the NAMES ClassDefAst recorded at class creation.
+	That laziness is the design and not an optimisation: materialising a
+	TypeVar means importing typing, and typing defines its own generic classes
+	(``SupportsAbs[T]'', ``SupportsRound[T]''), so doing it while a class is
+	being defined re-enters typing's own import and breaks ForwardRef --
+	deterministically, and far from here.  An earlier cut did it eagerly and
+	had to be reverted for exactly that.
+
+	An ASSIGNED value wins, because ``A.__type_params__ = whatever'' is legal
+	and lands in the class-attribute holder, which ___pyAttrLoad___ reads
+	before it reaches a method like this one.
+
+	A name that cannot be turned into a TypeVar -- typing missing, or the
+	import failing -- answers the empty tuple rather than raising: this is
+	introspection, and a reader that cannot get the parameters is better served
+	by ``none'' than by an exception from an attribute read."
+
+	| names vars holder assigned result |
+	holder := [self @env0:perform: #___dynInstVars___ env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"AN ASSIGNED VALUE WINS.  ``A.__type_params__ = whatever'' is legal and
+	lands in the holder; the class-level value-attribute branch that routes
+	here runs BEFORE the holder is consulted, so the assignment has to be
+	honoured from inside rather than around."
+	assigned := [self @env1:___classAttrOverlayLookup___: self name: #'__type_params__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	assigned @env0:isNil ifFalse: [^ assigned].
+	holder @env0:isNil ifFalse: [
+		assigned := [holder @env0:dynamicInstVarAt: #'__type_params__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		assigned @env0:isNil ifFalse: [^ assigned]].
+	names := holder @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [[holder @env0:dynamicInstVarAt: #'___typeParamNames___']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(names @env0:isNil @env0:or: [names @env0:isEmpty])
+		ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
+	"One builder for every shape, which also reads the ``*Ts'' / ``**P'' kind
+	 prefix -- a TypeVarTuple or ParamSpec was built as a TypeVar here."
+	vars := names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n].
+	"BUILT ONCE, then cached where the ``assigned'' branch above reads it.  A
+	 class's type parameters are FIXED objects: ``(T,) = Gen.__type_params__''
+	 followed by a second read must answer the same T, and everything that
+	 resolves a forward reference through the class's type parameters depends
+	 on it -- ForwardRef('T').evaluate(owner=Gen) is T (test_annotationlib
+	 test_evaluate_with_type_params).  Building afresh on every read gave a new
+	 TypeVar each time.  The laziness itself stays, for the import-cycle reason
+	 above; only the result is kept."
+	result := tuple @env0:withAll: (Array @env0:withAll: vars).
+	[holder @env0:dynamicInstVarAt: #'__type_params__' put: result]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ result
 %
 
 category: 'Grail-Reflection'

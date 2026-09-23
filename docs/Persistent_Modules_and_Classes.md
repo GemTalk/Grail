@@ -246,11 +246,72 @@ the pattern above: record what the body registered and replay it on bind.
 The mirror-image trap applies to module state: a **deployed** module's committed
 globals hold whatever its body captured, so an early-bound name
 (`from copyreg import dispatch_table`) freezes the deploy session's object while
-the rest of the system moves on. Native modules make this sharpest, because their
-*instances* are session-local even though their classes are install-stable — so
-their mutable module state must be reached through an accessor, never captured.
-`sys.modules` and `copyreg.dispatch_table` are both held class-side in
-`SessionTemps` for exactly this reason.
+the rest of the system moves on. For a native module the *module object* is no
+longer part of the trap — each one has a single committed instance and keeps its
+state per session (D8), so a committed `import builtins` is this session's
+`builtins`. A mutable *value* out of a native module's state still is: that value
+is rebuilt per session, so it must be reached through the module, never captured.
+`sys.modules` and `copyreg.dispatch_table` are held class-side in `SessionTemps`
+for exactly this reason, and `copy.py`/`pickle.py` read the table through
+`copyreg`.
+
+### 4.4 What a module is current against
+
+"One execution of its body per source version" needs a precise *source*. A body
+captures values out of what it imports — `from D import x`, but equally
+`X = D.CONST * 2` or a class built on `D.Base` — so a module whose own file is
+unchanged is still stale once anything it imported has changed. CPython never has
+to ask, because a new process re-executes everything; here nothing re-executes
+unless something decides it must.
+
+So each cold build records what its body imported, in `GrailCanonicalModuleDeps`:
+the module's **build generation** and, per dependency, the generation it had at
+build time. A deployed module is reused only while its own source hash matches
+**and** every recorded dependency is itself current and still has that generation
+(`___isCurrentModule___:`); otherwise it is *deployed-stale* exactly as if its own
+file had been edited. A change anywhere below therefore makes everything above it
+stale, and so does a dependency rebuilt in another session since. Whichever
+module is imported first checks the whole closure below it. A body that raises
+records nothing.
+
+The generation moves **only when a build was caused by a change**: a first
+build, a new source hash, or a stale dependency. A re-run of a module that was
+already current keeps it. The first version recomputed a Merkle hash of the
+inputs on every build instead, and churned: inside an import cycle the inputs
+depend on build order, so `deployFrameworks` loading `werkzeug.http` a second
+time by name gave it a different value, and 46 of 156 freshly deployed modules
+read as stale in every later session — each test session then cold-rebuilt the
+framework closure and ran out of temporary memory.
+
+Three more details keep the record from churning:
+
+- a dependency that is **not tracked** — native, C extension, namespace package,
+  or deliberately un-deployed (`deployFrameworks.gs` forgets `re`, `threading`,
+  `dataclasses` and `itertools`) — is not evidence either way and is skipped;
+- a dependency still **executing** when the module finishes (a circular import)
+  is left out of the record, since its effective hash is not final yet;
+- only imports made while the **body** runs are recorded. A function-level import
+  runs through the import machinery on every call, so it checks itself.
+
+Each source file is hashed at most once per session, however many dependents ask.
+Measured on a deployed extent, in a fresh session: checking `flask`'s closure
+hashes 149 files in 29 ms, and the whole warm `import flask` takes 29 ms and
+modifies zero persistent objects.
+
+A stale deployed module is rebuilt **into its committed instance**, as
+`importlib.reload()` does, never into a new one. Every committed reference to it —
+another deployed module's `import m`, an application object — is to that
+instance, and a second instance was the split this replaces: new methods (the
+class is recompiled in place, D2) over the old globals, while `sys.modules`
+answered a different object. The body re-executes over the existing namespace, so
+a name the new source no longer defines survives, again as `reload()` leaves it.
+A rebuild that raises puts the old source hash back, so the next import retries
+instead of binding the half-built instance.
+
+`runModuleCoherenceTest.gs` drives all of it across commits: an edit to a leaf
+module rebuilds the two modules above it, each into its committed instance, with
+both kinds of capture updated, and the session after that binds warm with zero
+persistent objects modified.
 
 ---
 
@@ -298,6 +359,9 @@ the new body's — and hybrids need reconciliation in both directions:
   synthetic slots (`__module__`, `_fields`, `__annotations__`,
   `___annotatedFields___`) moved with it, so every generated class declares
   exactly one classInstVar and `___canonicalSlotsSatisfied___` is gone.
+
+The **module instance** follows the same rule: a stale deployed module is
+rebuilt into its committed instance rather than a new one (§4.4).
 
 Details and the failure table are in the history log, §B.
 
@@ -369,18 +433,48 @@ match. `install.gs` bumps `GrailRuntimeGeneration`;
 registry in-transaction. **An install is a runtime upgrade, and a runtime upgrade
 implies redeploy** — enforced rather than remembered.
 
-### D8. Native (`.gs`) modules bypass all of this
+### D8. Native (`.gs`) modules: one committed instance, session state
 
-`sys`, `os`, `socket`, `time`, `gemstone`, … are Smalltalk classes installed and
-committed by `install.sh`. They never go through `loadModuleFromPath:`, so they
-are never canonical-bound; their singletons are rebuilt per session by
-construction. Importing one is a pure read — measured: **0 persistent objects
-modified**.
+`sys`, `os`, `builtins`, `socket`, `time`, `gemstone`, … are Smalltalk classes
+installed and committed by `install.sh`. They never go through
+`loadModuleFromPath:`, so they are never canonical-bound. Importing one is a pure
+read — measured: **0 persistent objects modified**.
 
-The one seam this created is instructive: a *deployed* `.py` module holds a
-committed reference to the `sys` **instance** from the deploy session, so
-`sys.modules` read through it answered a stale dict. Fixed by making the
-instance-side accessor delegate to the session-local class-side registry.
+Their instances used to be minted fresh in every session, and that made a seam.
+A deployed `.py` module that did `import builtins` committed the *deploy
+session's* instance in its globals, so every later session had two `builtins`:
+the one `sys.modules` answered and the one the deployed module held.
+`mock.patch('builtins.open')` patched the first, the deployed `codecs` called the
+second, and `codecs.open` recursed (`test_codecs`, only after `run_tests.sh` had
+deployed). `sys.modules` and `copyreg.dispatch_table` had each been patched for
+this one at a time (history log, §H.2).
+
+Now every native module subclasses `NativeModule`
+([NativeModule.gs](../src/smalltalk/Python/NativeModule.gs)):
+
+- **Identity.** `install.sh` creates one instance per class and commits it, and
+  `instance` answers it in every session, so a committed reference and
+  `sys.modules` agree.
+- **State.** The instance holds nothing in the repository. Its dynamic instVars
+  and dictionary entries — the two homes a module global can have; the third,
+  class methods, is install-stable — are redirected to `SessionTemps`, keyed by
+  class. A setattr, a `mock.patch`, `__spec__`, a submodule binding and the
+  `BoundMethod` a lazy read caches never touch a committed object, which keeps
+  the pure-read property above and keeps concurrent sessions from conflicting.
+  Keying by class also means an instance committed before this rule reads the
+  same state.
+- **Enforcement.** The committed instance is invariant, so a write path the
+  redirection misses raises at once instead of silently dirtying the repository.
+
+`initialize` still runs once per session and writes only session state.
+`EmbeddedExtensionModule` (C extensions) is not a `NativeModule`: it is loaded per
+session and keeps its state in C.
+
+One write remains, and it is not the instance's: assigning over a *method-backed*
+name (`mock.patch('builtins.open')`) installs a self-send dispatcher into the
+module's **class** (3 persistent objects: two method dictionaries and a selector
+set). That is the class-level dispatcher mechanism, not module state, and is
+still open.
 
 ### D9. An abort unloads what it rolled back
 
@@ -444,22 +538,24 @@ A module is in exactly one of these states, per repository and per session:
 |---|---|---|
 | **unknown** | no `GrailCanonicalModules` entry | cold: parse, compile, run body, register in-transaction |
 | **session-built** | entry present, `isCommitted` false | cold again in a new session (the entry died with the transaction) |
-| **deployed** | entry present and `isCommitted`, source hash matches | **bind**: register in `sys.modules`, adopt as singleton, restore metaclasses, run `__session_init__`. The body does not run |
-| **deployed-stale** | entry committed, source hash differs | cold rebuild, reusing class identities where the shape allows (D2) |
+| **deployed** | entry present and `isCommitted`, source hash matches, every recorded dependency unchanged (§4.4) | **bind**: register in `sys.modules`, adopt as singleton, restore metaclasses, run `__session_init__`. The body does not run |
+| **deployed-stale** | entry committed; source hash differs, or a recorded dependency changed | cold rebuild **into the committed instance**, reusing class identities where the shape allows (D2, §4.4) |
 | **cached** | present in this session's `sys.modules` | nothing — a dict hit, as in CPython |
 | **evicted** | loaded this session, then removed from `sys.modules` | raises (D6) |
 
 The cold path, in order ([importlib.gs](../src/smalltalk/Python/importlib.gs)
 `loadModuleFromPath:name:`):
 
-1. hash the source; compare with the committed per-module hash; stamp this
-   session's verdict `#stale` (a body run is always fully cold).
+1. hash the source; compare with the committed per-module hash, then check the
+   recorded dependencies (§4.4); stamp this session's verdict `#stale` (a body
+   run is always fully cold).
 2. parse; expand `from X import *`; `___buildModuleClass:name:` — `module
    subclass: <name> … inDictionary: PythonModules`, which **re-parents an
    existing class** rather than minting a rival, then compiles stub methods for
    every top-level `def`.
 3. record the source hash (in-transaction).
-4. create the instance, adopt it as the class's session singleton *before*
+4. take the committed instance when the module is deployed, else create one
+   (§4.4); adopt it as the class's session singleton *before*
    running the body (so self-referential module code cannot mint a second one),
    set `__name__` / `__package__` / `__file__` / `__loader__`.
 5. register in `sys.modules` **before** executing, so circular imports resolve.
@@ -468,7 +564,8 @@ The cold path, in order ([importlib.gs](../src/smalltalk/Python/importlib.gs)
 6. run the body. Each module-scope `class` statement goes through
    `___canonicalSubclassOf:` (mint or identity-reuse) and ends with
    `___canonicalClassRegister___` recording the final post-decorator object.
-7. `___syncPersistentState___` (D4), then `___runSessionInit___` (D5).
+7. `___syncPersistentState___` (D4), then `___runSessionInit___` (D5), then
+   record what the body imported (`___recordDepsOf___:srcHash:names:`).
 8. record the instance in `GrailCanonicalModules` — in-transaction. A later
    commit makes it a deployment.
 
@@ -706,7 +803,10 @@ left, both opt-in ([Schema_Evolution_Design.md](Schema_Evolution_Design.md)).
   land on the winner's class instead of on the orphan it built. The instance it
   then commits is an instance of the class a fresh session imports. Against a
   pre-D9 build the same harness fails five checks, ending at that one.
-- **Hash granularity** is per module. Per class would recompile less on an edit.
+- **Hash granularity** is per module, and a module is stale when any module its
+  body imported changed (§4.4) — so an edit to a widely imported module rebuilds
+  everything above it on the next import, as a CPython restart would. Per class
+  would recompile less on an edit.
 
 ### 8.5 `GRAIL_TEST_COLD=1` is no longer a complete cold mode
 
@@ -765,11 +865,20 @@ regress silently.
    Guarded by `PickleDispatchTableTestCase`, whose discriminating case is a type
    whose default reduction cannot rebuild it.
 
+11. **A committed reference to a native module is this session's module** (D8)
+   — guarded by `runModuleBindTest.gs`'s two `NATIVE` checks, whose identity
+   check fails when the committed instance is disabled.
+12. **A deployed module is current against what it imported** (§4.4): an edit
+   below it rebuilds it into its committed instance, and the next session binds
+   warm with zero persistent objects modified. Guarded by
+   `runModuleCoherenceTest.gs`.
+
 Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
 `runFlaskDeployTest.gs` (a real framework closure), `runOverlayReuseTest.gs`
 (D3), `runPersistentStateTest.gs` (D4), `runAbortReimportTest.gs` (D9),
-`runEphemeronCommitTest.gs` (commit-safety), `run_concurrent_import_test.sh`
+`runEphemeronCommitTest.gs` (commit-safety), `runModuleCoherenceTest.gs`
+(dependency staleness, rebuild in place), `run_concurrent_import_test.sh`
 (two interleaved sessions: disjoint modules, then the same module).
 The sharded SUnit suite runs against the deployed framework closure, so warm
 binding is exercised by every run.
@@ -789,6 +898,9 @@ binding is exercised by every run.
 | runtime class-attr overlay | `object >> ___classAttrOverlayStore___:name:value:`, `GrailClassAttrOverlay` |
 | metaclass restore on bind | `___restoreCanonicalMetaclasses___:` |
 | lazy first-touch bind | `module class >> instance` → `___canonicalInstanceForModuleClass___:` |
+| dependency record, staleness | `___recordDepsOf___:srcHash:names:`, `___isCurrentModule___:`, `GrailCanonicalModuleDeps` |
+| rebuild into the committed instance | `___committedInstanceToRebuild___:class:` |
+| native module identity + session state | `NativeModule`, `___installCommittedInstances___` (install.gs) |
 | registry-hit validation (D9) | `lookupModule:` → `___moduleEntryIsLive___:`, `___moduleClassKeys___`, `___forgetHashStateFor___:` |
 | `__persistent__` | `___syncPersistentState___:`, `___flushPersistentState___`, `GrailPersistentModuleState` |
 | `__session_init__` | `___runSessionInit___:` |
@@ -800,8 +912,9 @@ binding is exercised by every run.
 Session-local (never committed): `GrailSysModules`, `GrailModuleInstances`,
 `GrailModuleHashState`, `GrailMintedThisLoad`, `GrailClassAttrOverlay`,
 `GrailSubclassRegistry`, `GrailMiRegistry`, `GrailMroOverrideRegistry`,
-`GrailFunctoolsPlaceholder`, `GrailModuleClassKeys`, and the `CallAst` compile
-context.
+`GrailFunctoolsPlaceholder`, `GrailModuleClassKeys`, `GrailNativeModuleSlots`,
+`GrailNativeModuleEntries`, `GrailModuleDepCollectors`, `GrailModuleCurrency`,
+`GrailSourceHashNow`, and the `CallAst` compile context.
 
 ---
 

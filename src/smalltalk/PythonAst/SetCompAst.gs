@@ -61,7 +61,7 @@ printSmalltalkOn: aStream
 	around an inner body that adds elt to the accumulator."
 
 	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
-	aStream nextPutAll: '___r___ := (set perform: #new env: 0).'; lf.
+	aStream nextPutAll: '___r___ := (___set___ perform: #new env: 0).'; lf.
 	ComprehensionAst
 		emitGenerators: generators
 		from: 1

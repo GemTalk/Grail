@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- builtins class (Python 'builtins' module)
 expectvalue /Class
 doit
-module subclass: 'builtins'
+NativeModule subclass: 'builtins'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -247,7 +247,8 @@ _exec: positional kw: kwargs
 	step regardless of how much of the compiler runs."
 
 	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
-	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
+	  optLevel savedOpt |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -262,6 +263,22 @@ _exec: positional kw: kwargs
 	catchable TypeError CPython raises for the case that actually reaches here
 	(a code object carrying free variables -- test_scope
 	testEvalExecFreeVars)."
+	"THE OPTIMIZE LEVEL RIDES ON THE CODE OBJECT.  compile() chose it and
+	codegen has to see it, and everything between is ordinary parse and emit
+	with no argument to carry it -- so it is read here, off the object, and
+	installed around the evaluation."
+	optLevel := (source @env0:isKindOf: PyCode)
+		ifTrue: [source @env0:___grailOptimizeLevel___]
+		ifFalse: [-1].
+	savedOpt := self ___grailOptimizeLevel___.
+	"``closure='' RUNS A def's BODY WITH SUPPLIED CELLS.  Handled before the
+	source normalisation, because it is the one exec() shape whose arg 1 is a
+	def's code object rather than text -- ___sourceTextFor___ would refuse it."
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'closure']) ifTrue: [
+		^ self ___execWithClosure___: source
+			globals: ((positional @env0:size @env0:>= 2)
+				ifTrue: [positional @env0:at: 2] ifFalse: [nil])
+			closure: (kwargs @env0:at: 'closure')].
 	source := self ___sourceTextFor___: source what: 'exec'.
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
@@ -365,6 +382,7 @@ _exec: positional kw: kwargs
 		self ___grailLiveGlobals___: liveGlobals.
 		self ___grailExecGlobals___: globalsDict.
 		self ___grailExecLocals___: localsDict.
+		self ___grailOptimizeLevel___: optLevel.
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
@@ -377,7 +395,8 @@ _exec: positional kw: kwargs
 		self ___grailLiveLocals___: savedLive.
 		self ___grailLiveGlobals___: savedLiveGlobals.
 		self ___grailExecGlobals___: savedExecGlobals.
-		self ___grailExecLocals___: savedExecLocals].
+		self ___grailExecLocals___: savedExecLocals.
+		self ___grailOptimizeLevel___: savedOpt].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
 	^ None
@@ -535,13 +554,34 @@ _eval: positional kw: kwargs
 	inside the expression land where CPython puts them."
 
 	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins
-	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals |
+	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
+	  optLevel savedOpt |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
+	"A CODE OBJECT COMPILED WITH TOP-LEVEL AWAIT IS AWAITED, NOT RUN.  CPython
+	makes such a module body a coroutine, so eval() of it answers the coroutine
+	and the caller drives it -- ``await eval(co, g)'' is the documented idiom,
+	and test_compile_top_level_await runs it through send().  Running the body
+	here instead would both return the wrong thing and perform the awaits on a
+	stack that has no business awaiting."
+	((source @env0:isKindOf: PyCode)
+		@env0:and: [source @env0:___grailBodySource___ @env0:notNil]) ifTrue: [
+			^ self ___runTopLevelAwaitCode___: source globals:
+				((positional @env0:size @env0:>= 2)
+					ifTrue: [positional @env0:at: 2]
+					ifFalse: [((kwargs @env0:notNil)
+						@env0:and: [kwargs @env0:includesKey: 'globals'])
+							ifTrue: [kwargs @env0:at: 'globals']
+							ifFalse: [nil]])].
 	"Source TEXT, in any spelling CPython accepts -- see the matching call in
 	_exec: for what ___sourceTextFor___:what: does with the byte forms, and
 	for why a PyCode still fails."
+	"See _exec: -- the level rides on the code object."
+	optLevel := (source @env0:isKindOf: PyCode)
+		ifTrue: [source @env0:___grailOptimizeLevel___]
+		ifFalse: [-1].
+	savedOpt := self ___grailOptimizeLevel___.
 	source := self ___sourceTextFor___: source what: 'eval'.
 	"LEADING WHITESPACE IS STRIPPED, which is eval()'s own rule and not the
 	parser's: ``compile(' 1+1', '<s>', 'eval')'' raises IndentationError, and
@@ -692,6 +732,7 @@ _eval: positional kw: kwargs
 		self ___grailLiveGlobals___: liveGlobals.
 		self ___grailExecGlobals___: globalsDict.
 		self ___grailExecLocals___: localsDict.
+		self ___grailOptimizeLevel___: optLevel.
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
 			filename: filename
 	] @env0:ensure: [
@@ -700,9 +741,341 @@ _eval: positional kw: kwargs
 		self ___grailLiveLocals___: savedLive.
 		self ___grailLiveGlobals___: savedLiveGlobals.
 		self ___grailExecGlobals___: savedExecGlobals.
-		self ___grailExecLocals___: savedExecLocals].
+		self ___grailExecLocals___: savedExecLocals.
+		self ___grailOptimizeLevel___: savedOpt].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailOptimizeLevel___
+	"The ``optimize'' level the compile now running was given: 0, 1 or 2, or
+	-1 for ``whatever the interpreter is''.
+
+	Session-local because codegen has no other way to see it -- the level is
+	chosen by compile() and read by the emitters, and everything between is
+	ordinary parse and emit with no argument to thread it through.  Saved and
+	restored around each evaluation, like the doit scope beside it."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailOptimizeLevel' otherwise: -1
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailOptimizeLevel___: aLevel
+	SessionTemps @env0:current @env0:at: #'GrailOptimizeLevel'
+		put: (aLevel @env0:isNil ifTrue: [-1] ifFalse: [aLevel])
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___asExpressionTree___: aModuleTree source: aSource
+	"An ``Expression'' root around a module tree's single expression -- what
+	``ast.parse(s, mode='eval')'' answers.
+
+	Grail's parser always builds a module body, so the eval shape is made here
+	rather than in the parser: it is the same tree with a different root, and
+	the root is what compile() checks."
+
+	| astMod cls out body |
+	astMod := [self ___import__: { 'ast' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	astMod @env0:isNil ifTrue: [^ aModuleTree].
+	cls := [astMod @env1:___pyAttrLoad___: #'Expression']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cls @env0:isNil ifTrue: [^ aModuleTree].
+	body := [(aModuleTree @env1:___pyAttrLoad___: #'body') @env1:__getitem__: 0]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	body @env0:isNil ifTrue: [^ aModuleTree].
+	"An Expression's body is the EXPRESSION, not the Expr statement wrapping it."
+	body := [body @env1:___pyAttrLoad___: #'value']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: body].
+	out := cls @env1:___pyCallValue___: #() kw: nil.
+	out @env1:___pyAttrStore___: #'body' put: body.
+	out @env1:___pyAttrStore___: #'___grailSource___' put: aSource.
+	^ out
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireAstRoot___: aTree forMode: aMode
+	"CPython refuses a tree whose ROOT does not match the mode:
+	``compile(ast.parse(s), f, 'eval')'' is ``expected Expression node, got
+	Module''.  The check is worth having because the two trees are otherwise
+	interchangeable -- accepting the wrong one runs a module body as an
+	expression and answers something, which is a wrong answer rather than an
+	error."
+
+	| wanted got |
+	wanted := aMode @env0:= 'eval'
+		ifTrue: ['Expression']
+		ifFalse: [aMode @env0:= 'single' ifTrue: ['Interactive'] ifFalse: ['Module']].
+	got := [(aTree @env1:__class__) @env1:__name__]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	got @env0:isNil ifTrue: [^ self].
+	got @env0:asString @env0:= wanted ifTrue: [^ self].
+	"``single'' has no separate root here -- Grail parses it as a module -- so
+	only the eval/exec mismatch is refused, which is the one CPython's own
+	tests exercise."
+	(wanted @env0:= 'Interactive') ifTrue: [^ self].
+	^ TypeError ___signal___: 'expected ' @env0:, wanted @env0:,
+		' node, got ' @env0:, got @env0:asString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___execWithClosure___: aCode globals: globalsDict closure: aClosure
+	"``exec(code, globals, closure=cells)'' -- run a def's body with the given
+	free-variable cells.
+
+	GRAIL CANNOT RE-ENTER A COMPILED CLOSURE WITH DIFFERENT CELLS: its free
+	variables are Smalltalk temps captured when the def ran, so there is
+	nothing to substitute into.  What it can do is run the body's SOURCE again
+	against a namespace built from the cells, which is why a def with free
+	variables carries its body text on its code object.  The observable
+	behaviour is CPython's -- the body reads the supplied cells and writes back
+	through them -- and the mechanism is different.
+
+	The cells are copied in and written back out rather than read live.  A cell
+	is a one-slot box, and the body cannot change WHICH box a name refers to,
+	so a copy at entry and a store at exit are indistinguishable from reading
+	through it -- and it keeps the namespace an ordinary dict, which is what
+	the exec path is built for.
+
+	Every refusal below is CPython's, and there are more refusals than there is
+	execution: six of test_exec_closure's nine assertions are TypeErrors about
+	a closure that does not match its code object."
+
+	| freevars cells ns result |
+	"A STRING SOURCE takes no closure at all, whatever its value."
+	(aCode @env0:isKindOf: PyCode) ifFalse: [
+		^ TypeError ___signal___:
+			'closure can only be used when source is a code object'].
+	freevars := [aCode @env1:___pyAttrLoad___: #'co_freevars']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	freevars := freevars @env0:isNil
+		ifTrue: [Array @env0:new: 0]
+		ifFalse: [Array @env0:withAll: freevars].
+	(aClosure @env0:isNil @env0:or: [aClosure @env0:== None]) ifTrue: [
+		freevars @env0:isEmpty ifTrue: [
+			^ self _exec: { aCode. globalsDict } kw: nil].
+		^ TypeError ___signal___: 'code object requires a closure of exactly length '
+			@env0:, freevars @env0:size @env0:printString].
+	freevars @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'cannot use a closure with this code object'].
+	"ONE MESSAGE FOR EVERY MALFORMED CLOSURE, and that is CPython's doing, not
+	a simplification here.  A LIST of the right length, and a tuple of the
+	right length holding a non-cell, both report ``requires a closure of
+	exactly length N'' -- the length is what the message names whatever the
+	fault was.  Three separate, more descriptive messages read better and are
+	wrong.
+
+	A tuple, not any sequence: accepting a list would make
+	``closure=list(cells)'' work where CPython refuses it."
+	((aClosure @env0:isKindOf: tuple)
+		@env0:and: [(Array @env0:withAll: aClosure) @env0:size @env0:= freevars @env0:size])
+		ifFalse: [^ self ___refuseClosureLength___: freevars].
+	cells := Array @env0:withAll: aClosure.
+	cells @env0:do: [:each |
+		(self ___isCellObject___: each) ifFalse: [
+			^ self ___refuseClosureLength___: freevars]].
+	^ self ___runClosureBody___: aCode globals: globalsDict
+		freevars: freevars cells: cells
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___refuseClosureLength___: freevars
+	"CPython's one refusal for a closure that is not a tuple of exactly the
+	right number of cells."
+
+	^ TypeError ___signal___: 'code object requires a closure of exactly length '
+		@env0:, freevars @env0:size @env0:printString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isCellObject___: anObject
+	"Whether anObject is a cell -- what a closure tuple must hold.
+
+	Asked by CLASS NAME rather than by a Smalltalk kind test, because a cell is
+	a Python-visible type and the check has to agree with ``isinstance(x,
+	CellType)'' as the caller sees it."
+
+	^ [((anObject @env1:__class__) @env1:__name__) @env0:asString @env0:= 'cell']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___runClosureBody___: aCode globals: globalsDict freevars: freevars cells: cells
+	"Run the def body aCode carries, with freevars bound to the cells'
+	contents, then write the results back into the cells.
+
+	A code object with no body text -- one from compile() rather than a def, or
+	a def compiled before this was recorded -- is refused rather than run
+	empty: answering None for an exec that did nothing is the kind of quiet
+	wrong answer this whole file is about."
+
+	| src ns |
+	src := aCode @env0:___grailBodySource___.
+	src @env0:isNil ifTrue: [
+		^ TypeError ___signal___:
+			'exec() cannot run this code object with a closure'].
+	ns := dict ___new___.
+	1 @env0:to: freevars @env0:size do: [:i |
+		ns @env1:__setitem__: (freevars @env0:at: i) @env0:asString
+			_: ((cells @env0:at: i) @env1:___pyAttrLoad___: #'cell_contents')].
+	self _exec: { src. globalsDict. ns } kw: nil.
+	"WRITE BACK.  A cell is a one-slot box and the body cannot change which box
+	a name refers to, so storing the final value is exactly what reading
+	through the cell would have produced."
+	1 @env0:to: freevars @env0:size do: [:i |
+		| v |
+		v := [ns @env1:__getitem__: (freevars @env0:at: i) @env0:asString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		v @env0:isNil ifFalse: [
+			"__setattr__, not ___pyAttrStore___.  ``cell.cell_contents = v'' is
+			what makes a cell write reach the variable it boxes -- the store
+			goes through the cell's own setter -- and a dynamic-instVar store
+			writes past it, leaving the enclosing scope untouched.  The exec
+			above produced the right value and nothing could see it."
+			(cells @env0:at: i) @env1:__setattr__: 'cell_contents' _: v]].
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___astSourceOf___: anObject
+	"The source text an ast tree was parsed from, or nil.
+
+	Set by ___astTreeFor___:optimized: on the Module it builds, so
+	``compile(ast.parse(src), f, mode)'' can answer an executable code object
+	-- Grail compiles from text and has no AST-to-code path.  Nil for anything
+	that is not such a tree, which includes a tree the caller built by hand."
+
+	anObject @env0:isNil ifTrue: [^ nil].
+	(anObject @env0:isKindOf: CharacterCollection) ifTrue: [^ nil].
+	^ [anObject @env1:___pyAttrLoad___: #'___grailSource___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___foldAstDebug___: aTree
+	"Apply the ast module's ``__debug__'' fold to a tree, and answer it.
+
+	The walk lives in Python, beside the node classes it rewrites -- a tree
+	walk belongs with the tree -- and this is the one call site outside it.
+	A failure answers the tree unchanged rather than raising: compile() was
+	asked for an optimised tree and an unoptimised one is a closer answer than
+	an exception."
+
+	| astMod |
+	astMod := [self ___import__: { 'ast' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	astMod @env0:isNil ifTrue: [^ aTree].
+	^ [(astMod @env1:___pyAttrLoad___: #'__grail_fold_debug__')
+		@env1:___pyCallValue___: { aTree } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: aTree]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___astTreeFor___: aSource mode: aMode optimized: wantOptimized
+	"The Python ``ast'' tree for a source, as PyCF_ONLY_AST asks for.
+
+	Grail's parser builds its own node hierarchy;
+	AbstractNode >> ___asPythonAst___ maps it onto the classes the ast module
+	declares.  Before this, compile() with that flag answered the source string
+	and ast.parse() a placeholder, so anything that walked a parse got neither.
+
+	The ``__debug__'' fold for PyCF_OPTIMIZED_AST is done by the ast module's
+	own helper, beside the node classes it rewrites -- a tree walk belongs with
+	the tree."
+
+	| tree astMod |
+	tree := (ModuleAst @env0:parseSource: aSource) @env0:___asPythonAst___.
+	tree @env0:isNil ifTrue: [
+		^ TypeError ___signal___: 'compile(): cannot build an AST for this source'].
+	"THE TREE REMEMBERS ITS SOURCE.  ``compile(ast.parse(src), f, mode)'' has to
+	answer something EXECUTABLE, and Grail compiles from text -- it has no
+	AST-to-code path and no bytecode to build.  Carrying the source on the
+	Module is what makes the round trip work at all, and it is exact rather than
+	an approximation: it is the same text, not an unparse of the tree.
+
+	A tree the caller BUILT rather than parsed has no source and still cannot
+	be compiled; that is a narrower gap than the whole round trip being
+	impossible, and it is what CPython users of ast.parse actually do."
+	tree @env1:___pyAttrStore___: #'___grailSource___' put: aSource.
+	"THE ROOT NODE FOLLOWS THE MODE.  CPython's ``exec'' parse is a Module and
+	its ``eval'' parse an Expression, and compile() REFUSES the wrong one --
+	``compile(ast.parse(s), f, 'eval')'' is a TypeError naming both.  Grail's
+	parser always builds a module body, so the eval form is re-rooted here."
+	aMode @env0:= 'eval' ifTrue: [
+		tree := self ___asExpressionTree___: tree source: aSource].
+	wantOptimized ifFalse: [^ tree].
+	astMod := [self ___import__: { 'ast' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	astMod @env0:isNil ifTrue: [^ tree].
+	^ self ___foldAstDebug___: tree
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___topLevelAwaitWrapperFor___: aSource
+	"aSource as the body of an ``async def'', with a trailing line that copies
+	what it bound into the mapping the caller supplies.
+
+	CPython makes the module body itself a coroutine, so its assignments land
+	in the globals it was given.  Grail has no coroutine module body; wrapping
+	the source in an async def gives the awaits the scope they need, and turns
+	those assignments into the WRAPPER's locals -- so the copy at the end is
+	what puts them where the caller looks.  Reads are unaffected: the wrapper
+	is exec'd with that same mapping as its globals, so a free name resolves
+	to it as before.
+
+	The parameter is named with the Grail prefix so the body cannot shadow it,
+	and it is excluded from the copy for the same reason."
+
+	| lf out |
+	lf := Character @env0:lf @env0:asString.
+	out := WriteStream @env0:on: String @env0:new.
+	out @env0:nextPutAll: 'async def __grail_tla__(__grail_ns__):'; @env0:nextPutAll: lf.
+	(aSource @env0:asString @env0:subStrings: lf) @env0:do: [:line |
+		out @env0:nextPutAll: '    '; @env0:nextPutAll: line; @env0:nextPutAll: lf].
+	out @env0:nextPutAll: '    __grail_ns__.update({__grail_k__: __grail_v__'; @env0:nextPutAll: lf.
+	out @env0:nextPutAll: '        for __grail_k__, __grail_v__ in locals().items()'; @env0:nextPutAll: lf.
+	out @env0:nextPutAll: '        if __grail_k__ != ''__grail_ns__''})'; @env0:nextPutAll: lf.
+	^ out @env0:contents
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___runTopLevelAwaitCode___: aCode globals: aNamespaceOrNil
+	"eval() of a code object compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT: answer
+	the COROUTINE the caller will drive, rather than running the body.
+
+	CPython's module body IS the coroutine; Grail's stand-in is the async def
+	compile() wrapped the source in, so this execs that wrapper in the
+	supplied namespace and calls it with the namespace as its argument -- which
+	is how the body's assignments get back out (see
+	___topLevelAwaitWrapperFor___).
+
+	The wrapper's own name is removed again, because eval() must not leave a
+	name behind in the caller's globals that the source never bound."
+
+	| ns fn |
+	ns := aNamespaceOrNil @env0:isNil
+		ifTrue: [dict @env0:new]
+		ifFalse: [aNamespaceOrNil].
+	self _exec: { aCode @env0:___grailBodySource___. ns } kw: nil.
+	fn := ns @env0:at: '__grail_tla__' otherwise: nil.
+	fn @env0:isNil ifTrue: [
+		^ SystemError ___signal___: 'top-level await wrapper did not compile'].
+	ns @env0:removeKey: '__grail_tla__' ifAbsent: [nil].
+	^ fn @env1:___pyCallValue___: { ns } kw: nil
 %
 
 category: 'Grail-Built-in Functions'
@@ -719,8 +1092,8 @@ ___topLevelAwaitFlagsFor___: aSource
 	A source that will not parse answers 0 rather than raising: compile()
 	raises the SyntaxError itself, above, and this runs after that."
 
-	^ [(ModuleAst @env0:parseSource: aSource) ___hasModuleScopeAwait___
-		ifTrue: [128] ifFalse: [0]]
+	^ [(ModuleAst @env0:parseSource: aSource allowTopLevelAwait: true)
+		@env0:___hasModuleScopeAwait___ ifTrue: [128] ifFalse: [0]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: 0]
 %
 
@@ -879,7 +1252,7 @@ _compile: positional kw: kwargs
 	(test_augassign.test_with_unpacking).  Only strings are parsed; a
 	non-string source (already an AST/code object) is returned as-is."
 
-	| source args mode |
+	| source args mode parsed |
 	"COMPILE() TAKES ITS ARGUMENTS BY KEYWORD TOO, and all six of them:
 	``compile(source='pass', filename='?', mode='exec')'' and
 	``compile(dont_inherit=False, filename='tmp', source='0', mode='eval')''
@@ -931,7 +1304,14 @@ _compile: positional kw: kwargs
 					^ ValueError ___signal___: 'compile(): unrecognised flags']]].
 	(source isKindOf: CharacterCollection)
 		ifTrue: [
-			[ModuleAst @env0:parseSource: source]
+			"PyCF_ALLOW_TOP_LEVEL_AWAIT RELAXES THIS PARSE, and it has to be
+			this one: a module-level await is a SyntaxError to the ordinary
+			parser, so without the relaxation compile() refuses the source here
+			and never reaches the branch that would wrap it."
+			parsed := [ModuleAst @env0:parseSource: source allowTopLevelAwait:
+				((args @env0:size @env0:>= 4)
+					@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+						@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])]
 				@env0:on: SyntaxError
 				do: [:ex |
 					"Re-raise so the Python ``str(e)'' carries the parser's message.
@@ -948,7 +1328,17 @@ _compile: positional kw: kwargs
 					to draw a caret under.  That is why test_caret saw one output line
 					where CPython has four.  Passing the location tuple in the
 					constructor form keeps both halves."
-ModuleAst @env0:___resignalSyntaxError___: ex]].
+ModuleAst @env0:___resignalSyntaxError___: ex].
+			"EVAL MODE TAKES EXACTLY ONE EXPRESSION.  The parse above is a module
+			 parse whatever the mode, and a module may be empty or hold
+			 statements, so ``compile('', '<string>', 'eval')'' and
+			 ``compile('x = 1', ..., 'eval')'' both succeeded where CPython raises
+			 SyntaxError('invalid syntax').  annotationlib's
+			 ForwardRef('').__forward_code__ relies on that to reject an empty
+			 forward reference (test_syntax_error_empty_string)."
+			((mode @env0:= 'eval') @env0:and: [parsed @env0:notNil
+				@env0:and: [parsed @env0:isSingleExpressionBody @env0:not]]) ifTrue: [
+					^ SyntaxError ___signal___: 'invalid syntax']].
 	"RECORD THE MODE, and answer a FRESH string to key it by.
 
 	CPython's compile() answers a code object, and eval() treats a code object
@@ -999,13 +1389,62 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 			(fn @env0:isKindOf: CharacterCollection) ifTrue: [
 				fname := fn @env0:asString.
 				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fname]].
+		"PyCF_ONLY_AST / PyCF_OPTIMIZED_AST ANSWER THE TREE, not a code object.
+		That is what the flags mean: stop after parsing and hand back the AST.
+		``ast.parse'' is defined as this call, so one place builds the tree and
+		the two cannot drift.
+
+		OPTIMIZED additionally folds ``__debug__'' to a Constant -- CPython
+		resolves it at compile time, since it cannot change while a program
+		runs, and PyCF_OPTIMIZED_AST is how a caller asks to see the tree after
+		that.  The fold is written in Python, beside the node classes it
+		rewrites."
+		((args @env0:size @env0:>= 4)
+			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r400) @env0:~= 0]])
+			ifTrue: [^ self ___astTreeFor___: copy mode: mode optimized:
+				(((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0)].
 		flags := ((args @env0:size @env0:>= 4)
 			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])
 			ifTrue: [self ___topLevelAwaitFlagsFor___: copy]
 			ifFalse: [0].
-		^ PyCode @env0:___forCompiledSource___: copy filename: fname
-			mode: mode flags: flags].
+		"A MODULE THAT AWAITS IS COMPILED AS A COROUTINE.  CPython makes the
+		module body itself one; Grail wraps the source in an ``async def'' and
+		carries that wrapper on the code object, because an await has to be
+		inside an async scope for the ordinary compile to accept it at all.
+		eval() and FunctionType then run the wrapper and answer the coroutine
+		it makes -- see ___topLevelAwaitWrapperFor___."
+		(flags @env0:bitAnd: 128) @env0:~= 0 ifTrue: [
+			^ (PyCode @env0:___forCompiledSource___: copy filename: fname
+				mode: mode flags: flags)
+					@env0:___setOptimize___: ((args @env0:size @env0:>= 6)
+						ifTrue: [args @env0:at: 6] ifFalse: [-1]);
+					@env0:___setBodySource___: (self ___topLevelAwaitWrapperFor___: copy);
+					@env0:yourself].
+		^ (PyCode @env0:___forCompiledSource___: copy filename: fname
+			mode: mode flags: flags)
+				@env0:___setOptimize___: ((args @env0:size @env0:>= 6)
+					ifTrue: [args @env0:at: 6] ifFalse: [-1])].
+	"AN AST ARGUMENT WITH PyCF_OPTIMIZED_AST IS FOLDED AND HANDED BACK.
+	``compile(ast.parse(src), f, mode, flags=PyCF_OPTIMIZED_AST)'' is how a
+	caller asks to see an already-parsed tree AFTER the optimiser, and
+	test_compile_ast checks it against the tree compiled from source directly
+	-- the two must agree.  Without this the tree came back untouched and its
+	``__debug__'' was still a Name where the other was a Constant."
+	((args @env0:size @env0:>= 4)
+		@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+			@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0]])
+		ifTrue: [^ self ___foldAstDebug___: source].
+	"AN AST WITHOUT THAT FLAG IS COMPILED, not handed back.  The tree carries
+	the source it was parsed from, so this is the ordinary string compile with
+	the text read back out of it."
+	(self ___astSourceOf___: source) @env0:ifNotNil: [:text |
+		| rest |
+		self ___requireAstRoot___: source forMode: mode.
+		rest := args @env0:copy.
+		rest @env0:at: 1 put: text.
+		^ self _compile: rest kw: nil].
 	^ source
 %
 
@@ -3470,6 +3909,35 @@ format: aValue _: aFormatSpec
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___fformat___: aValue _: aConversion _: aSpec
+	"One f-string replacement field, as CPython's CONVERT_VALUE then
+	FORMAT_SIMPLE / FORMAT_WITH_SPEC run it: apply the conversion (''s'', ''r'',
+	''a'', or '''' for none), then answer format(value, spec) -- with an empty
+	spec when the field has none, so ``f'{x}''' is ``x.__format__('''')'' and
+	not str(x).
+
+	PythonParser >> ___wrapFStringExpr:... emits every field as a call to THIS
+	name.  It is not a Python builtin: it exists so that a local or global
+	called ``format'', ``str'' or ``repr'' cannot capture the field, as it could
+	when the parser emitted calls to those names.
+
+	An exact str with no spec is its own format, which is the common case and
+	skips the __format__ dispatch."
+
+	| v |
+	v := aValue.
+	(aConversion @env0:isEmpty) ifFalse: [
+		v := aConversion @env0:= 'r'
+			ifTrue: [self repr: v]
+			ifFalse: [aConversion @env0:= 'a'
+				ifTrue: [self ascii: v]
+				ifFalse: [str @env1:__new__: v]]].
+	((aSpec @env0:isEmpty) @env0:and: [v @env0:___isExactPyStr___]) ifTrue: [^ v].
+	^ self format: v _: aSpec
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 reversed: aSequence
 	"Python builtin reversed(seq) — fixed-arity fast path.  Prefer
 	the receiver's own __reversed__ (the Python protocol); fall back
@@ -5360,6 +5828,15 @@ ___isPythonIdentifier___: aString
 category: 'Grail-Built-in Functions'
 method: builtins
 type: className _: bases _: namespace
+	"The ordinary three-argument type(), which is the same build with no class
+	keywords -- see the kw: variant for everything it does."
+
+	^ self type: className _: bases _: namespace kw: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+type: className _: bases _: namespace kw: classKeywords
 	"Python builtin type(name, bases, namespace) — the 3-argument
 	metaclass form that builds a class dynamically.  Mirrors the
 	compile-time path in ClassDefAst: pick the storage base from
@@ -5559,6 +6036,26 @@ type: className _: bases _: namespace
 	the first, and re-pointing it would leave the first class's methods reading
 	the second."
 	newClass @env1:___grailApplyClassCell___: namespace.
+	"PEP 487, WHICH type() RUNS AND THIS DID NOT.  CPython fires both halves
+	from type.__new__ -- __set_name__ over the namespace, then
+	__init_subclass__ on the nearest base that defines one -- so a class built
+	dynamically got neither, while the identical class STATEMENT got both.
+	Measured: ``type('X', (Base,), {})'' left Base's hook unrun and a
+	descriptor in the namespace never learned its own name.
+
+	The class statement reaches these through ___pyClassDefined___:, the
+	METACLASS hook, which is deliberately not sent here: its other two steps
+	belong to a class statement (an __orig_bases__ stash left in SessionTemps
+	by the PEP 560 sole-base path, which type() refuses to take, and the
+	attr-method shadow install).  Sending it would let a stash belonging to
+	some earlier class statement land on this class.  So the two PEP 487 halves
+	are sent directly, which is what was missing.
+
+	``classKeywords'' are CPython's ``type(name, bases, ns, **kwds)'' -- the
+	3.6+ form, forwarded to __init_subclass__ exactly as a class header's
+	keywords are.  nil for the ordinary three-argument call."
+	newClass @env1:___invokeSetNameHooks___: ownAttrNames @env0:asArray.
+	newClass @env1:___grailInitSubclass___: classKeywords.
 	^ newClass
 %
 

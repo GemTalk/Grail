@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- os class (Python 'os' module)
 expectvalue /Class
 doit
-module subclass: 'os'
+NativeModule subclass: 'os'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -249,6 +249,13 @@ initialize
 	self @env0:at: #supports_dir_fd put: (set ___new___).
 	self @env0:at: #supports_follow_symlinks put: (set ___new___).
 	self @env0:at: #supports_effective_ids put: (set ___new___).
+	"``os._walk_symlinks_as_files'' is a bare sentinel OBJECT in CPython, and
+	is compared by identity.  Path.walk() passes it as os.walk's followlinks
+	for its own follow_symlinks=False, and it asks for a third behaviour that
+	neither Boolean gives: a symlink to a directory is reported as a FILE and
+	never descended into.  Private by name, and still part of the contract --
+	pathlib is the caller."
+	self @env0:at: #'_walk_symlinks_as_files' put: (object ___new___).
 	self @env0:at: #path put: (os_path instance).
 	self @env0:at: #PathLike put: os_PathLike.
 	"``os.DirEntry'' is a real module attribute in CPython -- code type-tests
@@ -360,6 +367,23 @@ ___fsPath___: path
 	method dict, so a Path SUBCLASS that inherits __fspath__ is coerced too."
 
 	(self ___isPathLike___: path) ifTrue: [^ path __fspath__].
+	"A str holding a LONE SURROGATE -- which is how os.fsdecode spells an
+	undecodable byte (PEP 383) -- cannot reach the GsFile primitives as it
+	is: they send it encodeAsUTF8, get the surrogatepass bytes back, and
+	refuse the ByteArray with an ArgumentTypeError no Python code can catch
+	(test_warnings' non-ASCII-filename tests died there, inside a
+	catch_warnings block that then never restored the warnings module).
+
+	CPython encodes such a path with surrogateescape.  Here the escaped bytes
+	are handed on as the CHARACTERS of an ordinary string, since the
+	primitives take a String and a raw-byte Utf8 cannot be built: a lone
+	U+DC80..U+DCFF becomes its byte, and any other surrogate raises
+	CPython's catchable UnicodeEncodeError.  The byte is then UTF-8-encoded
+	by the primitive, so a file whose on-disk name is itself undecodable is
+	still out of reach -- but a missing one is FileNotFoundError, as in
+	CPython, rather than a dead session."
+	(path isKindOf: PyStrSurrogate) ifTrue: [
+		^ (path encode: 'utf-8' _: 'surrogateescape') decode: 'latin-1'].
 	^ path
 %
 
@@ -778,11 +802,21 @@ chdir: aPath
 
 	| result path |
 	path := self ___fsPath___: aPath.
+	"The primitive answers 0 on success and the ERRNO on failure, never nil --
+	the one answer this tested for, so a chdir to a missing directory changed
+	nothing and said nothing, exactly as os.rename did (see Issues.md)."
 	result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot change directory to: ' @env0:, (path @env0:printString))
-	].
-	^ None
+	result == 0 ifTrue: [^ None].
+	(result @env0:isKindOf: SmallInteger) ifFalse: [
+		^ OSError ___signal___: (self @env0:class ___directoryNotChangedMessage: path)].
+	^ self ___signalErrno: result filename: path
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___directoryNotChangedMessage: path
+
+	^ 'Cannot change directory to: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -963,9 +997,37 @@ ___libcName
 	"By the soname the loader resolves, as zlib names libz: glibc's runtime
 	soname on Linux."
 
-	^ (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
+	^ self ___isDarwin
 		ifTrue: ['libc.dylib']
 		ifFalse: ['libc.so.6']
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___isDarwin
+	"Which platform's errno numbering and libc naming applies.  The errnos a
+	FILE operation reports agree on Darwin and Linux except where a method
+	below says otherwise."
+
+	^ (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___errnoOfADirectoryNotEmpty
+	"ENOTEMPTY, which Darwin numbers 66 and Linux 39.  It has no OSError
+	subclass of its own on either."
+
+	^ self ___isDarwin ifTrue: [66] ifFalse: [39]
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___errnoOfUnlinkingADirectory
+	"unlink(2) of a directory: EPERM on Darwin (PermissionError), EISDIR on
+	Linux (IsADirectoryError).  CPython reports whichever the platform gives."
+
+	^ self ___isDarwin ifTrue: [1] ifFalse: [21]
 %
 
 category: 'Grail-Error Messages'
@@ -1137,10 +1199,64 @@ rmdir: aPath
 	path := self ___fsPath___: aPath.
 	self ___refuseShellExpandedPath___: path for: 'rmdir'.
 	result := GsFile @env0:removeServerDirectory: path.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot remove directory: ' @env0:, (path @env0:printString))
-	].
+	result == nil ifTrue: [^ self ___signalDirectoryNotRemoved: path].
 	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___signalDirectoryNotRemoved: path
+	"Raise what CPython's os.rmdir raises.  The primitive answers only nil, so
+	the errno is read back from the filesystem, as os.mkdir's is."
+
+	| errno |
+
+	errno := self ___errnoPreventingRemovalOfDirectory: path.
+	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotRemovedMessage: path)].
+	^ self ___signalErrno: errno filename: path
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoPreventingRemovalOfDirectory: path
+	"Why rmdir of path failed: it cannot be lstat'd (that stat's own errno),
+	it is not a directory -- a SYMLINK to one included, which is why the probe
+	is an lstat -- or it still holds entries.  0 when none of those holds."
+
+	| entryStat |
+
+	entryStat := GsFile @env0:stat: path isLstat: true.
+	(entryStat @env0:isKindOf: SmallInteger) ifTrue: [^ entryStat].
+	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory @env0:not])
+		ifTrue: [^ 20].
+	(self ___isEmptyDirectory: path) ifFalse: [^ self @env0:class ___errnoOfADirectoryNotEmpty].
+	^ 0
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___isEmptyDirectory: path
+	"True when path holds nothing of its own.  The primitive reports '.' and
+	'..', which CPython's listing never does and which are not entries a
+	caller put there."
+
+	| contents |
+
+	contents := GsFile
+		@env0:_contentsOfServerDirectory: path
+		expandPath: false
+		utf8Results: false.
+	(contents @env0:isKindOf: Array) ifFalse: [^ true].
+	^ (contents @env0:reject: [:each | | name |
+		name := each @env0:asString.
+		(name @env0:= '.') @env0:or: [name @env0:= '..']]) @env0:isEmpty
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___directoryNotRemovedMessage: path
+
+	^ 'Cannot remove directory: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1165,10 +1281,44 @@ remove: aPath
 	unlinked.  CPython removes the LINK, and never consults the target at all."
 	self ___statOrSignal___: path isLstat: true.
 	result := GsFile @env0:removeServerFile: path.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot remove file: ' @env0:, (path @env0:printString))
-	].
+	result == nil ifTrue: [^ self ___signalFileNotRemoved: path].
 	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___signalFileNotRemoved: path
+	"Raise what CPython's os.remove raises.  The primitive answers only nil, so
+	the errno is read back from the filesystem, as os.mkdir's is."
+
+	| errno |
+
+	errno := self ___errnoPreventingUnlinkOf: path.
+	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___fileNotRemovedMessage: path)].
+	^ self ___signalErrno: errno filename: path
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoPreventingUnlinkOf: path
+	"Why unlinking path failed: it is a directory, which the two platforms
+	report differently.  The lstat has already passed by the time this is
+	asked, so 0 means a permission it cannot see."
+
+	| entryStat |
+
+	entryStat := GsFile @env0:stat: path isLstat: true.
+	(entryStat @env0:isKindOf: SmallInteger) ifTrue: [^ entryStat].
+	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory])
+		ifTrue: [^ self @env0:class ___errnoOfUnlinkingADirectory].
+	^ 0
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___fileNotRemovedMessage: path
+
+	^ 'Cannot remove file: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1800,7 +1950,7 @@ _walk: positional kw: kwargs
 	triple waiting to be yielded after its subdirectories.  Recursion would
 	have meant a nested generator, and so a forked GsProcess, per directory."
 
-	| top topdown onerror followlinks |
+	| top topdown onerror followlinks linksAreFiles |
 	positional @env0:size @env0:< 1 ifTrue: [
 		TypeError ___signal___:
 			'walk() missing 1 required positional argument: ''top'''].
@@ -1811,10 +1961,38 @@ _walk: positional kw: kwargs
 		name: 'onerror' default: nil.
 	followlinks := self ___walkArgAt___: positional at: 4 kw: kwargs
 		name: 'followlinks' default: false.
+	"The sentinel is an ordinary object, so ___isTruthy___ answers TRUE for it
+	-- it would read as followlinks=True, the opposite of what Path.walk asks
+	for.  Identity is the test, as it is in CPython."
+	linksAreFiles := followlinks == self ___walkSymlinksAsFiles.
 	^ self ___walk___: top
 		topdown: topdown ___isTruthy___
 		onerror: onerror
-		followlinks: followlinks ___isTruthy___
+		followlinks: (linksAreFiles @env0:not and: [followlinks ___isTruthy___])
+		linksAreFiles: linksAreFiles
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___isWalkDirectory___: aPath linksAreFiles: linksAreFiles
+	"Whether os.walk counts aPath as a directory to descend into.
+
+	isdir FOLLOWS a symlink, so by default a link to a directory is reported
+	in dirnames and ``followlinks'' decides whether it is entered.  Under
+	os._walk_symlinks_as_files it is a FILE instead, which is CPython's
+	``entry.is_dir(follow_symlinks=False)'' -- the lstat answer."
+
+	(self isdir: aPath) ifFalse: [^ false].
+	^ linksAreFiles @env0:not @env0:or: [(self ___isLink___: aPath) @env0:not]
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___walkSymlinksAsFiles
+	"The sentinel os.walk compares its followlinks against; see where it is
+	created for what it asks for."
+
+	^ self @env0:at: #'_walk_symlinks_as_files'
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1835,10 +2013,14 @@ walk: aTop _: topdown
 
 category: 'Grail-File and Directory Operations'
 method: os
-___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks
+___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks linksAreFiles: linksAreFiles
 	"The generator behind os.walk -- see _walk:kw: for the argument handling
 	and for why this is a generator at all.  topdown/followlinks arrive as
-	Smalltalk Booleans, already truth-tested."
+	Smalltalk Booleans, already truth-tested.
+
+	linksAreFiles is the os._walk_symlinks_as_files mode, which Path.walk asks
+	for: a symlink to a directory belongs in FILENAMES rather than dirnames,
+	so it is neither reported as a directory nor descended into."
 
 	| pathMod reportError |
 	pathMod := os_path instance.
@@ -1880,7 +2062,7 @@ ___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks
 							whether it is DESCENDED INTO is followlinks, below.
 							An OSError here counts as ``not a directory'', which
 							is what os.path.isdir does."
-							isDir := [self isdir: full]
+							isDir := [self ___isWalkDirectory___: full linksAreFiles: linksAreFiles]
 								@env0:on: OSError
 								do: [:ex | ex @env0:return: false].
 							isDir

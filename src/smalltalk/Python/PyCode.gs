@@ -285,6 +285,76 @@ ___codeKindBits___
 
 category: 'Instance Creation'
 method: PyCode
+___setBodySource___: aString
+	"Record the def's BODY text, and answer self.
+
+	``exec(f.__code__, g, closure=cells)'' has to run that body with the given
+	cells, and Grail has no way to re-enter a compiled closure with different
+	ones -- its free variables are Smalltalk temps captured at def time.
+	Running the text again, against a namespace backed by the cells, is what
+	makes the substitution observable at all.
+
+	Under a Grail-internal name: CPython's code object has no such field, and
+	it must not surface as an attribute of one."
+
+	self dynamicInstVarAt: #'___grailBodySource___' put: aString.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___grailBodySource___
+	"The def's body text, or nil for a code object that is not a def's."
+
+	^ [self dynamicInstVarAt: #'___grailBodySource___']
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Instance Creation'
+method: PyCode
+___setOptimize___: aLevel
+	"Record the ``optimize'' level compile() was given, and answer self.
+
+	It has to travel WITH the code object, not be a property of the compile
+	call, because Grail compiles from text at exec() time: the level chosen
+	when compile() ran is the one the eventual codegen must see, and the two
+	can be far apart.  Under a Grail-internal name, so it is not a Python
+	attribute of the code object -- CPython has none."
+
+	self dynamicInstVarAt: #'___grailOptimize___' put: aLevel.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___grailOptimizeLevel___
+	"The optimize level this code object was compiled with, or nil."
+
+	^ [self dynamicInstVarAt: #'___grailOptimize___']
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Instance Creation'
+method: PyCode
+___setConsts___: anArray
+	"Record ``co_consts'' and answer self, so the emitters can chain it onto
+	the constructor.
+
+	Grail keeps no constant POOL -- it compiles Python to Smalltalk methods --
+	so what goes in here is the part of co_consts that is OBSERVABLE and
+	stable: one code object per nested scope that CPython gives one.  Since
+	3.12 that is a GENERATOR EXPRESSION and a nested def or lambda; list, set
+	and dict comprehensions were inlined and no longer appear.  Counting them
+	is a real question code asks -- test_builtin's
+	test_all_any_tuple_optimization checks that a genexp leaves exactly one,
+	which is how it verifies the comprehension was not duplicated."
+
+	self dynamicInstVarAt: #'co_consts' put: anArray.
+	^ self
+%
+
+category: 'Instance Creation'
+method: PyCode
 ___setFreevars___: anArrayOfNames
 	"Record this def's FREE VARIABLE names -- the ones CPython reports as
 	``co_freevars'' -- and answer self so the emitters can cascade it onto the
@@ -457,6 +527,30 @@ __repr__
 	stream @env0:nextPutAll: (self @env0:dynamicInstVarAt: #'co_firstlineno') @env0:printString.
 	stream @env0:nextPut: $>.
 	^ stream @env0:contents
+%
+
+set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Pickling'
+method: PyCode
+__reduce_ex__: aProtocol
+	"A code object cannot be pickled, and CPython says so from HERE, with a
+	TypeError -- measured on 3.14.6: ``cannot pickle code objects'' for protocol
+	2 and up.  Without it pickle fell through to its generic reduce, tried to
+	save the ``code'' class by reference, and failed with a PicklingError about
+	the lookup instead: the wrong exception type, which ``except TypeError''
+	(and test_annotationlib's test_special_attrs, pickling a ForwardRef whose
+	compiled form is cached) does not catch."
+
+	^ TypeError ___signal___: 'cannot pickle code objects'
+%
+
+category: 'Grail-Pickling'
+method: PyCode
+__reduce__
+	^ TypeError ___signal___: 'cannot pickle code objects'
 %
 
 set compile_env: 0

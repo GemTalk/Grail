@@ -10,6 +10,10 @@
 # what CPython's own inspect does with its imports.
 import sys as _sys
 import types as _types
+# CPython 3.14 re-exports annotationlib's get_annotations as inspect's own:
+# ``from inspect import get_annotations'' is the documented spelling, and the
+# PEP 695 fixture module nested in test_inspect uses it.
+from annotationlib import get_annotations  # re-exported
 from collections import namedtuple as _namedtuple
 
 

@@ -686,12 +686,14 @@ printSmalltalkRuntimeOn: aStream
 	declare, even when the class name itself needs no temp -- a class nested
 	in a function or in another class body reaches this the same way, and
 	Smalltalk block temps are visible to the nested blocks the body emits."
-	(self ___bindsClassNameToModule___ or: [self ___classBodyHelperTemps___ notEmpty]) ifTrue: [
+	(self ___bindsClassNameToModule___ or: [self ___classBlockNeedsTemps___]) ifTrue: [
 		aStream nextPutAll: '[| '.
 		self ___bindsClassNameToModule___ ifTrue: [
 			aStream nextPutAll: self ___stVarName___; nextPutAll: ' '].
 		self ___classBodyHelperTemps___ do: [:each |
 			aStream nextPutAll: each asString; nextPutAll: ' '].
+		self ___classHeaderTemps___ do: [:each |
+			aStream nextPutAll: each; nextPutAll: ' '].
 		aStream nextPutAll: '| '.
 	].
 	(self isModuleScopeClassDef) ifTrue: [
@@ -707,7 +709,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream
 			lf;
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' := importlib @env0:___canonicalClassProbe___: '.
+			nextPutAll: ' := ___importlib___ @env0:___canonicalClassProbe___: '.
 		self printQuotedString: self ___enclosingModuleName___ on: aStream.
 		aStream nextPutAll: ' name: '.
 		self printQuotedString: name asString on: aStream.
@@ -721,6 +723,10 @@ printSmalltalkRuntimeOn: aStream
 	classInstVar slots because GemStone prohibits dynamic instVars on
 	Behavior / Class receivers (error 2484); accessor/setter pairs
 	keep the read/write path working for class-side attrs."
+	"THE HEADER FIRST, once, before the class exists -- which is also where
+	CPython evaluates it.  Inside the canonical guard, so a warm import that
+	binds the committed class evaluates nothing, as before."
+	self printClassHeaderOn: aStream.
 	aStream nextPutAll: self ___stVarName___; nextPutAll: ' := ('.
 	"Phase-1 canonical classes: a module-scope class definition mints
 	through importlib ___canonicalSubclassOf: so a stale-source rebuild can
@@ -730,7 +736,7 @@ printSmalltalkRuntimeOn: aStream
 	by default.  Nested / method-local classes keep the direct ___subclass___
 	path (minted fresh per execution, matching CPython)."
 	self isModuleScopeClassDef ifTrue: [
-		aStream nextPutAll: 'importlib @env0:___canonicalSubclassOf: ('].
+		aStream nextPutAll: '___importlib___ @env0:___canonicalSubclassOf: ('].
 	"The BASES expression evaluates INLINE in the enclosing scope at
 	classdef time -- a sibling method-local class (``class BaseEnum:
 	... class MainEnum(BaseEnum):`` in a setUp) is a plain Smalltalk
@@ -1139,7 +1145,7 @@ printSmalltalkRuntimeOn: aStream
 		the attribute and call it with the argument.  Flag off: one class-side
 		flag read, then the store, as before."
 		setterSrc := attrName , ': ___1' , lf
-			, '	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
+			, '	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
 			, attrName , ''') @env1:value: { ___1 } value: nil].' , lf
 			, '	self ___classHolderAttrStore___: #''' , attrName , ''' put: ___1.'.
 		self
@@ -1229,9 +1235,12 @@ printSmalltalkRuntimeOn: aStream
 	savedInBodyEmit := CallAst inClassBodyValueEmit.
 	savedBoundNames := CallAst classBodyBoundNames.
 	savedNestedNames := CallAst classNestedClassNames.
+	"Under the name each nested class BINDS, which is mangled for a private one
+	 (``class __Inner'' in C binds _C__Inner) -- NameAst probes this set with
+	 ___mangledId___, so a raw entry could never match a reference to it."
 	CallAst classNestedClassNames: (IdentitySet withAll:
 		((body body select: [:stmt | stmt isKindOf: ClassDefAst])
-			collect: [:c | c name asSymbol])).
+			collect: [:c | (c ___manglePrivate___: c name) asSymbol])).
 	savedConditionalNames := CallAst classBodyConditionalNames.
 	CallAst classBodyConditionalNames: self ___classBodyConditionalNames___.
 	savedDynamicLocals := CallAst classBodyDynamicLocals.
@@ -1283,6 +1292,31 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
 		nextPutAll: self ___stVarName___;
 		nextPutAll: ' ___dynInstVars___: (GrailClassAttrHolder @env0:new)].'; lf.
+	"PRIVATE METHOD NAMES, for __name__ / __qualname__.  A private def binds
+	 under its mangled selector and must still report the name it was written
+	 with (``def __m'' -> C._C__m, __name__ '__m') -- see UnboundMethod class
+	 >> ___pyDisplayNameOf___:forClass:, which reads this table.  Only defs that
+	 were ACTUALLY mangled are listed, so a def written as ``_C__lit'' keeps its
+	 spelling.  Emitted only when there is at least one."
+	[ | pairs |
+		pairs := OrderedCollection new.
+		(self instanceMethodDefs , self classMethodDefs , self staticMethodDefs) do: [:def |
+			def ___mangledName___ asString = def name asString ifFalse: [
+				pairs add: def ___mangledName___ asString; add: def name asString]].
+		pairs isEmpty ifFalse: [ | src |
+			src := WriteStream on: String new.
+			src nextPutAll: '___pyMangledDefNames___'; lf; tab; nextPutAll: '^ #('.
+			1 to: pairs size by: 2 do: [:i |
+				src nextPutAll: ' #'''; nextPutAll: (pairs at: i);
+					nextPutAll: ''' '''; nextPutAll: (pairs at: i + 1); nextPutAll: ''''].
+			src nextPutAll: ' )'.
+			self
+				emitCompileMethodOn: self ___stVarName___
+				source: src contents
+				category: 'Grail-Class Attrs'
+				env: 1
+				classSide: true
+				onStream: aStream]] value.
 	"___classHolderAttrStore___, not ___pyAttrStore___: this store is
 	DEFINITIONAL and must land on the committed class.  ___pyAttrStore___
 	diverts to the session overlay once the class is in the canonical set,
@@ -1290,6 +1324,24 @@ printSmalltalkRuntimeOn: aStream
 	and ___resetClassAttrOverlay___, emitted just after the class-build
 	guard, then wipes the overlay.  See object >> ___classHolderAttrStore___,
 	whose method-decorator caller was bitten by exactly this."
+	"PEP 695 TYPE PARAMETERS, as NAMES.  ``class A[T]'' must answer
+	``(T,)'' from __type_params__, where T is a typing.TypeVar.
+
+	The NAMES are stored, and the TypeVars are built on the first READ --
+	which is the whole design, not an optimisation.  Materialising them here
+	means importing typing while a class is being defined, and typing defines
+	its own generic classes (``SupportsAbs[T]'', ``SupportsRound[T]''): the
+	import re-enters itself and ForwardRef breaks, deterministically.  An
+	earlier cut did it eagerly and had to be reverted for exactly that.
+
+	Under a Grail-internal name, so it does not surface in __dict__ -- the
+	holder walk excludes ``___...___''."
+	(type_params notNil and: [type_params notEmpty]) ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''___typeParamNames___'' put: #('.
+		type_params do: [:n |
+			aStream nextPutAll: ''''; nextPutAll: n asString; nextPutAll: ''' '].
+		aStream nextPutAll: ').'; lf].
 	(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:nested |
 		aStream nextPutAll: '[ | '; nextPutAll: nested ___stVarName___;
 			nextPutAll: ' |'; lf.
@@ -1297,7 +1349,11 @@ printSmalltalkRuntimeOn: aStream
 		aStream lf;
 			nextPutAll: self ___stVarName___;
 			nextPutAll: ' @env1:___classHolderAttrStore___: #''';
-			nextPutAll: nested name asString;
+			"The BINDING is mangled (C._C__Inner) while the class's own __name__
+			 and __qualname__ keep the written spelling (__Inner, C.__Inner) --
+			 measured on CPython 3.14.6.  Stored raw, ``C._C__Inner'' was an
+			 AttributeError and the class could not be reached at all."
+			nextPutAll: (nested ___manglePrivate___: nested name) asString;
 			nextPutAll: ''' put: ';
 			nextPutAll: nested ___stVarName___;
 			nextPutAll: '.'; lf.
@@ -1321,9 +1377,16 @@ printSmalltalkRuntimeOn: aStream
 	test.test_traceback at import -- and the attr statements are emitted at that
 	point, so a table compiled afterwards would not exist yet.  The table is a
 	literal dict of compile-time constants, depending only on the class already
-	existing, so it is safe this early.  (The sibling tables stay late; nothing
-	reads __doc__ / __annotations__ from inside a class body.)"
+	existing, so it is safe this early.  (The doc table stays late.)"
 	self emitMethodCodeTableOn: aStream className: name.
+	"The ``___methodAnnotationsTable___'' (method-name -> annotate function;
+	BoundMethod >> __annotations__ walks the superclass chain consulting it) is
+	early for the same reason.  A class body DOES read a sibling def's
+	annotations while it runs -- ``get_annotations(one, format=FORWARDREF)'' in
+	test_annotationlib's GH-143831 test -- and compiled late the read found no
+	table and answered {}.  Safe this early: the annotate blocks are BUILT when
+	the table method runs and evaluate their names only when called."
+	self emitMethodAnnotationsTableOn: aStream className: name.
 
 	"``___receiverlessMethods___'' is early for the SAME reason, and it is a
 	call rather than a read that needs it: a class body may CALL a sibling
@@ -1390,10 +1453,7 @@ printSmalltalkRuntimeOn: aStream
 	[aStream nextPutAll: self ___stVarName___; nextPutAll: ' @env1:___grailPrepareNamespace___: '.
 	metaclassKw
 		ifNil: [aStream nextPutAll: 'nil']
-		ifNotNil: [
-			aStream nextPut: $(.
-			metaclassKw value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $)].
+		ifNotNil: [aStream nextPutAll: (self ___hdrTempForKeyword___: metaclassKw)].
 	aStream nextPutAll: '.'; lf]
 		ensure: [CallAst inDecoratorEmit: (savedDeco == true)]] value.
 	[
@@ -1546,7 +1606,7 @@ printSmalltalkRuntimeOn: aStream
 								"Through the marked store helper, not a bare ``Cls attr: v'' send:
 								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
 								send as a Python call (see ___grailClassAttrSetterDiverts___)."
-								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
@@ -1583,7 +1643,7 @@ printSmalltalkRuntimeOn: aStream
 								"Through the marked store helper, not a bare ``Cls attr: v'' send:
 								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
 								send as a Python call (see ___grailClassAttrSetterDiverts___)."
-								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
@@ -1654,6 +1714,64 @@ printSmalltalkRuntimeOn: aStream
 		def and the end of the body would be seen late.  That shape is pathological
 		and the ordering is the same compromise the nonlocal writes above accept."
 		self emitMethodDefaultStoresOn: aStream className: name.
+		"INSIDE the body-emit window, like the default stores above and for the
+		 same reason: the annotate block is built INLINE here, and its names must
+		 resolve through the class-body branches an attribute VALUE uses.  Emitted
+		 after the window closed, ``class C: U = int; x: U'' in a function with its
+		 own U read the FUNCTION's U, and in a METHOD an enclosing local became a
+		 class-cell load on the method's receiver -- ``free variable referenced
+		 before assignment'' (test_annotationlib test_nonlocal_in_annotation_scope).
+		 And with EVERY class-body name bound (nil): classBodyBoundNames is
+		 position-gated per statement and is left holding whatever the last one
+		 set, but an annotation is evaluated lazily, after the whole body ran --
+		 class namespace first, then the enclosing scope."
+		CallAst classBodyBoundNames: nil.
+		"PEP 649 ``__annotate__'' for a class with class-body annotations: ONE
+		annotate block, stored in the class's own holder under CPython's class-dict
+		key ``__annotate_func__''.  The generic class-side accessors on object
+		(``__annotate__'' / ``__annotations__'') read it, call it with
+		Format.VALUE on the first ``__annotations__'' read, and cache the result.
+
+		This replaces a per-class accessor answering a dict of PEP 563 SOURCE
+		STRINGS, built at class creation in an unordered dictionary: CPython 3.14
+		answers the evaluated types, lazily, in declaration order.  The block is
+		CREATED here, inside the class build, so its annotation expressions resolve
+		in the class body's scope; it is not CALLED until the annotations are read,
+		so a forward reference in a class annotation no longer has to resolve at
+		class creation.  An explicit ``__annotations__'' in the class body keeps
+		its own store and suppresses this, as before."
+		((self classAnnotationPairs notEmpty)
+			and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
+				ifTrue: [
+			"Under ``from __future__ import annotations'' a class keeps PEP 563: an
+			 EAGER dict of source strings, and no annotate function at all (measured:
+			 K.__annotate__ is None there)."
+			CallAst futureAnnotations
+				ifTrue: [
+					aStream nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotations__'' put: ((PyDict @env0:new)'.
+					"The UNPARSED expression, quotes and all -- see
+					 FunctionDefAst >> emitOneAnnotation:on:."
+					body body do: [:stmt |
+						((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]) ifTrue: [
+							aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
+							self emitStringLiteral: (stmt annotation ___unparse___: 4) on: aStream.
+							aStream nextPut: $;]].
+					aStream nextPutAll: ' @env0:yourself).'; lf]
+				ifFalse: [
+					aStream nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotate_func__'' put: '.
+					self emitClassAnnotateBlockOn: aStream.
+					aStream nextPutAll: '.'; lf.
+					"...and into the class-body NAMESPACE, when a metaclass prepared
+					 one: CPython's ``__annotate_func__'' is a class-body binding, so a
+					 metaclass __new__ reads it from ns --
+					 annotationlib.get_annotate_from_class_namespace exists for that.
+					 A no-op when no namespace is pending."
+					aStream nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___grailNsStore___: #''__annotate_func__'' value: (';
+						nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___classBodyDynamicRead___: #''__annotate_func__'').'; lf]].
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -1707,7 +1825,7 @@ printSmalltalkRuntimeOn: aStream
 			collect: [:p | p key].
 		aStream
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' _fields: (tuple @env0:withAll: #('.
+			nextPutAll: ' _fields: (___tuple___ @env0:withAll: #('.
 		bareNames do: [:n |
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
@@ -1740,44 +1858,13 @@ printSmalltalkRuntimeOn: aStream
 			onStream: aStream.
 		aStream
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' ___annotatedFields___: (tuple @env0:withAll: #('.
+			nextPutAll: ' ___annotatedFields___: (___tuple___ @env0:withAll: #('.
 		self annotatedFieldNames do: [:n |
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
-	"``__annotations__`` accessor/setter + init for a class with class-body
-	annotations.  The getter reads the class's OWN holder entry only
-	(___classBodyDynamicRead___:) and answers {} when there is none, matching
-	CPython's own-annotations-only ``Cls.__annotations__'': a subclass never
-	sees its parent's."
-	((self classAnnotationPairs notEmpty)
-		and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
-			ifTrue: [
-		| lf accessorSrc setterSrc |
-		lf := Character lf asString.
-		accessorSrc := '__annotations__' , lf , '	^ (self ___classBodyDynamicRead___: #''__annotations__'') @env0:ifNil: [KeyValueDictionary @env0:new]'.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: accessorSrc
-			category: 'Grail-Annotations'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		setterSrc := '__annotations__: ___1' , lf , '	self ___classHolderAttrStore___: #''__annotations__'' put: ___1.'.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: setterSrc
-			category: 'Grail-Annotations'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __annotations__: '.
-		self emitClassAnnotationsDictOn: aStream.
-		aStream nextPutAll: '.'; lf].
-	"Compile a class-side ``___methodAnnotationsTable___`` (method-name ->
-	annotations dict) for every annotated instance method; BoundMethod >>
-	__annotations__ walks the superclass chain consulting it."
-	self emitMethodAnnotationsTableOn: aStream className: name.
+	"(The class-side ``___methodAnnotationsTable___'' is compiled EARLY, beside
+	 ___methodCodeTable___ -- see there.)"
 	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
 	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
 	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
@@ -1792,6 +1879,7 @@ printSmalltalkRuntimeOn: aStream
 	__doc__ and claiming to be documented as ``The base class of the class
 	hierarchy...''."
 	self emitMethodDocTableOn: aStream className: name.
+	self emitMethodTypeParamsTableOn: aStream className: name.
 	self emitStaticMethodTableOn: aStream className: name.
 
 	"Compile the synthetic ``__module__'' accessor + setter on every
@@ -1932,7 +2020,7 @@ printSmalltalkRuntimeOn: aStream
 					``create_url_adapter'' relies on this: it does
 					``request.host = get_host(...)'' on a @cached_property."
 					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
+						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	self @env0:dynamicInstVarAt: #''' , def name , ''' put: ___1.' , lf2 ,
 						'	^ ___1' ]
 				ifFalse: [
@@ -1953,7 +2041,7 @@ printSmalltalkRuntimeOn: aStream
 					then calls the property's value with the argument, as CPython does.
 					Same guard on the cached_property setter above."
 					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
+						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	^ self ___raiseReadOnlyProperty___: ''',
 						def name , '''' ].
 			self
@@ -2069,20 +2157,15 @@ printSmalltalkRuntimeOn: aStream
 	them).  Emitted after the class's own methods are compiled so they
 	take precedence.  See importlib >> ___mergeSecondaryBases___:bases:."
 	bases size > 1 ifTrue: [
-		"Same inline-scope rule as printSuperclassOn: above -- these are
-		the SAME base expressions, re-emitted for the MI merge."
-		| savedBasesFlag |
-		savedBasesFlag := CallAst inBasesEmit.
-		CallAst inBasesEmit: true.
-		[aStream
+		"The SAME bases the storage-base choice saw, read from the header temps
+		rather than re-emitted.  Re-emitting them is what evaluated every base
+		expression twice.  Both lists go: the raw one because __orig_bases__
+		records what was written, the resolved one so the merge does not run
+		the __mro_entries__ hooks again."
+		aStream
 			nextPutAll: '(Python @env0:at: #importlib) @env0:___mergeSecondaryBases___: ';
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' bases: { '.
-		1 to: bases size do: [:i |
-			i > 1 ifTrue: [aStream nextPutAll: '. '].
-			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
-		aStream nextPutAll: ' }.'; lf]
-			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)]
+			nextPutAll: ' bases: ___hdrBases___ resolved: ___hdrResolved___.'; lf
 	].
 
 	"Compile the class-side value:value: method used for Python
@@ -2194,7 +2277,7 @@ printSmalltalkRuntimeOn: aStream
 			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
 				"Marked store helper rather than a bare setter send -- see the
 				attribute-value emit above and ___grailClassAttrSetterDiverts___."
-				aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+				aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 					nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 					nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 					nextPutAll: ' @env1:___pyAttrLoad___: #''';
@@ -2431,17 +2514,17 @@ printSmalltalkRuntimeOn: aStream
 		keywords do: [:kw |
 			(kw name notNil and: [kw name asString = 'boundary']) ifTrue: [
 				aStream nextPutAll: self ___stVarName___;
-					nextPutAll: ' @env1:___grailSetClassBoundary___: ('.
-				kw value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ').'; lf].
+					nextPutAll: ' @env1:___grailSetClassBoundary___: ';
+					nextPutAll: (self ___hdrTempForKeyword___: kw);
+					nextPutAll: '.'; lf].
 			"CLASS KEYWORD ``metaclass='': record it, so a metaclass-defined
 			comparison can be found for ``A < B''.  See object >>
 			___grailSetMetaclass___ for why it is a record, not a construction."
 			(kw name notNil and: [kw name asString = 'metaclass']) ifTrue: [
 				aStream nextPutAll: self ___stVarName___;
-					nextPutAll: ' @env1:___grailSetMetaclass___: ('.
-				kw value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ').'; lf]]].
+					nextPutAll: ' @env1:___grailSetMetaclass___: ';
+					nextPutAll: (self ___hdrTempForKeyword___: kw);
+					nextPutAll: '.'; lf]]].
 
 	"RUN THE METACLASS.  Last of the class-construction steps and the one that
 	can re-bind the name: CPython evaluates ``class A(metaclass=M)'' as
@@ -2549,7 +2632,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' @env1:___grailEndClassBuild___.'; lf.
 		aStream
-			nextPutAll: 'importlib @env0:___canonicalClassRegister___: '.
+			nextPutAll: '___importlib___ @env0:___canonicalClassRegister___: '.
 		self printQuotedString: self ___enclosingModuleName___ on: aStream.
 		aStream nextPutAll: ' name: '.
 		self printQuotedString: name asString on: aStream.
@@ -2560,7 +2643,7 @@ printSmalltalkRuntimeOn: aStream
 		this class's stale session-local attr overlay, then bind the class
 		into the module instance."
 		aStream
-			nextPutAll: 'importlib @env0:___resetClassAttrOverlay___: ';
+			nextPutAll: '___importlib___ @env0:___resetClassAttrOverlay___: ';
 			nextPutAll: self ___stVarName___; nextPutAll: '.'; lf.
 	].
 	"The module BINDING closes the block, so it runs for the
@@ -2579,7 +2662,7 @@ printSmalltalkRuntimeOn: aStream
 	] ifFalse: [
 		"No module binding, but the block was still opened above to declare
 		this body's codegen helper temps -- close it."
-		self ___classBodyHelperTemps___ notEmpty ifTrue: [
+		self ___classBlockNeedsTemps___ ifTrue: [
 			aStream nextPutAll: '] value.'; lf].
 	].
 %
@@ -2765,11 +2848,119 @@ printSuperclassOn: aStream
 		((only isKindOf: NameAst) and: [only id asString = 'str'])
 			ifTrue: [^ aStream nextPutAll: 'Unicode32'].
 		^ only printSmalltalkOn: aStream].
-	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: { '.
-	1 to: bases size do: [:i |
-		i > 1 ifTrue: [aStream nextPutAll: '. '].
-		(bases at: i) printSmalltalkWithParenthesisOn: aStream].
-	aStream nextPutAll: ' })'
+	"The bases were evaluated and resolved ONCE by printClassHeaderOn:; this
+	reads the result.  Handing the storage-base choice the RESOLVED list is
+	exactly what it computed for itself before: its own resolve step is a no-op
+	on a list of classes, because only a non-class base is asked for
+	__mro_entries__."
+	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: ___hdrResolved___)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___classHeaderTemps___
+	"The temps the class HEADER is evaluated into -- see printClassHeaderOn:.
+
+	The bases get two, the list as written and the list after PEP 560
+	substitution, but only when there is more than one base: a single base is
+	emitted exactly once already, inline, and hoisting it would change the
+	commonest class statement for nothing.  Every keyword gets one, the
+	metaclass included, because each keyword has more than one consumer or is
+	consumed after the body when CPython evaluates it before."
+
+	| temps |
+	temps := OrderedCollection new.
+	(bases notNil and: [bases size > 1]) ifTrue: [
+		temps add: '___hdrBases___'; add: '___hdrResolved___'].
+	keywords isNil ifFalse: [
+		1 to: keywords size do: [:i | temps add: (self ___hdrKeywordTempAt___: i)]].
+	^ temps
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___hdrKeywordTempAt___: anIndex
+	"The temp the header evaluation stores the anIndex'th keyword's value in.
+	By POSITION, not by name: a ``**splat'' has no name, and two splats would
+	otherwise collide."
+
+	^ '___hdrKw' , anIndex printString , '___'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___hdrTempForKeyword___: aKeyword
+	"The header temp holding aKeyword's value.  By identity, because the
+	keyword nodes are what the consumers hold."
+
+	1 to: keywords size do: [:i |
+		(keywords at: i) == aKeyword ifTrue: [^ self ___hdrKeywordTempAt___: i]].
+	^ self error: 'class keyword is not in this header'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___classBlockNeedsTemps___
+	"Whether the block that wraps the class emit has temps of its own to
+	declare, beyond the class name.  ONE predicate for both the open and the
+	close: an opened block that is not closed is a syntax error in the whole
+	module, and the two used to be separate tests."
+
+	^ self ___classBodyHelperTemps___ notEmpty
+		or: [self ___classHeaderTemps___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+printClassHeaderOn: aStream
+	"Evaluate the class HEADER once, left to right, before anything uses it.
+
+	CPython's order is fixed and observable: the bases in the order written,
+	then the keywords in the order written, then __prepare__, then the body,
+	then the metaclass call.  Each expression is evaluated exactly once.
+
+	Grail re-emitted the SAME expressions at every consumer.  The bases went
+	to ___selectStorageBase___: and again to ___mergeSecondaryBases___:, so
+	``class R(f(P), f(Q))'' called f four times; the metaclass went to
+	___grailPrepareNamespace___: and again to ___grailSetMetaclass___:, AFTER
+	the body; and every other keyword was evaluated after __prepare__ had
+	already run.  A base or keyword expression with a side effect -- a
+	registry, a counter, a factory -- did it twice, or at the wrong moment,
+	with no error to say so.
+
+	Now each is evaluated into a temp here and every consumer reads the temp.
+	The bases are also RESOLVED here, once: PEP 560 asks each non-class base
+	for __mro_entries__ exactly once per class statement, and three consumers
+	each resolving the raw list ran the hook three times.  The raw list still
+	travels too, because __orig_bases__ records what was written.
+
+	The inBasesEmit / inDecoratorEmit flags are the ones the consumers used to
+	set: a header expression evaluates in the scope ENCLOSING the class
+	statement, and those flags are what keep NameAst from resolving a base name
+	as one of the class's own cells."
+
+	(bases notNil and: [bases size > 1]) ifTrue: [
+		| savedBasesFlag |
+		savedBasesFlag := CallAst inBasesEmit.
+		CallAst inBasesEmit: true.
+		[aStream nextPutAll: '___hdrBases___ := { '.
+		1 to: bases size do: [:i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
+		aStream nextPutAll: ' }.'; lf]
+			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)].
+		aStream
+			nextPutAll: '___hdrResolved___ := (Python @env0:at: #importlib) @env0:___resolveMroEntries___: ___hdrBases___.';
+			lf].
+	keywords isNil ifFalse: [
+		| savedDeco |
+		savedDeco := CallAst inDecoratorEmit.
+		CallAst inDecoratorEmit: true.
+		[1 to: keywords size do: [:i |
+			aStream nextPutAll: (self ___hdrKeywordTempAt___: i); nextPutAll: ' := '.
+			(keywords at: i) value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: '.'; lf]]
+			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]]
 %
 
 category: 'Grail-code generation'
@@ -4728,6 +4919,30 @@ classAnnotationPairs
 
 category: 'Grail-code generation'
 method: ClassDefAst
+emitClassAnnotateBlockOn: aStream
+	"The class's PEP 649 annotate function: a block taking (positional-array,
+	kwargs-dict) -- Grail's shape for a block used as a Python callable -- and
+	answering an ORDERED PyDict of name -> annotation, in declaration order.
+	Each annotation goes through PyAnnotate >> ___annotationValue___:source:format:
+	as FunctionDefAst >> emitOneAnnotation:on: sends it, so a class answers the
+	three formats exactly as a function does: VALUE evaluates, STRING is the
+	source text, FORWARDREF evaluates per key."
+
+	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]) ifTrue: [
+			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
+			aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
+			stmt annotation printSmalltalkOn: aStream.
+			aStream nextPutAll: '] source: '.
+			self emitStringLiteral: stmt annotation ___annotationSourceString___ on: aStream.
+			aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'.
+			aStream nextPut: $;]].
+	aStream nextPutAll: ' @env0:yourself)]'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 emitClassAnnotationsDictOn: aStream
 	"Emit the ``{ name -> annotation-source-string, ... }'' dict expression
 	for this class's class-body annotations — same shape as
@@ -4818,6 +5033,42 @@ emitMethodDocTableOn: aStream className: aClassName
 		emitCompileMethodOn: self ___stVarName___
 		source: src contents
 		category: 'Grail-Docstrings'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodTypeParamsTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodTypeParamsTable___'' returning a dict
+	``method-name -> type-parameter names'' for every PEP 695 generic method
+	(``def m[T](self, x: T)''), the names carrying their kind prefix (``*Ts'',
+	``**P'').  A class-body def compiles to a Smalltalk METHOD, so -- like the
+	doc and code tables beside it -- it cannot carry the ``___pyTypeParams___:''
+	cascade a nested def's ExecBlock does, and ``Cls.m.__type_params__'' had
+	nowhere to come from.  UnboundMethod / BoundMethod >> __type_params__ read
+	it and build the placeholders on first read.
+
+	No-op when no method is generic."
+
+	| generic src |
+	generic := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [def type_params notNil and: [def type_params notEmpty]]].
+	generic isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodTypeParamsTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	generic do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: #('.
+		def type_params do: [:n | src nextPut: $'; nextPutAll: n asString; nextPutAll: ''' '].
+		src nextPutAll: ');'].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: src contents
+		category: 'Grail-Python Metadata'
 		env: 1
 		classSide: true
 		onStream: aStream
@@ -5428,12 +5679,10 @@ printClassKeywordsDictOn: aStream
 		kw name
 			ifNotNil: [
 				aStream nextPutAll: ' @env0:at: '''; nextPutAll: kw name asString;
-					nextPutAll: ''' put: '.
-				kw value printSmalltalkWithParenthesisOn: aStream.
+					nextPutAll: ''' put: '; nextPutAll: (self ___hdrTempForKeyword___: kw).
 				aStream nextPut: $;]
 			ifNil: [
-				aStream nextPutAll: ' @env1:update: '.
-				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ' @env1:update: '; nextPutAll: (self ___hdrTempForKeyword___: kw).
 				aStream nextPut: $;]].
 	aStream nextPutAll: ' yourself)'.
 %
@@ -5618,7 +5867,7 @@ emitIRInstallOn: classVarName id: anId source: sourceString category: categorySt
 	text fallback compiles onto."
 
 	aStream
-		nextPutAll: 'importlib @env0:___irInstallDef: ';
+		nextPutAll: '___importlib___ @env0:___irInstallDef: ';
 		nextPutAll: anId printString;
 		nextPutAll: ' on: ';
 		nextPutAll: classVarName.
@@ -5641,22 +5890,153 @@ emitIRTextSourcesOn: classVarName pairs: pairs onStream: aStream
 	It is what importlib ___textSourceFor___:in:selector: hands the consumers
 	that re-compile a method's source (MI merge, enum gap-fill, smalltalk_class,
 	the special-receiver recompile), so they keep behaving exactly as for a
-	text-compiled method.  Persistent with the class, like ___methodCodeTable___."
+	text-compiled method.  Persistent with the class, like ___methodCodeTable___.
+
+	THE WHOLE ACCESSOR IS ONE STRING LITERAL in the class-build text, and
+	GemStone refuses a literal over 5M bytes.  Bytes, not characters: ONE
+	character above U+FFFF anywhere in the class's methods makes the literal a
+	four-byte string, so 1.46M characters -- test_builtin's BuiltinTest, whose
+	tests are full of astral-plane test strings -- measured 5.86 MB, and the
+	module failed to import under IR with ``string literal too big'' while the
+	text path, which carries no twin, scored OK.
+
+	So a class whose table would exceed ___irTextSourcesLiteralBudget___ is
+	split into CHUNK accessors, each filling the table it is handed, and
+	``___irTextSources___'' threads one table through them:
+	  ___irTextSources___  ^ self ___irTextSources_2___: (self
+	      ___irTextSources_1___: (KeyValueDictionary @env0:new))
+	The reader still asks only ``___irTextSources___''.  A class that fits in
+	one literal -- every class but a handful -- gets exactly the single
+	accessor it always did, byte for byte, so the twin stays deterministic."
+
+	| chunks main |
+	pairs isEmpty ifTrue: [^ self].
+	chunks := self ___irTextSourceChunks___: pairs.
+	chunks size = 1 ifTrue: [
+		^ self ___emitIRTextSourcesAccessor___: '___irTextSources___'
+			entries: (chunks at: 1) threaded: false on: classVarName onStream: aStream].
+	chunks doWithIndex: [:entries :i |
+		self ___emitIRTextSourcesAccessor___:
+				'___irTextSources_' , i printString , '___:'
+			entries: entries threaded: true on: classVarName onStream: aStream].
+	main := WriteStream on: String new.
+	main nextPutAll: '___irTextSources___'; lf; nextPutAll: '	^ '.
+	main nextPutAll: ((1 to: chunks size) inject: '(KeyValueDictionary @env0:new)'
+		into: [:acc :i |
+			'(self ___irTextSources_' , i printString , '___: ' , acc , ')']).
+	self ___compileClassSide___: main contents on: classVarName onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTextSourcesLiteralBudget___
+	"Bytes one twin accessor's literal may occupy in the class-build text.  A
+	fifth of GemStone's 5M-byte limit: the estimate below counts the outer
+	quote doubling and the storage width, but not every byte a literal costs,
+	and the margin is cheap -- a chunk is one more method on the metaclass.
+
+	A session may lower it (``___grailIRTextSourcesBudget___'' in SessionTemps)
+	so a test can split a SMALL class and check the split loses nothing --
+	proving that on a class big enough to need it would cost a 1.3M-character
+	fixture."
+
+	^ SessionTemps current at: #'___grailIRTextSourcesBudget___' otherwise: 1000000
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTextSourceChunks___: pairs
+	"pairs split, in order, into runs whose accessor literal stays inside
+	___irTextSourcesLiteralBudget___.  Each entry's cost is its accessor line
+	after the OUTER quoting ___compileMethod: applies (every quote doubled
+	again), times the widest storage the run needs -- 1, 2 or 4 bytes per
+	character, fixed by the run's highest code point.  An entry too large for
+	any budget still gets a run of its own: it is one method's source, which
+	the text path compiles too."
+
+	| chunks current currentChars currentWidth budget |
+	budget := self ___irTextSourcesLiteralBudget___.
+	chunks := OrderedCollection new.
+	current := OrderedCollection new.
+	currentChars := 0.
+	currentWidth := 1.
+	pairs do: [:assoc |
+		| line chars width |
+		line := self ___irTextSourceLineFor___: assoc.
+		chars := line size + (line occurrencesOf: $').
+		width := self ___storageWidthOf___: line.
+		(current notEmpty and: [
+			(currentChars + chars) * (currentWidth max: width) > budget])
+				ifTrue: [
+					chunks add: current.
+					current := OrderedCollection new.
+					currentChars := 0.
+					currentWidth := 1].
+		current add: assoc.
+		currentChars := currentChars + chars.
+		currentWidth := currentWidth max: width].
+	current notEmpty ifTrue: [chunks add: current].
+	^ chunks
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___storageWidthOf___: aString
+	"Bytes per character GemStone stores aString in: 1, 2, or 4."
+
+	| widest |
+	widest := 0.
+	aString do: [:c | widest := widest max: c codePoint].
+	widest > 16rFFFF ifTrue: [^ 4].
+	widest > 16rFF ifTrue: [^ 2].
+	^ 1
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTextSourceLineFor___: assoc
+	"One table entry as the accessor spells it: ``@env0:at: #'sel' put: '...';''."
+
+	| line |
+	line := WriteStream on: String new.
+	line lf; nextPutAll: '		@env0:at: #'.
+	self printQuotedString: assoc key asString on: line.
+	line nextPutAll: ' put: '.
+	self printQuotedString: assoc value on: line.
+	line nextPut: $;.
+	^ line contents
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___emitIRTextSourcesAccessor___: aSelector entries: entries threaded: threadedBool on: classVarName onStream: aStream
+	"One accessor.  UNTHREADED is the single-literal form every class used to
+	get, unchanged: ``___irTextSources___  ^ (KeyValueDictionary @env0:new) ...
+	@env0:yourself''.  THREADED is a chunk: it fills the table it is handed
+	and answers it, ``___irTextSources_N___: d  ^ d ... @env0:yourself''."
 
 	| src |
-	pairs isEmpty ifTrue: [^ self].
 	src := WriteStream on: String new.
-	src nextPutAll: '___irTextSources___'; lf.
-	src nextPutAll: '	^ (KeyValueDictionary @env0:new)'.
-	pairs do: [:assoc |
-		src lf; nextPutAll: '		@env0:at: #'.
-		self printQuotedString: assoc key asString on: src.
-		src nextPutAll: ' put: '.
-		self printQuotedString: assoc value on: src.
-		src nextPut: $;].
+	threadedBool
+		ifTrue: [
+			src nextPutAll: aSelector; nextPutAll: ' ___d___'; lf.
+			src nextPutAll: '	^ ___d___']
+		ifFalse: [
+			src nextPutAll: aSelector; lf.
+			src nextPutAll: '	^ (KeyValueDictionary @env0:new)'].
+	entries do: [:assoc | src nextPutAll: (self ___irTextSourceLineFor___: assoc)].
 	src lf; nextPutAll: '		@env0:yourself'.
+	self ___compileClassSide___: src contents on: classVarName onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___compileClassSide___: aSource on: classVarName onStream: aStream
+	"``<cls> @env0:class ___compileMethod: '<aSource>' category: 'Grail-IR
+	Text Sources'.''"
+
 	aStream nextPutAll: classVarName; nextPutAll: ' @env0:class ___compileMethod: '.
-	self printQuotedString: src contents on: aStream.
+	self printQuotedString: aSource on: aStream.
 	aStream nextPutAll: ' category: ''Grail-IR Text Sources''.'; lf
 %
 
@@ -5779,6 +6159,22 @@ ___irMethodLocalClassReason___: localNames
 			or: [(self ___irCarriedCaptureNames___: localNames)
 				anySatisfy: [:c | c asString = n asString]]])
 				ifFalse: [^ #'classDef:nonlocalNotCarried'].
+	"A carried ``nonlocal'' READ LATER from class level.  The helper hands a
+	carried name in as a reader block, and methods read through it -- by
+	reference, so they see the enclosing binding at read time.  But the helper
+	ALSO seeds a temp of the name's own spelling from that block once, on
+	entry, for the reads the class emit makes EAGERLY (a base, an attribute's
+	value, a def-time default): correct for those, because they run then.
+	Class-level code that runs LATER reads that temp too -- a lambda, a lazy
+	generator expression, and since PEP 649 every annotation -- and gets the
+	value from when the class statement ran.  Measured under IR:
+	``x = 1; class C: nonlocal x; grab = lambda: x'' then ``x = 5'' answered
+	C.grab() == 1 where CPython and the text path answer 5, and a name bound
+	only after the class raised UnboundLocalError (test_annotationlib's
+	nonlocal-in-class ForwardRef: NameError).  Refused until the emit reads
+	those through the block as well."
+	(self ___irDeferredReadsOfNonlocalBelow___ isEmpty)
+		ifFalse: [^ #'classDef:deferredReadOfNonlocal'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
 	by reference -- which is what an enclosing PARAMETER that the body never
@@ -6099,6 +6495,76 @@ ___irCollectNonlocalNames___: aNode into: aSet
 	aNode class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self ___irCollectNonlocalNames___: (aNode instVarAt: i) into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irDeferredReadsOfNonlocalBelow___
+	"The names declared ``nonlocal'' below this class that class-level code
+	reads in a DEFERRED scope -- a lambda, a generator expression, or an
+	annotation (PEP 649 defers every one, a method's parameter and return
+	annotations included).  Method BODIES are not walked: they read a carried
+	name through its reader block, which is correct.
+
+	Eligibility must not raise, so an unexpected error answers a non-empty
+	set: refusing falls back to the text path, which is always safe."
+
+	| nonlocals reads |
+	^ [nonlocals := (self ___irNonlocalNamesBelow___: body)
+			reject: [:n | n asString = '__class__'].
+		nonlocals isEmpty
+			ifTrue: [Set new]
+			ifFalse: [
+				reads := Set new.
+				self ___irCollectDeferredReads___: body into: reads deferred: false.
+				nonlocals select: [:n | reads includes: n asSymbol]]]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: (Set with: #'<eligibility walk failed>')]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectDeferredReads___: aNode into: aSet deferred: deferredBool
+	"Add to aSet every name READ inside a deferred scope in aNode's subtree.
+	deferredBool says whether aNode is already inside one.  Skips ``parent'',
+	as every one of these walks must, or it climbs out and never terminates.
+
+	Conservative where it is cheap to be: a method's DEFAULTS are walked as
+	deferred along with its annotations, though a default is evaluated
+	eagerly.  Over-reporting only refuses a method the text path compiles
+	correctly anyway."
+
+	aNode isNil ifTrue: [^ self].
+	aNode isString ifTrue: [^ self].
+	(aNode isKindOf: NameAst) ifTrue: [
+		deferredBool ifTrue: [aSet add: aNode id asSymbol].
+		^ self].
+	(aNode isKindOf: SequenceableCollection) ifTrue: [
+		aNode do: [:e | self ___irCollectDeferredReads___: e into: aSet deferred: deferredBool].
+		^ self].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ self].
+	(aNode isKindOf: FunctionDefAst) ifTrue: [
+		"The BODY reads through the cell.  Decorators run now; the signature's
+		annotations run later."
+		self ___irCollectDeferredReads___: aNode decorator_list into: aSet deferred: deferredBool.
+		self ___irCollectDeferredReads___: aNode args into: aSet deferred: true.
+		self ___irCollectDeferredReads___: aNode returns into: aSet deferred: true.
+		^ self].
+	((aNode isKindOf: LambdaAst) or: [aNode isKindOf: GeneratorExpAst]) ifTrue: [
+		aNode class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: true]].
+		^ self].
+	(aNode isKindOf: AnnAssignAst) ifTrue: [
+		self ___irCollectDeferredReads___: aNode annotation into: aSet deferred: true.
+		self ___irCollectDeferredReads___: aNode target into: aSet deferred: deferredBool.
+		self ___irCollectDeferredReads___: aNode value into: aSet deferred: deferredBool.
+		^ self].
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: deferredBool]].
 	^ self
 %
 

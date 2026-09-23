@@ -352,7 +352,7 @@ printSmalltalkClassBodyRuntimeDefOn: aStream
 		ifFalse: [(self isKindOf: ClassFunctionDefAst)
 			ifTrue: ['PyClassMethod']
 			ifFalse: [nil]].
-	aStream nextPutAll: '[ | '; nextPutAll: name; nextPutAll: ' |'; lf.
+	aStream nextPutAll: '[ | '; nextPutAll: self ___mangledName___; nextPutAll: ' |'; lf.
 	savedRuntimeClass := CallAst classBodyRuntimeClass.
 	savedValueDefNode := CallAst classBodyValueDefNode.
 	CallAst classBodyRuntimeClass: nil.
@@ -363,12 +363,12 @@ printSmalltalkClassBodyRuntimeDefOn: aStream
 	aStream lf;
 		nextPutAll: clsName;
 		nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
-		nextPutAll: name;
+		nextPutAll: self ___mangledName___;
 		nextPutAll: ''' put: '.
 	wrapper
-		ifNil: [aStream nextPutAll: name]
+		ifNil: [aStream nextPutAll: self ___mangledName___]
 		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
-			nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil)'].
+			nextPutAll: ' value: { '; nextPutAll: self ___mangledName___; nextPutAll: ' } value: nil)'].
 	aStream nextPutAll: '. ] value.'; lf
 %
 
@@ -471,11 +471,11 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: self ___moduleStoreReceiverExpr___;
 			nextPutAll: ' @env0:dynamicInstVarAt: #''';
-			nextPutAll: name;
+			nextPutAll: self ___mangledName___;
 			nextPutAll: ''' put: ('
 	] ifFalse: [
 		aStream
-			nextPutAll: name;
+			nextPutAll: self ___mangledName___;
 			nextPutAll: ' := '
 	].
 	"A def-time outer wrapper block (run immediately via ``] value'') is needed
@@ -597,7 +597,7 @@ printSmalltalkOn: aStream
 	args vararg ifNotNil: [
 		aStream
 			nextPutAll: (self transportParamName: args vararg name);
-			nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
+			nextPutAll: ' := ___tuple___ perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
 			print: fixedCount + 1;
 			nextPutAll: ' to: ___positional___ @env0:size }.';
 			lf.
@@ -774,9 +774,14 @@ printSmalltalkOn: aStream
 	self hasAnnotations ifTrue: [
 		aStream nextPutAll: ' annotate: '.
 		self emitAnnotateBlockOn: aStream].
-	self ___docString___ ifNotNil: [:doc |
-		aStream nextPutAll: ' doc: '.
-		self emitStringLiteral: doc on: aStream].
+	"NO DOCSTRING AT optimize >= 2.  ``python -OO'' strips them, and
+	compile(..., optimize=2) is the same request one compile at a time --
+	test_compile reads ``f.__doc__'' back at each level and expects None only
+	at 2."
+	(self ___docString___ notNil and: [self ___grailOptimizeLevel___ < 2])
+		ifTrue: [
+			aStream nextPutAll: ' doc: '.
+			self emitStringLiteral: self ___docString___ on: aStream].
 		"Stamp func.__code__ (a PyCode) at def-time -- a CASCADE onto the same
 		block receiver as ___pyNamed___ (chaining another keyword send would
 		instead form one combined selector).  ___pyCode___: returns self, so the
@@ -887,12 +892,12 @@ printSmalltalkOn: aStream
 						lf;
 						nextPutAll: self ___moduleStoreReceiverExpr___;
 			nextPutAll: ' @env0:dynamicInstVarAt: #''';
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ''' put: ('
 				] ifFalse: [
 					aStream
 						lf;
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ' := '
 				].
 				(deco isKindOf: Symbol)
@@ -926,12 +931,12 @@ printSmalltalkOn: aStream
 				(self isModuleScopeNestedDefTarget) ifTrue: [
 					aStream
 						nextPutAll: ' value: { (self @env0:dynamicInstVarAt: #''';
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ''' ifAbsent: [nil]) } value: nil).'
 				] ifFalse: [
 					aStream
 						nextPutAll: ' value: { ';
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ' } value: nil.'
 				].
 			].
@@ -1048,16 +1053,16 @@ isModuleScopeNestedDefTarget
 	moduleVariableNames.  Missing it emitted a bare assignment to a name
 	the parser had (correctly) not declared, and the method failed to
 	compile."
-	(self ___nearestEnclosingScopeDeclaresGlobal___: name asSymbol)
+	(self ___nearestEnclosingScopeDeclaresGlobal___: self ___mangledName___ asSymbol)
 		ifTrue: [^ true].
 	CallAst classBeingCompiled ifNotNil: [^ false].
 	CallAst moduleVariableNames ifNil: [^ false].
-	(CallAst moduleVariableNames includes: name asSymbol) ifFalse: [^ false].
+	(CallAst moduleVariableNames includes: self ___mangledName___ asSymbol) ifFalse: [^ false].
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
-				(self ___enclosingDefDeclares___: node named: name asSymbol)
+				(self ___enclosingDefDeclares___: node named: self ___mangledName___ asSymbol)
 					ifTrue: [^ false]
 			].
 		node := node parent.
@@ -1645,11 +1650,11 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 			aStream
 				nextPutAll: self ___moduleStoreReceiverExpr___;
 				nextPutAll: ' @env0:dynamicInstVarAt: #''';
-				nextPutAll: name;
+				nextPutAll: self ___mangledName___;
 				nextPutAll: ''' put: ([']
 		ifFalse: [
 			aStream
-				nextPutAll: name;
+				nextPutAll: self ___mangledName___;
 				nextPutAll: ' := ['].
 	aStream nextPutAll: ':___grailDecoFns___ |'; lf.
 	self emitOrderedLocalDecoratorApplicationOn: aStream index: 1 count: n.
@@ -1693,9 +1698,9 @@ emitOrderedLocalDecoratorBaseOn: aStream
 		ifTrue: [
 			aStream
 				nextPutAll: '(self @env0:dynamicInstVarAt: #''';
-				nextPutAll: name;
+				nextPutAll: self ___mangledName___;
 				nextPutAll: ''' ifAbsent: [nil])']
-		ifFalse: [aStream nextPutAll: name]
+		ifFalse: [aStream nextPutAll: self ___mangledName___]
 %
 
 
@@ -2054,6 +2059,13 @@ emitCodeExtrasOpenOn: aStream nested: isNested
 
 	aStream nextPutAll: '('.
 	(CallAst ___freeVariableNamesFor___: self) isEmpty ifFalse: [
+		aStream nextPutAll: '('].
+	self ___codeConstScopes___ isEmpty ifFalse: [
+		aStream nextPutAll: '('].
+	"One more for the body-source setter, on the same rule as the others: each
+	cascaded setter needs the constructor parenthesised before it, or the
+	parser reads one long keyword selector ending in the setter's own name."
+	self ___emitsBodySource___ ifTrue: [
 		aStream nextPutAll: '(']
 %
 
@@ -2071,11 +2083,156 @@ emitCodeExtrasOn: aStream nested: isNested
 		nextPutAll: (self ___coFlags___: isNested) printString;
 		nextPutAll: ')'.
 	freeNames := CallAst ___freeVariableNamesFor___: self.
-	freeNames isEmpty ifTrue: [^ self].
-	aStream nextPutAll: ' @env0:___setFreevars___: #( '.
-	freeNames do: [:each |
-		aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
-	aStream nextPutAll: '))'
+	freeNames isEmpty ifFalse: [
+		aStream nextPutAll: ' @env0:___setFreevars___: #( '.
+		freeNames do: [:each |
+			aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
+		aStream nextPutAll: '))'].
+	self emitCodeConstsOn: aStream.
+	self emitCodeBodySourceOn: aStream
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeBodySourceOn: aStream
+	"Cascade this def's BODY TEXT onto the PyCode just emitted, when it has
+	free variables.
+
+	Only then, deliberately: the one caller is ``exec(f.__code__, g,
+	closure=cells)'', which CPython refuses outright for a code object with no
+	free variables, so carrying the text for every def in the corpus would be
+	a copy per def bought for nothing.
+
+	The text is what makes a substituted closure observable at all -- Grail's
+	free variables are Smalltalk temps captured at def time, so a compiled
+	closure cannot be re-entered with different cells.  Running the body again
+	against a namespace backed by them can."
+
+	| text |
+	"``body'' is an instVar here, so the temp has another name."
+	self ___emitsBodySource___ ifFalse: [^ self].
+	text := self ___grailBodySourceText___.
+	aStream nextPutAll: ' @env0:___setBodySource___: '.
+	self emitStringLiteral: text on: aStream.
+	aStream nextPutAll: ')'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___emitsBodySource___
+	"Whether this def will carry its body text on its code object.
+
+	ONE predicate, asked by both the paren-opener and the emitter.  They were
+	two conditions that looked equivalent and were not -- the opener asked only
+	whether the text exists and the emitter also required free variables -- so
+	a def with a body and no free variables opened a parenthesis nothing
+	closed, and the whole module failed to compile."
+
+	(CallAst ___freeVariableNamesFor___: self) isEmpty ifTrue: [^ false].
+	^ self ___grailBodySourceText___ notNil
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___grailBodySourceText___
+	"This def's body as source text, DEDENTED to column zero and with its
+	``nonlocal'' declarations removed.
+
+	Dedented because the body is indented inside the def and has to compile on
+	its own.  The nonlocal lines go because the names they declare are supplied
+	by the closure instead -- and because ``nonlocal'' at module level, which is
+	what exec()ing the body makes it, is a SyntaxError."
+
+	| text first |
+	"THE BODY HAS NO POSITION OF ITS OWN -- a Block descends from AbstractNode,
+	not AbstractLocationNode -- so the span runs from the first STATEMENT's
+	line to this def's last.  Using the def's own first line instead would
+	include the ``def'' header, which does not compile on its own."
+	(body isNil or: [body body isNil or: [body body isEmpty]]) ifTrue: [^ nil].
+	first := [body body first beginLine]
+		on: AbstractException do: [:ex | ex return: nil].
+	text := self ___grailSourceLinesFrom___: first to:
+		([self endLine] on: AbstractException do: [:ex | ex return: nil]).
+	text isNil ifTrue: [^ nil].
+	^ self ___grailDedentAndStripNonlocal___: text
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___grailDedentAndStripNonlocal___: aString
+	"Remove the common leading indentation, and drop ``nonlocal'' lines."
+
+	| lines kept indent out lf |
+	lf := Character lf.
+	lines := aString subStrings: (String with: lf).
+	kept := OrderedCollection new.
+	lines do: [:each |
+		| trimmed |
+		trimmed := each trimSeparators.
+		((trimmed size >= 8) and: [(trimmed copyFrom: 1 to: 8) = 'nonlocal'])
+			ifFalse: [kept add: each]].
+	indent := nil.
+	kept do: [:each |
+		| n |
+		each trimSeparators isEmpty ifFalse: [
+			n := 0.
+			[(n < each size) and: [(each at: n + 1) = $ ]] whileTrue: [n := n + 1].
+			(indent isNil or: [n < indent]) ifTrue: [indent := n]]].
+	indent isNil ifTrue: [^ ''].
+	out := WriteStream on: String new.
+	kept do: [:each |
+		out nextPutAll: (each size > indent
+			ifTrue: [each copyFrom: indent + 1 to: each size]
+			ifFalse: ['']).
+		out nextPut: lf].
+	^ out contents
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeConstsOn: aStream
+	"Cascade this def's co_consts onto the PyCode just emitted: one code object
+	per nested scope CPython gives one.
+
+	Since 3.12 that is a GENERATOR EXPRESSION and a nested def or lambda; list,
+	set and dict comprehensions were INLINED and no longer appear, so counting
+	them would answer three where CPython answers zero.  Grail keeps no
+	constant pool at all, so this is the observable part of co_consts and
+	nothing else -- which is what code actually asks of it: test_builtin's
+	test_all_any_tuple_optimization counts the code objects a genexp leaves, as
+	its way of checking the comprehension was not duplicated."
+
+	| scopes |
+	scopes := self ___codeConstScopes___.
+	scopes isEmpty ifTrue: [^ self].
+	"EVERY SEND IN THE GENERATED TEXT IS ENV-QUALIFIED.  This is emitted into
+	env-1 source, where a bare ``Array with:'' is a MessageNotUnderstood on a
+	Metaclass3.  The result is a TUPLE, which is what co_consts is."
+	aStream nextPutAll: ' @env0:___setConsts___: (___tuple___ @env0:withAll: (Array @env0:with: '.
+	scopes doWithIndex: [:node :i |
+		i > 1 ifTrue: [aStream nextPutAll: ' with: '].
+		aStream nextPutAll: '(PyCode @env0:name: '''.
+		aStream nextPutAll: node ___codeConstNameFor___.
+		aStream nextPutAll: ''' filename: '.
+		self emitSourceFilenameLiteralOn: aStream.
+		aStream nextPutAll: ' firstlineno: '.
+		aStream nextPutAll: node beginLine printString.
+		aStream nextPutAll: ')'].
+	aStream nextPutAll: ')))'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___codeConstScopes___
+	"The nested scopes this def contributes to its own co_consts, in source
+	order.  Capped at four: ``Array with:...'' has no five-argument form, and a
+	function with five genexps in it is not what the count is asked about."
+
+	| found |
+	found := OrderedCollection new.
+	body ifNotNil: [body ___collectCodeConstScopesInto___: found].
+	found size > 4 ifTrue: [^ found copyFrom: 1 to: 4].
+	^ found
 %
 
 category: 'Grail-code generation'
@@ -2499,6 +2656,14 @@ emitOneAnnotation: aNode on: aStream
 	dictionary list without the kernel ``Globals'', so ``ExecBlock'' --
 	where this method otherwise belongs -- is an undefined symbol there."
 
+	"Under ``from __future__ import annotations'' the annotation IS its source
+	 string, in every format -- CPython 3.14's annotate function for such a def
+	 answers strings for VALUE too."
+	"PEP 563 stores the UNPARSED expression, so a string literal keeps its
+	 quotes; the root-verbatim rule of ___annotationSourceString___ is for
+	 recovering text, which is not what the future import does."
+	CallAst futureAnnotations ifTrue: [
+		^ self emitStringLiteral: (aNode ___unparse___: 4) on: aStream].
 	aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
 	aNode printSmalltalkOn: aStream.
 	aStream nextPutAll: '] source: '.
@@ -3066,7 +3231,7 @@ ___irLeafNameFor___: aName
 	itself otherwise (NameAst class>>___transportIdentifierFor___:)."
 
 	^ (self isSmalltalkReservedIdentifier: aName asString)
-		ifTrue: [('_' , aName asString) asSymbol]
+		ifTrue: [(NameAst ___transportIdentifierFor___: aName) asSymbol]
 		ifFalse: [aName asSymbol]
 %
 
@@ -4126,9 +4291,11 @@ ___emitIRPyCodeExprOn___: aBuilder qualname: aQualname nested: isNested
 	text's: name, qualname, the module's real path (___irFileName___, the same
 	answer emitSourceFilenameLiteralOn: spells), the def's line, the three
 	parameter counts, then ___setFlags___: (___coFlags___:) and, when the def
-	has free variables, ___setFreevars___:.  All env-0 sends on literals."
+	has free variables, ___setFreevars___:, and then co_consts and the body
+	text -- all four through ___emitIRCodeExtrasOn___:code:nested:, the one
+	mirror of the text's emitCodeExtrasOn:nested:."
 
-	| poCount regCount kwoCount code freeNames |
+	| poCount regCount kwoCount code |
 	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
 	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
 	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
@@ -4144,14 +4311,7 @@ ___emitIRPyCodeExprOn___: aBuilder qualname: aQualname nested: isNested
 			aBuilder obj: poCount.
 			aBuilder obj: kwoCount }
 		env: 0.
-	code := aBuilder
-		send: #'___setFlags___:' to: code
-		with: { aBuilder obj: (self ___coFlags___: isNested) } env: 0.
-	freeNames := CallAst ___freeVariableNamesFor___: self.
-	freeNames isEmpty ifTrue: [^ code].
-	^ aBuilder
-		send: #'___setFreevars___:' to: code
-		with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray } env: 0
+	^ self ___emitIRCodeExtrasOn___: aBuilder code: code nested: isNested
 %
 
 category: 'Grail-IR Codegen'
@@ -5109,7 +5269,7 @@ transportParamName: aName
 	references read the transport identifier."
 
 	^ (self isSmalltalkReservedIdentifier: aName)
-		ifTrue: ['_' , aName asString]
+		ifTrue: [NameAst ___transportIdentifierFor___: aName]
 		ifFalse: [aName asString]
 %
 
@@ -5128,6 +5288,20 @@ category: 'Module Method Compilation'
 method: FunctionDefAst
 isSmalltalkReservedIdentifier: aString
   ^ self class isSmalltalkReservedIdentifier: aString
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+___reservedParamRebound___: aName assigned: assignedNames
+	"Is aName a pseudo-variable-spelled parameter (``self'', ``nil'', ...)
+	that the body rebinds?  Such a parameter cannot stay the read-only method
+	argument it otherwise rides in as: ``def f(self): self = 7'' compiled
+	``_self := 7'' against the argument and failed (CompileError 1029,
+	``expected an assignable variable'')."
+
+	^ (self isSmalltalkReservedIdentifier: aName)
+		and: [(assignedNames includes: aName asSymbol)
+			or: [assignedNames includes: aName asString]]
 %
 
 category: 'Module Method Compilation'
@@ -5263,12 +5437,23 @@ generateModuleMethodSourceOn: aStream
 			(needsTemp at: i) ifTrue: [
 				| candidate |
 				candidate := '_' , (paramNames at: i).
-				(canOptimise
-					and: [(paramNames includes: candidate) not
-					and: [(bodyVars includes: candidate asSymbol) not
-					and: [(instVarNames includes: candidate asSymbol) not]]])
-					ifTrue: [transportNames at: i put: candidate]
-					ifFalse: [transportNames at: i put: '___' , i printString].
+				(self isSmalltalkReservedIdentifier: (paramNames at: i))
+					ifTrue: [
+						"A pseudo-variable param rides in as its transport
+						identifier, read-only -- unless the body rebinds it
+						(``def f(self): self = ...''), when it arrives
+						positionally and is copied into a writable temp
+						spelled as that identifier, like any rebound param."
+						transportNames at: i put: ((self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+							ifTrue: ['___' , i printString]
+							ifFalse: [NameAst ___transportIdentifierFor___: (paramNames at: i)])]
+					ifFalse: [
+						(canOptimise
+							and: [(paramNames includes: candidate) not
+							and: [(bodyVars includes: candidate asSymbol) not
+							and: [(instVarNames includes: candidate asSymbol) not]]])
+							ifTrue: [transportNames at: i put: candidate]
+							ifFalse: [transportNames at: i put: '___' , i printString]].
 			].
 		].
 
@@ -5308,6 +5493,8 @@ generateModuleMethodSourceOn: aStream
 			((needsTemp at: i)
 				and: [(self isSmalltalkReservedIdentifier: (paramNames at: i)) not])
 				ifTrue: [allLocals add: (paramNames at: i)].
+			(self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+				ifTrue: [allLocals add: (NameAst ___transportIdentifierFor___: (paramNames at: i))].
 		].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
@@ -5327,7 +5514,7 @@ generateModuleMethodSourceOn: aStream
 							collide, so skip anything the transportNames
 							slot already carries."
 							| transport |
-							transport := '_' , each asString.
+							transport := NameAst ___transportIdentifierFor___: each.
 							((allLocals includes: transport)
 								or: [(paramNames includes: transport)
 								or: [(transportNames detect: [:t | t asString = transport] ifNone: [nil]) notNil
@@ -5381,6 +5568,14 @@ generateModuleMethodSourceOn: aStream
 							nextPut: $.;
 							lf.
 				].
+				(self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+					ifTrue: [
+						aStream
+							nextPutAll: (NameAst ___transportIdentifierFor___: (paramNames at: i));
+							nextPutAll: ' := ';
+							nextPutAll: (transportNames at: i);
+							nextPut: $.;
+							lf].
 			].
 		] ifFalse: [
 			"Outer-block form: wrap so block temps can shadow instVars
@@ -5402,6 +5597,14 @@ generateModuleMethodSourceOn: aStream
 								nextPut: $.;
 								lf.
 					].
+					(self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+						ifTrue: [
+							aStream
+								nextPutAll: (NameAst ___transportIdentifierFor___: (paramNames at: i));
+								nextPutAll: ' := ';
+								nextPutAll: (transportNames at: i);
+								nextPut: $.;
+								lf].
 				].
 			].
 		].
@@ -5482,7 +5685,7 @@ generateModuleMethodSourceOn: aStream
 		args vararg ifNotNil: [
 			aStream
 				nextPutAll: (self transportParamName: args vararg name);
-				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ';
+				nextPutAll: ' := ___tuple___ perform: #withAll: env: 0 withArguments: { ';
 				nextPutAll: posMethodParam;
 				nextPutAll: ' @env0:copyFrom: ';
 				nextPutAll: (paramNames size + 1) printString;
@@ -6309,7 +6512,7 @@ generateMethodSourceOn: aStream
 	would leave every body reference undeclared."
 	selfTransport := selfRebound
 		ifTrue: [(self isSmalltalkReservedIdentifier: selfName asString)
-			ifTrue: ['_' , selfName asString]
+			ifTrue: [NameAst ___transportIdentifierFor___: selfName]
 			ifFalse: [selfName asString]]
 		ifFalse: [nil].
 
@@ -6363,7 +6566,7 @@ generateMethodSourceOn: aStream
 			rename points every read/write at that temp, and the
 			pseudo-variable itself can't be a Smalltalk temp."
 			declared := (self isSmalltalkReservedIdentifier: each)
-				ifTrue: ['_' , each asString]
+				ifTrue: [NameAst ___transportIdentifierFor___: each]
 				ifFalse: [each].
 			(allLocals includes: declared) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
@@ -6476,7 +6679,7 @@ generateMethodSourceOn: aStream
 			Reserved-named locals declare their ``_<name>'' transport
 			(see the fixed-arity branch above)."
 			declared := (self isSmalltalkReservedIdentifier: each)
-				ifTrue: ['_' , each asString]
+				ifTrue: [NameAst ___transportIdentifierFor___: each]
 				ifFalse: [each].
 			(allLocals includes: declared) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
@@ -6508,7 +6711,7 @@ generateMethodSourceOn: aStream
 		args vararg ifNotNil: [
 			aStream
 				nextPutAll: args vararg name;
-				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { '.
+				nextPutAll: ' := ___tuple___ perform: #withAll: env: 0 withArguments: { '.
 			"NO NAMED PARAMETER AT ALL means there was no ``self'' to strip,
 			and the RECEIVER belongs in *args: CPython binds it as args[0], so
 			``def m(*args)'' called as ``c.m(1)'' sees ``(c, 1)'' and
@@ -6769,10 +6972,10 @@ ___irIneligibilityReason___
 	generated text mentions the parameter names nowhere.
 
 	So there was nothing for the IR path to reproduce, and refusing was
-	conservatism rather than a gap.  The names are erased on BOTH paths, which
-	is why ``__type_params__'' is unreadable on either -- a real divergence
-	from CPython, shared, older than this cut and not narrowed by it; it is the
-	XFAIL in tests/python/type_params.py.
+	conservatism rather than a gap.  Neither path carries the names IN THE
+	METHOD: they ride a class-side ___methodTypeParamsTable___ that the module
+	and class compiles emit for both paths alike (BoundMethod / UnboundMethod >>
+	__type_params__ read it).
 
 	The NESTED form DOES carry them, and that emit is in
 	___emitIRNestedSpecsOn___-land; see ___irNestedDefReasonUnguarded___."
@@ -7389,10 +7592,10 @@ ___emitIRStatementOn___: aBuilder
 		aBuilder add: (aBuilder
 			send: #dynamicInstVarAt:put:
 			to: (self ___emitIRModuleReceiverOn___: aBuilder)
-			with: { aBuilder obj: name asSymbol. fn }
+			with: { aBuilder obj: self ___mangledName___ asSymbol. fn }
 			env: 0).
 		^ self].
-	leaf := aBuilder leafFor: name asSymbol.
+	leaf := aBuilder leafFor: self ___mangledName___ asSymbol.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: fn).
 	self ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf.
@@ -7490,7 +7693,8 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	"PEP 695 type parameters, as printSmalltalkOn: cascades them: the NAMES
 	only, as an env-0 Array of Strings.  A closure is the one def shape that
 	can carry them -- ``___pyTypeParams___:'' is an ExecBlock method -- which is
-	why a top-level def and a method emit nothing for them at all."
+	why a top-level def and a method emit nothing for them here: theirs ride
+	the class-side ___methodTypeParamsTable___ instead."
 	(type_params notNil and: [type_params notEmpty]) ifTrue: [
 		specs add: { #'___pyTypeParams___:'.
 			{ aBuilder arrayOf: ((type_params collect: [:n | aBuilder obj: n asString])
@@ -7854,9 +8058,11 @@ ___emitIRNestedPyCodeOn___: aBuilder
 	name:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:)
 	___setFlags___: n) [___setFreevars___: #(...)]'' -- printSmalltalkOn:'s
 	cascade, which unlike emitPyCodeExprOn:qualname:nested: carries no qualname
-	field.  CO_NESTED is set (nested: true)."
+	field.  CO_NESTED is set (nested: true).  The setters after the
+	constructor are ___emitIRCodeExtrasOn___:code:nested:, shared with the
+	generator code thunk."
 
-	| poCount regCount kwoCount code freeNames |
+	| poCount regCount kwoCount code |
 	poCount := (args posonlyargs ifNil: [#()]) size.
 	regCount := (args args ifNil: [#()]) size.
 	kwoCount := (args kwonlyargs ifNil: [#()]) size.
@@ -7871,12 +8077,73 @@ ___emitIRNestedPyCodeOn___: aBuilder
 			aBuilder obj: poCount.
 			aBuilder obj: kwoCount }
 		env: 0.
-	code := aBuilder send: #'___setFlags___:' to: code
-		with: { aBuilder obj: (self ___coFlags___: true) } env: 0.
+	^ self ___emitIRCodeExtrasOn___: aBuilder code: code nested: true
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
+	"emitCodeExtrasOn:nested: as IR, send for send: the setters chained onto a
+	finished PyCode, each answering the code object --
+
+	    ((((code ___setFlags___: n)
+	        ___setFreevars___: #(...))                      when free variables
+	        ___setConsts___: (tuple withAll: (Array with: (PyCode name:filename:
+	            firstlineno:) ...)))                        when nested scopes
+	        ___setBodySource___: '...')                     when ___emitsBodySource___
+
+	-- all env 0, as the text qualifies them.
+
+	ONE MIRROR FOR BOTH IR EMITTERS, because two hand copies are how this went
+	wrong.  ___emitIRPyCodeExprOn___ and ___emitIRNestedPyCodeOn___ each
+	copied the text's first two setters when they were written; the text
+	then gained co_consts and the body text, and neither copy followed.  The
+	body text is what ``exec(f.__code__, g, closure=cells)'' re-runs, so under
+	IR that call refused every def with ``cannot run this code object with a
+	closure'' -- and the text path, being right, could not show it.
+
+	The conditions are the text's own predicates, not restatements of them:
+	___codeConstScopes___ and ___emitsBodySource___ decide here exactly as
+	they decide there."
+
+	| code freeNames scopes consts text |
+	code := aBuilder send: #'___setFlags___:' to: codeNode
+		with: { aBuilder obj: (self ___coFlags___: isNested) } env: 0.
 	freeNames := CallAst ___freeVariableNamesFor___: self.
-	freeNames isEmpty ifTrue: [^ code].
-	^ aBuilder send: #'___setFreevars___:' to: code
-		with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray } env: 0
+	freeNames isEmpty ifFalse: [
+		code := aBuilder send: #'___setFreevars___:' to: code
+			with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray }
+			env: 0].
+	scopes := self ___codeConstScopes___.
+	scopes isEmpty ifFalse: [
+		"PyCode objects are built at RUN time, as the text builds them -- a code
+		object is not a method literal -- and gathered by ``Array with:...'',
+		which ___codeConstScopes___ caps at four for exactly that reason."
+		consts := scopes collect: [:node |
+			aBuilder
+				send: #'name:filename:firstlineno:'
+				to: (aBuilder globalNamed: #PyCode)
+				with: {
+					aBuilder obj: node ___codeConstNameFor___ asString.
+					aBuilder obj: self ___irFileName___ asString.
+					aBuilder obj: node beginLine }
+				env: 0].
+		code := aBuilder send: #'___setConsts___:' to: code
+			with: { aBuilder
+				send: #withAll: to: (aBuilder globalNamed: #tuple)
+				with: { aBuilder
+					send: (#(#'with:' #'with:with:' #'with:with:with:' #'with:with:with:with:')
+						at: consts size)
+					to: (aBuilder globalNamed: #Array)
+					with: consts asArray
+					env: 0 }
+				env: 0 }
+			env: 0].
+	self ___emitsBodySource___ ifTrue: [
+		text := self ___grailBodySourceText___.
+		code := aBuilder send: #'___setBodySource___:' to: code
+			with: { aBuilder obj: text } env: 0].
+	^ code
 %
 
 category: 'Grail-IR Codegen'
@@ -8177,6 +8444,13 @@ ___emitIRAnnotateBlockOn___: aBuilder
 		specs := OrderedCollection new.
 		entry := [:key :node |
 			| thunk |
+			"The future import's twin of emitOneAnnotation:on: -- the source string
+			 itself, with no thunk to build."
+			CallAst futureAnnotations ifTrue: [
+				specs add: { #'at:put:'.
+					{ aBuilder obj: key. aBuilder obj: (node ___unparse___: 4) }.
+					0 }]
+			ifFalse: [
 			"nestedFunctionDo: for the duration of the EXPRESSION: the thunk is a
 			deferred function, so a read of an enclosing local in it must carry
 			the text's free-read guard (``(x ifNil: [UnboundLocalError
@@ -8201,7 +8475,7 @@ ___emitIRAnnotateBlockOn___: aBuilder
 						aBuilder send: #at: to: (aBuilder var: (argLeaves at: 1))
 							with: { aBuilder obj: 1 } env: 0 }
 					env: 1 }.
-				0 }].
+				0 }]].
 		self ___annotatedArgs___ do: [:a | entry value: a name asString value: a annotation].
 		returns ifNotNil: [:r | entry value: 'return' value: r].
 		specs add: { #yourself. { }. 0 }.

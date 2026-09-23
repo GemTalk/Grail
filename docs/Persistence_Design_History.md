@@ -622,3 +622,63 @@ round-trips through the default reduction path whether or not the table is
 consulted. The fixture now carries a type whose default reduction cannot rebuild
 it, and records which reductors actually ran — the difference between asserting a
 value and asserting a code path.
+
+---
+
+## I. A deployed module keeps a coherent closure (2026-09-23)
+
+Two defects with one root: the source hash was the whole answer to "can this
+committed module be reused", and a rebuild minted a new instance.
+
+**Native module identity.** `test_codecs` passed on a fresh install and scored
+`ERROR/1` after `run_tests.sh`. The deploy had committed `codecs`, and with it the
+deploy session's `builtins` instance, reachable from `codecs.builtins`; every
+later session minted its own. `mock.patch('builtins.open')` patched the session's
+instance, `codecs.open` called the committed one, and recursed. `sys.modules` and
+`copyreg.dispatch_table` had been patched for the same seam one at a time (§H.2).
+The general fix is `NativeModule` (design doc D8): one committed, invariant
+instance per native module, with all of its state in `SessionTemps`, keyed by
+class.
+
+The first gate run found what the design missed: 100 SUnit failures, all
+`'_socket' object has no attribute 'socket'`. A deployed `socket.py` reaches
+`_socket` through its committed globals and never asks for the session
+singleton, so `initialize` never ran; the old per-session instance had hidden
+this by carrying its entries in the repository. Per-session state now creates
+the session singleton, and so runs `initialize`, the first time it is touched.
+
+**Dependency staleness and the split.** A deployed module whose own file was
+unchanged was reused even when a module it imported had changed, and a deployed
+module whose file *had* changed was rebuilt into a new instance, while every
+committed reference kept the old one: new methods (the class is recompiled in
+place, D2) over old globals. The fix (design doc §4.4) records each body's
+imports with a build generation, and rebuilds a stale deployed module into its
+committed instance, as `reload()` does.
+
+The first version of the record was a Merkle hash recomputed on every build. The
+full gate caught it churning: 22 SUnit errors, two of them AlmostOutOfMemory in
+`ImportlibReloadTestCase`. A census right after `deployFrameworks` found 46 of
+156 deployed modules stale with every source unchanged, because inside an import
+cycle a dependency still executing is left out of the record, so the inputs —
+and the hash — depended on build order, and the deploy builds several modules
+twice. Making the generation move only when a build is caused by a change took
+the census to 0.
+
+An earlier proposal — re-run a dependent only when it used `from X import` — was
+rejected before it was built: `X = D.CONST * 2` at module level captures a value
+just as surely, so any dependency change has to make its importers stale.
+
+Each half was proved by reverting it on the exact configuration
+(`runModuleCoherenceTest.gs`: deploy leaf ← mid ← top, edit only leaf):
+
+| | reverted | fixed |
+|---|---|---|
+| no dependency check | top binds warm; leaf, mid never re-imported; `CAPTURED` 1, `DOUBLED` 2, `leaf_version()` `'v1'` — 8 named failures | all rebuilt, `CAPTURED` 5, `DOUBLED` 10, `'v2'` |
+| no rebuild into the committed instance | three new instances; `leaf_version()` `'v2'` through the old top while the committed leaf still reads `VALUE` 1 — 6 named failures | identities kept, `RUNS` 2/2/2 |
+| committed native instance disabled | `runModuleBindTest`: the deployed module's `builtins` is not this session's | identical |
+| `test_codecs` after `run_tests.sh` | `ERROR/1` (measured on #1131's tree, now `main`) | `OK 287/0/0` |
+
+The bind harness's second `NATIVE` check — a session-set `builtins` attribute
+seen through the committed reference — passed with the committed instance
+disabled too: the class-keyed state alone repairs visibility. It was not
+separately measured against `main`.

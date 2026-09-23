@@ -1,13 +1,13 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 CPythonShim ifNil: [self error: 'CPythonShim is not defined. Check file ordering.'].
 %
 
 ! ------- _shimtest class (API test module via shim)
 expectvalue /Class
 doit
-module subclass: '_shimtest'
+NativeModule subclass: '_shimtest'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

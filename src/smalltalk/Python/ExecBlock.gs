@@ -55,6 +55,19 @@ __setattr__: name _: value
 	captures) rather than overwriting the slot -- see ___setKwDefaults___:."
 	(name @env0:asSymbol == #'__kwdefaults__') ifTrue: [
 		^ self @env1:___setKwDefaults___: value].
+	"ASSIGNING __annotations__ RETIRES __annotate__, as CPython's function setter
+	 does (measured: after ``f.__annotations__ = d'', f.__annotate__ is None).
+	 Otherwise the old annotate function survived the assignment, and the
+	 STRING format -- which asks __annotate__ first -- kept answering the
+	 ORIGINAL annotations.  HERE, on the Python assignment, and not in the slot
+	 writer: the __annotations__ GETTER memoises through that same writer, so
+	 retiring there fired on the first READ and broke MUTATING the dict
+	 (``f.__annotations__['x'] = str'' must leave __annotate__ alone --
+	 test_modify_annotations).  Stored as None explicitly: a nil per-object
+	 entry reads as absent and falls back to the def-time annotate."
+	(name @env0:asSymbol == #'__annotations__') ifTrue: [
+		(ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__annotate__'
+			put: ExecBlock @env0:___pyNone___].
 	^ (ExecBlock @env0:___isSlotName___: name)
 		@env0:ifTrue: [
 			(ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: name put: value]
@@ -348,11 +361,11 @@ method: ExecBlock
 __type_params__
 	"``func.__type_params__'' — PEP 695 type parameters.
 
-	Grail's parser accepts ``def f[T](...)'' but discards the bracket, so
-	this is ALWAYS the empty tuple; it exists because it is one of
-	functools.WRAPPER_ASSIGNMENTS, and a name in that list that raises
-	AttributeError on the WRAPPER turns update_wrapper's callers into
-	errors rather than copies.
+	The def site stamps the NAMES (___pyTypeParams___:) and the placeholders
+	are built here on first read; the empty tuple for a def that declares
+	none.  It must never be absent: it is one of functools.WRAPPER_ASSIGNMENTS,
+	and a name in that list that raises AttributeError on the WRAPPER turns
+	update_wrapper's callers into errors rather than copies.
 
 	Memoized on first read for the same identity reason as
 	__annotations__."
@@ -438,28 +451,71 @@ set compile_env: 0
 category: 'Grail-Python Attribute Hook'
 classmethod: ExecBlock
 ___pyTypeVarNamed___: aName
-	"An opaque placeholder for a PEP 695 type parameter, minted through
-	``typing.TypeVar'' so it is the same kind of object user code gets from the
-	explicit spelling.  Falls back to the name STRING when typing is not loaded --
-	__type_params__ must answer something rather than fail, since
-	functools.update_wrapper copies it."
+	"An opaque placeholder for a PEP 695 type parameter, minted through typing
+	so it is the same kind of object user code gets from the explicit spelling:
+	``*Ts'' is a TypeVarTuple, ``**P'' a ParamSpec, a bare name a TypeVar (the
+	parser keeps the kind as a prefix -- PythonParser >> skipTypeParams).
 
-	| mods typing |
-	"@env1: on both sends: this helper is compiled in the file's env-0 region, and
-	``modules'' / ``TypeVar:'' are env-1 methods.  Sent unprefixed they are simply
-	not found, the guard swallows it, and the fallback quietly answers a STRING
-	where a TypeVar belongs -- silent, because the fallback exists for the
-	typing-not-loaded case and cannot tell the two apart."
-	mods := [(System @env0:myUserProfile @env0:symbolList
-		@env0:objectNamed: #importlib) @env1:modules]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	mods == nil ifTrue: [^ aName].
-	typing := (mods @env0:at: 'typing' otherwise: nil)
-		@env0:ifNil: [mods @env0:at: #'typing' otherwise: nil].
-	typing == nil ifTrue: [^ aName].
-	^ [typing @env1:TypeVar: aName]
+	The one builder for every def and class shape.  typing is IMPORTED when it is
+	not loaded yet: this runs on the first READ of __type_params__, never at def
+	time, which is the moment the laziness exists to protect.  Falls back to the
+	bare name STRING when typing cannot be had -- __type_params__ must answer
+	something rather than fail, since functools.update_wrapper copies it."
+
+	| bare kind typing kw |
+	bare := aName @env0:asString.
+	kind := #'TypeVar'.
+	((bare @env0:size > 2) and: [(bare @env0:copyFrom: 1 to: 2) @env0:= '**'])
+		ifTrue: [bare := bare @env0:copyFrom: 3 to: bare @env0:size. kind := #'ParamSpec']
+		ifFalse: [
+			((bare @env0:size > 1) and: [(bare @env0:at: 1) == $*]) ifTrue: [
+				bare := bare @env0:copyFrom: 2 to: bare @env0:size. kind := #'TypeVarTuple']].
+	"@env1: on the Python sends: this helper is compiled in the file's env-0
+	region.  Sent unprefixed they are simply not found, the guard swallows it,
+	and the fallback quietly answers a STRING where a TypeVar belongs."
+	typing := [((Python @env0:at: #builtins) @env1:instance)
+			@env1:___import__: { 'typing' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	typing == nil ifTrue: [^ bare].
+	"infer_variance, as CPython mints every PEP 695 TypeVar and ParamSpec: it
+	 is observable, as ``__infer_variance__'' and in the repr (``T'', not
+	 ``~T'').  A TypeVarTuple takes no variance."
+	kw := kind == #'TypeVarTuple'
+		ifTrue: [nil]
+		ifFalse: [((Python @env0:at: #'PyDict') @env0:new)
+			@env0:at: 'infer_variance' put: true; @env0:yourself].
+	^ [(typing @env1:___pyAttrLoad___: kind) @env1:___pyCallValue___: { bare } kw: kw]
 		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: aName]
+		do: [:ex | ex @env0:return: bare]
+%
+
+classmethod: ExecBlock
+___pyTypeParamsForClass___: aClass name: aName table: aTable
+	"``__type_params__'' for a def compiled to a METHOD -- a class-body def or a
+	module-level one -- which cannot carry the ``___pyTypeParams___:'' cascade a
+	closure does.  The NAMES come from aTable (the class-side
+	___methodTypeParamsTable___ entry, or nil); the placeholders are built on
+	first read and kept for the session, keyed by class and name.
+
+	Kept because the objects are the parameters' IDENTITY: ``get_annotations(f,
+	eval_str=True)'' resolves a stringized ``T'' through ``f.__type_params__'',
+	and the caller then compares against a second read of it.  Session-scoped,
+	like GrailMethodAnnotateCache, since a TypeVar is not persistent state."
+
+	| store perClass key tup built |
+	(aTable == nil or: [aTable @env0:isEmpty])
+		ifTrue: [^ (ExecBlock @env0:___pyTupleClass___) @env0:withAll: #()].
+	store := SessionTemps @env0:current
+		@env0:at: #'GrailMethodTypeParamsCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	perClass := store @env0:at: aClass ifAbsentPut: [KeyValueDictionary @env0:new].
+	key := aName @env0:asString.
+	tup := perClass @env0:at: key otherwise: nil.
+	tup == nil ifFalse: [^ tup].
+	built := aTable @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n].
+	tup := (ExecBlock @env0:___pyTupleClass___) @env0:withAll: built.
+	perClass @env0:at: key put: tup.
+	^ tup
 %
 
 classmethod: ExecBlock

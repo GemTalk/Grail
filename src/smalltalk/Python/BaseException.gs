@@ -1091,6 +1091,36 @@ ___init__: positional kw: kwargs
 	^ None
 %
 
+category: 'Grail-Initialization'
+method: BaseException
+___init__: positional kw: kwargs keywords: allowed displayName: aString
+	"The varargs init for the few built-in exceptions CPython gives KEYWORD
+	attributes: NameError(name=), AttributeError(name=, obj=) and
+	ImportError(name=, path=, name_from=).  Each keyword is stored as a dynamic
+	instVar under its own Python name -- the idiom ___signalUndefined___: and
+	AttributeError >> ___stampContextOn___: already use -- and one NOT passed is
+	stored as None, because CPython's attribute exists and is None
+	(``NameError().name is None'').  Absent, the read was an AttributeError.
+
+	The keywords never reach ``args'': ``ImportError('m', name='n').args'' is
+	('m',), measured.  An unknown keyword is CPython's TypeError, naming the
+	class that DEFINES the init -- aString -- which is why a
+	ModuleNotFoundError reports ``ImportError()''."
+
+	kwargs @env0:notNil ifTrue: [
+		kwargs @env0:keysDo: [:k |
+			(allowed @env0:includes: k @env0:asString) ifFalse: [
+				^ TypeError ___signal___: (aString @env0:, '() got an unexpected keyword argument '''
+					@env0:, k @env0:asString @env0:, '''')]]].
+	self ___args___: (positional isNil ifTrue: [#()] ifFalse: [positional @env0:asArray]).
+	allowed @env0:do: [:k |
+		self @env0:dynamicInstVarAt: k @env0:asSymbol put:
+			((kwargs @env0:notNil and: [kwargs @env0:includesKey: k])
+				ifTrue: [kwargs @env0:at: k]
+				ifFalse: [None])].
+	^ None
+%
+
 
 category: 'Grail-String Representation'
 method: BaseException

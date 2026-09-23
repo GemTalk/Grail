@@ -96,12 +96,12 @@ ___emitSmalltalkOn___: aStream
 
 	| hasStar |
 	elts isEmpty ifTrue: [
-		aStream nextPutAll: '(tuple perform: #new env: 0)'.
+		aStream nextPutAll: '(___tuple___ perform: #new env: 0)'.
 		^self.
 	].
 	hasStar := elts anySatisfy: [:each | each isKindOf: StarredAst].
 	hasStar ifFalse: [
-		aStream nextPutAll: '(tuple perform: #withAll: env: 0 withArguments: {{'.
+		aStream nextPutAll: '(___tuple___ perform: #withAll: env: 0 withArguments: {{'.
 		elts doWithIndex: [:each :i |
 			i > 1 ifTrue: [aStream nextPutAll: '. '].
 			each printSmalltalkOn: aStream.
@@ -121,7 +121,7 @@ ___emitSmalltalkOn___: aStream
 	unclosed, generating syntactically invalid Smalltalk for
 	``(a, *b)'' expressions.  Werkzeug.datastructures.headers'
 	``__eq__'' surfaced this via ``return item[0].lower(), *item[1:]''."
-	aStream nextPutAll: '(tuple perform: #withAll: env: 0 withArguments: {(({}'.
+	aStream nextPutAll: '(___tuple___ perform: #withAll: env: 0 withArguments: {(({}'.
 	elts do: [:each |
 		aStream nextPutAll: ' @env0:, '.
 		(each isKindOf: StarredAst)
@@ -150,14 +150,6 @@ setTo: aValue scope: aScope
 	].
 %
 
-category: 'Grail-annotations'
-method: TupleAst
-___annotationSourceString___
-	| parts |
-	parts := elts collect: [:e | e ___annotationSourceString___].
-	^ parts inject: '' into: [:acc :p |
-		acc isEmpty ifTrue: [p] ifFalse: [acc , ', ' , p]]
-%
 method: TupleAst
 elts: newValue
 	elts := newValue

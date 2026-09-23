@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- grail class (Python 'grail' module)
 expectvalue /Class
 doit
-module subclass: 'grail'
+NativeModule subclass: 'grail'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

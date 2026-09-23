@@ -21,8 +21,11 @@
 # in, so a caller wires the jar up by hand (add_cookie_header before the
 # call, extract_cookies after).
 
+import os
+import sys
+
 from urllib.error import URLError, HTTPError
-from urllib.parse import urlsplit, urljoin
+from urllib.parse import quote, unquote, urlsplit, urljoin
 
 
 # State urlcleanup() owns, in CPython's shape so that a urlretrieve() or an
@@ -251,6 +254,84 @@ def urlopen(url, data=None, timeout=None, context=None):
         return resp
 
 
+# ---------------------------------------------------------------------------
+# pathname2url / url2pathname -- CPython 3.14's own, POSIX branches only.
+#
+# pathlib.Path.as_uri() and Path.from_uri() ARE these two functions, so
+# without them both raised ImportError.  Everything the two stand on already
+# worked here -- os.path.splitroot, urllib.parse.quote/unquote/urlsplit,
+# sys.getfilesystemencoding and its encodeerrors -- and each was measured
+# answering exactly what CPython answers before any of this was written.
+#
+# The "nt" halves are DROPPED rather than carried: they handle DOS drive
+# letters, UNC shares and backslashes, none of which a GemStone server path
+# can be.  What is left is CPython's code rather than a paraphrase of it, so
+# its odd-looking corners stay and are tested: the THREE slashes of an
+# absolute path (an explicitly empty authority, which stops "//host/x" from
+# reading as a URL authority), the "file:" glued on before parsing when
+# require_scheme is false, and the query and fragment that urlsplit discards.
+
+
+def _is_local_authority(authority, resolve):
+    """Whether a file: URL's authority names this host, as CPython asks it."""
+    if not authority or authority == 'localhost':
+        return True
+    try:
+        import socket
+        hostname = socket.gethostname()
+    except (ImportError, AttributeError, OSError):
+        pass
+    else:
+        if authority == hostname:
+            return True
+    # CPython goes on to resolve the authority to an address and compare it
+    # against the host's own, which needs the opener's FileHandler.get_names().
+    # There is no handler chain here (see this module's header), so an
+    # authority that is not this host by name is simply not local.
+    return False
+
+
+def pathname2url(pathname, *, add_scheme=False):
+    """Convert the given local file system path to a file URL.
+
+    The 'file:' scheme prefix is omitted unless *add_scheme*
+    is set to true.
+    """
+    encoding = sys.getfilesystemencoding()
+    errors = sys.getfilesystemencodeerrors()
+    scheme = 'file:' if add_scheme else ''
+    drive, root, tail = os.path.splitroot(pathname)
+    if root:
+        # Add explicitly empty authority to absolute path. If the path
+        # starts with exactly one slash then this change is mostly
+        # cosmetic, but if it begins with two or more slashes then this
+        # avoids interpreting the path as a URL authority.
+        root = '//' + root
+    tail = quote(tail, encoding=encoding, errors=errors)
+    return scheme + drive + root + tail
+
+
+def url2pathname(url, *, require_scheme=False, resolve_host=False):
+    """Convert the given file URL to a local file system path.
+
+    The 'file:' scheme prefix must be omitted unless *require_scheme*
+    is set to true.
+
+    The URL authority may be resolved with gethostbyname() if
+    *resolve_host* is set to true.
+    """
+    if not require_scheme:
+        url = 'file:' + url
+    scheme, authority, url = urlsplit(url)[:3]  # Discard query and fragment.
+    if scheme != 'file':
+        raise URLError("URL is missing a 'file:' scheme")
+    if not _is_local_authority(authority, resolve_host):
+        raise URLError("file:// scheme is supported only on localhost")
+    encoding = sys.getfilesystemencoding()
+    errors = sys.getfilesystemencodeerrors()
+    return unquote(url, encoding=encoding, errors=errors)
+
+
 def parse_http_list(value):
     """Parse a list of HTTP headers as defined in RFC 9110.
 
@@ -332,7 +413,6 @@ def parse_http_list(value):
 # uppercase value survives instead.  Both limitations are pinned by
 # tests/python/urllib_defrag_and_proxies.py rather than left to be rediscovered.
 
-import os as _os
 
 
 def getproxies_environment():
@@ -344,10 +424,10 @@ def getproxies_environment():
     # passes: the first matches any case, the second lowercase only.
     proxies = {}
     environment = []
-    for name in _os.environ:
+    for name in os.environ:
         # Fast screen on the underscore position before the case-folding.
         if len(name) > 5 and name[-6] == "_" and name[-5:].lower() == "proxy":
-            value = _os.environ[name]
+            value = os.environ[name]
             proxy_name = name[:-6].lower()
             environment.append((name, value, proxy_name))
             if value:
@@ -356,7 +436,7 @@ def getproxies_environment():
     # (non-all-lowercase) as it may be set from the web server by a "Proxy:"
     # header from the client.  If "proxy" is lowercase it will still be used,
     # thanks to the next block.
-    if 'REQUEST_METHOD' in _os.environ:
+    if 'REQUEST_METHOD' in os.environ:
         proxies.pop('http', None)
     for name, value, proxy_name in environment:
         # Not case-folded: this pass is looking for lower-case names only.

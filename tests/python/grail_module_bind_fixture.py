@@ -13,6 +13,10 @@
 # ``events`` discriminates bind from re-run: the module body sets it to
 # ['boot']; session A appends 'A' after import and commits; a warm-bound
 # session B must see ['boot', 'A'] (a body re-run would rebind ['boot']).
+# ``builtins'' is a NATIVE module: session B checks that the reference this
+# committed module holds is the session's builtins, not the deploy session's
+# (NativeModule.gs -- one committed instance per native module).
+import builtins
 import enum
 from enum import IntEnum
 from dataclasses import dataclass, field

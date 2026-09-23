@@ -299,16 +299,32 @@ printSmalltalkAttributeAugAssignOn: aStream
 		nextPutAll: ''').'.
 			^self
 		].
-		"Phase B: ``self.attr op= value'' loads and stores through the
-		instance's dynamic-instVar storage.  Emit shape:
-		  self @env0:dynamicInstVarAt: #'attr'
-		    put: ((load) op (value))
+		"Phase B: ``self.attr op= value'' probes the instance's dynamic-instVar
+		storage to LOAD, and stores through ``__setattr__:_:''.  Emit shape:
+		  self @env1:__setattr__: 'attr' _: ((load) op (value))
 		where ``(load)'' is the dynamicInstVarAt:ifAbsent: probe + class
-		fallback."
+		fallback.
+
+		THE STORE GOES THROUGH __setattr__ BECAUSE THE SELF REFERENCE IS NOT
+		ALWAYS AN INSTANCE.  A dynamic-instVar store is an ImproperOperation
+		when the receiver is a CLASS -- ``dynamic instVars not supported in a
+		Class'' -- and an uncatchable env-0 one, so it takes down the whole
+		module run rather than raising anything Python can see.  Two everyday
+		shapes put a class there: ``@classmethod def bump(cls): cls.count +=
+		1'', and PEP 487's ``def __init_subclass__(cls, ...)'', which Grail
+		compiles instance-side and runs with the new class as the receiver.
+		Both are ordinary Python and both died here.
+
+		It is also what the PLAIN assignment emitter has always done for this
+		same target shape (AbstractNode >> the __setattr__:_: branch): one rule
+		with two implementations, and this was the stale copy -- ``cls.x = v''
+		worked in a classmethod while ``cls.x += v'' one line below did not.
+		Routing both the same way also means a @property setter fires for an
+		augmented assignment, which it previously wrote straight past."
 		aStream
-			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: 'self @env1:__setattr__: ''';
 			nextPutAll: target ___mangledAttr___;
-			nextPutAll: ''' put: ((self @env0:dynamicInstVarAt: #''';
+			nextPutAll: ''' _: ((self @env0:dynamicInstVarAt: #''';
 			nextPutAll: target ___mangledAttr___;
 			nextPutAll: ''' ifAbsent: [self @env1:___pyAttrLoad___: #''';
 			nextPutAll: target ___mangledAttr___;
@@ -532,31 +548,56 @@ category: 'Grail-IR Codegen'
 method: AugAssignAst
 ___emitIRComplexTargetOn___: aBuilder kind: aKind
 	"printSmalltalkAttributeAugAssignOn: / printSmalltalkSubscriptAugAssignOn:
-	(cut 62).  The text applies the BINARY operator send (``__add__:'', not the
-	in-place probe of the simple-local branch) to the loaded current value and
-	stores the result:
-	  self @env0:dynamicInstVarAt: #x put: ((self @env0:dynamicInstVarAt: #x
-	      ifAbsent: [self @env1:___pyAttrLoad___: #x]) __add__: (v))
-	  ___slot_x___ := (___slot_x___ ifNil: [self @env1:___pyAttrLoad___: #x]) __add__: (v)
-	  (obj) @env1:___pyAttrStore___: #x put: (((obj) @env1:___pyAttrLoad___: #x) __add__: (v))
-	  (obj) __setitem__: (i) _: (((obj) __getitem__: (i)) __add__: (v))
+	(cut 62).  Every shape routes the loaded current value through
+	``___augmentedOp___:inplace:binary:'' -- the SAME runtime helper the
+	simple-local branch uses -- and stores what it answers:
+	  self @env1:__setattr__: 'x' _: ((self @env0:dynamicInstVarAt: #x
+	      ifAbsent: [self @env1:___pyAttrLoad___: #x])
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
+	  self ___pyattr_x___: ((self ___pyattr_x___)
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
+	  (obj) @env1:___pyAttrStore___: #x put: (((obj) @env1:___pyAttrLoad___: #x)
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
+	  (obj) __setitem__: (i) _: (((obj) __getitem__: (i))
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
 	The receiver (and index) expressions are emitted TWICE for the foreign and
-	subscript shapes, as the text prints them twice."
+	subscript shapes, as the text prints them twice.
 
-	| binSel attr v load |
-	binSel := self ___irSelectorPair___ at: 2.
+	IT USED TO APPLY THE BARE BINARY SEND, and this docstring used to say the
+	text did too.  That was true when cut 62 was written and stopped being true
+	when the text emitters were corrected; the IR path kept the old shape, so
+	two things silently did not happen for an attribute or subscript target:
+
+	  * the IN-PLACE dunder.  ``self.lst += [2]'' built a new list and stored
+	    it where CPython extends the existing one, so any other name bound to
+	    it kept the old contents;
+	  * the REFLECTED dunder.  A forward dunder that DECLINES had nothing after
+	    it and its NotImplemented was STORED -- a value, not an error,
+	    surfacing wherever the attribute was next read.
+
+	The text path is the oracle, so the fix is to send what it sends rather
+	than to reason afresh about which dunder is right here."
+
+	| pair attr v load augOf |
+	pair := self ___irSelectorPair___.
+	"One place builds the helper send, so the four shapes cannot drift in which
+	dunders they offer -- which is how they drifted from the text to begin with."
+	augOf := [:aLoad :aValue |
+		aBuilder send: #'___augmentedOp___:inplace:binary:' to: aLoad
+			with: { aValue. aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) }
+			env: 1].
 	aKind == #attrSelf ifTrue: [
 		attr := target ___mangledAttr___ asSymbol.
 		"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS):
-		both halves are accessor sends,
-		``self ___pyattr_x___: ((self ___pyattr_x___) __add__: (v))''."
+		both halves are accessor sends, ``self ___pyattr_x___: ((self
+		___pyattr_x___) @env1:___augmentedOp___: (v) inplace: ... binary: ...)''."
 		(target ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
 			load := aBuilder send: acc to: aBuilder selfNode with: #() env: 1.
 			v := value ___emitIRValueOn___: aBuilder.
 			aBuilder atNode: self.
 			aBuilder add: (aBuilder
 				send: (acc , ':') asSymbol to: aBuilder selfNode
-				with: { aBuilder send: binSel to: load with: { v } env: 1 } env: 1).
+				with: { augOf value: load value: v } env: 1).
 			^ self].
 		load := aBuilder
 			send: #dynamicInstVarAt:ifAbsent:
@@ -567,10 +608,17 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 			env: 0.
 		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
+		"The STORE is ``self @env1:__setattr__: 'x' _: (...)'', the text's since
+		#1123, and a String name as the text spells it.  It used to be the
+		dynamic-instVar write the LOAD still probes -- which is an uncatchable
+		ImproperOperation when the self reference is a CLASS (a @classmethod's
+		cls, PEP 487's __init_subclass__), and which stepped past a
+		__setattr__ override or a @property setter.  The text moved and this
+		copy did not; the load is unchanged on both paths."
 		aBuilder add: (aBuilder
-			send: #dynamicInstVarAt:put: to: aBuilder selfNode
-			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
-			env: 0).
+			send: #'__setattr__:_:' to: aBuilder selfNode
+			with: { aBuilder obj: target ___mangledAttr___ asString. augOf value: load value: v }
+			env: 1).
 		^ self].
 	aKind == #attrForeign ifTrue: [
 		| recv1 recv2 |
@@ -582,7 +630,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'___pyAttrStore___:put:' to: recv1
-			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
+			with: { aBuilder obj: attr. augOf value: load value: v }
 			env: 1).
 		^ self].
 	aKind == #subscript ifTrue: [
@@ -596,7 +644,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'__setitem__:_:' to: obj1
-			with: { idx1. aBuilder send: binSel to: load with: { v } env: 1 }
+			with: { idx1. augOf value: load value: v }
 			env: 1).
 		^ self].
 	^ Error signal: 'IR codegen: unhandled augmented target kind ' , aKind printString

@@ -54,7 +54,7 @@ set compile_env: 0
 
 ! ------------------- Superclass checks
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 OSError ifNil: [self error: 'OSError is not defined. Check file ordering.'].
 %
 
@@ -1279,7 +1279,7 @@ set compile_env: 0
 ! ------- the _socket module itself -------------------------------------------
 expectvalue /Class
 doit
-module subclass: '_socket'
+NativeModule subclass: '_socket'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

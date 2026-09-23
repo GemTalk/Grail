@@ -257,14 +257,16 @@ _new: positional kw: keywords
 category: 'Grail-Generics'
 classmethod: dict
 __getitem__: item
-	"`dict[K, V]` is a parameterized type alias.  Python's
-	``dict.__class_getitem__`` returns a ``types.GenericAlias``
-	wrapping ``dict`` with the type args, but for our purposes
-	(class-statement bases, runtime annotation evaluation) the
-	origin class is sufficient — code that subscripts a built-in
-	collection at runtime is doing so for typing scaffolding, not
-	for actual element lookup.  Returning the class lets
-	``class Namespace(dict[str, Foo]):`` inherit from dict cleanly."
+	"``dict[K, V]'' -- a REAL types.GenericAlias, as list's and tuple's are.
+
+	It used to answer the class itself, on the reasoning that runtime
+	subscription of a built-in is only typing scaffolding and that
+	``class Namespace(dict[str, Foo]):'' needs the bare class as a base.  The
+	base case is PEP 560's __mro_entries__ now (see list class >> __getitem__:),
+	and the collapse was observable: an annotation's ForwardRef evaluated to
+	``dict'' with its arguments gone, where CPython answers
+	``dict[int, ForwardRef('undef')]'' (test_annotationlib
+	test_evaluate_undefined_generic)."
 
 	"A SUBCLASS with its own __class_getitem__ must get it.  This shortcut
 	sits on the metaclass chain AHEAD of Metaclass3 >>
@@ -280,7 +282,8 @@ __getitem__: item
 		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
 			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
 			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
-	^ self
+	"Late-bound: this file compiles before GenericAlias.gs defines the class."
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
 %
 
 category: 'Grail-Type'

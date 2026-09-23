@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- copyreg class (Python 'copyreg' module)
 expectvalue /Class
 doit
-module subclass: 'copyreg'
+NativeModule subclass: 'copyreg'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

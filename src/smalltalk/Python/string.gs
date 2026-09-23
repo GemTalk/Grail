@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- string class (Python 'string' module)
 expectvalue /Class
 doit
-module subclass: 'string'
+NativeModule subclass: 'string'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

@@ -43,6 +43,7 @@ test.test_scope|ScopeTests.testLeaks|counts 100 closure-captured objects back to
 # no bytecode, so there is nothing to specialize, unspecialize or trace.
 test.test_dynamic|RebindBuiltinsTests.test_load_global_specialization_failure_keeps_oparg|PEP 659 bytecode-specialization regression (cpython#91625): asserts a LOAD_GLOBAL whose specialization FAILS keeps its EXTENDED_ARGS oparg, via a 400-name dict-subclass globals. Grail compiles to Smalltalk methods, has no bytecode and no specialization, so the property under test does not exist here. (It also happens to need __missing__ on a custom eval globals mapping, which Grail does not consult -- a separate, real gap, tracked apart from this skip.)
 test.test_dynamic|TestTracing.test_after_specialization|turns on sys.settrace from inside __del__ so the tracer arrives between a CPython specialized instruction and its guard -- needs refcount-exact __del__ timing AND bytecode specialization, neither of which exists on a non-refcounted VM with no bytecode. It currently reports as a pass, which is worse than a skip: nothing it targets is being exercised.
+test.test_positional_only_arg|PositionalOnlyTestCase.test_annotations_constant_fold|asserts CPython's CONSTANT FOLDER ran, by disassembling the nested __annotate__ code object and requiring IS_OP 1 with no UNARY_NOT. Grail keeps no bytecode, so there is no optimizer output to inspect and dis.get_instructions() refuses by design ("nothing to disassemble"). It errors earlier than that, at StopIteration: g.__code__.co_consts holds only 'f' where CPython also holds '__annotate__' -- PEP 649 lazy annotations, a separate divergence that this skip does NOT stand in for, since even a faithful __annotate__ would carry no opcodes to assert on.
 # test_taskgroups' refcycle family: TaskGroup drops its internal references
 # (self._errors, self._parent_task, self._base_error, __aexit__'s args) on the
 # way out, and each of these six tests checks that by asserting
@@ -534,3 +535,22 @@ test.test_traceback|TestTracebackException.test_long_context_chain|recursion dep
 # tests reported, hiding the ~176 that pass.  Skipping it costs Darwin one real
 # pass, which is the right trade -- the committed board is CI-measured.
 test.test_xml_etree|BadElementTest.test_deeply_nested_deepcopy|500k-deep deepcopy recursion: converted to RecursionError on Darwin arm64 but the yellow-zone reserve runs out on Linux x86_64 native code, so AlmostOutOfStackError escapes from GsProcess>>_start and kills the scoring session
+
+# --- test_annotationlib: CPython's fake-globals re-execution -----------------
+# CPython's compiler-generated __annotate__ supports only VALUE.  annotationlib
+# gets STRING and FORWARDREF for any OTHER callable by RE-RUNNING its code object
+# under fake globals -- types.FunctionType(annotate.__code__, _StringifierDict,
+# closure=<fake cells>) -- and reading back what the _Stringifier proxies
+# recorded.  Grail compiles Python to Smalltalk and keeps no bytecode to rebind:
+# its own annotate functions answer every format natively, and annotationlib's
+# source-level port of the stringifier covers ForwardRef.evaluate and partial
+# FORWARDREF results.  What is left needs the code object, CPython's closure
+# CELL objects, or pins the text the proxy algebra produces where Grail has the
+# exact source.  Each was checked against its test body, 2026-09-23.
+test.test_annotationlib|TestCallAnnotateFunction.test_full_non_function_annotate|rebuilds a function from a callable's __code__, __closure__ (types.CellType) and __globals__ to run it under fake globals; Grail has no code object to rebind (and its body rebinds `self`, a Grail codegen gap)
+test.test_annotationlib|TestCallEvaluateFunction.test_evaluation|FORWARDREF/STRING of a user evaluate function whose body reads an undefined name: CPython re-runs its code object with stringifier globals; Grail can only call it, which raises NameError
+test.test_annotationlib|TestCallEvaluateFunction.test_fake_global_evaluation|same fake-globals re-execution of a user evaluate function (builtins.undefined | list[int] under VALUE_WITH_FAKE_GLOBALS)
+test.test_annotationlib|TestForwardRefClass.test_forward_equality_and_hash_with_cells|asserts ForwardRef.__cell__ is a types.CellType shared between reads (GH-143831): CPython closure-cell objects, which Grail does not have -- its ForwardRef carries the annotation's own block instead
+test.test_annotationlib|TestForwardRefFormat.test_multiple_closure|asserts __extra_names__ holds a closure variable's VALUE, which the fake-globals pass reads from the function's cell; Grail's stringifier runs on source text and cannot see an enclosing function's locals
+test.test_annotationlib|TestStringFormat.test_shenanigans|pins the stringifier's rendering of an expression it cannot reconstruct ("x | <class 'int'>" for x | (1).__class__); Grail's STRING is the exact source, "x | 1 .__class__"
+test.test_annotationlib|TestStringFormat.test_unsupported_operations|pins the stringifier's refusal of an f-string (its __format__ raises TypeError); Grail's STRING is source text and has no such limitation

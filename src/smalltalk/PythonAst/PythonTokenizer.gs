@@ -169,6 +169,63 @@ addToken: aType value: aValue line: aLine position: aPos
 
 category: 'Grail-private'
 method: PythonTokenizer
+___warnInvalidEscape___: escText octal: isOctal at: bsPos
+	"CPython does not silently keep an escape it has no meaning for: ``'\z''' is
+	the two characters backslash-z AND a SyntaxWarning, so a literal that was
+	meant to carry a tab or a newline is noticed before it ships.  The same for
+	an octal escape above \377, which does not fit a byte.
+
+	THROUGH warn_explicit, not warn:.  The location that matters is the
+	LITERAL's -- the line the escape is written on -- and warn: derives one from
+	the call stack, which here is the tokenizer rather than the developer's
+	source.
+
+	WHEN A FILTER MAKES IT AN ERROR, warn_explicit signals the warning instead
+	of recording it, and CPython turns that into a SyntaxError carrying the same
+	text WITHOUT the ``Such sequences will not work in the future.'' sentence,
+	plus the escape's own line and column.  That translation is here; anything
+	the warnings machinery raises that is NOT this category is passed on
+	untouched, so a real breakage in it cannot disguise itself as a bad escape.
+
+	SILENT when the warnings module is not importable.  A bootstrap parse runs
+	before it exists and must not fail over a diagnostic."
+
+	| msg warningsMod cat kind loc raised |
+	kind := isOctal
+		ifTrue: [' is an invalid octal escape sequence. ']
+		ifFalse: [' is an invalid escape sequence. '].
+	warningsMod := [(importlib @env1:modules) at: #warnings ifAbsent: [nil]]
+		on: AbstractException do: [:ex | ex return: nil].
+	warningsMod isNil ifTrue: [^ self].
+	cat := System myUserProfile symbolList objectNamed: #'SyntaxWarning'.
+	cat isNil ifTrue: [^ self].
+	msg := '"\' , escText , '"' , kind ,
+		'Such sequences will not work in the future. Did you mean "\\' , escText ,
+		'"? A raw string is also an option.'.
+	raised := false.
+	[warningsMod @env1:warn_explicit: msg _: cat _: '<string>' _: line]
+		on: AbstractException
+		do: [:ex |
+			(cat handles: ex) ifFalse: [ex pass].
+			raised := true.
+			ex return: nil].
+	raised ifFalse: [^ self].
+	loc := PythonParser ___sourceLocationIn___: source at: bsPos.
+	loc isNil ifTrue: [loc := Array with: line with: 1 with: nil].
+	^ SyntaxError @env1:___signalNew___:
+		(Array
+			with: ('"\' , escText , '"' , kind ,
+				'Did you mean "\\' , escText , '"? A raw string is also an option.')
+			with: (tuple withAll: (Array
+				with: '<string>'
+				with: (loc at: 1)
+				with: (loc at: 2)
+				with: (loc at: 3))))
+		kw: nil
+%
+
+category: 'Grail-private'
+method: PythonTokenizer
 advance
 	| char pos |
 	char := source atOrNil: (pos := position) .
@@ -296,16 +353,16 @@ isStringStart
 	next := self peekAt: 1.
 	next ifNil: [^false].
 
-	"Single-char prefix: r, b, f, u, R, B, F, U"
-	((char == $r or: [char == $R or: [char == $b or: [char == $B or: [char == $f or: [char == $F or: [char == $u or: [char == $U]]]]]]]) and: [next == $' or: [next == $"]]) ifTrue: [^true].
+	"Single-char prefix: r, b, f, t, u, R, B, F, T, U -- t is PEP 750's template string"
+	((char == $r or: [char == $R or: [char == $b or: [char == $B or: [char == $f or: [char == $F or: [char == $t or: [char == $T or: [char == $u or: [char == $U]]]]]]]]]) and: [next == $' or: [next == $"]]) ifTrue: [^true].
 
-	"Two-char prefix: rb, br, fr, rf (and case variants)"
+	"Two-char prefix: rb, br, fr, rf, tr, rt (and case variants)"
 	third := self peekAt: 2.
 	third ifNil: [^false].
 	(third == $' or: [third == $"]) ifTrue: [
 		| pair |
 		pair := (char asString , next asString) asLowercase.
-		^(pair = 'rb' or: [pair = 'br' or: [pair = 'fr' or: [pair = 'rf']]])
+		^(pair = 'rb' or: [pair = 'br' or: [pair = 'fr' or: [pair = 'rf' or: [pair = 'tr' or: [pair = 'rt']]]]])
 	].
 	^false
 %
@@ -812,11 +869,12 @@ tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  braceDepth nestQuote fieldStarts |
+	  braceDepth nestQuote fieldStarts isTString |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
 	isFString := false.
+	isTString := false.
 	isRaw := false.
 	isBytes := false.
 
@@ -827,12 +885,17 @@ tokenizeString
   1 to: prefix size do:[:n |
     char := (prefix at: n) asLowercase .
 		char == $f ifTrue: [isFString := true].
+		"PEP 750: a t-string scans exactly like an f-string -- same fields, same
+		 nesting -- and differs only in what the parser builds from it."
+		char == $t ifTrue: [isFString := true. isTString := true].
 		char == $r ifTrue: [isRaw := true].
 		char == $b ifTrue: [isBytes := true].
 	].
 	tokenType := isBytes
 		ifTrue: [#BYTES]
-		ifFalse: [isFString ifTrue: [#FSTRING] ifFalse: [#STRING]].
+		ifFalse: [isTString
+			ifTrue: [#TSTRING]
+			ifFalse: [isFString ifTrue: [#FSTRING] ifFalse: [#STRING]]].
 
 	"Read quote character"
 	quoteChar := self advance.
@@ -930,7 +993,10 @@ tokenizeString
 			] ifFalse: [
 			"Handle escape sequences"
 			(char == $\ and: [isRaw not]) ifTrue: [
-				| escaped |
+				| escaped bsPos |
+				"The backslash's own index, for the location an invalid-escape
+				diagnostic reports -- see ___warnInvalidEscape___:octal:at:."
+				bsPos := position.
 				self advance.
 				escaped := self advance.
 	      escaped ifNil:[ SyntaxError signal: 'unterminated string literal'].
@@ -962,6 +1028,11 @@ tokenizeString
 
 					A str literal is not masked: ``'\400''' is chr(256), which
 					is a perfectly good character."
+					"Above \377 the escape does not fit a byte.  CPython masks it in a
+					bytes literal and warns in BOTH, because the author almost
+					certainly meant something else."
+					value > 255 ifTrue: [
+						self ___warnInvalidEscape___: octStr octal: true at: bsPos].
 					isBytes ifTrue: [value := value bitAnd: 16rFF].
 					str addCodePoint: value.
 				]
@@ -973,19 +1044,19 @@ tokenizeString
 							inBytes: isBytes)
 						radix: 16).
 				]
-				ifFalse: [escaped == $u ifTrue: [
+				ifFalse: [(escaped == $u and: [isBytes not]) ifTrue: [
 					 str := self ___addCodePoint___: (PythonParser integerFrom:
 						(self ___hexEscapeDigits___: 4 for: $u decodedSoFar: str size
 							inBytes: isBytes)
 						radix: 16) to: str.
 				]
-				ifFalse: [escaped == $U ifTrue: [
+				ifFalse: [(escaped == $U and: [isBytes not]) ifTrue: [
 					 str := self ___addCodePoint___: (PythonParser integerFrom:
 						(self ___hexEscapeDigits___: 8 for: $U decodedSoFar: str size
 							inBytes: isBytes)
 						radix: 16) to: str.
 				]
-				ifFalse: [escaped == $N ifTrue: [
+				ifFalse: [(escaped == $N and: [isBytes not]) ifTrue: [
 					"\N{NAME} named-character escape.  Resolved against a
 					curated table of common names (see
 					___unicodeNameToCodePoint___:); an unknown name raises
@@ -1009,7 +1080,15 @@ tokenizeString
 				]
 				ifFalse: [escaped == Lf ifTrue: ["line continuation in string - skip"]
 				ifFalse: [
-					"Unknown escape - keep as-is"
+					"An escape Python does not define.  The backslash is KEPT --
+					''\z'' is two characters -- and CPython warns, so the literal that
+					was meant to carry a tab or a newline is noticed.  In a BYTES
+					literal that set is larger: \u, \U and \N are str-only escapes
+					and reach here (the branches above are gated on isBytes), which
+					is also what stops ``b''\N{BULLET}''''' decoding to code point 8226
+					and dying in ByteArray at:put: with an uncatchable
+					rtErrExpectedByteValue out of the parser."
+					self ___warnInvalidEscape___: escaped asString octal: false at: bsPos.
 					str add: $\; add: escaped.
 				]]]]]]]]]]]]]]].
 			] ifFalse: [

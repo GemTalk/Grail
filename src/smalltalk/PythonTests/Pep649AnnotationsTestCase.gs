@@ -173,12 +173,19 @@ testForwardrefResolvesWhatItCan
 	being built in one go -- a single call that raised partway could report
 	neither."
 
-	| got |
+	| got r prefix |
 	got := testModule @env1:forwardref_resolves_what_it_can asArray.
 	self assert: (got at: 1) equals: true.
 	self assert: (got at: 2) @env0:asString equals: 'still_not_defined'.
-	self assert: (got at: 3) @env0:asString
-		equals: 'ForwardRef(''still_not_defined'')'.
+	"CPython's repr names the OWNER -- measured on 3.14.6:
+	 ``ForwardRef('still_not_defined', owner=<function f at 0x...>)''.  The
+	 address varies, so the stable prefix is what is compared.  The owner used to
+	 be omitted, which matched no CPython output at all."
+	r := (got at: 3) @env0:asString.
+	prefix := 'ForwardRef(''still_not_defined'', owner=<function '.
+	self assert: (r size > prefix size).
+	self assert: (r copyFrom: 1 to: prefix size) equals: prefix.
+	self assert: (r copyFrom: r size - 1 to: r size) equals: '>)'.
 %
 
 ! --- deferral ---

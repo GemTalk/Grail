@@ -10,7 +10,7 @@ Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack paramStack annotatedStack compTargetStack ownReadStack
                     blockingStack nonlocalStack globalStack inCompTarget
                     underscoreDefCount underscoreCurrentName readStack walrusAllowed
-                    inWalrusValue walrusRefusal)
+                    inWalrusValue walrusRefusal mangleClassStack)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -262,7 +262,7 @@ declareVariable: aSymbol
 	def/class/import names — use declareWrite: instead so the binding
 	also lands in the block's write set."
 
-	variableStack last add: aSymbol.
+	variableStack last add: (self ___mangle___: aSymbol).
 %
 
 category: 'Grail-node construction'
@@ -277,7 +277,7 @@ declareParameter: aSymbol
 	were parameters (it is also used for f-string name propagation)."
 
 	self declareVariable: aSymbol.
-	paramStack last add: aSymbol
+	paramStack last add: (self ___mangle___: aSymbol)
 %
 
 category: 'Grail-node construction'
@@ -324,11 +324,72 @@ declareWrite: aSymbol
 		reads emitted inside the comprehension do land in this scope's
 		readStack, which without this would report ``used prior to global
 		declaration'' for code CPython accepts."
-		compTargetStack last add: aSymbol.
+		compTargetStack last add: (self ___mangle___: aSymbol).
 		^ self
 	].
-	variableStack last add: aSymbol.
-	writeStack last add: aSymbol.
+	"Mangled here as well as at each name's source: def, class and import
+	 names reach this helper as RAW tokens, and their NODES keep the raw
+	 spelling on purpose -- CPython mangles the BINDING (_C__m) but leaves
+	 __name__ and __qualname__ as written (__m, C.__m)."
+	variableStack last add: (self ___mangle___: aSymbol).
+	writeStack last add: (self ___mangle___: aSymbol).
+%
+
+category: 'Grail-name mangling'
+method: PythonParser
+___mangle___: aName
+	"CPython PRIVATE-NAME MANGLING, applied as each identifier is recorded.
+
+	An identifier spelled ``__x'' anywhere inside a class body -- method bodies,
+	nested defs, lambdas, comprehensions, defaults and decorators included --
+	is rewritten to ``_C__x''.  The rule is LEXICAL, which is why it belongs
+	here rather than in codegen: codegen used to mangle only the attribute-shaped
+	names (class attributes, private methods, ``self.__x''), and applying it to
+	bare names there as well cannot be made consistent.  Every scope set this
+	parser builds -- variables, writes, globals, parameters -- is keyed on the
+	name AS RECORDED, so a name mangled only at emit time is looked up under
+	one spelling and bound under another.  Tried and measured: mangling the
+	emit alone fixed ``global __x'' and broke a walrus targeting the
+	pre-mangled spelling, two cases that had passed.  Mangling at the source
+	gives every downstream consumer, text and IR, a single spelling.
+
+	WHAT STAYS RAW, each measured on CPython 3.14.6:
+	  * a def's or class's own NAME field -- __name__ and __qualname__ keep the
+	    written spelling (``C.__m''); only the binding is mangled, through
+	    declareWrite: here and ___mangledName___ / ___manglePrivate___: in
+	    codegen;
+	  * call-site keywords -- ``self.f(__a=1)'' passes __a even inside C;
+	  * attribute names -- AttributeAst mangles those itself;
+	  * anything outside a class body, and every dunder.
+
+	The rule itself is AbstractNode class >> ___mangle___:forClass:, shared
+	with codegen so the two cannot disagree.  It is idempotent, so codegen's
+	existing calls pass harmlessly over names already mangled here.  Answers
+	aName itself when nothing changes."
+
+	| stack m |
+	stack := self ___mangleClassStack___.
+	stack isEmpty ifTrue: [^ aName].
+	m := AbstractNode ___mangle___: aName forClass: stack last.
+	m == aName ifTrue: [^ aName].
+	^ m asSymbol
+%
+
+category: 'Grail-name mangling'
+method: PythonParser
+___mangleClassStack___
+	"The enclosing class names, innermost last.  Lazy because an f-string's
+	child parser is made with basicNew and is handed its parent's stack
+	afterwards (___mangleClassStack___:) -- a field ``{__v}'' inside a method
+	must mangle exactly as the same name outside the braces does."
+
+	^ mangleClassStack ifNil: [mangleClassStack := OrderedCollection new]
+%
+
+category: 'Grail-name mangling'
+method: PythonParser
+___mangleClassStack___: aCollection
+	mangleClassStack := aCollection
 %
 
 category: 'Grail-node construction'
@@ -445,30 +506,36 @@ skipTypeParams
 	``f.__type_params__'' is one of functools.WRAPPER_ASSIGNMENTS, and
 	test_functools unpacks it (``T, = f.__type_params__'').
 
-	Only the NAME of each parameter is kept.  A bound or constraint
-	(``[T: int]'', ``[T: (int, str)]'') is consumed and dropped, as are the
-	``*''/``**'' markers of a TypeVarTuple or ParamSpec -- Grail models a type
-	parameter as an opaque placeholder, so its constraints have nothing to act
-	on."
+	Only the NAME of each parameter is kept, with its KIND as a prefix: ``*Ts''
+	for a TypeVarTuple, ``**P'' for a ParamSpec, a bare name for a TypeVar.  The
+	kind decides which typing class __type_params__ builds, and it is visible:
+	``tuple[*Ts]'' iterates a TypeVarTuple, ``Callable[P, str]'' needs a
+	ParamSpec.  A bound or constraint (``[T: int]'', ``[T: (int, str)]'') is
+	consumed and dropped -- Grail models a type parameter as an opaque
+	placeholder, so its constraints have nothing to act on.  A consumer that
+	wants the bare name strips the stars (ExecBlock >> ___pyTypeVarNamed___:)."
 
-	| depth tok names expectName |
+	| depth tok names expectName stars |
 	names := OrderedCollection new.
 	tok := self peek.
 	(tok notNil and: [tok isOp: '[']) ifFalse: [^ names asArray].
 	depth := 0.
 	expectName := false.
+	stars := ''.
 	[
 		tok := self advance.
 		(tok isOp: '[') ifTrue: [
 			depth := depth + 1.
-			depth = 1 ifTrue: [expectName := true]].
+			depth = 1 ifTrue: [expectName := true. stars := '']].
 		(tok isOp: ']') ifTrue: [depth := depth - 1].
 		"At depth 1 a comma starts the next parameter; the first identifier after
 		that (or after the opening bracket) is its name.  Anything else at that
 		depth -- a colon and its bound, a star -- is skipped."
-		(depth = 1 and: [tok isOp: ',']) ifTrue: [expectName := true].
+		(depth = 1 and: [tok isOp: ',']) ifTrue: [expectName := true. stars := ''].
+		(depth = 1 and: [expectName and: [tok isOp: '*']]) ifTrue: [stars := '*'].
+		(depth = 1 and: [expectName and: [tok isOp: '**']]) ifTrue: [stars := '**'].
 		(depth = 1 and: [expectName and: [tok type == #NAME]]) ifTrue: [
-			names add: tok value asString.
+			names add: stars , tok value asString.
 			expectName := false].
 		depth = 0
 	] whileFalse.
@@ -601,6 +668,8 @@ parseAtom
 	adjacent token is an FSTRING, drop into the f-string parser
 	which handles mixed STRING+FSTRING runs and emits a concat
 	chain."
+	"PEP 750 t-string: the same field scanner, building a Template instead."
+	tok isTString ifTrue: [^ self parseFStringLiteral].
 	(tok isString or: [tok isFString]) ifTrue: [
 		"Look ahead: if any token in the adjacent string run is an
 		FSTRING, route through parseFStringLiteral; otherwise the
@@ -610,8 +679,8 @@ parseAtom
 		anyF := false.
 		[scan <= tokens size
 			and: [(tokens at: scan) isString
-				or: [(tokens at: scan) isFString]]] whileTrue: [
-			(tokens at: scan) isFString ifTrue: [anyF := true].
+				or: [(tokens at: scan) isFString or: [(tokens at: scan) isTString]]]] whileTrue: [
+			((tokens at: scan) isFString or: [(tokens at: scan) isTString]) ifTrue: [anyF := true].
 			scan := scan + 1.
 		].
 		anyF ifTrue: [^ self parseFStringLiteral].
@@ -640,10 +709,15 @@ parseAtom
 	it consistently at parse time — every NameAst that referred to `_`
 	now refers to `___unused___`."
 	tok isName ifTrue: [
-		| nameSym |
+		| nameSym written |
 		self advance.
 		nameSym := tok value asSymbol.
 		nameSym = #'_' ifTrue: [nameSym := self underscoreReadName].
+		"Private-name mangling for every bare-name reference, loads and stores
+		 alike -- this is the single funnel for both, so one line covers for /
+		 with / walrus / comprehension targets and del as well."
+		written := nameSym.
+		nameSym := self ___mangle___: nameSym.
 		"Record the MENTION in this scope's read set.  This is the single
 		funnel for every bare-name reference, which is what makes the free-
 		variable set cheap to collect (see popScope).  Store targets pass
@@ -654,6 +728,7 @@ parseAtom
 		ownReadStack last add: nameSym.
 		^NameAst new
 			id: nameSym;
+			writtenId: (written == nameSym ifTrue: [nil] ifFalse: [written]);
 			ctx: self loadCtx;
 			token: tok ; yourself
 	].
@@ -1021,7 +1096,16 @@ parseCallArgList
 					"Check for keyword argument: name=value"
 					(self matchOp: '=') ifTrue: [
 						| name value |
-						name := (expr isKindOf: NameAst) ifTrue: [expr id asString] ifFalse: [nil].
+						"The keyword's RAW spelling, from its own token: expr is a NameAst
+						 that parseAtom has MANGLED, and CPython never mangles a call-site
+						 keyword -- ``self.f(__a=1)'' inside class C passes __a, which is
+						 why it is a TypeError against a mangled parameter.  ``_'' keeps the
+						 id it always had."
+						name := (expr isKindOf: NameAst)
+							ifTrue: [(exprStartTok notNil and: [exprStartTok value asString ~= '_'])
+								ifTrue: [exprStartTok value asString]
+								ifFalse: [expr id asString]]
+							ifFalse: [nil].
 						name ifNotNil: [
 							(kwNames includes: name asSymbol) ifTrue: [
 								SyntaxError signal: 'keyword argument repeated: ' , name].
@@ -1091,13 +1175,16 @@ method: PythonParser
 parseClassDefWithDecorators: decorators
 	"Parse a class definition with already-parsed decorators."
 
-	| tok nameTok bases keywords body block variables writes blocking scope |
-	tok := self advance. "consume 'class'"
+	| tok nameTok bases keywords body block variables writes blocking scope  classTypeParams |	tok := self advance. "consume 'class'"
 	nameTok := self expectType: #NAME.
 	"``class _:`` -- same parse-time rename as def _ / NameAst reads."
 	nameTok value = '_' ifTrue: [nameTok value: self underscoreDefName asString].
 	self declareWrite: nameTok value asSymbol.
-	self skipTypeParams.
+	"KEEP the PEP 695 parameter names.  skipTypeParams already ANSWERS them --
+	the def parser has stored them since __type_params__ became observable --
+	and the class parser threw them away and set an empty array, so
+	``class A[T]'' recorded nothing and A.__type_params__ could not exist."
+	classTypeParams := self skipTypeParams.
 	bases := Array new.
 	keywords := Array new.
 	(self matchOp: '(') ifTrue: [
@@ -1110,7 +1197,14 @@ parseClassDefWithDecorators: decorators
 	self expect: #OP value: ':'.
 	self pushScope.
 	classNesting := classNesting + 1.
-	body := self parseBlock.
+	"PRIVATE-NAME MANGLING is scoped to the class BODY, and only to it: the
+	 name, bases, keywords and decorators above were parsed in the ENCLOSING
+	 class's scope and mangle with that one (CPython compiles them there), so
+	 the push happens here and not before them.  A separate stack rather than
+	 classNesting because that count is ZEROED around every def body, while
+	 mangling has to reach into method bodies -- CPython's rule is lexical."
+	self ___mangleClassStack___ add: nameTok value asSymbol.
+	body := [self parseBlock] ensure: [self ___mangleClassStack___ removeLast].
 	classNesting := classNesting - 1.
 	scope := self popScope.
 	variables := scope at: 1.
@@ -1131,7 +1225,7 @@ parseClassDefWithDecorators: decorators
 		keywords: keywords;
 		body: block;
 		decorator_list: decorators;
-		type_params: Array new;
+		type_params: (classTypeParams ifNil: [Array new]);
 		from: tok to: self lastSpanToken ; yourself
 %
 
@@ -1878,9 +1972,13 @@ parseFromImportName
 		land there too (``from django.utils.translation import
 		gettext_lazy as _'')."
 		asName == #'_' ifTrue: [asName := #'___unused___'].
+		asName := self ___mangle___: asName.
 	].
+	"Both halves are mangled.  Measured on 3.14.6, ``from modx import __spam''
+	 inside class C looks up _C__spam IN THE MODULE and binds _C__spam -- the
+	 imported name is an identifier in the class body like any other."
 	^AliasAst new
-		name: nameTok value asSymbol;
+		name: (self ___mangle___: nameTok value asSymbol);
 		asName: asName;
 		from: nameTok to: self lastToken ; yourself
 %
@@ -2248,6 +2346,13 @@ parseGlobal
 	[self matchOp: ','] whileTrue: [
 		names add: self advance value asSymbol.
 	].
+	"``global __x'' inside a class declares _C__x -- the same name every mangled
+	 reference to __x in that scope now uses.  This line is the one the whole
+	 change exists for: test_named_expressions'
+	 test_named_expression_scope_mangled_names, where the global was declared
+	 under the raw spelling and a walrus writing the pre-mangled one reached a
+	 different variable."
+	names := names collect: [:n | self ___mangle___: n].
 	names do: [:n | self ___checkGlobalDeclarationLegal___: n at: tok].
 	names do: [:n |
 		globalStack last add: n.
@@ -2418,7 +2523,16 @@ parseImportName
 			SyntaxError signal: 'invalid syntax'].
 		asName := self advance value asSymbol.
 		asName == #'_' ifTrue: [asName := #'___unused___'].
+		asName := self ___mangle___: asName.
 	].
+	"``import __m'' binds _C__m while still importing module __m, so the
+	 mangled binding goes in asName and the module path is left alone.  A
+	 DOTTED import binds only its first component and must not gain an alias
+	 (``import a.b as x'' binds a.b, not a), so it is not touched."
+	(asName isNil and: [(nameStr includes: $.) not]) ifTrue: [
+		| m |
+		m := self ___mangle___: nameStr asSymbol.
+		m == nameStr asSymbol ifFalse: [asName := m]].
 	^AliasAst new
 		name: nameStr asSymbol;
 		asName: asName;
@@ -2637,6 +2751,7 @@ parseNonlocal
 	[self matchOp: ','] whileTrue: [
 		names add: self advance value asSymbol.
 	].
+	names := names collect: [:n | self ___mangle___: n].
 	names do: [:n | nonlocalStack last add: n].
 	^NonlocalAst new
 		names: names;
@@ -3013,6 +3128,11 @@ parseSingleParamWithAnnotations: allowAnnotations
 	].
 	argName := nameTok value asSymbol.
 	argName = #'_' ifTrue: [argName := #'___unused___'].
+	"A private PARAMETER is mangled too: CPython's co_varnames for
+	 ``def f(self, __a)'' in class C is ('self', '_C__a'), so a keyword call has
+	 to spell it _C__a -- ``c.f(__a=1)'' is a TypeError even from inside C,
+	 because call-site keywords are never mangled (see parseCallArgList)."
+	argName := self ___mangle___: argName.
 	^ArgAst new
 		arg: argName;
 		annotation: annotation;
@@ -3283,14 +3403,17 @@ parseFStringLiteral
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
 	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
-	  wrapped anchor |
+	  wrapped anchor sawT sawNonT tExpr |
 	startTok := self peek.
 	parts := OrderedCollection new.
-	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString]]] whileTrue: [
+	sawT := false.
+	sawNonT := false.
+	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString or: [aTok isTString]]]] whileTrue: [
 		tok := self advance.
+		tok isTString ifTrue: [sawT := true] ifFalse: [sawNonT := true].
 		value := tok value.
 		len := value size.
-		tok isFString ifFalse: [
+		(tok isFString or: [tok isTString]) ifFalse: [
 			"Plain string token — append as a literal segment."
 			parts add: #literal -> value.
 		] ifTrue: [
@@ -3444,6 +3567,7 @@ parseFStringLiteral
 				wrapped ifTrue: [
 					innerSource := '(' , innerSource , ')'].
 				innerParser := PythonParser basicNew source: innerSource.
+				innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
 				exprAst := innerParser parseExpression.
 				"Its positions are relative to the FIELD, not the module: the
 				child parse sees ``(expr)'' as a whole source, so every node in
@@ -3480,8 +3604,19 @@ parseFStringLiteral
 				innerParser ___variableStack___ do: [:innerScope |
 					innerScope do: [:varName | self declareVariable: varName]].
 				"Apply conversion / format spec."
-				converted := self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok.
-				parts add: #expr -> converted.
+				tok isTString
+					ifTrue: [
+						"PEP 750: the field stays UNCONVERTED -- the value, its source
+						 text, the conversion and the spec go into an Interpolation.
+						 CPython keeps the text's leading whitespace and drops the
+						 trailing (t'{ x }' has expression ' x')."
+						tExpr := exprText asString.
+						[tExpr notEmpty and: [tExpr last isSeparator]]
+							whileTrue: [tExpr := tExpr copyFrom: 1 to: tExpr size - 1].
+						parts add: #interp -> { exprAst. tExpr. conversion. formatSpec }]
+					ifFalse: [
+						converted := self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok.
+						parts add: #expr -> converted].
 			]
 		] ifFalse: [
 			ch == $} ifTrue: [
@@ -3507,6 +3642,10 @@ parseFStringLiteral
 	].
 	].
 	].
+	sawT ifTrue: [
+		sawNonT ifTrue: [
+			SyntaxError signal: 'cannot mix t-string literals with string or bytes literals'].
+		^ self ___templateFromParts___: parts from: startTok].
 	"Empty f-string → empty literal."
 	parts isEmpty ifTrue: [
 		^ConstantAst new
@@ -3551,6 +3690,68 @@ ___fstringDebugEqualsIn___: text
 
 category: 'Grail-parsing - atoms'
 method: PythonParser
+___templateFromParts___: parts from: startTok
+	"PEP 750: a t-string's parts as a TemplateStrAst -- a call to
+	string.templatelib's _from_literal with each literal run as a str and each
+	field as a (value, expression, conversion, format_spec) tuple.
+
+	Reached through ``__import__'' because Template and Interpolation are Python
+	classes in string/templatelib.py; CPython's are C types the compiler builds
+	directly, so it needs no name at all.  The parts are also kept on the node,
+	unevaluated, for the STRING format's source text (TemplateStrAst)."
+
+	| loc args templateParts callee |
+	loc := startTok.
+	args := OrderedCollection new.
+	templateParts := OrderedCollection new.
+	parts do: [:assoc |
+		assoc key == #literal
+			ifTrue: [
+				args add: (self ___fstringPartToAst: assoc from: loc).
+				templateParts add: assoc value asString]
+			ifFalse: [ | f conv spec specAst |
+				f := assoc value.
+				conv := (f at: 3) isNil ifTrue: [nil] ifFalse: [(f at: 3) asString].
+				spec := f at: 4.
+				specAst := spec isNil
+					ifTrue: [ConstantAst new value: ''; kind: nil; from: loc to: loc; yourself]
+					ifFalse: [(spec includes: ${)
+						ifTrue: [self ___fstringSpecExprFor: spec at: loc]
+						ifFalse: [ConstantAst new value: spec asString; kind: nil; from: loc to: loc; yourself]].
+				args add: (TupleAst new
+					elts: { f at: 1.
+						ConstantAst new value: (f at: 2); kind: nil; from: loc to: loc; yourself.
+						ConstantAst new value: conv; kind: nil; from: loc to: loc; yourself.
+						specAst };
+					ctx: self loadCtx;
+					from: loc to: loc; yourself).
+				templateParts add: { f at: 2. conv. spec isNil ifTrue: [nil] ifFalse: [spec asString] }]].
+	callee := AttributeAst new
+		value: (CallAst new
+			function: (NameAst new id: #'__import__'; ctx: self loadCtx; from: loc to: loc; yourself);
+			arguments: {
+				ConstantAst new value: 'string.templatelib'; kind: nil; from: loc to: loc; yourself.
+				ConstantAst new value: nil; kind: nil; from: loc to: loc; yourself.
+				ConstantAst new value: nil; kind: nil; from: loc to: loc; yourself.
+				TupleAst new
+					elts: { ConstantAst new value: '_from_literal'; kind: nil; from: loc to: loc; yourself };
+					ctx: self loadCtx;
+					from: loc to: loc; yourself };
+			keywords: Array new;
+			from: loc to: loc; yourself);
+		attr: #'_from_literal';
+		ctx: self loadCtx;
+		from: loc to: loc; yourself.
+	^ TemplateStrAst new
+		function: callee;
+		arguments: args asArray;
+		keywords: Array new;
+		templateParts: templateParts asArray;
+		from: startTok to: self lastToken; yourself
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
 ___fstringPartToAst: assoc from: startTok
 	"Turn a (#literal -> string) or (#expr -> exprAst) pair into the
 	matching AST node — literals become a ConstantAst, expr-parts are
@@ -3569,50 +3770,54 @@ category: 'Grail-parsing - atoms'
 method: PythonParser
 ___wrapFStringExpr: exprAst conversion: conversionChar formatSpec: formatSpec at: locTok
 	"Wrap an f-string placeholder expression in the conversion /
-	format pipeline.  ``!r`` → repr(expr), ``!a`` → ascii(expr),
-	``!s`` and the default → str(expr).  A non-nil formatSpec wraps
-	in format(value, spec_string).  ``locTok`` is a real PythonToken
-	(the source f-string token) used for AST location info."
+	format pipeline: ``___fformat___(expr, conversion, spec)'', which
+	applies ``!s'' / ``!r'' / ``!a'' and then answers format(value, spec)
+	-- CPython's CONVERT_VALUE + FORMAT_SIMPLE / FORMAT_WITH_SPEC.
+	``locTok`` is a real PythonToken (the source f-string token) used for
+	AST location info.
 
-	| inner builtinName callNode |
-	builtinName := conversionChar isNil
-		ifTrue: ['str']
-		ifFalse: [conversionChar == $r
-			ifTrue: ['repr']
-			ifFalse: [conversionChar == $a
-				ifTrue: ['ascii']
-				ifFalse: ['str']]].
-	"NameAst for the chosen builtin — looked up at runtime via the
-	Python dict / module-scope fallback."
-	inner := CallAst new
-		function: (NameAst new
-			id: builtinName asSymbol;
-			ctx: self loadCtx;
-			from: locTok to: locTok ; yourself);
-		arguments: { exprAst };
-		keywords: Array new;
-		from: locTok to: locTok ; yourself.
-	formatSpec ifNil: [^ inner].
-	"format(value, spec) wrap.  A spec containing {expr} placeholders
-	(``f'{x:0{w}d}''' -- PEP 498 one-level nesting) becomes a runtime
-	concatenation instead of a literal (___fstringSpecExprFor:at:);
-	vendored fractions.py's __format__ tests build specs this way."
-	callNode := CallAst new
-		function: (NameAst new
-			id: #format;
-			ctx: self loadCtx;
-			from: locTok to: locTok ; yourself);
-		arguments: { exprAst.
-			((formatSpec includes: ${)
+	It used to call the builtins BY NAME -- str(expr), repr(expr),
+	format(expr, spec) -- and three things were wrong with that:
+	  * they are ordinary names, so a local or module global called
+	    ``format'' / ``str'' / ``repr'' captured every field:
+	    ``def f(format): return f'{1:>3}''' raised ``'str' object is not
+	    callable''.  CPython's opcodes look nothing up.
+	  * a field with no spec ran str(), not format(value, ''), so a class
+	    with its own __format__ lost it: ``f'{x}''' is ``x.__format__('')''.
+	  * a field with BOTH a conversion and a spec dropped the conversion:
+	    ``f'{s!r:>5}''' formatted ``s'', not ``repr(s)''.
+	No Python name can shadow ``___fformat___'' (the ___ spelling is Grail's
+	own), so the call site's builtin fast path always reaches builtins.
+
+	A spec containing {expr} placeholders (``f'{x:0{w}d}''' -- PEP 498
+	one-level nesting) becomes a runtime concatenation instead of a literal
+	(___fstringSpecExprFor:at:); vendored fractions.py's __format__ tests
+	build specs this way."
+
+	| conversionText specAst |
+	conversionText := conversionChar isNil
+		ifTrue: ['']
+		ifFalse: [conversionChar asString].
+	specAst := formatSpec isNil
+		ifTrue: [ConstantAst new value: ''; kind: nil; from: locTok to: locTok; yourself]
+		ifFalse: [
+			(formatSpec includes: ${)
 				ifTrue: [self ___fstringSpecExprFor: formatSpec at: locTok]
 				ifFalse: [
 					ConstantAst new
 						value: formatSpec;
 						kind: nil;
-						from: locTok to: locTok ; yourself])};
+						from: locTok to: locTok ; yourself]].
+	^ CallAst new
+		function: (NameAst new
+			id: #'___fformat___';
+			ctx: self loadCtx;
+			from: locTok to: locTok ; yourself);
+		arguments: { exprAst.
+			ConstantAst new value: conversionText; kind: nil; from: locTok to: locTok; yourself.
+			specAst };
 		keywords: Array new;
-		from: locTok to: locTok ; yourself.
-	^ callNode
+		from: locTok to: locTok ; yourself
 %
 
 category: 'Grail-parsing - atoms'
@@ -3641,6 +3846,7 @@ ___fstringSpecExprFor: spec at: locTok
 					depth > 0 ifTrue: [pos := pos + 1]].
 				innerParser := PythonParser basicNew
 					source: (spec copyFrom: exprStart to: pos - 1) asString.
+				innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
 				exprAst := innerParser parseExpression.
 				"Its positions are relative to the FIELD, not the module: the
 				child parse sees ``(expr)'' as a whole source, so every node in
@@ -3701,6 +3907,15 @@ parseSubscript
 			ctx: self loadCtx;
 			from: (tokens at: position - 1) to: self lastToken ; yourself
 	].
+
+	"``a[*b]'' is ``a[(*b,)]'' (PEP 646): a lone starred index is a one-element
+	 tuple display.  Bare, it reached StarredAst's expression printer, which
+	 answers a ``*-unpack in call sites'' TypeError -- so ``tuple[*Ts]'' failed."
+	(first isKindOf: StarredAst) ifTrue: [
+		^ TupleAst new
+			elts: { first };
+			ctx: self loadCtx;
+			from: (tokens at: position - 1) to: self lastToken ; yourself].
 
 	^first
 %
@@ -3818,6 +4033,7 @@ parseTry
 				whole function failed to compile.  Underscores WITHIN an
 				identifier are fine, which is what makes ___unused___ legal."
 				excName == #'_' ifTrue: [excName := #'___unused___'].
+				excName := self ___mangle___: excName.
 				"Bind the except name into the enclosing scope (module body
 				or function), so a module-level ``except X as e'' records e
 				as a module variable rather than an undeclared name."
@@ -4469,6 +4685,7 @@ source: aString
 	annotatedStack := Array new.
 	annotatedStack add: IdentitySet new.
 	classNesting := 0.
+	mangleClassStack := OrderedCollection new.
 	inCompTarget := false.
 %
 
@@ -4604,15 +4821,17 @@ ___checkNamedExprsIn___: node boundUpTo: earlier boundAfter: later
 		| target name |
 		target := ne target.
 		(target isKindOf: NameAst) ifTrue: [
+			"Detected on the MANGLED id (what CPython binds), reported with the
+			 WRITTEN spelling (what CPython quotes) -- see NameAst >> writtenId."
 			name := target id asString.
 			(earlier includes: name) ifTrue: [
 				SyntaxError signal:
 					'assignment expression cannot rebind comprehension iteration variable ''' ,
-					name , ''''].
+					target writtenId asString , ''''].
 			(later includes: name) ifTrue: [
 				SyntaxError signal:
 					'comprehension inner loop cannot rebind assignment expression target ''' ,
-					name , '''']]]
+					target writtenId asString , '''']]]
 %
 
 category: 'Grail-validation'
@@ -4882,7 +5101,7 @@ parseMatchCaptureTarget
 			(tok isNil ifTrue: ['?'] ifFalse: [tok line printString])].
 	self advance.
 	node := NameAst new
-		id: tok value asSymbol;
+		id: (self ___mangle___: tok value asSymbol);
 		ctx: self loadCtx;
 		token: tok ; yourself.
 	self setStoreCtx: node.
@@ -5074,7 +5293,7 @@ parseMatchDottedName
 	| tok node |
 	tok := self advance.
 	node := NameAst new
-		id: tok value asSymbol;
+		id: (self ___mangle___: tok value asSymbol);
 		ctx: self loadCtx;
 		token: tok ; yourself.
 	[self atOp: '.'] whileTrue: [
@@ -5248,7 +5467,7 @@ ___typeAliasTarget___: aToken
 
 	| node |
 	node := NameAst new
-		id: aToken value asSymbol;
+		id: (self ___mangle___: aToken value asSymbol);
 		ctx: self loadCtx;
 		token: aToken ; yourself.
 	self setStoreCtx: node.
