@@ -244,9 +244,14 @@ __mro__
 	Integer-chained; a subclass of E must keep Flag/Enum -- Enum
 	___grailIsFlagClass: reads __mro__, so auto() numbering and
 	issubclass(sub, Flag) both hinge on it).  Fall back to the bare chain
-	only before importlib exists (Class.gs loads early)."
+	only before importlib exists (Class.gs loads early).
+
+	The VISIBLE view (___visibleMroOf___:), not ___mroOf___: itself: the
+	kernel classes a built-in is implemented on -- KeyValueDictionary and
+	Collection above dict, the kernel Exception above BaseException -- are
+	not bases Python has, while super() and isinstance still need them."
 	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il == nil ifFalse: [^ self ___grailAsTuple___: (il @env0:___mroOf___: self)].
+	il == nil ifFalse: [^ self ___grailAsTuple___: (il @env0:___visibleMroOf___: self)].
 	result := OrderedCollection @env0:new.
 	c := self.
 	[c == nil] whileFalse: [

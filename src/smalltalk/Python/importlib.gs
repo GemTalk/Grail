@@ -5172,6 +5172,95 @@ ___withoutImplementationRoots___: aCollection for: aClass
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___visibleMroOf___: aClass
+	"aClass's MRO as PYTHON reports it -- what ``cls.__mro__'' and ``cls.mro()''
+	answer.  ___mroOf___: minus the kernel classes a built-in type happens to be
+	implemented on.
+
+	The gap ___withoutImplementationRoots___:for: left open.  A built-in is a
+	Smalltalk class with a Smalltalk ancestry, and every link of it was reported:
+
+	  dict       Grail (dict, dict, AbstractDictionary, Collection, object)
+	             CPython (dict, object)
+	  Exception  Grail (Exception, BaseException, Exception, AbstractException, object)
+	             CPython (Exception, BaseException, object)
+
+	-- the doubled names are KeyValueDictionary and the kernel Exception, which
+	answer a Python __name__ without being the class builtins binds to it.
+	Measured over the builtins types and seventeen stdlib modules, 168 of the
+	231 classes CPython also has differed, every exception among them, and a
+	user subclass inherits the tail (test_genericclass
+	test_mro_entry_with_builtins, which compares ``D.__mro__'' for
+	``class D(A, dict)'').
+
+	The rule: drop a kernel class that is an ANCESTOR of some type builtins
+	exposes, and is not itself exposed.  That is the per-builtin ``where does
+	the Python type end'' decision that method's comment deferred, made by
+	asking builtins rather than by listing classes: dict ends at PyDict because
+	builtins.dict is PyDict, and int ends at Integer.  ANY exposed type, not
+	only one in this MRO: ``class X(int)'' is built on a class that answers
+	``int'' without being builtins.int, so Number and Magnitude would survive a
+	test that looked for Integer among X's own ancestors.  object is exposed, so
+	it stays.  A Python-defined class is never dropped, and neither is a
+	Smalltalk class that is not above an exposed type -- a stdlib class written
+	in Smalltalk and bound in its own module is reported as it was.
+
+	REPORTING ONLY.  ___mroOf___: is left complete because it is walked for
+	behaviour: Super searches its method dictionaries past the current class,
+	so ``super().keys()'' in a dict subclass has to reach KeyValueDictionary.
+	isinstance, metaclass resolution and the enum mix-in scans read it too."
+
+	| mro hidden |
+	mro := self ___mroOf___: aClass.
+	hidden := self ___builtinImplementationAncestors___.
+	hidden isEmpty ifTrue: [^ mro].
+	^ mro reject: [:k | (k ~~ aClass) and: [hidden includesIdentical: k]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___builtinImplementationAncestors___
+	"The kernel classes the built-in types are implemented ON: every strict
+	Smalltalk superclass of a class that builtins exposes, minus the exposed
+	classes themselves and anything defined in Python.  See ___visibleMroOf___:.
+
+	Read from builtins by NAME and compared by IDENTITY.  KeyValueDictionary
+	answers ``dict'' for its __name__ and the kernel Exception answers
+	``Exception'', but builtins binds those names to PyDict and to the Python
+	Exception -- so a name test could not tell the visible class from the one
+	under it.  Values are read with ___pyAttrLoad___:, never performed: a
+	unary send of a builtin's name can CALL it (``input'').
+
+	Computed once per session.  builtins does not change shape within one, and
+	the answer is the same for every class.  A failed enumeration is not
+	cached, and answers empty -- which leaves __mro__ exactly as unfiltered as
+	it was before this existed."
+
+	| cached bi exposed hidden |
+	cached := SessionTemps current at: #GrailBuiltinImplAncestors otherwise: nil.
+	cached isNil ifFalse: [^ cached].
+	exposed := IdentitySet new.
+	[bi := (Python @env0:at: #builtins) @env1:instance.
+	 bi @env1:__dir__ do: [:n | | v |
+		v := [bi @env1:___pyAttrLoad___: n asString asSymbol]
+			on: AbstractException do: [:ex | ex return: nil].
+		(v isKindOf: Behavior) ifTrue: [exposed add: v]]]
+		on: AbstractException do: [:ex | ^ #()].
+	exposed isEmpty ifTrue: [^ #()].
+	hidden := IdentitySet new.
+	exposed do: [:cls | | c |
+		c := cls superclass.
+		[c == nil] whileFalse: [
+			((exposed includes: c) not
+				and: [(c whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) isNil])
+					ifTrue: [hidden add: c].
+			c := c superclass]].
+	SessionTemps current at: #GrailBuiltinImplAncestors put: hidden.
+	^ hidden
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___c3Linearize___: aClass bases: basesArray
 	"C3 linearization: L(C) = C + merge(L(B1), ..., L(Bn), [B1..Bn]).
 	At each step take the head of the first sequence that appears in no
