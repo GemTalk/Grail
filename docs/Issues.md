@@ -6232,9 +6232,9 @@ a call the real pathlib now makes and Grail cannot yet answer.
   the subclass from the errno. `BaseException class >> ___classForArgs___:` is
   the hook for exactly this, but only the two-argument constructor consults it.
 * **Missing `os` support for other `Path` methods:** `replace`/`move`
-  (`os.replace`), `walk`, `is_mount` and `is_junction` — all FIXED below.
-  `as_uri`/`from_uri` (`urllib.request.pathname2url`/`url2pathname`) is what
-  is left.
+  (`os.replace`), `walk`, `is_mount`, `is_junction` and `as_uri`/`from_uri`
+  (`urllib.request.pathname2url`/`url2pathname`) — all FIXED below. That is
+  the whole list.
 * **`abc.ABC` does not carry `ABCMeta`.** That is why `pathlib.types` needs its
   adaptation; `abc.py` records why the switch is deferred.
 
@@ -6516,3 +6516,56 @@ one entry later.
 pathlib — CPython's own, which Grail now uses — depends on its exact identity
 semantics. A name being private says who is expected to call it, not whether
 Grail can skip it.
+
+## Path.as_uri and Path.from_uri, and the urlsplit defect under them
+
+Both raised `ImportError`. `pathlib` does `from urllib.request import
+pathname2url` (and `url2pathname`), and Grail's `urllib.request` is Grail's
+own minimal module rather than CPython's, so it had neither.
+
+Both functions are CPython 3.14's own now, POSIX branches only — the `"nt"`
+halves handle DOS drive letters, UNC shares and backslashes, none of which a
+GemStone server path can be. Everything they stand on already worked here
+(`os.path.splitroot`, `quote`/`unquote`/`urlsplit`,
+`sys.getfilesystemencoding` and its `encodeerrors`), each measured answering
+exactly what CPython answers before any of this was written. Their
+odd-looking corners are kept rather than tidied, and are tested: the THREE
+slashes of an absolute path (an explicitly empty authority, so that
+`//host/x` cannot read as one), a relative path that gains no slashes at all,
+and a query and fragment that `urlsplit` discards rather than decoding into
+the path.
+
+### The port did not work, and what it found was worse
+
+`from_uri` still failed, and the cause was `urlsplit`. It split on `"://"`
+alone, so **every URL whose scheme carries no authority lost its scheme
+entirely** and answered the whole string as a PATH:
+
+```
+urlsplit('mailto:me@example.com')  ->  ('', '', 'mailto:me@example.com', '', '')
+urlsplit('file:/srv/x')            ->  ('', '', 'file:/srv/x', '', '')
+```
+
+A scheme is not the `"://"`. It is everything before the first colon when
+that is a letter followed by letters, digits, `+`, `-` or `.`, which is why
+`data:text/plain,hi` and `urn:isbn:1` have one and `1http://x` does not. The
+authority is still read only after `//`. `url2pathname` builds `'file:' + url`
+and splits it, which is how a pathlib method found a defect in the URL parser
+two modules away.
+
+`urlunsplit` had the matching defect — it wrote `scheme://` unconditionally,
+turning `mailto:me@x` into `mailto://me@x` — so fixing only `urlsplit` would
+have traded a wrong split for a wrong join. Both are CPython's logic now, and
+`uses_netloc` became load-bearing: the list Werkzeug appends to at import
+time, which this module's own comment admitted nothing consulted.
+
+### Two flaky corpus tests, seen while measuring this
+
+The tier-2 cycle reported ONE newly failing test in each after-run, and a
+DIFFERENT one each time — `test_annotationlib`'s
+`test_partially_nonexistent_union`, then `test_codecs`'s
+`test_file_closes_if_lookup_error_raised`. Neither module touches `urllib`,
+and `test_annotationlib` run alone answers 117 tests with no failures. So the
+corpus carries at least two tests that fail occasionally under four
+concurrent workers, and one run's "newly failing" line is not by itself
+evidence of a regression — a second sample is what tells the two apart.

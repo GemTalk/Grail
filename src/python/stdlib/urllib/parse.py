@@ -18,9 +18,9 @@ _ALWAYS_SAFE = frozenset(
 # can declare custom schemes that participate in netloc / relative-
 # URL / fragment handling.  Werkzeug.urls appends ``itms-services''
 # to ``uses_netloc'' at import time to make iOS install links round-
-# trip through urlsplit.  Grail's lightweight urlsplit doesn't
-# consult these lists for behavior, but the read/append surface
-# needs to exist for downstream imports.
+# trip through urlsplit.  ``uses_netloc'' IS consulted now, by
+# urlunsplit, which is what makes that append do what Werkzeug
+# expects; the other two are still read/append surface only.
 uses_relative = [
     'ftp', 'http', 'gopher', 'nntp', 'imap', 'wais', 'file',
     'https', 'shttp', 'mms', 'prospero', 'rtsp', 'rtspu', 'sftp',
@@ -246,34 +246,76 @@ class _SplitResult:
         )
 
 
+# The characters a scheme may hold after its first, which must be a letter.
+scheme_chars = ("abcdefghijklmnopqrstuvwxyz"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "0123456789"
+                "+-.")
+
+
 def urlsplit(url, scheme="", allow_fragments=True):
+    """Split a URL into (scheme, netloc, path, query, fragment).
+
+    THE SCHEME IS NOT THE "://" -- it is everything before the first colon,
+    when that is a letter followed by letters, digits, "+", "-" or ".".  This
+    used to split on "://" alone, which meant every URL whose scheme carries
+    no authority lost its scheme entirely and answered the whole string as a
+    PATH: "file:/tmp/x", "file:relative", "mailto:me@example.com",
+    "data:text/plain,hi", "urn:isbn:1".  urllib.request.url2pathname builds
+    exactly the first of those, so Path.from_uri could not work until this
+    was right.
+
+    The netloc is still only read after "//", which is what says an authority
+    is present; "file:/tmp/x" has none, and "file:///tmp/x" has an empty one.
+    The order below is CPython's and matters: the fragment and the query are
+    taken off AFTER the scheme and the authority, so a "#" inside an
+    authority is not a fragment.
+    """
     rest = url
     sch = scheme
     netloc = ""
     fragment = ""
     query = ""
+    colon = rest.find(":")
+    if colon > 0 and rest[0].isascii() and rest[0].isalpha():
+        for char in rest[:colon]:
+            if char not in scheme_chars:
+                break
+        else:
+            sch, rest = rest[:colon].lower(), rest[colon + 1:]
+    if rest[:2] == "//":
+        rest = rest[2:]
+        cut = len(rest)
+        for delimiter in "/?#":
+            found = rest.find(delimiter)
+            if found >= 0:
+                cut = min(cut, found)
+        netloc, rest = rest[:cut], rest[cut:]
     if "#" in rest and allow_fragments:
         rest, fragment = rest.split("#", 1)
     if "?" in rest:
         rest, query = rest.split("?", 1)
-    if "://" in rest:
-        sch, rest = rest.split("://", 1)
-        if "/" in rest:
-            netloc, rest = rest.split("/", 1)
-            rest = "/" + rest
-        else:
-            netloc = rest
-            rest = ""
     return _SplitResult(sch, netloc, rest, query, fragment)
 
 
 def urlunsplit(parts):
+    """Put back together what urlsplit took apart.
+
+    "//" is written only when there IS an authority, or when the scheme is one
+    that always carries one and the path could be mistaken for a relative
+    reference.  Writing it unconditionally -- which is what this did -- turned
+    "mailto:me@example.com" into "mailto://me@example.com".
+    """
     sch, netloc, path, query, fragment = parts
-    out = ""
+    if netloc or (sch and sch in uses_netloc and (not path or path[:1] == "/")):
+        if path and path[:1] != "/":
+            path = "/" + path
+        path = "//" + (netloc or "") + path
+    elif path[:2] == "//":
+        path = "//" + path
+    out = path
     if sch:
-        out += sch + "://"
-    out += netloc
-    out += path
+        out = sch + ":" + out
     if query:
         out += "?" + query
     if fragment:
