@@ -108,6 +108,7 @@ ___installCommittedInstances___
 	classes := self allSubclasses reject: [:c | c isMeta].
 	classes do: [:c | c ___installCommittedInstance___].
 	classes do: [:c | module ___sessionInstances___ removeKey: c ifAbsent: []].
+	classes do: [:c | c ___forgetSessionState___].
 	"sys.modules re-seeds itself from ``instance'' on the next read."
 	SessionTemps current removeKey: #GrailSysModules ifAbsent: [].
 	SessionTemps current removeKey: #GrailNativeModuleSlots ifAbsent: [].
@@ -124,7 +125,58 @@ ___forgetSessionState___
 
 	#(#GrailNativeModuleSlots #GrailNativeModuleEntries) do: [:key |
 		(SessionTemps current at: key otherwise: nil)
-			ifNotNil: [:reg | reg removeKey: self ifAbsent: []]]
+			ifNotNil: [:reg | reg removeKey: self ifAbsent: []]].
+	"And the fast accessors, which would otherwise keep answering the
+	dictionaries just forgotten: the persistent ones go back in, and the next
+	access rebuilds the state -- and re-runs initialize -- as it always did.
+	Unconditional: a session method dictionary cannot be READ outside
+	protected mode (its hash function is protected), and putting the
+	inherited method back is idempotent."
+	self == NativeModule ifTrue: [^ self].
+	self ___sessionMethodsAvailable___ ifFalse: [^ self].
+	#(#'___sessionSlots___' #'___sessionEntries___') do: [:sel |
+		self @env1:___installSessionMethod: (NativeModule compiledMethodAt: sel environmentId: 0)
+			as: sel environmentId: 0]
+%
+
+category: 'Grail-Session State'
+classmethod: NativeModule
+___sessionMethodsAvailable___
+	"Whether Behavior's session-method helpers (Class.gs) are filed yet.  They
+	are not while install.sh is still filing native modules -- enum.gs clears
+	its instance during file-in -- and without them the persistent accessors
+	are simply the only ones, which is correct, only slower."
+
+	^ (self class whichClassIncludesSelector: #'___installSessionMethod:as:environmentId:'
+		environmentId: 1) notNil
+%
+
+category: 'Grail-Session State'
+classmethod: NativeModule
+___installFastAccessor___: aSelector answering: aDictionary
+	"Install a session method answering aDictionary for aSelector, one of the
+	two state accessors, so the session's later accesses are one send and a
+	literal read instead of two hash lookups.
+
+	MEASURED, and why it is here: holding native-module state in SessionTemps
+	made every attribute load on a native module about 0.6 us slower
+	(sys.maxsize, math.pi: 1.2-1.3 us before, 1.8-1.9 us after) -- an
+	attribute load consults the state several times, and each consultation
+	was a SessionTemps probe plus a class-keyed one.  A transient session
+	method (Behavior >> ___compileSessionMethod:category:scope:environmentId:)
+	is per session by construction, which is exactly the lifetime this state
+	has, and a name bound in its compile scope is read as a literal
+	association.  ___forgetSessionState___ takes it out again."
+
+	| holder |
+	self ___sessionMethodsAvailable___ ifFalse: [^ self].
+	holder := SymbolDictionary new.
+	holder at: #'___grailNativeState___' put: aDictionary.
+	self @env1:___compileSessionMethod: aSelector asString , '
+	^ ___grailNativeState___'
+		category: 'Grail-Session State'
+		scope: holder
+		environmentId: 0
 %
 
 category: 'Grail-Session State'
@@ -142,6 +194,7 @@ ___sessionSlots___
 	slots == nil ifTrue: [
 		slots := IdentityKeyValueDictionary new.
 		reg at: self class put: slots.
+		self class ___installFastAccessor___: #'___sessionSlots___' answering: slots.
 		self ___ensureSessionInitialized___].
 	^ slots
 %
@@ -161,6 +214,7 @@ ___sessionEntries___
 	entries == nil ifTrue: [
 		entries := SymbolDictionary new.
 		reg at: self class put: entries.
+		self class ___installFastAccessor___: #'___sessionEntries___' answering: entries.
 		self ___ensureSessionInitialized___].
 	^ entries
 %
@@ -202,6 +256,14 @@ dynamicInstVarAt: aSymbol put: aValue
 	aValue == _remoteNil
 		ifTrue: [self ___sessionSlots___ removeKey: aSymbol ifAbsent: []]
 		ifFalse: [self ___sessionSlots___ at: aSymbol put: aValue].
+	"Keep a patched name's fast-path holder current (object class >>
+	___grailFastOverrideHolderFor___:): the dispatcher reads the override
+	from it, so this store IS the re-patch, and a delete the unpatch."
+	(SessionTemps current at: #'GrailFastOverrideHolders' otherwise: nil) ifNotNil: [:reg |
+		((reg at: self class otherwise: nil) ifNotNil: [:byName |
+			byName at: aSymbol otherwise: nil]) ifNotNil: [:holder |
+				holder at: #'___grailFastOverride___'
+					put: (aValue == _remoteNil ifTrue: [nil] ifFalse: [aValue])]].
 	^ aValue
 %
 
@@ -393,6 +455,9 @@ instance
 	inst := self @env0:___committedInstance___.
 	inst == nil ifTrue: [inst := self @env0:new].
 	reg @env0:at: self put: inst.
+	"A session's first native singleton is also a point every Python
+	execution passes: install the dispatchers committed overrides need."
+	object @env0:___grailInstallRecordedSelfSendOverrides___.
 	((inst @env0:class @env0:whichClassIncludesSelector: #initialize environmentId: 1) @env0:notNil)
 		ifTrue: [inst initialize].
 	^ inst

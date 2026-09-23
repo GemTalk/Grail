@@ -1898,9 +1898,17 @@ ___canonicalGenerationCheck___
 	self ___ensureStackErrorFlavour___.
 	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
 	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
-	deployGen == runtimeGen ifTrue: [^ self].
+	"The same once-per-session point installs the self-send dispatchers that
+	committed overrides need (object class >>
+	___grailInstallRecordedSelfSendOverrides___) -- but only once the record is
+	known to be current: a stale generation wipes it below, and the classes it
+	names are the ones the install replaced."
+	deployGen == runtimeGen ifTrue: [
+		object ___grailInstallRecordedSelfSendOverrides___.
+		^ self].
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
+	   #'GrailCommittedSelfSendOverrides'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
 	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
@@ -1970,6 +1978,14 @@ resetSessionForReinstall
 	"4. And the staleness verdicts: a reinstall usually follows an edit."
 	st @env0:removeKey: #'GrailModuleCurrency' ifAbsent: [].
 	st @env0:removeKey: #'GrailSourceHashNow' ifAbsent: [].
+	"5. And the self-send dispatcher records: the session-method refresh above
+	rebuilt the transient method dictionaries from the committed packages, so
+	the dispatchers are gone, and a record saying they are installed would
+	make every later patch of those names invisible to self-sends."
+	st @env0:removeKey: #'GrailSelfSendDispatchers' ifAbsent: [].
+	st @env0:removeKey: #'GrailFastOverrideHolders' ifAbsent: [].
+	st @env0:removeKey: #'GrailPinHolder' ifAbsent: [].
+	st @env0:removeKey: #'GrailRecordedDispatchersInstalled' ifAbsent: [].
 	^ toEvict @env0:size
 %
 
@@ -8264,6 +8280,41 @@ ___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCate
 	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
 	 aClass moveMethod: target toCategory: aCategory environmentId: 1]
 		on: Error do: [:e | e return: nil]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___copySessionMethod___: sel from: aProvider to: aClass prefix: aPrefix
+	"___copyMethod___:from:to:prefix:category: with the copy installed as a
+	TRANSIENT session method (Behavior >> ___installSessionMethod:as:) -- the
+	self-send dispatcher's shadow, which belongs to the patch that asked for
+	it and so to this session only.  Same two routes: a text source is
+	recompiled, prefixed; a method with none is shared under the prefixed key.
+	Errors leave aClass without a shadow, which the caller checks for."
+
+	| meth src ownShadow |
+	"A PROVIDER THAT IS ITSELF PATCHED answers its DISPATCHER for sel, and a
+	copy of that as aClass's shadow falls through to itself: patch an instance
+	of C, then an instance of a subclass D, and D's first self-send recursed to
+	the stack limit.  Its pristine original is its own shadow, shared as is --
+	sharing a compiled method under another key is sound here (see
+	___copyMethod___:from:to:prefix:category:), and its varargs forward was
+	already pointed at the shadow when it was made."
+	ownShadow := (aPrefix , sel asString) asSymbol.
+	(aProvider includesSelector: ownShadow environmentId: 1) ifTrue: [
+		^ [aClass perform: #'___installSessionMethod:as:' env: 1
+			withArguments: { aProvider compiledMethodAt: ownShadow environmentId: 1. ownShadow }]
+				on: Error do: [:e | e return: nil]].
+	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
+	meth isNil ifTrue: [^ self].
+	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	src notNil ifTrue: [
+		^ [aClass perform: #'___compileSessionMethod:category:' env: 1
+			withArguments: { aPrefix , src. 'Grail-Dynamic Rebinding Originals' }]
+				on: Error do: [:e | e return: nil]].
+	[aClass perform: #'___installSessionMethod:as:' env: 1
+		withArguments: { meth. (aPrefix , sel asString) asSymbol }]
+			on: Error do: [:e | e return: nil]
 %
 
 category: 'Grail-Class Compilation'

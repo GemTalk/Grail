@@ -5051,7 +5051,7 @@ ___syncBuiltinOverride___: aName
 	triggers an override and swap_attr's restore is recognised without
 	any bookkeeping at read time."
 
-	| s sym cls present value isOriginal originals pinned |
+	| s sym cls present value isOriginal originals pinned holder |
 	((aName @env0:isKindOf: String) or: [aName @env0:isSymbol]) ifFalse: [^ self].
 	s := aName @env0:asString.
 	sym := s @env0:asSymbol.
@@ -5079,7 +5079,10 @@ ___syncBuiltinOverride___: aName
 		present @env0:do: [:sel | | rec |
 			rec := originals @env0:at: sel otherwise: nil.
 			rec == nil ifFalse: [
-				cls ___compileMethod: (rec @env0:at: 1) category: (rec @env0:at: 2).
+				"The original METHOD goes back in as the session entry: lookup
+				reaches exactly the compiled method it always did, and nothing
+				is recompiled or written."
+				cls ___installSessionMethod: (rec @env0:at: 1) as: sel.
 				originals @env0:removeKey: sel.
 				pinned == nil ifFalse: [pinned @env0:removeIfPresent: sel]]].
 		^ self].
@@ -5089,22 +5092,33 @@ ___syncBuiltinOverride___: aName
 	pinned == nil ifTrue: [
 		pinned := IdentitySet @env0:new.
 		SessionTemps @env0:current @env0:at: #GrailBuiltinPinnedSelectors put: pinned].
+	"SESSION methods throughout (Behavior >> ___compileSessionMethod:category:):
+	an override of a builtin is this program's, as it is in CPython, so its
+	shadow and forwarders are too.  They were compiled persistently, which
+	wrote builtins' method and category dictionaries on every patch --
+	mock.patch('builtins.open') included -- so a session that committed kept
+	the forwarders for every later session, and two patching sessions
+	conflicted.  The forwarders read the override from the fast-path holder
+	(object class >> ___grailFastOverrideHolderFor___:), a literal association
+	NativeModule keeps current, rather than a slot lookup per call."
+	holder := cls @env0:___grailFastOverrideHolderFor___: sym.
 	present @env0:do: [:sel |
 		(originals @env0:at: sel otherwise: nil) == nil ifTrue: [ | src |
 			src := cls @env0:sourceCodeAt: sel environmentId: 1.
 			originals @env0:at: sel put: {
-				src.
+				(cls @env0:persistentMethodDictForEnv: 1) @env0:at: sel.
 				(cls @env0:categoryOfSelector: sel environmentId: 1) @env0:asString }.
 			"The pristine method survives the override under a mangled
 			selector -- source PREPENDED, which renames exactly the first
 			keyword part -- so a BoundMethod handed out before the override
 			still reaches it (see BoundMethod >> ___pinnedSelectorFor___:
 			receiver:)."
-			cls ___compileMethod: ('___grailOrig_' @env0:, src)
+			cls ___compileSessionMethod: ('___grailOrig_' @env0:, src)
 				category: 'Grail-Dynamic Rebinding Originals'.
 			pinned @env0:add: sel.
-			cls ___compileMethod: (self ___forwarderSourceFor___: sel name: s)
-				category: 'Grail-Dynamic Rebinding Forwarders']].
+			cls ___compileSessionMethod: (self ___forwarderSourceFor___: sel name: s)
+				category: 'Grail-Dynamic Rebinding Forwarders'
+				scope: holder]].
 	^ self
 %
 
@@ -5113,13 +5127,14 @@ method: builtins
 ___forwarderSourceFor___: aSelector name: aString
 	"The source of one forwarder method: same selector as the original,
 	body a call of whatever the dynamic slot currently holds, through the
-	reflective call protocol so any Python callable works.  Reading the
-	slot at CALL time is what makes a second rebinding (the leaf-function
-	test) visible without recompiling anything."
+	reflective call protocol so any Python callable works.  The override is
+	read at CALL time from ___grailFastOverride___, the fast-path holder's
+	association (compiled in as a literal), which is what makes a second
+	rebinding (the leaf-function test) visible without recompiling anything."
 
 	| sel n header args slotRead |
 	sel := aSelector @env0:asString.
-	slotRead := '(self @env0:dynamicInstVarAt: #''' @env0:, aString @env0:, ''')'.
+	slotRead := '___grailFastOverride___'.
 	(sel @env0:includes: $:) ifFalse: [
 		^ sel @env0:, '
 	^ ' @env0:, slotRead @env0:, ' @env1:___pyCallValue___: (Array @env0:new) kw: nil'].
