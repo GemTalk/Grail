@@ -51,8 +51,24 @@
 ! the yellow guard page whenever newSP is above the boundary -- with no margin.
 ! A trip in a prologue leaves the signal frame just above the boundary, so the
 ! page is re-armed underneath the replacement exception's own dispatch.
-! Interpreter entry already avoids exactly this with a margin ("don't reset from
-! red back to yellow unless we have some margin", fix 51168, intloopsup.c).
+!
+! The VM ALREADY guards against exactly this elsewhere, with a margin.  In
+! IntLpSupControlLoop (intloopsup.c), both where it enters the interpreter and
+! where it completes a process switch, it only moves the stack base back from
+! red to yellow when the stack is at least a margin below the boundary:
+!
+!     int64 stackMargin = (redWords - yellowWords) >> 2 ;   // 1/4 of the yellow zone
+!     // don't reset from red back to yellow unless we have some margin
+!     if (stackSizeWords < yellowWords - stackMargin) {     // fix 51168 (process switch)
+!       omPtr->stackBase = omPtr->stackBaseYellow;
+!
+! The five exception primitives that trim the stack all re-arm through
+! checkYellowProtection instead, which has no such margin: IntSwiExcRetryUsing,
+! IntSwiExcReturn, IntSwiExcResume, IntSwiExcResignal and IntSwiExcPassToDefault
+! (intswitch.c).  The native-code variant, om::checkYellowProtection, compares
+! against stackBaseYellow with no margin either, although this script has not
+! reproduced the defect with native code on.  A likely fix is to apply the same
+! margin there (or not to re-arm while resignalling the stack-limit exception).
 !
 ! AlmostOutOfStackError disable does not help: stackLimitYellowError() only
 ! chooses the class, so the re-trip arrives as AlmostOutOfStack instead.
