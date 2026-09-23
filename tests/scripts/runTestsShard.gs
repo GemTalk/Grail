@@ -44,7 +44,7 @@ escape hatch: it simply skips the deploy."
 level 1
 run
 | out n idx full shard result leaves flatten overrides oFile
-  groups order timeClasses shardT0 |
+  groups order timeClasses shardT0 shardOf |
 out := GsFile stdout.
 n := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
 n := (n isEmpty ifTrue: [1] ifFalse: [n asNumber]).
@@ -105,17 +105,18 @@ oFile ifNotNil: [
 kept in first-appearance order, so each class can be timed separately.  Running
 the per-class suites in that order visits exactly the tests the shard suite
 holds, in exactly the same order."
-shard := TestSuite new.
-groups := Dictionary new.
-order := OrderedCollection new.
-leaves do: [:t | | key h |
-  key := t class name asString.
-  h := overrides at: key ifAbsent: [
+shardOf := [:key |
+  overrides at: key ifAbsent: [
     | sum |
     sum := 0.
     key do: [:ch | sum := sum + ch asInteger].
-    sum \\ n].
-  (h = idx) ifTrue: [
+    sum \\ n]].
+shard := TestSuite new.
+groups := Dictionary new.
+order := OrderedCollection new.
+leaves do: [:t | | key |
+  key := t class name asString.
+  ((shardOf value: key) = idx) ifTrue: [
     shard addTest: t.
     (groups includesKey: key) ifFalse: [
       order add: key.
@@ -130,6 +131,18 @@ run by hand.  See src/smalltalk/PythonTests/GrailTestResult.gs.
 Inlined rather than sent as GrailTestResult class>>run:, because the loop times
 each class; the TestResource reset is part of that method's contract, so it is
 reproduced here rather than dropped."
+"SKIPPED TESTS ARE REPORTED, NOT JUST ABSENT.  PythonTestCase class>>
+allTestSelectors leaves out whatever a class's #skippedTests names on this gem
+(GemStone's SUnit has no skip of its own), so the suite above never held them.
+Name each one, with its reason, from the shard that OWNS the class -- the same
+partition as the tests -- so every skip is printed exactly once per run and
+scripts/run_tests.sh can list them under the summary.  A class whose tests are
+ALL skipped has no leaves, which is why this walks the classes, not the leaves."
+(PythonTestCase allSubclasses asSortedCollection: [:a :b | a name <= b name]) do: [:cls |
+  (cls isAbstract not and: [(shardOf value: cls name asString) = idx]) ifTrue: [
+    (cls skippedTests keys asSortedCollection: [:a :b | a <= b]) do: [:sel |
+      out nextPutAll: 'GRAIL_SKIP|'; nextPutAll: cls name; nextPutAll: '>>';
+        nextPutAll: sel; nextPutAll: '|'; nextPutAll: (cls skippedTests at: sel); lf]]].
 timeClasses := (System gemEnvironmentVariable: 'GRAIL_TEST_TIME_CLASSES').
 timeClasses := timeClasses notNil and: [timeClasses asString isEmpty not].
 result := GrailTestResult new.
