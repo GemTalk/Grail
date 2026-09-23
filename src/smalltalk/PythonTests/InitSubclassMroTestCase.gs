@@ -80,8 +80,18 @@ InitSubclassMroTestCase category: 'Grail-SUnit'
 !
 ! WHAT IS STILL NOT FIXED: new_class cannot honour an explicit ``metaclass=''
 ! that differs from the bases, because calling a metaclass to build a class
-! still answers an INSTANCE of it.  The KEYWORDS reach the hook either way, so
-! the check happens; the metaclass does not.  docs/Issues.md carries it.
+! still answers an INSTANCE of it.  docs/Issues.md carries it.
+!
+! That is why the keyword forwarding is CONDITIONAL rather than unconditional.
+! CPython sends the keywords to ``meta(...)'' and the hook sees only what that
+! metaclass's __new__ passes on, so a __new__ carrying **kwargs consumes them
+! and the class builds.  Forwarding all of them made test_errors pass and broke
+! two shapes CPython builds -- one right row bought with two wrong ones.  Grail
+! takes a Python-level __new__ at its word instead and forwards nothing; a
+! metaclass defining none forwards all, which is the shape test_errors asserts.
+! ``__code__'' is the discriminator because it answers the same in both
+! runtimes; ``meta.__new__ is not type.__new__'' does NOT -- Grail answers True
+! for a metaclass that defines nothing.
 !
 ! Drives tests/python/init_subclass_mro.py, whose EXPECTED table was measured by
 ! RUNNING CPython 3.14.6.
@@ -218,6 +228,12 @@ testNewClassForwardsItsKeywordsAndPrepareClassDoesNot
 	self assertMatchesCPythonAt: 'prepare_class_allows_it'.
 	self assertMatchesCPythonAt: 'new_class_plain'.
 	self assertMatchesCPythonAt: 'new_class_with_body'.
+	"A metaclass that OWNS its keywords must not have them forwarded to the
+	hook as well.  Forwarding everything made the check happen and turned two
+	shapes CPython builds into a spurious TypeError -- a worse trade than the
+	missing check, and the reason the forwarding is conditional."
+	self assertMatchesCPythonAt: 'new_class_metaclass_eats_keywords'.
+	self assertMatchesCPythonAt: 'new_class_metaclass_binds_keyword'.
 %
 
 category: 'Grail-Tests - Controls'
@@ -239,5 +255,5 @@ testEveryCheckIsPresentAndAgreesWithCPython
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '25 checks, 0 disagreeing [], keys match: True'
+		equals: '27 checks, 0 disagreeing [], keys match: True'
 %

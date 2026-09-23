@@ -609,6 +609,27 @@ def new_class(name, bases=(), kwds=None, exec_body=None):
         exec_body(ns)
     if resolved_bases is not bases:
         ns['__orig_bases__'] = bases
+    # ONLY WHAT THE METACLASS WOULD PASS ON reaches __init_subclass__.  In
+    # CPython the keywords go to ``meta(...)`` and the hook sees whatever that
+    # metaclass's __new__ forwards to type.__new__ -- a __new__ that binds the
+    # keyword, or carries **kwargs and does not pass them on, consumes it.
+    # Building through type() here hands the hook ALL of them, which turns a
+    # metaclass that legitimately eats its own keywords into a spurious
+    # TypeError: ``new_class('C', (), dict(metaclass=M, otherarg=1))`` for an
+    # M whose __new__ takes **kwargs builds a class in CPython and raised here.
+    #
+    # Grail cannot call the metaclass, so it takes one at its word: a metaclass
+    # with a PYTHON-level __new__ owns its keywords and none are forwarded.  A
+    # metaclass that defines none (``class MyMeta(type): pass``) forwards them
+    # all, which is what makes the leftover-keyword check still happen -- and
+    # that is the shape test_subclassinit test_errors asserts.
+    #
+    # ``__code__`` is the discriminator because it answers the same thing in
+    # both runtimes: a Python-defined __new__ has one and the inherited
+    # built-in type.__new__ does not.  ``meta.__new__ is not type.__new__``
+    # does NOT -- Grail answers True for a metaclass that defines nothing.
+    if kwds and getattr(getattr(meta, '__new__', None), '__code__', None):
+        kwds = {}
     return type(name, resolved_bases, ns, **kwds)
 
 

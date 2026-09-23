@@ -278,6 +278,31 @@ r['new_class_refuses_bad_keyword'] = outcome(
 r['prepare_class_allows_it'] = outcome(
     lambda: types.prepare_class(
         "MyClass", (object,), dict(metaclass=MyMeta, otherarg=1))[2])
+# A metaclass that OWNS its keywords must not have them forwarded to the hook
+# as well.  CPython sends the keywords to ``meta(...)`` and the hook sees only
+# what that metaclass's __new__ passes on to type.__new__, so a __new__ that
+# carries **kwargs, or binds the keyword by name, consumes it and the class
+# builds.  Grail cannot call the metaclass, so it takes a Python-level __new__
+# at its word and forwards nothing; a metaclass defining none forwards all,
+# which is what keeps the check above.
+
+
+class MetaKw(type):
+    def __new__(cls, name, bases, ns, **kwargs):
+        return super().__new__(cls, name, bases, ns)
+
+
+class MetaBinds(type):
+    def __new__(cls, name, bases, ns, otherarg=None):
+        return super().__new__(cls, name, bases, ns)
+
+
+r['new_class_metaclass_eats_keywords'] = outcome(
+    lambda: types.new_class(
+        'NcKw', (), dict(metaclass=MetaKw, otherarg=1)).__name__)
+r['new_class_metaclass_binds_keyword'] = outcome(
+    lambda: types.new_class(
+        'NcBind', (), dict(metaclass=MetaBinds, otherarg=1)).__name__)
 r['new_class_plain'] = outcome(
     lambda: types.new_class("Plain2", (HookBase,), {}).seen)
 r['new_class_with_body'] = outcome(
@@ -358,6 +383,8 @@ EXPECTED = {
     'new_class_refuses_bad_keyword':
         "TypeError: MyClass.__init_subclass__() takes no keyword arguments",
     'prepare_class_allows_it': "ok -> {'otherarg': 1}",
+    'new_class_metaclass_eats_keywords': "ok -> 'NcKw'",
+    'new_class_metaclass_binds_keyword': "ok -> 'NcBind'",
     'new_class_plain': 'ok -> []',
     'new_class_with_body': 'ok -> 9',
     'single_chain_order': ['SingleB', 'SingleA'],
