@@ -677,6 +677,7 @@ run
 	at: #'AttributePropertyTestCase' put: nil;
 	at: #'AttributeProtocolTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
+	at: #'AugAssignComplexTargetTestCase' put: nil;
 	at: #'AugAssignModuleTargetTestCase' put: nil;
 	at: #'AugAssignSliceTargetTestCase' put: nil;
 	at: #'AugmentedBinaryFallbackTestCase' put: nil;
@@ -2025,6 +2026,7 @@ input src/smalltalk/PythonTests/AttributeInheritanceTestCase.gs
 input src/smalltalk/PythonTests/AttributePropertyTestCase.gs
 input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
+input src/smalltalk/PythonTests/AugAssignComplexTargetTestCase.gs
 input src/smalltalk/PythonTests/AugAssignModuleTargetTestCase.gs
 input src/smalltalk/PythonTests/AugAssignSliceTargetTestCase.gs
 input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
