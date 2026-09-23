@@ -6372,8 +6372,10 @@ needed for the `strerror` callout.
 * **A directory that cannot be entered or removed for a reason the stat cannot
   see** — a permission on the directory itself — still falls back to the plain
   `OSError` with Grail's own sentence, since the primitives report nothing.
-* **`subprocess`, the socket layer and Grail's `shutil.py`** still raise the
-  message-only form (see the entry above).
+* **`subprocess` and Grail's `shutil.py` raised the message-only form** —
+  FIXED below. **The socket layer still does**, and stays that way while the
+  `errno` module carries one platform's numbering: a socket errno IS the
+  network family, which is where the two platforms disagree.
 * **`shutil.rmtree` followed a symbolic link to a directory** — FIXED below.
 
 ## shutil.rmtree followed a symbolic link, and deleted what it pointed at
@@ -6626,3 +6628,39 @@ gate, but a difference of ONE test in a ~180-failure corpus deserves a second
 sample before it is believed — of the baseline, not only of the change. The
 gate agreed throughout: 0 regressions in every run, because the flaky rows are
 not scoreboard movements.
+`test_file_closes_if_lookup_error_raised`. Neither module touches `urllib`,
+and `test_annotationlib` run alone answers 117 tests with no failures. So the
+corpus carries at least two tests that fail occasionally under four
+concurrent workers, and one run's "newly failing" line is not by itself
+evidence of a regression — a second sample is what tells the two apart.
+
+## The last message-only OSErrors: subprocess and copytree
+
+Three raises still built their exception from the TEXT of an errno rather than
+from the errno:
+
+```smalltalk
+FileNotFoundError ___signal___: '[Errno 2] No such file or directory: ' , prog printString
+```
+
+so `e.errno`, `e.strerror` and `e.filename` were `None`. Code catching
+`subprocess.run` to report WHICH program is missing reads `e.filename` and got
+nothing; the same for the tree `shutil.copytree` refused to overwrite.
+subprocess's broken-pipe error is the other shape CPython carries — errno and
+strerror with NO filename, since a pipe names no file.
+
+`shutil.copytree` is Python-side, and writing it as CPython does —
+`FileExistsError(17, os.strerror(17), dst)` — is now enough on its own,
+because `OSError`'s constructor narrows by errno — see "OSError(errno,
+strerror) now answers the errno's own subclass". The two changes meet here:
+the Python spelling and the Smalltalk one produce the same object.
+
+### A fixture that aborted instead of reporting
+
+The first baseline measurement answered nothing at all: the fixture compares
+`exc.strerror` against `os.strerror(exc.errno)`, and on the code being
+measured `exc.errno` is None — which `os.strerror` now refuses with a
+TypeError, the check added in "A failing os call carried no errno". A fixture written to
+catch a MISSING errno must not itself assume the errno is there; guarded, the
+same run reports 3 of its 8 checks failing with `errno=None, filename=None`,
+which is the evidence that was wanted.
