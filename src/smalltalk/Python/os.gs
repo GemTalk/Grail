@@ -778,11 +778,21 @@ chdir: aPath
 
 	| result path |
 	path := self ___fsPath___: aPath.
+	"The primitive answers 0 on success and the ERRNO on failure, never nil --
+	the one answer this tested for, so a chdir to a missing directory changed
+	nothing and said nothing, exactly as os.rename did (see Issues.md)."
 	result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot change directory to: ' @env0:, (path @env0:printString))
-	].
-	^ None
+	result == 0 ifTrue: [^ None].
+	(result @env0:isKindOf: SmallInteger) ifFalse: [
+		^ OSError ___signal___: (self @env0:class ___directoryNotChangedMessage: path)].
+	^ self ___signalErrno: result filename: path
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___directoryNotChangedMessage: path
+
+	^ 'Cannot change directory to: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -963,9 +973,37 @@ ___libcName
 	"By the soname the loader resolves, as zlib names libz: glibc's runtime
 	soname on Linux."
 
-	^ (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
+	^ self ___isDarwin
 		ifTrue: ['libc.dylib']
 		ifFalse: ['libc.so.6']
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___isDarwin
+	"Which platform's errno numbering and libc naming applies.  The errnos a
+	FILE operation reports agree on Darwin and Linux except where a method
+	below says otherwise."
+
+	^ (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___errnoOfADirectoryNotEmpty
+	"ENOTEMPTY, which Darwin numbers 66 and Linux 39.  It has no OSError
+	subclass of its own on either."
+
+	^ self ___isDarwin ifTrue: [66] ifFalse: [39]
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___errnoOfUnlinkingADirectory
+	"unlink(2) of a directory: EPERM on Darwin (PermissionError), EISDIR on
+	Linux (IsADirectoryError).  CPython reports whichever the platform gives."
+
+	^ self ___isDarwin ifTrue: [1] ifFalse: [21]
 %
 
 category: 'Grail-Error Messages'
@@ -1137,10 +1175,64 @@ rmdir: aPath
 	path := self ___fsPath___: aPath.
 	self ___refuseShellExpandedPath___: path for: 'rmdir'.
 	result := GsFile @env0:removeServerDirectory: path.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot remove directory: ' @env0:, (path @env0:printString))
-	].
+	result == nil ifTrue: [^ self ___signalDirectoryNotRemoved: path].
 	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___signalDirectoryNotRemoved: path
+	"Raise what CPython's os.rmdir raises.  The primitive answers only nil, so
+	the errno is read back from the filesystem, as os.mkdir's is."
+
+	| errno |
+
+	errno := self ___errnoPreventingRemovalOfDirectory: path.
+	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotRemovedMessage: path)].
+	^ self ___signalErrno: errno filename: path
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoPreventingRemovalOfDirectory: path
+	"Why rmdir of path failed: it cannot be lstat'd (that stat's own errno),
+	it is not a directory -- a SYMLINK to one included, which is why the probe
+	is an lstat -- or it still holds entries.  0 when none of those holds."
+
+	| entryStat |
+
+	entryStat := GsFile @env0:stat: path isLstat: true.
+	(entryStat @env0:isKindOf: SmallInteger) ifTrue: [^ entryStat].
+	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory @env0:not])
+		ifTrue: [^ 20].
+	(self ___isEmptyDirectory: path) ifFalse: [^ self @env0:class ___errnoOfADirectoryNotEmpty].
+	^ 0
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___isEmptyDirectory: path
+	"True when path holds nothing of its own.  The primitive reports '.' and
+	'..', which CPython's listing never does and which are not entries a
+	caller put there."
+
+	| contents |
+
+	contents := GsFile
+		@env0:_contentsOfServerDirectory: path
+		expandPath: false
+		utf8Results: false.
+	(contents @env0:isKindOf: Array) ifFalse: [^ true].
+	^ (contents @env0:reject: [:each | | name |
+		name := each @env0:asString.
+		(name @env0:= '.') @env0:or: [name @env0:= '..']]) @env0:isEmpty
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___directoryNotRemovedMessage: path
+
+	^ 'Cannot remove directory: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1165,10 +1257,44 @@ remove: aPath
 	unlinked.  CPython removes the LINK, and never consults the target at all."
 	self ___statOrSignal___: path isLstat: true.
 	result := GsFile @env0:removeServerFile: path.
-	result == nil ifTrue: [
-		OSError ___signal___: ('Cannot remove file: ' @env0:, (path @env0:printString))
-	].
+	result == nil ifTrue: [^ self ___signalFileNotRemoved: path].
 	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___signalFileNotRemoved: path
+	"Raise what CPython's os.remove raises.  The primitive answers only nil, so
+	the errno is read back from the filesystem, as os.mkdir's is."
+
+	| errno |
+
+	errno := self ___errnoPreventingUnlinkOf: path.
+	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___fileNotRemovedMessage: path)].
+	^ self ___signalErrno: errno filename: path
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoPreventingUnlinkOf: path
+	"Why unlinking path failed: it is a directory, which the two platforms
+	report differently.  The lstat has already passed by the time this is
+	asked, so 0 means a permission it cannot see."
+
+	| entryStat |
+
+	entryStat := GsFile @env0:stat: path isLstat: true.
+	(entryStat @env0:isKindOf: SmallInteger) ifTrue: [^ entryStat].
+	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory])
+		ifTrue: [^ self @env0:class ___errnoOfUnlinkingADirectory].
+	^ 0
+%
+
+category: 'Grail-Error Messages'
+classmethod: os
+___fileNotRemovedMessage: path
+
+	^ 'Cannot remove file: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'

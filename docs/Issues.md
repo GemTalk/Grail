@@ -6284,11 +6284,8 @@ filesystem is reported the same way, where CPython would say `EROFS`.
 
 ### Still open in the same area
 
-* **`os.chdir`, `os.rmdir`, and `os.remove` of a directory** say
-  `Cannot change directory` / `Cannot remove ...` as a plain `OSError` with no
-  errno. Their primitives answer only nil, so each needs a filesystem diagnosis,
-  like the one `mkdir` has. `os.remove` of a directory is also a platform
-  split: `EPERM` on Darwin and `EISDIR` on Linux.
+* **`os.chdir`, `os.rmdir`, and `os.remove` of a directory carried no errno** —
+  FIXED below.
 * **`subprocess` of a missing program** raises
   `FileNotFoundError('[Errno 2] ...')` from the text alone. CPython sets
   `filename` to the program.
@@ -6299,3 +6296,64 @@ filesystem is reported the same way, where CPython would say `EROFS`.
   as a message too.
 * **`OSError(2, 'msg')` still stays an `OSError`** (see the pathlib entry):
   a tier-2 change to the constructors every exception shares.
+
+## os.chdir said nothing when it failed
+
+`os.chdir('/nope')` returned `None`, changed nothing, and raised nothing.
+`GsFile _directoryPrim: 0` answers `0` on success and the errno on failure, and
+`os.chdir` tested only for `nil` — the one answer it never gives. That is
+`os.rename`'s defect again, in the one other place a primitive reports this
+way, and it was found by writing the test that covers the two entries beside
+it rather than by a caller hitting it.
+
+`os.rmdir` and `os.remove` of a directory did raise, but a plain `OSError`
+carrying only a sentence Grail wrote itself:
+
+```
+OSError: Cannot remove directory: '/tmp/x'
+```
+
+So `except FileNotFoundError` around an `os.rmdir` never fired, `e.errno` was
+`None`, and rmdir of a NON-EMPTY directory was indistinguishable from rmdir of
+a missing one — the two cases callers most need to tell apart. Both primitives
+answer only nil, so their errno is read back from the filesystem, the way
+`os.mkdir`'s already was: the path's own lstat errno, `ENOTDIR` for something
+that is not a directory (a SYMLINK to one included, which is why the probe is
+an lstat), and `ENOTEMPTY` for a directory that still holds entries.
+
+### Two errnos are numbered per platform
+
+Everything mapped before this point is numbered alike on Darwin and Linux.
+These two are not, and Grail now answers whichever the platform uses:
+
+* a directory that still holds entries is `ENOTEMPTY`, **66** on Darwin and
+  **39** on Linux. It has no `OSError` subclass of its own on either.
+* `unlink(2)` of a directory is `EPERM` on Darwin, so CPython raises
+  `PermissionError`, and `EISDIR` on Linux, so it raises `IsADirectoryError`.
+
+`os class >> ___isDarwin` is what decides, the predicate `___libcName` already
+needed for the `strerror` callout.
+
+### Still open in the same area
+
+* **Grail's `errno` module answers the BSD numbers on every platform.** Its own
+  header says so and calls it self-consistent, which it was while nothing
+  raised a real errno. It no longer is: on Linux, `os.rmdir` of a full
+  directory now raises `e.errno == 39` while `errno.ENOTEMPTY` in the same
+  session is 66, so the comparison Python code actually writes is false.
+  ENOENT, EACCES, EEXIST, ENOTDIR and EISDIR agree on both platforms and are
+  unaffected; the stub's network errnos are where it matters most. Reading the
+  numbers from the platform is the fix.
+* **A directory that cannot be entered or removed for a reason the stat cannot
+  see** — a permission on the directory itself — still falls back to the plain
+  `OSError` with Grail's own sentence, since the primitives report nothing.
+* **`subprocess`, the socket layer and Grail's `shutil.py`** still raise the
+  message-only form (see the entry above).
+* **`shutil.rmtree` FOLLOWS a symbolic link to a directory**, and deletes what
+  it points at. `_rmtree_inner` asks `os.path.isdir`, which resolves the link,
+  and recurses; CPython asks `os.path.islink` first and unlinks the link
+  itself, and raises rather than recursing when the TOP of the tree is one.
+  So `rmtree` of a tree holding a link can delete files outside that tree.
+  Found by the fixture above on CI: Darwin listed the link after the directory
+  it pointed at, which hid it, and Linux listed it first. That one needs
+  `os.lstat`, not a wider errno map, so it is a change of its own.
