@@ -2488,7 +2488,7 @@ emitCompiledMethodKeywordOnlyBindingOn: aStream kwargsName: kwMethodParam
 				ifFalse: [
 					self emitDefTimeDefaultFor: each name node: def on: aStream]].
 		aStream
-			nextPutAll: each name;
+			nextPutAll: (NameAst ___transportIdentifierFor___: each name);
 			nextPutAll: ' := '; nextPutAll: kwMethodParam;
 			nextPutAll: ' ifNil: ['.
 		emitDefault value.
@@ -4852,13 +4852,18 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 		requiredCount: firstWithDefault - 1
 		posonlyNames: posonlyNames.
 	1 to: numParams do: [:i |
-		| pname hasDefault isPosOnly |
+		| pname pyName hasDefault isPosOnly |
 		pname := paramNames at: i.
+		"Some callers hand in TRANSPORT identifiers (``___nil___''), which are
+		the Smalltalk spelling but not the keyword a caller writes."
+		pyName := NameAst ___pythonNameForTransportIdentifier___: pname.
 		hasDefault := i >= firstWithDefault.
 		isPosOnly := posonlyNames includes: pname asString.
-		"Open the positional gate."
+		"Open the positional gate.  The TARGET is the parameter's Smalltalk
+		identifier (a pseudo-variable spelling travels as ___nil___); the kwargs
+		lookup below keeps the Python name, which is the keyword."
 		aStream
-			nextPutAll: pname;
+			nextPutAll: (NameAst ___transportIdentifierFor___: pname);
 			nextPutAll: ' := ((';
 			nextPutAll: posName;
 			nextPutAll: ' @env0:size) @env0:>= ';
@@ -4884,11 +4889,11 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 				nextPutAll: ' @env0:isNil @env0:not and: [';
 				nextPutAll: kwName;
 				nextPutAll: ' @env0:includesKey: ''';
-				nextPutAll: pname;
+				nextPutAll: pyName;
 				nextPutAll: ''']) ifTrue: [';
 				nextPutAll: kwName;
 				nextPutAll: ' @env0:at: ''';
-				nextPutAll: pname;
+				nextPutAll: pyName;
 				nextPutAll: '''] ifFalse: ['].
 		hasDefault ifTrue: [
 			"Reference the pre-evaluated default temp captured by the
@@ -4917,7 +4922,7 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 			own last word, and phrased identically so a call that somehow arrives
 			here does not report the parameter in older wording."
 			self printSingleMissingArgumentOn: aStream
-				name: pname kind: 'positional'
+				name: pyName kind: 'positional'
 		].
 		"One closing bracket per gate opened: the positional gate always, the
 		kwargs gate only for a keyword-bindable parameter."
@@ -6544,7 +6549,13 @@ generateMethodSourceOn: aStream
 		write target from the bare-name local."
 		allLocals := OrderedCollection new.
 		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
-		paramNames do: [:each | allLocals add: each].
+		"A pseudo-variable-spelled parameter (``def m(self, nil)'') cannot be a
+		temp under its own name; it is declared as its transport identifier,
+		which NameAst's reserved-name rename reads and writes."
+		paramNames do: [:each |
+			allLocals add: ((self isSmalltalkReservedIdentifier: each)
+				ifTrue: [NameAst ___transportIdentifierFor___: each]
+				ifFalse: [each])].
 		bodyVars do: [:each |
 			| declared |
 			"Reserved-named body locals (``self = super(...).__new__(cls)``
@@ -6607,7 +6618,7 @@ generateMethodSourceOn: aStream
 		].
 		1 to: paramNames size do: [:i |
 			aStream
-				nextPutAll: (paramNames at: i);
+				nextPutAll: (NameAst ___transportIdentifierFor___: (paramNames at: i));
 				nextPutAll: ' := ';
 				nextPutAll: (transportNames at: i);
 				nextPut: $.;
@@ -6652,11 +6663,17 @@ generateMethodSourceOn: aStream
 		reason, as the simple-positional branch above)."
 		allLocals := OrderedCollection new.
 		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
-		paramNames do: [:each | allLocals add: each].
+		paramNames do: [:each |
+			allLocals add: ((self isSmalltalkReservedIdentifier: each)
+				ifTrue: [NameAst ___transportIdentifierFor___: each]
+				ifFalse: [each])].
 		args vararg ifNotNil: [allLocals add: args vararg name].
-		args kwonlyargs do: [:each |
-			(allLocals includes: each name) ifFalse: [
-				allLocals add: each name].
+		args kwonlyargs do: [:each | | declared |
+			declared := (self isSmalltalkReservedIdentifier: each name)
+				ifTrue: [NameAst ___transportIdentifierFor___: each name]
+				ifFalse: [each name].
+			(allLocals includes: declared) ifFalse: [
+				allLocals add: declared].
 		].
 		args kwarg ifNotNil: [allLocals add: args kwarg name].
 		bodyVars do: [:each |

@@ -7320,6 +7320,29 @@ ___isPythonSourceMethodCategory___: aCategory
 		or: [c @env0:= 'Grail-Method Aliases']]
 %
 
+category: 'Grail-Iterator Protocol'
+method: object
+___iterIsPythonDefined___
+	"Does the receiver's class take __iter__ from a class-body ``def'' -- a
+	Python subclass of list, tuple, dict, ... that iterates its own way?
+
+	The built-in consumers read a kernel collection's STORAGE directly
+	(``do:'', ``asArray'', ``keysDo:'') because that is what iterating it
+	means -- except for such a subclass, whose __iter__ CPython always calls
+	(seq_tests' LyingList).  ``[*x]'', ``f(*x)'', ``set(x)'', ``s.update(x)'',
+	``l.extend(x)'' and ``dict.fromkeys(x)'' all walked the storage of
+	``class L(list): def __iter__(self): ...''.  Each of those fast paths asks
+	this first.  list(x) and tuple(x) already did the equivalent (an exact
+	class test)."
+
+	| owner |
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1.
+	owner @env0:isNil ifTrue: [^ false].
+	^ self ___isPythonSourceMethodCategory___:
+		(owner @env0:categoryOfSelector: #'__iter__' environmentId: 1)
+%
+
 category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___metaChainOwnsAnyOf___: family from: metaclass
@@ -13799,7 +13822,8 @@ ___pyStarToArray___
 	iterating a str yields one-character strs.  It takes the iteration path."
 
 	((self isKindOf: SequenceableCollection)
-		and: [(self isKindOf: CharacterCollection) not]) ifTrue: [^ self asArray].
+		and: [(self isKindOf: CharacterCollection) not
+		and: [(self @env1:___iterIsPythonDefined___) not]]) ifTrue: [^ self asArray].
 	^ (list @env1:__new__: self) asArray
 %
 

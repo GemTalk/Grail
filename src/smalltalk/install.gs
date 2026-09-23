@@ -1001,6 +1001,7 @@ run
 	at: #'HttpCookiesTestCase' put: nil;
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'IPv6AddressTestCase' put: nil;
+	at: #'IRCodegenFlagDefaultTestCase' put: nil;
 	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'IRClassDeferredNonlocalTestCase' put: nil;
 	at: #'IRDefIdStableTestCase' put: nil;
@@ -1039,6 +1040,8 @@ run
 	at: #'InstanceDocstringTestCase' put: nil;
 	at: #'IntegerTestCase' put: nil;
 	at: #'IntFloatOverflowTestCase' put: nil;
+	at: #'IntFromBytesIterableTestCase' put: nil;
+	at: #'IntToBytesDefaultsTestCase' put: nil;
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorLengthHintTestCase' put: nil;
@@ -2425,8 +2428,11 @@ input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
 input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IntFloatOverflowTestCase.gs
+input src/smalltalk/PythonTests/IntFromBytesIterableTestCase.gs
+input src/smalltalk/PythonTests/IntToBytesDefaultsTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
+input src/smalltalk/PythonTests/IRCodegenFlagDefaultTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
 input src/smalltalk/PythonTests/IRClassDeferredNonlocalTestCase.gs
 input src/smalltalk/PythonTests/IRDefIdStableTestCase.gs
