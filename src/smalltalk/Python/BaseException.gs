@@ -2440,13 +2440,18 @@ ___deriveNestedFunctionNameFor___: aMethod line: aLine
 	src := [aMethod @env0:sourceString]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	src isNil ifTrue: [^ nil].
-	"An IR-built method carries the def's PYTHON source (padded so its line
-	indices are the module's): a nested def is found by INDENTATION, not by a
-	stamp (cut 64).  This is the path a nested def that captures NOTHING takes
-	-- its closure is a clean block with no home method, so the block-offset
-	namer above cannot see it -- and the path every line-only caller takes."
+	"An IR-built method carries the def's PYTHON source: a nested def is found
+	by INDENTATION, not by a stamp (cut 64).  This is the path a nested def
+	that captures NOTHING takes -- its closure is a clean block with no home
+	method, so the block-offset namer above cannot see it -- and the path every
+	line-only caller takes.  aLine is a MODULE line and the attached slice is
+	unpadded, so it is rebased by the slice's first module line first; indexing
+	the slice with the module line named the wrong def, or the home, for every
+	def not on line 1 (test_yield_from test_delegator_is_visible_to_debugger)."
 	(self ___isIRPythonMethod___: aMethod) ifTrue: [
-		^ self ___irNestedNameIn___: src line: aLine].
+		^ self ___irNestedNameIn___: src
+			line: (aLine isNil ifFalse: [
+				aLine @env0:- ((self ___irSliceFirstLineIn___: src) ifNil: [1]) @env0:+ 1])].
 	lines := src @env0:subStrings: (String @env0:with: Character lf).
 	best := nil.
 	bestF := 0.
@@ -2487,8 +2492,8 @@ ___deriveNestedFunctionNameFor___: aMethod line: aLine
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___irNestedNameIn___: pythonSource line: aLine
-	"The innermost nested ``def'' of pythonSource -- an IR method's padded
-	Python -- whose body contains line aLine, by indentation: a def at
+	"The innermost nested ``def'' of pythonSource -- an IR method's attached
+	Python slice -- whose body contains SLICE line aLine, by indentation: a def at
 	indentation k on line L owns every following non-blank line indented
 	deeper than k, up to the first one that is not.  The FIRST def in the
 	source is the method's own header (the slice begins at its ``def'', so it
@@ -2580,7 +2585,7 @@ ___irDefNameOnLine___: ln
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___irSoleNestedNameIn___: pythonSource
-	"The name of the ONE nested def in an IR method's padded Python source, or
+	"The name of the ONE nested def in an IR method's Python source slice, or
 	nil when there are none or several.  The first ``def'' line is the
 	method's own header and is skipped (see ___irNestedNameIn___:line:)."
 

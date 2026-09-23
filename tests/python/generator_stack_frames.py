@@ -82,6 +82,47 @@ def drive():
 _m = drive()
 r.update(_m)
 
+
+# UPSTREAM'S NESTING: test_delegator_is_visible_to_debugger defines call_stack,
+# gen, spam and eggs INSIDE the test method, so every generator frame is a
+# nested def of one method and is named by ___nestedFunctionNameFor___ from a
+# line inside that method's source.  The module-level spelling above never
+# takes that route, which is how a line-indexing slip that named ``gen'' as
+# ``spam'' (and, one level down, as the enclosing function) passed here while
+# test_yield_from failed.
+class _Upstream:
+    def delegator_is_visible(self):
+        def call_stack():
+            return [f[3] for f in inspect.stack()]
+
+        def gen():
+            yield call_stack()
+
+        def spam(g):
+            yield from g
+
+        def eggs(g):
+            yield from g
+
+        return next(spam(eggs(gen())))[:5]
+
+
+def _nested_in_function():
+    def call_stack():
+        return [f[3] for f in inspect.stack()]
+
+    def gen():
+        yield call_stack()
+
+    def spam(g):
+        yield from g
+
+    return next(spam(gen()))[:4]
+
+
+r['nested_defs_in_method'] = _Upstream().delegator_is_visible()
+r['nested_defs_in_function'] = _nested_in_function()
+
 # Order, stated as an invariant rather than as a list, so it holds however deep
 # the enclosing runner's stack happens to be.
 _two = r['two']
@@ -124,6 +165,8 @@ EXPECTED = {
     'eggs_inside_spam': True,
     'gen_inside_eggs': True,
     'nested_caller': ['call_stack', 'gen', 'spam', 'inner_driver', 'drive'],
+    'nested_defs_in_function': ['call_stack', 'gen', 'spam', '_nested_in_function'],
+    'nested_defs_in_method': ['call_stack', 'gen', 'eggs', 'spam', 'delegator_is_visible'],
     'no_duplicate_frames': True,
     'no_generator': ['call_stack', 'drive'],
     'one': ['call_stack', 'gen', 'spam', 'drive'],

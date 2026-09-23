@@ -164,3 +164,18 @@ testTheConsumerChainIncludesNestedFunctions
 
 	self assertMatchesCPythonAt: 'nested_caller'.
 %
+
+category: 'Grail-Tests - Generator Frames'
+method: GeneratorStackFrameTestCase
+testGeneratorFramesThatAreNestedDefsAreNamed
+	"test_delegator_is_visible_to_debugger's own NESTING: call_stack, gen, spam
+	and eggs defined inside one method (and, separately, one function), so each
+	generator frame is a nested def named from a line inside the enclosing
+	method's attached source.  An IR method's source is the UNPADDED def slice
+	while the line asked about is a MODULE line; indexing one with the other
+	named gen as spam, and in a function named both gen and spam as the
+	function itself."
+
+	self assertMatchesCPythonAt: 'nested_defs_in_method'.
+	self assertMatchesCPythonAt: 'nested_defs_in_function'.
+%
