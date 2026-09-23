@@ -364,6 +364,25 @@ ___new__: positional kw: kwargs
 
 category: 'Grail-Class Construction'
 classmethod: type
+___prepare__: positional kw: kwargs
+	"``type.__prepare__(name, bases, **kwds)'': the namespace a class body runs
+	in when the metaclass has nothing better -- a new, empty dict.  CPython's
+	accepts any arguments and ignores them, and so does this.
+
+	What makes it matter is ``super().__prepare__(name, bases, **kwds)'', the
+	way a metaclass's own __prepare__ asks for the default before wrapping or
+	seeding it.  With nothing on type the super() read raised AttributeError,
+	so any metaclass written that way failed its class statement.
+
+	object >> ___grailPrepareNamespace___:bases:keywords: does NOT treat this
+	as a __prepare__ the metaclass supplies (see ___grailOwnPrepare___:): a
+	metaclass that overrides nothing must still allocate no namespace."
+
+	^ dict @env1:___new___
+%
+
+category: 'Grail-Class Construction'
+classmethod: type
 ___classUnderConstruction___
 	"The class whose statement is currently running its metaclass __new__, or
 	nil.  A STACK, because a class statement can appear inside another class's

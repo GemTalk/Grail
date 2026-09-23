@@ -1352,6 +1352,7 @@ run
 	at: #'TypeErrorTestCase' put: nil;
 	at: #'TypeInCallPositionTestCase' put: nil;
 	at: #'TypeParamsTestCase' put: nil;
+	at: #'TypePrepareDefaultTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'TypedDictTotalTestCase' put: nil;
 	at: #'TypingGenericAliasTestCase' put: nil;
@@ -2755,6 +2756,7 @@ input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
 input src/smalltalk/PythonTests/TypeInCallPositionTestCase.gs
 input src/smalltalk/PythonTests/TypeParamsTestCase.gs
+input src/smalltalk/PythonTests/TypePrepareDefaultTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/TypingGenericAliasTestCase.gs
 input src/smalltalk/PythonTests/TypingSurfaceTestCase.gs
