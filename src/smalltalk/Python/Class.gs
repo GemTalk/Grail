@@ -664,4 +664,207 @@ ___compileMethod: aSource category: aCategory scope: aScopeOrNil
 	^ self
 %
 
+category: 'Grail-Class Compilation'
+method: Behavior
+___compileSessionMethod: aSource category: aCategory
+	"As ___compileMethod:category:, but the method is a TRANSIENT session
+	method: it overrides the receiver's own method of that selector in THIS
+	session only, is never committed, and modifies no persistent object.
+
+	This is what monkey-patching needs.  A patch is one program's change to a
+	class, and CPython's patch dies with the process; here a persistent
+	compile outlived the program, conflicted with any other session that
+	patched the same class, and left every later session paying for the
+	patch's dispatcher.  See ___installSessionMethod:as:."
+
+	^ self ___compileSessionMethod: aSource category: aCategory scope: nil
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___compileSessionMethod: aSource category: aCategory scope: aScopeOrNil
+	"As ___compileSessionMethod:category:, with aScopeOrNil -- a
+	SymbolDictionary -- searched first when the source resolves a name.  A
+	name bound there compiles to that dictionary's ASSOCIATION, so a later
+	``at:put:'' on it changes what the method reads without recompiling it:
+	the fast path of a native-module patch holds its override that way.
+
+	A compile error is signalled, not stubbed: every caller installs these
+	speculatively and treats a failure as ``leave the original in place''."
+
+	^ self ___compileSessionMethod: aSource category: aCategory scope: aScopeOrNil environmentId: 1
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___compileSessionMethod: aSource category: aCategory scope: aScopeOrNil environmentId: envId
+	"As ___compileSessionMethod:category:scope:, in environment envId -- 0 for
+	a Smalltalk-level method such as BoundMethod's pin readers."
+
+	| dicts meth |
+	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
+	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
+	meth := [self @env0:compileMethod: aSource
+			dictionaries: dicts
+			category: aCategory @env0:asSymbol
+			intoMethodDict: GsMethodDictionary @env0:new
+			"A scratch categories dictionary too: nil means the CLASS's own,
+			and filing the selector there was a persistent write -- measured,
+			the class's categories dictionary and a category's selector set,
+			on every patch."
+			intoCategories: GsMethodDictionary @env0:new
+			intoPragmas: nil
+			environmentId: envId]
+		@env0:on: CompileWarning do: [:ex | ex @env0:resume].
+	^ self ___installSessionMethod: meth as: meth @env0:selector environmentId: envId
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___installSessionMethod: aMethod as: aSelector
+	"Make aMethod answer aSelector on the receiver, for THIS session only.
+
+	The kernel's own route, ``compileTransientMethod:dictionaries:
+	environmentId:'', refuses every environment-1 method: it checks that the
+	method overrides an existing one with a lookup that always asks
+	environment 0.  That check sits in a protected method, which a session
+	method may not override, and creating a class's transient method
+	dictionary is itself protected.  GsPackagePolicy's lookup-cache update is
+	the unprotected way in -- it is how the policy installs a user's session
+	methods at login -- and it installs any compiled method under any key:
+	measured, zero persistent objects modified, the override visible to
+	whichClassIncludesSelector: and compiledMethodAt: (so the shadow checks
+	in the dispatcher installer see it), surviving an abort, invisible to
+	every other session.
+
+	The key need not be the method's own selector: the dispatcher's
+	``___grailOrig_'' shadow can be an existing method shared under the
+	shadow key."
+
+	^ self ___installSessionMethod: aMethod as: aSelector environmentId: 1
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___installSessionMethod: aMethod as: aSelector environmentId: envId
+	"___installSessionMethod:as: in environment envId."
+
+	| rec |
+	rec := self ___sessionMethodRecord___: true.
+	"Whether Grail created this class's transient dictionary for envId -- only
+	then may ___dropSessionMethods___ discard the whole dictionary."
+	(self @env0:transientMethodDictForEnv: envId) == nil
+		ifTrue: [(rec @env0:at: 1) @env0:add: envId].
+	GsPackagePolicy @env0:current
+		@env0:updateMethodLookupCacheForSelector: aSelector @env0:asSymbol
+		method: aMethod
+		in: self
+		environmentId: envId.
+	((rec @env0:at: 2) @env0:at: envId otherwise: nil) == nil ifTrue: [
+		(rec @env0:at: 2) @env0:at: envId put: IdentityKeyValueDictionary @env0:new].
+	((rec @env0:at: 2) @env0:at: envId) @env0:at: aSelector @env0:asSymbol put: aMethod.
+	^ self
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___sessionMethodRecord___: create
+	"This session's record of the session methods Grail installed on the
+	receiver: { envIds whose transient dictionary Grail created . envId ->
+	(selector -> method) }, or nil.  Kept because a transient method
+	dictionary cannot be READ outside protected mode -- its hash function is
+	protected -- so this is the only way to know, and to restore, what is in
+	it."
+
+	| temps reg rec |
+	temps := SessionTemps @env0:current.
+	reg := temps @env0:at: #'GrailSessionMethods' otherwise: nil.
+	reg == nil ifTrue: [
+		create ifFalse: [^ nil].
+		reg := IdentityKeyValueDictionary @env0:new.
+		temps @env0:at: #'GrailSessionMethods' put: reg].
+	rec := reg @env0:at: self otherwise: nil.
+	(rec == nil and: [create]) ifTrue: [
+		rec := { IdentitySet @env0:new. IdentityKeyValueDictionary @env0:new }.
+		reg @env0:at: self put: rec].
+	^ rec
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___dropSessionMethods___
+	"Discard every session method on the receiver, when Grail installed all
+	of them, and answer what was there (envId -> selector -> method) so a
+	caller can put the rest back; nil when nothing could be dropped.
+
+	THE REASON THIS EXISTS: once a class has a transient method dictionary
+	for an environment, the kernel's own removeSelector:environmentId: fails
+	for EVERY selector of that environment, patched or not -- it looks the
+	selector up in the transient dictionary first, and that lookup is
+	protected.  GsPackagePolicy's sessionMethodRemoveAllMethodsFor: runs in
+	protected mode and discards the dictionaries outright, for each
+	environment the policy manages this session.  It cannot be told which
+	environment, so it is used only when every dictionary it would discard is
+	one Grail created."
+
+	| rec policy envs |
+	rec := self ___sessionMethodRecord___: false.
+	rec == nil ifTrue: [^ nil].
+	policy := GsPackagePolicy @env0:current.
+	envs := SessionTemps @env0:current
+		@env0:at: policy @env0:sessionMethodEnvsGlobalName otherwise: nil.
+	envs == nil ifTrue: [^ nil].
+	"Every environment Grail installed in must be one the policy will clear,
+	and every one it will clear must hold nothing but Grail's."
+	((rec @env0:at: 2) @env0:keys @env0:detect: [:e | (envs @env0:includes: e) @env0:not] ifNone: [nil])
+		== nil ifFalse: [^ nil].
+	(envs @env0:detect: [:e |
+		(self @env0:transientMethodDictForEnv: e) ~~ nil
+			and: [((rec @env0:at: 1) @env0:includes: e) @env0:not]] ifNone: [nil])
+		== nil ifFalse: [^ nil].
+	policy @env0:sessionMethodRemoveAllMethodsFor: self.
+	(SessionTemps @env0:current @env0:at: #'GrailSessionMethods') @env0:removeKey: self.
+	^ rec @env0:at: 2
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___removeSelector: aSelector environmentId: envId
+	"removeSelector:environmentId: that also works on a class carrying Grail's
+	session methods (see ___dropSessionMethods___): drop them, remove the
+	selector, then put back every session method but the one removed.  A
+	selector that existed only as a session method is removed by the drop."
+
+	| sym removed pmd |
+	sym := aSelector @env0:asSymbol.
+	removed := self ___dropSessionMethods___.
+	^ [pmd := self @env0:persistentMethodDictForEnv: envId.
+		((pmd ~~ nil and: [pmd @env0:includesKey: sym]) or: [removed == nil])
+			ifTrue: [self @env0:removeSelector: sym environmentId: envId]]
+		@env0:ensure: [
+			removed @env0:ifNotNil: [:byEnv |
+				byEnv @env0:keysAndValuesDo: [:e :sels |
+					sels @env0:keysAndValuesDo: [:k :m |
+						(e == envId and: [k == sym]) ifFalse: [
+							self ___installSessionMethod: m as: k environmentId: e]]]]]
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___forgetSessionPatches___
+	"A class being REBUILT starts with no patches, as a re-executed class
+	statement does in CPython: drop its session methods (dispatchers, shadows,
+	forwarders) and the records that say they are installed, for the class
+	and its metaclass.  Without this the rebuilt class kept the old
+	dispatcher, whose shadow is a copy of the old method."
+
+	{ self. self @env0:class } @env0:do: [:c | | temps |
+		c ___dropSessionMethods___.
+		temps := SessionTemps @env0:current.
+		#(#'GrailSelfSendDispatchers' #'GrailFastOverrideHolders') @env0:do: [:k |
+			(temps @env0:at: k otherwise: nil) @env0:ifNotNil: [:reg |
+				reg @env0:removeKey: c ifAbsent: []]]].
+	^ self
+%
+
 set compile_env: 0

@@ -1066,12 +1066,12 @@ ___grailRemoveOwnIndexedPair___: aName
 		(((self @env0:categoryOfSelector: getter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
 			@env0:and: [(self @env0:compiledMethodAt: getter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
 			ifTrue: [
-				[self @env0:removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+				[self @env1:___removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 	(self @env0:includesSelector: setter environmentId: 1) ifTrue: [
 		(((self @env0:categoryOfSelector: setter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
 			@env0:and: [(self @env0:compiledMethodAt: setter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
 			ifTrue: [
-				[self @env0:removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+				[self @env1:___removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 	^ self
 %
 
@@ -5683,9 +5683,9 @@ ___classBodyDefinitionalDelete___: aName
 			@env0:= #'Grail-Class Attrs'])
 		ifTrue: [
 			found := true.
-			meta @env0:removeSelector: getterSym environmentId: 1.
+			meta @env1:___removeSelector: getterSym environmentId: 1.
 			(meta @env0:whichClassIncludesSelector: setterSym environmentId: 1) == meta
-				ifTrue: [meta @env0:removeSelector: setterSym environmentId: 1]].
+				ifTrue: [meta @env1:___removeSelector: setterSym environmentId: 1]].
 	holder := (self ___respondsTo___: #___dynInstVars___)
 		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].
@@ -5759,6 +5759,10 @@ ___grailResetClassNamespace___
 	category is what makes it decidable."
 
 	| meta |
+	"Patches first: a rebuilt class starts without them, and its session
+	dispatchers would otherwise block every selector removal below (see
+	Behavior >> ___dropSessionMethods___)."
+	self @env1:___forgetSessionPatches___.
 	meta := self @env0:class.
 	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		| cat |
@@ -5766,11 +5770,11 @@ ___grailResetClassNamespace___
 		(((cat @env0:= #'Grail-Class Attrs')
 			and: [(sel @env0:asString @env0:beginsWith: '___dynInstVars___') @env0:not])
 				or: [cat @env0:= #'Grail-MI-Inherited'])
-					ifTrue: [meta @env0:removeSelector: sel environmentId: 1]].
+					ifTrue: [meta @env1:___removeSelector: sel environmentId: 1]].
 	(self @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		((self @env0:categoryOfSelector: sel environmentId: 1)
 			@env0:= #'Grail-MI-Inherited')
-				ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
+				ifTrue: [self @env1:___removeSelector: sel environmentId: 1]].
 	self ___grailResetClassMethods___.
 	self ___grailEmptyClassHolder___.
 	^ self
@@ -5835,11 +5839,11 @@ ___grailResetClassMethods___
 			or: [(cat @env0:= #'Grail-Fixed Arity Forwarders')
 				or: [(cat @env0:= #'Grail-Method Aliases')
 				or: [cat @env0:= #'Grail-Dynamic Rebinding Originals']]])
-					ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
+					ifTrue: [self @env1:___removeSelector: sel environmentId: 1]].
 	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		((meta @env0:categoryOfSelector: sel environmentId: 1)
 			@env0:= #'Grail-Class Methods')
-				ifTrue: [meta @env0:removeSelector: sel environmentId: 1]].
+				ifTrue: [meta @env1:___removeSelector: sel environmentId: 1]].
 	"The self-send dispatcher record for this class goes with the methods: the
 	dispatchers themselves are 'Grail-Class Methods' and were just removed, and
 	the ``___grailOrig_'' shadows are removed above, so a store in the rebuilt
@@ -12329,10 +12333,10 @@ ___pyAttrDelete___: aName
 						((meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
 							and: [(meta @env0:categoryOfSelector: sym environmentId: 1)
 								@env0:= #'Grail-Class Attrs']) ifTrue: [
-							meta @env0:removeSelector: sym environmentId: 1.
+							meta @env1:___removeSelector: sym environmentId: 1.
 							(meta @env0:whichClassIncludesSelector:
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) == meta
-								ifTrue: [meta @env0:removeSelector:
+								ifTrue: [meta @env1:___removeSelector:
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1]].
 						^ self
 					]
@@ -12391,7 +12395,7 @@ ___pyAttrDelete___: aName
 						prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
 				  BoundMethod @env1:___grailPinSelector___: sel ]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-				self @env0:removeSelector: sel environmentId: 1].
+				self @env1:___removeSelector: sel environmentId: 1].
 			^ self].
 		^ AttributeError ___signal___:
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
@@ -12974,13 +12978,50 @@ classmethod: object
 ___grailSelfSendDispatcherKey___
 	"Where the per-class record of installed dispatchers lives.
 
-	SessionTemps, not the class, and deliberately: installing a dispatcher
-	COMPILES a method onto a shared class, and a record kept in the repository
-	would outlive the session that patched.  The compiled methods have the same
-	problem and the same answer -- nothing here is committed, and a session that
-	ends takes its patches with it."
+	SessionTemps, not the class, and deliberately: the dispatchers themselves
+	are TRANSIENT session methods (Behavior >> ___compileSessionMethod:category:),
+	so the record has to live and die with them.  Nothing here is committed,
+	and a session that ends takes its patches with it."
 
 	^ #'GrailSelfSendDispatchers'
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailFastOverrideHolderFor___: aSymbol
+	"The fast-path holder for the Python name aSymbol on this class, or nil
+	when this class takes the full override probe.
+
+	A holder is a SymbolDictionary binding ___grailFastOverride___ to the
+	current override (nil for none).  The dispatcher compiles against it, so
+	it reads the override as a literal association; NativeModule >>
+	dynamicInstVarAt:put: updates it on every store, so a re-patch or an
+	unpatch needs no recompile.  One holder per (class, name), shared by
+	every selector spelling of the name.
+
+	Only a NATIVE module qualifies: it has one instance, and Python cannot
+	store on its class, so its instance attribute is the only override there
+	is.  The holder starts at the value the store that triggered this install
+	has already written -- instance stores install after storing."
+
+	| temps reg byName holder |
+	(NativeModule ~~ nil and: [self @env0:inheritsFrom: NativeModule]) ifFalse: [^ nil].
+	temps := SessionTemps @env0:current.
+	reg := temps @env0:at: #'GrailFastOverrideHolders' otherwise: nil.
+	reg == nil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		temps @env0:at: #'GrailFastOverrideHolders' put: reg].
+	byName := reg @env0:at: self otherwise: nil.
+	byName == nil ifTrue: [
+		byName := IdentityKeyValueDictionary @env0:new.
+		reg @env0:at: self put: byName].
+	holder := byName @env0:at: aSymbol @env0:asSymbol otherwise: nil.
+	holder == nil ifTrue: [
+		holder := SymbolDictionary @env0:new.
+		holder @env0:at: #'___grailFastOverride___'
+			put: ((self @env1:instance) @env0:dynamicInstVarAt: aSymbol @env0:asSymbol).
+		byName @env0:at: aSymbol @env0:asSymbol put: holder].
+	^ holder
 %
 
 category: 'Grail-Self-Send Overrides'
@@ -13099,7 +13140,7 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 	happen at all.  The generation stamped on each BoundMethod is what keeps a
 	capture made AFTER the patch seeing the patch."
 
-	| orig shadowSel keywords nargs ws argNames |
+	| orig shadowSel keywords nargs ws argNames fast |
 	orig := definingClass @env0:compiledMethodAt: aSelector environmentId: 1.
 	orig == nil ifTrue: [^ self].
 	"A Grail-generated method's SELECTOR PATTERN is the first token of its
@@ -13118,8 +13159,8 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 	is wanted."
 	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
 		ifFalse: [
-			importlib @env0:___copyMethod___: aSelector from: definingClass to: self
-				prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
+			importlib @env0:___copySessionMethod___: aSelector from: definingClass to: self
+				prefix: '___grailOrig_'].
 	"NO SHADOW, NO DISPATCHER.  The copier compiles nothing for a method whose
 	source is not Grail-generated text (a kernel .gs method, an IR build with
 	no text twin); a dispatcher whose fall-through has nowhere to go is the
@@ -13153,7 +13194,7 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 					or: [(src @env0:at: last @env0:+ marker @env0:size) @env0:isAlphaNumeric @env0:not]]) ifTrue: [
 				src := (src @env0:copyFrom: 1 to: last @env0:+ 6) @env0:, '___grailOrig_'
 					@env0:, (src @env0:copyFrom: last @env0:+ 7 to: src @env0:size).
-				self @env1:___compileMethod: src category: 'Grail-Dynamic Rebinding Originals']]].
+				self @env1:___compileSessionMethod: src category: 'Grail-Dynamic Rebinding Originals']]].
 	keywords := aSelector @env0:asString @env0:subStrings: $:.
 	nargs := aSelector @env0:asString @env0:occurrencesOf: $:.
 	argNames := Array @env0:new: nargs.
@@ -13166,11 +13207,25 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 				i @env0:> 1 ifTrue: [ws nextPut: $ ].
 				ws nextPutAll: (keywords @env0:at: i); nextPutAll: ': ';
 					nextPutAll: (argNames @env0:at: i)]].
+	"THE FAST PATH, for a NATIVE module (NativeModule): it has exactly one
+	instance, and Python cannot store on its class (``type(builtins)'' is
+	``module''), so an override there is the instance attribute and nothing
+	else.  The dispatcher reads it straight from a literal -- an association
+	in a per-(class, name) holder that NativeModule >> dynamicInstVarAt:put:
+	keeps current -- instead of walking the instance and every class in the
+	chain on each call.  Everywhere else the full probe stays, because an
+	instance attribute on ONE object must not reach its siblings."
+	fast := self @env0:___grailFastOverrideHolderFor___: aSymbol.
 	ws nextPutAll: '
 	| ___ov___ |
-	___ov___ := self @env0:___grailSelfSendOverrideFor___: #'''.
-	ws nextPutAll: aSymbol @env0:asString.
-	ws nextPutAll: '''.
+	___ov___ := '.
+	fast == nil
+		ifTrue: [
+			ws nextPutAll: 'self @env0:___grailSelfSendOverrideFor___: #'''.
+			ws nextPutAll: aSymbol @env0:asString.
+			ws nextPutAll: '''']
+		ifFalse: [ws nextPutAll: '___grailFastOverride___'].
+	ws nextPutAll: '.
 	___ov___ == nil ifTrue: [^ self '.
 	nargs @env0:= 0
 		ifTrue: [ws nextPutAll: shadowSel @env0:asString]
@@ -13182,7 +13237,9 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 				ws nextPutAll: (skw @env0:at: i); nextPutAll: ': ';
 					nextPutAll: (argNames @env0:at: i)]].
 	ws nextPutAll: '].
-	^ self @env0:___grailCallOverride___: ___ov___ name: #'''.
+	^ self @env0:___grailCallOverride___: '.
+	ws nextPutAll: (fast == nil ifTrue: ['___ov___'] ifFalse: ['{ false. ___ov___ }']).
+	ws nextPutAll: ' name: #'''.
 	ws nextPutAll: aSymbol @env0:asString.
 	ws nextPutAll: ''' args: '.
 	"The varargs selector already HAS the positional array and the keyword dict
@@ -13196,7 +13253,11 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 			1 to: nargs do: [:i |
 				ws nextPutAll: (argNames @env0:at: i); nextPutAll: '. '].
 			ws nextPutAll: '} kw: nil'].
-	self @env1:___compileMethod: ws contents category: 'Grail-Class Methods'.
+	"A SESSION method (Behavior >> ___compileSessionMethod:category:scope:):
+	the patch that asked for it is this session's, so the dispatcher is too.
+	Nothing is committed, no other session pays for it, and two sessions
+	patching one class cannot conflict."
+	self @env1:___compileSessionMethod: ws contents category: 'Grail-Class Methods' scope: fast.
 	"Per-session tally of installs, so a fixture or a suite run can report how
 	often a callable store actually shadowed a compiled method."
 	SessionTemps @env0:current @env0:at: #'GrailSelfSendDispatcherInstalls'
