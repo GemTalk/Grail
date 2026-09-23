@@ -171,10 +171,29 @@ normcase: aPath
 category: 'Grail-Path Manipulation'
 method: os_path
 realpath: path
-	"Symlinks are not resolved yet -- same as abspath.  os.readlink exists,
-	so this is a gap rather than a platform limit; see docs/Issues.md."
+	"CPython's own posixpath.realpath, which Grail already ships and which
+	already works here: pathlib imports posixpath, so the module is in the
+	tree and exercised.  This answered ``abspath'' instead -- no link
+	resolved at all -- which is what Path.resolve() inherited.
 
-	^ self abspath: path
+	DELEGATED rather than rewritten.  Resolving is not one readlink: it is a
+	component-by-component walk that re-resolves each link against the
+	directory holding it, unwinds ``..'' AFTER following, and has to notice a
+	symlink LOOP and answer differently for strict.  A second copy of that
+	algorithm beside the one in the tree would be a second thing to get
+	wrong."
+
+	^ self ___posixpathModule @env1:realpath: path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___posixpathModule
+	"CPython's posixpath.  A Grail import is a database read, and sys.modules
+	caches it per session, so asking each time costs a dictionary lookup
+	after the first."
+
+	^ (importlib @env0:___instance___) @env1:import_module: 'posixpath'
 %
 
 category: 'Grail-Path Manipulation'
@@ -185,15 +204,23 @@ _realpath: positional kw: kwargs
 	strict=strict)'', so without this Path.resolve() matched no selector --
 	and resolve() is the one call there the old hand-written pathlib had.
 
-	strict asks that the path exist.  With no symlink resolved (see
-	realpath:) that is all it can ask, so stat's own FileNotFoundError is
-	the answer, as it is in CPython."
+	strict is posixpath's own now, not a stat bolted on afterwards.  That
+	matters for a symlink LOOP, which is an OSError carrying ELOOP rather
+	than the FileNotFoundError a re-stat would have produced, and for a
+	missing component in the MIDDLE of the path."
 
-	| resolved |
+	| filename |
 
-	resolved := self realpath: ((os instance) ___requiredArgument: 'filename' at: 1 in: positional kw: kwargs for: 'realpath').
-	(self ___isStrict: kwargs) ifTrue: [(os instance) stat: resolved].
-	^ resolved
+	filename := (os instance) ___requiredArgument: 'filename' at: 1 in: positional kw: kwargs for: 'realpath'.
+	(self ___isStrict: kwargs) ifFalse: [^ self realpath: filename].
+	^ self ___posixpathModule @env1:_realpath: { filename } kw: self ___strictKeyword
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___strictKeyword
+
+	^ Dictionary @env0:new @env0:at: 'strict' put: true; @env0:yourself
 %
 
 category: 'Grail-Path Manipulation'

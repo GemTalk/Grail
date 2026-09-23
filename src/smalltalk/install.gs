@@ -1210,6 +1210,7 @@ run
 	at: #'ReNonAsciiSubTestCase' put: nil;
 	at: #'ReSubCallableTestCase' put: nil;
 	at: #'RealPathlibTestCase' put: nil;
+	at: #'RealpathSymlinksTestCase' put: nil;
 	at: #'RecursionErrorTestCase' put: nil;
 	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
@@ -2574,6 +2575,7 @@ input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
 input src/smalltalk/PythonTests/RealPathlibTestCase.gs
+input src/smalltalk/PythonTests/RealpathSymlinksTestCase.gs
 input src/smalltalk/PythonTests/ReConstantsTestCase.gs
 input src/smalltalk/PythonTests/RecursionErrorTestCase.gs
 input src/smalltalk/PythonTests/ReduceAndBuiltinBindingTestCase.gs

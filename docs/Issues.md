@@ -79,12 +79,13 @@ CPython's slot 0 is single and the last program to start owns it. Separate
 entries would let a long session accumulate one stale directory per *kind* of
 start.
 
-**Accepted platform gap: symlinks are not resolved.** CPython resolves the
-script path's symlinks before taking its directory. Grail's
-`os_path >> realpath:` is literally `abspath:` — there is no symlink-reading
-primitive under it to build on — so a symlinked script answers the *link's*
-directory, not the target's. Absolutising is the part that was reachable; this
-part is not, and is left as a known deviation rather than faked.
+**Symlinks were not resolved when this was written, and now are.** CPython
+resolves the script path's symlinks before taking its directory, and Grail's
+`os_path >> realpath:` was literally `abspath:`, so a symlinked script answered
+the *link's* directory. This entry called that a platform gap with "no
+symlink-reading primitive under it to build on"; that was wrong twice over —
+`os.readlink` existed, and CPython's own `posixpath.realpath` was already in
+the tree and already worked. See "os.path.realpath resolved no symlink" below.
 
 Covered by six new `SysPathBootstrapTestCase` tests, including the end-to-end
 one the original fix never had (drive `runPath:` and assert `sys.path[0]`,
@@ -6223,11 +6224,7 @@ unspecified, and the stub had happened to sort.
 None of these is a regression — the stub had none of these methods — but each is
 a call the real pathlib now makes and Grail cannot yet answer.
 
-* **`os.path.realpath` does not resolve symlinks.** `os.readlink` exists, so this
-  is a gap, not a platform limit. On macOS every `tempfile` directory sits under
-  `/var -> /private/var`, so `Path(tempfile.mkdtemp()).resolve()` differs from
-  CPython there. `real_pathlib.py` compares paths relative to its root for this
-  reason.
+* **`os.path.realpath` did not resolve symlinks** — FIXED below.
 * **`os.rename` of a missing file returns normally.**
   `GsFile renameFileOnServer:to:` answers an errno on failure, and `os.rename`
   tests only for `nil`. `Path.rename` inherits it. — FIXED below.
@@ -6421,3 +6418,49 @@ one found a data-loss bug that no assertion was aiming at. And a green local
 run says less than it looks for anything that walks a directory, since the
 order is the filesystem's, not Grail's; `tests/python/rmtree_symlinks.py`
 therefore checks what must SURVIVE a removal, not only what must raise.
+* **`shutil.rmtree` FOLLOWS a symbolic link to a directory**, and deletes what
+  it points at. `_rmtree_inner` asks `os.path.isdir`, which resolves the link,
+  and recurses; CPython asks `os.path.islink` first and unlinks the link
+  itself, and raises rather than recursing when the TOP of the tree is one.
+  So `rmtree` of a tree holding a link can delete files outside that tree.
+  Found by the fixture above on CI: Darwin listed the link after the directory
+  it pointed at, which hid it, and Linux listed it first. That one needs
+  `os.lstat`, not a wider errno map, so it is a change of its own.
+
+## os.path.realpath resolved no symlink, and CPython's own was already there
+
+`realpath` answered `abspath`: it normalised the path and resolved nothing, so
+`realpath(link)` answered the link's own name. `pathlib.Path.resolve()` calls
+`os.path.realpath(self, strict=strict)` and inherited it — the one call there
+the hand-written pathlib had implemented.
+
+**The fix is a delegation, because the implementation was already in the tree
+and already worked.** Grail ships CPython's `posixpath.py` (pathlib imports
+it), and `posixpath.realpath` called directly answers every case correctly
+under Grail today: a link in the middle of a path, a relative target resolved
+against the directory holding the link, a chain, `..` unwound after following,
+and a symlink LOOP. Measured before anything was written — ten cases, all
+matching CPython. What was missing was only the wiring: `os_path >> realpath:`
+never asked it.
+
+So the change is two sends, not an algorithm. Resolving is not one `readlink`:
+it is a component-by-component walk that re-resolves each link against its own
+directory, unwinds `..` AFTER following rather than textually, and has to
+notice a loop and answer differently under `strict`. A second copy of that
+beside the one already shipped would be a second thing to get wrong.
+
+`strict` is posixpath's own now rather than a `stat` bolted on afterwards.
+That is visible in two places: a symlink loop raises `OSError` carrying ELOOP
+where a re-stat produced `FileNotFoundError`, and a missing component in the
+MIDDLE of a path is named by CPython as the component, not as the leaf.
+
+### What this says about the entries above it
+
+Two of them called this a platform gap. The `sys.path[0]` entry said there was
+"no symlink-reading primitive under it to build on", and the pathlib entry
+said `real_pathlib.py` compares paths relative to its root "for this reason".
+Both were written after reading `realpath:` and finding `abspath:`, and
+neither checked what the tree already had. The lesson is cheap to state and
+was expensive to skip: before recording a limit, look for the CPython module
+that already implements it — `pathlib` (#1104) and this are now two cases
+where the answer was a file Grail was already shipping.
