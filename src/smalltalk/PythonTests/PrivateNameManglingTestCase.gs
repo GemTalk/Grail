@@ -83,6 +83,50 @@ testPrivateNameMangling
 	  'public_untouched' 'base_helper' 'derived_helper'
 	  'base_helper_via_derived' 'dunder_not_mangled'
 	  'single_underscore_untouched' 'trailing_dunder_untouched'
-	  'super_passes_args' 'private_recursion_is_catchable') do: [:key |
+	  'super_passes_args') do: [:key |
 		self assert: ((results @env1:__getitem__: key) = true) description: key]
+%
+
+category: 'Grail-Testing'
+classmethod: PrivateNameManglingTestCase
+skippedTests
+	"Kermit 52108: resignalAs: from the stack-overflow handler can re-trip the
+	stack limit in the interpreter.  See #testPrivateRecursionIsCatchable."
+
+	^ self
+		skipping: #(#testPrivateRecursionIsCatchable)
+		whenNativeCodeIsOffBecause: 'Kermit 52108: resignalAs: re-trips the stack limit in the interpreter'
+%
+
+category: 'Grail-Tests - mangling'
+method: PrivateNameManglingTestCase
+testPrivateRecursionIsCatchable
+	"A private method recursion -- self.__go(n + 1) -- must take the direct-send
+	fast path and so reach a normal depth and raise a CATCHABLE RecursionError
+	(see testPrivateNameMangling for the history).
+
+	Its own fixture (tests/python/private_name_mangling_recursion.py) and its
+	own test, SKIPPED WHEN NATIVE CODE IS OFF (see the class-side #skippedTests),
+	because of a GemStone VM defect: Kermit 52108.  resignalAs: from the
+	AlmostOutOfStackError handler -- what ___recursionGuard___ does -- re-arms
+	the yellow-zone guard page with no margin, so when the trip lands in a method prologue the replacement
+	RecursionError trips the limit again while it is being dispatched, and the
+	second one escapes the ``except RecursionError:'' already committed to the
+	first.  At module level that aborted the load of the shared fixture and
+	lost all fifteen mangling checks, which is why this one moved out.
+
+	It reproduces only in the interpreter (every Darwin arm64 gem; Linux with
+	GEM_NATIVE_CODE_ENABLED=0), not with native code on, so CI still checks
+	it.  Plain-Smalltalk reproduction: branch repro/resignal-retrip,
+	tests/vm/resignal_retrip_repro.gs.  Remove the skip when Kermit 52108 is
+	fixed."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'private_name_mangling_recursion' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/private_name_mangling_recursion.py')
+		name: 'private_name_mangling_recursion'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'private_recursion_is_catchable') = true)
+		description: 'private_recursion_is_catchable'
 %
