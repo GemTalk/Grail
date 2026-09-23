@@ -207,6 +207,72 @@ __str__
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
 ! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
 ! invisible to the probe and the hook silently does nothing.
+category: 'Grail-Initialization'
+classmethod: OSError
+___classForArgs___: positional
+	"``OSError(2, 'msg')'' IS a FileNotFoundError in CPython: OSError.__new__
+	reads the errno and answers the subclass for it, so ``except
+	FileNotFoundError'' catches an error raised as a plain OSError with an
+	errno.  Grail answered a plain OSError, and the handler did not fire.
+
+	ONLY FOR OSError ITSELF.  CPython maps in OSError.__new__ and only when
+	the class named is OSError exactly -- ``PermissionError(2, 'msg')'' stays
+	a PermissionError rather than becoming FileNotFoundError, because a caller
+	naming a subclass has already said which one it means.
+
+	Only where an errno was really supplied: the (errno, strerror) form is
+	2..5 arguments with an INTEGER first, which is the same test
+	___args___: makes before it unpacks them.  ``OSError('just a message')''
+	and ``OSError(None, 'msg')'' stay OSError, as they do in CPython."
+
+	| errno |
+
+	self @env0:== OSError ifFalse: [^ self].
+	(positional @env0:isNil @env0:or: [positional @env0:size @env0:< 2]) ifTrue: [^ self].
+	positional @env0:size @env0:> 5 ifTrue: [^ self].
+	errno := positional @env0:at: 1.
+	(errno @env0:isKindOf: Integer) ifFalse: [^ self].
+	^ self ___classForErrno: errno
+%
+
+category: 'Grail-Initialization'
+classmethod: OSError
+___classForErrno: anErrno
+	"The OSError subclass CPython's errnomap answers for anErrno, or OSError
+	when it maps none.  os asks this too, so an errno reaching Python names
+	the same class however it was raised."
+
+	^ self ___classesByErrno @env0:at: anErrno ifAbsent: [OSError]
+%
+
+category: 'Grail-Initialization'
+classmethod: OSError
+___classesByErrno
+	"CPython's errnomap, for the errnos DARWIN AND LINUX NUMBER ALIKE -- all
+	of 1..34 plus ECHILD, which is where every error a file operation reports
+	lives.
+
+	The rest of CPython's map is the network and non-blocking family
+	(EAGAIN/EWOULDBLOCK -> BlockingIOError, ECONNRESET -> ConnectionResetError,
+	ETIMEDOUT -> TimeoutError, ...), and those errnos are numbered DIFFERENTLY
+	on the two platforms -- EAGAIN is 35 here and 11 on Linux. Mapping them
+	from one platform's numbering would answer the wrong class on the other,
+	which is worse than answering OSError; see docs/Issues.md."
+
+	^ Dictionary @env0:new
+		@env0:at: 1 put: PermissionError;        "EPERM"
+		@env0:at: 2 put: FileNotFoundError;      "ENOENT"
+		@env0:at: 3 put: ProcessLookupError;     "ESRCH"
+		@env0:at: 4 put: InterruptedError;       "EINTR"
+		@env0:at: 10 put: ChildProcessError;     "ECHILD"
+		@env0:at: 13 put: PermissionError;       "EACCES"
+		@env0:at: 17 put: FileExistsError;       "EEXIST"
+		@env0:at: 20 put: NotADirectoryError;    "ENOTDIR"
+		@env0:at: 21 put: IsADirectoryError;     "EISDIR"
+		@env0:at: 32 put: BrokenPipeError;       "EPIPE"
+		@env0:yourself
+%
+
 set compile_env: 0
 
 category: 'Grail-Python Attribute Hook'

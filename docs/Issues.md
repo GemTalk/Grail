@@ -6271,9 +6271,7 @@ class-and-text table that change added.
 
 * **Raises in `os.gs` and `io` carried the message but not the errno** — FIXED
   below.
-* **`OSError(2, 'msg')` still stays an `OSError`** (the pathlib entry above).
-  Not done here: it changes the exception constructors every exception shares,
-  which is a tier-2 change of its own.
+* **`OSError(2, 'msg')` stayed an `OSError`** — FIXED below.
 
 ## A failing os call carried no errno
 
@@ -6322,8 +6320,7 @@ filesystem is reported the same way, where CPython would say `EROFS`.
   table to borrow.
 * **Grail's `shutil.py`** raises `FileExistsError("[Errno 17] File exists: ...")`
   as a message too.
-* **`OSError(2, 'msg')` still stays an `OSError`** (see the pathlib entry):
-  a tier-2 change to the constructors every exception shares.
+* **`OSError(2, 'msg')` stayed an `OSError`** — FIXED below.
 
 ## os.chdir said nothing when it failed
 
@@ -6375,8 +6372,10 @@ needed for the `strerror` callout.
 * **A directory that cannot be entered or removed for a reason the stat cannot
   see** — a permission on the directory itself — still falls back to the plain
   `OSError` with Grail's own sentence, since the primitives report nothing.
-* **`subprocess`, the socket layer and Grail's `shutil.py`** still raise the
-  message-only form (see the entry above).
+* **`subprocess` and Grail's `shutil.py` raised the message-only form** —
+  FIXED below. **The socket layer still does**, and stays that way while the
+  `errno` module carries one platform's numbering: a socket errno IS the
+  network family, which is where the two platforms disagree.
 * **`shutil.rmtree` followed a symbolic link to a directory** — FIXED below.
 
 ## shutil.rmtree followed a symbolic link, and deleted what it pointed at
@@ -6559,13 +6558,109 @@ have traded a wrong split for a wrong join. Both are CPython's logic now, and
 `uses_netloc` became load-bearing: the list Werkzeug appends to at import
 time, which this module's own comment admitted nothing consulted.
 
-### Two flaky corpus tests, seen while measuring this
+### Two flaky corpus tests, first seen while measuring this
 
 The tier-2 cycle reported ONE newly failing test in each after-run, and a
 DIFFERENT one each time — `test_annotationlib`'s
 `test_partially_nonexistent_union`, then `test_codecs`'s
+`test_file_closes_if_lookup_error_raised`. Neither module touches `urllib`.
+They are flaky, which the next entry but one settles by running the suite
+twice on one unchanged baseline.
+
+## OSError(errno, strerror) now answers the errno's own subclass
+
+`OSError(2, 'No such file or directory')` IS a `FileNotFoundError` in CPython:
+`OSError.__new__` reads the errno and answers the subclass for it. Grail
+answered a plain `OSError`, so an `except FileNotFoundError` around code
+raising the two-argument form never fired — and that form is what a library
+writes when it re-raises an error it carried across a boundary.
+
+**The hook for this already existed and was half-wired.** `BaseException class
+>> ___classForArgs___:` is the seam PEP 654's exception groups use, and its own
+comment says why it is a hook rather than a special case: there are several
+construction paths, and "a rule applied to only some of them is worse than no
+rule". Only the TWO-argument `__new__` consulted it, so the class would have
+depended on how many arguments were written — `OSError(2, 'm')` narrowing while
+`OSError(2, 'm', 'f')` did not. Every arity consults it now.
+
+**One table, not two.** `os` grew its own errno→class map in the `os.rename`
+entry above. `OSError` owns it now and `os` asks for it, so an errno names the
+same class whether it arrives from a failing syscall or from
+`OSError(errno, strerror)` written in Python.
+
+Mapped are the errnos DARWIN AND LINUX NUMBER ALIKE: all of 1..34 plus
+`ECHILD`, which is where every error a file operation reports lives. CPython's
+map also covers the network and non-blocking family (`EAGAIN` →
+`BlockingIOError`, `ETIMEDOUT` → `TimeoutError`, …), and those numbers differ
+between the platforms — `EAGAIN` is 35 on Darwin and 11 on Linux — so mapping
+them from one platform's numbering would answer the WRONG class on the other.
+They stay `OSError` until the `errno` module reads its numbers from the
+platform (recorded above).
+
+### A silent no-op, and the probe that caught it
+
+The first attempt installed with no error and changed nothing. The new class
+methods had landed in an `env 0` section of `OSError.gs` while the call site
+sends from `env 1`, so the send fell through to the inherited hook. Asking for
+them directly in a session said so at once — `a Metaclass3 does not understand
+#'___classesByErrno' (env 1)` — where the fixture could only report that the
+narrowing still was not happening. **A `.gs` file's `set compile_env:` sections
+are part of the method's identity**; adding a method beside a related one is
+not enough if the two are in different sections.
+
+## Two corpus tests are flaky, and a baseline-vs-baseline run proves it
+
+The tier-2 cycles for the three changes above each reported ONE newly failing
+test, and not always the same one:
+`test_annotationlib.TestForwardRefFormat.test_partially_nonexistent_union`
+twice, `test_codecs.CodecsModuleTest.test_file_closes_if_lookup_error_raised`
+once. Run alone, `test.test_annotationlib` answers 117 tests with no failures.
+
+**Measured properly rather than assumed:** the full suite was run TWICE on the
+same unchanged baseline, and the two runs disagree by exactly that
+`test_annotationlib` test — 142 failing tests in one and 143 in the other. So
+the corpus carries tests that fail occasionally under four concurrent workers,
+and a single run's "newly failing" line is not evidence of a regression on its
+own.
+
+What follows for the tiering rule: the name-and-kind diff is still the right
+gate, but a difference of ONE test in a ~180-failure corpus deserves a second
+sample before it is believed — of the baseline, not only of the change. The
+gate agreed throughout: 0 regressions in every run, because the flaky rows are
+not scoreboard movements.
 `test_file_closes_if_lookup_error_raised`. Neither module touches `urllib`,
 and `test_annotationlib` run alone answers 117 tests with no failures. So the
 corpus carries at least two tests that fail occasionally under four
 concurrent workers, and one run's "newly failing" line is not by itself
 evidence of a regression — a second sample is what tells the two apart.
+
+## The last message-only OSErrors: subprocess and copytree
+
+Three raises still built their exception from the TEXT of an errno rather than
+from the errno:
+
+```smalltalk
+FileNotFoundError ___signal___: '[Errno 2] No such file or directory: ' , prog printString
+```
+
+so `e.errno`, `e.strerror` and `e.filename` were `None`. Code catching
+`subprocess.run` to report WHICH program is missing reads `e.filename` and got
+nothing; the same for the tree `shutil.copytree` refused to overwrite.
+subprocess's broken-pipe error is the other shape CPython carries — errno and
+strerror with NO filename, since a pipe names no file.
+
+`shutil.copytree` is Python-side, and writing it as CPython does —
+`FileExistsError(17, os.strerror(17), dst)` — is now enough on its own,
+because `OSError`'s constructor narrows by errno — see "OSError(errno,
+strerror) now answers the errno's own subclass". The two changes meet here:
+the Python spelling and the Smalltalk one produce the same object.
+
+### A fixture that aborted instead of reporting
+
+The first baseline measurement answered nothing at all: the fixture compares
+`exc.strerror` against `os.strerror(exc.errno)`, and on the code being
+measured `exc.errno` is None — which `os.strerror` now refuses with a
+TypeError, the check added in "A failing os call carried no errno". A fixture written to
+catch a MISSING errno must not itself assume the errno is there; guarded, the
+same run reports 3 of its 8 checks failing with `errno=None, filename=None`,
+which is the evidence that was wanted.
