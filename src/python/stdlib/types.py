@@ -583,25 +583,54 @@ def new_class(name, bases=(), kwds=None, exec_body=None):
     and the remaining keywords are forwarded to the call, exactly as the
     class STATEMENT forwards its header keywords.
 
-    ``kwds`` is STILL not forwarded to the construction call, and the
-    reason is worth recording because it is not this function's own gap:
-    calling a metaclass to build a class does not work yet.  ``M('X', (),
-    {})`` for ``class M(type)`` answers an INSTANCE of M rather than a
-    class, so ``M(...).__name__`` is an AttributeError.  Until that is
-    fixed, forwarding here would replace a class built with the wrong
-    metaclass -- which is what this does -- with an outright error, so the
-    lesser wrong is kept deliberately.
+    ``kwds`` IS now forwarded, through ``type(name, bases, ns, **kwds)``:
+    CPython has accepted class keywords on the three-argument type() since
+    3.6 and forwards them to ``__init_subclass__``, which is the whole
+    reason new_class has keywords to pass on.  Dropping them silently built
+    a class where CPython raises -- ``new_class("C", (object,),
+    dict(metaclass=MyMeta, otherarg=1))`` answered a class here and a
+    TypeError there (test_subclassinit test_errors).
+
+    THE METACLASS IS STILL NOT HONOURED, and that is not this function's own
+    gap: calling a metaclass to build a class does not work yet.  ``M('X',
+    (), {})`` for ``class M(type)`` answers an INSTANCE of M rather than a
+    class, so ``M(...).__name__`` is an AttributeError.  Until that is fixed
+    the class is built by type(), which derives its metaclass from the bases,
+    so an explicit ``metaclass=`` that differs from them is lost.  The
+    KEYWORDS, which is what the protocol checks, reach the hook either way --
+    so the check now happens even where the metaclass does not.
 
     ``prepare_class`` below IS faithful, including popping ``metaclass``
     and computing the most derived one, so the pieces are in place for
     the day the call works.  See docs/Issues.md."""
     resolved_bases = resolve_bases(bases)
-    ns = {}
+    meta, ns, kwds = prepare_class(name, resolved_bases, kwds)
     if exec_body is not None:
         exec_body(ns)
     if resolved_bases is not bases:
         ns['__orig_bases__'] = bases
-    return type(name, resolved_bases, ns)
+    # ONLY WHAT THE METACLASS WOULD PASS ON reaches __init_subclass__.  In
+    # CPython the keywords go to ``meta(...)`` and the hook sees whatever that
+    # metaclass's __new__ forwards to type.__new__ -- a __new__ that binds the
+    # keyword, or carries **kwargs and does not pass them on, consumes it.
+    # Building through type() here hands the hook ALL of them, which turns a
+    # metaclass that legitimately eats its own keywords into a spurious
+    # TypeError: ``new_class('C', (), dict(metaclass=M, otherarg=1))`` for an
+    # M whose __new__ takes **kwargs builds a class in CPython and raised here.
+    #
+    # Grail cannot call the metaclass, so it takes one at its word: a metaclass
+    # with a PYTHON-level __new__ owns its keywords and none are forwarded.  A
+    # metaclass that defines none (``class MyMeta(type): pass``) forwards them
+    # all, which is what makes the leftover-keyword check still happen -- and
+    # that is the shape test_subclassinit test_errors asserts.
+    #
+    # ``__code__`` is the discriminator because it answers the same thing in
+    # both runtimes: a Python-defined __new__ has one and the inherited
+    # built-in type.__new__ does not.  ``meta.__new__ is not type.__new__``
+    # does NOT -- Grail answers True for a metaclass that defines nothing.
+    if kwds and getattr(getattr(meta, '__new__', None), '__code__', None):
+        kwds = {}
+    return type(name, resolved_bases, ns, **kwds)
 
 
 def prepare_class(name, bases=(), kwds=None):

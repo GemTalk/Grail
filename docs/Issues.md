@@ -1057,14 +1057,26 @@ left is one cluster plus one unrelated test, diagnosed but not fixed:
 
 Those three are `test_errors` and `test_errors_changed_pep487`.
 
-* **`__init_subclass__` is not resolved along the full MRO.** The
-  cooperative chain walks Smalltalk superclass links, so a diamond whose
-  hook lives on a SECONDARY base is skipped:
-  `class A(Left, Middle, Right, middle="middle")` never reaches Middle's
-  hook and the leftover keyword reaches `object.__init_subclass__`, which
-  rejects it (`test_init_subclass_diamond`). `___grailInitSubclassRoots___`
-  already exists for the mixin case; making the whole cooperative
-  `super()` chain MRO-ordered is the real fix and is a larger job.
+* ~~**`__init_subclass__` is not resolved along the full MRO.**~~ **FIXED**
+  (2026-09-22, PR #1123). The ENTRY searched Smalltalk superclass links, so a
+  diamond whose hook lives on a SECONDARY base was skipped and the leftover
+  keyword reached `object.__init_subclass__`, which rejected it. It now goes
+  through `___grailInitSubclassMroSupplierAfter___`, which reads `__mro__`.
+
+  **The "larger job" this entry predicted did not exist.** It said making the
+  whole cooperative `super()` chain MRO-ordered was the real fix; in fact
+  `Super >> _lookupMethodAndSideFirstOf:` already walked `___mroOf___` from
+  `cls`'s index, assigned hooks included, so the continuation had been right
+  all along. An MRO-ordered hop was written for `Super >> ___pyAttrLoad___:`
+  on the strength of this paragraph and removed again when its control did not
+  discriminate. Read that as a warning about this file: a recorded diagnosis
+  is a measurement with a date on it, and the control is what settles it.
+
+  What the fix did need, and this entry did not predict, was that the search
+  base and the assigned-hook probe become ONE search. Two separate ones
+  disagree exactly on a diamond, and a class whose MRO names an assigned hook
+  on one base while the base walk finds a defined one on another then runs
+  NEITHER.
 
 Noticed in passing, unrelated to the above: a class attribute SET AT
 RUNTIME (including by `__init_subclass__`) is not visible through the
@@ -2506,25 +2518,44 @@ Probing the object model while there did find three real defects in it:
   `___grailInitSubclassRoots___`, the same base list the assigned-hook search
   already used.
 
-### What is still open in the diamond
+### The diamond is closed (2026-09-22, PR #1123)
 
-`___grailInitSubclassSearchBase___` is a **left-to-right walk of the bases,
-each one's superclass chain first** — not a C3 linearization. It agrees with
+`___grailInitSubclassSearchBase___` was **a left-to-right walk of the bases,
+each one's superclass chain first** — not a C3 linearization. It agreed with
 the MRO for every hierarchy whose bases do not SHARE an ancestor, and
-disagrees when they do. `test_subclassinit.test_init_subclass_diamond` is the
-disagreeing shape and still fails, unchanged at ERROR 17/2/1: `class A(Left,
-Middle, Right)` with `Left` and `Right` both deriving from `Base` puts `Base`
-AFTER `Middle` in the real MRO, and the walk reaches `Base` through `Left`
-first.
+disagreed when they do. `test_subclassinit.test_init_subclass_diamond` was the
+disagreeing shape.
 
-That test needs more than a search base in any case. Its hooks chain
-cooperatively with `super().__init_subclass__(**kwargs)`, and Grail's `super()`
-inside a hook walks Smalltalk links too, so `Middle`'s `super()` cannot reach
-`Right` **whatever the entry point is**. So the `__init_subclass__` bullet in
-`## OPEN: metaclass class-keyword plumbing, and type.__new__ keyword rejection`
-is NARROWED, not resolved: reaching a secondary base's hook works; continuing
-the cooperative chain in MRO order does not. That section's other three items were re-measured, and
-two of the three readings have moved:
+The entry now asks `___grailInitSubclassMroSupplierAfter___`, which reads
+`__mro__` and answers the next class that SUPPLIES a hook, defined or
+assigned. The base walk remains as the fallback for a class whose `__mro__`
+cannot be read.
+
+**The second half of what this section claimed was wrong.** It said the test
+needed more than a search base — that `Middle`'s `super()` could not reach
+`Right` whatever the entry point was, because `super()` inside a hook walked
+Smalltalk links too. It does not: `Super >> _lookupMethodAndSideFirstOf:`
+walks `___mroOf___` from `cls`'s index and has all along. A hop written for
+`Super >> ___pyAttrLoad___:` on the strength of that sentence was removed when
+its control turned out not to discriminate.
+
+`test.test_subclassinit` is `OK 17/0/0`.
+
+`types.new_class` forwards its class keywords now too, which was the other
+half of that module. The forwarding is CONDITIONAL, and the reason is worth
+recording: CPython sends the keywords to `meta(...)` and `__init_subclass__`
+sees only what that metaclass's `__new__` passes on to `type.__new__`, so a
+`__new__` carrying `**kwargs` consumes them and the class builds. Grail builds
+through `type()` and cannot call the metaclass, so forwarding ALL of them made
+`test_errors` pass and turned two shapes CPython builds into a spurious
+TypeError — one right row bought with two wrong ones. It now takes a
+Python-level `__new__` at its word and forwards nothing; a metaclass defining
+none forwards all. `__code__` is the discriminator because it answers the same
+in both runtimes — `meta.__new__ is not type.__new__` does not, since Grail
+answers True for a metaclass that defines nothing.
+
+The remaining three items in the section below were re-measured, and two of the
+three readings have moved:
 
 * a metaclass `__new__` naming a class keyword with no default is
   **unchanged** — still `type.__new__() argument 3 must be dict, not

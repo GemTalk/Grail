@@ -129,19 +129,28 @@ category: 'Grail-Tests - Semantics'
 method: InferredSlotsTestCase
 testAllChecksPassWithInferredSlotsOff
 	"The control: the same checks hold on the unchanged dynamic-instVar
-	model, so the fixture pins Python semantics rather than a storage
-	layout.  ONE known exception, pre-existing and not touched by this
-	change: an augmented self-store (``self.x += 1'') in a parent's method
-	is written straight to dynamic-instVar storage by the flag-off codegen
-	(AugAssignAst), so a SUBCLASS __setattr__ does not see it; CPython -- and
-	the flag-on accessor forwarder -- route it through the hook.  Listed
-	here so the day the flag-off path is fixed this test says so."
+	model, so the fixture pins Python semantics rather than a storage layout.
+
+	THE ONE EXCEPTION THIS USED TO LIST IS GONE.  An augmented self-store
+	(``self.x += 1'') in a parent's method was written straight to
+	dynamic-instVar storage by the flag-off codegen, so a SUBCLASS
+	__setattr__ never saw it, where CPython -- and the flag-on accessor
+	forwarder -- route it through the hook.  This test pinned that as
+	``[''subclass_setattr_hook_intercepts_parent_augassign'']'' and said the
+	day the flag-off path was fixed it would say so.  It did: AugAssignAst
+	now emits ``self __setattr__: ''x'' _: ...'' for that target shape, the
+	same store the PLAIN assignment emitter has always used, so both flag
+	states agree with CPython and the list is empty.
+
+	The fix was not made for this test.  It came from a raw dynamic-instVar
+	store being an uncatchable ImproperOperation whenever the receiver is a
+	CLASS -- ``@classmethod def bump(cls): cls.count += 1'' -- and closing
+	the __setattr__ hole with it."
 
 	| failed |
 	failed := ((self loadFixtureWithFlag: false) @env1:___pyAttrLoad___: #run_all)
 		@env1:value: #() value: nil.
-	self assert: (failed @env1:__repr__) asString
-		equals: '[''subclass_setattr_hook_intercepts_parent_augassign'']'.
+	self assert: (failed @env1:__repr__) asString equals: '[]'.
 %
 
 category: 'Grail-Private'
