@@ -707,6 +707,51 @@ _eval: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___foldAstDebug___: aTree
+	"Apply the ast module's ``__debug__'' fold to a tree, and answer it.
+
+	The walk lives in Python, beside the node classes it rewrites -- a tree
+	walk belongs with the tree -- and this is the one call site outside it.
+	A failure answers the tree unchanged rather than raising: compile() was
+	asked for an optimised tree and an unoptimised one is a closer answer than
+	an exception."
+
+	| astMod |
+	astMod := [self ___import__: { 'ast' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	astMod @env0:isNil ifTrue: [^ aTree].
+	^ [(astMod @env1:___pyAttrLoad___: #'__grail_fold_debug__')
+		@env1:___pyCallValue___: { aTree } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: aTree]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___astTreeFor___: aSource optimized: wantOptimized
+	"The Python ``ast'' tree for a source, as PyCF_ONLY_AST asks for.
+
+	Grail's parser builds its own node hierarchy;
+	AbstractNode >> ___asPythonAst___ maps it onto the classes the ast module
+	declares.  Before this, compile() with that flag answered the source string
+	and ast.parse() a placeholder, so anything that walked a parse got neither.
+
+	The ``__debug__'' fold for PyCF_OPTIMIZED_AST is done by the ast module's
+	own helper, beside the node classes it rewrites -- a tree walk belongs with
+	the tree."
+
+	| tree astMod |
+	tree := (ModuleAst @env0:parseSource: aSource) @env0:___asPythonAst___.
+	tree @env0:isNil ifTrue: [
+		^ TypeError ___signal___: 'compile(): cannot build an AST for this source'].
+	wantOptimized ifFalse: [^ tree].
+	astMod := [self ___import__: { 'ast' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	astMod @env0:isNil ifTrue: [^ tree].
+	^ self ___foldAstDebug___: tree
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___topLevelAwaitFlagsFor___: aSource
 	"``co_flags'' for a source compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT:
 	CO_COROUTINE (128) when the body awaits at MODULE scope, 0 otherwise.
@@ -999,6 +1044,21 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 			(fn @env0:isKindOf: CharacterCollection) ifTrue: [
 				fname := fn @env0:asString.
 				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fname]].
+		"PyCF_ONLY_AST / PyCF_OPTIMIZED_AST ANSWER THE TREE, not a code object.
+		That is what the flags mean: stop after parsing and hand back the AST.
+		``ast.parse'' is defined as this call, so one place builds the tree and
+		the two cannot drift.
+
+		OPTIMIZED additionally folds ``__debug__'' to a Constant -- CPython
+		resolves it at compile time, since it cannot change while a program
+		runs, and PyCF_OPTIMIZED_AST is how a caller asks to see the tree after
+		that.  The fold is written in Python, beside the node classes it
+		rewrites."
+		((args @env0:size @env0:>= 4)
+			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r400) @env0:~= 0]])
+			ifTrue: [^ self ___astTreeFor___: copy optimized:
+				(((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0)].
 		flags := ((args @env0:size @env0:>= 4)
 			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])
@@ -1006,6 +1066,16 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 			ifFalse: [0].
 		^ PyCode @env0:___forCompiledSource___: copy filename: fname
 			mode: mode flags: flags].
+	"AN AST ARGUMENT WITH PyCF_OPTIMIZED_AST IS FOLDED AND HANDED BACK.
+	``compile(ast.parse(src), f, mode, flags=PyCF_OPTIMIZED_AST)'' is how a
+	caller asks to see an already-parsed tree AFTER the optimiser, and
+	test_compile_ast checks it against the tree compiled from source directly
+	-- the two must agree.  Without this the tree came back untouched and its
+	``__debug__'' was still a Name where the other was a Constant."
+	((args @env0:size @env0:>= 4)
+		@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+			@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0]])
+		ifTrue: [^ self ___foldAstDebug___: source].
 	^ source
 %
 
