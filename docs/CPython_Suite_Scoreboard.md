@@ -85,20 +85,20 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_funcattrs | OK | 35 | 0 | 0 | 4 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 10 | 20 | 15 |  |
+| test.test_builtin | OK | 133 | 0 | 0 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | OK | 11 | 0 | 0 | 2 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
 | test.test_global | OK | 20 | 0 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
-| test.test_named_expressions | FAIL | 74 | 1 | 0 | 0 |  |
-| test.test_subclassinit | ERROR | 17 | 1 | 1 | 0 |  |
+| test.test_named_expressions | OK | 74 | 0 | 0 | 0 |  |
+| test.test_subclassinit | OK | 17 | 0 | 0 | 0 |  |
 | test.test_super | OK | 40 | 0 | 0 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
-| test.test_positional_only_arg | ERROR | 28 | 0 | 1 | 0 |  |
-| test.test_string_literals | ERROR | 20 | 5 | 1 | 0 |  |
-| test.test_genericclass | ERROR | 22 | 2 | 1 | 1 |  |
+| test.test_positional_only_arg | OK | 28 | 0 | 0 | 1 |  |
+| test.test_string_literals | OK | 20 | 0 | 0 | 0 |  |
+| test.test_genericclass | OK | 22 | 0 | 0 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
 | test.test_codecs | ERROR | 287 | 16 | 22 | 22 |  |
@@ -112,9 +112,9 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_reprlib | ERROR | 33 | 6 | 2 | 2 |  |
 | test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
-| test.test_warnings | ERROR | 187 | 7 | 3 | 29 |  |
+| test.test_warnings | ERROR | 187 | 5 | 5 | 29 |  |
 | test.test___all__ | FAIL | 1 | 1 | 0 | 0 |  |
-| test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
+| test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | 2 |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
@@ -125,7 +125,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_xml_etree | ERROR | 226 | 14 | 34 | 3 |  |
-| test.test_zipapp | ERROR | 35 | 0 | 11 | 0 |  |
+| test.test_zipapp | ERROR | 35 | 0 | 9 | 0 |  |
 | test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
