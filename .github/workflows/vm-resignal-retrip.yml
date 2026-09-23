@@ -1,0 +1,86 @@
+name: VM repro - resignalAs re-trips the stack limit
+
+# A STANDALONE GEMSTONE REPRODUCTION, NOT A GRAIL TEST.  It installs no Grail
+# code: it starts a stone in GemTalk's container and runs one plain-Smalltalk
+# topaz script, tests/vm/resignal_retrip_repro.gs, whose header describes the
+# defect.  It lives on its own branch so it can be handed to GemStone core
+# engineering with a CI run attached; nothing else runs on pushes to it
+# (ci.yml and the conformance nightly have no push trigger).
+#
+# One matrix cell per gem configuration.  A cell FAILS when the script prints
+# VERDICT|REPRODUCED -- so a red cell is the defect showing, and a green one is
+# a configuration where it did not.  Measured locally in this same image under
+# x86_64 emulation: reproduced with native code OFF, not with it on.
+
+on:
+  push:
+    branches:
+      - 'repro/resignal-retrip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "native on (image default), stack depth default", cfg: "" }
+          - { name: "native on, stack depth 48000",                   cfg: "GEM_MAX_SMALLTALK_STACK_DEPTH=48000;" }
+          - { name: "native OFF, stack depth default",                cfg: "GEM_NATIVE_CODE_ENABLED=0;" }
+          - { name: "native OFF, stack depth 48000",                  cfg: "GEM_NATIVE_CODE_ENABLED=0;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;" }
+          - { name: "native OFF, yellow zone 100 percent",            cfg: "GEM_NATIVE_CODE_ENABLED=0;GEM_SMALLTALK_STACK_ERROR_PERCENT=100;" }
+    name: ${{ matrix.name }}
+    container:
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
+      options: --shm-size=1g
+      credentials:
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # NO COMMENTS OR APOSTROPHES INSIDE THE bash -c BODY: it is one
+      # single-quoted string, and an apostrophe would end it early.
+      - name: start a stone and run the repro
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            REPRO_CFG="${{ matrix.cfg }}" \
+            bash -e -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              cd "$GITHUB_WORKSPACE"
+              tests/github/setup-testing-env.sh
+              cd "$GEMSTONE_GLOBAL_DIR"
+              startstone -e stone.conf gs64stone
+              waitstone gs64stone 60
+              cd "$GITHUB_WORKSPACE"
+              if [ -n "$REPRO_CFG" ]; then set -- -C "$REPRO_CFG"; else set --; fi
+              topaz -lq "$@" -S tests/vm/resignal_retrip_repro.gs < /dev/null > repro.out 2>&1 || true
+              cat repro.out
+              grep -q "^VERDICT|" repro.out || { echo "the script produced no VERDICT line"; exit 2; }
+              if grep -q "^VERDICT|REPRODUCED" repro.out; then
+                echo "::error::defect reproduced under -C \"$REPRO_CFG\""
+                exit 1
+              fi
+              echo "not reproduced under -C \"$REPRO_CFG\""
+            '
+
+      - name: Upload output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repro-${{ strategy.job-index }}
+          if-no-files-found: ignore
+          retention-days: 30
+          path: |
+            repro.out
+            testing/*.log
