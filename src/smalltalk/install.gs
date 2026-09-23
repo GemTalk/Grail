@@ -776,6 +776,7 @@ run
 	at: #'ClassFunctionBindingTestCase' put: nil;
 	at: #'ClassGetitemPrecedenceTestCase' put: nil;
 	at: #'ClassGetitemTestCase' put: nil;
+	at: #'ClassHeaderEvaluatedOnceTestCase' put: nil;
 	at: #'ClassInClassBodyTestCase' put: nil;
 	at: #'ClassMetaclassIdentityTestCase' put: nil;
 	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
@@ -2135,6 +2136,7 @@ input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemPrecedenceTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
+input src/smalltalk/PythonTests/ClassHeaderEvaluatedOnceTestCase.gs
 input src/smalltalk/PythonTests/ClassInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs

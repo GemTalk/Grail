@@ -686,12 +686,14 @@ printSmalltalkRuntimeOn: aStream
 	declare, even when the class name itself needs no temp -- a class nested
 	in a function or in another class body reaches this the same way, and
 	Smalltalk block temps are visible to the nested blocks the body emits."
-	(self ___bindsClassNameToModule___ or: [self ___classBodyHelperTemps___ notEmpty]) ifTrue: [
+	(self ___bindsClassNameToModule___ or: [self ___classBlockNeedsTemps___]) ifTrue: [
 		aStream nextPutAll: '[| '.
 		self ___bindsClassNameToModule___ ifTrue: [
 			aStream nextPutAll: self ___stVarName___; nextPutAll: ' '].
 		self ___classBodyHelperTemps___ do: [:each |
 			aStream nextPutAll: each asString; nextPutAll: ' '].
+		self ___classHeaderTemps___ do: [:each |
+			aStream nextPutAll: each; nextPutAll: ' '].
 		aStream nextPutAll: '| '.
 	].
 	(self isModuleScopeClassDef) ifTrue: [
@@ -721,6 +723,10 @@ printSmalltalkRuntimeOn: aStream
 	classInstVar slots because GemStone prohibits dynamic instVars on
 	Behavior / Class receivers (error 2484); accessor/setter pairs
 	keep the read/write path working for class-side attrs."
+	"THE HEADER FIRST, once, before the class exists -- which is also where
+	CPython evaluates it.  Inside the canonical guard, so a warm import that
+	binds the committed class evaluates nothing, as before."
+	self printClassHeaderOn: aStream.
 	aStream nextPutAll: self ___stVarName___; nextPutAll: ' := ('.
 	"Phase-1 canonical classes: a module-scope class definition mints
 	through importlib ___canonicalSubclassOf: so a stale-source rebuild can
@@ -1447,10 +1453,7 @@ printSmalltalkRuntimeOn: aStream
 	[aStream nextPutAll: self ___stVarName___; nextPutAll: ' @env1:___grailPrepareNamespace___: '.
 	metaclassKw
 		ifNil: [aStream nextPutAll: 'nil']
-		ifNotNil: [
-			aStream nextPut: $(.
-			metaclassKw value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $)].
+		ifNotNil: [aStream nextPutAll: (self ___hdrTempForKeyword___: metaclassKw)].
 	aStream nextPutAll: '.'; lf]
 		ensure: [CallAst inDecoratorEmit: (savedDeco == true)]] value.
 	[
@@ -2154,20 +2157,15 @@ printSmalltalkRuntimeOn: aStream
 	them).  Emitted after the class's own methods are compiled so they
 	take precedence.  See importlib >> ___mergeSecondaryBases___:bases:."
 	bases size > 1 ifTrue: [
-		"Same inline-scope rule as printSuperclassOn: above -- these are
-		the SAME base expressions, re-emitted for the MI merge."
-		| savedBasesFlag |
-		savedBasesFlag := CallAst inBasesEmit.
-		CallAst inBasesEmit: true.
-		[aStream
+		"The SAME bases the storage-base choice saw, read from the header temps
+		rather than re-emitted.  Re-emitting them is what evaluated every base
+		expression twice.  Both lists go: the raw one because __orig_bases__
+		records what was written, the resolved one so the merge does not run
+		the __mro_entries__ hooks again."
+		aStream
 			nextPutAll: '(Python @env0:at: #importlib) @env0:___mergeSecondaryBases___: ';
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' bases: { '.
-		1 to: bases size do: [:i |
-			i > 1 ifTrue: [aStream nextPutAll: '. '].
-			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
-		aStream nextPutAll: ' }.'; lf]
-			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)]
+			nextPutAll: ' bases: ___hdrBases___ resolved: ___hdrResolved___.'; lf
 	].
 
 	"Compile the class-side value:value: method used for Python
@@ -2516,17 +2514,17 @@ printSmalltalkRuntimeOn: aStream
 		keywords do: [:kw |
 			(kw name notNil and: [kw name asString = 'boundary']) ifTrue: [
 				aStream nextPutAll: self ___stVarName___;
-					nextPutAll: ' @env1:___grailSetClassBoundary___: ('.
-				kw value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ').'; lf].
+					nextPutAll: ' @env1:___grailSetClassBoundary___: ';
+					nextPutAll: (self ___hdrTempForKeyword___: kw);
+					nextPutAll: '.'; lf].
 			"CLASS KEYWORD ``metaclass='': record it, so a metaclass-defined
 			comparison can be found for ``A < B''.  See object >>
 			___grailSetMetaclass___ for why it is a record, not a construction."
 			(kw name notNil and: [kw name asString = 'metaclass']) ifTrue: [
 				aStream nextPutAll: self ___stVarName___;
-					nextPutAll: ' @env1:___grailSetMetaclass___: ('.
-				kw value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ').'; lf]]].
+					nextPutAll: ' @env1:___grailSetMetaclass___: ';
+					nextPutAll: (self ___hdrTempForKeyword___: kw);
+					nextPutAll: '.'; lf]]].
 
 	"RUN THE METACLASS.  Last of the class-construction steps and the one that
 	can re-bind the name: CPython evaluates ``class A(metaclass=M)'' as
@@ -2664,7 +2662,7 @@ printSmalltalkRuntimeOn: aStream
 	] ifFalse: [
 		"No module binding, but the block was still opened above to declare
 		this body's codegen helper temps -- close it."
-		self ___classBodyHelperTemps___ notEmpty ifTrue: [
+		self ___classBlockNeedsTemps___ ifTrue: [
 			aStream nextPutAll: '] value.'; lf].
 	].
 %
@@ -2850,11 +2848,119 @@ printSuperclassOn: aStream
 		((only isKindOf: NameAst) and: [only id asString = 'str'])
 			ifTrue: [^ aStream nextPutAll: 'Unicode32'].
 		^ only printSmalltalkOn: aStream].
-	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: { '.
-	1 to: bases size do: [:i |
-		i > 1 ifTrue: [aStream nextPutAll: '. '].
-		(bases at: i) printSmalltalkWithParenthesisOn: aStream].
-	aStream nextPutAll: ' })'
+	"The bases were evaluated and resolved ONCE by printClassHeaderOn:; this
+	reads the result.  Handing the storage-base choice the RESOLVED list is
+	exactly what it computed for itself before: its own resolve step is a no-op
+	on a list of classes, because only a non-class base is asked for
+	__mro_entries__."
+	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: ___hdrResolved___)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___classHeaderTemps___
+	"The temps the class HEADER is evaluated into -- see printClassHeaderOn:.
+
+	The bases get two, the list as written and the list after PEP 560
+	substitution, but only when there is more than one base: a single base is
+	emitted exactly once already, inline, and hoisting it would change the
+	commonest class statement for nothing.  Every keyword gets one, the
+	metaclass included, because each keyword has more than one consumer or is
+	consumed after the body when CPython evaluates it before."
+
+	| temps |
+	temps := OrderedCollection new.
+	(bases notNil and: [bases size > 1]) ifTrue: [
+		temps add: '___hdrBases___'; add: '___hdrResolved___'].
+	keywords isNil ifFalse: [
+		1 to: keywords size do: [:i | temps add: (self ___hdrKeywordTempAt___: i)]].
+	^ temps
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___hdrKeywordTempAt___: anIndex
+	"The temp the header evaluation stores the anIndex'th keyword's value in.
+	By POSITION, not by name: a ``**splat'' has no name, and two splats would
+	otherwise collide."
+
+	^ '___hdrKw' , anIndex printString , '___'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___hdrTempForKeyword___: aKeyword
+	"The header temp holding aKeyword's value.  By identity, because the
+	keyword nodes are what the consumers hold."
+
+	1 to: keywords size do: [:i |
+		(keywords at: i) == aKeyword ifTrue: [^ self ___hdrKeywordTempAt___: i]].
+	^ self error: 'class keyword is not in this header'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___classBlockNeedsTemps___
+	"Whether the block that wraps the class emit has temps of its own to
+	declare, beyond the class name.  ONE predicate for both the open and the
+	close: an opened block that is not closed is a syntax error in the whole
+	module, and the two used to be separate tests."
+
+	^ self ___classBodyHelperTemps___ notEmpty
+		or: [self ___classHeaderTemps___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+printClassHeaderOn: aStream
+	"Evaluate the class HEADER once, left to right, before anything uses it.
+
+	CPython's order is fixed and observable: the bases in the order written,
+	then the keywords in the order written, then __prepare__, then the body,
+	then the metaclass call.  Each expression is evaluated exactly once.
+
+	Grail re-emitted the SAME expressions at every consumer.  The bases went
+	to ___selectStorageBase___: and again to ___mergeSecondaryBases___:, so
+	``class R(f(P), f(Q))'' called f four times; the metaclass went to
+	___grailPrepareNamespace___: and again to ___grailSetMetaclass___:, AFTER
+	the body; and every other keyword was evaluated after __prepare__ had
+	already run.  A base or keyword expression with a side effect -- a
+	registry, a counter, a factory -- did it twice, or at the wrong moment,
+	with no error to say so.
+
+	Now each is evaluated into a temp here and every consumer reads the temp.
+	The bases are also RESOLVED here, once: PEP 560 asks each non-class base
+	for __mro_entries__ exactly once per class statement, and three consumers
+	each resolving the raw list ran the hook three times.  The raw list still
+	travels too, because __orig_bases__ records what was written.
+
+	The inBasesEmit / inDecoratorEmit flags are the ones the consumers used to
+	set: a header expression evaluates in the scope ENCLOSING the class
+	statement, and those flags are what keep NameAst from resolving a base name
+	as one of the class's own cells."
+
+	(bases notNil and: [bases size > 1]) ifTrue: [
+		| savedBasesFlag |
+		savedBasesFlag := CallAst inBasesEmit.
+		CallAst inBasesEmit: true.
+		[aStream nextPutAll: '___hdrBases___ := { '.
+		1 to: bases size do: [:i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
+		aStream nextPutAll: ' }.'; lf]
+			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)].
+		aStream
+			nextPutAll: '___hdrResolved___ := (Python @env0:at: #importlib) @env0:___resolveMroEntries___: ___hdrBases___.';
+			lf].
+	keywords isNil ifFalse: [
+		| savedDeco |
+		savedDeco := CallAst inDecoratorEmit.
+		CallAst inDecoratorEmit: true.
+		[1 to: keywords size do: [:i |
+			aStream nextPutAll: (self ___hdrKeywordTempAt___: i); nextPutAll: ' := '.
+			(keywords at: i) value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: '.'; lf]]
+			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]]
 %
 
 category: 'Grail-code generation'
@@ -5573,12 +5679,10 @@ printClassKeywordsDictOn: aStream
 		kw name
 			ifNotNil: [
 				aStream nextPutAll: ' @env0:at: '''; nextPutAll: kw name asString;
-					nextPutAll: ''' put: '.
-				kw value printSmalltalkWithParenthesisOn: aStream.
+					nextPutAll: ''' put: '; nextPutAll: (self ___hdrTempForKeyword___: kw).
 				aStream nextPut: $;]
 			ifNil: [
-				aStream nextPutAll: ' @env1:update: '.
-				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ' @env1:update: '; nextPutAll: (self ___hdrTempForKeyword___: kw).
 				aStream nextPut: $;]].
 	aStream nextPutAll: ' yourself)'.
 %
