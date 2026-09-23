@@ -121,7 +121,9 @@ ___keys___
 	    'foreign_attr_value' 'foreign_attr_in_place'
 	    'foreign_attr_reflected_custom' 'foreign_attr_inplace_dunder_ran'
 	    'subscript_value' 'subscript_in_place' 'subscript_reflected_custom'
-	    'subscript_inplace_dunder_ran')
+	    'subscript_inplace_dunder_ran'
+	    'classmethod_cls_attr' 'init_subclass_cls_attr'
+	    'setattr_hook_sees_augassign' 'property_setter_fires_on_augassign')
 %
 
 category: 'Grail-Tests - augmented assignment to an attribute or subscript'
@@ -186,4 +188,28 @@ testADecliningDunderReachesTheReflectedOne
 	self assert: (self ___reprOf___: 'self_attr_reflected_proxy')
 			= '{0: ''a'', 1: ''c''}'
 		description: 'a mapping proxy on the right of |= did not merge'
+%
+
+category: 'Grail-Tests - augmented assignment to an attribute or subscript'
+method: AugAssignComplexTargetTestCase
+testTheSelfStoreGoesThroughSetattr
+	"``self.x op= v'' STORES through __setattr__, as the plain ``self.x = v''
+	beside it does.  The self reference is not always an instance: a
+	@classmethod's cls and PEP 487's __init_subclass__ put a CLASS there, and a
+	dynamic-instVar store on a class is an uncatchable ImproperOperation.  And
+	writing the storage directly steps past a __setattr__ override and a
+	@property setter, both of which a Python assignment must go through.
+
+	This test was missing when the shape it pins moved: the text store changed
+	to __setattr__ (#1123) and the IR one did not, and nothing here covered a
+	class receiver or a hooked store -- so the file that exists to keep the two
+	paths together passed while they came apart."
+
+	#( #('classmethod_cls_attr' '(1, 2)')
+	   #('init_subclass_cls_attr' '([''RegA''], 1)')
+	   #('setattr_hook_sees_augassign' '(2, [''n''])')
+	   #('property_setter_fires_on_augassign' '(15, 1)') ) do: [:pair |
+		self assert: (self ___reprOf___: (pair at: 1)) = (pair at: 2)
+			description: (pair at: 1) , ' is ' , (self ___reprOf___: (pair at: 1))
+				, ', not ' , (pair at: 2)]
 %
