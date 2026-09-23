@@ -1171,6 +1171,7 @@ run
 	at: #'PartialCallableAndCopyTestCase' put: nil;
 	at: #'PartialMethodDescriptorTestCase' put: nil;
 	at: #'PassTestCase' put: nil;
+	at: #'PathUriTestCase' put: nil;
 	at: #'PathWalkAndMountTestCase' put: nil;
 	at: #'PathlibStubSurfaceTestCase' put: nil;
 	at: #'PendingDeprecationWarningTestCase' put: nil;
@@ -1376,6 +1377,7 @@ run
 	at: #'UnpackModuleTargetTestCase' put: nil;
 	at: #'UrlopenCleanupAndErrorCloseTestCase' put: nil;
 	at: #'UrlsplitIndexingTestCase' put: nil;
+	at: #'UrlsplitSchemesTestCase' put: nil;
 	at: #'UserWarningTestCase' put: nil;
 	at: #'Utf16TruncatedDecodeTestCase' put: nil;
 	at: #'Utf32CodecTestCase' put: nil;
@@ -2569,6 +2571,7 @@ input src/smalltalk/PythonTests/ParseErrorLocationTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
 input src/smalltalk/PythonTests/PartialMethodDescriptorTestCase.gs
 input src/smalltalk/PythonTests/PassTestCase.gs
+input src/smalltalk/PythonTests/PathUriTestCase.gs
 input src/smalltalk/PythonTests/PathlibStubSurfaceTestCase.gs
 input src/smalltalk/PythonTests/PathWalkAndMountTestCase.gs
 input src/smalltalk/PythonTests/PendingDeprecationWarningTestCase.gs
@@ -2776,6 +2779,7 @@ input src/smalltalk/PythonTests/UnittestTestCase.gs
 input src/smalltalk/PythonTests/UnpackModuleTargetTestCase.gs
 input src/smalltalk/PythonTests/UrlopenCleanupAndErrorCloseTestCase.gs
 input src/smalltalk/PythonTests/UrlsplitIndexingTestCase.gs
+input src/smalltalk/PythonTests/UrlsplitSchemesTestCase.gs
 input src/smalltalk/PythonTests/UserWarningTestCase.gs
 input src/smalltalk/PythonTests/Utf16TruncatedDecodeTestCase.gs
 input src/smalltalk/PythonTests/Utf32CodecTestCase.gs
