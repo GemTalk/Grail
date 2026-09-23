@@ -6380,11 +6380,44 @@ needed for the `strerror` callout.
   `OSError` with Grail's own sentence, since the primitives report nothing.
 * **`subprocess`, the socket layer and Grail's `shutil.py`** still raise the
   message-only form (see the entry above).
-* **`shutil.rmtree` FOLLOWS a symbolic link to a directory**, and deletes what
-  it points at. `_rmtree_inner` asks `os.path.isdir`, which resolves the link,
-  and recurses; CPython asks `os.path.islink` first and unlinks the link
-  itself, and raises rather than recursing when the TOP of the tree is one.
-  So `rmtree` of a tree holding a link can delete files outside that tree.
-  Found by the fixture above on CI: Darwin listed the link after the directory
-  it pointed at, which hid it, and Linux listed it first. That one needs
-  `os.lstat`, not a wider errno map, so it is a change of its own.
+* **`shutil.rmtree` followed a symbolic link to a directory** — FIXED below.
+
+## shutil.rmtree followed a symbolic link, and deleted what it pointed at
+
+`_rmtree_inner` asked `os.path.isdir`, which RESOLVES a link. So a link to a
+directory inside the tree was recursed into: `rmtree` deleted the contents of
+what the link POINTED AT — files outside the tree it was asked to remove — and
+then failed on the entries it had already taken away. CPython never looks
+through a link there. It unlinks the link itself and leaves the target alone.
+
+`rmtree` OF a link is refused rather than followed, which is CPython's own
+answer to the same bug (GH-46010: `rmtree(link)` once emptied the directory the
+link named). The exception it raises for that is an odd one, and is reproduced
+as measured rather than as invented: an `OSError` whose `errno` and `strerror`
+are both `None`, with the path as `filename`, printing as
+
+```
+[Errno None] None: '/some/path'
+```
+
+`OSError(None, None, path)` builds exactly that, because the unpacking in
+`OSError >> ___args___:` stores the None SINGLETON for a field supplied as
+None, and `__str__` tests presence rather than truth. A DANGLING link at the
+top is `ENOENT` instead, since CPython opens the target and reports what that
+open said.
+
+### How it was found, which is the part worth keeping
+
+Not by a caller, and not by review: by a fixture's CLEANUP on CI. The
+`os_directory_errors` fixture built a tree holding a symlink and called
+`rmtree` on it at the end. Darwin listed the link AFTER the directory it
+pointed at, so the damage was done to entries already removed and nothing
+failed; Linux listed it BEFORE, and the run died. The same code, the same
+fixture, and a defect visible on one platform only because of DIRECTORY
+LISTING ORDER.
+
+Two things follow. A fixture's cleanup is test surface, not scaffolding — this
+one found a data-loss bug that no assertion was aiming at. And a green local
+run says less than it looks for anything that walks a directory, since the
+order is the filesystem's, not Grail's; `tests/python/rmtree_symlinks.py`
+therefore checks what must SURVIVE a removal, not only what must raise.

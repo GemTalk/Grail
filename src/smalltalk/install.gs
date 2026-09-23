@@ -1243,6 +1243,7 @@ run
 	at: #'ShimForeignObjectTestCase' put: nil;
 	at: #'ShlexTestCase' put: nil;
 	at: #'ShortCircuitOperandSpanTestCase' put: nil;
+	at: #'RmtreeSymlinksTestCase' put: nil;
 	at: #'ShutilTestCase' put: nil;
 	at: #'SignatureDefaultTextTestCase' put: nil;
 	at: #'SignatureOfAClassTestCase' put: nil;
@@ -2610,6 +2611,7 @@ input src/smalltalk/PythonTests/ShimForeignObjectTestCase.gs
 input src/smalltalk/PythonTests/ShlexTestCase.gs
 input src/smalltalk/PythonTests/ShortCircuitOperandSpanTestCase.gs
 input src/smalltalk/PythonTests/ShutilTestCase.gs
+input src/smalltalk/PythonTests/RmtreeSymlinksTestCase.gs
 input src/smalltalk/PythonTests/SignatureDefaultTextTestCase.gs
 input src/smalltalk/PythonTests/SignatureOfAClassTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs

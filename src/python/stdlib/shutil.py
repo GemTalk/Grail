@@ -184,22 +184,43 @@ def move(src, dst):
 def _rmtree_inner(path):
     for name in os.listdir(path):
         full = os.path.join(path, name)
-        if os.path.isdir(full):
+        # islink BEFORE isdir, because isdir FOLLOWS a link.  A link to a
+        # directory used to be recursed into, which deleted what it pointed
+        # AT -- files outside the tree being removed -- and then failed on the
+        # entries it had already taken away.  CPython never looks through a
+        # link here: it unlinks the link itself and leaves the target alone.
+        if os.path.isdir(full) and not os.path.islink(full):
             _rmtree_inner(full)
         else:
             os.remove(full)
     os.rmdir(path)
 
 
+def _rmtree(path):
+    # A SYMLINK AT THE TOP IS REFUSED, not followed and not unlinked (CPython
+    # GH-46010: rmtree(link) once emptied the directory the link named).  The
+    # exception is CPython's own odd shape, measured rather than invented: an
+    # OSError with errno and strerror both None and the path as filename,
+    # which prints as "[Errno None] None: '<path>'".
+    #
+    # The stat comes first because a DANGLING link is ENOENT to CPython -- it
+    # opens the target, and reports what that open said -- rather than the
+    # refusal below.
+    if os.path.islink(path):
+        os.stat(path)
+        raise OSError(None, None, path)
+    _rmtree_inner(path)
+
+
 def rmtree(path, ignore_errors=False):
     """Recursively delete a directory tree."""
     if ignore_errors:
         try:
-            _rmtree_inner(path)
+            _rmtree(path)
         except OSError:
             pass
         return None
-    _rmtree_inner(path)
+    _rmtree(path)
     return None
 
 
