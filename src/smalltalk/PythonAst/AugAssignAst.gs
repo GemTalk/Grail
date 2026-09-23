@@ -551,7 +551,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 	(cut 62).  Every shape routes the loaded current value through
 	``___augmentedOp___:inplace:binary:'' -- the SAME runtime helper the
 	simple-local branch uses -- and stores what it answers:
-	  self @env0:dynamicInstVarAt: #x put: ((self @env0:dynamicInstVarAt: #x
+	  self @env1:__setattr__: 'x' _: ((self @env0:dynamicInstVarAt: #x
 	      ifAbsent: [self @env1:___pyAttrLoad___: #x])
 	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
 	  self ___pyattr_x___: ((self ___pyattr_x___)
@@ -608,10 +608,17 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 			env: 0.
 		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
+		"The STORE is ``self @env1:__setattr__: 'x' _: (...)'', the text's since
+		#1123, and a String name as the text spells it.  It used to be the
+		dynamic-instVar write the LOAD still probes -- which is an uncatchable
+		ImproperOperation when the self reference is a CLASS (a @classmethod's
+		cls, PEP 487's __init_subclass__), and which stepped past a
+		__setattr__ override or a @property setter.  The text moved and this
+		copy did not; the load is unchanged on both paths."
 		aBuilder add: (aBuilder
-			send: #dynamicInstVarAt:put: to: aBuilder selfNode
-			with: { aBuilder obj: attr. augOf value: load value: v }
-			env: 0).
+			send: #'__setattr__:_:' to: aBuilder selfNode
+			with: { aBuilder obj: target ___mangledAttr___ asString. augOf value: load value: v }
+			env: 1).
 		^ self].
 	aKind == #attrForeign ifTrue: [
 		| recv1 recv2 |

@@ -179,6 +179,87 @@ r['subscript_reflected_custom'] = reflect_subscript({'k': DeclinesOr()})
 r['subscript_inplace_dunder_ran'] = track_subscript({'k': TracksInPlace()})
 
 
+# --- the SELF REFERENCE IS A CLASS, or the store has a hook -------------------
+# ``self.x op= v'' is the self-attribute branch, and its store used to write
+# the instance's dynamic-instVar storage directly.  Two everyday shapes put a
+# CLASS in that position -- a @classmethod's ``cls'' and PEP 487's
+# ``__init_subclass__'' -- and a class cannot hold dynamic instVars, so the
+# store was an uncatchable ImproperOperation.  And writing storage directly
+# stepped past a __setattr__ override or a @property setter, both of which a
+# Python assignment must go through.  The store is __setattr__, as the plain
+# ``self.x = v'' beside it always was.
+
+class Counted:
+    count = 0
+
+    @classmethod
+    def bump(cls):
+        cls.count += 1
+        return cls.count
+
+
+r['classmethod_cls_attr'] = (Counted.bump(), Counted.bump())
+
+
+class Registry:
+    names = []
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        cls.names = cls.names + [cls.__name__]
+        cls.hooks_run = getattr(cls, 'hooks_run', 0)
+        cls.hooks_run += 1
+
+
+class RegA(Registry):
+    pass
+
+
+r['init_subclass_cls_attr'] = (RegA.names, RegA.hooks_run)
+
+
+class Hooked:
+    def __init__(self):
+        object.__setattr__(self, 'n', 1)
+        object.__setattr__(self, 'seen', [])
+
+    def bump(self):
+        self.n += 1
+        return self.n
+
+
+class HookedChild(Hooked):
+    def __setattr__(self, name, value):
+        self.seen.append(name)
+        object.__setattr__(self, name, value)
+
+
+_hc = HookedChild()
+r['setattr_hook_sees_augassign'] = (_hc.bump(), _hc.seen)
+
+
+class WithProperty:
+    def __init__(self):
+        self._v = 10
+        self.sets = 0
+
+    @property
+    def v(self):
+        return self._v
+
+    @v.setter
+    def v(self, value):
+        self.sets += 1
+        self._v = value
+
+    def bump(self):
+        self.v += 5
+        return (self.v, self.sets)
+
+
+r['property_setter_fires_on_augassign'] = WithProperty().bump()
+
+
 EXPECTED = {
     'self_attr_value': [1, 2],
     'self_attr_in_place': True,
@@ -196,6 +277,10 @@ EXPECTED = {
     'subscript_in_place': True,
     'subscript_reflected_custom': 'ror-ran',
     'subscript_inplace_dunder_ran': ['iadd'],
+    'classmethod_cls_attr': (1, 2),
+    'init_subclass_cls_attr': (['RegA'], 1),
+    'setattr_hook_sees_augassign': (2, ['n']),
+    'property_setter_fires_on_augassign': (15, 1),
 }
 
 
