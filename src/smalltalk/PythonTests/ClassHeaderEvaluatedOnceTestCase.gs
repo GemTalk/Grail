@@ -58,15 +58,21 @@ ClassHeaderEvaluatedOnceTestCase category: 'Grail-SUnit'
 ! and the registration; the raw-bases forms delegate, so type() and the enum
 ! functional API are unchanged.
 !
-! A single base is NOT hoisted.  It is emitted exactly once already, inline, and
-! hoisting it would change the commonest class statement for nothing.
+! WHAT __prepare__ IS HANDED.  It was called as ``__prepare__(name, ())'' -- no
+! bases and no keywords -- where CPython's __build_class__ passes
+! ``(name, resolved_bases, **kwds)'' with every keyword but ``metaclass''.  The
+! reason was structural: a SOLE base was emitted inline in the superclass
+! expression, so there was no evaluated value for anything else to read.  It is
+! hoisted now like the rest, which changes the codegen of every class statement
+! with a base.  It also fixed an ORDER defect nobody had listed: with the
+! keywords hoisted and a sole base inline, ``class C(f(), kw=g())'' called g
+! BEFORE f.
 !
-! WHAT IS STILL NOT FIXED, and is pinned: __prepare__ is called as
-! ``__prepare__(name, ())'' -- no bases and no keywords -- where CPython passes
-! ``(name, bases, **kwds)''.  It is a different defect from this one, and fixing
-! it means hoisting the single base too, i.e. changing the codegen of every class
-! statement in the corpus.  testThePrepareArgumentGapIsStillThere goes RED on the
-! day that is done.
+! A sole base's PEP 560 substitution stays in ___subclass___, which leaves the
+! entries it used in SessionTemps; object >> ___grailPrepareBases___: reads them
+! back, so __prepare__ gets the resolved base and the hook is still asked once.
+! And the resolve of several bases moved AFTER the keywords: __mro_entries__ runs
+! inside __build_class__, when every header value has been computed.
 !
 ! Drives tests/python/class_header_evaluated_once.py, whose EXPECTED table was
 ! measured by RUNNING CPython 3.14.6.
@@ -116,8 +122,8 @@ assertMatchesCPythonAt: key
 category: 'Grail-Tests - the bases'
 method: ClassHeaderEvaluatedOnceTestCase
 testEveryBaseIsEvaluatedOnce
-	"Two and three computed bases, and the single-base control that was
-	already right and must stay so."
+	"Two and three computed bases, and a single one -- hoisted now as well, and
+	still evaluated once."
 
 	self assertMatchesCPythonAt: 'two_bases_evaluated_once'.
 	self assertMatchesCPythonAt: 'three_bases_evaluated_once'.
@@ -194,16 +200,40 @@ testMultipleInheritanceStillMergesAndChoosesStorage
 	self assertMatchesCPythonAt: 'storage_base_chosen'.
 %
 
-category: 'Grail-Tests - Recorded gaps'
+category: 'Grail-Tests - prepare'
 method: ClassHeaderEvaluatedOnceTestCase
-testThePrepareArgumentGapIsStillThere
-	"The fixture's XFAIL.  __prepare__ is still called with no bases and no
-	keywords.  When that is fixed this goes RED -- the signal to retire the
-	XFAIL and let the row be asserted like the others."
+testPrepareIsHandedTheBasesAndKeywords
+	"One base, several, none (an EMPTY tuple, not (object,)), and a metaclass
+	that is inherited rather than written -- each with the keywords other than
+	``metaclass'', and the bases as a real tuple."
 
-	self
-		assert: (self ___reprOf___: 'prepare_receives_bases_and_keywords')
-		equals: '(''Prepared'', [], [])'
+	self assertMatchesCPythonAt: 'prepare_receives_bases_and_keywords'.
+	self assertMatchesCPythonAt: 'prepare_bases_is_a_tuple'.
+	self assertMatchesCPythonAt: 'prepare_receives_several_bases'.
+	self assertMatchesCPythonAt: 'prepare_receives_no_bases'.
+	self assertMatchesCPythonAt: 'prepare_inherited_metaclass'.
+%
+
+category: 'Grail-Tests - prepare'
+method: ClassHeaderEvaluatedOnceTestCase
+testPrepareIsHandedResolvedBasesWithoutAskingTwice
+	"The bases AFTER __mro_entries__ -- for a sole base, whose substitution
+	happens in ___subclass___, as well as for several -- and the hook asked once
+	in both, which is what reading the stashed entries back is for."
+
+	self assertMatchesCPythonAt: 'prepare_receives_resolved_sole_base'.
+	self assertMatchesCPythonAt: 'prepare_receives_resolved_bases'.
+%
+
+category: 'Grail-Tests - mro_entries'
+method: ClassHeaderEvaluatedOnceTestCase
+testMroEntriesRunsAfterTheKeywords
+	"CPython evaluates the whole header, keywords included, before
+	__build_class__ asks any __mro_entries__.  The sole-base row also catches the
+	older order defect: an inline sole base ran AFTER the hoisted keywords."
+
+	self assertMatchesCPythonAt: 'mro_entries_after_keywords_sole'.
+	self assertMatchesCPythonAt: 'mro_entries_after_keywords_many'.
 %
 
 category: 'Grail-Tests - Controls'
@@ -214,5 +244,5 @@ testEveryCheckIsPresentAndAgreesWithCPython
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '23 checks, 1 xfail, 0 disagreeing [], keys match: True'
+		equals: '31 checks, 0 xfail, 0 disagreeing [], keys match: True'
 %

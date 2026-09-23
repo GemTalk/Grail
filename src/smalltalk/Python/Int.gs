@@ -464,6 +464,104 @@ __instancecheck__: anObject
 
 category: 'Grail-Class Methods'
 classmethod: int
+from_bytes: theBytes
+	"``int.from_bytes(b)'' -- byteorder has defaulted to 'big' since CPython
+	3.11, and the one-argument spelling is what code written since then uses.
+	Grail had only the two- and three-argument forms, so the default was
+	unreachable."
+
+	^ self from_bytes: theBytes _: 'big' _: false
+%
+
+category: 'Grail-Class Methods'
+classmethod: int
+_from_bytes: positional kw: kwargs
+	"``int.from_bytes(bytes, byteorder='big', *, signed=False)'' for a call
+	that passes a keyword.  All three are nameable in CPython, so
+	``int.from_bytes(b, signed=True)'' and ``int.from_bytes(bytes=b)'' both
+	work there and matched no selector here."
+
+	| theBytes byteorder signed |
+
+	theBytes := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [self ___keyword: 'bytes' in: kwargs ifAbsent: [
+			^ TypeError ___signal___:
+				'from_bytes() missing required argument ''bytes'' (pos 1)']].
+	byteorder := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [self ___keyword: 'byteorder' in: kwargs ifAbsent: ['big']].
+	signed := (positional @env0:size @env0:>= 3)
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [self ___keyword: 'signed' in: kwargs ifAbsent: [false]].
+	^ self from_bytes: theBytes _: byteorder _: signed ___isTruthy___
+%
+
+category: 'Grail-Class Methods'
+classmethod: int
+___keyword: aName in: kwargs ifAbsent: aBlock
+
+	kwargs @env0:isNil ifTrue: [^ aBlock @env0:value].
+	^ kwargs @env0:at: aName ifAbsent: aBlock
+%
+
+category: 'Grail-Class Methods'
+classmethod: int
+___byteValuesOf: anObject
+	"The byte values int.from_bytes was handed.
+
+	CPython accepts ANY ITERABLE OF INTS here, not only a bytes-like one, and
+	the stdlib relies on it: ipaddress parses a dotted quad with
+	``int.from_bytes(map(cls._parse_octet, octets), 'big')'', a MAP OBJECT.
+	Grail required a ByteArray, so that call raised TypeError and CPython's
+	own ipaddress could not even be imported.
+
+	str is refused BEFORE iterating, as CPython refuses it -- iterating one
+	would yield characters and a confusing per-element error instead of the
+	``cannot convert 'str' object to bytes'' the caller gets.
+
+	Materialised through list >> extend:, which is the tested reader of the
+	__iter__/__next__ protocol; duplicating that loop here would be a second
+	place to keep the generator and sequence cases right."
+
+	| values |
+
+	(anObject @env0:isKindOf: ByteArray) ifTrue: [^ anObject].
+	(anObject @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ TypeError ___signal___: (self ___cannotConvertToBytesMessage: anObject)].
+	values := list ___new___.
+	[values extend: anObject]
+		@env0:on: TypeError
+		do: [:ex | ex @env0:return: (TypeError ___signal___:
+			(self ___cannotConvertToBytesMessage: anObject))].
+	^ values @env0:collect: [:each | self ___byteValueOf: each]
+%
+
+category: 'Grail-Class Methods'
+classmethod: int
+___byteValueOf: anElement
+	"One element of that iterable, as the byte it has to be.  __index__ is
+	what CPython coerces with, so an int-like element is accepted and
+	anything else gets CPython's own wording."
+
+	| value |
+
+	value := anElement ___asIndex___.
+	(value @env0:between: 0 and: 255) ifFalse: [
+		ValueError ___signal___: 'bytes must be in range(0, 256)'].
+	^ value
+%
+
+category: 'Grail-Error Messages'
+classmethod: int
+___cannotConvertToBytesMessage: anObject
+
+	^ 'cannot convert ''' @env0:, (bytes ___pyTypeNameOf___: anObject) @env0:asString
+		@env0:, ''' object to bytes'
+%
+
+category: 'Grail-Class Methods'
+classmethod: int
 from_bytes: bytes _: byteorder _: signed
 	"int.from_bytes(bytes, byteorder='big', *, signed=False)
 	Return the integer represented by the given array of bytes."
@@ -477,10 +575,7 @@ from_bytes: bytes _: byteorder _: signed
 	The old check (`isKindOf: tuple') could never match an actual
 	bytes/bytearray argument, since neither subclasses tuple
 	(array.fromfile, test_system_transitions)."
-	bytesArray := bytes.
-	(bytesArray isKindOf: ByteArray) ifFalse: [
-		TypeError ___signal___: 'from_bytes() argument must be bytes-like'
-	].
+	bytesArray := self ___byteValuesOf: bytes.
 
 	isBigEndian := (byteorder @env0:= 'big').
 	isSigned := (signed == true) or: [signed == true].
@@ -1489,6 +1584,46 @@ real
 	"Return the real part (self)."
 
 	^ self
+%
+
+category: 'Grail-Integer Methods'
+method: int
+to_bytes
+	"``(12).to_bytes()'' -- length defaults to 1 and byteorder to 'big' in
+	CPython since 3.11, and the defaulted spellings are what code written
+	since then uses.  Grail had only the two- and three-argument forms, so
+	CPython's own ipaddress -- which writes ``self._ip.to_bytes(4)'' -- could
+	not run here."
+
+	^ self to_bytes: 1 _: 'big' _: false
+%
+
+category: 'Grail-Integer Methods'
+method: int
+to_bytes: length
+	"``(258).to_bytes(4)'' -- byteorder defaults to 'big'; see to_bytes."
+
+	^ self to_bytes: length _: 'big' _: false
+%
+
+category: 'Grail-Integer Methods'
+method: int
+_to_bytes: positional kw: kwargs
+	"``(258).to_bytes(length=2, byteorder='little', signed=True)'' -- all
+	three are nameable in CPython, and matched no selector here."
+
+	| length byteorder signed |
+
+	length := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [int ___keyword: 'length' in: kwargs ifAbsent: [1]].
+	byteorder := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [int ___keyword: 'byteorder' in: kwargs ifAbsent: ['big']].
+	signed := (positional @env0:size @env0:>= 3)
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [int ___keyword: 'signed' in: kwargs ifAbsent: [false]].
+	^ self to_bytes: length _: byteorder _: signed ___isTruthy___
 %
 
 category: 'Grail-Integer Methods'

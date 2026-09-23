@@ -204,17 +204,12 @@ r['nested_headers_are_separate'] = _calls
 r['nested_inner_bases'] = [b.__name__ for b in _Outer.Inner.__bases__]
 r['nested_outer_bases'] = [b.__name__ for b in _Outer.__bases__]
 
-# --- the recorded gap: what __prepare__ is given ----------------------------
+# --- what __prepare__ is given ------------------------------------------------
 #
-# CPython calls ``__prepare__(name, bases, **kwds)`` with the resolved bases and
-# the class keywords.  Grail calls it as ``__prepare__(name, ())``: no bases and
-# no keywords at all.  Fixing it is not a small change -- a SINGLE base is
-# emitted inline, not into a header temp, so handing __prepare__ the bases means
-# changing the codegen of every class statement in the corpus.  It is kept apart
-# from this change for that reason, and pinned here so that the day it is fixed
-# the row says so.
-
-XFAIL = {'prepare_receives_bases_and_keywords'}
+# CPython calls ``__prepare__(name, bases, **kwds)`` with the RESOLVED bases (after
+# PEP 560 substitution) and every class keyword except ``metaclass``.  Grail
+# called it as ``__prepare__(name, ())``: no bases and no keywords at all,
+# because a sole base was emitted inline, where nothing else could read it.
 
 _PREP = {}
 
@@ -222,7 +217,8 @@ _PREP = {}
 class RecordingPrep(type):
     @classmethod
     def __prepare__(mcls, name, bases, **kw):
-        _PREP['args'] = (name, [b.__name__ for b in bases], sorted(kw.items()))
+        _PREP[name] = (name, [b.__name__ for b in bases], sorted(kw.items()),
+                       type(bases).__name__)
         return {}
 
     def __new__(mcls, name, bases, ns, **kw):
@@ -237,7 +233,75 @@ class Prepared(PrepBase, metaclass=RecordingPrep, tag=1):
     pass
 
 
-r['prepare_receives_bases_and_keywords'] = _PREP['args']
+r['prepare_receives_bases_and_keywords'] = _PREP['Prepared'][:3]
+r['prepare_bases_is_a_tuple'] = _PREP['Prepared'][3]
+
+
+class PreparedMany(P, Q, metaclass=RecordingPrep, b=2, a=1):
+    pass
+
+
+r['prepare_receives_several_bases'] = _PREP['PreparedMany'][:3]
+
+
+class PreparedBare(metaclass=RecordingPrep):
+    pass
+
+
+# No base written is an EMPTY tuple, not (object,).
+r['prepare_receives_no_bases'] = _PREP['PreparedBare'][:3]
+
+
+class PreparedChild(Prepared):
+    pass
+
+
+# The metaclass is inherited, and so is being asked.
+r['prepare_inherited_metaclass'] = _PREP['PreparedChild'][:3]
+
+
+def _prepare_sole_entry():
+    class PreparedEntry(_entry, metaclass=RecordingPrep):
+        pass
+    return PreparedEntry
+
+
+_calls, _PE = run(_prepare_sole_entry)
+# The RESOLVED base, and the hook still asked only once.
+r['prepare_receives_resolved_sole_base'] = [_calls, _PREP['PreparedEntry'][:3],
+                                            [b.__name__ for b in _PE.__bases__]]
+
+
+def _prepare_many_entry():
+    class PreparedEntries(_entry, Q, metaclass=RecordingPrep):
+        pass
+    return PreparedEntries
+
+
+_calls, _PEs = run(_prepare_many_entry)
+r['prepare_receives_resolved_bases'] = [_calls, _PREP['PreparedEntries'][:3],
+                                        [b.__name__ for b in _PEs.__bases__]]
+
+# __mro_entries__ runs inside __build_class__, so AFTER every keyword is
+# evaluated -- not between the bases and the keywords.
+
+
+def _entries_after_keywords_sole():
+    class O1(f(_entry, 'base'), metaclass=PrepMeta, kw=f(1, 'kw')):
+        pass
+    return O1
+
+
+r['mro_entries_after_keywords_sole'] = run(_entries_after_keywords_sole)[0]
+
+
+def _entries_after_keywords_many():
+    class O2(f(_entry, 'base'), f(Q), metaclass=PrepMeta, kw=f(1, 'kw')):
+        pass
+    return O2
+
+
+r['mro_entries_after_keywords_many'] = run(_entries_after_keywords_many)[0]
 
 
 # --- controls: multiple inheritance still works ------------------------------
@@ -286,9 +350,20 @@ EXPECTED = {
     'nested_outer_bases': ['P', 'Q'],
     'secondary_base_method_merged': 'hello',
     'storage_base_chosen': [True, 1, 'hello'],
-    # XFAIL -- CPython's answer.  Grail passes ('Prepared', [], []).
     'prepare_receives_bases_and_keywords': ('Prepared', ['PrepBase'], [('tag', 1)]),
+    'prepare_bases_is_a_tuple': 'tuple',
+    'prepare_receives_several_bases': ('PreparedMany', ['P', 'Q'], [('a', 1), ('b', 2)]),
+    'prepare_receives_no_bases': ('PreparedBare', [], []),
+    'prepare_inherited_metaclass': ('PreparedChild', ['Prepared'], []),
+    'prepare_receives_resolved_sole_base': [
+        ['__mro_entries__'], ('PreparedEntry', ['P'], []), ['P']],
+    'prepare_receives_resolved_bases': [
+        ['__mro_entries__'], ('PreparedEntries', ['P', 'Q'], []), ['P', 'Q']],
+    'mro_entries_after_keywords_sole': ['base', 'kw', '__mro_entries__', '__prepare__'],
+    'mro_entries_after_keywords_many': ['base', 'Q', 'kw', '__mro_entries__', '__prepare__'],
 }
+
+XFAIL = set()
 
 _disagreeing = sorted(
     k for k, v in EXPECTED.items() if k not in XFAIL and r.get(k) != v)

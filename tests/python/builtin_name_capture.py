@@ -193,9 +193,94 @@ r['eval_plain_mappings'] = outcome(lambda: (eval('a + b', {'a': 1}, {'b': 2}),
 r['exec_locals_mapping'] = outcome(lambda: (lambda ns: (exec('r = len', {}, ns), ns['r'])[1])(Missing()))
 r['not_callable_names_python_type'] = outcome(lambda: eval('x()', {'x': 'abc'}))
 
+
+# --- a sequence subclass's own __iter__ is honoured everywhere ----------------
+
+class OwnIter(list):
+    def __iter__(self):
+        return iter(['over'])
+
+class OwnIterTuple(tuple):
+    def __iter__(self):
+        return iter(['tover'])
+
+class OwnIterDict(dict):
+    def __iter__(self):
+        return iter(['dover'])
+
+class PlainSub(list):
+    pass
+
+def star_call(*args):
+    return args
+
+_o = OwnIter([1, 2])
+r['iter_override_star_displays'] = outcome(lambda: ([*_o], (*_o,), sorted({*_o}), [*OwnIterTuple((1,))]))
+r['iter_override_star_call'] = outcome(lambda: star_call(*_o))
+r['iter_override_consumers'] = outcome(lambda: (sorted(set(_o)), sorted(frozenset(_o)),
+    (lambda s: (s.update(_o), sorted(s))[1])(set()),
+    (lambda l: (l.extend(_o), l)[1])([]), dict.fromkeys(_o), sorted(set(OwnIterDict(a=1)))))
+r['plain_subclass_iterates_storage'] = outcome(lambda: ([*PlainSub([1, 2])], sorted(set(PlainSub([3])))))
+
+
+# --- pseudo-variable-spelled parameters on every def shape ---------------------
+
+class ReservedParams:
+    def rebinds(self, nil):
+        nil = nil + 1
+        return nil
+    def reads(self, true):
+        return true
+    def defaulted(self, nil=4):
+        return nil
+    def varargs(self, nil, *rest, true=1, **kw):
+        nil = nil + true
+        return nil, rest, kw
+    def default_then_star(self, a, nil=7, *r):
+        return a, nil, r
+    @staticmethod
+    def static(nil):
+        nil = nil * 2
+        return nil
+    @classmethod
+    def klass(cls, false):
+        false = not false
+        return false
+
+def plain_reserved_varargs(nil=3, *a, **k):
+    return nil, a, k
+
+def plain_reserved_kwonly(a, *, true=2, nil):
+    return a, true, nil
+
+def nested_reserved():
+    def inner(nil, *, true=3):
+        nil = nil + true
+        return nil
+    return inner(1), inner(1, true=4), (lambda nil, *, true=5: (nil, true))(0)
+
+_rp = ReservedParams()
+r['method_reserved_params'] = outcome(lambda: (_rp.rebinds(1), _rp.rebinds(nil=9), _rp.reads(2),
+    _rp.defaulted(), _rp.defaulted(nil=5)))
+r['method_reserved_varargs'] = outcome(lambda: (_rp.varargs(1, 2, true=5, z=0),
+    _rp.default_then_star(1), _rp.default_then_star(1, nil=2)))
+r['static_and_class_reserved_params'] = outcome(lambda: (ReservedParams.static(3), ReservedParams.klass(True)))
+r['plain_reserved_varargs_and_kwonly'] = outcome(lambda: (plain_reserved_varargs(),
+    plain_reserved_varargs(nil=8, x=1), plain_reserved_kwonly(1, nil=9), plain_reserved_kwonly(1, true=0, nil=8)))
+r['nested_and_lambda_reserved_params'] = outcome(nested_reserved)
+
+
+# --- a generator expression's first iterable is read in the enclosing scope ---
+
+r['eval_genexp_first_iterable'] = outcome(lambda: (
+    next(eval('(x for x in [len])', {}, Missing())),
+    next(eval('(len for _ in (1,))', {}, Missing())) is len,
+    next(eval('(y for x in [1] for y in [len])', {}, Missing())) is len))
+
 EXPECTED = {
     'complex_param': 'ok -> (2j, 5)',
     'dataclass_beside_tuple': "ok -> ('dataclass_beside_tuple.<locals>.P(x=1)', 5)",
+    'eval_genexp_first_iterable': "ok -> ('D:len', True, True)",
     'eval_genexp_reads_globals': 'ok -> [1]',
     'eval_globals_mapping': "ok -> ('D:zz', 'D:len')",
     'eval_implementation_names': 'ok -> ["NameError: name \'module\' is not defined", "NameError: name \'json\' is not defined", "NameError: name \'PyDict\' is not defined", "NameError: name \'Array\' is not defined", "NameError: name \'Object\' is not defined"]',
@@ -220,13 +305,21 @@ EXPECTED = {
     'fstring_params_named_like_builtins': 'ok -> "  1|  \'a\'|2|\'\\\\xe9\'"',
     'fstring_plain_values': 'ok -> "3.5 True None [1, \'a\'] -0.0"',
     'importlib_local': "ok -> ('C', 'importlib')",
+    'iter_override_consumers': "ok -> (['over'], ['over'], ['over'], ['over'], {'over': None}, ['dover'])",
+    'iter_override_star_call': "ok -> ('over',)",
+    'iter_override_star_displays': "ok -> (['over'], ('over',), ['over'], ['tover'])",
     'lambda_varargs_beside_tuple': 'ok -> (1, 2)',
     'list_param': 'ok -> ([2, 3], [2, 3], 5)',
+    'method_reserved_params': 'ok -> (2, 10, 2, 4, 5)',
+    'method_reserved_varargs': "ok -> ((6, (2,), {'z': 0}), (1, 7, ()), (1, 2, ()))",
+    'nested_and_lambda_reserved_params': 'ok -> (4, 5, (0, 5))',
     'not_callable_names_python_type': "TypeError: 'str' object is not callable",
     'object_param': "ok -> ('C', 2, 5)",
     'plain_def_rebinds_nil': 'ok -> 3',
     'plain_def_rebinds_self': 'ok -> 21',
     'plain_def_self_and__self': 'ok -> (1, 2)',
+    'plain_reserved_varargs_and_kwonly': "ok -> ((3, (), {}), (8, (), {'x': 1}), (1, 2, 9), (1, 0, 8))",
+    'plain_subclass_iterates_storage': 'ok -> ([1, 2], [3])',
     'rebind_self_beside__self': "ok -> (2, 'Rebinds')",
     'rebind_self_from__self_param': 'ok -> 4',
     'set_param': "ok -> ([1, 2], ['a', 'b'], 5)",
@@ -235,6 +328,7 @@ EXPECTED = {
     'star_over_str': "ok -> (('a', 'b'), ['a', 'b'], ['a', 'b'], ('h', 'i', 1))",
     'star_targets_bind_lists': "ok -> ([2, 3], ['y', 'z'], [0, 1, 2], [2, 3], [6], [2, 3])",
     'star_too_few': 'ValueError: not enough values to unpack (expected at least 2, got 1)',
+    'static_and_class_reserved_params': 'ok -> (6, False)',
     'tuple_param': "ok -> ((1, 2), (), ('a', 'b'), 5)",
     'varargs_beside_tuple': 'ok -> (1, 2)',
 }

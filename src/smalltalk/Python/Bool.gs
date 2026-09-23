@@ -814,10 +814,52 @@ as_integer_ratio
 
 category: 'Grail-Integer Methods'
 method: bool
+to_bytes
+	"bool inherits int.to_bytes; ``True.to_bytes()'' is b'\\x01'."
+
+	^ (self ifTrue: [1] ifFalse: [0]) to_bytes
+%
+
+category: 'Grail-Number Methods'
+method: bool
+to_bytes: length
+	"bool inherits int.to_bytes (1-arg form)."
+
+	^ (self ifTrue: [1] ifFalse: [0]) to_bytes: length
+%
+
+category: 'Grail-Number Methods'
+method: bool
+_to_bytes: positional kw: kwargs
+	"bool inherits int.to_bytes (keyword form)."
+
+	^ (self ifTrue: [1] ifFalse: [0]) _to_bytes: positional kw: kwargs
+%
+
+category: 'Grail-Number Methods'
+method: bool
 to_bytes: length _: byteorder
 	"bool inherits int.to_bytes (2-arg form)."
 
 	^ (self ifTrue: [1] ifFalse: [0]) to_bytes: length _: byteorder
+%
+
+category: 'Grail-Class Methods'
+classmethod: bool
+from_bytes: theBytes
+	"``bool.from_bytes(b)'' — see the two-argument form; byteorder defaults
+	to 'big' as int's does."
+
+	^ (int from_bytes: theBytes) @env0:~= 0
+%
+
+category: 'Grail-Class Methods'
+classmethod: bool
+_from_bytes: positional kw: kwargs
+	"``bool.from_bytes(b, signed=True)'' and the other keyword spellings,
+	narrowed as the positional forms are."
+
+	^ (int _from_bytes: positional kw: kwargs) @env0:~= 0
 %
 
 category: 'Grail-Class Methods'

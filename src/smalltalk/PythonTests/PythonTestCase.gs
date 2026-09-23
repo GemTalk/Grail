@@ -54,6 +54,53 @@ suite
 
 category: 'Grail-Testing'
 classmethod: PythonTestCase
+allTestSelectors
+	"The kernel's selectors, less the ones #skippedTests names on this gem.
+
+	GemStone's SUnit has NO skip: TestCase understands neither #skip nor
+	#skip:, and TestResult has no skip count -- so a ``^ self skip: ...'' in
+	a test is a MessageNotUnderstood, scored as an ERROR, and an early
+	``^ self'' is a PASS that checked nothing.  Leaving the test out of the
+	suite is the honest middle: it is neither passed nor failed, and
+	tests/scripts/runTestsShard.gs prints a GRAIL_SKIP line for it (from
+	#skippedTests again), which scripts/run_tests.sh lists under the summary.
+	Running the method directly still runs it."
+
+	| skipped |
+	skipped := self skippedTests.
+	^ super allTestSelectors reject: [:each | skipped includesKey: each]
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+skippedTests
+	"Tests of this class to leave out of the suite ON THIS GEM: a Dictionary of
+	selector -> reason.  Override per class; the reason is printed in every
+	run, so name the issue that has to be fixed for the skip to come out.
+	Answer an empty Dictionary when nothing is skipped here -- the condition
+	belongs in the override, so a skip that only applies to some gems (see
+	#skipping:whenNativeCodeIsOffBecause:) is not taken on the others."
+
+	^ Dictionary new
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+skipping: selectors whenNativeCodeIsOffBecause: reason
+	"A #skippedTests answer that skips selectors only on an INTERPRETED gem --
+	GemNativeCodeEnabled = 0, which is every Darwin arm64 gem and Linux with
+	GEM_NATIVE_CODE_ENABLED=0 -- and skips nothing where native code is on,
+	which is what CI runs.  For VM defects that only the interpreter shows."
+
+	| answer |
+	answer := Dictionary new.
+	(System configurationAt: #GemNativeCodeEnabled) == 0 ifTrue: [
+		selectors do: [:each | answer at: each put: reason]].
+	^ answer
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
 initGrail
   "ensure initialization if executing directly from topaz"
   | dir |

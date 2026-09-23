@@ -1967,6 +1967,13 @@ resetSessionForReinstall
 	"4. And the staleness verdicts: a reinstall usually follows an edit."
 	st @env0:removeKey: #'GrailModuleCurrency' ifAbsent: [].
 	st @env0:removeKey: #'GrailSourceHashNow' ifAbsent: [].
+	"5. And the self-send dispatcher records: the session-method refresh above
+	rebuilt the transient method dictionaries from the committed packages, so
+	the dispatchers are gone, and a record saying they are installed would
+	make every later patch of those names invisible to self-sends."
+	st @env0:removeKey: #'GrailSelfSendDispatchers' ifAbsent: [].
+	st @env0:removeKey: #'GrailFastOverrideHolders' ifAbsent: [].
+	st @env0:removeKey: #'GrailPinHolder' ifAbsent: [].
 	^ toEvict @env0:size
 %
 
@@ -4156,6 +4163,9 @@ ___irCodegenEnabled___
 	API is absent there entirely), which is why the tests still exercise both
 	branches."
 
+	"ON BY DEFAULT since cut 131 -- the flag now DISABLES the path (see
+	 ___irCodegenFlag___), and the platform gate below is what makes the
+	 default safe on a kernel without the builder API."
 	^ self ___irCodegenFlag___ and: [self ___irCodegenSupported___]
 %
 
@@ -4168,21 +4178,52 @@ ___irCodegenFlag___
 	(same shape as ``___codegenTraceDir___'': each gem reads its own env var, no
 	committed slot).
 
-	OFF by default: true only when the env var is set to a non-empty value other
-	than ``0'' / ``false'' / ``no''.  ___irCodegenForce___: seeds it for tests;
+	ON BY DEFAULT since cut 131.  The env var now turns the IR path OFF rather
+	than on: unset, empty, or any value other than ``0'' / ``false'' / ``no'' /
+	``off'' answers true, and those four (any case) answer false.
+
+	An EMPTY value reads as ON, which is the one judgement call here.  It used
+	to read as off, but that was the default anyway; now it would be the only
+	way to disable the path by accident -- ``GRAIL_IR_CODEGEN=$SOMETHING'' with
+	SOMETHING unset would silently take a suite off the path it is meant to be
+	gating.  Disabling is explicit, and says so.
+
+	``GRAIL_IR_CODEGEN=1'' therefore still means what it always meant and every
+	script that sets it keeps working; the flag-off arm of a comparison now
+	needs ``GRAIL_IR_CODEGEN=0''.
+
+	___irCodegenForce___: seeds it for tests (both ways -- a test wanting the
+	text path asks for ``false'' rather than relying on the ambient default);
 	``importlib ___irCodegenEnabledInvalidate___'' resets the cache."
 
 	| temps raw on |
 	temps := SessionTemps current.
 	(temps includesKey: #'___grailIRCodegenChecked___')
-		ifTrue: [^ temps at: #'___grailIRCodegenEnabled___' ifAbsent: [false]].
+		ifTrue: [^ temps at: #'___grailIRCodegenEnabled___' ifAbsent: [true]].
 	raw := System gemEnvironmentVariable: 'GRAIL_IR_CODEGEN'.
-	on := raw notNil
-		and: [raw isEmpty not
-		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	on := self ___irCodegenFlagFor___: raw.
 	temps at: #'___grailIRCodegenEnabled___' put: on.
 	temps at: #'___grailIRCodegenChecked___' put: true.
 	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenFlagFor___: rawOrNil
+	"Does this raw GRAIL_IR_CODEGEN value ask for the IR path?  Split out from
+	___irCodegenFlag___ so the answer can be TESTED for each spelling without
+	an SUnit case having to alter the OS environment of a running gem.
+
+	Unset or empty is ON; only an explicit off-word disables.  ``asLowercase''
+	rather than a list of spellings: the list this replaced held ``false'' and
+	``FALSE'' but not ``False'', and ``no''/``NO'' but not ``No'', so a
+	perfectly reasonable spelling of OFF quietly meant ON -- which after the
+	default flipped would be a suite measuring the IR path while reporting
+	itself as the text arm."
+
+	rawOrNil isNil ifTrue: [^ true].
+	rawOrNil isEmpty ifTrue: [^ true].
+	^ (#('0' 'false' 'no' 'off') includes: rawOrNil asLowercase) not
 %
 
 category: 'Grail-Class Compilation'
@@ -8227,6 +8268,41 @@ ___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCate
 	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
 	 aClass moveMethod: target toCategory: aCategory environmentId: 1]
 		on: Error do: [:e | e return: nil]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___copySessionMethod___: sel from: aProvider to: aClass prefix: aPrefix
+	"___copyMethod___:from:to:prefix:category: with the copy installed as a
+	TRANSIENT session method (Behavior >> ___installSessionMethod:as:) -- the
+	self-send dispatcher's shadow, which belongs to the patch that asked for
+	it and so to this session only.  Same two routes: a text source is
+	recompiled, prefixed; a method with none is shared under the prefixed key.
+	Errors leave aClass without a shadow, which the caller checks for."
+
+	| meth src ownShadow |
+	"A PROVIDER THAT IS ITSELF PATCHED answers its DISPATCHER for sel, and a
+	copy of that as aClass's shadow falls through to itself: patch an instance
+	of C, then an instance of a subclass D, and D's first self-send recursed to
+	the stack limit.  Its pristine original is its own shadow, shared as is --
+	sharing a compiled method under another key is sound here (see
+	___copyMethod___:from:to:prefix:category:), and its varargs forward was
+	already pointed at the shadow when it was made."
+	ownShadow := (aPrefix , sel asString) asSymbol.
+	(aProvider includesSelector: ownShadow environmentId: 1) ifTrue: [
+		^ [aClass perform: #'___installSessionMethod:as:' env: 1
+			withArguments: { aProvider compiledMethodAt: ownShadow environmentId: 1. ownShadow }]
+				on: Error do: [:e | e return: nil]].
+	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
+	meth isNil ifTrue: [^ self].
+	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	src notNil ifTrue: [
+		^ [aClass perform: #'___compileSessionMethod:category:' env: 1
+			withArguments: { aPrefix , src. 'Grail-Dynamic Rebinding Originals' }]
+				on: Error do: [:e | e return: nil]].
+	[aClass perform: #'___installSessionMethod:as:' env: 1
+		withArguments: { meth. (aPrefix , sel asString) asSymbol }]
+			on: Error do: [:e | e return: nil]
 %
 
 category: 'Grail-Class Compilation'

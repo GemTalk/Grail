@@ -479,11 +479,40 @@ Now every native module subclasses `NativeModule`
 `EmbeddedExtensionModule` (C extensions) is not a `NativeModule`: it is loaded per
 session and keeps its state in C.
 
-One write remains, and it is not the instance's: assigning over a *method-backed*
-name (`mock.patch('builtins.open')`) installs a self-send dispatcher into the
-module's **class** (3 persistent objects: two method dictionaries and a selector
-set). That is the class-level dispatcher mechanism, not module state, and is
-still open.
+**A monkey-patch is session state too.** Assigning over a *method-backed* name
+has to reach call sites that are plain Smalltalk sends: a bare `open(...)`
+compiles to a direct send to `builtins`, and `self.m()` to a send on the
+receiver's class. So a patch installs methods — `builtins` forwarders, or a
+self-send dispatcher — and those used to be compiled **persistently**, writing
+the class's method and category dictionaries (3–5 persistent objects per patch,
+measured), plus the `BoundMethod` pin class variables. A session that then
+committed kept them, and the next session's `len('abc')` called a forwarder whose
+override slot was empty: `'UndefinedObject' object is not callable`.
+
+They are now **transient session methods**
+(`Behavior >> ___compileSessionMethod:category:scope:environmentId:`), installed
+through `GsPackagePolicy >> updateMethodLookupCacheForSelector:method:in:environmentId:`
+— the kernel's own `compileTransientMethod:dictionaries:environmentId:` refuses
+every environment-1 method, and cannot be patched as a session method because it
+is protected. A patch writes nothing, no other session sees it or pays for it,
+and two patching sessions cannot conflict. The selector pins moved to a
+per-session holder the same way. `runSessionPatchTest.gs` guards it.
+
+Two fast paths come with it, both reading a value as a literal association
+compiled into a session method rather than probing:
+
+- **patched native-module names.** A native module has one instance and Python
+  cannot store on its class, so its instance attribute is the only possible
+  override. Its dispatchers and `builtins`' forwarders read the override from a
+  per-(class, name) holder that `NativeModule >> dynamicInstVarAt:put:` keeps
+  current, so a re-patch or an unpatch recompiles nothing. An ordinary class
+  keeps the full probe — an instance attribute on one object must not reach its
+  siblings — and in the patching session a *sibling* of a patched instance pays
+  it on every self-send (measured about 1.8 µs).
+- **native-module state.** The first access in a session installs a session
+  method answering the state dictionary as a literal, so native attribute loads
+  are back to their cost before the state moved into `SessionTemps` (1.2–1.4 µs
+  against 1.8–1.9 µs; 1.2–1.3 µs before).
 
 ### D9. An abort unloads what it rolled back
 

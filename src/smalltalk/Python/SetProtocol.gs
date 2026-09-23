@@ -84,12 +84,14 @@ __new__: iterable
 	VALUES, so the generic Collection fast path below would build the
 	wrong set (twilio.request_validator's ``sorted(set(params))``
 	KeyError'd using a value as a key)."
-	(iterable isKindOf: AbstractDictionary) ifTrue: [
+	((iterable isKindOf: AbstractDictionary)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
 		items := OrderedCollection @env0:new.
 		iterable @env0:keysDo: [:k | items @env0:add: k].
 		^ self @env0:withAll: items
 	].
-	(iterable isKindOf: Collection) ifTrue: [
+	((iterable isKindOf: Collection)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
 		iterable @env0:do: [:e | e ___requireHashableAsSetElement___].
 		^ self @env0:withAll: iterable
 	].

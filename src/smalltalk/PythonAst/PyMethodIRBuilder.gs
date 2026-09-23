@@ -1243,7 +1243,7 @@ ensureEnvDict
 			dictionaries: importlib ___grailCompileSymbolList___
 			category: 'Grail-IR Stub'
 			environmentId: env] on: CompileWarning do: [:w | w resume].
-		[targetClass removeSelector: #'___irStub___' environmentId: env]
+		[targetClass @env1:___removeSelector: #'___irStub___' environmentId: env]
 			on: Error do: [:e | e return: nil]].
 	^ targetClass persistentMethodDictForEnv: env
 %

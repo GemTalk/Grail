@@ -1066,12 +1066,12 @@ ___grailRemoveOwnIndexedPair___: aName
 		(((self @env0:categoryOfSelector: getter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
 			@env0:and: [(self @env0:compiledMethodAt: getter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
 			ifTrue: [
-				[self @env0:removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+				[self @env1:___removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 	(self @env0:includesSelector: setter environmentId: 1) ifTrue: [
 		(((self @env0:categoryOfSelector: setter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
 			@env0:and: [(self @env0:compiledMethodAt: setter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
 			ifTrue: [
-				[self @env0:removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+				[self @env1:___removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 	^ self
 %
 
@@ -2024,6 +2024,15 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 			@env0:at: #'GrailPendingOrigBases'
 			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
 				@env0:at: newCls put: origTuple.
+		"And what they RESOLVED to, which __prepare__ is handed next -- read back
+		by ___grailPrepareBases___: so the hook is not asked twice.  Dropped with
+		the orig bases, at the end of the class statement."
+		(SessionTemps @env0:current
+			@env0:at: #'GrailPendingResolvedBases'
+			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+				@env0:at: newCls
+				put: (tuple @env0:withAll: (entries @env0:isNil
+					ifTrue: [#()] ifFalse: [entries])).
 		^ newCls].
 	TypeError ___signal___: ('cannot subclass a non-class base ('
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
@@ -3049,6 +3058,15 @@ ___grailIsClassAttrAccessorCategory___: aCategory
 category: 'Grail-Class Namespace'
 classmethod: object
 ___grailPrepareNamespace___: aMetaclass
+	"The namespace for a class with no bases and no keywords to report.  Class
+	statements send the full form; see ___grailPrepareNamespace___:bases:keywords:."
+
+	^ self ___grailPrepareNamespace___: aMetaclass bases: #() keywords: nil
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 	"PEP 3115's ``__prepare__'': the mapping a class body is executed in.
 
 	    class Meta(type):
@@ -3114,7 +3132,8 @@ ___grailPrepareNamespace___: aMetaclass
 		((inherited notNil)
 			and: [(inherited isKindOf: Behavior)
 			and: [self ___grailMetaclassConstructs___: inherited]])
-				ifTrue: [^ self ___grailPrepareNamespace___: inherited].
+				ifTrue: [^ self ___grailPrepareNamespace___: inherited
+					bases: basesArray keywords: kwargs].
 		"Grail's own metaclasses are SMALLTALK -- an enum's namespace comes from
 		``Enum class'', not from a keyword -- so ask the receiver's metaclass
 		chain for the Grail-side hook.  A selector probe rather than an attribute
@@ -3132,6 +3151,13 @@ ___grailPrepareNamespace___: aMetaclass
 		^ ns].
 	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"type's own __prepare__ is not one the metaclass SUPPLIES.  Every metaclass
+	inherits it, ABCMeta included, so treating it as supplied would hand every
+	class with a Python metaclass a namespace -- where one that overrides
+	nothing has always allocated none.  Read as absent, the fallback below
+	answers exactly what type.__prepare__ would have (a plain dict) in the one
+	case that needs a namespace at all."
+	(prep notNil and: [self ___grailIsTypesOwnPrepare___: prep]) ifTrue: [prep := nil].
 	prep isNil
 		ifTrue: [
 			"No __prepare__, but a metaclass that overrides __new__ or __init__
@@ -3165,14 +3191,74 @@ ___grailPrepareNamespace___: aMetaclass
 			"NOT guarded.  A __prepare__ that raises is a real error in the
 			metaclass and CPython propagates it; swallowing it here turned a
 			broken namespace into a silent no-namespace, which looked exactly
-			like this whole path not working."
-			ns := prep @env1:value: { self @env1:__name__. #() } value: nil].
+			like this whole path not working.
+
+			Handed the header, as __build_class__ hands it: the resolved bases
+			as a tuple, and the class keywords other than ``metaclass''.  It was
+			``(name, ())'' with no keywords at all, whatever the header said."
+			ns := prep @env1:value: {
+					self @env1:__name__.
+					self ___grailPrepareBases___: basesArray }
+				value: kwargs].
 	(ns isNil or: [ns == None]) ifTrue: [^ nil].
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingClassNamespace'
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: ns.
 	^ ns
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailIsTypesOwnPrepare___: aPrepare
+	"Whether aPrepare, a ``__prepare__'' read off a metaclass, is type's default
+	rather than one the metaclass (or a base below type) defines.
+
+	A @classmethod ``__prepare__'' compiles to a class-side method under one of
+	the selectors a call derives from the name -- a fixed arity, or the varargs
+	``___prepare__:kw:'' -- so the test is whether any of those is implemented
+	on the receiver's class side by something OTHER than ``type class''.  A
+	__prepare__ that is not a BoundMethod on that name at all -- one ASSIGNED as
+	``__prepare__ = classmethod(fn)'' -- is the metaclass's own by definition."
+
+	| rcv meta |
+	(aPrepare isKindOf: BoundMethod) ifFalse: [^ false].
+	(aPrepare @env0:selector == #'__prepare__') ifFalse: [^ false].
+	rcv := aPrepare @env0:receiver.
+	rcv == nil ifTrue: [^ false].
+	meta := rcv @env0:class.
+	#( #'__prepare__' #'__prepare__:' #'__prepare__:_:' #'__prepare__:_:_:'
+	   #'___prepare__:kw:' ) @env0:do: [:sel | | impl |
+		impl := meta @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(impl == nil or: [impl == type @env0:class]) ifFalse: [^ false]].
+	^ (meta @env0:whichClassIncludesSelector: #'___prepare__:kw:' environmentId: 1)
+		== type @env0:class
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPrepareBases___: basesArray
+	"The bases tuple __prepare__ is handed: the class header's bases AFTER PEP 560
+	substitution, which is what CPython's __build_class__ passes.
+
+	Several bases arrive already resolved -- ClassDefAst resolved them once, for
+	the storage-base choice.  A SOLE base arrives as written, because its
+	substitution happens inside ___subclass___, which has already run: the class
+	being prepared exists.  Asking its __mro_entries__ again here would run the
+	hook twice, so ___subclass___ leaves the entries it used in SessionTemps and
+	they are read back.  Only a base that substituted without leaving them -- a
+	parameterised generic, whose ___subclass___ goes straight to its origin and
+	whose hook has no side effect -- is resolved afresh."
+
+	| tbl stashed |
+	(basesArray @env0:allSatisfy: [:b | b isKindOf: Behavior])
+		ifTrue: [^ tuple @env0:withAll: basesArray].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingResolvedBases' otherwise: nil.
+	stashed := tbl == nil ifTrue: [nil] ifFalse: [tbl @env0:at: self otherwise: nil].
+	stashed == nil ifFalse: [^ stashed].
+	^ tuple @env0:withAll:
+		((Python @env0:at: #importlib) @env0:___resolveMroEntries___: basesArray)
 %
 
 category: 'Grail-Class Namespace'
@@ -4009,6 +4095,9 @@ ___grailInstallOrigBases___
 	generated class reaches."
 
 	| tbl origTuple |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingResolvedBases' otherwise: nil.
+	tbl == nil ifFalse: [tbl @env0:removeKey: self ifAbsent: [nil]].
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingOrigBases' otherwise: nil.
 	tbl == nil ifTrue: [^ self].
@@ -5683,9 +5772,9 @@ ___classBodyDefinitionalDelete___: aName
 			@env0:= #'Grail-Class Attrs'])
 		ifTrue: [
 			found := true.
-			meta @env0:removeSelector: getterSym environmentId: 1.
+			meta @env1:___removeSelector: getterSym environmentId: 1.
 			(meta @env0:whichClassIncludesSelector: setterSym environmentId: 1) == meta
-				ifTrue: [meta @env0:removeSelector: setterSym environmentId: 1]].
+				ifTrue: [meta @env1:___removeSelector: setterSym environmentId: 1]].
 	holder := (self ___respondsTo___: #___dynInstVars___)
 		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].
@@ -5759,6 +5848,10 @@ ___grailResetClassNamespace___
 	category is what makes it decidable."
 
 	| meta |
+	"Patches first: a rebuilt class starts without them, and its session
+	dispatchers would otherwise block every selector removal below (see
+	Behavior >> ___dropSessionMethods___)."
+	self @env1:___forgetSessionPatches___.
 	meta := self @env0:class.
 	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		| cat |
@@ -5766,11 +5859,11 @@ ___grailResetClassNamespace___
 		(((cat @env0:= #'Grail-Class Attrs')
 			and: [(sel @env0:asString @env0:beginsWith: '___dynInstVars___') @env0:not])
 				or: [cat @env0:= #'Grail-MI-Inherited'])
-					ifTrue: [meta @env0:removeSelector: sel environmentId: 1]].
+					ifTrue: [meta @env1:___removeSelector: sel environmentId: 1]].
 	(self @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		((self @env0:categoryOfSelector: sel environmentId: 1)
 			@env0:= #'Grail-MI-Inherited')
-				ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
+				ifTrue: [self @env1:___removeSelector: sel environmentId: 1]].
 	self ___grailResetClassMethods___.
 	self ___grailEmptyClassHolder___.
 	^ self
@@ -5835,11 +5928,11 @@ ___grailResetClassMethods___
 			or: [(cat @env0:= #'Grail-Fixed Arity Forwarders')
 				or: [(cat @env0:= #'Grail-Method Aliases')
 				or: [cat @env0:= #'Grail-Dynamic Rebinding Originals']]])
-					ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
+					ifTrue: [self @env1:___removeSelector: sel environmentId: 1]].
 	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		((meta @env0:categoryOfSelector: sel environmentId: 1)
 			@env0:= #'Grail-Class Methods')
-				ifTrue: [meta @env0:removeSelector: sel environmentId: 1]].
+				ifTrue: [meta @env1:___removeSelector: sel environmentId: 1]].
 	"The self-send dispatcher record for this class goes with the methods: the
 	dispatchers themselves are 'Grail-Class Methods' and were just removed, and
 	the ``___grailOrig_'' shadows are removed above, so a store in the rebuilt
@@ -7229,6 +7322,29 @@ ___isPythonSourceMethodCategory___: aCategory
 	^ c @env0:= 'Grail-Class Methods'
 		or: [c @env0:= 'Grail-Fixed Arity Forwarders'
 		or: [c @env0:= 'Grail-Method Aliases']]
+%
+
+category: 'Grail-Iterator Protocol'
+method: object
+___iterIsPythonDefined___
+	"Does the receiver's class take __iter__ from a class-body ``def'' -- a
+	Python subclass of list, tuple, dict, ... that iterates its own way?
+
+	The built-in consumers read a kernel collection's STORAGE directly
+	(``do:'', ``asArray'', ``keysDo:'') because that is what iterating it
+	means -- except for such a subclass, whose __iter__ CPython always calls
+	(seq_tests' LyingList).  ``[*x]'', ``f(*x)'', ``set(x)'', ``s.update(x)'',
+	``l.extend(x)'' and ``dict.fromkeys(x)'' all walked the storage of
+	``class L(list): def __iter__(self): ...''.  Each of those fast paths asks
+	this first.  list(x) and tuple(x) already did the equivalent (an exact
+	class test)."
+
+	| owner |
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1.
+	owner @env0:isNil ifTrue: [^ false].
+	^ self ___isPythonSourceMethodCategory___:
+		(owner @env0:categoryOfSelector: #'__iter__' environmentId: 1)
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -12306,10 +12422,10 @@ ___pyAttrDelete___: aName
 						((meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
 							and: [(meta @env0:categoryOfSelector: sym environmentId: 1)
 								@env0:= #'Grail-Class Attrs']) ifTrue: [
-							meta @env0:removeSelector: sym environmentId: 1.
+							meta @env1:___removeSelector: sym environmentId: 1.
 							(meta @env0:whichClassIncludesSelector:
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) == meta
-								ifTrue: [meta @env0:removeSelector:
+								ifTrue: [meta @env1:___removeSelector:
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1]].
 						^ self
 					]
@@ -12368,7 +12484,7 @@ ___pyAttrDelete___: aName
 						prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
 				  BoundMethod @env1:___grailPinSelector___: sel ]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-				self @env0:removeSelector: sel environmentId: 1].
+				self @env1:___removeSelector: sel environmentId: 1].
 			^ self].
 		^ AttributeError ___signal___:
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
@@ -12951,13 +13067,50 @@ classmethod: object
 ___grailSelfSendDispatcherKey___
 	"Where the per-class record of installed dispatchers lives.
 
-	SessionTemps, not the class, and deliberately: installing a dispatcher
-	COMPILES a method onto a shared class, and a record kept in the repository
-	would outlive the session that patched.  The compiled methods have the same
-	problem and the same answer -- nothing here is committed, and a session that
-	ends takes its patches with it."
+	SessionTemps, not the class, and deliberately: the dispatchers themselves
+	are TRANSIENT session methods (Behavior >> ___compileSessionMethod:category:),
+	so the record has to live and die with them.  Nothing here is committed,
+	and a session that ends takes its patches with it."
 
 	^ #'GrailSelfSendDispatchers'
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailFastOverrideHolderFor___: aSymbol
+	"The fast-path holder for the Python name aSymbol on this class, or nil
+	when this class takes the full override probe.
+
+	A holder is a SymbolDictionary binding ___grailFastOverride___ to the
+	current override (nil for none).  The dispatcher compiles against it, so
+	it reads the override as a literal association; NativeModule >>
+	dynamicInstVarAt:put: updates it on every store, so a re-patch or an
+	unpatch needs no recompile.  One holder per (class, name), shared by
+	every selector spelling of the name.
+
+	Only a NATIVE module qualifies: it has one instance, and Python cannot
+	store on its class, so its instance attribute is the only override there
+	is.  The holder starts at the value the store that triggered this install
+	has already written -- instance stores install after storing."
+
+	| temps reg byName holder |
+	(NativeModule ~~ nil and: [self @env0:inheritsFrom: NativeModule]) ifFalse: [^ nil].
+	temps := SessionTemps @env0:current.
+	reg := temps @env0:at: #'GrailFastOverrideHolders' otherwise: nil.
+	reg == nil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		temps @env0:at: #'GrailFastOverrideHolders' put: reg].
+	byName := reg @env0:at: self otherwise: nil.
+	byName == nil ifTrue: [
+		byName := IdentityKeyValueDictionary @env0:new.
+		reg @env0:at: self put: byName].
+	holder := byName @env0:at: aSymbol @env0:asSymbol otherwise: nil.
+	holder == nil ifTrue: [
+		holder := SymbolDictionary @env0:new.
+		holder @env0:at: #'___grailFastOverride___'
+			put: ((self @env1:instance) @env0:dynamicInstVarAt: aSymbol @env0:asSymbol).
+		byName @env0:at: aSymbol @env0:asSymbol put: holder].
+	^ holder
 %
 
 category: 'Grail-Self-Send Overrides'
@@ -13076,7 +13229,7 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 	happen at all.  The generation stamped on each BoundMethod is what keeps a
 	capture made AFTER the patch seeing the patch."
 
-	| orig shadowSel keywords nargs ws argNames |
+	| orig shadowSel keywords nargs ws argNames fast |
 	orig := definingClass @env0:compiledMethodAt: aSelector environmentId: 1.
 	orig == nil ifTrue: [^ self].
 	"A Grail-generated method's SELECTOR PATTERN is the first token of its
@@ -13095,8 +13248,8 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 	is wanted."
 	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
 		ifFalse: [
-			importlib @env0:___copyMethod___: aSelector from: definingClass to: self
-				prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
+			importlib @env0:___copySessionMethod___: aSelector from: definingClass to: self
+				prefix: '___grailOrig_'].
 	"NO SHADOW, NO DISPATCHER.  The copier compiles nothing for a method whose
 	source is not Grail-generated text (a kernel .gs method, an IR build with
 	no text twin); a dispatcher whose fall-through has nowhere to go is the
@@ -13130,7 +13283,7 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 					or: [(src @env0:at: last @env0:+ marker @env0:size) @env0:isAlphaNumeric @env0:not]]) ifTrue: [
 				src := (src @env0:copyFrom: 1 to: last @env0:+ 6) @env0:, '___grailOrig_'
 					@env0:, (src @env0:copyFrom: last @env0:+ 7 to: src @env0:size).
-				self @env1:___compileMethod: src category: 'Grail-Dynamic Rebinding Originals']]].
+				self @env1:___compileSessionMethod: src category: 'Grail-Dynamic Rebinding Originals']]].
 	keywords := aSelector @env0:asString @env0:subStrings: $:.
 	nargs := aSelector @env0:asString @env0:occurrencesOf: $:.
 	argNames := Array @env0:new: nargs.
@@ -13143,11 +13296,25 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 				i @env0:> 1 ifTrue: [ws nextPut: $ ].
 				ws nextPutAll: (keywords @env0:at: i); nextPutAll: ': ';
 					nextPutAll: (argNames @env0:at: i)]].
+	"THE FAST PATH, for a NATIVE module (NativeModule): it has exactly one
+	instance, and Python cannot store on its class (``type(builtins)'' is
+	``module''), so an override there is the instance attribute and nothing
+	else.  The dispatcher reads it straight from a literal -- an association
+	in a per-(class, name) holder that NativeModule >> dynamicInstVarAt:put:
+	keeps current -- instead of walking the instance and every class in the
+	chain on each call.  Everywhere else the full probe stays, because an
+	instance attribute on ONE object must not reach its siblings."
+	fast := self @env0:___grailFastOverrideHolderFor___: aSymbol.
 	ws nextPutAll: '
 	| ___ov___ |
-	___ov___ := self @env0:___grailSelfSendOverrideFor___: #'''.
-	ws nextPutAll: aSymbol @env0:asString.
-	ws nextPutAll: '''.
+	___ov___ := '.
+	fast == nil
+		ifTrue: [
+			ws nextPutAll: 'self @env0:___grailSelfSendOverrideFor___: #'''.
+			ws nextPutAll: aSymbol @env0:asString.
+			ws nextPutAll: '''']
+		ifFalse: [ws nextPutAll: '___grailFastOverride___'].
+	ws nextPutAll: '.
 	___ov___ == nil ifTrue: [^ self '.
 	nargs @env0:= 0
 		ifTrue: [ws nextPutAll: shadowSel @env0:asString]
@@ -13159,7 +13326,9 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 				ws nextPutAll: (skw @env0:at: i); nextPutAll: ': ';
 					nextPutAll: (argNames @env0:at: i)]].
 	ws nextPutAll: '].
-	^ self @env0:___grailCallOverride___: ___ov___ name: #'''.
+	^ self @env0:___grailCallOverride___: '.
+	ws nextPutAll: (fast == nil ifTrue: ['___ov___'] ifFalse: ['{ false. ___ov___ }']).
+	ws nextPutAll: ' name: #'''.
 	ws nextPutAll: aSymbol @env0:asString.
 	ws nextPutAll: ''' args: '.
 	"The varargs selector already HAS the positional array and the keyword dict
@@ -13173,7 +13342,11 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 			1 to: nargs do: [:i |
 				ws nextPutAll: (argNames @env0:at: i); nextPutAll: '. '].
 			ws nextPutAll: '} kw: nil'].
-	self @env1:___compileMethod: ws contents category: 'Grail-Class Methods'.
+	"A SESSION method (Behavior >> ___compileSessionMethod:category:scope:):
+	the patch that asked for it is this session's, so the dispatcher is too.
+	Nothing is committed, no other session pays for it, and two sessions
+	patching one class cannot conflict."
+	self @env1:___compileSessionMethod: ws contents category: 'Grail-Class Methods' scope: fast.
 	"Per-session tally of installs, so a fixture or a suite run can report how
 	often a callable store actually shadowed a compiled method."
 	SessionTemps @env0:current @env0:at: #'GrailSelfSendDispatcherInstalls'
@@ -13710,7 +13883,8 @@ ___pyStarToArray___
 	iterating a str yields one-character strs.  It takes the iteration path."
 
 	((self isKindOf: SequenceableCollection)
-		and: [(self isKindOf: CharacterCollection) not]) ifTrue: [^ self asArray].
+		and: [(self isKindOf: CharacterCollection) not
+		and: [(self @env1:___iterIsPythonDefined___) not]]) ifTrue: [^ self asArray].
 	^ (list @env1:__new__: self) asArray
 %
 

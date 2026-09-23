@@ -91,3 +91,12 @@ testMroBuiltinsAndMiClosures
 	"PR #1126's fixture, which until now was only ever run under CPython."
 	self assert: (self ___failingChecksIn___: 'mro_builtins_and_mi_closures') equals: #()
 %
+
+category: 'Grail-Tests'
+method: SelfCheckingFixturesTestCase
+testSessionPatching
+	"Monkey-patching through session methods: an instance patch reaches only
+	its instance, a builtin patch reaches bare calls, and a class carrying a
+	patch can still have methods removed."
+	self assert: (self ___failingChecksIn___: 'session_patching') equals: #()
+%

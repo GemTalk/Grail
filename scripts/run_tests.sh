@@ -261,6 +261,7 @@ done
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
 SHARD_MS=""
+SKIPS=""
 for i in $SHARDS; do
   f="$PROJECT_ROOT/out/shard_$i.out"
   line=$(grep GRAIL_SHARD_RESULT "$f" 2>/dev/null)
@@ -285,6 +286,11 @@ for i in $SHARDS; do
   # the whole multi-line block -- a Python traceback or a stack report would
   # otherwise be truncated to its first line.
   grep -E "^GRAIL_DEFECT\|" "$f" | sed 's/^GRAIL_DEFECT|/  /'
+  # Tests a class's #skippedTests left out of the suite on this gem (GemStone's
+  # SUnit has no skip, so they are simply not in the run count).  The owning
+  # shard names each one once; they are listed under the summary line below.
+  SKIPS="$SKIPS$(grep -E "^GRAIL_SKIP\|" "$f" | sed 's/^GRAIL_SKIP|/  skipped: /; s/|/ -- /')
+"
 done
 # REPORT THE SHARDS THAT ANSWERED, NOT THE ONES WE ASKED FOR.  This line used
 # to print $N_SHARDS -- the count REQUESTED -- so a run in which half the shards
@@ -301,6 +307,9 @@ if [ "$S_SEEN" -ne "$N_SHARDS" ]; then
 else
   echo "main suite (sharded: $S_SEEN of x$WORKERS): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
 fi
+# The summary line above is left exactly as it was (other tooling reads it);
+# skips get lines of their own beneath it.
+printf '%s' "$SKIPS" | grep -v '^$' || true
 printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0))"
 [ -n "$SHARD_MS" ] && printf 'TIMING | %-26s |%s\n' "  per shard (concurrent)" "$SHARD_MS"
 if [ "$S_SEEN" -ne "$N_SHARDS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
@@ -413,6 +422,12 @@ timed "module-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runM
 # in place, captures included, then that the next session binds warm and
 # writes nothing.
 timed "module-coherence" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleCoherenceTest.gs < /dev/null || EXIT=$?
+
+# A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
+# D8): patching builtins.len and a class's method writes no persistent object,
+# and after a commit a fresh session sees both originals -- where persistent
+# forwarders used to survive the commit and break len() in every later session.
+timed "session-patch" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runSessionPatchTest.gs < /dev/null || EXIT=$?
 
 # REAL-APPLICATION acceptance (par.10): session A deploys a module-level
 # Flask app (committing the whole flask/werkzeug closure); session B

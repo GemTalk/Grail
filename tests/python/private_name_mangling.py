@@ -109,16 +109,8 @@ class B2(A2):
 RESULTS['super_passes_args'] = (B2(1).got == (1, 99))
 
 
-# A private method must recurse to a normal depth -- i.e. still take the
-# fast path -- and raise a CATCHABLE RecursionError, not die.
-class Deep:
-    def __go(self, n):
-        return self.__go(n + 1)
-    def run(self):
-        try:
-            self.__go(1)
-            return 'no-error'
-        except RecursionError:
-            return 'recursion-error'
-
-RESULTS['private_recursion_is_catchable'] = (Deep().run() == 'recursion-error')
+# The private-recursion check (a mangled method must recurse to a normal depth
+# and raise a CATCHABLE RecursionError) lives in
+# private_name_mangling_recursion.py: on an interpreted gem a GemStone defect
+# (Kermit 52108) can let its RecursionError escape, and here that would abort
+# the whole module and lose every check above.
