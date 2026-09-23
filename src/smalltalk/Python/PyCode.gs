@@ -285,6 +285,30 @@ ___codeKindBits___
 
 category: 'Instance Creation'
 method: PyCode
+___setOptimize___: aLevel
+	"Record the ``optimize'' level compile() was given, and answer self.
+
+	It has to travel WITH the code object, not be a property of the compile
+	call, because Grail compiles from text at exec() time: the level chosen
+	when compile() ran is the one the eventual codegen must see, and the two
+	can be far apart.  Under a Grail-internal name, so it is not a Python
+	attribute of the code object -- CPython has none."
+
+	self dynamicInstVarAt: #'___grailOptimize___' put: aLevel.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___grailOptimizeLevel___
+	"The optimize level this code object was compiled with, or nil."
+
+	^ [self dynamicInstVarAt: #'___grailOptimize___']
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Instance Creation'
+method: PyCode
 ___setConsts___: anArray
 	"Record ``co_consts'' and answer self, so the emitters can chain it onto
 	the constructor.

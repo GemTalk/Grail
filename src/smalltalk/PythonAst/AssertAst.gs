@@ -72,6 +72,14 @@ printSmalltalkOn: aStream
 	misbehave at runtime: the whole enclosing METHOD failed to compile,
 	and every test in it reported ``Grail could not compile this method''
 	(test_utc_offset_out_of_bounds)."
+	"DROPPED ENTIRELY AT optimize >= 1.  ``python -O'' removes assert
+	statements, and compile(..., optimize=1) is the same request made one
+	compile at a time -- test_compile runs the same source at -1, 0, 1 and 2
+	and distinguishes the levels by whether the assert fired.
+
+	Nothing is emitted, not a guarded no-op: the statement's own expression
+	must not be evaluated either, which is the point of removing it."
+	self ___grailOptimizeLevel___ >= 1 ifTrue: [^ self].
 
 	test printSmalltalkWithParenthesisOn: aStream.
 	msg ifNil: [

@@ -637,6 +637,16 @@ ___emitSmalltalkOn___: aStream
 
 	Direct call sites like `abs(5)` are special-cased in
 	`CallAst>>printSmalltalkOn:` and bypass this method entirely."
+	"``__debug__'' IS A COMPILE-TIME CONSTANT AT optimize >= 1.  CPython folds
+	it -- it cannot change while a program runs -- and ``python -O'' makes it
+	False; compile(..., optimize=1) is the same request one compile at a time.
+	Emitted as the literal rather than read from builtins, because the builtins
+	value is shared by every module and this level belongs to ONE compile.
+
+	At -1 and 0 it is left alone and reads True from builtins, which is what
+	the interpreter's own value is."
+	((id asString = '__debug__') and: [self ___grailOptimizeLevel___ >= 1])
+		ifTrue: [aStream nextPutAll: 'false'. ^ self].
 
 	"Class-body name referenced from a class-body METHOD DECORATOR.
 	``@t.register(int)'' names ``t'', a sibling def -- a local of the class

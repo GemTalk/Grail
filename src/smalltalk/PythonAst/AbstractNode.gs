@@ -276,6 +276,21 @@ ___hasModuleScopeAwait___
 	^ false
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___grailOptimizeLevel___
+	"The ``optimize'' level the compile now running was given -- -1 when the
+	caller said nothing, which means ``whatever the interpreter is''.
+
+	Read at EMIT time, not at parse time: the three things it changes are all
+	decisions a code generator makes (fold __debug__, drop an assert, drop a
+	docstring), and the level travels on the code object from compile() to the
+	exec() that eventually generates."
+
+	^ [((Python at: #builtins) @env1:instance) @env1:___grailOptimizeLevel___]
+		on: AbstractException do: [:ex | ex return: -1]
+%
+
 category: 'Grail-AST export'
 method: AbstractNode
 ___asPythonAst___
