@@ -1158,6 +1158,7 @@ run
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'OsRemoveDollarPathTestCase' put: nil;
 	at: #'OsRenameErrorsTestCase' put: nil;
+	at: #'OsErrorErrnoSubclassTestCase' put: nil;
 	at: #'OsErrorsCarryErrnoTestCase' put: nil;
 	at: #'OsDirectoryErrorsTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
@@ -2551,6 +2552,7 @@ input src/smalltalk/PythonTests/OSErrorTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/OsRemoveDollarPathTestCase.gs
 input src/smalltalk/PythonTests/OsRenameErrorsTestCase.gs
+input src/smalltalk/PythonTests/OsErrorErrnoSubclassTestCase.gs
 input src/smalltalk/PythonTests/OsErrorsCarryErrnoTestCase.gs
 input src/smalltalk/PythonTests/OsDirectoryErrorsTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
