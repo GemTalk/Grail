@@ -773,9 +773,12 @@ set compile_env: 1
 category: 'Grail-Opening'
 classmethod: FileIO
 ___resolveEncoding___: anEncoding
-	"Normalize an open() encoding argument to one of the two encodings
-	Grail supports: 'utf-8' (also covers ascii, a strict subset) and
-	'latin-1' (identity mapping over single-byte Strings)."
+	"Normalize an open() encoding argument to one of the three encodings
+	Grail's text layer supports: 'utf-8' (also covers ascii, a strict subset),
+	'latin-1' (identity mapping over single-byte Strings) and 'iso-8859-15'
+	(latin-9: latin-1 with 8 code points substituted, which the str and bytes
+	codecs already implement -- the branches here route to them rather than
+	carrying a second copy of the table)."
 
 	| e |
 	(anEncoding == nil @env0:or: [anEncoding == None]) ifTrue: [^ 'utf-8'].
@@ -784,6 +787,9 @@ ___resolveEncoding___: anEncoding
 	e := anEncoding @env0:asLowercase.
 	((e @env0:= 'utf-8') @env0:or: [(e @env0:= 'utf8') @env0:or: [(e @env0:= 'ascii') @env0:or: [e @env0:= 'us-ascii']]]) ifTrue: [^ 'utf-8'].
 	((e @env0:= 'latin-1') @env0:or: [(e @env0:= 'latin1') @env0:or: [(e @env0:= 'iso-8859-1') @env0:or: [e @env0:= 'l1']]]) ifTrue: [^ 'latin-1'].
+	((e @env0:= 'iso-8859-15') @env0:or: [(e @env0:= 'iso8859-15') @env0:or: [(e @env0:= 'iso8859_15')
+		@env0:or: [(e @env0:= 'latin-9') @env0:or: [(e @env0:= 'latin9') @env0:or: [e @env0:= 'l9']]]]])
+			ifTrue: [^ 'iso-8859-15'].
 	LookupError ___signal___: ('unknown encoding: ' @env0:, anEncoding)
 %
 
@@ -1571,6 +1577,13 @@ _decode: raw
 	raw @env0:isEmpty ifTrue: [^ ''].
 	enc := self @env0:dynamicInstVarAt: #_encoding.
 	enc @env0:= 'latin-1' ifTrue: [^ raw].
+	"latin-9 differs from latin-1 at 8 bytes, so it cannot be the identity map
+	above; hand the bytes to the codec that already knows the table
+	(bytes >> decode:_:) rather than repeating it here."
+	enc @env0:= 'iso-8859-15' ifTrue: [ | ba |
+		ba := bytes @env0:new: raw @env0:size.
+		1 @env0:to: raw @env0:size do: [:i | ba @env0:at: i put: (raw @env0:at: i) @env0:codePoint].
+		^ ba decode: 'iso-8859-15' _: 'strict'].
 	^ [raw @env0:decodeFromUTF8] @env0:on: Error do: [:ex |
 		UnicodeDecodeError ___signal___: ('''utf-8'' codec can''t decode bytes from file ' @env0:, (self @env0:dynamicInstVarAt: #_name))]
 %
@@ -1643,7 +1656,16 @@ write: data
 			out @env0:at: i put: (Character @env0:codePoint: cp)].
 		f @env0:nextPutAll: out
 	] ifFalse: [
-		f @env0:nextPutAllUtf8: data].
+		enc @env0:= 'iso-8859-15' ifTrue: [ | encoded |
+			"The str codec owns the latin-9 table, including the UnicodeEncodeError
+			for a character latin-9 cannot represent."
+			encoded := data encode: 'iso-8859-15' _: 'strict'.
+			out := String @env0:new: encoded @env0:size.
+			1 @env0:to: encoded @env0:size do: [:i |
+				out @env0:at: i put: (Character @env0:codePoint: (encoded @env0:at: i))].
+			f @env0:nextPutAll: out
+		] ifFalse: [
+			f @env0:nextPutAllUtf8: data]].
 	^ data @env0:size
 %
 
