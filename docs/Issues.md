@@ -6664,3 +6664,44 @@ TypeError, the check added in "A failing os call carried no errno". A fixture wr
 catch a MISSING errno must not itself assume the errno is there; guarded, the
 same run reports 3 of its 8 checks failing with `errno=None, filename=None`,
 which is the evidence that was wanted.
+
+## int.from_bytes took only a bytes-like, and CPython's ipaddress needs more
+
+`int.from_bytes` required a `ByteArray` and raised `TypeError` for anything
+else. CPython takes ANY ITERABLE OF INTS, and its own stdlib depends on it:
+`ipaddress` parses a dotted quad with
+
+```python
+int.from_bytes(map(cls._parse_octet, octets), 'big')
+```
+
+a MAP OBJECT. So CPython's `ipaddress` could not even be imported here, and
+the failure was three frames deep in a module that looks like it is about
+addresses.
+
+Two smaller gaps in the same signature went with it. `byteorder` has defaulted
+to `'big'` since CPython 3.11, so `int.from_bytes(b)` is what code written
+since then says, and Grail had only the two- and three-argument forms. All
+three arguments are nameable as keywords in CPython, and none were here.
+
+What is refused is refused as CPython refuses it: a `str` before anything is
+iterated (iterating one yields characters and a confusing per-element error
+instead of `cannot convert 'str' object to bytes`), an element that is not an
+integer with the `__index__` wording, and an element outside 0..255 as a
+`ValueError`. The iterable is read through `list >> extend:`, which is the
+tested reader of the `__iter__`/`__next__` protocol — a second copy of that
+loop would be a second place to keep generators and sequences right.
+
+### What it was found by, and what is still in the way
+
+Not by a bug report: by trying to run CPython's `ipaddress` under Grail, which
+is worth doing because Grail's own is 1701 lines of Smalltalk and
+`test.test_ipaddress` cannot import at all (`'ipaddress' object has no
+attribute 'IPv4Interface'`). With this fix CPython's module LOADS.
+
+It does not yet run, for a reason that has nothing to do with `int`: its
+classes are named `IPv4Address`, `IPv4Network` and so on, and Grail's
+Smalltalk module already has classes of those names, so loading a second copy
+collides in the canonical registry. Adopting CPython's `ipaddress` therefore
+means REPLACING the Smalltalk one, not adding to it — the same shape as
+pathlib in #1104, and a change of its own.
