@@ -6159,6 +6159,22 @@ ___irMethodLocalClassReason___: localNames
 			or: [(self ___irCarriedCaptureNames___: localNames)
 				anySatisfy: [:c | c asString = n asString]]])
 				ifFalse: [^ #'classDef:nonlocalNotCarried'].
+	"A carried ``nonlocal'' READ LATER from class level.  The helper hands a
+	carried name in as a reader block, and methods read through it -- by
+	reference, so they see the enclosing binding at read time.  But the helper
+	ALSO seeds a temp of the name's own spelling from that block once, on
+	entry, for the reads the class emit makes EAGERLY (a base, an attribute's
+	value, a def-time default): correct for those, because they run then.
+	Class-level code that runs LATER reads that temp too -- a lambda, a lazy
+	generator expression, and since PEP 649 every annotation -- and gets the
+	value from when the class statement ran.  Measured under IR:
+	``x = 1; class C: nonlocal x; grab = lambda: x'' then ``x = 5'' answered
+	C.grab() == 1 where CPython and the text path answer 5, and a name bound
+	only after the class raised UnboundLocalError (test_annotationlib's
+	nonlocal-in-class ForwardRef: NameError).  Refused until the emit reads
+	those through the block as well."
+	(self ___irDeferredReadsOfNonlocalBelow___ isEmpty)
+		ifFalse: [^ #'classDef:deferredReadOfNonlocal'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
 	by reference -- which is what an enclosing PARAMETER that the body never
@@ -6479,6 +6495,76 @@ ___irCollectNonlocalNames___: aNode into: aSet
 	aNode class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self ___irCollectNonlocalNames___: (aNode instVarAt: i) into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irDeferredReadsOfNonlocalBelow___
+	"The names declared ``nonlocal'' below this class that class-level code
+	reads in a DEFERRED scope -- a lambda, a generator expression, or an
+	annotation (PEP 649 defers every one, a method's parameter and return
+	annotations included).  Method BODIES are not walked: they read a carried
+	name through its reader block, which is correct.
+
+	Eligibility must not raise, so an unexpected error answers a non-empty
+	set: refusing falls back to the text path, which is always safe."
+
+	| nonlocals reads |
+	^ [nonlocals := (self ___irNonlocalNamesBelow___: body)
+			reject: [:n | n asString = '__class__'].
+		nonlocals isEmpty
+			ifTrue: [Set new]
+			ifFalse: [
+				reads := Set new.
+				self ___irCollectDeferredReads___: body into: reads deferred: false.
+				nonlocals select: [:n | reads includes: n asSymbol]]]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: (Set with: #'<eligibility walk failed>')]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectDeferredReads___: aNode into: aSet deferred: deferredBool
+	"Add to aSet every name READ inside a deferred scope in aNode's subtree.
+	deferredBool says whether aNode is already inside one.  Skips ``parent'',
+	as every one of these walks must, or it climbs out and never terminates.
+
+	Conservative where it is cheap to be: a method's DEFAULTS are walked as
+	deferred along with its annotations, though a default is evaluated
+	eagerly.  Over-reporting only refuses a method the text path compiles
+	correctly anyway."
+
+	aNode isNil ifTrue: [^ self].
+	aNode isString ifTrue: [^ self].
+	(aNode isKindOf: NameAst) ifTrue: [
+		deferredBool ifTrue: [aSet add: aNode id asSymbol].
+		^ self].
+	(aNode isKindOf: SequenceableCollection) ifTrue: [
+		aNode do: [:e | self ___irCollectDeferredReads___: e into: aSet deferred: deferredBool].
+		^ self].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ self].
+	(aNode isKindOf: FunctionDefAst) ifTrue: [
+		"The BODY reads through the cell.  Decorators run now; the signature's
+		annotations run later."
+		self ___irCollectDeferredReads___: aNode decorator_list into: aSet deferred: deferredBool.
+		self ___irCollectDeferredReads___: aNode args into: aSet deferred: true.
+		self ___irCollectDeferredReads___: aNode returns into: aSet deferred: true.
+		^ self].
+	((aNode isKindOf: LambdaAst) or: [aNode isKindOf: GeneratorExpAst]) ifTrue: [
+		aNode class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: true]].
+		^ self].
+	(aNode isKindOf: AnnAssignAst) ifTrue: [
+		self ___irCollectDeferredReads___: aNode annotation into: aSet deferred: true.
+		self ___irCollectDeferredReads___: aNode target into: aSet deferred: deferredBool.
+		self ___irCollectDeferredReads___: aNode value into: aSet deferred: deferredBool.
+		^ self].
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: deferredBool]].
 	^ self
 %
 
