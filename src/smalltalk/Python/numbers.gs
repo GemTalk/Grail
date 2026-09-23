@@ -177,14 +177,14 @@ numbers_Integral category: 'Grail-Numbers-ABC'
 
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 
 ! ------- numbers class (Python 'numbers' module)
 expectvalue /Class
 doit
-module subclass: 'numbers'
+NativeModule subclass: 'numbers'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- json module class
 expectvalue /Class
 doit
-module subclass: 'json'
+NativeModule subclass: 'json'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

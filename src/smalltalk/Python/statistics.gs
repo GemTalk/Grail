@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- statistics class (Python 'statistics' module)
 expectvalue /Class
 doit
-module subclass: 'statistics'
+NativeModule subclass: 'statistics'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

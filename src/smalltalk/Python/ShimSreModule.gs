@@ -1,13 +1,13 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 CPythonShim ifNil: [self error: 'CPythonShim is not defined. Check file ordering.'].
 %
 
 ! ------- _sre class (C extension module via shim)
 expectvalue /Class
 doit
-module subclass: '_sre'
+NativeModule subclass: '_sre'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

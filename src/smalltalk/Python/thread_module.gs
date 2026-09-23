@@ -14,7 +14,7 @@
 
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- PyThreadLock — a mutex (threading.Lock / allocate_lock()) -----------
@@ -353,7 +353,7 @@ set compile_env: 0
 
 expectvalue /Class
 doit
-module subclass: '_thread'
+NativeModule subclass: '_thread'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

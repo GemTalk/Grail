@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- functools class (Python 'functools' module)
 expectvalue /Class
 doit
-module subclass: 'functools'
+NativeModule subclass: 'functools'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

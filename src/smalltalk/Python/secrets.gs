@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- secrets module class
 expectvalue /Class
 doit
-module subclass: 'secrets'
+NativeModule subclass: 'secrets'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

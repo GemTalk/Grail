@@ -135,13 +135,14 @@ testStaleGenerationDiscardsCanonicalRegistries
 	Every mutated global is restored afterwards -- the suite must not
 	disturb a standing deployment."
 
-	| ug st savedMemo savedDeployGen savedMods savedHashes savedClasses savedSet marker |
+	| ug st savedMemo savedDeployGen savedMods savedHashes savedDeps savedClasses savedSet marker |
 	ug := UserGlobals.
 	st := SessionTemps current.
 	savedMemo := st at: #'GrailCanonicalGenChecked' otherwise: nil.
 	savedDeployGen := ug at: #'GrailCanonicalDeployGeneration' otherwise: nil.
 	savedMods := ug at: #'GrailCanonicalModules' otherwise: nil.
 	savedHashes := ug at: #'GrailCanonicalModuleHashes' otherwise: nil.
+	savedDeps := ug at: #'GrailCanonicalModuleDeps' otherwise: nil.
 	savedClasses := ug at: #'GrailCanonicalClasses' otherwise: nil.
 	savedSet := ug at: #'GrailCanonicalClassSet' otherwise: nil.
 	[
@@ -171,6 +172,9 @@ testStaleGenerationDiscardsCanonicalRegistries
 		savedHashes isNil
 			ifTrue: [ug removeKey: #'GrailCanonicalModuleHashes' ifAbsent: []]
 			ifFalse: [ug at: #'GrailCanonicalModuleHashes' put: savedHashes].
+		savedDeps isNil
+			ifTrue: [ug removeKey: #'GrailCanonicalModuleDeps' ifAbsent: []]
+			ifFalse: [ug at: #'GrailCanonicalModuleDeps' put: savedDeps].
 		savedClasses isNil
 			ifTrue: [ug removeKey: #'GrailCanonicalClasses' ifAbsent: []]
 			ifFalse: [ug at: #'GrailCanonicalClasses' put: savedClasses].
