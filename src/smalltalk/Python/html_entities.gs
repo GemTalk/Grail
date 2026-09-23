@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- html_entities class (Python 'html.entities' module)
 expectvalue /Class
 doit
-module subclass: 'html_entities'
+NativeModule subclass: 'html_entities'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

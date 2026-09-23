@@ -1,6 +1,6 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 Exception ifNil: [self error: 'Exception is not defined. Check file ordering.'].
 %
 
@@ -31,7 +31,7 @@ StructError category: 'Grail-Exceptions'
 ! ------- struct module class
 expectvalue /Class
 doit
-module subclass: 'struct'
+NativeModule subclass: 'struct'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

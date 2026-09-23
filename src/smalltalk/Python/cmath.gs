@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- cmath class (Python 'cmath' module)
 expectvalue /Class
 doit
-module subclass: 'cmath'
+NativeModule subclass: 'cmath'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

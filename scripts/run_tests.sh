@@ -406,6 +406,14 @@ timed "overlay-reuse" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/ru
 # par.10.5 ImportError. Session C cleans the repository.
 timed "module-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBindTest.gs < /dev/null || EXIT=$?
 
+# Dependency coherence (docs/Persistent_Modules_and_Classes.md par.4.4): a
+# deployed module is stale when anything its body imported changed, and a
+# stale deployed module is rebuilt into its committed instance.  Edits a
+# leaf of a three-module chain between sessions and checks all three rebuild
+# in place, captures included, then that the next session binds warm and
+# writes nothing.
+timed "module-coherence" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleCoherenceTest.gs < /dev/null || EXIT=$?
+
 # REAL-APPLICATION acceptance (par.10): session A deploys a module-level
 # Flask app (committing the whole flask/werkzeug closure); session B
 # warm-binds it and the committed app must serve requests (routing, request

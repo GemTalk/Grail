@@ -1,13 +1,13 @@
 ! ------------------- Superclass check
 set compile_env: 0
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- importlib class (Python 'importlib' module)
 expectvalue /Class
 doit
-module subclass: 'importlib'
+NativeModule subclass: 'importlib'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -1900,7 +1900,7 @@ ___canonicalGenerationCheck___
 	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
 	deployGen == runtimeGen ifTrue: [^ self].
 	"Stale (or first-ever) deployment: drop every canonical registry."
-	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes'
+	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
 	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
@@ -1967,6 +1967,9 @@ resetSessionForReinstall
 	-- so this changes no lookup, it just stops a session that reinstalls
 	repeatedly from holding every generation of evicted module class alive."
 	st @env0:removeKey: #'GrailModuleClassKeys' ifAbsent: [].
+	"4. And the staleness verdicts: a reinstall usually follows an edit."
+	st @env0:removeKey: #'GrailModuleCurrency' ifAbsent: [].
+	st @env0:removeKey: #'GrailSourceHashNow' ifAbsent: [].
 	^ toEvict @env0:size
 %
 
@@ -1988,6 +1991,271 @@ ___canonicalModuleHashes___
 		reg := RcKeyValueDictionary new.
 		UserGlobals at: #'GrailCanonicalModuleHashes' put: reg].
 	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalModuleDeps___
+	"Committed (module dotted-name -> dependency record) map, or nil before
+	any cold load has recorded one.  A record is
+	{ generation . { { depName . depGenerationAtBuild } ... } }.
+
+	WHY IT EXISTS.  The source hash decides whether a deployed module's
+	committed instance can be reused, but it covers only that module's own
+	file.  A module body also captures values out of the modules it imports
+	-- ``from D import x'', but equally ``X = D.CONST * 2'' or a class built
+	on D.Base -- so a deployed module whose own source is unchanged is still
+	stale when anything it imported has changed.  CPython never needs to ask:
+	a new process re-executes everything.  A persistent module is never
+	re-executed unless something decides it must be, and this record is what
+	decides.
+
+	The GENERATION names one build of the module, and moves only when a build
+	was caused by a change (___recordDepsOf___:srcHash:names:changed:).  A
+	dependent records each dependency's generation at build time, and is
+	current only while each dependency is itself current and still has that
+	generation (___isCurrentModule___:) -- so a change anywhere below makes
+	everything above it stale, and a module rebuilt in some other session
+	since is noticed too.
+
+	Read-only: a read never creates the registry, because creating it would
+	be a write in a session that imported nothing cold (deployGemdb.gs says
+	why that matters).  ___canonicalModuleDepsForWrite___ creates it."
+
+	self ___canonicalGenerationCheck___.
+	^ UserGlobals at: #'GrailCanonicalModuleDeps' otherwise: nil
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalModuleDepsForWrite___
+	| reg |
+	reg := self ___canonicalModuleDeps___.
+	reg isNil ifTrue: [
+		"Reduced-conflict, like the hash registry: concurrent first importers
+		of different modules merge."
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalModuleDeps' put: reg].
+	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___depCollectorStack___
+	"Session-local stack of { moduleName . namesImported } for the module
+	bodies executing right now, innermost last.  Separate from the
+	initializing-module stack because reload: records dependencies too and
+	does not push that one."
+
+	^ SessionTemps current
+		at: #'GrailModuleDepCollectors'
+		ifAbsentPut: [OrderedCollection new]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___beginDepCollection___: aName
+	"A Set: a body that runs a long loop -- a reloader serving an app from
+	module level -- imports the same modules over and over, and every one of
+	those imports lands here."
+	self ___depCollectorStack___ addLast: { aName asString . Set new }
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___endDepCollection___: aName
+	"Pop aName's collector and answer the names its body imported (nil when
+	the top is not aName's, which only an unbalanced begin/end would cause)."
+
+	| stack top |
+	stack := self ___depCollectorStack___.
+	stack isEmpty ifTrue: [^ nil].
+	top := stack last.
+	(top at: 1) = aName asString ifFalse: [^ nil].
+	stack removeLast.
+	^ top at: 2
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___noteImport___: absoluteName fromlist: fromlist
+	"An import statement just produced absoluteName: note it, its parent
+	packages, and any ``from absoluteName import sub'' submodule, against the
+	innermost module body being executed.  Outside a module body (a function
+	called later) this is a no-op, which is right: a function-level import
+	goes through the import machinery on every call, so it checks itself."
+
+	| stack names parts prefix |
+	stack := self ___depCollectorStack___.
+	stack isEmpty ifTrue: [^ self].
+	names := stack last at: 2.
+	parts := absoluteName asString subStrings: '.'.
+	prefix := nil.
+	parts do: [:p |
+		prefix := prefix isNil ifTrue: [p] ifFalse: [prefix , '.' , p].
+		names add: prefix].
+	fromlist == nil ifTrue: [^ self].
+	fromlist do: [:each | | sub |
+		(each isKindOf: CharacterCollection) ifTrue: [
+			sub := absoluteName asString , '.' , each asString.
+			(self @env1:lookupModule: sub) notNil ifTrue: [names add: sub]]]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___isTrackedModule___: aName
+	"Whether aName is a deployed-or-deployable Python module whose staleness
+	can be judged: it has a source hash AND a registry instance.  Native
+	modules, C extensions and namespace packages have neither.  So does a
+	module a deploy loaded and then deliberately un-registered
+	(deployFrameworks.gs forgets re, threading, dataclasses and itertools so
+	the suite can reset them) -- and treating that as a CHANGE would mark
+	every dependent stale in every session, so it is treated as unknown."
+
+	^ (self ___canonicalModuleHashes___ includesKey: aName asString)
+		and: [self ___canonicalModules___ includesKey: aName asString]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___recordedGenerationOf___: aName
+	"aName's build generation as recorded, or nil when it is not tracked.  A
+	tracked module without a dependency record (deployed before records
+	existed) answers its source hash."
+
+	| rec |
+	(self ___isTrackedModule___: aName) ifFalse: [^ nil].
+	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
+	^ rec isNil
+		ifTrue: [self ___canonicalModuleHashes___ at: aName asString]
+		ifFalse: [rec at: 1]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___recordDepsOf___: aName srcHash: srcHash names: importedNames changed: aBoolean
+	"After aName's body ran to completion: record what it imported, with each
+	dependency's build generation, and aName's own generation, in-transaction
+	(import never commits).
+
+	THE GENERATION CHANGES ONLY WHEN THE BUILD WAS CAUSED BY A CHANGE
+	(aBoolean): a first build, a new source hash, or a dependency that had
+	changed.  A re-run of a module that was already current -- a session
+	re-executing a module it has not committed, deployFrameworks loading a
+	closure member a second time by name -- keeps the generation it had.
+	Recomputing it from the inputs on every build was measured to churn:
+	inside an import cycle the inputs depend on build ORDER (a dependency
+	still executing is left out, below), so the second build of werkzeug.http
+	got a different value from the first, and 46 of 156 freshly deployed
+	modules read as stale in every later session.
+
+	A dependency still executing -- an ancestor on the collector stack, i.e.
+	a circular import -- is left out: it has no final generation yet."
+
+	| inProgress seen deps rec gen stream |
+	inProgress := Set new.
+	self ___depCollectorStack___ do: [:e | inProgress add: (e at: 1)].
+	seen := Set new.
+	deps := OrderedCollection new.
+	"Sorted, so the record does not depend on import order."
+	((importedNames ifNil: [#()]) collect: [:n | n asString]) asSortedCollection do: [:ns | | g |
+		((ns = aName asString) or: [(seen includes: ns) or: [inProgress includes: ns]]) ifFalse: [
+			seen add: ns.
+			g := self ___recordedGenerationOf___: ns.
+			g isNil ifFalse: [deps add: { ns . g }]]].
+	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
+	(aBoolean not and: [rec notNil])
+		ifTrue: [gen := rec at: 1]
+		ifFalse: [
+			"Deterministic in its inputs, so two sessions rebuilding the same
+			change agree; the previous generation is one of them, so a rebuild
+			always moves it."
+			stream := WriteStream on: String new.
+			stream nextPutAll: srcHash asString; nextPut: $|.
+			rec isNil ifFalse: [stream nextPutAll: (rec at: 1) asString].
+			deps do: [:pair | stream nextPut: $|; nextPutAll: (pair at: 1); nextPut: $=; nextPutAll: (pair at: 2) asString].
+			gen := stream contents sha1Sum].
+	self ___canonicalModuleDepsForWrite___ at: aName asString put: { gen . deps asArray }.
+	"Built here, so current for the rest of the session; and every OTHER
+	module's verdict may have depended on the old version."
+	SessionTemps current removeKey: #'GrailModuleCurrency' ifAbsent: [].
+	self ___currencyMemo___ at: aName asString put: true.
+	^ gen
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___currencyMemo___
+	"Session-local (module name -> Boolean) verdicts of ___isCurrentModule___:."
+
+	^ SessionTemps current at: #'GrailModuleCurrency' ifAbsentPut: [KeyValueDictionary new]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___sourceHashNowOf___: aName
+	"The sha1 of aName's source as it is on disk NOW, memoised per session by
+	path (each file is hashed at most once per session, however many
+	dependents ask), or nil when no source file can be found."
+
+	| inst path memo |
+	inst := self ___canonicalModules___ at: aName asString otherwise: nil.
+	path := inst isNil ifTrue: [nil] ifFalse: [inst dynamicInstVarAt: #'__file__'].
+	(path isNil or: [path == None]) ifTrue: [path := self @env1:___moduleNameToPath___: aName asString].
+	path isNil ifTrue: [^ nil].
+	path := path asString.
+	memo := SessionTemps current at: #'GrailSourceHashNow' ifAbsentPut: [KeyValueDictionary new].
+	^ memo at: path ifAbsent: [ | h |
+		h := (GsFile existsOnServer: path) == true
+			ifTrue: [(self ___sourceStringForPath___: path) sha1Sum]
+			ifFalse: [nil].
+		memo at: path put: h.
+		h]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___generationNowOf___: aName
+	"aName's build generation as the files on disk stand now: its recorded
+	one when it is current, a value no record can hold when it is not, nil
+	when it is not tracked."
+
+	| now |
+	(self ___isTrackedModule___: aName) ifFalse: [^ nil].
+	now := self ___sourceHashNowOf___: aName.
+	now = (self ___canonicalModuleHashes___ at: aName asString) ifFalse: [
+		^ 'changed:' , now printString].
+	(self ___isCurrentModule___: aName) ifFalse: [^ 'changed-dependency'].
+	^ self ___recordedGenerationOf___: aName
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___isCurrentModule___: aName
+	"Whether every dependency aName's body imported is unchanged since aName
+	was built (its OWN source is the caller's hash check).  A module with no
+	record -- never cold-loaded since records existed -- keeps the old
+	own-source-only rule.  A dependency that is no longer tracked is not
+	evidence either way and is skipped.  A dependency already being checked
+	(a cycle the record did not break) counts as current.  Memoised per
+	session."
+
+	| rec memo checking verdict |
+	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
+	rec isNil ifTrue: [^ true].
+	memo := self ___currencyMemo___.
+	(memo at: aName asString otherwise: nil) ifNotNil: [:v | ^ v].
+	checking := SessionTemps current at: #'GrailModuleCurrencyChecking' ifAbsentPut: [Set new].
+	(checking includes: aName asString) ifTrue: [^ true].
+	checking add: aName asString.
+	verdict := true.
+	[(rec at: 2) do: [:pair | | now |
+		verdict ifTrue: [
+			now := self ___generationNowOf___: (pair at: 1).
+			(now isNil or: [now = (pair at: 2)]) ifFalse: [verdict := false]]]]
+		ensure: [checking remove: aName asString ifAbsent: []].
+	memo at: aName asString put: verdict.
+	^ verdict
 %
 
 category: 'Grail-Persistent State'
@@ -2420,7 +2688,7 @@ ___canonicalRegistrySnapshot___
 
 	"More slots than Array class>>with: takes (it stops at five), so the tail is
 	appended with copyWith:."
-	^ ((Array
+	^ (((Array
 		with: self ___canonicalClassRegistry___ keys asIdentitySet
 		with: self ___canonicalModuleHashes___ keys asIdentitySet
 		with: self ___canonicalModules___ keys asIdentitySet
@@ -2429,7 +2697,10 @@ ___canonicalRegistrySnapshot___
 			ifNotNil: [:bag | bag asIdentitySet])
 		with: PythonModules keys asIdentitySet)
 		copyWith: self ___canonicalMetaclasses___ keys asIdentitySet)
-		copyWith: self ___canonicalClassStructure___ keys asIdentitySet
+		copyWith: self ___canonicalClassStructure___ keys asIdentitySet)
+		copyWith: (self ___canonicalModuleDeps___
+			ifNil: [IdentitySet new]
+			ifNotNil: [:deps | deps keys asIdentitySet])
 %
 
 category: 'Grail-Canonical Classes'
@@ -2467,6 +2738,10 @@ ___canonicalRegistryRestore___: aSnapshot
 		reg := self ___canonicalClassStructure___.
 		reg keys do: [:k |
 			((snap at: 7) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
+	(snap size >= 8 and: [self ___canonicalModuleDeps___ notNil]) ifTrue: [
+		reg := self ___canonicalModuleDeps___.
+		reg keys do: [:k |
+			((snap at: 8) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
 %
 
 category: 'Grail-Canonical Classes'
@@ -2501,6 +2776,7 @@ ___forgetCanonicalModule___: aModuleName
 	self ___canonicalModules___ removeKey: modName ifAbsent: [].
 	self ___canonicalModuleHashes___ removeKey: modName ifAbsent: [].
 	"Per-module records, keyed by the module name."
+	self ___canonicalModuleDeps___ ifNotNil: [:deps | deps removeKey: modName ifAbsent: []].
 	self ___canonicalMetaclasses___ removeKey: modName ifAbsent: [].
 	self ___canonicalClassStructure___ removeKey: modName ifAbsent: [].
 	"Class registry is keyed ``<module>.<class>''.  Collect the classes as we go:
@@ -2607,6 +2883,22 @@ _stateMap
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___committedInstanceToRebuild___: moduleName class: moduleClass
+	"The committed instance a stale deployed module should be rebuilt into,
+	or nil for a fresh one: a module never deployed, one recorded only in this
+	transaction (a session that has not committed keeps the old cold
+	semantics, and its forced re-imports keep working), or one whose class
+	the rebuild replaced rather than recompiled."
+
+	| inst |
+	inst := self ___canonicalModules___ at: moduleName otherwise: nil.
+	inst isNil ifTrue: [^ nil].
+	(inst isCommitted and: [inst class == moduleClass]) ifFalse: [^ nil].
+	^ inst
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
 	Returns the module instance.
@@ -2624,7 +2916,7 @@ loadModuleFromPath: pathString name: moduleName
 	new instances when the cache is missed."
 
 	| moduleAst moduleClass moduleInstance
-	  srcString srcHash hashes hashState stateMap |
+	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
@@ -2642,8 +2934,18 @@ loadModuleFromPath: pathString name: moduleName
 	srcString := self ___sourceStringForPath___: pathString.
 	srcHash := srcString sha1Sum.
 	hashes := self ___canonicalModuleHashes___.
-	hashState := ((hashes at: moduleName otherwise: nil) = srcHash)
+	previousHash := hashes at: moduleName otherwise: nil.
+	hashState := (previousHash = srcHash)
 		ifTrue: [#'match'] ifFalse: [#'stale'].
+	"Its own source is unchanged -- but a module body captures values out of
+	what it imports, so it is only reusable while every module it imported is
+	unchanged too (___canonicalModuleDeps___).  A changed dependency makes this
+	module stale exactly as an edit to its own file would."
+	(hashState == #'match' and: [(self ___isCurrentModule___: moduleName) not])
+		ifTrue: [hashState := #'stale'].
+	"Whether a build from here on is caused by a change -- or is a re-run of a
+	module already current, which keeps its generation."
+	buildChanged := hashState == #'stale'.
     stateMap := self _stateMap .
 	"Phase-5 warm BIND (doc par.10.2): a committed module INSTANCE with
 	matching source binds -- register in sys.modules, adopt as the class's
@@ -2748,7 +3050,17 @@ loadModuleFromPath: pathString name: moduleName
 	"Create an instance, set metadata, register, then run.
 	Must use @env0:new (not basicNew) because module inherits from
 	SymbolDictionary, which requires internal structure initialization."
-	moduleInstance := moduleClass new.
+	"A DEPLOYED module that is stale is rebuilt INTO its committed instance,
+	as importlib.reload() does, rather than into a new one.  Every committed
+	reference to the module -- another deployed module's import m'', an
+	application object -- is to that instance, and a second instance is the
+	split this avoids: new methods (the class is recompiled in place) over the
+	old globals, while sys.modules answers a different object.  The body
+	re-executes over the existing namespace, so a name the new source no
+	longer defines survives, again as reload() leaves it."
+	moduleInstance := self ___committedInstanceToRebuild___: moduleName class: moduleClass.
+	rebuiltInPlace := moduleInstance notNil.
+	rebuiltInPlace ifFalse: [moduleInstance := moduleClass new].
 	"Adopt as the class's singleton BEFORE running initialize.  Module
 	body code that references its own class names through
 	``(modCls @env0:___instance___) @env1:Foo'' (NameAst's emit for
@@ -2811,11 +3123,21 @@ loadModuleFromPath: pathString name: moduleName
 	modules and the innermost one is the answer.  ensure:, so a body that
 	raises still pops."
 	self ___pushInitializingModule___: moduleName.
+	self ___beginDepCollection___: moduleName.
 	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
 			self removeModule: moduleName.
+			"A failed rebuild leaves the committed instance half re-executed
+			(in this transaction only).  Put the old hash back so the next
+			import sees the module as stale and retries, instead of finding a
+			matching hash and binding the half-built instance."
+			rebuiltInPlace ifTrue: [
+				previousHash isNil
+					ifTrue: [hashes removeKey: moduleName ifAbsent: []]
+					ifFalse: [hashes at: moduleName put: previousHash]].
 			ex outer]]
 		ensure: [
+			imported := self ___endDepCollection___: moduleName.
 			self ___popInitializingModule___.
 			"Registrations for this module's class methods that no class-build
 			statement consumed -- a module whose class bodies were compiled but
@@ -2833,6 +3155,7 @@ loadModuleFromPath: pathString name: moduleName
 	gets ONE uniform per-session hook regardless of how the session
 	acquired the module (cold build here, warm bind above)."
 	self ___runSessionInit___: moduleInstance.
+	self ___recordDepsOf___: moduleName srcHash: srcHash names: imported changed: buildChanged.
 	"Phase-5 (doc par.10): record this cold import's instance in the
 	canonical-module registry, IN-TRANSACTION (import never commits).  It
 	persists -- with its whole globals graph, via reachability -- when the
@@ -3555,6 +3878,10 @@ removeModule: aName
 		mods removeKey: key ifAbsent: [].
 		self ___clearSessionCachesFor___: key asString].
 	self ___forgetHashStateFor___: aName.
+	"Something wants a rebuild from source: files may have changed since the
+	per-session staleness verdicts and source hashes were taken."
+	SessionTemps current removeKey: #'GrailModuleCurrency' ifAbsent: [].
+	SessionTemps current removeKey: #'GrailSourceHashNow' ifAbsent: [].
 	^ toRemove size
 %
 
@@ -7244,6 +7571,8 @@ ___import__: positional kw: kwargs
 		]
 	].
 
+	"A module body importing: part of its dependency record."
+	self @env0:class @env0:___noteImport___: absoluteName @env0:asString fromlist: fromlist.
 	"Return the correct module per CPython semantics"
 	^ (isDotted and: [fromlist __len__ == 0])
 		ifTrue: [self @env0:class lookupModule: (nameParts @env0:at: 1)]
@@ -7319,7 +7648,7 @@ reload: aModule
 	with no source path (a native/C-extension or built-in module) is returned
 	unchanged."
 
-	| path name moduleAst srcHash stateMap |
+	| path name moduleAst srcHash stateMap imported |
 	path := aModule @env0:dynamicInstVarAt: #'__file__'.
 	path @env0:isNil ifTrue: [^ aModule].
 	name := (aModule __name__) @env0:asString.
@@ -7343,13 +7672,19 @@ reload: aModule
 	instance so it stays the module's canonical object before re-running body."
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.
 	importlib @env0:___resetMintedThisLoad___: name.
-	aModule initialize.
+	importlib @env0:___beginDepCollection___: name.
+	[aModule initialize] @env0:ensure: [
+		imported := importlib @env0:___endDepCollection___: name].
 	"After a successful re-run: the current source is what the (same,
 	identity-preserved) instance now reflects -- update the committed hash
 	and registry entry in-transaction and mark the session verdict #match,
 	so subsequent class probes reuse the refreshed classes.  A body that
 	raised skipped this, leaving the verdict #stale (conservative: the next
 	load rebuilds)."
+	"What the re-run imported is its dependency record now; the generation
+	moves only when the source did."
+	importlib @env0:___recordDepsOf___: name srcHash: srcHash names: imported
+		changed: ((importlib @env0:___canonicalModuleHashes___ @env0:at: name otherwise: nil) @env0:~= srcHash).
 	importlib @env0:___canonicalModuleHashes___ @env0:at: name put: srcHash.
 	"Leave the session verdict #stale: the entry's PRESENCE drives the
 	par.10.5 guard, and the emitted class-def probes must never hit

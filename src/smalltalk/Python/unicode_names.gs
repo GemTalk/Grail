@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- unicode_names (GENERATED -- see scripts/generate_unicode_names.py)
 expectvalue /Class
 doit
-module subclass: 'unicode_names'
+NativeModule subclass: 'unicode_names'
   instVarNames: #()
   classVars: #( NameToCp CpToName )
   classInstVars: #()

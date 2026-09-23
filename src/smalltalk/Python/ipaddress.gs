@@ -1,6 +1,6 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 %
 
 ! ------- IPv4Address: Smalltalk-backed wrapper holding 32-bit unsigned int
@@ -1515,7 +1515,7 @@ set compile_env: 0
 ! ------- ipaddress module class
 expectvalue /Class
 doit
-module subclass: 'ipaddress'
+NativeModule subclass: 'ipaddress'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

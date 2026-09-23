@@ -1,6 +1,6 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 Exception ifNil: [self error: 'Exception is not defined. Check file ordering.'].
 PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file ordering.'].
 %
@@ -154,7 +154,7 @@ ___pythonValueAttrs___
 
 expectvalue /Class
 doit
-module subclass: 'zlib'
+NativeModule subclass: 'zlib'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

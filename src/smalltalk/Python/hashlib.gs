@@ -1,6 +1,6 @@
 ! ------------------- Superclass check
 run
-module ifNil: [self error: 'module is not defined. Check file ordering.'].
+NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 PythonInstance ifNil: [self error: 'PythonInstance is not defined.  Check file ordering.'].
 %
 
@@ -223,7 +223,7 @@ set compile_env: 0
 ! ------- hashlib module class
 expectvalue /Class
 doit
-module subclass: 'hashlib'
+NativeModule subclass: 'hashlib'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

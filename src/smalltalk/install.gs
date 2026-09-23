@@ -302,6 +302,7 @@ run
 	at: #'NotImplementedType' put: nil;
 	at: #'Ellipsis' put: nil;
 	at: #'ellipsis' put: nil;
+	at: #'NativeModule' put: nil;
 	at: #'NoneType' put: nil;
 	at: #'NotADirectoryError' put: nil;
 	at: #'NotImplementedError' put: nil;
@@ -1545,6 +1546,7 @@ input src/smalltalk/Python/PyFrame.gs
 input src/smalltalk/Python/PyTraceback.gs
 input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
+input src/smalltalk/Python/NativeModule.gs
 input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/PyInstanceDict.gs
 input src/smalltalk/Python/GrailClassAttrHolder.gs
@@ -2899,6 +2901,15 @@ overlapBetween := [:nameA :nameB |
 ].
 Transcript show: 'No-overlap assertion: OK'.
 %
+
+! ------------------- One committed instance per native module
+! Before anything below asks for a native singleton: from here on
+! ``instance'' answers the committed instance, so importlib's registrations
+! and every later session bind the same object (NativeModule.gs).
+run
+Transcript show: 'Native module instances committed: ' , NativeModule ___installCommittedInstances___ printString.
+%
+commit
 
 run
 | libPath pyPath |
