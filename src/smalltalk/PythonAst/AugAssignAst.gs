@@ -532,31 +532,56 @@ category: 'Grail-IR Codegen'
 method: AugAssignAst
 ___emitIRComplexTargetOn___: aBuilder kind: aKind
 	"printSmalltalkAttributeAugAssignOn: / printSmalltalkSubscriptAugAssignOn:
-	(cut 62).  The text applies the BINARY operator send (``__add__:'', not the
-	in-place probe of the simple-local branch) to the loaded current value and
-	stores the result:
+	(cut 62).  Every shape routes the loaded current value through
+	``___augmentedOp___:inplace:binary:'' -- the SAME runtime helper the
+	simple-local branch uses -- and stores what it answers:
 	  self @env0:dynamicInstVarAt: #x put: ((self @env0:dynamicInstVarAt: #x
-	      ifAbsent: [self @env1:___pyAttrLoad___: #x]) __add__: (v))
-	  ___slot_x___ := (___slot_x___ ifNil: [self @env1:___pyAttrLoad___: #x]) __add__: (v)
-	  (obj) @env1:___pyAttrStore___: #x put: (((obj) @env1:___pyAttrLoad___: #x) __add__: (v))
-	  (obj) __setitem__: (i) _: (((obj) __getitem__: (i)) __add__: (v))
+	      ifAbsent: [self @env1:___pyAttrLoad___: #x])
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
+	  self ___pyattr_x___: ((self ___pyattr_x___)
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
+	  (obj) @env1:___pyAttrStore___: #x put: (((obj) @env1:___pyAttrLoad___: #x)
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
+	  (obj) __setitem__: (i) _: (((obj) __getitem__: (i))
+	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
 	The receiver (and index) expressions are emitted TWICE for the foreign and
-	subscript shapes, as the text prints them twice."
+	subscript shapes, as the text prints them twice.
 
-	| binSel attr v load |
-	binSel := self ___irSelectorPair___ at: 2.
+	IT USED TO APPLY THE BARE BINARY SEND, and this docstring used to say the
+	text did too.  That was true when cut 62 was written and stopped being true
+	when the text emitters were corrected; the IR path kept the old shape, so
+	two things silently did not happen for an attribute or subscript target:
+
+	  * the IN-PLACE dunder.  ``self.lst += [2]'' built a new list and stored
+	    it where CPython extends the existing one, so any other name bound to
+	    it kept the old contents;
+	  * the REFLECTED dunder.  A forward dunder that DECLINES had nothing after
+	    it and its NotImplemented was STORED -- a value, not an error,
+	    surfacing wherever the attribute was next read.
+
+	The text path is the oracle, so the fix is to send what it sends rather
+	than to reason afresh about which dunder is right here."
+
+	| pair attr v load augOf |
+	pair := self ___irSelectorPair___.
+	"One place builds the helper send, so the four shapes cannot drift in which
+	dunders they offer -- which is how they drifted from the text to begin with."
+	augOf := [:aLoad :aValue |
+		aBuilder send: #'___augmentedOp___:inplace:binary:' to: aLoad
+			with: { aValue. aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) }
+			env: 1].
 	aKind == #attrSelf ifTrue: [
 		attr := target ___mangledAttr___ asSymbol.
 		"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS):
-		both halves are accessor sends,
-		``self ___pyattr_x___: ((self ___pyattr_x___) __add__: (v))''."
+		both halves are accessor sends, ``self ___pyattr_x___: ((self
+		___pyattr_x___) @env1:___augmentedOp___: (v) inplace: ... binary: ...)''."
 		(target ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
 			load := aBuilder send: acc to: aBuilder selfNode with: #() env: 1.
 			v := value ___emitIRValueOn___: aBuilder.
 			aBuilder atNode: self.
 			aBuilder add: (aBuilder
 				send: (acc , ':') asSymbol to: aBuilder selfNode
-				with: { aBuilder send: binSel to: load with: { v } env: 1 } env: 1).
+				with: { augOf value: load value: v } env: 1).
 			^ self].
 		load := aBuilder
 			send: #dynamicInstVarAt:ifAbsent:
@@ -569,7 +594,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #dynamicInstVarAt:put: to: aBuilder selfNode
-			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
+			with: { aBuilder obj: attr. augOf value: load value: v }
 			env: 0).
 		^ self].
 	aKind == #attrForeign ifTrue: [
@@ -582,7 +607,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'___pyAttrStore___:put:' to: recv1
-			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
+			with: { aBuilder obj: attr. augOf value: load value: v }
 			env: 1).
 		^ self].
 	aKind == #subscript ifTrue: [
@@ -596,7 +621,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'__setitem__:_:' to: obj1
-			with: { idx1. aBuilder send: binSel to: load with: { v } env: 1 }
+			with: { idx1. augOf value: load value: v }
 			env: 1).
 		^ self].
 	^ Error signal: 'IR codegen: unhandled augmented target kind ' , aKind printString
