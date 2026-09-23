@@ -202,10 +202,13 @@ are illustrative only.
 
 With IR on, every module's eligible top-level defs compile through IR, so the
 whole suite becomes a differential test of IR against text. Since cut 131 that
-is simply what `ci.yml` runs, because IR is the default; before it, the IR arm
-ran pre-merge only through `.github/workflows/ir-flag-on.yml` (#1148), which
-sets `GRAIL_IR_CODEGEN=1` explicitly. The arm that now needs asking for is the
-TEXT one. By hand:
+is simply what `ci.yml` runs, because IR is the default. `ci.yml`'s `test-main`
+runs BOTH arms on every pull request and merge-queue entry -- the default (IR)
+and `GRAIL_IR_CODEGEN=0` (text) -- and both are gated by `ci-complete`; each leg
+also runs `tests/github/ir_seam_control.gs` to prove its arm really ran. (Before
+that, the IR arm had its own workflow, `ir-flag-on.yml` from #1148, which ran in
+the merge queue but was not a required check.) By hand, the text arm is the one
+that needs asking for:
 
 ```bash
 ./scripts/run_tests.sh                                        # IR (the default since cut 131)

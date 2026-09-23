@@ -1,11 +1,15 @@
-! Prove the IR seam was actually live in a flag-on run.
+! Prove WHICH codegen arm a run really used.
 !
-! A sweep that silently fell back to text scores EXACTLY like the ordinary
-! suite, so a green flag-on run means nothing without this.  Import one real
-! stdlib module and read the seam's own counters.
+! The IR and text arms of the suite score identically when the flag does not
+! take effect -- an IR arm that silently fell back to text, or a text arm that
+! compiled through IR, is just another green run -- so neither result means
+! anything without this.  Import one real stdlib module and read the seam's own
+! counters.  ci.yml's test-main runs it after each leg's shards: the ir arm
+! (GRAIL_IR_CODEGEN empty, the default since #1087) must answer IRFLAG|true
+! with IRCOMPILED > 0, the text arm (GRAIL_IR_CODEGEN=0) IRFLAG|false with
+! IRCOMPILED = 0.
 !
 ! Run as:  topaz -lq -S tests/github/ir_seam_control.gs   (finds ./.topazini or ~/.topazini)
-! Expects: GRAIL_IR_CODEGEN=1 (or the flag defaulting to on) in the environment.
 
 login
 set compile_env: 0
