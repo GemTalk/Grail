@@ -276,9 +276,11 @@ ___spawn___: argvList _: cwdOrNone _: envPairsOrNone _: modesList
 
 	prog := argv @env0:first.
 	resolved := PyHostProcess @env0:___resolveExecutable___: prog env: envPairs.
+	"Through os, so the error carries errno, strerror and filename as CPython's
+	does: code that catches this reads e.filename to say WHICH program was not
+	found, and got None before."
 	resolved == nil ifTrue: [
-		FileNotFoundError ___signal___:
-			'[Errno 2] No such file or directory: ' @env0:, (prog @env0:printString)].
+		(os instance) ___signalErrno: 2 filename: prog].
 
 	"A cd, an env replacement, or a space in the path all need a shell."
 	needShell := (cwd ~~ nil) @env0:or: [
@@ -512,8 +514,11 @@ ___writeStdin___: someBytes
 				remaining := data @env0:size @env0:- ofs @env0:+ 1.
 				n := [sock @env0:write: remaining from: data startingAt: ofs]
 					@env0:on: Error do: [:ex | ex @env0:return: nil].
+				"errno and strerror, not just the text of them -- CPython's
+				BrokenPipeError carries both, and a pipe error names no file."
 				n == nil ifTrue: [
-					BrokenPipeError ___signal___: '[Errno 32] Broken pipe'].
+					BrokenPipeError ___signalNew___:
+						{ 32. (os instance) strerror: 32 } kw: nil].
 				ofs := ofs @env0:+ n]
 			ifFalse: [(Delay @env0:forMilliseconds: 2) @env0:wait]].
 	^ data @env0:size

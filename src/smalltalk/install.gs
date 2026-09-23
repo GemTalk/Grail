@@ -1296,6 +1296,7 @@ run
 	at: #'SubclassAttrShadowTestCase' put: nil;
 	at: #'SubclassNameAttrTestCase' put: nil;
 	at: #'SubmoduleAutoBindTestCase' put: nil;
+	at: #'SubprocessAndCopytreeErrnoTestCase' put: nil;
 	at: #'SubprocessTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
 	at: #'SuperForeignReceiverTestCase' put: nil;
@@ -2698,6 +2699,7 @@ input src/smalltalk/PythonTests/SubclassAttrShadowTestCase.gs
 input src/smalltalk/PythonTests/SubclassCopyPickleTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
+input src/smalltalk/PythonTests/SubprocessAndCopytreeErrnoTestCase.gs
 input src/smalltalk/PythonTests/SubprocessTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
 input src/smalltalk/PythonTests/SuperForeignReceiverTestCase.gs
