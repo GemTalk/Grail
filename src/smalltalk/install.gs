@@ -918,6 +918,7 @@ run
 	at: #'ExceptionTestCase' put: nil;
 	at: #'ExecBuiltinsMappingTestCase' put: nil;
 	at: #'ExecClassBodyNamesTestCase' put: nil;
+	at: #'ExecWithClosureIRTestCase' put: nil;
 	at: #'ExecWithClosureTestCase' put: nil;
 	at: #'ExecClassDefinitionTestCase' put: nil;
 	at: #'ExecClassMethodScopeTestCase' put: nil;
@@ -2271,6 +2272,7 @@ input src/smalltalk/PythonTests/ExceptStarTestCase.gs
 input src/smalltalk/PythonTests/ExecBuiltinsMappingTestCase.gs
 input src/smalltalk/PythonTests/ExecClassBodyNamesTestCase.gs
 input src/smalltalk/PythonTests/ExecWithClosureTestCase.gs
+input src/smalltalk/PythonTests/ExecWithClosureIRTestCase.gs
 input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
 input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
 input src/smalltalk/PythonTests/ExecFrameGlobalsTestCase.gs

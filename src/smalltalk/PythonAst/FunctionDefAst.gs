@@ -4275,9 +4275,11 @@ ___emitIRPyCodeExprOn___: aBuilder qualname: aQualname nested: isNested
 	text's: name, qualname, the module's real path (___irFileName___, the same
 	answer emitSourceFilenameLiteralOn: spells), the def's line, the three
 	parameter counts, then ___setFlags___: (___coFlags___:) and, when the def
-	has free variables, ___setFreevars___:.  All env-0 sends on literals."
+	has free variables, ___setFreevars___:, and then co_consts and the body
+	text -- all four through ___emitIRCodeExtrasOn___:code:nested:, the one
+	mirror of the text's emitCodeExtrasOn:nested:."
 
-	| poCount regCount kwoCount code freeNames |
+	| poCount regCount kwoCount code |
 	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
 	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
 	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
@@ -4293,14 +4295,7 @@ ___emitIRPyCodeExprOn___: aBuilder qualname: aQualname nested: isNested
 			aBuilder obj: poCount.
 			aBuilder obj: kwoCount }
 		env: 0.
-	code := aBuilder
-		send: #'___setFlags___:' to: code
-		with: { aBuilder obj: (self ___coFlags___: isNested) } env: 0.
-	freeNames := CallAst ___freeVariableNamesFor___: self.
-	freeNames isEmpty ifTrue: [^ code].
-	^ aBuilder
-		send: #'___setFreevars___:' to: code
-		with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray } env: 0
+	^ self ___emitIRCodeExtrasOn___: aBuilder code: code nested: isNested
 %
 
 category: 'Grail-IR Codegen'
@@ -7998,9 +7993,11 @@ ___emitIRNestedPyCodeOn___: aBuilder
 	name:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:)
 	___setFlags___: n) [___setFreevars___: #(...)]'' -- printSmalltalkOn:'s
 	cascade, which unlike emitPyCodeExprOn:qualname:nested: carries no qualname
-	field.  CO_NESTED is set (nested: true)."
+	field.  CO_NESTED is set (nested: true).  The setters after the
+	constructor are ___emitIRCodeExtrasOn___:code:nested:, shared with the
+	generator code thunk."
 
-	| poCount regCount kwoCount code freeNames |
+	| poCount regCount kwoCount code |
 	poCount := (args posonlyargs ifNil: [#()]) size.
 	regCount := (args args ifNil: [#()]) size.
 	kwoCount := (args kwonlyargs ifNil: [#()]) size.
@@ -8015,12 +8012,73 @@ ___emitIRNestedPyCodeOn___: aBuilder
 			aBuilder obj: poCount.
 			aBuilder obj: kwoCount }
 		env: 0.
-	code := aBuilder send: #'___setFlags___:' to: code
-		with: { aBuilder obj: (self ___coFlags___: true) } env: 0.
+	^ self ___emitIRCodeExtrasOn___: aBuilder code: code nested: true
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
+	"emitCodeExtrasOn:nested: as IR, send for send: the setters chained onto a
+	finished PyCode, each answering the code object --
+
+	    ((((code ___setFlags___: n)
+	        ___setFreevars___: #(...))                      when free variables
+	        ___setConsts___: (tuple withAll: (Array with: (PyCode name:filename:
+	            firstlineno:) ...)))                        when nested scopes
+	        ___setBodySource___: '...')                     when ___emitsBodySource___
+
+	-- all env 0, as the text qualifies them.
+
+	ONE MIRROR FOR BOTH IR EMITTERS, because two hand copies are how this went
+	wrong.  ___emitIRPyCodeExprOn___ and ___emitIRNestedPyCodeOn___ each
+	copied the text's first two setters when they were written; the text
+	then gained co_consts and the body text, and neither copy followed.  The
+	body text is what ``exec(f.__code__, g, closure=cells)'' re-runs, so under
+	IR that call refused every def with ``cannot run this code object with a
+	closure'' -- and the text path, being right, could not show it.
+
+	The conditions are the text's own predicates, not restatements of them:
+	___codeConstScopes___ and ___emitsBodySource___ decide here exactly as
+	they decide there."
+
+	| code freeNames scopes consts text |
+	code := aBuilder send: #'___setFlags___:' to: codeNode
+		with: { aBuilder obj: (self ___coFlags___: isNested) } env: 0.
 	freeNames := CallAst ___freeVariableNamesFor___: self.
-	freeNames isEmpty ifTrue: [^ code].
-	^ aBuilder send: #'___setFreevars___:' to: code
-		with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray } env: 0
+	freeNames isEmpty ifFalse: [
+		code := aBuilder send: #'___setFreevars___:' to: code
+			with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray }
+			env: 0].
+	scopes := self ___codeConstScopes___.
+	scopes isEmpty ifFalse: [
+		"PyCode objects are built at RUN time, as the text builds them -- a code
+		object is not a method literal -- and gathered by ``Array with:...'',
+		which ___codeConstScopes___ caps at four for exactly that reason."
+		consts := scopes collect: [:node |
+			aBuilder
+				send: #'name:filename:firstlineno:'
+				to: (aBuilder globalNamed: #PyCode)
+				with: {
+					aBuilder obj: node ___codeConstNameFor___ asString.
+					aBuilder obj: self ___irFileName___ asString.
+					aBuilder obj: node beginLine }
+				env: 0].
+		code := aBuilder send: #'___setConsts___:' to: code
+			with: { aBuilder
+				send: #withAll: to: (aBuilder globalNamed: #tuple)
+				with: { aBuilder
+					send: (#(#'with:' #'with:with:' #'with:with:with:' #'with:with:with:with:')
+						at: consts size)
+					to: (aBuilder globalNamed: #Array)
+					with: consts asArray
+					env: 0 }
+				env: 0 }
+			env: 0].
+	self ___emitsBodySource___ ifTrue: [
+		text := self ___grailBodySourceText___.
+		code := aBuilder send: #'___setBodySource___:' to: code
+			with: { aBuilder obj: text } env: 0].
+	^ code
 %
 
 category: 'Grail-IR Codegen'
