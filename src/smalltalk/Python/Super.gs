@@ -610,6 +610,14 @@ ___pyAttrLoad___: aSym
 		^ AttributeError ___signal___:
 			('''super'' object has no attribute ''' @env0:, aSym @env0:asString
 				@env0:, '''')].
+	"PEP 487's COOPERATIVE CHAIN RESOLVES ALONG obj's MRO, not along cls's
+	Smalltalk superclass links.  Asked before the parent walk below because it
+	answers a different, and for this one name correct, hop -- see
+	___mroInitSubclassHop___ for why it is narrowed to this name."
+	(aSym @env0:asSymbol @env0:== #'__init_subclass__') ifTrue: [
+		| hop |
+		hop := self ___mroInitSubclassHop___.
+		hop @env0:isNil ifFalse: [^ hop]].
 	walker := cls @env0:superClass.
 	[walker == nil] whileFalse: [
 		(walker @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifTrue: [
@@ -736,6 +744,66 @@ ___pyAttrLoad___: aSym
 	method at call time once arity is known."
 	^ SuperBoundMethod obj: obj resolver: pickMethod selector: aSym
 %
+
+category: 'Grail-Attribute'
+method: Super
+___mroInitSubclassHop___
+	"``super().__init_subclass__'' resolved along OBJ's MRO, or nil to let the
+	ordinary parent walk have it.
+
+	PEP 487's chain is cooperative: every hook ends with
+	``super().__init_subclass__(**kwargs)'', and CPython resolves each hop
+	along the MRO of the class being created -- super(Owner, cls) uses
+	cls.__mro__, not Owner's superclass links.  Grail's general parent walk
+	below follows Smalltalk links, which for a diamond skips whole branches:
+	Middle's super() could not reach Right in ``class A(Left, Middle, Right)''
+	however the chain was entered, so the hooks ran in the wrong order and the
+	leftover keyword reached object's terminator.
+
+	NARROWED TO THIS ONE NAME ON PURPOSE.  Making every super() MRO-ordered is
+	a different and much larger change -- it is the resolution rule for the
+	whole corpus, not for one protocol -- and nothing else would be fixed by
+	it here.  __init_subclass__ is the case where the cooperative chain IS the
+	feature, so it is the case where the MRO has to be honoured.
+
+	Only when obj is a class: super() inside a hook substitutes the class being
+	created as the receiver, and anything else is not this protocol.  A
+	receiver that cannot answer the walk -- a metaclass, a kernel class --
+	falls through, which is the pre-existing behaviour."
+
+	| supplier owner sel assigned meth |
+	(obj @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	(obj @env0:_respondsTo: #'___grailInitSubclassMroSupplierAfter___:'
+		flags: 16r10001) ifFalse: [^ nil].
+	supplier := obj ___grailInitSubclassMroSupplierAfter___: cls.
+	supplier @env0:isNil ifTrue: [^ nil].
+	owner := supplier @env0:at: 1.
+	assigned := supplier @env0:at: 2.
+	sel := #'___init_subclass__:kw:'.
+	"An ASSIGNED hook is a Python callable, not a GsNMethod, so it travels as
+	the { hook. #assigned } pair SuperBoundMethod already knows how to run."
+	assigned @env0:isNil ifFalse: [
+		^ SuperBoundMethod obj: obj
+			resolver: [:n :k | { assigned. #assigned }]
+			selector: #'__init_subclass__'].
+	"A DEFINED hook is found on the owner itself -- instance-side for the plain
+	``def'', class-side for the explicit ``@classmethod def''.  The resolver
+	ignores the call-site arity because there is only ever one shape here: the
+	varargs entry ClassDefAst emits for every hook."
+	meth := (owner @env0:methodDictForEnv: 1) @env0:at: sel otherwise: nil.
+	meth @env0:isNil ifFalse: [
+		^ SuperBoundMethod obj: obj
+			resolver: [:n :k | { meth. false }]
+			selector: #'__init_subclass__'].
+	meth := (owner @env0:class @env0:methodDictForEnv: 1)
+		@env0:at: sel otherwise: nil.
+	meth @env0:isNil ifFalse: [
+		^ SuperBoundMethod obj: obj
+			resolver: [:n :k | { meth. true }]
+			selector: #'__init_subclass__'].
+	^ nil
+%
+
 
 
 

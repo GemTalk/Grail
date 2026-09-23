@@ -5789,6 +5789,15 @@ ___isPythonIdentifier___: aString
 category: 'Grail-Built-in Functions'
 method: builtins
 type: className _: bases _: namespace
+	"The ordinary three-argument type(), which is the same build with no class
+	keywords -- see the kw: variant for everything it does."
+
+	^ self type: className _: bases _: namespace kw: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+type: className _: bases _: namespace kw: classKeywords
 	"Python builtin type(name, bases, namespace) — the 3-argument
 	metaclass form that builds a class dynamically.  Mirrors the
 	compile-time path in ClassDefAst: pick the storage base from
@@ -5988,6 +5997,26 @@ type: className _: bases _: namespace
 	the first, and re-pointing it would leave the first class's methods reading
 	the second."
 	newClass @env1:___grailApplyClassCell___: namespace.
+	"PEP 487, WHICH type() RUNS AND THIS DID NOT.  CPython fires both halves
+	from type.__new__ -- __set_name__ over the namespace, then
+	__init_subclass__ on the nearest base that defines one -- so a class built
+	dynamically got neither, while the identical class STATEMENT got both.
+	Measured: ``type('X', (Base,), {})'' left Base's hook unrun and a
+	descriptor in the namespace never learned its own name.
+
+	The class statement reaches these through ___pyClassDefined___:, the
+	METACLASS hook, which is deliberately not sent here: its other two steps
+	belong to a class statement (an __orig_bases__ stash left in SessionTemps
+	by the PEP 560 sole-base path, which type() refuses to take, and the
+	attr-method shadow install).  Sending it would let a stash belonging to
+	some earlier class statement land on this class.  So the two PEP 487 halves
+	are sent directly, which is what was missing.
+
+	``classKeywords'' are CPython's ``type(name, bases, ns, **kwds)'' -- the
+	3.6+ form, forwarded to __init_subclass__ exactly as a class header's
+	keywords are.  nil for the ordinary three-argument call."
+	newClass @env1:___invokeSetNameHooks___: ownAttrNames @env0:asArray.
+	newClass @env1:___grailInitSubclass___: classKeywords.
 	^ newClass
 %
 

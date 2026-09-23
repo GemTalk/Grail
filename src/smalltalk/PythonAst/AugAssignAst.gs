@@ -299,16 +299,32 @@ printSmalltalkAttributeAugAssignOn: aStream
 		nextPutAll: ''').'.
 			^self
 		].
-		"Phase B: ``self.attr op= value'' loads and stores through the
-		instance's dynamic-instVar storage.  Emit shape:
-		  self @env0:dynamicInstVarAt: #'attr'
-		    put: ((load) op (value))
+		"Phase B: ``self.attr op= value'' probes the instance's dynamic-instVar
+		storage to LOAD, and stores through ``__setattr__:_:''.  Emit shape:
+		  self @env1:__setattr__: 'attr' _: ((load) op (value))
 		where ``(load)'' is the dynamicInstVarAt:ifAbsent: probe + class
-		fallback."
+		fallback.
+
+		THE STORE GOES THROUGH __setattr__ BECAUSE THE SELF REFERENCE IS NOT
+		ALWAYS AN INSTANCE.  A dynamic-instVar store is an ImproperOperation
+		when the receiver is a CLASS -- ``dynamic instVars not supported in a
+		Class'' -- and an uncatchable env-0 one, so it takes down the whole
+		module run rather than raising anything Python can see.  Two everyday
+		shapes put a class there: ``@classmethod def bump(cls): cls.count +=
+		1'', and PEP 487's ``def __init_subclass__(cls, ...)'', which Grail
+		compiles instance-side and runs with the new class as the receiver.
+		Both are ordinary Python and both died here.
+
+		It is also what the PLAIN assignment emitter has always done for this
+		same target shape (AbstractNode >> the __setattr__:_: branch): one rule
+		with two implementations, and this was the stale copy -- ``cls.x = v''
+		worked in a classmethod while ``cls.x += v'' one line below did not.
+		Routing both the same way also means a @property setter fires for an
+		augmented assignment, which it previously wrote straight past."
 		aStream
-			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: 'self @env1:__setattr__: ''';
 			nextPutAll: target ___mangledAttr___;
-			nextPutAll: ''' put: ((self @env0:dynamicInstVarAt: #''';
+			nextPutAll: ''' _: ((self @env0:dynamicInstVarAt: #''';
 			nextPutAll: target ___mangledAttr___;
 			nextPutAll: ''' ifAbsent: [self @env1:___pyAttrLoad___: #''';
 			nextPutAll: target ___mangledAttr___;

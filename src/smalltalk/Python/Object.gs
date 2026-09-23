@@ -2651,10 +2651,15 @@ ___grailInitSubclassSearchBase___
 	A single-base class -- the whole corpus bar the mixin case -- answers its
 	primary superclass without walking anything."
 
-	| roots primary |
+	| roots primary supplier |
 	primary := self @env0:superclass.
 	roots := self ___grailInitSubclassRoots___.
 	roots @env0:size @env0:<= 1 ifTrue: [^ primary].
+	"THE MRO DECIDES when there is more than one base, because that is what
+	CPython resolves along.  The left-to-right base walk below stays as the
+	fallback for a class whose __mro__ cannot be read."
+	supplier := self ___grailInitSubclassMroSupplierAfter___: nil.
+	supplier @env0:isNil ifFalse: [^ supplier @env0:at: 1].
 	roots @env0:do: [:root |
 		(self ___grailChainDefinesInitSubclass___: root) ifTrue: [^ root]].
 	^ primary
@@ -2759,72 +2764,128 @@ ___grailAssignedInitSubclass___: sel
 	    definition first meant the decorator's wrapper never ran on exactly
 	    the classes it was applied to;
 	  * a NEARER class's definition beats a farther class's assignment, so
-	    the walk stops as soon as a class defines one."
+	    the walk stops as soon as a class defines one.
 
-	| walker v holder st ov inner acc |
+	The per-class half is ___grailOwnAssignedInitSubclass___, which the
+	MRO-ordered walk uses too -- two orders of search must not end up with two
+	different ideas of what a single class supplies."
+
+	| walker v |
 	self ___grailInitSubclassRoots___ @env0:do: [:root |
 	walker := root.
 	[walker == nil] whileFalse: [
-		"Assignment first -- same class, assignment wins."
-		nil.
-		"Session-local overlay first -- a runtime setattr on a canonical class
-		lands there -- then the committed per-class store."
-		"Both lookups are sent to SELF, not to the walker: they are object's
-		classmethods and the chain runs up into Smalltalk kernel classes that
-		do not have them.  The walker is the class being examined, which is
-		what the argument is for."
-		"Read the two stores DIRECTLY rather than through
-		___classAttrOverlayLookup___ / ___classChainAttrLookup___: those are
-		instance-side methods on object, and the receiver here is a CLASS, so
-		the send goes to the metaclass chain and is not understood.  Reading
-		them here also gives what those cannot -- an OWN-class answer, which
-		is what ranking an assignment against a definition needs."
-		st := SessionTemps @env0:current.
-		ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
-		v := nil.
-		ov == nil ifFalse: [
-			inner := ov @env0:at: walker otherwise: nil.
-			inner == nil ifFalse: [
-				v := inner @env0:at: #'__init_subclass__' otherwise: nil]].
-		"Probe the committed store by ATTEMPTING it, not by asking first.
-		``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is
-		env-1; and ``___respondsTo___:'' raises outright when the receiver is
-		a CLASS.  Either guard therefore reports ``no store'' for every class
-		in the chain, and the value sitting in the store is never read."
-		v == nil ifFalse: [^ v].
-		"An OWN ACCESSOR PAIR on this class says its BODY bound the name --
-		``__init_subclass__ = hook'' written unconditionally -- and what it holds
-		is PEP 487's implicit classmethod, wrapped to say so: the same rule
-		___classBodyDefinitionalStore___:put: applies to the conditional
-		spelling, at the same moment CPython applies it.  Asked BEFORE the raw
-		holder read below, because the pair's value lives in that same holder
-		(docs/Class_Attribute_Single_Home.md): reading the holder first
-		classified a body assignment as a runtime setattr and called the hook
-		with no class -- ``hook() missing 1 required positional argument:
-		'cls''' (InitSubclassClassBodyTestCase).  A runtime ``Cls.__init_subclass__
-		= f'' on a NON-canonical class also lands in the holder, but through
-		___pyAttrStore___'s setter dispatch when the pair exists, so telling the
-		two apart by the pair alone is the best available reading; CPython would
-		call that runtime f with no class and this calls it with one."
-		acc := self ___grailClassAttrAccessorValue___: walker
-			name: #'__init_subclass__'.
-		acc == nil ifFalse: [^ self ___grailImplicitClassmethod___: acc].
-		"Probe the committed store by ATTEMPTING it, not by asking first.
-		``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is
-		env-1; and ``___respondsTo___:'' raises outright when the receiver is
-		a CLASS.  Either guard therefore reports ``no store'' for every class
-		in the chain, and the value sitting in the store is never read."
-		holder := [walker @env0:perform: #___dynInstVars___ env: 1]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-		holder == nil ifFalse: [
-			v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		v := self ___grailOwnAssignedInitSubclass___: walker.
 		v == nil ifFalse: [^ v].
 		"This class defines it instead -- that definition wins over anything
 		farther up, and the compiled-selector path will run it."
 		(self ___grailDefinesInitSubclass___: walker selector: sel)
 			ifTrue: [^ nil].
 		walker := walker @env0:superClass]].
+	^ nil
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailOwnAssignedInitSubclass___: aClass
+	"The ASSIGNED __init_subclass__ that aClass ITSELF supplies, or nil.
+
+	Three stores, in the order an assignment can reach them.
+
+	Session-local overlay first -- a runtime setattr on a canonical class lands
+	there -- then the class's own accessor pair, then the committed per-class
+	store.
+
+	Read DIRECTLY rather than through ___classAttrOverlayLookup___ /
+	___classChainAttrLookup___: those are instance-side methods on object, and
+	the receiver here is a CLASS, so the send goes to the metaclass chain and
+	is not understood.  Reading them here also gives what those cannot -- an
+	OWN-class answer, which is what ranking an assignment against a definition
+	needs.
+
+	An OWN ACCESSOR PAIR on this class says its BODY bound the name --
+	``__init_subclass__ = hook'' written unconditionally -- and what it holds
+	is PEP 487's implicit classmethod, wrapped to say so: the same rule
+	___classBodyDefinitionalStore___:put: applies to the conditional spelling,
+	at the same moment CPython applies it.  Asked BEFORE the raw holder read
+	below, because the pair's value lives in that same holder
+	(docs/Class_Attribute_Single_Home.md): reading the holder first classified
+	a body assignment as a runtime setattr and called the hook with no class,
+	which InitSubclassClassBodyTestCase pins.  A runtime assignment on a
+	NON-canonical class also lands in the holder, but through
+	___pyAttrStore___'s setter dispatch when the pair exists, so telling the
+	two apart by the pair alone is the best available reading.
+
+	The committed store is probed by ATTEMPTING it, not by asking first.
+	``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is env-1;
+	and ``___respondsTo___:'' raises outright when the receiver is a CLASS.
+	Either guard therefore reports ``no store'' for every class in the chain,
+	and the value sitting in the store is never read."
+
+	| st ov inner v acc holder |
+	st := SessionTemps @env0:current.
+	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	v := nil.
+	ov == nil ifFalse: [
+		inner := ov @env0:at: aClass otherwise: nil.
+		inner == nil ifFalse: [
+			v := inner @env0:at: #'__init_subclass__' otherwise: nil]].
+	v == nil ifFalse: [^ v].
+	acc := self ___grailClassAttrAccessorValue___: aClass
+		name: #'__init_subclass__'.
+	acc == nil ifFalse: [^ self ___grailImplicitClassmethod___: acc].
+	holder := [aClass @env0:perform: #___dynInstVars___ env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	holder == nil ifFalse: [
+		v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	^ v
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInitSubclassMroSupplierAfter___: aClassOrNil
+	"The next class in SELF's MRO, strictly after aClassOrNil, that SUPPLIES an
+	__init_subclass__ -- answered as { thatClass. assignedHookOrNil } -- or nil
+	when the MRO cannot be read or nothing after that point supplies one.
+
+	THIS IS THE C3 ORDER, which is the whole point of it.  Every other search
+	here walks Smalltalk superclass links, base by base, and that agrees with
+	the MRO for any hierarchy whose bases do not SHARE an ancestor.  A diamond
+	is the disagreeing shape: ``class A(Left, Middle, Right)'' with Left and
+	Right both deriving from Base puts Base AFTER Middle in the real MRO, while
+	a left-to-right base walk reaches Base through Left first and never asks
+	Middle.  test_subclassinit's test_init_subclass_diamond is exactly that.
+
+	``aClassOrNil'' is nil for the ENTRY -- start after self, since a class's
+	own hook never runs for itself -- and is the hook's owner for each
+	cooperative ``super().__init_subclass__(**kwargs)'' hop, which is how the
+	chain stays in MRO order all the way down rather than only at its head.
+
+	Answering nil rather than raising: every caller has the base walk to fall
+	back on, and a class whose __mro__ does not read back as a sequence must
+	get the old answer rather than no answer.  ___grailInitSubclassRoots___
+	guards __bases__ the same way and for the same reason -- on some classes
+	the attribute answers a PropertyDescriptor, and iterating that is a raw
+	MessageNotUnderstood escaping into class creation."
+
+	| mro sel started each v |
+	sel := #'___init_subclass__:kw:'.
+	mro := [self ___pyAttrLoad___: #'__mro__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(mro @env0:isNil or: [mro @env0:== None
+		or: [(mro @env0:isKindOf: Collection) @env0:not]]) ifTrue: [^ nil].
+	started := aClassOrNil @env0:isNil.
+	1 @env0:to: mro @env0:size do: [:i |
+		each := mro @env0:at: i.
+		started
+			ifTrue: [
+				((each @env0:isKindOf: Behavior) @env0:and: [each @env0:~~ self])
+					ifTrue: [
+						v := self ___grailOwnAssignedInitSubclass___: each.
+						v == nil ifFalse: [^ { each. v }].
+						(self ___grailDefinesInitSubclass___: each selector: sel)
+							ifTrue: [^ { each. nil }]]]
+			ifFalse: [each @env0:== aClassOrNil ifTrue: [started := true]]].
 	^ nil
 %
 
@@ -4181,10 +4242,27 @@ ___invokeSetNameHooks___: attrNames
 			self ___setNameOn___: v named: sym].
 		^ self].
 	attrNames == nil ifFalse: [
+		"THE HOLDER IS THE FALLBACK HERE TOO, as it is in the ordered branch
+		above.  A name can be listed in attrNames and yet have no accessor
+		pair: that is every entry of a class built by ``type(name, bases,
+		ns)'', whose namespace is copied into the ___dynInstVars___ holder
+		because the dynamic builder emits no accessors.  Reading only the
+		accessor answered nil for each of them, and the holder loop below then
+		SKIPPED them for being named in attrNames -- so a descriptor handed to
+		type() was never told its own name, while the identical class statement
+		told it."
+		holder := (self ___respondsTo___: #___dynInstVars___)
+			ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
+			ifFalse: [nil].
 		attrNames @env0:do: [:nm |
-			| sym |
+			| sym v |
 			sym := nm @env0:asString @env0:asSymbol.
-			self ___setNameOn___: (self ___classBodyValueAt___: sym) named: sym]].
+			v := self ___classBodyValueAt___: sym.
+			(v == nil
+				and: [holder @env0:notNil
+				and: [(holder @env0:dynamicInstanceVariables) @env0:includes: sym]])
+					ifTrue: [v := holder @env0:dynamicInstVarAt: sym].
+			self ___setNameOn___: v named: sym]].
 	holder := (self ___respondsTo___: #___dynInstVars___)
 		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].

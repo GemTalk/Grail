@@ -1019,6 +1019,7 @@ run
 	at: #'InitSubclassAssignedTestCase' put: nil;
 	at: #'InitSubclassClassBodyTestCase' put: nil;
 	at: #'InitSubclassFixedArityTestCase' put: nil;
+	at: #'InitSubclassMroTestCase' put: nil;
 	at: #'InitSubclassTestCase' put: nil;
 	at: #'InlineSuiteContinuationTestCase' put: nil;
 	at: #'InputBuiltinTestCase' put: nil;
@@ -2367,6 +2368,7 @@ input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassAssignedTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassClassBodyTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassFixedArityTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassMroTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassTestCase.gs
 input src/smalltalk/PythonTests/InlineSuiteContinuationTestCase.gs
 input src/smalltalk/PythonTests/InputBuiltinTestCase.gs
