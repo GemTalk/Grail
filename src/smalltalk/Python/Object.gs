@@ -1797,9 +1797,17 @@ ___unpackCheck___: nBefore star: hasStar after: nAfter
 	(test_iter test_unpack_iter).  Only a receiver with a dependable length (the
 	materialized iterator list, or a kernel sequence -- both SequenceableCollection)
 	is checked; a bare custom-__getitem__ receiver has no reliable size and keeps
-	the lenient index path.  Answers self so it chains after ___unpackSequence___."
+	the lenient index path.  Answers self so it chains after ___unpackSequence___.
+
+	With a STAR target the answer is always an exact list, because the starred
+	name is bound by SLICING it and CPython binds a list there whatever was
+	unpacked: ``a, *b = (1, 2, 3)'' makes b ``[2, 3]''.  Sliced as it arrived,
+	a tuple gave a tuple and a str gave a str."
 
 	| sz needed |
+	(hasStar @env0:and: [(self @env0:class == OrderedCollection) @env0:not])
+		@env0:ifTrue: [
+			^ (list @env1:__new__: self) ___unpackCheck___: nBefore star: hasStar after: nAfter].
 	(self @env0:isKindOf: SequenceableCollection) @env0:ifFalse: [^ self].
 	sz := self @env0:size.
 	hasStar @env0:ifTrue: [
@@ -5001,7 +5009,9 @@ value: positional value: kwargs
 	(blocks, BoundMethod, UnboundMethod, partial, classes via the
 	metaclass) define their own value:value: and never reach this."
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+	"The PYTHON type name: the Smalltalk class name printed ``'Unicode7' object
+	is not callable'' for a str."
+	TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
 		@env0:, ''' object is not callable')
 %
 
@@ -12215,7 +12225,7 @@ ___pyCallValue___: positional kw: kwargs
 	(self isKindOf: Behavior) ifTrue: [
 		^ self @env1:value: positional value: kwargs].
 	TypeError ___signal___:
-		'''' @env0:, self @env0:class @env0:name @env0:asString
+		'''' @env0:, self ___pyTypeNameForError___
 			@env0:, ''' object is not callable'
 %
 
@@ -13693,9 +13703,14 @@ ___pyStarToArray___
 	``list''s __iter__/__next__ constructor.  Replaces a bare ``asArray''
 	in the splat codegen, which a Python iterator does not understand —
 	the crash flask's ``preprocess_request'' hit via
-	``(None, *reversed(request.blueprints))''."
+	``(None, *reversed(request.blueprints))''.
 
-	(self isKindOf: SequenceableCollection) ifTrue: [^ self asArray].
+	A str is a SequenceableCollection too, but its asArray is an Array of
+	Smalltalk Characters -- ``(*'ab',)'' answered two Character objects, where
+	iterating a str yields one-character strs.  It takes the iteration path."
+
+	((self isKindOf: SequenceableCollection)
+		and: [(self isKindOf: CharacterCollection) not]) ifTrue: [^ self asArray].
 	^ (list @env1:__new__: self) asArray
 %
 

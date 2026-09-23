@@ -597,7 +597,7 @@ printSmalltalkOn: aStream
 	args vararg ifNotNil: [
 		aStream
 			nextPutAll: (self transportParamName: args vararg name);
-			nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
+			nextPutAll: ' := ___tuple___ perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
 			print: fixedCount + 1;
 			nextPutAll: ' to: ___positional___ @env0:size }.';
 			lf.
@@ -2208,7 +2208,7 @@ emitCodeConstsOn: aStream
 	"EVERY SEND IN THE GENERATED TEXT IS ENV-QUALIFIED.  This is emitted into
 	env-1 source, where a bare ``Array with:'' is a MessageNotUnderstood on a
 	Metaclass3.  The result is a TUPLE, which is what co_consts is."
-	aStream nextPutAll: ' @env0:___setConsts___: (tuple @env0:withAll: (Array @env0:with: '.
+	aStream nextPutAll: ' @env0:___setConsts___: (___tuple___ @env0:withAll: (Array @env0:with: '.
 	scopes doWithIndex: [:node :i |
 		i > 1 ifTrue: [aStream nextPutAll: ' with: '].
 		aStream nextPutAll: '(PyCode @env0:name: '''.
@@ -3231,7 +3231,7 @@ ___irLeafNameFor___: aName
 	itself otherwise (NameAst class>>___transportIdentifierFor___:)."
 
 	^ (self isSmalltalkReservedIdentifier: aName asString)
-		ifTrue: [('_' , aName asString) asSymbol]
+		ifTrue: [(NameAst ___transportIdentifierFor___: aName) asSymbol]
 		ifFalse: [aName asSymbol]
 %
 
@@ -5261,7 +5261,7 @@ transportParamName: aName
 	references read the transport identifier."
 
 	^ (self isSmalltalkReservedIdentifier: aName)
-		ifTrue: ['_' , aName asString]
+		ifTrue: [NameAst ___transportIdentifierFor___: aName]
 		ifFalse: [aName asString]
 %
 
@@ -5275,6 +5275,20 @@ isSmalltalkReservedIdentifier: aString
 
 	^ #(#'self' #'super' #'thisContext' #'nil' #'true' #'false')
 		includes: aString asSymbol
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+___reservedParamRebound___: aName assigned: assignedNames
+	"Is aName a pseudo-variable-spelled parameter (``self'', ``nil'', ...)
+	that the body rebinds?  Such a parameter cannot stay the read-only method
+	argument it otherwise rides in as: ``def f(self): self = 7'' compiled
+	``_self := 7'' against the argument and failed (CompileError 1029,
+	``expected an assignable variable'')."
+
+	^ (self isSmalltalkReservedIdentifier: aName)
+		and: [(assignedNames includes: aName asSymbol)
+			or: [assignedNames includes: aName asString]]
 %
 
 category: 'Module Method Compilation'
@@ -5410,12 +5424,23 @@ generateModuleMethodSourceOn: aStream
 			(needsTemp at: i) ifTrue: [
 				| candidate |
 				candidate := '_' , (paramNames at: i).
-				(canOptimise
-					and: [(paramNames includes: candidate) not
-					and: [(bodyVars includes: candidate asSymbol) not
-					and: [(instVarNames includes: candidate asSymbol) not]]])
-					ifTrue: [transportNames at: i put: candidate]
-					ifFalse: [transportNames at: i put: '___' , i printString].
+				(self isSmalltalkReservedIdentifier: (paramNames at: i))
+					ifTrue: [
+						"A pseudo-variable param rides in as its transport
+						identifier, read-only -- unless the body rebinds it
+						(``def f(self): self = ...''), when it arrives
+						positionally and is copied into a writable temp
+						spelled as that identifier, like any rebound param."
+						transportNames at: i put: ((self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+							ifTrue: ['___' , i printString]
+							ifFalse: [NameAst ___transportIdentifierFor___: (paramNames at: i)])]
+					ifFalse: [
+						(canOptimise
+							and: [(paramNames includes: candidate) not
+							and: [(bodyVars includes: candidate asSymbol) not
+							and: [(instVarNames includes: candidate asSymbol) not]]])
+							ifTrue: [transportNames at: i put: candidate]
+							ifFalse: [transportNames at: i put: '___' , i printString]].
 			].
 		].
 
@@ -5455,6 +5480,8 @@ generateModuleMethodSourceOn: aStream
 			((needsTemp at: i)
 				and: [(self isSmalltalkReservedIdentifier: (paramNames at: i)) not])
 				ifTrue: [allLocals add: (paramNames at: i)].
+			(self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+				ifTrue: [allLocals add: (NameAst ___transportIdentifierFor___: (paramNames at: i))].
 		].
 		bodyVars do: [:each |
 			(allLocals includes: each) ifFalse: [
@@ -5474,7 +5501,7 @@ generateModuleMethodSourceOn: aStream
 							collide, so skip anything the transportNames
 							slot already carries."
 							| transport |
-							transport := '_' , each asString.
+							transport := NameAst ___transportIdentifierFor___: each.
 							((allLocals includes: transport)
 								or: [(paramNames includes: transport)
 								or: [(transportNames detect: [:t | t asString = transport] ifNone: [nil]) notNil
@@ -5528,6 +5555,14 @@ generateModuleMethodSourceOn: aStream
 							nextPut: $.;
 							lf.
 				].
+				(self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+					ifTrue: [
+						aStream
+							nextPutAll: (NameAst ___transportIdentifierFor___: (paramNames at: i));
+							nextPutAll: ' := ';
+							nextPutAll: (transportNames at: i);
+							nextPut: $.;
+							lf].
 			].
 		] ifFalse: [
 			"Outer-block form: wrap so block temps can shadow instVars
@@ -5549,6 +5584,14 @@ generateModuleMethodSourceOn: aStream
 								nextPut: $.;
 								lf.
 					].
+					(self ___reservedParamRebound___: (paramNames at: i) assigned: assignedNames)
+						ifTrue: [
+							aStream
+								nextPutAll: (NameAst ___transportIdentifierFor___: (paramNames at: i));
+								nextPutAll: ' := ';
+								nextPutAll: (transportNames at: i);
+								nextPut: $.;
+								lf].
 				].
 			].
 		].
@@ -5629,7 +5672,7 @@ generateModuleMethodSourceOn: aStream
 		args vararg ifNotNil: [
 			aStream
 				nextPutAll: (self transportParamName: args vararg name);
-				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ';
+				nextPutAll: ' := ___tuple___ perform: #withAll: env: 0 withArguments: { ';
 				nextPutAll: posMethodParam;
 				nextPutAll: ' @env0:copyFrom: ';
 				nextPutAll: (paramNames size + 1) printString;
@@ -6456,7 +6499,7 @@ generateMethodSourceOn: aStream
 	would leave every body reference undeclared."
 	selfTransport := selfRebound
 		ifTrue: [(self isSmalltalkReservedIdentifier: selfName asString)
-			ifTrue: ['_' , selfName asString]
+			ifTrue: [NameAst ___transportIdentifierFor___: selfName]
 			ifFalse: [selfName asString]]
 		ifFalse: [nil].
 
@@ -6510,7 +6553,7 @@ generateMethodSourceOn: aStream
 			rename points every read/write at that temp, and the
 			pseudo-variable itself can't be a Smalltalk temp."
 			declared := (self isSmalltalkReservedIdentifier: each)
-				ifTrue: ['_' , each asString]
+				ifTrue: [NameAst ___transportIdentifierFor___: each]
 				ifFalse: [each].
 			(allLocals includes: declared) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
@@ -6623,7 +6666,7 @@ generateMethodSourceOn: aStream
 			Reserved-named locals declare their ``_<name>'' transport
 			(see the fixed-arity branch above)."
 			declared := (self isSmalltalkReservedIdentifier: each)
-				ifTrue: ['_' , each asString]
+				ifTrue: [NameAst ___transportIdentifierFor___: each]
 				ifFalse: [each].
 			(allLocals includes: declared) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
@@ -6655,7 +6698,7 @@ generateMethodSourceOn: aStream
 		args vararg ifNotNil: [
 			aStream
 				nextPutAll: args vararg name;
-				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { '.
+				nextPutAll: ' := ___tuple___ perform: #withAll: env: 0 withArguments: { '.
 			"NO NAMED PARAMETER AT ALL means there was no ``self'' to strip,
 			and the RECEIVER belongs in *args: CPython binds it as args[0], so
 			``def m(*args)'' called as ``c.m(1)'' sees ``(c, 1)'' and

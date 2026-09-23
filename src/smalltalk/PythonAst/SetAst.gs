@@ -88,7 +88,7 @@ ___emitSmalltalkOn___: aStream
 				each printSmalltalkWithParenthesisOn: aStream].
 		aStream nextPutAll: '. '.
 	].
-	aStream nextPutAll: '___s] value: (set perform: #new env: 0))'.
+	aStream nextPutAll: '___s] value: (___set___ perform: #new env: 0))'.
 %
 method: SetAst
 elts

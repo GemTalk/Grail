@@ -3770,50 +3770,54 @@ category: 'Grail-parsing - atoms'
 method: PythonParser
 ___wrapFStringExpr: exprAst conversion: conversionChar formatSpec: formatSpec at: locTok
 	"Wrap an f-string placeholder expression in the conversion /
-	format pipeline.  ``!r`` → repr(expr), ``!a`` → ascii(expr),
-	``!s`` and the default → str(expr).  A non-nil formatSpec wraps
-	in format(value, spec_string).  ``locTok`` is a real PythonToken
-	(the source f-string token) used for AST location info."
+	format pipeline: ``___fformat___(expr, conversion, spec)'', which
+	applies ``!s'' / ``!r'' / ``!a'' and then answers format(value, spec)
+	-- CPython's CONVERT_VALUE + FORMAT_SIMPLE / FORMAT_WITH_SPEC.
+	``locTok`` is a real PythonToken (the source f-string token) used for
+	AST location info.
 
-	| inner builtinName callNode |
-	builtinName := conversionChar isNil
-		ifTrue: ['str']
-		ifFalse: [conversionChar == $r
-			ifTrue: ['repr']
-			ifFalse: [conversionChar == $a
-				ifTrue: ['ascii']
-				ifFalse: ['str']]].
-	"NameAst for the chosen builtin — looked up at runtime via the
-	Python dict / module-scope fallback."
-	inner := CallAst new
-		function: (NameAst new
-			id: builtinName asSymbol;
-			ctx: self loadCtx;
-			from: locTok to: locTok ; yourself);
-		arguments: { exprAst };
-		keywords: Array new;
-		from: locTok to: locTok ; yourself.
-	formatSpec ifNil: [^ inner].
-	"format(value, spec) wrap.  A spec containing {expr} placeholders
-	(``f'{x:0{w}d}''' -- PEP 498 one-level nesting) becomes a runtime
-	concatenation instead of a literal (___fstringSpecExprFor:at:);
-	vendored fractions.py's __format__ tests build specs this way."
-	callNode := CallAst new
-		function: (NameAst new
-			id: #format;
-			ctx: self loadCtx;
-			from: locTok to: locTok ; yourself);
-		arguments: { exprAst.
-			((formatSpec includes: ${)
+	It used to call the builtins BY NAME -- str(expr), repr(expr),
+	format(expr, spec) -- and three things were wrong with that:
+	  * they are ordinary names, so a local or module global called
+	    ``format'' / ``str'' / ``repr'' captured every field:
+	    ``def f(format): return f'{1:>3}''' raised ``'str' object is not
+	    callable''.  CPython's opcodes look nothing up.
+	  * a field with no spec ran str(), not format(value, ''), so a class
+	    with its own __format__ lost it: ``f'{x}''' is ``x.__format__('')''.
+	  * a field with BOTH a conversion and a spec dropped the conversion:
+	    ``f'{s!r:>5}''' formatted ``s'', not ``repr(s)''.
+	No Python name can shadow ``___fformat___'' (the ___ spelling is Grail's
+	own), so the call site's builtin fast path always reaches builtins.
+
+	A spec containing {expr} placeholders (``f'{x:0{w}d}''' -- PEP 498
+	one-level nesting) becomes a runtime concatenation instead of a literal
+	(___fstringSpecExprFor:at:); vendored fractions.py's __format__ tests
+	build specs this way."
+
+	| conversionText specAst |
+	conversionText := conversionChar isNil
+		ifTrue: ['']
+		ifFalse: [conversionChar asString].
+	specAst := formatSpec isNil
+		ifTrue: [ConstantAst new value: ''; kind: nil; from: locTok to: locTok; yourself]
+		ifFalse: [
+			(formatSpec includes: ${)
 				ifTrue: [self ___fstringSpecExprFor: formatSpec at: locTok]
 				ifFalse: [
 					ConstantAst new
 						value: formatSpec;
 						kind: nil;
-						from: locTok to: locTok ; yourself])};
+						from: locTok to: locTok ; yourself]].
+	^ CallAst new
+		function: (NameAst new
+			id: #'___fformat___';
+			ctx: self loadCtx;
+			from: locTok to: locTok ; yourself);
+		arguments: { exprAst.
+			ConstantAst new value: conversionText; kind: nil; from: locTok to: locTok; yourself.
+			specAst };
 		keywords: Array new;
-		from: locTok to: locTok ; yourself.
-	^ callNode
+		from: locTok to: locTok ; yourself
 %
 
 category: 'Grail-parsing - atoms'

@@ -3909,6 +3909,35 @@ format: aValue _: aFormatSpec
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___fformat___: aValue _: aConversion _: aSpec
+	"One f-string replacement field, as CPython's CONVERT_VALUE then
+	FORMAT_SIMPLE / FORMAT_WITH_SPEC run it: apply the conversion (''s'', ''r'',
+	''a'', or '''' for none), then answer format(value, spec) -- with an empty
+	spec when the field has none, so ``f'{x}''' is ``x.__format__('''')'' and
+	not str(x).
+
+	PythonParser >> ___wrapFStringExpr:... emits every field as a call to THIS
+	name.  It is not a Python builtin: it exists so that a local or global
+	called ``format'', ``str'' or ``repr'' cannot capture the field, as it could
+	when the parser emitted calls to those names.
+
+	An exact str with no spec is its own format, which is the common case and
+	skips the __format__ dispatch."
+
+	| v |
+	v := aValue.
+	(aConversion @env0:isEmpty) ifFalse: [
+		v := aConversion @env0:= 'r'
+			ifTrue: [self repr: v]
+			ifFalse: [aConversion @env0:= 'a'
+				ifTrue: [self ascii: v]
+				ifFalse: [str @env1:__new__: v]]].
+	((aSpec @env0:isEmpty) @env0:and: [v @env0:___isExactPyStr___]) ifTrue: [^ v].
+	^ self format: v _: aSpec
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 reversed: aSequence
 	"Python builtin reversed(seq) — fixed-arity fast path.  Prefer
 	the receiver's own __reversed__ (the Python protocol); fall back

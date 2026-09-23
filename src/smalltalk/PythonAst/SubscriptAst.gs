@@ -117,7 +117,7 @@ ___emitSmalltalkOn___: aStream
 	self assertContextIsLoad.
 	(slice isKindOf: SliceAst) ifTrue: [
 		value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ' __getitem__: (slice @env0:___newStart: '.
+		aStream nextPutAll: ' __getitem__: (___slice___ @env0:___newStart: '.
 		(slice lower) ifNil: [aStream nextPutAll: 'nil']
 			ifNotNil: [slice lower printSmalltalkWithParenthesisOn: aStream].
 		aStream nextPutAll: ' stop: '.

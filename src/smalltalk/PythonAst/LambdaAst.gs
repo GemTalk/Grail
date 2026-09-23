@@ -165,7 +165,7 @@ transportNamesFor: argNodes
 
 	^ argNodes collect: [:each |
 		(NameAst isReservedSmalltalkIdentifier: each name)
-			ifTrue: ['_' , each name asString]
+			ifTrue: [NameAst ___transportIdentifierFor___: each name]
 			ifFalse: [each name asString]]
 %
 
@@ -409,7 +409,7 @@ printSmalltalkOn: aStream
 	varargName ifNotNil: [
 		aStream
 			nextPutAll: varargName;
-			nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
+			nextPutAll: ' := ___tuple___ perform: #withAll: env: 0 withArguments: { ___positional___ @env0:copyFrom: ';
 			nextPutAll: (transport size + 1) printString;
 			nextPutAll: ' to: ___positional___ @env0:size }.';
 			lf.

@@ -94,7 +94,7 @@ ___emitSmalltalkOn___: aStream
 	custom `__getitem__` can pattern-match.  Emit nil for any omitted
 	bound; the slice class's `.indices(length)` normalizes at use."
 
-	aStream nextPutAll: '(slice @env1:__new__: '.
+	aStream nextPutAll: '(___slice___ @env1:__new__: '.
 	lower ifNil: [aStream nextPutAll: 'None']
 		ifNotNil: [lower printSmalltalkWithParenthesisOn: aStream].
 	aStream nextPutAll: ' _: '.

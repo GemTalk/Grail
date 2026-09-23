@@ -129,6 +129,51 @@ ___resolveBuiltinOrSignal___: aName
 
 category: 'Grail-Name Errors'
 classmethod: NameError
+___resolveDoitName___: aName
+	"A free name read by the top-level code of an exec()/eval() that was handed
+	a LIVE mapping (NameAst >> ___readsDoitLiveMapping___), resolved in
+	CPython's LOAD_NAME order as the code runs: the locals mapping, then the
+	doit's own scope (the seeded plain-dict globals, and anything the source
+	has bound), then the globals mapping if that is live too, then builtins.
+
+	A separate entry from ___resolveBuiltinOrSignal___: because that one is
+	also reached from ordinary MODULE code, which must never see an exec()'s
+	scope just because it was called from inside one."
+
+	| b inst scope v found liveLocals liveGlobals |
+	b := System myUserProfile symbolList objectNamed: #builtins.
+	b == nil ifTrue: [^ self ___signalUndefined___: aName].
+	inst := [b ___instance___] on: Error do: [:ex | nil].
+	inst == nil ifTrue: [^ self ___signalUndefined___: aName].
+	liveLocals := inst @env1:___grailLiveLocals___.
+	liveLocals isNil ifFalse: [
+		found := inst
+			@env1:___lookUpInLiveLocals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		found == #'___grailLiveLocalsMiss___' ifFalse: [^ found]].
+	scope := inst @env1:___grailDoitScope___.
+	(scope isKindOf: SymbolDictionary) ifTrue: [
+		v := scope at: (NameAst doitScopeNameFor: aName asSymbol) ifAbsent: [nil].
+		v == nil ifFalse: [^ v]].
+	liveGlobals := inst @env1:___grailLiveGlobals___.
+	(liveGlobals notNil and: [liveGlobals ~~ liveLocals]) ifTrue: [
+		found := inst
+			@env1:___lookUpInLiveGlobals___: aName
+			ifAbsent: [#'___grailLiveLocalsMiss___'].
+		found == #'___grailLiveLocalsMiss___' ifFalse: [^ found]].
+	"Builtins last, exactly as ___resolveBuiltinOrSignal___: finishes -- with
+	the live mappings masked, so it does not ask them a second time (a
+	mapping's __missing__ may have side effects, or answer differently)."
+	^ [inst @env1:___grailLiveLocals___: nil.
+		inst @env1:___grailLiveGlobals___: nil.
+		self ___resolveBuiltinOrSignal___: aName]
+			ensure: [
+				inst @env1:___grailLiveLocals___: liveLocals.
+				inst @env1:___grailLiveGlobals___: liveGlobals]
+%
+
+category: 'Grail-Name Errors'
+classmethod: NameError
 ___requireBuildClass___
 	"Refuse a class statement whose builtins namespace has no
 	``__build_class__''.
