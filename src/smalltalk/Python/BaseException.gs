@@ -2173,9 +2173,52 @@ ___irPythonLineForMethod___: aMethod ip: anIp
 	1 to: caretIdx - 1 do: [:i |
 		(self ___isCaretLine___: (lines at: i)) ifFalse: [count := count + 1]].
 	count = 0 ifTrue: [^ nil].
+	"No map: count is SLICE-relative, so rebase it by the def's first module
+	line, read from the ``# line N file ...'' comment FunctionDefAst appends to
+	the slice.  Answering count bare reported a frame paused on a def's second
+	line as module line 2 -- a blank line near the top of the file, so the
+	traceback printed an empty source line (ClassBodyTracebackTestCase)."
 	^ (self ___mapSpanForMethod___: aMethod ip: anIp)
-		ifNil: [count]
+		ifNil: [
+			(self ___irSliceFirstLineIn___: ([aMethod @env0:sourceString]
+					on: Error do: [:ex |
+						(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+						ex return: nil]))
+				ifNil: [count]
+				ifNotNil: [:first | count + first - 1]]
 		ifNotNil: [:map | map @env0:at: 1]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irSliceFirstLineIn___: src
+	"The ABSOLUTE module line an IR method's attached def slice starts on, or
+	nil.  FunctionDefAst>>___irMethodBodyCoreOn___:install: attaches the def
+	slice VERBATIM and ends it with one comment line of its own,
+	``# line <beginLine> file <path>'' -- the only place the slice's module
+	position survives now that the slice is no longer padded with
+	(beginLine - 1) newlines.  Every reader that turns a line of the slice into
+	a module line needs it.
+
+	Read from the END: that comment is the slice's last source line, and only a
+	position-map comment (a ___GRAILPOS___ comment) may follow it.  Accepting it
+	ONLY there means a user comment of the same shape inside the def cannot be
+	mistaken for it."
+
+	| lines |
+	src isNil ifTrue: [^ nil].
+	lines := self ___splitLinesOf___: src.
+	lines size to: 1 by: -1 do: [:i | | ln tokens n |
+		ln := (lines at: i) trimSeparators.
+		(ln isEmpty or: [ln at: 1 equals: '"___GRAILPOS___']) ifFalse: [
+			(ln at: 1 equals: '# line ') ifFalse: [^ nil].
+			tokens := ln subStrings: ' '.
+			tokens size >= 3 ifFalse: [^ nil].
+			n := [(tokens at: 3) asNumber] on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+			^ ((n isKindOf: Integer) and: [n >= 1]) ifTrue: [n] ifFalse: [nil]]].
+	^ nil
 %
 
 category: 'Grail-Traceback Building'
@@ -2248,8 +2291,8 @@ ___irPythonSpanForMethod___: aMethod ip: anIp
 
 	Element 5 is the RAW source line, indentation included, because the columns
 	are absolute and traceback.FrameSummary does its own stripping.  An IR
-	method's attached source is padded to ABSOLUTE module lines, so line N of
-	the source is module line N and no rebasing is needed."
+	method's attached source is the UNPADDED def slice, so the absolute line is
+	rebased by the slice's first module line (___irSliceFirstLineIn___:)."
 
 	| line map src |
 	line := self ___irPythonLineForMethod___: aMethod ip: anIp.
@@ -2260,11 +2303,13 @@ ___irPythonSpanForMethod___: aMethod ip: anIp
 	src := [aMethod @env0:sourceString] on: Error do: [:ex |
 		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 		ex return: nil].
+	"line is ABSOLUTE (the map records each node's own beginLine) but the
+	attached source is the unpadded def slice, so index it slice-relative."
 	^ { map @env0:at: 1.
 		map @env0:at: 2.
 		map @env0:at: 3.
 		map @env0:at: 4.
-		self ___sourceLine___: line of: src }
+		self ___sourceLine___: line - ((self ___irSliceFirstLineIn___: src) ifNil: [1]) + 1 of: src }
 %
 
 category: 'Grail-Traceback Building'
@@ -6940,14 +6985,18 @@ ___irPositionsFromSource___: src
 	prefix newlines are precisely what makes index = line number, so collapsing
 	them would renumber every position in the method."
 
-	| out lines |
+	| out lines base |
 	out := OrderedCollection new.
 	lines := self ___splitLinesOf___: src.
+	"The slice is no longer padded, so an index is SLICE-relative; rebase it by
+	the def's first module line.  The trailing ``# line'' comment is attached
+	metadata, not user source, so it gets no position."
+	base := ((self ___irSliceFirstLineIn___: src) ifNil: [1]) - 1.
 	1 to: lines size do: [:i |
 		| ln |
 		ln := lines at: i.
-		ln trimSeparators isEmpty ifFalse: [
-			out add: (Array with: i with: nil with: nil with: nil with: ln)]].
+		(ln trimSeparators isEmpty or: [ln trimSeparators at: 1 equals: '# line ']) ifFalse: [
+			out add: (Array with: i + base with: nil with: nil with: nil with: ln)]].
 	^ out asArray
 %
 
