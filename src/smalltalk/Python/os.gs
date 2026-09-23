@@ -921,25 +921,12 @@ ___signalErrno: anErrno filename: aPath filename2: anotherPath
 category: 'Grail-Error Messages'
 classmethod: os
 ___errorClassForErrno: anErrno
-	"The OSError subclass CPython raises for an errno a FILE operation reports.
-	These errnos are numbered alike on Darwin and Linux.  The network ones are
-	not, so they are not mapped here: every other errno is a plain OSError."
+	"The OSError subclass CPython raises for an errno.  OSError owns the map,
+	because CPython's OSError.__new__ consults the same one -- so an errno
+	names the same class whether it arrives from here or from
+	``OSError(errno, strerror)'' written in Python."
 
-	^ self ___fileErrorClassesByErrno @env0:at: anErrno ifAbsent: [OSError]
-%
-
-category: 'Grail-Error Messages'
-classmethod: os
-___fileErrorClassesByErrno
-
-	^ Dictionary @env0:new
-		@env0:at: 1 put: PermissionError;
-		@env0:at: 2 put: FileNotFoundError;
-		@env0:at: 13 put: PermissionError;
-		@env0:at: 17 put: FileExistsError;
-		@env0:at: 20 put: NotADirectoryError;
-		@env0:at: 21 put: IsADirectoryError;
-		@env0:yourself
+	^ OSError ___classForErrno: anErrno
 %
 
 category: 'Grail-Built-in Functions'
