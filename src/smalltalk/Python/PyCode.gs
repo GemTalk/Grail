@@ -285,6 +285,33 @@ ___codeKindBits___
 
 category: 'Instance Creation'
 method: PyCode
+___setBodySource___: aString
+	"Record the def's BODY text, and answer self.
+
+	``exec(f.__code__, g, closure=cells)'' has to run that body with the given
+	cells, and Grail has no way to re-enter a compiled closure with different
+	ones -- its free variables are Smalltalk temps captured at def time.
+	Running the text again, against a namespace backed by the cells, is what
+	makes the substitution observable at all.
+
+	Under a Grail-internal name: CPython's code object has no such field, and
+	it must not surface as an attribute of one."
+
+	self dynamicInstVarAt: #'___grailBodySource___' put: aString.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___grailBodySource___
+	"The def's body text, or nil for a code object that is not a def's."
+
+	^ [self dynamicInstVarAt: #'___grailBodySource___']
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Instance Creation'
+method: PyCode
 ___setOptimize___: aLevel
 	"Record the ``optimize'' level compile() was given, and answer self.
 

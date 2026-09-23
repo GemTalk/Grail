@@ -264,6 +264,12 @@ ___hasModuleScopeAwait___
 	((self isKindOf: AwaitAst)
 		or: [(self isKindOf: AsyncForAst) or: [self isKindOf: AsyncWithAst]])
 			ifTrue: [^ true].
+	"``[x async for x in ait]'' AWAITS TOO, and its async-ness is a FLAG on the
+	comprehension clause rather than a node kind -- there is no AsyncForAst in
+	a comprehension.  Without this the three shapes test_compile_top_level_await
+	spells as comprehensions compiled with the coroutine bit clear, so the
+	caller was told to exec code that has to be awaited."
+	((self isKindOf: ComprehensionAst) and: [self is_async = 1]) ifTrue: [^ true].
 	2 to: self class allInstVarNames size do: [:i |
 		| val |
 		val := self instVarAt: i.
@@ -274,6 +280,91 @@ ___hasModuleScopeAwait___
 				((each isKindOf: AbstractNode)
 					and: [each ___hasModuleScopeAwait___]) ifTrue: [^ true]]]].
 	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___rootModuleSource___
+	"The source text of the module this node was parsed from, or nil.
+
+	Found by walking ``parent'' to the root, which is the only link a node has
+	upward; ModuleAst records the text in parseSource:.  Nil for a tree built
+	by hand, and for one whose root is not a ModuleAst."
+
+	| node |
+	node := self.
+	[node parent notNil] whileTrue: [node := node parent].
+	((node isKindOf: ModuleAst) and: [node source notNil])
+		ifTrue: [^ node source].
+	"THE PARENT WALK IS NOT ALWAYS AVAILABLE AT EMIT TIME: setParent: runs
+	over the tree after construction, and a def reached through the nested
+	emit path can be generated from a node whose chain does not reach the
+	root.  parseSource: therefore also records the text class-side, for the
+	duration of the compile that is about to happen, and that is what this
+	falls back to."
+	^ AbstractNode ___currentModuleSource___
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
+___currentModuleSource___
+	"The source text of the module now being parsed and emitted, or nil.
+
+	Session-local, set by ModuleAst >> parseSource: -- which every entry
+	(import, exec, eval, compile) passes through -- and read only where a node
+	needs its own text and the parent walk cannot supply it."
+
+	^ SessionTemps current at: #'GrailCurrentModuleSource' otherwise: nil
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
+___currentModuleSource___: aString
+	SessionTemps current at: #'GrailCurrentModuleSource' put: aString
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___grailSourceSpanText___
+	"This node's own source text, sliced out of the module's by LINE.
+
+	Line granularity rather than column: the caller is after a COMPILABLE
+	fragment -- a def's body -- and a body always starts on its own line.  A
+	column slice would cut a statement in half whenever one shared a line with
+	its header, which ``def f(): return 1'' does.
+
+	Answers nil when the module source or this node's span is unavailable,
+	which is what tells the caller to fall back rather than emit a wrong
+	fragment."
+
+	| first last |
+	first := [self beginLine] on: AbstractException do: [:ex | ex return: nil].
+	last := [self endLine] on: AbstractException do: [:ex | ex return: nil].
+	^ self ___grailSourceLinesFrom___: first to: last
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___grailSourceLinesFrom___: first to: last
+	"Lines first..last of the module's source, or nil when either the text or
+	the range is unavailable.
+
+	Split out because the node that WANTS a span is not always the one that
+	HAS one: a Block carries no position -- SuiteAst descends from AbstractNode
+	rather than AbstractLocationNode -- so a def asking for its body's text has
+	to build the range from its first statement and its own end."
+
+	| src lines out lf |
+	(first isNil or: [last isNil]) ifTrue: [^ nil].
+	src := self ___rootModuleSource___.
+	src isNil ifTrue: [^ nil].
+	lf := Character lf.
+	lines := (src asString) subStrings: (String with: lf).
+	((first < 1) or: [(last > lines size) or: [last < first]]) ifTrue: [^ nil].
+	out := WriteStream on: String new.
+	first to: last do: [:i |
+		out nextPutAll: (lines at: i); nextPut: lf].
+	^ out contents
 %
 
 category: 'Grail-codegen helpers'

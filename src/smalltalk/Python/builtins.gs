@@ -271,6 +271,14 @@ _exec: positional kw: kwargs
 		ifTrue: [source @env0:___grailOptimizeLevel___]
 		ifFalse: [-1].
 	savedOpt := self ___grailOptimizeLevel___.
+	"``closure='' RUNS A def's BODY WITH SUPPLIED CELLS.  Handled before the
+	source normalisation, because it is the one exec() shape whose arg 1 is a
+	def's code object rather than text -- ___sourceTextFor___ would refuse it."
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'closure']) ifTrue: [
+		^ self ___execWithClosure___: source
+			globals: ((positional @env0:size @env0:>= 2)
+				ifTrue: [positional @env0:at: 2] ifFalse: [nil])
+			closure: (kwargs @env0:at: 'closure')].
 	source := self ___sourceTextFor___: source what: 'exec'.
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
@@ -551,6 +559,21 @@ _eval: positional kw: kwargs
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
+	"A CODE OBJECT COMPILED WITH TOP-LEVEL AWAIT IS AWAITED, NOT RUN.  CPython
+	makes such a module body a coroutine, so eval() of it answers the coroutine
+	and the caller drives it -- ``await eval(co, g)'' is the documented idiom,
+	and test_compile_top_level_await runs it through send().  Running the body
+	here instead would both return the wrong thing and perform the awaits on a
+	stack that has no business awaiting."
+	((source @env0:isKindOf: PyCode)
+		@env0:and: [source @env0:___grailBodySource___ @env0:notNil]) ifTrue: [
+			^ self ___runTopLevelAwaitCode___: source globals:
+				((positional @env0:size @env0:>= 2)
+					ifTrue: [positional @env0:at: 2]
+					ifFalse: [((kwargs @env0:notNil)
+						@env0:and: [kwargs @env0:includesKey: 'globals'])
+							ifTrue: [kwargs @env0:at: 'globals']
+							ifFalse: [nil]])].
 	"Source TEXT, in any spelling CPython accepts -- see the matching call in
 	_exec: for what ___sourceTextFor___:what: does with the byte forms, and
 	for why a PyCode still fails."
@@ -802,6 +825,128 @@ ___requireAstRoot___: aTree forMode: aMode
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___execWithClosure___: aCode globals: globalsDict closure: aClosure
+	"``exec(code, globals, closure=cells)'' -- run a def's body with the given
+	free-variable cells.
+
+	GRAIL CANNOT RE-ENTER A COMPILED CLOSURE WITH DIFFERENT CELLS: its free
+	variables are Smalltalk temps captured when the def ran, so there is
+	nothing to substitute into.  What it can do is run the body's SOURCE again
+	against a namespace built from the cells, which is why a def with free
+	variables carries its body text on its code object.  The observable
+	behaviour is CPython's -- the body reads the supplied cells and writes back
+	through them -- and the mechanism is different.
+
+	The cells are copied in and written back out rather than read live.  A cell
+	is a one-slot box, and the body cannot change WHICH box a name refers to,
+	so a copy at entry and a store at exit are indistinguishable from reading
+	through it -- and it keeps the namespace an ordinary dict, which is what
+	the exec path is built for.
+
+	Every refusal below is CPython's, and there are more refusals than there is
+	execution: six of test_exec_closure's nine assertions are TypeErrors about
+	a closure that does not match its code object."
+
+	| freevars cells ns result |
+	"A STRING SOURCE takes no closure at all, whatever its value."
+	(aCode @env0:isKindOf: PyCode) ifFalse: [
+		^ TypeError ___signal___:
+			'closure can only be used when source is a code object'].
+	freevars := [aCode @env1:___pyAttrLoad___: #'co_freevars']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	freevars := freevars @env0:isNil
+		ifTrue: [Array @env0:new: 0]
+		ifFalse: [Array @env0:withAll: freevars].
+	(aClosure @env0:isNil @env0:or: [aClosure @env0:== None]) ifTrue: [
+		freevars @env0:isEmpty ifTrue: [
+			^ self _exec: { aCode. globalsDict } kw: nil].
+		^ TypeError ___signal___: 'code object requires a closure of exactly length '
+			@env0:, freevars @env0:size @env0:printString].
+	freevars @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'cannot use a closure with this code object'].
+	"ONE MESSAGE FOR EVERY MALFORMED CLOSURE, and that is CPython's doing, not
+	a simplification here.  A LIST of the right length, and a tuple of the
+	right length holding a non-cell, both report ``requires a closure of
+	exactly length N'' -- the length is what the message names whatever the
+	fault was.  Three separate, more descriptive messages read better and are
+	wrong.
+
+	A tuple, not any sequence: accepting a list would make
+	``closure=list(cells)'' work where CPython refuses it."
+	((aClosure @env0:isKindOf: tuple)
+		@env0:and: [(Array @env0:withAll: aClosure) @env0:size @env0:= freevars @env0:size])
+		ifFalse: [^ self ___refuseClosureLength___: freevars].
+	cells := Array @env0:withAll: aClosure.
+	cells @env0:do: [:each |
+		(self ___isCellObject___: each) ifFalse: [
+			^ self ___refuseClosureLength___: freevars]].
+	^ self ___runClosureBody___: aCode globals: globalsDict
+		freevars: freevars cells: cells
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___refuseClosureLength___: freevars
+	"CPython's one refusal for a closure that is not a tuple of exactly the
+	right number of cells."
+
+	^ TypeError ___signal___: 'code object requires a closure of exactly length '
+		@env0:, freevars @env0:size @env0:printString
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isCellObject___: anObject
+	"Whether anObject is a cell -- what a closure tuple must hold.
+
+	Asked by CLASS NAME rather than by a Smalltalk kind test, because a cell is
+	a Python-visible type and the check has to agree with ``isinstance(x,
+	CellType)'' as the caller sees it."
+
+	^ [((anObject @env1:__class__) @env1:__name__) @env0:asString @env0:= 'cell']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___runClosureBody___: aCode globals: globalsDict freevars: freevars cells: cells
+	"Run the def body aCode carries, with freevars bound to the cells'
+	contents, then write the results back into the cells.
+
+	A code object with no body text -- one from compile() rather than a def, or
+	a def compiled before this was recorded -- is refused rather than run
+	empty: answering None for an exec that did nothing is the kind of quiet
+	wrong answer this whole file is about."
+
+	| src ns |
+	src := aCode @env0:___grailBodySource___.
+	src @env0:isNil ifTrue: [
+		^ TypeError ___signal___:
+			'exec() cannot run this code object with a closure'].
+	ns := dict ___new___.
+	1 @env0:to: freevars @env0:size do: [:i |
+		ns @env1:__setitem__: (freevars @env0:at: i) @env0:asString
+			_: ((cells @env0:at: i) @env1:___pyAttrLoad___: #'cell_contents')].
+	self _exec: { src. globalsDict. ns } kw: nil.
+	"WRITE BACK.  A cell is a one-slot box and the body cannot change which box
+	a name refers to, so storing the final value is exactly what reading
+	through the cell would have produced."
+	1 @env0:to: freevars @env0:size do: [:i |
+		| v |
+		v := [ns @env1:__getitem__: (freevars @env0:at: i) @env0:asString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		v @env0:isNil ifFalse: [
+			"__setattr__, not ___pyAttrStore___.  ``cell.cell_contents = v'' is
+			what makes a cell write reach the variable it boxes -- the store
+			goes through the cell's own setter -- and a dynamic-instVar store
+			writes past it, leaving the enclosing scope untouched.  The exec
+			above produced the right value and nothing could see it."
+			(cells @env0:at: i) @env1:__setattr__: 'cell_contents' _: v]].
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___astSourceOf___: anObject
 	"The source text an ast tree was parsed from, or nil.
 
@@ -879,6 +1024,62 @@ ___astTreeFor___: aSource mode: aMode optimized: wantOptimized
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___topLevelAwaitWrapperFor___: aSource
+	"aSource as the body of an ``async def'', with a trailing line that copies
+	what it bound into the mapping the caller supplies.
+
+	CPython makes the module body itself a coroutine, so its assignments land
+	in the globals it was given.  Grail has no coroutine module body; wrapping
+	the source in an async def gives the awaits the scope they need, and turns
+	those assignments into the WRAPPER's locals -- so the copy at the end is
+	what puts them where the caller looks.  Reads are unaffected: the wrapper
+	is exec'd with that same mapping as its globals, so a free name resolves
+	to it as before.
+
+	The parameter is named with the Grail prefix so the body cannot shadow it,
+	and it is excluded from the copy for the same reason."
+
+	| lf out |
+	lf := Character @env0:lf @env0:asString.
+	out := WriteStream @env0:on: String @env0:new.
+	out @env0:nextPutAll: 'async def __grail_tla__(__grail_ns__):'; @env0:nextPutAll: lf.
+	(aSource @env0:asString @env0:subStrings: lf) @env0:do: [:line |
+		out @env0:nextPutAll: '    '; @env0:nextPutAll: line; @env0:nextPutAll: lf].
+	out @env0:nextPutAll: '    __grail_ns__.update({__grail_k__: __grail_v__'; @env0:nextPutAll: lf.
+	out @env0:nextPutAll: '        for __grail_k__, __grail_v__ in locals().items()'; @env0:nextPutAll: lf.
+	out @env0:nextPutAll: '        if __grail_k__ != ''__grail_ns__''})'; @env0:nextPutAll: lf.
+	^ out @env0:contents
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___runTopLevelAwaitCode___: aCode globals: aNamespaceOrNil
+	"eval() of a code object compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT: answer
+	the COROUTINE the caller will drive, rather than running the body.
+
+	CPython's module body IS the coroutine; Grail's stand-in is the async def
+	compile() wrapped the source in, so this execs that wrapper in the
+	supplied namespace and calls it with the namespace as its argument -- which
+	is how the body's assignments get back out (see
+	___topLevelAwaitWrapperFor___).
+
+	The wrapper's own name is removed again, because eval() must not leave a
+	name behind in the caller's globals that the source never bound."
+
+	| ns fn |
+	ns := aNamespaceOrNil @env0:isNil
+		ifTrue: [dict @env0:new]
+		ifFalse: [aNamespaceOrNil].
+	self _exec: { aCode @env0:___grailBodySource___. ns } kw: nil.
+	fn := ns @env0:at: '__grail_tla__' otherwise: nil.
+	fn @env0:isNil ifTrue: [
+		^ SystemError ___signal___: 'top-level await wrapper did not compile'].
+	ns @env0:removeKey: '__grail_tla__' ifAbsent: [nil].
+	^ fn @env1:___pyCallValue___: { ns } kw: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___topLevelAwaitFlagsFor___: aSource
 	"``co_flags'' for a source compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT:
 	CO_COROUTINE (128) when the body awaits at MODULE scope, 0 otherwise.
@@ -891,8 +1092,8 @@ ___topLevelAwaitFlagsFor___: aSource
 	A source that will not parse answers 0 rather than raising: compile()
 	raises the SyntaxError itself, above, and this runs after that."
 
-	^ [(ModuleAst @env0:parseSource: aSource) ___hasModuleScopeAwait___
-		ifTrue: [128] ifFalse: [0]]
+	^ [(ModuleAst @env0:parseSource: aSource allowTopLevelAwait: true)
+		@env0:___hasModuleScopeAwait___ ifTrue: [128] ifFalse: [0]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: 0]
 %
 
@@ -1103,7 +1304,14 @@ _compile: positional kw: kwargs
 					^ ValueError ___signal___: 'compile(): unrecognised flags']]].
 	(source isKindOf: CharacterCollection)
 		ifTrue: [
-			[ModuleAst @env0:parseSource: source]
+			"PyCF_ALLOW_TOP_LEVEL_AWAIT RELAXES THIS PARSE, and it has to be
+			this one: a module-level await is a SyntaxError to the ordinary
+			parser, so without the relaxation compile() refuses the source here
+			and never reaches the branch that would wrap it."
+			[ModuleAst @env0:parseSource: source allowTopLevelAwait:
+				((args @env0:size @env0:>= 4)
+					@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
+						@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])]
 				@env0:on: SyntaxError
 				do: [:ex |
 					"Re-raise so the Python ``str(e)'' carries the parser's message.
@@ -1191,6 +1399,19 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])
 			ifTrue: [self ___topLevelAwaitFlagsFor___: copy]
 			ifFalse: [0].
+		"A MODULE THAT AWAITS IS COMPILED AS A COROUTINE.  CPython makes the
+		module body itself one; Grail wraps the source in an ``async def'' and
+		carries that wrapper on the code object, because an await has to be
+		inside an async scope for the ordinary compile to accept it at all.
+		eval() and FunctionType then run the wrapper and answer the coroutine
+		it makes -- see ___topLevelAwaitWrapperFor___."
+		(flags @env0:bitAnd: 128) @env0:~= 0 ifTrue: [
+			^ (PyCode @env0:___forCompiledSource___: copy filename: fname
+				mode: mode flags: flags)
+					@env0:___setOptimize___: ((args @env0:size @env0:>= 6)
+						ifTrue: [args @env0:at: 6] ifFalse: [-1]);
+					@env0:___setBodySource___: (self ___topLevelAwaitWrapperFor___: copy);
+					@env0:yourself].
 		^ (PyCode @env0:___forCompiledSource___: copy filename: fname
 			mode: mode flags: flags)
 				@env0:___setOptimize___: ((args @env0:size @env0:>= 6)
