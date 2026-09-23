@@ -6592,6 +6592,32 @@ ___classCell___: aSym
 	blk @env0:isNil ifTrue: [
 		meta := self ___grailMetaclass___.
 		meta == nil ifFalse: [blk := meta ___dynamicClassAttr___: aSym]].
+	"A method inherited from a SECONDARY base.  A multiple-inheritance class is
+	one Smalltalk class whose superclass is only its primary base, and
+	importlib ___mergeSecondaryBases___ recompiles the other bases' methods onto
+	it -- so the copy runs with a receiver whose chain never reaches the base
+	that holds the cell:
+
+	    def t():
+	        tested = []
+	        class C:
+	            def m(self): return tested
+	        class D(A, C): ...
+	        D().m()          # NameError: free variable 'tested' ...
+
+	Search the true MRO, which does reach it (test_genericclass
+	test_mro_entry).  Only on a miss, where the chain walk was about to answer
+	nil anyway, so single inheritance never pays for the C3 lookup."
+	blk @env0:isNil ifTrue: [ | il chain |
+		il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+		il == nil ifFalse: [
+			chain := [il @env0:___methodLookupChainFor___:
+					((self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class])]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			chain == nil ifFalse: [
+				chain @env0:detect: [:c |
+					blk := c ___dynamicClassAttr___: aSym.
+					blk @env0:notNil] ifNone: [nil]]]].
 	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
 	"MISSED.  For the cell that holds the DEFINING CLASS ITSELF -- what
 	``__class__'' and zero-arg ``super()'' read -- a miss does not mean the name
