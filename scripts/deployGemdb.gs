@@ -56,8 +56,8 @@ importlib ___canonicalMetaclasses___.
 (UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) isNil
   ifTrue: [UserGlobals at: #'GrailCanonicalClassSet' put: RcIdentityBag new].
 "gemdb's __init__ imports the submodules, so loading 'gemdb' pulls them
-in; they are also loaded by name, like deployFrameworks does for
-werkzeug's submodules, so each has its own registry and hash entry."
+in.  Listing them by name as well guards against that changing: a name
+the closure already loaded is skipped, not rebuilt (see the loop)."
 names := #('gemdb' 'gemdb.admin' 'gemdb.schema' 'gemdb.sessions').
 loaded := 0.
 names do: [:nm | | path |
@@ -65,7 +65,17 @@ names do: [:nm | | path |
   path isNil
     ifTrue: [out nextPutAll: 'deployGemdb: skipped (no path): ' , nm; cr]
     ifFalse: [
-      importlib loadModuleFromPath: path name: nm.
+      "BUILT ONCE.  A name an earlier one's closure already imported this
+      session is skipped: it is registered, hashed and recorded already, and
+      a second loadModuleFromPath: would re-execute it into a NEW instance
+      (nothing is committed yet, so there is no committed one to rebuild
+      into).  Whatever the first build handed out keeps the first instance
+      alive -- measured: a BoundMethod captured from werkzeug.local held it,
+      so after the commit werkzeug.http/.local/.wsgi/.exceptions/.utils each
+      had two committed instances, and calls through the capture ran
+      against globals the registry no longer named."
+      (importlib @env1:lookupModule: nm) isNil
+        ifTrue: [importlib loadModuleFromPath: path name: nm].
       loaded := loaded + 1]].
 System commitTransaction ifFalse: [
   out nextPutAll: 'deployGemdb: COMMIT FAILED'; cr.

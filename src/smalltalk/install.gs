@@ -1159,6 +1159,7 @@ run
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'OsRemoveDollarPathTestCase' put: nil;
 	at: #'OsRenameErrorsTestCase' put: nil;
+	at: #'OsErrorErrnoSubclassTestCase' put: nil;
 	at: #'OsErrorsCarryErrnoTestCase' put: nil;
 	at: #'OsDirectoryErrorsTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
@@ -1294,6 +1295,7 @@ run
 	at: #'SubclassAttrShadowTestCase' put: nil;
 	at: #'SubclassNameAttrTestCase' put: nil;
 	at: #'SubmoduleAutoBindTestCase' put: nil;
+	at: #'SubprocessAndCopytreeErrnoTestCase' put: nil;
 	at: #'SubprocessTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
 	at: #'SuperForeignReceiverTestCase' put: nil;
@@ -2554,6 +2556,7 @@ input src/smalltalk/PythonTests/OSErrorTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/OsRemoveDollarPathTestCase.gs
 input src/smalltalk/PythonTests/OsRenameErrorsTestCase.gs
+input src/smalltalk/PythonTests/OsErrorErrnoSubclassTestCase.gs
 input src/smalltalk/PythonTests/OsErrorsCarryErrnoTestCase.gs
 input src/smalltalk/PythonTests/OsDirectoryErrorsTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
@@ -2695,6 +2698,7 @@ input src/smalltalk/PythonTests/SubclassAttrShadowTestCase.gs
 input src/smalltalk/PythonTests/SubclassCopyPickleTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
+input src/smalltalk/PythonTests/SubprocessAndCopytreeErrnoTestCase.gs
 input src/smalltalk/PythonTests/SubprocessTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
 input src/smalltalk/PythonTests/SuperForeignReceiverTestCase.gs
