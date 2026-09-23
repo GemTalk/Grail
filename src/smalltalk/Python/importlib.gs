@@ -4643,13 +4643,57 @@ ___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors asWr
 				miss and the non-text refusal both happen before it and are not
 				codec failures.  ``pass'' re-raises the original exception, so
 				nothing is swallowed -- see the AlmostOutOfStack rule."
-				[((info @env1:___pyAttrLoad___: aSelector)
-					@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]
-					@env0:on: AbstractException
-					do: [:ex |
-						self ___noteCodecFailure___: ex for: aSelector named: writtenName.
-						ex @env0:pass]]]
+				self ___checkTextModelResult___:
+					([((info @env1:___pyAttrLoad___: aSelector)
+						@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]
+						@env0:on: AbstractException
+						do: [:ex |
+							self ___noteCodecFailure___: ex for: aSelector named: writtenName.
+							ex @env0:pass])
+					for: aSelector named: writtenName]]
 				@env0:ensure: [active @env0:remove: key ifAbsent: [nil]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___checkTextModelResult___: aResult for: aSelector named: aName
+	"What str.encode / bytes.decode may hand back from a registered codec:
+	bytes from an encoder, str from a decoder -- CPython's text-model check
+	(unicodeobject.c), with its message.
+
+	The stdlib's non-text codecs are refused before they are called
+	(___refuseNonTextCodec___:named:for:), but a third-party codec is not
+	flagged, and one whose encode answered a str made ``'x'.encode(name)''
+	return that str (test_codecs ExceptionNotesTest
+	test_unflagged_non_text_codec_handling).  codecs.encode / codecs.decode
+	do NOT come through here, and must not check: they are the documented
+	way to reach a codec with arbitrary types.
+
+	A bytearray from an encoder is accepted and answered as bytes, as
+	CPython converts it; a surrogate-carrying str is a str.  AbstractPyStr
+	is resolved at run time, as ___isStrLike___ does: it is not in scope
+	when this class compiles."
+
+	| isEncode ok wanted boxed verb |
+	isEncode := aSelector @env0:asString @env0:= 'encode'.
+	isEncode
+		ifTrue: [
+			(aResult @env0:isKindOf: bytearray) ifTrue: [^ bytes @env0:withAll: aResult].
+			ok := aResult @env0:isKindOf: ByteArray.
+			wanted := 'bytes'.
+			verb := 'encode']
+		ifFalse: [
+			boxed := Python @env0:at: #'AbstractPyStr' otherwise: nil.
+			ok := (aResult @env0:isKindOf: CharacterCollection)
+				@env0:or: [boxed @env0:notNil @env0:and: [aResult @env0:isKindOf: boxed]].
+			wanted := 'str'.
+			verb := 'decode'].
+	ok ifTrue: [^ aResult].
+	^ TypeError @env1:___signal___: ('''' @env0:, aName @env0:asString
+		@env0:, ''' ' @env0:, verb @env0:, 'r returned '''
+		@env0:, (bytes @env1:___pyTypeNameOf___: aResult) @env0:asString
+		@env0:, ''' instead of ''' @env0:, wanted @env0:, '''; use codecs.'
+		@env0:, verb @env0:, '() to ' @env0:, verb @env0:, ' to arbitrary types')
 %
 
 category: 'Grail-Module Loading'

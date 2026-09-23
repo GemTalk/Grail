@@ -1231,6 +1231,7 @@ run
 	at: #'SaxUtilsTestCase' put: nil;
 	at: #'SecretsTestCase' put: nil;
 	at: #'SelectReadinessTestCase' put: nil;
+	at: #'SelfCheckingFixturesTestCase' put: nil;
 	at: #'SelectorManglingApiTestCase' put: nil;
 	at: #'SelfNameCollisionTestCase' put: nil;
 	at: #'SelfNamedClassTestCase' put: nil;
@@ -2599,6 +2600,7 @@ input src/smalltalk/PythonTests/SaxUtilsTestCase.gs
 input src/smalltalk/PythonTests/SecretsTestCase.gs
 input src/smalltalk/PythonTests/SelectorManglingApiTestCase.gs
 input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
+input src/smalltalk/PythonTests/SelfCheckingFixturesTestCase.gs
 input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
 input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs

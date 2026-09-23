@@ -661,13 +661,86 @@ __getitem__: index
 
 	| n i |
 	n := codePoints @env0:size.
+	"A SLICE, through slice>>indices: so negative bounds, clamping and a step
+	all follow CPython.  The result demotes like any other: a slice with no
+	surrogate left in it is an ordinary str.  It used to be refused outright,
+	so ``exc.object[exc.start:exc.end]'' -- how every test of a surrogate's
+	UnicodeEncodeError reads the offending text -- raised NotImplementedError
+	(test_codecs test_lone_surrogates)."
+	(index @env0:isKindOf: slice) ifTrue: [ | ix start stop step out k |
+		ix := index indices: n.
+		start := ix @env0:at: 1. stop := ix @env0:at: 2. step := ix @env0:at: 3.
+		out := OrderedCollection @env0:new.
+		k := start.
+		step @env0:> 0
+			ifTrue: [[k @env0:< stop] @env0:whileTrue: [
+				out @env0:add: (codePoints @env0:at: k @env0:+ 1). k := k @env0:+ step]]
+			ifFalse: [[k @env0:> stop] @env0:whileTrue: [
+				out @env0:add: (codePoints @env0:at: k @env0:+ 1). k := k @env0:+ step]].
+		^ PyStrSurrogate @env0:___fromCodePoints___: out @env0:asArray].
 	(index @env0:isKindOf: Integer) @env0:ifFalse: [
-		^ self @env0:___unsupported___: 'slicing'].
+		^ TypeError ___signal___: 'string indices must be integers, not '''
+			@env0:, (bytes ___pyTypeNameOf___: index) @env0:, ''''].
 	i := index @env0:< 0 ifTrue: [index @env0:+ n] ifFalse: [index].
 	(i @env0:< 0 @env0:or: [i @env0:>= n]) ifTrue: [
 		^ IndexError ___signal___: 'string index out of range'].
 	^ PyStrSurrogate @env0:___fromCodePoints___:
 		(Array @env0:with: (codePoints @env0:at: i @env0:+ 1))
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___mapNonSurrogateRuns___: aSelector
+	"Apply the ordinary str method aSelector to each run of code points
+	BETWEEN the surrogates, keeping every surrogate as itself.
+
+	A surrogate has no case -- CPython's lower/upper/casefold leave one
+	unchanged -- and every other character must be mapped by the same rules
+	as in a plain str, including the special cases that change a string's
+	length (``'\u0130'.lower()'' is two code points).  Mapping each run as an
+	ordinary string gets both without a second copy of the case tables.
+
+	These methods used to be missing, so a surrogate-bearing str refused
+	``lower()'' outright -- and stringprep lowercases every character, which
+	is how nameprep reaches its RFC 3454 table C.5 refusal of surrogates
+	(test_codecs NameprepTest)."
+
+	| out run flush |
+	out := OrderedCollection @env0:new.
+	run := OrderedCollection @env0:new.
+	flush := [
+		run @env0:isEmpty ifFalse: [ | plain mapped |
+			plain := PyStrSurrogate @env0:___fromCodePoints___: run @env0:asArray.
+			mapped := plain @env0:perform: aSelector env: 1.
+			out @env0:addAll: mapped @env0:___pyCodePoints___.
+			run := OrderedCollection @env0:new]].
+	codePoints @env0:do: [:cp |
+		(self @env0:___isSurrogate___: cp)
+			ifTrue: [flush @env0:value. out @env0:add: cp]
+			ifFalse: [run @env0:add: cp]].
+	flush @env0:value.
+	^ PyStrSurrogate @env0:___fromCodePoints___: out @env0:asArray
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+lower
+
+	^ self ___mapNonSurrogateRuns___: #lower
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+upper
+
+	^ self ___mapNonSurrogateRuns___: #upper
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+casefold
+
+	^ self ___mapNonSurrogateRuns___: #casefold
 %
 
 category: 'Grail-Python Protocol'
@@ -774,6 +847,36 @@ encode: encoding
 	^ self @env1:encode: encoding _: 'strict'
 %
 
+category: 'Grail-String Methods'
+method: PyStrSurrogate
+_encode: positional kw: kwargs
+	"``str.encode(encoding='utf-8', errors='strict')'' with KEYWORDS, the
+	mirror of bytes>>_decode:kw:.  The fixed-arity selectors cover the
+	positional spellings only, so ``s.encode('ascii', errors='replace')'' --
+	the form encodings/idna.py uses to build its UnicodeDecodeError objects --
+	raised ``encode() takes a different number of arguments''.  A keyword
+	outside the two is CPython's ``encode() got an unexpected keyword
+	argument''."
+
+	| encoding errors |
+	kwargs @env0:isNil ifFalse: [
+		kwargs @env0:keysDo: [:k |
+			(#('encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
+				^ TypeError ___signal___: 'encode() got an unexpected keyword argument '''
+					@env0:, k @env0:asString @env0:, '''']]].
+	encoding := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [(kwargs @env0:isNil @env0:not @env0:and: [kwargs @env0:includesKey: 'encoding'])
+			ifTrue: [kwargs @env0:at: 'encoding']
+			ifFalse: ['utf-8']].
+	errors := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(kwargs @env0:isNil @env0:not @env0:and: [kwargs @env0:includesKey: 'errors'])
+			ifTrue: [kwargs @env0:at: 'errors']
+			ifFalse: ['strict']].
+	^ self encode: encoding _: errors
+%
+
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
 encode: encoding _: errors
@@ -784,6 +887,16 @@ encode: encoding _: errors
 
 	| e enc |
 	e := errors @env0:asString.
+	"utf-8-sig IS utf-8 WITH ONE BOM IN FRONT, which is exactly how CPython's
+	codec is written (``codecs.utf_8_encode'' behind a BOM).  Handing it to
+	the branches below whole wrote a BOM per re-encoded fragment -- the
+	surrogateescape path put a SECOND one in the middle of the output -- and
+	named 'utf-8-sig' in the error, where CPython's names 'utf-8'."
+	enc := (encoding @env0:asString @env0:asLowercase)
+		@env0:select: [:c | (c @env0:= $-) @env0:not @env0:and: [(c @env0:= $_) @env0:not]].
+	enc @env0:= 'utf8sig' ifTrue: [
+		^ (bytes @env0:withAll: #(16rEF 16rBB 16rBF))
+			@env1:__add__: (self encode: 'utf-8' _: errors)].
 	"``surrogatepass'' IS CODEC-SPECIFIC.  It used to answer the WTF-8 form
 	whatever the target was, so ``'\\udc80'.encode('utf-16-le',
 	'surrogatepass')'' came back as three UTF-8 bytes instead of the two
@@ -834,8 +947,8 @@ encode: encoding _: errors
 	(#('ignore' 'replace' 'xmlcharrefreplace' 'backslashreplace' 'namereplace')
 		@env0:includes: e) ifTrue: [
 			^ self ___substitutingEncode___: encoding errors: e].
-	^ UnicodeEncodeError ___signal___:
-		(self @env0:___strictEncodeMessage___: encoding)
+	^ self @env0:___signalSurrogateEncodeError___: encoding
+		at: (codePoints @env0:findFirst: [:cp | self @env0:___isSurrogate___: cp])
 %
 
 category: 'Grail-Python Protocol'
@@ -993,11 +1106,37 @@ ___emitUnit___: aValue on: aStream wide: isWide littleEndian: isLE
 
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
-___strictEncodeMessage___: encoding
-	"CPython's wording for the strict-codec refusal."
+___signalSurrogateEncodeError___: encoding at: anIndex
+	"Raise CPython's UnicodeEncodeError for the surrogate at anIndex (1-based
+	into codePoints), with the five arguments rather than a bare message.
 
-	^ '''' , encoding asString ,
-		''' codec can''t encode character in position 0: surrogates not allowed'
+	The message used to be a constant -- ``can't encode character in position
+	0'' -- whatever the string, so '\\ud800' at position 1 reported position
+	0 and no character, and ``exc.start'' / ``exc.end'' described nothing.
+	CPython's span is the RUN of consecutive surrogates starting there, which
+	is what its message counts: ``characters in position 1-2'' for two."
+
+	| start stop |
+	start := (anIndex @env0:isNil or: [anIndex @env0:< 1]) ifTrue: [1] ifFalse: [anIndex].
+	stop := start.
+	[stop @env0:< codePoints @env0:size
+		@env0:and: [self @env0:___isSurrogate___: (codePoints @env0:at: stop @env0:+ 1)]]
+			@env0:whileTrue: [stop := stop @env0:+ 1].
+	^ UnicodeEncodeError @env1:___signalNew___:
+		{ encoding @env0:asString. self. start @env0:- 1. stop. 'surrogates not allowed' }
+		kw: nil
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___firstUnescapableSurrogate___
+	"The 1-based index of the first surrogate that ``surrogateescape'' cannot
+	turn back into a byte -- one outside U+DC80..U+DCFF, which never came
+	from a byte -- or nil."
+
+	^ codePoints @env0:findFirst: [:cp |
+		(self @env0:___isSurrogate___: cp)
+			@env0:and: [(cp @env0:between: 16rDC80 and: 16rDCFF) @env0:not]]
 %
 
 category: 'Grail-Python Protocol'
@@ -1047,8 +1186,8 @@ ___surrogateEscapeViaRegistry___: encoding
 				out := out , (ByteArray with: cp - 16rDC00)]
 			ifFalse: [
 				(self ___isSurrogate___: cp)
-					ifTrue: [^ UnicodeEncodeError @env1:___signal___:
-						(self ___strictEncodeMessage___: encoding)].
+					ifTrue: [^ self ___signalSurrogateEncodeError___: encoding
+						at: (self ___firstUnescapableSurrogate___)].
 				run add: cp]].
 	flush value.
 	^ bytes @env0:withAll: out
@@ -1084,8 +1223,8 @@ ___surrogateEscapeBytes___: encoding
 			ifTrue: [out add: cp - 16rDC00]
 			ifFalse: [
 				(self ___isSurrogate___: cp)
-					ifTrue: [^ UnicodeEncodeError @env1:___signal___:
-						(self ___strictEncodeMessage___: encoding)]
+					ifTrue: [^ self ___signalSurrogateEncodeError___: encoding
+						at: (self ___firstUnescapableSurrogate___)]
 					ifFalse: [
 						max == nil
 							ifTrue: [self ___appendUTF8___: cp to: out]

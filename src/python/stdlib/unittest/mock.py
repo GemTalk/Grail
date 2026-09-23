@@ -7,4 +7,4 @@
 
 from mock import *
 from mock import (Mock, MagicMock, NonCallableMock, patch, patch_object,
-                  sentinel, DEFAULT, ANY, call, _Call)
+                  sentinel, DEFAULT, ANY, call, _Call, mock_open)

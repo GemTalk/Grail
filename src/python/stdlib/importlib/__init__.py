@@ -134,17 +134,27 @@ def spec_from_loader(name, loader, origin=None, is_package=None):
 
 
 def find_spec(name, package=None, target=None):
-    """Locate the module-spec for ``name``.  Returns None if not
-    found.  Tries the Grail stdlib search root + the project's
-    own source tree."""
-    # Convert dotted name to path parts and probe both roots.
+    """Locate the module-spec for ``name``.  Returns None if not found.
+
+    CPython's order: a module already in sys.modules answers its own
+    ``__spec__`` (ValueError if that is None), and anything else is searched
+    for.  The search walks _search_roots(), which is Grail's own resolution
+    order and is derived from THIS file's location.  It used to probe only
+    under $GRAIL_DIR, which is unset in an ordinary session -- so find_spec
+    answered None for every module, ``json'' and ``encodings'' included
+    (test_codecs test_alias_modules_exist)."""
+    import sys as _sys
+    if name in _sys.modules:
+        module = _sys.modules[name]
+        if module is None:
+            return None
+        spec = getattr(module, '__spec__', None)
+        if spec is None:
+            raise ValueError('%s.__spec__ is None' % name)
+        return spec
     parts = name.split('.')
     sub = _os.path.join(*parts)
-    candidates = []
-    grail_dir = _os.environ.get('GRAIL_DIR', '')
-    if grail_dir:
-        candidates.append(_os.path.join(grail_dir, 'src', 'python', 'stdlib', sub))
-        candidates.append(_os.path.join(grail_dir, sub))
+    candidates = [_os.path.join(root, sub) for root in _search_roots()]
     for base in candidates:
         if _os.path.isdir(base):
             init = _os.path.join(base, '__init__.py')
