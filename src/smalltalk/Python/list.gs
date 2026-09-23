@@ -510,7 +510,8 @@ extend: iterable
 	(test_list's test_extend / test_iadd)."
 	self ___noteSortMutation.
 	((iterable isKindOf: Collection)
-		and: [(iterable isKindOf: CharacterCollection) not]) ifTrue: [
+		and: [(iterable isKindOf: CharacterCollection) not
+		and: [iterable ___iterIsPythonDefined___ not]]) ifTrue: [
 		self @env0:addAll: iterable.
 		^ None].
 	((iterable @env0:class

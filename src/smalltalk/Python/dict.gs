@@ -142,7 +142,8 @@ fromkeys: iterable _: value
 			@env0:on: MessageNotUnderstood do: [:ex | nil]].
 	"A string yields its 1-character SUBSTRINGS as keys, not Smalltalk
 	 Characters (CPython quirk: dict.fromkeys('abc') == {'a':v,'b':v,'c':v})."
-	(iterable isKindOf: CharacterCollection) ifTrue: [
+	((iterable isKindOf: CharacterCollection)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			| s |
 			s := Unicode7 ___new___: 1.
@@ -151,7 +152,8 @@ fromkeys: iterable _: value
 		].
 		^ result
 	].
-	(iterable isKindOf: SequenceableCollection) ifTrue: [
+	((iterable isKindOf: SequenceableCollection)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			result @env1:__setitem__: (iterable @env0:at: i) _: value
 		].
