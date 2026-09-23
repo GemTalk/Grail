@@ -1210,7 +1210,7 @@ ___grailBuildMembers: cls names: attrNames
 		and: [((cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1)
 			== #'Grail-Enum Metaclass') not])
 		ifTrue: [
-			[cls @env0:class @env0:removeSelector: #'value:value:' environmentId: 1]
+			[cls @env0:class @env1:___removeSelector: #'value:value:' environmentId: 1]
 				@env0:on: Error do: [:ex |
 					"A host extent may hook method removal (e.g. a change-
 					notification framework patched into Behavior) and fail

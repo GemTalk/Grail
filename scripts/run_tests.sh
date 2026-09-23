@@ -423,6 +423,12 @@ timed "module-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runM
 # writes nothing.
 timed "module-coherence" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleCoherenceTest.gs < /dev/null || EXIT=$?
 
+# A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
+# D8): patching builtins.len and a class's method writes no persistent object,
+# and after a commit a fresh session sees both originals -- where persistent
+# forwarders used to survive the commit and break len() in every later session.
+timed "session-patch" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runSessionPatchTest.gs < /dev/null || EXIT=$?
+
 # REAL-APPLICATION acceptance (par.10): session A deploys a module-level
 # Flask app (committing the whole flask/werkzeug closure); session B
 # warm-binds it and the committed app must serve requests (routing, request

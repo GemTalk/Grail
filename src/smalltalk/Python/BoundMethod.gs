@@ -657,18 +657,30 @@ ___grailPinSelector___: aSelector
 	"Record that aSelector has a ``___grailOrig_'' shadow, so a BoundMethod
 	handed out before the change still reaches the original.
 
-	The set is a CLASS VARIABLE rather than SessionTemps because
-	___pinnedSelectorFor___ reads it on every indirect call and a SessionTemps
-	probe costs more than the call itself.  Never committed."
+	PER SESSION.  A pin goes with a shadow, and the shadows are transient
+	session methods (Behavior >> ___compileSessionMethod:category:), so the
+	pins must die with the session too.  They lived in two class variables,
+	which ``never committed'' did not make true: assigning one wrote the
+	class's variable association and its dictionary, three persistent objects
+	on every patch (measured) that a committing session would have kept, and
+	that two patching sessions conflicted on.
 
-	GrailPinnedSelectors == nil ifTrue: [
-		GrailPinnedSelectors := IdentityKeyValueDictionary @env0:new].
-	GrailPinGeneration == nil ifTrue: [GrailPinGeneration := 0].
-	GrailPinGeneration := GrailPinGeneration @env0:+ 1.
+	The readers stay as cheap as a class-variable read, which is what the
+	per-call path needs (a SessionTemps probe there was measured at 118% of a
+	whole Python call): the first pin of a session installs session-method
+	copies of them that read the pin holder's associations as literals
+	(___grailSessionPinHolder___).  A session that never patches runs the
+	persistent readers, whose class variables are now never set -- nothing is
+	pinned, at the cost of one nil test."
+
+	| holder gen |
+	holder := self ___grailSessionPinHolder___.
+	gen := (holder @env0:at: #'___grailSessionPinGeneration___') @env0:+ 1.
+	holder @env0:at: #'___grailSessionPinGeneration___' put: gen.
 	"The generation the pin happened at.  A BoundMethod stamped with an EARLIER
 	one predates the change and redirects; one stamped later was looked up
 	afterwards and must see the change."
-	GrailPinnedSelectors @env0:at: aSelector @env0:asSymbol put: GrailPinGeneration.
+	(holder @env0:at: #'___grailSessionPins___') @env0:at: aSelector @env0:asSymbol put: gen.
 	"EVICT THE INTERNED UNBOUND HANDLES for this selector.  ``Cls.m'' is
 	interned per (class, selector), so without this there is only ever ONE
 	handle and the generation stamp cannot separate a capture taken before the
@@ -677,6 +689,41 @@ ___grailPinSelector___: aSelector
 	wrongly resolve to the shadow."
 	UnboundMethod ___grailForgetInterned___: aSelector @env0:asSymbol.
 	^ aSelector
+%
+
+category: 'Grail-Dynamic Rebinding'
+classmethod: BoundMethod
+___grailSessionPinHolder___
+	"This session's pins: a SymbolDictionary binding ___grailSessionPins___
+	(selector -> the generation it was pinned at) and
+	___grailSessionPinGeneration___.  Created by the session's first pin,
+	which also installs the session-method readers that consult it -- each is
+	its persistent twin with the class-variable names replaced, compiled
+	against this holder so the names resolve to its associations."
+
+	| temps holder |
+	temps := SessionTemps @env0:current.
+	holder := temps @env0:at: #'GrailPinHolder' otherwise: nil.
+	holder == nil ifFalse: [^ holder].
+	holder := SymbolDictionary @env0:new.
+	holder @env0:at: #'___grailSessionPins___' put: IdentityKeyValueDictionary @env0:new.
+	holder @env0:at: #'___grailSessionPinGeneration___' put: 0.
+	temps @env0:at: #'GrailPinHolder' put: holder.
+	{ { self @env0:class. #'___grailPinGeneration___'. 1 }.
+	  { self @env0:class. #'___grailPinnedAt___:'. 1 }.
+	  { self. #'___pinnedSelectorFor___:receiver:'. 1 }.
+	  { self. #'_setReceiver:selector:'. 0 } } @env0:do: [:each | | cls sel env src |
+		cls := each @env0:at: 1.
+		sel := each @env0:at: 2.
+		env := each @env0:at: 3.
+		src := cls @env0:sourceCodeAt: sel environmentId: env.
+		src := (src @env0:copyReplaceAll: 'GrailPinnedSelectors' with: '___grailSessionPins___')
+			@env0:copyReplaceAll: 'GrailPinGeneration' with: '___grailSessionPinGeneration___'.
+		cls ___compileSessionMethod: src
+			category: (cls @env0:categoryOfSelector: sel environmentId: env)
+			scope: holder
+			environmentId: env].
+	^ holder
 %
 
 category: 'Grail-Calling'
