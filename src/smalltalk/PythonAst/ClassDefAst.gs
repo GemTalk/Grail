@@ -1450,10 +1450,23 @@ printSmalltalkRuntimeOn: aStream
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"__prepare__(name, bases, **kwds) is handed the header: the RESOLVED bases
+	when there are several (the list the storage-base choice saw), the sole base
+	as written (its substitution happens in ___subclass___, and the runtime
+	reads the result back rather than asking the hook again), and every keyword
+	but ``metaclass''."
 	[aStream nextPutAll: self ___stVarName___; nextPutAll: ' @env1:___grailPrepareNamespace___: '.
 	metaclassKw
 		ifNil: [aStream nextPutAll: 'nil']
 		ifNotNil: [aStream nextPutAll: (self ___hdrTempForKeyword___: metaclassKw)].
+	aStream nextPutAll: ' bases: '.
+	bases isEmpty
+		ifTrue: [aStream nextPutAll: '#()']
+		ifFalse: [aStream nextPutAll: (bases size = 1
+			ifTrue: ['___hdrBases___']
+			ifFalse: ['___hdrResolved___'])].
+	aStream nextPutAll: ' keywords: '.
+	self printClassKeywordsDictOn: aStream withholding: #('metaclass').
 	aStream nextPutAll: '.'; lf]
 		ensure: [CallAst inDecoratorEmit: (savedDeco == true)]] value.
 	[
@@ -2847,7 +2860,8 @@ printSuperclassOn: aStream
 		Unicode16 is not enough."
 		((only isKindOf: NameAst) and: [only id asString = 'str'])
 			ifTrue: [^ aStream nextPutAll: 'Unicode32'].
-		^ only printSmalltalkOn: aStream].
+		"The value printClassHeaderOn: evaluated, not the expression again."
+		^ aStream nextPutAll: '(___hdrBases___ @env0:at: 1)'].
 	"The bases were evaluated and resolved ONCE by printClassHeaderOn:; this
 	reads the result.  Handing the storage-base choice the RESOLVED list is
 	exactly what it computed for itself before: its own resolve step is a no-op
@@ -2861,17 +2875,19 @@ method: ClassDefAst
 ___classHeaderTemps___
 	"The temps the class HEADER is evaluated into -- see printClassHeaderOn:.
 
-	The bases get two, the list as written and the list after PEP 560
-	substitution, but only when there is more than one base: a single base is
-	emitted exactly once already, inline, and hoisting it would change the
-	commonest class statement for nothing.  Every keyword gets one, the
-	metaclass included, because each keyword has more than one consumer or is
-	consumed after the body when CPython evaluates it before."
+	The bases get one for the list as written whenever there is a base at all,
+	and a second for the list after PEP 560 substitution when there is more than
+	one.  A SOLE base is hoisted too, although the superclass is its only other
+	reader: __prepare__ is handed the bases, and it can only be handed a value
+	that was evaluated once, before the keywords.  Its substitution stays where
+	it was, in ___subclass___ (see object >> ___grailPrepareBases___:).  Every
+	keyword gets one, the metaclass included, because each keyword has more than
+	one consumer or is consumed after the body when CPython evaluates it before."
 
 	| temps |
 	temps := OrderedCollection new.
-	(bases notNil and: [bases size > 1]) ifTrue: [
-		temps add: '___hdrBases___'; add: '___hdrResolved___'].
+	(bases notNil and: [bases notEmpty]) ifTrue: [temps add: '___hdrBases___'].
+	(bases notNil and: [bases size > 1]) ifTrue: [temps add: '___hdrResolved___'].
 	keywords isNil ifFalse: [
 		1 to: keywords size do: [:i | temps add: (self ___hdrKeywordTempAt___: i)]].
 	^ temps
@@ -2934,12 +2950,21 @@ printClassHeaderOn: aStream
 	each resolving the raw list ran the hook three times.  The raw list still
 	travels too, because __orig_bases__ records what was written.
 
+	The resolve comes AFTER the keywords.  CPython's __mro_entries__ runs inside
+	__build_class__, which is called with every header value already computed,
+	so ``class C(entry, kw=f())'' calls f before the hook.
+
+	A sole base is hoisted as well, so that __prepare__ can be handed it and so
+	that it is evaluated before the keywords rather than after them: while it
+	was emitted inline in the superclass expression, the hoisted keywords ran
+	FIRST.
+
 	The inBasesEmit / inDecoratorEmit flags are the ones the consumers used to
 	set: a header expression evaluates in the scope ENCLOSING the class
 	statement, and those flags are what keep NameAst from resolving a base name
 	as one of the class's own cells."
 
-	(bases notNil and: [bases size > 1]) ifTrue: [
+	(bases notNil and: [bases notEmpty]) ifTrue: [
 		| savedBasesFlag |
 		savedBasesFlag := CallAst inBasesEmit.
 		CallAst inBasesEmit: true.
@@ -2948,10 +2973,7 @@ printClassHeaderOn: aStream
 			i > 1 ifTrue: [aStream nextPutAll: '. '].
 			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
 		aStream nextPutAll: ' }.'; lf]
-			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)].
-		aStream
-			nextPutAll: '___hdrResolved___ := (Python @env0:at: #importlib) @env0:___resolveMroEntries___: ___hdrBases___.';
-			lf].
+			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)]].
 	keywords isNil ifFalse: [
 		| savedDeco |
 		savedDeco := CallAst inDecoratorEmit.
@@ -2960,7 +2982,11 @@ printClassHeaderOn: aStream
 			aStream nextPutAll: (self ___hdrKeywordTempAt___: i); nextPutAll: ' := '.
 			(keywords at: i) value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: '.'; lf]]
-			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]]
+			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]].
+	(bases notNil and: [bases size > 1]) ifTrue: [
+		aStream
+			nextPutAll: '___hdrResolved___ := (Python @env0:at: #importlib) @env0:___resolveMroEntries___: ___hdrBases___.';
+			lf]
 %
 
 category: 'Grail-code generation'
@@ -5668,11 +5694,22 @@ printClassKeywordsDictOn: aStream
 	PyDict, and String keys, for the reasons CallAst spells out: kwargs are
 	looked up with ``='' and user code expects ``kwargs['tag']'' to work."
 
+	self printClassKeywordsDictOn: aStream withholding: #('metaclass' 'boundary')
+%
+
+category: 'Grail-other'
+method: ClassDefAst
+printClassKeywordsDictOn: aStream withholding: someNames
+	"The class keywords other than someNames, as a kwargs expression -- ``nil''
+	when none are left.  __init_subclass__ withholds ``metaclass'' and
+	``boundary'' (see printClassKeywordsDictOn:); __prepare__ withholds only
+	``metaclass'', because CPython's __build_class__ hands it every other
+	keyword, ``boundary'' included -- EnumType.__prepare__ accepts it."
+
 	| forwarded |
 	keywords isNil ifTrue: [aStream nextPutAll: 'nil'. ^ self].
 	forwarded := keywords reject: [:kw |
-		kw name notNil and: [
-			(kw name asString = 'metaclass') or: [kw name asString = 'boundary']]].
+		kw name notNil and: [someNames includes: kw name asString]].
 	forwarded isEmpty ifTrue: [aStream nextPutAll: 'nil'. ^ self].
 	aStream nextPutAll: '((PyDict @env0:new)'.
 	forwarded do: [:kw |

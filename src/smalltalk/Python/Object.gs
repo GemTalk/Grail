@@ -2024,6 +2024,15 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 			@env0:at: #'GrailPendingOrigBases'
 			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
 				@env0:at: newCls put: origTuple.
+		"And what they RESOLVED to, which __prepare__ is handed next -- read back
+		by ___grailPrepareBases___: so the hook is not asked twice.  Dropped with
+		the orig bases, at the end of the class statement."
+		(SessionTemps @env0:current
+			@env0:at: #'GrailPendingResolvedBases'
+			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+				@env0:at: newCls
+				put: (tuple @env0:withAll: (entries @env0:isNil
+					ifTrue: [#()] ifFalse: [entries])).
 		^ newCls].
 	TypeError ___signal___: ('cannot subclass a non-class base ('
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
@@ -3049,6 +3058,15 @@ ___grailIsClassAttrAccessorCategory___: aCategory
 category: 'Grail-Class Namespace'
 classmethod: object
 ___grailPrepareNamespace___: aMetaclass
+	"The namespace for a class with no bases and no keywords to report.  Class
+	statements send the full form; see ___grailPrepareNamespace___:bases:keywords:."
+
+	^ self ___grailPrepareNamespace___: aMetaclass bases: #() keywords: nil
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 	"PEP 3115's ``__prepare__'': the mapping a class body is executed in.
 
 	    class Meta(type):
@@ -3114,7 +3132,8 @@ ___grailPrepareNamespace___: aMetaclass
 		((inherited notNil)
 			and: [(inherited isKindOf: Behavior)
 			and: [self ___grailMetaclassConstructs___: inherited]])
-				ifTrue: [^ self ___grailPrepareNamespace___: inherited].
+				ifTrue: [^ self ___grailPrepareNamespace___: inherited
+					bases: basesArray keywords: kwargs].
 		"Grail's own metaclasses are SMALLTALK -- an enum's namespace comes from
 		``Enum class'', not from a keyword -- so ask the receiver's metaclass
 		chain for the Grail-side hook.  A selector probe rather than an attribute
@@ -3165,14 +3184,47 @@ ___grailPrepareNamespace___: aMetaclass
 			"NOT guarded.  A __prepare__ that raises is a real error in the
 			metaclass and CPython propagates it; swallowing it here turned a
 			broken namespace into a silent no-namespace, which looked exactly
-			like this whole path not working."
-			ns := prep @env1:value: { self @env1:__name__. #() } value: nil].
+			like this whole path not working.
+
+			Handed the header, as __build_class__ hands it: the resolved bases
+			as a tuple, and the class keywords other than ``metaclass''.  It was
+			``(name, ())'' with no keywords at all, whatever the header said."
+			ns := prep @env1:value: {
+					self @env1:__name__.
+					self ___grailPrepareBases___: basesArray }
+				value: kwargs].
 	(ns isNil or: [ns == None]) ifTrue: [^ nil].
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingClassNamespace'
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: ns.
 	^ ns
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPrepareBases___: basesArray
+	"The bases tuple __prepare__ is handed: the class header's bases AFTER PEP 560
+	substitution, which is what CPython's __build_class__ passes.
+
+	Several bases arrive already resolved -- ClassDefAst resolved them once, for
+	the storage-base choice.  A SOLE base arrives as written, because its
+	substitution happens inside ___subclass___, which has already run: the class
+	being prepared exists.  Asking its __mro_entries__ again here would run the
+	hook twice, so ___subclass___ leaves the entries it used in SessionTemps and
+	they are read back.  Only a base that substituted without leaving them -- a
+	parameterised generic, whose ___subclass___ goes straight to its origin and
+	whose hook has no side effect -- is resolved afresh."
+
+	| tbl stashed |
+	(basesArray @env0:allSatisfy: [:b | b isKindOf: Behavior])
+		ifTrue: [^ tuple @env0:withAll: basesArray].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingResolvedBases' otherwise: nil.
+	stashed := tbl == nil ifTrue: [nil] ifFalse: [tbl @env0:at: self otherwise: nil].
+	stashed == nil ifFalse: [^ stashed].
+	^ tuple @env0:withAll:
+		((Python @env0:at: #importlib) @env0:___resolveMroEntries___: basesArray)
 %
 
 category: 'Grail-Class Namespace'
@@ -4009,6 +4061,9 @@ ___grailInstallOrigBases___
 	generated class reaches."
 
 	| tbl origTuple |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingResolvedBases' otherwise: nil.
+	tbl == nil ifFalse: [tbl @env0:removeKey: self ifAbsent: [nil]].
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingOrigBases' otherwise: nil.
 	tbl == nil ifTrue: [^ self].
