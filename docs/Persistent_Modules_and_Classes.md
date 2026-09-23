@@ -196,7 +196,8 @@ is no third verb.
   the session stops finding it by name (D9).
 - [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
   [deployGemdb.gs](../scripts/deployGemdb.gs) are not that second verb. They are
-  a **preload**: one session imports a known list and commits once, so
+  a **preload**: one session imports a known list — building each module
+  once, however many names on the list its closure covers — and commits once, so
   application sessions start warm, compile nothing, and cannot conflict with one
   another on first use. That is an operational choice about startup cost and
   contention — production wants one, a developer's edit loop does not. Note what
@@ -282,6 +283,14 @@ depend on build order, so `deployFrameworks` loading `werkzeug.http` a second
 time by name gave it a different value, and 46 of 156 freshly deployed modules
 read as stale in every later session — each test session then cold-rebuilt the
 framework closure and ran out of temporary memory.
+
+That second load was a defect of its own, now fixed: the deploy scripts skip a
+name an earlier name's closure already built. Nothing is committed during a
+deploy, so a second `loadModuleFromPath:` re-executed the module into a *new*
+instance, while whatever the first build had handed out kept the first alive — a
+`BoundMethod` captured from `werkzeug.local` did — and after the commit five
+`werkzeug` modules each had two committed instances, one of them not the
+registry's. A deploy now commits exactly one instance per module.
 
 Three more details keep the record from churning:
 

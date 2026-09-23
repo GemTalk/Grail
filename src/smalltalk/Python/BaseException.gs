@@ -259,11 +259,17 @@ __new__: arg1 _: arg2
 category: 'Grail-Initialization'
 classmethod: BaseException
 __new__: arg1 _: arg2 _: arg3
-	"``ExceptionClass(a, b, c)`` as an expression."
+	"``ExceptionClass(a, b, c)`` as an expression.
 
-	| instance |
-	instance := self ___new___.
-	instance ___args___: { arg1. arg2. arg3 }.
+	Through ___classForArgs___:, for the reason the two-argument form gives:
+	which class is built cannot depend on how many arguments were written.
+	``OSError(2, 'm')'' and ``OSError(2, 'm', 'f')'' are both
+	FileNotFoundError in CPython."
+
+	| instance args |
+	args := { arg1. arg2. arg3 }.
+	instance := (self ___classForArgs___: args) ___new___.
+	instance ___args___: args.
 	^ instance
 %
 
@@ -271,11 +277,14 @@ category: 'Grail-Initialization'
 classmethod: BaseException
 __new__: arg1 _: arg2 _: arg3 _: arg4 _: arg5
 	"``ExceptionClass(a, b, c, d, e)`` as an expression —
-	UnicodeDecodeError / UnicodeEncodeError take five arguments."
+	UnicodeDecodeError / UnicodeEncodeError take five arguments, and so does
+	the OSError form that carries a second filename.  Through
+	___classForArgs___: for the reason the two-argument form gives."
 
-	| instance |
-	instance := self ___new___.
-	instance ___args___: { arg1. arg2. arg3. arg4. arg5 }.
+	| instance args |
+	args := { arg1. arg2. arg3. arg4. arg5 }.
+	instance := (self ___classForArgs___: args) ___new___.
+	instance ___args___: args.
 	^ instance
 %
 

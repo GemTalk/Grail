@@ -159,7 +159,10 @@ def copytree(src, dst, dirs_exist_ok=False):
     """
     if os.path.exists(dst):
         if not dirs_exist_ok:
-            raise FileExistsError("[Errno 17] File exists: '" + dst + "'")
+            # errno and filename, not a sentence that merely looks like them:
+            # a caller catching this reads e.filename to say which tree was in
+            # the way, and CPython's copytree sets it.
+            raise FileExistsError(17, os.strerror(17), dst)
     else:
         os.makedirs(dst)
     for name in sorted(os.listdir(src)):
