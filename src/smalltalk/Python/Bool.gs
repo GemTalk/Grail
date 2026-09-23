@@ -814,6 +814,30 @@ as_integer_ratio
 
 category: 'Grail-Integer Methods'
 method: bool
+to_bytes
+	"bool inherits int.to_bytes; ``True.to_bytes()'' is b'\\x01'."
+
+	^ (self ifTrue: [1] ifFalse: [0]) to_bytes
+%
+
+category: 'Grail-Number Methods'
+method: bool
+to_bytes: length
+	"bool inherits int.to_bytes (1-arg form)."
+
+	^ (self ifTrue: [1] ifFalse: [0]) to_bytes: length
+%
+
+category: 'Grail-Number Methods'
+method: bool
+_to_bytes: positional kw: kwargs
+	"bool inherits int.to_bytes (keyword form)."
+
+	^ (self ifTrue: [1] ifFalse: [0]) _to_bytes: positional kw: kwargs
+%
+
+category: 'Grail-Number Methods'
+method: bool
 to_bytes: length _: byteorder
 	"bool inherits int.to_bytes (2-arg form)."
 
