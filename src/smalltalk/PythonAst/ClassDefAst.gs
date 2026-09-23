@@ -5659,22 +5659,153 @@ emitIRTextSourcesOn: classVarName pairs: pairs onStream: aStream
 	It is what importlib ___textSourceFor___:in:selector: hands the consumers
 	that re-compile a method's source (MI merge, enum gap-fill, smalltalk_class,
 	the special-receiver recompile), so they keep behaving exactly as for a
-	text-compiled method.  Persistent with the class, like ___methodCodeTable___."
+	text-compiled method.  Persistent with the class, like ___methodCodeTable___.
+
+	THE WHOLE ACCESSOR IS ONE STRING LITERAL in the class-build text, and
+	GemStone refuses a literal over 5M bytes.  Bytes, not characters: ONE
+	character above U+FFFF anywhere in the class's methods makes the literal a
+	four-byte string, so 1.46M characters -- test_builtin's BuiltinTest, whose
+	tests are full of astral-plane test strings -- measured 5.86 MB, and the
+	module failed to import under IR with ``string literal too big'' while the
+	text path, which carries no twin, scored OK.
+
+	So a class whose table would exceed ___irTextSourcesLiteralBudget___ is
+	split into CHUNK accessors, each filling the table it is handed, and
+	``___irTextSources___'' threads one table through them:
+	  ___irTextSources___  ^ self ___irTextSources_2___: (self
+	      ___irTextSources_1___: (KeyValueDictionary @env0:new))
+	The reader still asks only ``___irTextSources___''.  A class that fits in
+	one literal -- every class but a handful -- gets exactly the single
+	accessor it always did, byte for byte, so the twin stays deterministic."
+
+	| chunks main |
+	pairs isEmpty ifTrue: [^ self].
+	chunks := self ___irTextSourceChunks___: pairs.
+	chunks size = 1 ifTrue: [
+		^ self ___emitIRTextSourcesAccessor___: '___irTextSources___'
+			entries: (chunks at: 1) threaded: false on: classVarName onStream: aStream].
+	chunks doWithIndex: [:entries :i |
+		self ___emitIRTextSourcesAccessor___:
+				'___irTextSources_' , i printString , '___:'
+			entries: entries threaded: true on: classVarName onStream: aStream].
+	main := WriteStream on: String new.
+	main nextPutAll: '___irTextSources___'; lf; nextPutAll: '	^ '.
+	main nextPutAll: ((1 to: chunks size) inject: '(KeyValueDictionary @env0:new)'
+		into: [:acc :i |
+			'(self ___irTextSources_' , i printString , '___: ' , acc , ')']).
+	self ___compileClassSide___: main contents on: classVarName onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTextSourcesLiteralBudget___
+	"Bytes one twin accessor's literal may occupy in the class-build text.  A
+	fifth of GemStone's 5M-byte limit: the estimate below counts the outer
+	quote doubling and the storage width, but not every byte a literal costs,
+	and the margin is cheap -- a chunk is one more method on the metaclass.
+
+	A session may lower it (``___grailIRTextSourcesBudget___'' in SessionTemps)
+	so a test can split a SMALL class and check the split loses nothing --
+	proving that on a class big enough to need it would cost a 1.3M-character
+	fixture."
+
+	^ SessionTemps current at: #'___grailIRTextSourcesBudget___' otherwise: 1000000
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTextSourceChunks___: pairs
+	"pairs split, in order, into runs whose accessor literal stays inside
+	___irTextSourcesLiteralBudget___.  Each entry's cost is its accessor line
+	after the OUTER quoting ___compileMethod: applies (every quote doubled
+	again), times the widest storage the run needs -- 1, 2 or 4 bytes per
+	character, fixed by the run's highest code point.  An entry too large for
+	any budget still gets a run of its own: it is one method's source, which
+	the text path compiles too."
+
+	| chunks current currentChars currentWidth budget |
+	budget := self ___irTextSourcesLiteralBudget___.
+	chunks := OrderedCollection new.
+	current := OrderedCollection new.
+	currentChars := 0.
+	currentWidth := 1.
+	pairs do: [:assoc |
+		| line chars width |
+		line := self ___irTextSourceLineFor___: assoc.
+		chars := line size + (line occurrencesOf: $').
+		width := self ___storageWidthOf___: line.
+		(current notEmpty and: [
+			(currentChars + chars) * (currentWidth max: width) > budget])
+				ifTrue: [
+					chunks add: current.
+					current := OrderedCollection new.
+					currentChars := 0.
+					currentWidth := 1].
+		current add: assoc.
+		currentChars := currentChars + chars.
+		currentWidth := currentWidth max: width].
+	current notEmpty ifTrue: [chunks add: current].
+	^ chunks
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___storageWidthOf___: aString
+	"Bytes per character GemStone stores aString in: 1, 2, or 4."
+
+	| widest |
+	widest := 0.
+	aString do: [:c | widest := widest max: c codePoint].
+	widest > 16rFFFF ifTrue: [^ 4].
+	widest > 16rFF ifTrue: [^ 2].
+	^ 1
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTextSourceLineFor___: assoc
+	"One table entry as the accessor spells it: ``@env0:at: #'sel' put: '...';''."
+
+	| line |
+	line := WriteStream on: String new.
+	line lf; nextPutAll: '		@env0:at: #'.
+	self printQuotedString: assoc key asString on: line.
+	line nextPutAll: ' put: '.
+	self printQuotedString: assoc value on: line.
+	line nextPut: $;.
+	^ line contents
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___emitIRTextSourcesAccessor___: aSelector entries: entries threaded: threadedBool on: classVarName onStream: aStream
+	"One accessor.  UNTHREADED is the single-literal form every class used to
+	get, unchanged: ``___irTextSources___  ^ (KeyValueDictionary @env0:new) ...
+	@env0:yourself''.  THREADED is a chunk: it fills the table it is handed
+	and answers it, ``___irTextSources_N___: d  ^ d ... @env0:yourself''."
 
 	| src |
-	pairs isEmpty ifTrue: [^ self].
 	src := WriteStream on: String new.
-	src nextPutAll: '___irTextSources___'; lf.
-	src nextPutAll: '	^ (KeyValueDictionary @env0:new)'.
-	pairs do: [:assoc |
-		src lf; nextPutAll: '		@env0:at: #'.
-		self printQuotedString: assoc key asString on: src.
-		src nextPutAll: ' put: '.
-		self printQuotedString: assoc value on: src.
-		src nextPut: $;].
+	threadedBool
+		ifTrue: [
+			src nextPutAll: aSelector; nextPutAll: ' ___d___'; lf.
+			src nextPutAll: '	^ ___d___']
+		ifFalse: [
+			src nextPutAll: aSelector; lf.
+			src nextPutAll: '	^ (KeyValueDictionary @env0:new)'].
+	entries do: [:assoc | src nextPutAll: (self ___irTextSourceLineFor___: assoc)].
 	src lf; nextPutAll: '		@env0:yourself'.
+	self ___compileClassSide___: src contents on: classVarName onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___compileClassSide___: aSource on: classVarName onStream: aStream
+	"``<cls> @env0:class ___compileMethod: '<aSource>' category: 'Grail-IR
+	Text Sources'.''"
+
 	aStream nextPutAll: classVarName; nextPutAll: ' @env0:class ___compileMethod: '.
-	self printQuotedString: src contents on: aStream.
+	self printQuotedString: aSource on: aStream.
 	aStream nextPutAll: ' category: ''Grail-IR Text Sources''.'; lf
 %
 
