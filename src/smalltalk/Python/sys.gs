@@ -352,7 +352,10 @@ initializeBuiltinModules
 		@env0:at: #warnings 	put: warnings 	instance;
 		@env0:at: #struct 		put: struct 	instance;
 		@env0:at: #mimetypes 	put: mimetypes 	instance;
-		@env0:at: #ipaddress 	put: ipaddress 	instance;
+		"ipaddress deliberately NOT seeded, as fractions is not: ``import
+		ipaddress'' resolves to the vendored CPython ipaddress.py, whose
+		IPv4Interface, ip_network() strictness and address arithmetic the
+		hand-written Smalltalk module never had."
 		@env0:at: #datetime 	put: datetime 	instance;
 		@env0:at: #json 		put: json 		instance;
 		@env0:at: #io 			put: io 		instance;

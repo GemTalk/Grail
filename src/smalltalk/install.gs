@@ -431,11 +431,6 @@ run
 	at: #'struct' put: nil;
 	at: #'PyStruct' put: nil;
 	at: #'mimetypes' put: nil;
-	at: #'ipaddress' put: nil;
-	at: #'IPv4Address' put: nil;
-	at: #'IPv4Network' put: nil;
-	at: #'IPv6Address' put: nil;
-	at: #'IPv6Network' put: nil;
 	at: #'datetime' put: nil;
 	at: #'PyDate' put: nil;
 	at: #'PyDateTime' put: nil;
@@ -1006,6 +1001,7 @@ run
 	at: #'HttpCookiesTestCase' put: nil;
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'IPv6AddressTestCase' put: nil;
+	at: #'IpaddressFullModuleTestCase' put: nil;
 	at: #'IRCodegenFlagDefaultTestCase' put: nil;
 	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'IRClassDeferredNonlocalTestCase' put: nil;
@@ -1656,7 +1652,6 @@ input src/smalltalk/Python/secrets.gs
 input src/smalltalk/Python/warnings.gs
 input src/smalltalk/Python/struct.gs
 input src/smalltalk/Python/mimetypes.gs
-input src/smalltalk/Python/ipaddress.gs
 input src/smalltalk/Python/datetime_module.gs
 input src/smalltalk/Python/json_module.gs
 input src/smalltalk/Python/json_decoder.gs
@@ -2443,6 +2438,7 @@ input src/smalltalk/PythonTests/IntFromBytesIterableTestCase.gs
 input src/smalltalk/PythonTests/IntToBytesDefaultsTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
+input src/smalltalk/PythonTests/IpaddressFullModuleTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenFlagDefaultTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
 input src/smalltalk/PythonTests/IRClassDeferredNonlocalTestCase.gs
@@ -2923,7 +2919,6 @@ run
 (sys @env1:modules) at: #'warnings' put: warnings @env1:instance.
 (sys @env1:modules) at: #'struct' put: struct @env1:instance.
 (sys @env1:modules) at: #'mimetypes' put: mimetypes @env1:instance.
-(sys @env1:modules) at: #'ipaddress' put: ipaddress @env1:instance.
 (sys @env1:modules) at: #'datetime' put: datetime @env1:instance.
 (sys @env1:modules) at: #'json' put: json @env1:instance.
 (sys @env1:modules) at: #'io' put: io @env1:instance.
