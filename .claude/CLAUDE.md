@@ -280,9 +280,15 @@ second concurrent suite competes rather than scaling:
 
 ```bash
 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
-GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
+GRAIL_TEST_COLD=1 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
 ./scripts/with_stone_lock.sh ./scripts/run_cpython_suite.sh
 ```
+
+**`GRAIL_IR_CODEGEN` is ON by default since PR #1087, and the variable now
+DISABLES the IR path.** The text path is `GRAIL_IR_CODEGEN=0`; setting it to
+`1` is a no-op that still reads as "the IR arm". So a two-arm comparison has
+to spell the OFF arm explicitly, and one that forgets measures IR twice and
+reports two arms that agree.
 
 **Wrap the CPython suite too, not just `run_tests.sh`.** It opens
 `GRAIL_CPYTHON_WORKERS` sessions of its own (four by default), so on a tight
