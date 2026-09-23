@@ -1168,6 +1168,7 @@ run
 	at: #'PartialCallableAndCopyTestCase' put: nil;
 	at: #'PartialMethodDescriptorTestCase' put: nil;
 	at: #'PassTestCase' put: nil;
+	at: #'PathWalkAndMountTestCase' put: nil;
 	at: #'PathlibStubSurfaceTestCase' put: nil;
 	at: #'PendingDeprecationWarningTestCase' put: nil;
 	at: #'Pep448StarredLiteralsTestCase' put: nil;
@@ -2544,6 +2545,7 @@ input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
 input src/smalltalk/PythonTests/PartialMethodDescriptorTestCase.gs
 input src/smalltalk/PythonTests/PassTestCase.gs
 input src/smalltalk/PythonTests/PathlibStubSurfaceTestCase.gs
+input src/smalltalk/PythonTests/PathWalkAndMountTestCase.gs
 input src/smalltalk/PythonTests/PendingDeprecationWarningTestCase.gs
 input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs
 input src/smalltalk/PythonTests/Pep487HooksTestCase.gs

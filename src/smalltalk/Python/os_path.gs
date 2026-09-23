@@ -186,6 +186,46 @@ realpath: path
 	^ self ___posixpathModule @env1:realpath: path
 %
 
+category: 'Grail-Path Predicates'
+method: os_path
+ismount: path
+	"os.path.ismount(path) -- CPython's own, which compares the path's device
+	and inode against its parent's.  Path.is_mount() is this call, and there is
+	no primitive to shortcut it with: what it needs is os.lstat, os.fspath and
+	realpath, all of which Grail has."
+
+	^ self ___posixpathModule @env1:ismount: path
+%
+
+category: 'Grail-Path Predicates'
+method: os_path
+isjunction: path
+	"os.path.isjunction(path) -- FALSE everywhere off Windows, which is what
+	CPython answers here too, after coercing the argument.  Path.is_junction()
+	is this call.  posixpath re-exports genericpath's, so the coercion (and so
+	the TypeError for a non-path) is CPython's rather than a bare ``^ false''."
+
+	^ self ___posixpathModule @env1:isjunction: path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+relpath: path
+	"os.path.relpath(path, start=os.curdir) -- CPython's own.  Missing
+	entirely before, and it is not a shortening of abspath: the two paths are
+	split, their common prefix dropped, and one ``..'' emitted per remaining
+	component of start."
+
+	^ self ___posixpathModule @env1:relpath: path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+relpath: path _: start
+
+	^ self ___posixpathModule @env1:relpath: path _: start
+%
+
 category: 'Grail-Path Manipulation'
 method: os_path
 ___posixpathModule

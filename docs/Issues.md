@@ -6232,9 +6232,9 @@ a call the real pathlib now makes and Grail cannot yet answer.
   the subclass from the errno. `BaseException class >> ___classForArgs___:` is
   the hook for exactly this, but only the two-argument constructor consults it.
 * **Missing `os` support for other `Path` methods:** `replace`/`move`
-  (`os.replace` — FIXED below), `walk` (`os._walk_symlinks_as_files`), `is_mount`
-  (`os.path.ismount`), `is_junction` (`os.path.isjunction`), and
-  `as_uri`/`from_uri` (`urllib.request.pathname2url`/`url2pathname`).
+  (`os.replace`), `walk`, `is_mount` and `is_junction` — all FIXED below.
+  `as_uri`/`from_uri` (`urllib.request.pathname2url`/`url2pathname`) is what
+  is left.
 * **`abc.ABC` does not carry `ABCMeta`.** That is why `pathlib.types` needs its
   adaptation; `abc.py` records why the switch is deferred.
 
@@ -6464,3 +6464,55 @@ neither checked what the tree already had. The lesson is cheap to state and
 was expensive to skip: before recording a limit, look for the CPython module
 that already implements it — `pathlib` (#1104) and this are now two cases
 where the answer was a file Grail was already shipping.
+
+## Path.walk, Path.is_mount and Path.is_junction had no os under them
+
+All three raised `AttributeError`. Two were wiring, and one was a real mode
+`os.walk` did not have.
+
+**`os.path.ismount` and `os.path.isjunction` were already written.** CPython's
+`posixpath` implements `ismount` (it compares a path's device and inode against
+its parent's) and re-exports `genericpath`'s `isjunction`, which answers false
+off Windows *after* coercing its argument — so a non-path is still a TypeError
+rather than a bare `false`. Grail ships both files. They are delegations now,
+as `realpath` became in the entry above. **`os.path.relpath` was missing
+outright** and is the same one-line delegation; it turned up because a fixture
+called it.
+
+**`os.walk` needed a third mode.** `Path.walk` passes
+`os._walk_symlinks_as_files` as `followlinks` for its own
+`follow_symlinks=False`. That is a bare sentinel OBJECT, compared by identity,
+and it asks for something neither Boolean gives: a symlink to a directory
+belongs among the FILENAMES and is never descended into. CPython spells it
+
+```python
+if followlinks is _walk_symlinks_as_files:
+    is_dir = entry.is_dir(follow_symlinks=False) and not entry.is_junction()
+```
+
+Grail had no sentinel to compare against, and **an object is truthy**, so had
+one been passed it would have read as `followlinks=True` — descending into
+every link, the exact opposite of what the caller asked for. A missing
+attribute that raises is the lucky failure here; the dangerous one was the
+plausible answer waiting behind it.
+
+The fixture checks all three of `os.walk`'s symlink modes rather than only the
+new one, because the other two share the classification the change touched.
+
+**Its first CI run failed, on listing order again.** The fixture compared the
+walk's rows in the order they were yielded, and the order a walk visits
+SIBLINGS in is the filesystem's listing order: Darwin's put the real directory
+first and Linux's put the symlink first, so two rows swapped and the fixture
+failed on CI having passed locally. Reproduced by re-running it with
+`os.scandir` reversed, which fails the same two checks. The comparisons are
+sorted now, and the two orderings that ARE contracts — bottom-up yielding a
+directory after its children, and pruning by mutating `dirnames` — are
+asserted as sequences on their own. Same lesson as the `rmtree` entry above,
+one entry later.
+
+### Private by name is not private in practice
+
+`_walk_symlinks_as_files` has a leading underscore and no documentation, and
+pathlib — CPython's own, which Grail now uses — depends on its exact identity
+semantics. A name being private says who is expected to call it, not whether
+Grail can skip it.

@@ -249,6 +249,13 @@ initialize
 	self @env0:at: #supports_dir_fd put: (set ___new___).
 	self @env0:at: #supports_follow_symlinks put: (set ___new___).
 	self @env0:at: #supports_effective_ids put: (set ___new___).
+	"``os._walk_symlinks_as_files'' is a bare sentinel OBJECT in CPython, and
+	is compared by identity.  Path.walk() passes it as os.walk's followlinks
+	for its own follow_symlinks=False, and it asks for a third behaviour that
+	neither Boolean gives: a symlink to a directory is reported as a FILE and
+	never descended into.  Private by name, and still part of the contract --
+	pathlib is the caller."
+	self @env0:at: #'_walk_symlinks_as_files' put: (object ___new___).
 	self @env0:at: #path put: (os_path instance).
 	self @env0:at: #PathLike put: os_PathLike.
 	"``os.DirEntry'' is a real module attribute in CPython -- code type-tests
@@ -1943,7 +1950,7 @@ _walk: positional kw: kwargs
 	triple waiting to be yielded after its subdirectories.  Recursion would
 	have meant a nested generator, and so a forked GsProcess, per directory."
 
-	| top topdown onerror followlinks |
+	| top topdown onerror followlinks linksAreFiles |
 	positional @env0:size @env0:< 1 ifTrue: [
 		TypeError ___signal___:
 			'walk() missing 1 required positional argument: ''top'''].
@@ -1954,10 +1961,38 @@ _walk: positional kw: kwargs
 		name: 'onerror' default: nil.
 	followlinks := self ___walkArgAt___: positional at: 4 kw: kwargs
 		name: 'followlinks' default: false.
+	"The sentinel is an ordinary object, so ___isTruthy___ answers TRUE for it
+	-- it would read as followlinks=True, the opposite of what Path.walk asks
+	for.  Identity is the test, as it is in CPython."
+	linksAreFiles := followlinks == self ___walkSymlinksAsFiles.
 	^ self ___walk___: top
 		topdown: topdown ___isTruthy___
 		onerror: onerror
-		followlinks: followlinks ___isTruthy___
+		followlinks: (linksAreFiles @env0:not and: [followlinks ___isTruthy___])
+		linksAreFiles: linksAreFiles
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___isWalkDirectory___: aPath linksAreFiles: linksAreFiles
+	"Whether os.walk counts aPath as a directory to descend into.
+
+	isdir FOLLOWS a symlink, so by default a link to a directory is reported
+	in dirnames and ``followlinks'' decides whether it is entered.  Under
+	os._walk_symlinks_as_files it is a FILE instead, which is CPython's
+	``entry.is_dir(follow_symlinks=False)'' -- the lstat answer."
+
+	(self isdir: aPath) ifFalse: [^ false].
+	^ linksAreFiles @env0:not @env0:or: [(self ___isLink___: aPath) @env0:not]
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___walkSymlinksAsFiles
+	"The sentinel os.walk compares its followlinks against; see where it is
+	created for what it asks for."
+
+	^ self @env0:at: #'_walk_symlinks_as_files'
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1978,10 +2013,14 @@ walk: aTop _: topdown
 
 category: 'Grail-File and Directory Operations'
 method: os
-___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks
+___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks linksAreFiles: linksAreFiles
 	"The generator behind os.walk -- see _walk:kw: for the argument handling
 	and for why this is a generator at all.  topdown/followlinks arrive as
-	Smalltalk Booleans, already truth-tested."
+	Smalltalk Booleans, already truth-tested.
+
+	linksAreFiles is the os._walk_symlinks_as_files mode, which Path.walk asks
+	for: a symlink to a directory belongs in FILENAMES rather than dirnames,
+	so it is neither reported as a directory nor descended into."
 
 	| pathMod reportError |
 	pathMod := os_path instance.
@@ -2023,7 +2062,7 @@ ___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks
 							whether it is DESCENDED INTO is followlinks, below.
 							An OSError here counts as ``not a directory'', which
 							is what os.path.isdir does."
-							isDir := [self isdir: full]
+							isDir := [self ___isWalkDirectory___: full linksAreFiles: linksAreFiles]
 								@env0:on: OSError
 								do: [:ex | ex @env0:return: false].
 							isDir
