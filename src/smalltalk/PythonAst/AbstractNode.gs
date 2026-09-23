@@ -1558,9 +1558,26 @@ ___manglePrivate___: aName
 	class C both yield _C__x); an all-underscore class name mangles
 	nothing, matching CPython."
 
-	| s cls stripped i |
-	cls := self ___manglingClassName___.
-	cls isNil ifTrue: [^ aName].
+	^ AbstractNode ___mangle___: aName forClass: self ___manglingClassName___
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
+___mangle___: aName forClass: aClassName
+	"CPython's _Py_Mangle as a pure function of the name and the class -- the
+	one copy of the rule.  Shared by codegen (___manglePrivate___:, which finds
+	the class by walking the AST) and by the PARSER (PythonParser >>
+	___mangle___:, which knows it from its own class-name stack), so the two
+	can never disagree about what a name mangles to.
+
+	ANSWERS aName UNCHANGED -- same object, same class -- whenever nothing is
+	mangled, so a Symbol in stays a Symbol out on the common path.  Mangling is
+	IDEMPOTENT: a result has exactly one leading underscore and so never
+	qualifies again, which is what lets codegen's calls run harmlessly over
+	names the parser has already mangled."
+
+	| s stripped i |
+	aClassName isNil ifTrue: [^ aName].
 	s := aName asString.
 	"Must start with two underscores..."
 	(s size > 2 and: [(s at: 1) == $_ and: [(s at: 2) == $_]]) ifFalse: [^ aName].
@@ -1568,7 +1585,7 @@ ___manglePrivate___: aName
 	((s at: s size) == $_ and: [(s at: s size - 1) == $_]) ifTrue: [^ aName].
 	"A dotted name is never mangled (CPython checks this too)."
 	(s includesValue: $.) ifTrue: [^ aName].
-	stripped := cls asString.
+	stripped := aClassName asString.
 	i := 1.
 	[i <= stripped size and: [(stripped at: i) == $_]] whileTrue: [i := i + 1].
 	stripped := stripped copyFrom: i to: stripped size.

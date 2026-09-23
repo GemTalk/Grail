@@ -352,7 +352,7 @@ printSmalltalkClassBodyRuntimeDefOn: aStream
 		ifFalse: [(self isKindOf: ClassFunctionDefAst)
 			ifTrue: ['PyClassMethod']
 			ifFalse: [nil]].
-	aStream nextPutAll: '[ | '; nextPutAll: name; nextPutAll: ' |'; lf.
+	aStream nextPutAll: '[ | '; nextPutAll: self ___mangledName___; nextPutAll: ' |'; lf.
 	savedRuntimeClass := CallAst classBodyRuntimeClass.
 	savedValueDefNode := CallAst classBodyValueDefNode.
 	CallAst classBodyRuntimeClass: nil.
@@ -363,12 +363,12 @@ printSmalltalkClassBodyRuntimeDefOn: aStream
 	aStream lf;
 		nextPutAll: clsName;
 		nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
-		nextPutAll: name;
+		nextPutAll: self ___mangledName___;
 		nextPutAll: ''' put: '.
 	wrapper
-		ifNil: [aStream nextPutAll: name]
+		ifNil: [aStream nextPutAll: self ___mangledName___]
 		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
-			nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil)'].
+			nextPutAll: ' value: { '; nextPutAll: self ___mangledName___; nextPutAll: ' } value: nil)'].
 	aStream nextPutAll: '. ] value.'; lf
 %
 
@@ -471,11 +471,11 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: self ___moduleStoreReceiverExpr___;
 			nextPutAll: ' @env0:dynamicInstVarAt: #''';
-			nextPutAll: name;
+			nextPutAll: self ___mangledName___;
 			nextPutAll: ''' put: ('
 	] ifFalse: [
 		aStream
-			nextPutAll: name;
+			nextPutAll: self ___mangledName___;
 			nextPutAll: ' := '
 	].
 	"A def-time outer wrapper block (run immediately via ``] value'') is needed
@@ -892,12 +892,12 @@ printSmalltalkOn: aStream
 						lf;
 						nextPutAll: self ___moduleStoreReceiverExpr___;
 			nextPutAll: ' @env0:dynamicInstVarAt: #''';
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ''' put: ('
 				] ifFalse: [
 					aStream
 						lf;
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ' := '
 				].
 				(deco isKindOf: Symbol)
@@ -931,12 +931,12 @@ printSmalltalkOn: aStream
 				(self isModuleScopeNestedDefTarget) ifTrue: [
 					aStream
 						nextPutAll: ' value: { (self @env0:dynamicInstVarAt: #''';
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ''' ifAbsent: [nil]) } value: nil).'
 				] ifFalse: [
 					aStream
 						nextPutAll: ' value: { ';
-						nextPutAll: name;
+						nextPutAll: self ___mangledName___;
 						nextPutAll: ' } value: nil.'
 				].
 			].
@@ -1053,16 +1053,16 @@ isModuleScopeNestedDefTarget
 	moduleVariableNames.  Missing it emitted a bare assignment to a name
 	the parser had (correctly) not declared, and the method failed to
 	compile."
-	(self ___nearestEnclosingScopeDeclaresGlobal___: name asSymbol)
+	(self ___nearestEnclosingScopeDeclaresGlobal___: self ___mangledName___ asSymbol)
 		ifTrue: [^ true].
 	CallAst classBeingCompiled ifNotNil: [^ false].
 	CallAst moduleVariableNames ifNil: [^ false].
-	(CallAst moduleVariableNames includes: name asSymbol) ifFalse: [^ false].
+	(CallAst moduleVariableNames includes: self ___mangledName___ asSymbol) ifFalse: [^ false].
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
-				(self ___enclosingDefDeclares___: node named: name asSymbol)
+				(self ___enclosingDefDeclares___: node named: self ___mangledName___ asSymbol)
 					ifTrue: [^ false]
 			].
 		node := node parent.
@@ -1650,11 +1650,11 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 			aStream
 				nextPutAll: self ___moduleStoreReceiverExpr___;
 				nextPutAll: ' @env0:dynamicInstVarAt: #''';
-				nextPutAll: name;
+				nextPutAll: self ___mangledName___;
 				nextPutAll: ''' put: ([']
 		ifFalse: [
 			aStream
-				nextPutAll: name;
+				nextPutAll: self ___mangledName___;
 				nextPutAll: ' := ['].
 	aStream nextPutAll: ':___grailDecoFns___ |'; lf.
 	self emitOrderedLocalDecoratorApplicationOn: aStream index: 1 count: n.
@@ -1698,9 +1698,9 @@ emitOrderedLocalDecoratorBaseOn: aStream
 		ifTrue: [
 			aStream
 				nextPutAll: '(self @env0:dynamicInstVarAt: #''';
-				nextPutAll: name;
+				nextPutAll: self ___mangledName___;
 				nextPutAll: ''' ifAbsent: [nil])']
-		ifFalse: [aStream nextPutAll: name]
+		ifFalse: [aStream nextPutAll: self ___mangledName___]
 %
 
 
@@ -7533,10 +7533,10 @@ ___emitIRStatementOn___: aBuilder
 		aBuilder add: (aBuilder
 			send: #dynamicInstVarAt:put:
 			to: (self ___emitIRModuleReceiverOn___: aBuilder)
-			with: { aBuilder obj: name asSymbol. fn }
+			with: { aBuilder obj: self ___mangledName___ asSymbol. fn }
 			env: 0).
 		^ self].
-	leaf := aBuilder leafFor: name asSymbol.
+	leaf := aBuilder leafFor: self ___mangledName___ asSymbol.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: fn).
 	self ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf.

@@ -203,6 +203,45 @@ _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
 	^ nil
 %
 
+category: 'Grail-Python Names'
+classmethod: UnboundMethod
+___pyDisplayNameOf___: aSelector forClass: aClass
+	"The name a PRIVATE method was WRITTEN with, or nil.
+
+	CPython mangles a private def's BINDING and keeps its __name__ as written:
+	``def __m'' in class C is reached as C._C__m and reports __name__ '__m' and
+	__qualname__ 'C.__m'.  A Grail method object holds only its selector, which
+	is the binding, so it reported '_C__m'.
+
+	NOT recovered by un-mangling the selector.  A def WRITTEN as ``_C__lit''
+	has exactly the spelling a mangled ``__lit'' would have, and CPython reports
+	it as written; stripping the prefix would rename it.  So the defining class
+	records the pairs it actually mangled (ClassDefAst emits
+	___pyMangledDefNames___), and a name absent from every table is its own
+	spelling.  Walks the superclass chain, reading each class's OWN table, so an
+	inherited private method reports the name its defining class gave it.
+
+	Cheap on the common path: a selector that cannot be a mangled name -- it
+	must start with exactly one underscore and contain ``__'' -- never walks."
+
+	| s sym c |
+	aClass isNil ifTrue: [^ nil].
+	s := aSelector asString.
+	(s size > 3 and: [(s at: 1) == $_ and: [(s at: 2) ~~ $_]]) ifFalse: [^ nil].
+	(s indexOfSubCollection: '__' startingAt: 3) = 0 ifTrue: [^ nil].
+	sym := s asSymbol.
+	c := (aClass isKindOf: Behavior) ifTrue: [aClass] ifFalse: [aClass class].
+	[c notNil] whileTrue: [
+		(c class compiledMethodAt: #'___pyMangledDefNames___' environmentId: 1 otherwise: nil) notNil
+			ifTrue: [ | pairs |
+				pairs := [c @env1:___pyMangledDefNames___]
+					on: AbstractException do: [:ex | ex return: #()].
+				1 to: pairs size - 1 by: 2 do: [:i |
+					(pairs at: i) == sym ifTrue: [^ pairs at: i + 1]]].
+		c := c superclass].
+	^ nil
+%
+
 set compile_env: 1
 
 category: 'Grail-Instance Creation'
@@ -664,9 +703,13 @@ __name__
 	for a class-body decorator IS one of these unbound handles.  Every one
 	of those reads used to raise AttributeError, and update_wrapper silently
 	skips a name it cannot read -- so the wrapper kept ITS own name and
-	``@functools.wraps(fn)'' looked like it had done nothing."
+	``@functools.wraps(fn)'' looked like it had done nothing.
 
-	^ selector @env0:asString
+	A PRIVATE method reports the name it was WRITTEN with -- see
+	UnboundMethod class >> ___pyDisplayNameOf___:forClass:."
+
+	^ (UnboundMethod @env0:___pyDisplayNameOf___: selector forClass: definingClass)
+		ifNil: [selector @env0:asString]
 %
 
 category: 'Grail-Python Metadata'
@@ -683,7 +726,7 @@ __qualname__
 	too."
 
 	| qn owner |
-	definingClass == nil ifTrue: [^ selector @env0:asString].
+	definingClass == nil ifTrue: [^ self __name__].
 	owner := self ___pyOwnerClass___.
 	"Read through ___pyAttrLoad___ rather than sent directly.  A Smalltalk
 	METACLASS answers its Python name only on that path -- the Behavior branch
@@ -695,7 +738,7 @@ __qualname__
 	qn := [(owner @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: owner @env0:name @env0:asString].
-	^ qn @env0:, '.' @env0:, selector @env0:asString
+	^ qn @env0:, '.' @env0:, self __name__ @env0:asString
 %
 
 category: 'Grail-Python Metadata'

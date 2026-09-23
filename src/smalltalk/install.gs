@@ -1086,6 +1086,7 @@ run
 	at: #'ModuleAttrDeleteTestCase' put: nil;
 	at: #'ModuleDocstringTestCase' put: nil;
 	at: #'ModuleSpecTestCase' put: nil;
+	at: #'BareNameManglingTestCase' put: nil;
 	at: #'GlobalsShadowBuiltinTestCase' put: nil;
 	at: #'ModuleCachedAbsentTestCase' put: nil;
 	at: #'ModuleAttrZeroArgCallTestCase' put: nil;
@@ -2443,6 +2444,7 @@ input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrDeleteTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
+input src/smalltalk/PythonTests/BareNameManglingTestCase.gs
 input src/smalltalk/PythonTests/GlobalsShadowBuiltinTestCase.gs
 input src/smalltalk/PythonTests/ModuleCachedAbsentTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
