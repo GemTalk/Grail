@@ -4815,6 +4815,16 @@ ___refuseNonTextCodec___: aCodecInfo named: aName for: aSelector
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___registerBases___: aClass bases: basesArray
+	"The raw-bases form, for callers that have not resolved them: resolves here
+	and hands both lists on.  See the resolved: variant."
+
+	^ self ___registerBases___: aClass bases: basesArray
+		resolved: (self ___resolveMroEntries___: basesArray)
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registerBases___: aClass bases: basesArray resolved: resolvedBases
 	"Record aClass's TRUE Python bases and its C3 linearization.
 	Python computes the MRO once at class creation and it is fixed
 	thereafter -- same here.  An inconsistent hierarchy raises
@@ -4828,7 +4838,14 @@ ___registerBases___: aClass bases: basesArray
 
 	__orig_bases__ is recorded ONLY when the hook actually fired, matching
 	CPython: an ordinary class has no such attribute at all."
-	resolved := self ___resolveMroEntries___: basesArray.
+	"RESOLVED ONCE, BY THE CALLER.  PEP 560 asks each non-class base for
+	__mro_entries__ exactly once per class statement, and a class statement
+	used to resolve the same header three times -- here, in
+	___selectStorageBase___:, and again in ___mergeSecondaryBases___: -- so a
+	hook with side effects ran three times.  The caller now resolves and passes
+	both lists.  __orig_bases__ is still decided by IDENTITY: the resolver
+	answers the SAME array when no hook fired, a new one when one did."
+	resolved := resolvedBases.
 	resolved == basesArray ifFalse: [
 		aClass @env1:___classHolderAttrStore___: #'__orig_bases__'
 			put: (tuple @env0:withAll: basesArray)].
@@ -5466,6 +5483,18 @@ ___pythonNameForSelector___: aSelector
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___mergeSecondaryBases___: aClass bases: secondaryBases
+	"The raw-bases form, for callers that have not resolved them -- type() and
+	the enum functional API.  Resolves here and hands both lists on.  A class
+	STATEMENT resolves once itself and calls the resolved: variant directly, so
+	its __mro_entries__ hooks run once rather than once per consumer."
+
+	^ self ___mergeSecondaryBases___: aClass bases: secondaryBases
+		resolved: (self ___resolveMroEntries___: secondaryBases)
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 	"Multiple-inheritance method resolution.  ``aClass`` already
 	inherits its PRIMARY base (the storage base selected by
 	___selectStorageBase___, else ``bases first'') through Smalltalk
@@ -5521,7 +5550,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	__bases__ / isinstance / issubclass / super() all consult this
 	registry; the copy-down merge below remains the dispatch mechanism
 	for now (its approximate precedence is unchanged this phase)."
-	self ___registerBases___: aClass bases: secondaryBases.
+	self ___registerBases___: aClass bases: secondaryBases resolved: resolvedBases.
 	"PEP 560 substitution, on the SAME rule ___selectStorageBase___: applies
 	one line below -- both must see the same base list or the storage base
 	will not be found in it.  ___registerBases___: is deliberately given the
@@ -5533,7 +5562,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	from -- it was silently skipped.  ``class C(Generic[K, V],
 	MutableMapping[K, V])'' therefore built a class with none of the mapping
 	mixins and raised nothing; the first sign was AttributeError on ``get''."
-	bases := self ___resolveMroEntries___: secondaryBases.
+	bases := resolvedBases.
 	storageBase := self ___selectStorageBase___: bases.
 	storageIdx := bases indexOf: storageBase.
 	overrideEligible := (storageBase isKindOf: Behavior)
