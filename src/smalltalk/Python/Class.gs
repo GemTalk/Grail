@@ -365,7 +365,7 @@ __type_params__
 	introspection, and a reader that cannot get the parameters is better served
 	by ``none'' than by an exception from an attribute read."
 
-	| names il vars tv holder assigned |
+	| names vars holder assigned result |
 	holder := [self @env0:perform: #___dynInstVars___ env: 1]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	"AN ASSIGNED VALUE WINS.  ``A.__type_params__ = whatever'' is legal and
@@ -385,14 +385,21 @@ __type_params__
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	(names @env0:isNil @env0:or: [names @env0:isEmpty])
 		ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
-	il := Python @env0:at: #builtins otherwise: nil.
-	tv := [((il @env1:instance) @env1:___import__: { 'typing' } kw: nil)
-		@env1:___pyAttrLoad___: #'TypeVar']
+	"One builder for every shape, which also reads the ``*Ts'' / ``**P'' kind
+	 prefix -- a TypeVarTuple or ParamSpec was built as a TypeVar here."
+	vars := names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n].
+	"BUILT ONCE, then cached where the ``assigned'' branch above reads it.  A
+	 class's type parameters are FIXED objects: ``(T,) = Gen.__type_params__''
+	 followed by a second read must answer the same T, and everything that
+	 resolves a forward reference through the class's type parameters depends
+	 on it -- ForwardRef('T').evaluate(owner=Gen) is T (test_annotationlib
+	 test_evaluate_with_type_params).  Building afresh on every read gave a new
+	 TypeVar each time.  The laziness itself stays, for the import-cycle reason
+	 above; only the result is kept."
+	result := tuple @env0:withAll: (Array @env0:withAll: vars).
+	[holder @env0:dynamicInstVarAt: #'__type_params__' put: result]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	tv @env0:isNil ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
-	vars := names @env0:collect: [:n |
-		tv ___pyCallValue___: { n @env0:asString } kw: nil].
-	^ tuple @env0:withAll: (Array @env0:withAll: vars)
+	^ result
 %
 
 category: 'Grail-Reflection'

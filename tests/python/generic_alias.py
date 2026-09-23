@@ -65,12 +65,17 @@ def probe():
         'call': functools.partial[int](lambda x: x + 1, 4)(),
         # and erased as a base -- __mro_entries__
         'base_call': _subclass_of_alias()(lambda x: x, 3)(),
-        # list has since opted IN, so it answers a real alias
+        # list, tuple and dict have since opted IN, so each answers a real alias
         'list_opted_in': list[int].__origin__ is list,
-        # everything that did NOT opt in still collapses
-        'dict_collapses': dict[str, int] is dict,
-        'tuple_collapses': tuple[int] is tuple,
+        'dict_opted_in': dict[str, int].__origin__ is dict,
+        'tuple_opted_in': tuple[int].__origin__ is tuple,
+        # a class that did NOT opt in still collapses
+        'plain_class_collapses': _NotOptedIn[int] is _NotOptedIn,
     }
+
+
+class _NotOptedIn:
+    pass
 
 
 def _subclass_of_alias():

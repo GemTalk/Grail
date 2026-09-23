@@ -134,11 +134,6 @@ ___emitSmalltalkOn___: aStream
 	slice printSmalltalkWithParenthesisOn: aStream.
 %
 
-category: 'Grail-annotations'
-method: SubscriptAst
-___annotationSourceString___
-	^ (value ___annotationSourceString___) , '[' , (slice ___annotationSourceString___) , ']'
-%
 method: SubscriptAst
 value: newValue
 	value := newValue

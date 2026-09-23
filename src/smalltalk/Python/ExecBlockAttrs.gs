@@ -372,8 +372,21 @@ ___globalsFor___: aBlock
 	whereas the AttributeError says the thing that is actually true -- this
 	callable cannot say where it was defined."
 
-	^ (Python @env0:at: #'PyModuleDict')
-		@env0:___forModuleNamed___: (self slotAt: aBlock attr: '__module__')
+	"THE DEF-TIME __module__, NOT THE CURRENT ONE.  __module__ is WRITABLE and
+	functools.update_wrapper writes it: a wrapper takes the WRAPPED function's
+	__module__, which is right for __module__ and wrong for __globals__ --
+	CPython's func_globals is fixed when the def runs.  Reading the current
+	slot made every wrapper of a function from another module report THAT
+	module's namespace (``w.__globals__ is inner.__globals__'', measured) and
+	resolve its own globals there; test_annotationlib's
+	test_stock_annotations_on_wrapper asserts they differ.  The def-time stamp
+	lives in the static slot, which a runtime setattr never touches; the
+	per-object slot is the fallback for a block stamped only that way."
+
+	| mod |
+	mod := self staticSlotAt: aBlock attr: '__module__'.
+	mod == nil ifTrue: [mod := self slotAt: aBlock attr: '__module__'].
+	^ (Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: mod
 %
 
 category: 'Grail-Access'

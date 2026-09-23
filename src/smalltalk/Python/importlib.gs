@@ -543,7 +543,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	recompiles the SAME class in place -- preserving the module instance's
 	identity.  Shared by loadModuleFromPath: and reload:."
 
-	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf |
+	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture |
 	"Collect declared variable names from the module body"
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
@@ -635,6 +635,13 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	arms too, not inside defs/classes): a zero-argument direct call through one
 	of them must keep load-then-call -- see CallAst>>___receiverIsImportBound___:."
 	CallAst moduleImportNames: (moduleAst body ___importBoundNamesInto___: IdentitySet new).
+	"``from __future__ import annotations'' for the WHOLE compile, not only the
+	 module body's emit (ModuleAst >> printSmalltalkOn: sets it there): a
+	 top-level def is compiled below, as a method of its own, and a class nested
+	 in it read the flag as false -- its annotations came out EVALUATED where
+	 PEP 563 stores strings (test_annotationlib's nested() generic class)."
+	savedFuture := CallAst futureAnnotations.
+	CallAst futureAnnotations: moduleAst ___hasFutureAnnotations___.
 	[
 		| debugStream debugClassName tpzPath irPath traceDir irEnabled |
 		"Accumulate every method source we hand to compileMethod: into a
@@ -788,6 +795,38 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			] on: CompileWarning do: [:ex | ex resume].
 		].
 
+		"Class-side ``___methodTypeParamsTable___'' (function name -> PEP 695
+		type-parameter names) for the module's generic top-level defs -- the
+		module-scope twin of ClassDefAst >> emitMethodTypeParamsTableOn:.  A
+		top-level def is a method on the module class, so it has no ExecBlock to
+		carry ``___pyTypeParams___:''; BoundMethod >> __type_params__ reads this."
+		[:generic | generic isEmpty ifFalse: [
+			| tpSrc |
+			tpSrc := WriteStream on: String new.
+			tpSrc nextPutAll: '___methodTypeParamsTable___'; nextPutAll: lf.
+			tpSrc nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+			generic do: [:stmt |
+				tpSrc nextPutAll: ' @env0:at: '''; nextPutAll: stmt name asString;
+					nextPutAll: ''' put: #('.
+				stmt type_params do: [:n |
+					tpSrc nextPut: $'; nextPutAll: n asString; nextPutAll: ''' '].
+				tpSrc nextPutAll: ');'].
+			tpSrc nextPutAll: ' @env0:yourself)'.
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
+					nextPutAll: 'classmethod: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: tpSrc contents on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
+			].
+			[moduleClass class compileMethod: tpSrc contents
+				dictionaries: sl
+				category: 'Grail-Python Metadata'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
+		]] value: (topLevelDefs select: [:stmt |
+			stmt type_params notNil and: [stmt type_params notEmpty]]).
+
 		"The module's own docstring, as a class-side method, so ``mod.__doc__''
 		answers the module's docstring instead of inheriting Object's through the
 		superclass chain -- measured before this, EVERY module answered ``The base
@@ -897,6 +936,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		CallAst moduleVariableNames: nil.
 		CallAst moduleClassNames: nil.
 		CallAst moduleImportNames: nil.
+		CallAst futureAnnotations: savedFuture.
 	].
 	^ moduleClass
 %
@@ -5986,6 +6026,12 @@ ___probeSourcePathFor___: aName roots: searchRoots
 	searchRoots, or nil."
 
 	| pathParts joined result |
+	"A NUL cannot be in a file name, and the OS stops reading the path at one:
+	 ``string\0.py'' probes as ``string'', so ``__import__('string\0')'' found
+	 the stdlib's string/ directory and loaded nothing, an uncatchable
+	 MessageNotUnderstood (ImportAndOpenArgsTestCase).  Not found, as in
+	 CPython, which answers ModuleNotFoundError."
+	(aName @env0:includes: (Character @env0:codePoint: 0)) ifTrue: [^ nil].
 	pathParts := $. @env0:split: aName.
 	joined := '/' @env0:join: pathParts.
 	"Return via a local rather than ``^'' out of the do: block.  This
@@ -6031,6 +6077,8 @@ ___namespacePortionsFor___: aName
 	the portions are discarded."
 
 	| pathParts joined searchRoots portions |
+	"No directory is named with a NUL -- see ___probeSourcePathFor___:roots:."
+	(aName @env0:includes: (Character @env0:codePoint: 0)) ifTrue: [^ #()].
 	pathParts := $. @env0:split: aName.
 	joined := '/' @env0:join: pathParts.
 	searchRoots := self ___importSearchRoots___.
@@ -6900,6 +6948,19 @@ ___import__: positional kw: kwargs
 		]
 		ifFalse: [name].
 
+	"A NUL CANNOT NAME A MODULE, and every probe below would read the name
+	 only up to it: the OS stops a path at a NUL, so ``__import__('string\0')''
+	 found the stdlib's string/ directory as source and as a C extension to
+	 dlopen.  CPython answers ModuleNotFoundError with the name repr'd."
+	(absoluteName @env0:asString @env0:includes: (Character @env0:codePoint: 0)) ifTrue: [
+		| mnfe msg |
+		msg := 'No module named ' @env0:,
+			((builtins @env0:___instance___) @env1:repr: absoluteName) @env0:asString.
+		mnfe := ModuleNotFoundError @env1:___new___.
+		mnfe @env1:___args___: { msg }.
+		mnfe @env0:dynamicInstVarAt: #'name' put: absoluteName @env0:asString.
+		mnfe @env1:___signal___: msg].
+
 	"Split the name into parts; detect dotted names"
 	nameParts := $. @env0:split: absoluteName.
 	isDotted := nameParts __len__ @env0:> 1.
@@ -6985,8 +7046,17 @@ ___import__: positional kw: kwargs
 				session's grailDir could not satisfy ANY .py import -- the
 				bare CPython wording blames whichever module was imported
 				first (typically the first non-Smalltalk one)."
-				ModuleNotFoundError ___signal___:
-					(self @env0:class @env0:___moduleNotFoundMessage___: absoluteName)
+				"CARRIES ``name'', as CPython's does: ``e.name'' is the module that
+				 was not found, and it is what importlib.util and pkgutil callers
+				 compare against to tell THIS module's absence from a transitive
+				 one.  ___signal___: builds the instance with args alone, so the
+				 attribute read None."
+				| mnfe msg |
+				msg := self @env0:class @env0:___moduleNotFoundMessage___: absoluteName.
+				mnfe := ModuleNotFoundError @env1:___new___.
+				mnfe @env1:___args___: { msg }.
+				mnfe @env0:dynamicInstVarAt: #'name' put: absoluteName @env0:asString.
+				mnfe @env1:___signal___: msg
 			]
 			]
 		]

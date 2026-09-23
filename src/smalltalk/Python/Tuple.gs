@@ -505,4 +505,23 @@ __getnewargs__
 	^ tupleClass @env0:withAll: { tupleClass @env0:withAll: (self @env0:asArray) }
 %
 
+category: 'Grail-Generics'
+classmethod: tuple
+__getitem__: item
+	"``tuple[int, str]'' -- a REAL types.GenericAlias, as list's is (see list
+	class >> __getitem__:, which this mirrors, subclass hook and all).
+
+	The collapse to the bare class was observable in annotations: PEP 646's
+	``tuple[*Ts]'' has to keep its arguments -- ``A.__annotations__['y'].__args__''
+	is how test_annotationlib reads the unpacked TypeVarTuple back -- and
+	``*tuple[int, ...]'' iterates the alias, which a class cannot do."
+
+	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
+			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
+			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
+	^ PyGenericAlias ___fromSubscript___: item origin: self
+%
+
 set compile_env: 0

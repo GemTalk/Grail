@@ -506,30 +506,36 @@ skipTypeParams
 	``f.__type_params__'' is one of functools.WRAPPER_ASSIGNMENTS, and
 	test_functools unpacks it (``T, = f.__type_params__'').
 
-	Only the NAME of each parameter is kept.  A bound or constraint
-	(``[T: int]'', ``[T: (int, str)]'') is consumed and dropped, as are the
-	``*''/``**'' markers of a TypeVarTuple or ParamSpec -- Grail models a type
-	parameter as an opaque placeholder, so its constraints have nothing to act
-	on."
+	Only the NAME of each parameter is kept, with its KIND as a prefix: ``*Ts''
+	for a TypeVarTuple, ``**P'' for a ParamSpec, a bare name for a TypeVar.  The
+	kind decides which typing class __type_params__ builds, and it is visible:
+	``tuple[*Ts]'' iterates a TypeVarTuple, ``Callable[P, str]'' needs a
+	ParamSpec.  A bound or constraint (``[T: int]'', ``[T: (int, str)]'') is
+	consumed and dropped -- Grail models a type parameter as an opaque
+	placeholder, so its constraints have nothing to act on.  A consumer that
+	wants the bare name strips the stars (ExecBlock >> ___pyTypeVarNamed___:)."
 
-	| depth tok names expectName |
+	| depth tok names expectName stars |
 	names := OrderedCollection new.
 	tok := self peek.
 	(tok notNil and: [tok isOp: '[']) ifFalse: [^ names asArray].
 	depth := 0.
 	expectName := false.
+	stars := ''.
 	[
 		tok := self advance.
 		(tok isOp: '[') ifTrue: [
 			depth := depth + 1.
-			depth = 1 ifTrue: [expectName := true]].
+			depth = 1 ifTrue: [expectName := true. stars := '']].
 		(tok isOp: ']') ifTrue: [depth := depth - 1].
 		"At depth 1 a comma starts the next parameter; the first identifier after
 		that (or after the opening bracket) is its name.  Anything else at that
 		depth -- a colon and its bound, a star -- is skipped."
-		(depth = 1 and: [tok isOp: ',']) ifTrue: [expectName := true].
+		(depth = 1 and: [tok isOp: ',']) ifTrue: [expectName := true. stars := ''].
+		(depth = 1 and: [expectName and: [tok isOp: '*']]) ifTrue: [stars := '*'].
+		(depth = 1 and: [expectName and: [tok isOp: '**']]) ifTrue: [stars := '**'].
 		(depth = 1 and: [expectName and: [tok type == #NAME]]) ifTrue: [
-			names add: tok value asString.
+			names add: stars , tok value asString.
 			expectName := false].
 		depth = 0
 	] whileFalse.
@@ -662,6 +668,8 @@ parseAtom
 	adjacent token is an FSTRING, drop into the f-string parser
 	which handles mixed STRING+FSTRING runs and emits a concat
 	chain."
+	"PEP 750 t-string: the same field scanner, building a Template instead."
+	tok isTString ifTrue: [^ self parseFStringLiteral].
 	(tok isString or: [tok isFString]) ifTrue: [
 		"Look ahead: if any token in the adjacent string run is an
 		FSTRING, route through parseFStringLiteral; otherwise the
@@ -671,8 +679,8 @@ parseAtom
 		anyF := false.
 		[scan <= tokens size
 			and: [(tokens at: scan) isString
-				or: [(tokens at: scan) isFString]]] whileTrue: [
-			(tokens at: scan) isFString ifTrue: [anyF := true].
+				or: [(tokens at: scan) isFString or: [(tokens at: scan) isTString]]]] whileTrue: [
+			((tokens at: scan) isFString or: [(tokens at: scan) isTString]) ifTrue: [anyF := true].
 			scan := scan + 1.
 		].
 		anyF ifTrue: [^ self parseFStringLiteral].
@@ -3395,14 +3403,17 @@ parseFStringLiteral
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
 	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
-	  wrapped anchor |
+	  wrapped anchor sawT sawNonT tExpr |
 	startTok := self peek.
 	parts := OrderedCollection new.
-	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString]]] whileTrue: [
+	sawT := false.
+	sawNonT := false.
+	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString or: [aTok isTString]]]] whileTrue: [
 		tok := self advance.
+		tok isTString ifTrue: [sawT := true] ifFalse: [sawNonT := true].
 		value := tok value.
 		len := value size.
-		tok isFString ifFalse: [
+		(tok isFString or: [tok isTString]) ifFalse: [
 			"Plain string token — append as a literal segment."
 			parts add: #literal -> value.
 		] ifTrue: [
@@ -3593,8 +3604,19 @@ parseFStringLiteral
 				innerParser ___variableStack___ do: [:innerScope |
 					innerScope do: [:varName | self declareVariable: varName]].
 				"Apply conversion / format spec."
-				converted := self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok.
-				parts add: #expr -> converted.
+				tok isTString
+					ifTrue: [
+						"PEP 750: the field stays UNCONVERTED -- the value, its source
+						 text, the conversion and the spec go into an Interpolation.
+						 CPython keeps the text's leading whitespace and drops the
+						 trailing (t'{ x }' has expression ' x')."
+						tExpr := exprText asString.
+						[tExpr notEmpty and: [tExpr last isSeparator]]
+							whileTrue: [tExpr := tExpr copyFrom: 1 to: tExpr size - 1].
+						parts add: #interp -> { exprAst. tExpr. conversion. formatSpec }]
+					ifFalse: [
+						converted := self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok.
+						parts add: #expr -> converted].
 			]
 		] ifFalse: [
 			ch == $} ifTrue: [
@@ -3620,6 +3642,10 @@ parseFStringLiteral
 	].
 	].
 	].
+	sawT ifTrue: [
+		sawNonT ifTrue: [
+			SyntaxError signal: 'cannot mix t-string literals with string or bytes literals'].
+		^ self ___templateFromParts___: parts from: startTok].
 	"Empty f-string → empty literal."
 	parts isEmpty ifTrue: [
 		^ConstantAst new
@@ -3660,6 +3686,68 @@ ___fstringDebugEqualsIn___: text
 	((prev == $=) or: [(prev == $!) or: [(prev == $<)
 		or: [(prev == $>) or: [prev == $:]]]]) ifTrue: [^ 0].
 	^ i
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+___templateFromParts___: parts from: startTok
+	"PEP 750: a t-string's parts as a TemplateStrAst -- a call to
+	string.templatelib's _from_literal with each literal run as a str and each
+	field as a (value, expression, conversion, format_spec) tuple.
+
+	Reached through ``__import__'' because Template and Interpolation are Python
+	classes in string/templatelib.py; CPython's are C types the compiler builds
+	directly, so it needs no name at all.  The parts are also kept on the node,
+	unevaluated, for the STRING format's source text (TemplateStrAst)."
+
+	| loc args templateParts callee |
+	loc := startTok.
+	args := OrderedCollection new.
+	templateParts := OrderedCollection new.
+	parts do: [:assoc |
+		assoc key == #literal
+			ifTrue: [
+				args add: (self ___fstringPartToAst: assoc from: loc).
+				templateParts add: assoc value asString]
+			ifFalse: [ | f conv spec specAst |
+				f := assoc value.
+				conv := (f at: 3) isNil ifTrue: [nil] ifFalse: [(f at: 3) asString].
+				spec := f at: 4.
+				specAst := spec isNil
+					ifTrue: [ConstantAst new value: ''; kind: nil; from: loc to: loc; yourself]
+					ifFalse: [(spec includes: ${)
+						ifTrue: [self ___fstringSpecExprFor: spec at: loc]
+						ifFalse: [ConstantAst new value: spec asString; kind: nil; from: loc to: loc; yourself]].
+				args add: (TupleAst new
+					elts: { f at: 1.
+						ConstantAst new value: (f at: 2); kind: nil; from: loc to: loc; yourself.
+						ConstantAst new value: conv; kind: nil; from: loc to: loc; yourself.
+						specAst };
+					ctx: self loadCtx;
+					from: loc to: loc; yourself).
+				templateParts add: { f at: 2. conv. spec isNil ifTrue: [nil] ifFalse: [spec asString] }]].
+	callee := AttributeAst new
+		value: (CallAst new
+			function: (NameAst new id: #'__import__'; ctx: self loadCtx; from: loc to: loc; yourself);
+			arguments: {
+				ConstantAst new value: 'string.templatelib'; kind: nil; from: loc to: loc; yourself.
+				ConstantAst new value: nil; kind: nil; from: loc to: loc; yourself.
+				ConstantAst new value: nil; kind: nil; from: loc to: loc; yourself.
+				TupleAst new
+					elts: { ConstantAst new value: '_from_literal'; kind: nil; from: loc to: loc; yourself };
+					ctx: self loadCtx;
+					from: loc to: loc; yourself };
+			keywords: Array new;
+			from: loc to: loc; yourself);
+		attr: #'_from_literal';
+		ctx: self loadCtx;
+		from: loc to: loc; yourself.
+	^ TemplateStrAst new
+		function: callee;
+		arguments: args asArray;
+		keywords: Array new;
+		templateParts: templateParts asArray;
+		from: startTok to: self lastToken; yourself
 %
 
 category: 'Grail-parsing - atoms'
@@ -3815,6 +3903,15 @@ parseSubscript
 			ctx: self loadCtx;
 			from: (tokens at: position - 1) to: self lastToken ; yourself
 	].
+
+	"``a[*b]'' is ``a[(*b,)]'' (PEP 646): a lone starred index is a one-element
+	 tuple display.  Bare, it reached StarredAst's expression printer, which
+	 answers a ``*-unpack in call sites'' TypeError -- so ``tuple[*Ts]'' failed."
+	(first isKindOf: StarredAst) ifTrue: [
+		^ TupleAst new
+			elts: { first };
+			ctx: self loadCtx;
+			from: (tokens at: position - 1) to: self lastToken ; yourself].
 
 	^first
 %

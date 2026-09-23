@@ -2519,11 +2519,6 @@ setTo: aValue scope: aScope
 	aScope set: id to: aValue.
 %
 
-category: 'Grail-annotations'
-method: NameAst
-___annotationSourceString___
-	^ id asString
-%
 
 category: 'Grail-IR Codegen'
 method: NameAst

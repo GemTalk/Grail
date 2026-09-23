@@ -1104,12 +1104,14 @@ def _phase2_annotations_results():
                          and ma["rest"] is float and ma["return"] == str)
     out['mod_empty'] = (len(mod_plain.__annotations__) == 0)
 
-    # Class-body annotations (own-only; unannotated names excluded).  These
-    # are still SOURCE STRINGS: class-body ``x: int'' is stored by a
-    # different path (a class-side accessor built from AnnAssignAst) that
-    # PEP 649's __annotate__ conversion has not reached yet.
+    # Class-body annotations (own-only; unannotated names excluded).  PEP 649
+    # VALUES, as CPython 3.14 answers them: ``x: int'' is the class int, and
+    # ``y: "Later"'' is the string literal it was written as.  These used to be
+    # SOURCE STRINGS ('int') -- the one annotation path the __annotate__
+    # conversion had not reached; ClassDefAst now emits a class annotate
+    # function and the class-side accessor computes from it lazily.
     ca = _AnnHolder.__annotations__
-    out['class_ann'] = (ca["x"] == "int" and ca["y"] == "Later"
+    out['class_ann'] = (ca["x"] is int and ca["y"] == "Later"
                         and "z" not in ca)
     # A subclass reports only its OWN class-body annotations, not the parent's.
     cc = _AnnChild.__annotations__

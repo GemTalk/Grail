@@ -2656,6 +2656,14 @@ emitOneAnnotation: aNode on: aStream
 	dictionary list without the kernel ``Globals'', so ``ExecBlock'' --
 	where this method otherwise belongs -- is an undefined symbol there."
 
+	"Under ``from __future__ import annotations'' the annotation IS its source
+	 string, in every format -- CPython 3.14's annotate function for such a def
+	 answers strings for VALUE too."
+	"PEP 563 stores the UNPARSED expression, so a string literal keeps its
+	 quotes; the root-verbatim rule of ___annotationSourceString___ is for
+	 recovering text, which is not what the future import does."
+	CallAst futureAnnotations ifTrue: [
+		^ self emitStringLiteral: (aNode ___unparse___: 4) on: aStream].
 	aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
 	aNode printSmalltalkOn: aStream.
 	aStream nextPutAll: '] source: '.
@@ -6908,10 +6916,10 @@ ___irIneligibilityReason___
 	generated text mentions the parameter names nowhere.
 
 	So there was nothing for the IR path to reproduce, and refusing was
-	conservatism rather than a gap.  The names are erased on BOTH paths, which
-	is why ``__type_params__'' is unreadable on either -- a real divergence
-	from CPython, shared, older than this cut and not narrowed by it; it is the
-	XFAIL in tests/python/type_params.py.
+	conservatism rather than a gap.  Neither path carries the names IN THE
+	METHOD: they ride a class-side ___methodTypeParamsTable___ that the module
+	and class compiles emit for both paths alike (BoundMethod / UnboundMethod >>
+	__type_params__ read it).
 
 	The NESTED form DOES carry them, and that emit is in
 	___emitIRNestedSpecsOn___-land; see ___irNestedDefReasonUnguarded___."
@@ -7629,7 +7637,8 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	"PEP 695 type parameters, as printSmalltalkOn: cascades them: the NAMES
 	only, as an env-0 Array of Strings.  A closure is the one def shape that
 	can carry them -- ``___pyTypeParams___:'' is an ExecBlock method -- which is
-	why a top-level def and a method emit nothing for them at all."
+	why a top-level def and a method emit nothing for them here: theirs ride
+	the class-side ___methodTypeParamsTable___ instead."
 	(type_params notNil and: [type_params notEmpty]) ifTrue: [
 		specs add: { #'___pyTypeParams___:'.
 			{ aBuilder arrayOf: ((type_params collect: [:n | aBuilder obj: n asString])
@@ -8379,6 +8388,13 @@ ___emitIRAnnotateBlockOn___: aBuilder
 		specs := OrderedCollection new.
 		entry := [:key :node |
 			| thunk |
+			"The future import's twin of emitOneAnnotation:on: -- the source string
+			 itself, with no thunk to build."
+			CallAst futureAnnotations ifTrue: [
+				specs add: { #'at:put:'.
+					{ aBuilder obj: key. aBuilder obj: (node ___unparse___: 4) }.
+					0 }]
+			ifFalse: [
 			"nestedFunctionDo: for the duration of the EXPRESSION: the thunk is a
 			deferred function, so a read of an enclosing local in it must carry
 			the text's free-read guard (``(x ifNil: [UnboundLocalError
@@ -8403,7 +8419,7 @@ ___emitIRAnnotateBlockOn___: aBuilder
 						aBuilder send: #at: to: (aBuilder var: (argLeaves at: 1))
 							with: { aBuilder obj: 1 } env: 0 }
 					env: 1 }.
-				0 }].
+				0 }]].
 		self ___annotatedArgs___ do: [:a | entry value: a name asString value: a annotation].
 		returns ifNotNil: [:r | entry value: 'return' value: r].
 		specs add: { #yourself. { }. 0 }.

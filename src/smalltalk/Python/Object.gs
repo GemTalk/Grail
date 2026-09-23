@@ -8273,6 +8273,31 @@ ___pyAttrLoad___: aSym
 			^ AttributeError ___signal___: ('type object '''
 				@env0:, (self ___grailPythonClassNameForError___)
 				@env0:, ''' has no attribute ''' @env0:, s @env0:, '''')].
+		"PEP 649 ``__annotate__'' / ``__annotations__'' exist on a CLASS only, and
+		only on one Grail generated: see object class >> ___pyClassAnnotate___.
+		A built-in type answers AttributeError here, as it does in CPython."
+		(((s @env0:= '__annotate__') or: [s @env0:= '__annotations__'])
+			"A class body that DEFINES its own ``def __annotate__(format)'' keeps
+			 it: CPython's getter answers the class dict's __annotate__ first.  So
+			 the generic one steps aside when the class's OWN method dictionary
+			 has the def, and the ordinary lookup below finds it."
+			"Both selector shapes: ``def __annotate__(format)'' has no ``self'', so
+			 its one parameter is the receiver and it compiles UNARY."
+			and: [(s @env0:= '__annotate__') @env0:not
+				or: [((self @env0:compiledMethodAt: #'__annotate__:' environmentId: 1 otherwise: nil) == nil)
+					and: [(self @env0:compiledMethodAt: #'__annotate__' environmentId: 1 otherwise: nil) == nil]]])
+			ifTrue: [
+			(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+				"The PYTHON name, read through __name__ -- the error helper answers
+				 the GemStone class name, so int printed as 'Integer'."
+				^ AttributeError ___signal___: ('type object '''
+					@env0:, ([(self @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+						@env0:on: AbstractException
+						do: [:ex | ex @env0:return: self @env0:name @env0:asString])
+					@env0:, ''' has no attribute ''' @env0:, s @env0:, '''')].
+			^ (s @env0:= '__annotate__')
+				ifTrue: [self @env1:___pyClassAnnotate___]
+				ifFalse: [self @env1:___pyClassAnnotations___]].
 		"Class-level dunders that should always read as values, never
 		wrap as BoundMethods.  Without this, ``type(node).__name__``
 		on any class would wrap the inherited Behavior-side getter
@@ -13360,6 +13385,15 @@ ___pyAttrStore___: aName put: aValue
 		for every program that never does this."
 		(aName @env0:asString @env0:= '__hash__') ifTrue: [
 			SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' put: true].
+		"``C.__annotate__ = f'' / ``C.__annotations__ = d'' -- the setters of the
+		class-only PEP 649 pair; see object class >> ___pyClassAnnotate___."
+		(((aName @env0:asString @env0:= '__annotate__')
+			or: [aName @env0:asString @env0:= '__annotations__'])
+			and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
+				(aName @env0:asString @env0:= '__annotate__')
+					ifTrue: [self @env1:___pyClassAnnotate___: aValue]
+					ifFalse: [self @env1:___pyClassAnnotations___: aValue].
+				^ aValue].
 		"``cls.__qualname__ = 'Outer.Inner''' is a WRITABLE slot in CPython, and
 		pickle depends on it: a class defined in a function body is pickled by
 		walking its dotted qualname from the module, so the idiom is to attach
@@ -14608,6 +14642,108 @@ ___grailClassDefault___: aSymbol
 	and so cannot be shadowed by a Python local; see ___grailClassDefaultPut___:."
 
 	^ module @env0:___classDefaultOwnedBy: self at: aSymbol
+%
+
+set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotate___
+	"PEP 649: the class's annotate function, or None -- what ``Cls.__annotate__''
+	reads.  REACHED ONLY THROUGH ___pyAttrLoad___'s class branch, never by the
+	name itself: CPython's __annotate__ and __annotations__ are data
+	descriptors on the METACLASS, so an INSTANCE cannot see them
+	(``A().__annotate__'' is an AttributeError) and neither can a built-in
+	type.  A class-side method called __annotate__ was visible to both --
+	performed for an instance, wrapped as a bound method for int -- and
+	``get_annotations(CustomClass())'' answered {} where CPython raises
+	TypeError.  So the Python names are recognised only when the receiver is a
+	Grail-generated CLASS, and routed here.
+
+	EVERY Python class answers it -- None when it has no annotations of its
+	own (measured: ``class D: pass; D.__annotate__ is None'').  A class
+	inherits none from its bases; this reads the receiver's OWN holder only,
+	under CPython's class-dict key ``__annotate_func__''.  A class Grail did
+	not generate -- int, str, a kernel class -- has no holder and answers
+	AttributeError, as ``int.__annotate__'' does in CPython.
+
+	Class-side because an INSTANCE must not see it: ``A().__annotate__'' is an
+	AttributeError in CPython too."
+
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotate__' on: self].
+	^ (self ___classBodyDynamicRead___: #'__annotate_func__') @env0:ifNil: [None]
+%
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotate___: aValue
+	"``C.__annotate__ = f'' -- replaces the annotate function and INVALIDATES the
+	cached __annotations__, so the next read recomputes from the new function
+	(measured: after the assignment, __annotations__ answers the new dict).
+	CPython refuses a value that is neither callable nor None."
+
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotate__' on: self].
+	((aValue == None) or: [(builtins @env1:instance) @env1:callable: aValue]) ifFalse: [
+		^ TypeError ___signal___: '__annotate__ must be callable or None'].
+	self ___classHolderAttrStore___: #'__annotate_func__' put: aValue.
+	self ___classHolderAttrStore___: #'__annotations_cache__' put: nil.
+	^ None
+%
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotations___
+	"PEP 649: the class's OWN annotations, computed on first read and cached.
+
+	LAZY, and that is the point: CPython 3.14 evaluates class annotations when
+	they are read, not when the class statement runs, so ``class Late: x:
+	Undefined'' defines cleanly and raises NameError only at the read.
+	Evaluating at class creation would break every forward reference CPython
+	accepts.  Grail used to store PEP 563 SOURCE STRINGS here instead, so
+	``A.__annotations__'' answered {'a': 'int'} where CPython answers
+	{'a': <class 'int'>} -- and in an unordered dictionary, so the keys came back
+	in the wrong order as well.
+
+	Resolution order: an EXPLICIT ``__annotations__'' the class body or a
+	caller stored; then the cache; then the annotate function called with
+	Format.VALUE, whose result is cached.  The cache is the object returned, so
+	mutating it persists, as it does in CPython.  A class with no annotate
+	function answers an empty dict, and a class Grail did not generate answers
+	AttributeError."
+
+	| explicit cached annotate ann |
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotations__' on: self].
+	explicit := self ___classBodyDynamicRead___: #'__annotations__'.
+	explicit @env0:notNil ifTrue: [^ explicit].
+	cached := self ___classBodyDynamicRead___: #'__annotations_cache__'.
+	cached @env0:notNil ifTrue: [^ cached].
+	annotate := self ___classBodyDynamicRead___: #'__annotate_func__'.
+	((annotate @env0:isNil) or: [annotate == None])
+		ifTrue: [ann := PyDict @env0:new]
+		ifFalse: [
+			ann := annotate @env1:___pyCallValue___: { 1 } kw: nil.
+			(ann @env0:isKindOf: KeyValueDictionary) ifFalse: [
+				^ TypeError ___signal___: ('__annotate__ returned non-dict of type '''
+					@env0:, (bytes ___pyTypeNameOf___: ann) @env0:, '''')]].
+	self ___classHolderAttrStore___: #'__annotations_cache__' put: ann.
+	^ ann
+%
+
+category: 'Grail-Annotations'
+classmethod: object
+___pyClassAnnotations___: aValue
+	"``C.__annotations__ = d'' -- an explicit dict, which the getter answers
+	ahead of any computed one."
+
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+		^ AttributeError @env0:___signalMissing___: '__annotations__' on: self].
+	self ___classHolderAttrStore___: #'__annotations__' put: aValue.
+	^ None
 %
 
 set compile_env: 0

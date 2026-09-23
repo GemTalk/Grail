@@ -277,22 +277,13 @@ literal in a `def` is captured as `__doc__` (FunctionDefAst).
 
 Still missing, in the order they cost conformance:
 
-* **PEP 695 type params on a module-level `def` or a method.** No longer
-  "always `()`": a def or lambda that compiles to a BLOCK carries its
-  type parameters, and `typing.TypeVar` is a real class so
-  `isinstance(T, TypeVar)` works (test_funcattrs'
-  `test___type_params__` passes).  What is still missing is the other
-  code path.  A module-level `def` compiles to a real Smalltalk METHOD
-  whose metadata lives in a PyCode built by
-  `FunctionDefAst >> emitPyCodeExprOn:qualname:` and stored in a method
-  code table, and `FunctionDefAst` emits the `___pyTypeParams___` stamp
-  only on the nested-def cascade — so `module_level_generic[U]` answers
-  AttributeError rather than `(U,)`.  Closing it means carrying the
-  names on the PyCode (a `___setTypeParamNames___:` cascade beside the
-  `___setFlags___:` / `___setFreevars___:` ones already emitted for
-  both paths) plus a `BoundMethod` / `UnboundMethod` reader and their
-  write guards.  Blocks `test_functools`'
-  `TestUpdateWrapper.test_default_update`.
+* ~~**PEP 695 type params on a module-level `def` or a method.**~~ Closed:
+  a def that compiles to a METHOD has its names in a class-side
+  `___methodTypeParamsTable___` (the module class's for a top-level def, the
+  defining class's for a method), which `BoundMethod` / `UnboundMethod >>
+  __type_params__` read, as `__code__` reads `___methodCodeTable___`.  The
+  kind survives too -- `*Ts` builds a TypeVarTuple and `**P` a ParamSpec,
+  all with `infer_variance=True` as CPython mints them.
 * **PEP 649 `__annotate__`**, and annotations are PEP 563 *source
   strings* rather than evaluated objects (`{'x': 'int'}`, not
   `{'x': int}`).  `WRAPPER_ASSIGNMENTS` therefore names

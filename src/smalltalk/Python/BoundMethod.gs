@@ -317,6 +317,7 @@ ___pythonValueAttrs___
 		 comes back wrapped as a BoundMethod, so ``f.__builtins__ is
 		 __builtins__'' is False and the attribute looks broken rather than
 		 unevaluated."
+		add: #'__type_params__';
 		add: #'__builtins__';
 		add: #'__dict__';
 		yourself
@@ -1051,6 +1052,13 @@ __annotations__
 	reports an empty dict, matching CPython's ``always has one''."
 
 	| cls |
+	"A class-body sibling reference is receiver-less but carries its
+	 definingClass, exactly as __annotate__ resolves it.  Answering {} for it
+	 was wrong only while the class body RUNS -- the one time that handle is
+	 read -- so ``get_annotations(one)'' inside the body saw nothing
+	 (test_annotationlib's GH-143831 test)."
+	(receiver == nil and: [definingClass @env0:notNil]) ifTrue: [
+		^ self ___methodAnnotationsForClass___: definingClass name: selector @env0:asString].
 	receiver == nil ifTrue: [^ KeyValueDictionary @env0:new].
 	(receiver isKindOf: module)
 		ifTrue: [^ receiver @env0:___functionAnnotationsFor___: selector @env0:asString].
@@ -1346,6 +1354,51 @@ ___methodLookupChainFor___: aClass
 		chain @env0:add: c.
 		c := c @env0:superclass].
 	^ chain
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__type_params__
+	"PEP 695: ``f.__type_params__'' for a module-level function or a bound
+	method.  Such a def compiles to a Smalltalk method, which cannot carry the
+	``___pyTypeParams___:'' cascade a closure does, so the parameter names ride
+	the owning class's class-side ___methodTypeParamsTable___ -- the module
+	class's for a top-level def -- found the way __code__ finds its PyCode.  The
+	empty tuple for a def that declares none, as in CPython.
+
+	Used to be absent altogether, an AttributeError on a module-level def: the
+	XFAIL tests/python/type_params.py pinned."
+
+	| cls tbl |
+	cls := (receiver == nil and: [definingClass @env0:notNil])
+		ifTrue: [definingClass]
+		ifFalse: [
+			receiver == nil
+				ifTrue: [nil]
+				ifFalse: [(receiver isKindOf: Class)
+					ifTrue: [receiver]
+					ifFalse: [receiver @env0:class]]].
+	tbl := cls == nil ifTrue: [nil] ifFalse: [
+		self ___methodTableEntryForClass___: cls
+			table: #'___methodTypeParamsTable___'
+			name: selector @env0:asString].
+	^ ExecBlock @env0:___pyTypeParamsForClass___: cls name: selector table: tbl
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___methodTableEntryForClass___: aClass table: aTableSelector name: aName
+	"First entry named aName in the class-side table aTableSelector along the
+	lookup chain, or nil -- ___methodCodeForClass___:name: for any table."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
+		((c @env0:class @env0:whichClassIncludesSelector: aTableSelector environmentId: 1) ~~ nil) ifTrue: [
+			tbl := c @env0:perform: aTableSelector env: 1.
+			v := tbl @env0:at: aName otherwise: nil.
+			v == nil ifFalse: [^ v]]].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'
