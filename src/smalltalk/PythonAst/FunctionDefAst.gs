@@ -8248,18 +8248,25 @@ ___emitIRFreeVariableRead___: aName on: aBuilder
 	and one the fixture's values could not have shown.
 
 	Resolved through the shared NameAst route rather than by spelling the
-	module read again here, so the two paths cannot drift on it.  Anything else
-	leafless still raises: replacing a fallback with an emit is a behaviour
-	change, and this cut measured only the declared-global shape."
+	module read again here, so the two paths cannot drift on it.
+
+	EVERY OTHER LEAFLESS NAME TAKES THAT ROUTE TOO, because that is all the
+	text ever does: ___emitFreeVariableRead___:parent:on: builds a NameAst at
+	the def site whatever the name.  Testing only the NEAREST enclosing
+	function missed a declaration made further out -- ``global x'' in g, a
+	plain i inside it, and h inside i reading x: i binds nothing, so there is
+	no leaf, and i declares nothing, so the test answered false and this
+	raised.  NameAst's own walk (___pythonLocalInEnclosingFunctions___:) stops
+	at the innermost scope that binds OR declares the name, which is the rule
+	GlobalDeclarationScopeTestCase pins.  While importlib caught emit errors
+	the raise was a quiet text fallback; without that seam it failed the
+	module load."
 
 	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
 	(self ___irMethodMode___ and: [CallAst isSelfReference: aName asSymbol])
 		ifTrue: [^ aBuilder selfNode].
-	(CallAst moduleClassBeingCompiled notNil
-		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: aName asSymbol])
-		ifTrue: [^ self ___emitIRFreeVariableRead___: aName asSymbol
-			parent: self parent on: aBuilder].
-	Error signal: 'IR codegen: free variable ' , aName asString , ' has no leaf at the def site'
+	^ self ___emitIRFreeVariableRead___: aName asSymbol
+		parent: self parent on: aBuilder
 %
 
 category: 'Grail-IR Codegen'
