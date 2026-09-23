@@ -1017,6 +1017,23 @@ __annotate__
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+__type_params__
+	"PEP 695: ``Cls.method.__type_params__''.  A class-body def compiles to a
+	Smalltalk method, so the parameter names ride the defining class's
+	class-side ___methodTypeParamsTable___, as its doc and code do.  The empty
+	tuple for a def that declares none, as in CPython."
+
+	| cls |
+	cls := self ___metadataClass___.
+	^ ExecBlock @env0:___pyTypeParamsForClass___: cls
+		name: selector
+		table: (cls == nil
+			ifTrue: [nil]
+			ifFalse: [self ___tableEntryFor___: cls table: #'___methodTypeParamsTable___'])
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 ___tableEntryFor___: aClass table: aTableSelector
 	"First entry named by this handle's selector in the class-side metadata table
 	``aTableSelector'' along aClass's LOOKUP CHAIN (superclasses, then the C3
@@ -1486,6 +1503,7 @@ ___pythonValueAttrs___
 		"``__builtins__'' is a namespace DICT too and needs the hook for the same
 		 reason as ``__globals__'' above -- unlisted, the accessor comes back
 		 wrapped as a BoundMethod and the identity check fails."
+		add: #'__type_params__';
 		add: #'__builtins__';
 		add: #'__dict__';
 		yourself

@@ -1371,9 +1371,16 @@ printSmalltalkRuntimeOn: aStream
 	test.test_traceback at import -- and the attr statements are emitted at that
 	point, so a table compiled afterwards would not exist yet.  The table is a
 	literal dict of compile-time constants, depending only on the class already
-	existing, so it is safe this early.  (The sibling tables stay late; nothing
-	reads __doc__ / __annotations__ from inside a class body.)"
+	existing, so it is safe this early.  (The doc table stays late.)"
 	self emitMethodCodeTableOn: aStream className: name.
+	"The ``___methodAnnotationsTable___'' (method-name -> annotate function;
+	BoundMethod >> __annotations__ walks the superclass chain consulting it) is
+	early for the same reason.  A class body DOES read a sibling def's
+	annotations while it runs -- ``get_annotations(one, format=FORWARDREF)'' in
+	test_annotationlib's GH-143831 test -- and compiled late the read found no
+	table and answered {}.  Safe this early: the annotate blocks are BUILT when
+	the table method runs and evaluate their names only when called."
+	self emitMethodAnnotationsTableOn: aStream className: name.
 
 	"``___receiverlessMethods___'' is early for the SAME reason, and it is a
 	call rather than a read that needs it: a class body may CALL a sibling
@@ -1704,6 +1711,64 @@ printSmalltalkRuntimeOn: aStream
 		def and the end of the body would be seen late.  That shape is pathological
 		and the ordering is the same compromise the nonlocal writes above accept."
 		self emitMethodDefaultStoresOn: aStream className: name.
+		"INSIDE the body-emit window, like the default stores above and for the
+		 same reason: the annotate block is built INLINE here, and its names must
+		 resolve through the class-body branches an attribute VALUE uses.  Emitted
+		 after the window closed, ``class C: U = int; x: U'' in a function with its
+		 own U read the FUNCTION's U, and in a METHOD an enclosing local became a
+		 class-cell load on the method's receiver -- ``free variable referenced
+		 before assignment'' (test_annotationlib test_nonlocal_in_annotation_scope).
+		 And with EVERY class-body name bound (nil): classBodyBoundNames is
+		 position-gated per statement and is left holding whatever the last one
+		 set, but an annotation is evaluated lazily, after the whole body ran --
+		 class namespace first, then the enclosing scope."
+		CallAst classBodyBoundNames: nil.
+		"PEP 649 ``__annotate__'' for a class with class-body annotations: ONE
+		annotate block, stored in the class's own holder under CPython's class-dict
+		key ``__annotate_func__''.  The generic class-side accessors on object
+		(``__annotate__'' / ``__annotations__'') read it, call it with
+		Format.VALUE on the first ``__annotations__'' read, and cache the result.
+
+		This replaces a per-class accessor answering a dict of PEP 563 SOURCE
+		STRINGS, built at class creation in an unordered dictionary: CPython 3.14
+		answers the evaluated types, lazily, in declaration order.  The block is
+		CREATED here, inside the class build, so its annotation expressions resolve
+		in the class body's scope; it is not CALLED until the annotations are read,
+		so a forward reference in a class annotation no longer has to resolve at
+		class creation.  An explicit ``__annotations__'' in the class body keeps
+		its own store and suppresses this, as before."
+		((self classAnnotationPairs notEmpty)
+			and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
+				ifTrue: [
+			"Under ``from __future__ import annotations'' a class keeps PEP 563: an
+			 EAGER dict of source strings, and no annotate function at all (measured:
+			 K.__annotate__ is None there)."
+			CallAst futureAnnotations
+				ifTrue: [
+					aStream nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotations__'' put: ((PyDict @env0:new)'.
+					"The UNPARSED expression, quotes and all -- see
+					 FunctionDefAst >> emitOneAnnotation:on:."
+					body body do: [:stmt |
+						((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]) ifTrue: [
+							aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
+							self emitStringLiteral: (stmt annotation ___unparse___: 4) on: aStream.
+							aStream nextPut: $;]].
+					aStream nextPutAll: ' @env0:yourself).'; lf]
+				ifFalse: [
+					aStream nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotate_func__'' put: '.
+					self emitClassAnnotateBlockOn: aStream.
+					aStream nextPutAll: '.'; lf.
+					"...and into the class-body NAMESPACE, when a metaclass prepared
+					 one: CPython's ``__annotate_func__'' is a class-body binding, so a
+					 metaclass __new__ reads it from ns --
+					 annotationlib.get_annotate_from_class_namespace exists for that.
+					 A no-op when no namespace is pending."
+					aStream nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___grailNsStore___: #''__annotate_func__'' value: (';
+						nextPutAll: self ___stVarName___;
+						nextPutAll: ' @env1:___classBodyDynamicRead___: #''__annotate_func__'').'; lf]].
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -1795,39 +1860,8 @@ printSmalltalkRuntimeOn: aStream
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
-	"``__annotations__`` accessor/setter + init for a class with class-body
-	annotations.  The getter reads the class's OWN holder entry only
-	(___classBodyDynamicRead___:) and answers {} when there is none, matching
-	CPython's own-annotations-only ``Cls.__annotations__'': a subclass never
-	sees its parent's."
-	((self classAnnotationPairs notEmpty)
-		and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
-			ifTrue: [
-		| lf accessorSrc setterSrc |
-		lf := Character lf asString.
-		accessorSrc := '__annotations__' , lf , '	^ (self ___classBodyDynamicRead___: #''__annotations__'') @env0:ifNil: [KeyValueDictionary @env0:new]'.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: accessorSrc
-			category: 'Grail-Annotations'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		setterSrc := '__annotations__: ___1' , lf , '	self ___classHolderAttrStore___: #''__annotations__'' put: ___1.'.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: setterSrc
-			category: 'Grail-Annotations'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __annotations__: '.
-		self emitClassAnnotationsDictOn: aStream.
-		aStream nextPutAll: '.'; lf].
-	"Compile a class-side ``___methodAnnotationsTable___`` (method-name ->
-	annotations dict) for every annotated instance method; BoundMethod >>
-	__annotations__ walks the superclass chain consulting it."
-	self emitMethodAnnotationsTableOn: aStream className: name.
+	"(The class-side ``___methodAnnotationsTable___'' is compiled EARLY, beside
+	 ___methodCodeTable___ -- see there.)"
 	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
 	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
 	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
@@ -1842,6 +1876,7 @@ printSmalltalkRuntimeOn: aStream
 	__doc__ and claiming to be documented as ``The base class of the class
 	hierarchy...''."
 	self emitMethodDocTableOn: aStream className: name.
+	self emitMethodTypeParamsTableOn: aStream className: name.
 	self emitStaticMethodTableOn: aStream className: name.
 
 	"Compile the synthetic ``__module__'' accessor + setter on every
@@ -4778,6 +4813,30 @@ classAnnotationPairs
 
 category: 'Grail-code generation'
 method: ClassDefAst
+emitClassAnnotateBlockOn: aStream
+	"The class's PEP 649 annotate function: a block taking (positional-array,
+	kwargs-dict) -- Grail's shape for a block used as a Python callable -- and
+	answering an ORDERED PyDict of name -> annotation, in declaration order.
+	Each annotation goes through PyAnnotate >> ___annotationValue___:source:format:
+	as FunctionDefAst >> emitOneAnnotation:on: sends it, so a class answers the
+	three formats exactly as a function does: VALUE evaluates, STRING is the
+	source text, FORWARDREF evaluates per key."
+
+	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]) ifTrue: [
+			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
+			aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
+			stmt annotation printSmalltalkOn: aStream.
+			aStream nextPutAll: '] source: '.
+			self emitStringLiteral: stmt annotation ___annotationSourceString___ on: aStream.
+			aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'.
+			aStream nextPut: $;]].
+	aStream nextPutAll: ' @env0:yourself)]'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 emitClassAnnotationsDictOn: aStream
 	"Emit the ``{ name -> annotation-source-string, ... }'' dict expression
 	for this class's class-body annotations — same shape as
@@ -4868,6 +4927,42 @@ emitMethodDocTableOn: aStream className: aClassName
 		emitCompileMethodOn: self ___stVarName___
 		source: src contents
 		category: 'Grail-Docstrings'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodTypeParamsTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodTypeParamsTable___'' returning a dict
+	``method-name -> type-parameter names'' for every PEP 695 generic method
+	(``def m[T](self, x: T)''), the names carrying their kind prefix (``*Ts'',
+	``**P'').  A class-body def compiles to a Smalltalk METHOD, so -- like the
+	doc and code tables beside it -- it cannot carry the ``___pyTypeParams___:''
+	cascade a nested def's ExecBlock does, and ``Cls.m.__type_params__'' had
+	nowhere to come from.  UnboundMethod / BoundMethod >> __type_params__ read
+	it and build the placeholders on first read.
+
+	No-op when no method is generic."
+
+	| generic src |
+	generic := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [def type_params notNil and: [def type_params notEmpty]]].
+	generic isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodTypeParamsTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	generic do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: #('.
+		def type_params do: [:n | src nextPut: $'; nextPutAll: n asString; nextPutAll: ''' '].
+		src nextPutAll: ');'].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: src contents
+		category: 'Grail-Python Metadata'
 		env: 1
 		classSide: true
 		onStream: aStream

@@ -406,6 +406,24 @@ _difference_update: positional kw: kwargs
 	^ None
 %
 
+category: 'Grail-Generics'
+method: set
+__class_getitem__: item
+	"``set[int]'' -- a REAL types.GenericAlias.  PEP 560's own hook rather
+	than the class-side ``__getitem__:'' list, tuple and dict override: a
+	class-side method leaks into INSTANCE attribute lookup, so it would make
+	``hasattr(set(), '__getitem__')'' true where CPython says false
+	(TypeErrorTestCase testTheFallbackDoesNotInventAGetitemAttribute).  Those
+	three have an instance __getitem__ anyway; a set does not.  And
+	``set().__class_getitem__'' exists in CPython too.
+
+	Metaclass3 >> ___grailClassGetitemDispatch___: runs this with the CLASS as
+	receiver, so a subclass's alias has the subclass as its origin."
+
+	"Late-bound: this file compiles before GenericAlias.gs defines the class."
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+%
+
 set compile_env: 0
 
 ! ===============================================================================

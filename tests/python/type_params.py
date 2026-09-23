@@ -13,11 +13,12 @@ body, emits nothing at all for its type parameters, on either path.  So two of
 the three rows had nothing to reproduce and were refusing out of caution, while
 the third needed one cascade entry.
 
-THE XFAIL IS THE PRICE OF THAT ERASURE, and it is older than this cut and
-shared by both paths: ``__type_params__`` is unreadable on a module-level def,
-because such a def is reached as a BoundMethod, which has no such attribute.
-CPython answers the tuple of parameter objects.  Pinning it here means a later
-fix has to come through this file.
+THE ERASURE HAD A PRICE, since paid: ``__type_params__`` was unreadable on a
+module-level def, because such a def is reached as a BoundMethod, which had no
+such attribute.  It was this file's XFAIL.  The names now ride a class-side
+``___methodTypeParamsTable___`` (the module class's, or the defining class's for
+a method), which BoundMethod and UnboundMethod read -- the same route a method's
+``__code__`` and ``__doc__`` take.
 
 The shapes vary where the parameters SIT -- a plain def, a bounded parameter,
 two of them, a positional-only signature, a method, a nested def -- because the
@@ -87,7 +88,7 @@ record('type_params_names',
        lambda: tuple(t.__name__ for t in identity.__type_params__))
 
 
-XFAIL = {'type_params_names'}
+XFAIL = set()
 
 
 EXPECTED = {
@@ -99,9 +100,10 @@ EXPECTED = {
     'a_method_runs': 5,
     'a_nested_def_runs': 7,
     'a_nested_def_closing_over_a_local': ('z', 'outer'),
-    # CPython answers the parameter names.  Grail erases them on a def that
-    # compiles to a method, and reaches such a def as a BoundMethod, which has
-    # no __type_params__ at all -- the same on both codegen paths.
+    # CPython answers the parameter names.  Grail used to erase them on a def
+    # that compiles to a method, reached as a BoundMethod with no
+    # __type_params__ at all; the names now ride the module class's
+    # ___methodTypeParamsTable___, and this was the fixture's XFAIL.
     'type_params_names': ('T',),
 }
 

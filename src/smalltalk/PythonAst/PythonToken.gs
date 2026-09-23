@@ -160,6 +160,14 @@ isFString
 	^type == #FSTRING
 %
 
+category: 'Grail-testing'
+method: PythonToken
+isTString
+	"PEP 750 template string: scanned like an f-string, parsed into a Template."
+
+	^type == #TSTRING
+%
+
 category: 'Grail-printing'
 method: PythonToken
 printOn: aStream

@@ -1252,7 +1252,7 @@ _compile: positional kw: kwargs
 	(test_augassign.test_with_unpacking).  Only strings are parsed; a
 	non-string source (already an AST/code object) is returned as-is."
 
-	| source args mode |
+	| source args mode parsed |
 	"COMPILE() TAKES ITS ARGUMENTS BY KEYWORD TOO, and all six of them:
 	``compile(source='pass', filename='?', mode='exec')'' and
 	``compile(dont_inherit=False, filename='tmp', source='0', mode='eval')''
@@ -1308,7 +1308,7 @@ _compile: positional kw: kwargs
 			this one: a module-level await is a SyntaxError to the ordinary
 			parser, so without the relaxation compile() refuses the source here
 			and never reaches the branch that would wrap it."
-			[ModuleAst @env0:parseSource: source allowTopLevelAwait:
+			parsed := [ModuleAst @env0:parseSource: source allowTopLevelAwait:
 				((args @env0:size @env0:>= 4)
 					@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 						@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])]
@@ -1328,7 +1328,17 @@ _compile: positional kw: kwargs
 					to draw a caret under.  That is why test_caret saw one output line
 					where CPython has four.  Passing the location tuple in the
 					constructor form keeps both halves."
-ModuleAst @env0:___resignalSyntaxError___: ex]].
+ModuleAst @env0:___resignalSyntaxError___: ex].
+			"EVAL MODE TAKES EXACTLY ONE EXPRESSION.  The parse above is a module
+			 parse whatever the mode, and a module may be empty or hold
+			 statements, so ``compile('', '<string>', 'eval')'' and
+			 ``compile('x = 1', ..., 'eval')'' both succeeded where CPython raises
+			 SyntaxError('invalid syntax').  annotationlib's
+			 ForwardRef('').__forward_code__ relies on that to reject an empty
+			 forward reference (test_syntax_error_empty_string)."
+			((mode @env0:= 'eval') @env0:and: [parsed @env0:notNil
+				@env0:and: [parsed @env0:isSingleExpressionBody @env0:not]]) ifTrue: [
+					^ SyntaxError ___signal___: 'invalid syntax']].
 	"RECORD THE MODE, and answer a FRESH string to key it by.
 
 	CPython's compile() answers a code object, and eval() treats a code object

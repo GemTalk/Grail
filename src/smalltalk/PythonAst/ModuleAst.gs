@@ -1027,7 +1027,13 @@ printSmalltalkOn: aStream
 	the frames of the functions it passed through.  A script whose exception is
 	caught in its own top level printed the exception line and nothing else."
 
+	| savedFuture |
 	CallAst moduleBodyBeingCompiled: true.
+	"``from __future__ import annotations'' governs the WHOLE module -- every
+	 def, class and the module itself -- so the flag is set for the entire body
+	 emit and restored after, alongside moduleBodyBeingCompiled."
+	savedFuture := CallAst futureAnnotations.
+	CallAst futureAnnotations: self ___hasFutureAnnotations___.
 	"The pragma goes FIRST, which for this body means before the temps the block
 	below declares: importlib prepends the ``initialize'' selector line after the
 	fact, and a DOIT (exec/eval reaches a traceback through this same emitter)
@@ -1046,8 +1052,84 @@ printSmalltalkOn: aStream
 			argument, and only the compile knows it."
 			s2 nextPutAll: '___pyFile___ := '.
 			self class emitSourceFilenameLiteralOn: s2.
-			s2 nextPutAll: '.'; lf]]
-		ensure: [CallAst moduleBodyBeingCompiled: false].
+			s2 nextPutAll: '.'; lf.
+			self ___emitModuleAnnotationsOn___: s2]]
+		ensure: [
+			CallAst moduleBodyBeingCompiled: false.
+			CallAst futureAnnotations: savedFuture].
+%
+
+category: 'Grail-code generation'
+method: ModuleAst
+___hasFutureAnnotations___
+	"True when the module begins with ``from __future__ import annotations'' --
+	a future statement is legal only among the module's first statements, after
+	an optional docstring, so the scan stops at the first statement that is
+	neither."
+
+	body body do: [:stmt |
+		(stmt isKindOf: ImportFromAst)
+			ifTrue: [
+				stmt module asString = '__future__' ifFalse: [^ false].
+				(stmt names anySatisfy: [:alias | alias name asString = 'annotations'])
+					ifTrue: [^ true]]
+			ifFalse: [(stmt isKindOf: ExprAst) ifFalse: [^ false]]].
+	^ false
+%
+
+category: 'Grail-code generation'
+method: ModuleAst
+___moduleAnnotationStatements___
+	"The module's own annotated NAMES, in order -- ``x: int = 1'' at top level.
+
+	TOP-LEVEL ONLY, and that is a deliberate divergence.  CPython also includes
+	an annotation inside a module-level ``if''/``for''/``try'' that EXECUTED,
+	tracked at run time through __conditional_annotations__.  Grail omits those
+	rather than guess: including one whose branch did not run would evaluate an
+	expression over names that may never have been bound, and raise NameError
+	on read where CPython simply leaves the key out."
+
+	^ body body select: [:stmt |
+		(stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]]
+%
+
+category: 'Grail-code generation'
+method: ModuleAst
+___emitModuleAnnotationsOn___: aStream
+	"PEP 649 for the MODULE: store its annotate function in the module's own
+	namespace as ``__annotate__'', exactly where CPython puts it, so
+	``mod.__annotations__'' (module >> __annotations__) can compute and cache
+	the dict on first read.  Under ``from __future__ import annotations'' PEP 563
+	applies instead: the dict of SOURCE STRINGS is stored eagerly and
+	__annotate__ stays None -- both measured on CPython 3.14.6.
+
+	A REAL MODULE only.  exec() and eval() bodies come through this same emitter
+	and have no module instance for ``self'' to be."
+
+	| stmts |
+	(CallAst moduleClassBeingCompiled notNil
+		and: [ModuleAst compilingDoitScope isNil]) ifFalse: [^ self].
+	stmts := self ___moduleAnnotationStatements___.
+	stmts isEmpty ifTrue: [^ self].
+	CallAst futureAnnotations ifTrue: [
+		aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''__annotations__'' put: ((PyDict @env0:new)'.
+		stmts do: [:stmt |
+			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
+			"The UNPARSED expression, quotes and all (PEP 563)."
+			self emitStringLiteral: (stmt annotation ___unparse___: 4) on: aStream.
+			aStream nextPut: $;].
+		aStream nextPutAll: ' @env0:yourself).'; lf.
+		^ self].
+	aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''__annotate__'' put: [:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
+	stmts do: [:stmt |
+		aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
+		aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
+		stmt annotation printSmalltalkOn: aStream.
+		aStream nextPutAll: '] source: '.
+		self emitStringLiteral: stmt annotation ___annotationSourceString___ on: aStream.
+		aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'.
+		aStream nextPut: $;].
+	aStream nextPutAll: ' @env0:yourself)].'; lf
 %
 
 category: 'Grail-variables'

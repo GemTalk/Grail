@@ -74,6 +74,7 @@ origin: aClass args: anArgArray
 	params := anArgArray @env0:select: [:each | self ___isTypeVar___: each].
 	inst @env0:dynamicInstVarAt: #'__parameters__'
 		put: (tuple @env0:withAll: params).
+	inst @env0:dynamicInstVarAt: #'__unpacked__' put: false.
 	^ inst
 %
 
@@ -154,13 +155,46 @@ __repr__
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(mod @env0:notNil and: [mod @env0:asString @env0:~= 'builtins']) ifTrue: [
 		out @env0:nextPutAll: mod @env0:asString; @env0:nextPut: $.].
+	(self @env0:dynamicInstVarAt: #'__unpacked__') == true
+		ifTrue: [out @env0:nextPut: $*].
 	out @env0:nextPutAll: (self ___nameOf___: origin).
 	out @env0:nextPut: $[.
 	args @env0:asArray @env0:doWithIndex: [:each :i |
 		i @env0:> 1 ifTrue: [out @env0:nextPutAll: ', '].
-		out @env0:nextPutAll: (self ___nameOf___: each)].
+		out @env0:nextPutAll: (self ___argRepr___: each)].
 	out @env0:nextPut: $].
 	^ out @env0:contents @env0:asUnicodeString
+%
+
+category: 'Grail-Private'
+method: PyGenericAlias
+___argRepr___: anObject
+	"One ARGUMENT as CPython's ga_repr writes it: ``...'' for Ellipsis, the repr
+	of anything that is itself an alias (has __origin__ and __args__, so
+	``Unpack[Ts]'' stays whole rather than printing its bare __name__), a class
+	as its qualified name (``collections.OrderedDict'', but ``int'' for a
+	builtin), and the repr of everything else -- ``~T'' for a TypeVar."
+
+	| probe qn mod |
+	probe := [:sym | [anObject @env1:___pyAttrLoad___: sym]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	anObject == (Python @env0:at: #'Ellipsis' otherwise: nil) ifTrue: [^ '...'].
+	((probe value: #'__origin__') notNil and: [(probe value: #'__args__') notNil])
+		ifTrue: [^ self ___reprOf___: anObject].
+	qn := probe value: #'__qualname__'.
+	mod := probe value: #'__module__'.
+	(qn notNil and: [mod notNil]) ifTrue: [
+		^ mod @env0:asString @env0:= 'builtins'
+			ifTrue: [qn @env0:asString]
+			ifFalse: [mod @env0:asString @env0:, '.' @env0:, qn @env0:asString]].
+	^ self ___reprOf___: anObject
+%
+
+category: 'Grail-Private'
+method: PyGenericAlias
+___reprOf___: anObject
+	^ [((Python @env0:at: #builtins) @env1:instance @env1:repr: anObject) @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: anObject @env0:printString]
 %
 
 category: 'Grail-Private'
@@ -182,10 +216,28 @@ __eq__: other
 	"CPython compares origin and args, so ``list[int] == list[int]''."
 
 	(other isKindOf: PyGenericAlias) ifFalse: [^ false].
+	((self @env0:dynamicInstVarAt: #'__unpacked__') == true)
+		== ((other @env0:dynamicInstVarAt: #'__unpacked__') == true)
+			ifFalse: [^ false].
 	^ ((self @env0:dynamicInstVarAt: #'__origin__')
 			@env0:== (other @env0:dynamicInstVarAt: #'__origin__'))
 		and: [(self @env0:dynamicInstVarAt: #'__args__')
 			@env1:__eq__: (other @env0:dynamicInstVarAt: #'__args__')]
+%
+
+category: 'Grail-Iteration'
+method: PyGenericAlias
+__iter__
+	"PEP 646: iterating an alias yields it once, UNPACKED -- ``*tuple[int, ...]''
+	in a subscript or a star-annotation is ``(*tuple[int, ...],)[0]'', an alias
+	that differs only in ``__unpacked__'' and prints with a leading star."
+
+	| copy |
+	copy := PyGenericAlias
+		origin: (self @env0:dynamicInstVarAt: #'__origin__')
+		args: (self @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
+	copy @env0:dynamicInstVarAt: #'__unpacked__' put: true.
+	^ (tuple @env0:withAll: { copy }) @env1:__iter__
 %
 
 category: 'Grail-Comparison'
@@ -292,6 +344,7 @@ ___pythonValueAttrs___
 		add: #'__origin__';
 		add: #'__args__';
 		add: #'__parameters__';
+		add: #'__unpacked__';
 		yourself
 %
 
@@ -398,6 +451,37 @@ ___grailUnionFrom___: aSequence
 
 category: 'Grail-Instance Creation'
 classmethod: PyUnionType
+__class_getitem__: item
+	"``types.UnionType[X, Y]'' -- subscripting the union TYPE builds the union,
+	as it does in CPython 3.14, where UnionType IS typing.Union: measured,
+	``types.UnionType[int, str]'' is ``int | str''.  annotationlib's
+	ForwardRef.__or__ is written exactly this way, so without it
+	``ForwardRef('X') | ForwardRef('x')'' answered the bare PyUnionType class.
+
+	No type check on the members, for the reason ___grailUnionFrom___: gives:
+	this is the Union SUBSCRIPT, which accepts forward references and other
+	non-types that ``|'' on its own would refuse."
+
+	"A STRING member becomes a ForwardRef, as typing.Union's subscript converts
+	 it (_type_convert): measured, ``types.UnionType[int, 'x']'' is
+	 ``int | ForwardRef('x')'', with no module and is_class False.  So
+	 ``ForwardRef('X') | 'x''' equals ``ForwardRef('X') | ForwardRef('x')''."
+	| members fwd |
+	members := (item @env0:isKindOf: tuple) ifTrue: [item @env0:asArray] ifFalse: [{ item }].
+	(members @env0:anySatisfy: [:m | m @env0:isKindOf: CharacterCollection]) ifTrue: [
+		fwd := [((Python @env0:at: #builtins) @env1:instance @env1:___import__: { 'annotationlib' } kw: nil)
+			@env1:___pyAttrLoad___: #'ForwardRef']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		fwd @env0:notNil ifTrue: [
+			members := members @env0:collect: [:m |
+				(m @env0:isKindOf: CharacterCollection)
+					ifTrue: [fwd ___pyCallValue___: { m } kw: nil]
+					ifFalse: [m]]]].
+	^ self ___grailUnionFrom___: members
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
 ___isTypeOperand___: anOperand
 	"Is anOperand something ``|'' may union -- a class, a builtin type reached as
 	a value, a parameterised generic, an existing union, or None?
@@ -491,10 +575,26 @@ __eq__: other
 	mine := (self @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
 	theirs := (other @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
 	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
+	"PYTHON equality per member, not Smalltalk's ``='': for a Python instance
+	 that is identity, which held for class members (int, str) and failed for
+	 anything with its own __eq__ -- two unions of equal ForwardRefs compared
+	 unequal (test_annotationlib test_or).  Python's order: identity, then
+	 __eq__, then the reflected __eq__ when the first answers NotImplemented."
 	mine @env0:do: [:m |
-		(theirs @env0:anySatisfy: [:t | t == m or: [t @env0:= m]])
+		(theirs @env0:anySatisfy: [:t | PyUnionType ___pyEq___: t with: m])
 			ifFalse: [^ false]].
 	^ true
+%
+
+category: 'Grail-Comparison'
+classmethod: PyUnionType
+___pyEq___: a with: b
+	| r |
+	a == b ifTrue: [^ true].
+	r := [a @env1:__eq__: b] @env0:on: AbstractException do: [:ex | ex @env0:return: NotImplemented].
+	r == NotImplemented ifTrue: [
+		r := [b @env1:__eq__: a] @env0:on: AbstractException do: [:ex | ex @env0:return: NotImplemented]].
+	^ r == true
 %
 
 category: 'Grail-Comparison'

@@ -353,16 +353,16 @@ isStringStart
 	next := self peekAt: 1.
 	next ifNil: [^false].
 
-	"Single-char prefix: r, b, f, u, R, B, F, U"
-	((char == $r or: [char == $R or: [char == $b or: [char == $B or: [char == $f or: [char == $F or: [char == $u or: [char == $U]]]]]]]) and: [next == $' or: [next == $"]]) ifTrue: [^true].
+	"Single-char prefix: r, b, f, t, u, R, B, F, T, U -- t is PEP 750's template string"
+	((char == $r or: [char == $R or: [char == $b or: [char == $B or: [char == $f or: [char == $F or: [char == $t or: [char == $T or: [char == $u or: [char == $U]]]]]]]]]) and: [next == $' or: [next == $"]]) ifTrue: [^true].
 
-	"Two-char prefix: rb, br, fr, rf (and case variants)"
+	"Two-char prefix: rb, br, fr, rf, tr, rt (and case variants)"
 	third := self peekAt: 2.
 	third ifNil: [^false].
 	(third == $' or: [third == $"]) ifTrue: [
 		| pair |
 		pair := (char asString , next asString) asLowercase.
-		^(pair = 'rb' or: [pair = 'br' or: [pair = 'fr' or: [pair = 'rf']]])
+		^(pair = 'rb' or: [pair = 'br' or: [pair = 'fr' or: [pair = 'rf' or: [pair = 'tr' or: [pair = 'rt']]]]])
 	].
 	^false
 %
@@ -869,11 +869,12 @@ tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  braceDepth nestQuote fieldStarts |
+	  braceDepth nestQuote fieldStarts isTString |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
 	isFString := false.
+	isTString := false.
 	isRaw := false.
 	isBytes := false.
 
@@ -884,12 +885,17 @@ tokenizeString
   1 to: prefix size do:[:n |
     char := (prefix at: n) asLowercase .
 		char == $f ifTrue: [isFString := true].
+		"PEP 750: a t-string scans exactly like an f-string -- same fields, same
+		 nesting -- and differs only in what the parser builds from it."
+		char == $t ifTrue: [isFString := true. isTString := true].
 		char == $r ifTrue: [isRaw := true].
 		char == $b ifTrue: [isBytes := true].
 	].
 	tokenType := isBytes
 		ifTrue: [#BYTES]
-		ifFalse: [isFString ifTrue: [#FSTRING] ifFalse: [#STRING]].
+		ifFalse: [isTString
+			ifTrue: [#TSTRING]
+			ifFalse: [isFString ifTrue: [#FSTRING] ifFalse: [#STRING]]].
 
 	"Read quote character"
 	quoteChar := self advance.

@@ -530,3 +530,27 @@ __repr__
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Pickling'
+method: PyCode
+__reduce_ex__: aProtocol
+	"A code object cannot be pickled, and CPython says so from HERE, with a
+	TypeError -- measured on 3.14.6: ``cannot pickle code objects'' for protocol
+	2 and up.  Without it pickle fell through to its generic reduce, tried to
+	save the ``code'' class by reference, and failed with a PicklingError about
+	the lookup instead: the wrong exception type, which ``except TypeError''
+	(and test_annotationlib's test_special_attrs, pickling a ForwardRef whose
+	compiled form is cached) does not catch."
+
+	^ TypeError ___signal___: 'cannot pickle code objects'
+%
+
+category: 'Grail-Pickling'
+method: PyCode
+__reduce__
+	^ TypeError ___signal___: 'cannot pickle code objects'
+%
+
+set compile_env: 0

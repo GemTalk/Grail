@@ -157,34 +157,6 @@ ___pythonOperatorFor___: sel
 	^ m at: sel otherwise: nil
 %
 
-category: 'Grail-annotations'
-method: BinOpAst
-___annotationSourceString___
-	"Render the ACTUAL operator.
-
-	This hardcoded `` | '' on the reasoning that annotation binops are almost
-	always PEP 604 unions and ``the exact operator glyph is not load-bearing''.
-	That was true while the unparser served ANNOTATIONS only.  It stopped being
-	true when FunctionDefAst>>emitSignatureEntryFor: reused the same unparser for
-	DEFAULT VALUES, where arithmetic is ordinary and the glyph is the whole
-	point: every binop in a default rendered as a union, so ``def f(a=1+1)''
-	reported ``a=1 | 1'' through inspect.signature, and ``x='s'+'t''' reported
-	``x=s | t''.  A shared helper whose documented assumption holds in one
-	caller's context and not the other's.
-
-	Falls back to `` | '' for an operator not in the table, which keeps the
-	previous behaviour for anything the map does not cover rather than losing
-	the operand text entirely."
-
-	| opStream sel glyph |
-	opStream := AppendStream on: String new.
-	op printSmalltalkOn: opStream.
-	sel := opStream _contents trimSeparators.
-	glyph := self ___pythonOperatorFor___: sel.
-	glyph isNil ifTrue: [glyph := '|'].
-	^ (left ___annotationSourceString___) , ' ' , glyph , ' '
-		, (right ___annotationSourceString___)
-%
 method: BinOpAst
 left
 	^left

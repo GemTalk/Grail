@@ -822,6 +822,18 @@ def run_unittest(*classes):
     return result
 
 
+def run_code(code: str, extra_names: dict[str, object] | None = None) -> dict[str, object]:
+    """Run a piece of code after dedenting it, and return its global namespace."""
+    # GRAIL: CPython 3.14's helper, verbatim; test_annotationlib's
+    # test_stringized_annotation_permutations builds its cases with it.
+    import textwrap
+    ns = {}
+    if extra_names:
+        ns.update(extra_names)
+    exec(textwrap.dedent(code), ns)
+    return ns
+
+
 def check_syntax_error(testcase, statement, errtext="", *, lineno=None, offset=None):
     with testcase.assertRaises(SyntaxError):
         compile(statement, "<test string>", "exec")

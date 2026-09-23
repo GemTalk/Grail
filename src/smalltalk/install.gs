@@ -529,6 +529,7 @@ run
 	at: #'BoolOpAst' put: nil;
 	at: #'BreakAst' put: nil;
 	at: #'CallAst' put: nil;
+	at: #'TemplateStrAst' put: nil;
 	at: #'ClassDefAst' put: nil;
 	at: #'ClassFunctionDefAst' put: nil;
 	at: #'CmpOpAst' put: nil;
@@ -736,6 +737,7 @@ run
 	at: #'CheckWarningsHelperTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassTypeParamsTestCase' put: nil;
+	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'ClassAttrSingleHomeTestCase' put: nil;
@@ -1914,6 +1916,7 @@ input src/smalltalk/PythonAst/AwaitAst.gs
 input src/smalltalk/PythonAst/BinOpAst.gs
 input src/smalltalk/PythonAst/BoolOpAst.gs
 input src/smalltalk/PythonAst/CallAst.gs
+input src/smalltalk/PythonAst/TemplateStrAst.gs
 input src/smalltalk/PythonAst/CompareAst.gs
 input src/smalltalk/PythonAst/ConstantAst.gs
 input src/smalltalk/PythonAst/RawSmalltalkAst.gs
@@ -1973,6 +1976,7 @@ input src/smalltalk/PythonAst/USubAst.gs
 input src/smalltalk/PythonAst/ClassFunctionDefAst.gs
 input src/smalltalk/PythonAst/InstanceFunctionDefAst.gs
 input src/smalltalk/PythonAst/StaticFunctionDefAst.gs
+input src/smalltalk/PythonAst/AnnotationUnparser.gs
 
 run
 Transcript show: 'Step 5 complete: AST classes loaded'.
@@ -2089,6 +2093,7 @@ input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
 input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
+input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs

@@ -2407,6 +2407,25 @@ moduleBodyBeingCompiled: aBoolean
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+futureAnnotations
+	"True while compiling a module that begins ``from __future__ import
+	annotations''.  PEP 563 still governs such a module in 3.14: a class's and
+	the module's __annotations__ are SOURCE STRINGS, stored eagerly, with
+	__annotate__ None; a function's annotate function answers strings.
+	Measured on CPython 3.14.6.  Grail treated the import as a no-op, which went
+	unnoticed while class annotations were strings for every module."
+
+	^ (self ___compileContext___ at: #'futureAnnotations' otherwise: false) == true
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+futureAnnotations: aBoolean
+	self ___compileContext___ at: #'futureAnnotations' put: aBoolean
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 curPosLiteralInEffect
 	"The Smalltalk source text of the ``___curPos___ :='' store most recently
 	EMITTED at the current point in the output, or nil before the first one.

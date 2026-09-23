@@ -1134,9 +1134,9 @@ testPhase2Annotations
 	Module functions store their ``__annotate__'' on the module instance
 	keyed by name; methods on a class-side ___methodAnnotationsTable___
 	that BoundMethod >> __annotations__ walks up the superclass chain --
-	both PEP 649 VALUES.  CLASS-BODY annotations are the exception: they
-	still answer source strings, from a class-side accessor built by
-	AnnAssignAst that the __annotate__ conversion has not reached.
+	both PEP 649 VALUES.  CLASS-BODY annotations are now values too: ClassDefAst
+	emits a class annotate function and __annotations__ is computed from it on
+	first read, where it used to answer PEP 563 source strings.
 	Verifies: module params/return + empty; class own-only annotations (a
 	subclass reports only ITS annotations, not the parent's; unannotated names
 	excluded); method params/return with ``self'' excluded + empty; an

@@ -174,15 +174,18 @@ testClassesThatDidNotOptInStillCollapse
 	a class with no __getitem__: override still answers ITSELF, so
 	``class Foo(MultiDict[K, V])'' keeps compiling to ``class Foo(MultiDict)''.
 
-	``list'' used to be the example here and has since opted IN -- while
+	``list'' used to be the example here and opted IN first -- while
 	``list[int] is list'' held, singledispatch's register() accepted a
 	subscripted generic and silently registered the unsubscripted class,
-	where CPython raises.  dict and tuple still carry the collapse, so the
-	per-class model is what this now pins, together with list's opt-in."
+	where CPython raises.  tuple and dict followed: PEP 646's ``tuple[*Ts]''
+	and a ForwardRef's partial evaluation (``dict[int, ForwardRef('undef')]'')
+	both need the arguments kept.  A plain class is the collapse's example now,
+	and the per-class model is what this pins."
 
 	self assert: (self at: 'list_opted_in') equals: true.
-	self assert: (self at: 'dict_collapses') equals: true.
-	self assert: (self at: 'tuple_collapses') equals: true.
+	self assert: (self at: 'dict_opted_in') equals: true.
+	self assert: (self at: 'tuple_opted_in') equals: true.
+	self assert: (self at: 'plain_class_collapses') equals: true.
 %
 
 ! --- reaching the class by its name in types ---

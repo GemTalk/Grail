@@ -39,11 +39,12 @@ TypeParamsTestCase category: 'Grail-SUnit'
 ! caution, and dropping the refusal is the whole change for them.  The third
 ! needed one spec entry beside the qualname.
 !
-! THE XFAIL IS THE PRICE OF THAT ERASURE and is not this cut's:
-! ``__type_params__'' is unreadable on a module-level def on BOTH paths,
-! because such a def is reached as a BoundMethod, which has no such attribute.
-! CPython answers the tuple of parameter objects.  Pinned so that a later fix
-! has to come through the fixture.
+! THE ERASURE HAD A PRICE, since paid: ``__type_params__'' was unreadable on a
+! module-level def on BOTH paths, because such a def is reached as a
+! BoundMethod, which had no such attribute -- the fixture's XFAIL.  The names
+! now ride a class-side ___methodTypeParamsTable___, emitted by the module
+! compile both paths share, and testDunderTypeParamsIsReadableOnBothPaths holds
+! the two paths to CPython's answer.
 !
 ! THE NESTED SHAPE IS THE ONE WITH SOMETHING TO GET WRONG, which is why the
 ! fixture includes a nested def that both declares its own parameter and closes
@@ -83,8 +84,8 @@ ___fixturePath___
 category: 'Grail-Private'
 method: TypeParamsTestCase
 ___keys___
-	"The fixture's XFAIL (``type_params_names'') is deliberately absent and has
-	its own test below."
+	"``type_params_names'', once the fixture's XFAIL, has its own test below,
+	which also holds the two codegen paths to each other."
 
 	^ #('identity_runs' 'bounded_runs' 'two_params_runs' 'positional_only_runs'
 	    'default_beside_params_runs' 'a_method_runs' 'a_nested_def_runs'
@@ -167,24 +168,22 @@ testTheNestedClosureStillCapturesItsEnclosingLocal
 
 category: 'Grail-Tests - PEP 695 type parameters'
 method: TypeParamsTestCase
-testDunderTypeParamsIsUnreadableOnBothPaths
-	"The fixture's XFAIL, pinned as a MEASUREMENT of both paths rather than a
-	remark about one.
+testDunderTypeParamsIsReadableOnBothPaths
+	"The fixture's former XFAIL, as a MEASUREMENT of both paths.
 
-	Grail erases the names on a def that compiles to a method, and reaches such
-	a def as a BoundMethod, which has no ``__type_params__'' at all; CPython
-	answers the tuple of parameter objects.  Older than this cut and unchanged
-	by it.  When it is fixed, this fails and the fixture's XFAIL retires."
+	A def that compiles to a method is reached as a BoundMethod, which used to
+	have no ``__type_params__'' at all.  Its names now come from the module
+	class's ___methodTypeParamsTable___, which the module compile emits for the
+	text and IR paths alike, so both must answer CPython's ``('T',)''."
 
 	| ir text |
 	ir := self ___reprOf___: self ___irModule___ key: 'type_params_names'.
 	text := self ___reprOf___: self ___textModule___ key: 'type_params_names'.
 	self assert: ir = text
-		description: 'the two paths now disagree about __type_params__ -- IR: '
+		description: 'the two paths disagree about __type_params__ -- IR: '
 			, ir , ' text: ' , text.
-	self assert: (ir includesString: 'AttributeError')
-		description: '__type_params__ became readable -- retire the fixture''s '
-			, 'XFAIL: ' , ir
+	self assert: ir = '(''T'',)'
+		description: '__type_params__ on a module-level def: ' , ir
 %
 
 category: 'Grail-Tests - PEP 695 type parameters'

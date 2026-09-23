@@ -287,6 +287,43 @@ new
 
 category: 'Grail-Accessors'
 method: module
+__annotate__
+	"PEP 649: the module's annotate function, or None.  ModuleAst stores the
+	function in the module's own namespace as a dynamic instVar, which attribute
+	loads probe first, so this answers only for a module with no annotations
+	(measured: a module with none answers None) or one under ``from __future__
+	import annotations'', where CPython also answers None."
+
+	^ None
+%
+
+category: 'Grail-Accessors'
+method: module
+__annotations__
+	"PEP 649: the module's annotations, computed from __annotate__ on first read
+	and cached in the namespace -- where CPython caches them too, so
+	``'__annotations__' in mod.__dict__'' holds once read.  Reached only when no
+	dict is stored yet: ModuleAst stores one eagerly under the future import, and
+	the cache below is itself a dynamic instVar, which loads probe first.
+
+	Grail used to have no module __annotations__ at all, so
+	get_annotations(module) raised ``does not have annotations''."
+
+	| annotate ann |
+	annotate := self @env0:dynamicInstVarAt: #'__annotate__'.
+	((annotate @env0:isNil) or: [annotate == None])
+		"PyDict is resolved late: this file compiles before PyDict exists."
+		ifTrue: [ann := (Python @env0:at: #'PyDict') @env0:new]
+		ifFalse: [
+			ann := annotate @env1:___pyCallValue___: { 1 } kw: nil.
+			(ann @env0:isKindOf: KeyValueDictionary) ifFalse: [
+				^ TypeError ___signal___: '__annotate__ returned a non-dict']].
+	self @env0:dynamicInstVarAt: #'__annotations__' put: ann.
+	^ ann
+%
+
+category: 'Grail-Accessors'
+method: module
 __cached__
 	"DELIBERATELY ABSENT.  Raises AttributeError, and this method exists only so
 	that the absence is a recorded decision rather than an oversight.

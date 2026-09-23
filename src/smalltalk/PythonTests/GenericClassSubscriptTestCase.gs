@@ -92,9 +92,9 @@ testMapSubclassWorks
 category: 'Grail-Tests'
 method: GenericClassSubscriptTestCase
 testSubscriptionReturnsSelfForAlias
-	"Bare subscription, per class.  ``list'' has opted IN to real
-	parameterised generics, so ``list[int]'' is a GenericAlias whose
-	__origin__ is list -- CPython's answer.  ``dict'' has not, and still
+	"Bare subscription, per class.  ``list'' and ``dict'' have opted IN to
+	real parameterised generics, so ``list[int]'' is a GenericAlias whose
+	__origin__ is list -- CPython's answer.  A class that has not still
 	collapses to itself.
 
 	This test used to assert that BOTH collapsed.  list had to change:
