@@ -738,6 +738,7 @@ run
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassTypeParamsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
+	at: #'BuiltinNameCaptureTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'ClassAttrSingleHomeTestCase' put: nil;
@@ -1835,6 +1836,25 @@ DynamicClassAttribute @env1:___stampPythonIdentity___: 'enum' qualname: 'propert
 %
 commit
 
+! ------- Aliases the generated code names its runtime classes by
+!
+! The text codegen emits Smalltalk that SENDS to runtime classes by name --
+! ``(tuple perform: #withAll: ...)'' for every tuple display, ``set'' for a set
+! display, ``slice'' for a slice, ``object'' / ``importlib'' in class-definition
+! code.  A Python local or parameter becomes a Smalltalk temp of the SAME name,
+! and a temp shadows a global, so ``def f(tuple): return (1, 2)'' sent
+! #withAll: to the argument and died uncatchably.  The names below are the ones
+! the codegen emits that real code also uses as locals (``object'' and ``set''
+! are ordinary parameter names -- pprint, codecs, pydoc); the emit strings name
+! these ___x___ spellings instead, which no Python binding can shadow.  The IR
+! path needs none of this: it binds globals by association, not by name.
+run
+#( #tuple #object #importlib #set #list #slice #complex ) do: [:each |
+	Python at: ('___' , each , '___') asSymbol put: (Python at: each)].
+true
+%
+commit
+
 run
 Transcript show: 'Step 4 complete: Python built-in type classes loaded'.
 %
@@ -2097,6 +2117,7 @@ input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
 input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
+input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs

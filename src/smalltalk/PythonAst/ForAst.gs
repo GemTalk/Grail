@@ -304,8 +304,13 @@ emitForTargetStore: aNameAst source: sourceExpr on: aStream
 			nextPutAll: ').'; lf.
 		^ self
 	].
+	"The name's own STORE emit, as AssignAst writes ``x = v'', not its bare id:
+	the Smalltalk identifier is not always the Python spelling.  A method that
+	rebinds ``self'' carries it in a ``___self___'' temp, and ``for self in
+	xs'' wrote ``self := ...'' -- the pseudo-variable -- so the method did not
+	compile."
+	aNameAst printSmalltalkOn: aStream.
 	aStream
-		nextPutAll: aNameAst id;
 		nextPutAll: ' := ';
 		nextPutAll: sourceExpr;
 		nextPut: $.; lf.
@@ -376,8 +381,8 @@ emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth
 				Emitted as a Python-level slice through __getitem__:
 				with a slice object, so any sequence works."
 				starIdx := i - 1.
-				childExpr := '(list @env1:__new__: (' , sourceExpr ,
-					' __getitem__: (slice @env1:__new__: ' , starIdx printString ,
+				childExpr := '(___list___ @env1:__new__: (' , sourceExpr ,
+					' __getitem__: (___slice___ @env1:__new__: ' , starIdx printString ,
 					' _: ((' , sourceExpr , ' __len__) @env0:- ' ,
 					(n - i) printString , '))))'.
 				self

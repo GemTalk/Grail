@@ -149,8 +149,8 @@ ___emitUnpack___: aTarget from: sourceExpr on: aStream
 		| childExpr starIdx after |
 		(elt isKindOf: StarredAst) ifTrue: [
 			starIdx := i - 1.
-			childExpr := '(list @env1:__new__: ((' , sourceExpr ,
-				') __getitem__: (slice @env1:__new__: ' , starIdx printString ,
+			childExpr := '(___list___ @env1:__new__: ((' , sourceExpr ,
+				') __getitem__: (___slice___ @env1:__new__: ' , starIdx printString ,
 				' _: (((' , sourceExpr , ') __len__) @env0:- ' ,
 				(n - i) printString , '))))'.
 			self ___emitUnpack___: elt value from: childExpr on: aStream

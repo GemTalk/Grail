@@ -709,7 +709,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream
 			lf;
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' := importlib @env0:___canonicalClassProbe___: '.
+			nextPutAll: ' := ___importlib___ @env0:___canonicalClassProbe___: '.
 		self printQuotedString: self ___enclosingModuleName___ on: aStream.
 		aStream nextPutAll: ' name: '.
 		self printQuotedString: name asString on: aStream.
@@ -736,7 +736,7 @@ printSmalltalkRuntimeOn: aStream
 	by default.  Nested / method-local classes keep the direct ___subclass___
 	path (minted fresh per execution, matching CPython)."
 	self isModuleScopeClassDef ifTrue: [
-		aStream nextPutAll: 'importlib @env0:___canonicalSubclassOf: ('].
+		aStream nextPutAll: '___importlib___ @env0:___canonicalSubclassOf: ('].
 	"The BASES expression evaluates INLINE in the enclosing scope at
 	classdef time -- a sibling method-local class (``class BaseEnum:
 	... class MainEnum(BaseEnum):`` in a setUp) is a plain Smalltalk
@@ -1145,7 +1145,7 @@ printSmalltalkRuntimeOn: aStream
 		the attribute and call it with the argument.  Flag off: one class-side
 		flag read, then the store, as before."
 		setterSrc := attrName , ': ___1' , lf
-			, '	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
+			, '	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
 			, attrName , ''') @env1:value: { ___1 } value: nil].' , lf
 			, '	self ___classHolderAttrStore___: #''' , attrName , ''' put: ___1.'.
 		self
@@ -1606,7 +1606,7 @@ printSmalltalkRuntimeOn: aStream
 								"Through the marked store helper, not a bare ``Cls attr: v'' send:
 								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
 								send as a Python call (see ___grailClassAttrSetterDiverts___)."
-								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
@@ -1643,7 +1643,7 @@ printSmalltalkRuntimeOn: aStream
 								"Through the marked store helper, not a bare ``Cls attr: v'' send:
 								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
 								send as a Python call (see ___grailClassAttrSetterDiverts___)."
-								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
@@ -1825,7 +1825,7 @@ printSmalltalkRuntimeOn: aStream
 			collect: [:p | p key].
 		aStream
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' _fields: (tuple @env0:withAll: #('.
+			nextPutAll: ' _fields: (___tuple___ @env0:withAll: #('.
 		bareNames do: [:n |
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
@@ -1858,7 +1858,7 @@ printSmalltalkRuntimeOn: aStream
 			onStream: aStream.
 		aStream
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' ___annotatedFields___: (tuple @env0:withAll: #('.
+			nextPutAll: ' ___annotatedFields___: (___tuple___ @env0:withAll: #('.
 		self annotatedFieldNames do: [:n |
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
@@ -2020,7 +2020,7 @@ printSmalltalkRuntimeOn: aStream
 					``create_url_adapter'' relies on this: it does
 					``request.host = get_host(...)'' on a @cached_property."
 					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
+						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	self @env0:dynamicInstVarAt: #''' , def name , ''' put: ___1.' , lf2 ,
 						'	^ ___1' ]
 				ifFalse: [
@@ -2041,7 +2041,7 @@ printSmalltalkRuntimeOn: aStream
 					then calls the property's value with the argument, as CPython does.
 					Same guard on the cached_property setter above."
 					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
+						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	^ self ___raiseReadOnlyProperty___: ''',
 						def name , '''' ].
 			self
@@ -2277,7 +2277,7 @@ printSmalltalkRuntimeOn: aStream
 			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
 				"Marked store helper rather than a bare setter send -- see the
 				attribute-value emit above and ___grailClassAttrSetterDiverts___."
-				aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+				aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 					nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 					nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 					nextPutAll: ' @env1:___pyAttrLoad___: #''';
@@ -2632,7 +2632,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' @env1:___grailEndClassBuild___.'; lf.
 		aStream
-			nextPutAll: 'importlib @env0:___canonicalClassRegister___: '.
+			nextPutAll: '___importlib___ @env0:___canonicalClassRegister___: '.
 		self printQuotedString: self ___enclosingModuleName___ on: aStream.
 		aStream nextPutAll: ' name: '.
 		self printQuotedString: name asString on: aStream.
@@ -2643,7 +2643,7 @@ printSmalltalkRuntimeOn: aStream
 		this class's stale session-local attr overlay, then bind the class
 		into the module instance."
 		aStream
-			nextPutAll: 'importlib @env0:___resetClassAttrOverlay___: ';
+			nextPutAll: '___importlib___ @env0:___resetClassAttrOverlay___: ';
 			nextPutAll: self ___stVarName___; nextPutAll: '.'; lf.
 	].
 	"The module BINDING closes the block, so it runs for the
@@ -5867,7 +5867,7 @@ emitIRInstallOn: classVarName id: anId source: sourceString category: categorySt
 	text fallback compiles onto."
 
 	aStream
-		nextPutAll: 'importlib @env0:___irInstallDef: ';
+		nextPutAll: '___importlib___ @env0:___irInstallDef: ';
 		nextPutAll: anId printString;
 		nextPutAll: ' on: ';
 		nextPutAll: classVarName.

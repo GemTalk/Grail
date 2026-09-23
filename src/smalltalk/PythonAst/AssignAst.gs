@@ -475,7 +475,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	(tgt attr asString = '__class__'
 		and: [((tgt value isKindOf: NameAst)
 			and: [CallAst isSelfReference: tgt value id]) not]) ifTrue: [
-		aStream nextPutAll: 'object @env1:___pyChangeClassOf: ('.
+		aStream nextPutAll: '___object___ @env1:___pyChangeClassOf: ('.
 		tgt value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ') to: ('.
 		value printSmalltalkWithParenthesisOn: aStream.

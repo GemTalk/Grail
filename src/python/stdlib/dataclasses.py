@@ -354,10 +354,13 @@ def _make_synthesized_repr(cls_name, field_dict):
         field_names.append(name)
 
     def __repr__(self):
+        # CPython's _repr_fn names the INSTANCE's class by __qualname__: a
+        # class made inside a function reprs as ``f.<locals>.P(x=1)'', and a
+        # subclass that is not itself a dataclass under its own name.
         parts = []
         for name in field_names:
             parts.append(name + '=' + repr(getattr(self, name, None)))
-        return cls_name + '(' + ', '.join(parts) + ')'
+        return self.__class__.__qualname__ + '(' + ', '.join(parts) + ')'
 
     return __repr__
 
