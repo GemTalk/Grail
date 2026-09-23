@@ -38,12 +38,20 @@ InitSubclassMroTestCase category: 'Grail-SUnit'
 ! Middle's super() could not reach Right whatever the entry point was.  Fixing
 ! only one half would have moved the failure rather than closed it.
 !
-! Both now go through ___grailInitSubclassMroSupplierAfter___, which reads
-! __mro__ and answers the next class that SUPPLIES a hook, defined or assigned.
-! The continuation is narrowed to this one attribute name in Super >>
-! ___pyAttrLoad___: making every super() MRO-ordered is the resolution rule for
-! the whole corpus and a different change; __init_subclass__ is the case where
-! the cooperative chain IS the feature.
+! ONLY THE ENTRY WAS ACTUALLY BROKEN, and finding that out took a control.  The
+! comment this was written from said the CONTINUATION was broken too -- that
+! Middle's super() could not reach Right whatever the entry point was -- so an
+! MRO-ordered hop was written for Super >> ___pyAttrLoad___: as well.  Its
+! control did not discriminate: Super >> _lookupMethodAndSideFirstOf: already
+! walks ___mroOf___ from cls's index, assigned hooks included, so the
+! continuation had been right all along.  The hop came back out.
+!
+! The entry now goes through ___grailInitSubclassMroSupplierAfter___, which
+! reads __mro__ and answers the next class that SUPPLIES a hook, defined or
+! assigned -- ONE answer covering both, because the search base and the
+! assigned-hook probe used to be two separate searches and a class whose MRO
+! named an assigned hook on one base while the base walk found a defined one on
+! another ran NEITHER.
 !
 ! THE FIXTURE LOGS WHICH HOOK RAN, not just what the hooks left behind.  The
 ! class attributes CPython's own test asserts are a weaker statement than they
@@ -135,6 +143,11 @@ testTheTwoBaseCaseCrossesToASiblingBranch
 
 	self assertMatchesCPythonAt: 'two_base_chain_order'.
 	self assertMatchesCPythonAt: 'secondary_base_hook'.
+	"An ASSIGNED hook on a secondary base -- how @deprecated installs one.
+	This needs the two searches (which class supplies it, and how) to agree:
+	when they disagreed NEITHER hook ran, which was briefly worse than the
+	base walk it replaced."
+	self assertMatchesCPythonAt: 'assigned_mixin_chain_order'.
 %
 
 category: 'Grail-Tests - the MRO chain'
@@ -226,5 +239,5 @@ testEveryCheckIsPresentAndAgreesWithCPython
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '24 checks, 0 disagreeing [], keys match: True'
+		equals: '25 checks, 0 disagreeing [], keys match: True'
 %

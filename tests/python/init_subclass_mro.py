@@ -104,6 +104,55 @@ class Secondary(Plain, Only):
 r['secondary_base_hook'] = Secondary.only
 
 
+# A hook ASSIGNED at runtime onto a secondary base -- which is how PEP 702's
+# @deprecated installs one.  The entry has to find it in MRO order AND the
+# chain has to continue past it, and those are two different searches: one
+# answering which class supplies the hook, the other whether it supplies it by
+# definition or by assignment.  When they disagreed, NEITHER ran -- the search
+# base pointed at a class with no compiled method while the assigned probe had
+# already stopped on the other branch.
+
+ALOG = []
+
+
+class AsgBase:
+    def __init_subclass__(cls, **kwargs):
+        ALOG.append('AsgBase')
+        super().__init_subclass__(**kwargs)
+
+
+class AsgLeft(AsgBase):
+    pass
+
+
+class AsgMid:
+    pass
+
+
+def _asg_hook(cls, **kwargs):
+    ALOG.append('AsgMid')
+    super(AsgMid, cls).__init_subclass__(**kwargs)
+
+
+AsgMid.__init_subclass__ = classmethod(_asg_hook)
+
+
+class AsgRight(AsgBase):
+    def __init_subclass__(cls, **kwargs):
+        ALOG.append('AsgRight')
+        super().__init_subclass__(**kwargs)
+
+
+del ALOG[:]
+
+
+class AsgAll(AsgLeft, AsgMid, AsgRight):
+    pass
+
+
+r['assigned_mixin_chain_order'] = list(ALOG)
+
+
 # --- storing a class attribute from inside a hook ---------------------------
 #
 # The receiver of an __init_subclass__ (and of a classmethod) is a CLASS, so an
@@ -295,6 +344,7 @@ EXPECTED = {
     'diamond_right_untouched': [],
     'two_base_chain_order': ['Base', 'Middle'],
     'secondary_base_hook': True,
+    'assigned_mixin_chain_order': ['AsgMid', 'AsgRight', 'AsgBase'],
     'classmethod_augmented': [1, 2],
     'hook_augmented': ('x',),
     'instance_augmented': 1,

@@ -2471,9 +2471,24 @@ ___grailInitSubclass___: kwargs
 	Answers self so the send can sit in the ``C := C ...'' chain if it ever
 	needs to."
 
-	| sup sel instOwner metaOwner found meth assigned kw |
+	| sup sel instOwner metaOwner found meth assigned kw supplier |
 	sel := #'___init_subclass__:kw:'.
-	sup := self ___grailInitSubclassSearchBase___.
+	"ONE SEARCH DECIDES BOTH HALVES BELOW.  The MRO supplier answers which
+	class supplies the hook AND whether it supplies it by definition or by
+	assignment, so the search base and the assigned-hook probe cannot
+	disagree.  Letting them disagree is not a cosmetic problem: the base walk
+	and the MRO differ exactly on a diamond, and a class whose MRO names an
+	ASSIGNED hook on one base while the base walk finds a DEFINED one on
+	another ran NEITHER -- the search base pointed at a class with no compiled
+	method, and the assigned probe, asked separately, had already stopped at
+	the other branch.  Measured on a mixin carrying a runtime-assigned hook.
+
+	The base walk stays as the fallback for a class whose __mro__ cannot be
+	read, and then both halves come from IT, for the same reason."
+	supplier := self ___grailInitSubclassMroSupplierAfter___: nil.
+	sup := supplier @env0:isNil
+		ifTrue: [self ___grailInitSubclassSearchBase___]
+		ifFalse: [supplier @env0:at: 1].
 	sup == nil ifTrue: [^ self].
 	"THE METACLASS EATS ITS KEYWORDS FIRST.  CPython routes the class
 	header's keywords to the metaclass call -- MyMeta(name, bases, ns,
@@ -2505,7 +2520,9 @@ ___grailInitSubclass___: kwargs
 	It is searched from the same place and by the same rule as the compiled
 	spelling: nearest owner walking up from the superclass wins, so a
 	subclass's definition still shadows an ancestor's assignment."
-	assigned := self ___grailAssignedInitSubclass___: sel.
+	assigned := supplier @env0:isNil
+		ifTrue: [self ___grailAssignedInitSubclass___: sel]
+		ifFalse: [supplier @env0:at: 2].
 	assigned == nil ifFalse: [
 		^ self ___grailRunAssignedInitSubclass___: assigned kw: kw].
 	"Two spellings to look for.  A plain ``def __init_subclass__(cls, **kwds)''
@@ -2651,15 +2668,10 @@ ___grailInitSubclassSearchBase___
 	A single-base class -- the whole corpus bar the mixin case -- answers its
 	primary superclass without walking anything."
 
-	| roots primary supplier |
+	| roots primary |
 	primary := self @env0:superclass.
 	roots := self ___grailInitSubclassRoots___.
 	roots @env0:size @env0:<= 1 ifTrue: [^ primary].
-	"THE MRO DECIDES when there is more than one base, because that is what
-	CPython resolves along.  The left-to-right base walk below stays as the
-	fallback for a class whose __mro__ cannot be read."
-	supplier := self ___grailInitSubclassMroSupplierAfter___: nil.
-	supplier @env0:isNil ifFalse: [^ supplier @env0:at: 1].
 	roots @env0:do: [:root |
 		(self ___grailChainDefinesInitSubclass___: root) ifTrue: [^ root]].
 	^ primary
