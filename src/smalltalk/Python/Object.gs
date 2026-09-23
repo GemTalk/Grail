@@ -3151,6 +3151,13 @@ ___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 		^ ns].
 	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"type's own __prepare__ is not one the metaclass SUPPLIES.  Every metaclass
+	inherits it, ABCMeta included, so treating it as supplied would hand every
+	class with a Python metaclass a namespace -- where one that overrides
+	nothing has always allocated none.  Read as absent, the fallback below
+	answers exactly what type.__prepare__ would have (a plain dict) in the one
+	case that needs a namespace at all."
+	(prep notNil and: [self ___grailIsTypesOwnPrepare___: prep]) ifTrue: [prep := nil].
 	prep isNil
 		ifTrue: [
 			"No __prepare__, but a metaclass that overrides __new__ or __init__
@@ -3199,6 +3206,33 @@ ___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: ns.
 	^ ns
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailIsTypesOwnPrepare___: aPrepare
+	"Whether aPrepare, a ``__prepare__'' read off a metaclass, is type's default
+	rather than one the metaclass (or a base below type) defines.
+
+	A @classmethod ``__prepare__'' compiles to a class-side method under one of
+	the selectors a call derives from the name -- a fixed arity, or the varargs
+	``___prepare__:kw:'' -- so the test is whether any of those is implemented
+	on the receiver's class side by something OTHER than ``type class''.  A
+	__prepare__ that is not a BoundMethod on that name at all -- one ASSIGNED as
+	``__prepare__ = classmethod(fn)'' -- is the metaclass's own by definition."
+
+	| rcv meta |
+	(aPrepare isKindOf: BoundMethod) ifFalse: [^ false].
+	(aPrepare @env0:selector == #'__prepare__') ifFalse: [^ false].
+	rcv := aPrepare @env0:receiver.
+	rcv == nil ifTrue: [^ false].
+	meta := rcv @env0:class.
+	#( #'__prepare__' #'__prepare__:' #'__prepare__:_:' #'__prepare__:_:_:'
+	   #'___prepare__:kw:' ) @env0:do: [:sel | | impl |
+		impl := meta @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(impl == nil or: [impl == type @env0:class]) ifFalse: [^ false]].
+	^ (meta @env0:whichClassIncludesSelector: #'___prepare__:kw:' environmentId: 1)
+		== type @env0:class
 %
 
 category: 'Grail-Class Namespace'
