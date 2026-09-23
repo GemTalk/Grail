@@ -46,9 +46,14 @@ supportedOnThisPlatform
 	builder drives the kernel GsCom* node classes and GsNMethod>>generateFromIR:
 	(primitive 679); both are 4.0+ kernel machinery.  On 3.7.x the GsCom* node
 	classes exist but their instance-variable layout and API differs.
-	importlib caches the result per session; this need run only once."
+	importlib caches the result per session; this need run only once.
 
-  ^ System _gemVersionNum >= 40000 and:[ (System gemEnvironmentVariable:'GRAIL_IR_CODEGEN') ~~ nil ]
+	This is the CAPABILITY gate only.  Whether IR is REQUESTED is
+	importlib>>___irCodegenFlag___ (the GRAIL_IR_CODEGEN env var), which tests
+	override with ___irCodegenForce___:; reading the env var here as well would
+	make a forced test silently compile through the text path."
+
+  ^ System _gemVersionNum >= 40000
 %
 
 category: 'initialization'
