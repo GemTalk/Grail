@@ -51,7 +51,11 @@ def normalizestring(encoding):
     chars = []
     punct = False
     for c in encoding:
-        if c.isalnum() or c == '.':
+        # ASCII alphanumerics only: CPython normalizes the UTF-8 BYTES with
+        # Py_ISALNUM, so a non-ASCII letter is punctuation like any other --
+        # 'aaa\xe9\u20ac-8' reaches a search function as 'aaa_8'
+        # (test_codecs test_codecs_lookup).  str.isalnum() kept the \xe9.
+        if (c.isascii() and c.isalnum()) or c == '.':
             if punct and chars:
                 chars.append('_')
             chars.append(c)
@@ -150,49 +154,38 @@ def _call_codec(info_attr, operation, encoding, obj, errors):
 
 
 def encode(obj, encoding='utf-8', errors='strict'):
-    """codecs.encode(obj, encoding, errors) -> bytes.
+    """codecs.encode(obj, encoding, errors): the codec's encoder, whatever it
+    answers.
 
-    CPython always goes through the registry here; Grail shortcuts a str
-    through ``str.encode`` because that is where its built-in codecs live,
-    and falls back to the registry when the name is not one of them.
-
-    A NON-str never takes that shortcut.  It has no ``.encode`` to take --
-    ``codecs.encode(b'..', 'base64_codec')`` used to die with
-    ``'ByteArray' object has no attribute 'encode'`` -- and the
-    bytes-to-bytes transform codecs are precisely the ones whose input is
-    not a str.  Nor is a str-to-str codec reachable by the shortcut: the
-    LookupError below is what ``'x'.encode('rot_13')`` now raises, and
-    catching it routes the call the same way."""
-    if not isinstance(obj, str):
-        return _call_codec(lookup(encoding).encode, 'encoding', encoding,
-                           obj, errors)
+    THROUGH THE REGISTRY, always, as CPython's _PyCodec_Encode is -- and
+    with no type check on either side: codecs.encode is the documented way
+    to reach a codec with arbitrary types, where str.encode applies the text
+    model.  It used to shortcut a str through str.encode, and then catch a
+    TypeError to retry without ``errors'' -- which, once str.encode refused a
+    codec answering str, turned CPython's result into a LookupError from the
+    retry.  A name the registry does not know still falls back to the
+    built-in methods, for any encoding only the Smalltalk side implements."""
     try:
-        return obj.encode(encoding, errors)
+        info = lookup(encoding)
     except LookupError:
-        return _call_codec(lookup(encoding).encode, 'encoding', encoding,
-                           obj, errors)
-    except TypeError:
-        # Grail's str.encode does not always accept the errors argument.
-        return obj.encode(encoding)
+        if isinstance(obj, str):
+            return obj.encode(encoding, errors)
+        raise
+    return _call_codec(info.encode, 'encoding', encoding, obj, errors)
 
 
 def decode(obj, encoding='utf-8', errors='strict'):
-    """codecs.decode(obj, encoding, errors) -> str.
-
-    The mirror of encode: a str input cannot use the ``bytes.decode``
-    shortcut, and the transform codecs decode str-to-str (rot_13) or
-    bytes-to-bytes, the latter reaching the registry through the
-    LookupError the denylist raises."""
-    if isinstance(obj, str):
-        return _call_codec(lookup(encoding).decode, 'decoding', encoding,
-                           obj, errors)
+    """codecs.decode(obj, encoding, errors): the mirror of encode -- through
+    the registry for every input, so a memoryview or any other object reaches
+    the codec (TransformCodecTest test_buffer_api_usage), with the built-in
+    bytes.decode as the fallback for a name the registry does not know."""
     try:
-        return obj.decode(encoding, errors)
+        info = lookup(encoding)
     except LookupError:
-        return _call_codec(lookup(encoding).decode, 'decoding', encoding,
-                           obj, errors)
-    except TypeError:
-        return obj.decode(encoding)
+        if isinstance(obj, (bytes, bytearray)):
+            return obj.decode(encoding, errors)
+        raise
+    return _call_codec(info.decode, 'decoding', encoding, obj, errors)
 
 
 # ----------------------------------------------------------- error handlers
@@ -257,32 +250,62 @@ def _call_error_handler(errors, exc):
 def charmap_build(decoding_table):
     """Invert a 256-character decoding table into an encoding map.
 
-    CPython answers an opaque EncodingMap; a plain dict has the same
-    behaviour for the one thing anybody does with it, which is hand it back
-    to charmap_encode."""
+    Keyed by CODE POINT, as CPython's EncodingMap is: charmap_encode looks a
+    character up by ``ord``, and it is handed maps from two sources that must
+    agree -- this one, and ``codecs.make_encoding_map``, which the dict-built
+    codecs (cp437, cp850, ...) use and which has always been keyed by int.
+    Keying this one by CHARACTER made those codecs unable to encode even
+    ``'a'`` ("character maps to <undefined>").  A plain dict stands in for the
+    opaque EncodingMap; nothing does anything with one but hand it back."""
     encoding_map = {}
     for index in range(len(decoding_table)):
-        encoding_map[decoding_table[index]] = index
+        point = ord(decoding_table[index])
+        if point != 0xFFFE and point not in encoding_map:
+            encoding_map[point] = index
     return encoding_map
 
 
+def _charmap_lookup_decode(mapping, byte):
+    """What mapping says byte decodes to: a str, or None for undefined.
+
+    CPython's rules (PyUnicode_DecodeCharmap).  A STR table is indexed, and
+    U+FFFE or a short table means undefined.  Anything else is a mapping from
+    the byte to an int code point, a str (of any length, including empty),
+    or None; a LookupError means undefined too."""
+    if isinstance(mapping, str):
+        if byte >= len(mapping):
+            return None
+        char = mapping[byte]
+        return None if char == '\ufffe' else char
+    try:
+        item = mapping[byte]
+    except LookupError:
+        return None
+    if item is None:
+        return None
+    if isinstance(item, int):
+        if not 0 <= item <= 0x10FFFF:
+            raise TypeError('character mapping must be in range(0x110000)')
+        if item == 0xFFFE:
+            return None
+        return chr(item)
+    if isinstance(item, str):
+        return None if item == '\ufffe' else item
+    raise TypeError('character mapping must return integer, None or str')
+
+
 def charmap_decode(input, errors='strict', mapping=None):
-    """Decode bytes through a 256-entry table, answering (str, consumed)."""
+    """Decode bytes through a mapping, answering (str, consumed)."""
     if errors is None:
         errors = 'strict'
-    data = bytes(input)
+    data = _as_bytes(input)
     if mapping is None:
         return (data.decode('latin-1'), len(data))
     out = []
     index = 0
     length = len(data)
     while index < length:
-        byte = data[index]
-        char = None
-        if byte < len(mapping):
-            candidate = mapping[byte]
-            if candidate != '\ufffe':
-                char = candidate
+        char = _charmap_lookup_decode(mapping, data[index])
         if char is None:
             exc = _make_unicode_error(
                 UnicodeDecodeError, 'charmap', data, index, index + 1,
@@ -293,6 +316,43 @@ def charmap_decode(input, errors='strict', mapping=None):
         out.append(char)
         index += 1
     return (''.join(out), length)
+
+
+def _charmap_lookup_encode(mapping, char):
+    """The bytes mapping gives char, or None for undefined.
+
+    Looked up by ``ord`` (see charmap_build).  An int must fit in a byte; a
+    bytes value is used as is; None or a LookupError means undefined."""
+    try:
+        item = mapping[ord(char)]
+    except LookupError:
+        return None
+    if item is None:
+        return None
+    if isinstance(item, int):
+        if not 0 <= item <= 255:
+            raise TypeError('character mapping must be in range(256)')
+        return bytes((item,))
+    if isinstance(item, (bytes, bytearray)):
+        return bytes(item)
+    raise TypeError('character mapping must return integer, bytes or None, '
+                    'not %s' % type(item).__name__)
+
+
+def _charmap_encode_replacement(mapping, replacement, exc):
+    """Push an error handler's str replacement back through the map.
+
+    CPython does this for every policy, built-in or registered: ``'replace'``
+    means the map's ``'?'``, which is NOT byte 0x3F in EBCDIC (cp037 has it at
+    0x6F), and a replacement the map cannot encode re-raises the original
+    error rather than being smuggled through as ASCII."""
+    out = bytearray()
+    for char in replacement:
+        encoded = _charmap_lookup_encode(mapping, char)
+        if encoded is None:
+            raise exc
+        out.extend(encoded)
+    return bytes(out)
 
 
 def charmap_encode(input, errors='strict', mapping=None):
@@ -307,16 +367,46 @@ def charmap_encode(input, errors='strict', mapping=None):
     length = len(text)
     while index < length:
         char = text[index]
-        value = mapping.get(char)
-        if value is None:
-            exc = _make_unicode_error(
-                UnicodeEncodeError, 'charmap', text, index, index + 1,
-                'character maps to <undefined>')
-            replacement, index = _handle_encode_error(errors, exc, text, index)
-            out.extend(replacement)
+        encoded = _charmap_lookup_encode(mapping, char)
+        if encoded is not None:
+            out.extend(encoded)
+            index += 1
             continue
-        out.append(value)
-        index += 1
+        # A RUN of unencodable characters is one error, as in CPython: a
+        # handler sees start..end over all of it.
+        end = index + 1
+        while end < length and _charmap_lookup_encode(mapping, text[end]) is None:
+            end += 1
+        exc = _make_unicode_error(
+            UnicodeEncodeError, 'charmap', text, index, end,
+            'character maps to <undefined>')
+        if errors == 'strict':
+            raise exc
+        if errors == 'ignore':
+            index = end
+            continue
+        if errors == 'replace':
+            out.extend(_charmap_encode_replacement(mapping, '?' * (end - index), exc))
+            index = end
+            continue
+        if errors == 'backslashreplace':
+            out.extend(_charmap_encode_replacement(
+                mapping, ''.join(_backslash_escape(c) for c in text[index:end]), exc))
+            index = end
+            continue
+        if errors == 'xmlcharrefreplace':
+            out.extend(_charmap_encode_replacement(
+                mapping, ''.join('&#%d;' % ord(c) for c in text[index:end]), exc))
+            index = end
+            continue
+        replacement, position = _call_error_handler(errors, exc)
+        if position < 0:
+            position = length + position
+        if isinstance(replacement, (bytes, bytearray)):
+            out.extend(replacement)
+        else:
+            out.extend(_charmap_encode_replacement(mapping, str(replacement), exc))
+        index = position
     return (bytes(out), length)
 
 
@@ -401,9 +491,38 @@ def _backslash_escape(char):
 # reports how much it used, and the caller re-feeds the remainder next time.
 
 def _as_bytes(data):
+    """A decoder's input as bytes, refusing anything without the buffer
+    protocol.
+
+    ``bytes(data)`` was the spelling, and it ACCEPTS an int -- forty-two zero
+    bytes for ``utf_8_decode(42)`` -- and would build bytes out of an
+    iterable of ints too, so every decoder turned CPython's TypeError into
+    plausible-looking output (test_codecs test_bad_decode_args, 76 codecs).
+    memoryview() is the buffer-protocol test, as in readbuffer_encode."""
     if isinstance(data, bytes):
         return data
-    return bytes(data)
+    if isinstance(data, (bytearray, memoryview)):
+        return bytes(data)
+    if isinstance(data, (str, int)):
+        view = None
+    else:
+        try:
+            view = memoryview(data)
+        except TypeError:
+            view = None
+    if view is None:
+        raise TypeError("a bytes-like object is required, not '%s'"
+                        % type(data).__name__)
+    return bytes(view)
+
+
+def _as_escape_input(data):
+    """The unicode-escape decoders' input: bytes-like, or a str taken as its
+    UTF-8 encoding, which is what CPython's ``s*`` argument does.  Only these
+    two decoders accept a str (test_codecs TypesTest test_unicode_escape)."""
+    if isinstance(data, str):
+        return data.encode('utf-8')
+    return _as_bytes(data)
 
 
 def utf_8_encode(input, errors='strict'):
@@ -411,12 +530,44 @@ def utf_8_encode(input, errors='strict'):
     return (text.encode('utf-8', errors), len(text))
 
 
-def _utf8_incomplete_tail(data):
+def _utf8_second_byte_range(lead, errors='strict'):
+    """The (low, high) a well-formed sequence allows after this lead byte,
+    or None for a byte that cannot start a multi-byte sequence at all.
+
+    Under ``surrogatepass`` an ED lead also admits A0..BF: that is an encoded
+    surrogate, which the policy decodes, so ``ED A0'' is a sequence still
+    waiting for its last byte rather than an invalid one
+    (test_incremental_surrogatepass feeds ED A0 80 a byte at a time)."""
+    if 0xC2 <= lead <= 0xDF:
+        return (0x80, 0xBF)
+    if lead == 0xE0:
+        return (0xA0, 0xBF)
+    if lead == 0xED:
+        return (0x80, 0xBF if errors == 'surrogatepass' else 0x9F)
+    if 0xE1 <= lead <= 0xEF:
+        return (0x80, 0xBF)
+    if lead == 0xF0:
+        return (0x90, 0xBF)
+    if 0xF1 <= lead <= 0xF3:
+        return (0x80, 0xBF)
+    if lead == 0xF4:
+        return (0x80, 0x8F)
+    return None
+
+
+def _utf8_incomplete_tail(data, errors='strict'):
     """Length of a trailing byte run that is a TRUNCATED (not invalid) UTF-8
     sequence, so an incremental decoder can hold it back for the next chunk.
 
     A malformed run answers 0: an invalid sequence must reach the strict
-    decoder and raise, not be silently withheld forever."""
+    decoder and raise, not be silently withheld forever.
+
+    TRUNCATED means every byte present could still begin a well-formed
+    sequence -- CPython's rule, and the one test_codecs test_incremental_errors
+    checks with final=False.  Looking only at the lead byte's length
+    withheld ``C0`` (never a lead), ``E0 80`` (an overlong), ``ED A0`` (a
+    surrogate), ``F0 8F`` and ``F4 90`` (out of range) as if more input could
+    rescue them, so the decoder waited instead of raising."""
     length = len(data)
     index = length - 1
     limit = length - 4
@@ -434,9 +585,17 @@ def _utf8_incomplete_tail(data):
             else:
                 need = 2
             have = length - index
-            if have < need:
-                return have
-            return 0
+            if have >= need:
+                return 0
+            bounds = _utf8_second_byte_range(byte, errors)
+            if bounds is None:
+                return 0
+            if have >= 2 and not bounds[0] <= data[index + 1] <= bounds[1]:
+                return 0
+            for k in range(index + 2, length):
+                if not 0x80 <= data[k] <= 0xBF:
+                    return 0
+            return have
         index -= 1
     return 0
 
@@ -444,7 +603,7 @@ def _utf8_incomplete_tail(data):
 def utf_8_decode(input, errors='strict', final=False):
     data = _as_bytes(input)
     if not final:
-        tail = _utf8_incomplete_tail(data)
+        tail = _utf8_incomplete_tail(data, errors)
         if tail:
             data = data[:len(data) - tail]
     return (data.decode('utf-8', errors), len(data))
@@ -535,32 +694,40 @@ def utf_16_ex_decode(input, errors='strict', byteorder=0, final=False):
     order is what the caller must pass back on the next chunk, which is how
     an incremental decoder keeps the BOM decision across a chunk boundary."""
     data = _as_bytes(input)
+    # The ANSWERED order stays 0 when there is no BOM, as CPython's does: the
+    # input is still read little-endian, but 0 is how the vendored
+    # encodings/utf_16.py incremental decoder and StreamReader learn that the
+    # stream had none, and they raise "Stream does not start with BOM" on it
+    # (test_codecs UTF16Test test_badbom).  Answering -1 made them accept any
+    # two bytes as a little-endian character.
+    answered = byteorder
+    consumed_bom = 0
+    order = byteorder
     if byteorder == 0:
         if len(data) < 2:
-            if final and len(data) == 1:
-                raise UnicodeDecodeError(
-                    'utf-16', data, 0, 1, 'truncated data')
+            # Too short for a BOM.  With final set the byte is decoded, not
+            # refused, so an error handler applies to it: ``replace'' gives
+            # U+FFFD and ``ignore'' nothing (test_handlers).
+            if final and data:
+                result, consumed = utf_16_le_decode(data, errors, final)
+                return (result, consumed, 0)
             return ('', 0, 0)
         head = data[0] | (data[1] << 8)
         if head == 0xFEFF:
-            byteorder = -1
+            order = answered = -1
             data = data[2:]
             consumed_bom = 2
         elif head == 0xFFFE:
-            byteorder = 1
+            order = answered = 1
             data = data[2:]
             consumed_bom = 2
         else:
-            # CPython defaults to little-endian when there is no BOM.
-            byteorder = -1
-            consumed_bom = 0
-    else:
-        consumed_bom = 0
-    if byteorder < 0:
+            order = -1
+    if order < 0:
         result, consumed = utf_16_le_decode(data, errors, final)
     else:
         result, consumed = utf_16_be_decode(data, errors, final)
-    return (result, consumed + consumed_bom, byteorder)
+    return (result, consumed + consumed_bom, answered)
 
 
 # ------------------------------------------------------------------ UTF-32
@@ -639,31 +806,34 @@ def utf_32_ex_decode(input, errors='strict', byteorder=0, final=False):
     import sys
 
     data = _as_bytes(input)
+    # See utf_16_ex_decode for both rules: the answered order stays 0 without
+    # a BOM, and a too-short final input is decoded so a handler applies.
     consumed_bom = 0
+    native = -1 if sys.byteorder == 'little' else 1
+    answered = byteorder
+    order = byteorder
     if byteorder == 0:
         if len(data) < 4:
             if final and data:
-                raise _make_unicode_error(
-                    UnicodeDecodeError, 'utf-32', data, 0, len(data),
-                    'truncated data')
+                decode = utf_32_le_decode if native < 0 else utf_32_be_decode
+                result, consumed = decode(data, errors, final)
+                return (result, consumed, 0)
             return ('', 0, 0)
         if data[:4] == b'\xff\xfe\x00\x00':
-            order = -1
+            order = answered = -1
             data = data[4:]
             consumed_bom = 4
         elif data[:4] == b'\x00\x00\xfe\xff':
-            order = 1
+            order = answered = 1
             data = data[4:]
             consumed_bom = 4
         else:
-            order = -1 if sys.byteorder == 'little' else 1
-    else:
-        order = byteorder
+            order = native
     if order < 0:
         result, consumed = utf_32_le_decode(data, errors, final)
     else:
         result, consumed = utf_32_be_decode(data, errors, final)
-    return (result, consumed + consumed_bom, order)
+    return (result, consumed + consumed_bom, answered)
 
 
 # ------------------------------------------------------------------- UTF-7
@@ -679,43 +849,155 @@ def utf_32_ex_decode(input, errors='strict', byteorder=0, final=False):
 # safe stopping point is the last character that cannot be inside a run.
 
 
-def _utf7_safe_prefix(data):
-    """How much of data an incremental decoder may consume now.
-
-    A shifted run runs from ``+`` to its terminator, and nothing inside it
-    can be decoded until the run closes -- so the prefix ends at the last
-    byte that is provably outside one."""
-    last = len(data)
-    index = 0
-    while index < len(data):
-        if data[index] == 0x2B:          # '+' opens a run
-            run_end = index + 1
-            while run_end < len(data) and (
-                    data[run_end:run_end + 1].isalnum()
-                    or data[run_end] in (0x2B, 0x2F)):
-                run_end += 1
-            if run_end >= len(data):
-                return index             # run is still open: stop before it
-            if data[run_end] == 0x2D:    # '-' closes it
-                run_end += 1
-            index = run_end
-            last = index
-        else:
-            index += 1
-            last = index
-    return last
-
-
 def utf_7_encode(input, errors='strict'):
     text = str(input)
     return (text.encode('utf-7', errors), len(text))
 
 
+_UTF7_BASE64 = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+_UTF7_VALUE = {c: i for i, c in enumerate(_UTF7_BASE64)}
+
+
+def _lone_surrogate(point):
+    """A one-character str holding the surrogate ``point``.  Grail's chr()
+    refuses one on purpose; the surrogatepass decoder is the path that can
+    build it (as a PyStrSurrogate)."""
+    return bytes((point & 0xFF, point >> 8)).decode('utf-16-le', 'surrogatepass')
+
+
+def _utf7_error(errors, data, start, end, reason):
+    """Apply a decode policy to data[start:end], answering (text, resume)."""
+    exc = _make_unicode_error(UnicodeDecodeError, 'utf7', data, start, end, reason)
+    if errors == 'strict':
+        raise exc
+    if errors == 'ignore':
+        return ('', end)
+    if errors == 'replace':
+        return ('\ufffd', end)
+    if errors == 'backslashreplace':
+        return (''.join('\\x%02x' % b for b in data[start:end]), end)
+    if errors == 'surrogateescape':
+        out = []
+        for b in data[start:end]:
+            escaped = _surrogate_escape_char(b)
+            if escaped is None:
+                raise exc
+            out.append(escaped)
+        return (''.join(out), end)
+    replacement, position = _call_error_handler(errors, exc)
+    if position < 0:
+        position = len(data) + position
+    return (replacement, position)
+
+
 def utf_7_decode(input, errors='strict', final=False):
+    """UTF-7 (RFC 2152), a port of CPython's PyUnicode_DecodeUTF7Stateful.
+
+    A PORT, not an approximation, because what an error handler produces
+    depends on the state machine's every detail and test_codecs pins them:
+    an error inside a shift spans from its ``+``, output already produced in
+    that shift stays, a leftover of six or more bits is a partial character
+    and of fewer must be zero padding, a high surrogate is kept as itself
+    when the shift ends before its partner, and with final=False an open
+    shift is handed back whole (consumed stops at its ``+``).  The old path
+    delegated to a strict-only Smalltalk decoder, so ``replace`` raised and
+    every error named no position.
+
+    Input with no ``+`` and no high byte is plain ASCII to UTF-7, and is
+    decoded as that without the per-byte loop."""
+    if errors is None:
+        errors = 'strict'
     data = _as_bytes(input)
-    if not final:
-        data = data[:_utf7_safe_prefix(data)]
-    return (data.decode('utf-7', errors), len(data))
+    if 0x2B not in data and all(b < 0x80 for b in data):
+        return (data.decode('ascii'), len(data))
+    out = []
+    length = len(data)
+    in_shift = False
+    bits = 0
+    buffer = 0
+    surrogate = 0
+    shift_out_start = 0
+    start = 0
+    index = 0
+    while index < length:
+        ch = data[index]
+        error = None
+        if in_shift:
+            if ch in _UTF7_VALUE:
+                buffer = (buffer << 6) | _UTF7_VALUE[ch]
+                bits += 6
+                index += 1
+                if bits >= 16:
+                    unit = buffer >> (bits - 16)
+                    bits -= 16
+                    buffer &= (1 << bits) - 1
+                    if surrogate:
+                        if 0xDC00 <= unit <= 0xDFFF:
+                            out.append(chr(0x10000 + ((surrogate - 0xD800) << 10)
+                                           + (unit - 0xDC00)))
+                            surrogate = 0
+                            continue
+                        out.append(_lone_surrogate(surrogate))
+                        surrogate = 0
+                    if 0xD800 <= unit <= 0xDBFF:
+                        surrogate = unit
+                    elif 0xDC00 <= unit <= 0xDFFF:
+                        out.append(_lone_surrogate(unit))
+                    else:
+                        out.append(chr(unit))
+            else:
+                in_shift = False
+                if bits > 0:
+                    if bits >= 6:
+                        index += 1
+                        error = 'partial character in shift sequence'
+                    elif buffer != 0:
+                        index += 1
+                        error = 'non-zero padding bits in shift sequence'
+                if error is None:
+                    if surrogate and ch < 0x80 and ch != 0x2B:
+                        out.append(_lone_surrogate(surrogate))
+                    surrogate = 0
+                    if ch == 0x2D:
+                        index += 1
+        elif ch == 0x2B:
+            start = index
+            index += 1
+            if index < length and data[index] == 0x2D:
+                index += 1
+                out.append('+')
+            elif index < length and data[index] not in _UTF7_VALUE:
+                index += 1
+                error = 'ill-formed sequence'
+            else:
+                in_shift = True
+                surrogate = 0
+                shift_out_start = len(out)
+                bits = 0
+                buffer = 0
+        elif ch < 0x80:
+            index += 1
+            out.append(chr(ch))
+        else:
+            start = index
+            index += 1
+            error = 'unexpected special character'
+        if error is not None:
+            text, index = _utf7_error(errors, data, start, index, error)
+            out.append(text)
+    if in_shift and final:
+        in_shift = False
+        if surrogate or bits >= 6 or (bits > 0 and buffer != 0):
+            text, resume = _utf7_error(errors, data, start, length,
+                                       'unterminated shift sequence')
+            out.append(text)
+            if resume < length:
+                rest, _ = utf_7_decode(data[resume:], errors, final)
+                out.append(rest)
+    if not final and in_shift:
+        del out[shift_out_start:]
+        return (''.join(out), start)
+    return (''.join(out), length)
 # ----------------------------------------------- escape / buffer helpers
 #
 # CPython exposes these three from _codecs and the stdlib reaches for them
@@ -743,6 +1025,77 @@ _ESCAPE_DECODE_SIMPLE = {
 }
 
 
+def _warn_invalid_escape(first, prefix=''):
+    """CPython's one DeprecationWarning for an escape decoder's FIRST invalid
+    escape: ``first`` is the offending character (a str) or, for an octal
+    escape past \\377, its value (an int); None means there was none.
+
+    ONCE per call, about the first, with CPython's wording including the
+    trailing sentence -- the bytes decoder's message carries a ``b`` prefix.
+    Both decoders used to warn once PER invalid escape, with the sentence
+    missing."""
+    if first is None:
+        return
+    import warnings
+    if isinstance(first, int):
+        text = '%s"\\%o" is an invalid octal escape sequence. ' % (prefix, first)
+    else:
+        text = '%s"\\%s" is an invalid escape sequence. ' % (prefix, first)
+    warnings.warn(text + 'Such sequences will not work in the future. ',
+                  DeprecationWarning, stacklevel=3)
+
+
+_unicode_escape_depth = 0
+
+_UNICODE_ESCAPE_SIMPLE = frozenset(b'\n\\\'"abfnrtv')
+
+
+def _first_invalid_unicode_escape(data):
+    """What the unicode-escape decoder would warn about in data, or None.
+
+    Walks the escapes as the decoder does, stepping over every valid one --
+    ``\\x``, ``\\u``, ``\\U`` with their hex digits (a MALFORMED one is an
+    error, not a warning, and the scan resumes after its digits as the
+    decoder does), ``\\N{...}``, and one to three octal digits -- so a
+    backslash inside a valid escape is never mistaken for a new one."""
+    length = len(data)
+    index = 0
+    while index < length:
+        if data[index] != 0x5C:
+            index += 1
+            continue
+        if index + 1 >= length:
+            return None
+        nxt = data[index + 1]
+        if nxt in _UNICODE_ESCAPE_SIMPLE:
+            index += 2
+            continue
+        if nxt in (0x78, 0x75, 0x55):          # x u U
+            width = {0x78: 2, 0x75: 4, 0x55: 8}[nxt]
+            index += 2
+            count = 0
+            while (count < width and index < length
+                   and data[index] in b'0123456789abcdefABCDEF'):
+                index += 1
+                count += 1
+            continue
+        if nxt == 0x4E:                        # N{name}
+            close = data.find(b'}', index + 2)
+            index = length if close < 0 else close + 1
+            continue
+        if 0x30 <= nxt <= 0x37:
+            end = index + 2
+            while end < length and end < index + 4 and 0x30 <= data[end] <= 0x37:
+                end += 1
+            value = int(data[index + 1:end], 8)
+            if value > 0o377:
+                return value
+            index = end
+            continue
+        return chr(nxt)
+    return None
+
+
 def escape_decode(data, errors='strict'):
     """Interpret Python's byte escapes, answering (bytes, consumed).
 
@@ -765,6 +1118,7 @@ def escape_decode(data, errors='strict'):
     out = bytearray()
     index = 0
     length = len(data)
+    first_invalid = None
     while index < length:
         byte = data[index]
         if byte != 0x5C:            # not a backslash
@@ -806,28 +1160,22 @@ def escape_decode(data, errors='strict'):
             while end < length and end < index + 4 and 0x30 <= data[end] <= 0x37:
                 end += 1
             value = int(data[index + 1:end], 8)
-            if value > 0o377:
+            if value > 0o377 and first_invalid is None:
                 # Three octal digits can name a value no byte can hold.
                 # CPython keeps the low eight bits and deprecates the
                 # spelling; the message names the value as WRITTEN.
-                import warnings
-
-                warnings.warn(
-                    '"\\%o" is an invalid octal escape sequence' % value,
-                    DeprecationWarning, stacklevel=2)
+                first_invalid = value
             out.append(value & 0xFF)
             index = end
             continue
         # Unrecognised: keep the backslash and the character after it, and
         # say so -- CPython deprecated these rather than making them errors.
-        import warnings
-
-        warnings.warn(
-            '"\\%c" is an invalid escape sequence' % nxt,
-            DeprecationWarning, stacklevel=2)
+        if first_invalid is None:
+            first_invalid = chr(nxt)
         out.append(byte)
         out.append(nxt)
         index += 2
+    _warn_invalid_escape(first_invalid, 'b')
     return (bytes(out), length)
 
 
@@ -939,7 +1287,7 @@ def _escape_incomplete_tail(data, raw):
 
 
 def raw_unicode_escape_decode(input, errors='strict', final=True):
-    data = _as_bytes(input)
+    data = _as_escape_input(input)
     if not final:
         tail = _escape_incomplete_tail(data, True)
         if tail:
@@ -953,12 +1301,26 @@ def unicode_escape_encode(input, errors='strict'):
 
 
 def unicode_escape_decode(input, errors='strict', final=True):
-    data = _as_bytes(input)
+    data = _as_escape_input(input)
     if not final:
         tail = _escape_incomplete_tail(data, False)
         if tail:
             data = data[:len(data) - tail]
-    return (data.decode('unicode-escape', errors), len(data))
+    # Decode FIRST: a strict error is raised before any warning, as in
+    # CPython, which only warns once the decode has succeeded.
+    #
+    # Only the OUTERMOST call warns.  bytes.decode with an errors argument
+    # consults the codec registry, which for unicode-escape comes straight
+    # back here -- so a direct call nests one level and warned twice.
+    global _unicode_escape_depth
+    _unicode_escape_depth += 1
+    try:
+        result = data.decode('unicode-escape', errors)
+    finally:
+        _unicode_escape_depth -= 1
+    if _unicode_escape_depth == 0 and 0x5C in data:
+        _warn_invalid_escape(_first_invalid_unicode_escape(data))
+    return (result, len(data))
 
 
 def utf_8_sig_encode(input, errors='strict'):

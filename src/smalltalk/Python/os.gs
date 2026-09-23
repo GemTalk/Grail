@@ -360,6 +360,23 @@ ___fsPath___: path
 	method dict, so a Path SUBCLASS that inherits __fspath__ is coerced too."
 
 	(self ___isPathLike___: path) ifTrue: [^ path __fspath__].
+	"A str holding a LONE SURROGATE -- which is how os.fsdecode spells an
+	undecodable byte (PEP 383) -- cannot reach the GsFile primitives as it
+	is: they send it encodeAsUTF8, get the surrogatepass bytes back, and
+	refuse the ByteArray with an ArgumentTypeError no Python code can catch
+	(test_warnings' non-ASCII-filename tests died there, inside a
+	catch_warnings block that then never restored the warnings module).
+
+	CPython encodes such a path with surrogateescape.  Here the escaped bytes
+	are handed on as the CHARACTERS of an ordinary string, since the
+	primitives take a String and a raw-byte Utf8 cannot be built: a lone
+	U+DC80..U+DCFF becomes its byte, and any other surrogate raises
+	CPython's catchable UnicodeEncodeError.  The byte is then UTF-8-encoded
+	by the primitive, so a file whose on-disk name is itself undecodable is
+	still out of reach -- but a missing one is FileNotFoundError, as in
+	CPython, rather than a dead session."
+	(path isKindOf: PyStrSurrogate) ifTrue: [
+		^ (path encode: 'utf-8' _: 'surrogateescape') decode: 'latin-1'].
 	^ path
 %
 

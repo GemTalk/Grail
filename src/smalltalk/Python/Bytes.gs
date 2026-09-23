@@ -1559,17 +1559,35 @@ ___decodeSurrogatePass___: enc
 			@env0:and: [(data @env0:at: 1) @env0:= 16rEF
 			@env0:and: [(data @env0:at: 2) @env0:= 16rBB
 			@env0:and: [(data @env0:at: 3) @env0:= 16rBF]]]]) ifTrue: [i := 4].
-		[i @env0:<= n] @env0:whileTrue: [ | b len cp |
+		"Anything that is not well-formed apart from an encoded surrogate
+		answers nil, so the STRICT decoder raises on it with CPython's
+		message and position.  The continuation bytes were never checked, so
+		``b'abc\xed\xa0z'`` decoded to a garbage U+D83A with the ``z'' folded
+		into it (test_codecs test_surrogatepass_handler).  Leads 80..C1 and
+		F5..FF never start a sequence, and a 3- or 4-byte lead also bounds
+		its SECOND byte (overlongs and values past U+10FFFF); ED is left
+		open above 9F, because A0..BF there is exactly the surrogate block."
+		[i @env0:<= n] @env0:whileTrue: [ | b len cp lo hi |
 			b := data @env0:at: i.
+			lo := 16r80. hi := 16rBF.
 			b @env0:< 16r80
 				ifTrue: [len := 1. cp := b]
 				ifFalse: [
+					(b @env0:< 16rC2 @env0:or: [b @env0:> 16rF4]) ifTrue: [^ nil].
 					b @env0:< 16rE0 ifTrue: [len := 2. cp := b @env0:bitAnd: 16r1F]
-						ifFalse: [b @env0:< 16rF0 ifTrue: [len := 3. cp := b @env0:bitAnd: 16r0F]
-							ifFalse: [len := 4. cp := b @env0:bitAnd: 16r07]]].
+						ifFalse: [b @env0:< 16rF0
+							ifTrue: [len := 3. cp := b @env0:bitAnd: 16r0F.
+								b @env0:= 16rE0 ifTrue: [lo := 16rA0]]
+							ifFalse: [len := 4. cp := b @env0:bitAnd: 16r07.
+								b @env0:= 16rF0 ifTrue: [lo := 16r90].
+								b @env0:= 16rF4 ifTrue: [hi := 16r8F]]]].
 			(i @env0:+ len @env0:- 1) @env0:> n ifTrue: [^ nil].
-			2 @env0:to: len do: [:k |
-				cp := (cp @env0:bitShift: 6) @env0:+ ((data @env0:at: i @env0:+ k @env0:- 1) @env0:bitAnd: 16r3F)].
+			2 @env0:to: len do: [:k | | c |
+				c := data @env0:at: i @env0:+ k @env0:- 1.
+				(k @env0:= 2
+					ifTrue: [c @env0:< lo @env0:or: [c @env0:> hi]]
+					ifFalse: [c @env0:< 16r80 @env0:or: [c @env0:> 16rBF]]) ifTrue: [^ nil].
+				cp := (cp @env0:bitShift: 6) @env0:+ (c @env0:bitAnd: 16r3F)].
 			cps @env0:add: cp.
 			i := i @env0:+ len].
 		^ bytes @env0:___stringFromCodePoints___: cps].
@@ -2087,10 +2105,25 @@ decode: encoding
 	byte patterns and expect a Python exception)."
 	((encodingStr @env0:= 'utf-8') or: [
 		encodingStr @env0:= 'utf8'
-	]) ifTrue: [
-		^ [self @env0:decodeFromUTF8]
+	]) ifTrue: [ | ___decoded |
+		___decoded := [self @env0:decodeFromUTF8]
 			@env0:on: ArgumentError
-			do: [:ex | self ___signalUTF8DecodeError___]
+			do: [:ex | self ___signalUTF8DecodeError___].
+		"decodeFromUTF8 is not a complete validator: it ACCEPTS an encoded
+		surrogate (ED A0..BF xx) once the result is already a wide string --
+		``b'\xf0\x90\xbf\xbf\xed\xb2\x80'' decoded to U+10FFF U+DC80, where
+		CPython raises 'invalid continuation byte' (test_codecs
+		test_lone_surrogates, the supplementary-before case).  A surrogate is
+		ill-formed UTF-8 whatever precedes it, so any ED A0..BF sends the
+		input to the re-scan, which reports it with CPython's span.  The
+		byte scan runs only when an ED is present at all."
+		(self @env0:includes: 16rED) ifTrue: [ | n |
+			n := self @env0:size.
+			1 @env0:to: n @env0:- 1 do: [:k |
+				((self @env0:at: k) @env0:= 16rED
+					@env0:and: [(self @env0:at: k @env0:+ 1) @env0:>= 16rA0])
+						ifTrue: [^ self ___signalUTF8DecodeError___]]].
+		^ ___decoded
 	].
 
 	"Support ASCII.  ``us-ascii'' is the same codec under the name that appears
@@ -2179,26 +2212,11 @@ decode: encoding
 		or: [encodingStr @env0:= 'utf-32be']]]]) ifTrue: [
 		^ self ___pyDecodeUTF32___: encodingStr].
 
-	"``idna'' is RFC 3490 internationalized-domain decoding —
-	ASCII names pass through unchanged, full punycode handling is
-	left for a downstream test that needs it.  Werkzeug.urls
-	(_decode_idna) calls ``data.decode('idna')'' on every host
-	parse; ASCII passthrough is sufficient for the M7 Flask demo."
-	(encodingStr @env0:= 'idna') ifTrue: [
-		| result size |
-		size := self @env0:size.
-		result := Unicode7 ___new___: size.
-		1 @env0:to: size do: [:i |
-			| byte char |
-			byte := self @env0:at: i.
-			(byte @env0:> 127) ifTrue: [
-				UnicodeDecodeError ___signal___: 'idna decode of non-ASCII byte not yet supported'
-			].
-			char := Character @env0:codePoint: byte.
-			result @env0:at: i put: char
-		].
-		^ result
-	].
+	"``idna'' is NOT handled here: it reaches the registry below, and so the
+	vendored encodings/idna.py (RFC 3490 over nameprep, on the generated
+	Unicode 3.2.0 tables).  This used to be an ASCII-only shortcut that
+	refused any byte above 127 and could not decode an ``xn--'' label at
+	all; the real codec keeps an ASCII fast path of its own."
 
 	"iso-8859-15 (latin-9): the inverse of str>>encode's latin-9 branch --
 	latin-1 with 8 code points substituted.  encode has supported it since
@@ -2366,28 +2384,63 @@ category: 'Grail-Encoding/Decoding'
 method: bytes
 ___pyDecodeUTF8Ignore___
 	"UTF-8 decode with errors='ignore': decode well-formed sequences and skip
-	invalid bytes.  (Strict decoding uses GemStone's decodeFromUTF8.)"
-	| n i ws |
+	the ill-formed ones exactly as CPython does.  (Strict decoding uses
+	GemStone's decodeFromUTF8.)
+
+	WELL-FORMED is the same rule ___signalUTF8DecodeError___ reports by: a
+	lead in C2..F4, and a SECOND byte inside the range the lead allows --
+	E0 needs A0.., ED needs ..9F, F0 needs 90.., F4 needs ..8F -- which is
+	what excludes overlongs, values past U+10FFFF and encoded surrogates.
+	This used to check only that each continuation byte looked like
+	10xxxxxx, so ``ED B2 80'' was reassembled into U+DC80 and handed to a
+	Unicode16 stream, which refuses a surrogate with an UNCATCHABLE
+	OutOfRange (error 2723) -- the whole session died on
+	``b'\xed\xb2\x80'.decode('utf-8', 'ignore')'' (test_codecs
+	test_lone_surrogates).
+
+	An ill-formed sequence drops its VALID PREFIX and resumes at the byte
+	that broke it, CPython's error span: ``ED B2 80'' is three errors (ED,
+	then B2 and 80 as bad leads), all skipped.  Code points are collected and
+	turned into a string at the end, so a supplementary character widens the
+	result instead of depending on the stream's class."
+
+	| n i cps |
 	n := self @env0:size. i := 1.
-	ws := AppendStream @env0:on: Unicode16 @env0:new.
-	[i @env0:<= n] @env0:whileTrue: [ | b0 cp nbytes ok |
+	cps := OrderedCollection @env0:new.
+	[i @env0:<= n] @env0:whileTrue: [ | b0 cp len lo hi j good |
 		b0 := self @env0:at: i.
-		b0 @env0:< 16r80 ifTrue: [cp := b0. nbytes := 1] ifFalse: [
-		(b0 @env0:bitAnd: 16rE0) @env0:= 16rC0 ifTrue: [cp := b0 @env0:bitAnd: 16r1F. nbytes := 2] ifFalse: [
-		(b0 @env0:bitAnd: 16rF0) @env0:= 16rE0 ifTrue: [cp := b0 @env0:bitAnd: 16r0F. nbytes := 3] ifFalse: [
-		(b0 @env0:bitAnd: 16rF8) @env0:= 16rF0 ifTrue: [cp := b0 @env0:bitAnd: 16r07. nbytes := 4] ifFalse: [
-		nbytes := 0]]]].
-		ok := (nbytes @env0:> 0) and: [i @env0:+ nbytes @env0:- 1 @env0:<= n].
-		ok ifTrue: [
-			2 @env0:to: nbytes do: [:k | | bk |
-				bk := self @env0:at: i @env0:+ k @env0:- 1.
-				(bk @env0:bitAnd: 16rC0) @env0:= 16r80
-					ifTrue: [cp := (cp @env0:bitShift: 6) @env0:+ (bk @env0:bitAnd: 16r3F)]
-					ifFalse: [ok := false]]].
-		ok
-			ifTrue: [ws @env0:nextPut: (Character @env0:codePoint: cp). i := i @env0:+ nbytes]
-			ifFalse: [i := i @env0:+ 1]].
-	^ ws @env0:contents
+		b0 @env0:< 16r80
+			ifTrue: [cps @env0:add: b0. i := i @env0:+ 1]
+			ifFalse: [
+				(b0 @env0:< 16rC2 @env0:or: [b0 @env0:> 16rF4])
+					ifTrue: [i := i @env0:+ 1]
+					ifFalse: [
+						lo := 16r80. hi := 16rBF.
+						b0 @env0:< 16rE0
+							ifTrue: [len := 2. cp := b0 @env0:bitAnd: 16r1F]
+							ifFalse: [b0 @env0:< 16rF0
+								ifTrue: [len := 3. cp := b0 @env0:bitAnd: 16r0F.
+									b0 @env0:= 16rE0 ifTrue: [lo := 16rA0].
+									b0 @env0:= 16rED ifTrue: [hi := 16r9F]]
+								ifFalse: [len := 4. cp := b0 @env0:bitAnd: 16r07.
+									b0 @env0:= 16rF0 ifTrue: [lo := 16r90].
+									b0 @env0:= 16rF4 ifTrue: [hi := 16r8F]]].
+						j := 1. good := true.
+						[good @env0:and: [j @env0:< len]] @env0:whileTrue: [ | c |
+							(i @env0:+ j) @env0:> n
+								ifTrue: [good := false]
+								ifFalse: [
+									c := self @env0:at: i @env0:+ j.
+									((j @env0:= 1)
+										ifTrue: [c @env0:between: lo and: hi]
+										ifFalse: [c @env0:between: 16r80 and: 16rBF])
+											ifTrue: [cp := (cp @env0:bitShift: 6) @env0:+ (c @env0:bitAnd: 16r3F).
+												j := j @env0:+ 1]
+											ifFalse: [good := false]]].
+						good
+							ifTrue: [cps @env0:add: cp. i := i @env0:+ len]
+							ifFalse: [i := i @env0:+ j]]]].
+	^ bytes @env0:___stringFromCodePoints___: cps
 %
 
 set compile_env: 0
