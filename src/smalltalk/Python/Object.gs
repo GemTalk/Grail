@@ -4732,6 +4732,10 @@ ___pythonModuleAttrIdentity___
 	re-exports it from json, so its __module__ is 'json.decoder' even though
 	``json.JSONDecodeError'' is how most code names it."
 	(n @env0:= 'JSONDecodeError') ifTrue: [^ #('JSONDecodeError' 'json.decoder')].
+	"JSONEncoder likewise lives in json.encoder upstream.  json>>initialize
+	builds it with PythonInstance ___subclass___:, so nothing else gives it a
+	module, and it answered AttributeError."
+	(n @env0:= 'JSONEncoder') ifTrue: [^ #('JSONEncoder' 'json.encoder')].
 
 	"enum.  These keep their CPython NAME already (the Smalltalk class is spelled
 	the same), and are here purely for __module__: they are defined in enum

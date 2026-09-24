@@ -957,6 +957,7 @@ run
 	at: #'FrameReceiverSuggestionTestCase' put: nil;
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
+	at: #'FunctionalEnumModuleTestCase' put: nil;
 	at: #'FunctionBuiltinsAttrTestCase' put: nil;
 	at: #'FunctionDefaultsTestCase' put: nil;
 	at: #'FunctionDictAndDocTestCase' put: nil;
@@ -2354,6 +2355,7 @@ input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
+input src/smalltalk/PythonTests/FunctionalEnumModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionBuiltinsAttrTestCase.gs
 input src/smalltalk/PythonTests/FunctionDefaultsTestCase.gs
 input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
