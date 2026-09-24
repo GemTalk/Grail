@@ -6873,7 +6873,7 @@ nothing applied. A change is still judged by the same rule, the name-and-kind
 diff against a baseline run of the same tree: this one is 162 -> 163, and the
 one test is `test_annotationlib`'s known flaky row.
 
-## A classmethod called through self fails when its class is a SECONDARY base
+## A classmethod called through self failed when its class was a SECONDARY base — FIXED
 
 ```python
 class Standalone:
@@ -6933,3 +6933,60 @@ Two leads, in order of likelihood:
   turns the failed instance-side send into an attribute load. It answers
   correctly for the primary-base case, so the difference is in what it finds
   for the merged one.
+
+### The cause, and the one-line gate that had it
+
+Two mechanisms disagreed about one method. Codegen emits `self parse: x` for
+the call, and no instance-side method answers it, so the `doesNotUnderstand`
+hook recovers by forwarding to the class — but only for a method filed under
+`Grail-Class Methods`, and `___mergeSecondaryBases___` files a secondary
+base's class-side methods under `Grail-MI-Inherited`. The same method, a
+different category, and the gate declined it; the send then fell through to
+the "missing attribute" branch, which is the AttributeError the entry above
+describes.
+
+`PythonInstance >> ___isForwardableClassSideCategory___:` now admits both.
+The merge never copies `Grail-Class Attrs` or `Grail-Slot Layout` onto the
+class side, so admitting its category cannot let a synthesized accessor or a
+real setter into that branch — which is what the gate was written to keep out.
+
+**With this, CPython's own `ipaddress` answers 134 of 134 checks in
+`tests/python/ipaddress_ipv6_conformance.py`** — 118 before the `int`
+signature work, 126 after it, 130 after the class-attribute shadowing fix.
+Vendoring the module in place of the 1701-line Smalltalk one is now a
+mechanical change rather than a research project.
+
+## IR codegen cannot run on every 4.0 build, and the capability gate says it can
+
+On this machine — GemStone `4.0.0 Build 2026-08-05` — the kernel's
+`GsComMethNode >> selector:` sends `envId` to itself, and `GsComMethNode`
+implements no such accessor (its instance variables carry `envInfo`). Every
+call raises:
+
+```
+MessageNotUnderstood ... a GsComMethNode does not understand #'envId'
+```
+
+`selector:` has exactly one caller in Grail, `PyMethodIRBuilder >>
+initClass:selector:env:`, so nothing noticed until `IR codegen on by default`
+(#1087) made that the path every compile takes. Then:
+
+* `./install.sh` fails at the gemdb deploy step (exit 1), while reporting
+  that Grail itself installed;
+* every module load in a plain session raises the DNU above;
+* the ~151 SUnit tests that FORCE the IR arm error out, on main as much as on
+  any branch.
+
+`GRAIL_IR_CODEGEN=0` restores all of it, and CI is unaffected — its container
+build has a consistent kernel, and both arms pass there.
+
+**The gate is the part Grail owns.** `PyMethodIRBuilder class >>
+supportedOnThisPlatform` answers `System _gemVersionNum >= 40000`, and its own
+comment records that this probe once GENERATED A THROWAWAY METHOD and that
+building it was how the check earned its answer. A version number cannot see a
+kernel whose node class and node methods disagree; a generated method can.
+Restoring that probe would turn a hard failure into the quiet fallback to the
+text path that the flag already supports.
+
+Until then, local work on such a build needs `GRAIL_IR_CODEGEN=0`, and a
+local tier-2 run covers the text arm only — the IR arm is CI's.
