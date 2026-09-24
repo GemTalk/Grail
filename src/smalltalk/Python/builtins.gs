@@ -471,6 +471,33 @@ ___doitGlobalsView___: aScope
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___doitModuleName___: aScope
+	"What a class statement in a DOIT stamps as ``__module__'': the value of
+	``__name__'', looked up in the globals and then in builtins.
+
+	CPython opens every class body with ``__module__ = __name__'', an ordinary
+	name read, so ``exec('class C: pass', {'__name__': 'named'})'' makes a
+	C.__module__ of 'named' -- and globals with no ``__name__'' fall through
+	to builtins.__name__, which is 'builtins'.  A MODULE's class statement
+	knows its name at compile time and keeps the literal; a doit's scope is
+	only known when it runs (GemTalk/Grail#1170).
+
+	The GLOBALS, not the merged scope: the class body's own namespace stands
+	where a locals mapping would, so exec()'s third argument is never
+	consulted -- hence ___doitGlobalsView___:.  A globals mapping read LIVE
+	(a dict subclass; see _exec:) is not seeded into the scope at all, so its
+	storage is asked directly while it is parked."
+
+	| live |
+	^ (self ___doitGlobalsView___: aScope) @env0:at: #'__name__' ifAbsent: [
+		live := self ___grailLiveGlobals___.
+		live @env0:isNil
+			ifTrue: ['builtins']
+			ifFalse: [live @env0:at: '__name__' ifAbsent: ['builtins']]]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___storeReflected___: value at: pyName into: target
 	"Write one binding the exec'd source produced back into the caller's
 	mapping.
