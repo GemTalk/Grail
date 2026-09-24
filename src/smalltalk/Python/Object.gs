@@ -8151,15 +8151,13 @@ ___pyAttrLoad___: aSym
 				([self @env1:__name__] @env0:on: AbstractException
 					do: [:ex | ex @env0:return: '?']) @env0:asString @env0:,
 				''' has no attribute ''' @env0:, aSym @env0:asString @env0:, ''''].
-		"Cache the wrapper in the slot so repeated reads of the same
-		module function return the SAME object -- CPython functions are
-		first-class module attributes with stable identity
-		(g.dispatch(int) is g_int)."
+		"Repeated reads of the same module function answer the SAME object --
+		CPython functions are first-class module attributes with stable
+		identity (g.dispatch(int) is g_int) -- but caching the handle in the
+		slot must not WRITE A COMMITTED MODULE (issue #851).  See module >>
+		___functionHandleFor___: and ___mayCacheFunctionHandles___."
 		(self ___respondsTo___: symVA) ifTrue: [
-			dValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dValue.
-			^ dValue
-		].
+			^ self ___functionHandleFor___: aSym].
 		"Unary selector resolution.  Sub-cases:
 		  * Defined on ``module'' itself, or a hand-written getter/
 		    accessor on a module subclass (categories like
@@ -8191,10 +8189,7 @@ ___pyAttrLoad___: aSym
 			cat := (owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:asString.
 			(#('Grail-Methods' 'Grail-Built-in Functions' 'Grail-Wall clock'
 			   'Grail-Monotonic' 'Grail-Formatting' 'Grail-Calendar') @env0:includes: cat)
-				ifTrue: [
-					dValue := BoundMethod receiver: self selector: aSym.
-					self @env0:dynamicInstVarAt: aSym put: dValue.
-					^ dValue]
+				ifTrue: [^ self ___functionHandleFor___: aSym]
 				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
 		"Class-body attributes of a Python SUBCLASS of ``module''.
@@ -8256,10 +8251,7 @@ ___pyAttrLoad___: aSym
 			or: [(self ___respondsTo___: sym4)
 			or: [(self ___respondsTo___: sym5)
 			or: [self ___respondsTo___: sym6]]]]]) ifTrue: [
-			dValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dValue.
-			^ dValue
-		].
+			^ self ___functionHandleFor___: aSym].
 		^ self @env0:at: aSym ifAbsent: [
 			"PEP 562: a module may define a module-level ``__getattr__(name)''
 			to serve names its namespace does not hold, and it is consulted

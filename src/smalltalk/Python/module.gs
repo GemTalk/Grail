@@ -437,6 +437,50 @@ ___mayDispatchToSetter___: aSym
 
 category: 'Grail-Attribute Access'
 method: module
+___mayCacheFunctionHandles___
+	"May an attribute read of a module FUNCTION cache its BoundMethod in this
+	module's dynamic-instVar slot?  Only when that store writes nothing
+	committed (issue #851).
+
+	The cache is what gives a function a STABLE identity that survives the
+	session: ``__abs__ = abs'' in operator's body stores the handle a read of
+	``abs'' answered, and ``operator.__abs__ is operator.abs'' holds in a later
+	session only because that read cached the SAME handle in ``abs'' and both
+	shipped in the deploy commit.  So a module still being BUILT -- not yet
+	committed -- caches as it always has, and the handles become part of what
+	its deploy commits.
+
+	A COMMITTED module does not.  Its instance is shared by every session, so
+	caching there made a function's first read a repository write: a pure call
+	dirtied a clean session (gemdb.transaction() then refused), and two
+	sessions making the same first call conflicted Write-Write on the module,
+	wedging the loser's commits.  The read answers BoundMethod's per-session
+	intern instead, which keeps ``m.f is m.f'' within the session.
+
+	NativeModule overrides this: its slots already live in SessionTemps."
+
+	^ self @env0:isCommitted @env0:not
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___functionHandleFor___: aSym
+	"The BoundMethod an attribute read of the module function aSym answers --
+	the ONE place both resolution chains (object >> ___pyAttrLoad___: for
+	``m.f'', ___globalAt___:otherwise: for a bare-name read) mint it.  Cached
+	in the slot, so it has the stable identity CPython gives module functions,
+	only when that store writes nothing committed; otherwise BoundMethod's
+	per-session intern is the answer (___mayCacheFunctionHandles___)."
+
+	| fn |
+	fn := BoundMethod receiver: self selector: aSym.
+	self ___mayCacheFunctionHandles___
+		ifTrue: [self @env0:dynamicInstVarAt: aSym put: fn].
+	^ fn
+%
+
+category: 'Grail-Attribute Access'
+method: module
 ___pyAttrDelete___: aName
 	"``del m.x'' removes the binding WHEREVER the module keeps it.
 
@@ -1091,16 +1135,13 @@ ___globalAt___: aSym otherwise: aBlock
 	compiled as a real env-1 method on the module class; this is
 	the first read that turns it into a first-class function value."
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
-	"Wrap sites below CACHE the BoundMethod in the dynamic slot: module
-	functions are first-class attributes with STABLE identity in
+	"Module functions are first-class attributes with STABLE identity in
 	CPython (g.dispatch(int) is g_int), and callers may compare with
-	``is''.  The slot was already checked above, so this only runs on
-	the first read."
+	``is'' -- but caching the handle in the slot must not WRITE A COMMITTED
+	MODULE (issue #851).  See ___functionHandleFor___: and
+	___mayCacheFunctionHandles___."
 	((cls @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
-		| fn |
-		fn := BoundMethod receiver: self selector: aSym.
-		self @env0:dynamicInstVarAt: aSym put: fn.
-		^ fn
+		^ self ___functionHandleFor___: aSym
 	].
 	"Try the fast-path fixed-arity selectors first (1..3 args), then
 	walk to higher arities until we either find one or exhaust the
@@ -1116,10 +1157,7 @@ ___globalAt___: aSym otherwise: aBlock
 	(((cls @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
 		or: [(cls @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 		or: [(cls @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
-		| fn |
-		fn := BoundMethod receiver: self selector: aSym.
-		self @env0:dynamicInstVarAt: aSym put: fn.
-		^ fn
+		^ self ___functionHandleFor___: aSym
 	].
 	"Higher-arity fixed selectors (4..16 args).  Selector shape is
 	``name:'' followed by ``_:'' repeated (arity - 1) times."
@@ -1128,10 +1166,7 @@ ___globalAt___: aSym otherwise: aBlock
 		candidate := s @env0:asString @env0:, ':'.
 		2 to: arity do: [:_ | candidate := candidate @env0:, '_:'].
 		(cls @env0:whichClassIncludesSelector: candidate @env0:asSymbol environmentId: 1) notNil ifTrue: [
-			| fn |
-			fn := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: fn.
-			^ fn
+			^ self ___functionHandleFor___: aSym
 		].
 	].
 	"Unary class method.  Two sub-cases:
