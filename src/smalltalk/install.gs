@@ -1250,6 +1250,7 @@ run
 	at: #'SelectorManglingApiTestCase' put: nil;
 	at: #'SelfNameCollisionTestCase' put: nil;
 	at: #'SelfNamedClassTestCase' put: nil;
+	at: #'SelfSendPropertyCallTestCase' put: nil;
 	at: #'SelfReboundInMethodTestCase' put: nil;
 	at: #'SelfSendOverrideTestCase' put: nil;
 	at: #'SetDisplayUnpackTestCase' put: nil;
@@ -2657,6 +2658,7 @@ input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
 input src/smalltalk/PythonTests/SelfCheckingFixturesTestCase.gs
 input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
+input src/smalltalk/PythonTests/SelfSendPropertyCallTestCase.gs
 input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs
 input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
 input src/smalltalk/PythonTests/SetDisplayUnpackTestCase.gs

@@ -1188,6 +1188,27 @@ isPropertyAccessorDecorator: deco
 	^ a = 'setter' or: [a = 'getter' or: [a = 'deleter']]
 %
 
+category: 'Grail-Decorators'
+method: FunctionDefAst
+___isPropertyDef___
+	"Whether this def declares a @property or @cached_property, the
+	``@x.setter'' / ``@x.getter'' / ``@x.deleter'' halves included -- they bind
+	the same name.
+
+	Asked by ClassDefAst for the set CallAst >> classPropertyNames answers: a
+	property's getter compiles to a plain unary method, so a CALL through self
+	must NOT fuse into the same-named keyword selector, which is the
+	property's setter."
+
+	| decorators |
+
+	decorators := self decoratorList.
+	decorators isNil ifTrue: [^ false].
+	^ decorators anySatisfy: [:each |
+		#(#'property' #'cached_property' #'setter' #'getter' #'deleter')
+			includes: each]
+%
+
 category: 'Grail-code generation'
 method: FunctionDefAst
 ___hasWrappingDecorator___
