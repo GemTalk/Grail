@@ -44,7 +44,7 @@ def getLevelName(level):
 class LogRecord:
     """Plain record of a logging event - what Formatter formats."""
 
-    def __init__(self, name, lvl, msg, args):
+    def __init__(self, name, lvl, msg, args, exc_info=None):
         import time
         self.name = name
         self.levelno = lvl
@@ -52,6 +52,12 @@ class LogRecord:
         self.msg = msg
         self.args = args
         self.created = time.time()
+        # CPython keeps the (type, value, traceback) triple here and lets the
+        # Formatter render it. We keep the triple for compatibility and render
+        # eagerly, because the traceback is the whole reason a caller passed
+        # exc_info and losing it is worse than formatting it early.
+        self.exc_info = exc_info
+        self.exc_text = _format_exc_info(exc_info)
 
     def getMessage(self):
         if not self.args:
@@ -61,6 +67,37 @@ class LogRecord:
         if isinstance(self.args, tuple) and len(self.args) == 1:
             return str(self.msg) % self.args[0]
         return str(self.msg) % self.args
+
+
+def _format_exc_info(exc_info):
+    """Render ``exc_info`` the way CPython's Formatter would, or None.
+
+    ``True`` means "the exception being handled", which is what
+    ``Logger.exception`` and ``logger.error(..., exc_info=True)`` pass. A
+    (type, value, traceback) triple or a bare exception instance are both
+    accepted, because callers in the wild pass all three.
+    """
+    if not exc_info:
+        return None
+    import traceback
+    try:
+        if exc_info is True:
+            text = traceback.format_exc()
+            # No active exception: format_exc() answers a "NoneType: None"
+            # placeholder, which is noise rather than information.
+            if not text or text.startswith('NoneType'):
+                return None
+            return text.rstrip('\n')
+        if isinstance(exc_info, tuple) and len(exc_info) == 3:
+            return ''.join(traceback.format_exception(*exc_info)).rstrip('\n')
+        if isinstance(exc_info, BaseException):
+            return ''.join(traceback.format_exception(
+                type(exc_info), exc_info, exc_info.__traceback__)).rstrip('\n')
+    except Exception:
+        # Logging must not raise. A record with no traceback still carries its
+        # message, which is more than an exception here would leave.
+        return None
+    return None
 
 
 class Formatter:
@@ -94,7 +131,16 @@ class Formatter:
             'message': record.getMessage(),
             'asctime': self.formatTime(record),
         }
-        return self._fmt % fields
+        line = self._fmt % fields
+        # CPython appends the traceback after the formatted line, separated by
+        # a newline, and so does this. Without it a caller can pass exc_info
+        # and still see nothing, which is the failure this exists to prevent.
+        exc_text = getattr(record, 'exc_text', None)
+        if exc_text:
+            if not line.endswith('\n'):
+                line = line + '\n'
+            line = line + exc_text
+        return line
 
 
 _default_formatter = Formatter()
@@ -242,10 +288,10 @@ class Logger:
             logger = logger.parent
         return False
 
-    def _log(self, lvl, msg, args):
+    def _log(self, lvl, msg, args, exc_info=None):
         if not self.isEnabledFor(lvl):
             return
-        record = LogRecord(self.name, lvl, msg, args)
+        record = LogRecord(self.name, lvl, msg, args, exc_info)
         # Walk own handlers, then propagate up the chain.
         logger = self
         while logger is not None:
@@ -258,35 +304,48 @@ class Logger:
         for h in _root_handlers:
             h.handle(record)
 
-    def debug(self, msg, *args):
-        self._log(DEBUG, msg, args)
+    # Every level method accepts CPython's keyword arguments. Taking only
+    # ``*args`` was not merely incomplete -- it raised TypeError, and the
+    # commonest caller is a framework reporting somebody else's exception.
+    # Flask's error handler calls ``logger.error(msg, exc_info=...)``, so an
+    # unhandled exception in a view came back as
+    # ``TypeError: Logger.error() got an unexpected keyword argument
+    # 'exc_info'`` with the real traceback nowhere in sight.
+    #
+    # ``exc_info`` is honoured. ``stack_info``, ``stacklevel`` and ``extra``
+    # are accepted and ignored: there is no call-stack introspection here to
+    # implement them with, and refusing them would reintroduce the same class
+    # of failure for the sake of a field nobody would have seen anyway.
 
-    def info(self, msg, *args):
-        self._log(INFO, msg, args)
+    def debug(self, msg, *args, **kwargs):
+        self._log(DEBUG, msg, args, kwargs.get('exc_info'))
 
-    def warning(self, msg, *args):
-        self._log(WARNING, msg, args)
+    def info(self, msg, *args, **kwargs):
+        self._log(INFO, msg, args, kwargs.get('exc_info'))
 
-    def warn(self, msg, *args):
-        self._log(WARNING, msg, args)
+    def warning(self, msg, *args, **kwargs):
+        self._log(WARNING, msg, args, kwargs.get('exc_info'))
 
-    def error(self, msg, *args):
-        self._log(ERROR, msg, args)
+    def warn(self, msg, *args, **kwargs):
+        self._log(WARNING, msg, args, kwargs.get('exc_info'))
 
-    def critical(self, msg, *args):
-        self._log(CRITICAL, msg, args)
+    def error(self, msg, *args, **kwargs):
+        self._log(ERROR, msg, args, kwargs.get('exc_info'))
 
-    def fatal(self, msg, *args):
-        self._log(CRITICAL, msg, args)
+    def critical(self, msg, *args, **kwargs):
+        self._log(CRITICAL, msg, args, kwargs.get('exc_info'))
 
-    def exception(self, msg, *args):
-        # CPython attaches exc_info; here we just emit the message at
-        # ERROR.  Callers that need the traceback should format it
-        # themselves via traceback.format_exc().
-        self._log(ERROR, msg, args)
+    def fatal(self, msg, *args, **kwargs):
+        self._log(CRITICAL, msg, args, kwargs.get('exc_info'))
 
-    def log(self, lvl, msg, *args):
-        self._log(lvl, msg, args)
+    def exception(self, msg, *args, **kwargs):
+        # CPython's exception() is error() with exc_info defaulting to True.
+        if 'exc_info' not in kwargs:
+            kwargs['exc_info'] = True
+        self._log(ERROR, msg, args, kwargs.get('exc_info'))
+
+    def log(self, lvl, msg, *args, **kwargs):
+        self._log(lvl, msg, args, kwargs.get('exc_info'))
 
 
 def _resolve_parent(name):
@@ -342,36 +401,38 @@ def debug(msg, *args):
     getLogger()._log(DEBUG, msg, args)
 
 
-def info(msg, *args):
-    getLogger()._log(INFO, msg, args)
+def info(msg, *args, **kwargs):
+    getLogger()._log(INFO, msg, args, kwargs.get('exc_info'))
 
 
-def warning(msg, *args):
-    getLogger()._log(WARNING, msg, args)
+def warning(msg, *args, **kwargs):
+    getLogger()._log(WARNING, msg, args, kwargs.get('exc_info'))
 
 
-def warn(msg, *args):
-    getLogger()._log(WARNING, msg, args)
+def warn(msg, *args, **kwargs):
+    getLogger()._log(WARNING, msg, args, kwargs.get('exc_info'))
 
 
-def error(msg, *args):
-    getLogger()._log(ERROR, msg, args)
+def error(msg, *args, **kwargs):
+    getLogger()._log(ERROR, msg, args, kwargs.get('exc_info'))
 
 
-def critical(msg, *args):
-    getLogger()._log(CRITICAL, msg, args)
+def critical(msg, *args, **kwargs):
+    getLogger()._log(CRITICAL, msg, args, kwargs.get('exc_info'))
 
 
-def fatal(msg, *args):
-    getLogger()._log(CRITICAL, msg, args)
+def fatal(msg, *args, **kwargs):
+    getLogger()._log(CRITICAL, msg, args, kwargs.get('exc_info'))
 
 
-def exception(msg, *args):
-    getLogger()._log(ERROR, msg, args)
+def exception(msg, *args, **kwargs):
+    if 'exc_info' not in kwargs:
+        kwargs['exc_info'] = True
+    getLogger()._log(ERROR, msg, args, kwargs.get('exc_info'))
 
 
-def log(level, msg, *args):
-    getLogger()._log(level, msg, args)
+def log(level, msg, *args, **kwargs):
+    getLogger()._log(level, msg, args, kwargs.get('exc_info'))
 
 
 def disable(level=CRITICAL):

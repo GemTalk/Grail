@@ -1868,14 +1868,21 @@ testLoggingHandlerSetLevelFilters
 category: 'Grail-Tests - logging'
 method: FlaskScaffoldingTestCase
 testLoggingLoggerExceptionLogsAtError
-	"logger.exception(...) logs the message at ERROR.  Grail's
-	implementation drops the traceback (CPython attaches exc_info);
-	the message + level routing must still fire."
+	"logger.exception(...) logs the message at ERROR, and now carries the
+	traceback with it.  This test used to assert the opposite -- that Grail
+	dropped the traceback -- which is the behaviour this change exists to
+	fix, so the assertion codified the bug.
+
+	Checked as a prefix and a substring rather than by equality: the
+	traceback carries absolute paths and line numbers that differ per
+	checkout."
 
 	| mod result |
 	mod := self loadFixture: 'use_logging'.
-	result := mod @env1:logger_exception_logs_at_error.
-	self assert: result equals: #('ERROR:emit.exc:caught: failure') asOrderedCollection
+	result := mod @env1:logger_exception_reports_the_traceback.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true
 %
 
 category: 'Grail-Tests - logging'
@@ -1953,6 +1960,106 @@ testLoggingLogRecordArgsTuple
 	| mod |
 	mod := self loadFixture: 'use_logging'.
 	self assert: mod @env1:log_record_args_tuple equals: 'hi and 7'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingErrorAcceptsExcInfo
+	"logger.error(msg, exc_info=True) is accepted and appends the
+	exception. Taking only *args raised TypeError here, and the
+	commonest caller is a framework reporting somebody else's
+	exception -- Flask's error handler calls exactly this, so an
+	unhandled exception in a view surfaced as a TypeError about
+	logging with the real traceback nowhere in sight."
+
+	| mod result |
+	mod := self loadFixture: 'use_logging'.
+	result := mod @env1:error_accepts_exc_info.
+	self assert: (result @env1:__getitem__: 0) equals: 1.
+	self assert: (result @env1:__getitem__: 1) equals: true.
+	self assert: (result @env1:__getitem__: 2) equals: true
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingErrorIgnoresUnsupportedKeywords
+	"stack_info, stacklevel and extra are accepted and ignored.
+	There is no call-stack introspection here to implement them
+	with, and refusing them would reintroduce the same class of
+	failure for the sake of a field nobody would have seen."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:error_ignores_unsupported_keywords
+		equals: #('ERROR:exc.kw2:plain') asOrderedCollection
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingExceptionDefaultsToExcInfo
+	"CPython's exception() is error() with exc_info defaulting to
+	True, so the handled exception is appended without asking."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:exception_defaults_to_exc_info equals: true
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingExcInfoFromATriple
+	"exc_info accepts a (type, value, traceback) triple, which is
+	what sys.exc_info() answers and what callers in the wild pass."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:exc_info_from_a_triple equals: true
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingExcInfoFalseAddsNothing
+	"exc_info=False leaves the message exactly as it was, even
+	inside an except block."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:exc_info_false_adds_nothing
+		equals: 'ERROR:exc.off:quiet'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingExcInfoTrueOutsideExceptBlock
+	"exc_info=True with no exception being handled appends
+	nothing -- not the 'NoneType: None' placeholder."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:exc_info_true_outside_an_except_block
+		equals: 'ERROR:exc.none:nothing to report'
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingAdapterForwardsKeywords
+	"LoggerAdapter forwards **kwargs into the level methods, so it
+	was broken by the same gap and is fixed by the same change."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:adapter_forwards_keywords equals: true
+%
+
+category: 'Grail-Tests - logging'
+method: FlaskScaffoldingTestCase
+testLoggingModuleLevelErrorAcceptsExcInfo
+	"The module-level convenience functions take the same keywords
+	as the methods they stand in for."
+
+	| mod |
+	mod := self loadFixture: 'use_logging'.
+	self assert: mod @env1:module_level_error_accepts_exc_info equals: true
 %
 
 ! --- traceback module -----------------------------------------------------
