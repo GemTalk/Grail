@@ -750,6 +750,7 @@ run
 	at: #'ClassBodyClosureCellTestCase' put: nil;
 	at: #'ClassBodyConditionalNewTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
+	at: #'ClassAttrShadowsInheritedTestCase' put: nil;
 	at: #'ClassBodyControlFlowTestCase' put: nil;
 	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
 	at: #'ClassBodyDefAsPlainFunctionTestCase' put: nil;
@@ -2142,6 +2143,7 @@ input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalNewTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrShadowsInheritedTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyControlFlowTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDefAsPlainFunctionTestCase.gs

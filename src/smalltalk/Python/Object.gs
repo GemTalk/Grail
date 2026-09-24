@@ -4110,6 +4110,123 @@ ___grailInstallOrigBases___
 
 category: 'Grail-Initialization'
 classmethod: object
+___grailPropertyShadowSetterSourceFor___: aName
+	"Source of the setter that goes with ___grailPropertyShadowSourceFor___::
+
+	    kind: ___1
+	        (object ___grailClassAttrSetterDiverts___)
+	            ifTrue: [^ (self ___pyAttrLoad___: #'kind') value: { ___1 } value: nil].
+	        self dynamicInstVarAt: #'kind' put: ___1.
+	        ^ ___1
+
+	The store goes to the INSTANCE, which is what CPython does once the class
+	attribute has shadowed the property: with no data descriptor left in the
+	MRO there is nothing to outrank the instance dict.
+
+	The divert guard is the one ClassDefAst puts on every generated property
+	setter, for the same reason -- under GRAIL_DIRECT_CALLS this selector is
+	also what a Python CALL ``obj.kind(x)'' compiles to, and a call must not
+	silently store."
+
+	| lf |
+
+	lf := Character @env0:lf @env0:asString.
+	^ aName @env0:, ': ___1' @env0:, lf
+		@env0:, '	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
+		@env0:, aName @env0:, ''') @env1:value: { ___1 } value: nil].' @env0:, lf
+		@env0:, '	self @env0:dynamicInstVarAt: #''' @env0:, aName @env0:, ''' put: ___1.' @env0:, lf
+		@env0:, '	^ ___1'
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailIsMergedInSelector___: aSelector
+	"Whether the receiver's OWN entry for aSelector was copied in from a
+	secondary base rather than written in its class body.
+
+	``The class already supplies this arity itself'' is what keeps
+	___grailInstallAttrMethodShadows___: off a name a real def in the same
+	body already answers.  ___mergeSecondaryBases___ runs BEFORE the hook that
+	installs the shadows and copies the other bases' methods ONTO the class,
+	so without this test every multiple-inheritance class looks like it
+	supplies every inherited name itself -- and a class attribute could never
+	shadow anything it inherited through a secondary base."
+
+	^ (self @env0:categoryOfSelector: aSelector environmentId: 1) @env0:asString
+		@env0:= 'Grail-MI-Inherited'
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInheritedPropertySetterOwner___: aName
+	"The ancestor whose 1-arg ``name:'' is a generated @property SETTER, or nil.
+
+	A name the superclass chain answers with BOTH the unary and the 1-arg
+	selector is a PAIR, and ___grailInstallAttrMethodShadows___: leaves those
+	alone because the pair is how Grail encodes a data attribute -- a slot
+	accessor above all, whose getter must keep reaching the slot.
+
+	An inherited @property wears the same shape and is not that: CPython's
+	lookup stops at the first class in the MRO holding the name, so a class
+	attribute shadows the property entirely.  The CATEGORY is what tells them
+	apart, because ClassDefAst files a generated property setter under its own
+	name.  A property whose setter the user WROTE is an ordinary method in an
+	ordinary category and is not recognised here -- it keeps the old
+	behaviour rather than guessing."
+
+	| setterSym mro |
+
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	"THE MRO, not the Smalltalk superclass chain.  A Python class with several
+	bases is one Smalltalk class whose superclass is only its PRIMARY base;
+	___mergeSecondaryBases___ copies the others' methods onto the class itself
+	under 'Grail-MI-Inherited', which loses the category that says what they
+	were.  Walking the MRO asks the class that WROTE the setter."
+	mro := [(Python @env0:at: #importlib) @env0:___mroOf___: self]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	mro == nil ifTrue: [^ nil].
+	mro @env0:do: [:cls |
+		(cls @env0:== self) ifFalse: [
+			((cls @env0:isKindOf: Behavior)
+				@env0:and: [cls @env0:includesSelector: setterSym environmentId: 1]) ifTrue: [
+					^ (#('Grail-Property-ReadOnly' 'Grail-CachedProperty-Setter')
+						@env0:includes: (cls @env0:categoryOfSelector: setterSym environmentId: 1) @env0:asString)
+							ifTrue: [cls]
+							ifFalse: [nil]]]].
+	^ nil
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailPropertyShadowSourceFor___: aName
+	"Source of the getter that makes a class attribute shadow an inherited
+	@property:
+
+	    kind
+	        ^ self ___descriptorGet___:
+	            (self @env0:class ___classAttrOwnOrInherited___: #'kind')
+
+	It RETURNS the value where the method-shadow forwarder CALLS it
+	(___grailShadowSourceFor___:nargs:).  That is the whole difference between
+	shadowing a method, where the unary selector means ``call me'', and
+	shadowing a property, where it means ``read me''.
+
+	It reads the holder DIRECTLY rather than through ___pyAttrLoad___: that
+	load resolves an instance read by performing this very selector, so going
+	back through it would recurse.  ___descriptorGet___: is the step the
+	ordinary class-attribute branch of the load applies, so a function stored
+	as the attribute still reads as a bound method."
+
+	| lf |
+
+	lf := Character @env0:lf @env0:asString.
+	^ aName @env0:, lf
+		@env0:, '	^ self ___descriptorGet___: (self @env0:class ___classAttrOwnOrInherited___: #'''
+		@env0:, aName @env0:, ''')'
+%
+
+category: 'Grail-Initialization'
+classmethod: object
 ___grailInstallAttrMethodShadows___: attrNames
 	"A class-body ASSIGNMENT that binds a callable -- ``setUp =
 	TestJointOps.setUp'', CPython's idiom for borrowing a method from an
@@ -4157,12 +4274,23 @@ ___grailInstallAttrMethodShadows___: attrNames
 			kept := ownDict == nil
 				ifTrue: [fam]
 				ifFalse: [fam @env0:reject: [:pair |
-					ownDict @env0:includesKey: (pair @env0:at: 1)]].
+					(ownDict @env0:includesKey: (pair @env0:at: 1))
+						and: [(self ___grailIsMergedInSelector___: (pair @env0:at: 1)) @env0:not]]].
 			kept @env0:isEmpty ifFalse: [
 				pending @env0:add: (Array @env0:with: s with: kept)]]].
 	pending @env0:isEmpty ifTrue: [^ self].
 	"One walk of the superclass chain for every candidate at once."
 	inherited := IdentitySet @env0:new.
+	"A selector COPIED IN from a secondary base counts as inherited, because
+	that is what it is: ___mergeSecondaryBases___ put it on this class, and the
+	chain walk below cannot see it -- the base it came from is not this class's
+	superclass.  Without this a class attribute could shadow nothing it
+	inherited through a secondary base."
+	pending @env0:do: [:entry |
+		(entry @env0:at: 2) @env0:do: [:pair |
+			((ownDict @env0:notNil @env0:and: [ownDict @env0:includesKey: (pair @env0:at: 1)])
+				@env0:and: [self ___grailIsMergedInSelector___: (pair @env0:at: 1)])
+					ifTrue: [inherited @env0:add: (pair @env0:at: 1)]]].
 	walker := sup.
 	[walker == nil] whileFalse: [
 		md := walker @env0:methodDictForEnv: 1.
@@ -4185,7 +4313,27 @@ ___grailInstallAttrMethodShadows___: attrNames
 		alone; it is a data attribute in Grail's encoding, not a method."
 		((shadowed @env0:anySatisfy: [:pair | (pair @env0:at: 2) == 0])
 			and: [shadowed @env0:anySatisfy: [:pair | (pair @env0:at: 2) == 1]])
-				ifTrue: [shadowed := Array @env0:new].
+				ifTrue: [
+					"...UNLESS the pair is an inherited @property, which wears the
+					same shape and is not a data attribute at all.  CPython's
+					lookup stops at the first class in the MRO holding the name,
+					so the class attribute shadows the property entirely; a
+					getter that ANSWERS the value is what that takes, and the
+					call forwarder below would call the value instead."
+					(self ___grailInheritedPropertySetterOwner___: s) == nil
+						ifTrue: [shadowed := Array @env0:new]
+						ifFalse: [
+							self
+								___compileMethod: (self ___grailPropertyShadowSourceFor___: s)
+								category: 'Grail-Attr Property Shadows'.
+							"The SETTER too: shadowing hides the whole descriptor, so
+							``obj.kind = v'' is an ordinary instance-dict store in
+							CPython, where the inherited property's setter refuses it
+							as read-only."
+							self
+								___compileMethod: (self ___grailPropertyShadowSetterSourceFor___: s)
+								category: 'Grail-Attr Property Shadows'.
+							shadowed := Array @env0:new]].
 		shadowed @env0:isEmpty ifFalse: [
 			"Reading the value can run a __get__; only do it for a name that is
 			really shadowing something."

@@ -6729,7 +6729,7 @@ The same shape as the `from_bytes` entry above, found the same way: CPython's
 it after `from_bytes` was fixed. A signature gap reads as "an obscure
 spelling nobody uses" right up until a real module uses it twice.
 
-## A class attribute does not shadow an inherited property, and the obvious fix does not work
+## A class attribute does not shadow an inherited property — FIXED, at the second attempt
 
 CPython's attribute lookup scans the MRO once and stops at the FIRST class
 holding the name, so a class attribute shadows an inherited method or
@@ -6786,9 +6786,46 @@ tell an inherited property (whose setter carries the category
 `Grail-Property-ReadOnly` or `Grail-CachedProperty-Setter`) from a class
 attribute's own accessor pair — not beside it.
 
-The fixture written for it is not committed: it fails on today's code, and the
-gate's XFAIL convention is for fixtures that CPython and Grail disagree about
-by design, which this is not.
+### What the second attempt did
+
+Exactly what the paragraph above says it should: it extended
+`___grailInstallAttrMethodShadows___:` rather than standing beside it. Four
+of that method's conditions had to give way, each recorded at its site.
+
+* **The pair-shape skip**, now taken only when the inherited 1-arg half is NOT
+  a generated property setter. The category is what tells an inherited
+  `@property` from the accessor pair Grail compiles for a data attribute — a
+  SLOT above all, whose getter must keep reaching the slot.
+* **The superclass walk**, now the MRO. A secondary base's property is copied
+  ONTO the class by `___mergeSecondaryBases___`, so the chain never shows where
+  it came from; the MRO does.
+* **"The class already supplies this arity itself"**, which kept the installer
+  off a name a real `def` in the same body answers. The merge runs BEFORE this
+  hook, so every multiple-inheritance class looked like it supplied every
+  inherited name. A selector whose own category is `Grail-MI-Inherited` is a
+  merged copy and no longer counts.
+* **The forwarder shape.** The existing one CALLS the value, because for a
+  method the unary selector means "call me". For a property it means "read
+  me", so the new one answers the value, and a companion setter stores to the
+  instance dict — shadowing hides the whole descriptor, so there is no data
+  descriptor left to outrank the instance.
+
+The tests that failed the first attempt pass: `ClassAttrMethodOverride` 1/1,
+`GetattributeHook` 12/12, `SlotsInheritedDict` 2/2. The corpus is unmoved: 162
+failing tests before and after, with an empty name-and-kind diff.
+
+**For CPython's own `ipaddress`, measured with the module vendored locally: 126
+of 134 checks before, 130 after.** The four that remain are the classmethod
+defect recorded below.
+
+### One debugging note
+
+The MRO lookup answered nil for three installs before the cause showed: the
+helper `importlib ___mroOf___:` is an ENV-0 method, the send was env 1, and the
+`on: Error` guard around it turned the DNU into "no MRO available" rather than
+an error. A guard that swallows a programming mistake costs more than the
+failure it was written for; the probe that asks the expression directly is what
+found it.
 
 ## self.prop(arg) called the property's setter
 
