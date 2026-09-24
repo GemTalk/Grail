@@ -3874,10 +3874,23 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	___dynInstVars___ := ___1.'.
 		[newCls @env0:class ___compileMethod: holderSrc category: 'Grail-Class Attrs']
 			@env0:on: AbstractException do: [:e | nil]]] @env0:value.
-	(keywords ~~ nil and: [keywords @env0:includesKey: 'module']) ifTrue: [
-		[newCls @env1:___pyAttrStore___: #'__module__'
-			put: (keywords @env0:at: 'module')]
-			@env0:on: AbstractException do: [:e | nil]].
+	"With no ``module='' the module is the CALLER's, which is what CPython's
+	_create_ reads through sys._getframemodulename.  Without the fallback
+	``Enum('F', 'A B')'' had no __module__ at all -- an AttributeError, and a
+	repr with no module in it -- while the class statement it is shorthand for
+	answered '__main__'.  nil (no identifiable caller) stamps nothing, as
+	CPython's own None does."
+	(keywords ~~ nil and: [keywords @env0:includesKey: 'module'])
+		ifTrue: [
+			[newCls @env1:___pyAttrStore___: #'__module__'
+				put: (keywords @env0:at: 'module')]
+				@env0:on: AbstractException do: [:e | nil]]
+		ifFalse: [ | callerMod |
+			callerMod := [(Python @env0:at: #importlib) @env1:___callerModuleName___]
+				@env0:on: AbstractException do: [:e | nil].
+			callerMod @env0:notNil ifTrue: [
+				[newCls @env1:___pyAttrStore___: #'__module__' put: callerMod]
+					@env0:on: AbstractException do: [:e | nil]]].
 	"CPython _EnumDict.__setitem__: a name whose value is a DESCRIPTOR is NOT a
 	member.  It stays an ordinary class attribute, and an enum whose members dict
 	holds only descriptors stays MEMBER-LESS -- which is what makes it legal to
