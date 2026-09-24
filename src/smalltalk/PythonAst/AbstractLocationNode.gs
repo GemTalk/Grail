@@ -245,6 +245,13 @@ method: AbstractLocationNode
 endPosition: newValue
 	endPosition := newValue
 %
+method: AbstractLocationNode
+setPositionFrom: aNode
+  beginLine  := aNode beginLine .
+  beginPosition := aNode beginPosition .
+  endLine := aNode endLine .
+  endPosition := aNode endPosition 
+%
 
 category: 'Grail-traceback'
 method: AbstractLocationNode

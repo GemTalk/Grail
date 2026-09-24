@@ -2127,13 +2127,36 @@ ___irSourceLooksLikeDef___: src
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___irPythonLineForMethod___: aMethod ip: anIp
-	"The ABSOLUTE Python line an IR-built method was executing at anIp.  An IR
-	method's attached source is the def slice PREFIXED with (beginLine-1)
-	newlines, so a source line's position in that string IS its module line
-	number.  _sourceAtIp: marks the reached position with a caret line (first
-	non-blank ``*''); the source line just above it is the line in flight, and
-	the count of source (non-caret) lines at or above the caret is its absolute
-	line.  Fails closed (nil) like the ___curPos___ path."
+	"The ABSOLUTE Python line an IR-built method was executing at anIp.
+
+	TWO STEPS, because neither half can do the job alone.
+
+	The CARET SCAN decides whether there is a frame at all.  _sourceAtIp: marks
+	the reached position with a caret line (first non-blank ``*''), and a frame
+	is identified as Python by this derivation answering non-nil -- so the scan
+	has to run and has to fail closed, exactly as ___refineSpan___:forMethod:ip:
+	describes for the span: nil in, nil out.  What it yields is the count of
+	source lines above the caret, which is SLICE-relative.
+
+	The MAP supplies the absolute line.  The slice is attached verbatim -- it is
+	NOT prefixed with (beginLine - 1) newlines, which an earlier reader of this
+	comment will remember, and which is what used to make the count absolute by
+	construction.  Nor can the VM be asked: methNode lineNumber is set, but
+	nothing on this build carries it through to the generated method, and
+	_lineNumberForIp: answers the slice-relative line too (measured: 1 and 2 for
+	a def whose body spans module lines 11-14).  The position map is the one
+	place the ABSOLUTE line survives, because atNode: records ``aNode beginLine''
+	from the AST itself rather than deriving it from an offset.
+
+	So the traceback walk and the live walk now agree about WHERE a frame is
+	while still disagreeing about what a frame is -- the map lookup is the same
+	one ___tracebackLineForMethod___:ip: makes, but the caret scan above still
+	sets frame identity and statement granularity, which is what that method's
+	``the live walk keeps the statement-granular scan'' is about.
+
+	Falls back to the relative count when the method carries no map: a body
+	whose only expression emits no send records nothing, and answering the
+	def-relative line there is what this did for every method before."
 
 	| report lines caretIdx count |
 	report := [aMethod _sourceAtIp: anIp] on: Error do: [:ex |
@@ -2146,13 +2169,56 @@ ___irPythonLineForMethod___: aMethod ip: anIp
 		(self ___isCaretLine___: (lines at: i))
 			ifTrue: [caretIdx = 0 ifTrue: [caretIdx := i]]].
 	caretIdx = 0 ifTrue: [^ nil].
-	"source lines strictly above the caret; the last of them is the line in
-	flight, so their count is its 1-based absolute line number."
 	count := 0.
 	1 to: caretIdx - 1 do: [:i |
 		(self ___isCaretLine___: (lines at: i)) ifFalse: [count := count + 1]].
 	count = 0 ifTrue: [^ nil].
-	^ count
+	"No map: count is SLICE-relative, so rebase it by the def's first module
+	line, read from the ``# line N file ...'' comment FunctionDefAst appends to
+	the slice.  Answering count bare reported a frame paused on a def's second
+	line as module line 2 -- a blank line near the top of the file, so the
+	traceback printed an empty source line (ClassBodyTracebackTestCase)."
+	^ (self ___mapSpanForMethod___: aMethod ip: anIp)
+		ifNil: [
+			(self ___irSliceFirstLineIn___: ([aMethod @env0:sourceString]
+					on: Error do: [:ex |
+						(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+						ex return: nil]))
+				ifNil: [count]
+				ifNotNil: [:first | count + first - 1]]
+		ifNotNil: [:map | map @env0:at: 1]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irSliceFirstLineIn___: src
+	"The ABSOLUTE module line an IR method's attached def slice starts on, or
+	nil.  FunctionDefAst>>___irMethodBodyCoreOn___:install: attaches the def
+	slice VERBATIM and ends it with one comment line of its own,
+	``# line <beginLine> file <path>'' -- the only place the slice's module
+	position survives now that the slice is no longer padded with
+	(beginLine - 1) newlines.  Every reader that turns a line of the slice into
+	a module line needs it.
+
+	Read from the END: that comment is the slice's last source line, and only a
+	position-map comment (a ___GRAILPOS___ comment) may follow it.  Accepting it
+	ONLY there means a user comment of the same shape inside the def cannot be
+	mistaken for it."
+
+	| lines |
+	src isNil ifTrue: [^ nil].
+	lines := self ___splitLinesOf___: src.
+	lines size to: 1 by: -1 do: [:i | | ln tokens n |
+		ln := (lines at: i) trimSeparators.
+		(ln isEmpty or: [ln at: 1 equals: '"___GRAILPOS___']) ifFalse: [
+			(ln at: 1 equals: '# line ') ifFalse: [^ nil].
+			tokens := ln subStrings: ' '.
+			tokens size >= 3 ifFalse: [^ nil].
+			n := [(tokens at: 3) asNumber] on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+			^ ((n isKindOf: Integer) and: [n >= 1]) ifTrue: [n] ifFalse: [nil]]].
+	^ nil
 %
 
 category: 'Grail-Traceback Building'
@@ -2225,8 +2291,8 @@ ___irPythonSpanForMethod___: aMethod ip: anIp
 
 	Element 5 is the RAW source line, indentation included, because the columns
 	are absolute and traceback.FrameSummary does its own stripping.  An IR
-	method's attached source is padded to ABSOLUTE module lines, so line N of
-	the source is module line N and no rebasing is needed."
+	method's attached source is the UNPADDED def slice, so the absolute line is
+	rebased by the slice's first module line (___irSliceFirstLineIn___:)."
 
 	| line map src |
 	line := self ___irPythonLineForMethod___: aMethod ip: anIp.
@@ -2237,11 +2303,13 @@ ___irPythonSpanForMethod___: aMethod ip: anIp
 	src := [aMethod @env0:sourceString] on: Error do: [:ex |
 		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 		ex return: nil].
+	"line is ABSOLUTE (the map records each node's own beginLine) but the
+	attached source is the unpadded def slice, so index it slice-relative."
 	^ { map @env0:at: 1.
 		map @env0:at: 2.
 		map @env0:at: 3.
 		map @env0:at: 4.
-		self ___sourceLine___: line of: src }
+		self ___sourceLine___: line - ((self ___irSliceFirstLineIn___: src) ifNil: [1]) + 1 of: src }
 %
 
 category: 'Grail-Traceback Building'
@@ -2372,13 +2440,18 @@ ___deriveNestedFunctionNameFor___: aMethod line: aLine
 	src := [aMethod @env0:sourceString]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	src isNil ifTrue: [^ nil].
-	"An IR-built method carries the def's PYTHON source (padded so its line
-	indices are the module's): a nested def is found by INDENTATION, not by a
-	stamp (cut 64).  This is the path a nested def that captures NOTHING takes
-	-- its closure is a clean block with no home method, so the block-offset
-	namer above cannot see it -- and the path every line-only caller takes."
+	"An IR-built method carries the def's PYTHON source: a nested def is found
+	by INDENTATION, not by a stamp (cut 64).  This is the path a nested def
+	that captures NOTHING takes -- its closure is a clean block with no home
+	method, so the block-offset namer above cannot see it -- and the path every
+	line-only caller takes.  aLine is a MODULE line and the attached slice is
+	unpadded, so it is rebased by the slice's first module line first; indexing
+	the slice with the module line named the wrong def, or the home, for every
+	def not on line 1 (test_yield_from test_delegator_is_visible_to_debugger)."
 	(self ___isIRPythonMethod___: aMethod) ifTrue: [
-		^ self ___irNestedNameIn___: src line: aLine].
+		^ self ___irNestedNameIn___: src
+			line: (aLine isNil ifFalse: [
+				aLine @env0:- ((self ___irSliceFirstLineIn___: src) ifNil: [1]) @env0:+ 1])].
 	lines := src @env0:subStrings: (String @env0:with: Character lf).
 	best := nil.
 	bestF := 0.
@@ -2419,8 +2492,8 @@ ___deriveNestedFunctionNameFor___: aMethod line: aLine
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___irNestedNameIn___: pythonSource line: aLine
-	"The innermost nested ``def'' of pythonSource -- an IR method's padded
-	Python -- whose body contains line aLine, by indentation: a def at
+	"The innermost nested ``def'' of pythonSource -- an IR method's attached
+	Python slice -- whose body contains SLICE line aLine, by indentation: a def at
 	indentation k on line L owns every following non-blank line indented
 	deeper than k, up to the first one that is not.  The FIRST def in the
 	source is the method's own header (the slice begins at its ``def'', so it
@@ -2512,7 +2585,7 @@ ___irDefNameOnLine___: ln
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___irSoleNestedNameIn___: pythonSource
-	"The name of the ONE nested def in an IR method's padded Python source, or
+	"The name of the ONE nested def in an IR method's Python source slice, or
 	nil when there are none or several.  The first ``def'' line is the
 	method's own header and is skipped (see ___irNestedNameIn___:line:)."
 
@@ -6917,14 +6990,18 @@ ___irPositionsFromSource___: src
 	prefix newlines are precisely what makes index = line number, so collapsing
 	them would renumber every position in the method."
 
-	| out lines |
+	| out lines base |
 	out := OrderedCollection new.
 	lines := self ___splitLinesOf___: src.
+	"The slice is no longer padded, so an index is SLICE-relative; rebase it by
+	the def's first module line.  The trailing ``# line'' comment is attached
+	metadata, not user source, so it gets no position."
+	base := ((self ___irSliceFirstLineIn___: src) ifNil: [1]) - 1.
 	1 to: lines size do: [:i |
 		| ln |
 		ln := lines at: i.
-		ln trimSeparators isEmpty ifFalse: [
-			out add: (Array with: i with: nil with: nil with: nil with: ln)]].
+		(ln trimSeparators isEmpty or: [ln trimSeparators at: 1 equals: '# line ']) ifFalse: [
+			out add: (Array with: i + base with: nil with: nil with: nil with: ln)]].
 	^ out asArray
 %
 

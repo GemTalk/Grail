@@ -4137,7 +4137,7 @@ ___irMethodBodyCoreOn___: aClass install: installBool
 	build, for a method-local class that does not exist yet and will exist many
 	times."
 
-	| builder lastStmt moduleSrc defBegin defEnd pad padded reassigned transports |
+	| builder lastStmt moduleSrc defBegin defEnd module reassigned transports |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self ___irSelector___ env: 1.
 	"install:false is cut 79's SHARED build, whose aClass is importlib's stand-in
@@ -4148,22 +4148,30 @@ ___irMethodBodyCoreOn___: aClass install: installBool
 	"Attach the def's Python source + node offsets so step points and tracebacks
 	speak Python natively (no ___curPos___ text; see
 	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
-	slice PREFIXED with (beginLine - 1) newlines so the VM -- which numbers lines
-	by counting newlines from the start of the attached source, and ignores the
-	methNode lineNumber -- reports ABSOLUTE module line numbers.  sourceBase
-	rebases each node's absolute beginPosition into that padded string."
-	moduleSrc := self sourceString.
+	slice VERBATIM.  sourceBase rebases each node's absolute beginPosition into
+	that slice, so it is defBegin.
+
+	It is NOT prefixed with (beginLine - 1) newlines, which an earlier reader of
+	this comment will remember; padding used to be what made a line count come
+	out absolute, at the cost of copying the whole prefix per def.  Nothing
+	replaces it at THIS end: lineNumber is set below for the method's debug info
+	but does not reach the generated method, so both the VM's _lineNumberForIp:
+	and a line count over the attached source answer the DEF-RELATIVE line.  The
+	absolute line is recovered downstream from the position map, which stores
+	each node's own beginLine -- BaseException>>___irPythonLineForMethod___:ip:."
+
+  module := self module .
+	moduleSrc := module source .
 	defBegin := self beginPosition.
 	defEnd := (self endPosition ifNil: [moduleSrc size]) min: moduleSrc size.
 	(moduleSrc notNil and: [defBegin notNil and: [defBegin >= 1 and: [defBegin <= defEnd]]])
-		ifTrue: [
-			pad := WriteStream on: String new.
-			(self beginLine - 1) timesRepeat: [pad nextPut: Character lf].
-			padded := pad contents , (moduleSrc copyFrom: defBegin to: defEnd).
-			builder fileName: (self ___irFileName___) source: padded.
-			"padded pos of an absolute node offset abs = abs - defBegin + beginLine
-			 = abs - (defBegin - beginLine + 1) + 1, so sourceBase is that base."
-			builder sourceBase: (defBegin - self beginLine + 1)].
+		ifTrue: [ | fctSource |
+      fctSource := moduleSrc copyFrom: defBegin to: defEnd .
+      fctSource last == Character lf ifFalse:[ fctSource lf ].
+      "Maglev's file and line instVars within GsNMethod debugInfo were removed, so append..."
+      fctSource add:'# line '; add: beginLine asString; add: ' file '; add: module path ; lf  .
+      builder sourceString: fctSource fileName: (self ___irFileName___) line: beginLine .
+			builder sourceBase: defBegin. ].
 	"A reassigned parameter cannot be the method argument (Smalltalk args are
 	read-only; comgen refuses the store outright), so it arrives under a
 	TRANSPORT name and is copied into a temp of its own name before the body
@@ -5292,7 +5300,7 @@ transportParamName: aName
 %
 
 category: 'Module Method Compilation'
-method: FunctionDefAst
+classmethod: FunctionDefAst
 isSmalltalkReservedIdentifier: aString
 	"Smalltalk pseudo-variables and other identifiers that can't be
 	used as method-argument names without ambiguity.  When a Python
@@ -5301,6 +5309,11 @@ isSmalltalkReservedIdentifier: aString
 
 	^ #(#'self' #'super' #'thisContext' #'nil' #'true' #'false')
 		includes: aString asSymbol
+%
+category: 'Module Method Compilation'
+method: FunctionDefAst
+isSmalltalkReservedIdentifier: aString
+  ^ self class isSmalltalkReservedIdentifier: aString
 %
 
 category: 'Module Method Compilation'
@@ -8256,18 +8269,25 @@ ___emitIRFreeVariableRead___: aName on: aBuilder
 	and one the fixture's values could not have shown.
 
 	Resolved through the shared NameAst route rather than by spelling the
-	module read again here, so the two paths cannot drift on it.  Anything else
-	leafless still raises: replacing a fallback with an emit is a behaviour
-	change, and this cut measured only the declared-global shape."
+	module read again here, so the two paths cannot drift on it.
+
+	EVERY OTHER LEAFLESS NAME TAKES THAT ROUTE TOO, because that is all the
+	text ever does: ___emitFreeVariableRead___:parent:on: builds a NameAst at
+	the def site whatever the name.  Testing only the NEAREST enclosing
+	function missed a declaration made further out -- ``global x'' in g, a
+	plain i inside it, and h inside i reading x: i binds nothing, so there is
+	no leaf, and i declares nothing, so the test answered false and this
+	raised.  NameAst's own walk (___pythonLocalInEnclosingFunctions___:) stops
+	at the innermost scope that binds OR declares the name, which is the rule
+	GlobalDeclarationScopeTestCase pins.  While importlib caught emit errors
+	the raise was a quiet text fallback; without that seam it failed the
+	module load."
 
 	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
 	(self ___irMethodMode___ and: [CallAst isSelfReference: aName asSymbol])
 		ifTrue: [^ aBuilder selfNode].
-	(CallAst moduleClassBeingCompiled notNil
-		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: aName asSymbol])
-		ifTrue: [^ self ___emitIRFreeVariableRead___: aName asSymbol
-			parent: self parent on: aBuilder].
-	Error signal: 'IR codegen: free variable ' , aName asString , ' has no leaf at the def site'
+	^ self ___emitIRFreeVariableRead___: aName asSymbol
+		parent: self parent on: aBuilder
 %
 
 category: 'Grail-IR Codegen'
