@@ -853,6 +853,7 @@ run
 	at: #'DeprecatedCooperativeTestCase' put: nil;
 	at: #'DeprecationWarningTestCase' put: nil;
 	at: #'DequeIdentitySearchTestCase' put: nil;
+	at: #'DictDeleteByEqualKeyTestCase' put: nil;
 	at: #'DictKwargsTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
 	at: #'DictUnpackingTestCase' put: nil;
@@ -2252,6 +2253,7 @@ input src/smalltalk/PythonTests/DeployCheckTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
 input src/smalltalk/PythonTests/DeprecationWarningTestCase.gs
 input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
+input src/smalltalk/PythonTests/DictDeleteByEqualKeyTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
 input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
