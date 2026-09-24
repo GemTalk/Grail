@@ -181,6 +181,29 @@ set compile_env: 0
 
 category: 'Python-Attribute Access'
 method: PythonInstance
+___isForwardableClassSideCategory___: aCategory
+	"Whether a class-side method in aCategory may answer a send that reached
+	the INSTANCE -- the @classmethod-through-self forwarding below.
+
+	'Grail-Class Methods' is where a class body's own @classmethod lands.
+	'Grail-MI-Inherited' is the SAME method copied onto this class by
+	importlib >> ___mergeSecondaryBases___: because it was declared in a
+	SECONDARY base; the copy keeps no trace of the category it had.  Without
+	the second name, ``self.parse(x)'' written inside a class later used as a
+	secondary base raised AttributeError, while the identical call in a
+	SUBCLASS -- which takes the attribute path, not this one -- worked.
+	CPython's own ipaddress reaches _BaseV6's _ip_int_from_string that way.
+
+	The merge never copies 'Grail-Class Attrs' or 'Grail-Slot Layout' onto the
+	class side, so admitting its category here cannot let a synthesized
+	class-attribute accessor or a real setter into this branch, which is what
+	the gate was written to keep out."
+
+	^ #(#'Grail-Class Methods' #'Grail-MI-Inherited') includes: aCategory
+%
+
+category: 'Python-Attribute Access'
+method: PythonInstance
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Phase B: instance attributes live in dynamic-instVar storage.
 	Route unknown env-1 messages to that store: `name:` (1 arg) →
@@ -250,16 +273,16 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 			metaOwner := (self class class)
 				whichClassIncludesSelector: aSelector environmentId: 1.
 			(metaOwner notNil and: [
-				(metaOwner categoryOfSelector: aSelector environmentId: 1)
-					= #'Grail-Class Methods']) ifTrue: [
+				self ___isForwardableClassSideCategory___:
+					(metaOwner categoryOfSelector: aSelector environmentId: 1)]) ifTrue: [
 				^ self class perform: aSelector
 					env: 1 withArguments: anArray asArray
 			].
 			metaOwner := (self class class)
 				whichClassIncludesSelector: varargSel environmentId: 1.
 			(metaOwner notNil and: [
-				(metaOwner categoryOfSelector: varargSel environmentId: 1)
-					= #'Grail-Class Methods']) ifTrue: [
+				self ___isForwardableClassSideCategory___:
+					(metaOwner categoryOfSelector: varargSel environmentId: 1)]) ifTrue: [
 				^ self class perform: varargSel
 					env: 1 withArguments: { anArray asArray. nil }
 			].
