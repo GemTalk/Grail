@@ -266,9 +266,44 @@ add: anAssociation
 
 category: 'Grail-Mutation'
 method: PyDict
+___removeKeyFromOrder___: aKey
+	"Drop from the order list the key the TABLE matches, not the one the caller
+	spelled.
+
+	``remove:ifAbsent:'' compares with the Smalltalk ``='', which for a
+	PythonInstance is identity; the table compares with ``compareKey:with:'',
+	which is Python equality.  So a key whose class defines __eq__/__hash__ is
+	removed from the table by an equal-but-not-identical probe -- ``del
+	d[K(1)]'' -- while the order list keeps the key that was stored.  What the
+	next walk of that list does with a key the dictionary no longer holds is
+	either an uncatchable LookupError out of ``self at: k'' (values(), items())
+	or, once the two sizes are compared, ``dictionary changed size during
+	iteration'' about a change nobody made (keys()).
+
+	Measured on CPython's own ipaddress, whose _collapse_addresses_internal keys
+	a dict by IPv4Network and deletes through a supernet() it builds fresh each
+	time, so every delete there took the broken path.
+
+	The Smalltalk comparison goes first because it is what every str/int key
+	needs and it sends no __eq__; the table's own comparison is the fallback,
+	so the scan is paid only where the cheap answer was WRONG.  That fallback
+	also settles the String-probe/Symbol-stored mismatch, which ``='' misses
+	for the same reason and which dict>>___removeStoredKey___ has its own
+	resolution ladder for."
+
+	| index |
+
+	index := self ___order___ indexOf: aKey.
+	index = 0 ifTrue: [
+		index := self ___order___ findFirst: [:each | self compareKey: aKey with: each]].
+	index = 0 ifFalse: [self ___order___ removeAtIndex: index]
+%
+
+category: 'Grail-Mutation'
+method: PyDict
 removeKey: aKey
 	| r |
-	self ___order___ remove: aKey ifAbsent: [].
+	self ___removeKeyFromOrder___: aKey.
 	r := super removeKey: aKey.
 	self ___bumpVersion___.
 	^ r
@@ -278,7 +313,7 @@ category: 'Grail-Mutation'
 method: PyDict
 removeKey: aKey ifAbsent: aBlock
 	(self includesKey: aKey) ifTrue: [
-		self ___order___ remove: aKey ifAbsent: [].
+		self ___removeKeyFromOrder___: aKey.
 		self ___bumpVersion___].
 	^ super removeKey: aKey ifAbsent: aBlock
 %
@@ -299,7 +334,7 @@ removeKey: aKey otherwise: aValue
 	un-iterable from that point on."
 
 	(self includesKey: aKey) ifTrue: [
-		self ___order___ remove: aKey ifAbsent: [].
+		self ___removeKeyFromOrder___: aKey.
 		self ___bumpVersion___].
 	^ super removeKey: aKey otherwise: aValue
 %
@@ -307,7 +342,7 @@ removeKey: aKey otherwise: aValue
 category: 'Grail-Mutation'
 method: PyDict
 removeAllKeys: aCollection
-	aCollection do: [:k | self ___order___ remove: k ifAbsent: []].
+	aCollection do: [:k | self ___removeKeyFromOrder___: k].
 	self ___bumpVersion___.
 	^ super removeAllKeys: aCollection
 %
