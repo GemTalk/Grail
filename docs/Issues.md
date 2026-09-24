@@ -6835,3 +6835,64 @@ previously the IR-only set. Both are MAIN's numbers, measured on main with
 nothing applied. A change is still judged by the same rule, the name-and-kind
 diff against a baseline run of the same tree: this one is 162 -> 163, and the
 one test is `test_annotationlib`'s known flaky row.
+
+## A classmethod called through self fails when its class is a SECONDARY base
+
+```python
+class Standalone:
+    @classmethod
+    def parse(cls, s):
+        return 'parsed-' + s
+    def use(self):
+        return self.parse('own')        # called from the declaring class
+
+class Other:
+    __slots__ = ()
+
+class First(Standalone, Other): pass    # Standalone is the PRIMARY base
+class Second(Other, Standalone): pass   # Standalone is a SECONDARY base
+
+Standalone().use()   # 'parsed-own'
+First().use()        # 'parsed-own'
+Second().use()       # AttributeError: 'Second' object has no attribute 'parse'
+```
+
+Only that one shape fails. Reading the attribute from outside (`Second().parse`)
+answers a BoundMethod, calling it works, and `Second.parse('a')` works — so the
+merged classmethod IS reachable; it is the call written INSIDE the declaring
+class, once that class is a secondary base, that does not find it.
+
+**Why the call is shaped that way.** `@classmethod` is a STRUCTURAL decorator
+(`FunctionDefAst >> ___hasWrappingDecorator___`), and ClassDefAst adds
+classmethod names to `classFunctionNames` deliberately — the comment there
+records that suppressing the fast path for them turned `self.cm0()` into an
+AttributeError back when a class-side method was not reachable through an
+instance's `___pyAttrLoad___`. So `self.parse('own')` compiles to the fused
+send `self parse: 'own'`, which no instance-side method answers; it works
+through the doesNotUnderstand recovery, which loads the attribute and calls it.
+That recovery is what fails for a secondary base.
+
+By contrast the same call written in a SUBCLASS of the declaring class compiles
+to the attribute path outright — `parse` is not in that body's
+`classFunctionNames` — which is why `Sub` works and the mixin does not.
+
+This is what keeps 4 of the 8 remaining checks in
+`tests/python/ipaddress_ipv6_conformance.py` from passing against CPython's own
+`ipaddress`: `IPv6Address(_BaseV6, _BaseAddress)` reaches `_ip_int_from_string`
+that way, and `_BaseV6` is the secondary base. The other 4 are the class
+attribute/property shadowing entry above.
+
+### Where to look
+
+Two leads, in order of likelihood:
+
+* `importlib >> ___mergeSecondaryBases___:bases:resolved:` copies a secondary
+  base's env-1 INSTANCE methods onto the class. A classmethod's home is the
+  class side, and the copied instance method still sends `parse:` to the
+  instance, so whether the recovery can find it depends on how the merged
+  class-side entry is represented — a compiled method or a PyClassMethod
+  descriptor in the class-attribute store.
+* the doesNotUnderstand recovery on PythonInstance / object, which is what
+  turns the failed instance-side send into an attribute load. It answers
+  correctly for the primary-base case, so the difference is in what it finds
+  for the merged one.
