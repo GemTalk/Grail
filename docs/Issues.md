@@ -6728,3 +6728,64 @@ The same shape as the `from_bytes` entry above, found the same way: CPython's
 `ipaddress` writes `self._ip.to_bytes(4)`, and that was the next call to stop
 it after `from_bytes` was fixed. A signature gap reads as "an obscure
 spelling nobody uses" right up until a real module uses it twice.
+
+## A class attribute does not shadow an inherited property, and the obvious fix does not work
+
+CPython's attribute lookup scans the MRO once and stops at the FIRST class
+holding the name, so a class attribute shadows an inherited method or
+`@property` entirely. Grail's instance read finds the inherited one:
+
+```python
+class Base:
+    @property
+    def kind(self): raise NotImplementedError('abstract')
+
+class Sub(Base):
+    kind = 'concrete'
+
+Sub().kind      # CPython: 'concrete'      Grail: NotImplementedError
+Sub.kind        # both: 'concrete'
+```
+
+The class-level read is right, so the value IS stored; only the instance
+lookup has the wrong precedence. CPython's own `ipaddress` is built this way —
+`IPv4Network` declares `_address_class = IPv4Address` where `_BaseNetwork`
+exposes `_address_class` as a property — and it is one of two defects keeping
+that module from running here (see the `int.from_bytes` entry).
+
+### Grail already has the mechanism, and it stops just short
+
+`Object class >> ___grailInstallAttrMethodShadows___:` compiles a forwarding
+method at class creation for each assigned name the superclass chain
+implements. Two of its conditions exclude this case, both deliberately:
+
+* it installs only when the value `___isDescriptorCallable___` — a plain
+  string or class gets nothing;
+* it SKIPS a name carrying both the unary and the 1-arg selector, on the
+  grounds that the pair "is a data attribute in Grail's encoding, not a
+  method". That is true of a class attribute's own accessor pair, and false
+  of an inherited `@property`, which compiles to exactly that shape.
+
+### What was tried, and why it was reverted
+
+A second mechanism alongside it: `ClassDefAst` asking the new class, after the
+secondary-base merge, to compile an instance getter and setter for each class
+attribute whose name a Python ancestor implements. It made the reproduction
+above and all 10 checks of a new fixture pass, and measured **4 regressions in
+the CPython suite** (`test_enum` ×5, `test_set` ×2, `test_super`) **and 6 new
+SUnit failures**, among them `ClassAttrMethodOverrideTestCase` and three
+`GetattributeHookTestCase` tests.
+
+That is the finding worth keeping: those tests already pin this area. The
+compiled getter reads the attribute DIRECTLY, where the existing forwarder
+routes through `___pyAttrLoad___` and is therefore visible to a user
+`__getattribute__`; and two mechanisms installing methods for the same name
+disagree about which wins. **The fix belongs inside
+`___grailInstallAttrMethodShadows___:`**, by teaching its pair-shape test to
+tell an inherited property (whose setter carries the category
+`Grail-Property-ReadOnly` or `Grail-CachedProperty-Setter`) from a class
+attribute's own accessor pair — not beside it.
+
+The fixture written for it is not committed: it fails on today's code, and the
+gate's XFAIL convention is for fixtures that CPython and Grail disagree about
+by design, which this is not.

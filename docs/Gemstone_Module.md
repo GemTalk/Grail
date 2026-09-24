@@ -246,6 +246,25 @@ process-bound objects — compiled regex patterns, jinja2 lexers. It is an
 implementation detail rather than a public API, but is safe to use for
 session-lifetime caching.
 
+## Continuations (internal): `___captureContinuation___`, `___isContinuation___`, `___resumeContinuation___`, `___tryCommit___`
+
+The primitives under stdlib `durable` ([Durable_Execution.md](Durable_Execution.md)).
+`___captureContinuation___()` answers a `GsProcess` continuation of the
+calling stack (`GsProcess continuationFromLevel: 1`): a committable copy of
+every frame from the base to the caller, temps included. Committed and
+fetched by another session, `___resumeContinuation___(k, value)` replaces
+*that* process's stack with the copy and continues it, with `value` as the
+result of the original capturing call — so the same Python call returns
+twice, once with the continuation and once, possibly in another gem, with
+the value. `___isContinuation___(x)` tells the two returns apart.
+`___tryCommit___()` is `System commit` with the one failure Python cannot
+otherwise catch turned into data: a commit that GemStone *refuses* because
+a session-bound object (a Semaphore, a generator's process, an open file)
+is reachable signals TransactionError 2407 in Smalltalk, which unwinds
+straight through Python frames; the method answers the message as a `str`
+instead (True/False remain success/conflict). After such a refusal the
+session must abort before it can commit again (ImproperOperation 2424).
+
 ## Implementation notes
 
 * Value attributes (`system`, `mySymbolList`, `version`) are unary env-1

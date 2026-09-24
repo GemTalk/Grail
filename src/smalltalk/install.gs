@@ -740,6 +740,7 @@ run
 	at: #'ClassTypeParamsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
+	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'ClassAttrSingleHomeTestCase' put: nil;
@@ -1357,6 +1358,7 @@ run
 	at: #'TypeErrorTestCase' put: nil;
 	at: #'TypeInCallPositionTestCase' put: nil;
 	at: #'TypeParamsTestCase' put: nil;
+	at: #'TypePrepareDefaultTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'TypedDictTotalTestCase' put: nil;
 	at: #'TypingGenericAliasTestCase' put: nil;
@@ -2128,6 +2130,7 @@ input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
+input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
@@ -2765,6 +2768,7 @@ input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
 input src/smalltalk/PythonTests/TypeInCallPositionTestCase.gs
 input src/smalltalk/PythonTests/TypeParamsTestCase.gs
+input src/smalltalk/PythonTests/TypePrepareDefaultTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/TypingGenericAliasTestCase.gs
 input src/smalltalk/PythonTests/TypingSurfaceTestCase.gs

@@ -341,6 +341,13 @@ timed "gemstone-system" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/
 timed "gemdb" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemdbTest.gs < /dev/null || EXIT=$?
 timed "gemdb-conflict" tests/scripts/run_gemdb_conflict_test.sh || EXIT=$?
 
+# Durable execution on GemStone continuations (stdlib durable, docs/Durable_Execution.md):
+# one workflow crosses six gems -- parked on sleep() and recv(), resumed by
+# timer and by send(), and one gem is kill -9ed after a checkpoint so another
+# recovers it from the committed continuation.  Each phase is its own `grail`
+# gem, so it lives in a shell driver rather than SUnit.
+timed "durable" tests/scripts/run_durable_test.sh || EXIT=$?
+
 # Functional test for gemdb.schema (layout/report/drop/rename/compact, the
 # public surface for deliberate schema change). Every operation but layout()
 # scans the repository for the instances it touches, which aborts first and

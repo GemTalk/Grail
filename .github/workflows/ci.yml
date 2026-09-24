@@ -106,6 +106,7 @@ jobs:
         run: python3 tests/scripts/make_archive_fixtures.py --check
 
   test-main:
+    name: test-main ${{ matrix.arm }} (${{ matrix.name }}, ${{ matrix.shards }})
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     strategy:
@@ -135,11 +136,29 @@ jobs:
         # Four runners of two shards each keeps the runner count where it was
         # while every session compiles half as much.  `name` gives
         # collision-free artifact names (matrix.shards contains a space).
+        #
+        # TWO ARMS, BOTH GATED.  Since #1087 the IR codegen path is the
+        # DEFAULT, so the `ir` arm leaves GRAIL_IR_CODEGEN empty -- which reads
+        # as ON, deliberately (importlib>>___irCodegenFlagFor___:) -- and the
+        # `text` arm sets it to 0.  The text path is not dead code: it is what
+        # IR falls back to for any shape it declines, and the oracle every IR
+        # emit is checked against, so a PR that breaks it must be caught
+        # before it merges, not months later when someone asks for =0.
+        #
+        # Being legs of THIS job is what gates them: ci-complete already needs
+        # test-main, so no ruleset change was needed.  Before this, the IR arm
+        # ran in a separate workflow (ir-flag-on.yml, #1148) that nothing
+        # required -- it ran in the merge queue, and the queue did not wait
+        # for it.
         include:
-          - { name: a, shards: "0 1" }
-          - { name: b, shards: "2 3" }
-          - { name: c, shards: "4 5" }
-          - { name: d, shards: "6 7" }
+          - { arm: ir,   ircodegen: "",  name: a, shards: "0 1" }
+          - { arm: ir,   ircodegen: "",  name: b, shards: "2 3" }
+          - { arm: ir,   ircodegen: "",  name: c, shards: "4 5" }
+          - { arm: ir,   ircodegen: "",  name: d, shards: "6 7" }
+          - { arm: text, ircodegen: "0", name: a, shards: "0 1" }
+          - { arm: text, ircodegen: "0", name: b, shards: "2 3" }
+          - { arm: text, ircodegen: "0", name: c, shards: "4 5" }
+          - { arm: text, ircodegen: "0", name: d, shards: "6 7" }
     # --shm-size lifts the container's default 64 MB /dev/shm so GemStone's
     # shared page cache fits. GEMSTONE/PATH come from the image ENV.
     container:
@@ -160,7 +179,7 @@ jobs:
       # first (checkout wrote it as root).  Everything runs in one shell, so no
       # $GITHUB_ENV hand-off is needed (and ci can't write those root files, so
       # they're dropped with `env -u`).
-      - name: install + run SUnit shards ${{ matrix.shards }} (as non-root 'ci')
+      - name: install + run SUnit shards ${{ matrix.shards }}, ${{ matrix.arm }} arm (as non-root 'ci')
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
@@ -170,6 +189,7 @@ jobs:
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
+            GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
               export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
@@ -184,12 +204,55 @@ jobs:
               ./scripts/run_tests.sh
             '
 
+      # PROVE WHICH ARM RAN.  The two arms score the same when the flag does
+      # not take -- a text arm that silently compiled through IR, or an IR arm
+      # that fell back to text, is just another green run -- so each arm
+      # checks the seam's own counters after the shards: the ir arm must have
+      # compiled something through IR, the text arm nothing.  Runs even when
+      # the shards failed, because knowing the arm was real is what makes a
+      # RED run interpretable too.
+      #
+      # The probe is a FILE rather than a heredoc: topaz needs its `%'
+      # terminators at column 0, which an indented heredoc would break.  No -I
+      # on the topaz line (it finds the ~/.topazini setup-testing-env.sh
+      # wrote); the -C is run_tests.sh's own TOPAZ_CFG.  NO COMMENTS OR
+      # APOSTROPHES INSIDE THE bash -c BODY: it is one single-quoted string.
+      - name: prove the ${{ matrix.arm }} arm really ran
+        if: always()
+        run: |
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GRAIL_NETLDI=gs64ldi \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
+            ARM="${{ matrix.arm }}" \
+            bash -ex -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              cd "$GITHUB_WORKSPACE"
+              topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;" \
+                -S tests/github/ir_seam_control.gs \
+                < /dev/null | tee /tmp/ir_control.out
+              flag=$(grep "^IRFLAG|" /tmp/ir_control.out | cut -d"|" -f2)
+              compiled=$(grep "^IRCOMPILED|" /tmp/ir_control.out | cut -d"|" -f2)
+              if [ "$ARM" = ir ]; then
+                [ "$flag" = true ] || { echo "the ir arm reported IR OFF"; exit 1; }
+                [ "${compiled:-0}" -gt 0 ] || { echo "the ir arm compiled nothing through IR"; exit 1; }
+              else
+                [ "$flag" = false ] || { echo "the text arm reported IR ON"; exit 1; }
+                [ "${compiled:-1}" -eq 0 ] || { echo "the text arm compiled $compiled methods through IR"; exit 1; }
+              fi
+              echo "$ARM arm confirmed: flag=$flag compiled=$compiled"
+            '
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          # Per-group name: matrix jobs must not collide on artifact names.
-          name: grail-ci-logs-shards-${{ matrix.name }}
+          # Per-leg name: matrix jobs must not collide on artifact names.
+          name: grail-ci-logs-${{ matrix.arm }}-shards-${{ matrix.name }}
           if-no-files-found: ignore
           retention-days: 7
           # .out logs + stone/gem logs; the extent is deliberately excluded.
