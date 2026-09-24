@@ -455,6 +455,9 @@ instance
 	inst := self @env0:___committedInstance___.
 	inst == nil ifTrue: [inst := self @env0:new].
 	reg @env0:at: self put: inst.
+	"A session's first native singleton is also a point every Python
+	execution passes: install the dispatchers committed overrides need."
+	object @env0:___grailInstallRecordedSelfSendOverrides___.
 	((inst @env0:class @env0:whichClassIncludesSelector: #initialize environmentId: 1) @env0:notNil)
 		ifTrue: [inst initialize].
 	^ inst

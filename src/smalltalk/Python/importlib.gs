@@ -1895,9 +1895,17 @@ ___canonicalGenerationCheck___
 	self ___ensureStackErrorFlavour___.
 	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
 	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
-	deployGen == runtimeGen ifTrue: [^ self].
+	"The same once-per-session point installs the self-send dispatchers that
+	committed overrides need (object class >>
+	___grailInstallRecordedSelfSendOverrides___) -- but only once the record is
+	known to be current: a stale generation wipes it below, and the classes it
+	names are the ones the install replaced."
+	deployGen == runtimeGen ifTrue: [
+		object ___grailInstallRecordedSelfSendOverrides___.
+		^ self].
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
+	   #'GrailCommittedSelfSendOverrides'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
 	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
@@ -1974,6 +1982,7 @@ resetSessionForReinstall
 	st @env0:removeKey: #'GrailSelfSendDispatchers' ifAbsent: [].
 	st @env0:removeKey: #'GrailFastOverrideHolders' ifAbsent: [].
 	st @env0:removeKey: #'GrailPinHolder' ifAbsent: [].
+	st @env0:removeKey: #'GrailRecordedDispatchersInstalled' ifAbsent: [].
 	^ toEvict @env0:size
 %
 

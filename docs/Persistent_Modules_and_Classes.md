@@ -498,6 +498,28 @@ is protected. A patch writes nothing, no other session sees it or pays for it,
 and two patching sessions cannot conflict. The selector pins moved to a
 per-session holder the same way. `runSessionPatchTest.gs` guards it.
 
+**A committed override is data, not a patch.** `g.word = f` followed by a commit
+of `g` must keep `g.greet()` — `self.word()` — reaching `f` in every later
+session, and a session-only dispatcher does not: measured before the fix, a later
+session's `g.word()` answered `f` while `g.greet()` ran the original. The same
+holds for a class-body store over a method in a deployed module, whose body never
+re-runs. So the *names* are recorded persistently
+(`object class >> ___grailCommittedSelfSendOverrides___`, a reduced-conflict
+class → names record written in the storing transaction, only the first time a
+pair is seen) and each session installs the recorded dispatchers once, from
+importlib's per-session generation check and from its first native-module
+singleton (`___grailInstallRecordedSelfSendOverrides___`). The dispatchers stay
+session methods; only the record is committed, and only if that session commits.
+A generation bump wipes it with the other registries.
+
+A class carrying session methods also changes what the kernel can do to it:
+`removeSelector:environmentId:` looks the selector up in the (protected)
+transient dictionary first and fails for **every** selector. Grail records what it
+installs and removes through `Behavior >> ___removeSelector:environmentId:`, which
+drops the class's transient dictionaries in protected mode
+(`GsPackagePolicy >> sessionMethodRemoveAllMethodsFor:`), removes the selector and
+reinstalls the rest; a class rebuild forgets its patches outright.
+
 Two fast paths come with it, both reading a value as a literal association
 compiled into a session method rather than probing:
 

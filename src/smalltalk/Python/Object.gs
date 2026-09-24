@@ -13206,7 +13206,84 @@ ___grailInstallSelfSendDispatchers___: aSymbol
 	pairs @env0:do: [:each |
 		self ___grailInstallOneDispatcher___: (each @env0:at: 1)
 			definedIn: (each @env0:at: 2) name: sym].
+	self ___grailRecordSelfSendOverride___: sym.
 	^ true
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailCommittedSelfSendOverrides___
+	"The committed record of (class -> Python names) whose stores needed a
+	self-send dispatcher, or nil before any did.  Read-only: a read never
+	creates it (a creation is a write).
+
+	WHY IT IS COMMITTED when the dispatchers are not.  A dispatcher is a
+	SESSION method, which is right for a patch -- but an override stored on an
+	object that is then committed is DATA, and every later session that uses
+	the object needs the dispatcher too.  Measured before this record existed:
+	commit ``g.word = f'', and a later session's ``g.word()'' answered the
+	override while ``g.greet()'' -- ``self.word()'' -- ran the original.  The
+	same holds for a class-body store over a method in a deployed module,
+	whose body never re-runs.  So the NAME is recorded, in the transaction
+	that stored it (it commits only if that session does), and each session
+	re-installs the recorded dispatchers (___grailInstallRecordedSelfSendOverrides___).
+	Reduced-conflict throughout, so two sessions recording different names
+	merge; a name already recorded is not written again."
+
+	^ UserGlobals @env0:at: #'GrailCommittedSelfSendOverrides' otherwise: nil
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailRecordSelfSendOverride___: aSymbol
+	"Note that this class needed a dispatcher for aSymbol (see
+	___grailCommittedSelfSendOverrides___).  Not for a native module: its
+	instance state is session state and is never committed."
+
+	| reg names |
+	(NativeModule ~~ nil and: [self @env0:inheritsFrom: NativeModule]) ifTrue: [^ self].
+	reg := self ___grailCommittedSelfSendOverrides___.
+	names := reg == nil ifTrue: [nil] ifFalse: [reg @env0:at: self otherwise: nil].
+	(names ~~ nil and: [names @env0:includes: aSymbol @env0:asSymbol]) ifTrue: [^ self].
+	reg == nil ifTrue: [
+		reg := RcKeyValueDictionary @env0:new.
+		UserGlobals @env0:at: #'GrailCommittedSelfSendOverrides' put: reg].
+	names == nil ifTrue: [
+		names := RcIdentityBag @env0:new.
+		reg @env0:at: self put: names].
+	names @env0:add: aSymbol @env0:asSymbol.
+	^ self
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailInstallRecordedSelfSendOverrides___
+	"Once per session: install the session dispatchers for every recorded
+	(class, name), so an override committed in an earlier session reaches this
+	session's self-sends.  Called from the two points every Python execution
+	passes before it can reach a committed object -- importlib's per-session
+	registry check and the session's first native-module singleton.  A class
+	the record names but a later install replaced is skipped: it is not the
+	class any live code runs."
+
+	| temps reg |
+	temps := SessionTemps @env0:current.
+	(temps @env0:at: #'GrailRecordedDispatchersInstalled' otherwise: nil) == true
+		ifTrue: [^ self].
+	"A record from before the last install names classes that install
+	replaced, and importlib's generation check is about to wipe it: not yet
+	current, so not yet done -- the check calls back once it has decided."
+	(UserGlobals @env0:at: #'GrailCanonicalDeployGeneration' otherwise: nil)
+		= (UserGlobals @env0:at: #'GrailRuntimeGeneration' otherwise: 0)
+			ifFalse: [^ self].
+	temps @env0:at: #'GrailRecordedDispatchersInstalled' put: true.
+	reg := self ___grailCommittedSelfSendOverrides___.
+	reg == nil ifTrue: [^ self].
+	reg @env0:keysAndValuesDo: [:cls :names |
+		names @env0:asIdentitySet @env0:do: [:sym |
+			[cls ___grailInstallSelfSendDispatchers___: sym]
+				@env0:on: Error do: [:e | e @env0:return: nil]]].
+	^ self
 %
 
 category: 'Grail-Self-Send Overrides'
