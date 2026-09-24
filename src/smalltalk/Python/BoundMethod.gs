@@ -246,8 +246,10 @@ category: 'Grail-Instance creation'
 classmethod: BoundMethod
 ___internedFor___: aReceiver selector: aSymbol
 	"The session-cached handle for (aReceiver, aSymbol), minting it on first
-	ask.  Keyed by receiver IDENTITY: module instances are session-local, so a
-	fresh session re-mints rather than reviving a stale receiver."
+	ask.  Keyed by receiver IDENTITY, in SessionTemps: each session mints its
+	own handles, including for a DEPLOYED (committed, shared) module instance,
+	so answering a function attribute never writes a COMMITTED module (issue
+	#851; module >> ___mayCacheFunctionHandles___)."
 
 	| tbl per inst |
 	tbl := SessionTemps @env0:current

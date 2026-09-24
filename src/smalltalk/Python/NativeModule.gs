@@ -474,4 +474,16 @@ clearInstance
 	self @env0:___forgetSessionState___
 %
 
+set compile_env: 1
+
+category: 'Grail-Session State'
+method: NativeModule
+___mayCacheFunctionHandles___
+	"Always: a native module's dynamic instVars are redirected to SessionTemps
+	(dynamicInstVarAt:put: above), so caching a function handle there writes
+	nothing committed -- see module >> ___mayCacheFunctionHandles___."
+
+	^ true
+%
+
 set compile_env: 0
