@@ -6789,3 +6789,49 @@ attribute's own accessor pair — not beside it.
 The fixture written for it is not committed: it fails on today's code, and the
 gate's XFAIL convention is for fixtures that CPython and Grail disagree about
 by design, which this is not.
+
+## self.prop(arg) called the property's setter
+
+Calling a property's value through self raised:
+
+```python
+class C:
+    @property
+    def factory(self): return maker
+    def use(self): return self.factory(5)   # AttributeError: property 'factory'
+                                            # of 'C' object has no setter
+```
+
+`self.kind(n)` means read the property, then call what it answers. Grail fused
+it into the keyword send `self kind: n` — the class self-send fast path, which
+is right for a plain def and wrong here, because that selector is the
+property's SETTER. The varargs twin of the fusion was no better: it sent the
+getter's own `_kind: { n } kw: nil` wrapper, which refused the argument its
+signature never had.
+
+**Why the name got that far.** `@property` is a STRUCTURAL decorator in
+Grail's classification (`FunctionDefAst >> ___hasWrappingDecorator___`), not a
+wrapping one, because its getter compiles to a plain unary method. That is
+exactly right for a READ — `self.kind` resolving to the getter is the point —
+so the name never joined `classDecoratedFunctionNames`, the set that keeps
+`@contextmanager` and friends out of the fast path. Reads and calls needed
+different answers from one classification.
+
+`CallAst >> classPropertyNames` is that second answer: populated where
+`classDecoratedFunctionNames` is, consulted by the same two guards
+(`classSelfSendSelector` and its varargs twin), and it excludes CALLS ONLY.
+A plain read is AttributeAst's and still resolves to the getter.
+
+CPython's own ipaddress is a caller: `_BaseNetwork` does
+`self._address_class(n)` where `_address_class` is a property.
+
+### The measurement baseline moved underneath this
+
+`IR codegen on by default` (#1087) merged while this was being written, so the
+numbers a tier-2 run prints are not the ones the entries above quote: the
+CPython corpus went from 142 failing tests to 162, and the SUnit default arm
+from 14 failures to 54 — the position and traceback families that were
+previously the IR-only set. Both are MAIN's numbers, measured on main with
+nothing applied. A change is still judged by the same rule, the name-and-kind
+diff against a baseline run of the same tree: this one is 162 -> 163, and the
+one test is `test_annotationlib`'s known flaky row.

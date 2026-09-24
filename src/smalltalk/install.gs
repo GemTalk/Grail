@@ -740,6 +740,7 @@ run
 	at: #'ClassTypeParamsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
+	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'ClassAttrSingleHomeTestCase' put: nil;
@@ -1249,6 +1250,7 @@ run
 	at: #'SelectorManglingApiTestCase' put: nil;
 	at: #'SelfNameCollisionTestCase' put: nil;
 	at: #'SelfNamedClassTestCase' put: nil;
+	at: #'SelfSendPropertyCallTestCase' put: nil;
 	at: #'SelfReboundInMethodTestCase' put: nil;
 	at: #'SelfSendOverrideTestCase' put: nil;
 	at: #'SetDisplayUnpackTestCase' put: nil;
@@ -2129,6 +2131,7 @@ input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
+input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
@@ -2655,6 +2658,7 @@ input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
 input src/smalltalk/PythonTests/SelfCheckingFixturesTestCase.gs
 input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
+input src/smalltalk/PythonTests/SelfSendPropertyCallTestCase.gs
 input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs
 input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
 input src/smalltalk/PythonTests/SetDisplayUnpackTestCase.gs

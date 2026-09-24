@@ -331,6 +331,65 @@ sessionDict: name
 %
 
 ! ===============================================================================
+! Continuations -- the primitive under stdlib ``durable``
+! ===============================================================================
+! A GsProcess continuation is a committable copy of the running stack.  Captured
+! from Python, committed, and resumed by ``value:`` in ANOTHER gem, the Python
+! frames carry on with their locals intact (measured 2026-09-23: a 16-frame
+! stack through importlib and a Python function).  What the copy must not reach
+! is anything session-bound -- a Semaphore, the Processor, a GsFile, a Grail
+! generator (a forked GsProcess parked on a Semaphore) -- or the commit refuses
+! it by class name.
+
+category: 'Grail-Continuations'
+method: gemstone
+___captureContinuation___
+	"Python gemstone.___captureContinuation___() -- answer a continuation of
+	the calling stack, this frame included.  The FIRST return is the
+	GsProcess; every later ``value: x'' sent to it (from any session) returns
+	x from this same call, with the caller's locals restored."
+
+	^ GsProcess @env0:continuationFromLevel: 1
+%
+
+category: 'Grail-Continuations'
+method: gemstone
+___isContinuation___: anObject
+	"True when anObject is what ___captureContinuation___ answered on its first
+	return, as opposed to a value it was resumed with."
+
+	^ (anObject @env0:isKindOf: GsProcess) and: [anObject @env0:isContinuation]
+%
+
+category: 'Grail-Continuations'
+method: gemstone
+___resumeContinuation___: aContinuation _: aValue
+	"Replace the CURRENT process's stack with aContinuation's and continue it,
+	with aValue as the result of the capturing call.  Nothing after this send
+	runs in this process: when the resumed stack completes, its own base
+	frames do -- so the caller forks a process whose only job is this send."
+
+	^ aContinuation @env0:value: aValue
+%
+
+category: 'Grail-Continuations'
+method: gemstone
+___tryCommit___
+	"Commit, answering True; False on a conflict; or a str saying why GemStone
+	REFUSED the commit outright -- a session-bound object (Semaphore, GsFile,
+	the Processor, a generator's process) reachable from the commit set.
+	commitTransaction signals that as TransactionError 2407 rather than
+	answering false, and a Smalltalk error crossing into Python cannot be
+	caught there, so the refusal is caught here and handed over as data.
+	After a refusal the session must abort before it can commit again
+	(ImproperOperation 2424, measured on 4.0)."
+
+	^ [ System commit ]
+		@env0:on: TransactionError
+		do: [:ex | ex @env0:return: (str @env0:withAll: (ex @env0:messageText))]
+%
+
+! ===============================================================================
 ! Deploy audit
 ! ===============================================================================
 
