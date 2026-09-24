@@ -6,8 +6,19 @@ def root_default_level():
 
 
 def basic_config_sets_level():
-    logging.basicConfig(level=logging.DEBUG)
-    return logging.getLogger().level
+    # Restores root afterwards. Prophylactic, not a bug fix: no .gs test drives
+    # this fixture today, so its leak has never reached anything. But
+    # root_default_level() reads root.level expecting a pristine WARNING, and
+    # this is the other fixture here that sets that level -- wire it up without
+    # the restore and the two become order-dependent.
+    root = logging.getLogger()
+    saved_handlers, saved_level = list(root.handlers), root.level
+    try:
+        logging.basicConfig(level=logging.DEBUG)
+        return root.level
+    finally:
+        root.handlers = saved_handlers
+        root.setLevel(saved_level)
 
 
 def named_logger_uses_root_level():
@@ -128,6 +139,19 @@ def handler_set_level_filters():
     return list(_CAPTURED)
 
 
+def logger_exception_reports_the_traceback():
+    """exception() logs at ERROR and now carries the traceback with it.
+
+    Returned as counts and booleans rather than the raw line, because the
+    traceback contains absolute paths and line numbers that differ per
+    checkout.
+    """
+    lines = logger_exception_logs_at_error()
+    return (len(lines),
+            lines[0].startswith('ERROR:emit.exc:caught: failure'),
+            'Traceback (most recent call last):' in lines[0])
+
+
 def logger_exception_logs_at_error():
     log = logging.getLogger('emit.exc')
     log.handlers = []
@@ -207,3 +231,139 @@ def log_record_args_tuple():
     # %-formatting with a multi-element args tuple.
     rec = logging.LogRecord('app', logging.INFO, '%s and %d', ('hi', 7))
     return rec.getMessage()
+
+
+# ---------------------------------------------------------------------------
+# exc_info and the rest of CPython's keyword arguments.
+#
+# Taking only *args was not merely incomplete: it raised TypeError, and the
+# commonest caller is a framework reporting somebody else's exception. Flask's
+# error handler calls logger.error(msg, exc_info=...), so an unhandled
+# exception in a view surfaced as "Logger.error() got an unexpected keyword
+# argument 'exc_info'" with the real traceback nowhere in sight.
+
+
+def error_accepts_exc_info():
+    log = logging.getLogger('exc.kw')
+    log.handlers = []
+    log.propagate = False
+    _reset_captured()
+    log.addHandler(CapturingHandler())
+    log.setLevel(logging.DEBUG)
+    try:
+        raise ValueError('boom')
+    except ValueError:
+        log.error('view raised', exc_info=True)
+    line = _CAPTURED[0]
+    return (len(_CAPTURED), line.startswith('ERROR:exc.kw:view raised'),
+            'ValueError: boom' in line)
+
+
+def error_ignores_unsupported_keywords():
+    # stack_info/stacklevel/extra are accepted and ignored. Refusing them
+    # would reintroduce the same failure for a field nobody would have seen.
+    log = logging.getLogger('exc.kw2')
+    log.handlers = []
+    log.propagate = False
+    _reset_captured()
+    log.addHandler(CapturingHandler())
+    log.setLevel(logging.DEBUG)
+    log.error('plain', stack_info=True, stacklevel=2, extra={'a': 1})
+    return list(_CAPTURED)
+
+
+def exception_defaults_to_exc_info():
+    log = logging.getLogger('exc.default')
+    log.handlers = []
+    log.propagate = False
+    _reset_captured()
+    log.addHandler(CapturingHandler())
+    log.setLevel(logging.DEBUG)
+    try:
+        raise KeyError('missing')
+    except KeyError:
+        log.exception('while handling')
+    return 'missing' in _CAPTURED[0]
+
+
+def exc_info_from_a_triple():
+    import sys
+    log = logging.getLogger('exc.triple')
+    log.handlers = []
+    log.propagate = False
+    _reset_captured()
+    log.addHandler(CapturingHandler())
+    log.setLevel(logging.DEBUG)
+    try:
+        raise RuntimeError('explicit')
+    except RuntimeError:
+        log.error('with a triple', exc_info=sys.exc_info())
+    return 'RuntimeError: explicit' in _CAPTURED[0]
+
+
+def exc_info_false_adds_nothing():
+    log = logging.getLogger('exc.off')
+    log.handlers = []
+    log.propagate = False
+    _reset_captured()
+    log.addHandler(CapturingHandler())
+    log.setLevel(logging.DEBUG)
+    try:
+        raise ValueError('unseen')
+    except ValueError:
+        log.error('quiet', exc_info=False)
+    return _CAPTURED[0]  # exactly the message, nothing appended
+
+
+def exc_info_true_outside_an_except_block():
+    # No exception is being handled, so there is nothing to append and the
+    # message must not gain a "NoneType: None" placeholder.
+    log = logging.getLogger('exc.none')
+    log.handlers = []
+    log.propagate = False
+    _reset_captured()
+    log.addHandler(CapturingHandler())
+    log.setLevel(logging.DEBUG)
+    log.error('nothing to report', exc_info=True)
+    return _CAPTURED[0]  # no "NoneType: None" placeholder
+
+
+def adapter_forwards_keywords():
+    # LoggerAdapter forwards **kwargs into these methods, so it was broken
+    # by the same gap.
+    log = logging.getLogger('exc.adapter')
+    log.handlers = []
+    log.propagate = False
+    _reset_captured()
+    log.addHandler(CapturingHandler())
+    log.setLevel(logging.DEBUG)
+    adapter = logging.LoggerAdapter(log, {'ctx': 1})
+    try:
+        raise ValueError('through the adapter')
+    except ValueError:
+        adapter.error('adapted', exc_info=True)
+    return 'through the adapter' in _CAPTURED[0]
+
+
+def module_level_error_accepts_exc_info():
+    # The module-level functions log to the root logger, so this has to touch
+    # it -- and therefore has to put it back. `root_default_level` reads
+    # root.level and expects a pristine WARNING; a fixture that walks away
+    # leaving DEBUG makes that test pass or fail on which ran first. No other
+    # root-touching fixture here sets the LEVEL, which is why this is the one
+    # that broke it.
+    root = logging.getLogger()
+    saved_handlers, saved_level = list(root.handlers), root.level
+    root.handlers = []
+    _reset_captured()
+    root.addHandler(CapturingHandler())
+    root.setLevel(logging.DEBUG)
+    try:
+        try:
+            raise ValueError('module level')
+        except ValueError:
+            logging.error('at module level', exc_info=True)
+        return 'module level' in _CAPTURED[0]
+    finally:
+        root.handlers = saved_handlers
+        root.setLevel(saved_level)
