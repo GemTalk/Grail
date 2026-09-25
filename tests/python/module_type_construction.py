@@ -128,6 +128,42 @@ def a_subclass_without_its_own_init_still_gets_the_name():
     return M('probe').__name__ == 'probe'
 
 
+def a_constructed_modules_dict_can_be_copied():
+    """``dict(m.__dict__)`` -- copying a namespace, which every loader does.
+
+    a_constructed_module_has_a_dict above checks the view EXISTS. This checks
+    it can be TRAVERSED, a different claim and the one that broke:
+    PyModuleDict >> ___moduleKeys___ unions ___globalNames___ with __dir__ and
+    then reads each key it yields, so one advertised-but-unreadable name makes
+    the whole view untraversable."""
+    m = types.ModuleType('probe_copy')
+    return dict(m.__dict__) is not None
+
+
+def source_can_be_executed_into_a_constructed_module():
+    """Build a module, exec source into it -- a plugin loader, a test
+    collector, a REPL. This raised an AttributeError naming __cached__ before
+    a line of the source ran."""
+    m = types.ModuleType('probe_exec')
+    exec(compile('VALUE = 7\n', '<probe>', 'exec'), m.__dict__)
+    return m.VALUE == 7
+
+
+def a_constructed_module_agrees_with_itself_about_cached():
+    """__cached__ is DELIBERATELY absent -- ModuleCachedAbsentTestCase pins
+    that decision, and its comment says the point is that dir(), vars() and
+    iteration do not list it. The namespace has to agree.
+
+    A bare module's class is ``module`` itself, so __dir__'s sweep of the
+    class's env-1 selectors reported the accessor and advertised a key that
+    getattr refuses. A module loaded from a path has a generated class and
+    never showed it, which is why this hid."""
+    m = types.ModuleType('probe_cached')
+    return (hasattr(m, '__cached__') is False
+            and ('__cached__' in m.__dict__) is False
+            and '__cached__' not in dir(m))
+
+
 CHECKS = [
     a_module_can_be_constructed_by_name,
     a_fresh_modules_doc_is_none,
@@ -144,6 +180,9 @@ CHECKS = [
     three_positionals_raise_typeerror,
     no_arguments_raises_typeerror,
     a_subclass_without_its_own_init_still_gets_the_name,
+    a_constructed_modules_dict_can_be_copied,
+    source_can_be_executed_into_a_constructed_module,
+    a_constructed_module_agrees_with_itself_about_cached,
 ]
 
 

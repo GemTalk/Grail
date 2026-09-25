@@ -584,7 +584,8 @@ __dir__
 		| s index skip |
 		s := sel @env0:asString.
 		skip := (self ___isGrailInternalSelector___: s)
-			@env0:or: [self ___isDeletedGlobal___: sel].
+			@env0:or: [(self ___isDeletedGlobal___: sel)
+			@env0:or: [self ___isAbsentAccessor___: sel]].
 		"The module BODY is compiled as an env-1 ``initialize'' method in
 		category 'Grail-Module Body' (importlib class >>
 		___defineModuleClass___).  It is an implementation artifact, not a
@@ -1284,6 +1285,35 @@ ___isDeletedGlobal___: aSym
 
 category: 'Grail-Attribute Access'
 method: module
+___isAbsentAccessor___: aSym
+	"Whether aSym is an accessor that DELIBERATELY reports no such attribute.
+
+	``__cached__'' is implemented as a method that signals AttributeError --
+	in CPython it is the path of the module's compiled BYTECODE FILE, Grail
+	has no such file, and inventing one would be a wrong answer wearing a
+	familiar name (ModuleCachedAbsentTestCase).  Being a method, it appears in
+	``class selectorsForEnvironment: 1'', so the __dir__ and ___globalNames___
+	sweeps reported a name that getattr refuses: dir() listed it, ``in'' said
+	true, and reading it raised.  PyModuleDict >> ___moduleKeys___ unions
+	__dir__ into its key list and keysAndValuesDo: READS each key, so the
+	whole namespace view became untraversable -- ``dict(m.__dict__)'' and
+	``exec(src, m.__dict__)'' both died on an otherwise healthy module.
+
+	Only a module whose class is ``module'' itself showed it.  One loaded from
+	a path gets a generated class whose env-1 selectors are its own globals,
+	which is why this hid until a bare types.ModuleType was built.
+
+	A NAMESPACE ENTRY STILL WINS, exactly as in the accessor: a module body may
+	assign ``__cached__ = ...'' itself and CPython reads that back, so this is
+	a default and not a veto.  Mirrors module >> __cached__ deliberately; the
+	two must agree or the same disagreement returns."
+
+	aSym @env0:== #'__cached__' ifFalse: [^ false].
+	^ (self @env0:includesKey: #'__cached__') @env0:not
+%
+
+category: 'Grail-Attribute Access'
+method: module
 ___markGlobalDeleted___: aSym
 	"Record that aSym is gone, and make a later assignment revive it: a store
 	goes to a dynamic instVar, which the read probes BEFORE the tombstone
@@ -1449,7 +1479,8 @@ ___globalNames___
 		Nothing changes for a module written in PYTHON: its top-level defs all
 		compile into 'Grail-Methods', which neither rule excludes."
 		skip := (self ___isGrailInternalSelector___: s)
-			@env0:or: [self ___isDeletedGlobal___: sel].
+			@env0:or: [(self ___isDeletedGlobal___: sel)
+			@env0:or: [self ___isAbsentAccessor___: sel]].
 		skip ifFalse: [
 			| cat |
 			cat := self @env0:class @env0:categoryOfSelector: sel environmentId: 1.
