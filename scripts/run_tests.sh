@@ -340,6 +340,10 @@ timed "gemstone-system" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/
 # needs two concurrent sessions and lives in run_gemdb_conflict_test.sh.
 timed "gemdb" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemdbTest.gs < /dev/null || EXIT=$?
 timed "gemdb-conflict" tests/scripts/run_gemdb_conflict_test.sh || EXIT=$?
+# contextvars' current Context, and a committed regex's recompiled pointer,
+# are per-session state: two RPC sessions set one ContextVar and do Decimal
+# arithmetic with overlapping transactions, and every commit must succeed.
+timed "contextvars-session" tests/scripts/run_contextvars_session_test.sh || EXIT=$?
 
 # Durable execution on GemStone continuations (stdlib durable, docs/Durable_Execution.md):
 # one workflow crosses six gems -- parked on sleep() and recv(), resumed by

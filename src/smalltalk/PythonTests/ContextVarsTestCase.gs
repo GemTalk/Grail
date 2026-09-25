@@ -74,3 +74,23 @@ testNoDefault
 	self assert: (testModule @env1:___pyAttrLoad___: #'no_default_caught') equals: true.
 	self assert: (testModule @env1:___pyAttrLoad___: #'got_with_fallback') equals: 'fallback'.
 %
+
+category: 'Grail-Tests - Session-Local State'
+method: ContextVarsTestCase
+testCurrentContextLivesInSessionTempsNotCommitted
+	"Regression: the current Context must live in SessionTemps, not in the
+	committed contextvars module.  It used to be a module global, so every gem
+	shared one Context and one _data dict: two sessions that each set a
+	ContextVar -- or did decimal arithmetic, whose context is a ContextVar --
+	collided on commit.  The two-session half is
+	tests/scripts/run_contextvars_session_test.sh; this checks the storage."
+
+	| cv ctx store |
+	cv := (importlib ___instance___) @env1:import_module: 'contextvars'.
+	ctx := cv @env1:_get_current_context.
+	store := SessionTemps current
+		at: #'___GrailSessionDict___contextvars' otherwise: nil.
+	self assert: store notNil.
+	self assert: (store @env1:__getitem__: 'current') == ctx.
+	self deny: ctx isCommitted.
+%
