@@ -103,6 +103,26 @@ ___fixtureSource___
 
 category: 'Grail-Private'
 method: PythonCallSitePositionsTestCase
+___fixtureLinesOfDef___: aName in: srcLines
+	"The {lineNumber. text} of every non-blank line of the fixture's top-level
+	``def aName('', from the def line through the last line before the next
+	unindented one -- the answer an IR method for it should give."
+
+	| out inDef |
+	out := OrderedCollection new.
+	inDef := false.
+	1 to: srcLines size do: [:i |
+		| ln |
+		ln := srcLines at: i.
+		(ln notEmpty and: [(ln at: 1) isSeparator not]) ifTrue: [
+			inDef := (ln indexOfSubCollection: 'def ' , aName , '(') = 1].
+		(inDef and: [ln trimSeparators notEmpty]) ifTrue: [
+			out add: (Array with: i with: ln)]].
+	^ out
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
 ___textMethod___
 	^ textModule class compiledMethodAt: #answer environmentId: 1
 %
@@ -173,10 +193,10 @@ test_ir_path_answers_positions_too
 category: 'Grail-Tests-CallSitePositions'
 method: PythonCallSitePositionsTestCase
 test_ir_line_numbers_are_absolute
-	"An IR method's source is prefixed with (beginLine - 1) newlines, so a
-	line's index IS its module line number.  Splitting with ``subStrings:''
-	would drop those empty lines and renumber everything, so this pins it: the
-	def line reported must match where ``def answer'' really is in the fixture."
+	"An IR method's source is its def's slice of the module, so a line's index
+	in it, rebased by the def's first module line, is its module line number.
+	This pins that rebase: the def line reported must match where ``def
+	answer'' really is in the fixture."
 
 	| m pos defLine fileLine srcLines |
 	importlib ___irCodegenSupported___ ifFalse: [^ self].
@@ -194,6 +214,59 @@ test_ir_line_numbers_are_absolute
 			ifTrue: [fileLine := i]].
 	self assert: fileLine > 0 description: 'fixture has no ``def answer'' line'.
 	self assert: (defLine at: 1) equals: fileLine.
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_ir_positions_are_exactly_the_defs_own_lines
+	"The WHOLE answer, not one line of it: an IR method's positions are the
+	non-blank lines of its def, each at its module line with its own text, and
+	nothing else.
+
+	Asserted on defs that SEND something, because only those carry a
+	___GRAILPOS___ map, and the map comment is what used to leak: it came back
+	as one more ``line'', past the def's end, on a module line that belongs to
+	the next def (poly_local reported line 100, which is ``def ir_raiser():'').
+	``answer'' sends nothing, carries no map, and so could never show it -- which
+	is why the method is checked to carry one before its answer is trusted."
+
+	| srcLines |
+	importlib ___irCodegenSupported___ ifFalse: [^ self].
+	srcLines := BaseException ___splitLinesOf___: self ___fixtureSource___.
+	#(#'poly_local:' 'poly_local' #'sign:' 'sign') pairsDo: [:sel :name |
+		| m got expected |
+		m := irModule class compiledMethodAt: sel environmentId: 1.
+		self assert: (BaseException pythonPositionKindForMethod: m) equals: #irSource.
+		self assert: (m sourceString includesString: '___GRAILPOS___')
+			description: name , ' carries no position map, so this proves nothing'.
+		got := (BaseException pythonPositionsForMethod: m)
+			collect: [:p | Array with: (p at: 1) with: (p at: 5) asString].
+		expected := (self ___fixtureLinesOfDef___: name in: srcLines)
+			collect: [:each | Array with: (each at: 1) with: (each at: 2) asString].
+		self assert: expected notEmpty description: 'fixture has no def ' , name.
+		self assert: got asArray equals: expected asArray]
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_ir_slice_trailer_is_cut_by_position_not_by_prefix
+	"The metadata after a def slice is recognised by WHERE it is -- at the end --
+	not by what a line starts with, so a user comment shaped like the trailer
+	inside the def is source and keeps its position."
+
+	| lf lines |
+	lf := String with: Character lf.
+	lines := BaseException ___splitLinesOf___:
+		'def f():' , lf , '    # line 3 of the recipe' , lf , '    return g()' , lf ,
+		'# line 40 file /x.py' , lf , lf , '"___GRAILPOS___ 1 2 41 4 41 7 "'.
+	self assert: (BaseException ___irSliceSourceLineCountIn___: lines) equals: 3.
+	"The map without a ``# line'' comment: only the map is cut."
+	lines := BaseException ___splitLinesOf___:
+		'def f():' , lf , '    return g()' , lf , lf , '"___GRAILPOS___ 1 2 1 4 1 7 "'.
+	self assert: (BaseException ___irSliceSourceLineCountIn___: lines) equals: 2.
+	"No trailer at all: every line is source."
+	lines := BaseException ___splitLinesOf___: 'def f():' , lf , '    pass'.
+	self assert: (BaseException ___irSliceSourceLineCountIn___: lines) equals: 2.
 %
 
 category: 'Grail-Tests-CallSitePositions'
