@@ -4237,13 +4237,15 @@ ___irCodegenEnabled___
 	source compilation; every other def, and the whole path when this is false, is
 	unchanged.
 
-	The platform gate stays even though 4.0 is now the only supported kernel: it
-	asks whether the kernel GsCom* builder API is actually present, so an old 4.0
-	build without it answers false, this answers false whatever the flag says, and
-	the flag becomes a no-op -- the IR path is never even attempted, so no per-def
-	build-and-fall-back churn.  It was load-bearing while 3.7.x was supported (the
-	API is absent there entirely), which is why the tests still exercise both
-	branches."
+	The platform gate is a VERSION COMPARISON, not a capability probe -- see
+	___irCodegenSupported___, and do not rely on it to keep an under-equipped
+	kernel off the IR path.  A 4.0 build older than the server commit the builder
+	needs answers TRUE here and then FAILS, loudly, on the first def it tries to
+	build.  That is deliberate (e647f739: ``errors during IR generation will be
+	signalled normally so they can be debugged''), and the remedy is a newer
+	product, not a fallback.  The gate was load-bearing while 3.7.x was supported,
+	where the whole GsCom* API is absent, which is why the tests still exercise
+	both branches."
 
 	"ON BY DEFAULT since cut 131 -- the flag now DISABLES the path (see
 	 ___irCodegenFlag___), and the platform gate below is what makes the
@@ -4314,12 +4316,27 @@ ___irCodegenSupported___
 	"Whether this GemStone can actually run the direct-to-IR path -- true on 4.0+
 	(the kernel GsCom* builder API + GsNMethod>>generateFromIR:, primitive 679),
 	false on 3.7.x where the GsCom* node ivar layout differs and the builder
-	raises.  Probed once per session (PyMethodIRBuilder builds a throwaway ``^ 42''
-	method and generates it with no install / no side effect) and cached in
-	SessionTemps.  This is the platform gate that lets the two versions share one
-	code base: the IR-specific tests and the seam both consult it, so 3.7.x skips
-	the 4.0-only path instead of failing on it.  A capability probe, not a version
-	string -- a 4.0 build lacking the VM fixes correctly reads false too."
+	raises.  Computed once per session and cached in SessionTemps.  This is the
+	platform gate that lets the two versions share one code base: the IR-specific
+	tests and the seam both consult it, so 3.7.x skips the 4.0-only path instead of
+	failing on it.
+
+	IT IS A VERSION COMPARISON, NOT A CAPABILITY PROBE.  PyMethodIRBuilder class >>
+	supportedOnThisPlatform answers ``System _gemVersionNum >= 40000'' and builds
+	nothing, so a 4.0 build OLDER than the server commit the builder needs
+	(e647f739: aee5f5d51 or later) reads TRUE here and then fails on the first def
+	it tries to build -- on a 2026-08-05 4.0.0 the failure is
+	``a GsComMethNode does not understand #envId'', which takes install.sh's gemdb
+	deploy down with it.  That loudness is deliberate, not an oversight: the same
+	commit removed the ___irNoteFallback___:error: sends so ``errors during IR
+	generation will be signalled normally so they can be debugged''.  The remedy is
+	a newer product build; GRAIL_IR_CODEGEN=0 is the local workaround.
+
+	This comment used to claim the opposite -- a generative probe that builds a
+	throwaway ``^ 42'' and so reads false on an under-equipped 4.0 -- and that
+	claim cost a reader a wrong diagnosis.  If someone does make it generative, the
+	IR arm's ``testTheIRArmActuallyCompiledTheFixture'' tests are the guard that a
+	silent fallback does not turn the arm vacuous."
 
 	| temps |
 	temps := SessionTemps current.
