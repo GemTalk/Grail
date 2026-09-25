@@ -51,7 +51,15 @@ supportedOnThisPlatform
 	This is the CAPABILITY gate only.  Whether IR is REQUESTED is
 	importlib>>___irCodegenFlag___ (the GRAIL_IR_CODEGEN env var), which tests
 	override with ___irCodegenForce___:; reading the env var here as well would
-	make a forced test silently compile through the text path."
+	make a forced test silently compile through the text path.
+
+	It answers the question by VERSION, and generates nothing.  So a 4.0 build
+	older than the server commit the builder needs (e647f739 names aee5f5d51)
+	answers true and then fails on the first def -- deliberately, since that same
+	commit made IR errors signal normally so they can be debugged.  Do not read
+	this as a promise that an under-equipped kernel is kept off the IR path; see
+	importlib>>___irCodegenSupported___ for what that costs and what to do about
+	it."
 
   ^ System _gemVersionNum >= 40000
 %
