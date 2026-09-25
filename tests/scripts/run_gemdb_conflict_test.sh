@@ -33,7 +33,7 @@ trap 'rm -rf "$SYNC"' EXIT
 # environment, so the checkout path is substituted in as a literal.
 RUN="$SYNC/run.gs"
 {
-  printf 'set gems %s\n' "$STONE"
+  printf 'set stone %s\n' "$STONE"
   printf 'set gemnetid %s\n' "$GEMNETID"
   sed -e "s#@@GRAILDIR@@#${PROJECT_ROOT}#g" \
     "$SCRIPT_DIR/runGemdbConflictRpc.gs"
