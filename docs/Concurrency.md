@@ -124,6 +124,34 @@ doing this at runtime would conflict on the classInstVar.
 (`#GrailNumbersRegistry`, keyed per ABC class). The classInstVar
 declaration remains but is unused.
 
+### Python-level module state — `contextvars` and committed regexes (fixed 2026-09-24)
+
+Found together from one `ConflictError` in a Flask app served from inside the
+database (Brain Freeze, `docs/grail-contextvars-session-state.md` there). Both
+made ordinary `decimal` arithmetic in two sessions a commit conflict.
+
+**`contextvars`' current Context.** It was a module global of the committed
+`contextvars` module, so every gem shared one `Context` and one `_data` dict:
+any two sessions that set a `ContextVar` Write-Write'd on it, and `decimal`
+keeps its context in a `ContextVar` whose `flags` every rounding op mutates.
+**Fixed:** the current context lives in a `SessionDict("contextvars")`
+(`_current()` / `_set_current()`); each session makes its own top context on
+first use, so nothing a library stores in a `ContextVar` is committed.
+
+**A committed `SrePattern`'s recompiled pointer.** A committed pattern faults
+into a new session with a NULL `cPointer` and recompiles on first use
+(`SrePattern >> cPtrAddress`), which used to store the new pointer back into
+the pattern — a persistent write every session made, so two sessions using one
+module-level `re.compile(...)` (decimal's `_all_zeros`, `_exact_half`)
+collided. **Fixed:** the recompiled pointer goes into a SessionTemps map
+(`#GrailSrePatternPointers`) and the committed pattern is never written.
+
+**Regression tests:** `tests/scripts/run_contextvars_session_test.sh` (two RPC
+sessions, overlapping transactions: one shared `ContextVar`, then `Decimal`
+arithmetic; every commit must succeed and a fresh session must see neither
+value nor flags), `ContextVarsTestCase >> testCurrentContextLivesInSessionTempsNotCommitted`,
+`SreTestCase >> testCommittedPatternRecompileIsSessionLocal`.
+
 ### Tier 3 — Acceptable as committed state
 
 These classInstVars are safe because they are truly write-once after install
@@ -175,6 +203,8 @@ use a shorter `GrailXxx` form. Keys as of the 2026-06-08 audit:
 | `#'___GrailSecretsGenerator___'` | `secrets` | Per-session CSPRNG state |
 | `#PythonStoreRootsMap` | `PythonStore` | IncRef'd PyObject roots map |
 | `#'___GrailSessionDict___*'` | `gemstone` | Per-session `SessionDict` backing stores (one key per dict) |
+| `#'___GrailSessionDict___contextvars'` | `contextvars` | This session's current `Context` (key `"current"`) |
+| `#GrailSrePatternPointers` | `SrePattern` | Per-session recompiled C pointers for committed regex patterns |
 | `#'___ExecBlockAttrsTable___'` | `ExecBlockAttrs` | Per-session exec-block `__dict__` (user attributes) |
 | `#'___ExecBlockSlotsTable___'` | `ExecBlockAttrs` | Per-session exec-block SLOTS (`__name__`, `__qualname__`, `__module__`, `__doc__`, `__annotations__`, `__type_params__`) — kept out of `__dict__` so `functools.update_wrapper`'s `__dict__` merge doesn't copy Grail's def-time stamps |
 

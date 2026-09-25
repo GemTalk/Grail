@@ -231,3 +231,24 @@ pattern := self abcPattern.
 %
 
 set compile_env: 0
+
+category: 'Grail-Tests - Session-Local State'
+method: SreTestCase
+testCommittedPatternRecompileIsSessionLocal
+	"Regression: a committed SrePattern faults in with a NULL cPointer and
+	recompiles on first use.  The recompiled pointer must go to SessionTemps,
+	not back into the committed pattern -- that store was a persistent write
+	every session made, and two sessions using one module-level pattern
+	(decimal's _all_zeros) collided on commit.  Found with the contextvars
+	session-state bug; the two-session half is
+	tests/scripts/run_contextvars_session_test.sh."
+
+	| pat |
+	pat := ((importlib ___instance___) @env1:import_module: 're') @env1:compile: 'ab+c'.
+	"Simulate the fault-in: drop the live pointer, as a new session sees it."
+	pat instVarAt: 1 put: nil.  "cPointer"
+	self assert: ((pat @env1:search: 'xabbc') @env1:group: 0) equals: 'abbc'.
+	self assert: (pat instVarAt: 1) isNil.
+	self assert: ((SessionTemps current at: #'GrailSrePatternPointers')
+		includesKey: pat).
+%
