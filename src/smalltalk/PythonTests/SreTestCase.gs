@@ -246,9 +246,9 @@ testCommittedPatternRecompileIsSessionLocal
 	| pat |
 	pat := ((importlib ___instance___) @env1:import_module: 're') @env1:compile: 'ab+c'.
 	"Simulate the fault-in: drop the live pointer, as a new session sees it."
-	pat instVarNamed: 'cPointer' put: nil.
+	pat instVarAt: 1 put: nil.  "cPointer"
 	self assert: ((pat @env1:search: 'xabbc') @env1:group: 0) equals: 'abbc'.
-	self assert: (pat instVarNamed: 'cPointer') isNil.
+	self assert: (pat instVarAt: 1) isNil.
 	self assert: ((SessionTemps current at: #'GrailSrePatternPointers')
 		includesKey: pat).
 %
