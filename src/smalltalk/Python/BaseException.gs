@@ -6982,27 +6982,59 @@ category: 'Grail-Python Positions'
 classmethod: BaseException
 ___irPositionsFromSource___: src
 	"Private to the position API: an IR method's attached source IS the user's
-	Python, PREFIXED with (beginLine - 1) newlines, so a line's INDEX in that
-	string is its absolute module line number -- the same fact
-	___irPythonLineForMethod___:ip: counts caret-relative.
+	Python -- the def's slice of the module, verbatim -- so a line's INDEX in the
+	slice, rebased by the def's first module line (___irSliceFirstLineIn___:), is
+	its absolute module line number.
 
-	Split by hand rather than with ``subStrings:'', which DROPS empty parts: the
-	prefix newlines are precisely what makes index = line number, so collapsing
-	them would renumber every position in the method."
+	Split by hand rather than with ``subStrings:'', which DROPS empty parts: a
+	blank line inside the def still occupies a line number, so collapsing it
+	would renumber every position below it.
+
+	Only the slice's own lines are positions.  What follows them is metadata
+	Grail appends (___irSliceSourceLineCountIn___: says exactly what), and it
+	used to be reported as Python: every IR method with a ___GRAILPOS___ map --
+	any def that sends anything -- answered one extra entry, the map comment
+	itself, at a module line past the def's end that belongs to other code."
 
 	| out lines base |
 	out := OrderedCollection new.
 	lines := self ___splitLinesOf___: src.
-	"The slice is no longer padded, so an index is SLICE-relative; rebase it by
-	the def's first module line.  The trailing ``# line'' comment is attached
-	metadata, not user source, so it gets no position."
 	base := ((self ___irSliceFirstLineIn___: src) ifNil: [1]) - 1.
-	1 to: lines size do: [:i |
+	1 to: (self ___irSliceSourceLineCountIn___: lines) do: [:i |
 		| ln |
 		ln := lines at: i.
-		(ln trimSeparators isEmpty or: [ln trimSeparators at: 1 equals: '# line ']) ifFalse: [
+		ln trimSeparators isEmpty ifFalse: [
 			out add: (Array with: i + base with: nil with: nil with: nil with: ln)]].
 	^ out asArray
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___irSliceSourceLineCountIn___: lines
+	"Private to the position API: how many of lines -- an IR method's attached
+	source, split by ___splitLinesOf___: -- are the user's def slice, i.e. the
+	index of its last line.  Everything after that is metadata Grail appends:
+
+	  # line <beginLine> file <path>      FunctionDefAst, always
+	  ""___GRAILPOS___ ...""                PyMethodIRBuilder>>attachPositionMap,
+	                                      when the body recorded any position
+
+	each possibly behind a blank line.  Walked from the END under the same rule
+	___irSliceFirstLineIn___: reads the ``# line'' comment by, so the two agree
+	on where the slice stops, and so a user comment of the same shape INSIDE the
+	def is still counted as source rather than mistaken for the trailer.  With
+	no ``# line'' comment there is no trailer to cut beyond the map, and every
+	line above it is source."
+
+	| i |
+	i := lines size.
+	[i >= 1 and: [| ln |
+		ln := (lines at: i) trimSeparators.
+		ln isEmpty or: [ln at: 1 equals: '"___GRAILPOS___']]]
+			whileTrue: [i := i - 1].
+	(i >= 1 and: [(lines at: i) trimSeparators at: 1 equals: '# line '])
+		ifTrue: [i := i - 1].
+	^ i
 %
 
 category: 'Grail-Python Positions'
