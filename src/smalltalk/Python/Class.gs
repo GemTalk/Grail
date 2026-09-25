@@ -592,6 +592,30 @@ ___compileMethod: aSource category: aCategory
 
 category: 'Grail-Class Compilation'
 method: Behavior
+___grailRuntimeCompileDictionaries___: aScopeOrNil
+	"The symbol list a method compiled at RUNTIME -- a class-body def, a
+	session method, a re-bound UnboundMethod -- resolves names against: a copy
+	of the user profile's, with aScopeOrNil (a doit's names) first.
+
+	Plus the SESSION-LOCAL module classes (``__main__'', issue #851), ahead
+	of the profile's entries.  importlib files a script's backing class there
+	instead of in PythonModules, and a method of a class the script defines
+	reaches that class BY NAME; the profile list holds PythonModules but not
+	the session dictionary, so without it such a method failed to compile and
+	was replaced by a NameError-raising stub.  Read straight from SessionTemps,
+	not through importlib: Class.gs files in before importlib exists.  Only when
+	present -- composing a list must not create it."
+
+	| dicts |
+	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
+	(SessionTemps @env0:current @env0:at: #'GrailSessionModuleClasses' otherwise: nil)
+		@env0:ifNotNil: [:d | dicts @env0:insertObject: d at: 1].
+	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
+	^ dicts
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
 ___compileMethod: aSource category: aCategory scope: aScopeOrNil
 	"As ___compileMethod:category:, with aScopeOrNil -- a SymbolDictionary --
 	searched FIRST when the method's source resolves a name.
@@ -623,8 +647,7 @@ ___compileMethod: aSource category: aCategory scope: aScopeOrNil
 	same value importlib's helper would return."
 
 	| dicts |
-	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
-	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
+	dicts := self ___grailRuntimeCompileDictionaries___: aScopeOrNil.
 	[[self @env0:compileMethod: aSource
 		dictionaries: dicts
 		category: aCategory
@@ -702,8 +725,7 @@ ___compileSessionMethod: aSource category: aCategory scope: aScopeOrNil environm
 	a Smalltalk-level method such as BoundMethod's pin readers."
 
 	| dicts meth |
-	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
-	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
+	dicts := self ___grailRuntimeCompileDictionaries___: aScopeOrNil.
 	meth := [self @env0:compileMethod: aSource
 			dictionaries: dicts
 			category: aCategory @env0:asSymbol

@@ -599,7 +599,7 @@ ___methodForSpecialReceiver___: aMethod class: aClass
 	___curPos___ shadows method temp'' -- and Class >> ___compileMethod:category:
 	resumes it for the same reason on the ordinary compile path."
 	compiled := [[aClass @env0:_compileMethod: src
-		symbolList: System @env0:myUserProfile @env0:symbolList
+		symbolList: (aClass ___grailRuntimeCompileDictionaries___: nil)
 		environmentId: 1]
 		@env0:on: CompileWarning do: [:wx | wx @env0:resume]]
 		@env0:on: Error do: [:ex |
