@@ -107,8 +107,8 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
 | test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
-| test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
-| test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.pickletester' |
+| test.test_linecache | ERROR | 29 | 0 | 11 | 1 |  |
+| test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '__main__' |
 | test.test_reprlib | ERROR | 33 | 6 | 2 | 2 |  |
 | test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
@@ -117,7 +117,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | 2 |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
-| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
+| test.test_ipaddress | OK | 211 | 0 | 0 | 0 |  |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.dom' |
 | test.test_sax | ERROR | 186 | 12 | 15 | 1 |  |
