@@ -203,7 +203,7 @@ __ge__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a __ge__: b].
+		(a @env0:= b) ifFalse: [^ a ___cmpGe___: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:>= otherSize ]
@@ -229,7 +229,7 @@ __gt__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a __gt__: b].
+		(a @env0:= b) ifFalse: [^ a ___cmpGt___: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:> otherSize ]
@@ -255,7 +255,7 @@ __le__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a __le__: b].
+		(a @env0:= b) ifFalse: [^ a ___cmpLe___: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:<= otherSize ]
@@ -281,7 +281,7 @@ __lt__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a __lt__: b].
+		(a @env0:= b) ifFalse: [^ a ___cmpLt___: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:< otherSize ]
