@@ -11451,7 +11451,7 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	NotImplemented sentinel and means ``tried, declined'' -- the caller must
 	then NOT try that same reflected method again."
 
-	| myClass otherClass owner mine refBase |
+	| myClass otherClass owner refBase |
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 	(otherClass @env0:== myClass) ifTrue: [^ nil].
@@ -11471,11 +11471,16 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	the subclass does NOT override it -- fall through to the varargs form
 	(``def __ne__(*args)'' has only ___ne__:kw:), rather than reading it as an
 	override and stopping here."
+	"INHERITING the reflected method is enough; it does not have to be
+	OVERRIDDEN.  CPython's do_richcompare tests only that type(other) is a
+	proper subtype and has a tp_richcompare slot -- every Python class does --
+	so ``Base() < Sub()'' calls Sub's inherited __gt__ before Base's __lt__,
+	and the two answers differ because the operands are swapped.  Requiring an
+	override sent that comparison down the forward path instead:
+	@functools.total_ordering gives IPv4Interface the very same __gt__ object as
+	IPv4Address, and sorted() with ipaddress.get_mixed_type_key came out in the
+	wrong order (test_ipaddress test_mixed_type_key)."
 	(owner @env0:notNil and: [owner @env0:~~ object]) ifTrue: [
-		mine := myClass
-			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
-		"Same owner means the subclass inherited it -- no override, no priority."
-		(owner @env0:== mine) ifTrue: [^ nil].
 		^ other @env0:perform: refSelector env: 1 withArguments: { self }].
 	^ other ___varargsDunder___: kwSelector with: self
 %

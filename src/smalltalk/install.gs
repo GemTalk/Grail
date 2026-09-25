@@ -1217,6 +1217,7 @@ run
 	at: #'RaiseSpanTestCase' put: nil;
 	at: #'RaiseTestCase' put: nil;
 	at: #'RandomTestCase' put: nil;
+	at: #'ReflectedComparisonPriorityTestCase' put: nil;
 	at: #'RoundDirFormatTestCase' put: nil;
 	at: #'RangeTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
@@ -2631,6 +2632,7 @@ input src/smalltalk/PythonTests/RaiseSemanticsTestCase.gs
 input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
 input src/smalltalk/PythonTests/RaiseTestCase.gs
 input src/smalltalk/PythonTests/RandomTestCase.gs
+input src/smalltalk/PythonTests/ReflectedComparisonPriorityTestCase.gs
 input src/smalltalk/PythonTests/RoundDirFormatTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
