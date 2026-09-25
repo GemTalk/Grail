@@ -1046,9 +1046,21 @@ __ne__: other
 	a bare @env0:~= disagreed with __eq__: for e.g. 0 != False (Boolean
 	has an __index__, so __eq__: finds them equal via that path, but
 	native ~= just sees an Integer and a Boolean as unrelated types and
-	always answers 'not equal') (test_re.py's test_case_helpers)."
+	always answers 'not equal') (test_re.py's test_case_helpers).
 
-	^ (self __eq__: other) @env0:not
+	PUNT WHERE __eq__: PUNTS.  Negating its answer unconditionally sent
+	``not'' to the NotImplemented singleton, and a doesNotUnderstand in
+	an operator is not a Python-level error any handler can see -- it is
+	an uncatchable MessageNotUnderstood, so the report never names the
+	comparison that raised it.  Answering the singleton instead is what
+	lets the operator layer reflect to the other operand, which is the
+	whole point of a punt."
+
+	| equal |
+
+	equal := self __eq__: other.
+	(equal @env0:== NotImplemented) ifTrue: [^ equal].
+	^ equal @env0:not
 %
 
 category: 'Grail-Arithmetic'
