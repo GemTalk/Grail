@@ -62,7 +62,7 @@ testEveryFixtureCheckPasses
 	failed := (results select: [:pair | (pair at: 2) ~~ true])
 		collect: [:pair | pair at: 1].
 	self assert: failed asArray equals: #().
-	self assert: results size equals: 15
+	self assert: results size equals: 18
 %
 
 category: 'Grail-Tests-ModuleType'

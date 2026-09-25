@@ -3,6 +3,59 @@ run
 PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
 %
 
+! ------------------- GrailReprLookupSignaller: an object whose ``__repr__''
+! slot probe -- the ___pyAttrLoad___: builtins>>repr: makes before calling
+! __repr__ -- evaluates a block instead of answering.  It puts a signal exactly
+! where the VM's one-shot AlmostOutOfStack landed in the nightly that scored
+! test_xml_etree CRASH, which a real recursion reaches only at depths that
+! depend on frame widths, and so on the platform.
+expectvalue /Class
+doit
+Object subclass: 'GrailReprLookupSignaller'
+  instVarNames: #('signal')
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+%
+
+expectvalue /Metaclass3
+doit
+GrailReprLookupSignaller removeAllMethods.
+GrailReprLookupSignaller class removeAllMethods.
+%
+
+set compile_env: 0
+
+category: 'Grail-Test-Support'
+classmethod: GrailReprLookupSignaller
+signalling: aBlock
+	^ self new setSignal: aBlock
+%
+
+category: 'Grail-Test-Support'
+method: GrailReprLookupSignaller
+setSignal: aBlock
+	signal := aBlock
+%
+
+set compile_env: 1
+
+category: 'Grail-Test-Support'
+method: GrailReprLookupSignaller
+___pyAttrLoad___: aName
+	^ signal @env0:value
+%
+
+category: 'Grail-Test-Support'
+method: GrailReprLookupSignaller
+__repr__
+	^ 'reached __repr__'
+%
+
+set compile_env: 0
+
 ! ------------------- Class definition for RecursionErrorTestCase
 expectvalue /Class
 doit
@@ -104,4 +157,60 @@ testReflexiveDictComparisonRaisesACatchableRecursionError
 		self assert: got = true
 			description: 'reflexive-dict comparison check failed: ' , k , ' -- ',
 				([got ___str___] @env0:on: Error do: [:e | got printString])].
+%
+
+category: 'Grail-Tests-RecursionError'
+method: RecursionErrorTestCase
+testReprConvertsAStackTripInItsSlotProbe
+	"The VM's AlmostOutOfStack, tripping INSIDE builtins>>repr:'s probe for the
+	``__repr__'' slot, must come out as a RecursionError.
+
+	The probe sits in a broad handler that answers nil for whatever the read
+	raises, and it answered nil for this too -- which consumes the VM's only
+	warning without reducing depth.  A __repr__ that reprs itself recurses
+	through the probe once per level, so the recursion carried on into the Red
+	Zone, where the VM ends the session: test_xml_etree's test_recursive_repr
+	took the whole module to CRASH on Linux (nightly 36136723364) while passing
+	on Darwin, where the trip happened to land in a different frame.  Signalled
+	here directly, so the test does not depend on where a real overflow lands."
+
+	| raised |
+	raised := [builtins @env1:instance @env1:repr:
+			(GrailReprLookupSignaller signalling: [AlmostOutOfStack new signal])]
+		on: RecursionError do: [:e | e return: e].
+	self assert: (raised isKindOf: RecursionError)
+		description: 'repr: answered ' , raised printString , ' instead of raising RecursionError'.
+	self assert: (raised messageText includesString: 'while getting the repr of an object')
+%
+
+category: 'Grail-Tests-RecursionError'
+method: RecursionErrorTestCase
+testReprLetsARecursionErrorFromItsSlotProbeThrough
+	"A RecursionError raised by the ``__repr__'' slot probe is not a missing
+	slot, and must not be answered as one.  That is also what the boundary
+	guard's conversion looks like when it reaches the probe: #resignalAs:
+	restarts the handler search at the original signal point, so a trip the
+	probe passed on comes back to it as a RecursionError."
+
+	| raised |
+	raised := [builtins @env1:instance @env1:repr:
+			(GrailReprLookupSignaller signalling: [
+				RecursionError @env1:___signal___: 'raised by the probe'])]
+		on: RecursionError do: [:e | e return: e].
+	self assert: (raised isKindOf: RecursionError)
+		description: 'repr: answered ' , raised printString , ' instead of raising RecursionError'.
+	self assert: (raised messageText includesString: 'raised by the probe')
+%
+
+category: 'Grail-Tests-RecursionError'
+method: RecursionErrorTestCase
+testReprStillCallsReprWhenItsSlotProbeRaises
+	"The control: any OTHER failure of the probe still falls through to the
+	receiver's __repr__, which is what the broad handler is there for."
+
+	self
+		assert: (builtins @env1:instance @env1:repr:
+			(GrailReprLookupSignaller signalling: [
+				AttributeError @env1:___signal___: 'no __repr__ here']))
+		equals: 'reached __repr__'
 %

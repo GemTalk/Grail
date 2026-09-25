@@ -6990,3 +6990,85 @@ text path that the flag already supports.
 
 Until then, local work on such a build needs `GRAIL_IR_CODEGEN=0`, and a
 local tier-2 run covers the text arm only — the IR arm is CI's.
+
+## test.test_xml_etree crashed on CI again: repr() swallowed the stack trip
+
+Four days after the `test_deeply_nested_deepcopy` skip above, the nightly
+(run 36136723364) scored the module `CRASH` again, and this time the culprit was
+the test that entry had measured as safe: `BadElementTest.test_recursive_repr`.
+Its Element's tag is the Element, so `repr(e)` recurses through `builtins>>repr:`
+once per level.
+
+```
+GRAIL_TEST|test.test_xml_etree.BadElementTest.test_recursive_repr
+ERROR 2502 , a AlmostOutOfStack occurred (notification 2502), Smalltalk
+execution stack overflow, Red Zone.   Stack depth 75120
+==> 1 AlmostOutOfStack (AbstractException) >> _signalFromPrimitive
+    2 Element (Object) >> ___pyAttrLoad___:
+    3 [] in builtins >> repr:
+    4 ExecBlock0 (ExecBlock) >> on:do:
+```
+
+`repr:` probes the `__repr__` slot (so that `__repr__ = None` can raise the
+not-callable TypeError) inside `on: AbstractException do: [:ex | ex return:
+nil]`. That handler catches the VM's AlmostOutOfStack too, and answering nil for
+it throws away the VM's one warning without reducing depth. The recursion
+carried on into the Red Zone, which nothing can catch. It is the hazard
+`___captureFrameLocalsIfSuggestible___` and `dict>>__eq__:` already record,
+in a third place.
+
+**Why it only appeared now.** The handler has been there since 2026-09-02,
+and the nightly of 2026-09-24 converted this very test (`deepest=60156`).
+Which frame the trip lands in is set by frame widths, so any merge that moves
+them can move the landing site into or out of the probe. The window here was
+#1168–#1184. Locally (Darwin arm64, `GEM_MAX_SMALLTALK_STACK_DEPTH=74000`),
+starting the same recursion from 16 different depths killed the session at 3
+of them (offsets 2, 9, 11). With the fix, all 16 converted.
+
+**Fixed in `builtins>>repr:`**: the handler converts AlmostOutOfStack /
+AlmostOutOfStackError to RecursionError itself (dict>>__eq__:'s approach) and
+passes a RecursionError through rather than taking it for a missing slot.
+`RecursionErrorTestCase` signals into the probe directly through a Smalltalk
+double (`GrailReprLookupSignaller`), so the test does not depend on where a
+real overflow lands.
+
+### Still open: Kermit 52108 in the same recursion
+
+The same depth sweep, run from a slightly different base depth, found an
+offset where the trip lands in `type(self).__name__` (the interned-name
+lookup), outside any handler. The boundary guard converts it with
+`resignalAs:`, and the replacement RecursionError trips the stack limit
+AGAIN while it is being dispatched:
+
+```
+3 AlmostOutOfStackError (AbstractException) >> _executeHandler:
+4 AlmostOutOfStackError (AbstractException) >> _signalFromPrimitive
+5 RecursionError (AbstractException) >> _executeHandler:
+6 RecursionError (AbstractException) >> _signalFromPrimitive
+7 KeyValueDictionary >> valueAt:             <- first trip, in a prologue (@1)
+```
+
+The guard converts the second trip as well, and that RecursionError goes past
+the inner `except RecursionError:`, which was already committed to the first.
+When nothing catches it, printing the uncaught exception imports `traceback`
+at full depth, trips a third time, and the gem runs out of memory.
+
+This is **Kermit 52108**, already tracked here: the `BaseExceptionTestCase`
+and `PrivateNameManglingTestCase` skips and the plain-Smalltalk reproduction
+on branch `repro/resignal-retrip`. It matches all three of that report's
+conditions: the first trip is in a method prologue, the recursion goes
+through a helper chain of two or more frames (`__name__` →
+`___grailInternedNameString___:` → `at:otherwise:` → `valueAt:`), and it runs
+in the interpreter. The cause is in the VM, not in the yellow-zone reserve.
+The report finds that `GEM_SMALLTALK_STACK_ERROR_PERCENT` changes nothing, and
+traces it to the exception primitives re-arming the yellow guard page with no
+margin when they trim the stack (`checkYellowProtection`).
+
+The conversion `builtins>>repr:` now does is not exposed to it: it signals a
+fresh RecursionError from inside the handler instead of using `resignalAs:`.
+Trips that land anywhere else still reach the guard's `resignalAs:`.
+
+It is also a likely explanation for the open defect
+`tests/python/reflexive_dict_comparison.py` records (`y != x` raising a
+RecursionError its `except RecursionError:` does not match, trigger "not yet
+established"), and a real-world case to add to the Kermit report.

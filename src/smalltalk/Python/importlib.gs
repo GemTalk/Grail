@@ -577,12 +577,17 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	module-as-dict semantics: setattr/delattr/hasattr all reach the
 	same backing store, and `del x` truly removes the binding rather
 	than nilling a slot."
+	"A session-local module (``__main__'') is filed in a SESSION dictionary,
+	not PythonModules: filing it there is a repository write under a name every
+	session's script shares (issue #851; ___isSessionLocalModule___:)."
 	moduleClass := module subclass: moduleClassName
 		instVarNames: #()
 		classVars: #()
 		classInstVars: #()
 		poolDictionaries: #()
-		inDictionary: PythonModules
+		inDictionary: ((self ___isSessionLocalModule___: moduleName)
+			ifTrue: [self ___sessionModuleClasses___]
+			ifFalse: [PythonModules])
 		options: #().
 
 	"Compile top-level `def` statements as real methods on the
@@ -984,6 +989,12 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	    (docs/Class_Attribute_Single_Home.md)."
 
 	| key reg existing minted supersedesLive |
+	"A session-local module's class (``__main__'') mints fresh every run, as
+	CPython's does, and is neither reused from nor recorded in the registry:
+	its key is the same in every session's script, so reuse would hand one
+	script another's class and the record is the write #851 removes."
+	(self ___isSessionLocalModule___: aModuleName) ifTrue: [
+		^ aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames].
 	key := aModuleName asString , '.' , aName asString.
 	reg := self ___canonicalClassRegistry___.
 	existing := reg at: key otherwise: nil.
@@ -1500,6 +1511,46 @@ ___resetMintedThisLoad___: aModuleName
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___isSessionLocalModule___: aModuleName
+	"Is aModuleName built for THIS SESSION ONLY -- never filed in PythonModules,
+	never recorded in the canonical registries, never warm-bound?
+
+	True of ``__main__'', and that is the whole list.  The script under
+	runPath:/runModule: is loaded under that one fixed name whatever file it
+	is, so filing it persistently put EVERY session's script under the same key
+	(issue #851): a script found the session dirty before its first line --
+	``with gemdb.transaction():'' as its first statement was refused -- and two
+	sessions running scripts wrote the same PythonModules entry and canonical
+	registry keys, which is a commit conflict, with each other and with any cold
+	import elsewhere (PythonModules is a plain SymbolDictionary).
+
+	CPython re-executes __main__ every run; nothing about a script is meant to
+	outlive it.  An instance of a class the script defines that the script
+	COMMITS still persists, by reachability -- but its class has no name another
+	session can resolve, as with pickle and CPython's __main__."
+
+	^ aModuleName asString = '__main__'
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___sessionModuleClasses___
+	"The SESSION-LOCAL counterpart of PythonModules: a SymbolDictionary in
+	SessionTemps holding the backing classes of the modules
+	___isSessionLocalModule___: names.  ___grailCompileSymbolList___ puts it
+	ahead of PythonModules, so generated code resolves such a class by name
+	exactly as it does a persistent module's -- and a stale ``__main__'' an
+	older extent committed into PythonModules is shadowed rather than reused."
+
+	^ SessionTemps current at: #'GrailSessionModuleClasses' ifAbsentPut: [
+		| d |
+		d := SymbolDictionary new.
+		d name: #'GrailSessionModuleClasses'.
+		d]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___canonicalClassProbe___: aModuleName name: aClassName
 	"Fast-path probe for the emitted class-build guard: return the canonical
 	(final, post-decorator) object for module.class when it can be reused
@@ -1516,6 +1567,9 @@ ___canonicalClassProbe___: aModuleName name: aClassName
 	importers, and nothing new for the developer's next commit to sweep up."
 
 	| state |
+	"A session-local module (``__main__'') is never deployed, so there is
+	nothing committed to reuse -- see ___isSessionLocalModule___:."
+	(self ___isSessionLocalModule___: aModuleName) ifTrue: [^ nil].
 	state := SessionTemps current at: #'GrailModuleHashState' otherwise: nil.
 	state isNil ifTrue: [^ nil].
 	((state at: aModuleName asString asSymbol otherwise: nil) == #'match')
@@ -1534,6 +1588,10 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	class-build guard, so the probe hands back exactly what the original
 	build produced.  Never commits."
 
+	"Nothing of a session-local module (``__main__'') is recorded: the
+	registry key would be the same in every session, which is the write #851
+	removes.  See ___isSessionLocalModule___:."
+	(self ___isSessionLocalModule___: aModuleName) ifTrue: [^ anObject].
 	self ___canonicalClassRegistry___
 		at: (aModuleName asString , '.' , aClassName asString)
 		put: anObject.
@@ -2929,7 +2987,7 @@ loadModuleFromPath: pathString name: moduleName
 	new instances when the cache is missed."
 
 	| moduleAst moduleClass moduleInstance
-	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged |
+	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
@@ -2946,7 +3004,15 @@ loadModuleFromPath: pathString name: moduleName
 	both cases) know whether registry entries for THIS module are current."
 	srcString := self ___sourceStringForPath___: pathString.
 	srcHash := srcString sha1Sum.
-	hashes := self ___canonicalModuleHashes___.
+	"A SESSION-LOCAL module (``__main__'', ___isSessionLocalModule___:) is
+	never deployed, so it gets a scratch hash table: no previous hash means it
+	is always built cold and never warm-bound, and every hash read and write
+	below lands in an object nothing else can see instead of the committed
+	registry, under a key every session would share (issue #851)."
+	local := self ___isSessionLocalModule___: moduleName.
+	hashes := local
+		ifTrue: [KeyValueDictionary new]
+		ifFalse: [self ___canonicalModuleHashes___].
 	previousHash := hashes at: moduleName otherwise: nil.
 	hashState := (previousHash = srcHash)
 		ifTrue: [#'match'] ifFalse: [#'stale'].
@@ -3071,7 +3137,11 @@ loadModuleFromPath: pathString name: moduleName
 	old globals, while sys.modules answers a different object.  The body
 	re-executes over the existing namespace, so a name the new source no
 	longer defines survives, again as reload() leaves it."
-	moduleInstance := self ___committedInstanceToRebuild___: moduleName class: moduleClass.
+	"Never for a session-local module: an older extent may hold a committed
+	``__main__'' from before #851, and rebuilding into it would write it."
+	moduleInstance := local
+		ifTrue: [nil]
+		ifFalse: [self ___committedInstanceToRebuild___: moduleName class: moduleClass].
 	rebuiltInPlace := moduleInstance notNil.
 	rebuiltInPlace ifFalse: [moduleInstance := moduleClass new].
 	"Adopt as the class's singleton BEFORE running initialize.  Module
@@ -3168,6 +3238,9 @@ loadModuleFromPath: pathString name: moduleName
 	gets ONE uniform per-session hook regardless of how the session
 	acquired the module (cold build here, warm bind above)."
 	self ___runSessionInit___: moduleInstance.
+	"A session-local module is recorded in no canonical registry -- neither as
+	a dependency record here nor as the deployed instance below."
+	local ifTrue: [^ moduleInstance].
 	self ___recordDepsOf___: moduleName srcHash: srcHash names: imported changed: buildChanged.
 	"Phase-5 (doc par.10): record this cold import's instance in the
 	canonical-module registry, IN-TRANSACTION (import never commits).  It
@@ -4164,13 +4237,15 @@ ___irCodegenEnabled___
 	source compilation; every other def, and the whole path when this is false, is
 	unchanged.
 
-	The platform gate stays even though 4.0 is now the only supported kernel: it
-	asks whether the kernel GsCom* builder API is actually present, so an old 4.0
-	build without it answers false, this answers false whatever the flag says, and
-	the flag becomes a no-op -- the IR path is never even attempted, so no per-def
-	build-and-fall-back churn.  It was load-bearing while 3.7.x was supported (the
-	API is absent there entirely), which is why the tests still exercise both
-	branches."
+	The platform gate is a VERSION COMPARISON, not a capability probe -- see
+	___irCodegenSupported___, and do not rely on it to keep an under-equipped
+	kernel off the IR path.  A 4.0 build older than the server commit the builder
+	needs answers TRUE here and then FAILS, loudly, on the first def it tries to
+	build.  That is deliberate (e647f739: ``errors during IR generation will be
+	signalled normally so they can be debugged''), and the remedy is a newer
+	product, not a fallback.  The gate was load-bearing while 3.7.x was supported,
+	where the whole GsCom* API is absent, which is why the tests still exercise
+	both branches."
 
 	"ON BY DEFAULT since cut 131 -- the flag now DISABLES the path (see
 	 ___irCodegenFlag___), and the platform gate below is what makes the
@@ -4241,12 +4316,27 @@ ___irCodegenSupported___
 	"Whether this GemStone can actually run the direct-to-IR path -- true on 4.0+
 	(the kernel GsCom* builder API + GsNMethod>>generateFromIR:, primitive 679),
 	false on 3.7.x where the GsCom* node ivar layout differs and the builder
-	raises.  Probed once per session (PyMethodIRBuilder builds a throwaway ``^ 42''
-	method and generates it with no install / no side effect) and cached in
-	SessionTemps.  This is the platform gate that lets the two versions share one
-	code base: the IR-specific tests and the seam both consult it, so 3.7.x skips
-	the 4.0-only path instead of failing on it.  A capability probe, not a version
-	string -- a 4.0 build lacking the VM fixes correctly reads false too."
+	raises.  Computed once per session and cached in SessionTemps.  This is the
+	platform gate that lets the two versions share one code base: the IR-specific
+	tests and the seam both consult it, so 3.7.x skips the 4.0-only path instead of
+	failing on it.
+
+	IT IS A VERSION COMPARISON, NOT A CAPABILITY PROBE.  PyMethodIRBuilder class >>
+	supportedOnThisPlatform answers ``System _gemVersionNum >= 40000'' and builds
+	nothing, so a 4.0 build OLDER than the server commit the builder needs
+	(e647f739: aee5f5d51 or later) reads TRUE here and then fails on the first def
+	it tries to build -- on a 2026-08-05 4.0.0 the failure is
+	``a GsComMethNode does not understand #envId'', which takes install.sh's gemdb
+	deploy down with it.  That loudness is deliberate, not an oversight: the same
+	commit removed the ___irNoteFallback___:error: sends so ``errors during IR
+	generation will be signalled normally so they can be debugged''.  The remedy is
+	a newer product build; GRAIL_IR_CODEGEN=0 is the local workaround.
+
+	This comment used to claim the opposite -- a generative probe that builds a
+	throwaway ``^ 42'' and so reads false on an under-equipped 4.0 -- and that
+	claim cost a reader a wrong diagnosis.  If someone does make it generative, the
+	IR arm's ``testTheIRArmActuallyCompiledTheFixture'' tests are the guard that a
+	silent fallback does not turn the arm vacuous."
 
 	| temps |
 	temps := SessionTemps current.
@@ -4678,6 +4768,11 @@ ___grailCompileSymbolList___
 	prof := System myUserProfile symbolList.
 	sl := SymbolList new.
 	sl add: (prof objectNamed: #Python).
+	"Session-local module classes (``__main__''), AHEAD of PythonModules so a
+	stale persistent ``__main__'' from an older extent is shadowed.  Only when
+	one exists: composing the list must not create it."
+	(SessionTemps current at: #'GrailSessionModuleClasses' otherwise: nil)
+		ifNotNil: [:d | sl add: d].
 	sl add: (prof objectNamed: #PythonModules).
 	sl add: self ___grailKernelDict___.
 	^ sl
@@ -7748,6 +7843,11 @@ reload: aModule
 	so subsequent class probes reuse the refreshed classes.  A body that
 	raised skipped this, leaving the verdict #stale (conservative: the next
 	load rebuilds)."
+	"A session-local module (``__main__'') records nothing here either --
+	see importlib >> ___isSessionLocalModule___:."
+	(importlib @env0:___isSessionLocalModule___: name) ifTrue: [
+		importlib @env0:___runSessionInit___: aModule.
+		^ aModule].
 	"What the re-run imported is its dependency record now; the generation
 	moves only when the source did."
 	importlib @env0:___recordDepsOf___: name srcHash: srcHash names: imported

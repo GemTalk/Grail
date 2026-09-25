@@ -24,26 +24,21 @@ IPv6AddressTestCase category: 'Grail-SUnit'
 ! ===============================================================================
 ! IPv6AddressTestCase - ipaddress IPv6 support
 ! ===============================================================================
-! Grail implements ``ipaddress'' in Smalltalk (src/smalltalk/Python/ipaddress.gs)
-! rather than vendoring CPython's ipaddress.py, so every behaviour here is a
-! re-implementation rather than a copy, and every one of them is a chance to
-! drift.  tests/python/ipaddress_ipv6_conformance.py states the expectations as
-! literals and scripts/check_python_fixtures.sh runs it under real CPython 3.14,
-! so what this class asserts is measured against CPython and not against Grail's
-! own behaviour.
+! ``ipaddress'' is CPython's own module now (src/python/stdlib/ipaddress.py).
+! It used to be 1701 lines of Smalltalk re-implementing a subset of it, and
+! every one of those behaviours was a chance to drift.
+! tests/python/ipaddress_ipv6_conformance.py states the expectations as literals
+! and scripts/check_python_fixtures.sh runs it under real CPython 3.14, so what
+! this class asserts is measured against CPython and not against Grail's own
+! behaviour -- which is exactly what let the re-implementation be replaced
+! underneath it without rewriting a single expectation.
 !
-! WHY VENDORING WAS NOT THE ROUTE (measured, not assumed): CPython 3.14's
-! ipaddress.py dropped into src/python/stdlib/ compiles under Grail and builds
-! its classes, then dies in module-level init on two SHARED-machinery gaps --
-! int.from_bytes() rejects the iterable-of-ints form that _ip_int_from_string
-! uses, and a subclass that declares no __slots__ inherits strict-slots from a
-! base that declares __slots__ = () (CPython gives such a subclass a __dict__),
-! so IPv4Network.__init__'s ``self.network_address = ...'' is an AttributeError.
-! Both are real defects worth fixing on their own; neither belongs in a leaf
-! stdlib module's PR.
-!
-! The surface deliberately NOT implemented is listed in the ipaddress module
-! comment and pinned by testOmissionsAreDeliberate below.
+! The half the subset left out -- hosts(), ip_interface(), collapse_addresses(),
+! AddressValueError and the rest -- used to be pinned HERE as absent, by a
+! testOmissionsAreDeliberate arguing that a faithful subset beats a half-working
+! port as long as the boundary is written down.  The boundary is gone, so that
+! test went with it: IpaddressFullModuleTestCase asserts those same names now
+! compute correct answers.
 ! ===============================================================================
 
 set compile_env: 0
@@ -153,53 +148,4 @@ IPv4Network.__name__ + '','' + IPv6Network.__name__
 'import ipaddress
 ipaddress.IPv6Address(''2001:db8::1'').exploded
 ') equals: '2001:0db8:0000:0000:0000:0000:0000:0001'
-%
-
-category: 'Grail-Tests - ipaddress'
-method: IPv6AddressTestCase
-testOmissionsAreDeliberate
-	"The half of CPython's ipaddress that Grail does NOT provide.
-
-	A faithful subset beats a half-working full port, but only if the
-	boundary is written down: stubbing hosts() or ip_interface() would let
-	code that needs real network algebra get something that merely looks
-	like it.  This test pins the boundary as a decision rather than an
-	oversight -- adding any of these should fail here first.
-
-	AddressValueError / NetmaskValueError are on the list because Grail
-	raises plain ValueError, which those CPython classes SUBCLASS -- so
-	``except ValueError'' code (urllib3's match_hostname) is unaffected,
-	while ``except ipaddress.AddressValueError'' is not available."
-
-	self assert: (self eval:
-'import ipaddress
-present = []
-for name in (''ip_interface'', ''IPv4Interface'', ''IPv6Interface'',
-             ''collapse_addresses'', ''summarize_address_range'',
-             ''get_mixed_type_key'', ''AddressValueError'',
-             ''NetmaskValueError''):
-    if hasattr(ipaddress, name):
-        present.append(name)
-len(present)
-') equals: 0.
-	self assert: (self eval:
-'import ipaddress
-n = ipaddress.ip_network(''2001:db8::/32'')
-present = []
-for name in (''hosts'', ''subnets'', ''supernet'', ''address_exclude'',
-             ''subnet_of'', ''supernet_of'', ''netmask'', ''hostmask'',
-             ''with_prefixlen'', ''with_netmask'', ''with_hostmask''):
-    if hasattr(n, name):
-        present.append(name)
-len(present)
-') equals: 0.
-	self assert: (self eval:
-'import ipaddress
-a = ipaddress.ip_address(''::1'')
-present = []
-for name in (''reverse_pointer'', ''teredo''):
-    if hasattr(a, name):
-        present.append(name)
-len(present)
-') equals: 0
 %

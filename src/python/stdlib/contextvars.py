@@ -29,6 +29,17 @@
 # whoever resumes, because a Grail generator body is a separate call stack while
 # the current context is shared.  CPython forbids the same thing for its own
 # reasons; do not be tempted to relax it.
+#
+# WHERE the current context lives is the other thing to understand.  This
+# module is committed, so a module global is shared by every gem and persists
+# in the repository: the current context used to be one, and every session then
+# wrote the same Context._data dict -- a Write-Write on the first ContextVar.set
+# two sessions committed, and with decimal (whose context is a ContextVar and
+# whose every rounding op mutates its flags) on ordinary arithmetic.  It lives
+# in SessionTemps instead, behind _current() / _set_current(), and each session
+# makes its own top context on first use (docs/Concurrency.md).
+
+from _grail_session import SessionDict
 
 
 class _Missing:
@@ -96,14 +107,13 @@ class Context:
         if self._entered:
             raise RuntimeError(
                 'cannot enter context: %r is already entered' % (self,))
-        global _current_context
-        self._prev = _current_context
+        self._prev = _current()
         self._entered = True
-        _current_context = self
+        _set_current(self)
         try:
             return callable_obj(*args, **kwargs)
         finally:
-            _current_context = self._prev
+            _set_current(self._prev)
             self._prev = None
             self._entered = False
 
@@ -172,7 +182,7 @@ class ContextVar:
         LookupError.  An argument beats the constructor default -- a caller
         asking "or this" means this call, not this variable.
         """
-        value = _current_context._data.get(self, _MISSING)
+        value = _current()._data.get(self, _MISSING)
         if value is not _MISSING:
             return value
         if len(args) > 0:
@@ -182,7 +192,7 @@ class ContextVar:
         raise LookupError(self._name)
 
     def set(self, value):
-        ctx = _current_context
+        ctx = _current()
         old = ctx._data.get(self, _MISSING)
         ctx._data[self] = value
         return Token(ctx, self, old)
@@ -200,23 +210,37 @@ class ContextVar:
                 'Token was created by a different ContextVar')
         if token._used:
             raise RuntimeError('Token has already been used once')
-        if token._context is not _current_context:
+        ctx = _current()
+        if token._context is not ctx:
             raise ValueError('Token was created in a different Context')
         if token._old_value is _MISSING:
-            _current_context._data.pop(self, None)
+            ctx._data.pop(self, None)
         else:
-            _current_context._data[self] = token._old_value
+            ctx._data[self] = token._old_value
         token._used = True
 
     def __repr__(self):
         return '<ContextVar name=%r>' % (self._name,)
 
 
-# The context that is current when nothing has been entered.  Module-level
-# writes land here and stay there, which is what non-async callers (werkzeug's
-# proxy storage) saw from the old single-slot stub.
-_top_context = Context()
-_current_context = _top_context
+# The current context, per session.  When nothing has been entered it is this
+# session's TOP context, made on first use -- writes outside any run() land
+# there and stay for the life of the session, which is what non-async callers
+# (werkzeug's proxy storage) saw from the old single-slot stub.  Nothing here
+# is committed, so a fresh session starts with an empty top context.
+_state = SessionDict("contextvars")
+
+
+def _current():
+    ctx = _state.get("current")
+    if ctx is None:
+        ctx = Context()
+        _state["current"] = ctx
+    return ctx
+
+
+def _set_current(ctx):
+    _state["current"] = ctx
 
 
 def copy_context():
@@ -226,9 +250,9 @@ def copy_context():
     given the copy starts from what its creator could see, and its own sets go
     to the copy rather than back to the creator's context.
     """
-    return _current_context.copy()
+    return _current().copy()
 
 
 def _get_current_context():
     """Grail-internal: asyncio needs the current context to default to."""
-    return _current_context
+    return _current()

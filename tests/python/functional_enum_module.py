@@ -84,6 +84,38 @@ rec('exec_without_a_name_stamps_nothing',
     lambda: '__module__' in _exec("C = type('C', (), {})", {}).__dict__)
 
 
+# --- evaluated code: a CLASS STATEMENT reads __name__ too (#1170) -----------
+#
+# CPython opens a class body with ``__module__ = __name__'', a run-time read of
+# the globals and then builtins.  Grail compiled a '__main__' literal for every
+# doit, so an explicit __name__ was ignored -- and the class statement and
+# type() disagreed about the same exec().  Globals with no __name__ fall
+# through to builtins.__name__.  exec()'s LOCALS are never consulted: the class
+# body's own namespace stands where they would.
+
+def _exec_locals(src, g, l):
+    exec(src, g, l)
+    return l['C']
+
+
+rec('exec_class_names_its_globals',
+    lambda: _exec("class C: pass", {'__name__': 'evaluated'}).__module__)
+rec('exec_class_without_a_name_is_builtins',
+    lambda: _exec("class C: pass", {}).__module__)
+rec('exec_class_ignores_the_locals',
+    lambda: _exec_locals("class C: pass", {'__name__': 'glob'},
+                         {'__name__': 'loc'}).__module__)
+rec('exec_class_in_a_function_names_its_globals',
+    lambda: _exec("def f():\n    class C: pass\n    return C\nC = f()",
+                  {'__name__': 'evaluated'}).__module__)
+rec('exec_class_reads_the_name_when_it_runs',
+    lambda: _exec("class A: pass\n__name__ = 'later'\nclass C: pass",
+                  {'__name__': 'first'}).__module__)
+rec('exec_class_own_module_is_kept',
+    lambda: _exec("class C:\n    __module__ = 'own'",
+                  {'__name__': 'evaluated'}).__module__)
+
+
 # --- classes native modules define -------------------------------------------
 
 rec('flag_boundary', lambda: enum.FlagBoundary.__module__)
@@ -94,6 +126,12 @@ rec('json_encoder', lambda: json.JSONEncoder.__module__)
 
 EXPECTED = {
     'enum_check': 'enum',
+    'exec_class_ignores_the_locals': 'glob',
+    'exec_class_in_a_function_names_its_globals': 'evaluated',
+    'exec_class_names_its_globals': 'evaluated',
+    'exec_class_own_module_is_kept': 'own',
+    'exec_class_reads_the_name_when_it_runs': 'later',
+    'exec_class_without_a_name_is_builtins': 'builtins',
     'exec_enum_names_its_globals': 'evaluated',
     'exec_in_a_function_names_its_globals': 'evaluated',
     'exec_type_names_its_globals': 'evaluated',

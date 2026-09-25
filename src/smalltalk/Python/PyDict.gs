@@ -182,22 +182,15 @@ hashFunction: aKey
 	str/int/tuple/plain-object keys this equals the kernel hash (no rebucketing);
 	bool / non-integer float / int(-1) move to their Python-hash bucket.
 
-	An unhashable key's __hash__ raises TypeError; re-raise it as CPython's rich
-	``cannot use 'X' as a dict key (unhashable type: 'X')'' -- the same message
-	__setitem__'s explicit ___requireHashableAsDictKey___ gate produces -- so the
-	READ paths (key in d, d[key], .get/.pop/.setdefault), which reach __hash__
-	through this bucketing function before any explicit gate, report it too
-	rather than the bare ``unhashable type: 'X'''.  A non-TypeError from __hash__
-	(e.g. a KeyError) propagates unchanged (test_dict test_unhashable_key)."
+	___pythonHashOf___ is the same computation, for the callers that need the
+	UNREDUCED value.  It is duplicated here rather than sent to, deliberately:
+	this runs on every probe of every dict, and one extra frame per probe is
+	enough to change where a recursion limit bites -- it turned
+	test.test_copy's test_deepcopy_reflexive_dict, whose whole subject is
+	recursion depth, into ``RecursionError: maximum recursion depth exceeded''.
+	Keep the two in step."
 
 	| h |
-	"A CLASS buckets by IDENTITY.  CPython hashes a class with type.__hash__,
-	never with the class's own ``__hash__'' -- that one describes its
-	INSTANCES, and for a mapping type it is the None that makes them
-	unhashable (collections.UserDict sets exactly that).  Reading it off the
-	class produced nil, and the modulo below then failed with ``nil
-	doesNotUnderstand: #\\''.  Classes ARE ordinary dict keys and set
-	elements: copy.py keys its atomic-type tables as sets of classes."
 	(aKey isKindOf: Behavior)
 		ifTrue: [^ (aKey identityHash \\ tableSize) + 1].
 	h := [aKey @env1:__hash__] on: TypeError do: [:ex |
@@ -207,18 +200,80 @@ hashFunction: aKey
 
 category: 'Grail-Hashing'
 method: PyDict
+___pythonHashOf___: aKey
+	"The key's FULL Python hash, before any reduction to a bucket index.
+
+	hashFunction: reduces this modulo tableSize; compareKey:with: needs the
+	unreduced value, because two keys sharing a bucket have equal hashes only
+	modulo the table -- and CPython compares the full hashes before it is willing
+	to call __eq__ at all.
+
+	A CLASS hashes by IDENTITY.  CPython hashes a class with type.__hash__, never
+	with the class's own ``__hash__'' -- that one describes its INSTANCES, and for
+	a mapping type it is the None that makes them unhashable (collections.UserDict
+	sets exactly that).  Reading it off the class produced nil, and the modulo in
+	hashFunction: then failed with ``nil doesNotUnderstand: #\\''.  Classes ARE
+	ordinary dict keys and set elements: copy.py keys its atomic-type tables as
+	sets of classes.
+
+	An unhashable key's __hash__ raises TypeError; re-raise it as CPython's rich
+	``cannot use 'X' as a dict key (unhashable type: 'X')'' -- the same message
+	__setitem__'s explicit ___requireHashableAsDictKey___ gate produces -- so the
+	READ paths (key in d, d[key], .get/.pop/.setdefault), which reach __hash__
+	through the bucketing function before any explicit gate, report it too rather
+	than the bare ``unhashable type: 'X'''.  A non-TypeError from __hash__ (e.g. a
+	KeyError) propagates unchanged (test_dict test_unhashable_key)."
+
+	(aKey isKindOf: Behavior) ifTrue: [^ aKey identityHash].
+	^ [aKey @env1:__hash__] on: TypeError do: [:ex |
+		aKey @env1:___raiseUnhashableUse___: ex context: 'a dict key']
+%
+
+category: 'Grail-Hashing'
+method: PyDict
 compareKey: aKey with: hashKey
 	"Match keys by Python equality (identity first, then __eq__, a raising __eq__
 	propagates).  ``aKey'' is the probe key, ``hashKey'' the stored key."
 
 	aKey == hashKey ifTrue: [^ true].
+	"THE FULL HASHES MUST MATCH BEFORE __eq__ IS CONSULTED AT ALL.  Sharing a
+	bucket means the hashes agree modulo tableSize, which is a far weaker thing,
+	and CPython compares the stored me_hash before it will call __eq__.  Without
+	this, a key whose __eq__ answers something truthy for an unrelated object --
+	annotationlib's _Stringifier returns a new expression object, which is truthy
+	-- swallows whatever it happens to collide with, and since the collision
+	depends on object ids the loss appears in roughly one run in seven.  That is
+	issue #1171: ``{str: 1, x: 2}'' lost a key 400 times in 2000, and
+	typing.Union[str, undefined] shrank to str, which is what
+	test_annotationlib's test_partially_nonexistent_union reports.
+
+	Recomputed rather than stored: CPython keeps me_hash per entry, which this
+	table has nowhere to put.
+
+	IT GUARDS ONLY THE TWO CUSTOM BRANCHES.  Answering truthy for an unrelated
+	object takes a user-written __eq__, so a built-in/built-in pair cannot
+	exhibit the bug and the path below is left exactly as it was.
+
+	Frames here are not free, and hashFunction: says why: an extra send per probe
+	was enough to turn test.test_copy's test_deepcopy_reflexive_dict into
+	``RecursionError: maximum recursion depth exceeded''.  That one was the
+	bucketing path, not this one -- measured, by inlining hashFunction: alone and
+	watching the module go back to OK 3/3 under the suite's
+	GEM_MAX_SMALLTALK_STACK_DEPTH -- but the same caution applies to anything
+	added on this side."
 	"Consult the CUSTOM (PythonInstance) side's __eq__ first.  A built-in's
 	__eq__ (str/int) does not reflect to a custom operand, so a str key stored
 	against a custom-__eq__ probe -- or the reverse -- must be compared from the
 	PythonInstance side (test_str_nonstr: Key3 == 'key3' / StrSub('key3')).  A
 	raising __eq__ propagates (test_bad_key)."
-	(aKey isKindOf: PythonInstance) ifTrue: [^ aKey @env1:___pyRichEqBool___: hashKey].
-	(hashKey isKindOf: PythonInstance) ifTrue: [^ hashKey @env1:___pyRichEqBool___: aKey].
+	(aKey isKindOf: PythonInstance) ifTrue: [
+		(self ___pythonHashOf___: aKey) = (self ___pythonHashOf___: hashKey)
+			ifFalse: [^ false].
+		^ aKey @env1:___pyRichEqBool___: hashKey].
+	(hashKey isKindOf: PythonInstance) ifTrue: [
+		(self ___pythonHashOf___: aKey) = (self ___pythonHashOf___: hashKey)
+			ifFalse: [^ false].
+		^ hashKey @env1:___pyRichEqBool___: aKey].
 	"Both built-in: Python equality (not the kernel Smalltalk ``='', whose
 	Boolean/Number comparison is asymmetric -- ``true = 1'' vs ``1 = true'') so
 	1 / 1.0 / True compare equal in whichever probe/stored order they meet."

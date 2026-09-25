@@ -471,6 +471,33 @@ ___doitGlobalsView___: aScope
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___doitModuleName___: aScope
+	"What a class statement in a DOIT stamps as ``__module__'': the value of
+	``__name__'', looked up in the globals and then in builtins.
+
+	CPython opens every class body with ``__module__ = __name__'', an ordinary
+	name read, so ``exec('class C: pass', {'__name__': 'named'})'' makes a
+	C.__module__ of 'named' -- and globals with no ``__name__'' fall through
+	to builtins.__name__, which is 'builtins'.  A MODULE's class statement
+	knows its name at compile time and keeps the literal; a doit's scope is
+	only known when it runs (GemTalk/Grail#1170).
+
+	The GLOBALS, not the merged scope: the class body's own namespace stands
+	where a locals mapping would, so exec()'s third argument is never
+	consulted -- hence ___doitGlobalsView___:.  A globals mapping read LIVE
+	(a dict subclass; see _exec:) is not seeded into the scope at all, so its
+	storage is asked directly while it is parked."
+
+	| live |
+	^ (self ___doitGlobalsView___: aScope) @env0:at: #'__name__' ifAbsent: [
+		live := self ___grailLiveGlobals___.
+		live @env0:isNil
+			ifTrue: ['builtins']
+			ifFalse: [live @env0:at: '__name__' ifAbsent: ['builtins']]]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___storeReflected___: value at: pyName into: target
 	"Write one binding the exec'd source produced back into the caller's
 	mapping.
@@ -2923,7 +2950,26 @@ repr: anObject
 
 	| slot |
 	slot := [anObject ___pyAttrLoad___: #'__repr__']
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		@env0:on: AbstractException do: [:ex |
+			"CATCH BROADLY, BUT NEVER A STACK OVERFLOW.  A __repr__ that reprs
+			 itself -- test_xml_etree's test_recursive_repr, whose Element's tag
+			 is the Element -- recurses through here once per level, so the VM's
+			 one-shot AlmostOutOfStack can trip INSIDE this block.  Answering nil
+			 for it consumed that warning without reducing depth: the recursion
+			 carried on into the Red Zone as an uncatchable ERROR 2502 and took
+			 the whole scoring session down (nightly 36136723364, on Linux only,
+			 because which frame the trip lands in is set by frame widths).
+			 Convert it HERE rather than pass it, for dict>>__eq__:'s reason: a
+			 pass leaves conversion to ___recursionGuard___, whose resignalAs:
+			 restarts the search at the signal point and so finds this handler
+			 again -- which must then let the RecursionError through, as it
+			 must one raised by the attribute read itself."
+			((ex @env0:isKindOf: AlmostOutOfStack)
+				or: [ex @env0:isKindOf: AlmostOutOfStackError]) ifTrue: [
+				RecursionError ___signal___:
+					'maximum recursion depth exceeded while getting the repr of an object'].
+			(ex @env0:isKindOf: RecursionError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
 	slot == None ifTrue: [
 		^ TypeError ___signal___: '''NoneType'' object is not callable'].
 	^ anObject __repr__
@@ -3180,6 +3226,31 @@ ___groupDigitsFromLeft___: digits separator: sep every: groupSize
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___zeroPaddedForGrouping___: digits every: groupSize reaching: aWidth
+	"``digits'' zero-extended so that GROUPING the result fills aWidth.
+
+	A sign-aware zero pad groups its own fill, so the separators cannot be
+	counted until the digit count is known -- which is why the pad has to happen
+	here rather than in ___formatPadBody___, whose fill the grouping never sees.
+
+	It routinely OVERSHOOTS the width, and that is CPython's answer, not a
+	rounding-up of mine: format(1234, '012,d') asks for 12 and answers
+	``0,000,001,234'', 13 wide, because 9 digits group to 11 and 10 group to 13,
+	and the first count that REACHES 12 is taken rather than the last that fits.
+	Measured across 29 spec/value pairs against CPython 3.14."
+
+	| count padded |
+
+	count := digits @env0:size.
+	[count @env0:+ ((count @env0:- 1) @env0:// groupSize) @env0:< aWidth]
+		@env0:whileTrue: [count := count @env0:+ 1].
+	padded := digits.
+	[padded @env0:size @env0:< count] @env0:whileTrue: [padded := '0' @env0:, padded].
+	^ padded
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___signString___: negative sign: sign
 	negative ifTrue: [^ '-'].
 	sign @env0:= $+ ifTrue: [^ '+'].
@@ -3221,11 +3292,21 @@ ___formatIntValue___: value parsed: p
 		type @env0:= $X ifTrue: [
 			digits := value @env0:abs @env0:printStringRadix: 16.
 			alt ifTrue: [prefix := '0X']]].
+	signStr := self ___signString___: value @env0:< 0 sign: sign.
 	grouping == nil ifFalse: [
 		groupSize := (type == nil or: [type @env0:= $d or: [type @env0:= $n]])
 			ifTrue: [3] ifFalse: [4].
+		"A SIGN-AWARE ZERO PAD groups its own fill.  Padding afterwards, in
+		___formatPadBody___, prepends zeros the grouping never sees, which left
+		a ragged leading group -- format(0x0102032a, '039_b') answered
+		``000000001_0000_...'' (33 digits, 6 separators) where CPython answers
+		``0000_0001_0000_...'' (32 digits, 7).  Both are 39 wide, so only the
+		grouping tells them apart."
+		(fill == $0 @env0:and: [align == $=]) ifTrue: [
+			digits := self ___zeroPaddedForGrouping___: digits
+				every: groupSize
+				reaching: width @env0:- signStr @env0:size @env0:- prefix @env0:size].
 		digits := self ___groupDigits___: digits separator: grouping every: groupSize].
-	signStr := self ___signString___: value @env0:< 0 sign: sign.
 	body := signStr @env0:, prefix @env0:, digits.
 	align == nil ifTrue: [align := $>].
 	^ self ___formatPadBody___: body fill: fill align: align

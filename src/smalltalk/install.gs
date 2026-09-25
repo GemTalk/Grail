@@ -431,11 +431,6 @@ run
 	at: #'struct' put: nil;
 	at: #'PyStruct' put: nil;
 	at: #'mimetypes' put: nil;
-	at: #'ipaddress' put: nil;
-	at: #'IPv4Address' put: nil;
-	at: #'IPv4Network' put: nil;
-	at: #'IPv6Address' put: nil;
-	at: #'IPv6Network' put: nil;
 	at: #'datetime' put: nil;
 	at: #'PyDate' put: nil;
 	at: #'PyDateTime' put: nil;
@@ -812,6 +807,7 @@ run
 	at: #'CompileCodeObjectTestCase' put: nil;
 	at: #'CompileTopLevelAwaitTestCase' put: nil;
 	at: #'ComparisonBlockingTestCase' put: nil;
+	at: #'ComparisonProtocolInsideSequencesTestCase' put: nil;
 	at: #'ComparisonProtocolTestCase' put: nil;
 	at: #'CompatPickleAndNetrcTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
@@ -854,6 +850,7 @@ run
 	at: #'DeprecationWarningTestCase' put: nil;
 	at: #'DequeIdentitySearchTestCase' put: nil;
 	at: #'DictDeleteByEqualKeyTestCase' put: nil;
+	at: #'DictHashesBeforeEqTestCase' put: nil;
 	at: #'DictKwargsTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
 	at: #'DictUnpackingTestCase' put: nil;
@@ -950,6 +947,7 @@ run
 	at: #'FloatingPointErrorTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'ForStarTargetTestCase' put: nil;
+	at: #'FormatZeroPadGroupsItsFillTestCase' put: nil;
 	at: #'FormatSpecAndComplexTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'FourArgAttrCallTestCase' put: nil;
@@ -994,6 +992,7 @@ run
 	at: #'GlobalsTestCase' put: nil;
 	at: #'GrailDirFallbackTestCase' put: nil;
 	at: #'GrailModuleTestCase' put: nil;
+	at: #'GrailReprLookupSignaller' put: nil;
 	at: #'GrailSTestTarget' put: nil;
 	at: #'GrailTestResult' put: nil;
 	at: #'GrailTestStdinProvider' put: nil;
@@ -1006,6 +1005,7 @@ run
 	at: #'HttpCookiesTestCase' put: nil;
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'IPv6AddressTestCase' put: nil;
+	at: #'IpaddressFullModuleTestCase' put: nil;
 	at: #'IRCodegenFlagDefaultTestCase' put: nil;
 	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'IRClassDeferredNonlocalTestCase' put: nil;
@@ -1220,6 +1220,7 @@ run
 	at: #'RaiseSpanTestCase' put: nil;
 	at: #'RaiseTestCase' put: nil;
 	at: #'RandomTestCase' put: nil;
+	at: #'ReflectedComparisonPriorityTestCase' put: nil;
 	at: #'RoundDirFormatTestCase' put: nil;
 	at: #'RangeTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
@@ -1657,7 +1658,6 @@ input src/smalltalk/Python/secrets.gs
 input src/smalltalk/Python/warnings.gs
 input src/smalltalk/Python/struct.gs
 input src/smalltalk/Python/mimetypes.gs
-input src/smalltalk/Python/ipaddress.gs
 input src/smalltalk/Python/datetime_module.gs
 input src/smalltalk/Python/json_module.gs
 input src/smalltalk/Python/json_decoder.gs
@@ -2211,6 +2211,7 @@ input src/smalltalk/PythonTests/CompileOptimizeTestCase.gs
 input src/smalltalk/PythonTests/CompileCodeObjectTestCase.gs
 input src/smalltalk/PythonTests/CompileTopLevelAwaitTestCase.gs
 input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
+input src/smalltalk/PythonTests/ComparisonProtocolInsideSequencesTestCase.gs
 input src/smalltalk/PythonTests/ComparisonProtocolTestCase.gs
 input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
@@ -2255,6 +2256,7 @@ input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
 input src/smalltalk/PythonTests/DeprecationWarningTestCase.gs
 input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
 input src/smalltalk/PythonTests/DictDeleteByEqualKeyTestCase.gs
+input src/smalltalk/PythonTests/DictHashesBeforeEqTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
 input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
@@ -2349,6 +2351,7 @@ input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
 input src/smalltalk/PythonTests/FloatingPointErrorTestCase.gs
 input src/smalltalk/PythonTests/FloatTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
+input src/smalltalk/PythonTests/FormatZeroPadGroupsItsFillTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecTestCase.gs
 input src/smalltalk/PythonTests/ForStarTargetTestCase.gs
@@ -2445,6 +2448,7 @@ input src/smalltalk/PythonTests/IntNePuntsOnNotImplementedTestCase.gs
 input src/smalltalk/PythonTests/IntToBytesDefaultsTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
+input src/smalltalk/PythonTests/IpaddressFullModuleTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenFlagDefaultTestCase.gs
 input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
 input src/smalltalk/PythonTests/IRClassDeferredNonlocalTestCase.gs
@@ -2633,6 +2637,7 @@ input src/smalltalk/PythonTests/RaiseSemanticsTestCase.gs
 input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
 input src/smalltalk/PythonTests/RaiseTestCase.gs
 input src/smalltalk/PythonTests/RandomTestCase.gs
+input src/smalltalk/PythonTests/ReflectedComparisonPriorityTestCase.gs
 input src/smalltalk/PythonTests/RoundDirFormatTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
@@ -2925,7 +2930,6 @@ run
 (sys @env1:modules) at: #'warnings' put: warnings @env1:instance.
 (sys @env1:modules) at: #'struct' put: struct @env1:instance.
 (sys @env1:modules) at: #'mimetypes' put: mimetypes @env1:instance.
-(sys @env1:modules) at: #'ipaddress' put: ipaddress @env1:instance.
 (sys @env1:modules) at: #'datetime' put: datetime @env1:instance.
 (sys @env1:modules) at: #'json' put: json @env1:instance.
 (sys @env1:modules) at: #'io' put: io @env1:instance.

@@ -259,6 +259,106 @@ if run "several script -- survive" 0 -- "$TMP/argv.py" -- a -- b; then
     fi
 fi
 
+# --- __main__ is session-local (issue #851) --------------------------------
+# A script is loaded under the one fixed name __main__.  Filing it persistently
+# (PythonModules + the canonical registries) put every session's script under
+# the same key: the session was dirty before the script's first line, so
+# ``with gemdb.transaction():`` as the first statement was refused, and two
+# sessions running scripts wrote the same entries -- a commit conflict.  The
+# measured writes were PythonModules plus three Rc registry buckets; now zero.
+
+printf 'import gemstone\nprint(gemstone.needs_commit)\n' > "$TMP/first_line.py"
+if run "script is clean on its first line" 0 -- "$TMP/first_line.py"; then
+    if [ "$(cat "$OUT_FILE")" = "False" ]; then ok; else
+        bad "first-line needs_commit" "want: False" "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+
+# Classes (with methods reading module globals), a decorator and a closure --
+# every class-build path a script takes -- and then a transaction block.  Only
+# gemdb is imported: install.sh deploys it, so no cold import can dirty the run.
+cat > "$TMP/defines.py" <<'PY'
+import gemdb
+LIMIT = 10
+def helper(x):
+    return x + LIMIT
+class Widget:
+    def __init__(self, n):
+        self.n = n
+    def scaled(self):
+        return helper(self.n)
+class Sub(Widget):
+    pass
+def deco(f):
+    def inner(*a):
+        return f(*a) + 1
+    return inner
+@deco
+def plus(a, b):
+    return a + b
+assert Sub(3).scaled() == 13 and plus(1, 2) == 4
+print(gemdb.needs_commit())
+with gemdb.transaction():
+    gemdb.root["grail_launcher_851"] = Widget.__name__
+with gemdb.transaction():
+    del gemdb.root["grail_launcher_851"]
+print("committed")
+PY
+if run "defining classes leaves a script clean" 0 -- "$TMP/defines.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$(printf 'False\ncommitted')" ]; then ok; else
+        bad "script defining classes" "want: False / committed" \
+            "got:  $(cat "$OUT_FILE")" "stderr: $(cat "$ERR_FILE")"
+    fi
+fi
+
+# The same script on the TEXT codegen path.  There a class-body method is
+# compiled at RUNTIME against the user profile's symbol list, which holds
+# PythonModules but not the session dictionary __main__ now lives in -- so a
+# method reaching the script's class by name compiled to a NameError stub
+# until Behavior >> ___grailRuntimeCompileDictionaries___ added it.  The IR
+# path above never compiles that way, which is why it needs its own case.
+if GRAIL_IR_CODEGEN=0 run "defining classes leaves a script clean (text codegen)" 0 -- "$TMP/defines.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$(printf 'False\ncommitted')" ]; then ok; else
+        bad "script defining classes (text codegen)" "want: False / committed" \
+            "got:  $(cat "$OUT_FILE")" "stderr: $(cat "$ERR_FILE")"
+    fi
+fi
+
+# Two sessions, each running a script that defines a class, both commit.  They
+# run in parallel and meet at a barrier before committing, so both transactions
+# overlap -- the case that used to conflict on __main__'s shared entries.
+cat > "$TMP/race.py" <<'PY'
+import sys, os, time, gemdb
+role, bar = sys.argv[1], sys.argv[2]
+class Local:
+    pass
+def touch(n):
+    open(os.path.join(bar, n), "w").close()
+def wait(n):
+    t = time.time()
+    while not os.path.exists(os.path.join(bar, n)):
+        if time.time() - t > 120:
+            print("timeout"); sys.exit(3)
+        time.sleep(0.1)
+touch("ready_" + role)
+wait("ready_" + ("B" if role == "A" else "A"))
+try:
+    gemdb.commit()
+    print("ok")
+except gemdb.ConflictError as e:
+    print("conflict: " + str(e))
+PY
+mkdir -p "$TMP/bar"
+./grail "$TMP/race.py" A "$TMP/bar" >"$TMP/raceA" 2>&1 &
+pa=$!
+./grail "$TMP/race.py" B "$TMP/bar" >"$TMP/raceB" 2>&1 &
+pb=$!
+wait "$pa" "$pb"
+if [ "$(cat "$TMP/raceA")" = "ok" ] && [ "$(cat "$TMP/raceB")" = "ok" ]; then ok; else
+    bad "two concurrent scripts both commit" \
+        "A: $(cat "$TMP/raceA")" "B: $(cat "$TMP/raceB")"
+fi
+
 # --- report ----------------------------------------------------------------
 
 echo "grail launcher: $pass passed, $fail failed"

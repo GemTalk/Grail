@@ -124,8 +124,13 @@ the script -- leaving the repository pristine in every case."
   m2 := pat @env1:search: 'xyzabc'.
   check value: 'SrePattern>>search: RECOMPILES and matches after the fault'
     value: ((m2 isKindOf: SreMatch) and: [(m2 @env1:group: 0) = 'abc']).
-  check value: 'pattern cPointer re-populated by the recompile'
-    value: (pat @env0:cPointer isNull not).
+  "The recompiled pointer is per-session (SessionTemps), NOT stored back
+  into the committed pattern: that store was a persistent write every
+  session made, and two sessions using one module-level pattern
+  collided on commit."
+  check value: 'recompile leaves the committed pattern unwritten'
+    value: ((pat @env0:cPointer isNull)
+      and: [((System _writtenObjects ifNil: [#()]) includesIdentical: pat) not]).
   check value: 'SrePattern>>match: works after recompile'
     value: (((pat @env1:match: 'abcxyz') isKindOf: SreMatch)).
   check value: 'SrePattern>>findall: works after recompile'

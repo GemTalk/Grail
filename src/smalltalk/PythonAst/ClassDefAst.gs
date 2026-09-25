@@ -1936,9 +1936,18 @@ printSmalltalkRuntimeOn: aStream
 		"__module__ is the defining module's dotted NAME STRING (CPython
 		semantics), emitted as a compile-time literal via the enclosing
 		ModuleAst.  Never the module instance — see
-		___enclosingModuleName___ for the reachability rationale."
+		___enclosingModuleName___ for the reachability rationale.
+
+		EXCEPT IN A DOIT, where the literal was always '__main__' and so
+		ignored the globals exec() was handed (GemTalk/Grail#1170).  CPython's
+		class body opens with ``__module__ = __name__'', a run-time read of
+		the globals, so a doit's class reads its ``__name__'' when it runs.
+		Still a string, so the reachability constraint holds."
 		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
-		self printQuotedString: self ___enclosingModuleName___ on: aStream.
+		self ___readsModuleNameAtRunTime___
+			ifTrue: [aStream nextPutAll:
+				'(((Python @env0:at: #builtins) instance) ___doitModuleName___: ___pyGlobals___)']
+			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
 		aStream nextPutAll: '.'; lf.
 	].
 
@@ -4891,7 +4900,12 @@ ___enclosingModuleName___
 	made every committed class drag its defining session's module instance
 	— and that instance's entire globals graph — into any commit that
 	reached the class: exactly the ephemeron/commit-conflict shape the
-	session-state refactor removed, resurfacing through class reachability."
+	session-state refactor removed, resurfacing through class reachability.
+
+	A DOIT's ``__module__'' does not come from here: its ModuleAst carries the
+	parser's default '__main__', so the stamp reads ``__name__'' at run time
+	instead (___readsModuleNameAtRunTime___, GemTalk/Grail#1170).  The
+	canonical-class registry keys still do."
 
 	| node |
 	node := self.
@@ -4900,6 +4914,23 @@ ___enclosingModuleName___
 			^ node name ifNil: ['__main__'] ifNotNil: [:n | n asString]].
 		node := node parent].
 	^ '__main__'
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___readsModuleNameAtRunTime___
+	"True when ``__module__'' must be read from ``__name__'' as the class
+	statement runs rather than compiled in: a DOIT (exec, eval, the REPL, an
+	embedder's evaluateSource:usingModuleScope:).  A module's class statement
+	keeps the compile-time literal -- the hot path, and already right
+	(GemTalk/Grail#1170).
+
+	Asked of the doit SCOPE, not of the ModuleAst's name.  The parser names
+	every module '__main__' until loadModuleFromPath: stamps the real one, so
+	a doit's ModuleAst is never unnamed and the name cannot tell the two
+	apart.  The scope can: it is set only around a doit's compile."
+
+	^ ModuleAst compilingDoitScope notNil
 %
 
 category: 'Grail-Class Compilation'

@@ -146,8 +146,19 @@ class TestResult:
     def addSkip(self, test, reason):
         self.skipped.append((test, reason))
 
+    def addExpectedFailure(self, test, err):
+        self.expectedFailures.append((test, err))
+
+    def addUnexpectedSuccess(self, test):
+        self.unexpectedSuccesses.append(test)
+
     def wasSuccessful(self):
-        return len(self.errors) == 0 and len(self.failures) == 0
+        # An UNEXPECTED SUCCESS counts against the run, as it does in CPython: a
+        # test the author marked as known-broken and which now passes is a claim
+        # that has gone stale, and saying nothing about it is how the marker
+        # outlives the bug.
+        return (len(self.errors) == 0 and len(self.failures) == 0
+                and len(self.unexpectedSuccesses) == 0)
 
     def stop(self):
         self.shouldStop = True
@@ -869,10 +880,35 @@ class TestCase:
             if status == "success":
                 status = "error"
                 message = _describe_exception(e)
-        if status == "success":
-            result.addSuccess(self)
-        elif status == "skip":
+        # An @expectedFailure marker on the test METHOD reroutes the outcome, the
+        # same oversight the @skip block above records one decorator earlier: the
+        # decorator set __unittest_expecting_failure__ all along and run() never
+        # read it, so a test CPython counts as an expected failure was reported
+        # as a plain failure, and one that has quietly started passing was
+        # reported as a pass.  Both mis-score the corpus -- three of
+        # test.test_pulldom's six reported problems are this, not pulldom's.
+        #
+        # A SKIP is left alone: it never ran, so there is nothing to have
+        # expected.  CPython reads the marker off the method only, never the
+        # class.
+        expecting_failure = False
+        try:
+            marked = getattr(self, self._testMethodName)
+        except Exception:
+            marked = None
+        if marked is not None:
+            expecting_failure = getattr(
+                marked, "__unittest_expecting_failure__", False)
+
+        if status == "skip":
             result.addSkip(self, message)
+        elif expecting_failure:
+            if status == "success":
+                result.addUnexpectedSuccess(self)
+            else:
+                result.addExpectedFailure(self, message)
+        elif status == "success":
+            result.addSuccess(self)
         elif status == "failure":
             result.addFailure(self, message)
         else:

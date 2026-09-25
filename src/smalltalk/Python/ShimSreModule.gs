@@ -258,12 +258,24 @@ cPtrAddress
 	canonical-module closure (werkzeug URL rules, module-level
 	re.compile()) must keep serving in later sessions.  Without the args
 	(a wrapper minted by SreMatch>>re), signal rather than hand a
-	NULL/stale address into C -- dereferencing it would crash the gem."
+	NULL/stale address into C -- dereferencing it would crash the gem.
 
-	(cPointer isNil or: [cPointer isNull]) ifTrue: [
-		compileArgs isNil ifTrue: [
-			^ self error: 'SrePattern is not valid in this session: a compiled regular expression does not persist across a commit/session boundary (recompile the pattern).'].
-		[ | addr sreCls |
+	The recompiled pointer is kept in SessionTemps, NOT stored back into
+	cPointer.  The pattern is committed (that is how it came to be NULL), so
+	storing into it is a persistent write -- and every session that touches a
+	module-level re.compile() makes the same one, so two sessions using, say,
+	decimal's _all_zeros collide on commit (Write-Write on the SrePattern).
+	The pointer is per-process state and belongs with the rest of it
+	(docs/Concurrency.md)."
+
+	| live |
+	(cPointer notNil and: [cPointer isNull not]) ifTrue: [^ cPointer memoryAddress].
+	live := (SessionTemps current at: #'GrailSrePatternPointers' otherwise: nil)
+		ifNotNil: [:map | map at: self otherwise: nil].
+	live notNil ifTrue: [^ live memoryAddress].
+	compileArgs isNil ifTrue: [
+		^ self error: 'SrePattern is not valid in this session: a compiled regular expression does not persist across a commit/session boundary (recompile the pattern).'].
+	[ | addr sreCls |
 		"_sre's class definition follows SrePattern's in this file --
 		resolve it at runtime rather than compile time."
 		sreCls := System myUserProfile symbolList objectNamed: #'_sre'.
@@ -273,8 +285,10 @@ cPtrAddress
 			groupindex: (compileArgs at: 5) indexgroup: (compileArgs at: 6).
 		addr = 0 ifTrue: [
 			^ self error: 'SrePattern recompile failed in this session (see compileArgs).'].
-		cPointer := CPointer forAddress: addr ] value].
-	^ cPointer memoryAddress
+		live := CPointer forAddress: addr ] value.
+	(SessionTemps current at: #'GrailSrePatternPointers'
+		ifAbsentPut: [IdentityKeyValueDictionary new]) at: self put: live.
+	^ live memoryAddress
 %
 
 ! ===============================================================================
