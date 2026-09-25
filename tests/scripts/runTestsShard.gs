@@ -19,6 +19,7 @@ iferr 1 where
 iferr 2 output pop
 iferr 3 where
 iferr 4 exit 1
+iferr_clear 
 login
 run
 | dir |
@@ -43,15 +44,21 @@ escape hatch: it simply skips the deploy."
 %
 level 1
 run
-| out n idx full shard result leaves flatten overrides oFile
+| out numWorkers idx full shard result leaves flatten overrides oFile
   groups order timeClasses shardT0 shardOf |
 out := GsFile stdout.
-n := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
-n := (n isEmpty ifTrue: [1] ifFalse: [n asNumber]).
-(n isNil or: [n < 1]) ifTrue: [n := 1].
-idx := (System gemEnvironmentVariable: 'GRAIL_TEST_SHARD') ifNil: ['0'].
+out nextPutAll:'topaz -l  processId = ' , System gemProcessId asString ; lf .
+numWorkers := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
+out nextPutAll:'GRAIL_TEST_WORKERS = ', numWorkers asString; lf .
+numWorkers := (numWorkers isEmpty ifTrue: [1] ifFalse: [numWorkers asNumber]).
+(numWorkers isNil or: [numWorkers < 1]) ifTrue: [numWorkers := 1].
+out nextPutAll:'numWorkers = ', numWorkers asString; lf .
+idx := System gemEnvironmentVariable: 'GRAIL_TEST_SHARD' .
+out nextPutAll:'GRAIL_TEST_SHARD = ', idx asString; lf .
+idx ifNil:[ idx := '0' ].
 idx := (idx isEmpty ifTrue: [0] ifFalse: [idx asNumber]).
 idx isNil ifTrue: [idx := 0].
+out nextPutAll:'   idx = ', idx asString; lf .
 "PythonTestCase suite is a suite of PER-CLASS sub-suites; flatten to leaf
 TestCase instances in ORIGINAL suite order (pre-order DFS).  Order matters:
 some tests incidentally rely on a module imported by an earlier test in the
@@ -97,7 +104,7 @@ oFile ifNotNil: [
         want := (parts at: 2) asNumber.
         "Ignore an index this run has no worker for, so the gate can be run
         with fewer workers than the file was written for."
-        (want notNil and: [want >= 0 and: [want < n]])
+        (want notNil and: [want >= 0 and: [want < numWorkers]])
           ifTrue: [overrides at: (parts at: 1) asString put: want]]]].
   oFile close].
 "Collect this shard's tests twice over: once into the shard suite (whose
@@ -110,7 +117,7 @@ shardOf := [:key |
     | sum |
     sum := 0.
     key do: [:ch | sum := sum + ch asInteger].
-    sum \\ n]].
+    sum \\ numWorkers]].
 shard := TestSuite new.
 groups := Dictionary new.
 order := OrderedCollection new.
@@ -170,7 +177,7 @@ out nextPutAll: 'GRAIL_SHARD_MEM|idx='; nextPutAll: idx printString;
   nextPutAll: '|usedMB='; nextPutAll: ((System _tempObjSpaceUsed / 1048576) rounded) printString;
   nextPutAll: '|pct='; nextPutAll: (System _tempObjSpacePercentUsed) printString; lf.
 out nextPutAll: 'GRAIL_SHARD_RESULT|idx='; nextPutAll: idx printString;
-  nextPutAll: '|workers='; nextPutAll: n printString;
+  nextPutAll: '|workers='; nextPutAll: numWorkers printString;
   nextPutAll: '|ms='; nextPutAll: (System _timeMs - shardT0) printString;
   nextPutAll: '|'; nextPutAll: result printString; cr.
 result hasPassed

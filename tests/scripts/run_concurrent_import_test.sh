@@ -89,7 +89,7 @@ EOF
 # (@@GRAILDIR@@ / @@SYNC@@) rather than read via System gemEnvironmentVariable:.
 RUN="$SYNC/run.gs"
 {
-  printf 'set gems %s\n' "$STONE"
+  printf 'set stone %s\n' "$STONE"
   printf 'set gemnetid %s\n' "$GEMNETID"
   sed -e "s#@@GRAILDIR@@#${PROJECT_ROOT}#g" -e "s#@@SYNC@@#${SYNC}#g" \
     "$SCRIPT_DIR/runConcurrentImportRpc.gs"
