@@ -945,6 +945,7 @@ run
 	at: #'FloatingPointErrorTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'ForStarTargetTestCase' put: nil;
+	at: #'FormatZeroPadGroupsItsFillTestCase' put: nil;
 	at: #'FormatSpecAndComplexTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'FourArgAttrCallTestCase' put: nil;
@@ -2344,6 +2345,7 @@ input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
 input src/smalltalk/PythonTests/FloatingPointErrorTestCase.gs
 input src/smalltalk/PythonTests/FloatTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
+input src/smalltalk/PythonTests/FormatZeroPadGroupsItsFillTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecTestCase.gs
 input src/smalltalk/PythonTests/ForStarTargetTestCase.gs
