@@ -11451,7 +11451,7 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	NotImplemented sentinel and means ``tried, declined'' -- the caller must
 	then NOT try that same reflected method again."
 
-	| myClass otherClass owner refBase |
+	| myClass otherClass owner refBase varargsResult attrDunder |
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 	(otherClass @env0:== myClass) ifTrue: [^ nil].
@@ -11482,7 +11482,29 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	wrong order (test_ipaddress test_mixed_type_key)."
 	(owner @env0:notNil and: [owner @env0:~~ object]) ifTrue: [
 		^ other @env0:perform: refSelector env: 1 withArguments: { self }].
-	^ other ___varargsDunder___: kwSelector with: self
+	varargsResult := other ___varargsDunder___: kwSelector with: self.
+	varargsResult == nil ifFalse: [^ varargsResult].
+	"A dunder that lives in the class DICT rather than as a compiled method is
+	invisible to both probes above.  @functools.total_ordering installs its
+	derived comparisons with setattr(cls, opname, opfunc), so IPv4Interface's
+	__gt__ is a functools_ordering_op and ``whichClassIncludesSelector:
+	#'__gt__:''' answers object -- the subclass looks like it has no reflected
+	method at all, and the priority rule was skipped however it asked its
+	question.  ___binOpFallback___ already consults ___classAttrDunder___ for
+	the arithmetic family, for the same reason and with the same receiver-first
+	call shape.
+
+	No object guard is needed: object's own comparison dunders are COMPILED
+	methods, not holder entries, so a class-attribute walk cannot reach them and
+	a hit here is always a user's or a decorator's.
+
+	Reached only once both compiled probes have missed AND other's class is
+	already known to be a proper subclass, so an ordinary comparison between
+	unrelated or same-typed operands never pays for it."
+	attrDunder := other ___classAttrDunder___: refBase.
+	attrDunder == nil ifFalse: [
+		^ attrDunder ___pyCallValue___: { other . self } kw: nil].
+	^ nil
 %
 
 category: 'Grail-Comparison'

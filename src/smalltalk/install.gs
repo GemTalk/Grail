@@ -807,6 +807,7 @@ run
 	at: #'CompileCodeObjectTestCase' put: nil;
 	at: #'CompileTopLevelAwaitTestCase' put: nil;
 	at: #'ComparisonBlockingTestCase' put: nil;
+	at: #'ComparisonProtocolInsideSequencesTestCase' put: nil;
 	at: #'ComparisonProtocolTestCase' put: nil;
 	at: #'CompatPickleAndNetrcTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
@@ -2208,6 +2209,7 @@ input src/smalltalk/PythonTests/CompileOptimizeTestCase.gs
 input src/smalltalk/PythonTests/CompileCodeObjectTestCase.gs
 input src/smalltalk/PythonTests/CompileTopLevelAwaitTestCase.gs
 input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
+input src/smalltalk/PythonTests/ComparisonProtocolInsideSequencesTestCase.gs
 input src/smalltalk/PythonTests/ComparisonProtocolTestCase.gs
 input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
