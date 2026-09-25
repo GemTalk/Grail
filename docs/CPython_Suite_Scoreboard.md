@@ -99,11 +99,11 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_positional_only_arg | OK | 28 | 0 | 0 | 1 |  |
 | test.test_string_literals | OK | 20 | 0 | 0 | 0 |  |
 | test.test_genericclass | OK | 22 | 0 | 0 | 1 |  |
-| test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
+| test.test_annotationlib | OK | 117 | 0 | 0 | 8 |  |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | ERROR | 287 | 16 | 22 | 22 |  |
-| test.test_contextlib_async | ERROR | 58 | 6 | 2 | 0 |  |
-| test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
+| test.test_codecs | OK | 287 | 0 | 0 | 22 |  |
+| test.test_contextlib_async | ERROR | 58 | 6 | 1 | 0 |  |
+| test.test_asyncgen | FAIL | 85 | 5 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
 | test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
@@ -112,7 +112,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_reprlib | ERROR | 33 | 6 | 2 | 2 |  |
 | test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
-| test.test_warnings | ERROR | 187 | 5 | 5 | 29 |  |
+| test.test_warnings | ERROR | 187 | 5 | 4 | 29 |  |
 | test.test___all__ | FAIL | 1 | 1 | 0 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | 2 |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |

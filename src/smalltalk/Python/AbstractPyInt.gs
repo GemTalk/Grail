@@ -516,7 +516,14 @@ __eq__: other
 category: 'Grail-Python Protocol'
 method: AbstractPyInt
 __ne__: other
-	^ (self __eq__: other) not
+	"Punts where __eq__: punts -- see Int.gs's twin __ne__: for why
+	negating the singleton instead is an uncatchable error."
+
+	| equal |
+
+	equal := self __eq__: other.
+	(equal @env0:== NotImplemented) ifTrue: [^ equal].
+	^ equal @env0:not
 %
 
 category: 'Grail-Python Protocol'

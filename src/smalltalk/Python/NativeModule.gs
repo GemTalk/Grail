@@ -455,6 +455,9 @@ instance
 	inst := self @env0:___committedInstance___.
 	inst == nil ifTrue: [inst := self @env0:new].
 	reg @env0:at: self put: inst.
+	"A session's first native singleton is also a point every Python
+	execution passes: install the dispatchers committed overrides need."
+	object @env0:___grailInstallRecordedSelfSendOverrides___.
 	((inst @env0:class @env0:whichClassIncludesSelector: #initialize environmentId: 1) @env0:notNil)
 		ifTrue: [inst initialize].
 	^ inst
@@ -469,6 +472,18 @@ clearInstance
 
 	self @env0:___sessionInstances___ @env0:removeKey: self ifAbsent: [].
 	self @env0:___forgetSessionState___
+%
+
+set compile_env: 1
+
+category: 'Grail-Session State'
+method: NativeModule
+___mayCacheFunctionHandles___
+	"Always: a native module's dynamic instVars are redirected to SessionTemps
+	(dynamicInstVarAt:put: above), so caching a function handle there writes
+	nothing committed -- see module >> ___mayCacheFunctionHandles___."
+
+	^ true
 %
 
 set compile_env: 0

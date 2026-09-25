@@ -6729,7 +6729,7 @@ The same shape as the `from_bytes` entry above, found the same way: CPython's
 it after `from_bytes` was fixed. A signature gap reads as "an obscure
 spelling nobody uses" right up until a real module uses it twice.
 
-## A class attribute does not shadow an inherited property, and the obvious fix does not work
+## A class attribute does not shadow an inherited property — FIXED, at the second attempt
 
 CPython's attribute lookup scans the MRO once and stops at the FIRST class
 holding the name, so a class attribute shadows an inherited method or
@@ -6786,6 +6786,207 @@ tell an inherited property (whose setter carries the category
 `Grail-Property-ReadOnly` or `Grail-CachedProperty-Setter`) from a class
 attribute's own accessor pair — not beside it.
 
-The fixture written for it is not committed: it fails on today's code, and the
-gate's XFAIL convention is for fixtures that CPython and Grail disagree about
-by design, which this is not.
+### What the second attempt did
+
+Exactly what the paragraph above says it should: it extended
+`___grailInstallAttrMethodShadows___:` rather than standing beside it. Four
+of that method's conditions had to give way, each recorded at its site.
+
+* **The pair-shape skip**, now taken only when the inherited 1-arg half is NOT
+  a generated property setter. The category is what tells an inherited
+  `@property` from the accessor pair Grail compiles for a data attribute — a
+  SLOT above all, whose getter must keep reaching the slot.
+* **The superclass walk**, now the MRO. A secondary base's property is copied
+  ONTO the class by `___mergeSecondaryBases___`, so the chain never shows where
+  it came from; the MRO does.
+* **"The class already supplies this arity itself"**, which kept the installer
+  off a name a real `def` in the same body answers. The merge runs BEFORE this
+  hook, so every multiple-inheritance class looked like it supplied every
+  inherited name. A selector whose own category is `Grail-MI-Inherited` is a
+  merged copy and no longer counts.
+* **The forwarder shape.** The existing one CALLS the value, because for a
+  method the unary selector means "call me". For a property it means "read
+  me", so the new one answers the value, and a companion setter stores to the
+  instance dict — shadowing hides the whole descriptor, so there is no data
+  descriptor left to outrank the instance.
+
+The tests that failed the first attempt pass: `ClassAttrMethodOverride` 1/1,
+`GetattributeHook` 12/12, `SlotsInheritedDict` 2/2. The corpus is unmoved: 162
+failing tests before and after, with an empty name-and-kind diff.
+
+**For CPython's own `ipaddress`, measured with the module vendored locally: 126
+of 134 checks before, 130 after.** The four that remain are the classmethod
+defect recorded below.
+
+### One debugging note
+
+The MRO lookup answered nil for three installs before the cause showed: the
+helper `importlib ___mroOf___:` is an ENV-0 method, the send was env 1, and the
+`on: Error` guard around it turned the DNU into "no MRO available" rather than
+an error. A guard that swallows a programming mistake costs more than the
+failure it was written for; the probe that asks the expression directly is what
+found it.
+
+## self.prop(arg) called the property's setter
+
+Calling a property's value through self raised:
+
+```python
+class C:
+    @property
+    def factory(self): return maker
+    def use(self): return self.factory(5)   # AttributeError: property 'factory'
+                                            # of 'C' object has no setter
+```
+
+`self.kind(n)` means read the property, then call what it answers. Grail fused
+it into the keyword send `self kind: n` — the class self-send fast path, which
+is right for a plain def and wrong here, because that selector is the
+property's SETTER. The varargs twin of the fusion was no better: it sent the
+getter's own `_kind: { n } kw: nil` wrapper, which refused the argument its
+signature never had.
+
+**Why the name got that far.** `@property` is a STRUCTURAL decorator in
+Grail's classification (`FunctionDefAst >> ___hasWrappingDecorator___`), not a
+wrapping one, because its getter compiles to a plain unary method. That is
+exactly right for a READ — `self.kind` resolving to the getter is the point —
+so the name never joined `classDecoratedFunctionNames`, the set that keeps
+`@contextmanager` and friends out of the fast path. Reads and calls needed
+different answers from one classification.
+
+`CallAst >> classPropertyNames` is that second answer: populated where
+`classDecoratedFunctionNames` is, consulted by the same two guards
+(`classSelfSendSelector` and its varargs twin), and it excludes CALLS ONLY.
+A plain read is AttributeAst's and still resolves to the getter.
+
+CPython's own ipaddress is a caller: `_BaseNetwork` does
+`self._address_class(n)` where `_address_class` is a property.
+
+### The measurement baseline moved underneath this
+
+`IR codegen on by default` (#1087) merged while this was being written, so the
+numbers a tier-2 run prints are not the ones the entries above quote: the
+CPython corpus went from 142 failing tests to 162, and the SUnit default arm
+from 14 failures to 54 — the position and traceback families that were
+previously the IR-only set. Both are MAIN's numbers, measured on main with
+nothing applied. A change is still judged by the same rule, the name-and-kind
+diff against a baseline run of the same tree: this one is 162 -> 163, and the
+one test is `test_annotationlib`'s known flaky row.
+
+## A classmethod called through self failed when its class was a SECONDARY base — FIXED
+
+```python
+class Standalone:
+    @classmethod
+    def parse(cls, s):
+        return 'parsed-' + s
+    def use(self):
+        return self.parse('own')        # called from the declaring class
+
+class Other:
+    __slots__ = ()
+
+class First(Standalone, Other): pass    # Standalone is the PRIMARY base
+class Second(Other, Standalone): pass   # Standalone is a SECONDARY base
+
+Standalone().use()   # 'parsed-own'
+First().use()        # 'parsed-own'
+Second().use()       # AttributeError: 'Second' object has no attribute 'parse'
+```
+
+Only that one shape fails. Reading the attribute from outside (`Second().parse`)
+answers a BoundMethod, calling it works, and `Second.parse('a')` works — so the
+merged classmethod IS reachable; it is the call written INSIDE the declaring
+class, once that class is a secondary base, that does not find it.
+
+**Why the call is shaped that way.** `@classmethod` is a STRUCTURAL decorator
+(`FunctionDefAst >> ___hasWrappingDecorator___`), and ClassDefAst adds
+classmethod names to `classFunctionNames` deliberately — the comment there
+records that suppressing the fast path for them turned `self.cm0()` into an
+AttributeError back when a class-side method was not reachable through an
+instance's `___pyAttrLoad___`. So `self.parse('own')` compiles to the fused
+send `self parse: 'own'`, which no instance-side method answers; it works
+through the doesNotUnderstand recovery, which loads the attribute and calls it.
+That recovery is what fails for a secondary base.
+
+By contrast the same call written in a SUBCLASS of the declaring class compiles
+to the attribute path outright — `parse` is not in that body's
+`classFunctionNames` — which is why `Sub` works and the mixin does not.
+
+This is what keeps 4 of the 8 remaining checks in
+`tests/python/ipaddress_ipv6_conformance.py` from passing against CPython's own
+`ipaddress`: `IPv6Address(_BaseV6, _BaseAddress)` reaches `_ip_int_from_string`
+that way, and `_BaseV6` is the secondary base. The other 4 are the class
+attribute/property shadowing entry above.
+
+### Where to look
+
+Two leads, in order of likelihood:
+
+* `importlib >> ___mergeSecondaryBases___:bases:resolved:` copies a secondary
+  base's env-1 INSTANCE methods onto the class. A classmethod's home is the
+  class side, and the copied instance method still sends `parse:` to the
+  instance, so whether the recovery can find it depends on how the merged
+  class-side entry is represented — a compiled method or a PyClassMethod
+  descriptor in the class-attribute store.
+* the doesNotUnderstand recovery on PythonInstance / object, which is what
+  turns the failed instance-side send into an attribute load. It answers
+  correctly for the primary-base case, so the difference is in what it finds
+  for the merged one.
+
+### The cause, and the one-line gate that had it
+
+Two mechanisms disagreed about one method. Codegen emits `self parse: x` for
+the call, and no instance-side method answers it, so the `doesNotUnderstand`
+hook recovers by forwarding to the class — but only for a method filed under
+`Grail-Class Methods`, and `___mergeSecondaryBases___` files a secondary
+base's class-side methods under `Grail-MI-Inherited`. The same method, a
+different category, and the gate declined it; the send then fell through to
+the "missing attribute" branch, which is the AttributeError the entry above
+describes.
+
+`PythonInstance >> ___isForwardableClassSideCategory___:` now admits both.
+The merge never copies `Grail-Class Attrs` or `Grail-Slot Layout` onto the
+class side, so admitting its category cannot let a synthesized accessor or a
+real setter into that branch — which is what the gate was written to keep out.
+
+**With this, CPython's own `ipaddress` answers 134 of 134 checks in
+`tests/python/ipaddress_ipv6_conformance.py`** — 118 before the `int`
+signature work, 126 after it, 130 after the class-attribute shadowing fix.
+Vendoring the module in place of the 1701-line Smalltalk one is now a
+mechanical change rather than a research project.
+
+## IR codegen cannot run on every 4.0 build, and the capability gate says it can
+
+On this machine — GemStone `4.0.0 Build 2026-08-05` — the kernel's
+`GsComMethNode >> selector:` sends `envId` to itself, and `GsComMethNode`
+implements no such accessor (its instance variables carry `envInfo`). Every
+call raises:
+
+```
+MessageNotUnderstood ... a GsComMethNode does not understand #'envId'
+```
+
+`selector:` has exactly one caller in Grail, `PyMethodIRBuilder >>
+initClass:selector:env:`, so nothing noticed until `IR codegen on by default`
+(#1087) made that the path every compile takes. Then:
+
+* `./install.sh` fails at the gemdb deploy step (exit 1), while reporting
+  that Grail itself installed;
+* every module load in a plain session raises the DNU above;
+* the ~151 SUnit tests that FORCE the IR arm error out, on main as much as on
+  any branch.
+
+`GRAIL_IR_CODEGEN=0` restores all of it, and CI is unaffected — its container
+build has a consistent kernel, and both arms pass there.
+
+**The gate is the part Grail owns.** `PyMethodIRBuilder class >>
+supportedOnThisPlatform` answers `System _gemVersionNum >= 40000`, and its own
+comment records that this probe once GENERATED A THROWAWAY METHOD and that
+building it was how the check earned its answer. A version number cannot see a
+kernel whose node class and node methods disagree; a generated method can.
+Restoring that probe would turn a hard failure into the quiet fallback to the
+text path that the flag already supports.
+
+Until then, local work on such a build needs `GRAIL_IR_CODEGEN=0`, and a
+local tier-2 run covers the text arm only — the IR arm is CI's.

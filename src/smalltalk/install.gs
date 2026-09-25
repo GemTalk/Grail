@@ -740,6 +740,7 @@ run
 	at: #'ClassTypeParamsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
+	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'ClassAttrSingleHomeTestCase' put: nil;
@@ -749,6 +750,8 @@ run
 	at: #'ClassBodyClosureCellTestCase' put: nil;
 	at: #'ClassBodyConditionalNewTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
+	at: #'ClassAttrShadowsInheritedTestCase' put: nil;
+	at: #'ClassmethodViaSelfMergedTestCase' put: nil;
 	at: #'ClassBodyControlFlowTestCase' put: nil;
 	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
 	at: #'ClassBodyDefAsPlainFunctionTestCase' put: nil;
@@ -850,6 +853,7 @@ run
 	at: #'DeprecatedCooperativeTestCase' put: nil;
 	at: #'DeprecationWarningTestCase' put: nil;
 	at: #'DequeIdentitySearchTestCase' put: nil;
+	at: #'DictDeleteByEqualKeyTestCase' put: nil;
 	at: #'DictKwargsTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
 	at: #'DictUnpackingTestCase' put: nil;
@@ -956,6 +960,7 @@ run
 	at: #'FrameReceiverSuggestionTestCase' put: nil;
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
+	at: #'FunctionalEnumModuleTestCase' put: nil;
 	at: #'FunctionBuiltinsAttrTestCase' put: nil;
 	at: #'FunctionDefaultsTestCase' put: nil;
 	at: #'FunctionDictAndDocTestCase' put: nil;
@@ -1041,6 +1046,7 @@ run
 	at: #'IntegerTestCase' put: nil;
 	at: #'IntFloatOverflowTestCase' put: nil;
 	at: #'IntFromBytesIterableTestCase' put: nil;
+	at: #'IntNePuntsOnNotImplementedTestCase' put: nil;
 	at: #'IntToBytesDefaultsTestCase' put: nil;
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
@@ -1249,6 +1255,7 @@ run
 	at: #'SelectorManglingApiTestCase' put: nil;
 	at: #'SelfNameCollisionTestCase' put: nil;
 	at: #'SelfNamedClassTestCase' put: nil;
+	at: #'SelfSendPropertyCallTestCase' put: nil;
 	at: #'SelfReboundInMethodTestCase' put: nil;
 	at: #'SelfSendOverrideTestCase' put: nil;
 	at: #'SetDisplayUnpackTestCase' put: nil;
@@ -2129,6 +2136,7 @@ input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
+input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
@@ -2139,6 +2147,8 @@ input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalNewTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrShadowsInheritedTestCase.gs
+input src/smalltalk/PythonTests/ClassmethodViaSelfMergedTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyControlFlowTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDefAsPlainFunctionTestCase.gs
@@ -2244,6 +2254,7 @@ input src/smalltalk/PythonTests/DeployCheckTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
 input src/smalltalk/PythonTests/DeprecationWarningTestCase.gs
 input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
+input src/smalltalk/PythonTests/DictDeleteByEqualKeyTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
 input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
@@ -2351,6 +2362,7 @@ input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
+input src/smalltalk/PythonTests/FunctionalEnumModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionBuiltinsAttrTestCase.gs
 input src/smalltalk/PythonTests/FunctionDefaultsTestCase.gs
 input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
@@ -2429,6 +2441,7 @@ input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IntFloatOverflowTestCase.gs
 input src/smalltalk/PythonTests/IntFromBytesIterableTestCase.gs
+input src/smalltalk/PythonTests/IntNePuntsOnNotImplementedTestCase.gs
 input src/smalltalk/PythonTests/IntToBytesDefaultsTestCase.gs
 input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
@@ -2655,6 +2668,7 @@ input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
 input src/smalltalk/PythonTests/SelfCheckingFixturesTestCase.gs
 input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
+input src/smalltalk/PythonTests/SelfSendPropertyCallTestCase.gs
 input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs
 input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
 input src/smalltalk/PythonTests/SetDisplayUnpackTestCase.gs

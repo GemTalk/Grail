@@ -3509,6 +3509,23 @@ classAttrNames
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classPropertyNames
+	"Names the class body declares as a @property (or @cached_property, or one
+	of its setter/getter/deleter halves).  classSelfSendSelector consults it so
+	``self.kind(n)'' takes the attribute path instead of fusing into the
+	property's setter selector."
+
+	^ self ___compileContext___ at: #'classPropertyNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classPropertyNames: aSetOrNil
+	self ___compileContext___ at: #'classPropertyNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classAttrNames: aSetOrNil
 	self ___compileContext___ at: #'classAttrNames' put: aSetOrNil
 %
@@ -3782,6 +3799,14 @@ classSelfSendSelector
 	lives in the class dict, so this call must take the attribute path."
 	((self class classDecoratedFunctionNames notNil
 		and: [self class classDecoratedFunctionNames includes: attrSym])) ifTrue: [^nil].
+	"A @property's getter compiles to a plain unary method, so fusing a CALL
+	through self emits ``self kind: n'' -- the property's SETTER -- which a
+	read-only property answers by raising ``property 'kind' of 'C' object has
+	no setter''.  CPython loads the property's value and calls THAT, so this
+	call takes the attribute path.  Only calls are affected: a plain read
+	``self.kind'' is AttributeAst's, and still resolves to the getter."
+	((self class classPropertyNames notNil
+		and: [self class classPropertyNames includes: attrSym])) ifTrue: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	^ self class fastPathSelectorForAttr: attrName arity: arguments size
 %
@@ -3803,6 +3828,12 @@ classSelfSendVarargsSelector
 	"See classSelfSendSelector: a wrapped def must not be self-sent at all."
 	((self class classDecoratedFunctionNames notNil
 		and: [self class classDecoratedFunctionNames includes: attrName asSymbol]))
+			ifTrue: [^nil].
+	"Nor a @property, for the reason classSelfSendSelector gives: the varargs
+	twin of that fusion sends ``_kind: { n } kw: nil'', the getter's own
+	wrapper, which then refuses the argument its signature never had."
+	((self class classPropertyNames notNil
+		and: [self class classPropertyNames includes: attrName asSymbol]))
 			ifTrue: [^nil].
 	candidate := self class varargsSelectorForName: attrName.
 	^ candidate

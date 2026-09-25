@@ -251,6 +251,13 @@ SessionTemps current at: #'GrailConsole'
     ] ifFalse: [
         | bufferStream inContinuation moduleScope lfCodepoint running |
         moduleScope := SymbolDictionary new.
+        " The REPL IS __main__, as CPython's is: its globals carry
+          __name__ = '__main__' because the LAUNCHER puts it there, not the
+          interpreter -- bare globals such as exec(src, {}) have none.  Without
+          it  __name__  at the prompt was a NameError, and a class built by
+          type() or Enum('F', 'A B') got no __module__, since both read it
+          from the caller's globals (GemTalk/Grail#1134). "
+        moduleScope at: #'__name__' put: '__main__'.
         bufferStream := WriteStream on: Unicode16 new.
         inContinuation := false.
         running := true.

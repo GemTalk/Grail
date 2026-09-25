@@ -118,7 +118,7 @@ printSmalltalkRuntimeOn: aStream
 	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
 	  methodSources fixedArityForwarderSources classMethodSources staticMethodSources
-	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope
+	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope propertyFuncNames savedPropertyFuncNames
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet mangledSlotNames savedBackingInstVars
@@ -155,6 +155,7 @@ printSmalltalkRuntimeOn: aStream
 	staticMethodDefs do: [:def | staticFuncNames add: def ___mangledName___ asSymbol].
 	varargsFuncNames := IdentitySet new.
 	decoratedFuncNames := IdentitySet new.
+	propertyFuncNames := IdentitySet new.
 	methodDefs do: [:def |
 		"Normalise ``@bigmemtest''-family test methods up front (inject a
 		dry-run ``size'' default) so the compilesAsVarargs classification
@@ -175,6 +176,16 @@ printSmalltalkRuntimeOn: aStream
 		send would bypass the decorator entirely."
 		def ___hasWrappingDecorator___ ifTrue: [
 			decoratedFuncNames add: def name asSymbol
+		].
+		"A @property is a STRUCTURAL decorator: its getter compiles to a plain
+		unary method, which is what a READ of the attribute needs.  A CALL is
+		the other case -- ``self.kind(n)'' fused into ``self kind: n'' is the
+		property's SETTER selector, and a read-only property answers that by
+		raising ``has no setter''.  Named here so classSelfSendSelector can
+		decline, leaving the call to load the attribute and call what it
+		answers, as CPython does."
+		def ___isPropertyDef___ ifTrue: [
+			propertyFuncNames add: def name asSymbol
 		].
 	].
 	"Track @classmethod-decorated funcs in the same name set so a
@@ -358,6 +369,8 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classVarargsFunctionNames: varargsFuncNames.
 	savedDecoratedFuncNames := CallAst classDecoratedFunctionNames.
 	CallAst classDecoratedFunctionNames: decoratedFuncNames.
+	savedPropertyFuncNames := CallAst classPropertyNames.
+	CallAst classPropertyNames: propertyFuncNames.
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
 	CallAst classInferredSlotNames: inferredSlotNameSet.
@@ -615,6 +628,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classDefIsModuleScope: savedIsModuleScope.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classDecoratedFunctionNames: savedDecoratedFuncNames.
+		CallAst classPropertyNames: savedPropertyFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classInferredSlotNames: savedInferredSlotNames.
@@ -1223,6 +1237,8 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classVarargsFunctionNames: varargsFuncNames.
 	savedDecoratedFuncNames := CallAst classDecoratedFunctionNames.
 	CallAst classDecoratedFunctionNames: decoratedFuncNames.
+	savedPropertyFuncNames := CallAst classPropertyNames.
+	CallAst classPropertyNames: propertyFuncNames.
 	CallAst classAttrNames: ((IdentitySet withAll: (classAttrs collect: [:p | p key]))
 		addAll: ((body body select: [:stmt | stmt isKindOf: ClassDefAst])
 			collect: [:c | c name asSymbol]);
@@ -1796,6 +1812,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classStaticFunctionNames: savedStaticFuncNames.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classDecoratedFunctionNames: savedDecoratedFuncNames.
+		CallAst classPropertyNames: savedPropertyFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classInferredSlotNames: savedInferredSlotNames.

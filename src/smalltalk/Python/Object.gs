@@ -4110,6 +4110,123 @@ ___grailInstallOrigBases___
 
 category: 'Grail-Initialization'
 classmethod: object
+___grailPropertyShadowSetterSourceFor___: aName
+	"Source of the setter that goes with ___grailPropertyShadowSourceFor___::
+
+	    kind: ___1
+	        (object ___grailClassAttrSetterDiverts___)
+	            ifTrue: [^ (self ___pyAttrLoad___: #'kind') value: { ___1 } value: nil].
+	        self dynamicInstVarAt: #'kind' put: ___1.
+	        ^ ___1
+
+	The store goes to the INSTANCE, which is what CPython does once the class
+	attribute has shadowed the property: with no data descriptor left in the
+	MRO there is nothing to outrank the instance dict.
+
+	The divert guard is the one ClassDefAst puts on every generated property
+	setter, for the same reason -- under GRAIL_DIRECT_CALLS this selector is
+	also what a Python CALL ``obj.kind(x)'' compiles to, and a call must not
+	silently store."
+
+	| lf |
+
+	lf := Character @env0:lf @env0:asString.
+	^ aName @env0:, ': ___1' @env0:, lf
+		@env0:, '	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
+		@env0:, aName @env0:, ''') @env1:value: { ___1 } value: nil].' @env0:, lf
+		@env0:, '	self @env0:dynamicInstVarAt: #''' @env0:, aName @env0:, ''' put: ___1.' @env0:, lf
+		@env0:, '	^ ___1'
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailIsMergedInSelector___: aSelector
+	"Whether the receiver's OWN entry for aSelector was copied in from a
+	secondary base rather than written in its class body.
+
+	``The class already supplies this arity itself'' is what keeps
+	___grailInstallAttrMethodShadows___: off a name a real def in the same
+	body already answers.  ___mergeSecondaryBases___ runs BEFORE the hook that
+	installs the shadows and copies the other bases' methods ONTO the class,
+	so without this test every multiple-inheritance class looks like it
+	supplies every inherited name itself -- and a class attribute could never
+	shadow anything it inherited through a secondary base."
+
+	^ (self @env0:categoryOfSelector: aSelector environmentId: 1) @env0:asString
+		@env0:= 'Grail-MI-Inherited'
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInheritedPropertySetterOwner___: aName
+	"The ancestor whose 1-arg ``name:'' is a generated @property SETTER, or nil.
+
+	A name the superclass chain answers with BOTH the unary and the 1-arg
+	selector is a PAIR, and ___grailInstallAttrMethodShadows___: leaves those
+	alone because the pair is how Grail encodes a data attribute -- a slot
+	accessor above all, whose getter must keep reaching the slot.
+
+	An inherited @property wears the same shape and is not that: CPython's
+	lookup stops at the first class in the MRO holding the name, so a class
+	attribute shadows the property entirely.  The CATEGORY is what tells them
+	apart, because ClassDefAst files a generated property setter under its own
+	name.  A property whose setter the user WROTE is an ordinary method in an
+	ordinary category and is not recognised here -- it keeps the old
+	behaviour rather than guessing."
+
+	| setterSym mro |
+
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	"THE MRO, not the Smalltalk superclass chain.  A Python class with several
+	bases is one Smalltalk class whose superclass is only its PRIMARY base;
+	___mergeSecondaryBases___ copies the others' methods onto the class itself
+	under 'Grail-MI-Inherited', which loses the category that says what they
+	were.  Walking the MRO asks the class that WROTE the setter."
+	mro := [(Python @env0:at: #importlib) @env0:___mroOf___: self]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	mro == nil ifTrue: [^ nil].
+	mro @env0:do: [:cls |
+		(cls @env0:== self) ifFalse: [
+			((cls @env0:isKindOf: Behavior)
+				@env0:and: [cls @env0:includesSelector: setterSym environmentId: 1]) ifTrue: [
+					^ (#('Grail-Property-ReadOnly' 'Grail-CachedProperty-Setter')
+						@env0:includes: (cls @env0:categoryOfSelector: setterSym environmentId: 1) @env0:asString)
+							ifTrue: [cls]
+							ifFalse: [nil]]]].
+	^ nil
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailPropertyShadowSourceFor___: aName
+	"Source of the getter that makes a class attribute shadow an inherited
+	@property:
+
+	    kind
+	        ^ self ___descriptorGet___:
+	            (self @env0:class ___classAttrOwnOrInherited___: #'kind')
+
+	It RETURNS the value where the method-shadow forwarder CALLS it
+	(___grailShadowSourceFor___:nargs:).  That is the whole difference between
+	shadowing a method, where the unary selector means ``call me'', and
+	shadowing a property, where it means ``read me''.
+
+	It reads the holder DIRECTLY rather than through ___pyAttrLoad___: that
+	load resolves an instance read by performing this very selector, so going
+	back through it would recurse.  ___descriptorGet___: is the step the
+	ordinary class-attribute branch of the load applies, so a function stored
+	as the attribute still reads as a bound method."
+
+	| lf |
+
+	lf := Character @env0:lf @env0:asString.
+	^ aName @env0:, lf
+		@env0:, '	^ self ___descriptorGet___: (self @env0:class ___classAttrOwnOrInherited___: #'''
+		@env0:, aName @env0:, ''')'
+%
+
+category: 'Grail-Initialization'
+classmethod: object
 ___grailInstallAttrMethodShadows___: attrNames
 	"A class-body ASSIGNMENT that binds a callable -- ``setUp =
 	TestJointOps.setUp'', CPython's idiom for borrowing a method from an
@@ -4157,12 +4274,23 @@ ___grailInstallAttrMethodShadows___: attrNames
 			kept := ownDict == nil
 				ifTrue: [fam]
 				ifFalse: [fam @env0:reject: [:pair |
-					ownDict @env0:includesKey: (pair @env0:at: 1)]].
+					(ownDict @env0:includesKey: (pair @env0:at: 1))
+						and: [(self ___grailIsMergedInSelector___: (pair @env0:at: 1)) @env0:not]]].
 			kept @env0:isEmpty ifFalse: [
 				pending @env0:add: (Array @env0:with: s with: kept)]]].
 	pending @env0:isEmpty ifTrue: [^ self].
 	"One walk of the superclass chain for every candidate at once."
 	inherited := IdentitySet @env0:new.
+	"A selector COPIED IN from a secondary base counts as inherited, because
+	that is what it is: ___mergeSecondaryBases___ put it on this class, and the
+	chain walk below cannot see it -- the base it came from is not this class's
+	superclass.  Without this a class attribute could shadow nothing it
+	inherited through a secondary base."
+	pending @env0:do: [:entry |
+		(entry @env0:at: 2) @env0:do: [:pair |
+			((ownDict @env0:notNil @env0:and: [ownDict @env0:includesKey: (pair @env0:at: 1)])
+				@env0:and: [self ___grailIsMergedInSelector___: (pair @env0:at: 1)])
+					ifTrue: [inherited @env0:add: (pair @env0:at: 1)]]].
 	walker := sup.
 	[walker == nil] whileFalse: [
 		md := walker @env0:methodDictForEnv: 1.
@@ -4185,7 +4313,27 @@ ___grailInstallAttrMethodShadows___: attrNames
 		alone; it is a data attribute in Grail's encoding, not a method."
 		((shadowed @env0:anySatisfy: [:pair | (pair @env0:at: 2) == 0])
 			and: [shadowed @env0:anySatisfy: [:pair | (pair @env0:at: 2) == 1]])
-				ifTrue: [shadowed := Array @env0:new].
+				ifTrue: [
+					"...UNLESS the pair is an inherited @property, which wears the
+					same shape and is not a data attribute at all.  CPython's
+					lookup stops at the first class in the MRO holding the name,
+					so the class attribute shadows the property entirely; a
+					getter that ANSWERS the value is what that takes, and the
+					call forwarder below would call the value instead."
+					(self ___grailInheritedPropertySetterOwner___: s) == nil
+						ifTrue: [shadowed := Array @env0:new]
+						ifFalse: [
+							self
+								___compileMethod: (self ___grailPropertyShadowSourceFor___: s)
+								category: 'Grail-Attr Property Shadows'.
+							"The SETTER too: shadowing hides the whole descriptor, so
+							``obj.kind = v'' is an ordinary instance-dict store in
+							CPython, where the inherited property's setter refuses it
+							as read-only."
+							self
+								___compileMethod: (self ___grailPropertyShadowSetterSourceFor___: s)
+								category: 'Grail-Attr Property Shadows'.
+							shadowed := Array @env0:new]].
 		shadowed @env0:isEmpty ifFalse: [
 			"Reading the value can run a __get__; only do it for a name that is
 			really shadowing something."
@@ -4732,6 +4880,10 @@ ___pythonModuleAttrIdentity___
 	re-exports it from json, so its __module__ is 'json.decoder' even though
 	``json.JSONDecodeError'' is how most code names it."
 	(n @env0:= 'JSONDecodeError') ifTrue: [^ #('JSONDecodeError' 'json.decoder')].
+	"JSONEncoder likewise lives in json.encoder upstream.  json>>initialize
+	builds it with PythonInstance ___subclass___:, so nothing else gives it a
+	module, and it answered AttributeError."
+	(n @env0:= 'JSONEncoder') ifTrue: [^ #('JSONEncoder' 'json.encoder')].
 
 	"enum.  These keep their CPython NAME already (the Smalltalk class is spelled
 	the same), and are here purely for __module__: they are defined in enum
@@ -8151,15 +8303,13 @@ ___pyAttrLoad___: aSym
 				([self @env1:__name__] @env0:on: AbstractException
 					do: [:ex | ex @env0:return: '?']) @env0:asString @env0:,
 				''' has no attribute ''' @env0:, aSym @env0:asString @env0:, ''''].
-		"Cache the wrapper in the slot so repeated reads of the same
-		module function return the SAME object -- CPython functions are
-		first-class module attributes with stable identity
-		(g.dispatch(int) is g_int)."
+		"Repeated reads of the same module function answer the SAME object --
+		CPython functions are first-class module attributes with stable
+		identity (g.dispatch(int) is g_int) -- but caching the handle in the
+		slot must not WRITE A COMMITTED MODULE (issue #851).  See module >>
+		___functionHandleFor___: and ___mayCacheFunctionHandles___."
 		(self ___respondsTo___: symVA) ifTrue: [
-			dValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dValue.
-			^ dValue
-		].
+			^ self ___functionHandleFor___: aSym].
 		"Unary selector resolution.  Sub-cases:
 		  * Defined on ``module'' itself, or a hand-written getter/
 		    accessor on a module subclass (categories like
@@ -8191,10 +8341,7 @@ ___pyAttrLoad___: aSym
 			cat := (owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:asString.
 			(#('Grail-Methods' 'Grail-Built-in Functions' 'Grail-Wall clock'
 			   'Grail-Monotonic' 'Grail-Formatting' 'Grail-Calendar') @env0:includes: cat)
-				ifTrue: [
-					dValue := BoundMethod receiver: self selector: aSym.
-					self @env0:dynamicInstVarAt: aSym put: dValue.
-					^ dValue]
+				ifTrue: [^ self ___functionHandleFor___: aSym]
 				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
 		"Class-body attributes of a Python SUBCLASS of ``module''.
@@ -8256,10 +8403,7 @@ ___pyAttrLoad___: aSym
 			or: [(self ___respondsTo___: sym4)
 			or: [(self ___respondsTo___: sym5)
 			or: [self ___respondsTo___: sym6]]]]]) ifTrue: [
-			dValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dValue.
-			^ dValue
-		].
+			^ self ___functionHandleFor___: aSym].
 		^ self @env0:at: aSym ifAbsent: [
 			"PEP 562: a module may define a module-level ``__getattr__(name)''
 			to serve names its namespace does not hold, and it is consulted
@@ -13206,7 +13350,84 @@ ___grailInstallSelfSendDispatchers___: aSymbol
 	pairs @env0:do: [:each |
 		self ___grailInstallOneDispatcher___: (each @env0:at: 1)
 			definedIn: (each @env0:at: 2) name: sym].
+	self ___grailRecordSelfSendOverride___: sym.
 	^ true
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailCommittedSelfSendOverrides___
+	"The committed record of (class -> Python names) whose stores needed a
+	self-send dispatcher, or nil before any did.  Read-only: a read never
+	creates it (a creation is a write).
+
+	WHY IT IS COMMITTED when the dispatchers are not.  A dispatcher is a
+	SESSION method, which is right for a patch -- but an override stored on an
+	object that is then committed is DATA, and every later session that uses
+	the object needs the dispatcher too.  Measured before this record existed:
+	commit ``g.word = f'', and a later session's ``g.word()'' answered the
+	override while ``g.greet()'' -- ``self.word()'' -- ran the original.  The
+	same holds for a class-body store over a method in a deployed module,
+	whose body never re-runs.  So the NAME is recorded, in the transaction
+	that stored it (it commits only if that session does), and each session
+	re-installs the recorded dispatchers (___grailInstallRecordedSelfSendOverrides___).
+	Reduced-conflict throughout, so two sessions recording different names
+	merge; a name already recorded is not written again."
+
+	^ UserGlobals @env0:at: #'GrailCommittedSelfSendOverrides' otherwise: nil
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailRecordSelfSendOverride___: aSymbol
+	"Note that this class needed a dispatcher for aSymbol (see
+	___grailCommittedSelfSendOverrides___).  Not for a native module: its
+	instance state is session state and is never committed."
+
+	| reg names |
+	(NativeModule ~~ nil and: [self @env0:inheritsFrom: NativeModule]) ifTrue: [^ self].
+	reg := self ___grailCommittedSelfSendOverrides___.
+	names := reg == nil ifTrue: [nil] ifFalse: [reg @env0:at: self otherwise: nil].
+	(names ~~ nil and: [names @env0:includes: aSymbol @env0:asSymbol]) ifTrue: [^ self].
+	reg == nil ifTrue: [
+		reg := RcKeyValueDictionary @env0:new.
+		UserGlobals @env0:at: #'GrailCommittedSelfSendOverrides' put: reg].
+	names == nil ifTrue: [
+		names := RcIdentityBag @env0:new.
+		reg @env0:at: self put: names].
+	names @env0:add: aSymbol @env0:asSymbol.
+	^ self
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailInstallRecordedSelfSendOverrides___
+	"Once per session: install the session dispatchers for every recorded
+	(class, name), so an override committed in an earlier session reaches this
+	session's self-sends.  Called from the two points every Python execution
+	passes before it can reach a committed object -- importlib's per-session
+	registry check and the session's first native-module singleton.  A class
+	the record names but a later install replaced is skipped: it is not the
+	class any live code runs."
+
+	| temps reg |
+	temps := SessionTemps @env0:current.
+	(temps @env0:at: #'GrailRecordedDispatchersInstalled' otherwise: nil) == true
+		ifTrue: [^ self].
+	"A record from before the last install names classes that install
+	replaced, and importlib's generation check is about to wipe it: not yet
+	current, so not yet done -- the check calls back once it has decided."
+	(UserGlobals @env0:at: #'GrailCanonicalDeployGeneration' otherwise: nil)
+		= (UserGlobals @env0:at: #'GrailRuntimeGeneration' otherwise: 0)
+			ifFalse: [^ self].
+	temps @env0:at: #'GrailRecordedDispatchersInstalled' put: true.
+	reg := self ___grailCommittedSelfSendOverrides___.
+	reg == nil ifTrue: [^ self].
+	reg @env0:keysAndValuesDo: [:cls :names |
+		names @env0:asIdentitySet @env0:do: [:sym |
+			[cls ___grailInstallSelfSendDispatchers___: sym]
+				@env0:on: Error do: [:e | e @env0:return: nil]]].
+	^ self
 %
 
 category: 'Grail-Self-Send Overrides'

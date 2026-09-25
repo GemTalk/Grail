@@ -257,6 +257,81 @@ import gemdb
 gemdb.root["gemdb_test"]["n"]
 ') = 5.
 
+"READING A FUNCTION OF A DEPLOYED MODULE IS NOT A WRITE (issue #851).  The
+first attribute read of a module function used to cache its BoundMethod in the
+module instance's dynamic-instVar slot -- and a deployed module instance is
+COMMITTED and shared, so a pure call dirtied a clean session (a following
+``with gemdb.transaction():'' refused), and two sessions making the same first
+call conflicted Write-Write on the module, wedging the loser's commits.
+
+A fixture of our own, deployed here, because gemdb's own functions cannot show
+it: its module body warm-reads them during the deploy, so their slots are
+already filled.  Each probe starts from a clean commit so it is attributed to
+the one read that made it.  Every arity shape is its own branch of the
+attribute-load chain: the defaulted def (``_name:kw:''), the 0-arg unary def,
+fixed 1..6-arg, and the bare-name path (module >> ___globalAt___:otherwise:)
+for a 1-arg and a >3-arg sibling read as a value."
+[| tmpDir path file m slotsEmpty probe |
+  tmpDir := importlib grailTmpDir.
+  path := tmpDir , '/grail_first_read_fixture.py'.
+  (GsFile existsOnServer: path) == true ifTrue: [GsFile removeServerFile: path].
+  file := GsFile open: path mode: 'wb' onClient: false.
+  file nextPutAll: 'def score(d):
+    return sum(v * 2 for v in d.values())
+
+def pair(a, b):
+    return a + b
+
+def opt(x=3):
+    return x * 2
+
+def zero():
+    return 42
+
+def helper(x):
+    return x + 1
+
+def four(a, b, c, d):
+    return a + b + c + d
+
+def uses_values():
+    f = helper
+    g = four
+    return f(1) + g(1, 2, 3, 4)
+'; close.
+  "SELF-HEAL: a run that died before its cleanup left the fixture deployed."
+  importlib ___forgetCanonicalModule___: 'grail_first_read_fixture'.
+  System commit.
+  [evalPython value: 'import sys
+sys.path.append("' , tmpDir , '")
+import grail_first_read_fixture'.
+    System commit.
+    m := importlib @env1:lookupModule: 'grail_first_read_fixture'.
+    check value: 'first-read fixture deployed (committed module instance)'
+      value: (m notNil and: [m isCommitted and: [System needsCommit not]]).
+    probe := [:label :src |
+      System commit.
+      evalPython value: 'import grail_first_read_fixture as m
+' , src.
+      check value: 'first read of a deployed function is not a write: ' , label
+        value: System needsCommit not].
+    probe value: '1-arg m.score(d)' value: 'm.score({"a": 1, "b": 2})'.
+    probe value: '2-arg m.pair(a, b)' value: 'm.pair(1, 2)'.
+    probe value: 'defaulted m.opt()' value: 'm.opt()'.
+    probe value: '0-arg m.zero()' value: 'm.zero()'.
+    probe value: 'bare-name sibling reads' value: 'm.uses_values()'.
+    slotsEmpty := #(#score #pair #opt #zero #helper #four) allSatisfy: [:s |
+      (m @env0:dynamicInstVarAt: s) isNil].
+    check value: 'reads leave the module''s own slots empty (only assignments fill them)'
+      value: slotsEmpty.
+    check value: 'a module function keeps its identity (m.score is m.score)'
+      value: (evalPython value: 'import grail_first_read_fixture as m
+m.score is m.score and m.four is m.four') == true.
+  ] ensure: [
+    System abortTransaction.
+    importlib ___forgetCanonicalModule___: 'grail_first_read_fixture'.
+    System commit]] value.
+
 out cr.
 failures isEmpty ifFalse: [
   out nextPutAll: 'gemdb session-1 checks FAILED:'; cr.

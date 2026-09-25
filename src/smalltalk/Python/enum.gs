@@ -183,17 +183,24 @@ ___grailDefineBoundaryEnums___
 	The values are CPython's own, which are not decorative -- a StrEnum member
 	IS its value, so ``enum.STRICT == 'strict''' holds, and EnumCheck's members
 	carry the sentences upstream gives them (``UNIQUE'' is 'one name per
-	value')."
+	value').
 
-	| fb ec |
+	``module='enum''' is passed EXPLICITLY, as upstream's class statements get
+	it implicitly.  Without it the functional API infers the CALLER's module,
+	and the caller of an import is whichever module happened to import enum
+	first -- so FlagBoundary's __module__ would have named that module."
+
+	| fb ec kw |
+	kw := KeyValueDictionary @env0:new.
+	kw @env0:at: 'module' put: 'enum'.
 	fb := StrEnum @env1:___pyCallValue___: { 'FlagBoundary'.
 		self ___grailPairList___: #( #('STRICT' 'strict') #('CONFORM' 'conform')
-			#('EJECT' 'eject') #('KEEP' 'keep') ) } kw: nil.
+			#('EJECT' 'eject') #('KEEP' 'keep') ) } kw: kw.
 	ec := StrEnum @env1:___pyCallValue___: { 'EnumCheck'.
 		self ___grailPairList___: #(
 			#('CONTINUOUS' 'no skipped integer values')
 			#('NAMED_FLAGS' 'multi-flag aliases may not contain unnamed flags')
-			#('UNIQUE' 'one name per value') ) } kw: nil.
+			#('UNIQUE' 'one name per value') ) } kw: kw.
 	self @env0:at: #FlagBoundary put: fb.
 	self @env0:at: #EnumCheck put: ec.
 	#('STRICT' 'CONFORM' 'EJECT' 'KEEP') @env0:do: [:nm |

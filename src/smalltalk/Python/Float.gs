@@ -961,9 +961,19 @@ __ne__: other
 	"Not equal comparison.  Delegates to __eq__: (not a raw native ~=)
 	so it shares its __index__/complex/PythonInstance fallback logic --
 	see Int.gs's twin __ne__: comment for the concrete Boolean case
-	this fixes (0.0 != False must be False)."
+	this fixes (0.0 != False must be False).
 
-	^ (self __eq__: other) @env0:not
+	Punts where __eq__: punts, and see that same twin for why negating
+	the singleton instead is an UNCATCHABLE error rather than a
+	Python-level one.  __eq__: forwards to a PythonInstance carrying its
+	own __eq__, so the punt arrives through that forward -- nothing here
+	spells NotImplemented, which is what made this hard to see."
+
+	| equal |
+
+	equal := self __eq__: other.
+	(equal @env0:== NotImplemented) ifTrue: [^ equal].
+	^ equal @env0:not
 %
 
 category: 'Grail-Arithmetic'

@@ -1895,9 +1895,17 @@ ___canonicalGenerationCheck___
 	self ___ensureStackErrorFlavour___.
 	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
 	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
-	deployGen == runtimeGen ifTrue: [^ self].
+	"The same once-per-session point installs the self-send dispatchers that
+	committed overrides need (object class >>
+	___grailInstallRecordedSelfSendOverrides___) -- but only once the record is
+	known to be current: a stale generation wipes it below, and the classes it
+	names are the ones the install replaced."
+	deployGen == runtimeGen ifTrue: [
+		object ___grailInstallRecordedSelfSendOverrides___.
+		^ self].
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
+	   #'GrailCommittedSelfSendOverrides'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
 	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
@@ -1974,6 +1982,7 @@ resetSessionForReinstall
 	st @env0:removeKey: #'GrailSelfSendDispatchers' ifAbsent: [].
 	st @env0:removeKey: #'GrailFastOverrideHolders' ifAbsent: [].
 	st @env0:removeKey: #'GrailPinHolder' ifAbsent: [].
+	st @env0:removeKey: #'GrailRecordedDispatchersInstalled' ifAbsent: [].
 	^ toEvict @env0:size
 %
 
@@ -6328,11 +6337,12 @@ ___callerModuleName___
 
 	Grail reads its own stack the one way a running gem can, by RAISING
 	(BaseException class>>___liveFrameChain___), which sys._getframe and
-	warnings both already stand on.  Frames carry no globals, so the module is
-	recovered by matching a frame's co_filename against the __file__ of each
-	imported module -- the same recovery warnings>>___warningOrigin___ makes,
-	kept separate from it because that one wants the INNERMOST frame only and
-	this one must walk OUTWARD.
+	warnings both already stand on.  Only a doit's frame carries its globals,
+	so for every other frame the module is recovered by matching its
+	co_filename against the __file__ of each imported module -- the same
+	recovery warnings>>___warningOrigin___ makes, kept separate from it
+	because that one wants the INNERMOST frame only and this one must walk
+	OUTWARD.
 
 	Walking outward is what skips Grail's own machinery for free: a Smalltalk
 	method's frame has no module file behind it, so it matches nothing and the
@@ -6364,7 +6374,26 @@ ___callerModuleName___
 			fileToName @env0:at: f @env0:asString put: k @env0:asString]]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	[(frame @env0:~~ nil) and: [frame @env0:~~ None]] @env0:whileTrue: [
-		| code fname hit |
+		| globals code fname hit |
+		"A DOIT FRAME CARRIES ITS GLOBALS, and they are the answer.  Evaluated
+		code -- the REPL, an embedder's evaluateSource:, exec() -- has no file
+		that sys.modules could match, so the filename test below finds nothing
+		and the walk used to fall out to nil: ``type('T', (), {})'' typed at a
+		prompt had no __module__ at all where CPython says '__main__'.  The
+		live chain hands a doit's frame its scope as f_globals (see
+		BaseException class >> ___doitGlobalsFor___:), and no other frame is
+		given one, so its presence alone says this is a doit.
+
+		ANSWERED EVEN WHEN __name__ IS MISSING.  ``exec(src, {})'' runs in
+		globals with no __name__, and CPython then stamps nothing; walking on
+		to the exec() CALLER's module would name a module the code never ran
+		in."
+		globals := [frame @env0:dynamicInstVarAt: #'f_globals']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(globals @env0:notNil and: [globals @env0:~~ None]) ifTrue: [
+			hit := [globals @env0:at: '__name__' ifAbsent: [nil]]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			^ hit @env0:== None ifTrue: [nil] ifFalse: [hit]].
 		code := [frame @env0:dynamicInstVarAt: #'f_code']
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		fname := code @env0:isNil
