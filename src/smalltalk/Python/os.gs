@@ -216,16 +216,15 @@ initialize
 	self @env0:at: #extsep put: '.'.
 	self @env0:at: #altsep put: None.
 	self @env0:at: #devnull put: '/dev/null'.
-	"open(2) flag constants (POSIX values, macOS/Linux common set)."
+	"open(2) flag constants -- THIS platform's numbers, because os.open hands
+	them straight to libc.  Only the access modes agree across platforms: the
+	set used to be Darwin's alone, which on Linux made O_CREAT (512) mean
+	O_TRUNC, and O_TRUNC (1024) mean O_APPEND."
 	self @env0:at: #O_RDONLY put: 0.
 	self @env0:at: #O_WRONLY put: 1.
 	self @env0:at: #O_RDWR put: 2.
-	self @env0:at: #O_APPEND put: 8.
-	self @env0:at: #O_CREAT put: 512.
-	self @env0:at: #O_TRUNC put: 1024.
-	self @env0:at: #O_EXCL put: 2048.
-	self @env0:at: #O_NOFOLLOW put: 256.
-	self @env0:at: #O_CLOEXEC put: 16777216.
+	self @env0:class ___openFlags @env0:keysAndValuesDo: [:name :value |
+		self @env0:at: name put: value].
 	"lseek(2) whence values, spelled as CPython's os and io spell them.  CPython's
 	own zipfile seeks with os.SEEK_SET / SEEK_CUR / SEEK_END, so without them the
 	real module could not even be imported."
@@ -997,6 +996,37 @@ ___isDarwin
 	below says otherwise."
 
 	^ (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
+%
+
+category: 'Grail-Initialization'
+classmethod: os
+___openFlags
+	"The open(2) flags whose numbers differ by platform, as glibc and Darwin's
+	<fcntl.h> define them.  Linux's O_NOFOLLOW is itself per-architecture:
+	x86_64 keeps the historic 0400000, aarch64 uses the asm-generic 0100000."
+
+	| d arch |
+	d := SymbolKeyValueDictionary @env0:new.
+	arch := (System @env0:gemVersionAt: #cpuArchitecture) @env0:asLowercase.
+	self ___isDarwin
+		ifTrue: [
+			d @env0:at: #O_APPEND put: 8.
+			d @env0:at: #O_CREAT put: 512.
+			d @env0:at: #O_TRUNC put: 1024.
+			d @env0:at: #O_EXCL put: 2048.
+			d @env0:at: #O_NOFOLLOW put: 256.
+			d @env0:at: #O_CLOEXEC put: 16777216]
+		ifFalse: [
+			d @env0:at: #O_APPEND put: 1024.
+			d @env0:at: #O_CREAT put: 64.
+			d @env0:at: #O_TRUNC put: 512.
+			d @env0:at: #O_EXCL put: 128.
+			d @env0:at: #O_NOFOLLOW put:
+				((arch @env0:includesString: 'arm') @env0:or: [arch @env0:includesString: 'aarch'])
+					ifTrue: [32768]
+					ifFalse: [131072].
+			d @env0:at: #O_CLOEXEC put: 524288].
+	^ d
 %
 
 category: 'Grail-Error Messages'
@@ -2666,6 +2696,315 @@ chmod: aPath _: aMode
 	there is one set of semantics."
 
 	^ self _chmod: { aPath . aMode } kw: nil
+%
+
+! ===============================================================================
+! File descriptors — os.open / read / readinto / write / lseek / fstat /
+! ftruncate / isatty / close, straight onto libc
+! ===============================================================================
+!
+! _pyio.FileIO is built entirely on these, so without them every _pyio file
+! (test_bufio's PyBufferSizeTest, and any code importing _pyio) died on its
+! first ``os.open'' with AttributeError.
+!
+! ONE DELIBERATE DIVERGENCE: a descriptor is usable only if os.open handed it
+! out in this session.  Any other number is EBADF, exactly what CPython
+! answers for a descriptor that is not open.  The gem shares its process with
+! Grail, and its own descriptors -- the stone and NetLDI sockets, its log --
+! sit in the same table: the first os.open in a fresh gem answered 10, not 3.
+! ``os.close(5)'' or ``os.write(6, ...)'' on one of those would break the
+! session in ways no Python handler can see, so the answer CPython gives for a
+! closed descriptor is the one given for a descriptor that is not Grail's.
+
+category: 'Grail-File Descriptors'
+classmethod: os
+___fdCallouts
+	"The libc callouts behind the descriptor functions.  A CCallout wraps
+	per-process C state, so the table lives in SessionTemps, as strerror's does.
+
+	open(2) is VARIADIC, and it has to be declared so: on Apple arm64 a
+	variadic argument travels on the stack rather than in a register, so a
+	fixed three-argument declaration would hand open() a garbage mode."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_fd_callouts'
+		ifAbsentPut: [ | lib d |
+			lib := CLibrary @env0:named: self ___libcName.
+			d := SymbolKeyValueDictionary @env0:new.
+			d @env0:at: #open put: (CCallout @env0:library: lib name: 'open'
+				result: #'int32' args: #(#'ptr' #'int32') varArgsAfter: 2).
+			d @env0:at: #close put: (CCallout @env0:library: lib name: 'close'
+				result: #'int32' args: #(#'int32')).
+			d @env0:at: #read put: (CCallout @env0:library: lib name: 'read'
+				result: #'int64' args: #(#'int32' #'ptr' #'uint64')).
+			d @env0:at: #write put: (CCallout @env0:library: lib name: 'write'
+				result: #'int64' args: #(#'int32' #'ptr' #'uint64')).
+			d @env0:at: #lseek put: (CCallout @env0:library: lib name: 'lseek'
+				result: #'int64' args: #(#'int32' #'int64' #'int32')).
+			d @env0:at: #ftruncate put: (CCallout @env0:library: lib name: 'ftruncate'
+				result: #'int32' args: #(#'int32' #'int64')).
+			d @env0:at: #isatty put: (CCallout @env0:library: lib name: 'isatty'
+				result: #'int32' args: #(#'int32')).
+			d]
+%
+
+category: 'Grail-File Descriptors'
+classmethod: os
+___openFds
+	"The descriptors os.open has handed out in this session and os.close has
+	not yet taken back.  Per session, like the descriptors themselves: they
+	belong to this gem's process."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_open_fds'
+		ifAbsentPut: [IdentitySet @env0:new]
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___libc: aName with: anArray
+	"Call libc's aName, answering its result, or raising the errno's own OSError
+	subclass when it reports failure with -1."
+
+	^ self ___libc: aName with: anArray ifFail: [:errno | self ___signalErrno: errno]
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___libc: aName with: anArray ifFail: aBlock
+	"As ___libc:with:, handing the errno of a failure to aBlock."
+
+	| errno result |
+	errno := Array @env0:new: 1.
+	result := (self @env0:class ___fdCallouts @env0:at: aName)
+		@env0:callWith: anArray errno: errno.
+	result @env0:= -1 ifTrue: [^ aBlock @env0:value: (errno @env0:at: 1)].
+	^ result
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___signalErrno: anErrno
+	"CPython's OSError for a call on a DESCRIPTOR: no filename, so it prints
+	``[Errno 9] Bad file descriptor'' with nothing after it."
+
+	^ (self @env0:class ___errorClassForErrno: anErrno)
+		___signalNew___: { anErrno. self strerror: anErrno }
+		kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___fd: anObject
+	"anObject as a descriptor this session may use -- see the section comment.
+	EBADF, which Darwin and Linux both number 9, for anything else."
+
+	| fd |
+	fd := self ___asCInt: anObject.
+	(self @env0:class ___openFds @env0:includes: fd) ifFalse: [^ self ___signalErrno: 9].
+	^ fd
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___cPathFor: aPath
+	"aPath as the NUL-terminated bytes libc takes: a str as UTF-8, bytes as
+	they are.  An embedded NUL would silently cut the path short in C, so it
+	is CPython's ValueError instead."
+
+	| path encoded |
+	path := self ___fsPath___: aPath.
+	(path @env0:isKindOf: ByteArray)
+		ifTrue: [encoded := path]
+		ifFalse: [
+			(path @env0:isKindOf: CharacterCollection) ifFalse: [
+				^ TypeError ___signal___:
+					('open: path should be string, bytes or os.PathLike, not '
+						@env0:, (bytes ___pyTypeNameOf___: aPath))].
+			encoded := path @env0:encodeAsUTF8 @env0:asByteArray].
+	(encoded @env0:includes: 0) ifTrue: [
+		^ ValueError ___signal___: 'open: embedded null character in path'].
+	^ CByteArray @env0:withAll: encoded nullTerminate: true
+%
+
+category: 'Grail-File Descriptors'
+method: os
+open: aPath _: flags
+	"os.open(path, flags) -- the default mode is 0o777, as CPython's is."
+
+	^ self _open: { aPath. flags } kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+open: aPath _: flags _: mode
+
+	^ self _open: { aPath. flags. mode } kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+_open: positional kw: kwargs
+	"os.open(path, flags, mode=0o777, *, dir_fd=None) -- open(2), answering the
+	new descriptor.  The flags are this platform's own (see ___openFlags), and
+	libc sees the path exactly as given: none of the ``$'' expansion the GsFile
+	primitives apply.
+
+	dir_fd is refused, as os.stat refuses it: resolving the path against the
+	wrong directory would open a different file."
+
+	| path flags mode fd |
+	path := self ___requiredArgument: 'path' at: 1 in: positional kw: kwargs for: 'open'.
+	flags := self ___requiredArgument: 'flags' at: 2 in: positional kw: kwargs for: 'open'.
+	mode := positional @env0:size @env0:>= 3
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [(kwargs isNil) ifTrue: [8r777] ifFalse: [kwargs @env0:at: 'mode' ifAbsent: [8r777]]].
+	(kwargs notNil and: [(kwargs @env0:at: 'dir_fd' ifAbsent: [None]) ~~ None])
+		ifTrue: [^ NotImplementedError ___signal___: (self @env0:class ___dirFdUnavailableMessage: 'open')].
+	flags := self ___asCInt: flags.
+	mode := self ___asCInt: mode.
+	fd := self ___libc: #open
+		with: { self ___cPathFor: path. flags. #'int32'. mode }
+		ifFail: [:errno | ^ self ___signalErrno: errno filename: (self ___fsPath___: path)].
+	self @env0:class ___openFds @env0:add: fd.
+	^ fd
+%
+
+category: 'Grail-File Descriptors'
+method: os
+close: fd
+	"os.close(fd).  The descriptor is forgotten BEFORE close(2) runs: on an
+	error (even EINTR) Linux has already released it, so keeping it would let a
+	later os.open's reuse of the number be refused."
+
+	| n |
+	n := self ___fd: fd.
+	self @env0:class ___openFds @env0:remove: n.
+	self ___libc: #close with: { n }.
+	^ None
+%
+
+category: 'Grail-File Descriptors'
+method: os
+read: fd _: size
+	"os.read(fd, n) -- at most n bytes, and b'' at end of file.  A negative n
+	is EINVAL, as in CPython 3.14."
+
+	| n count buffer got |
+	n := self ___fd: fd.
+	count := size ___asIndex___.
+	count @env0:< 0 ifTrue: [^ self ___signalErrno: 22].
+	buffer := CByteArray @env0:gcMalloc: (count @env0:max: 1).
+	got := self ___libc: #read with: { n. buffer. count }.
+	got @env0:= 0 ifTrue: [^ ByteArray @env0:new].
+	^ buffer @env0:byteArrayFrom: 0 numBytes: got
+%
+
+category: 'Grail-File Descriptors'
+method: os
+readinto: fd _: aBuffer
+	"os.readinto(fd, buffer) -- read into a writable buffer (a bytearray, or a
+	memoryview over one), answering how many bytes arrived.  _pyio.FileIO reads
+	this way, into a memoryview SLICE of its result, so the bytes land at the
+	view's own offset in the source."
+
+	| n window target offset length buffer got |
+	n := self ___fd: fd.
+	window := self ___writableWindowOf: aBuffer.
+	target := window @env0:at: 1.
+	offset := window @env0:at: 2.
+	length := window @env0:at: 3.
+	buffer := CByteArray @env0:gcMalloc: (length @env0:max: 1).
+	got := self ___libc: #read with: { n. buffer. length }.
+	got @env0:> 0 ifTrue: [
+		target @env0:replaceFrom: offset @env0:+ 1
+			to: offset @env0:+ got
+			with: (buffer @env0:byteArrayFrom: 0 numBytes: got)
+			startingAt: 1].
+	^ got
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___writableWindowOf: aBuffer
+	"{ bytes. offset. length } -- where a read into aBuffer must write."
+
+	(aBuffer @env0:isKindOf: memoryview) ifTrue: [^ aBuffer ___writableWindow___].
+	(aBuffer @env0:isKindOf: bytearray) ifTrue: [^ { aBuffer. 0. aBuffer @env0:size }].
+	^ TypeError ___signal___:
+		('readinto() argument 2 must be read-write bytes-like object, not '
+			@env0:, (bytes ___pyTypeNameOf___: aBuffer))
+%
+
+category: 'Grail-File Descriptors'
+method: os
+write: fd _: data
+	"os.write(fd, data) -- one write(2), answering how many bytes it took."
+
+	| n contents |
+	n := self ___fd: fd.
+	contents := (data @env0:isKindOf: memoryview)
+		ifTrue: [data tobytes]
+		ifFalse: [data].
+	(contents @env0:isKindOf: ByteArray) ifFalse: [
+		^ TypeError ___signal___:
+			('a bytes-like object is required, not '''
+				@env0:, (bytes ___pyTypeNameOf___: data) @env0:, '''')].
+	contents @env0:isEmpty ifTrue: [^ self ___libc: #write with: { n. nil. 0 }].
+	^ self ___libc: #write
+		with: { n. CByteArray @env0:withAll: contents nullTerminate: false. contents @env0:size }
+%
+
+category: 'Grail-File Descriptors'
+method: os
+lseek: fd _: position _: how
+	"os.lseek(fd, pos, how) -- answering the new offset from the start."
+
+	| n pos |
+	n := self ___fd: fd.
+	pos := position ___asIndex___.
+	(pos @env0:between: -9223372036854775808 and: 9223372036854775807) ifFalse: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C long'].
+	^ self ___libc: #lseek with: { n. pos. self ___asCInt: how }
+%
+
+category: 'Grail-File Descriptors'
+method: os
+fstat: fd
+	"os.fstat(fd) -- the kernel's own fstat primitive, which answers the same
+	GsFileStat os.stat wraps, so the two agree field for field."
+
+	| n result |
+	n := self ___fd: fd.
+	result := GsFile @env0:_fstat: n isLstat: false.
+	(result @env0:isKindOf: GsFileStat) ifTrue: [^ PyStatResult @env0:on: result].
+	(result @env0:isKindOf: SmallInteger) ifTrue: [^ self ___signalErrno: result].
+	^ self ___signalErrno: 9
+%
+
+category: 'Grail-File Descriptors'
+method: os
+ftruncate: fd _: length
+	"os.ftruncate(fd, length)."
+
+	| n size |
+	n := self ___fd: fd.
+	size := length ___asIndex___.
+	self ___libc: #ftruncate with: { n. size }.
+	^ None
+%
+
+category: 'Grail-File Descriptors'
+method: os
+isatty: fd
+	"os.isatty(fd) -- never raises: CPython answers False for a descriptor that
+	is not open, and so for one that is not Grail's."
+
+	| n |
+	n := [self ___asCInt: fd] @env0:on: OverflowError do: [:ex | ex @env0:return: nil].
+	n isNil ifTrue: [^ false].
+	(self @env0:class ___openFds @env0:includes: n) ifFalse: [^ false].
+	^ ((self @env0:class ___fdCallouts @env0:at: #isatty) @env0:callWith: { n }) @env0:= 1
 %
 
 ! ===============================================================================
