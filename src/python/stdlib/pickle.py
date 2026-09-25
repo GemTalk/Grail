@@ -49,6 +49,23 @@ except Exception:                       # pragma: no cover - bootstrap only
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 5          # CPython 3.14's default
 
+# Part of CPython's pickle surface rather than of its implementation, so they
+# belong here even though this module is written rather than vendored:
+# pickletools imports decode_long, and test.pickletester imports bytes_types.
+bytes_types = (bytes, bytearray)
+format_version = "5.0"        # File format version we write
+compatible_formats = ["1.0",  # Original protocol 0
+                      "1.1",  # Protocol 0 with INST added
+                      "1.2",  # Original protocol 1
+                      "1.3",  # Protocol 1 with BINFLOAT added
+                      "2.0",  # Protocol 2
+                      "3.0",  # Protocol 3
+                      "4.0",  # Protocol 4
+                      "5.0",  # Protocol 5
+                      ]       # Old format versions we can read
+TRUE = b'I01\n'               # not an opcode; see INT in pickletools
+FALSE = b'I00\n'              # not an opcode; see INT in pickletools
+
 _FRAME_SIZE_MIN = 4           # payloads smaller than this are not framed
 
 
@@ -145,6 +162,17 @@ NEXT_BUFFER      = b'\x97'
 READONLY_BUFFER  = b'\x98'
 
 
+# CPython builds __all__ the same way and in the same place: the nine names it
+# documents, then every opcode constant defined above.  Listed after the opcodes
+# because that is what makes the second half possible.  PickleBuffer is absent
+# from CPython's list too unless the C _pickle supplied it, and there is no
+# PickleBuffer here.
+__all__ = ["PickleError", "PicklingError", "UnpicklingError", "Pickler",
+           "Unpickler", "dump", "dumps", "load", "loads"]
+__all__.extend(sorted(n for n in globals()
+                      if n.isupper() and not n.startswith('_')))
+
+
 # --------------------------------------------------------------------------
 # Byte packing helpers
 #
@@ -208,6 +236,22 @@ def _decode_long(data):
     if data[len(data) - 1] >= 0x80:
         n -= 1 << (8 * len(data))
     return n
+
+
+def encode_long(x):
+    """CPython's public name for the LONG1/LONG4 payload encoder.
+
+    Two's-complement little-endian, minimal length -- the same format
+    _encode_long writes, which is why this is an alias rather than a second
+    implementation.  pickletools and test.pickletester reach for the public
+    spelling.
+    """
+    return _encode_long(x)
+
+
+def decode_long(data):
+    """CPython's public name for the LONG1/LONG4 payload decoder."""
+    return _decode_long(data)
 
 
 def _pack_double(x):
