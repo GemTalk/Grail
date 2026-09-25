@@ -8308,13 +8308,8 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 		| dv |
 		dv := self ___emitIRDecoratorValue___: applicable first on: aBuilder.
 		aBuilder atNode: self.
-		"``functools.wraps(fn)'' answers a two-argument BLOCK -- the decorator-
-		factory shape ExecBlock>>___pyCallValue___:kw: documents -- so this send
-		is the one that made a @functools.wraps-decorated nested def raise
-		``'ExecBlock' object is not callable'' under IR, swallowed by the
-		decorator guard and leaving the function undecorated."
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
-			send: #'___pyCallValue___:kw:' to: dv
+			send: #'value:value:' to: dv
 			with: { aBuilder arrayOf: { aBuilder var: leaf }. aBuilder nilLit } env: 1)).
 		^ self].
 	[
@@ -8334,20 +8329,11 @@ category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder
 	"emitOrderedLocalDecoratorApplicationOn:index:count:: ``((fns at: i)
-	___pyCallValue___: { <apply i+1> } kw: nil)'', the undecorated function at
-	the base.
-
-	CallAst>>___emitIRGeneralCallOn___: explains why the IR path spells a
-	Python call ___pyCallValue___:kw: where the text path spells it
-	value:value:: the two mean the same thing, but only this one reaches a
-	BLOCK receiver, which on the text path the compiler's special send
-	handles and optimize will not attach here.
-	Every decorator in the list is a value here, and any of them can be a
-	block."
+	value: { <apply i+1> } value: nil)'', the undecorated function at the base."
 
 	i > n ifTrue: [^ aBuilder var: leaf].
 	^ aBuilder
-		send: #'___pyCallValue___:kw:'
+		send: #'value:value:'
 		to: (aBuilder send: #at: to: (aBuilder var: fnsLeaf) with: { aBuilder obj: i } env: 0)
 		with: { aBuilder arrayOf: { self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf on: aBuilder }.
 			aBuilder nilLit }
