@@ -992,6 +992,7 @@ run
 	at: #'GlobalsTestCase' put: nil;
 	at: #'GrailDirFallbackTestCase' put: nil;
 	at: #'GrailModuleTestCase' put: nil;
+	at: #'GrailReprLookupSignaller' put: nil;
 	at: #'GrailSTestTarget' put: nil;
 	at: #'GrailTestResult' put: nil;
 	at: #'GrailTestStdinProvider' put: nil;

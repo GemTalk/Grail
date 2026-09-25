@@ -2950,7 +2950,26 @@ repr: anObject
 
 	| slot |
 	slot := [anObject ___pyAttrLoad___: #'__repr__']
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		@env0:on: AbstractException do: [:ex |
+			"CATCH BROADLY, BUT NEVER A STACK OVERFLOW.  A __repr__ that reprs
+			 itself -- test_xml_etree's test_recursive_repr, whose Element's tag
+			 is the Element -- recurses through here once per level, so the VM's
+			 one-shot AlmostOutOfStack can trip INSIDE this block.  Answering nil
+			 for it consumed that warning without reducing depth: the recursion
+			 carried on into the Red Zone as an uncatchable ERROR 2502 and took
+			 the whole scoring session down (nightly 36136723364, on Linux only,
+			 because which frame the trip lands in is set by frame widths).
+			 Convert it HERE rather than pass it, for dict>>__eq__:'s reason: a
+			 pass leaves conversion to ___recursionGuard___, whose resignalAs:
+			 restarts the search at the signal point and so finds this handler
+			 again -- which must then let the RecursionError through, as it
+			 must one raised by the attribute read itself."
+			((ex @env0:isKindOf: AlmostOutOfStack)
+				or: [ex @env0:isKindOf: AlmostOutOfStackError]) ifTrue: [
+				RecursionError ___signal___:
+					'maximum recursion depth exceeded while getting the repr of an object'].
+			(ex @env0:isKindOf: RecursionError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
 	slot == None ifTrue: [
 		^ TypeError ___signal___: '''NoneType'' object is not callable'].
 	^ anObject __repr__
