@@ -167,7 +167,23 @@ _forkBody
 					are the only record of where inside the generator the raise
 					happened, and re-signalling on the consumer would otherwise
 					keep them and lose the consumer's half instead (§9.12)."
-					BaseException ___stashGeneratorStack___: ex.
+					"The PAYLOAD's, when ex is a carrier: that is the object
+					the consumer will catch and walk, so a stash keyed by the
+					carrier was never read -- a bare ``raise'' out of the body's
+					own except clause escapes as one, and so does an exception
+					thrown in with throw()/athrow() that the body lets pass.
+
+					Then the carrier's own capture goes too.  It is the
+					generator side's, and ___payloadOf___: hands a carrier's
+					capture to a payload that has none -- which, just stashed,
+					this payload has not.  The consumer's re-signal unwraps the
+					carrier on its way out, so leaving it would give the payload
+					THIS side's frames a second time in place of the consumer's:
+					``[f@yield, body@raise]'' where CPython reports
+					``[body@raise]''."
+					BaseException ___stashGeneratorStack___:
+						(BaseException ___payloadOf___: ex).
+					ex _gsStack: nil.
 					ex return: nil]
 		] ensure: [
 			done := true.

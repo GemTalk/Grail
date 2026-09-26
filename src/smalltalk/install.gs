@@ -919,6 +919,7 @@ run
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'ExceptStarShapesTestCase' put: nil;
 	at: #'ExceptStarTestCase' put: nil;
+	at: #'ExceptionFramesAcrossGeneratorsTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
 	at: #'ExceptionSubclassArgsTestCase' put: nil;
 	at: #'ExceptionTestCase' put: nil;
@@ -2323,6 +2324,7 @@ input src/smalltalk/PythonTests/EvalLiveMappingTestCase.gs
 input src/smalltalk/PythonTests/EvalInNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/EventLoopTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
+input src/smalltalk/PythonTests/ExceptionFramesAcrossGeneratorsTestCase.gs
 input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
 input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
 input src/smalltalk/PythonTests/ExceptionTestCase.gs

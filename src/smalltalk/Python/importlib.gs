@@ -6092,10 +6092,23 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					from the primary base only -- does not have.  A copied method
 					body that sends ``self ___pyattr_x___'' is answered by
 					PythonInstance's doesNotUnderstand hook through the attribute
-					protocol instead."
+					protocol instead.
+
+					Nor its ___pySlotsStrict___ marker.  Strictness is a verdict
+					ClassDefAst already reached for aClass itself -- true when
+					it declares strict __slots__, false when it declares none
+					over a strict primary chain -- and it reached it from the
+					PRIMARY chain alone, before this merge runs.  So a class
+					declaring no __slots__ whose strict base is SECONDARY found
+					nothing to override, and the copy then made it strict:
+					``class ExitStack(_BaseExitStack, AbstractContextManager)''
+					with a ``__slots__ = ()'' ABC could not keep the
+					_exit_callbacks its own __init__ assigned.  CPython gives a
+					class without __slots__ a __dict__ whatever its bases say."
 					(shouldCopy and: [sel == #'___pySlotIndexFor___:'
+						or: [sel == #'___pySlotsStrict___'
 						or: [([walker categoryOfSelector: sel environmentId: 1] on: Error do: [:e | nil])
-							= #'Grail-Inferred Slots']]) ifTrue: [shouldCopy := false].
+							= #'Grail-Inferred Slots']]]) ifTrue: [shouldCopy := false].
 					shouldCopy ifTrue: [
 						self ___copyMethod___: sel from: walker to: aClass
 							category: 'Grail-MI-Inherited'.
