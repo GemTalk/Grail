@@ -97,6 +97,40 @@ testFlagsMeanWhatTheySayOnThisPlatform
 
 category: 'Grail-Tests - os'
 method: OsFileDescriptorsTestCase
+testEveryPlatformRowOfTheOpenFlags
+	"Every row, from whichever machine runs this -- so the Linux rows are
+	executed on a Mac and the Darwin row on Linux.  The first version could
+	only compute its own platform's row, and the Linux branch no Mac run ever
+	reached held a precedence slip (an unparenthesised ifTrue:ifFalse: fused
+	into at:put:) that stopped os initialising on the first Linux install.
+
+	Darwin's row is what CPython 3.14's os reports on macOS; the Linux rows are
+	asm-generic/fcntl.h, with arm64's own O_NOFOLLOW (0100000)."
+
+	| row installed |
+	row := [:isDarwin :arch | | d |
+		d := os @env1:___openFlagsDarwin: isDarwin arch: arch.
+		#(#O_APPEND #O_CREAT #O_TRUNC #O_EXCL #O_NOFOLLOW #O_CLOEXEC)
+			collect: [:k | d at: k]].
+	self assert: (row value: true value: 'arm64')
+		equals: #(8 512 1024 2048 256 16777216).
+	self assert: (row value: false value: 'x86_64')
+		equals: #(1024 64 512 128 131072 524288).
+	self assert: (row value: false value: 'aarch64')
+		equals: #(1024 64 512 128 32768 524288).
+	"And the row this machine installed is the one its platform asks for."
+	installed := os @env1:___openFlags.
+	self assert: (self eval:
+'import os
+repr([os.O_APPEND, os.O_CREAT, os.O_TRUNC, os.O_EXCL, os.O_NOFOLLOW, os.O_CLOEXEC])
+')
+		equals: '[' , ((#(#O_APPEND #O_CREAT #O_TRUNC #O_EXCL #O_NOFOLLOW #O_CLOEXEC)
+			collect: [:k | (installed at: k) printString])
+				inject: '' into: [:acc :each | acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]]) , ']'
+%
+
+category: 'Grail-Tests - os'
+method: OsFileDescriptorsTestCase
 testReadReadintoAndFtruncate
 
 	self assertAll: #('read_answers_at_most_n_bytes' 'readinto_a_bytearray'

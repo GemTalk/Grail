@@ -1001,31 +1001,47 @@ ___isDarwin
 category: 'Grail-Initialization'
 classmethod: os
 ___openFlags
+	"This platform's row of ___openFlagsDarwin:arch:."
+
+	^ self
+		___openFlagsDarwin: self ___isDarwin
+		arch: (System @env0:gemVersionAt: #cpuArchitecture)
+%
+
+category: 'Grail-Initialization'
+classmethod: os
+___openFlagsDarwin: isDarwin arch: anArchitecture
 	"The open(2) flags whose numbers differ by platform, as glibc and Darwin's
 	<fcntl.h> define them.  Linux's O_NOFOLLOW is itself per-architecture:
-	x86_64 keeps the historic 0400000, aarch64 uses the asm-generic 0100000."
+	x86_64 keeps the historic 0400000, aarch64 uses the asm-generic 0100000.
 
-	| d arch |
+	The platform is an ARGUMENT so every row can be exercised from any one
+	machine: OsFileDescriptorsTestCase asks for the Linux rows on a Mac.  The
+	first version read the platform itself, and its Linux branch -- which no
+	Mac run ever executed -- carried a missing pair of parentheses that turned
+	``at:put:'' into an at:put:ifTrue:ifFalse: send, so os failed to
+	initialise on the first Linux install."
+
+	| d arch nofollow |
 	d := SymbolKeyValueDictionary @env0:new.
-	arch := (System @env0:gemVersionAt: #cpuArchitecture) @env0:asLowercase.
-	self ___isDarwin
-		ifTrue: [
-			d @env0:at: #O_APPEND put: 8.
-			d @env0:at: #O_CREAT put: 512.
-			d @env0:at: #O_TRUNC put: 1024.
-			d @env0:at: #O_EXCL put: 2048.
-			d @env0:at: #O_NOFOLLOW put: 256.
-			d @env0:at: #O_CLOEXEC put: 16777216]
-		ifFalse: [
-			d @env0:at: #O_APPEND put: 1024.
-			d @env0:at: #O_CREAT put: 64.
-			d @env0:at: #O_TRUNC put: 512.
-			d @env0:at: #O_EXCL put: 128.
-			d @env0:at: #O_NOFOLLOW put:
-				((arch @env0:includesString: 'arm') @env0:or: [arch @env0:includesString: 'aarch'])
-					ifTrue: [32768]
-					ifFalse: [131072].
-			d @env0:at: #O_CLOEXEC put: 524288].
+	isDarwin ifTrue: [
+		d @env0:at: #O_APPEND put: 8.
+		d @env0:at: #O_CREAT put: 512.
+		d @env0:at: #O_TRUNC put: 1024.
+		d @env0:at: #O_EXCL put: 2048.
+		d @env0:at: #O_NOFOLLOW put: 256.
+		d @env0:at: #O_CLOEXEC put: 16777216.
+		^ d].
+	arch := anArchitecture @env0:asLowercase.
+	nofollow := ((arch @env0:includesString: 'arm') @env0:or: [arch @env0:includesString: 'aarch'])
+		ifTrue: [32768]
+		ifFalse: [131072].
+	d @env0:at: #O_APPEND put: 1024.
+	d @env0:at: #O_CREAT put: 64.
+	d @env0:at: #O_TRUNC put: 512.
+	d @env0:at: #O_EXCL put: 128.
+	d @env0:at: #O_NOFOLLOW put: nofollow.
+	d @env0:at: #O_CLOEXEC put: 524288.
 	^ d
 %
 
