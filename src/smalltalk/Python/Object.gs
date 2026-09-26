@@ -2244,6 +2244,36 @@ ___grailUnimplementedAbstract___
 
 category: 'Grail-Metaclass'
 method: object
+___grailCachedUnimplementedAbstract___
+	"___grailUnimplementedAbstract___, computed ONCE per class -- this is asked
+	on every construction of an ABCMeta class, and the scan is not cheap: it
+	visits every env-1 selector up the chain, object's thousands of ___x___
+	internals included, and probes each for __isabstractmethod__ under an
+	exception handler.  Measured at ~17 ms per construction, which made every
+	_pyio file cost ~70 ms to open (FileIO and the buffered classes descend from
+	IOBase(metaclass=abc.ABCMeta)).
+
+	Computing it once is CPython's own model: ABCMeta.__new__ fixes
+	__abstractmethods__ when the class is created, and a later assignment does
+	not change it.  Every class statement builds a NEW class, so an identity key
+	cannot go stale on redefinition; the table is session-local, like
+	GrailMetaclassCall, and the nil answer is cached as a marker so a concrete
+	class does not rescan either."
+
+	| tbl found name |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailUnimplementedAbstract'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	found := tbl @env0:at: self otherwise: nil.
+	found @env0:notNil ifTrue: [
+		^ found @env0:== #'___noAbstract___' ifTrue: [nil] ifFalse: [found]].
+	name := self ___grailUnimplementedAbstract___.
+	tbl @env0:at: self put: (name @env0:ifNil: [#'___noAbstract___']).
+	^ name
+%
+
+category: 'Grail-Metaclass'
+method: object
 ___grailSelectorIsAbstract___: sel on: owner
 	"Did ``owner'' mark this selector abstract?  Read off the interned
 	UnboundMethod, guarded: most selectors carry no such stamp."
@@ -2278,7 +2308,7 @@ ___allocateInstance___: positional kw: keywords
 	@abc.abstractmethod is untouched -- see ___grailAbcMetaclassInChain___ for
 	why that distinction is the one that matters here."
 	self ___grailAbcMetaclassInChain___ ifTrue: [
-		abstractName := self ___grailUnimplementedAbstract___.
+		abstractName := self ___grailCachedUnimplementedAbstract___.
 		abstractName @env0:notNil ifTrue: [
 			TypeError ___signal___: ('Can''t instantiate abstract class '
 				@env0:, (self ___pyNameOrEmpty___)
