@@ -339,3 +339,90 @@ testWeakSetMemberVanishesWhenCollected
 	self assert: s size = 0.
 %
 
+
+! ------------------------------------------------------------------------------
+! FinalizerEphemeron — a destruction hook that is handed the object
+! ------------------------------------------------------------------------------
+
+category: 'Grail-Tests-FinalizerEphemeron'
+method: WeakReferenceTestCase
+testFinalizerIsHandedTheObjectAndItsArgument
+	"Unlike a weakref callback, the hook sees the object that died -- the
+	 ephemeron resurrects it -- plus the datum registered with it, and runs
+	 once.  The watch then leaves the registry."
+
+	| subject log ep |
+	log := OrderedCollection new.
+	subject := WeakReferenceTestSubject new tag: 7.
+	ep := FinalizerEphemeron
+		on: subject
+		do: [:obj :arg | arg add: obj tag]
+		with: log.
+	self assert: ep isWatching.
+	subject := nil.
+	self collectGarbage.
+	FinalizerEphemeron _runPending.
+	self assert: log asArray = #(7).
+	self deny: ep isWatching.
+	self collectGarbage.
+	FinalizerEphemeron _runPending.
+	self assert: log size = 1.
+%
+
+category: 'Grail-Tests-FinalizerEphemeron'
+method: WeakReferenceTestCase
+testMourningOnlyQueuesTheHook
+	"Mourning can land anywhere -- a compile included -- so it only QUEUES the
+	 hook; a safe point runs it.  collectGarbage here is the bare scavenge +
+	 drain, deliberately not gc.collect(), which is such a safe point."
+
+	| subject log |
+	log := OrderedCollection new.
+	subject := WeakReferenceTestSubject new tag: 3.
+	FinalizerEphemeron on: subject do: [:obj :arg | arg add: obj tag] with: log.
+	subject := nil.
+	self collectGarbage.
+	self assert: log isEmpty.
+	self assert: FinalizerEphemeron _queuedCount >= 1.
+	FinalizerEphemeron _runPending.
+	self assert: log asArray = #(3).
+	self assert: FinalizerEphemeron _queuedCount = 0.
+%
+
+category: 'Grail-Tests-FinalizerEphemeron'
+method: WeakReferenceTestCase
+testFinalizerDoesNotFireWhileReachable
+	| subject log |
+	log := OrderedCollection new.
+	subject := WeakReferenceTestSubject new tag: 1.
+	FinalizerEphemeron on: subject do: [:obj :arg | arg add: obj] with: log.
+	self collectGarbage.
+	FinalizerEphemeron _runPending.
+	self assert: log isEmpty.
+	self assert: subject tag = 1.
+%
+
+category: 'Grail-Tests-FinalizerEphemeron'
+method: WeakReferenceTestCase
+testARaisingFinalizerDoesNotEscapeTheCollection
+	"Mourning runs wherever the VM finalizes; a hook that raises must not
+	 unwind the code it interrupted."
+
+	| subject |
+	subject := WeakReferenceTestSubject new tag: 1.
+	FinalizerEphemeron on: subject do: [:obj :arg | obj error: 'boom'] with: nil.
+	subject := nil.
+	self collectGarbage.
+	FinalizerEphemeron _runPending.
+	self assert: FinalizerEphemeron _queuedCount = 0.
+%
+
+category: 'Grail-Tests-FinalizerEphemeron'
+method: WeakReferenceTestCase
+testAnImmediateCannotBeWatched
+	"beEphemeron: silently does nothing to an immediate, so a watch on one
+	 would never fire and never leave the registry."
+
+	self assert: (FinalizerEphemeron on: 42 do: [:obj :arg | nil] with: nil) isNil.
+	self assert: (FinalizerEphemeron on: nil do: [:obj :arg | nil] with: nil) isNil.
+%

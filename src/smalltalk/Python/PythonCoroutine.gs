@@ -438,6 +438,23 @@ ___grailAiter___: anObject
 	^ it
 %
 
+category: 'Grail-Coroutine Protocol'
+classmethod: PythonCoroutine
+___grailAnext___: anIterator
+	"One step of an ``async for'' or an async comprehension: the ``it.__anext__()''
+	the loop awaits in the same expression.  AsyncForAst and ComprehensionAst
+	emit this, not a bare __anext__ send, for one reason: the step of a real
+	async generator can be made WITHOUT the never-awaited watch
+	(PyAsyncGenASend class >> ___unwatchedOn___:kind:arg:).  The loop awaits
+	it on the spot, so it can never go undriven, and the watch cost ~10% of a
+	tight ``async for'' (measured: 2879 vs 3140-3178 ms per 100k steps).
+	Anything else gets its own __anext__, exactly as before."
+
+	anIterator @env0:class == PythonAsyncGenerator ifTrue: [
+		^ PyAsyncGenASend @env0:___unwatchedOn___: anIterator kind: #'send' arg: None].
+	^ anIterator __anext__
+%
+
 ! Leave the compile environment where the rest of the install expects it.  A
 ! trailing ``set compile_env: 1' leaks into the NEXT file install.gs inputs,
 ! whose class-definition doit then runs in env 1 and fails with ``Object class

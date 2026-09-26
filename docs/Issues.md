@@ -478,7 +478,7 @@ Worth fixing rather than tolerating: while it is live, a traceback in an affecte
 session silently misreports a line — or loses a frame — and the loss is reported
 by whatever reads the walk as a fact about *its own* request.
 
-## PLATFORM GAP (decided): no unawaited-coroutine warning, no origin tracking
+## OPEN (decision): no unawaited-coroutine warning, no origin tracking
 
 CPython warns when a coroutine is garbage-collected without ever having been
 awaited -- ``RuntimeWarning: coroutine 'f' was never awaited`` -- and, with
@@ -487,60 +487,84 @@ created so the warning can point at it.  Both fire from the coroutine's
 **destructor**: the check lives in ``coro_dealloc``, and the report goes
 through ``warnings._warn_unawaited_coroutine`` at collection time.
 
-Grail deliberately implements neither, and the reason is the platform, not
-the effort.  A Grail coroutine is an ordinary GemStone session object; nothing
-runs when one becomes unreachable -- there is no per-object finalization hook
-for transient objects, and the in-memory collector gives no destruction
-callback the runtime could attach the check to.  Every route that fakes it
-gives a worse answer than absence:
+Grail still implements neither -- but this entry used to say "PLATFORM GAP
+(decided)", on the premise that GemStone gives transient session objects no
+destruction hook, and **that premise was wrong** (corrected 2026-09-25, in the
+test_asyncgen work).  GemStone's ephemerons work on transient objects: the VM
+fires one when its key is reachable only through ephemerons and sends it
+``#mourn`` from ``GcFinalizeNotification`` -- "executed as needed by the VM",
+per the kernel class comment, so automatically, and synchronously when
+``gc.collect()`` drains the queue.  ``weakref`` had been built on exactly that
+all along.  ``FinalizerEphemeron`` (``src/weakref/WeakReference.gs``) is the
+hook in the form a destructor needs: it hands the dying object itself to the
+action (resurrected, PEP 442's contract), and a session-local registry keeps
+pending watches reachable.  Measured: ~0.45 µs to register, ~0.3 µs to mourn,
+~0.06 µs to run a queued hook; 200,000 watched steps with no ``gc.collect()``
+left 1,872 pending, so the VM's own collections keep the registry bounded.
 
-* **Sweep at commit/abort/session end.**  Warns arbitrarily late (CPython
-  warns at collection, which is usually promptly after the drop), attributes
-  the warning to the sweep point rather than the drop site, and costs a scan
-  of session memory that grows with the session.  A warning whose line points
-  at ``System commitTransaction`` teaches nobody anything.
-* **Warn on reuse instead of on drop.**  Reuse already raises
-  (``cannot reuse already awaited coroutine``, PR #672); the never-awaited
-  bug is precisely the coroutine nobody ever touches AGAIN, so a reuse hook
-  never sees it.
-* **A weak-reference/ephemeron registry.**  GemStone's finalization story is
-  for persistent objects and epochs, not per-temp-object callbacks; polling a
-  registry is the sweep option wearing a different hat.
+Two things about it were learned the hard way, and both are load-bearing:
 
-This is the same platform-honesty call as ``os.fork``: CPython itself ships
-platforms where pieces are absent (Windows and WASI have no fork; PyPy warns
-about unawaited coroutines only when its GC happens to run, and its docs tell
-users not to rely on it).  PyPy is the precedent that matters here: a
-tracing-GC Python already cannot promise CPython's prompt warning, so
-portable code treats it as best-effort diagnostics, never semantics.
+* **``#mourn`` only QUEUES the hook.**  Mourning lands wherever the VM
+  finalizes, and in one SUnit shard 132 mournings landed in the middle of a
+  module compile; a never-awaited warning run from one of them -- Python code,
+  importing as it goes -- left the interrupted compile unable to resolve a
+  module function (``IR codegen: unhandled name load``, a different
+  AsendLifecycleTestCase test each run).  The queue runs at known-safe points:
+  ``gc.collect()``, straight after it drains the ephemerons (so a collection
+  still runs its hooks before it returns), and every new registration.
+  ``weakref`` callbacks still run AT mourning, as they always have; the same
+  instrumented shard saw none of them land in a compile, but they are the same
+  exposure.
+* **The compiled ``async for`` makes its steps unwatched**
+  (``PythonCoroutine class>>___grailAnext___:``): the loop awaits each step in
+  the same expression, so it cannot go undriven, and the watch cost ~10% of a
+  tight ``async for``.  Explicit ``asend``/``athrow``/``aclose``/``__anext__``
+  calls keep it.
 
-What this costs on the scoreboard, recorded rather than hidden -- seven
-tests of ``test.test_coroutines``, all of which EXIST to test the warning
-machinery itself: ``test_bpo_45813_1/2``, ``test_func_9``,
-``test_fatal_coro_warning``, and the three ``OriginTrackingTest`` cases
-(which also want ``sys.get/set_coroutine_origin_tracking_depth``; adding
-no-op depth accessors without the warning they configure would be a stub
-that lies, so they stay absent too).
+What had ACTUALLY hidden every destructor hook was a different defect: **a
+suspended generator could never be collected.**  Its parked producer process
+sat in the scheduler's ``waitingSet`` (``Semaphore>>wait`` →
+``_waitOnSema:``), a GC root, and the parked stack holds the generator.
+Measured: 2000 calls of ``for x in gen(): return x`` left 2000 live
+GsProcesses after a full mark-sweep -- a per-session leak of one process and
+its stack per abandoned generator, independent of any warning.  Two changes
+fix it:
+
+* ``PythonGenerator>>___unrootParkedProducer___`` takes a producer parked on
+  its own semaphore out of ``waitingSet`` each time the consumer gets control
+  back (cost within noise: 268 vs 273 ms per 100k sync-generator items).  The
+  semaphore still records the waiter, so a signal resumes it normally.  The
+  invariant it rests on: nothing terminates, suspends or resumes a parked
+  producer -- the kernel's ``_resumeProcess:`` expects a semaphore waiter to
+  be in ``waitingSet``.
+* ``WeakReference class>>_flushProcessStackAreas``, run by ``gc.collect()``:
+  the VM keeps the stacks of the last ``OM_MAX_PROCESS_STACKS`` (8) processes
+  in C stack areas, which are roots too -- the last seven parked processes
+  always survived a collection, so the generator abandoned just before
+  ``gc.collect()`` was exactly the one that did not die.
+
+And ``for`` loops on the IR path now drop their iterator at loop exit (it was a
+method temp, alive until the function returned), as CPython's do.
+
+**Fixed with that, in test_asyncgen (now 85/0/0):** the finalizer hook of
+``sys.set_asyncgen_hooks`` fires (``test_async_gen_asyncio_gc_aclose_09``,
+``test_async_gen_asyncio_shutdown_exception_02`` -- asyncio's
+``_asyncgen_finalizer_hook`` and a ``WeakSet`` for ``loop._asyncgens``, as
+CPython), and an undriven ``asend`` / ``athrow`` / ``aclose`` step warns that
+it was never awaited (``TestUnawaitedWarnings.test_asend/test_athrow/
+test_aclose``), both through ``FinalizerEphemeron``.
+
+**What is left is a decision, not a platform limit:** the COROUTINE warning
+(seven ``test.test_coroutines`` tests: ``test_bpo_45813_1/2``, ``test_func_9``,
+``test_fatal_coro_warning``, and the three ``OriginTrackingTest`` cases, which
+also want ``sys.get/set_coroutine_origin_tracking_depth``).  It is the same
+hook on a different object, but a watch per coroutine CALL rather than per
+explicit step, on the hottest async path there is, and origin tracking adds a
+stack capture per call when enabled.  PyPy's precedent still applies to the
+warning's promptness: a tracing GC warns when it collects, not at the drop, so
+portable code treats it as best-effort diagnostics.
 ``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineIsSilent`` pins
-the deviation so a green run is not read as more than it is.
-``test.test_asyncgen`` carries the same gap's three twins --
-``TestUnawaitedWarnings.test_asend/test_athrow/test_aclose`` warn about a
-step object collected undriven, from the same destructor -- counted here
-rather than re-decided there.  Two more members, same root, recorded with
-the asyncgen-hooks work: ``test_async_gen_asyncio_gc_aclose_09`` (the
-FINALIZER hook fires at collection; Grail's substitute is the
-shutdown_asyncgens sweep, which runs later than the test's two
-sleep(0)s), and ``test_async_gen_asyncio_shutdown_exception_02``'s phase
-label (the abandoned generator's close error reaches the exception
-handler with the SWEEP's message -- 'an error occurred during closing of
-asynchronous generator' -- where CPython's GC-finalizer path reports
-'unhandled exception during asyncio.run() shutdown'; right exception,
-right handler, different funnel).
-
-What would reopen the decision: a GemStone finalization hook for transient
-session objects, or the async runtime growing a real event loop whose task
-lifecycle (asyncio warns about un-retrieved exceptions from its own
-bookkeeping, not from the GC) gives the warning a natural, prompt home.
+the current behaviour so a green run is not read as more than it is.
 
 ## OPEN: two codec-reach gaps (found while adding UTF-32, 2026-08-31)
 

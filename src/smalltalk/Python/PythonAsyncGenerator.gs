@@ -352,7 +352,28 @@ classmethod: PyAsyncGenASend
 ___on___: anAsyncGen kind: aKind arg: anArg
 	"aKind is #send, #throw or #close -- HOW the body is first resumed.  Every
 	step after the first is a plain send, which is why one class covers all
-	four entry points."
+	four entry points.
+
+	Each one is watched for collection, for CPython's never-awaited warning
+	(___warnIfNeverAwaited___).  The action is a clean block: the step
+	travels in the ephemeron's key slot, never in a closure."
+
+	| step |
+	step := self new ___setAgen___: anAsyncGen kind: aKind arg: anArg.
+	FinalizerEphemeron
+		on: step
+		do: [:aStep :unused | aStep ___warnIfNeverAwaited___]
+		with: nil.
+	^ step
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyAsyncGenASend
+___unwatchedOn___: anAsyncGen kind: aKind arg: anArg
+	"A step with no never-awaited watch, for a caller that drives it on the
+	spot -- the compiled ``async for'' (PythonCoroutine class >>
+	___grailAnext___:).  Only such a caller: a step handed to user code
+	unwatched could be dropped undriven without the warning CPython gives."
 
 	^ self new ___setAgen___: anAsyncGen kind: aKind arg: anArg
 %
@@ -366,6 +387,40 @@ ___setAgen___: anAsyncGen kind: aKind arg: anArg
 	started := false.
 	finished := false.
 	^ self
+%
+
+category: 'Grail-Private'
+method: PyAsyncGenASend
+___warnIfNeverAwaited___
+	"The step's destructor, run by its FinalizerEphemeron when it is collected:
+	CPython's async_gen_asend_finalize / async_gen_athrow_finalize.  A step
+	collected in its INITIAL state -- never sent to, thrown into or closed --
+	is ``g.asend(v)'' (or athrow / aclose) without the ``await'', the async
+	twin of calling a coroutine function and dropping the result:
+
+	    RuntimeWarning: coroutine method 'asend' of 'gen' was never awaited
+
+	The method is named as CPython names it -- __anext__ is asend underneath
+	and says so -- and both names are quoted, as CPython's %R formats them.
+	close() on an undriven step marks it finished, so a closed one stays
+	quiet, as CPython's does (TestUnawaitedWarnings).
+
+	The undriven COROUTINE is the same warning from the same kind of
+	destructor, and is not covered here -- see docs/Issues.md."
+
+	| word q |
+	(started or: [finished]) ifTrue: [^ self].
+	word := kind == #'close'
+		ifTrue: ['aclose']
+		ifFalse: [kind == #'throw' ifTrue: ['athrow'] ifFalse: ['asend']].
+	q := agen dynamicInstVarAt: #'__qualname__'.
+	(q isKindOf: CharacterCollection) ifFalse: [q := '?'].
+	(Python at: #warnings otherwise: nil) ifNotNil: [:wm |
+		wm @env1:instance
+			@env1:___warn___: 'coroutine method ''' , word , ''' of ''' , q asString
+				, ''' was never awaited'
+			category: (Python at: #RuntimeWarning otherwise: nil)
+			stacklevel: 1]
 %
 
 set compile_env: 1
@@ -818,19 +873,49 @@ ag_running
 category: 'Grail-Private'
 method: PythonAsyncGenerator
 ___fireFirstiterIfNeeded___
-	"The asyncgen half of sys.set_asyncgen_hooks: the FIRSTITER hook fires
-	once, at the generator's first drive, handing the loop the reference it
-	will close in shutdown_asyncgens().  Gated by a dynamic instVar so the
-	per-step cost after the first is one probe; a hook error must not break
-	iteration, so the call is guarded -- CPython logs and continues too."
+	"The asyncgen half of sys.set_asyncgen_hooks, both hooks captured at the
+	generator's first drive, as CPython's async_gen_init_hooks captures them.
+
+	The FINALIZER is bound first: it is what runs if this generator is
+	collected unfinished (___runFinalizer___:), so the hook in force NOW is the
+	one it gets, whatever is installed by the time it dies.  Then FIRSTITER
+	fires, handing the loop the reference it will close in
+	shutdown_asyncgens() if the generator is still alive then.  Gated by a
+	dynamic instVar so the per-step cost after the first is one probe; a hook
+	error must not break iteration, so the call is guarded -- CPython logs and
+	continues too."
 
 	(self @env0:dynamicInstVarAt: #'___firstIterFired___') @env0:isNil ifTrue: [
 		self @env0:dynamicInstVarAt: #'___firstIterFired___' put: true.
+		(SessionTemps @env0:current @env0:at: #'GrailAsyncgenFinalizer' otherwise: nil)
+			@env0:ifNotNil: [:fin |
+				FinalizerEphemeron
+					@env0:on: self
+					do: [:anAgen :aHook | anAgen ___runFinalizer___: aHook]
+					with: fin].
 		(SessionTemps @env0:current @env0:at: #'GrailAsyncgenFirstiter' otherwise: nil)
 			@env0:ifNotNil: [:hook |
 				[hook @env1:___pyCallValue___: { self } kw: nil]
 					@env0:on: AbstractException
 					do: [:ex | ex @env0:return: nil]]]
+%
+
+category: 'Grail-Private'
+method: PythonAsyncGenerator
+___runFinalizer___: aHook
+	"This generator was collected -- its FinalizerEphemeron mourned it and
+	queued this, which keeps it alive until now, a safe point -- and PEP 525
+	hands it to the finalizer hook bound at its first drive.  asyncio's hook schedules
+	aclose() as a task, so the body's ``finally'' runs on the loop, with the
+	loop's exception handler catching what it raises
+	(test_async_gen_asyncio_gc_aclose_09, shutdown_exception_02).  The hook
+	keeps the generator reachable for as long as it needs it.
+
+	A generator that already FINISHED has nothing left to close, and CPython
+	skips the hook for it (ag_closed)."
+
+	done ifTrue: [^ None].
+	^ aHook ___pyCallValue___: { self } kw: nil
 %
 
 category: 'Grail-Private'
