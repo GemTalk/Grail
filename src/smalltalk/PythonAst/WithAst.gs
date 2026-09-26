@@ -169,7 +169,9 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: '(BaseException @env0:___whileHandling___: (BaseException @env0:___payloadOf___: ___ex___) do: ['.
 	aStream nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
-	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil)]) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
+	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). '.
+	self ___emitExitTracebackOn___: aStream.
+	aStream nextPutAll: ' } value: nil)]) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
 	aStream decreaseIndent; lf.
 	aStream nextPut: $].
 	"THE CLEAN EXIT, outside the protection.  Reached only when the body ran to
@@ -432,7 +434,7 @@ ___emitIRItem___: anIndex on: aBuilder
 										to: (self ___emitIRPayloadOf___: exLeaf on: aBuilder)
 										with: { } env: 0.
 									self ___emitIRPayloadOf___: exLeaf on: aBuilder.
-									aBuilder nilLit }
+									self ___emitIRExitTraceback___: exLeaf on: aBuilder }
 								builder: aBuilder at: item context_expr)] }
 					env: 0.
 				aBuilder
@@ -549,6 +551,70 @@ ___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder
 	"___emitProtocolPreflightOn___:'s IR twin: nothing for a plain with."
 
 	^ self
+%
+
+category: 'Grail-code generation'
+method: WithAst
+___emitExitTracebackOn___: aStream
+	"The THIRD argument __exit__ receives when the body raised: the exception's
+	traceback, with the frame of the function running this ``with'' on it.
+
+	CPython records that frame when the exception reaches the statement --
+	the with statement is a catch in its own frame, exactly as an ``except''
+	clause is -- and hands the result to __exit__ as ``tb''.  Grail did
+	neither.  It passed Smalltalk nil, which is not even None, and built no
+	traceback at all, because only an except clause's entry
+	(TryAst >> ___emitPushCatchingFrameOn___:target:) ever did.  An exception
+	that a with statement saw and let go was therefore frameless until some
+	except clause further out caught it -- and one that was never caught
+	again, but became another exception's __context__ instead, stayed
+	frameless for good: ExitStack's ``1/0'' inside ``with self.exit_stack()'',
+	whose traceback test_contextlib[_async] test_exit_exception_traceback reads
+	off the ValueError's __context__.
+
+	The PyCode is the one TryAst names for the same frame, with the same
+	fallback rule: nothing is pushed where there is no frame to name (a class
+	body), and __exit__ still gets whatever traceback the exception already
+	has."
+
+	| frameName firstLine |
+	CallAst functionBeingCompiled
+		ifNil: [
+			CallAst moduleBodyBeingCompiled ifFalse: [
+				^ aStream nextPutAll: '(BaseException @env0:___withExitTraceback___: (BaseException @env0:___payloadOf___: ___ex___) code: nil pos: nil)'].
+			frameName := '<module>'.
+			firstLine := 1]
+		ifNotNil: [:___func |
+			frameName := ___func name asString.
+			firstLine := ___func beginLine].
+	aStream nextPutAll: '(BaseException @env0:___withExitTraceback___: (BaseException @env0:___payloadOf___: ___ex___) code: (PyCode @env0:name: '''.
+	aStream nextPutAll: frameName; nextPutAll: ''' filename: '.
+	self emitSourceFilenameLiteralOn: aStream.
+	aStream nextPutAll: ' firstlineno: '; print: firstLine; nextPutAll: ') pos: ___curPos___)'.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___emitIRExitTraceback___: exLeaf on: aBuilder
+	"___emitExitTracebackOn___:'s IR twin, as the VALUE node for __exit__'s
+	third argument.  ``pos: nil'' as every IR catching-frame push passes: the
+	walk derives the line from the captured ips."
+
+	| func pyCode |
+	func := CallAst functionBeingCompiled.
+	pyCode := func isNil
+		ifTrue: [aBuilder nilLit]
+		ifFalse: [aBuilder
+			send: #'name:filename:firstlineno:' to: (aBuilder globalNamed: #PyCode)
+			with: { aBuilder obj: func name asString.
+				aBuilder obj: (CallAst sourcePath ifNil: ['<grail>']).
+				aBuilder obj: func beginLine }
+			env: 0].
+	^ aBuilder
+		send: #'___withExitTraceback___:code:pos:' to: (aBuilder globalNamed: #BaseException)
+		with: { self ___emitIRPayloadOf___: exLeaf on: aBuilder. pyCode. aBuilder nilLit }
+		env: 0
 %
 
 category: 'Grail-IR Codegen'

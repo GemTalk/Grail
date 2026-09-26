@@ -2246,12 +2246,34 @@ category: 'Grail-Metaclass'
 method: object
 ___grailSelectorIsAbstract___: sel on: owner
 	"Did ``owner'' mark this selector abstract?  Read off the interned
-	UnboundMethod, guarded: most selectors carry no such stamp."
+	UnboundMethod, guarded: most selectors carry no such stamp.
 
-	^ [((UnboundMethod definingClass: owner selector: sel)
+	...and, failing that, off the class's COMMITTED attribute holder.  The
+	interned handle is session-local (UnboundMethod class >>
+	definingClass:selector:), so the stamp @abc.abstractmethod put on it lives
+	only in the session that ran the class body.  What survives is the object
+	the decorator RETURNED, which the class-body rebinding stored in the
+	holder -- the same object ``Cls.meth'' reads.  For a DEPLOYED module no
+	later session runs the body again, so without this every abstract method
+	of a deployed class read as concrete everywhere but the deploy session:
+	contextlib.AbstractAsyncContextManager instantiated with __aexit__ still
+	abstract (test_contextlib_async test_exit_is_abstract), passing only when
+	the module happened to be compiled in the session that ran the test."
+
+	([((UnboundMethod definingClass: owner selector: sel)
 		___pyAttrLoad___: #'__isabstractmethod__') == true]
 		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: false]
+		do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]) ifTrue: [^ true].
+	^ [ | held |
+		held := owner ___classChainAttrLookup___: sel.
+		held notNil
+			and: [(held ___pyAttrLoad___: #'__isabstractmethod__') == true]]
+		@env0:on: AbstractException
+		do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]
 %
 
 category: 'Grail-Instantiation'

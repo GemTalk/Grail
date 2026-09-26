@@ -214,6 +214,12 @@ class nullcontext:
     def __exit__(self, exc_type, exc, tb):
         return False
 
+    async def __aenter__(self):
+        return self.enter_result
+
+    async def __aexit__(self, *excinfo):
+        pass
+
 
 class ContextDecorator:
     """Base adding ``@cm``-style decorator behaviour to a context
@@ -256,20 +262,81 @@ class AsyncContextDecorator:
         return inner
 
 
-class AbstractContextManager:
+# The two abstract context managers are upstream's, with ONE respelling:
+# ``metaclass=ABCMeta'' where CPython writes ``(abc.ABC)''.  Grail's abc.ABC is
+# a plain marker class (abc.py says why), so it carries none of the three things
+# test_contextlib[_async]'s TestAbstract* cases check -- and an explicit ABCMeta
+# carries all of them:
+#   * instantiating a subclass that leaves __exit__/__aexit__ abstract raises
+#     TypeError (Object >> ___allocateInstance___:kw: keys that on ABCMeta);
+#   * __subclasshook__ is consulted, so a class that merely DEFINES the pair is
+#     a subclass, and one that sets either to None is not;
+#   * ``__slots__ = ()'' -- with the base slotless too, a slotted subclass has
+#     no __dict__ and refuses a stray attribute.
+# This is the one module-level import in the file, because a class statement
+# needs its metaclass at creation and cannot defer it into a method.  It is
+# safe where ``import sys'' was not: the
+# NOTE at the top is about a deploy-time binding to a SESSION-specific instance,
+# and ABCMeta / abstractmethod are classes and functions, identical in every
+# session -- the abstractness gate matches ABCMeta by name in any case.
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+
+
+def _check_methods(C, *methods):
+    # _collections_abc._check_methods, inlined: Grail's _collections_abc is a
+    # re-export shim that does not carry it.
+    mro = C.__mro__
+    for method in methods:
+        for B in mro:
+            if method in B.__dict__:
+                if B.__dict__[method] is None:
+                    return NotImplemented
+                break
+        else:
+            return NotImplemented
+    return True
+
+
+class AbstractContextManager(metaclass=_ABCMeta):
+    """An abstract base class for context managers."""
+
+    __slots__ = ()
+
     def __enter__(self):
+        """Return `self` upon entering the runtime context."""
         return self
 
+    @_abstractmethod
     def __exit__(self, exc_type, exc_value, traceback):
+        """Raise any exception triggered within the runtime context."""
         return None
 
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is AbstractContextManager:
+            return _check_methods(C, "__enter__", "__exit__")
+        return NotImplemented
 
-class AbstractAsyncContextManager:
+
+class AbstractAsyncContextManager(metaclass=_ABCMeta):
+    """An abstract base class for asynchronous context managers."""
+
+    __slots__ = ()
+
     async def __aenter__(self):
+        """Return `self` upon entering the runtime context."""
         return self
 
+    @_abstractmethod
     async def __aexit__(self, exc_type, exc_value, traceback):
+        """Raise any exception triggered within the runtime context."""
         return None
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is AbstractAsyncContextManager:
+            return _check_methods(C, "__aenter__", "__aexit__")
+        return NotImplemented
 
 
 # ---------------------------------------------------------------------------
