@@ -102,8 +102,8 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_annotationlib | OK | 117 | 0 | 0 | 8 |  |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
 | test.test_codecs | OK | 287 | 0 | 0 | 22 |  |
-| test.test_contextlib_async | ERROR | 58 | 6 | 1 | 0 |  |
-| test.test_asyncgen | FAIL | 85 | 5 | 0 | 0 |  |
+| test.test_contextlib_async | OK | 58 | 0 | 0 | 0 |  |
+| test.test_asyncgen | OK | 85 | 0 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
 | test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
@@ -119,7 +119,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
 | test.test_ipaddress | OK | 211 | 0 | 0 | 0 |  |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
-| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.dom' |
+| test.test_pulldom | ERROR | 11 | 0 | 1 | 0 |  |
 | test.test_sax | ERROR | 186 | 12 | 15 | 1 |  |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
