@@ -190,6 +190,50 @@ ___consumerProcess___
 	^ consumerProcess
 %
 
+category: 'Grail-Private'
+method: PythonGenerator
+___unrootParkedProducer___
+	"Let a SUSPENDED generator be garbage like any other object.  Sent by the
+	consumer each time it gets control back from the body.
+
+	A body parked at a yield is its producer process blocked in ``producerSem
+	wait'', and Semaphore>>wait files the waiter in the scheduler's waitingSet
+	(ProcessorScheduler>>_waitOnSema:).  That set is a GC ROOT, and the parked
+	stack holds the generator -- it is the receiver of the ___yield___: frame
+	-- so every generator ever suspended stayed alive for the rest of the
+	session, whoever still referred to it.  Measured: 2000 ``for x in gen():
+	return x'' calls left 2000 live GsProcesses after a full mark-sweep.  That
+	is a leak in its own right, and it is also why CPython's destruction-time
+	hooks had nothing to fire on: an abandoned async generator was never
+	collected at all (test_asyncgen's gc_aclose_09).
+
+	The semaphore still records the waiter, so dropping the scheduler's entry
+	leaves generator -> producerSem -> process -> stack -> generator: a cycle
+	that is collected when nothing outside it refers to the generator, and
+	that resumes normally when something does -- Semaphore>>signal reaches
+	_scheduleProcess:, which files a process whose onQueue is nil straight on
+	the ready queue.
+
+	THE INVARIANT this relies on: nothing terminates, suspends or resumes a
+	parked producer.  _resumeProcess: and _resumeForTermination: expect a
+	semaphore waiter to be in waitingSet and raise ('bad waiting state')
+	when it is not.  Grail only ever SIGNALS producerSem, and a finished body
+	returns off the end of its block; a future close-by-terminate would have
+	to re-file the process first.  Only a waiter on OUR semaphore is touched:
+	a body blocked on anything else (a lock, a socket, a Delay) is a running
+	body in the middle of its own business, and stays where the kernel put
+	it."
+
+	| q |
+	done ifTrue: [^ self].
+	proc == nil ifTrue: [^ self].
+	proc waitingOn == producerSem ifFalse: [^ self].
+	proc _isSuspended ifTrue: [^ self].
+	(q := proc onQueue) == nil ifTrue: [^ self].
+	ProcessorScheduler scheduler _remove: proc fromSet: q.
+	proc _onQueue: nil
+%
+
 set compile_env: 1
 
 category: 'Grail-Instance Creation'
@@ -423,6 +467,7 @@ send: aValue
 		producerSem @env0:signal.
 	].
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
+	self @env0:___unrootParkedProducer___.
 	done ifTrue: [
 		escapedException == nil ifFalse: [^ self _signalEscapedException].
 		^ self ___signalExhausted___].
@@ -717,6 +762,7 @@ throw: anException
 	running := true.
 	producerSem @env0:signal.
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
+	self @env0:___unrootParkedProducer___.
 	done ifTrue: [
 		"Body finished — normal completion raises StopIteration; an
 		exception that bubbled out of the body (stowed by _forkBody)
@@ -910,6 +956,7 @@ close
 	running := true.
 	producerSem @env0:signal.
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
+	self @env0:___unrootParkedProducer___.
 	done ifFalse: [
 		RuntimeError ___signal___:
 			(self ___pyKindWords___ @env0:, ' ignored GeneratorExit')

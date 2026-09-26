@@ -588,6 +588,15 @@ ___emitIRStatementOn___: aBuilder
 		with: { aBuilder globalNamed: #PythonBreak.
 			aBuilder handlerBlockNamed: #'___ex___' }
 		env: 0).
+	"Release the iterator once the loop is over, drained or broken out of.
+	 CPython pops it off the value stack at loop exit; a METHOD temp would
+	 otherwise keep it -- and the generator behind it -- alive until the
+	 function returns, so ``for x in agen(): break'' followed by
+	 gc.collect() in the same function could not reclaim the generator
+	 (test_async_gen_asyncio_shutdown_exception_02 expects its finalizer to
+	 have run).  The text path's iterator is a BLOCK temp, which the loop's
+	 own block takes with it."
+	aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit).
 	^ self
 %
 

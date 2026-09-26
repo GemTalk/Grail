@@ -937,18 +937,24 @@ method: sys
 _set_asyncgen_hooks: positional kw: kwargs
 	"sys.set_asyncgen_hooks(firstiter=..., finalizer=...) -- both keyword
 	arguments optional, and CPython only changes the ones actually given.
-	Stored session-locally; PythonAsyncGenerator fires firstiter at an async
-	generator's first drive, which is how an event loop learns which
-	generators to close in shutdown_asyncgens().  The FINALIZER half is
-	stored but never fires: it is the destruction-time hook of the recorded
-	platform gap (docs/Issues.md, 'no unawaited-coroutine warning') -- the
-	shutdown sweep is the working substitute."
+	Stored session-locally, and captured by each async generator at its first
+	drive (PythonAsyncGenerator>>___fireFirstiterIfNeeded___): firstiter fires
+	then, which is how an event loop learns which generators to close in
+	shutdown_asyncgens(), and the finalizer is bound then and fires if the
+	generator is collected unfinished.
+
+	None CLEARS a hook, as in CPython -- an event loop restores the hooks it
+	found, and those are usually (None, None).  Storing None instead left a
+	hook that every later first drive tried to call."
 
 	kwargs @env0:ifNotNil: [
-		(kwargs @env0:at: 'firstiter' ifAbsent: [nil]) @env0:ifNotNil: [:fi |
-			SessionTemps @env0:current @env0:at: #'GrailAsyncgenFirstiter' put: fi].
-		(kwargs @env0:at: 'finalizer' ifAbsent: [nil]) @env0:ifNotNil: [:fin |
-			SessionTemps @env0:current @env0:at: #'GrailAsyncgenFinalizer' put: fin]].
+		#( #('firstiter' #'GrailAsyncgenFirstiter') #('finalizer' #'GrailAsyncgenFinalizer') )
+			@env0:do: [:pair | | hook |
+				hook := kwargs @env0:at: (pair @env0:at: 1) ifAbsent: [nil].
+				hook == nil ifFalse: [
+					hook == None
+						ifTrue: [SessionTemps @env0:current @env0:removeKey: (pair @env0:at: 2) ifAbsent: [nil]]
+						ifFalse: [SessionTemps @env0:current @env0:at: (pair @env0:at: 2) put: hook]]]].
 	^ None
 %
 

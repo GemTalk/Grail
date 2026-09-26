@@ -57,6 +57,7 @@ run
 | dict |
 dict := System myUserProfile symbolList objectNamed: #'Python'.
 #( #'WeakReference' #'WeakReferenceHolder' #'WeakReferenceEphemeron'
+   #'FinalizerEphemeron'
    #'WeakValueDictionary' #'WeakKeyDictionary' #'WeakSet' )
 	do: [:nm | (dict includesKey: nm) ifFalse: [dict at: nm put: nil]].
 true
@@ -435,11 +436,242 @@ _collect
 	 refs fire and callbacks run synchronously. The Python equivalent of
 	 CPython's `gc.collect()` for the purpose of weakref tests."
 
+	WeakReference @env0:_flushProcessStackAreas.
 	System @env0:_generationScavenge_vmMarkSweep.
-	GcFinalizeNotification @env0:new @env0:_finalizeEphemerons
+	GcFinalizeNotification @env0:new @env0:_finalizeEphemerons.
+	FinalizerEphemeron @env0:_runPending
 %
 
 set compile_env: 0
+
+category: 'Grail-Weak-private'
+classmethod: WeakReference
+_flushProcessStackAreas
+	"Push every switched-out GsProcess's stack out to object memory, so that a
+	 collection straight after sees only the references objects really hold.
+
+	 The VM keeps the stacks of the last few processes that ran in C stack
+	 areas -- OM_MAX_PROCESS_STACKS of them, GsProcess _maxProcessStacks, 8 on
+	 4.0 -- and a stack held there is a GC ROOT until the area is reused.
+	 Measured: park N processes nothing refers to, mark-sweep, and exactly the
+	 last seven survive, whatever N is.  So a generator abandoned just before
+	 gc.collect() -- the whole point of calling it -- is precisely the one
+	 whose parked producer is pinned, and it outlives the collection that was
+	 supposed to reclaim it (PythonGenerator>>___unrootParkedProducer___ has
+	 the other half: the scheduler's own root).
+
+	 A process that is PARKED holds its area, so parking one throwaway process
+	 per area evicts every earlier occupant to object memory; the throwaways
+	 then finish and give their areas back.  They run one priority ABOVE the
+	 caller, so each fork and each signal switches straight to it and back:
+	 no other green thread at the caller's priority gets a turn out of a
+	 gc.collect()."
+
+	| sched prio sems |
+	sched := ProcessorScheduler scheduler.
+	prio := (sched activePriority + 1) min: sched highestPriority.
+	sems := (1 to: GsProcess _maxProcessStacks) collect: [:i | Semaphore new].
+	sems do: [:sem | [sem wait] forkAt: prio].
+	sems do: [:sem | sem signal]
+%
+
+! ===============================================================================
+! FinalizerEphemeron — a destruction hook for one TRANSIENT object: CPython's
+!   tp_finalize, for the runtime's own use (not a Python-visible type).
+!
+!   WeakReference's callback is handed the dead REF, as Python's weakref
+!   callbacks are, so it cannot see the object that died.  The hooks CPython
+!   fires from a destructor need exactly that object: an async generator's
+!   finalizer is CALLED WITH the generator (asyncio schedules its aclose()),
+!   and the never-awaited warning names the step object's method and owner.
+!   An ephemeron can give it to them, because mourning happens while the key
+!   is still in the first slot -- the object is resurrected for the duration
+!   of #mourn, which is PEP 442's contract too, and whatever the action keeps
+!   hold of stays alive.
+!
+!   The registry is what keeps a pending hook reachable: an ephemeron that is
+!   itself garbage is never traced, so never fired.  It lives in SessionTemps,
+!   so commit never reaches it, and nothing points from the watched object to
+!   its ephemeron, so the watched object commits clean too.  An object is
+!   watched from the moment #on:do: answers until it dies or the session ends;
+!   there is no cancel, because every caller decides at mourning time whether
+!   the object still needs the hook (a started step, a closed generator: no).
+!
+!   The action is a TWO-arg block, [:object :argument | ...], so the object
+!   travels in the key slot and the per-object datum in its own slot.  A block
+!   that closed over either instead would reference the key from a non-key
+!   slot; keep the action a clean block and the key only in the key slot.
+!
+!   #mourn DOES NOT RUN THE ACTION.  Mourning happens wherever the VM
+!   finalizes (GcFinalizeNotification, at an interrupt point), and Grail's
+!   runtime is not reentrant there: measured in a SUnit shard, 132 mournings
+!   landed in the middle of a MODULE COMPILE, and a never-awaited warning run
+!   from one of them -- Python code, importing and compiling as it goes --
+!   left the interrupted compile unable to resolve a module function
+!   (``IR codegen: unhandled name load'', a different AsendLifecycleTestCase
+!   test each run).  So #mourn only queues the hook (pure Smalltalk, safe
+!   anywhere) and _runPending runs the queue at points known to be ordinary
+!   runtime code: gc.collect() -- right after it drains the ephemerons, so a
+!   collection still runs its hooks before it returns, as CPython's does --
+!   and every new registration.  A queued object stays alive until its hook
+!   has run; the queue is emptied at the next of those points.
+! ! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'FinalizerEphemeron'
+  instVarNames: #( referent action argument )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+FinalizerEphemeron category: 'Grail-Weak'
+%
+
+set compile_env: 0
+
+expectvalue /Metaclass3
+doit
+FinalizerEphemeron removeAllMethods.
+FinalizerEphemeron class removeAllMethods.
+%
+
+set compile_env: 0
+
+category: 'Grail-Weak-constructors'
+classmethod: FinalizerEphemeron
+on: anObject do: aTwoArgBlock with: anArgument
+	"Evaluate aTwoArgBlock with anObject and anArgument once anObject has been
+	 reclaimed (at the next safe point -- see the class section).  Answers the
+	 ephemeron, or nil when anObject cannot be watched: an immediate or a
+	 committed object, on which beEphemeron: silently has no effect, so the
+	 watch would sit in the registry forever and never fire.
+
+	 Registering is itself a safe point, so the hooks queued since the last
+	 one run first."
+
+	| ep |
+	self _runPending.
+	(anObject isSpecial or: [anObject isCommitted]) ifTrue: [^ nil].
+	ep := self new _setReferent: anObject action: aTwoArgBlock argument: anArgument.
+	[ep beEphemeron: true] on: Error do: [:ex | ^ nil].
+	self _registry add: ep.
+	^ ep
+%
+
+category: 'Grail-Weak-private'
+classmethod: FinalizerEphemeron
+_registry
+	"The session's pending watches -- see the class section for why there has
+	 to be one, and why it is session-local."
+
+	^ SessionTemps current at: #'GrailFinalizerEphemerons' ifAbsent: [
+		SessionTemps current at: #'GrailFinalizerEphemerons' put: IdentitySet new]
+%
+
+category: 'Grail-Weak-private'
+classmethod: FinalizerEphemeron
+_queue
+	"Hooks whose objects have died, waiting for a safe point: triples of
+	 { action. object. argument }."
+
+	^ SessionTemps current at: #'GrailFinalizerQueue' ifAbsent: [
+		SessionTemps current at: #'GrailFinalizerQueue' put: OrderedCollection new]
+%
+
+category: 'Grail-Weak-finalization'
+classmethod: FinalizerEphemeron
+_runPending
+	"Run every queued hook, oldest first, including any a hook queues while
+	 this runs.  Not reentrant: a hook that registers a watch (asyncio's
+	 finalizer creates an aclose() step) reaches here again, and the nested
+	 call leaves the rest to the loop already running.
+
+	 Each hook is guarded -- one that raises must not stop the others, or
+	 escape into the code that happened to reach this safe point.  The guard
+	 is deliberately not a bare AbstractException handler: the VM's stack
+	 warning has to reach whoever can act on it, so it passes."
+
+	| temps |
+	temps := SessionTemps current.
+	(temps at: #'GrailFinalizerQueue' ifAbsent: [^ self]) isEmpty ifTrue: [^ self].
+	(temps at: #'GrailFinalizerRunning' ifAbsent: [false]) ifTrue: [^ self].
+	temps at: #'GrailFinalizerRunning' put: true.
+	"Take the whole batch and leave an empty queue behind for the hooks to add
+	 to, round after round.  NOT removeFirst per job: measured, it made the
+	 queue cost ~7 us a hook against ~0.06 us for this -- it dominated an
+	 async for loop, which queues one hook per step."
+	[[(temps at: #'GrailFinalizerQueue') isEmpty] whileFalse: [
+		| jobs |
+		jobs := temps at: #'GrailFinalizerQueue'.
+		temps at: #'GrailFinalizerQueue' put: OrderedCollection new.
+		jobs do: [:job |
+			[(job at: 1) value: (job at: 2) value: (job at: 3)]
+				on: AbstractException
+				do: [:ex |
+					((ex isKindOf: AlmostOutOfStack) or: [ex isKindOf: AlmostOutOfStackError])
+						ifTrue: [ex pass].
+					ex return: nil]]]]
+		ensure: [temps at: #'GrailFinalizerRunning' put: false]
+%
+
+category: 'Grail-Weak-private'
+classmethod: FinalizerEphemeron
+_pendingCount
+	"How many objects are being watched -- for tests."
+
+	^ (SessionTemps current at: #'GrailFinalizerEphemerons' ifAbsent: [^ 0]) size
+%
+
+category: 'Grail-Weak-private'
+classmethod: FinalizerEphemeron
+_queuedCount
+	"How many hooks are waiting for a safe point -- for tests."
+
+	^ (SessionTemps current at: #'GrailFinalizerQueue' ifAbsent: [^ 0]) size
+%
+
+category: 'Grail-Weak-private'
+method: FinalizerEphemeron
+_setReferent: anObject action: aTwoArgBlock argument: anArgument
+
+	referent := anObject.
+	action := aTwoArgBlock.
+	argument := anArgument.
+	^ self
+%
+
+category: 'Grail-Weak-testing'
+method: FinalizerEphemeron
+isWatching
+	"Still waiting for its object to die -- for tests."
+
+	^ (SessionTemps current at: #'GrailFinalizerEphemerons' ifAbsent: [^ false])
+		includes: self
+%
+
+category: 'Grail-Weak-finalization'
+method: FinalizerEphemeron
+mourn
+	"Sent by the finalization process once GC finds the referent reachable only
+	 through ephemerons.  Leave the registry, hand the hook to the queue -- the
+	 queue's strong reference is what keeps the object alive until its hook
+	 runs -- and release every slot.  Nothing here runs the hook: this can be
+	 ANY point in the session, a compile included (see the class section)."
+
+	(SessionTemps current at: #'GrailFinalizerEphemerons' ifAbsent: [nil])
+		ifNotNil: [:reg | reg remove: self ifAbsent: []].
+	action == nil ifFalse: [
+		FinalizerEphemeron _queue add: { action. referent. argument }].
+	referent := nil.
+	action := nil.
+	argument := nil
+%
 
 ! ===============================================================================
 ! WeakValueDictionary — mapping whose values are held weakly. Each entry is a

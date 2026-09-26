@@ -156,15 +156,15 @@ testAnAsyncMethodIsACoroutineToo
 category: 'Grail-Tests - Known gaps'
 method: CoroutineObjectsTestCase
 testDroppingAnUnawaitedCoroutineIsSilent
-	"A PLATFORM GAP, decided and documented -- pinned so a green run is not
-	read as more than it is.  CPython's ``RuntimeWarning: coroutine ... was
-	never awaited'' fires from the coroutine's DESTRUCTOR at collection
-	time, and GemStone gives transient session objects no destruction hook
-	to attach that check to; every route that fakes one (a sweep at
-	commit/abort, a warn-on-reuse hook, a weakref registry) answers later
-	and worse than absence.  PyPy's GC gives the same non-promise, and its
-	docs tell users not to rely on the warning.  See docs/Issues.md,
-	'PLATFORM GAP (decided): no unawaited-coroutine warning'.
+	"A KNOWN GAP, pinned so a green run is not read as more than it is.
+	CPython's ``RuntimeWarning: coroutine ... was never awaited'' fires from
+	the coroutine's DESTRUCTOR at collection time.  This used to be recorded
+	as a platform limit -- no destruction hook for transient objects -- and
+	that was wrong: FinalizerEphemeron is one, and the async-generator step
+	objects already warn through it (AsyncgenShutdownHooksTestCase).  What
+	keeps the coroutine silent is a decision still to be made: a watch per
+	coroutine CALL, on the hottest async path.  See docs/Issues.md,
+	'OPEN (decision): no unawaited-coroutine warning'.
 
 	If this test ever FAILS, someone has built the warning -- move the seven
 	pinned test.test_coroutines scoreboard entries and delete the Issues.md
