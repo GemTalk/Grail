@@ -1153,6 +1153,7 @@ run
 	at: #'NoSelfParameterTestCase' put: nil;
 	at: #'NonblockingSocketTestCase' put: nil;
 	at: #'NoneTypeTestCase' put: nil;
+	at: #'NulPathsLongKeysTempfilesTestCase' put: nil;
 	at: #'NoDictAttributesTestCase' put: nil;
 	at: #'NonlocalClosureTestCase' put: nil;
 	at: #'NonlocalDunderClassTestCase' put: nil;
@@ -2565,6 +2566,7 @@ input src/smalltalk/PythonTests/NestedUnpackTestCase.gs
 input src/smalltalk/PythonTests/NextIterTestCase.gs
 input src/smalltalk/PythonTests/NonblockingSocketTestCase.gs
 input src/smalltalk/PythonTests/NoneTypeTestCase.gs
+input src/smalltalk/PythonTests/NulPathsLongKeysTempfilesTestCase.gs
 input src/smalltalk/PythonTests/NoDictAttributesTestCase.gs
 input src/smalltalk/PythonTests/NonlocalClosureTestCase.gs
 input src/smalltalk/PythonTests/NonlocalDunderClassTestCase.gs
