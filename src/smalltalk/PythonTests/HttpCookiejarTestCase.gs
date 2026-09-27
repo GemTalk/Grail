@@ -251,9 +251,8 @@ testOmissionsAreDeliberate
 	   the WINDOW it was still guarding: between open() and chmod the file
 	   used to exist at the process umask.  The helper now creates it with
 	   os.open and mode 0600, as CPython does, and reopens it by name.
-	   os.fdopen is the one name left -- builtin open() refuses a
-	   descriptor too -- so it alone stays on the list, and the mode is
-	   checked rather than assumed.
+	   os.fdopen is the one name left, so it alone stays on the list, and
+	   the mode is checked rather than assumed.
 
 	2. HTTPCookieProcessor.  In CPython it lives in urllib.request, not
 	   here, and it needs the opener/handler chain that Grail's urlopen()

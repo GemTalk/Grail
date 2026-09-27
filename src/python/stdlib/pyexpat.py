@@ -18,12 +18,20 @@ text, CDATA, comments, processing instructions, character references, the five
 predefined entities, and namespace processing when a separator is given. It
 reports well-formedness errors with expat's own codes, messages and positions.
 
-It does NOT implement the DTD engine -- no entity expansion beyond the
-predefined five, no external entities, no validation, no conditional sections.
-`<!DOCTYPE ...>` is recognised and reported through the doctype handlers, and
-its internal subset is skipped rather than interpreted. Those are the parts of
-expat that need a DTD, and a caller that needs them gets a clear
-`XML_ERROR_UNDEFINED_ENTITY` at the reference rather than silently wrong text.
+The DTD is read as far as expat reports it to handlers: the internal subset's
+comments, processing instructions, entity declarations (internal, external
+and unparsed) and notations, each through its handler; internal entities
+expand in content (markup included) and in attribute values; an external
+entity or an external DTD subset goes to ExternalEntityRefHandler, and
+ExternalEntityParserCreate answers a parser for its text.  What is NOT here
+is the rest of the DTD engine: element and attribute-list declarations reach
+only the default handler (no content models, no attribute defaults), there is
+no validation, no conditional sections, and parameter entities are recognised
+but never expanded -- as expat itself behaves under its default
+XML_PARAM_ENTITY_PARSING_NEVER.
+
+Character data arrives in expat's own pieces, which callers see: without
+buffer_text every newline, and every reference, is a call of its own.
 
 Positions are 0-based columns and 1-based lines, as expat reports them.
 """
@@ -64,8 +72,14 @@ class _Errors:
     XML_ERROR_TAG_MISMATCH = 'mismatched tag'
     XML_ERROR_DUPLICATE_ATTRIBUTE = 'duplicate attribute'
     XML_ERROR_JUNK_AFTER_DOC_ELEMENT = 'junk after document element'
+    XML_ERROR_PARAM_ENTITY_REF = 'illegal parameter entity reference'
     XML_ERROR_UNDEFINED_ENTITY = 'undefined entity'
+    XML_ERROR_RECURSIVE_ENTITY_REF = 'recursive entity reference'
+    XML_ERROR_ASYNC_ENTITY = 'asynchronous entity'
     XML_ERROR_BAD_CHAR_REF = 'reference to invalid character number'
+    XML_ERROR_BINARY_ENTITY_REF = 'reference to binary entity'
+    XML_ERROR_ATTRIBUTE_EXTERNAL_ENTITY_REF = 'reference to external entity in attribute'
+    XML_ERROR_EXTERNAL_ENTITY_HANDLING = 'error in processing external entity reference'
     XML_ERROR_UNCLOSED_CDATA_SECTION = 'unclosed CDATA section'
     XML_ERROR_UNBOUND_PREFIX = 'unbound prefix'
     XML_ERROR_XML_DECL = 'XML declaration not well-formed'
@@ -84,9 +98,15 @@ class _Errors:
         'mismatched tag': 7,
         'duplicate attribute': 8,
         'junk after document element': 9,
+        'illegal parameter entity reference': 10,
         'undefined entity': 11,
+        'recursive entity reference': 12,
+        'asynchronous entity': 13,
         'reference to invalid character number': 14,
+        'reference to binary entity': 15,
+        'reference to external entity in attribute': 16,
         'unclosed CDATA section': 20,
+        'error in processing external entity reference': 21,
         'unbound prefix': 27,
         'XML declaration not well-formed': 30,
         'unknown encoding': 18,
@@ -200,8 +220,21 @@ class xmlparser:
         self._seen_root = False
         self._done = False
         self._base = None
-        self._defer = True
-        self._entities = {}       # name -> replacement text, from the subset
+        self._textbuf = []        # character data held back by buffer_text
+        # The DTD, as far as handlers see it.  Shared by reference with any
+        # parser ExternalEntityParserCreate makes, so an entity an external
+        # subset declares is known to the document that loaded it.
+        self._entities = {}       # name -> replacement text (internal)
+        self._external = {}       # name -> (base, sysid, pubid)
+        self._unparsed = {}       # name -> notation (NDATA: binary)
+        self._param_parsing = XML_PARAM_ENTITY_PARSING_NEVER
+        self._standalone = -1
+        self._dtd_skips = False   # undefined entity: skipped, not an error
+        self._keep_decls = True   # false after a PE reference expat skips
+        self._fragment = False    # external parsed entity: content, no root
+        self._dtd_mode = False    # external DTD subset: declarations only
+        self._open_entities = []  # internal entities being expanded
+        self._ref_pos = None      # where the outermost of them was referenced
         self._decoder = None      # incremental decoder, once the encoding is known
         self._rawhead = b''       # bytes held back until it is
         self._encoding_used = None
@@ -218,12 +251,19 @@ class xmlparser:
             except _UndecodableBytes as bad:
                 self._fail_at_undecodable(bad)
         self._buf += data
-        self._scan(isfinal)
+        if self._dtd_mode:
+            self._advance(self._subset(self._buf[self._pos:], isfinal, True))
+        else:
+            self._scan(isfinal)
+        # CPython's pyexpat flushes buffer_text's held text at the end of
+        # every Parse call, not only when another event arrives.
+        self._flush_text()
         if isfinal:
-            if not self._seen_root:
-                self._fail(errors.XML_ERROR_NO_ELEMENTS)
-            if self._stack:
-                self._fail(errors.XML_ERROR_NO_ELEMENTS)
+            if not self._dtd_mode:
+                if not self._seen_root:
+                    self._fail(errors.XML_ERROR_NO_ELEMENTS)
+                if self._stack:
+                    self._fail(errors.XML_ERROR_NO_ELEMENTS)
             self._done = True
         return 1
 
@@ -241,13 +281,21 @@ class xmlparser:
         return self._base
 
     def SetParamEntityParsing(self, flag):
+        """Only decides whether an external DTD subset is asked for:
+        parameter entities themselves are never expanded (see the module
+        docstring)."""
+        self._param_parsing = flag
         return 1
 
+    # Reparse deferral arrived in expat 2.6.0, and this reports 2.5.0 --
+    # which is what callers consult (test_sax skips the "enabled" test on
+    # version_info).  So it is off and cannot be turned on, as it is under a
+    # real 2.5 expat, where CPython's setter does nothing.
     def SetReparseDeferralEnabled(self, enabled):
-        self._defer = bool(enabled)
+        return None
 
     def GetReparseDeferralEnabled(self):
-        return self._defer
+        return False
 
     def GetInputContext(self):
         if self._buf is None:
@@ -255,10 +303,34 @@ class xmlparser:
         return self._buf[self._pos:].encode('utf-8', 'replace')
 
     def ExternalEntityParserCreate(self, context, encoding=None):
+        """A parser for the text of an external entity -- what an
+        ExternalEntityRefHandler feeds the entity to.
+
+        `context` is whatever this parser passed the handler: an entity NAME
+        for a general entity in content, which is read as content (text and
+        any number of elements, no document element required), or None for
+        the external DTD subset, which is read as declarations.  expat's
+        context is an opaque string it re-parses; here the new parser simply
+        takes what it needs from this one -- the handlers, the namespace
+        bindings in scope, and the DTD itself, shared rather than copied."""
         sub = xmlparser(encoding or self.encoding, self._ns_sep)
         for name in _HANDLER_NAMES:
             setattr(sub, name, getattr(self, name, None))
+        for name in ('buffer_text', 'ordered_attributes',
+                     'specified_attributes', 'namespace_prefixes'):
+            setattr(sub, name, getattr(self, name))
         sub._base = self._base
+        sub._entities = self._entities
+        sub._external = self._external
+        sub._unparsed = self._unparsed
+        sub._param_parsing = self._param_parsing
+        sub._standalone = self._standalone
+        if context is None:
+            sub._dtd_mode = True
+        else:
+            sub._fragment = True
+            sub._seen_root = True
+            sub._ns_map = [dict(self._ns_map[-1])]
         return sub
 
     def UseForeignDTD(self, flag=True):
@@ -377,6 +449,10 @@ class xmlparser:
         code = errors.codes.get(message, 2)
         lineno = self._line if line is None else line
         offset = self._col if col is None else col
+        if self._ref_pos is not None:
+            # Inside an internal entity's replacement text, positions are
+            # in that text; expat blames the reference in the document.
+            lineno, offset = self._ref_pos
         self.ErrorCode = code
         self.ErrorLineNumber = lineno
         self.ErrorColumnNumber = offset
@@ -414,12 +490,54 @@ class xmlparser:
     def _call(self, name, *args):
         h = getattr(self, name, None)
         if h is not None:
-            h(*args)
+            self._flush_text()
+            return h(*args)
+        return None
 
     def _default(self, text):
         h = self.DefaultHandlerExpand or self.DefaultHandler
         if h is not None:
+            self._flush_text()
             h(text)
+
+    def _emit_chars(self, text):
+        """Character data, in expat's pieces.
+
+        Without buffer_text expat hands a text run over a piece at a time,
+        and callers see the pieces: every newline is a call of its own, as is
+        each reference (the caller splits on those).  test_sax's
+        CDATAHandlerTest compares each call against the text between two
+        newlines.  With buffer_text the pieces are held and joined, and go
+        out as one call before the next other event or at the end of Parse --
+        which is what ElementTree and minidom, both of which set it, see."""
+        if not text:
+            return
+        h = self.CharacterDataHandler
+        if h is None:
+            self._default(text)
+            return
+        if self.buffer_text:
+            self._textbuf.append(text)
+            return
+        start = 0
+        while True:
+            nl = text.find('\n', start)
+            if nl < 0:
+                if start < len(text):
+                    h(text[start:])
+                return
+            if nl > start:
+                h(text[start:nl])
+            h('\n')
+            start = nl + 1
+
+    def _flush_text(self):
+        if self._textbuf:
+            text = ''.join(self._textbuf)
+            self._textbuf = []
+            h = self.CharacterDataHandler
+            if h is not None:
+                h(text)
 
     # ------------------------------------------------------------- scanning
 
@@ -455,10 +573,7 @@ class xmlparser:
                 return False
             text = buf[i + 4:end]
             self._advance(end + 3 - i)
-            if self.CommentHandler is not None:
-                self.CommentHandler(text)
-            else:
-                self._default('<!--%s-->' % text)
+            self._comment(text)
             return True
         if rest.startswith('<![CDATA['):
             end = buf.find(']]>', i + 9)
@@ -469,8 +584,7 @@ class xmlparser:
             text = buf[i + 9:end]
             self._advance(end + 3 - i)
             self._call('StartCdataSectionHandler')
-            if text:
-                self._emit_text(text)
+            self._emit_chars(text)
             self._call('EndCdataSectionHandler')
             return True
         if rest.startswith('<?'):
@@ -543,25 +657,107 @@ class xmlparser:
         raw = buf[i:end]
         if ']]>' in raw:
             self._fail(errors.XML_ERROR_INVALID_TOKEN)
-        if not self._seen_root and raw.strip():
-            self._fail(errors.XML_ERROR_SYNTAX)
-        if self._done and raw.strip():
-            self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
-        if not self._stack and raw.strip():
-            self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
+        if not self._fragment:
+            if not self._seen_root and raw.strip():
+                self._fail(errors.XML_ERROR_SYNTAX)
+            if self._done and raw.strip():
+                self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
+            if not self._stack and raw.strip():
+                self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
         tline, tcol = self._line, self._col
         self._advance(end - i)
-        if self._stack:
-            self._emit_text(self._expand(raw, tline, tcol))
+        if self._stack or self._fragment:
+            self._content(raw, tline, tcol)
         else:
             self._default(raw)
         return True
 
-    def _emit_text(self, text):
-        if text and self.CharacterDataHandler is not None:
-            self.CharacterDataHandler(text)
-        elif text:
-            self._default(text)
+    def _content(self, raw, line, col):
+        """A text run inside an element: its character data, and what each
+        reference in it stands for.  Every reference ends the piece before
+        it, as in expat; an entity reference can stand for markup, or for an
+        external entity a handler has to fetch."""
+        i, n = 0, len(raw)
+        while i < n:
+            amp = raw.find('&', i)
+            if amp < 0:
+                self._emit_chars(raw[i:])
+                return
+            if amp > i:
+                self._emit_chars(raw[i:amp])
+            eline, ecol = self._offset_pos(line, col, raw, amp)
+            end = raw.find(';', amp)
+            if end < 0:
+                self._fail(errors.XML_ERROR_INVALID_TOKEN, eline, ecol)
+            ref = raw[amp + 1:end]
+            i = end + 1
+            if ref.startswith('#'):
+                self._emit_chars(self._char_ref(ref, eline, ecol))
+            elif ref in _PREDEFINED:
+                self._emit_chars(_PREDEFINED[ref])
+            else:
+                self._entity_in_content(ref, eline, ecol)
+
+    def _entity_in_content(self, name, line, col):
+        if name in self._entities:
+            text = self._entities[name]
+            if '<' in text or '&' in text:
+                self._expand_entity_text(name, text, line, col)
+            else:
+                self._emit_chars(text)
+            return
+        if name in self._unparsed:
+            self._fail(errors.XML_ERROR_BINARY_ENTITY_REF, line, col)
+        if name in self._external:
+            # No handler: expat drops the reference without a word.
+            h = self.ExternalEntityRefHandler
+            if h is not None:
+                base, sysid, pubid = self._external[name]
+                self._flush_text()
+                if _refused(h(name, base, sysid, pubid)):
+                    self._fail(errors.XML_ERROR_EXTERNAL_ENTITY_HANDLING,
+                               line, col)
+            return
+        if self._skips_undefined():
+            if self.SkippedEntityHandler is not None:
+                self._call('SkippedEntityHandler', name, 0)
+            else:
+                self._default('&%s;' % name)
+            return
+        self._fail(errors.XML_ERROR_UNDEFINED_ENTITY, line, col)
+
+    def _skips_undefined(self):
+        """expat's rule for a reference to an entity nobody declared: an
+        error, unless the DTD could have declared it somewhere this parser
+        did not read -- an external subset, or a parameter entity -- and the
+        document does not claim to be standalone.  Then it is skipped."""
+        return self._dtd_skips and self._standalone != 1
+
+    def _expand_entity_text(self, name, text, line, col):
+        """An internal entity whose replacement text is markup, or holds
+        references: scanned as content where the reference stood.  expat
+        blames any error inside it on the reference, and requires its
+        elements to balance within it."""
+        if name in self._open_entities:
+            self._fail(errors.XML_ERROR_RECURSIVE_ENTITY_REF, line, col)
+        saved = (self._buf, self._pos, self._line, self._col)
+        depth = len(self._stack)
+        outer = self._ref_pos is None
+        if outer:
+            self._ref_pos = (line, col)
+        self._open_entities.append(name)
+        try:
+            self._buf, self._pos = text, 0
+            self._scan(True)
+            if len(self._stack) != depth:
+                self._fail(errors.XML_ERROR_ASYNC_ENTITY)
+        finally:
+            self._open_entities.pop()
+            self._buf, self._pos, self._line, self._col = saved
+            self.CurrentLineNumber = self._line
+            self.CurrentColumnNumber = self._col
+            if outer:
+                self._ref_pos = None
 
     # ----------------------------------------------------- pieces of markup
 
@@ -575,9 +771,15 @@ class xmlparser:
             k += 1
         target, data = body[:k], body[k:].lstrip()
         if self.ProcessingInstructionHandler is not None:
-            self.ProcessingInstructionHandler(target, data)
+            self._call('ProcessingInstructionHandler', target, data)
         else:
             self._default('<?%s?>' % body)
+
+    def _comment(self, text):
+        if self.CommentHandler is not None:
+            self._call('CommentHandler', text)
+        else:
+            self._default('<!--%s-->' % text)
 
     def _xml_decl(self, body):
         attrs = {}
@@ -592,98 +794,243 @@ class xmlparser:
             if close < 0:
                 self._fail(errors.XML_ERROR_XML_DECL)
             attrs[key] = body[at + len(key) + 2:close]
-        if 'version' not in attrs:
+        # An external entity opens with a TEXT declaration, where the version
+        # is optional and standalone has no meaning.
+        external = self._fragment or self._dtd_mode
+        if 'version' not in attrs and not external:
             self._fail(errors.XML_ERROR_XML_DECL)
         standalone = -1
         if attrs.get('standalone') == 'yes':
             standalone = 1
         elif attrs.get('standalone') == 'no':
             standalone = 0
+        if not external:
+            self._standalone = standalone
         if self.XmlDeclHandler is not None:
-            self.XmlDeclHandler(attrs.get('version'), attrs.get('encoding'),
-                                standalone)
+            self._call('XmlDeclHandler', attrs.get('version'),
+                       attrs.get('encoding'), standalone)
         else:
             self._default('<?%s?>' % body)
 
     def _scan_doctype(self, isfinal):
-        """`<!DOCTYPE name ...>`, with the internal subset SKIPPED.
+        """`<!DOCTYPE name [ExternalID] [[subset]]>`, in expat's order.
 
-        Skipped rather than interpreted: the subset is the DTD engine, which
-        this parser does not have. The doctype handlers still fire, so a
-        caller that only wants to see the declaration gets it; a caller that
-        needs entities declared there gets an undefined-entity error at the
-        reference, which is a better answer than silently empty text.
+        StartDoctypeDeclHandler first; then the internal subset's
+        declarations, each through its handler; then -- when the declaration
+        names one and parameter-entity parsing is on -- the external subset,
+        through ExternalEntityRefHandler with a None context; and last
+        EndDoctypeDeclHandler.  test_sax's LexicalHandlerTest counts a comment
+        inside the subset, and its DTD handler test a notation and an
+        unparsed entity declared there.
         """
         buf, i = self._buf, self._pos
-        j, depth, quote = i + 9, 0, ''
-        while j < len(buf):
-            c = buf[j]
+        found = self._doctype_end(i + 9)
+        if found is None:
+            if isfinal:
+                self._fail(errors.XML_ERROR_UNCLOSED_TOKEN)
+            return False
+        j, subset = found
+        head = buf[i + 9:j if subset is None else subset[0] - 1]
+        toks = _decl_tokens(head)
+        if not toks or toks[0][0] != 'name':
+            self._fail(errors.XML_ERROR_SYNTAX)
+        name = toks[0][1]
+        sysid, pubid, _ = self._external_id(toks, 1)
+        self._advance(j + 1 - i)
+        self._call('StartDoctypeDeclHandler', name, sysid, pubid,
+                   0 if subset is None else 1)
+        if subset is not None:
+            self._subset(buf[subset[0]:subset[1]], True, False)
+        if sysid is not None:
+            self._dtd_skips = True
+            h = self.ExternalEntityRefHandler
+            wanted = self._param_parsing == XML_PARAM_ENTITY_PARSING_ALWAYS or (
+                self._param_parsing == XML_PARAM_ENTITY_PARSING_UNLESS_STANDALONE
+                and self._standalone != 1)
+            if h is not None and wanted:
+                self._flush_text()
+                if _refused(h(None, self._base, sysid, pubid)):
+                    self._fail(errors.XML_ERROR_EXTERNAL_ENTITY_HANDLING)
+        self._call('EndDoctypeDeclHandler')
+        return True
+
+    def _doctype_end(self, k):
+        """(index of the closing ``>'', (start, end) of the internal subset
+        or None), or None while the declaration is incomplete.  The subset is
+        walked a declaration at a time, so a ``]'' or ``>'' inside a comment
+        or a quoted value does not end it."""
+        buf, n, quote = self._buf, len(self._buf), ''
+        while k < n:
+            c = buf[k]
             if quote:
                 if c == quote:
                     quote = ''
             elif c in '"\'':
                 quote = c
             elif c == '[':
-                depth += 1
-            elif c == ']':
-                depth -= 1
-            elif c == '>' and depth <= 0:
                 break
-            j += 1
+            elif c == '>':
+                return k, None
+            k += 1
         else:
-            if isfinal:
-                self._fail(errors.XML_ERROR_UNCLOSED_TOKEN)
-            return False
-        body = buf[i + 9:j]
-        subset = ''
-        if '[' in body:
-            lo = body.index('[')
-            hi = body.rfind(']')
-            subset = body[lo + 1:hi] if hi > lo else ''
-            body = body[:lo]
-        parts = body.split()
-        name = parts[0] if parts else ''
-        sysid = pubid = None
-        if 'PUBLIC' in parts:
-            k = parts.index('PUBLIC')
-            pubid = parts[k + 1].strip('"\'') if len(parts) > k + 1 else None
-            sysid = parts[k + 2].strip('"\'') if len(parts) > k + 2 else None
-        elif 'SYSTEM' in parts:
-            k = parts.index('SYSTEM')
-            sysid = parts[k + 1].strip('"\'') if len(parts) > k + 1 else None
-        self._advance(j + 1 - i)
-        self._collect_subset_entities(subset)
-        self._call('StartDoctypeDeclHandler', name, sysid, pubid, bool(subset))
-        self._call('EndDoctypeDeclHandler')
-        return True
-
-    def _collect_subset_entities(self, subset):
-        """Pick up simple `<!ENTITY name "text">` declarations only.
-
-        A one-line internal entity is common enough in real documents to be
-        worth honouring; anything with a parameter entity, NDATA or an
-        external id is left alone, so a reference to it still reports
-        undefined rather than expanding to something invented here.
-        """
-        k = 0
+            return None
+        lo = k = k + 1
         while True:
-            k = subset.find('<!ENTITY', k)
-            if k < 0:
+            if k >= n:
+                return None
+            item = _next_decl(buf, k)
+            if item is None:
+                return None
+            kind, end = item
+            if kind == 'close':
+                hi, k = k, end
+                while k < n and buf[k].isspace():
+                    k += 1
+                if k >= n:
+                    return None
+                if buf[k] != '>':
+                    self._fail(errors.XML_ERROR_SYNTAX)
+                return k, (lo, hi)
+            if kind == 'bad':
+                self._fail(errors.XML_ERROR_SYNTAX)
+            k = end
+
+    def _subset(self, text, isfinal, external):
+        """Report the declarations in DTD text; answer how much was consumed.
+        `external` is the external subset, fed in chunks, where a ``]'' is
+        an error rather than the end."""
+        k, n = 0, len(text)
+        while k < n:
+            item = _next_decl(text, k)
+            if item is None:
+                if isfinal:
+                    self._fail(errors.XML_ERROR_UNCLOSED_TOKEN)
+                return k
+            kind, end = item
+            piece = text[k:end]
+            if kind == 'ws':
+                self._default(piece)
+            elif kind == 'comment':
+                self._comment(piece[4:-3])
+            elif kind == 'pi':
+                self._pi(piece[2:-2])
+            elif kind == 'decl':
+                self._declaration(piece)
+            elif kind == 'peref':
+                # Never expanded (XML_PARAM_ENTITY_PARSING_NEVER is all this
+                # implements), and once one has been skipped expat stops
+                # processing the entity declarations after it: the skipped
+                # text could have declared any of them first.
+                self._dtd_skips = True
+                if self._standalone != 1:
+                    self._keep_decls = False
+                self._default(piece)
+            else:
+                self._fail(errors.XML_ERROR_SYNTAX)
+            k = end
+        return k
+
+    def _declaration(self, piece):
+        if piece.startswith('<!ENTITY') and piece[8:9].isspace():
+            self._entity_decl(piece[8:-1])
+        elif piece.startswith('<!NOTATION') and piece[10:11].isspace():
+            self._notation_decl(piece[10:-1])
+        else:
+            # ELEMENT and ATTLIST: no content models or attribute defaults
+            # here, so only the default handler sees them.
+            self._default(piece)
+
+    def _entity_decl(self, body):
+        toks = _decl_tokens(body)
+        is_pe = bool(toks) and toks[0] == ('name', '%')
+        if is_pe:
+            toks = toks[1:]
+        if not toks or toks[0][0] != 'name' or len(toks) < 2:
+            self._fail(errors.XML_ERROR_SYNTAX)
+        name, rest = toks[0][1], toks[1:]
+        if not self._keep_decls:
+            return
+        base = self._base
+        if rest[0][0] == 'lit':
+            value = self._entity_value(rest[0][1])
+            if not is_pe:
+                if self._declared(name):
+                    return          # the first declaration is binding
+                self._entities[name] = value
+            self._call('EntityDeclHandler', name, int(is_pe), value, base,
+                       None, None, None)
+            return
+        sysid, pubid, k = self._external_id(rest, 0)
+        if sysid is None:
+            self._fail(errors.XML_ERROR_SYNTAX)
+        notation = None
+        if k < len(rest) and rest[k] == ('name', 'NDATA'):
+            if k + 1 >= len(rest) or is_pe:
+                self._fail(errors.XML_ERROR_SYNTAX)
+            notation = rest[k + 1][1]
+        if not is_pe:
+            if self._declared(name):
                 return
-            stop = subset.find('>', k)
-            if stop < 0:
-                return
-            decl = subset[k + 8:stop].strip()
-            k = stop + 1
-            if decl.startswith('%') or 'NDATA' in decl \
-               or 'SYSTEM' in decl or 'PUBLIC' in decl:
-                continue
-            bits = decl.split(None, 1)
-            if len(bits) != 2:
-                continue
-            name, value = bits[0], bits[1].strip()
-            if len(value) >= 2 and value[0] in '"\'' and value[-1] == value[0]:
-                self._entities[name] = value[1:-1]
+            if notation is not None:
+                self._unparsed[name] = notation
+                if self.UnparsedEntityDeclHandler is not None:
+                    self._call('UnparsedEntityDeclHandler', name, base, sysid,
+                               pubid, notation)
+                    return
+            else:
+                self._external[name] = (base, sysid, pubid)
+        self._call('EntityDeclHandler', name, int(is_pe), None, base, sysid,
+                   pubid, notation)
+
+    def _declared(self, name):
+        return (name in self._entities or name in self._external
+                or name in self._unparsed)
+
+    def _entity_value(self, literal):
+        """An entity's replacement text: character references are expanded
+        when it is DECLARED, general entity references when it is used."""
+        out, i = [], 0
+        while True:
+            amp = literal.find('&#', i)
+            if amp < 0:
+                out.append(literal[i:])
+                return ''.join(out)
+            end = literal.find(';', amp)
+            if end < 0:
+                self._fail(errors.XML_ERROR_INVALID_TOKEN)
+            out.append(literal[i:amp])
+            out.append(self._char_ref(literal[amp + 1:end], None, None))
+            i = end + 1
+
+    def _notation_decl(self, body):
+        toks = _decl_tokens(body)
+        if not toks or toks[0][0] != 'name':
+            self._fail(errors.XML_ERROR_SYNTAX)
+        sysid, pubid, _ = self._external_id(toks, 1, notation=True)
+        if sysid is None and pubid is None:
+            self._fail(errors.XML_ERROR_SYNTAX)
+        self._call('NotationDeclHandler', toks[0][1], self._base, sysid, pubid)
+
+    def _external_id(self, toks, k, notation=False):
+        """(sysid, pubid, index after them) for an ExternalID starting at
+        toks[k], or (None, None, k) when there is none.  A NOTATION may give
+        a public id alone."""
+        if k >= len(toks):
+            return None, None, k
+        if toks[k] == ('name', 'SYSTEM'):
+            if k + 1 >= len(toks) or toks[k + 1][0] != 'lit':
+                self._fail(errors.XML_ERROR_SYNTAX)
+            return toks[k + 1][1], None, k + 2
+        if toks[k] == ('name', 'PUBLIC'):
+            if k + 1 >= len(toks) or toks[k + 1][0] != 'lit':
+                self._fail(errors.XML_ERROR_SYNTAX)
+            pubid = toks[k + 1][1]
+            if k + 2 < len(toks) and toks[k + 2][0] == 'lit':
+                return toks[k + 2][1], pubid, k + 3
+            if not notation:
+                self._fail(errors.XML_ERROR_SYNTAX)
+            return None, pubid, k + 2
+        return None, None, k
 
     # --------------------------------------------------------- element tags
 
@@ -697,9 +1044,9 @@ class xmlparser:
         raw_name = body[:k]
         if not raw_name:
             self._fail(errors.XML_ERROR_INVALID_TOKEN)
-        if self._done:
+        if self._done and not self._fragment:
             self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
-        attrs_raw = self._parse_attrs(body[k:])
+        attrs_raw = self._parse_attrs(body, k)
         self._advance(consumed)
         self._seen_root = True
 
@@ -725,9 +1072,14 @@ class xmlparser:
         if selfclose:
             self._end_element(raw_name, synthetic=True)
 
-    def _parse_attrs(self, text):
-        """`name="value"` pairs, in source order, values reference-expanded."""
-        out, i, n = [], 0, len(text)
+    def _parse_attrs(self, body, i):
+        """`name="value"` pairs, in source order, values reference-expanded.
+        `body` is the tag after its ``<'', its attributes from body[i:] on;
+        the scanner is still at the ``<'', so a value's position is the
+        tag's plus its offset -- which is where expat blames a bad reference
+        inside it."""
+        text, n = body, len(body)
+        out = []
         seen = set()
         while i < n:
             while i < n and text[i].isspace():
@@ -758,18 +1110,21 @@ class xmlparser:
             if name in seen:
                 self._fail(errors.XML_ERROR_DUPLICATE_ATTRIBUTE)
             seen.add(name)
-            # newlines inside an attribute value normalise to spaces
-            value = self._expand(value).replace('\n', ' ').replace('\t', ' ')
-            out.append((name, value))
+            vline, vcol = self._offset_pos(self._line, self._col,
+                                           '<' + body, i - len(value))
+            out.append((name, self._expand(value, vline, vcol)))
         return out
 
     def _build_attrs(self, attrs_raw):
         pairs = []
         for an, av in attrs_raw:
+            # Under namespace processing expat consumes the declarations: they
+            # reach StartNamespaceDeclHandler and are never attributes, with
+            # or without namespace_prefixes.  Passing them through gave
+            # XMLGenerator each xmlns twice (test_sax test_5027_1).
             if self._ns_sep is not None and (
                     an == 'xmlns' or an.startswith('xmlns:')):
-                if not self.namespace_prefixes:
-                    continue
+                continue
             pairs.append((self._expand_name(an, is_attr=True), av))
         if self.ordered_attributes:
             flat = []
@@ -780,7 +1135,11 @@ class xmlparser:
         return dict(pairs)
 
     def _expand_name(self, raw, is_attr):
-        """`prefix:local` -> `uri<sep>local` when namespace processing is on."""
+        """`prefix:local` -> `uri<sep>local` when namespace processing is on.
+
+        namespace_prefixes asks for the prefix as well, as a third part:
+        `uri<sep>local<sep>prefix` -- expatreader turns that back into the
+        qname.  A name in the default namespace has no prefix to add."""
         if self._ns_sep is None:
             return raw
         if ':' in raw:
@@ -788,10 +1147,13 @@ class xmlparser:
             if prefix == 'xmlns':
                 return raw
             if prefix == 'xml':
-                return 'http://www.w3.org/XML/1998/namespace' + self._ns_sep + local
-            uri = self._ns_map[-1].get(prefix)
-            if uri is None:
-                self._fail(errors.XML_ERROR_UNBOUND_PREFIX)
+                uri = 'http://www.w3.org/XML/1998/namespace'
+            else:
+                uri = self._ns_map[-1].get(prefix)
+                if uri is None:
+                    self._fail(errors.XML_ERROR_UNBOUND_PREFIX)
+            if self.namespace_prefixes:
+                return uri + self._ns_sep + local + self._ns_sep + prefix
             return uri + self._ns_sep + local
         if is_attr:
             return raw           # an unprefixed attribute is NOT in the default ns
@@ -816,50 +1178,142 @@ class xmlparser:
 
     # ----------------------------------------------------------- references
 
-    def _expand(self, text, base_line=None, base_col=None):
-        """Character references and entity references inside text/attributes.
-
-        `base_line`/`base_col` say where `text` started, so a bad reference is
-        blamed at its own `&` the way expat blames it. Omitted for attribute
-        values, where the scanner position is already close enough and the
-        text has been lifted out of its quotes.
-        """
-        if '&' not in text:
-            return text
+    def _expand(self, text, line=None, col=None, at=None):
+        """An attribute value: its references expanded, and each literal
+        tab or newline normalised to a space -- but not one a character
+        reference produced, which is why the two happen together here
+        rather than as a replace() over the result.  An internal entity's
+        replacement text is expanded the same way, recursively, with any
+        error in it blamed `at` the reference that brought it in."""
         out, i, n = [], 0, len(text)
         while i < n:
-            c = text[i]
-            if c != '&':
-                out.append(c)
-                i += 1
-                continue
-            amp = i
-            if base_line is None:
-                eline = ecol = None
+            amp = text.find('&', i)
+            if amp < 0:
+                out.append(_normalise_space(text[i:]))
+                break
+            out.append(_normalise_space(text[i:amp]))
+            if at is not None:
+                eline, ecol = at
+            elif line is not None:
+                eline, ecol = self._offset_pos(line, col, text, amp)
             else:
-                eline, ecol = self._offset_pos(base_line, base_col, text, amp)
-            end = text.find(';', i)
+                eline = ecol = None
+            end = text.find(';', amp)
             if end < 0:
                 self._fail(errors.XML_ERROR_INVALID_TOKEN, eline, ecol)
-            ref = text[i + 1:end]
+            ref = text[amp + 1:end]
             i = end + 1
             if ref.startswith('#'):
-                try:
-                    cp = int(ref[2:], 16) if ref[1:2].lower() == 'x' else int(ref[1:])
-                except ValueError:
-                    self._fail(errors.XML_ERROR_BAD_CHAR_REF, eline, ecol)
-                if cp == 0 or cp > 0x10FFFF or 0xD800 <= cp <= 0xDFFF:
-                    self._fail(errors.XML_ERROR_BAD_CHAR_REF, eline, ecol)
-                out.append(chr(cp))
+                out.append(self._char_ref(ref, eline, ecol))
             elif ref in _PREDEFINED:
                 out.append(_PREDEFINED[ref])
             elif ref in self._entities:
-                out.append(self._entities[ref])
-            elif self.SkippedEntityHandler is not None:
-                self.SkippedEntityHandler(ref, False)
-            else:
+                if ref in self._open_entities:
+                    self._fail(errors.XML_ERROR_RECURSIVE_ENTITY_REF,
+                               eline, ecol)
+                self._open_entities.append(ref)
+                try:
+                    out.append(self._expand(self._entities[ref],
+                                            at=(eline, ecol)))
+                finally:
+                    self._open_entities.pop()
+            elif ref in self._unparsed:
+                self._fail(errors.XML_ERROR_BINARY_ENTITY_REF, eline, ecol)
+            elif ref in self._external:
+                self._fail(errors.XML_ERROR_ATTRIBUTE_EXTERNAL_ENTITY_REF,
+                           eline, ecol)
+            elif not self._skips_undefined():
+                # (skipped in an attribute means dropped: no handler is told)
                 self._fail(errors.XML_ERROR_UNDEFINED_ENTITY, eline, ecol)
         return ''.join(out)
+
+    def _char_ref(self, ref, line, col):
+        """The character `&#...;` stands for; `ref` is the part after ``&''."""
+        try:
+            cp = int(ref[2:], 16) if ref[1:2].lower() == 'x' else int(ref[1:])
+        except ValueError:
+            self._fail(errors.XML_ERROR_BAD_CHAR_REF, line, col)
+        if cp == 0 or cp > 0x10FFFF or 0xD800 <= cp <= 0xDFFF:
+            self._fail(errors.XML_ERROR_BAD_CHAR_REF, line, col)
+        return chr(cp)
+
+
+def _normalise_space(text):
+    if '\n' in text or '\t' in text or '\r' in text:
+        return text.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ')
+    return text
+
+
+def _refused(result):
+    """Whether an ExternalEntityRefHandler's answer is expat's failure.  Only
+    a zero is: expat tests the C int for zero, and a handler that returns
+    None -- the common case for one that simply does its work -- is not a
+    refusal here."""
+    return result is not None and result == 0
+
+
+def _decl_tokens(text):
+    """The words of a declaration body, a quoted literal counting as ONE
+    word: [('name', 'PUBLIC'), ('lit', '-//X//EN')].  A split() broke a
+    public id at its spaces."""
+    toks, k, n = [], 0, len(text)
+    while k < n:
+        c = text[k]
+        if c.isspace():
+            k += 1
+        elif c in '"\'':
+            end = text.find(c, k + 1)
+            if end < 0:
+                return toks + [('bad', text[k:])]
+            toks.append(('lit', text[k + 1:end]))
+            k = end + 1
+        else:
+            start = k
+            while k < n and not text[k].isspace() and text[k] not in '"\'':
+                k += 1
+            toks.append(('name', text[start:k]))
+    return toks
+
+
+def _next_decl(text, k):
+    """(kind, end) for the DTD item starting at text[k], or None while it is
+    incomplete.  Kinds: 'ws', 'comment', 'pi', 'decl' (<!ENTITY ...> and its
+    kind, with quoted values respected), 'peref' (%name;), 'close' (the
+    ``]'' ending an internal subset), 'bad'."""
+    n = len(text)
+    c = text[k]
+    if c.isspace():
+        end = k + 1
+        while end < n and text[end].isspace():
+            end += 1
+        return 'ws', end
+    if text.startswith('<!--', k):
+        end = text.find('-->', k + 4)
+        return None if end < 0 else ('comment', end + 3)
+    if text.startswith('<?', k):
+        end = text.find('?>', k + 2)
+        return None if end < 0 else ('pi', end + 2)
+    if text.startswith('<!', k):
+        j, quote = k + 2, ''
+        while j < n:
+            ch = text[j]
+            if quote:
+                if ch == quote:
+                    quote = ''
+            elif ch in '"\'':
+                quote = ch
+            elif ch == '>':
+                return 'decl', j + 1
+            j += 1
+        return None
+    if c == '<' and n - k < 4 and '<!--'.startswith(text[k:]):
+        return None
+    if c == '%':
+        end = text.find(';', k)
+        return None if end < 0 else ('peref', end + 1)
+    if c == ']':
+        return 'close', k + 1
+    return 'bad', k
 
 
 class _UndecodableBytes(Exception):
