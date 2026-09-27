@@ -734,6 +734,7 @@ run
 	at: #'CheckWarningsHelperTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassTypeParamsTestCase' put: nil;
+	at: #'TypeParamScopesTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
 	at: #'GemstoneContinuationTestCase' put: nil;
@@ -2137,6 +2138,7 @@ input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
 input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
+input src/smalltalk/PythonTests/TypeParamScopesTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs

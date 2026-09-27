@@ -1,6 +1,13 @@
 # PEP 695 type parameters on a CLASS: ``class A[T]'' must answer ``(T,)'' from
 # __type_params__, where T is a typing.TypeVar.
 #
+# SUPERSEDED FOR MOST CLASSES, and kept as a regression net.  The parser now
+# rewrites ``class A[T]'' into the annotation scope CPython builds, binding T
+# to a TypeVar made by _typing (which, unlike typing, is safe to import while a
+# class is being defined) and storing __type_params__ on the finished class --
+# see tests/python/type_param_scopes.py.  What follows still describes a class
+# nested DIRECTLY in a class body, the one place the rewrite does not run.
+#
 # Grail's class parser called skipTypeParams -- which already ANSWERS the names,
 # because the def parser has stored them since f.__type_params__ became
 # observable -- and threw the answer away, setting an empty array.  So the names

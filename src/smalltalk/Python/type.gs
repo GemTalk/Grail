@@ -259,16 +259,27 @@ __new__: mcls _: aName _: bases _: ns
 		___grailNsStore___:value: writes to the namespace and the class as each
 		statement runs.  What it cannot know about is a write the metaclass
 		itself made between the body finishing and this call, which is exactly
-		what this replays."
+		what this replays -- and ONLY that.  A body ``def'' sits in the mapping
+		as the method read back off the class, and storing it again made the
+		compiled method a data attribute holding a bound method (see
+		object class >> ___grailDispatchMetaclass___ for what that broke), so a
+		binding the metaclass left as it found it is skipped."
 		(ns @env0:isNil @env0:not and: [ns @env0:isEmpty @env0:not]) ifTrue: [
 			ns @env0:keysAndValuesDo: [:k :v |
 				"``__classcell__'' is protocol, not a class attribute.  CPython
 				consumes it here and never stores it on the class -- copying it
 				across would leave a stray attribute on every class whose methods
 				mention __class__."
-				(k @env0:asString @env0:= '__classcell__') @env0:ifFalse: [
-					[pending ___pyAttrStore___: k @env0:asSymbol put: v]
-						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]].
+				"Replayed when the metaclass changed it -- or when the class does
+				not have it at all, which is a __prepare__ that SEEDED the
+				namespace with a name the body never bound."
+				((k @env0:asString @env0:= '__classcell__') @env0:not
+					and: [(pending ___grailNamespaceChanged___: k value: v)
+						or: [[pending ___pyAttrLoad___: k @env0:asSymbol. false]
+							@env0:on: AbstractException do: [:ex | ex @env0:return: true]]])
+						@env0:ifTrue: [
+						[pending ___pyAttrStore___: k @env0:asSymbol put: v]
+							@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]].
 		"BUILD THE ENUM'S MEMBERS, if this class deferred them.  CPython reaches
 		EnumType.__new__ through exactly this call -- ``super().__new__'' from
 		inside a metaclass __new__ -- and THAT is where an enum's members are

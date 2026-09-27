@@ -3290,6 +3290,11 @@ parseStatement
 	tok := self peek.
 	tok ifNil: [^Array new].
 
+	"PEP 695: ``class C[T]'' and ``type A[T] = V'' are rewritten, in the token
+	stream, into the scope function CPython's compiler builds -- see
+	___rewriteTypeParamStatement___.  What follows then parses its ``def''."
+	self ___rewriteTypeParamStatement___ ifTrue: [tok := self peek].
+
 	"Compound statements"
 	(tok isKeyword: 'if') ifTrue: [^Array with: self parseIf].
 	(tok isKeyword: 'while') ifTrue: [^Array with: self parseWhile].
@@ -5387,6 +5392,382 @@ parseMatchClassPattern: clsNode from: tok
 		kwdAttrs: kwNames;
 		kwdPatterns: kwPats;
 		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___rewriteTypeParamStatement___
+	"PEP 695 type parameters on a CLASS or a TYPE ALIAS, by rewriting the tokens
+	into what CPython's compiler builds -- an annotation scope that binds the
+	parameters, with the definition inside it:
+
+	    @deco
+	    class C[T: int](Base, metaclass=M): body
+
+	becomes
+
+	    def ___generic_parameters_of_C___():
+	        ___typing___ = __import__('_typing')
+	        T = ___typing___._grail_type_param(0, 'T', lambda: int, None, None)
+	        class C(Base, ___typing___._grail_generic_base((T,)), metaclass=M):
+	            body
+	        C.__type_params__ = (T,)
+	        return C
+	    C = deco(___generic_parameters_of_C___())
+	    del ___generic_parameters_of_C___
+
+	and ``type A[T] = V'' becomes the same function returning
+	``___typing___._grail_type_alias('A', lambda: V, (T,))''.
+
+	WHY TOKENS, and not an AST built by hand.  The parser keeps scope books as
+	it goes -- declared writes, reads, globals, nonlocals, the class-nesting
+	count, the private-name mangling stack -- and a synthesized FunctionDefAst
+	would have to reproduce every one of them to be compiled correctly.
+	Rewriting the tokens in place lets the ordinary def/class/assign parsers
+	keep those books, so T is an ordinary local of the scope function and an
+	ordinary free variable everywhere inside it: the class body, its methods,
+	its lazily-evaluated annotations (``class Bar[T]: x: T''), a bound that
+	names an earlier parameter.  None of that was reachable before, when only
+	the NAMES were kept (skipTypeParams) and T resolved to whatever the
+	enclosing scope happened to hold.
+
+	The generic base is CPython's too: _Py_subscript_generic appends
+	``Generic[*params]'' after the positional bases, which is what makes
+	``class X[T](NamedTuple)'' have __orig_bases__ ``(NamedTuple, Generic[T])''
+	and ``X[int]'' work at all.  The scope function is transparent to
+	__qualname__ (CallAst class >> ___isTypeParamScope___:), as CPython's
+	annotation scope is.
+
+	NOT DONE directly in a CLASS BODY (classNesting > 0), where the scope
+	function would be a method called during the body.  There the old path
+	stands: a class keeps its parameter NAMES, and a parameterised alias is
+	refused.  Answers whether it rewrote anything; when it did, the tokens at
+	``position'' now start the scope function's ``def''."
+
+	| i decoRanges kwTok nameTok isClass lb rb params w ref out names c indent
+	  bodyStart bodyEnd end name segs valueEnd |
+	classNesting > 0 ifTrue: [^ false].
+	i := position.
+	decoRanges := OrderedCollection new.
+	[i <= tokens size and: [(tokens at: i) isOp: '@']] whileTrue: [
+		| j |
+		j := i + 1.
+		[j <= tokens size and: [(tokens at: j) isNewline not]] whileTrue: [j := j + 1].
+		decoRanges add: (Array with: i + 1 with: j - 1).
+		i := j + 1].
+	i + 2 > tokens size ifTrue: [^ false].
+	kwTok := tokens at: i.
+	isClass := kwTok isKeyword: 'class'.
+	(isClass or: [decoRanges isEmpty and: [kwTok isName and: [kwTok value = 'type']]])
+		ifFalse: [^ false].
+	nameTok := tokens at: i + 1.
+	(nameTok isName and: [(tokens at: i + 2) isOp: '[']) ifFalse: [^ false].
+	lb := i + 2.
+	rb := self ___indexOfClose___: lb.
+	rb isNil ifTrue: [^ false].
+	params := self ___typeParamsFrom: lb + 1 to: rb - 1.
+	params isEmpty ifTrue: [^ false].
+	name := nameTok value asString.
+	w := '___generic_parameters_of_' , name , '___'.
+	ref := kwTok.
+	names := String new.
+	params do: [:p | names := names , (p at: 2) , ','].
+	out := OrderedCollection new.
+	self ___synth: 'def ' , w , '():' like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synthType: #INDENT like: ref into: out.
+	self ___synth: '___typing___ = __import__(''_typing'')' like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	params do: [:p | self ___emitTypeParam: p like: ref into: out].
+	isClass
+		ifTrue: [
+			c := rb + 1.
+			segs := #().
+			(c <= tokens size and: [(tokens at: c) isOp: '(']) ifTrue: [
+				| close |
+				close := self ___indexOfClose___: c.
+				close isNil ifTrue: [^ false].
+				segs := self ___segmentsFrom: c + 1 to: close - 1.
+				c := close + 1].
+			((tokens at: c) isOp: ':') ifFalse: [^ false].
+			self ___synth: 'class ' , name , '(' like: ref into: out.
+			(segs reject: [:s | self ___isKeywordArgument___: s]) do: [:s |
+				s do: [:k | out add: (tokens at: k)].
+				self ___synth: ',' like: ref into: out].
+			self ___synth: '___typing___._grail_generic_base((' , names , '))' like: ref into: out.
+			(segs select: [:s | self ___isKeywordArgument___: s]) do: [:s |
+				self ___synth: ',' like: ref into: out.
+				s do: [:k | out add: (tokens at: k)]].
+			self ___synth: '):' like: ref into: out.
+			self ___synthType: #NEWLINE like: ref into: out.
+			self ___synthType: #INDENT like: ref into: out.
+			"An indented body, after however many NEWLINE tokens: a comment
+			line between the header and the first statement is a NEWLINE of
+			its own, and reading only one of them mistook ``class G[T]:
+			# note'' for a one-line body."
+			indent := c + 1.
+			[indent <= tokens size and: [(tokens at: indent) isNewline]]
+				whileTrue: [indent := indent + 1].
+			(indent > (c + 1) and: [indent <= tokens size
+				and: [(tokens at: indent) type == #INDENT]])
+				ifTrue: [
+					bodyStart := indent + 1.
+					end := self ___indexOfMatchingDedent___: indent.
+					end isNil ifTrue: [^ false].
+					bodyEnd := end - 1]
+				ifFalse: [
+					bodyStart := c + 1.
+					end := bodyStart.
+					[end <= tokens size and: [(tokens at: end) isNewline not]]
+						whileTrue: [end := end + 1].
+					end > tokens size ifTrue: [^ false].
+					bodyEnd := end].
+			bodyStart to: bodyEnd do: [:k | out add: (tokens at: k)].
+			self ___synthType: #DEDENT like: ref into: out.
+			"Stored on the finished class, not bound in its body: a body binding
+			is an attribute subclasses INHERIT, and CPython's __type_params__ is
+			read from the class's own dict -- ``type('C', (A,), {})'' answers
+			``()''.  A store lands in the class's own holder, which is exactly
+			what Behavior >> __type_params__ reads."
+			self ___synth: name , '.__type_params__ = (' , names , ')' like: ref into: out.
+			self ___synthType: #NEWLINE like: ref into: out.
+			self ___synth: 'return ' , name like: ref into: out]
+		ifFalse: [
+			((tokens at: rb + 1) isOp: '=') ifFalse: [^ false].
+			end := rb + 2.
+			[end <= tokens size and: [(tokens at: end) isNewline not
+				and: [((tokens at: end) isOp: ';') not]]] whileTrue: [end := end + 1].
+			end > tokens size ifTrue: [^ false].
+			valueEnd := end - 1.
+			self ___synth: 'return ___typing___._grail_type_alias(''' , name , ''', lambda:'
+				like: ref into: out.
+			rb + 2 to: valueEnd do: [:k | out add: (tokens at: k)].
+			self ___synth: ', (' , names , '))' like: ref into: out].
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synthType: #DEDENT like: ref into: out.
+	self ___synth: name , ' =' like: ref into: out.
+	decoRanges do: [:r |
+		(r at: 1) to: (r at: 2) do: [:k | out add: (tokens at: k)].
+		self ___synth: '(' like: ref into: out].
+	self ___synth: w , '()' like: ref into: out.
+	decoRanges size timesRepeat: [self ___synth: ')' like: ref into: out].
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synth: 'del ' , w like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	tokens := (tokens copyFrom: 1 to: position - 1) , out asArray
+		, (tokens copyFrom: end + 1 to: tokens size).
+	^ true
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___typeParamsFrom: first to: last
+	"Each type parameter between the brackets, as {kind. name. boundRange.
+	constraintsRange. defaultRange} -- kind 0 TypeVar, 1 TypeVarTuple (``*Ts''),
+	2 ParamSpec (``**P''); each range an Array of token indexes, or nil.
+
+	``T: (A, B)'' is a CONSTRAINT tuple, not a bound -- CPython tells them
+	apart syntactically, by the bound being a parenthesised tuple."
+
+	| result |
+	result := OrderedCollection new.
+	(self ___segmentsFrom: first to: last) do: [:seg |
+		| k kind pname eq bound constraints default |
+		k := 1.
+		kind := 0.
+		((tokens at: (seg at: k)) isOp: '*') ifTrue: [kind := 1. k := k + 1].
+		((tokens at: (seg at: k)) isOp: '**') ifTrue: [kind := 2. k := k + 1].
+		pname := (tokens at: (seg at: k)) value asString.
+		k := k + 1.
+		eq := nil.
+		k to: seg size do: [:m |
+			(eq isNil and: [(tokens at: (seg at: m)) isOp: '=']) ifTrue: [eq := m]].
+		bound := nil. constraints := nil. default := nil.
+		(k <= seg size and: [(tokens at: (seg at: k)) isOp: ':']) ifTrue: [
+			bound := seg copyFrom: k + 1 to: (eq ifNil: [seg size + 1]) - 1.
+			(self ___isParenthesisedTuple___: bound)
+				ifTrue: [constraints := bound. bound := nil]].
+		eq notNil ifTrue: [default := seg copyFrom: eq + 1 to: seg size].
+		result add: (Array with: kind with: pname with: bound with: constraints with: default)].
+	^ result
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___emitTypeParam: p like: ref into: out
+	"``T = ___typing___._grail_type_param(kind, 'T', bound, constraints,
+	default)'', each of the last three a lambda over its tokens or None.  A
+	TypeVarTuple default written ``= *X'' is CPython's ``next(iter(X))''."
+
+	self ___synth: (p at: 2) , ' = ___typing___._grail_type_param(' , (p at: 1) printString
+		, ', ''' , (p at: 2) , ''''
+		like: ref into: out.
+	3 to: 5 do: [:n |
+		| range |
+		range := p at: n.
+		self ___synth: ',' like: ref into: out.
+		range isNil
+			ifTrue: [self ___synth: 'None' like: ref into: out]
+			ifFalse: [
+				(n = 5 and: [(tokens at: range first) isOp: '*'])
+					ifTrue: [
+						self ___synth: 'lambda: next(iter(' like: ref into: out.
+						range allButFirst do: [:k | out add: (tokens at: k)].
+						self ___synth: '))' like: ref into: out]
+					ifFalse: [
+						self ___synth: 'lambda:' like: ref into: out.
+						range do: [:k | out add: (tokens at: k)]]]].
+	self ___synth: ')' like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___segmentsFrom: first to: last
+	"The comma-separated pieces of tokens first..last at bracket depth 0, each
+	as an Array of token indexes.  An empty piece (a trailing comma) is
+	dropped."
+
+	| result current depth |
+	result := OrderedCollection new.
+	current := OrderedCollection new.
+	depth := 0.
+	first to: last do: [:k |
+		| t |
+		t := tokens at: k.
+		((t isOp: '(') or: [(t isOp: '[') or: [t isOp: '{']]) ifTrue: [depth := depth + 1].
+		((t isOp: ')') or: [(t isOp: ']') or: [t isOp: '}']]) ifTrue: [depth := depth - 1].
+		(depth = 0 and: [t isOp: ','])
+			ifTrue: [
+				current isEmpty ifFalse: [result add: current asArray].
+				current := OrderedCollection new]
+			ifFalse: [current add: k]].
+	current isEmpty ifFalse: [result add: current asArray].
+	^ result
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___isKeywordArgument___: aSegment
+	"``name=value'' or ``**mapping'' -- the class arguments that must follow
+	every base, so the generic base goes before the first of them."
+
+	| t |
+	t := tokens at: aSegment first.
+	(t isOp: '**') ifTrue: [^ true].
+	^ aSegment size > 1 and: [t isName and: [(tokens at: (aSegment at: 2)) isOp: '=']]
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___isParenthesisedTuple___: aRange
+	"Does the token range read ``( a, b )'' -- one parenthesised group with a
+	comma directly inside it?"
+
+	| close |
+	aRange isEmpty ifTrue: [^ false].
+	((tokens at: aRange first) isOp: '(') ifFalse: [^ false].
+	close := self ___indexOfClose___: aRange first.
+	close = aRange last ifFalse: [^ false].
+	^ (self ___segmentsFrom: aRange first + 1 to: aRange last - 1) size > 1
+		or: [((tokens at: aRange last - 1) isOp: ',')]
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___indexOfClose___: openIndex
+	"The index of the bracket closing the one at openIndex, counting all three
+	kinds, or nil."
+
+	| depth |
+	depth := 0.
+	openIndex to: tokens size do: [:k |
+		| t |
+		t := tokens at: k.
+		((t isOp: '(') or: [(t isOp: '[') or: [t isOp: '{']]) ifTrue: [depth := depth + 1].
+		((t isOp: ')') or: [(t isOp: ']') or: [t isOp: '}']]) ifTrue: [
+			depth := depth - 1.
+			depth = 0 ifTrue: [^ k]]].
+	^ nil
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___indexOfMatchingDedent___: indentIndex
+	| depth |
+	depth := 0.
+	indentIndex to: tokens size do: [:k |
+		| t |
+		t := tokens at: k.
+		t type == #INDENT ifTrue: [depth := depth + 1].
+		t type == #DEDENT ifTrue: [
+			depth := depth - 1.
+			depth = 0 ifTrue: [^ k]]].
+	^ nil
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___synth: aString like: refTok into: out
+	"Append the tokens of a source FRAGMENT, each placed at refTok so an error
+	in synthesized code reports the statement it came from.
+
+	Scanned here rather than by PythonTokenizer, because the fragments are
+	pieces of a statement -- ``class C('' and ``))'' -- and the tokenizer
+	rightly refuses an unbalanced bracket.  The rewrite writes only names,
+	keywords, small integers, single-quoted strings without escapes, ``**''
+	and one-character operators, so that is all this recognises."
+
+	| i n c keywords |
+	keywords := PythonTokenizer keywords.
+	i := 1.
+	n := aString size.
+	[i <= n] whileTrue: [
+		c := aString at: i.
+		c isSeparator
+			ifTrue: [i := i + 1]
+			ifFalse: [
+				| j type value |
+				j := i + 1.
+				(c isLetter or: [c == $_])
+					ifTrue: [
+						[j <= n and: [(aString at: j) isAlphaNumeric or: [(aString at: j) == $_]]]
+							whileTrue: [j := j + 1].
+						value := aString copyFrom: i to: j - 1.
+						type := (keywords includes: value) ifTrue: [#KEYWORD] ifFalse: [#NAME]]
+					ifFalse: [
+						c isDigit
+							ifTrue: [
+								[j <= n and: [(aString at: j) isDigit]] whileTrue: [j := j + 1].
+								value := aString copyFrom: i to: j - 1.
+								type := #NUMBER]
+							ifFalse: [
+								c == $'
+									ifTrue: [
+										[(aString at: j) == $'] whileFalse: [j := j + 1].
+										value := aString copyFrom: i + 1 to: j - 1.
+										j := j + 1.
+										type := #STRING]
+									ifFalse: [
+										(c == $* and: [j <= n and: [(aString at: j) == $*]])
+											ifTrue: [j := j + 1].
+										value := aString copyFrom: i to: j - 1.
+										type := #OP]]].
+				self ___synthType: type value: value like: refTok into: out.
+				i := j]]
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___synthType: aType value: aString like: refTok into: out
+	out add: ((PythonToken type: aType value: aString line: refTok line position: refTok position)
+		endPosition: refTok endPosition; endLine: refTok endLine; yourself)
+%
+
+category: 'Grail-parsing - type params'
+method: PythonParser
+___synthType: aType like: refTok into: out
+	self ___synthType: aType value: '' like: refTok into: out
 %
 
 category: 'Grail-parsing - type alias'

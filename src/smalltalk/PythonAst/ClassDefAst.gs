@@ -657,7 +657,7 @@ printSmalltalkRuntimeOn: aStream
 	holding the per-class attribute store (an Object whose dynamic instVars are
 	the class dict; a Class refuses dynamicInstVarAt:put: itself).  Every class
 	attribute -- the body's own, and the synthetic ``__module__'', ``__doc__'',
-	``_fields'', ``___annotatedFields___'' and ``__annotations__'' -- is an
+	``___bareAnnotatedFields___'', ``___annotatedFields___'' and ``__annotations__'' -- is an
 	entry in it behind an accessor pair, so the metaclass shape is the SAME for
 	every class from every creation site (here, type(), the functional Enum
 	API), and a rebuild can always reuse the class identity.  See
@@ -1137,8 +1137,16 @@ printSmalltalkRuntimeOn: aStream
 	one-dict-per-class MRO walk -- instead of a build-time copy.  Raw, because
 	every reader of a pair applies the descriptor protocol itself.  The setter
 	stores into the receiver's OWN holder through ___classHolderAttrStore___,
-	the same door a decorator's rebinding and a conditional binding use."
-	classAttrs do: [:pair |
+	the same door a decorator's rebinding and a conditional binding use.
+
+	NOT FOR A BARE ANNOTATION.  ``x: int'' with no value binds nothing in
+	CPython -- ``C.x'' is an AttributeError and ``hasattr(C, 'x')'' is
+	False -- but a pair made it a class attribute holding Smalltalk nil, and
+	every reader of a pair answered that nil: ``C.x'' was a raw
+	UndefinedObject, hasattr was True, and typing's runtime protocols found
+	an ``x'' on every instance of an annotated class.  The name still reaches
+	___bareAnnotatedFields___, which is what NamedTuple and dataclasses read."
+	(classAttrs reject: [:pair | pair value isNil]) do: [:pair |
 		| attrName lf accessorSrc setterSrc |
 		attrName := pair key asString.
 		lf := Character lf asString.
@@ -1825,17 +1833,26 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classMethodAliasTargets: savedAliasTargets.
 		CallAst classBodyDynamicLocals: (savedDynamicLocals == true).
 	].
-	"NamedTuple-style classes get a ``_fields'' accessor/setter pair on the
-	metaclass, initialised to a tuple of declaration-order bare-annotation
-	names.  Holder-backed like every class attribute; the getter walks own
+	"Every class with a BARE annotation (``x: int'', no value) gets a
+	``___bareAnnotatedFields___'' accessor/setter pair on the metaclass,
+	initialised to a tuple of those names in declaration order -- which
+	typing.NamedTuple and dataclasses read to tell a required field from a
+	defaulted one.
+
+	It used to be called ``_fields'', a real Python name, and that leaked:
+	every annotated class answered ``C._fields'', listed it in dir() and
+	__dict__, and typing.Protocol counted it as a protocol member -- so
+	``class HasX(Protocol): x: int'' demanded ``_fields'' of anything claiming
+	to implement it.  An internal name is hidden by the same ``___'' rule
+	that hides every other piece of Grail scaffolding.  Holder-backed like every class attribute; the getter walks own
 	holder then superclasses, so ``class Sub(SomeNamedTuple): pass'' reads the
 	parent's fields without the copy ___inheritClassAttrs___ used to make."
 	((classAttrs anySatisfy: [:p | p value isNil])
-		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
+		and: [(classAttrs anySatisfy: [:p | p key == #'___bareAnnotatedFields___']) not])
 			ifTrue: [
 		| lf accessorSrc setterSrc bareNames |
 		lf := Character lf asString.
-		accessorSrc := '_fields' , lf , '	^ self ___classAttrOwnOrInherited___: #''_fields'''.
+		accessorSrc := '___bareAnnotatedFields___' , lf , '	^ self ___classAttrOwnOrInherited___: #''___bareAnnotatedFields___'''.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: accessorSrc
@@ -1843,7 +1860,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := '_fields: ___1' , lf , '	self ___classHolderAttrStore___: #''_fields'' put: ___1.'.
+		setterSrc := '___bareAnnotatedFields___: ___1' , lf , '	self ___classHolderAttrStore___: #''___bareAnnotatedFields___'' put: ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1855,14 +1872,14 @@ printSmalltalkRuntimeOn: aStream
 			collect: [:p | p key].
 		aStream
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' _fields: (___tuple___ @env0:withAll: #('.
+			nextPutAll: ' ___bareAnnotatedFields___: (___tuple___ @env0:withAll: #('.
 		bareNames do: [:n |
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
 	"``___annotatedFields___`` accessor/setter + init — every annotated
 	field name in declaration order (see the slot registration above).
-	Mirrors the ``_fields'' emission but includes annotated-with-value
+	Mirrors the ``___bareAnnotatedFields___'' emission but includes annotated-with-value
 	lines, so dataclasses can recover defaulted fields, and
 	typing.NamedTuple the ordered field layout of a class with defaults."
 	((self annotatedFieldNames notEmpty)
@@ -4954,7 +4971,7 @@ method: ClassDefAst
 annotatedFieldNames
 	"Ordered names of every annotated assignment in the class body —
 	bare ``x: int'' AND ``x: int = default'' alike.  ClassDefAst's
-	``_fields'' captures only the bare ones (annotated-with-value lines
+	``___bareAnnotatedFields___'' captures only the bare ones (annotated-with-value lines
 	route to class-attribute storage), so this is what
 	dataclasses._collect_fields and typing.NamedTuple need to recover the
 	full field layout and each field's default.  Plain (un-annotated)

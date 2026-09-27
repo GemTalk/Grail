@@ -2754,11 +2754,28 @@ ___qualnamePrefixBefore___: aNode
 		name LIVES rather than where its source sits.  Dropping what came
 		before is the whole content of that rule."
 		(self ___isGlobalDeclaredScope___: (frame at: 1)) ifTrue: [out := nil].
-		out := out == nil
-			ifTrue: [(frame at: 3) asString]
-			ifFalse: [out , '.' , (frame at: 3) asString].
-		(frame at: 2) == #function ifTrue: [out := out , '.<locals>']].
+		"A PEP 695 scope function names nothing: CPython's annotation scope
+		for ``class C[T]'' is invisible in C.__qualname__, and so is the
+		function the parser rewrites it into."
+		(self ___isTypeParamScope___: (frame at: 1)) ifFalse: [
+			out := out == nil
+				ifTrue: [(frame at: 3) asString]
+				ifFalse: [out , '.' , (frame at: 3) asString].
+			(frame at: 2) == #function ifTrue: [out := out , '.<locals>']]].
 	^ out
+%
+
+category: 'Grail-Lexical Scope Stack'
+classmethod: CallAst
+___isTypeParamScope___: aNode
+	"Is aNode the scope function PythonParser >> ___rewriteTypeParamStatement___
+	builds for a PEP 695 class or type alias -- a def named
+	``___generic_parameters_of_<name>___''?"
+
+	| nm |
+	(aNode isKindOf: FunctionDefAst) ifFalse: [^ false].
+	nm := aNode name asString.
+	^ (nm beginsWith: '___generic_parameters_of_') and: [nm endsWith: '___']
 %
 
 category: 'Grail-Lexical Scope Stack'

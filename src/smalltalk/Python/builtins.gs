@@ -5932,6 +5932,24 @@ type: className _: bases _: namespace
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___typeNamespaceValue___: aValue named: aKey
+	"What type() stores on the class for one namespace entry.
+
+	CPython's type_new wraps two names in ``classmethod'' when the namespace
+	holds a plain function for them -- __init_subclass__ (PEP 487) and
+	__class_getitem__ (PEP 560) -- so ``type('X', (), {'__init_subclass__':
+	f})'' behaves as the class statement would.  Stored raw, the hook read as
+	an ASSIGNED one and ran with no class argument."
+
+	| k |
+	k := aKey @env0:asString.
+	((k @env0:= '__init_subclass__') or: [k @env0:= '__class_getitem__'])
+		ifTrue: [^ object ___grailImplicitClassmethod___: aValue].
+	^ aValue
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 type: className _: bases _: namespace kw: classKeywords
 	"Python builtin type(name, bases, namespace) — the 3-argument
 	metaclass form that builds a class dynamically.  Mirrors the
@@ -6042,11 +6060,13 @@ type: className _: bases _: namespace kw: classKeywords
 					orderedKeys @env0:do: [:k |
 						ownAttrNames @env0:add: k @env0:asSymbol.
 						newClass ___pyAttrStore___: k @env0:asSymbol
-							put: (namespace @env1:__getitem__: k)]]
+							put: (self ___typeNamespaceValue___: (namespace @env1:__getitem__: k)
+								named: k)]]
 				ifTrue: [
 			namespace @env0:keysAndValuesDo: [:k :v |
 				ownAttrNames @env0:add: k @env0:asSymbol.
-				newClass ___pyAttrStore___: k @env0:asSymbol put: v
+				newClass ___pyAttrStore___: k @env0:asSymbol
+					put: (self ___typeNamespaceValue___: v named: k)
 			]]
 		].
 	"No parent-value copy: a class attribute is a holder entry read through a

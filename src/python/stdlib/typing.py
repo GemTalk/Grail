@@ -3760,9 +3760,9 @@ def _nt_normalize(cls):
     Runs from __init_subclass__, i.e. after the class body has been stamped
     onto the class, so both field lists are readable:
 
-        class Foo(NamedTuple):        ___annotatedFields___  ('a', 'b')
-            a: int                    _fields                ('a',)
-            b: str = "x"              Foo.b                  'x'
+        class Foo(NamedTuple):    ___annotatedFields___      ('a', 'b')
+            a: int                ___bareAnnotatedFields___  ('a',)
+            b: str = "x"          Foo.b                      'x'
 
     Everything in the first list and not in the second has a default, and the
     default is the class attribute of that name."""
@@ -3779,7 +3779,7 @@ def _nt_normalize(cls):
     if not all_fields:
         return
     all_fields = tuple(all_fields)
-    bare = getattr(cls, '_fields', None) or ()
+    bare = getattr(cls, '___bareAnnotatedFields___', None) or ()
 
     defaults = {}
     seen_default = None
