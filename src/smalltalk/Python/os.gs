@@ -800,7 +800,7 @@ chdir: aPath
 	"os.chdir(path) — change the current working directory."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'chdir' arg: 'path'.
 	"The primitive answers 0 on success and the ERRNO on failure, never nil --
 	the one answer this tested for, so a chdir to a missing directory changed
 	nothing and said nothing, exactly as os.rename did (see Issues.md)."
@@ -824,7 +824,7 @@ mkdir: aPath
 	"os.mkdir(path) — create a directory."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
 	result := GsFile @env0:createServerDirectory: path.
 	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
@@ -836,7 +836,7 @@ mkdir: aPath _: mode
 	"os.mkdir(path, mode) — create a directory with numeric mode."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
 	result := GsFile @env0:createServerDirectory: path mode: mode.
 	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
@@ -1076,7 +1076,7 @@ makedirs: aPath
 	"os.makedirs(path) — recursive directory creation."
 
 	| parts currentPath sep path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
 	sep := '/'.
 	parts := $/ @env0:split: path.
 	currentPath := ''.
@@ -1229,7 +1229,7 @@ rmdir: aPath
 	"os.rmdir(path) — remove a directory."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'rmdir' arg: 'path'.
 	self ___refuseShellExpandedPath___: path for: 'rmdir'.
 	result := GsFile @env0:removeServerDirectory: path.
 	result == nil ifTrue: [^ self ___signalDirectoryNotRemoved: path].
@@ -1304,7 +1304,7 @@ remove: aPath
 	and would otherwise propagate a bare OSError out of every cleanup."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'remove' arg: 'path'.
 	"BEFORE the existence check, which is itself expanding and would otherwise
 	report on whatever the expansion names -- see ___refuseShellExpandedPath___."
 	self ___refuseShellExpandedPath___: path for: 'remove'.
@@ -1381,8 +1381,8 @@ rename: anOldPath _: aNewPath
 	said nothing, and pathlib's Path.rename inherited it."
 
 	| result oldPath newPath |
-	oldPath := self ___fsPath___: anOldPath.
-	newPath := self ___fsPath___: aNewPath.
+	oldPath := self ___fsPathChecked___: anOldPath for: 'rename' arg: 'src'.
+	newPath := self ___fsPathChecked___: aNewPath for: 'rename' arg: 'dst'.
 	"Both ends: a rename can destroy the destination as surely as remove does,
 	and an expanded SOURCE renames a file the caller never named."
 	self ___refuseShellExpandedPath___: oldPath for: 'rename'.
@@ -1429,7 +1429,7 @@ _listdir: positional kw: kwargs
 	actualPath == nil ifTrue: [actualPath := self getcwd].
 	"listdir: routes its 1-arg fast path through here, so this one
 	coercion covers both spellings."
-	actualPath := self ___fsPath___: actualPath.
+	actualPath := self ___fsPathChecked___: actualPath for: 'listdir' arg: 'path'.
 	"GsFile>>contentsOfDirectory: expands a PATTERN; it does not open a
 	directory, so it answers something plausible for two paths CPython
 	refuses outright, and neither answer looked like an error:
@@ -1757,7 +1757,7 @@ _scandir: positional kw: kwargs
 			((kwargs @env0:isNil) @env0:not and: [kwargs @env0:includesKey: 'path'])
 				ifTrue: [kwargs @env0:at: 'path']
 				ifFalse: ['.']].
-	target := self ___fsPath___: target.
+	target := self ___fsPathChecked___: target for: 'scandir' arg: 'path'.
 	names := self listdir: target.
 	entries := OrderedCollection @env0:new.
 	names @env0:do: [:name |
@@ -1846,8 +1846,8 @@ symlink: src _: dst
 	after the fact by asking whether the link now exists."
 
 	| srcPath dstPath errno |
-	srcPath := self ___fsPath___: src.
-	dstPath := self ___fsPath___: dst.
+	srcPath := self ___fsPathChecked___: src for: 'symlink' arg: 'src'.
+	dstPath := self ___fsPathChecked___: dst for: 'symlink' arg: 'dst'.
 	errno := self ___errnoPreventingCreationOf: dstPath.
 	errno == 0 ifFalse: [^ self ___signalErrno: errno filename: srcPath filename2: dstPath].
 	self ___runShell___: 'ln -s -- ' @env0:,
@@ -1892,7 +1892,7 @@ readlink: aPath
 	and code branches on it."
 
 	| path out |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'readlink' arg: 'path'.
 	self ___statOrSignal___: path isLstat: true.
 	(self ___isLink___: path) ifFalse: [^ self ___signalErrno: 22 filename: path].
 	out := self ___runShell___: 'readlink -- ' @env0:, (self ___shellQuote___: path).
@@ -1916,9 +1916,15 @@ ___statOrNil___: aPath lstat: isLstat
 	And it is the only file primitive that does NOT expand ``$'' in the path,
 	which is why every predicate was rebuilt on it: GsFile>>existsOnServer:
 	does expand, so ``exists('dir/a$b')'' answered about ``dir/a'' -- true, if
-	such a file happened to be there."
+	such a file happened to be there.
+
+	A path with an embedded NUL cannot be stat'd, and CPython's predicates say
+	no to it (genericpath catches the ValueError).  Asking the primitive
+	instead answered about the path cut short at the NUL -- ``exists('/tmp\\x00x')''
+	was true.  See ___fsPathChecked___:."
 
 	| result |
+	(self ___hasNul___: aPath) ifTrue: [^ nil].
 	result := GsFile @env0:stat: aPath isLstat: isLstat.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
 	^ nil
@@ -2067,7 +2073,7 @@ ___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks link
 	^ PythonGenerator withBlock: [:gen |
 		| stack |
 		stack := OrderedCollection @env0:new.
-		stack @env0:addLast: (self ___fsPath___: aTop).
+		stack @env0:addLast: (self ___fsPathChecked___: aTop for: 'scandir' arg: 'path').
 		[stack @env0:isEmpty] @env0:whileFalse: [
 			| top dirs nondirs walkDirs names |
 			top := stack @env0:removeLast.
@@ -2197,6 +2203,53 @@ isfile: aPath
 
 category: 'Grail-Filesystem'
 method: os
+___fsPathChecked___: aPath for: aFunctionName arg: anArgName
+	"___fsPath___:, for a path that is about to reach the FILESYSTEM: an
+	embedded NUL is CPython's ValueError.
+
+	The kernel reads a path as a C string, so everything after a NUL is
+	silently dropped and the call acts on a DIFFERENT file from the one named:
+	``os.stat('/tmp/x\x00junk')'' reported on /tmp/x, ``os.listdir('\x00')''
+	listed the current directory, and ``os.remove(p + '\x00.bak')'' would
+	remove p itself.  CPython's path converter refuses the NUL before any
+	system call, in every os function that takes a path; this is that check.
+
+	Not folded into ___fsPath___: itself, which the pure string functions of
+	os.path share -- join, split, basename and the rest never touch the
+	filesystem, and CPython lets a NUL pass through them unremarked.  The
+	predicates (exists, isdir, isfile, islink) do not come here either: they
+	answer False for such a path, as genericpath does, which ___statOrNil___:
+	arranges.  Found by test_linecache test_invalid_names, where
+	updatecache('\x00') stat'ed sys.path's first directory and then died
+	opening it.
+
+	The message is CPython's, and names the function and the argument --
+	``stat: embedded null character in path'', ``rename: ... in dst'' --
+	because that is what its path converter reports.  (``embedded null byte''
+	is what open() says, from a different converter.)"
+
+	| path |
+	path := self ___fsPath___: aPath.
+	(self ___hasNul___: path) ifTrue: [
+		^ ValueError ___signal___:
+			aFunctionName @env0:, ': embedded null character in ' @env0:, anArgName].
+	^ path
+%
+
+category: 'Grail-Filesystem'
+method: os
+___hasNul___: aPath
+	"Does a str or bytes path contain a NUL?  Anything else answers false and
+	is left to the caller's own type check."
+
+	(aPath @env0:isKindOf: ByteArray) ifTrue: [^ aPath @env0:includes: 0].
+	(aPath @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ aPath @env0:includes: (Character @env0:withValue: 0)].
+	^ false
+%
+
+category: 'Grail-Filesystem'
+method: os
 ___statOrSignal___: path isLstat: isLstat
 	"GsFile>>stat:isLstat: answers a GsFileStat on success but a SmallInteger
 	ERRNO on failure -- never nil, which is what the callers here used to test
@@ -2239,7 +2292,7 @@ stat: aPath
 	"os.stat(path) — get file status."
 
 	| statResult path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'stat' arg: 'path'.
 	statResult := self ___statOrSignal___: path isLstat: false.
 	"Answer CPython's os.stat_result, not the raw GsFileStat: the fields are the
 	same but Python code reads them as ``st_size'' / ``st_mtime'' (linecache does
@@ -2258,7 +2311,7 @@ getmtime: aPath
 	happened)."
 
 	| st path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'stat' arg: 'path'.
 	st := self ___statOrSignal___: path @env0:asString isLstat: false.
 	^ st @env0:mtimeUtcSeconds
 %
@@ -2269,7 +2322,7 @@ lstat: aPath
 	"os.lstat(path) — like stat but does not follow symlinks."
 
 	| statResult path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'lstat' arg: 'path'.
 	statResult := self ___statOrSignal___: path isLstat: true.
 	^ PyStatResult @env0:on: statResult
 %
@@ -2403,7 +2456,7 @@ ___applyUtime___: aPath atime: at mtime: mt follow: followSymlinks
 	touch acted: lstat when -h was used, stat when it was not."
 
 	| path st q base atIso mtIso |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'utime' arg: 'path'.
 	"Format BEFORE the existence check so an out-of-range timestamp is an
 	OverflowError rather than a FileNotFoundError, which is the order CPython
 	reports them in: argument conversion, then the syscall."
@@ -2623,7 +2676,7 @@ ___applyChmod___: aPath mode: aMode
 
 	| path st want |
 	want := aMode @env0:bitAnd: 8r7777.
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'chmod' arg: 'path'.
 	st := self ___statOrSignal___: path isLstat: false.
 	(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want ifTrue: [^ None].
 	self ___runShell___: 'chmod ' @env0:, (self ___octalString___: want)

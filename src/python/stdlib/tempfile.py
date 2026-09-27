@@ -1,9 +1,19 @@
 # Minimal `tempfile` for Grail.  Jinja2's FileSystemBytecodeCache was the
-# original consumer, reachable on the Flask render path; most of the surface
-# still raises NotImplementedError.  mkdtemp IS real -- `os` gives us
-# mkdir/rmdir/getpid, and CPython's own test suite reaches for it constantly
-# (test.support.os_helper.temp_dir), so refusing it bought nothing.
-# Expand the rest as downstream packages actually need it.
+# original consumer, reachable on the Flask render path.  mkdtemp,
+# TemporaryDirectory, mkstemp, NamedTemporaryFile and TemporaryFile are real;
+# SpooledTemporaryFile still raises NotImplementedError.  Expand the rest as
+# downstream packages actually need it.
+#
+# THE FILE-BACKED HALF, AND WHY IT REOPENS BY NAME.  CPython creates the file
+# with os.open(O_CREAT | O_EXCL) -- the exclusivity is the security property:
+# nobody else can have created or linked that name first -- and then wraps the
+# DESCRIPTOR in a file object.  Grail has the first half (os.open is real
+# open(2)) but not the second: open() refuses an integer descriptor.  So the
+# name is reserved the same way, the descriptor closed, and the file reopened
+# by path.  What that gives up is the guarantee that the reopened file is the
+# one reserved, should someone replace it in the gap; the directory is the
+# caller's (default /tmp, sticky) and the file is created 0600, as CPython's
+# is.  mkstemp hands the descriptor itself back, exactly as CPython does.
 
 import os
 
@@ -60,20 +70,135 @@ def mkdtemp(suffix=None, prefix=None, dir=None):
         % (dir, last))
 
 
+def _sanitize_params(prefix, suffix, dir):
+    if suffix is None:
+        suffix = ""
+    if prefix is None:
+        prefix = gettempprefix()
+    if dir is None:
+        dir = gettempdir()
+    return prefix, suffix, dir
+
+
+def _mkstemp_inner(dir, pre, suf):
+    """(fd, absolute path) of a newly created file only this caller can have
+    made: O_EXCL fails if the name exists, and a taken name moves on to the
+    next candidate, as mkdtemp does."""
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+    for extra in ("O_NOFOLLOW", "O_CLOEXEC"):
+        flags |= getattr(os, extra, 0)
+    last = None
+    for _attempt in range(100):
+        path = os.path.join(dir, _next_candidate(pre, suf))
+        try:
+            fd = os.open(path, flags, 0o600)
+        except FileExistsError as exc:
+            last = exc
+            continue
+        return fd, os.path.abspath(path)
+    raise FileExistsError(
+        "tempfile: no unique name found in %r after 100 attempts (%s)"
+        % (dir, last))
+
+
 def mkstemp(suffix=None, prefix=None, dir=None, text=False):
-    raise NotImplementedError("tempfile.mkstemp is not supported under Grail")
+    """Create a uniquely-named file and answer (fd, absolute path).  The
+    caller owns both, as in CPython: close the descriptor and remove the file
+    when done."""
+    prefix, suffix, dir = _sanitize_params(prefix, suffix, dir)
+    return _mkstemp_inner(dir, prefix, suffix)
 
 
-def NamedTemporaryFile(*args, **kwargs):
-    raise NotImplementedError(
-        "tempfile.NamedTemporaryFile is not supported under Grail"
-    )
+def _create_and_open(mode, buffering, encoding, newline, suffix, prefix, dir,
+                     errors):
+    prefix, suffix, dir = _sanitize_params(prefix, suffix, dir)
+    fd, name = _mkstemp_inner(dir, prefix, suffix)
+    os.close(fd)
+    try:
+        if "b" in mode:
+            file = open(name, mode, buffering)
+        else:
+            file = open(name, mode, buffering, encoding=encoding,
+                        newline=newline, errors=errors)
+    except BaseException:
+        os.unlink(name)
+        raise
+    return file, name
 
 
-def TemporaryFile(*args, **kwargs):
-    raise NotImplementedError(
-        "tempfile.TemporaryFile is not supported under Grail"
-    )
+class _TemporaryFileWrapper:
+    """CPython's wrapper: the file object's own attributes are delegated,
+    ``name'' is the path, and the file is removed on close or on leaving the
+    ``with'' block according to delete / delete_on_close (3.12)."""
+
+    def __init__(self, file, name, delete=True, delete_on_close=True):
+        self.file = file
+        self.name = name
+        self._delete = delete
+        self._delete_on_close = delete_on_close
+        self._removed = False
+
+    def __getattr__(self, name):
+        # Only reached for attributes the wrapper does not have itself.
+        return getattr(self.__dict__["file"], name)
+
+    def _remove(self):
+        if not self._removed:
+            self._removed = True
+            try:
+                os.unlink(self.name)
+            except FileNotFoundError:
+                pass
+
+    def close(self):
+        try:
+            self.file.close()
+        finally:
+            if self._delete and self._delete_on_close:
+                self._remove()
+
+    def __enter__(self):
+        self.file.__enter__()
+        return self
+
+    def __exit__(self, exc, value, tb):
+        try:
+            self.file.close()
+        finally:
+            if self._delete:
+                self._remove()
+        return False
+
+    def __iter__(self):
+        return iter(self.file)
+
+    def __repr__(self):
+        return "<tempfile._TemporaryFileWrapper %r>" % (self.name,)
+
+
+def NamedTemporaryFile(mode="w+b", buffering=-1, encoding=None, newline=None,
+                       suffix=None, prefix=None, dir=None, delete=True, *,
+                       errors=None, delete_on_close=True):
+    """A file with a visible name, removed on close unless delete=False (or,
+    with delete_on_close=False, only when its ``with'' block ends)."""
+    file, name = _create_and_open(mode, buffering, encoding, newline, suffix,
+                                  prefix, dir, errors)
+    return _TemporaryFileWrapper(file, name, delete, delete_on_close)
+
+
+def TemporaryFile(mode="w+b", buffering=-1, encoding=None, newline=None,
+                  suffix=None, prefix=None, dir=None, *, errors=None):
+    """A temporary file, removed when it is closed.
+
+    On POSIX CPython unlinks it the moment it is open, so it never has a name
+    at all.  Grail cannot: its file object does not survive the unlink of its
+    path -- measured, a write followed by seek(0) and read() answers b'' once
+    the name is gone, flushed or not.  So this is CPython's OWN answer for a
+    platform where an open file cannot be unlinked, which is Windows: there
+    ``TemporaryFile is NamedTemporaryFile'', and the name is visible while the
+    file is open."""
+    return NamedTemporaryFile(mode, buffering, encoding, newline, suffix,
+                              prefix, dir, errors=errors)
 
 
 class SpooledTemporaryFile:
