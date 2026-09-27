@@ -43,12 +43,11 @@ set compile_env: 0
 category: 'Grail-Setup'
 method: ComparisonProtocolTestCase
 setUp
-	| mods |
-	mods := importlib @env1:modules.
-	mods removeKey: #'comparison_protocol' ifAbsent: [].
-	testModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/comparison_protocol.py')
-		name: 'comparison_protocol'.
+	"Imported once per session: the tests only read RESULTS, which the
+	module body records -- see PythonTestCase >> ___recordedFixture___:name:."
+
+	testModule := self ___recordedFixture___: '/tests/python/comparison_protocol.py'
+		name: 'comparison_protocol'
 %
 
 category: 'Grail-Helpers'
