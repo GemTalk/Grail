@@ -1126,6 +1126,16 @@ printSmalltalkRuntimeOn: aStream
 		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
 	importlib ___irForgetClassDefIds___: self.
 
+	"A @staticmethod / @classmethod that shadows a BASE's ordinary method needs
+	an instance-side entry point too, or the base's own ``self.m(...)'' -- a
+	plain Smalltalk send -- never reaches it (Behavior >>
+	___grailInstallClassSideForwarders___).  Whether a base defines the name is
+	a RUNTIME question, as for the fixed-arity forwarders above, so the call is
+	emitted only for a body that has such defs and decides there."
+	(staticMethodSources notEmpty or: [classMethodSources notEmpty]) ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' ___grailInstallClassSideForwarders___.'; lf].
+
 	"Compile a class-side unary accessor + 1-arg setter for each class
 	attribute (``class Color: RED = 1'').  The pair is the PROTOCOL, not the
 	storage: ___pyAttrLoad___ tells a value attribute (paired getter+setter,

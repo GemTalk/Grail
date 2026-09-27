@@ -645,6 +645,7 @@ run
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'BuiltinTypeDictAndBasesTestCase' put: nil;
 	at: #'AstExportTestCase' put: nil;
+	at: #'StaticmethodOverridesBaseMethodTestCase' put: nil;
 	at: #'AsendLifecycleTestCase' put: nil;
 	at: #'AsgiServerTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
@@ -2071,6 +2072,7 @@ input src/smalltalk/PythonTests/ArgparseTestCase.gs
 input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
 input src/smalltalk/PythonTests/BuiltinTypeDictAndBasesTestCase.gs
 input src/smalltalk/PythonTests/AstExportTestCase.gs
+input src/smalltalk/PythonTests/StaticmethodOverridesBaseMethodTestCase.gs
 input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
 input src/smalltalk/PythonTests/AsgiServerTestCase.gs
 input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
