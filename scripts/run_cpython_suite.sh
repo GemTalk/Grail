@@ -130,12 +130,29 @@ SCOREBOARD_JSON="$OUTDIR/scoreboard.json"
 CONCURRENCY="${GRAIL_CPYTHON_WORKERS:-4}"
 SUITE_T0=$SECONDS
 
+# Per-module memory budget.  test___all__ imports every stdlib module that has
+# an __all__ -- about 220 of them, django included -- into ONE session, and
+# keeps them all: measured, 820MB of temporary object memory is still live after
+# the last import (mark-swept), before the compiles' own transient garbage.  At
+# the suite's 1000000 it died silently partway through the test package (the gem
+# exits when temporary memory is exhausted); at 2000000 it passes.  The budget is
+# a ceiling, not an allocation, so the other modules are unaffected.
+# docs/Issues.md, ``A module's session footprint'', has where that memory goes.
+module_topaz_cfg() { # $1=mod
+    case "$1" in
+        test.test___all__)
+            echo "${TOPAZ_CFG/GEM_TEMPOBJ_CACHE_SIZE=1000000/GEM_TEMPOBJ_CACHE_SIZE=2000000}" ;;
+        *)
+            echo "$TOPAZ_CFG" ;;
+    esac
+}
+
 run_module() { # $1=mod -- run one module capped; record exit code + duration sidecars
     local mod="$1" log="$OUTDIR/$1.out" t0
     rm -f "$log" "$OUTDIR/$1.rc"
     export GRAIL_TEST_MODULE="$mod"
     t0=$(date +%s)
-    run_capped topaz -lq -C "$TOPAZ_CFG" -S "$DRIVER" < /dev/null > "$log" 2>&1
+    run_capped topaz -lq -C "$(module_topaz_cfg "$mod")" -S "$DRIVER" < /dev/null > "$log" 2>&1
     echo $? > "$OUTDIR/$1.rc"
     # Wall clock, for the NEXT run's launch order (see launch_order).  Written
     # last and never removed at start-up: a `.sec' is the one artifact here that

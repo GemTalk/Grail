@@ -24,8 +24,7 @@ strikes the same bargain for Executor.
 
 import multiprocessing
 
-__all__ = ['ThreadPool', 'Pool', 'AsyncResult', 'ApplyResult', 'MapResult',
-           'ThreadPool']
+__all__ = ['ThreadPool', 'Pool', 'AsyncResult', 'ApplyResult', 'MapResult']
 
 
 class _MainProcess:
