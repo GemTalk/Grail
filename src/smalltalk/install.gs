@@ -643,6 +643,7 @@ run
 	at: #'RuntimeGapsBehindPickleTestCase' put: nil;
 	at: #'ArgparseTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
+	at: #'BuiltinTypeDictAndBasesTestCase' put: nil;
 	at: #'AstExportTestCase' put: nil;
 	at: #'AsendLifecycleTestCase' put: nil;
 	at: #'AsgiServerTestCase' put: nil;
@@ -2068,6 +2069,7 @@ input src/smalltalk/PythonTests/ArchiveMetadataTestCase.gs
 input src/smalltalk/PythonTests/RuntimeGapsBehindPickleTestCase.gs
 input src/smalltalk/PythonTests/ArgparseTestCase.gs
 input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
+input src/smalltalk/PythonTests/BuiltinTypeDictAndBasesTestCase.gs
 input src/smalltalk/PythonTests/AstExportTestCase.gs
 input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
 input src/smalltalk/PythonTests/AsgiServerTestCase.gs
