@@ -3982,6 +3982,17 @@ ___grailDispatchMetaclass___
 	fn := [meta ___pyAttrLoad___: #'__new__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	fn @env0:notNil ifTrue: [
+		"WHAT THE NAMESPACE HELD BEFORE THE METACLASS SAW IT, so type.__new__
+		can tell a binding the metaclass MADE from one the body already put on
+		the class.  The body's defs are in the mapping as read back off the
+		class (___grailNsBind___:), and replaying those as attribute stores
+		turned each compiled method into a data attribute holding a bound
+		method -- an ``__init_subclass__'' so stored then read as an ASSIGNED
+		hook and was run with no class, so a class with a metaclass= silently
+		never told its parent about a subclass.  typing.Protocol is one:
+		every Protocol subclass lost its __parameters__.  See type >>
+		__new__:_:_:_:."
+		self ___grailSnapshotNamespace___: ns.
 		stk := SessionTemps @env0:current
 			@env0:at: #'GrailClassUnderConstruction'
 			ifAbsentPut: [OrderedCollection @env0:new].
@@ -4014,7 +4025,44 @@ ___grailDispatchMetaclass___
 		"Drop the stashed header keywords with the rest of the pending state."
 		kwTbl := SessionTemps @env0:current
 			@env0:at: #'GrailPendingClassKwargs' otherwise: nil.
+		kwTbl == nil ifFalse: [kwTbl @env0:removeKey: self ifAbsent: [nil]].
+		kwTbl := SessionTemps @env0:current
+			@env0:at: #'GrailPendingNamespaceSnapshot' otherwise: nil.
 		kwTbl == nil ifFalse: [kwTbl @env0:removeKey: self ifAbsent: [nil]]]
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailSnapshotNamespace___: ns
+	"Record each binding in ns, by identity, for ___grailNamespaceChanged___:
+	value: -- see ___grailDispatchMetaclass___."
+
+	| snap |
+	snap := Dictionary @env0:new.
+	[ns @env0:keysAndValuesDo: [:k :v | snap @env0:at: k @env0:asString put: v]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(SessionTemps @env0:current
+		@env0:at: #'GrailPendingNamespaceSnapshot'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+			@env0:at: self put: snap
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNamespaceChanged___: aKey value: aValue
+	"Did the metaclass bind aKey to aValue -- a key the namespace did not have
+	when the metaclass was handed it, or one it now holds something else for?
+	True when no snapshot was taken, which keeps the replay's old behaviour for
+	any path that did not go through ___grailDispatchMetaclass___."
+
+	| tbl snap missing |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingNamespaceSnapshot' otherwise: nil.
+	tbl == nil ifTrue: [^ true].
+	snap := tbl @env0:at: self otherwise: nil.
+	snap == nil ifTrue: [^ true].
+	missing := Object @env0:new.
+	^ (snap @env0:at: aKey @env0:asString otherwise: missing) @env0:~~ aValue
 %
 
 category: 'Grail-Class Namespace'
@@ -6767,9 +6815,17 @@ ___classDict___
 	___grailPythonDictNames___."
 	addSel := [:sel :defCls :allowed |
 		| nm merged |
-		nm := sel @env0:asString.
-		(nm @env0:includes: $:) ifTrue: [
-			nm := nm @env0:copyFrom: 1 to: (nm @env0:indexOf: $:) @env0:- 1].
+		"THE SELECTOR IS DECODED, not cut at its first colon.  Every def compiles
+		a varargs transport ``_<name>:kw:'', and cutting that at the colon named
+		the method with one underscore too many: ``def star(self, *a)'' read as
+		``_star'', ``def _meth(self)'' added a phantom ``__meth'', and a dunder
+		with a default -- ``def __init__(self, a=1)'', transported as
+		``___init__:kw:'' -- then looked Grail-internal and was dropped, so the
+		class dict had no __init__ at all.  typing's Protocol reads a class's
+		members from exactly this mapping.  Decoded the way __dir__ decodes it,
+		by the one helper both use."
+		nm := self ___grailPythonNameForSelector___: sel.
+		nm == nil ifTrue: [nm := ''].
 		"A METHOD MERGED FROM A SECONDARY BASE IS NOT THE CLASS'S OWN.  Grail is
 		single-inheritance underneath, so ___mergeSecondaryBases___ COPIES the
 		other bases' methods onto the class -- which makes them indistinguishable
@@ -6836,8 +6892,20 @@ ___classDict___
 		cmd @env0:keys @env0:do: [:sel |
 			| nm setter v |
 			nm := sel @env0:asString.
+			"A class-side method WITH ARGUMENTS -- ``@classmethod def cm(cls, x)'',
+			``@staticmethod def sm(x, y=2)'' -- compiles only keyword selectors, and
+			the test below admits unary ones alone, so both were missing from
+			__dict__.  Decoded by addSel like an instance-side def; the setter
+			half of an accessor pair (``data:'' beside ``data'') is not a method
+			and is left to the pair branch."
+			((nm @env0:includes: $:)
+				and: [((nm @env0:occurrencesOf: $:) @env0:= 1
+					and: [(nm @env0:at: nm @env0:size) == $:
+					and: [cmd @env0:includesKey: (nm @env0:copyFrom: 1 to: nm @env0:size @env0:- 1) @env0:asSymbol]]) @env0:not
+				and: [(metaCls ___grailMetaclassOwnedCategory___: sel) @env0:not]]) ifTrue: [
+					addSel @env0:value: sel value: metaCls value: allowed].
 			((nm @env0:includes: $:) @env0:not
-				and: [nm @env0:~= '___dynInstVars___'
+				and: [(nm @env0:size @env0:< 3 or: [(nm @env0:copyFrom: 1 to: 3) @env0:~= '___'])
 				and: [(allowed @env0:isNil or: [allowed @env0:includes: nm])
 				and: [(metaCls ___grailMetaclassOwnedCategory___: sel) @env0:not]]]) ifTrue: [
 				setter := (nm @env0:, ':') @env0:asSymbol.
@@ -9645,6 +9713,37 @@ __getattr__: name
 
 category: 'Grail-Attribute Access'
 method: object
+___grailPythonNameForSelector___: aSelector
+	"The Python name a compiled env-1 selector implements, or nil when it
+	implements none.
+
+	Two encodings, both FunctionDefAst's: the varargs transport
+	``_<name>:kw:'' every def compiles, whose name is what lies between the
+	single leading underscore and the trailing ``:kw:''; and the fixed-arity
+	``name:_:_:'' a def with plain positional parameters also gets.  A unary
+	selector is its own name.  Anything else -- ``perform:env:'',
+	``value:value:'' -- is the kernel's call protocol, and names nothing
+	(see ___grailIsFixedAritySelector___:from:).
+
+	Shared by __dir__ and ___classDict___, which used to decode it two
+	different ways and so disagreed about what a class defines."
+
+	| s sz index |
+	s := aSelector @env0:asString.
+	sz := s @env0:size.
+	((sz @env0:> 4)
+		and: [((s @env0:at: 1) == $_)
+		and: [(s @env0:copyFrom: (sz @env0:- 3) to: sz) @env0:= ':kw:']])
+			ifTrue: [^ s @env0:copyFrom: 2 to: (sz @env0:- 4)].
+	index := s @env0:indexOf: $:.
+	index == 0 ifTrue: [^ s].
+	(self ___grailIsFixedAritySelector___: s from: index)
+		ifTrue: [^ s @env0:copyFrom: 1 to: (index @env0:- 1)].
+	^ nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
 ___grailIsFixedAritySelector___: aString from: firstColon
 	"True when aString is a Grail FIXED-ARITY method selector: a name, a colon,
 	then zero or more ``_:'' groups -- ``meth:'', ``meth:_:'', ``meth:_:_:'',
@@ -9676,7 +9775,7 @@ __dir__
 	Returns an Array of Strings containing all method names for environment 1 (Python).
 	Excludes convenience methods (those starting with ___) that are internal implementation helpers."
 
-	| selectors result myClass strs others walker |
+	| selectors result myClass strs others walker lacking |
 	myClass := self @env0:class.
 	"A DECLARED ``__class__'' SLOT THAT IS UNSET LEAVES dir() WITH THE
 	INSTANCE'S OWN NAMES.  CPython reaches the type through ``getattr(self,
@@ -9779,49 +9878,13 @@ __dir__
 			prefix @env0:= '___'
 		] ifFalse: [false]
 	].
+	"Each selector as the Python name it implements -- see
+	___grailPythonNameForSelector___:, which also explains the two encodings
+	and why a kernel selector like ``perform:env:'' names nothing (it once
+	manufactured ``perform'', ``value'' and ``with'' in dir() for EVERY
+	object)."
 	result := selectors @env0:collect: [:selector |
-		| s sz index |
-		s := selector @env0:asString.
-		sz := s @env0:size.
-		"A def with optional / keyword / *args parameters compiles to the
-		varargs transport selector ``_<name>:kw:'' (FunctionDefAst), whose
-		Python-visible name is <name>.  Report <name> -- not the leading-
-		underscore transport spelling -- so dir() matches CPython and
-		getattr(obj, name) (unittest's getTestCaseNames, inspect, ...) resolves
-		the method.  Recover it by dropping the single leading ``_'' and the
-		trailing ``:kw:''.  (``___''-prefixed selectors were rejected above, so
-		this never fires on a Grail-internal helper.)"
-		((sz @env0:> 4)
-			and: [((s @env0:at: 1) == $_)
-			and: [(s @env0:copyFrom: (sz @env0:- 3) to: sz) @env0:= ':kw:']])
-			ifTrue: [s @env0:copyFrom: 2 to: (sz @env0:- 4)]
-			ifFalse: [
-				"Fixed-arity keyword selector -- ``name:'' followed by zero or more
-				``_:'', which is exactly what FunctionDefAst>>fixedAritySelectorFor:
-				emits.  The REST OF THE SELECTOR HAS TO BE CHECKED, not just
-				truncated at the first colon: every Python object inherits Object,
-				whose env-1 kernel selectors include ``perform:env:'',
-				``value:value:'' and ``with:perform:env:'' -- the dispatch and call
-				protocol Grail is built on.  Truncating those manufactured the
-				Python-looking names ``perform'', ``value'' and ``with'' and put
-				them in dir() for EVERY object (40 of the 42 parity subjects).
-
-				They cannot be renamed out of the way the ``___''-prefix convention
-				handles Grail's own helpers: they are GemStone kernel selectors, and
-				``value:value:'' is deliberately the universal call protocol.  A
-				prefix filter never sees them either -- ``with:perform:env:'' is an
-				ordinary selector.  Recognising the ENCODING is what separates a
-				Python method from the infrastructure it dispatches through.
-
-				A selector that is neither encoding answers nil and is dropped."
-				index := s @env0:indexOf: $:.
-				index == 0
-					ifTrue: [s]
-					ifFalse: [
-						(self ___grailIsFixedAritySelector___: s from: index)
-							ifTrue: [s @env0:copyFrom: 1 to: (index @env0:- 1)]
-							ifFalse: [nil]]]
-	].
+		self ___grailPythonNameForSelector___: selector].
 	result := result @env0:reject: [:name | name @env0:isNil].
 	"CPython dir() returns unique names; a simple-positional def can yield BOTH
 	a fixed-arity selector and a ``_name:kw:'' keyword companion, which now
@@ -9870,6 +9933,22 @@ __dir__
 				ifFalse: [k])]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		result := names].
+	"THE DUNDERS GRAIL SYNTHESIZES ARE NOT LISTED WHERE A CLASS LACKS THEM.
+	object and PythonInstance install default __enter__/__iter__/__getitem__
+	and seven more, whose bodies raise the TypeError CPython's interpreter
+	would; ___pyAttrLoad___ hides them from a class that has no real one
+	(see ___grailClassLacksSynthesizedDunder___:).  dir() did not ask the same
+	question, so it listed ten names that getattr then refused -- and
+	``for key in dir(cls): getattr(cls, key)'' is an idiom, not an accident:
+	typing.no_type_check does exactly that, and @no_type_check on any class
+	raised AttributeError ``__aenter__'' (test.typinganndata.ann_module2,
+	imported by test_typing).  An instance asks its class, as CPython's
+	dir(inst) is built from dir(type(inst))."
+	lacking := self @env0:isBehavior ifTrue: [self] ifFalse: [myClass].
+	result := result @env0:reject: [:n |
+		(n @env0:isKindOf: CharacterCollection)
+			and: [(self ___grailSynthesizedDunderSelectors___: n) @env0:notNil
+			and: [lacking ___grailClassLacksSynthesizedDunder___: n @env0:asSymbol]]].
 	"SORT THE STRINGS ONLY, then append the rest.  A mixed collection cannot be
 	sorted at all -- which is exactly why CPython's ``dir()'' raises TypeError on
 	one, and why upstream's traceback.py calls ``obj.__dir__()'' directly rather
@@ -12215,7 +12294,7 @@ ___typeReprString___
 	__module__ is something else is not a reason for repr to raise -- and the
 	Smalltalk class name is the last resort."
 
-	| qual mod stream meta owner |
+	| qual mod stream meta owner active |
 	"A user METACLASS that defines __repr__ owns this: ``repr(C)'' is
 	``type(C).__repr__(C)''.  It cannot be reached by an ordinary send --
 	Grail MODELS the metaclass relation (``Custom.__class__'' answers ReprMeta,
@@ -12230,17 +12309,35 @@ ___typeReprString___
 
 	Guarded on the DEFINING class of the selector, not merely on its presence:
 	every metaclass inherits the default from ``object'', and treating that as
-	a user definition would recurse straight back into this method."
+	a user definition would recurse straight back into this method.
+
+	AND NOT WHILE THAT METACLASS REPR IS ALREADY RUNNING FOR THIS CLASS.  The
+	usual body of one ends ``return super().__repr__()'' -- typing's _AnyMeta
+	does, for every subclass of Any -- and that super send is meant to reach
+	type.__repr__, the plain form below.  Grail's super resolves it to
+	object's __repr__ instead, which lands here, which dispatched to the
+	metaclass again: ``class Sub(Any): pass; repr(Sub)'' recursed until the
+	stack ran out, and the RecursionError surfaced inside a kernel primitive as
+	the uncatchable ERROR 2758 that took test_typing's whole session down.  So
+	the dispatch is guarded per receiver (SessionTemps #GrailMetaReprActive):
+	a nested request for the class being repr'd gets type.__repr__'s answer."
 	meta := [self @env1:___pyAttrLoad___: #'__class__']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	(meta @env0:notNil and: [(meta @env0:isKindOf: Behavior) and: [meta @env0:~~ self]])
+	active := SessionTemps @env0:current @env0:at: #GrailMetaReprActive otherwise: nil.
+	(meta @env0:notNil and: [(meta @env0:isKindOf: Behavior) and: [meta @env0:~~ self
+		and: [active @env0:isNil or: [(active @env0:includesIdentical: self) @env0:not]]]])
 		ifTrue: [
 			owner := meta @env0:whichClassIncludesSelector: #'__repr__' environmentId: 1.
 			(owner @env0:notNil
 				and: [owner @env0:~~ (Python @env0:at: #object)
 				and: [owner @env0:~~ (Python @env0:at: #type)]]) ifTrue: [
-					^ (UnboundMethod definingClass: meta selector: #'__repr__')
-						@env1:value: { self } value: nil]].
+					active @env0:isNil ifTrue: [
+						active := IdentitySet @env0:new.
+						SessionTemps @env0:current @env0:at: #GrailMetaReprActive put: active].
+					active @env0:add: self.
+					^ [(UnboundMethod definingClass: meta selector: #'__repr__')
+						@env1:value: { self } value: nil]
+							@env0:ensure: [active @env0:remove: self ifAbsent: [nil]]]].
 	qual := [ | qn |
 		qn := self @env1:___pyAttrLoad___: #'__qualname__'.
 		(qn isKindOf: CharacterCollection)

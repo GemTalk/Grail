@@ -432,9 +432,15 @@ value: positional value: kwargs
 				fn notNil ifTrue: [
 					^ fn @env1:___pyCallValue___:
 						({ self } @env0:, positional @env0:asArray) kw: kwargs]].
-	"No __call__ — surface as a Python-shaped TypeError via the
-	standard DNU path on the original selector."
-	^ self @env0:perform: #'__call__' env: 1 withArguments: positional
+	"No __call__: CPython's TypeError, raised here.  This used to fall
+	through to a DNU on the original selector, on the theory that the DNU
+	path would reshape it -- it did not: the send reached the CLASS side,
+	surfaced as ``a K class does not understand #__call__'', and no Python
+	``except'' could catch it, so ``obj()'' on any non-callable instance
+	ended the whole program.  typing's TypeVar, ForwardRef and NoDefault
+	tests call an instance precisely to see the TypeError."
+	^ TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
+		@env0:, ''' object is not callable')
 %
 
 category: 'Python-Callable'

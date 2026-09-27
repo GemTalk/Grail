@@ -67,6 +67,82 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
+## FIXED (partly): `test_typing` could not be imported -- PEP 695 scopes, and what it hit next
+
+`test.test_typing` scored IMPORTERROR on `type type_alias[*_] = 0`: the parser
+refused a parameterised type alias, and `class C[T]` kept only the parameter
+NAMES, so `T` was unbound in the class body and no `Generic[T]` base was added.
+It now imports and runs: **701 tests, 114 failures, 58 errors** (CPython runs
+712; the other 11 are the typing doctests `load_tests` adds).
+
+### PEP 695 is a token rewrite into CPython's annotation scope
+
+`class C[T: int](Base, metaclass=M): body` and `type A[T] = V` are rewritten in
+the token stream (`PythonParser >> ___rewriteTypeParamStatement___`) into what
+CPython's compiler builds: a hidden `___generic_parameters_of_C___` function
+that binds each parameter to a TypeVar (`_typing._grail_type_param`, with the
+bound, constraints and default as lazy lambdas), defines the class with
+`_typing._grail_generic_base((T,))` appended after the positional bases, stores
+`C.__type_params__` on the finished class, and returns it; the enclosing scope
+binds the name and deletes the function. The alias form returns
+`_typing._grail_type_alias('A', lambda: V, (T,))`.
+
+Tokens rather than a hand-built AST because the parser keeps scope books as it
+goes -- writes, reads, globals, nonlocals, class nesting, the mangling stack --
+and a synthesized node would have to reproduce every one. The scope function
+is transparent to `__qualname__` (`CallAst class >> ___isTypeParamScope___:`).
+`__type_params__` is stored after the class exists, not bound in its body, so a
+subclass does not inherit it. Not done directly in a class BODY, where the
+function would be a method called mid-body; the old names-only path stands
+there. `tests/python/type_param_scopes.py` pins it (24 checks).
+
+### The shared-machinery defects the module hit next
+
+Each was found by the next import or crash, and each is in code every module
+uses, so the change is tier 2 (0 regressions across the corpus):
+
+- `obj.attr: T = v` compiled to the setter send `obj @env1:attr: v`, which
+  stored nothing and raised nothing (`test.typinganndata.ann_module2`).
+  `AnnAssignAst` now emits the `AssignAst` for `obj.attr = v`.
+- `dir(cls)` listed the ten dunders Grail synthesizes (`__enter__`,
+  `__iter__`, `__getitem__`, ...) that `getattr(cls, name)` refuses, so
+  `@no_type_check` -- which getattrs every name dir lists -- raised on any class.
+- A metaclass `__repr__` ending `return super().__repr__()` (typing's
+  `_AnyMeta`) recursed until the stack ran out inside a kernel primitive,
+  the uncatchable ERROR 2758 that took the whole session down. The
+  metaclass dispatch in `___typeReprString___` is now guarded per receiver.
+- `type.__new__`'s namespace replay stored every body `def` back onto the
+  class as a bound method, so an `__init_subclass__` read as an ASSIGNED hook
+  and ran with no class: a class with `metaclass=` never told its parent about
+  subclasses, and every `typing.Protocol` subclass lost its `__parameters__`.
+  Only bindings the metaclass added or changed are replayed now.
+- The class `__dict__` cut each selector at its first colon, so the
+  transport `_<name>:kw:` named `def star(self, *a)` as `_star`, added a
+  phantom `__meth` beside `_meth`, and dropped any dunder with a default
+  (`___init__:kw:` looks internal). It now decodes selectors with the same
+  helper `__dir__` uses, and lists class-side methods that take arguments.
+- A bare annotation `x: int` made a class attribute holding Smalltalk nil:
+  `C.x` answered an `UndefinedObject`, `hasattr` was True, and runtime
+  protocols found `x` on everything. It binds nothing now, as in CPython; the
+  names NamedTuple and dataclasses need moved from `_fields` (which leaked
+  into every annotated class's namespace) to `___bareAnnotatedFields___`.
+- `inspect.getattr_static` was `getattr` with a default of None; it is
+  CPython's MRO walk now, and raises for a missing name.
+- Calling a non-callable instance fell through to a DNU that no `except`
+  could catch; it is CPython's `TypeError: 'K' object is not callable`.
+
+### What is left, grouped by cause
+
+The largest groups, for the next pass: Grail's `abc` is a stub with no
+`ABCMeta` class creation and no abstract-instantiation check outside an
+explicit `metaclass=abc.ABCMeta` (so `Generator()`, `Protocol()` and abstract
+Protocol subclasses instantiate; `_abc_registry_clear` does not exist);
+`types.GenericAlias` and `types.UnionType` are Smalltalk classes without
+`__parameters__` or substitution, and report themselves as `PyGenericAlias` /
+`PyUnionType`; `collections.abc.Callable[...]` answers the class itself; the
+typing NamedTuple and TypedDict emulations diverge in `__bases__`/`__mro__`;
+and the typing doctests are not collected.
+
 ## FIXED: `sys.path[0]` was relative, and `-m` never saw the working directory
 
 Two residual halves of issue #847. The issue as filed — "`importlib runPath:`
@@ -2946,11 +3022,12 @@ described in full below under *`typing.overload` recursed forever*. It is fixed,
 `test.test_warnings` reads one error BETTER than before, and the vendoring
 carries no conformance cost at all.
 
-**`test.test_typing` cannot measure any of this.** It is IMPORTERROR before and
-after, on `type type_alias[...] = ...` at line 5860 -- PEP 695 syntax Grail's
-parser does not have. The typing surface is therefore covered by
-`tests/python/typing_surface.py` (28 checks, all of which also pass under
-CPython 3.14.6) and not by the module named after it.
+**`test.test_typing` could not measure any of this** when it was written: it
+was IMPORTERROR before and after, on `type type_alias[...] = ...` at line 5860
+-- PEP 695 syntax Grail's parser did not have. The typing surface was
+therefore covered by `tests/python/typing_surface.py` (28 checks, all of which
+also pass under CPython 3.14.6). The module imports now; see *`test_typing`
+could not be imported* above.
 
 ### What this bought, measured
 

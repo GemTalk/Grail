@@ -1123,16 +1123,115 @@ def currentframe():
         return None
 
 
-def getattr_static(obj, name, default=None):
-    """``inspect.getattr_static(obj, name)`` — CPython's
-    descriptor-bypassing attribute lookup.  Grail has no descriptor
-    machinery and getattr() already returns the underlying value
-    rather than running descriptors, so the stub just delegates to
-    builtin ``getattr`` with the same default-fallback semantics."""
+_sentinel = object()
+
+
+def _static_getmro(klass):
     try:
-        return getattr(obj, name)
+        return type.__getattribute__(klass, '__mro__')
+    except (AttributeError, TypeError):
+        return (klass,)
+
+
+def _getattr_static_class_dict(entry, cache):
+    # A class's __dict__ is built afresh on every read under Grail, so one
+    # getattr_static call reads each class's at most once.
+    d = cache.get(id(entry))
+    if d is None:
+        try:
+            d = type.__getattribute__(entry, '__dict__')
+        except (AttributeError, TypeError):
+            d = {}
+        cache[id(entry)] = d
+    return d
+
+
+def _check_instance(obj, attr):
+    instance_dict = {}
+    try:
+        instance_dict = object.__getattribute__(obj, "__dict__")
     except AttributeError:
+        pass
+    try:
+        return dict.get(instance_dict, attr, _sentinel)
+    except TypeError:
+        return instance_dict.get(attr, _sentinel)
+
+
+def _check_class(klass, attr, cache):
+    for entry in _static_getmro(klass):
+        if _shadowed_dict(type(entry), cache) is _sentinel:
+            d = _getattr_static_class_dict(entry, cache)
+            if attr in d:
+                return d[attr]
+    return _sentinel
+
+
+def _shadowed_dict(klass, cache):
+    # A class body that binds ``__dict__`` itself (a property, say) hides the
+    # instance dict; CPython's check also excludes the ordinary getset
+    # descriptor, which Grail's class dict never lists.
+    for entry in _static_getmro(klass):
+        d = _getattr_static_class_dict(entry, cache)
+        if '__dict__' in d:
+            return d['__dict__']
+    return _sentinel
+
+
+def getattr_static(obj, attr, default=_sentinel):
+    """Retrieve attributes without triggering dynamic lookup via the
+       descriptor protocol,  __getattr__ or __getattribute__.
+
+       Note: this function may not be able to retrieve all attributes
+       that getattr can fetch (like dynamically created attributes)
+       and may find attributes that getattr can't (like descriptors
+       that raise AttributeError). It can also return descriptor objects
+       instead of instance members in some cases. See the
+       documentation for details.
+
+       CPython's algorithm, over the instance dict and each class's own
+       __dict__ along the MRO.  This used to be ``getattr(obj, name)`` with
+       a default of None, which ran every descriptor and __getattr__ it was
+       meant to bypass and answered None for an attribute that did not exist
+       -- so typing's runtime-checkable protocols, which read members
+       through it, found every member on every object.
+    """
+    cache = {}
+    instance_result = _sentinel
+
+    objtype = type(obj)
+    if type not in _static_getmro(objtype):
+        klass = objtype
+        dict_attr = _shadowed_dict(klass, cache)
+        if dict_attr is _sentinel:
+            instance_result = _check_instance(obj, attr)
+    else:
+        klass = obj
+
+    klass_result = _check_class(klass, attr, cache)
+
+    if instance_result is not _sentinel and klass_result is not _sentinel:
+        if _check_class(type(klass_result), "__get__", cache) is not _sentinel and (
+            _check_class(type(klass_result), "__set__", cache) is not _sentinel
+            or _check_class(type(klass_result), "__delete__", cache) is not _sentinel
+        ):
+            return klass_result
+
+    if instance_result is not _sentinel:
+        return instance_result
+    if klass_result is not _sentinel:
+        return klass_result
+
+    if obj is klass:
+        # for types we check the metaclass too
+        for entry in _static_getmro(type(klass)):
+            if _shadowed_dict(type(entry), cache) is _sentinel:
+                d = _getattr_static_class_dict(entry, cache)
+                if attr in d:
+                    return d[attr]
+    if default is not _sentinel:
         return default
+    raise AttributeError(attr)
 
 
 def cleandoc(doc):
