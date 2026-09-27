@@ -192,6 +192,8 @@ def writer(csvfile, delimiter=",", quotechar='"', quoting=QUOTE_MINIMAL,
 
 
 class DictReader:
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self, f, fieldnames=None, restkey=None, restval=None,
                  delimiter=",", quotechar='"', quoting=QUOTE_MINIMAL,
                  skipinitialspace=False):
@@ -229,6 +231,8 @@ class DictReader:
 
 
 class DictWriter:
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self, f, fieldnames, restval="", extrasaction="raise",
                  delimiter=",", quotechar='"', quoting=QUOTE_MINIMAL,
                  lineterminator="\r\n"):

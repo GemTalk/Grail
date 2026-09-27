@@ -6587,6 +6587,15 @@ ___liveFrameFilenameFor___: aMethod
 	clsName isNil ifTrue: [^ '<grail>'].
 	mod := [(importlib @env1:modules) @env0:at: clsName @env0:asSymbol otherwise: nil]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"A SUBMODULE's class is not named by its dotted module name -- module class
+	names flatten the dots -- so ``pk.sub'' missed by name and every frame of
+	its body reported ``<grail>'', f_globals None: typing's _caller() then
+	answered None for every TypeVar and NewType a package module defines
+	(test.test_typing's SpecialAttrsT).  The module whose class IS this one."
+	mod isNil ifTrue: [
+		mod := [(importlib @env1:modules) @env0:detect: [:m | m @env0:class == cls]
+				ifNone: [nil]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	mod isNil ifTrue: [^ '<grail>'].
 	file := [mod @env0:dynamicInstVarAt: #'__file__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].

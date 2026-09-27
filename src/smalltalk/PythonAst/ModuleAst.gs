@@ -1090,7 +1090,7 @@ ___moduleAnnotationStatements___
 	on read where CPython simply leaves the key out."
 
 	^ body body select: [:stmt |
-		(stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]]
+		(stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___]]
 %
 
 category: 'Grail-code generation'

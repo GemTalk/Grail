@@ -60,6 +60,7 @@ class FrozenInstanceError(AttributeError):
 class Field:
     """Field descriptor — what ``field()'' returns and what
     ``fields()'' enumerates."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, default=MISSING, default_factory=MISSING,
                  init=True, repr=True, hash=None, compare=True,

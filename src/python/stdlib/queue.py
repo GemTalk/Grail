@@ -24,6 +24,7 @@ class Full(Exception):
 
 class Queue:
     """FIFO queue.  maxsize <= 0 means unbounded."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, maxsize=0):
         self.maxsize = maxsize
@@ -124,5 +125,7 @@ class PriorityQueue(Queue):
 
 
 class SimpleQueue(Queue):
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self):
         super().__init__(0)

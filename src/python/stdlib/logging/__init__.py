@@ -199,6 +199,7 @@ class StreamHandler(Handler):
     Grail Transcript via builtin print).  CPython's StreamHandler
     defaults to sys.stderr; Grail's sys doesn't surface a writable
     stderr yet, so we fall back to print()."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, stream=None):
         super().__init__()
@@ -471,6 +472,8 @@ class FileHandler(StreamHandler):
 
 
 class LoggerAdapter:
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self, logger, extra=None):
         self.logger = logger
         self.extra = extra

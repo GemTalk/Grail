@@ -1941,6 +1941,25 @@ TextIOBase
 
 category: 'Grail-Type Accessors'
 method: io
+Reader
+	"CPython 3.14's io.Reader, defined in Lib/io.py and so in neither _io nor
+	_pyio: src/python/stdlib/_grail_io.py holds it."
+
+	^ ((importlib @env0:___instance___) @env1:import_module: '_grail_io')
+		@env1:___pyAttrLoad___: #'Reader'
+%
+
+category: 'Grail-Type Accessors'
+method: io
+Writer
+	"io.Writer; see io >> Reader."
+
+	^ ((importlib @env0:___instance___) @env1:import_module: '_grail_io')
+		@env1:___pyAttrLoad___: #'Writer'
+%
+
+category: 'Grail-Type Accessors'
+method: io
 BufferedReader
 	^ self ___pyioClass___: #'BufferedReader'
 %

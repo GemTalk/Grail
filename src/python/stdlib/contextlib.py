@@ -300,6 +300,8 @@ def _check_methods(C, *methods):
 class AbstractContextManager(metaclass=_ABCMeta):
     """An abstract base class for context managers."""
 
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     __slots__ = ()
 
     def __enter__(self):
@@ -320,6 +322,8 @@ class AbstractContextManager(metaclass=_ABCMeta):
 
 class AbstractAsyncContextManager(metaclass=_ABCMeta):
     """An abstract base class for asynchronous context managers."""
+
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     __slots__ = ()
 

@@ -828,6 +828,23 @@ value: positional value: kwargs
 		coerce to an exact Array."
 		(actualArgs @env0:class == Array)
 			@env0:ifFalse: [actualArgs := Array @env0:withAll: actualArgs].
+	"AN EXPLICIT ``C.__init_subclass__()''.  The read binds the implicit
+	classmethod to C (definingClass == receiver), and CPython resolves it from
+	C ITSELF: a hook C defines, or one a base supplies, runs with cls = C.  The
+	fixed-arity lookup below finds ``object class >> __init_subclass__'', the
+	class-side no-op, first -- so the call did nothing, and typing's
+	NamedTupleMeta, which ends ``nm_tpl.__init_subclass__()'' to give a generic
+	NamedTuple its __parameters__, built one without.  A hook compiled
+	instance-side below object wins; the automatic PEP 487 call
+	(___grailInitSubclass___) is unaffected, as it starts at the superclass."
+	(selector == #'__init_subclass__' and: [definingClass == actualReceiver
+		and: [actualReceiver @env0:isKindOf: Behavior]]) ifTrue: [ | owner |
+			owner := actualReceiver @env0:whichClassIncludesSelector:
+				#'___init_subclass__:kw:' environmentId: 1.
+			(owner @env0:notNil and: [owner ~~ object]) ifTrue: [
+				^ (UnboundMethod definingClass: actualReceiver selector: selector)
+					value: (Array @env0:with: actualReceiver) @env0:, actualArgs
+					value: kwargs]].
 	"RESOLVED BEFORE THE LOOKUPS, not at the perform.  A pinned selector's
 	original survives under a ``___grailOrig_'' shadow and the plain one may be
 	GONE -- ``del D.add'' removes every arity variant -- so asking whether the
@@ -1008,6 +1025,62 @@ cache_info
 	"Companion to cache_clear — a zeroed CacheInfo-shaped tuple."
 
 	^ tuple @env0:withAll: #(0 0 nil 0)
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+__new__
+	"``f.__new__()'' -- a function's type is ``function'', whose __new__ needs
+	a code object and globals.  typing's TypedDict and NamedTuple are
+	functions, and test_typing calls ``TypedDict.__new__()'' expecting
+	CPython's TypeError; the inherited object.__new__ allocated from nil
+	instead.  Python code cannot build a Grail function this way, so every
+	arity refuses; Grail's own code makes BoundMethods with Smalltalk #new."
+
+	^ TypeError ___signal___: 'function.__new__(): not enough arguments'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+__new__: cls
+	^ TypeError ___signal___: 'function() missing required argument ''code'' (pos 1)'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+___new__: positional kw: kwargs
+	positional @env0:isEmpty ifTrue: [^ self __new__].
+	^ TypeError ___signal___: 'function() argument ''code'' must be code, not '
+		@env0:, (positional @env0:size @env0:> 1
+			ifTrue: [(positional @env0:at: 2) ___pyTypeNameForError___]
+			ifFalse: ['nothing'])
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___pyAttrLoad___: aSym
+	"A METHOD forwards what it does not have to its function, as CPython's
+	method_getattro does: ``C.cm.__func__.flag = True'' then ``C.cm.flag''.
+	typing.no_type_check marks a classmethod exactly that way, and the read
+	came back AttributeError.  Only when the method itself misses, and only
+	for a method that HAS a separate function -- a classmethod or staticmethod
+	read through its class, or a Python bound method; a module-level function
+	is its own __func__.  When the function misses too the method's own error
+	stands."
+
+	| fn val |
+	^ [super ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError
+		do: [:ex |
+			((receiver @env0:isKindOf: Behavior) or: [self ___isPythonBoundMethod___])
+				ifTrue: [
+					fn := [self __func__] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+					(fn @env0:notNil and: [fn ~~ self]) ifTrue: [
+						val := [fn @env1:___pyAttrLoad___: aSym]
+							@env0:on: AttributeError
+							do: [:e2 | e2 @env0:return: #'___grailMiss___'].
+						val == #'___grailMiss___' ifFalse: [^ val]]].
+			ex @env0:pass]
 %
 
 category: 'Grail-Attribute Access'
@@ -1656,9 +1729,27 @@ __qualname__
 	builtin answers its Python name (list.append, dict.keys, int.bit_length,
 	str.lower) and only the inherited case differs."
 
-	| n owner |
+	| n owner fq |
 	n := self __name__ @env0:asString.
 	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		"The DEFINING class, which the function knows: an inherited classmethod
+		or ``__init_subclass__'' read through a subclass is ``Base.cm'' in
+		CPython, not ``Sub.cm'' -- typing names the hook that way in its
+		not-called-super() note (test_typing
+		test_generic_init_subclass_not_called_error).  The receiver's name is
+		the fallback when the function cannot say."
+		"Python classes only: a built-in's function is implemented on a Smalltalk
+		class with no Python name -- str.lower would read
+		CharacterCollection.lower."
+		fq := ((receiver @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+				or: [receiver @env0:isMeta
+					and: [receiver @env0:thisClass @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]])
+			ifTrue: [[self __func__ @env1:__qualname__]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+			ifFalse: [nil].
+		((fq @env0:isKindOf: CharacterCollection)
+			and: [fq @env0:includes: $.])
+			ifTrue: [^ fq @env0:asUnicodeString].
 		^ ((self ___receiverQualname___) @env0:, '.' @env0:, n) @env0:asUnicodeString].
 	(receiver @env0:isKindOf: module) ifTrue: [^ self __name__].
 	owner := self ___receiverTypeName___.

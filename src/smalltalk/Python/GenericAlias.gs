@@ -549,11 +549,15 @@ PyUnionType class removeAllMethods: 1.
 category: 'Grail-Python Attribute Hook'
 classmethod: PyUnionType
 ___pythonValueAttrs___
-	"__args__ and __parameters__ are DATA, as on an alias."
+	"__args__ and __parameters__ are DATA, as on an alias -- and so are the
+	three names the union reports for itself."
 	^ IdentitySet new
 		add: #'__args__';
 		add: #'__parameters__';
 		add: #'__origin__';
+		add: #'__name__';
+		add: #'__qualname__';
+		add: #'__module__';
 		yourself
 %
 
@@ -793,6 +797,19 @@ __hash__
 	^ h
 %
 
+category: 'Grail-Protocol Refusal'
+method: PyUnionType
+__iter__
+	<grailProtocolRefusal>
+	"CPython's union type has no tp_iter, so iter(int | str) is ``'typing.Union'
+	object is not iterable''.  Without this the legacy sequence protocol found
+	__getitem__ -- which is substitution here -- and ``list(str | T)'' built
+	str | 0, str | 1, ... without end (test_typing TypeIterationTests).  A
+	refusal, so the class dict and collections.abc.Iterable do not count it."
+
+	TypeError ___signal___: '''typing.Union'' object is not iterable'
+%
+
 category: 'Grail-Subscript'
 method: PyUnionType
 __getitem__: item
@@ -807,6 +824,26 @@ __getitem__: item
 	r == #'___noHelper___' ifTrue: [
 		^ TypeError ___signal___: '''typing.Union'' object is not subscriptable'].
 	^ r
+%
+
+category: 'Grail-Attribute Access'
+method: PyUnionType
+__name__
+	"CPython 3.14's union type names itself Union: ``(int | str).__name__''."
+
+	^ 'Union'
+%
+
+category: 'Grail-Attribute Access'
+method: PyUnionType
+__qualname__
+	^ 'Union'
+%
+
+category: 'Grail-Attribute Access'
+method: PyUnionType
+__module__
+	^ 'typing'
 %
 
 category: 'Grail-Attribute Access'
@@ -942,14 +979,19 @@ ___nameOf___: anOperand
 category: 'Grail-Operators'
 method: PyUnionType
 __or__: other
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
+	"A UNION accepts what is_unionable() refuses (gh-140348): ``U | 'float'''
+	is ``Union[U, 'float']'', whose type check makes the string a ForwardRef."
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [
+		^ PyUnionType @env1:__getitem__: (tuple @env0:with: self with: other)].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: PyUnionType
 __ror__: other
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
+	"``'float' | U'' -- see __or__:."
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [
+		^ PyUnionType @env1:__getitem__: (tuple @env0:with: other with: self)].
 	^ PyUnionType ___of___: other with: self
 %
 

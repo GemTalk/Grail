@@ -477,6 +477,13 @@ def formatannotation(annotation, base_module=None):
     test is "does it have a __name__" rather than isinstance(x, type): ``str``
     is a BoundMethod here and would otherwise have printed as its repr.
     """
+    # CPython's first rule: a typing construct prints as its repr with the
+    # ``typing.`` prefixes dropped -- ``int | None``, ``List[int]``.  It has to
+    # come before the __name__ test, since a union answers __name__ 'Union'.
+    if getattr(annotation, '__module__', None) == 'typing':
+        import re
+        return re.sub(r'[\w\.]+', lambda m: m.group().removeprefix('typing.'),
+                      repr(annotation))
     name = getattr(annotation, '__name__', None)
     if isinstance(name, str):
         return name

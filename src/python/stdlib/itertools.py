@@ -75,6 +75,7 @@ def _tuple(x):
 class chain:
     """Iterator chaining.  A class (as in CPython) so the
     ``chain.from_iterable`` classmethod exists."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, *iterables):
         self._iterables = iterables

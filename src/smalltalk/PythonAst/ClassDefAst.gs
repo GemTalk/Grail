@@ -1576,7 +1576,7 @@ printSmalltalkRuntimeOn: aStream
 	aStream nextPutAll: ' bases: '.
 	bases isEmpty
 		ifTrue: [aStream nextPutAll: '#()']
-		ifFalse: [aStream nextPutAll: (bases size = 1
+		ifFalse: [aStream nextPutAll: ((bases size = 1 and: [self ___hasStarredBase___ not])
 			ifTrue: ['___hdrBases___']
 			ifFalse: ['___hdrResolved___'])].
 	aStream nextPutAll: ' keywords: '.
@@ -2281,7 +2281,7 @@ printSmalltalkRuntimeOn: aStream
 	(its methods are inherited, so ___primaryChainProvides___ sees
 	them).  Emitted after the class's own methods are compiled so they
 	take precedence.  See importlib >> ___mergeSecondaryBases___:bases:."
-	bases size > 1 ifTrue: [
+	(bases size > 1 or: [self ___hasStarredBase___]) ifTrue: [
 		"The SAME bases the storage-base choice saw, read from the header temps
 		rather than re-emitted.  Re-emitting them is what evaluated every base
 		expression twice.  Both lists go: the raw one because __orig_bases__
@@ -2936,7 +2936,7 @@ printSuperclassOn: aStream
 	see importlib >> ___selectStorageBase___:."
 
 	bases isEmpty ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
-	bases size = 1 ifTrue: [
+	(bases size = 1 and: [self ___hasStarredBase___ not]) ifTrue: [
 		| only |
 		only := bases first.
 		"``class C(object):`` is identical to ``class C:`` in Python 3.
@@ -2991,6 +2991,17 @@ printSuperclassOn: aStream
 
 category: 'Grail-code generation'
 method: ClassDefAst
+___hasStarredBase___
+	"``class C(*bases)'' -- a header whose base list is known only at run time.
+	Such a statement takes the multiple-base path (runtime storage-base choice,
+	resolve, merge) whatever the written count: the sole-base path reads its one
+	base as written, and a starred expression is a list, not a class."
+
+	^ bases notNil and: [bases anySatisfy: [:b | b isKindOf: StarredAst]]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 ___classHeaderTemps___
 	"The temps the class HEADER is evaluated into -- see printClassHeaderOn:.
 
@@ -3006,7 +3017,8 @@ ___classHeaderTemps___
 	| temps |
 	temps := OrderedCollection new.
 	(bases notNil and: [bases notEmpty]) ifTrue: [temps add: '___hdrBases___'].
-	(bases notNil and: [bases size > 1]) ifTrue: [temps add: '___hdrResolved___'].
+	(bases notNil and: [bases size > 1 or: [self ___hasStarredBase___]])
+		ifTrue: [temps add: '___hdrResolved___'].
 	keywords isNil ifFalse: [
 		1 to: keywords size do: [:i | temps add: (self ___hdrKeywordTempAt___: i)]].
 	^ temps
@@ -3087,11 +3099,31 @@ printClassHeaderOn: aStream
 		| savedBasesFlag |
 		savedBasesFlag := CallAst inBasesEmit.
 		CallAst inBasesEmit: true.
-		[aStream nextPutAll: '___hdrBases___ := { '.
-		1 to: bases size do: [:i |
-			i > 1 ifTrue: [aStream nextPutAll: '. '].
-			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
-		aStream nextPutAll: ' }.'; lf]
+		[self ___hasStarredBase___
+			ifTrue: [
+				"``class C(A, *more)'': the list is built at run time, each
+				starred expression splatted in place -- TupleAst's splat
+				shape -- and the statement takes the multiple-base path
+				whatever the written count (___hasStarredBase___)."
+				aStream nextPutAll: '___hdrBases___ := (({}'.
+				bases do: [:each |
+					aStream nextPutAll: ' @env0:, '.
+					(each isKindOf: StarredAst)
+						ifTrue: [
+							aStream nextPut: $(.
+							each value printSmalltalkWithParenthesisOn: aStream.
+							aStream nextPutAll: ' @env0:___pyStarToArray___)']
+						ifFalse: [
+							aStream nextPutAll: '{ '.
+							each printSmalltalkWithParenthesisOn: aStream.
+							aStream nextPutAll: '. }']].
+				aStream nextPutAll: ')).'; lf]
+			ifFalse: [
+				aStream nextPutAll: '___hdrBases___ := { '.
+				1 to: bases size do: [:i |
+					i > 1 ifTrue: [aStream nextPutAll: '. '].
+					(bases at: i) printSmalltalkWithParenthesisOn: aStream].
+				aStream nextPutAll: ' }.'; lf]]
 			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)]].
 	keywords isNil ifFalse: [
 		| savedDeco |
@@ -3102,7 +3134,7 @@ printClassHeaderOn: aStream
 			(keywords at: i) value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: '.'; lf]]
 			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]].
-	(bases notNil and: [bases size > 1]) ifTrue: [
+	(bases notNil and: [bases size > 1 or: [self ___hasStarredBase___]]) ifTrue: [
 		aStream
 			nextPutAll: '___hdrResolved___ := (Python @env0:at: #importlib) @env0:___resolveMroEntries___: ___hdrBases___.';
 			lf]
@@ -4167,7 +4199,13 @@ slotNames
 			((valueAst isKindOf: TupleAst) or: [valueAst isKindOf: ListAst]) ifTrue: [
 				valueAst elts do: [:elt |
 					((elt isKindOf: ConstantAst) and: [elt value isKindOf: String])
-						ifTrue: [addName value: elt value]]]].
+						ifTrue: [addName value: elt value]]].
+			"``__slots__ = {'banana': 42}'' -- a dict's KEYS are the slots, its
+			values their docstrings (test_typing test_parameterized_slots_dict)."
+			(valueAst isKindOf: DictAst) ifTrue: [
+				(valueAst keys ifNil: [#()]) do: [:k |
+					((k isKindOf: ConstantAst) and: [k value isKindOf: String])
+						ifTrue: [addName value: k value]]]].
 	^ names
 %
 
@@ -4186,10 +4224,13 @@ slotsDeclaredStrict
 	valueAst ifNil: [^ false].
 	(valueAst isKindOf: ConstantAst) ifTrue: [
 		^ valueAst value isKindOf: String].
-	((valueAst isKindOf: TupleAst) or: [valueAst isKindOf: ListAst]) ifFalse: [
+	((valueAst isKindOf: TupleAst) or: [(valueAst isKindOf: ListAst)
+			or: [valueAst isKindOf: DictAst]]) ifFalse: [
 		^ false].
 	hasDict := false.
-	valueAst elts do: [:elt |
+	"A dict's keys name the slots; a ``**'' splat has a nil key, and a
+	declaration Grail cannot read stays lenient."
+	((valueAst isKindOf: DictAst) ifTrue: [valueAst keys ifNil: [#()]] ifFalse: [valueAst elts]) do: [:elt |
 		((elt isKindOf: ConstantAst) and: [elt value isKindOf: String])
 			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
 			ifFalse: [^ false]].
@@ -5258,7 +5299,7 @@ annotatedFieldNames
 	| names |
 	names := OrderedCollection new.
 	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst])
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___])
 			ifTrue: [names add: stmt target id asString]].
 	^ names
 %
@@ -5276,7 +5317,7 @@ classAnnotationPairs
 	| pairs |
 	pairs := OrderedCollection new.
 	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst])
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___])
 			ifTrue: [pairs add:
 				stmt target id asString -> stmt annotation ___annotationSourceString___]].
 	^ pairs
@@ -5323,7 +5364,7 @@ emitClassAnnotateBlockOn: aStream
 
 	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
 	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]) ifTrue: [
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___]) ifTrue: [
 			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
 			aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
 			stmt annotation printSmalltalkOn: aStream.
@@ -6021,7 +6062,8 @@ isDerivedFrom: aClass scope: aScope
 2) isSubclassOf: checks the Smalltalk class hierarchy"
 
 	(aClass name = name) ifTrue: [^true].
-	bases do: [:base | ((aScope get: base id) astNode isDerivedFrom: aClass scope: aScope) ifTrue: [^true]].
+	bases do: [:base | ((base isKindOf: NameAst)
+		and: [(aScope get: base id) astNode isDerivedFrom: aClass scope: aScope]) ifTrue: [^true]].
 	^false
 %
 
@@ -6579,6 +6621,16 @@ ___irMethodLocalClassReason___: localNames
 	those through the block as well."
 	(self ___irDeferredReadsOfNonlocalBelow___ isEmpty)
 		ifFalse: [^ #'classDef:deferredReadOfNonlocal'].
+	"A class-body ANNOTATION is a deferred read of the same kind: PEP 649
+	evaluates it through __annotate__ when asked, not when the class statement
+	runs, so it must see an enclosing binding as it is THEN.  ``class X: y:
+	undefined'' followed by ``undefined = int'' answers {'y': int} in CPython and
+	on the text path; the helper's seeded temp answered UnboundLocalError
+	(test_typing test_deferred_annotations).  An annotation naming ANY enclosing
+	local refuses -- AnnAssignAst's read walk skips annotations, so such a name
+	may not be among the carried captures at all."
+	(self ___irClassAnnotationLocalReads___: localNames) isEmpty
+		ifFalse: [^ #'classDef:deferredAnnotationRead'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
 	by reference -- which is what an enclosing PARAMETER that the body never
@@ -7010,6 +7062,20 @@ ___irCarriedCaptureNames___: localNames
 	self ___irEnclosingFunctionDef___ isNil ifTrue: [^ #()].
 	^ (self ___irClassCapturedNames___: localNames)
 		asSortedCollection: [:a :b | a asString <= b asString]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irClassAnnotationLocalReads___: localNames
+	"The enclosing def's locals that a class-body annotation names."
+
+	| out |
+	out := Set new.
+	body isNil ifTrue: [^ out].
+	(body body ifNil: [#()]) do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___])
+			ifTrue: [stmt annotation ___irReadLocalNamesInto___: out locals: localNames]].
+	^ out
 %
 
 category: 'Grail-IR Codegen'

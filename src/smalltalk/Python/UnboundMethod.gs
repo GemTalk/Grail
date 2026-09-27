@@ -1087,16 +1087,25 @@ ___pyImplementingClass___
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___findImplementorOf___: aSym family: family in: aClass
-	"The class in aClass's chain defining aSym or any of its arity variants, in
-	env 1; nil when none does."
+	"The NEAREST class in aClass's chain defining aSym or any of its arity
+	variants, in env 1; nil when none does.
 
-	| found |
-	found := aClass @env0:whichClassIncludesSelector: aSym environmentId: 1.
-	found @env0:isNil ifFalse: [^ found].
-	1 to: 7 do: [:i |
-		found := aClass @env0:whichClassIncludesSelector: (family @env0:at: i)
-			environmentId: 1.
-		found @env0:isNil ifFalse: [^ found]].
+	One walk, every spelling asked at each class.  It used to look for the
+	unary spelling up the WHOLE chain first, and object defines a unary
+	__init__ -- so for ``def __init__(self, x)'', compiled as the varargs
+	``___init__:kw:'', every class's own __init__ reported object as its
+	owner: ``A.__init__.__qualname__'' read 'object.__init__', and
+	typing.no_type_check, which checks that qualname, skipped every
+	constructor (test_typing test_respect_no_type_check)."
+
+	| c |
+	c := aClass.
+	[c @env0:notNil] @env0:whileTrue: [
+		(c @env0:includesSelector: aSym environmentId: 1) ifTrue: [^ c].
+		family @env0:do: [:s |
+			(s @env0:notNil and: [c @env0:includesSelector: s environmentId: 1])
+				ifTrue: [^ c]].
+		c := c @env0:superclass].
 	^ nil
 %
 

@@ -96,6 +96,14 @@ __iter__
 	PySequence_Check tests a real sq_item); the former eager walk did too,
 	incidentally, by probing __getitem__(0).  ___hasProtocolForCall___
 	restores that (test_error_iter's DefaultIterClass)."
+	"``__iter__ = None'' is CPython's explicit opt-out, and it wins over
+	__getitem__ for every consumer: builtins >> iter: asked, but list(),
+	tuple() and a for loop reach this fallback directly and walked the
+	sequence protocol anyway -- typing's _NotIterable forms ran away."
+	(self ___classAttrDunder___: #'__iter__') == None
+		ifTrue: [
+			TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
+				@env0:, ''' object is not iterable')].
 	(self ___hasProtocolForCall___: '__getitem__')
 		ifFalse: [
 			TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
