@@ -2132,6 +2132,30 @@ ___grailMroEntriesMethod___
 	^ nil
 %
 
+category: 'Grail-Metaclass'
+method: object
+___grailRecordDirectMetaclass___: aMetaclass
+	"Persist this class's metaclass when a module body built it by calling the
+	metaclass directly -- importlib >> ___recordDirectMetaclass___:meta:.
+	Answers the receiver, so it can end a cascade."
+
+	importlib @env0:___recordDirectMetaclass___: self meta: aMetaclass.
+	^ self
+%
+
+category: 'Grail-Metaclass'
+classmethod: object
+___cpythonObjectDictNames___
+	"The names in CPython's ``object.__dict__'' -- what every class's MRO finds
+	in object before a metaclass's plain methods are consulted.  A literal, so
+	the attribute read that asks pays one includes: and nothing else."
+
+	^ #( #'__init__' #'__new__' #'__repr__' #'__str__' #'__hash__' #'__eq__'
+		#'__ne__' #'__lt__' #'__le__' #'__gt__' #'__ge__' #'__getattribute__'
+		#'__setattr__' #'__delattr__' #'__reduce__' #'__reduce_ex__'
+		#'__format__' #'__sizeof__' #'__dir__' #'__getstate__' )
+%
+
 category: 'Grail-Instantiation'
 method: object
 ___isMetaclassBase___
@@ -2327,6 +2351,38 @@ ___allocateInstance___: positional kw: keywords
 		2 @env0:to: n do: [:i | stream @env0:nextPutAll: '_:'].
 		sel := stream @env0:contents @env0:asSymbol.
 		found := n @env0:> 0 and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) ~~ nil]].
+	"A METACLASS called directly -- ``M('X', (), {})'' for ``class M(type)'' --
+	is type.__call__: it BUILDS A CLASS whose type is M.  With no __new__ of
+	its own, M reached the plain allocation below and answered an M
+	INSTANCE, which is not a class at all (isinstance(m, type) was False),
+	and ``M()'' / ``type(Any)()'' succeeded where CPython refuses.  type's
+	direct three-argument __new__ is the builder and records M as the new
+	class's metaclass; every other count is CPython's arity error."
+	(found @env0:not and: [self @env0:inheritsFrom: (Python @env0:at: #type)]) ifTrue: [
+		n := positional @env0:size.
+		n @env0:= 3 ifFalse: [
+			TypeError ___signal___: 'type.__new__() takes exactly 3 arguments ('
+				@env0:, n @env0:printString @env0:, ' given)'].
+		(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not]) ifTrue: [ | built |
+			built := (builtins @env1:instance)
+				@env1:type: (positional @env0:at: 1)
+				_: (positional @env0:at: 2)
+				_: (positional @env0:at: 3)
+				kw: keywords.
+			built @env1:___grailSetMetaclass___: self.
+			importlib @env0:___recordDirectMetaclass___: built meta: self.
+			^ built].
+		"Recorded as ``class C(metaclass=M)'' records it -- unconditionally,
+		because the record is what type(C) reports.  type.__new__'s own
+		recording is gated to metaclasses that take part in construction,
+		which a bare ``class M(type): pass'' does not.  Committed too, for a
+		module body's call: importlib >> ___recordDirectMetaclass___:meta:."
+		^ ((Python @env0:at: #type)
+			@env1:__new__: self
+			_: (positional @env0:at: 1)
+			_: (positional @env0:at: 2)
+			_: (positional @env0:at: 3)) @env1:___grailSetMetaclass___: self;
+				___grailRecordDirectMetaclass___: self].
 	found ifFalse: [
 		"A subclass of an IMMUTABLE built-in collection (tuple / frozenset) is
 		populated by the built-in's __new__ (a classmethod), NOT by a mutable
@@ -3133,6 +3189,16 @@ ___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 		the corpus: a metaclass that overrides neither __new__ nor __init__ --
 		ABCMeta, and most of the rest -- still allocates nothing."
 		inherited := self ___grailMetaclass___.
+		"...or through a base OTHER than the primary one.  The superclass walk
+		sees only the first base, and the MI record that names the others is
+		written after the body -- too late for this decision -- so the
+		header's resolved bases are asked directly: ``class A2(Generic[T],
+		TypedDict)'' gets _TypedDictMeta from its second base, as CPython's
+		most-derived rule gives it.  Recorded on the class, as a keyword would
+		be, so type(A2) reports it too."
+		inherited isNil ifTrue: [
+			inherited := self ___grailMostDerivedMetaclassOf___: basesArray.
+			inherited notNil ifTrue: [self ___grailSetMetaclass___: inherited]].
 		((inherited notNil)
 			and: [(inherited isKindOf: Behavior)
 			and: [self ___grailMetaclassConstructs___: inherited]])
@@ -3205,6 +3271,20 @@ ___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 					self ___grailPrepareBases___: basesArray }
 				value: kwargs].
 	(ns isNil or: [ns == None]) ifTrue: [^ nil].
+	"THE BODY'S IMPLICIT FIRST BINDINGS.  A CPython class body begins with
+	``__module__ = __name__'' and ``__qualname__ = ...'', so a namespace that
+	watches its writes is offered those two before anything the body says --
+	['__module__', '__qualname__', '__doc__', ...] -- and a metaclass reads
+	them back (typing's NamedTupleMeta takes ns['__module__']).  Grail's body
+	never binds them, so they are written here, before it runs.  Not into the
+	namespace Grail's Smalltalk enum machinery supplies, which is not a Python
+	mapping's write protocol."
+	(prep notNil or: [ns @env0:isKindOf: dict]) ifTrue: [
+		#( #'__module__' #'__qualname__' ) @env0:do: [:k |
+			[ns @env1:__setitem__: k @env0:asString _: (self ___pyAttrLoad___: k)]
+				@env0:on: AbstractException do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil]]].
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingClassNamespace'
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
@@ -3934,6 +4014,44 @@ ___grailDispatchMetaclass___
 		never told its parent about a subclass.  typing.Protocol is one:
 		every Protocol subclass lost its __parameters__.  See type >>
 		__new__:_:_:_:."
+		"THE IMPLICIT BINDINGS FIRST.  A CPython class body begins with
+		``__module__ = __name__'' and ``__qualname__ = '...''', so every
+		namespace a metaclass is handed carries both -- and typing's
+		NamedTupleMeta reads ``ns['__module__']'' unconditionally, while it
+		copies __qualname__ onto the class it builds.  Grail's body never
+		binds them (the class already knows both), so the namespace came
+		without.  Added before the snapshot, so type.__new__ sees them as
+		unchanged rather than as a metaclass's own write."
+		"__orig_bases__ too, when the header's __mro_entries__ substituted a
+		base: CPython's class statement puts it in the namespace, and
+		typing's _generic_init_subclass refuses ``Cannot inherit from plain
+		Generic'' for a class a metaclass rebuilt without it.  Absent on a
+		class that has none -- the read raises and nothing is added."
+		"And __annotations__ under ``from __future__ import annotations'':
+		there CPython's namespace holds the stringified dict itself, where a
+		PEP 649 body leaves __annotate_func__ instead -- which Grail already
+		supplies.  Seeded only when neither is present and there is
+		something to seed, so a class without annotations keeps a namespace
+		that says so.  typing's _TypedDictMeta pops it, so a future-annotated
+		TypedDict (test.typinganndata._typed_dict_helper) had no keys."
+		(((ns @env1:__contains__: '__annotations__') ___isTruthy___
+			or: [(ns @env1:__contains__: '__annotate_func__') ___isTruthy___
+			or: [(ns @env1:__contains__: '__annotate__') ___isTruthy___]]) @env0:not)
+				ifTrue: [
+					[ | ann |
+					ann := self ___pyAttrLoad___: #'__annotations__'.
+					(ann @env1:__len__ @env0:> 0) ifTrue: [
+						ns @env1:__setitem__: '__annotations__'
+							_: (ann @env1:copy)]]
+						@env0:on: AbstractException do: [:ex |
+							(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+							ex @env0:return: nil]].
+		#( #'__module__' #'__qualname__' #'__orig_bases__' ) @env0:do: [:k |
+			(ns @env1:__contains__: k @env0:asString) ___isTruthy___ ifFalse: [
+				[ns @env1:__setitem__: k @env0:asString _: (self ___pyAttrLoad___: k)]
+					@env0:on: AbstractException do: [:ex |
+						(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+						ex @env0:return: nil]]].
 		self ___grailSnapshotNamespace___: ns.
 		stk := SessionTemps @env0:current
 			@env0:at: #'GrailClassUnderConstruction'
@@ -3945,6 +4063,17 @@ ___grailDispatchMetaclass___
 		does."
 		[result := fn @env1:___pyCallValue___: { meta. clsName. clsBases. ns } kw: hdrKw]
 			@env0:ensure: [stk @env0:removeLast]].
+	"A metaclass that answered a DIFFERENT class -- typing's NamedTupleMeta
+	returns the one collections.namedtuple built, and type.__new__ builds a
+	fresh one when _TypedDictMeta rewrites the bases -- has made the class the
+	statement's name will be bound to, and so what the canonical registry will
+	record.  Stamped in its committed holder, so a re-import's class statement
+	does not read that class's bases as a declared base change (importlib >>
+	___isMetaclassBuilt___:)."
+	((result ~~ self) and: [result @env0:notNil and: [result isKindOf: Behavior]]) ifTrue: [
+		[(result @env0:perform: #'___dynInstVars___' env: 1)
+			@env0:dynamicInstVarAt: #'___grailMetaclassBuilt___' put: true]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	(result @env0:notNil and: [result isKindOf: Behavior]) ifTrue: [
 		fn := [meta ___pyAttrLoad___: #'__init__']
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
@@ -5762,7 +5891,20 @@ ___dynamicClassAttr___: aSym
 				holder := walker @env0:perform: #___dynInstVars___ env: 1.
 				holder == nil ifFalse: [
 					dynValue := holder @env0:dynamicInstVarAt: aSym.
-					dynValue == nil ifFalse: [^ dynValue]
+					dynValue == nil ifFalse: [
+						"MRO ORDER, as the overlay walk above applies it: a value
+						a BASE was assigned yields to a subclass whose own body
+						defines the name.  typing's Protocol assigns
+						``cls.__init__ = _no_init_or_replace_init'' on the
+						protocol, and a concrete subclass with its own
+						``def __init__'' ran the refusal instead -- whose
+						replace-on-first-call then installed object.__init__
+						and the subclass's __init__ never ran at all."
+						(self ___methodDefinedFrom___: ((self isKindOf: Behavior)
+								ifTrue: [self] ifFalse: [self @env0:class])
+							upTo: walker name: aSym)
+							ifTrue: [^ nil].
+						^ dynValue]
 				]
 			].
 		walker := walker @env0:superClass
@@ -9104,8 +9246,25 @@ ___pyAttrLoad___: aSym
 				ifTrue: [^ aSym == #'__init_subclass__'
 					ifTrue: [BoundMethod receiver: self selector: aSym
 						definingClass: self]
-					ifFalse: [UnboundMethod definingClass: self selector: aSym]].
-			(___meta ___chainOwnsAnyOf___: family orUnary: aSym from: ___meta)
+					ifFalse: [UnboundMethod ___forClassRead___: self
+						family: family selector: aSym]].
+			"...but NOT a name CPython's ``object'' defines.  Every metaclass
+			descends from type and so from object, so its chain owns __init__,
+			__repr__, __new__ and the rest -- and so does the class's own MRO,
+			which ends in object and is searched FIRST: ``Q.__init__'' for
+			``class Q(metaclass=M)'' is object.__init__, never M's.  Binding the
+			metaclass's copy to the class answered a BoundMethod that no
+			``is'' comparison against the class's own read could match, which
+			is how typing's Protocol.__init_subclass__ never installed the
+			refusal that stops a protocol being instantiated."
+			"Nor a name the class's own chain defines BELOW the universal roots --
+			``class S(dict, MutableMapping)'' reads dict's __iter__, which lives
+			on KeyValueDictionary, not ABCMeta's inherited copy: cls.__mro__ is
+			searched before the metatype's plain methods."
+			((___meta ___chainOwnsAnyOf___: family orUnary: aSym from: ___meta)
+				and: [(((object ___cpythonObjectDictNames___ @env0:includes: aSym)
+					and: [self ___chainOwnsAnyOf___: family orUnary: aSym from: self])
+					or: [self ___ownChainOwnsAnyOf___: family orUnary: aSym from: self]) @env0:not])
 				ifTrue: [^ BoundMethod receiver: self selector: aSym
 					definingClass: ___meta]].
 		"Instance method accessed via the class object — an *unbound* method
@@ -9180,6 +9339,7 @@ ___pyAttrLoad___: aSym
 							ifTrue: [BoundMethod receiver: self selector: aSym
 								definingClass: self]
 							ifFalse: [UnboundMethod ___forClassRead___: self
+								family: family
 								selector: aSym]]].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
@@ -10291,6 +10451,23 @@ __eq__: other
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
 	r := self ___varargsDunder___: #'___eq__:kw:' with: other.
 	r == nil ifFalse: [^ r].
+	"A CLASS compares through its metaclass, as __lt__ below already does:
+	``A == B'' is ``type(A).__eq__(A, B)''.  pickletester's pickling_metaclass
+	defines __eq__ so a class rebuilt by unpickling equals the original, and
+	once calling a metaclass really built a class, identity said False."
+	"Only a metaclass that DEFINES __eq__, below type and object: every
+	metaclass descends from both, and reaching this very method up its chain
+	re-entered it on the class forever (test_pickle stopped importing)."
+	(self @env0:isKindOf: Behavior) ifTrue: [ | meta owner |
+		meta := self ___grailMetaclass___.
+		meta @env0:notNil ifTrue: [
+			owner := meta @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
+			(((owner @env0:notNil and: [owner ~~ Object
+					and: [owner ~~ (Python @env0:at: #type)]]))
+				or: [(meta ___classChainAttrLookup___: #'__eq__') @env0:notNil])
+				ifTrue: [
+					r := self ___grailMetaclassCmp___: #'__eq__' with: other.
+					r == nil ifFalse: [^ r]]]].
 	"Answer a MATCH outright, punt otherwise.  ``='' rather than ``=='': for a
 	generic PythonInstance the two agree (kernel = is identity there), but a
 	KERNEL-backed receiver that reaches this default -- a Fraction built as a
@@ -11963,6 +12140,36 @@ ___grailMetaclass___
 
 category: 'Grail-Metaclass'
 method: object
+___grailMostDerivedMetaclassOf___: basesArray
+	"The metaclass a class with these bases inherits, or nil: CPython's
+	_PyType_CalculateMetaclass over the bases' own metaclasses, of which the
+	winner is the one every other is an ancestor of.  A conflict CPython would
+	refuse answers the first candidate -- the class exists by the time this is
+	asked, so there is nothing left to refuse.
+
+	Needed only past the FIRST base: the superclass walk in
+	___grailMetaclass___ already finds whatever the primary base carries."
+
+	| cands |
+	(basesArray @env0:isKindOf: SequenceableCollection) ifFalse: [^ nil].
+	basesArray @env0:size @env0:< 2 ifTrue: [^ nil].
+	cands := OrderedCollection @env0:new.
+	basesArray @env0:do: [:base | | m |
+		(base @env0:isKindOf: Behavior) ifTrue: [
+			m := base ___grailMetaclass___.
+			(m ~~ nil and: [(cands @env0:includesIdentical: m) @env0:not])
+				ifTrue: [cands @env0:add: m]]].
+	cands @env0:isEmpty ifTrue: [^ nil].
+	cands @env0:do: [:c | | all |
+		all := true.
+		cands @env0:do: [:o |
+			(o == c or: [c @env0:inheritsFrom: o]) ifFalse: [all := false]].
+		all ifTrue: [^ c]].
+	^ cands @env0:first
+%
+
+category: 'Grail-Metaclass'
+method: object
 ___grailOwnMetaclass___
 	"The metaclass THIS class recorded for itself, without the inheriting walk
 	___grailMetaclass___ does -- nil for a class that merely inherits one.
@@ -11998,10 +12205,14 @@ ___metaclassCheckHook___: baseSym
 	every isinstance(x, int) in the corpus.  This hook exists for a metaclass
 	written in PYTHON, which is the case Grail had no answer for at all."
 
-	| meta fn |
+	| meta fn bypass |
 	(self isKindOf: Behavior) ifFalse: [^ nil].
 	meta := self ___grailMetaclass___.
 	meta == nil ifTrue: [^ nil].
+	"Suppressed while type's DEFAULT check runs for this class -- see
+	type >> ___withCheckHookBypassed___:."
+	bypass := SessionTemps @env0:current @env0:at: #'GrailCheckHookBypass' otherwise: nil.
+	(bypass @env0:notNil and: [bypass @env0:includes: self]) ifTrue: [^ nil].
 	fn := meta ___classChainAttrLookup___: baseSym.
 	fn == nil ifTrue: [fn := meta ___classAttrDunder___: baseSym].
 	fn == nil ifTrue: [
@@ -12095,7 +12306,27 @@ ___grailMetaclassCallHandler___
 	found := tbl @env0:at: self otherwise: nil.
 	found @env0:notNil ifTrue: [
 		^ found @env0:== #'___noMetaCall___' ifTrue: [nil] ifFalse: [found]].
-	handler := self ___metaclassMethodFor___: #'__call__'.
+	"An ASSIGNED __call__ first.  typing's _TypedDictMeta says
+	``__call__ = dict  # static method'', so ``Movie(name='x')'' is a plain dict
+	-- CPython finds dict on the metatype and, dict not being a function, calls
+	it without the class.  The assignment compiles to a class-attribute
+	accessor on the metaclass, which the method probe below cannot see; worse,
+	that probe then finds object's own generic __call__ up the metaclass's
+	chain and constructs the class as usual.  A FUNCTION so assigned binds to
+	the class the way a def would; anything else is called as it stands."
+	handler := nil.
+	(self ___grailMetaclass___) @env0:ifNotNil: [:meta | | v |
+		v := (meta ___grailMetaclassClassAttr___: #'__call__')
+			@env0:ifNil: [meta ___classChainAttrLookup___: #'__call__'].
+		v @env0:notNil ifTrue: [
+			(v @env0:isKindOf: PyStaticMethod)
+				ifTrue: [handler := v @env0:dynamicInstVarAt: #'__func__']
+				ifFalse: [
+					handler := (v @env0:isKindOf: Behavior)
+						ifTrue: [v]
+						ifFalse: [MethodBinding instance: self callable: v]]]].
+	handler @env0:isNil ifTrue: [
+		handler := self ___metaclassMethodFor___: #'__call__'].
 	tbl @env0:at: self put: (handler @env0:ifNil: [#'___noMetaCall___']).
 	^ handler
 %
@@ -14907,6 +15138,38 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	BoundMethod/varargs machinery)."
 	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
 	binOp == #'___noBinOp___' ifFalse: [^ binOp].
+	"A SELF-SEND TO A METHOD THE CLASS HOLDS AS AN ATTRIBUTE.  A class a
+	metaclass BUILT -- typing's NamedTupleMeta returns the class
+	collections.namedtuple made, and setattr()s the body's methods onto it --
+	holds them as class attributes, not compiled methods.  Those methods were
+	compiled on the class statement's own class, so a sibling call inside one
+	(jinja2's ``Token.test_any'' calls ``self.test(expr)'') is a plain
+	Smalltalk self-send, and the namedtuple class does not understand it.
+	CPython finds the function in the class's __dict__; so does this, by
+	loading the attribute (which binds it) and calling that."
+	((self isKindOf: Behavior) not and: [(s @env0:indexOf: $:) @env0:> 0]) ifTrue: [
+		| varargs pyName held |
+		varargs := (s @env0:size @env0:> 4) and: [(s @env0:endsWith: ':kw:')
+			and: [(s @env0:at: 1) == $_]].
+		pyName := varargs
+			ifTrue: [s @env0:copyFrom: 2 to: s @env0:size @env0:- 4]
+			ifFalse: [s @env0:copyFrom: 1 to: (s @env0:indexOf: $:) @env0:- 1].
+		"Only for a name the class does NOT compile in any arity.  A class that
+		defines ``register'' and was sent the wrong arity of it must still get
+		the ordinary refusal: the attribute read finds its own method, whose
+		varargs forwarder performs the missing fixed selector again -- which
+		recursed argparse to the stack limit."
+		held := ((importlib @env0:___pythonNameFamilyOf___: aSelector)
+				@env0:anySatisfy: [:sel |
+					(cls @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:notNil])
+			ifTrue: [nil]
+			ifFalse: [[cls @env1:___classChainAttrLookup___: pyName @env0:asSymbol]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		held @env0:notNil ifTrue: [ | fn |
+			fn := self @env1:___pyAttrLoad___: pyName @env0:asSymbol.
+			^ varargs
+				ifTrue: [fn @env1:value: (anArray @env0:at: 1) value: (anArray @env0:at: 2)]
+				ifFalse: [fn @env1:value: anArray value: nil]]].
 	"A METACLASS METHOD reached as a DIRECT SEND on the class.  Inside a compiled
 	method body ``cls.__subclasscheck__(c)'' emits the send __subclasscheck__:
 	rather than an attribute load, so the metaclass consult in ___pyAttrLoad___:

@@ -100,8 +100,28 @@ def _make_union(parameters):
     return Union[tuple(parameters)]
 
 
+def _not_a_base(name):
+    """``__init_subclass__`` for a type CPython implements in C without
+    Py_TPFLAGS_BASETYPE -- ``class V(TypeVar)'' is refused there with
+    ``type 'typing.TypeVar' is not an acceptable base type''.  Grail's
+    stand-ins are ordinary Python classes, so the refusal is spelled out;
+    PEP 487 runs it on the parent as the subclass is created."""
+    def __init_subclass__(cls, *args, **kwargs):
+        raise TypeError(f"type '{name}' is not an acceptable base type")
+    return classmethod(__init_subclass__)
+
+
+def _cannot_subclass_instance(obj):
+    """``class W(T)'' for a type variable is CPython's ``Cannot subclass an
+    instance of TypeVar'', raised from the variable's ``__mro_entries__''."""
+    return f"Cannot subclass an instance of {type(obj).__name__}"
+
+
 class _NoDefaultType:
     """The type of the ``NoDefault`` sentinel."""
+
+    __slots__ = ()
+    __init_subclass__ = _not_a_base('NoDefaultType')
 
     _instance = None
 
@@ -185,6 +205,11 @@ class TypeVar(_Common):
     ``class C[T]`` syntax, through _grail_type_param.
     """
 
+    __init_subclass__ = _not_a_base('typing.TypeVar')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
+
     def __init__(self, name, *constraints, bound=None, covariant=False,
                  contravariant=False, default=NoDefault, infer_variance=False):
         self.__name__ = name
@@ -229,6 +254,11 @@ class TypeVar(_Common):
 class ParamSpecArgs:
     """The args for a ParamSpec object -- ``P.args``."""
 
+    __init_subclass__ = _not_a_base('typing.ParamSpecArgs')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
+
     def __init__(self, origin):
         self.__origin__ = origin
 
@@ -247,6 +277,11 @@ class ParamSpecArgs:
 class ParamSpecKwargs:
     """The kwargs for a ParamSpec object -- ``P.kwargs``."""
 
+    __init_subclass__ = _not_a_base('typing.ParamSpecKwargs')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
+
     def __init__(self, origin):
         self.__origin__ = origin
 
@@ -264,6 +299,11 @@ class ParamSpecKwargs:
 
 class ParamSpec(_Common):
     """Parameter specification variable (PEP 612)."""
+
+    __init_subclass__ = _not_a_base('typing.ParamSpec')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
 
     def __init__(self, name, *, bound=None, covariant=False,
                  contravariant=False, default=NoDefault, infer_variance=False):
@@ -306,6 +346,11 @@ class ParamSpec(_Common):
 
 class TypeVarTuple(_Common):
     """Type variable tuple (PEP 646)."""
+
+    __init_subclass__ = _not_a_base('typing.TypeVarTuple')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
 
     def __init__(self, name, *, default=NoDefault):
         self.__name__ = name

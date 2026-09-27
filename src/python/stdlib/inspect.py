@@ -1172,6 +1172,13 @@ def _shadowed_dict(klass, cache):
     # instance dict; CPython's check also excludes the ordinary getset
     # descriptor, which Grail's class dict never lists.
     for entry in _static_getmro(klass):
+        # ``type`` and ``object`` list their own ``__dict__`` -- the getset
+        # descriptor CPython's check excludes by type -- so an entry on one
+        # of those roots is never a shadowing binding.  Counting type's made
+        # every class look shadowed, and getattr_static then never read a
+        # class's __dict__ at all.
+        if entry is type or entry is object:
+            continue
         d = _getattr_static_class_dict(entry, cache)
         if '__dict__' in d:
             return d['__dict__']

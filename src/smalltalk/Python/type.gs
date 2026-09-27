@@ -248,6 +248,26 @@ __new__: mcls _: aName _: bases _: ns
 				('__classcell__ must be a nonlocal cell, not <class ''' @env0:,
 					(___cellVal ___pyTypeNameForError___) @env0:, '''>')]].
 	pending := type ___classUnderConstruction___.
+	"DIFFERENT BASES BUILD A DIFFERENT CLASS.  The class under construction can
+	only be answered when the metaclass asks for the class the statement was
+	already building.  typing's _TypedDictMeta does not: it calls
+	``type.__new__(_TypedDictMeta, name, (*generic_base, dict), ns)'', so a
+	``class Movie(TypedDict)'' is a dict subclass, not a TypedDict one.
+	Answering the pending class dropped that ``dict'' on the floor -- the
+	recorded reason typing.py carried its own TypedDict.
+
+	So a changed bases tuple builds a fresh class from the namespace, exactly
+	as the direct three-argument form below does, and the class statement
+	re-binds its name to it (___grailDispatchMetaclass___ answers whatever
+	__new__ returned).  The body's defs travel as the functions the namespace
+	holds -- the same thing typing's NamedTupleMeta relies on when it copies a
+	namespace onto the class collections.namedtuple built -- and the metaclass
+	is recorded unconditionally, since it built this class itself."
+	(pending @env0:notNil
+		and: [type ___grailBases___: bases differFrom: pending]) ifTrue: [ | rebuilt |
+			rebuilt := (builtins @env1:instance) @env1:type: aName _: bases _: ns.
+			rebuilt @env1:___grailSetMetaclass___: mcls.
+			^ rebuilt].
 	pending @env0:notNil ifTrue: [
 		"APPLY THE NAMESPACE.  type.__new__ is defined as ``build a class with
 		this namespace'', so what the metaclass did to the mapping before
@@ -328,7 +348,11 @@ __new__: mcls _: aName _: bases _: ns
 	bootstrap ran left a class routing to one of them."
 	((mcls ~~ built)
 		and: [object ___grailMetaclassConstructs___: mcls])
-			ifTrue: [built ___grailSetMetaclass___: mcls].
+			ifTrue: [
+				built ___grailSetMetaclass___: mcls.
+				"Committed too, for a module body's call -- see importlib >>
+				___recordDirectMetaclass___:meta:."
+				importlib @env0:___recordDirectMetaclass___: built meta: mcls].
 	^ built
 %
 
@@ -476,6 +500,32 @@ __subclasses__
 %
 
 category: 'Grail-Class Construction'
+classmethod: type
+___grailBases___: aBasesTuple differFrom: aClass
+	"Does aBasesTuple name different bases, in a different order, from the ones
+	aClass -- the one under construction -- was declared with?  Identity,
+	element by element: a metaclass that passes the bases it was given, the
+	common case, must keep answering the class it was handed."
+
+	| mine theirs |
+	aBasesTuple @env0:isNil ifTrue: [^ false].
+	mine := [aClass ___pyAttrLoad___: #'__bases__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mine @env0:isNil ifTrue: [^ false].
+	theirs := [aBasesTuple @env0:asArray]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	theirs @env0:isNil ifTrue: [^ false].
+	mine := mine @env0:asArray.
+	"``()'' and ``(object,)'' are the same declaration."
+	(theirs @env0:isEmpty and: [mine @env0:size @env0:= 1
+		and: [(mine @env0:at: 1) == object]]) ifTrue: [^ false].
+	(mine @env0:size @env0:= theirs @env0:size) ifFalse: [^ true].
+	1 @env0:to: mine @env0:size do: [:i |
+		(mine @env0:at: i) == (theirs @env0:at: i) ifFalse: [^ true]].
+	^ false
+%
+
+category: 'Grail-Class Construction'
 method: type
 ___call__: positional kw: kwargs
 	"``type.__call__(cls, *args, **kwargs)'' -- the DEFAULT instantiation, and
@@ -503,6 +553,50 @@ ___call__: positional kw: kwargs
 	bypass @env0:add: self.
 	^ [self @env1:value: positional value: kwargs]
 		@env0:ensure: [bypass @env0:remove: self ifAbsent: []]
+%
+
+category: 'Grail-Class Construction'
+method: type
+__instancecheck__: anObject
+	"``type.__instancecheck__(cls, obj)'' -- the DEFAULT check, and what
+	``super().__instancecheck__(obj)'' inside a metaclass reaches: typing's
+	_AnyMeta, _ProtocolMeta and _TypedDictMeta all end that way.  Grail had no
+	such method, so the super() read raised AttributeError.
+
+	The receiver is the class being checked (see ___call__:kw: for why).  The
+	ordinary builtin check runs with THIS class's metaclass hook bypassed --
+	without the bypass it would ask the very metaclass __instancecheck__ that
+	delegated here, and recurse."
+
+	^ self ___withCheckHookBypassed___: [
+		(builtins @env1:instance) @env1:isinstance: anObject _: self]
+%
+
+category: 'Grail-Class Construction'
+method: type
+__subclasscheck__: aClass
+	"``type.__subclasscheck__(cls, sub)'' -- the default, for
+	``super().__subclasscheck__(sub)''.  See __instancecheck__:."
+
+	^ self ___withCheckHookBypassed___: [
+		(builtins @env1:instance) @env1:issubclass: aClass _: self]
+%
+
+category: 'Grail-Class Construction'
+method: type
+___withCheckHookBypassed___: aBlock
+	"Run aBlock with this class's metaclass __instancecheck__ / __subclasscheck__
+	hook suppressed -- object >> ___metaclassCheckHook___: answers nil for a
+	class in the set.  A set of classes rather than a flag, so a default check
+	that asks about a DIFFERENT class on the way still gets that class's hook."
+
+	| bypass |
+	bypass := SessionTemps @env0:current
+		@env0:at: #'GrailCheckHookBypass'
+		ifAbsentPut: [IdentitySet @env0:new].
+	(bypass @env0:includes: self) ifTrue: [^ aBlock @env0:value].
+	bypass @env0:add: self.
+	^ aBlock @env0:ensure: [bypass @env0:remove: self ifAbsent: []]
 %
 
 set compile_env: 0

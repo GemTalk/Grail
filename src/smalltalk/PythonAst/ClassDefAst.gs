@@ -1760,13 +1760,28 @@ printSmalltalkRuntimeOn: aStream
 								"Through the marked store helper, not a bare ``Cls attr: v'' send:
 								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
 								send as a Python call (see ___grailClassAttrSetterDiverts___)."
+								"...EXCEPT a docstring-less class's __doc__.  That None is
+								Grail's stamp (see the __doc__ injection in this method's
+								caller), not a binding the body made: CPython's body binds
+								__doc__ only when there IS a docstring, so a watching
+								namespace must not be offered one."
+								((pair key asSymbol == #'__doc__')
+									and: [(pair value isKindOf: ConstantAst)
+									and: [pair value value isNil]])
+									ifTrue: [
+										aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
+											nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+											nextPutAll: ' with: ('.
+										pair value printSmalltalkWithParenthesisOn: aStream.
+										aStream nextPutAll: ').'; lf]
+									ifFalse: [
 								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('.
 								pair value printSmalltalkWithParenthesisOn: aStream.
-								aStream nextPutAll: ')).'; lf]]
+								aStream nextPutAll: ')).'; lf]]]
 			].
 		]] value: IdentityKeyValueDictionary new.
 		"Whatever is left stands after the last attribute in the body.
