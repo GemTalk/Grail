@@ -2168,6 +2168,53 @@ ___hasUserInit___
 %
 
 
+category: 'Grail-Instantiation'
+method: object
+___grailInheritsObjectInitAndNew___
+	"Is every __init__ and every __new__ this class can reach object's own --
+	CPython's ``type->tp_init == object_init && type->tp_new == object_new''?
+	That is the case in which object_new refuses arguments.
+
+	The receiver is a class.  Every spelling counts, because Grail spells the
+	arity into the selector: ``def __init__(self, x)'' is ``__init__:'', and
+	a built-in's constructor is a class-side ``__new__:'' (int has no
+	__init__ at all, so asking about __init__ alone would refuse int(5)'s
+	subclasses).  So does an ASSIGNED __init__ or __new__ -- a dataclass's
+	synthesized one, a @deprecated wrapper -- which lives in the class
+	attribute stores rather than as a method."
+
+	| family cls objectMeta |
+	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
+	self @env0:isMeta ifTrue: [^ false].
+	"__init__: object must be the NEAREST class defining any spelling."
+	family := self ___selectorFamilyFor___: #'__init__' string: '__init__'.
+	cls := self.
+	[cls @env0:notNil and: [cls ~~ object]] @env0:whileTrue: [
+		((cls @env0:includesSelector: #'__init__' environmentId: 1)
+			or: [(family @env0:detect: [:sel |
+					cls @env0:includesSelector: sel environmentId: 1]
+				ifNone: [nil]) @env0:notNil])
+			ifTrue: [^ false].
+		cls := cls @env0:superclass].
+	cls == object ifFalse: [^ false].
+	(self ___dynamicClassAttr___: #'__init__') == nil ifFalse: [^ false].
+	"__new__: no instance-side spelling (a class-body def) anywhere, and every
+	class-side one object's."
+	family := self ___selectorFamilyFor___: #'__new__' string: '__new__'.
+	(self @env0:whichClassIncludesSelector: #'__new__' environmentId: 1) == nil
+		ifFalse: [^ false].
+	(family @env0:detect: [:sel |
+			(self @env0:whichClassIncludesSelector: sel environmentId: 1) ~~ nil]
+		ifNone: [nil]) == nil ifFalse: [^ false].
+	objectMeta := object @env0:class.
+	({ #'__new__' } @env0:, family) @env0:do: [:sel | | owner |
+		owner := self @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner == nil or: [owner == objectMeta]) ifFalse: [^ false]].
+	(self ___dynamicClassAttr___: #'__new__') == nil ifFalse: [^ false].
+	^ true
+%
+
+
 category: 'Grail-Metaclass'
 classmethod: object
 ___grailAbcMetaclassInChain___
@@ -2386,6 +2433,15 @@ ___allocateInstance___: positional kw: keywords
 			^ positional @env0:isEmpty
 				ifTrue: [self @env1:__new__]
 				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
+		"CPython's object_new: with neither __new__ nor __init__ of its own
+		anywhere in the class's lineage, nothing can consume an argument, so
+		any argument is an error -- ``A() takes no arguments''.  Grail allocated
+		and dropped them, so ``class A: pass; A(42)'' succeeded."
+		((positional @env0:isEmpty @env0:not
+				or: [keywords @env0:notNil and: [keywords @env0:notEmpty]])
+			and: [self ___grailInheritsObjectInitAndNew___])
+			ifTrue: [TypeError ___signal___:
+				self ___pyNameOrEmpty___ @env0:, '() takes no arguments'].
 		"A sealed kernel class (ExecBlock via type(lambda)(), ...) refuses
 		#new with an UNCATCHABLE ShouldNotImplement/ImproperOperation --
 		resignal as CPython's catchable TypeError."
@@ -4918,6 +4974,10 @@ ___pythonModuleAttrIdentity___
 	the two directly).  Same treatment, and for the same reason, as PyTraceback
 	above: Grail HAS the object, only the NAME was wrong."
 	(n @env0:= 'PyCode') ifTrue: [^ #('code' 'builtins')].
+	"The property type.  ``builtins.property'' IS this class, so only its
+	spelling was wrong: ``type(property(f)).__name__'' answered
+	'PropertyDescriptor' and ``property.__module__'' raised."
+	(n @env0:= 'PropertyDescriptor') ifTrue: [^ #('property' 'builtins')].
 	"PyCell already answers ``cell'' from ___pythonName___; it needs the module
 	half too, so ``type(c).__module__'' is 'builtins' rather than the Python
 	dictionary it happens to live in."
