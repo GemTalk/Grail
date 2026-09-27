@@ -1299,6 +1299,82 @@ isDeleterDecorated
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___propertyAccessorKind___
+	"Which accessor of a property this def is, read off its OUTERMOST
+	decorator: #getter for ``@property'', #setter / #deleter for
+	``@<name>.setter'' / ``@<name>.deleter'' naming this def's own name, #other
+	for any other accessor shape (``@<name>.getter'', a mismatched name), and
+	nil for a def whose outermost decorator is not a property form at all.
+
+	Only the outermost counts because that is the object the class ends up
+	holding: ``@property @deco def x'' is property(deco(x)).  A property form
+	further in is not a property this class declares."
+
+	| first |
+	decorator_list isNil ifTrue: [^ nil].
+	decorator_list isEmpty ifTrue: [^ nil].
+	first := decorator_list at: 1.
+	(first isKindOf: Symbol) ifTrue: [
+		^ first asSymbol == #'property' ifTrue: [#getter] ifFalse: [nil]].
+	(self isPropertyAccessorDecorator: first) ifFalse: [^ nil].
+	first value id asString = name asString ifFalse: [^ #other].
+	first attr asString = 'setter' ifTrue: [^ #setter].
+	first attr asString = 'deleter' ifTrue: [^ #deleter].
+	^ #other
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___wrapsPropertyAccessor___
+	"Does a decorator BENEATH this property accessor's property form replace
+	the function -- ``@property @deprecated(...) def x'' -- so the accessor the
+	property must call is the decorator's result rather than the compiled
+	body?
+
+	@abstractmethod does not count, bare or as ``@abc.abstractmethod'': it
+	marks the function and hands the same one back, so the compiled body is
+	still the accessor, and the ordinary property path already serves it."
+
+	| marking |
+	marking := #('abstractmethod' 'abstractproperty').
+	^ self applicableMethodDecorators anySatisfy: [:deco |
+		(deco isKindOf: Symbol)
+			ifTrue: [(marking includes: deco asString) not]
+			ifFalse: [
+				"``@abc.abstractmethod'' is the same marker, spelled dotted."
+				((deco isKindOf: AttributeAst)
+					and: [marking includes: deco attr asString]) not]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printPropertyAccessorOn: aStream className: aClassName siblingNames: siblingNames baseName: baseName
+	"The callable this def contributes to a DECORATED property's
+	``property(fget, fset, fdel)'': its decorator chain over the method
+	compiled as baseName, or -- an accessor with no decorator of its own --
+	that method alone, as an UnboundMethod.
+
+	The same scope bookkeeping as printMethodDecoratorsOn:, for the same
+	reasons: a decorator may name a sibling def, and the chain emits inline in
+	the scope that emits the classdef."
+
+	| savedDecoEmit |
+	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
+	savedDecoEmit := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
+	[self
+		printMethodDecoratorChainOn: aStream
+		decorators: self applicableMethodDecorators
+		index: 1
+		className: aClassName
+		baseName: baseName]
+			ensure: [
+				CallAst classBodyDecoratorScope: nil.
+				CallAst inDecoratorEmit: savedDecoEmit]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
 	| ___savedDecoEmit___ |
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
@@ -1436,6 +1512,15 @@ ___decoratorBaseIsClassSide___
 category: 'Grail-code generation'
 method: FunctionDefAst
 printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName
+	"The chain over the method compiled under this def's own name."
+
+	^ self printMethodDecoratorChainOn: aStream decorators: decoList index: i
+		className: aClassName baseName: name
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName baseName: baseName
 	"Nested decorator application A(B(...(the method)...)).  At the base case
 	emit an UnboundMethod naming the COMPILED method -- what CPython hands a
 	decorator, a plain function taking self first.
@@ -1471,7 +1556,7 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 					nextPutAll: '(UnboundMethod definingClass: ';
 					nextPutAll: aClassName;
 					nextPutAll: ' @env0:class selector: #''';
-					nextPutAll: name;
+					nextPutAll: baseName;
 					nextPutAll: ''')']
 			ifFalse: [self ___decoratorBaseIsClassSide___
 			ifTrue: [
@@ -1481,14 +1566,14 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 					nextPutAll: '(BoundMethod receiver: ';
 					nextPutAll: aClassName;
 					nextPutAll: ' selector: #''';
-					nextPutAll: name;
+					nextPutAll: baseName;
 					nextPutAll: ''')']
 			ifFalse: [
 				aStream
 					nextPutAll: '(UnboundMethod definingClass: ';
 					nextPutAll: aClassName;
 					nextPutAll: ' selector: #''';
-					nextPutAll: name;
+					nextPutAll: baseName;
 					nextPutAll: ''')']].
 		^ self].
 	aStream nextPutAll: '(('.
@@ -1498,7 +1583,8 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 		printMethodDecoratorChainOn: aStream
 		decorators: decoList
 		index: i + 1
-		className: aClassName.
+		className: aClassName
+		baseName: baseName.
 	aStream nextPutAll: ' } kw: nil)'
 %
 

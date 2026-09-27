@@ -5,6 +5,13 @@
 # hand back the module object".  import_module maps a failed import to a
 # clean SkipTest (CPython behavior) instead of an opaque error.
 
+import importlib
+# CPython's import_helper imports these two at its top, and test files lean on
+# the side effect: ``import importlib'' alone does not bind the submodules, so
+# test_warnings' test_issue31285 reads ``importlib.machinery'' having imported
+# nothing but importlib and test.support.
+import importlib.machinery
+import importlib.util
 import sys
 import unittest
 
@@ -74,6 +81,16 @@ def import_fresh_module(name, fresh=(), blocked=(), *, deprecated=False,
         __import__(name)
     except ImportError:
         return None
+    # With ``fresh=``, CPython answers a NEW module object, and test_warnings
+    # asserts it (``assertIsNot(original_warnings, c_warnings)``).  A native
+    # module that can build an independent copy of itself does so here; for
+    # every other module this answers None and the helper keeps answering the
+    # module already imported.
+    if fresh:
+        import grail
+        copy = grail._fresh_native_module(name)
+        if copy is not None:
+            return copy
     return sys.modules.get(name)
 
 

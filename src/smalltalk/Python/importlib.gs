@@ -7631,6 +7631,15 @@ ___import__: positional kw: kwargs
 	fromlist := (positional __len__ @env0:> 3)
 		ifTrue: [positional @env0:at: 4]
 		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'fromlist' _: {}] ifNil: [{}]].
+	"A None fromlist is an EMPTY one: CPython only asks whether it is truthy.
+	It is also what IMPORT_NAME passes for a plain ``import x'', so any code
+	run under a __builtins__ override -- which routes its imports through
+	builtins ___gatedImport___ and so through here with CPython's five
+	arguments -- failed every plain import with ``object of type 'NoneType'
+	has no len()''.  A bare in-function exec() is such code: its namespace
+	is the module's globals, ``__builtins__'' included (test_warnings
+	test_exec_filename)."
+	(fromlist @env0:== None) ifTrue: [fromlist := {}].
 	level := (positional __len__ @env0:> 4)
 		ifTrue: [positional @env0:at: 5]
 		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'level' _: 0] ifNil: [0]].

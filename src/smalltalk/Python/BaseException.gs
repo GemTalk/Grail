@@ -6524,6 +6524,15 @@ ___liveFrameFilenameFor___: aMethod
 	always reported."
 
 	| cls clsName mod file pyName code |
+	"Route 0: a NAMED DOIT -- code run by exec()/eval() under the filename
+	compile() was given.  Neither route below can see it: a doit has no module
+	class and no code table, so every live frame of exec'd code reported
+	``<grail>'' while its traceback, which already asks the doit registry
+	(___codeForMethod___:name:ip:aCode:), reported the real name.  A warning raised there
+	was then recorded against ``<grail>'' (test_warnings test_exec_filename).
+	Nil for an unnamed doit and for every ordinary method, so the other routes
+	are unchanged."
+	(self ___pythonFileForDoitOf___: aMethod) ifNotNil: [:f | ^ f @env0:asString].
 	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	cls isNil ifTrue: [^ '<grail>'].
 	"A @classmethod or @staticmethod compiles to a CLASS-SIDE Smalltalk method,

@@ -216,6 +216,30 @@ _smalltalk: args kw: kw
 	^ first
 %
 
+category: 'Grail-Import Support'
+method: grail
+_fresh_native_module: aName
+	"A freshly built copy of the NATIVE module aName, or None.
+
+	test.support.import_helper.import_fresh_module asks for this when it is
+	given ``fresh='': CPython's helper answers a NEW module object, and
+	test_warnings checks exactly that -- ``assertIsNot(original_warnings,
+	c_warnings)'' (CWarnTests.test_accelerated).  Grail's import machinery has
+	no way to re-run a native module's import, so the helper used to answer
+	the module already in sys.modules.
+
+	None -- and the helper's old answer -- unless aName is a native module
+	that has declared its instances independent (NativeModule class >>
+	___hasFreshInstances___)."
+
+	| cls |
+	cls := Python @env0:at: aName @env0:asString @env0:asSymbol otherwise: nil.
+	(cls @env0:isKindOf: Behavior) ifFalse: [^ None].
+	(cls @env0:inheritsFrom: NativeModule) ifFalse: [^ None].
+	cls ___hasFreshInstances___ ifFalse: [^ None].
+	^ cls ___freshInstance___
+%
+
 set compile_env: 0
 
 ! ===============================================================================

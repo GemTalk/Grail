@@ -9174,7 +9174,7 @@ ___pyAttrLoad___: aSym
 						^ aSym == #'__init_subclass__'
 							ifTrue: [BoundMethod receiver: self selector: aSym
 								definingClass: self]
-							ifFalse: [UnboundMethod definingClass: self
+							ifFalse: [UnboundMethod ___forClassRead___: self
 								selector: aSym]]].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
@@ -9559,7 +9559,7 @@ ___pyAttrLoad___: aSym
 						or: [(self ___respondsTo___: sym5)
 							or: [(self ___respondsTo___: sym6)
 								or: [self ___respondsTo___: symVA]]]]]]])
-		ifTrue: [^ BoundMethod receiver: self selector: aSym].
+		ifTrue: [^ BoundMethod ___forAttrRead___: self selector: aSym].
 	"Unbound class-method lookup: ``Cls.method'' where ``method'' is
 	an instance method defined on Cls itself (env 1).  Python returns
 	a function that, when called with ``(instance, args...)'', runs

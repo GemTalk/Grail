@@ -227,6 +227,18 @@ ___pyDisplayNameOf___: aSelector forClass: aClass
 	| s sym c |
 	aClass isNil ifTrue: [^ nil].
 	s := aSelector asString.
+	"A property ACCESSOR compiled under a private selector -- a deleter as
+	``___propDeleter_x'', a decorated property's setter as ``___propSetter_x''
+	(ClassDefAst >> ___redirectedAccessorNameFor___:) -- was written ``def x''.
+	Only ClassDefAst emits either prefix, so stripping it renames nothing
+	written by hand, and a decorator's functools.wraps then copies the name
+	CPython would (test_warnings DeprecatedTests.test_property)."
+	#('___propSetter_' '___propDeleter_') do: [:prefix |
+		(s size > prefix size and: [(s copyFrom: 1 to: prefix size) = prefix])
+			ifTrue: [
+				| rest |
+				rest := s copyFrom: prefix size + 1 to: s size.
+				^ (self ___pyDisplayNameOf___: rest forClass: aClass) ifNil: [rest]]].
 	(s size > 3 and: [(s at: 1) == $_ and: [(s at: 2) ~~ $_]]) ifFalse: [^ nil].
 	(s indexOfSubCollection: '__' startingAt: 3) = 0 ifTrue: [^ nil].
 	sym := s asSymbol.
@@ -277,6 +289,52 @@ definingClass: aClass selector: aSym
 	inst @env0:_setClass: aClass selector: aSym.
 	per @env0:at: aSym put: inst.
 	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+___forClassRead___: aClass selector: aSym
+	"``Cls.method'' as object >> ___pyAttrLoad___ reads it off a class --
+	definingClass:selector:, except that a method Cls INHERITS FROM ``object''
+	answers object's own handle.
+
+	CPython's ``A.__init__'' for a class that does not define one IS
+	``object.__init__'' -- one slot wrapper, compared with ``is''.  Grail
+	interned the handle per class READ THROUGH, so the two were different
+	objects, and PEP 702's @deprecated, which asks ``cls.__init__ is
+	object.__init__'' to decide whether excess arguments are an error, never
+	raised ``A() takes no arguments'' (test_warnings DeprecatedTests.test_class).
+
+	Only object is redirected, and only when it is the NEAREST class on Cls's
+	superclass chain to define the name in any spelling -- ``__init__'',
+	``__init__:'', ..., ``___init__:kw:''.  Nothing between Cls and object
+	defining it is what makes resolving from object run the very method
+	resolving from Cls would.  The walk is per class, all spellings at once,
+	and NOT ___pyImplementingClass___'s: that one tries the unary spelling up
+	the whole chain first, so for ``def __init__(self, x)'' -- compiled as
+	``__init__:'' -- it finds object's unary __init__ above the class's own.
+	Inheritance between two Python classes (``C.m is B.m'') is left as it
+	was."
+
+	| inst family cls |
+	inst := self definingClass: aClass selector: aSym.
+	aClass == object ifTrue: [^ inst].
+	(aClass @env0:isKindOf: Behavior) ifFalse: [^ inst].
+	"A METACLASS's superclass chain ends at object too -- through Class and
+	Behavior -- but what it inherits there is type's, not object's:
+	``type(A).__init__'' is type.__init__ in CPython."
+	aClass @env0:isMeta ifTrue: [^ inst].
+	family := inst ___selectorFamilyFor___: aSym string: aSym @env0:asString.
+	cls := aClass.
+	[cls @env0:notNil and: [cls ~~ object]] @env0:whileTrue: [
+		((cls @env0:includesSelector: aSym environmentId: 1)
+			or: [(family @env0:detect: [:s |
+					cls @env0:includesSelector: s environmentId: 1]
+				ifNone: [nil]) @env0:notNil])
+			ifTrue: [^ inst].
+		cls := cls @env0:superclass].
+	cls == object ifFalse: [^ inst].
+	^ self definingClass: object selector: aSym
 %
 
 category: 'Grail-Dynamic Rebinding'
