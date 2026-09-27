@@ -1977,10 +1977,11 @@ printKeywordsDictOn: aStream
 		^ self
 	].
 	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
-		"Checked to be a mapping -- see object >> ___pyKwargsSplat___."
+		"Checked to be a mapping -- see object >> ___pyKwargsSplatFor___:."
 		aStream nextPut: $(.
 		keywords first value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ' @env1:___pyKwargsSplat___)'.
+		self printKwargsSplatCheckOn: aStream.
+		aStream nextPut: $).
 		^ self
 	].
 	"Build with Python ``str'' (Smalltalk String) keys to match
@@ -2014,10 +2015,27 @@ printKeywordsDictOn: aStream
 				the ``**options'' here, so the rule endpoint came back nil."
 				aStream nextPutAll: ' @env1:update: ('.
 				kwAst value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ' @env1:___pyKwargsSplat___);'.
+				self printKwargsSplatCheckOn: aStream.
+				aStream nextPutAll: ');'.
 			].
 	].
 	aStream nextPutAll: ' yourself)'.
+%
+
+category: 'Grail-other'
+method: CallAst
+printKwargsSplatCheckOn: aStream
+	"The mapping check a ``**'' operand gets (object >> ___pyKwargsSplatFor___:),
+	handed the callee when it is a plain NAME so the TypeError can start with
+	its name as CPython's does -- ``functools.partial() argument after ** must
+	be a mapping''.  A name is the one callee that can be evaluated a second
+	time for free and without effect; anything else keeps the unprefixed
+	message rather than re-running an attribute load or a call."
+
+	(function isKindOf: NameAst) ifFalse: [
+		^ aStream nextPutAll: ' @env1:___pyKwargsSplat___'].
+	aStream nextPutAll: ' @env1:___pyKwargsSplatFor___: '.
+	function printSmalltalkWithParenthesisOn: aStream
 %
 
 category: 'Grail-other'
@@ -4347,6 +4365,13 @@ ___irEligibleValueLocals___: localNames
 		ifFalse: [^ false].
 	(keywords allSatisfy: [:k | k value ___irEligibleValueLocals___: localNames])
 		ifFalse: [^ false].
+	"A ``**'' hands a NAME callee to its mapping check (___emitIRKwargsSplat___:on:),
+	so that name must be one the IR can load as a value; one it cannot stays on
+	text, which can print any name."
+	((function isKindOf: NameAst)
+		and: [(keywords anySatisfy: [:k | k name isNil])
+		and: [(function ___irEligibleValueLocals___: localNames) not]])
+			ifTrue: [^ false].
 	(#(#attrFixed #attrVarargs #attrDirect) includes: shape) ifTrue: [
 		^ function value ___irEligibleValueLocals___: localNames].
 	"#classSelfSend names its callee at compile time (a sibling def) and sends
@@ -4354,6 +4379,21 @@ ___irEligibleValueLocals___: localNames
 	(#(#attrLegacy #general) includes: shape) ifTrue: [
 		^ function ___irEligibleValueLocals___: localNames].
 	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRKwargsSplat___: anExpr on: aBuilder
+	"printKwargsSplatCheckOn:'s check, send for send: a NAME callee is handed
+	over (___irEligibleValueLocals___: has already required that it be one the
+	IR can load)."
+
+	(function isKindOf: NameAst) ifFalse: [
+		^ aBuilder send: #'___pyKwargsSplat___'
+			to: (anExpr ___emitIRValueOn___: aBuilder) with: { } env: 1].
+	^ aBuilder send: #'___pyKwargsSplatFor___:'
+		to: (anExpr ___emitIRValueOn___: aBuilder)
+		with: { function ___emitIRValueOn___: aBuilder } env: 1
 %
 
 category: 'Grail-IR Codegen'
@@ -4369,15 +4409,13 @@ ___emitIRKeywordsOn___: aBuilder
 	"A lone ``**m'' is the mapping itself, no wrapping dict (cut 56)."
 	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
 		"The text's mapping check, send for send (object >> ___pyKwargsSplat___)."
-		^ aBuilder send: #'___pyKwargsSplat___'
-			to: (keywords first value ___emitIRValueOn___: aBuilder) with: { } env: 1].
+		^ self ___emitIRKwargsSplat___: keywords first value on: aBuilder].
 	specs := keywords collect: [:k |
 		k name isNil
 			ifTrue: [
 				"``**m'' among named keywords: the text's env-1 ``update:'' of the
 				mapping, in source order (later entries win)."
-				{ #'update:'. { aBuilder send: #'___pyKwargsSplat___'
-					to: (k value ___emitIRValueOn___: aBuilder) with: { } env: 1 }. 1 }]
+				{ #'update:'. { self ___emitIRKwargsSplat___: k value on: aBuilder }. 1 }]
 			ifFalse: [
 				{ #'at:put:'. { aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder }. 0 }]].
 	specs := specs asOrderedCollection.
