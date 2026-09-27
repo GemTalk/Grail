@@ -99,17 +99,18 @@ set compile_env: 0
 category: 'Grail-Setup'
 method: ArchiveMetadataTestCase
 setUp
-	"Reload tests/python/archive_metadata.py fresh each test.  The module body
-	builds its trees, extracts both archives, records every answer and tears
-	the trees down again, so the tests read recorded results rather than
-	sharing filesystem state."
+	"tests/python/archive_metadata.py, imported ONCE per session.  The module
+	body builds its trees, extracts both archives, records every answer in
+	``r'' and tears the trees down again, so the tests read recorded results
+	rather than sharing filesystem state -- and read nothing else.
 
-	| mods |
-	mods := importlib @env1:modules.
-	mods removeKey: #'archive_metadata' ifAbsent: [].
-	testModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/archive_metadata.py')
-		name: 'archive_metadata'.
+	It used to be re-imported in every test, redoing the whole workload (and
+	its chmod(1)/touch(1) subprocesses) twenty times to read twenty slices of
+	the same answers: 151s, the second most expensive class in the suite.
+	See PythonTestCase >> ___recordedFixture___:name:."
+
+	testModule := self ___recordedFixture___: '/tests/python/archive_metadata.py'
+		name: 'archive_metadata'
 %
 
 category: 'Grail-Private'

@@ -76,16 +76,13 @@ set compile_env: 0
 category: 'Grail-Setup'
 method: OsUtimeTestCase
 setUp
-	"Reload tests/python/os_utime.py fresh each test.  The module body builds
-	its tree, records every answer, and tears the tree down again, so the tests
-	read recorded results rather than sharing filesystem state."
+	"tests/python/os_utime.py, imported once per session.  The module body
+	builds its tree, records every answer, and tears the tree down again, so
+	the tests read recorded results (r, EXPECTED and g) rather than sharing
+	filesystem state -- see PythonTestCase >> ___recordedFixture___:name:."
 
-	| mods |
-	mods := importlib @env1:modules.
-	mods removeKey: #'os_utime' ifAbsent: [].
-	testModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/os_utime.py')
-		name: 'os_utime'.
+	testModule := self ___recordedFixture___: '/tests/python/os_utime.py'
+		name: 'os_utime'
 %
 
 category: 'Grail-Private'

@@ -88,3 +88,34 @@ PickleProtocolTestCase 3
 # new slowest, so 13s comes back the other way.  Both were shard 3 (8.2s, 4.9s).
 WeakrefModuleTestCase 0
 SingleDispatchMethodTestCase 0
+
+# ---------------------------------------------------------------------------
+# 2026-09-27, EIGHT shards (the lines above were placed for four).  Measured
+# locally with all eight concurrent (macOS arm64 / GemStone 4.0), 7534 tests:
+#     before   0=245 1=224 2=341 3=329 4=293 5=187 6=113 7=580   (ideal 289)
+# Shard 7 had held two classes that between them cost 400s.  CI said the same
+# thing every run: shard 7 took 1170-1380s while shard 6 took 200-430s, and
+# the job holding them was the slowest in 4 of 5 runs.
+#
+# Most of that was not placement but WASTE -- fixtures re-imported per test,
+# or per assertion, to read the same recorded answers (PythonTestCase >>
+# ___recordedFixture___:name:).  Removing it:
+#     PythonCallSitePositionsTestCase   250s -> 69s  (22 cold compiles -> 8)
+#     ArchiveMetadataTestCase           151s -> 11s
+#     PrintableReprAndPrintfTestCase    103s ->  1s  (91 imports -> 2)
+#     ComparisonProtocolTestCase         58s ->  9s
+#     OsUtimeTestCase                    39s ->  3s
+#     after    0=259 1=193 2=220 3=335 4=299 5=195 6=119 7=228   (ideal 231)
+#
+# Then these five SELF-CONTAINED classes (each fixture imports only basic
+# stdlib: functools, inspect, os, sys, types) move off the heavy shards:
+# was shard 3 (82s)
+IRCodegenSmokeTestCase 6
+# was shard 4 (63s)
+InspectAsyncPredicatesTestCase 1
+# was shard 1 (24s)
+OsScandirSymlinkTestCase 6
+# was shard 3 (33s)
+FormatSpecAndComplexTestCase 5
+# was shard 0 (23s)
+TypeThreeArgTestCase 2

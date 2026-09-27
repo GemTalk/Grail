@@ -52,7 +52,15 @@ setUp
 
 	Cold both times -- ___forgetCanonicalModule___: before the snapshot -- for
 	the reason IRCodegenSmokeTestCase documents: a warm bind would answer from a
-	method some other session compiled, on whichever path THAT session was on."
+	method some other session compiled, on whichever path THAT session was on.
+
+	Each import happens on FIRST USE (___textModule___ / ___irModule___), not
+	here.  The fixture is 4800 lines and costs ~11s a compile locally, and every
+	test used to pay for both: 22 compiles for 11 tests, 250s, which made this
+	the single most expensive class in the suite and the reason its shard ran
+	twice as long as the next.  Five of the tests read neither module and each
+	of the others reads one, so 8 compiles are all the tests need.  Every
+	import is still cold, in its own test, with the seam forced its own way."
 
 	| mods |
 	mods := importlib @env1:modules.
@@ -61,14 +69,34 @@ setUp
 	self ___forgetCanonicalModule___: 'callsite_pos_text'.
 	self ___forgetCanonicalModule___: 'callsite_pos_ir'.
 	registrySnapshot := importlib ___canonicalRegistrySnapshot___.
-	importlib ___irCodegenForce___: false.
-	textModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/ir_codegen_smoke.py')
-		name: 'callsite_pos_text'.
-	importlib ___irCodegenForce___: true.
-	irModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/ir_codegen_smoke.py')
-		name: 'callsite_pos_ir'.
+	textModule := nil.
+	irModule := nil.
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
+___textModule___
+	"The fixture imported with the IR seam forced OFF -- a text-path method."
+
+	textModule ifNil: [
+		importlib ___irCodegenForce___: false.
+		textModule := importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/ir_codegen_smoke.py')
+			name: 'callsite_pos_text'].
+	^ textModule
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
+___irModule___
+	"The fixture imported with the IR seam forced ON -- an IR method."
+
+	irModule ifNil: [
+		importlib ___irCodegenForce___: true.
+		irModule := importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/ir_codegen_smoke.py')
+			name: 'callsite_pos_ir'].
+	^ irModule
 %
 
 category: 'Grail-Setup'
@@ -124,13 +152,13 @@ ___fixtureLinesOfDef___: aName in: srcLines
 category: 'Grail-Private'
 method: PythonCallSitePositionsTestCase
 ___textMethod___
-	^ textModule class compiledMethodAt: #answer environmentId: 1
+	^ self ___textModule___ class compiledMethodAt: #answer environmentId: 1
 %
 
 category: 'Grail-Private'
 method: PythonCallSitePositionsTestCase
 ___irMethod___
-	^ irModule class compiledMethodAt: #answer environmentId: 1
+	^ self ___irModule___ class compiledMethodAt: #answer environmentId: 1
 %
 
 category: 'Grail-Tests-CallSitePositions'
@@ -235,7 +263,7 @@ test_ir_positions_are_exactly_the_defs_own_lines
 	srcLines := BaseException ___splitLinesOf___: self ___fixtureSource___.
 	#(#'poly_local:' 'poly_local' #'sign:' 'sign') pairsDo: [:sel :name |
 		| m got expected |
-		m := irModule class compiledMethodAt: sel environmentId: 1.
+		m := self ___irModule___ class compiledMethodAt: sel environmentId: 1.
 		self assert: (BaseException pythonPositionKindForMethod: m) equals: #irSource.
 		self assert: (m sourceString includesString: '___GRAILPOS___')
 			description: name , ' carries no position map, so this proves nothing'.
