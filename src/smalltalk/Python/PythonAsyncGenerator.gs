@@ -406,7 +406,8 @@ ___warnIfNeverAwaited___
 	quiet, as CPython's does (TestUnawaitedWarnings).
 
 	The undriven COROUTINE is the same warning from the same kind of
-	destructor, and is not covered here -- see docs/Issues.md."
+	destructor, registered by PythonCoroutine class >> withBlock: and run by
+	PythonCoroutine >> ___finalizeUnawaited___."
 
 	| word q |
 	(started or: [finished]) ifTrue: [^ self].

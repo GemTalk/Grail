@@ -827,6 +827,7 @@ run
 	at: #'CoroutineIntrospectionTestCase' put: nil;
 	at: #'CoroutineNotIterableTestCase' put: nil;
 	at: #'CoroutineObjectsTestCase' put: nil;
+	at: #'CoroutineNeverAwaitedTestCase' put: nil;
 	at: #'CoroutineReuseTestCase' put: nil;
 	at: #'CoroutineSuspensionTestCase' put: nil;
 	at: #'CrossModuleFrameTestCase' put: nil;
@@ -2234,6 +2235,7 @@ input src/smalltalk/PythonTests/CopyregTestCase.gs
 input src/smalltalk/PythonTests/CoroutineIntrospectionTestCase.gs
 input src/smalltalk/PythonTests/CoroutineNotIterableTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
+input src/smalltalk/PythonTests/CoroutineNeverAwaitedTestCase.gs
 input src/smalltalk/PythonTests/CoroutineReuseTestCase.gs
 input src/smalltalk/PythonTests/CoroutineSuspensionTestCase.gs
 input src/smalltalk/PythonTests/CPythonHarnessTestCase.gs

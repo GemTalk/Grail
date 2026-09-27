@@ -1507,8 +1507,19 @@ clear
 	not enter into it.
 
 	CPython raises RuntimeError for a frame that is still EXECUTING.  A Grail
-	traceback frame never is: it is built after the stack has unwound."
+	traceback frame never is: it is built after the stack has unwound.
 
+	A generator's or coroutine's frame (gi_frame / cr_frame) is different: it
+	belongs to its generator, reached through a weak link, and clearing it is
+	the generator's business -- refused while it runs or is suspended, and
+	otherwise a finalization, which for an unstarted coroutine is the
+	never-awaited warning (PythonGenerator>>___clearFromFrame___)."
+
+	| ref gen |
+	ref := self @env0:dynamicInstVarAt: #'___generator___'.
+	ref @env0:notNil ifTrue: [
+		gen := ref @env0:value.
+		gen @env0:notNil ifTrue: [gen ___clearFromFrame___]].
 	self @env0:dynamicInstVarAt: #'f_locals'
 		put: (PyFrame @env0:___pyDictFrom___: Dictionary @env0:new).
 	^ None

@@ -646,6 +646,17 @@ _setReferent: anObject action: aTwoArgBlock argument: anArgument
 	^ self
 %
 
+category: 'Grail-Weak-accessing'
+method: FinalizerEphemeron
+referent
+	"The watched object while it lives -- asked by a caller deciding whether a
+	 collection is worth running (PythonCoroutine class >>
+	 ___closeCapture___:).  Reading it holds it only as long as the
+	 caller's temp does."
+
+	^ referent
+%
+
 category: 'Grail-Weak-testing'
 method: FinalizerEphemeron
 isWatching

@@ -437,8 +437,59 @@ gi_frame
 			ifTrue: [0]
 			ifFalse: [(code @env0:dynamicInstVarAt: #'co_firstlineno')
 				@env0:ifNil: [0]].
-		frameObject := PyFrame @env0:code: code lineno: lineno back: None globals: None].
+		frameObject := PyFrame @env0:code: code lineno: lineno back: None globals: None.
+		"A WEAK way back, for frame.clear() (PyFrame>>clear): CPython's frame
+		 finds its generator from the frame's own memory and does not own it, so
+		 a frame kept after its generator is dropped must not keep it alive."
+		frameObject @env0:dynamicInstVarAt: #'___generator___'
+			put: (WeakReference @env0:on: self)].
 	^ frameObject
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___clearFromFrame___
+	"frame.clear() on this generator's frame -- CPython 3.14's frame_clear for a
+	generator-owned frame: refused while the body runs or is parked at a yield,
+	and otherwise the generator is finalized, as its destructor would."
+
+	running == true ifTrue: [
+		^ RuntimeError ___signal___: 'cannot clear an executing frame'].
+	(started == true and: [done ~~ true]) ifTrue: [
+		^ RuntimeError ___signal___: 'cannot clear a suspended frame'].
+	self ___finalizeFromFrameClear___
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___finalizeFromFrameClear___
+	"_PyGen_Finalize for a generator that is not suspended: one never started
+	is closed; a finished one has nothing left to do."
+
+	started == true ifFalse: [done := true]
+%
+
+category: 'Grail-Docstrings'
+classmethod: PythonGenerator
+___methodDocTable___
+	"CPython 3.14's __doc__ for the generator type's methods and name
+	descriptors, transcribed from the running interpreter.  PythonCoroutine
+	carries its own table with the coroutine wording."
+
+	^ (KeyValueDictionary @env0:new)
+		@env0:at: 'send' put: 'send(value) -> send ''value'' into generator,
+return next yielded value or raise StopIteration.';
+		@env0:at: 'throw' put: 'throw(value)
+throw(type[,value[,tb]])
+
+Raise exception in generator, return next yielded value or raise
+StopIteration.
+the (type, val, tb) signature is deprecated, 
+and may be removed in a future version of Python.';
+		@env0:at: 'close' put: 'close() -> raise GeneratorExit inside generator.';
+		@env0:at: '__name__' put: 'name of the generator';
+		@env0:at: '__qualname__' put: 'qualified name of the generator';
+		yourself
 %
 
 category: 'Grail-Iterator Protocol'

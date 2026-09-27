@@ -279,8 +279,12 @@ class _AssertWarnsContext:
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        recorded = list(self._recorded or [])
+        # Exit FIRST and read the live list after, in CPython's order.  The
+        # exit can itself add a record: a coroutine dropped undriven in the
+        # block warns as the capture closes (PythonCoroutine class >>
+        # ___closeCapture___:), where CPython warned at the drop.
         self._catcher.__exit__(exc_type, exc_value, tb)
+        recorded = list(self._recorded or [])
         if exc_type is not None:
             # A real exception escaped the block -- let it propagate.
             return False
@@ -329,8 +333,12 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
     # WAS recorded.  Reuses __enter__ (same recording setup) and just
     # inverts __exit__'s pass/fail condition.
     def __exit__(self, exc_type, exc_value, tb):
-        recorded = list(self._recorded or [])
+        # Exit FIRST and read the live list after, in CPython's order.  The
+        # exit can itself add a record: a coroutine dropped undriven in the
+        # block warns as the capture closes (PythonCoroutine class >>
+        # ___closeCapture___:), where CPython warned at the drop.
         self._catcher.__exit__(exc_type, exc_value, tb)
+        recorded = list(self._recorded or [])
         if exc_type is not None:
             return False
         for rec in recorded:

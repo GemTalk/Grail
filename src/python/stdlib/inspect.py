@@ -1021,6 +1021,43 @@ FrameInfo = _namedtuple(
     'FrameInfo', 'frame filename lineno function code_context index')
 
 
+Traceback = _namedtuple(
+    'Traceback', 'filename lineno function code_context index')
+
+
+def getframeinfo(frame, context=1):
+    """(filename, lineno, function, code_context, index) for a frame or a
+    traceback, as CPython's inspect.getframeinfo answers.
+
+    code_context is up to ``context`` source lines centred on the current one,
+    read through linecache as CPython reads them, and index is the current
+    line's position in it.  Both are None when the source cannot be found --
+    generated code, or a file that has gone -- rather than a plausible wrong
+    line.
+
+    GRAIL: the record has no ``positions`` (3.11's column range): Grail's
+    frames carry a line number only.
+    """
+    if hasattr(frame, 'tb_frame'):
+        lineno = frame.tb_lineno
+        frame = frame.tb_frame
+    else:
+        lineno = getattr(frame, 'f_lineno', None)
+    code = getattr(frame, 'f_code', None)
+    if code is None or lineno is None:
+        raise TypeError('{!r} is not a frame or traceback object'.format(frame))
+    filename = code.co_filename
+    code_context = index = None
+    if context > 0:
+        import linecache
+        lines = linecache.getlines(filename)
+        if lines and 0 < lineno <= len(lines):
+            start = max(0, min(lineno - 1 - context // 2, len(lines) - context))
+            code_context = lines[start:start + context]
+            index = lineno - 1 - start
+    return Traceback(filename, lineno, code.co_name, code_context, index)
+
+
 def getouterframes(frame, context=1):
     """The frame and all its callers, innermost first, as FrameInfo records.
 
