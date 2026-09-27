@@ -281,3 +281,36 @@ removeAll: aCollection
 	aCollection do: [:each | table removeKey: each ifAbsent: [nil]].
 	^ aCollection
 %
+
+set compile_env: 1
+
+category: 'Grail-Introspection'
+method: frozenset
+__dict__
+	"``obj.__dict__'' for a frozenset SUBCLASS instance -- the live dynamic-instVar
+	view list and bytes publish.  Only a class PYTHON defined gets one: an EXACT
+	frozenset, and Grail's own Smalltalk subclasses of it (struct_time is a tuple),
+	have no instance dict, as in CPython.  test_pickle's round trips compare
+	subclass instances' __dict__."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) @env0:isNil ifTrue: [
+		^ AttributeError ___signal___:
+			'''frozenset'' object has no attribute ''__dict__'''].
+	^ PyInstanceDict @env0:on: self
+%
+
+set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like list's and bytes' copies) it must be an
+! env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: frozenset
+___pythonValueAttrs___
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

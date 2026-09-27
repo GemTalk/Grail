@@ -138,10 +138,19 @@ class Thread:
             # the thread's WORK, and Context.run refuses re-entry, so holding it
             # open across the _active/_limbo updates would widen the window in
             # which another thread entering the same context object fails.
-            if self._context is not None:
-                self._context.run(self.run)
-            else:
-                self.run()
+            try:
+                if self._context is not None:
+                    self._context.run(self.run)
+                else:
+                    self.run()
+            except BaseException:
+                # CPython's _bootstrap_inner: an exception that escapes run()
+                # is REPORTED, through excepthook, and ends only this thread.
+                # Letting it propagate ended the whole session instead -- the
+                # GsProcess has no Python caller to catch it, so it reached
+                # topaz as an unhandled error (test_pickle's
+                # test_unpickle_module_race took the module's run with it).
+                _invoke_excepthook(self)
         finally:
             self._alive = False
             # Identity-checked rather than a bare delete: an ident can be
@@ -170,6 +179,52 @@ class Thread:
 
     def __repr__(self):
         return "<Thread(%s)>" % self.name
+
+
+class ExceptHookArgs:
+    """What excepthook is called with: CPython's structseq, as a plain class."""
+
+    def __init__(self, exc_type, exc_value, exc_traceback, thread):
+        self.exc_type = exc_type
+        self.exc_value = exc_value
+        self.exc_traceback = exc_traceback
+        self.thread = thread
+
+
+def excepthook(args):
+    """Report an exception that escaped a thread's run(), as CPython does:
+    ``Exception in thread NAME:'' and the traceback, on stderr.  SystemExit
+    is silently ignored, which is also CPython's rule."""
+    if args.exc_type is SystemExit:
+        return
+    import sys
+    stderr = sys.stderr
+    if stderr is None:
+        return
+    name = args.thread.name if args.thread is not None else get_ident()
+    print("Exception in thread %s:" % (name,), file=stderr, flush=True)
+    import traceback
+    traceback.print_exception(args.exc_type, args.exc_value,
+                              args.exc_traceback, file=stderr)
+    stderr.flush()
+
+
+__excepthook__ = excepthook
+
+
+def _invoke_excepthook(thread):
+    import sys
+    exc_type, exc_value, exc_tb = sys.exc_info()
+    hook = excepthook
+    try:
+        hook(ExceptHookArgs(exc_type, exc_value, exc_tb, thread))
+    except BaseException:
+        # A hook that raises must not take the session down either -- the
+        # whole point of this path.  CPython falls back to sys.excepthook.
+        try:
+            sys.excepthook(*sys.exc_info())
+        except BaseException:
+            pass
 
 
 class Event:

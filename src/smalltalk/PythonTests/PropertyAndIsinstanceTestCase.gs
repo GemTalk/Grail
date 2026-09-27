@@ -97,10 +97,10 @@ testEveryArityBuildsTheSameKindOfDescriptor
 	"The 1-argument form was the odd one out: it answered a bare function while
 	property(), property(g, s), property(g, s, doc=) all built descriptors."
 
-	self assertResult: 'one_arg_type' equals: '''PropertyDescriptor'''.
-	self assertResult: 'two_arg_type' equals: '''PropertyDescriptor'''.
-	self assertResult: 'no_arg_type' equals: '''PropertyDescriptor'''.
-	self assertResult: 'kwarg_type' equals: '''PropertyDescriptor'''
+	self assertResult: 'one_arg_type' equals: '''property'''.
+	self assertResult: 'two_arg_type' equals: '''property'''.
+	self assertResult: 'no_arg_type' equals: '''property'''.
+	self assertResult: 'kwarg_type' equals: '''property'''
 %
 
 category: 'Grail-Tests-PropertyIsinstance'
@@ -109,7 +109,7 @@ testClassAccessAnswersTheDescriptorItself
 	"CPython's property.__get__(None, owner) is the property, which is what
 	makes ``C.prop.fget'' work."
 
-	self assertResult: 'class_access_is_descriptor' equals: '''PropertyDescriptor'''.
+	self assertResult: 'class_access_is_descriptor' equals: '''property'''.
 	self assertResult: 'fget_reachable' equals: 'True'
 %
 

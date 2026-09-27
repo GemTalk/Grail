@@ -50,6 +50,8 @@ ___pythonValueAttrs___
 		add: #year;
 		add: #week;
 		add: #weekday;
+		"Inherited from tuple, which lists it -- see struct_time's copy."
+		add: #'__dict__';
 		yourself
 %
 

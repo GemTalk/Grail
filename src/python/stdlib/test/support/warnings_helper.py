@@ -147,3 +147,17 @@ class check_no_warnings:
 
     def __exit__(self, *exc):
         return False
+
+
+class save_restore_warnings_filters:
+    """CPython's save_restore_warnings_filters: snapshot warnings.filters on
+    entry and put that snapshot back on exit, in place, so a module holding a
+    reference to the list sees the restore too."""
+
+    def __enter__(self):
+        self._old_filters = warnings.filters[:]
+        return None
+
+    def __exit__(self, *exc):
+        warnings.filters[:] = self._old_filters
+        return False

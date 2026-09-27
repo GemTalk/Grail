@@ -6741,6 +6741,45 @@ ___loadNamespacePackageIfAny___: moduleName
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___loadEmptyMainModule___
+	"Build and register an EMPTY ``__main__'' for a session that is running no
+	script.
+
+	CPython's interpreter creates __main__ at startup, before any code runs, so
+	``import __main__'' never searches and never fails -- under ``python -m
+	test'' it is the test runner, in an embedding it is an empty module.  Grail
+	makes one only when runPath:/runModule: loads a script under that name, so
+	code imported any other way -- the CPython suite harness, a test importing
+	a module by its real name, a Smalltalk-driven import -- got ``No module
+	named '__main__''' where CPython hands back a module.  test.pickletester is
+	the case that found it: it does ``import __main__'' at the top and then
+	stores classes on it for the unpickler to find by ``__main__.<name>''.
+
+	Built the way ___loadNamespacePackage___: builds one -- an empty module
+	body -- and filed session-local like any other __main__
+	(___isSessionLocalModule___:), so it is gone at the next login exactly as a
+	script's __main__ is.  Resolved BEFORE the path search: CPython never looks
+	for a __main__.py to satisfy the import, and one in the current directory
+	must not be run as the program by an unrelated import."
+
+	| moduleAst moduleClass moduleInstance |
+	moduleAst := ModuleAst @env0:parseSource: ''.
+	moduleClass := self @env0:___buildModuleClass: moduleAst name: '__main__'.
+	moduleInstance := moduleClass @env0:new.
+	moduleClass @env0:___adoptInstance___: moduleInstance.
+	self
+		@env0:___initModuleAttrsFrom___: (self
+			@env0:___specFor___: '__main__'
+			origin: nil
+			loader: nil
+			locations: nil)
+		on: moduleInstance.
+	self @env0:registerModule: '__main__' with: moduleInstance.
+	^ moduleInstance
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 extraSearchRoots
 	"Extra module search roots (a sys.path-like list), held in a SessionTemp
 	so they can be configured per session without recompiling the class.
@@ -7593,6 +7632,10 @@ ___import__: positional kw: kwargs
 		keeps Grail's OWN tree out of a user finder's reach.  See
 		___findViaMetaPath___:."
 		moduleInstance := self @env0:class ___findViaMetaPath___: absoluteName].
+	"No __main__ yet means no script is running: supply CPython's empty one
+	rather than searching the path -- see ___loadEmptyMainModule___."
+	(moduleInstance isNil and: [absoluteName @env0:asString @env0:= '__main__'])
+		ifTrue: [moduleInstance := self @env0:class ___loadEmptyMainModule___].
 	moduleInstance notNil ifTrue: [
 		result := moduleInstance
 	] ifFalse: [

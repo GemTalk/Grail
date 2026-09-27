@@ -108,10 +108,12 @@ ___fixturePath___
 category: 'Grail-Private'
 method: EvalInNestedScopeTestCase
 ___xfailKeys___
-	"The fixture's two XFAILs -- shapes Grail gets wrong on BOTH paths, so they
-	are not this cut's to fix and are compared separately below."
+	"The fixture's XFAIL -- a shape Grail gets wrong on BOTH paths, so it is
+	not this cut's to fix and is compared separately below.  There were two
+	until exec() gained eval's caller-namespace fallback, which retired
+	'exec_with_none_binds_into_the_caller' into ___keys___."
 
-	^ #('none_in_a_comprehension' 'exec_with_none_binds_into_the_caller')
+	^ #('none_in_a_comprehension')
 %
 
 category: 'Grail-Private'
@@ -132,7 +134,8 @@ ___keys___
 	    'a_none_valued_variable_is_the_same_as_none'
 	    'none_sees_a_module_global' 'none_in_a_lambda_sees_its_parameter'
 	    'none_in_a_methods_nested_def_cannot_see_the_methods_local'
-	    'three_arguments_with_none_for_locals')
+	    'three_arguments_with_none_for_locals'
+	    'exec_with_none_binds_into_the_caller')
 %
 
 category: 'Grail-Private'
@@ -282,10 +285,10 @@ testTheTextPathCannotSeeANestedDefsParameters
 category: 'Grail-Tests - eval in a nested scope'
 method: EvalInNestedScopeTestCase
 testTheTwoWalkGapsAreStillThereOnBothPaths
-	"The fixture's XFAILs.  Grail's caller-namespace walk is blind to a
-	COMPREHENSION's own target and to a name ``exec'' binds into the caller's
-	namespace, on the text path as much as the IR one -- so neither is this
-	cut's, and neither is hidden.  When the walk learns either, this fails."
+	"The fixture's XFAIL.  Grail's caller-namespace walk is blind to a
+	COMPREHENSION's own target, on the text path as much as the IR one -- so it
+	is not this cut's, and it is not hidden.  When the walk learns it, this
+	fails."
 
 	| bad |
 	bad := OrderedCollection new.

@@ -293,9 +293,7 @@ _exec: positional kw: kwargs
 			^ TypeError ___signal___:
 				'exec() got multiple values for argument ''globals'''].
 		globalsDict := kwargs @env0:at: 'globals'].
-	(globalsDict @env0:isNil) ifTrue: [
-		globalsDict := KeyValueDictionary @env0:new
-	].
+	globalsDict := self ___grailNamespaceArgOrNil___: globalsDict.
 	localsDict := (positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
 		ifFalse: [nil].
@@ -304,6 +302,28 @@ _exec: positional kw: kwargs
 			^ TypeError ___signal___:
 				'exec() got multiple values for argument ''locals'''].
 		localsDict := kwargs @env0:at: 'locals'].
+	localsDict := self ___grailNamespaceArgOrNil___: localsDict.
+	"NO GLOBALS MEANS THE CALLER'S, as for eval() -- ``If only globals is
+	provided ... If globals and locals are omitted, the code is executed in the
+	current scope.''  Grail substituted an EMPTY dict, so a module-level
+	``exec(src)'' could not read the module's own names and every binding it
+	made vanished with the throwaway: test.picklecommon's
+	``exec('class use_metaclass(object, metaclass=metaclass): ...')'' raised
+	NameError for ``metaclass'' and took all of test_pickle with it.
+
+	Unlike eval()'s fallback this must be the LIVE module view, not a merged
+	copy: a module-level exec binds into the module, and the reflect-back below
+	writes into whatever it is handed.  See ___grailCallerExecNamespaces___,
+	which also supplies a function frame's locals for the shapes CallAst's bare
+	rewrite does not reach."
+	globalsDict @env0:isNil ifTrue: [
+		| callerNs |
+		callerNs := self ___grailCallerExecNamespaces___.
+		callerNs @env0:isNil
+			ifTrue: [globalsDict := KeyValueDictionary @env0:new]
+			ifFalse: [
+				globalsDict := callerNs @env0:at: 1.
+				localsDict @env0:isNil ifTrue: [localsDict := callerNs @env0:at: 2]]].
 	"CPython: locals defaults to globals, so the 2-argument form keeps
 	reflecting into globals exactly as before."
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
@@ -1534,6 +1554,70 @@ ___grailCallerNamespace___
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___grailCallerExecNamespaces___
+	"{globals. locals} of the Python frame that called exec() with no globals,
+	or nil when there is no module to take them from.
+
+	THE GLOBALS ARE THE LIVE MODULE VIEW, which is where this parts company
+	with ___grailCallerNamespace___.  eval() is handed a merged COPY because a
+	binding an expression makes (a walrus) must not become a module global;
+	exec() at module scope is the opposite case -- ``exec('def f(): ...')'' is
+	how a module defines f, and CPython's module-level locals() IS globals().
+	So a MODULE-BODY frame answers the one live view as both namespaces, exactly
+	the ``exec(src, globals())'' that already worked.
+
+	ANY OTHER FRAME answers its locals as a separate COPY over the same globals,
+	which is CPython's function-scope rule: the code reads the function's locals
+	and its bindings land in a snapshot that the function never sees.  Reached
+	only by the shapes CallAst's bare rewrite (printBareEvalExecOn:) leaves
+	alone -- ``exec(src, None)'', a keyword ``globals=None'' -- because the bare
+	one-argument form in a function arrives with its locals already supplied.
+
+	A frame whose module cannot be identified -- a Smalltalk-side call, a doit
+	whose receiver is no module -- answers nil and keeps the empty namespace it
+	always had."
+
+	| pair mod globalsView |
+	pair := [PyFrame @env0:___innermostPythonFrameReceiverAndTemps___]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	pair @env0:isNil ifTrue: [^ nil].
+	mod := self ___grailModuleForFrameReceiver___: (pair @env0:at: 1)
+		method: (pair @env0:at: 3).
+	mod @env0:isNil ifTrue: [^ nil].
+	globalsView := PyModuleDict @env0:on: mod.
+	(self ___grailIsModuleBodyFrameMethod___: (pair @env0:at: 3))
+		ifTrue: [^ Array @env0:with: globalsView with: globalsView].
+	^ Array @env0:with: globalsView
+		with: (self ___evalScopeFor___: nil locals: (pair @env0:at: 2))
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailIsModuleBodyFrameMethod___: aMethod
+	"Is aMethod -- a live frame's GsNMethod -- a module body, or a block inside
+	one?  A module body compiles to ``initialize'' in category 'Grail-Module
+	Body' (the test BaseException's frame naming makes to call a frame
+	'<module>'), and a statement under ``try:''/``with'' at module level runs in
+	a block of it, whose homeMethod is that initialize."
+
+	| home cls |
+	aMethod @env0:isNil ifTrue: [^ false].
+	home := aMethod @env0:homeMethod.
+	(home @env0:isNil or: [home @env0:selector ~~ #'initialize'])
+		ifTrue: [^ false].
+	cls := home @env0:inClass.
+	cls @env0:isNil ifTrue: [^ false].
+	^ ([cls @env0:categoryOfSelector: #'initialize' environmentId: 1]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil])
+				== #'Grail-Module Body'
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___grailModuleForFrameReceiver___: aReceiver method: aMethod
 	"The module whose globals a frame sees, or nil.
 
@@ -2373,7 +2457,7 @@ iter: anObject
 	(anObject ___classAttrDunder___: #'__iter__') == None
 		ifTrue: [
 			TypeError @env0:signal: ('''' @env0:,
-				(anObject @env0:class @env0:name) @env0:,
+				(anObject ___pyTypeNameForError___) @env0:,
 				''' object is not iterable')
 		].
 
@@ -2383,7 +2467,7 @@ iter: anObject
 	(anObject ___respondsTo___: #'__iter__')
 		ifFalse: [
 			TypeError @env0:signal: ('''' @env0:,
-				(anObject @env0:class @env0:name) @env0:,
+				(anObject ___pyTypeNameForError___) @env0:,
 				''' object is not iterable')
 		].
 
@@ -4200,9 +4284,12 @@ ___pyIter___: anIterable
 		result := anIterable __iter__.
 		(result ___hasProtocolForCall___: '__next__') ifFalse: [
 			TypeError ___signal___: ('iter() returned non-iterator of type '''
-				@env0:, (result @env0:class @env0:name)) @env0:, ''''].
+				@env0:, (result ___pyTypeNameForError___)) @env0:, ''''].
 		^ result].
-	TypeError ___signal___: (('''' @env0:, (anIterable @env0:class @env0:name))
+	"The PYTHON type name -- ``'int' object is not iterable'' -- not the
+	GemStone class behind the value, which read 'SmallInteger' from enumerate,
+	zip and map (test_pickle's test_bad_object_list_items)."
+	TypeError ___signal___: (('''' @env0:, (anIterable ___pyTypeNameForError___))
 		@env0:, ''' object is not iterable')
 %
 

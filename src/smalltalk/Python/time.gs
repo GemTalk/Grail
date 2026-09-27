@@ -60,6 +60,11 @@ ___pythonValueAttrs___
 		add: #tm_wday;
 		add: #tm_yday;
 		add: #tm_isdst;
+		"Inherited from tuple, which lists it in its own copy of this set --
+		the first class answering the hook wins, so a subclass that lists its
+		own attributes has to list this one too, or ``t.__dict__'' reads as a
+		bound method instead of raising AttributeError."
+		add: #'__dict__';
 		yourself
 %
 

@@ -122,6 +122,44 @@ isBigmemtestDecorated
 
 category: 'Grail-other'
 method: FunctionDefAst
+isBigmemtestWithoutDryRun
+	"True for ``@bigmemtest(..., dry_run=False)'' (or a sibling spelled that
+	way).  CPython's bigmemtest runs a test at the small dry-run size only when
+	the decorator allows a dry run; with dry_run=False and no ``-M'' memory
+	limit -- a default run -- it raises SkipTest('not enough memory') instead,
+	because the body cannot say anything useful about a small input
+	(test_pickle's test_huge_* tests assert that a >4GiB value is REFUSED).
+	The dry-run normalisation below would run those bodies at 5147 anyway, so
+	ClassDefAst emits a skipping body for them instead."
+
+	| names |
+	decorator_list isNil ifTrue: [^ false].
+	names := #('bigmemtest' 'bigaddrspacetest' 'precisionbigmemtest').
+	^ decorator_list anySatisfy: [:deco | | fn |
+		(deco isKindOf: CallAst) and: [
+			fn := deco function.
+			(((fn isKindOf: NameAst) and: [names includes: fn id asString])
+				or: [(fn isKindOf: AttributeAst) and: [names includes: fn attr asString]])
+			and: [deco keywords notNil and: [deco keywords anySatisfy: [:kw |
+				kw arg asString = 'dry_run'
+					and: [(kw value isKindOf: ConstantAst) and: [kw value value == false]]]]]]]
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
+generateBigmemSkipSource
+	"Body for a ``@bigmemtest(..., dry_run=False)'' test (see
+	isBigmemtestWithoutDryRun): skip it, as CPython's default run does."
+
+	| stream |
+	stream := AppendStream on: Unicode7 new.
+	stream nextPutAll: name; lf.
+	stream nextPutAll: '^ self skipTest: ''not enough memory (bigmemtest without a dry run)'''.
+	^ stream contents
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
 applyBigmemtestDefaultIfNeeded
 	"Normalisation pass for ``@bigmemtest''-family test methods (see
 	isBigmemtestDecorated).  Injects a synthetic trailing default equal

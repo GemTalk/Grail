@@ -1977,7 +1977,10 @@ printKeywordsDictOn: aStream
 		^ self
 	].
 	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
+		"Checked to be a mapping -- see object >> ___pyKwargsSplat___."
+		aStream nextPut: $(.
 		keywords first value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' @env1:___pyKwargsSplat___)'.
 		^ self
 	].
 	"Build with Python ``str'' (Smalltalk String) keys to match
@@ -2009,9 +2012,9 @@ printKeywordsDictOn: aStream
 				items via update: (source order, later entries win).
 				flask's ``Rule(rule, methods=methods, **options)'' dropped
 				the ``**options'' here, so the rule endpoint came back nil."
-				aStream nextPutAll: ' @env1:update: '.
+				aStream nextPutAll: ' @env1:update: ('.
 				kwAst value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPut: $;.
+				aStream nextPutAll: ' @env1:___pyKwargsSplat___);'.
 			].
 	].
 	aStream nextPutAll: ' yourself)'.
@@ -4365,13 +4368,16 @@ ___emitIRKeywordsOn___: aBuilder
 	keywords isEmpty ifTrue: [^ aBuilder nilLit].
 	"A lone ``**m'' is the mapping itself, no wrapping dict (cut 56)."
 	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
-		^ keywords first value ___emitIRValueOn___: aBuilder].
+		"The text's mapping check, send for send (object >> ___pyKwargsSplat___)."
+		^ aBuilder send: #'___pyKwargsSplat___'
+			to: (keywords first value ___emitIRValueOn___: aBuilder) with: { } env: 1].
 	specs := keywords collect: [:k |
 		k name isNil
 			ifTrue: [
 				"``**m'' among named keywords: the text's env-1 ``update:'' of the
 				mapping, in source order (later entries win)."
-				{ #'update:'. { k value ___emitIRValueOn___: aBuilder }. 1 }]
+				{ #'update:'. { aBuilder send: #'___pyKwargsSplat___'
+					to: (k value ___emitIRValueOn___: aBuilder) with: { } env: 1 }. 1 }]
 			ifFalse: [
 				{ #'at:put:'. { aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder }. 0 }]].
 	specs := specs asOrderedCollection.

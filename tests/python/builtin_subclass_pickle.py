@@ -129,10 +129,11 @@ class Colour(enum.IntEnum):
 
 r['int_enum_member'] = repr(pickle.loads(pickle.dumps(Colour.RED)) is Colour.RED)
 
-# --- KNOWN GAP, recorded rather than endorsed -------------------------------------
-# list and dict subclasses still pickle as plain containers.  CPython rebuilds
-# those through the reduction's listitems / dictitems, a different mechanism
-# from __getnewargs__, so they are not covered here.
+# --- list and dict subclasses --------------------------------------------------
+# CPython rebuilds these through the reduction's listitems / dictitems, a
+# different mechanism from __getnewargs__.  They used to come back as PLAIN
+# containers, recorded here as a known gap; pickle is now CPython's own
+# pickle.py, whose default reduction carries both, so they keep their class.
 
 
 class MyList(list):
@@ -143,5 +144,5 @@ class MyDict(dict):
     pass
 
 
-r['list_subclass_is_a_known_gap'] = _round(MyList([1, 2]))
-r['dict_subclass_is_a_known_gap'] = _round(MyDict({'a': 1}))
+r['list_subclass_keeps_its_class'] = _round(MyList([1, 2]))
+r['dict_subclass_keeps_its_class'] = _round(MyDict({'a': 1}))

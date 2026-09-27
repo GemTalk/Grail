@@ -440,6 +440,13 @@ printSmalltalkRuntimeOn: aStream
 				decorators, so emit a self.skipTest(...) body in place of the
 				real one -- the method stays discoverable under its plain
 				selector but is counted as skipped, matching CPython."
+				def isBigmemtestWithoutDryRun
+					ifTrue: [
+						"``@bigmemtest(..., dry_run=False)'' skips in a default
+						run -- see isBigmemtestWithoutDryRun."
+						methodSources add: def ___mangledName___ asString
+							-> def generateBigmemSkipSource]
+					ifFalse: [
 				def isRequiresResourceDecorated
 					ifTrue: [
 						methodSources add: def ___mangledName___ asString
@@ -531,7 +538,7 @@ printSmalltalkRuntimeOn: aStream
 						plain unary forwarder so getTestCaseNames finds it."
 						def isBigmemtestDecorated ifTrue: [
 							methodSources add: ('bigmem_' , def ___mangledName___ asString)
-								-> def generateBigmemtestUnaryForwarderSource]]].
+								-> def generateBigmemtestUnaryForwarderSource]]]].
 			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
 		"@classmethod bodies use the same per-method source generator
@@ -2014,7 +2021,14 @@ printSmalltalkRuntimeOn: aStream
 	returns a marker with no holder.  Emitted here it precedes the decorator
 	loop, which is also where CPython stamps it -- a decorator that returns
 	something else never receives the qualname in CPython either."
-	(CallAst ___qualnamePrefixBefore___: self) ifNotNil: [:prefix |
+	"A class whose name the enclosing function declares ``global'' binds at
+	module level and so has the BARE qualname -- CallAst ___qualnameFor___:name:
+	applies that rule for a def, and the prefix walk alone does not.
+	``def f(): global Bad; class Bad: ...'' reported ``f.<locals>.Bad'', so
+	pickle refused it as a local object (test_pickle's test_evil_* tests)."
+	((CallAst ___isGlobalDeclaredScope___: self)
+		ifTrue: [nil]
+		ifFalse: [CallAst ___qualnamePrefixBefore___: self]) ifNotNil: [:prefix |
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: '.
 		self printQuotedString: prefix , '.' , name asString on: aStream.

@@ -484,3 +484,43 @@ __getnewargs__
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Introspection'
+method: AbstractPyFloat
+___pyHiddenStateNames___
+	"The dynamic instVars that are Grail's IMPLEMENTATION rather than Python
+	attributes: a subclass instance of this root keeps its builtin value under
+	#value.  The __dict__ view and __getstate__ leave them out -- otherwise
+	``vars(MyInt(7))'' answered {'value': 7} and a pickle of it carried that as
+	instance state, which CPython would read back as a real attribute."
+
+	^ #( #value )
+%
+
+category: 'Grail-Introspection'
+method: AbstractPyFloat
+__dict__
+	"``obj.__dict__'' for a SUBCLASS instance (every instance of this root is
+	one: an exact builtin value is a kernel object) -- the live dynamic-instVar
+	view list and bytes publish, minus ___pyHiddenStateNames___.  test_pickle's
+	newobj tests read it to compare a round-tripped object's attributes."
+
+	^ PyInstanceDict @env0:on: self
+%
+
+set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like list's and bytes' copies) it must be an
+! env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: AbstractPyFloat
+___pythonValueAttrs___
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

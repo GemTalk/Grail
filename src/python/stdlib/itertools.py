@@ -562,10 +562,14 @@ class batched:
         it = self._it
         n = self._n
         batch = []
-        for _ in range(n):
-            try:
-                batch.append(next(it))
-            except StopIteration:
+        # A ``for'' over the iterator rather than next() under try/except: the
+        # loop ends on exhaustion without an exception being raised and
+        # caught, and that raise was nearly all of the cost -- about 0.3ms per
+        # short batch, which is every batch pickle makes of a small container
+        # (_batch_appends / _batch_setitems call batched once per container).
+        for item in it:
+            batch.append(item)
+            if len(batch) == n:
                 break
         if not batch:
             raise StopIteration

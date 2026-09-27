@@ -356,7 +356,12 @@ __getitem__: index
 	((idx @env0:< 0) or: [
 		idx @env0:>= size
 	]) ifTrue: [
-		IndexError ___signal___: 'list index out of range'
+		"Named for the type, as the TypeError above is: a tuple is an Array, and
+		CPython says ``tuple index out of range'' (test_pickle's
+		test_bad_newobj_args matches the message __newobj__'s args[0] raises)."
+		IndexError ___signal___: ((self @env0:isKindOf: Array)
+			ifTrue: ['tuple index out of range']
+			ifFalse: ['list index out of range'])
 	].
 
 	"Convert to 1-based Smalltalk index"

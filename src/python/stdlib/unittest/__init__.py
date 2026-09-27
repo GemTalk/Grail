@@ -571,6 +571,14 @@ class TestCase:
     def assertListEqual(self, list1, list2, msg=None):
         self.assertSequenceEqual(list1, list2, msg, seq_type=list)
 
+    def assertDictEqual(self, d1, d2, msg=None):
+        # CPython's: both must be dicts, then plain equality.  (test_pickle's
+        # buffer and persistent-id tests compare pickler memos with it.)
+        self.assertIsInstance(d1, dict, 'First argument is not a dictionary')
+        self.assertIsInstance(d2, dict, 'Second argument is not a dictionary')
+        if d1 != d2:
+            self._failWith(msg, repr(d1) + " != " + repr(d2))
+
     def assertSetEqual(self, set1, set2, msg=None):
         # Set-specific equality with a symmetric-difference failure message
         # (test_operator's test___all__).
