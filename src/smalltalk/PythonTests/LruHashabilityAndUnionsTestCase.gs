@@ -104,6 +104,42 @@ testHashableArgumentsStillCache
 		equals: #( 6 6 8 2 ).
 %
 
+! --- lru_cache key equality ---
+
+category: 'Grail-Tests - LRU key equality'
+method: LruHashabilityAndUnionsTestCase
+testMixedNumericKeysDoNotCrash
+	"A bucket collision compared the cache's Array keys with SMALLTALK =, and
+	``SmallFraction = complex'' is a doesNotUnderstand.  Collisions depend on
+	object hashes (test_typing lost a different test on different runs);
+	3000 complex and 3000 float keys make one certain.  Answers the number of
+	wrong results."
+
+	self assert: testModule @env1:mixed_numeric_keys_do_not_crash equals: 0
+%
+
+category: 'Grail-Tests - LRU key equality'
+method: LruHashabilityAndUnionsTestCase
+testNotImplementedEqFallsBackToIdentity
+	"An __eq__ answering NotImplemented became the uncatchable ``Expected
+	NotImplemented to be a Boolean'' on a collision; Python's == falls back
+	to identity."
+
+	self assert: testModule @env1:not_implemented_eq_falls_back_to_identity asArray
+		equals: #( 0 0 3000 )
+%
+
+category: 'Grail-Tests - LRU key equality'
+method: LruHashabilityAndUnionsTestCase
+testEqualKeysShareAnEntry
+	"A user class's __eq__/__hash__ decides key identity, as in CPython.  With
+	Smalltalk = (identity for an instance) a fresh _Key(1) missed, and in a
+	bounded cache the hit could not TOUCH the stored entry."
+
+	self assert: testModule @env1:equal_keys_share_an_entry asArray
+		equals: #( 1 2 2 2 4 2 )
+%
+
 ! --- singledispatch union registration ---
 
 category: 'Grail-Tests - Union registration'

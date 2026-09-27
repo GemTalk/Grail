@@ -133,3 +133,95 @@ def subscripted_union_member_is_still_rejected():
         def _(arg: list[int] | str):
             return "union"
     return _attempt(register)
+
+
+# --- lru_cache key equality --------------------------------------------------
+#
+# CPython hashes an lru_cache key once and compares it with tuple ==, which is
+# each element's Python __eq__.  Grail stored a bare Array in a Smalltalk
+# dictionary, so a bucket collision compared elements with SMALLTALK =:
+# ``SmallFraction = complex'' was a doesNotUnderstand, a NotImplemented from
+# __eq__ was an uncatchable ``Expected NotImplemented to be a Boolean'', and a
+# user class's __eq__ was never consulted (Smalltalk = on an instance is
+# identity).  Collisions depend on object hashes, so the first two failed on
+# some runs and not others; enough keys make a collision certain.
+
+def mixed_numeric_keys_do_not_crash():
+    """Complex and float keys side by side, into an unbounded and a bounded
+    cache (the bounded one also walks its recency list).  Answers how many
+    calls came back with the wrong value: 0."""
+    @functools.lru_cache(maxsize=None)
+    def unbounded(x):
+        return ('u', x)
+
+    @functools.lru_cache(maxsize=64)
+    def bounded(x):
+        return ('b', x)
+
+    wrong = 0
+    for i in range(3000):
+        for v in (complex(i, 1), i + 0.5):
+            if unbounded(v) != ('u', v) or bounded(v) != ('b', v):
+                wrong += 1
+    return wrong
+
+
+class _NoEq:
+    def __eq__(self, other):
+        return NotImplemented
+
+    __hash__ = object.__hash__
+
+
+def not_implemented_eq_falls_back_to_identity():
+    """Every key is distinct, so every call misses and answers its own key."""
+    @functools.lru_cache(maxsize=None)
+    def f(x):
+        return x
+
+    keys = [_NoEq() for _ in range(3000)]
+    wrong = sum(1 for k in keys if f(k) is not k)
+    info = f.cache_info()
+    return [wrong, info.hits, info.misses]
+
+
+class _Key:
+    def __init__(self, v):
+        self.v = v
+
+    def __eq__(self, other):
+        return isinstance(other, _Key) and other.v == self.v
+
+    def __hash__(self):
+        return hash(self.v)
+
+
+def equal_keys_share_an_entry():
+    """_Key(1) and a fresh _Key(1) are the same key to CPython.  Unbounded:
+    one hit.  Bounded to 2: the hit on a fresh _Key(1) must TOUCH the stored
+    entry, so _Key(3) evicts _Key(2) and the last _Key(1) hits again."""
+    @functools.lru_cache(maxsize=None)
+    def f(k):
+        return k.v
+
+    f(_Key(1)); f(_Key(1)); f(_Key(2))
+    a = f.cache_info()
+
+    @functools.lru_cache(maxsize=2)
+    def g(k):
+        return k.v
+
+    g(_Key(1)); g(_Key(2)); g(_Key(1)); g(_Key(3)); g(_Key(1)); g(_Key(2))
+    b = g.cache_info()
+    return [a.hits, a.misses, a.currsize, b.hits, b.misses, b.currsize]
+
+
+if __name__ == '__main__':
+    # Only the key-equality checks self-run; the rest of this file returns
+    # values the SUnit class compares.  Expected values from CPython 3.14.6.
+    for fn, expected in [
+            (mixed_numeric_keys_do_not_crash, 0),
+            (not_implemented_eq_falls_back_to_identity, [0, 0, 3000]),
+            (equal_keys_share_an_entry, [1, 2, 2, 2, 4, 2])]:
+        actual = fn()
+        print('%-12s %s %s' % (fn.__name__, 'OK ' if actual == expected else 'DIFF', actual))

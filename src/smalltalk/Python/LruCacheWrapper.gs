@@ -3,6 +3,119 @@ run
 Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 %
 
+! ------- LruCacheKey class definition
+
+expectvalue /Class
+doit
+Object subclass: 'LruCacheKey'
+  instVarNames: #( parts pyHash )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+LruCacheKey comment:
+'The key an LruCacheWrapper stores a result under: the call''s arguments
+(plus the keyword and type sections ___cacheKeyFor___:kw: appends), hashed
+and compared the way CPython''s lru_cache does it -- with PYTHON semantics.
+
+CPython builds a _HashedSeq: a tuple that computes its hash once, and a dict
+probe compares it with tuple ==, which is each element''s __eq__, identity
+first and NotImplemented falling back to identity.  The key used to be a
+bare Array in a KeyValueDictionary, so a bucket collision compared the
+elements with SMALLTALK =.  That is not Python equality and it does not
+always answer a Boolean: SmallFraction = complex is a doesNotUnderstand, and
+a Python __eq__ that answers NotImplemented became the uncatchable
+``Expected NotImplemented to be a Boolean''.  Collisions depend on object
+hashes, so test_typing lost a different test on different runs
+(LiteralTests.test_illegal_parameters_do_not_raise_runtime_errors about one
+run in eight) and a plain lru_cache over a few thousand mixed complex and
+float keys failed outright.
+
+= and hash are the only protocol the cache''s KeyValueDictionary and its
+recency list use, so defining them here fixes both.'
+%
+
+expectvalue /Class
+doit
+LruCacheKey category: 'Grail-Modules'
+%
+
+removeallmethods LruCacheKey
+removeallclassmethods LruCacheKey
+
+set compile_env: 0
+
+category: 'Grail-Instance Creation'
+classmethod: LruCacheKey
+parts: anArray
+	"The key for anArray's elements.  Each one is asked for its Python hash
+	here, once, as CPython's _HashedSeq does; an unhashable element raises
+	the TypeError CPython raises (test_lru_type_error).
+
+	A CLASS hashes by identity, as PyDict >> ___pythonHashOf___: explains: its
+	own ``__hash__'' describes its INSTANCES, and reading it off the class can
+	answer None.  Classes are the type section of every typed key."
+
+	| h |
+	h := anArray size.
+	anArray do: [:each | | eh |
+		eh := (each isKindOf: Behavior)
+			ifTrue: [each identityHash]
+			ifFalse: [each @env1:__hash__].
+		"Masked to 40 bits before the multiply so the product stays a SmallInteger."
+		h := (((h bitAnd: 16rFFFFFFFFFF) * 1000003) bitXor: eh) bitAnd: 16r0FFFFFFFFFFFFFFF].
+	^ self new _setParts: anArray hash: h
+%
+
+category: 'Grail-Private'
+method: LruCacheKey
+_setParts: anArray hash: anInteger
+
+	parts := anArray.
+	pyHash := anInteger
+%
+
+category: 'Grail-Private'
+method: LruCacheKey
+parts
+
+	^ parts
+%
+
+category: 'Comparing'
+method: LruCacheKey
+hash
+
+	^ pyHash
+%
+
+category: 'Comparing'
+method: LruCacheKey
+= other
+	"Tuple == over the elements: identity first, then the element's Python
+	__eq__ (reflected, NotImplemented falling back to identity), always a
+	Boolean.  The hashes are compared first, as CPython compares the stored
+	hash before it will call __eq__ at all -- two keys sharing a bucket agree
+	only modulo the table size."
+
+	| otherParts |
+	self == other ifTrue: [^ true].
+	(other isKindOf: LruCacheKey) ifFalse: [^ false].
+	pyHash = other hash ifFalse: [^ false].
+	otherParts := other parts.
+	parts size = otherParts size ifFalse: [^ false].
+	1 to: parts size do: [:i | | a b |
+		a := parts at: i.
+		b := otherParts at: i.
+		(a == b or: [a @env1:___pyRichEqBool___: b]) ifFalse: [^ false]].
+	^ true
+%
+
 ! ------- LruCacheWrapper class definition
 expectvalue /Class
 doit
@@ -174,19 +287,10 @@ ___cacheKeyFor___: positional kw: kwargs
 
 	| key pairs |
 	key := (positional == nil ifTrue: [#()] ifFalse: [positional]) @env0:asArray.
-	"Every argument must be HASHABLE, as it is in CPython -- lru_cache hashes
-	the key it builds, so ``cached([])'' is a TypeError there.  Grail keys a
-	Smalltalk dictionary by an Array of the arguments, and a Smalltalk
-	collection hashes perfectly well, so an unhashable Python value was
-	cached under a key that Python semantics say cannot exist (issue #28653,
-	test_lru_type_error).  Ask each argument for its Python hash and let the
-	TypeError out; the key itself is unchanged."
-	key @env0:do: [:each | each ___pyHashCheck___].
 	(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		pairs := OrderedCollection @env0:new.
 		pairs @env0:add: #'___kwMark___'.
 		kwargs @env0:keysAndValuesDo: [:k :v |
-			v ___pyHashCheck___.
 			pairs @env0:add: k.
 			pairs @env0:add: v].
 		key := key @env0:, pairs @env0:asArray].
@@ -199,7 +303,12 @@ ___cacheKeyFor___: positional kw: kwargs
 		(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 			kwargs @env0:keysAndValuesDo: [:k :v | types @env0:add: v @env0:class]].
 		key := key @env0:, types @env0:asArray].
-	^ key
+	"Hashed and compared with PYTHON semantics (LruCacheKey's comment says
+	why a bare Array was not).  Building it asks every element for its Python
+	hash, so an unhashable argument raises the TypeError CPython raises --
+	lru_cache hashes the key it builds, so ``cached([])'' fails there
+	(issue #28653, test_lru_type_error)."
+	^ LruCacheKey @env0:parts: key
 %
 
 category: 'Grail-Calling'
