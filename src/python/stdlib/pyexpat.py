@@ -33,6 +33,8 @@ EXPAT_VERSION = 'expat_2.5.0-grail'
 version_info = (2, 5, 0)
 native_encoding = 'UTF-8'
 
+import codecs
+
 XML_PARAM_ENTITY_PARSING_NEVER = 0
 XML_PARAM_ENTITY_PARSING_UNLESS_STANDALONE = 1
 XML_PARAM_ENTITY_PARSING_ALWAYS = 2
@@ -68,6 +70,7 @@ class _Errors:
     XML_ERROR_UNBOUND_PREFIX = 'unbound prefix'
     XML_ERROR_XML_DECL = 'XML declaration not well-formed'
     XML_ERROR_UNKNOWN_ENCODING = 'unknown encoding'
+    XML_ERROR_INCORRECT_ENCODING = 'encoding specified in XML declaration is incorrect'
 
     # expat's own numbering, so a caller comparing `err.code` to
     # `errors.codes[errors.XML_ERROR_x]` gets what it does upstream.
@@ -87,6 +90,7 @@ class _Errors:
         'unbound prefix': 27,
         'XML declaration not well-formed': 30,
         'unknown encoding': 18,
+        'encoding specified in XML declaration is incorrect': 19,
     }
 
 
@@ -198,6 +202,10 @@ class xmlparser:
         self._base = None
         self._defer = True
         self._entities = {}       # name -> replacement text, from the subset
+        self._decoder = None      # incremental decoder, once the encoding is known
+        self._rawhead = b''       # bytes held back until it is
+        self._encoding_used = None
+        self._encoding_col = None # where a declared encoding's value starts
 
     # ---------------------------------------------------------- public API
 
@@ -205,7 +213,10 @@ class xmlparser:
         """Feed a chunk. Text is accumulated, so a token split across two
         chunks is handled by leaving it unconsumed until more arrives."""
         if isinstance(data, (bytes, bytearray)):
-            data = self._decode(bytes(data))
+            try:
+                data = self._decode(bytes(data), isfinal)
+            except _UndecodableBytes as bad:
+                self._fail_at_undecodable(bad)
         self._buf += data
         self._scan(isfinal)
         if isfinal:
@@ -255,14 +266,112 @@ class xmlparser:
 
     # ------------------------------------------------------------ internals
 
-    def _decode(self, raw):
-        enc = self.encoding or 'utf-8'
+    def _decode(self, raw, isfinal):
+        """The text of one chunk of bytes, through ONE incremental decoder.
+
+        Two things this used to get wrong, both of which expat gets right:
+
+          * the document's own encoding.  It decoded as UTF-8 unless
+            ParserCreate named an encoding, so a document declaring
+            ``encoding="iso-8859-1"'' failed at its first non-ASCII byte --
+            test_pulldom's test.xml ends in a Latin-1 0xB5.  The encoding is
+            now chosen as expat chooses it (_sniff_encoding).
+          * a character split across two Parse calls.  Each chunk was decoded
+            on its own, so a UTF-8 sequence cut by a chunk boundary was
+            invalid in both halves.  The incremental decoder holds the
+            partial bytes until the next chunk completes them.
+        """
+        if self._decoder is None:
+            self._rawhead += raw
+            enc = self._sniff_encoding(self._rawhead, isfinal)
+            if enc is None:
+                return ''
+            raw, self._rawhead = self._rawhead, b''
+            # An unknown encoding is a LookupError, not an ExpatError: CPython's
+            # pyexpat asks the codec registry, and lets its answer through --
+            # for a declared encoding and for ParserCreate's alike.
+            if not _check_supported_encoding(enc):
+                self._fail(errors.XML_ERROR_UNKNOWN_ENCODING, 1,
+                           self._encoding_col or 0)
+            self._decoder = codecs.getincrementaldecoder(enc)()
+            self._encoding_used = enc
         try:
-            return raw.decode(enc)
-        except LookupError:
-            self._fail(errors.XML_ERROR_UNKNOWN_ENCODING)
-        except UnicodeDecodeError:
-            self._fail(errors.XML_ERROR_INVALID_TOKEN)
+            return self._decoder.decode(raw, isfinal)
+        except UnicodeDecodeError as exc:
+            good = codecs.decode(exc.object[:exc.start], self._encoding_used)
+            partial = isfinal and exc.reason.startswith('unexpected end')
+            raise _UndecodableBytes(good, partial)
+
+    def _fail_at_undecodable(self, bad):
+        """Report bytes the encoding cannot decode as expat does: the text
+        BEFORE them is parsed first -- its events are delivered -- and the
+        error is placed at the first bad byte.  It used to fail at once, at
+        line 1 column 0, and always as an invalid token; expat calls a
+        sequence the input ends inside a partial character."""
+        self._buf += bad.good
+        self._scan(False)
+        # A text run the scanner held back for want of a closing ``<'' is
+        # complete here -- nothing can follow the bad byte -- and expat
+        # delivers it before reporting.  Only plain text: a ``<'' or ``&''
+        # would be an unfinished tag or reference, which it is not.
+        rest = self._buf[self._pos:]
+        if rest and '<' not in rest and '&' not in rest:
+            self._scan_text(True)
+        line, col = self._offset_pos(self._line, self._col,
+                                     self._buf[self._pos:],
+                                     len(self._buf) - self._pos)
+        self._fail(errors.XML_ERROR_PARTIAL_CHAR if bad.partial
+                   else errors.XML_ERROR_INVALID_TOKEN, line, col)
+
+    def _sniff_encoding(self, head, isfinal):
+        """The encoding to decode with, or None while `head` is too short to
+        say.  In expat's order: the encoding given to ParserCreate, then what
+        the first bytes show -- a byte-order mark, or a BOM-less UTF-16
+        ``<'' -- and within an 8-bit encoding the XML declaration's
+        ``encoding='', then UTF-8."""
+        if self.encoding:
+            return self.encoding
+        for sig, enc in _SIGNATURES:
+            if head.startswith(sig):
+                if enc == 'utf-8-sig':
+                    return enc
+                return self._checked_wide(head, enc, isfinal)
+        if not isfinal and any(sig.startswith(head) for sig, _ in _SIGNATURES):
+            return None
+        if not head.startswith(b'<?xml'):
+            if not isfinal and b'<?xml'.startswith(head):
+                return None
+            return 'utf-8'
+        end = head.find(b'?>')
+        if end < 0:
+            return 'utf-8' if isfinal else None
+        text = head[:end].decode('ascii', 'replace')
+        declared, at = _declared_encoding(text)
+        if declared is None:
+            return 'utf-8'
+        self._encoding_col = at
+        # The declaration was just read as 8-bit text, so the bytes cannot be
+        # a 16- or 32-bit encoding: expat's ``incorrect'' error.
+        if _is_wide_encoding(declared):
+            self._fail(errors.XML_ERROR_INCORRECT_ENCODING, 1, at)
+        return declared
+
+    def _checked_wide(self, head, enc, isfinal):
+        """`enc`, a UTF-16 the first bytes showed, once any XML declaration
+        has been checked against it: one naming an 8-bit encoding is expat's
+        ``incorrect'' error, as the bytes plainly are not 8-bit."""
+        text = head[:len(head) & ~1].decode(enc, 'replace').lstrip('\ufeff')
+        if not text.startswith('<?xml'):
+            if not isfinal and '<?xml'.startswith(text):
+                return None
+            return enc
+        end = text.find('?>')
+        if end < 0:
+            return enc if isfinal else None
+        declared, at = _declared_encoding(text[:end])
+        if declared is not None and not _is_wide_encoding(declared):
+            self._fail(errors.XML_ERROR_INCORRECT_ENCODING, 1, at)
+        return enc
 
     def _fail(self, message, line=None, col=None):
         code = errors.codes.get(message, 2)
@@ -751,6 +860,87 @@ class xmlparser:
             else:
                 self._fail(errors.XML_ERROR_UNDEFINED_ENTITY, eline, ecol)
         return ''.join(out)
+
+
+class _UndecodableBytes(Exception):
+    """Internal: a chunk held bytes its encoding cannot decode.  Carries the
+    text decoded before them, and whether the input ended inside a
+    sequence."""
+
+    def __init__(self, good, partial):
+        self.good = good
+        self.partial = partial
+
+
+# What the first bytes of a document can show about its encoding, as expat
+# reads them: a byte-order mark, or the ``<'' every document starts with,
+# spelled in UTF-16 without one.
+_SIGNATURES = ((b'\xef\xbb\xbf', 'utf-8-sig'), (b'\xff\xfe', 'utf-16'),
+               (b'\xfe\xff', 'utf-16'), (b'<\x00', 'utf-16-le'),
+               (b'\x00<', 'utf-16-be'))
+
+
+# The encodings expat decodes itself, as it spells them, plus the codec names
+# _sniff_encoding answers for the byte orders it detects.  Every other name
+# goes to pyexpat's unknown-encoding handler.
+_EXPAT_BUILTIN_ENCODINGS = frozenset((
+    'UTF-8', 'UTF-16', 'UTF-16BE', 'UTF-16LE', 'ISO-8859-1', 'US-ASCII',
+    'UTF-8-SIG', 'UTF-16-BE', 'UTF-16-LE'))
+
+
+# The ASCII bytes an unknown encoding must decode to themselves -- every one
+# XML's syntax gives a meaning.  Measured from CPython's expat by giving it an
+# identity codec with one byte remapped: these 90 are refused, and only the
+# other control bytes, DEL and ``$ @ \ ^ ` { } ~'' may differ.
+_EXPAT_FIXED_ASCII = frozenset(
+    [9, 10, 13, 32, 33, 34, 35] + list(range(37, 64)) + list(range(65, 92))
+    + [93, 95] + list(range(97, 123)) + [124])
+
+
+def _check_supported_encoding(name):
+    """What CPython's pyexpat unknown-encoding handler checks, for an
+    encoding expat does not decode itself.  The codec must map each of the
+    256 byte values to one character: it decodes them with ``replace'', and
+    a multi-byte codec (big5, euc-kr, utf-7) is a ValueError, while a codec's
+    own error or an unknown name's LookupError goes through unchanged.  And
+    expat then refuses -- answered here as False, for the caller to report as
+    ``unknown encoding'' -- a codec that moves any byte of XML's syntax
+    (cp864's ``%''), which is how an EBCDIC declaration fails
+    (test_xml_etree ElementTreeTest.test_encoding)."""
+    if name.upper() in _EXPAT_BUILTIN_ENCODINGS:
+        return True
+    table = codecs.decode(bytes(range(256)), name, 'replace')
+    if len(table) != 256:
+        raise ValueError('multi-byte encodings are not supported')
+    return all(table[b] == chr(b) for b in _EXPAT_FIXED_ASCII)
+
+
+def _is_wide_encoding(name):
+    return name.lower().replace('_', '-').startswith(
+        ('utf-16', 'utf16', 'utf-32', 'utf32', 'ucs-2', 'ucs2', 'ucs-4', 'ucs4'))
+
+
+def _declared_encoding(decl):
+    """(the ``encoding='' pseudo-attribute of an XML declaration's text, the
+    column its value starts at), or (None, None) when it has none."""
+    at = decl.find('encoding')
+    if at < 0:
+        return None, None
+    k = at + len('encoding')
+    while decl[k:k + 1].isspace():
+        k += 1
+    if decl[k:k + 1] != '=':
+        return None, None
+    k += 1
+    while decl[k:k + 1].isspace():
+        k += 1
+    quote = decl[k:k + 1]
+    if quote not in ('"', "'"):
+        return None, None
+    close = decl.find(quote, k + 1)
+    if close < 0:
+        return None, None
+    return decl[k + 1:close], k + 1
 
 
 def ParserCreate(encoding=None, namespace_separator=None, intern=None):

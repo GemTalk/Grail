@@ -1218,6 +1218,7 @@ run
 	at: #'Py2PrintStatementTestCase' put: nil;
 	at: #'PyDictTestCase' put: nil;
 	at: #'PydocTextRendererTestCase' put: nil;
+	at: #'PyexpatDocumentEncodingTestCase' put: nil;
 	at: #'PythonCallSitePositionsTestCase' put: nil;
 	at: #'PythonClassEnumerationTestCase' put: nil;
 	at: #'PythonOffsetMapTestCase' put: nil;
@@ -2654,6 +2655,7 @@ input src/smalltalk/PythonTests/PropertyNotDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
 input src/smalltalk/PythonTests/PyDictTestCase.gs
 input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
+input src/smalltalk/PythonTests/PyexpatDocumentEncodingTestCase.gs
 input src/smalltalk/PythonTests/PythonCallSitePositionsTestCase.gs
 input src/smalltalk/PythonTests/PythonClassEnumerationTestCase.gs
 input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs
