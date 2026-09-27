@@ -3356,6 +3356,7 @@ loadModuleFromPath: pathString name: moduleName
 	modules and the innermost one is the answer.  ensure:, so a body that
 	raises still pops."
 	self ___pushInitializingModule___: moduleName.
+	self ___claimModuleInit___: moduleName.
 	self ___beginDepCollection___: moduleName.
 	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
@@ -3386,6 +3387,7 @@ loadModuleFromPath: pathString name: moduleName
 		ensure: [
 			imported := self ___endDepCollection___: moduleName.
 			self ___popInitializingModule___.
+			self ___releaseModuleInit___: moduleName.
 			"Registrations for this module's class methods that no class-build
 			statement consumed -- a module whose class bodies were compiled but
 			whose body did not run in this session (a deployed module bound
@@ -6873,6 +6875,121 @@ ___popInitializingModule___
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___moduleInitOwners___
+	"Module name -> the GsProcess running that module's body, for every body
+	running now.  CPython's per-module import lock, in the one form Grail
+	needs: registration happens BEFORE the body runs (so a circular import
+	finds the module), which means another THREAD importing the same name
+	meanwhile found it in sys.modules and took a half-built module as done.
+	test_pickle's test_unpickle_module_race unpickles a class from a module
+	whose body is blocked on a barrier, from two threads at once; the second
+	got ``module 'locking_import' has no attribute 'ToBeUnpickled'''.  See
+	___awaitModuleInit___:."
+
+	^ SessionTemps current at: #'GrailModuleInitOwners'
+		ifAbsentPut: [KeyValueDictionary new]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___claimModuleInit___: aName
+	self ___moduleInitOwners___ at: aName asString
+		put: (self ___pythonThreadOf___: Processor activeProcess)
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___pythonThreadOf___: aProcess
+	"The GsProcess that is aProcess's Python THREAD.  A generator (or
+	coroutine) body runs on a process of its own, but in Python it runs on the
+	thread that resumed it -- whose process is blocked in that resume while
+	the body runs.  So the answer follows each generator body to its current
+	resumer until it reaches a process that is no generator's body
+	(PythonGenerator >> _forkBody stamps the process).
+
+	Without this, a generator in a module's own body that imported the module
+	-- pickle.loads of a class defined there, from a generator expression --
+	found the module owned by ANOTHER process, the one running the body, and
+	waited for it forever: that process was waiting for the generator."
+
+	| p gen hops |
+	p := aProcess.
+	hops := 0.
+	[hops < 64
+		and: [(gen := p environmentAt: #'GrailPyGenerator' ifAbsent: [nil]) ~~ nil
+		and: [gen ___consumerProcess___ ~~ nil]]]
+			whileTrue: [
+				p := gen ___consumerProcess___.
+				hops := hops + 1].
+	^ p
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___releaseModuleInit___: aName
+	| owners |
+	owners := self ___moduleInitOwners___.
+	(owners at: aName asString otherwise: nil)
+			== (self ___pythonThreadOf___: Processor activeProcess)
+		ifTrue: [owners removeKey: aName asString]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___awaitModuleInit___: aName
+	"A sys.modules HIT on a module whose body ANOTHER GsProcess is still
+	running: wait until that body finishes, as CPython's import does on the
+	module's lock -- unless waiting would deadlock, which CPython detects too
+	and answers the partial module (two threads importing each other's
+	modules).  Its own process's body is a circular import and passes, as
+	before.
+
+	The common case is one dictionary probe: nothing is being initialized
+	(the table is empty outside imports), or nothing by anyone else.  The wait
+	polls rather than parking on a semaphore -- it is reached only when two
+	threads really race one import -- and stops if the owner dies without
+	releasing."
+
+	| owners owner me waits |
+	owners := SessionTemps current at: #'GrailModuleInitOwners' otherwise: nil.
+	(owners == nil or: [owners isEmpty]) ifTrue: [^ self].
+	owner := owners at: aName asString otherwise: nil.
+	owner == nil ifTrue: [^ self].
+	"The THREAD, not the process: a generator in the module's own body is the
+	same thread importing it circularly."
+	me := self ___pythonThreadOf___: Processor activeProcess.
+	owner == me ifTrue: [^ self].
+	waits := SessionTemps current at: #'GrailImportWaits'
+		ifAbsentPut: [IdentityKeyValueDictionary new].
+	(self ___importWaitFrom___: me on: owner wouldDeadlock: waits owners: owners)
+		ifTrue: [^ self].
+	waits at: me put: aName asString.
+	[[(owners at: aName asString otherwise: nil) == owner
+		and: [owner _isTerminated not]]
+			whileTrue: [(Delay forMilliseconds: 1) wait]]
+		ensure: [waits removeKey: me ifAbsent: []]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___importWaitFrom___: me on: owner wouldDeadlock: waits owners: owners
+	"Follow owner -> the module it waits on -> that module's owner ...; a chain
+	that reaches me is a cycle of imports each thread holds the next of."
+
+	| p seen n |
+	p := owner.
+	seen := IdentitySet new.
+	[p ~~ nil and: [(seen includes: p) not]] whileTrue: [
+		seen add: p.
+		n := waits at: p otherwise: nil.
+		n == nil ifTrue: [^ false].
+		p := owners at: n otherwise: nil.
+		p == me ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___initializingModuleName___
 	"The module whose body is running right now, or nil outside any import."
 
@@ -7824,7 +7941,9 @@ lookupModule: aName
 		otherwise be re-bound, stale, onto the fresh one -- and, since #824,
 		so does this session's hash-state verdict, which used to be swept
 		here by hand and nowhere else."
-		(self @env0:___moduleEntryIsLive___: found) ifTrue: [^ found].
+		(self @env0:___moduleEntryIsLive___: found) ifTrue: [
+			self @env0:___awaitModuleInit___: aName.
+			^ found].
 		self @env0:removeModule: sym @env0:asString].
 	"A vendored .py SHADOWS the Smalltalk builtin of the same name --
 	the old committed registry expressed this by never containing

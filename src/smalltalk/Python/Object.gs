@@ -6172,7 +6172,7 @@ ___hasProtocol___: aName
 
 category: 'Grail-Python Protocol'
 method: object
-___pyKwargsSplat___
+___pyKwargsSplatFor___: aCallee
 	"The receiver is the operand of a ``**'' in a call.  A MAPPING passes
 	through unchanged -- the callee reads it as the call's keyword dict, as it
 	always has -- and anything else raises CPython's TypeError.
@@ -6182,9 +6182,14 @@ ___pyKwargsSplat___
 	it a dictionary message it did not understand.  functools.partial did the
 	latter, ``valuesDo:'' on an OrderedCollection, an uncatchable
 	MessageNotUnderstood that ended the session (test_pickle's
-	test_bad_newobj_ex_args builds exactly that partial).  CPython prefixes the
-	callee's name (``f() argument after ** ...''); the operand is all this
-	sees, so the message starts at ``argument''."
+	test_bad_newobj_ex_args builds exactly that partial).
+
+	aCallee is the called object when the call site could hand it over -- a
+	callee that is a plain NAME, which CallAst passes because reading a
+	variable twice costs nothing and changes nothing -- or nil.  CPython
+	starts the message with the callee's name, ``functools.partial()
+	argument after ** ...'' (___pyFunctionStr___:), which is what
+	test_bad_newobj_ex_args compares; with nil it starts at ``argument''."
 
 	"Grail's own dictionaries -- a dict, any Smalltalk dictionary Grail's
 	runtime builds keywords in (datetime's replace() hands a Dictionary), and
@@ -6203,8 +6208,41 @@ ___pyKwargsSplat___
 			(list @env1:__new__: self keys) @env0:do: [:k |
 				d @env0:at: k put: (self __getitem__: k)].
 			^ d].
-	^ TypeError ___signal___: ('argument after ** must be a mapping, not '
-		@env0:, (self ___pyTypeNameForError___))
+	^ TypeError ___signal___: ((self ___pyFunctionStrPrefix___: aCallee)
+		@env0:, ('argument after ** must be a mapping, not '
+		@env0:, (self ___pyTypeNameForError___)))
+%
+
+category: 'Grail-Python Protocol'
+method: object
+___pyKwargsSplat___
+	"___pyKwargsSplatFor___: with no callee to name."
+
+	^ self ___pyKwargsSplatFor___: nil
+%
+
+category: 'Grail-Python Protocol'
+method: object
+___pyFunctionStrPrefix___: aCallee
+	"CPython's _PyObject_FunctionStr of aCallee and a space, the prefix of a
+	call's argument errors -- ``mod.qualname() '', just ``qualname() '' for
+	builtins, ``str(callee) '' when it has no __qualname__ -- or '' for nil
+	or a callee whose name cannot be read."
+
+	| qn mod |
+	aCallee == nil ifTrue: [^ ''].
+	^ [qn := [aCallee ___pyAttrLoad___: #'__qualname__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(qn @env0:isKindOf: CharacterCollection)
+			ifFalse: [(aCallee __str__ @env0:asString) @env0:, ' ']
+			ifTrue: [
+				mod := [aCallee ___pyAttrLoad___: #'__module__']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				((mod @env0:isKindOf: CharacterCollection)
+					and: [(mod @env0:asString @env0:= 'builtins') @env0:not])
+						ifTrue: [(((mod @env0:asString @env0:, '.') @env0:, qn @env0:asString) @env0:, '() ')]
+						ifFalse: [qn @env0:asString @env0:, '() ']]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: '']
 %
 
 category: 'Grail-Python Protocol'
@@ -7053,6 +7091,49 @@ ___classAttrOverlayRemove___: aClass name: aSym
 	(inner @env0:at: aSym otherwise: nil) == nil ifTrue: [^ false].
 	inner @env0:removeKey: aSym.
 	^ true
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailBuiltinNewOwner___
+	"The built-in type whose __new__ the receiver, a Python-defined class,
+	inherits -- nil when some Python class on its chain defines __new__ itself,
+	or when the type it rests on is not one of the core built-ins below.
+
+	Walks the Python-defined classes at the bottom of the chain; the first
+	class past them is what the subclass is built on (AbstractPyInt for an int
+	subclass, Unicode32 for a str one), mapped to the class builtins binds by
+	its Python type name.  Only the core types are redirected, and only
+	because their __new__ was MEASURED to behave the same called either way:
+	``int.__new__(S, x)'' and ``S.__new__(S, x)'' give the same answer for
+	each of them.  ``object'' already reads as object's own handle
+	(UnboundMethod class >> ___forClassRead___:)."
+
+	| c name canon |
+	c := self.
+	[c ~~ nil and: [(c @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) ~~ nil]] whileTrue: [
+		((c ___grailOwnsPythonDef___: #'__new__'
+				family: (importlib @env0:___pythonNameFamilyOf___: #'__new__')
+				forwarders: true)
+			or: [c @env0:class ___grailOwnsPythonDef___: #'__new__'
+				family: (importlib @env0:___pythonNameFamilyOf___: #'__new__')
+				forwarders: true])
+			ifTrue: [^ nil].
+		c := c @env0:superclass].
+	(c == nil or: [c == self]) ifTrue: [^ nil].
+	"Its Python __name__, which every one of these answers -- AbstractPyInt
+	reads ``int'', Unicode32 ``str'' -- where ___pythonBuiltinTypeName___
+	covers only the reused kernel classes."
+	name := [c ___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	(#('int' 'float' 'complex' 'str' 'bytes' 'bytearray' 'tuple' 'list' 'dict'
+		'set' 'frozenset') @env0:includes: name @env0:asString) ifFalse: [^ nil].
+	canon := [((Python @env0:at: #builtins) @env0:___instance___)
+			___pyAttrLoad___: name @env0:asSymbol]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ (canon @env0:isKindOf: Behavior) ifTrue: [canon] ifFalse: [nil]
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -9273,6 +9354,15 @@ ___pyAttrLoad___: aSym
 				or: [(self ___declaresOwnClassAttr___: aSym) @env0:not]]])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
 	(self isKindOf: Behavior) ifTrue: [
+		"``Sub.__new__'' for a Python class that inherits __new__ from a
+		built-in IS the built-in's: CPython's ``class C(int): pass'' has
+		``C.__new__ is int.__new__''.  Grail answered a separate unbound handle
+		for the subclass, and pickle -- which saves ``cls.__new__'' by its name,
+		int.__new__, and checks that name finds the same object -- refused it
+		(test_pickle test_complex_newobj_ex).  See
+		___grailBuiltinNewOwner___."
+		(aSym == #'__new__' and: [self ___grailBuiltinNewOwner___ ~~ nil])
+			ifTrue: [^ self ___grailBuiltinNewOwner___ ___pyAttrLoad___: #'__new__'].
 		"A DUNDER GRAIL SYNTHESIZES BUT CPYTHON'S object DOES NOT HAVE reads
 		as absent here, because that is what it is.
 

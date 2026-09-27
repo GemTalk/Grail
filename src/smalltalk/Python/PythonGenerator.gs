@@ -150,6 +150,11 @@ _forkBody
 
 	started := true.
 	proc := [
+		"Which generator this process is the body of, so a lookup can find the
+		Python THREAD it runs for: the process blocked resuming it, and that
+		one's, and so on (importlib class >> ___pythonThreadOf___:).  A
+		generator's body is not a thread of its own in Python."
+		GsProcess @env0:current @env0:environmentAt: #'GrailPyGenerator' put: self.
 		[
 			[returnValue := block value: self]
 				on: AbstractException

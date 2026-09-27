@@ -446,11 +446,10 @@ ___new__: positional kw: keywords
 
 	| inst v |
 	inst := self @env0:new.
-	v := [positional @env0:size @env0:= 0
-			ifTrue: [0]
-			ifFalse: [positional @env0:size @env0:= 1
-				ifTrue: [int __new__: (positional @env0:at: 1)]
-				ifFalse: [int __new__: (positional @env0:at: 1) _: (positional @env0:at: 2)]]]
+	"Through int()'s own keyword-aware entry, so ``MyInt('FACE', base=16)''
+	honours the base, as ``int('FACE', base=16)'' does: the positional-only
+	spelling here dropped every keyword and then read 'FACE' in base 10."
+	v := [int _new: positional kw: keywords]
 		@env0:on: AbstractException
 		do: [:ex | (self ___hasUserInit___) ifTrue: [ex @env0:return: nil] ifFalse: [ex @env0:pass]].
 	v == nil ifFalse: [
