@@ -216,20 +216,14 @@ testAnExplicitMetaclassIsReported
 
 category: 'Grail-Tests - Known gaps'
 method: ClassMetaclassIdentityTestCase
-testAbcDoesNotDeclareItsMetaclassWhichIsAVendoredDivergence
-	"CPython: type(ABC) is ABCMeta.  Grail answers ``type'', and NOT because
-	type() cannot report a metaclass -- the test above shows it now does.  The
-	vendored abc.py writes ``class ABC:'' where upstream writes ``class
-	ABC(metaclass=ABCMeta)'', so there is no keyword here to report.
+testAbcDeclaresItsMetaclass
+	"CPython: type(ABC) is ABCMeta, and so is it here.  This used to be pinned as
+	a vendored divergence -- Grail's abc.py wrote ``class ABC:'' with no
+	metaclass, to spare every ABC subclass ABCMeta's Python-level checks -- and
+	abc.py is CPython's own now."
 
-	Kept as a gap rather than fixed in passing because the divergence is a
-	deliberate one with its own reasoning (see the note in src/python/stdlib/
-	abc.py: ABCMeta's Python-level __instancecheck__ is a cost every ``class
-	Foo(ABC)'' would then pay).  Closing it is a change to abc.py, measured on
-	its own."
-
-	self assert: (self resultAt: 'abc_metaclass_is_a_vendored_divergence')
-		asString equals: 'False'.
+	self assert: (self resultAt: 'abc_metaclass_is_abcmeta')
+		asString equals: 'True'.
 %
 
 category: 'Grail-Tests - Metaclass identity'

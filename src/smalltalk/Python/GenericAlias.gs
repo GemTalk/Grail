@@ -67,15 +67,25 @@ origin: aClass args: anArgArray
 	"The Smalltalk-side constructor.  anArgArray is a plain Array of the
 	subscript arguments, already flattened out of any tuple."
 
-	| inst params |
+	| inst |
 	inst := self @env0:new.
 	inst @env0:dynamicInstVarAt: #'__origin__' put: aClass.
 	inst @env0:dynamicInstVarAt: #'__args__' put: (tuple @env0:withAll: anArgArray).
-	params := anArgArray @env0:select: [:each | self ___isTypeVar___: each].
-	inst @env0:dynamicInstVarAt: #'__parameters__'
-		put: (tuple @env0:withAll: params).
+	"__parameters__ is computed on first READ (PyGenericAlias >>
+	__parameters__), as CPython does -- most aliases are never asked."
 	inst @env0:dynamicInstVarAt: #'__unpacked__' put: false.
 	^ inst
+%
+
+category: 'Grail-Instantiation'
+classmethod: PyGenericAlias
+__new__: cls _: origin _: args
+	"``GenericAlias.__new__(cls, origin, args)'', which is what a Python
+	SUBCLASS reaches through ``super().__new__(cls, origin, args)'' --
+	collections.abc's _CallableGenericAlias is one.  Builds an instance of
+	cls, not of GenericAlias, so the subclass's methods apply."
+
+	^ cls ___fromSubscript___: args origin: origin
 %
 
 category: 'Grail-Instantiation'
@@ -130,6 +140,9 @@ value: positional value: keywords
 	"``types.GenericAlias(origin, args)'' -- CPython exposes the constructor."
 
 	| origin rest |
+	"A SUBCLASS is called the ordinary way, so its own __new__ and __init__
+	run; only GenericAlias itself takes this shortcut."
+	self == PyGenericAlias ifFalse: [^ super value: positional value: keywords].
 	(positional == nil or: [positional @env0:size @env0:< 2]) ifTrue: [
 		TypeError ___signal___: 'GenericAlias expected 2 arguments'].
 	origin := positional @env0:at: 1.
@@ -142,6 +155,19 @@ value: positional value: keywords
 category: 'Grail-Reflection'
 method: PyGenericAlias
 __repr__
+	"CPython's ga_repr (in _grail_generic_alias): ``list[int]'', ``tuple[()]'',
+	``*tuple[int, ...]'', a Callable's argument LIST in brackets.  The
+	Smalltalk rendering below stays for the bootstrap window."
+
+	| r |
+	r := PyGenericAlias ___helperCall___: #ga_repr with: { self }.
+	r == #'___noHelper___' ifTrue: [^ self ___smalltalkRepr___].
+	^ r
+%
+
+category: 'Grail-Reflection'
+method: PyGenericAlias
+___smalltalkRepr___
 	"``functools.partial[int]''.  Each argument renders as its __name__ when
 	it has one (a class) and its repr otherwise (a TypeVar, a string)."
 
@@ -243,7 +269,11 @@ __iter__
 category: 'Grail-Comparison'
 method: PyGenericAlias
 __hash__
-	^ (self @env0:dynamicInstVarAt: #'__args__') @env1:__hash__
+	"CPython's ga_hash: ``hash(origin) ^ hash(args)''.  Hashing the args
+	alone put ``list[int]'' and ``set[int]'' in one bucket."
+
+	^ ((self @env0:dynamicInstVarAt: #'__origin__') @env1:__hash__)
+		@env0:bitXor: ((self @env0:dynamicInstVarAt: #'__args__') @env1:__hash__)
 %
 
 category: 'Grail-Callable'
@@ -256,12 +286,20 @@ ___pyCallValue___: positional kw: kwargs
 	___pyCallValue___ is not answered for Behaviors in general, and making it
 	so is what broke the enum member builder once already."
 
-	| origin |
+	| origin result |
 	origin := self @env0:dynamicInstVarAt: #'__origin__'.
-	(origin isKindOf: Behavior) ifTrue: [
-		^ origin @env1:value: (positional == nil ifTrue: [#()] ifFalse: [positional])
-			value: kwargs].
-	^ origin ___pyCallValue___: positional kw: kwargs
+	result := (origin isKindOf: Behavior)
+		ifTrue: [origin @env1:value: (positional == nil ifTrue: [#()] ifFalse: [positional])
+			value: kwargs]
+		ifFalse: [origin ___pyCallValue___: positional kw: kwargs].
+	"CPython's ga_call records the alias on what it made -- ``list[int]()''
+	has __orig_class__ ``list[int]'' when the object accepts attributes --
+	and a refusal is not the caller's problem."
+	[result @env1:__setattr__: '__orig_class__' _: self]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	^ result
 %
 
 category: 'Grail-Instantiation'
@@ -322,9 +360,16 @@ __getattr__: aName
 	look like a legitimate check instead of the TypeError CPython raises.
 	Grail got the right answer for the wrong reason until __bases__ started
 	answering a real tuple."
-	(aName @env0:asString @env0:= '__bases__') ifTrue: [
+	"CPython's attribute_exceptions: the names ga_getattro answers itself or
+	refuses, rather than forwarding -- a forwarded __reduce_ex__ made
+	copy.copy(list[int]) copy a LIST."
+	(#('__bases__' '__class__' '__origin__' '__args__' '__unpacked__'
+		'__parameters__' '__typing_unpacked_tuple_args__' '__mro_entries__'
+		'__reduce_ex__' '__reduce__' '__copy__' '__deepcopy__')
+			@env0:includes: aName @env0:asString) ifTrue: [
 		^ AttributeError ___signal___:
-			'''types.GenericAlias'' object has no attribute ''__bases__'''].
+			'''types.GenericAlias'' object has no attribute ''' @env0:,
+				aName @env0:asString @env0:, ''''].
 	^ (self @env0:dynamicInstVarAt: #'__origin__')
 		@env1:___pyAttrLoad___: aName @env0:asSymbol
 %
@@ -345,8 +390,113 @@ ___pythonValueAttrs___
 		add: #'__args__';
 		add: #'__parameters__';
 		add: #'__unpacked__';
+		add: #'__typing_unpacked_tuple_args__';
 		yourself
 %
+
+set compile_env: 1
+
+! ------------------------------------------------------------------ the rules
+
+category: 'Grail-Private'
+classmethod: PyGenericAlias
+___helperCall___: aSymbol with: anArray
+	"Call a function of _grail_generic_alias -- where the RULES of
+	types.GenericAlias and types.UnionType live, ported from CPython's C --
+	or answer the marker #'___noHelper___' when that module cannot be
+	imported yet.  An alias can be built during bootstrap, long before the
+	stdlib is importable; nothing reaches here that early except by accident,
+	and the callers keep a Smalltalk answer for it."
+
+	| mod fn |
+	mod := [(Python @env0:at: #builtins) @env1:instance
+			@env1:___import__: { '_grail_generic_alias' } kw: nil]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	mod == nil ifTrue: [^ #'___noHelper___'].
+	fn := mod @env1:___pyAttrLoad___: aSymbol.
+	^ fn @env1:___pyCallValue___: anArray kw: nil
+%
+
+category: 'Grail-Attribute Access'
+method: PyGenericAlias
+__parameters__
+	"The type parameters among the arguments, collected by CPython's rule
+	(_Py_make_parameters, in _grail_generic_alias): anything with
+	__typing_subst__, plus the __parameters__ of any argument that has them,
+	searching nested tuples and lists -- so ``dict[str, list[T]]'' has (T,).
+	It used to be the arguments whose CLASS was named TypeVar, which missed
+	a parameter nested one level down and every ParamSpec.
+
+	Computed on first read and kept, as CPython does."
+
+	| p |
+	p := self @env0:dynamicInstVarAt: #'___parameters___'.
+	p @env0:notNil ifTrue: [^ p].
+	p := PyGenericAlias ___helperCall___: #make_parameters
+		with: { self @env0:dynamicInstVarAt: #'__args__' }.
+	p == #'___noHelper___' ifTrue: [
+		^ tuple @env0:withAll: ((self @env0:dynamicInstVarAt: #'__args__') @env0:asArray
+			@env0:select: [:each | PyGenericAlias ___isTypeVar___: each])].
+	self @env0:dynamicInstVarAt: #'___parameters___' put: p.
+	^ p
+%
+
+category: 'Grail-Subscript'
+method: PyGenericAlias
+__getitem__: item
+	"``list[T][int]'' is ``list[int]'' -- substitution, by CPython's rule
+	(ga_getitem).  An alias with no parameters answers the TypeError CPython
+	gives: ``list[int][str]'' is ``list[int] is not a generic class''.  It
+	used to answer nothing at all: the alias was not subscriptable."
+
+	| r |
+	r := PyGenericAlias ___helperCall___: #ga_getitem with: { self. item }.
+	r == #'___noHelper___' ifTrue: [
+		^ TypeError ___signal___: '''types.GenericAlias'' object is not subscriptable'].
+	^ r
+%
+
+category: 'Grail-Reflection'
+method: PyGenericAlias
+__typing_unpacked_tuple_args__
+	"The arguments of ``*tuple[...]'', which substitution splices in; None for
+	anything else."
+
+	((self @env0:dynamicInstVarAt: #'__unpacked__') == true
+		and: [(self @env0:dynamicInstVarAt: #'__origin__') == tuple])
+		ifTrue: [^ self @env0:dynamicInstVarAt: #'__args__'].
+	^ None
+%
+
+category: 'Grail-Pickling'
+method: PyGenericAlias
+__reduce__
+	"``(GenericAlias, (origin, args))'', and ``(next, (iter(...),))'' for a
+	starred one -- CPython's ga_reduce.  Without it an alias pickled as an
+	instance of a class pickle could not find."
+
+	| r |
+	r := PyGenericAlias ___helperCall___: #ga_reduce with: { self }.
+	r == #'___noHelper___' ifTrue: [
+		^ TypeError ___signal___: 'cannot pickle ''types.GenericAlias'' object'].
+	^ r
+%
+
+category: 'Grail-Type Checks'
+method: PyGenericAlias
+__instancecheck__: anObject
+	^ TypeError ___signal___: 'isinstance() argument 2 cannot be a parameterized generic'
+%
+
+category: 'Grail-Type Checks'
+method: PyGenericAlias
+__subclasscheck__: aClass
+	^ TypeError ___signal___: 'issubclass() argument 2 cannot be a parameterized generic'
+%
+
+set compile_env: 0
 
 ! ===============================================================================
 ! PyUnionType -- PEP 604's ``X | Y'' at RUNTIME.
@@ -396,6 +546,18 @@ PyUnionType removeAllMethods: 1.
 PyUnionType class removeAllMethods: 1.
 %
 
+category: 'Grail-Python Attribute Hook'
+classmethod: PyUnionType
+___pythonValueAttrs___
+	"__args__ and __parameters__ are DATA, as on an alias."
+	^ IdentitySet new
+		add: #'__args__';
+		add: #'__parameters__';
+		add: #'__origin__';
+		yourself
+%
+
+
 set compile_env: 1
 
 category: 'Grail-Instance Creation'
@@ -407,8 +569,11 @@ ___of___: left with: right
 
 	| args inst |
 	args := OrderedCollection @env0:new.
-	(self ___membersOf___: left) @env0:do: [:m | args @env0:add: m].
-	(self ___membersOf___: right) @env0:do: [:m | args @env0:add: m].
+	(self ___membersOf___: left) @env0:do: [:m | self ___addMember___: m to: args].
+	(self ___membersOf___: right) @env0:do: [:m | self ___addMember___: m to: args].
+	"``int | int'' is ``int'': CPython's builder drops a repeat, and a union
+	of one member is that member."
+	args @env0:size @env0:= 1 ifTrue: [^ args @env0:first].
 	inst := self @env0:new.
 	inst @env0:dynamicInstVarAt: #'__args__' put: (tuple @env0:withAll: args @env0:asArray).
 	^ inst
@@ -439,7 +604,7 @@ ___grailUnionFrom___: aSequence
 	| args inst |
 	args := OrderedCollection @env0:new.
 	aSequence @env0:do: [:each |
-		(self ___membersOf___: each) @env0:do: [:m | args @env0:add: m]].
+		(self ___membersOf___: each) @env0:do: [:m | self ___addMember___: m to: args]].
 	args @env0:isEmpty ifTrue: [
 		TypeError ___signal___: 'Cannot take a Union of no types.'].
 	args @env0:size @env0:= 1 ifTrue: [^ args @env0:first].
@@ -538,6 +703,17 @@ ___isTypeOperand___: anOperand
 
 category: 'Grail-Instance Creation'
 classmethod: PyUnionType
+___addMember___: aMember to: members
+	"Add aMember unless an equal one is already there -- CPython's union
+	builder deduplicates, by hash where it can and by == where a member is
+	unhashable, so == (Python's) is the rule for both here."
+
+	(members @env0:anySatisfy: [:m | PyUnionType ___pyEq___: m with: aMember])
+		ifFalse: [members @env0:add: aMember]
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
 ___membersOf___: anOperand
 	"anOperand''s contribution to a union: its own members when it is already a
 	union, otherwise itself."
@@ -604,7 +780,13 @@ __hash__
 	the same bucket.  A union used as a dict key or put in a set is ordinary --
 	``Union[int, str]'' keys a cache in typing itself."
 
-	| h |
+	| r h |
+	"CPython's union_hash (in _grail_generic_alias) hashes the member SET, so
+	two equal unions of equal-but-distinct members hash alike, and an
+	unhashable member raises -- the identity xor below did neither, and stays
+	only for the bootstrap window."
+	r := PyGenericAlias ___helperCall___: #union_hash with: { self }.
+	r == #'___noHelper___' ifFalse: [^ r].
 	h := 0.
 	(self @env0:dynamicInstVarAt: #'__args__') @env0:do: [:m |
 		h := h @env0:bitXor: m @env0:identityHash].
@@ -614,51 +796,71 @@ __hash__
 category: 'Grail-Subscript'
 method: PyUnionType
 __getitem__: item
-	"``SomeUnion[X]'' -- PEP 484 parameter substitution on an alias that was
-	spelled as a union.  The idiom is ordinary in annotation modules:
+	"``(T | None)[int]'' is ``int | None'' -- substitution by CPython's rule
+	(union_getitem, in _grail_generic_alias), which reaches a variable nested
+	inside a member as well: flask's ``t.Union[cabc.Callable[[R], R], ...]''
+	substitutes R inside each Callable.  This used to replace only a TOP-LEVEL
+	member that was itself a variable, and pass nested ones through."
 
-		AfterRequestCallable = t.Union[
-			cabc.Callable[[ResponseClass], ResponseClass],
-			cabc.Callable[[ResponseClass], t.Awaitable[ResponseClass]],
-		]
-		...
-		T_after_request = t.TypeVar('T', bound=ft.AfterRequestCallable[t.Any])
+	| r |
+	r := PyGenericAlias ___helperCall___: #union_getitem with: { self. item }.
+	r == #'___noHelper___' ifTrue: [
+		^ TypeError ___signal___: '''typing.Union'' object is not subscriptable'].
+	^ r
+%
 
-	is flask/typing.py and flask/sansio/scaffold.py, and it is the line the
-	framework deploy stopped on with ``'PyUnionType' object is not
-	subscriptable''.  A union was not subscriptable at all before, because
-	before this change ``t.Union[...]'' was not a union -- it was a stub object
-	whose subscript answered itself.
+category: 'Grail-Attribute Access'
+method: PyUnionType
+__parameters__
+	"CPython's union_parameters: the same collection an alias makes."
 
-	Substitutes a type variable that is a MEMBER of the union, positionally,
-	which is the whole of what CPython does when the variables are at the top
-	level: ``Union[T, None][int]'' is ``int | None''.  A variable nested inside
-	a member -- flask's case, where the T is inside a Callable -- is NOT
-	substituted; the member is passed through unchanged and the answer is a
-	union of the same shape.  That is a deliberate stop rather than a partial
-	attempt: doing it properly means re-running typing's whole substitution
-	protocol through each member, Grail does not enforce annotations at
-	runtime, and it is exactly what the stub typing did for every case, so
-	nothing regresses by stopping here."
+	| p |
+	p := self @env0:dynamicInstVarAt: #'___parameters___'.
+	p @env0:notNil ifTrue: [^ p].
+	p := PyGenericAlias ___helperCall___: #union_parameters with: { self }.
+	p == #'___noHelper___' ifTrue: [^ tuple @env0:new].
+	self @env0:dynamicInstVarAt: #'___parameters___' put: p.
+	^ p
+%
 
-	| argsArray idx |
-	argsArray := (item @env0:isKindOf: Array)
-		ifTrue: [item @env0:asArray]
-		ifFalse: [((item @env0:isKindOf: tuple)
-				or: [item @env0:isKindOf: OrderedCollection])
-			ifTrue: [item @env0:asArray]
-			ifFalse: [Array @env0:with: item]].
-	idx := 0.
-	^ PyUnionType ___grailUnionFrom___:
-		((self @env0:dynamicInstVarAt: #'__args__') @env0:asArray
-			@env0:collect: [:m |
-				(m ___respondsTo___: #'__typing_subst__:')
-					ifTrue: [
-						idx := idx @env0:+ 1.
-						idx @env0:<= argsArray @env0:size
-							ifTrue: [argsArray @env0:at: idx]
-							ifFalse: [m]]
-					ifFalse: [m]])
+category: 'Grail-Attribute Access'
+method: PyUnionType
+__origin__
+	"The union type itself -- ``(int | str).__origin__ is typing.Union'' in
+	3.14, which is what lets typing.get_origin treat a union like any other
+	parameterised form."
+
+	^ self @env0:class
+%
+
+category: 'Grail-Pickling'
+method: PyUnionType
+__reduce__
+	"``(operator.getitem, (Union, args))'', CPython 3.14's reduction."
+
+	| r |
+	r := PyGenericAlias ___helperCall___: #union_reduce with: { self }.
+	r == #'___noHelper___' ifTrue: [
+		^ TypeError ___signal___: 'cannot pickle ''typing.Union'' object'].
+	^ r
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
+value: positional value: keywords
+	"``Union()'' -- the union type cannot be instantiated; a union is made by
+	``|'' or by subscripting it."
+
+	^ TypeError ___signal___: 'cannot create ''typing.Union'' instances'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
+___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames
+	"``class X(Union)'' -- CPython refuses, and so does this, where the class
+	statement asks the base for a subclass."
+
+	^ TypeError ___signal___: 'type ''typing.Union'' is not an acceptable base type'
 %
 
 category: 'Grail-Attribute Access'
@@ -670,8 +872,20 @@ __args__
 category: 'Grail-Representation'
 method: PyUnionType
 __repr__
-	"``int | str'', as CPython prints it."
+	"``int | str'', as CPython prints it (union_repr, in
+	_grail_generic_alias): each member by the same rule an alias argument
+	uses, so ``list[int] | test.Employee'' is qualified as CPython qualifies
+	it.  The Smalltalk rendering below stays for the bootstrap window."
 
+	| r |
+	r := PyGenericAlias ___helperCall___: #union_repr with: { self }.
+	r == #'___noHelper___' ifTrue: [^ self ___smalltalkRepr___].
+	^ r
+%
+
+category: 'Grail-Representation'
+method: PyUnionType
+___smalltalkRepr___
 	| parts |
 	parts := WriteStream @env0:on: String @env0:new.
 	self __args__ @env0:doWithIndex: [:a :i |

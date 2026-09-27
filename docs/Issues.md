@@ -67,6 +67,85 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
+## FIXED: abc and collections.abc are CPython's, and the machinery that exposed
+
+Grail's `abc` was a stub: `ABCMeta` created nothing, `abc.ABC` had no
+metaclass, and an abstract class instantiated unless it named
+`metaclass=abc.ABCMeta` itself. `collections.abc` was a hand-written stand-in
+answering structural questions from whitelists, with `Callable[[int], str]`
+evaluating to the class. `types.GenericAlias` and the union type were
+Smalltalk classes with no parameter collection and no substitution, reporting
+themselves as `PyGenericAlias` / `PyUnionType`. test_typing's ABC, Protocol,
+Callable and GenericAlias tests could not pass on any of that.
+
+**Now**: `abc.py` is CPython 3.14.6's, with `ABCMeta` defined in it from
+`_py_abc`'s code; `collections/abc.py` is CPython's `_collections_abc.py`;
+`_grail_generic_alias.py` ports genericaliasobject.c's and unionobject.c's
+rules (`_Py_make_parameters`, `_Py_subs_parameters`, the reprs), which the two
+Smalltalk classes call; and `typing.Union` IS the union type, as in 3.14.
+`tests/python/abc_machinery.py` pins it (35 checks, CPython-measured).
+
+### The recorded deviations
+
+- `ABCMeta` is defined in `abc.py`, not re-exported from `_py_abc`: gemdb
+  refuses an import in which a module stops defining a class that has
+  instances in the repository.
+- The ABC registry is a strong `set`: weak references do not survive a
+  deployed module's commit, so every registration `_collections_abc` makes at
+  import was gone in the next session.
+- The ABC caches belong to a session (keyed by the gem's pid): committed
+  caches are whatever the deploy session left, and a session's own stores can
+  be dropped wholesale with the class-attribute overlay.
+
+### What it exposed
+
+Each of these was reached by a regression, and each is fixed where it
+originates:
+
+- **The class-attribute overlay walk skipped a nearer class's own value.**
+  `object >> ___classAttrOverlayLookup___:name:` walked up the superclass chain
+  returning the first overlay entry, so once `Sized`'s ABC caches were reset
+  in a session every `Sized` subclass read `Sized`'s caches instead of its
+  own. It stops now at the first class holding the name in either home.
+- **Builtin class dicts listed almost nothing.** `dict.__dict__` had no
+  `__len__`, `__iter__` or `__contains__`: the methods live on Smalltalk
+  ancestors the Python `__mro__` does not name. `___classDict___` folds those
+  ancestors in (stopping at `PythonInstance` / `Object`), and gives the
+  unhashable builtins their `__hash__ = None`.
+- **Protocol-refusing stand-ins read as methods.** `int.__iter__` and
+  `NoneType.__len__` exist only to raise the interpreter's TypeError, but made
+  `isinstance(3, Iterable)` True. They carry `<grailProtocolRefusal>` (a
+  pragma, because a kernel class's session methods report no category), and
+  the class dict skips them -- as it now skips the synthesized
+  `__iter__`/`__enter__` defaults on classes that lack them.
+- **A strict-slots base lost its slots to a deeper one.**
+  `importlib >> ___selectStorageBase___:` preferred the deepest chain, so
+  `KeysView(MappingView, Set)` was rooted at `Set` and `MappingView`'s
+  `__slots__ = '_mapping'` had nowhere to go. A base whose nearest `__slots__`
+  names a slot wins now.
+- **A warm bind restored only the bound module's metaclass records.**
+  `_collections_abc` is `from collections.abc import *`, so once deployed its
+  body does not run and nothing binds `collections.abc` -- but pathlib reaches
+  `Sequence` through it. After a stale rebuild of pathlib (anything importing
+  `re` first; `re` is never deployed), `class _PathParents(Sequence)` found no
+  metaclass on its chain, skipped `ABCMeta.__new__`, and `Path.parents`
+  refused to instantiate. `importlib >> ___restoreAllCanonicalMetaclasses___`
+  restores every deployed record, as `___restoreCanonicalMiRecords___` already
+  did for MI records.
+- **A bind's subclass links were credited to the importer.** The restore
+  re-derives a bound module's `__subclasses__` links while the importing
+  module's body is running, and credited them to that body -- so re-importing
+  the importer took them back, leaving `Sequence.__subclasses__()` without
+  `MutableSequence` and `isinstance([], Sequence)` False on a cold cache. The
+  links are credited to the bound module now
+  (`___registerSubclass___:of:origin:`).
+- A function found through a recorded metaclass was answered unbound
+  (`C.__subclasses__()` raised); a generator lambda did not compile; the dict
+  views pickled once pickle could find them by name; builtin iterator types
+  constructed empty objects; `singledispatch` read a counter only the stub
+  `abc` kept and never dropped its cache; the storage-base and `__subclasses__`
+  code consulted `_ABCRoot`, which no longer exists.
+
 ## FIXED (partly): `test_typing` could not be imported -- PEP 695 scopes, and what it hit next
 
 `test.test_typing` scored IMPORTERROR on `type type_alias[*_] = 0`: the parser
@@ -133,15 +212,28 @@ uses, so the change is tier 2 (0 regressions across the corpus):
 
 ### What is left, grouped by cause
 
-The largest groups, for the next pass: Grail's `abc` is a stub with no
-`ABCMeta` class creation and no abstract-instantiation check outside an
-explicit `metaclass=abc.ABCMeta` (so `Generator()`, `Protocol()` and abstract
-Protocol subclasses instantiate; `_abc_registry_clear` does not exist);
-`types.GenericAlias` and `types.UnionType` are Smalltalk classes without
-`__parameters__` or substitution, and report themselves as `PyGenericAlias` /
-`PyUnionType`; `collections.abc.Callable[...]` answers the class itself; the
-typing NamedTuple and TypedDict emulations diverge in `__bases__`/`__mro__`;
-and the typing doctests are not collected.
+The abc / collections.abc / GenericAlias group is closed (see the section
+above): with it, **701 tests, 79 failures, 26 errors**. The largest groups
+still open:
+
+- **TypedDict and NamedTuple (~35).** Both are Grail's own emulations (GRAIL
+  DEVIATIONs 2 and 3 in `typing.py`), because `type.__new__` called from a
+  metaclass cannot rewrite the bases and class-body annotations are never
+  evaluated; their `__bases__`, `__mro__`, `__orig_bases__` and key sets
+  diverge.
+- **A TypeError CPython raises and Grail does not (~25).** A class without
+  `__class_getitem__` answers itself when subscripted (`object`'s lenient
+  default), calling a metaclass with no arguments builds an instance, and
+  subclassing `TypeVar` / `ParamSpec` / `NoDefault`'s type succeeds.
+- **`get_type_hints` on classes and modules**, `__no_type_check__` on
+  methods, and `*`-unpack in call sites (`def f(*args: *Ts)`).
+- **A module body's store on another module's class is lost in a later
+  session.** `typing`'s `_DeprecatedGenericAlias` sets `_removal_version` on
+  `collections.abc.ByteString`; the store goes to the deploy session's overlay
+  and never commits. This is the "write side" still open in
+  `docs/Persistent_Modules_and_Classes.md` §4.3.
+- The typing doctests are not collected, and `io.Reader` / `io.Writer` do
+  not exist.
 
 ## FIXED: `sys.path[0]` was relative, and `-m` never saw the working directory
 

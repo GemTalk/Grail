@@ -56,6 +56,29 @@ iterator class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Grail-Instance Creation'
+classmethod: iterator
+value: positional value: keywords
+	"``type(iter([]))()'' -- CPython's iterator types cannot be constructed
+	from Python: ``cannot create 'list_iterator' instances''.  Grail's used to
+	build an empty, unusable object instead.  test_struct's
+	test_uninstantiable asks exactly this of the unpack iterator, which Grail
+	backs with a list_iterator.  Grail builds its iterators from Smalltalk,
+	never through this call.
+
+	NAMED, not every subclass: ``enumerate'' is an iterator here too and is a
+	real, constructible type, as are the map/filter/zip stand-ins.  Anything
+	not listed is called the ordinary way."
+
+	(#(#'list_iterator' #'tuple_iterator' #'str_iterator' #'set_iterator'
+		#'range_iterator' #'dict_keyiterator' #'dict_valueiterator'
+		#'dict_itemiterator' #'seq_iterator' #'callable_iterator')
+			@env0:includes: self @env0:name) ifFalse: [
+				^ super value: positional value: keywords].
+	^ TypeError ___signal___: ('cannot create ''' @env0:,
+		(self @env1:__name__) @env0:asString @env0:, ''' instances')
+%
+
 category: 'Grail-Type Information'
 method: iterator
 __class__

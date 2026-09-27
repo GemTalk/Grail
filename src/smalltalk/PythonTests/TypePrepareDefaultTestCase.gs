@@ -133,15 +133,20 @@ testAMetaclassWithNoPrepareIsUnchanged
 category: 'Grail-Tests - namespace'
 method: TypePrepareDefaultTestCase
 testTypesOwnPrepareAllocatesNoNamespace
-	"The guard.  ABCMeta and Bare have no __prepare__ of their own and override
-	neither __new__ nor __init__, so no namespace -- exactly as before type had
-	one to inherit.  Without ___grailIsTypesOwnPrepare___: both answer a dict."
+	"The guard.  Bare has no __prepare__ of its own and overrides neither
+	__new__ nor __init__, so no namespace -- exactly as before type had one to
+	inherit.  Without ___grailIsTypesOwnPrepare___: it answers a dict.
+
+	ABCMeta used to be the second subject, on the same grounds.  It is
+	CPython's own now and DEFINES __new__, so it gets the namespace every
+	constructing metaclass gets -- which is asserted, so the change of subject
+	is visible rather than silent."
 
 	| abcMeta |
-	abcMeta := (testModule @env1:___pyAttrLoad___: #abc) @env1:___pyAttrLoad___: #ABCMeta.
-	self assert: (self ___namespaceFor___: #ScratchForAbc metaclass: abcMeta) isNil.
 	self assert: (self ___namespaceFor___: #ScratchForBare
-		metaclass: (testModule @env1:___pyAttrLoad___: #Bare)) isNil
+		metaclass: (testModule @env1:___pyAttrLoad___: #Bare)) isNil.
+	abcMeta := (testModule @env1:___pyAttrLoad___: #abc) @env1:___pyAttrLoad___: #ABCMeta.
+	self deny: (self ___namespaceFor___: #ScratchForAbc metaclass: abcMeta) isNil
 %
 
 category: 'Grail-Tests - namespace'

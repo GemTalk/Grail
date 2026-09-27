@@ -2167,27 +2167,38 @@ ___hasUserInit___
 	^ false
 %
 
+
+category: 'Grail-Metaclass'
 classmethod: object
 ___grailAbcMetaclassInChain___
-	"True when this class, or one it inherits from, explicitly declared
-	``metaclass=abc.ABCMeta''.
+	"True when this class's metaclass is abc.ABCMeta or a subclass of it --
+	typing._ProtocolMeta is one -- the only classes whose instantiation
+	CPython checks for abstract methods.  A PLAIN class using
+	@abc.abstractmethod is not checked there either, and twilio's
+	AuthStrategy / CredentialProvider rely on that.
 
-	EXPLICIT is the whole point.  Grail deliberately does not block instantiating
-	a class that merely uses @abc.abstractmethod -- abc.py records why: twilio's
-	AuthStrategy / CredentialProvider are PLAIN classes whose abstract methods
-	raise NotImplementedError from their bodies, and blocking them would break
-	working code.  Neither declares a metaclass, so keying on the declaration
-	leaves them untouched while still honouring a class that asked for ABCMeta."
+	Walks the metaclass's own superclass chain, which a Python metaclass
+	shares with its first base, and caches the answer per class: it is asked
+	on every instantiation, and a class's metaclass does not change."
 
-	| c meta |
+	| tbl found c meta m |
 	(self isKindOf: Behavior) ifFalse: [^ false].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailAbcMetaclassGate'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	found := tbl @env0:at: self otherwise: nil.
+	found @env0:notNil ifTrue: [^ found].
+	found := false.
 	c := self.
-	[c == nil] @env0:whileFalse: [
+	[found not and: [c ~~ nil]] @env0:whileTrue: [
 		meta := c ___grailMetaclass___.
-		(meta @env0:notNil
-			and: [(meta ___pyNameOrEmpty___) @env0:= 'ABCMeta']) ifTrue: [^ true].
+		m := meta.
+		[found not and: [m ~~ nil and: [m @env0:isBehavior]]] @env0:whileTrue: [
+			(m ___pyNameOrEmpty___) @env0:= 'ABCMeta' ifTrue: [found := true].
+			m := m @env0:superclass].
 		c := c @env0:superclass].
-	^ false
+	tbl @env0:at: self put: found.
+	^ found
 %
 
 category: 'Grail-Metaclass'
@@ -2202,44 +2213,44 @@ ___pyNameOrEmpty___
 %
 
 category: 'Grail-Metaclass'
-method: object
-___grailUnimplementedAbstract___
-	"The name of an abstract method this class has NOT implemented, or nil.
+classmethod: object
+___grailAbstractInstantiationError___
+	"CPython's refusal to instantiate an abstract class, or nil when this class
+	may be instantiated -- read from ``__abstractmethods__'', which
+	ABCMeta.__new__ computes when it builds the class and abc's
+	update_abstractmethods recomputes, exactly as object.__new__ reads the
+	flag that assignment sets.
 
-	A name is still abstract for C when the FIRST class in C's chain that
-	defines it is the one that marked it abstract -- which is how a concrete
-	subclass clears it by overriding, and why email's Compat32 instantiates
-	while the Policy it derives from does not.
+	It used to be recomputed here by scanning every env-1 selector up the
+	chain for an __isabstractmethod__ stamp, because Grail's abc was a stub
+	that computed nothing.  That scan read a stamp on a SESSION-LOCAL
+	interned UnboundMethod, so a class compiled in an earlier session looked
+	concrete; the stored frozenset has no such problem.
 
-	Abstractness lives on the INTERNED UnboundMethod for (class, selector),
-	because that is the handle @abc.abstractmethod receives and stamps."
+	    Can't instantiate abstract class B without an implementation for
+	    abstract method 'f'                    -- one
+	    ... for abstract methods 'f', 'g'      -- several, sorted"
 
-	| c seen |
-	c := self.
-	seen := IdentitySet @env0:new.
-	[c == nil] @env0:whileFalse: [
-		(c @env0:methodDictForEnv: 1) @env0:keysDo: [:sel |
-			| str bare owner |
-			"The BARE Python name: ``def add(self, x, y)'' compiles to #'add:_:',
-			and a varargs companion to #'_add:kw:', while the abstractness stamp
-			is keyed by the plain name on the interned UnboundMethod."
-			str := sel @env0:asString.
-			bare := (str @env0:includes: $:)
-				ifTrue: [str @env0:copyFrom: 1 to: (str @env0:indexOf: $:) @env0:- 1]
-				ifFalse: [str].
-			(bare @env0:isEmpty @env0:not
-				and: [(bare @env0:at: 1) @env0:= $_
-					ifTrue: [(bare @env0:size @env0:> 1)
-						and: [(bare @env0:at: 2) @env0:= $_]]
-					ifFalse: [true]]) ifTrue: [
-				(seen @env0:includes: bare @env0:asSymbol) ifFalse: [
-					seen @env0:add: bare @env0:asSymbol.
-					owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
-					(owner @env0:notNil
-						and: [self ___grailSelectorIsAbstract___: bare @env0:asSymbol on: owner])
-							ifTrue: [^ bare]]]].
-		c := c @env0:superclass].
-	^ nil
+	| am names stream |
+	am := [self ___pyAttrLoad___: #'__abstractmethods__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(am == nil or: [am == None]) ifTrue: [^ nil].
+	names := [(list @env1:__new__: am) @env0:collect: [:n | n @env0:asString]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	names @env0:isEmpty ifTrue: [^ nil].
+	names := names @env0:asSortedCollection @env0:asArray.
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
+	stream @env0:nextPutAll: 'Can''t instantiate abstract class '.
+	stream @env0:nextPutAll: self ___pyNameOrEmpty___.
+	stream @env0:nextPutAll: ' without an implementation for abstract method'.
+	names @env0:size @env0:> 1 ifTrue: [stream @env0:nextPut: $s].
+	stream @env0:nextPut: $ .
+	names @env0:doWithIndex: [:n :i |
+		i @env0:> 1 ifTrue: [stream @env0:nextPutAll: ', '].
+		stream @env0:nextPut: $'.
+		stream @env0:nextPutAll: n.
+		stream @env0:nextPut: $'].
+	^ stream @env0:contents
 %
 
 category: 'Grail-Finalization'
@@ -2250,70 +2261,6 @@ ___isUndrivenCoroutine___
 	capture closes."
 
 	^ false
-%
-
-category: 'Grail-Metaclass'
-method: object
-___grailCachedUnimplementedAbstract___
-	"___grailUnimplementedAbstract___, computed ONCE per class -- this is asked
-	on every construction of an ABCMeta class, and the scan is not cheap: it
-	visits every env-1 selector up the chain, object's thousands of ___x___
-	internals included, and probes each for __isabstractmethod__ under an
-	exception handler.  Measured at ~17 ms per construction, which made every
-	_pyio file cost ~70 ms to open (FileIO and the buffered classes descend from
-	IOBase(metaclass=abc.ABCMeta)).
-
-	Computing it once is CPython's own model: ABCMeta.__new__ fixes
-	__abstractmethods__ when the class is created, and a later assignment does
-	not change it.  Every class statement builds a NEW class, so an identity key
-	cannot go stale on redefinition; the table is session-local, like
-	GrailMetaclassCall, and the nil answer is cached as a marker so a concrete
-	class does not rescan either."
-
-	| tbl found name |
-	tbl := SessionTemps @env0:current
-		@env0:at: #'GrailUnimplementedAbstract'
-		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
-	found := tbl @env0:at: self otherwise: nil.
-	found @env0:notNil ifTrue: [
-		^ found @env0:== #'___noAbstract___' ifTrue: [nil] ifFalse: [found]].
-	name := self ___grailUnimplementedAbstract___.
-	tbl @env0:at: self put: (name @env0:ifNil: [#'___noAbstract___']).
-	^ name
-%
-
-category: 'Grail-Metaclass'
-method: object
-___grailSelectorIsAbstract___: sel on: owner
-	"Did ``owner'' mark this selector abstract?  Read off the interned
-	UnboundMethod, guarded: most selectors carry no such stamp.
-
-	...and, failing that, off the class's COMMITTED attribute holder.  The
-	interned handle is session-local (UnboundMethod class >>
-	definingClass:selector:), so the stamp @abc.abstractmethod put on it lives
-	only in the session that ran the class body.  What survives is the object
-	the decorator RETURNED, which the class-body rebinding stored in the
-	holder -- the same object ``Cls.meth'' reads.  For a DEPLOYED module no
-	later session runs the body again, so without this every abstract method
-	of a deployed class read as concrete everywhere but the deploy session:
-	contextlib.AbstractAsyncContextManager instantiated with __aexit__ still
-	abstract (test_contextlib_async test_exit_is_abstract), passing only when
-	the module happened to be compiled in the session that ran the test."
-
-	([((UnboundMethod definingClass: owner selector: sel)
-		___pyAttrLoad___: #'__isabstractmethod__') == true]
-		@env0:on: AbstractException
-		do: [:ex |
-			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-			ex @env0:return: false]) ifTrue: [^ true].
-	^ [ | held |
-		held := owner ___classChainAttrLookup___: sel.
-		held notNil
-			and: [(held ___pyAttrLoad___: #'__isabstractmethod__') == true]]
-		@env0:on: AbstractException
-		do: [:ex |
-			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-			ex @env0:return: false]
 %
 
 category: 'Grail-Instantiation'
@@ -2336,16 +2283,11 @@ ___allocateInstance___: positional kw: keywords
 
 	| n sel stream found abstractName assignedNew |
 	"CPython refuses to instantiate a class that still has abstract methods.
-	Gated on an EXPLICIT ``metaclass=abc.ABCMeta'' so a plain class using
-	@abc.abstractmethod is untouched -- see ___grailAbcMetaclassInChain___ for
-	why that distinction is the one that matters here."
+	Only an ABCMeta class is checked, as there -- see
+	___grailAbcMetaclassInChain___ and ___grailAbstractInstantiationError___."
 	self ___grailAbcMetaclassInChain___ ifTrue: [
-		abstractName := self ___grailCachedUnimplementedAbstract___.
-		abstractName @env0:notNil ifTrue: [
-			TypeError ___signal___: ('Can''t instantiate abstract class '
-				@env0:, (self ___pyNameOrEmpty___)
-				@env0:, ' without an implementation for abstract method '''
-				@env0:, abstractName @env0:, '''')]].
+		abstractName := self ___grailAbstractInstantiationError___.
+		abstractName @env0:notNil ifTrue: [TypeError ___signal___: abstractName]].
 	"An ASSIGNED __new__ -- ``A.__new__ = staticmethod(f)'' -- lives in the
 	class-attribute store, not as a compiled method, so the selector probes
 	below cannot see it.  CPython looks __new__ up on the TYPE, walking the
@@ -4962,6 +4904,13 @@ ___pythonModuleAttrIdentity___
 	every repr and every ``type(tb).__name__''."
 	(n @env0:= 'PyTraceback') ifTrue: [^ #('traceback' 'builtins')].
 
+	"``list[int]'' and ``int | str''.  CPython's are ``types.GenericAlias'' and
+	``types.UnionType'' -- reprs, pickling (``Can't pickle <class
+	'PyUnionType'>'') and every TypeError built from the type name leaked the
+	Smalltalk spellings, which test_typing reads in a dozen places."
+	(n @env0:= 'PyGenericAlias') ifTrue: [^ #('GenericAlias' 'types')].
+	(n @env0:= 'PyUnionType') ifTrue: [^ #('Union' 'typing')].
+
 	"The code object.  CPython's is a BUILTIN type spelled ``code''
 	(``<class 'code'>'', __module__ 'builtins'), reachable from Python only as
 	types.CodeType -- so Grail's ``PyCode'' spelling leaked into every repr and
@@ -5960,8 +5909,41 @@ ___classAttrOverlayLookup___: aClass name: aSym
 				(self ___methodDefinedFrom___: aClass upTo: walker name: aSym)
 					ifTrue: [^ nil].
 				^ v]].
+		"A NEARER CLASS'S OWN COMMITTED VALUE ENDS THE WALK.  The overlay is
+		only half of a class's namespace; the committed holder is the other
+		half, and CPython reads the nearest class's dict first whichever half
+		the value sits in.  Walking on past a class that holds the name in its
+		own holder let an ANCESTOR's session store shadow it: once
+		collections.abc.Sized's ABC caches were reset in a session (an overlay
+		store on a canonical class), Collection, Set, MutableSet and the dict
+		views -- each with its OWN committed caches -- all read Sized's, so
+		one class's negative answer landed in every other's cache and
+		``issubclass(frozenset, Set)'' came back False (test_functools'
+		singledispatch).  Nil here means ``read the committed value'', which
+		the caller does next."
+		(self ___grailOwnsCommittedAttr___: walker name: aSym) ifTrue: [^ nil].
 		walker := walker @env0:superClass].
 	^ nil
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailOwnsCommittedAttr___: aClass name: aSym
+	"Does aClass ITSELF hold aSym in its committed namespace -- its own
+	___dynInstVars___ holder, or its own class-attribute accessor pair?"
+
+	| holder |
+	((aClass @env0:class @env0:includesSelector: aSym environmentId: 1)
+		and: [object ___grailIsClassAttrAccessorCategory___:
+			(aClass @env0:class @env0:categoryOfSelector: aSym environmentId: 1)])
+				ifTrue: [^ true].
+	(aClass @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1)
+		ifFalse: [^ false].
+	holder := [aClass @env0:perform: #'___dynInstVars___' env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	holder == nil ifTrue: [^ false].
+	^ ([holder @env0:dynamicInstVarAt: aSym]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
 %
 
 category: 'Grail-Class Attr Overlay'
@@ -6890,9 +6872,30 @@ ___classDict___
 		The merge files them under its own CATEGORY, so the class already
 		records which they are -- no new bookkeeping, and it cannot drift from
 		the merge because the merge is what writes it."
-		merged := [(defCls @env0:categoryOfSelector: sel environmentId: 1)
-			@env0:= #'Grail-MI-Inherited']
+		"A PROTOCOL REFUSAL is not an attribute either: ``int.__iter__'' and
+		``NoneType.__len__'' exist only to raise the TypeError CPython's
+		interpreter raises, instead of an uncatchable MNU.  CPython's int has
+		no __iter__, and collections.abc's structural checks read __dict__, so
+		listing them made ``isinstance(3, Iterable)'' True.  Such methods carry
+		the pragma <grailProtocolRefusal> -- a CATEGORY cannot mark them,
+		because on a kernel class (int is Integer) they are session methods,
+		whose category reads back nil -- and are skipped with the merged ones.
+
+		And a name must be a Python IDENTIFIER: a Smalltalk binary selector
+		(``<'', ``<='') on a kernel-backed class is no attribute of anything."
+		merged := [| meth |
+			((defCls @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-MI-Inherited')
+				or: [meth := defCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil.
+					meth @env0:notNil and: [meth @env0:pragmas @env0:anySatisfy: [:p |
+						p @env0:keyword == #grailProtocolRefusal]]]]
 			@env0:on: AbstractException do: [:e | e @env0:return: false].
+		(nm @env0:size @env0:> 0 and: [((nm @env0:at: 1) @env0:isLetter
+			or: [(nm @env0:at: 1) == $_]) @env0:not]) ifTrue: [nm := ''].
+		"A Grail-internal ``___x___'' transported as ``____x___:kw:'' decodes
+		to ``__x___'' -- the THREE trailing underscores still mark it."
+		(nm @env0:size @env0:> 3 and: [(nm @env0:copyFrom: nm @env0:size @env0:- 2
+			to: nm @env0:size) @env0:= '___']) ifTrue: [nm := ''].
 		(((nm @env0:size) @env0:> 0)
 			and: [merged not
 			and: [(nm @env0:copyFrom: 1 to: (3 @env0:min: nm @env0:size)) @env0:~= '___'
@@ -6918,7 +6921,34 @@ ___classDict___
 						(d @env0:includesKey: sel @env0:asString) ifFalse: [
 							d @env0:at: sel @env0:asString
 								put: (self ___grailMetaclassPropertyObject___: sel)]]
-					ifFalse: [addSel @env0:value: sel value: self value: allowed]]].
+					ifFalse: [addSel @env0:value: sel value: self value: allowed]].
+		"HIDDEN ANCESTORS FOLD IN.  A built-in's Python __mro__ skips the
+		Smalltalk classes it is implemented on -- ``dict.__mro__'' is (dict,
+		object), while its methods live on Smalltalk ancestors that no Python
+		MRO names -- so an own-methods scan left ``dict.__dict__'' without
+		__len__, __iter__ or __contains__.  collections.abc's structural hooks
+		are _check_methods over exactly these dicts, so no built-in passed one
+		on its own merits: ``issubclass(dict, Sized)'' then came out of the ABC
+		caches, right or wrong depending on what had been asked first
+		(test_functools test_compose_mro).  CPython's built-in types list their
+		methods in their own __dict__, and a hidden ancestor's methods are
+		that, for this class.
+
+		Walks up the Smalltalk chain until a class the MRO DOES name, and never
+		into PythonInstance or Object: those hold Grail's protocol fallbacks,
+		which no Python class dict has."
+		[ | mroSet walker |
+		mroSet := IdentitySet @env0:new.
+		[(self ___pyAttrLoad___: #'__mro__') @env0:do: [:m | mroSet @env0:add: m]]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		walker := self @env0:superclass.
+		[walker @env0:notNil
+			and: [(mroSet @env0:includes: walker) @env0:not
+			and: [walker ~~ PythonInstance and: [walker ~~ Object]]]] @env0:whileTrue: [
+				(walker @env0:methodDictForEnv: 1) @env0:keys @env0:do: [:sel |
+					addSel @env0:value: sel value: walker value: allowed].
+				walker := walker @env0:superclass]]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
 	"(b) metaclass own: accessor PAIRS read as data; the rest wrap.
 
 	Two exclusions, both of them ``this belongs to the METACLASS, not to the
@@ -6973,6 +7003,28 @@ ___classDict___
 							v := [self @env0:perform: sel env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 							v == nil ifFalse: [d @env0:at: nm put: v]]]
 					ifFalse: [addSel @env0:value: sel value: self @env0:class value: nil]]]].
+	"THE SYNTHESIZED DUNDERS ARE NOT IN THE NAMESPACE of a class that lacks
+	them -- the same rule dir() and getattr apply
+	(___grailClassLacksSynthesizedDunder___:).  object's __dict__ held
+	__iter__, __enter__, __contains__ and the rest, every one a raising
+	stand-in that CPython's object does not have, and collections.abc reads
+	__dict__: ``isinstance(None, Iterable)'' was True, which sent django's
+	normalize_choices iterating None."
+	(d @env0:keys @env0:asArray) @env0:do: [:k |
+		((self ___grailSynthesizedDunderSelectors___: k) @env0:notNil
+			and: [self ___grailClassLacksSynthesizedDunder___: k @env0:asSymbol])
+				ifTrue: [d @env0:removeKey: k]].
+	"THE UNHASHABLE BUILTINS HOLD ``__hash__ = None''.  CPython's list, dict,
+	set, bytearray, dict_keys and dict_items carry that entry in their own
+	__dict__, and collections.abc.Hashable is _check_methods over __dict__:
+	Grail's compiled raising __hash__ read as a METHOD, so every one of them
+	was Hashable.  User classes already get the None from ClassDefAst
+	(___unhashableByClassBody___); these are kernel classes with no holder, so
+	the entry is supplied here, for exactly those classes and not their
+	subclasses -- CPython's subclass inherits it through the MRO."
+	(#(#list #dict #set #bytearray #'dict_keys' #'dict_items') @env0:anySatisfy: [:nm |
+		(Python @env0:at: nm otherwise: nil) @env0:== self])
+			ifTrue: [d @env0:at: '__hash__' put: None].
 	"Descriptor kinds -- see ___grailPythonDictDescriptorKinds___.  After (b)/(c)
 	so the entry to wrap is there, before (d) so an explicit override still wins."
 	[ | kinds |
@@ -9032,8 +9084,17 @@ ___pyAttrLoad___: aSym
 			canonical metaclass idiom: CPython's singleton keeps
 			``_instances = {}'' on the metaclass and reads it as
 			``cls._instances'' from inside __call__."
+			"A FUNCTION found there binds to the class, as CPython's method
+			descriptors on the metatype do: ``type.__subclasses__'' is held as an
+			UnboundMethod value (so ``type.__subclasses__(C)'' takes the class
+			explicitly), and handing that back unbound made ``C.__subclasses__()''
+			a TypeError for every class whose metaclass is a Python subclass of
+			type -- which _py_abc's ABCMeta.__subclasscheck__ calls."
 			(___meta ___grailMetaclassClassAttr___: aSym)
-				@env0:ifNotNil: [:___cv | ^ self ___descriptorGet___: ___cv].
+				@env0:ifNotNil: [:___cv | ^ (___cv isKindOf: UnboundMethod)
+					ifTrue: [BoundMethod receiver: self selector: ___cv @env0:selector
+						definingClass: ___cv @env0:definingClass]
+					ifFalse: [self ___descriptorGet___: ___cv]].
 			(self ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: self)
 				ifTrue: [^ aSym == #'__init_subclass__'
 					ifTrue: [BoundMethod receiver: self selector: aSym

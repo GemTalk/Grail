@@ -261,9 +261,10 @@ cr_suspended
 	^ self gi_suspended
 %
 
-category: 'Grail-Coroutine Protocol'
+category: 'Grail-Protocol Refusal'
 method: PythonCoroutine
 __iter__
+	<grailProtocolRefusal>
 	"CPython: a coroutine is NOT iterable -- iter(), for, list(), sum(), a
 	comprehension all refuse before running any of the body.  Grail inherited
 	the generator's ``^ self'' here, so ``list(coro)'' DROVE the coroutine:
@@ -281,9 +282,10 @@ __iter__
 			@env0:, ''' object is not iterable')
 %
 
-category: 'Grail-Coroutine Protocol'
+category: 'Grail-Protocol Refusal'
 method: PythonCoroutine
 __next__
+	<grailProtocolRefusal>
 	"next(coro) -- CPython's spelling of the same refusal, measured:
 	``TypeError: 'coroutine' object is not an iterator''.  do: no longer
 	routes through __next__ (it drives send: directly), so this only fires

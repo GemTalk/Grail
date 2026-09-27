@@ -975,9 +975,10 @@ ag_await
 	^ self ___delegationTargetWhileAlive___
 %
 
-category: 'Grail-Async Generator Protocol'
+category: 'Grail-Protocol Refusal'
 method: PythonAsyncGenerator
 __iter__
+	<grailProtocolRefusal>
 	"CPython: an async generator is not SYNC-iterable -- ``async for'' is its
 	loop, __aiter__ its protocol.  The inherited generator ``^ self'' was the
 	dangerous kind of wrong (isgenerator's docstring already called it that):
@@ -991,9 +992,10 @@ __iter__
 			@env0:, ''' object is not iterable')
 %
 
-category: 'Grail-Async Generator Protocol'
+category: 'Grail-Protocol Refusal'
 method: PythonAsyncGenerator
 __next__
+	<grailProtocolRefusal>
 	"next(agen) -- ``TypeError: 'async_generator' object is not an iterator''
 	(measured).  anext() is the async spelling and goes through __anext__."
 

@@ -159,18 +159,15 @@ testABCMetaNamedDirectlyStillEnforces
 
 category: 'Grail-Tests - Known gaps'
 method: InheritedMetaclassDispatchTestCase
-testInheritingAbcABCDoesNotEnforceWhichIsAKnownGap
-	"PRE-EXISTING and DELIBERATE, recorded here as a guard rather than a claim.
-	src/python/stdlib/abc.py spells the marker ``class ABC:'' and not ``class
-	ABC(metaclass=ABCMeta)'', with a comment giving the reason: routing every
-	ABC subclass's isinstance/issubclass miss through ABCMeta.__instancecheck__
-	is a performance and semantic change worth measuring on its own.  So there
-	is no metaclass record for a subclass to inherit, and this commit -- which
-	only changes what happens when there IS one -- leaves it exactly as it was.
-	Verified identical before and after."
+testInheritingAbcABCEnforcesAbstractness
+	"``class Abstract(abc.ABC)'' with an unimplemented abstract method refuses
+	instantiation, and type(Abstract) is ABCMeta -- CPython's answers.  This
+	test used to guard the opposite as a known, deliberate gap: abc.py wrote
+	``class ABC:'' with no metaclass, so nothing was inherited and nothing was
+	refused.  abc.py is CPython's own now."
 
-	self assert: (self resultAt: 'abc_base_refuses') asString equals: 'instantiated'.
-	self assert: (self resultAt: 'abc_base_type') asString equals: '''type'''.
+	self assert: (self resultAt: 'abc_base_refuses') asString equals: 'TypeError'.
+	self assert: (self resultAt: 'abc_base_type') asString equals: '''ABCMeta'''.
 %
 
 category: 'Grail-Tests - Inherited metaclass'

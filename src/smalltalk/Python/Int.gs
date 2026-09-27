@@ -1569,18 +1569,20 @@ numerator
 	^ self
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: int
 __iter__
+	<grailProtocolRefusal>
 	"iter(int) raises catchable TypeError (CPython) -- heapify(non-
 	sequence) sent an uncatchable env-1 MNU."
 
 	TypeError ___signal___: '''int'' object is not iterable'
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: int
 __getitem__: idx
+	<grailProtocolRefusal>
 	"x[i] on an int raises catchable TypeError (CPython).  Without a
 	real method the send died as an UNCATCHABLE env-1 MNU and killed
 	the test_fractions module run.  Safe as a real method on int alone
