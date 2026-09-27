@@ -5,6 +5,7 @@
 # are passthroughs (Grail drops method decorators anyway).
 
 import re
+import sys
 import warnings
 
 
@@ -91,10 +92,17 @@ class check_warnings:
         # Dunder lookups go through the TYPE: a Grail instance attribute read
         # of a zero-arg dunder auto-invokes it, so self._cm.__enter__() would
         # call the RESULT of __enter__.
-        self._cm = warnings.catch_warnings(record=True)
+        #
+        # The module is sys.modules['warnings'], NOT the one imported above,
+        # exactly as CPython's _filterwarnings reads it: test_warnings swaps
+        # that entry for the implementation under test, and a recorder on the
+        # other one saw nothing that implementation's warn() emitted
+        # (PyCatchWarningTests.test_check_warnings: 'None' != 'foo').
+        wmod = sys.modules['warnings']
+        self._cm = wmod.catch_warnings(record=True)
         cls = type(self._cm)
         recorded = getattr(cls, '__enter__')(self._cm)
-        warnings.simplefilter("always")
+        wmod.simplefilter("always")
         self._recorder = WarningsRecorder(recorded)
         return self._recorder
 

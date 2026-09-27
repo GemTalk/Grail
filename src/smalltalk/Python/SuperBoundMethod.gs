@@ -249,11 +249,18 @@ __eq__: other
 	CLASS does not bind, and neither does a super whose __self__ is that class.
 	Grail spells the two differently -- SuperBoundMethod here, UnboundMethod
 	there -- so the comparison has to bridge them.  Keyed the analogous way:
-	super's obj IS the class, and the unbound handle names it as its
-	definingClass."
+	super's obj IS the class, and the unbound handle is what reading the name
+	off that class answers.  Usually that handle names obj as its
+	definingClass; for a method obj inherits from ``object'' it is object's
+	own handle (UnboundMethod class >> ___forClassRead___:selector:, which is
+	what makes ``E.__reduce__ is object.__reduce__''), so the match asks for
+	THAT handle rather than comparing the class."
 	(other @env0:isKindOf: UnboundMethod) @env0:ifTrue: [
-		^ (obj == (other @env0:definingClass))
-			@env0:and: [selector @env0:asSymbol == (other @env0:selector) @env0:asSymbol]].
+		^ (selector @env0:asSymbol == (other @env0:selector) @env0:asSymbol)
+			@env0:and: [(obj == (other @env0:definingClass))
+				@env0:or: [(obj @env0:isKindOf: Behavior)
+					@env0:and: [(UnboundMethod @env1:___forClassRead___: obj
+						selector: (other @env0:selector) @env0:asSymbol) == other]]]].
 	(other @env0:isKindOf: SuperBoundMethod) @env0:ifTrue: [
 		^ (obj == (other @env0:_obj))
 			@env0:and: [selector @env0:asSymbol == (other @env0:_selector) @env0:asSymbol]].

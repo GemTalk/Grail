@@ -1420,6 +1420,7 @@ run
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningTestCase' put: nil;
 	at: #'WarningsApi314TestCase' put: nil;
+	at: #'WarningsAndDecoratedPropertiesTestCase' put: nil;
 	at: #'WarningsArgValidationTestCase' put: nil;
 	at: #'WarningsDeprecatedTestCase' put: nil;
 	at: #'WarningsInternalApiTestCase' put: nil;
@@ -2842,6 +2843,7 @@ input src/smalltalk/PythonTests/WarningLocationTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryTestCase.gs
 input src/smalltalk/PythonTests/WarningsApi314TestCase.gs
+input src/smalltalk/PythonTests/WarningsAndDecoratedPropertiesTestCase.gs
 input src/smalltalk/PythonTests/WarningsArgValidationTestCase.gs
 input src/smalltalk/PythonTests/WarningsDeprecatedTestCase.gs
 input src/smalltalk/PythonTests/WarningsInternalApiTestCase.gs

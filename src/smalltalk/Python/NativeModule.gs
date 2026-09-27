@@ -440,6 +440,41 @@ set compile_env: 1
 
 category: 'Grail-Singleton'
 classmethod: NativeModule
+___hasFreshInstances___
+	"Can a SECOND object of this native module stand for a fresh import of
+	it -- what test.support.import_helper.import_fresh_module answers when it
+	is given ``fresh=''?
+
+	A native module keeps its state per session and per CLASS (see
+	___sessionEntries___ and ___sessionSlots___), so a second instance is a
+	new module object over the SAME state -- the arrangement CPython has for a
+	C-accelerated module, whose state lives in the interpreter.  What can
+	still tell the two objects apart is identity: a method comparing ``self''
+	with the singleton, or keying something by instance.
+
+	False by default, because nobody has checked that for most modules.  A
+	module that answers true has been checked."
+
+	^ false
+%
+
+category: 'Grail-Singleton'
+classmethod: NativeModule
+___freshInstance___
+	"A second, UNREGISTERED module object over this module's session state.
+
+	``initialize'' is NOT run on it: that state already exists -- the
+	singleton is made first, which is what fills it -- and initializing again
+	would reset it under the canonical module (a fresh warnings would empty
+	the session's filters).  Neither the session registry nor sys.modules
+	learns of the copy."
+
+	self instance.
+	^ self @env0:new
+%
+
+category: 'Grail-Singleton'
+classmethod: NativeModule
 instance
 	"The session singleton: install.sh's committed instance when there is
 	one, else a fresh one (the old behaviour, for a class install has not

@@ -120,7 +120,7 @@ printSmalltalkRuntimeOn: aStream
 	  methodSources fixedArityForwarderSources classMethodSources staticMethodSources
 	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope propertyFuncNames savedPropertyFuncNames
 	  savedClass savedFuncNames savedVarargsFuncNames
-	  savedSelfParam savedClassAttrNames settersByName
+	  savedSelfParam savedClassAttrNames settersByName decoratedProps
 	  slotNamesOrdered slotNameSet mangledSlotNames savedBackingInstVars
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
 	  slotPropertyNames accessorInferredNames accessorPairsWanted renamedPairsOrdered
@@ -456,20 +456,26 @@ printSmalltalkRuntimeOn: aStream
 						s := PrettyWriteStream on: Unicode7 new.
 						s markStartOfMethod.
 						def generateMethodSourceOn: s.
-						def isDeleterDecorated
+						(def isDeleterDecorated
+							or: [self ___isRedirectedPropertySetter___: def])
 							ifTrue: [
 								"A property DELETER (``@x.deleter def x(self)'') is unary
 								like the getter; emitting it as ``x'' would clobber the
 								getter.  Redirect to ``___propDeleter_x'', invoked by
 								object>>___pyAttrDelete___ for ``del obj.x''."
+								"The SETTER of a DECORATED property goes the same way, to
+								``___propSetter_x:'': compiled as ``x:'' it would pair with
+								the getter, and the pair wins every read and write over the
+								property object that carries the decorated accessors -- see
+								___decoratedPropertyNames___."
 								"The one caller that edits the source after the generator
 								is done with it: the rewrite lengthens the leading selector,
 								moving every offset the map describes."
 								mSrc := s contents.
 								mRedirect := self ___redirectUnarySelectorIn: mSrc
 									from: def ___mangledName___ asString
-									to: ('___propDeleter_' , def ___mangledName___ asString).
-								methodSources add: ('___propDeleter_' , def ___mangledName___ asString)
+									to: (self ___redirectedAccessorNameFor___: def).
+								methodSources add: (self ___redirectedAccessorNameFor___: def)
 									-> (mRedirect , (s mapCommentShiftedBy: mRedirect size - mSrc size))]
 							ifFalse: [
 								s writeMapAsComment.
@@ -2039,11 +2045,17 @@ printSmalltalkRuntimeOn: aStream
 			]
 		]
 	].
+	"...and skip it for a DECORATED property, which is a property object in
+	the class holder rather than a pair: a stub here would re-create the pair
+	that object has to win against (___decoratedPropertyNames___).  Its
+	read-only-ness is the property object's own -- no fset."
+	decoratedProps := self ___decoratedPropertyNames___.
 	methodDefs do: [:def |
 		((def decoratorList notNil
 			and: [(def decoratorList includes: #'property')
 				or: [def decoratorList includes: #'cached_property']])
-			and: [(settersByName includes: def name asSymbol) not]) ifTrue: [
+			and: [(settersByName includes: def name asSymbol) not
+			and: [(decoratedProps includes: def name asSymbol) not]]) ifTrue: [
 			| propSetterSrc lf2 isCached |
 			lf2 := Character lf asString.
 			isCached := def decoratorList includes: #'cached_property'.
@@ -2282,12 +2294,17 @@ printSmalltalkRuntimeOn: aStream
 	self ___allFunctionDefs___ do: [:def |
 		| decos |
 		decos := def applicableMethodDecorators.
-		decos isEmpty ifFalse: [
+		(decos isEmpty not
+			and: [(decoratedProps includes: def name asSymbol) not]) ifTrue: [
 			def
 				printMethodDecoratorsOn: aStream
 				decorators: decos
 				className: self ___stVarName___
 				siblingNames: decoratorScope]].
+	"A DECORATED property's accessors are not rebound one by one: together
+	they are ONE property object -- see ___decoratedPropertyNames___."
+	decoratedProps do: [:n |
+		self ___printDecoratedProperty___: n on: aStream siblingNames: decoratorScope].
 
 	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
 	guarantees it by applying a decorator at the def statement, so by the time
@@ -3063,6 +3080,155 @@ ___redirectUnarySelectorIn: sourceString from: oldName to: newName
 		ifTrue: [
 			^ newName , (sourceString copyFrom: oldName size + 1 to: sourceString size)].
 	^ sourceString
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___decoratedPropertyNames___
+	"The names of this body's DECORATED properties: a @property whose getter,
+	setter or deleter carries a decorator that replaces the function --
+
+	    @property
+	    @deprecated('x will go away soon')
+	    def x(self): ...
+
+	Grail compiles a @property as a getter/setter PAIR of methods, which
+	___pyAttrLoad___ reads by performing the getter.  That reads the compiled
+	body, so the decorator's result -- which the decorator loop does store,
+	in the class holder -- was never reached: the DeprecationWarning above
+	never fired (test_warnings DeprecatedTests.test_property).
+
+	Such a property is built as what CPython builds, a property OBJECT over
+	the decorated accessors, stored in the class holder where an attribute
+	read or write finds it as a data descriptor.  For that to be found, the
+	pair must not exist: the read-only setter stub is not synthesized, and an
+	explicit setter compiles as ``___propSetter_x:'' (see
+	___isRedirectedPropertySetter___:).
+
+	Conservative by construction, because every property NOT listed keeps the
+	pair it had: exactly one @property getter, at most one setter and one
+	deleter, each with its property form OUTERMOST, all instance-side and
+	fixed-arity, no other def sharing the name, and at least one accessor
+	carrying a wrapping decorator."
+
+	| getters setters deleters wrapped excluded answer |
+	getters := Dictionary new. setters := Dictionary new. deleters := Dictionary new.
+	wrapped := IdentitySet new. excluded := IdentitySet new.
+	self ___allFunctionDefs___ do: [:def | | n kind |
+		n := def name asSymbol.
+		kind := def ___propertyAccessorKind___.
+		(kind isNil or: [kind == #other
+			or: [def ___decoratorBaseIsClassSide___
+			or: [def compilesAsVarargs]]])
+			ifTrue: [excluded add: n]
+			ifFalse: [
+				| tally |
+				tally := kind == #getter ifTrue: [getters]
+					ifFalse: [kind == #setter ifTrue: [setters] ifFalse: [deleters]].
+				tally at: n put: (tally at: n ifAbsent: [0]) + 1.
+				def ___wrapsPropertyAccessor___ ifTrue: [wrapped add: n]]].
+	answer := IdentitySet new.
+	wrapped do: [:n |
+		((excluded includes: n) not
+			and: [(getters at: n ifAbsent: [0]) = 1
+			and: [(setters at: n ifAbsent: [0]) <= 1
+			and: [(deleters at: n ifAbsent: [0]) <= 1]]])
+				ifTrue: [answer add: n]].
+	^ answer
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___printDecoratedProperty___: aName on: aStream siblingNames: siblingNames
+	"Store ``property(fget, fset, fdel)'' for the decorated property aName in
+	the class holder, each accessor its def's decorator chain over the
+	method it compiled to -- the getter under the plain name, the setter and
+	deleter under their private ones.  An absent accessor is None.
+
+	Guarded like printMethodDecoratorsOn:'s rebinding, with one difference.
+	There a decorator that raises leaves the compiled method in place, which
+	is still the undecorated method.  Here it would leave nothing usable --
+	no pair was compiled, and the setter is under its private name -- so the
+	handler stores the property over the UNDECORATED accessors instead: the
+	property works as it did before, just without the decorators, which is
+	what a failed decorator has always meant."
+
+	| byKind |
+	byKind := Dictionary new.
+	self ___allFunctionDefs___ do: [:def |
+		def name asSymbol == aName ifTrue: [
+			byKind at: def ___propertyAccessorKind___ put: def]].
+	aStream nextPutAll: '['.
+	self ___printPropertyStore___: aName accessors: byKind decorated: true
+		on: aStream siblingNames: siblingNames.
+	aStream
+		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
+		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass].'; lf;
+		nextPutAll: '	'.
+	self ___printPropertyStore___: aName accessors: byKind decorated: false
+		on: aStream siblingNames: siblingNames.
+	aStream nextPutAll: '].'; lf
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___printPropertyStore___: aName accessors: byKind decorated: aBoolean on: aStream siblingNames: siblingNames
+	"The holder store ___printDecoratedProperty___:on:siblingNames: emits, with
+	each accessor's decorator chain (aBoolean) or bare."
+
+	| className |
+	className := self ___stVarName___.
+	aStream
+		nextPutAll: className;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
+		nextPutAll: aName;
+		nextPutAll: ''' put: (PropertyDescriptor @env1:__new__: '.
+	#(#getter #setter #deleter) doWithIndex: [:kind :i | | def baseName |
+		i > 1 ifTrue: [aStream nextPutAll: ' _: '].
+		def := byKind at: kind ifAbsent: [nil].
+		def isNil
+			ifTrue: [aStream nextPutAll: 'None']
+			ifFalse: [
+				baseName := kind == #getter
+					ifTrue: [def name asString]
+					ifFalse: [self ___redirectedAccessorNameFor___: def].
+				aBoolean
+					ifTrue: [
+						def
+							printPropertyAccessorOn: aStream
+							className: className
+							siblingNames: siblingNames
+							baseName: baseName]
+					ifFalse: [
+						aStream
+							nextPutAll: '(UnboundMethod definingClass: ';
+							nextPutAll: className;
+							nextPutAll: ' selector: #''';
+							nextPutAll: baseName;
+							nextPutAll: ''')']]].
+	aStream nextPutAll: ')'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___isRedirectedPropertySetter___: aDef
+	"Is aDef the explicit setter of one of this body's decorated properties,
+	which compiles as ``___propSetter_x:'' rather than ``x:''?"
+
+	^ aDef ___propertyAccessorKind___ == #setter
+		and: [self ___decoratedPropertyNames___ includes: aDef name asSymbol]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___redirectedAccessorNameFor___: aDef
+	"The private selector base a property accessor that must not claim the
+	plain name compiles under: ``___propDeleter_x'' for a deleter (which
+	object >> ___pyAttrDelete___ looks for), ``___propSetter_x'' for a
+	decorated property's setter."
+
+	^ (aDef isDeleterDecorated ifTrue: ['___propDeleter_'] ifFalse: ['___propSetter_'])
+		, aDef ___mangledName___ asString
 %
 
 category: 'Grail-code generation'

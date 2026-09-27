@@ -215,6 +215,48 @@ receiver: aReceiver selector: aSymbol
 
 category: 'Grail-Instance Creation'
 classmethod: BoundMethod
+___forAttrRead___: aReceiver selector: aSymbol
+	"receiver:selector:, as object >> ___pyAttrLoad___'s generic method wrap
+	asks for it -- except for a CLASS reading an INHERITED ``__new__'', which
+	answers object.__new__ itself.
+
+	CPython's __new__ is a staticmethod, so ``A.__new__'' for a class that does
+	not define one IS ``object.__new__'': the same object, compared with
+	``is''.  PEP 702's @deprecated decides how to forward construction that
+	way -- ``if original_new is not object.__new__'' -- and Grail's
+	per-receiver handle took the other branch, calling ``A.__new__(A, 42)''
+	where CPython raises ``A() takes no arguments'' (test_warnings
+	DeprecatedTests.test_class).
+
+	Sound because object's own __new__ implementations never consult their
+	receiver: each allocates from its ``cls'' argument.  So the redirect is
+	taken only when EVERY spelling of the __new__ family the class side can
+	reach is object's -- a class, Python or built-in, that defines any
+	__new__ of its own keeps a handle bound to itself, exactly as before."
+
+	| objectMeta fromObject |
+	(aSymbol == #'__new__' and: [aReceiver @env0:isKindOf: Behavior])
+		ifFalse: [^ self receiver: aReceiver selector: aSymbol].
+	aReceiver == object ifTrue: [^ self receiver: aReceiver selector: aSymbol].
+	objectMeta := object @env0:class.
+	fromObject := false.
+	#(#'__new__' #'__new__:' #'__new__:_:' #'__new__:_:_:' #'__new__:_:_:_:'
+	  #'__new__:_:_:_:_:' #'__new__:_:_:_:_:_:' #'___new__:kw:') @env0:do: [:sel |
+		| owner |
+		owner := aReceiver @env0:class
+			@env0:whichClassIncludesSelector: sel environmentId: 1.
+		owner == objectMeta
+			ifTrue: [fromObject := true]
+			ifFalse: [owner @env0:isNil ifFalse: [
+				^ self receiver: aReceiver selector: aSymbol]]].
+	"...and at least one of them must BE object's: a class reaching __new__
+	some other way is not inheriting object's."
+	fromObject ifFalse: [^ self receiver: aReceiver selector: aSymbol].
+	^ self receiver: object selector: aSymbol
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
 receiver: aReceiver selector: aSymbol definingClass: aClass
 	"As receiver:selector:, but also record the defining class so a
 	receiver-LESS (unbound) reference can still invoke its method

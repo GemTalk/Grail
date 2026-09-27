@@ -56,7 +56,35 @@ initialize
 	A separate `_seen` dict tracks what has already been emitted."
 
 	self @env0:at: #filters put: OrderedCollection @env0:new.
-	self @env0:at: #_seen put: KeyValueDictionary @env0:new
+	self @env0:at: #_seen put: KeyValueDictionary @env0:new.
+	"``__all__'', CPython's list exactly -- every name on it is defined here
+	(deprecated is delegated to _py_warnings, see there).  The module had none,
+	so test_warnings' CPublicAPITests.test_module_all_attribute failed at
+	hasattr."
+	self @env0:at: #'__all__' put: (list @env0:withAll: #(
+		'warn' 'warn_explicit' 'showwarning' 'formatwarning' 'filterwarnings'
+		'simplefilter' 'resetwarnings' 'catch_warnings' 'deprecated'))
+%
+
+category: 'Grail-Singleton'
+classmethod: warnings
+___hasFreshInstances___
+	"Yes.  A second warnings object is a faithful fresh import: its methods
+	take everything from ``self'' and reach no warnings singleton, so it
+	behaves exactly as the canonical module does -- over the same state,
+	which a native module keeps per session and per CLASS.
+
+	That is CPython's arrangement for this very call.
+	``import_fresh_module('warnings', fresh=['_warnings', ...])'' builds a new
+	warnings module whose filters, once-registry and default action are the C
+	accelerator's, held by the interpreter and shared with every other copy.
+	test_warnings runs its C-variant tests against that copy and checks it is
+	a different object (CWarnTests.test_accelerated).
+
+	Grail's own Smalltalk callers that raise a warning keep using the
+	canonical instance, as CPython's C callers use the canonical state."
+
+	^ true
 %
 
 category: 'Grail-Built-in Functions'
@@ -1228,10 +1256,9 @@ ___resolveModuleGlobals___: moduleGlobals
 	fires whether or not the warning would have been shown.  A dict, including
 	an empty one, goes to _bless_my_loader.
 
-	The loader is answered for symmetry with CPython and then dropped: Grail
-	reads source lines off the filesystem rather than through a loader's
-	get_source, so nothing downstream needs it.  What the call is FOR is its
-	side effects -- the DeprecationWarnings and the two errors."
+	The loader is answered for ___sourceLineFrom___:globals:lineno:, which
+	asks it for the source the way _warnings.c does.  The other thing the call
+	is FOR is its side effects -- the DeprecationWarnings and the two errors."
 
 	| b typeName |
 	(moduleGlobals @env0:isNil or: [moduleGlobals @env0:== None])
@@ -1242,6 +1269,48 @@ ___resolveModuleGlobals___: moduleGlobals
 		TypeError ___signal___:
 			'module_globals must be a dict, not ''' @env0:, typeName @env0:, ''''].
 	^ self ___blessMyLoader___: moduleGlobals
+%
+
+category: 'Grail-Private'
+method: warnings
+___sourceLineFrom___: aLoader globals: moduleGlobals lineno: lineno
+	"_warnings.c's get_source_line: the source line ``lineno'' of the module
+	``moduleGlobals'' names, fetched through its loader's get_source, or nil.
+
+	Nothing displays the answer -- CPython builds the WarningMessage with
+	line=None, so the source line printed is linecache's reading of the
+	filename -- and it is computed anyway, because computing it is observable:
+	get_source is called with the module's ``__name__'', whatever it raises
+	propagates, a non-str source is a TypeError, and a line number the source
+	does not have is an IndexError.  All of that happens before the filters are
+	consulted, so an ignored warning raises it too.  test_warnings'
+	test_issue31285 counts the get_source calls.
+
+	The split is str's OWN splitlines, as PyUnicode_Splitlines is: a str
+	subclass overriding splitlines -- that test's BadSource -- does not get a
+	say.
+
+	Nil, and nothing called, when there is no loader, no ``__name__'', or a
+	loader without get_source, as in C."
+
+	| b name getSource src lines |
+	(aLoader @env0:isNil or: [aLoader @env0:== None]) ifTrue: [^ nil].
+	name := moduleGlobals @env1:get: '__name__' _: None.
+	name @env0:== None ifTrue: [^ nil].
+	b := (Python @env0:at: #builtins) @env0:___instance___.
+	(b @env1:hasattr: aLoader _: 'get_source') == true ifFalse: [^ nil].
+	getSource := aLoader @env1:___pyAttrLoad___: #'get_source'.
+	src := getSource @env1:___pyCallValue___: { name } kw: nil.
+	src @env0:== None ifTrue: [^ nil].
+	((src @env0:isKindOf: CharacterCollection)
+		or: [src @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+			^ TypeError ___signal___: 'must be str, not '
+				@env0:, ((b @env1:type: src) @env1:___pyAttrLoad___: #'__name__')].
+	lines := ((b @env1:___pyAttrLoad___: #'str') @env1:___pyAttrLoad___: #'splitlines')
+		@env1:___pyCallValue___: { src } kw: nil.
+	(lineno @env0:< 1 or: [lineno @env0:> lines @env1:__len__]) ifTrue: [
+		^ IndexError ___signal___: 'list index out of range'].
+	^ lines @env1:__getitem__: lineno @env0:- 1
 %
 
 category: 'Grail-Public'
@@ -1465,6 +1534,15 @@ ___moduleFor___: module _: filename
 
 	| mod |
 	(module @env0:isNil or: [module @env0:== None]) ifFalse: [^ module].
+	"A filename holding a LONE SURROGATE stays a Python str throughout:
+	GemStone Characters cannot hold D800-DFFF, so asString refused it with
+	NotImplementedError and the warning was never issued.  CPython accepts
+	it -- a POSIX filesystem name decoded with surrogateescape looks exactly
+	like this (test_warnings test_warn_explicit_non_ascii_filename)."
+	(filename @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ (filename @env1:lower @env1:endswith: '.py')
+			ifTrue: [filename @env1:__getitem__: (slice __new__: None _: -3)]
+			ifFalse: [filename]].
 	mod := (filename @env0:isNil or: [filename @env0:== None])
 		ifTrue: ['<unknown>'] ifFalse: [filename @env0:asString].
 	mod @env0:isEmpty ifTrue: [^ '<unknown>'].
@@ -1840,7 +1918,8 @@ _warn_explicit: positional kw: kwargs
 		ifTrue: [kwargs @env0:at: 'module_globals']
 		ifFalse: [positional @env0:size @env0:>= 7
 			ifTrue: [positional @env0:at: 7] ifFalse: [nil]].
-	self ___resolveModuleGlobals___: mg.
+	self ___sourceLineFrom___: (self ___resolveModuleGlobals___: mg)
+		globals: mg lineno: lineno.
 	^ self
 		warn_explicit: msg
 		_: cat
