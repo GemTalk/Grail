@@ -462,7 +462,7 @@ __base__
 				^ declared
 					@env0:detect: [:b | self ___grailInheritsStorageOf___: b]
 					ifNone: [declared @env0:at: 1]]]].
-	s := self @env0:superclass.
+	s := self ___grailVisibleSuperclass___: il.
 	"A Python-defined class's Smalltalk superclass is ``PythonInstance'', which
 	is Grail's implementation of the role CPython gives to ``object'' -- so that
 	is the name to report.  See
@@ -515,7 +515,7 @@ __bases__
 		entry == nil ifFalse: [
 			^ self ___grailAsTuple___: ((entry @env0:at: 1) @env0:collect: [:b |
 				b == PythonInstance ifTrue: [Object] ifFalse: [b]])]].
-	s := self @env0:superclass.
+	s := self ___grailVisibleSuperclass___: il.
 	"``PythonInstance'' -> ``object'', for the reason __base__ gives above.
 	Without it ``class Plain: pass'' reported __bases__ == (PythonInstance,)
 	where CPython reports (object,), and inspect.getclasstree -- which builds
@@ -523,6 +523,31 @@ __bases__
 	s == PythonInstance ifTrue: [^ self ___grailAsTuple___: (Array @env0:with: Object)].
 	^ self ___grailAsTuple___:
 		(s == nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s])
+%
+
+category: 'Grail-Reflection'
+method: Behavior
+___grailVisibleSuperclass___: il
+	"The nearest Smalltalk superclass Python can see as a base -- the
+	receiver's superclass, walked past every class __mro__ leaves out
+	(importlib class >> ___isHiddenBase___:of:).  il is importlib, or nil
+	before it exists, when this is the bare superclass.
+
+	__mro__ has hidden those classes since ___visibleMroOf___:, but __bases__
+	and __base__ still answered the raw superclass: ``int.__bases__'' was
+	(Number,), ``tuple.__bases__'' (Array,), ``BaseException.__bases__'' the
+	kernel Exception, and ``dict.__bases__'' / ``str.__bases__'' a kernel
+	class that prints the same name -- fourteen of the builtins types, each
+	disagreeing with its own __mro__.  inspect.getclasstree builds its tree
+	from __bases__ alone."
+
+	| s |
+	s := self @env0:superclass.
+	il == nil ifTrue: [^ s].
+	[s ~~ nil and: [s ~~ Object
+		and: [(il @env0:___isHiddenBase___: s of: self) and: [s ~~ PythonInstance]]]]
+			whileTrue: [s := s @env0:superclass].
+	^ s
 %
 
 category: 'Grail-Class Compilation'

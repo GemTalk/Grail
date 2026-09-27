@@ -5992,11 +5992,36 @@ ___visibleMroOf___: aClass
 	so ``super().keys()'' in a dict subclass has to reach KeyValueDictionary.
 	isinstance, metaclass resolution and the enum mix-in scans read it too."
 
-	| mro hidden |
+	| mro |
 	mro := self ___mroOf___: aClass.
-	hidden := self ___builtinImplementationAncestors___.
-	hidden isEmpty ifTrue: [^ mro].
-	^ mro reject: [:k | (k ~~ aClass) and: [hidden includesIdentical: k]]
+	^ mro reject: [:k | self ___isHiddenBase___: k of: aClass]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___isHiddenBase___: k of: aClass
+	"Is k, a Smalltalk ancestor of aClass, left out of aClass's PYTHON
+	ancestry?  The one rule __mro__, __bases__ and __base__ share (Behavior >>
+	__bases__ / __base__ walk past such a class to the next one).
+
+	Two kinds.  A kernel class a built-in is implemented on
+	(___builtinImplementationAncestors___) -- see ___visibleMroOf___:.  And
+	an EXPOSED built-in that is only an implementation base of another: Grail
+	builds bytearray as a subclass of ByteArray, which builtins binds as
+	``bytes'', so the two share the byte-sequence methods.  CPython's
+	bytearray does not derive from bytes -- ``bytearray.__mro__'' is
+	(bytearray, object), and Grail's own issubclass(bytearray, bytes) already
+	answers False -- yet __mro__ and __bases__ both reported bytes, and
+	bytearray.__dict__, which folds in hidden ancestors only up to the first
+	class the MRO names, stopped there and listed none of those methods."
+
+	| ba |
+	k == aClass ifTrue: [^ false].
+	(self ___builtinImplementationAncestors___ includesIdentical: k) ifTrue: [^ true].
+	ba := Python @env0:at: #bytearray otherwise: nil.
+	^ ba notNil
+		and: [k == ba superclass
+		and: [aClass == ba or: [aClass inheritsFrom: ba]]]
 %
 
 category: 'Grail-Module Loading'
