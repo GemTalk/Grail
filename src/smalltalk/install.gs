@@ -1177,6 +1177,7 @@ run
 	at: #'OSErrorTestCase' put: nil;
 	at: #'ObjectNewArgsAndSurrogateWarningsTestCase' put: nil;
 	at: #'ObjectTestCase' put: nil;
+	at: #'OpenCodecsAndDescriptorsTestCase' put: nil;
 	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'OsRemoveDollarPathTestCase' put: nil;
@@ -1223,6 +1224,7 @@ run
 	at: #'PyDictTestCase' put: nil;
 	at: #'PydocTextRendererTestCase' put: nil;
 	at: #'PyexpatDocumentEncodingTestCase' put: nil;
+	at: #'PyexpatDtdEventsTestCase' put: nil;
 	at: #'PythonCallSitePositionsTestCase' put: nil;
 	at: #'PythonClassEnumerationTestCase' put: nil;
 	at: #'PythonOffsetMapTestCase' put: nil;
@@ -2612,6 +2614,7 @@ input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectNewArgsAndSurrogateWarningsTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
+input src/smalltalk/PythonTests/OpenCodecsAndDescriptorsTestCase.gs
 input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/OSErrorTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
@@ -2666,6 +2669,7 @@ input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
 input src/smalltalk/PythonTests/PyDictTestCase.gs
 input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
 input src/smalltalk/PythonTests/PyexpatDocumentEncodingTestCase.gs
+input src/smalltalk/PythonTests/PyexpatDtdEventsTestCase.gs
 input src/smalltalk/PythonTests/PythonCallSitePositionsTestCase.gs
 input src/smalltalk/PythonTests/PythonClassEnumerationTestCase.gs
 input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs

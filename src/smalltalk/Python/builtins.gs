@@ -3039,10 +3039,12 @@ _open: positional kw: kwargs
 	"Python builtin open(file, mode='r', buffering=-1, encoding=None,
 	errors=None, newline=None, closefd=True, opener=None) — varargs fast
 	path for kwarg call shapes like open(p, encoding='utf-8').
-	buffering / errors / newline / closefd / opener are accepted and
-	ignored (no newline translation; GsFile buffers internally)."
+	buffering and opener are accepted and ignored (GsFile buffers
+	internally).  errors and newline choose the text implementation (see
+	FileIO class >> ___open___:mode:encoding:errors:newline:closefd:), and
+	closefd matters for a descriptor."
 
-	| nargs file mode encoding |
+	| nargs file mode encoding arg |
 	nargs := positional @env0:size.
 	file := (nargs @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
@@ -3057,13 +3059,18 @@ _open: positional kw: kwargs
 			(kwargs == nil)
 				ifTrue: [nil]
 				ifFalse: [kwargs @env0:at: 'mode' ifAbsent: [nil]]].
-	encoding := (nargs @env0:>= 4)
-		ifTrue: [positional @env0:at: 4]
-		ifFalse: [
-			(kwargs == nil)
-				ifTrue: [nil]
-				ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]]].
+	arg := [:index :key :default |
+		(nargs @env0:>= index)
+			ifTrue: [positional @env0:at: index]
+			ifFalse: [
+				(kwargs == nil)
+					ifTrue: [default]
+					ifFalse: [kwargs @env0:at: key ifAbsent: [default]]]].
+	encoding := arg value: 4 value: 'encoding' value: nil.
 	^ FileIO ___open___: file mode: mode encoding: encoding
+		errors: (arg value: 5 value: 'errors' value: nil)
+		newline: (arg value: 6 value: 'newline' value: nil)
+		closefd: (arg value: 7 value: 'closefd' value: true)
 %
 
 category: 'Grail-Built-in Functions'

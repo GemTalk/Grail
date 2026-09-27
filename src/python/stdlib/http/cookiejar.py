@@ -21,9 +21,8 @@
 # FileCookieJar.save (both LWPCookieJar and MozillaCookieJar) writes through
 # ``os.fdopen(os.open(filename, O_CREAT|O_WRONLY|O_TRUNC, 0o600), 'w')`` so the
 # cookie file is created mode 0600 and never briefly world-readable.  Grail's
-# os has os.open and os.close but no os.fdopen, and builtin open() refuses a
-# descriptor, so both sites go through the _open_cookie_file_for_write helper
-# defined below.
+# os has os.open and os.close but no os.fdopen, so both sites go through the
+# _open_cookie_file_for_write helper defined below.
 #
 # WHAT IS LEFT OF THAT DEVIATION: nothing a reader can exploit.  It began as a
 # real security difference -- a saved cookie file got the process umask
