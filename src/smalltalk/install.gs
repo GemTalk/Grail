@@ -643,6 +643,7 @@ run
 	at: #'RuntimeGapsBehindPickleTestCase' put: nil;
 	at: #'ArgparseTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
+	at: #'BuiltinTypeDictAndBasesTestCase' put: nil;
 	at: #'AstExportTestCase' put: nil;
 	at: #'AsendLifecycleTestCase' put: nil;
 	at: #'AsgiServerTestCase' put: nil;
@@ -663,6 +664,7 @@ run
 	at: #'AsyncWithProtocolTestCase' put: nil;
 	at: #'AsyncgenShutdownHooksTestCase' put: nil;
 	at: #'ReprlibConformanceTestCase' put: nil;
+	at: #'AllConformanceTestCase' put: nil;
 	at: #'AsyncioEagerTaskTestCase' put: nil;
 	at: #'AsyncioExceptionsTestCase' put: nil;
 	at: #'AsyncioIoTestCase' put: nil;
@@ -1219,6 +1221,7 @@ run
 	at: #'Py2PrintStatementTestCase' put: nil;
 	at: #'PyDictTestCase' put: nil;
 	at: #'PydocTextRendererTestCase' put: nil;
+	at: #'PyexpatDocumentEncodingTestCase' put: nil;
 	at: #'PythonCallSitePositionsTestCase' put: nil;
 	at: #'PythonClassEnumerationTestCase' put: nil;
 	at: #'PythonOffsetMapTestCase' put: nil;
@@ -2066,6 +2069,7 @@ input src/smalltalk/PythonTests/ArchiveMetadataTestCase.gs
 input src/smalltalk/PythonTests/RuntimeGapsBehindPickleTestCase.gs
 input src/smalltalk/PythonTests/ArgparseTestCase.gs
 input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
+input src/smalltalk/PythonTests/BuiltinTypeDictAndBasesTestCase.gs
 input src/smalltalk/PythonTests/AstExportTestCase.gs
 input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
 input src/smalltalk/PythonTests/AsgiServerTestCase.gs
@@ -2082,6 +2086,7 @@ input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
 input src/smalltalk/PythonTests/AsyncGenExpTestCase.gs
 input src/smalltalk/PythonTests/AsyncgenShutdownHooksTestCase.gs
 input src/smalltalk/PythonTests/ReprlibConformanceTestCase.gs
+input src/smalltalk/PythonTests/AllConformanceTestCase.gs
 input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
 input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
 input src/smalltalk/PythonTests/AsyncioIoTestCase.gs
@@ -2658,6 +2663,7 @@ input src/smalltalk/PythonTests/PropertyNotDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
 input src/smalltalk/PythonTests/PyDictTestCase.gs
 input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
+input src/smalltalk/PythonTests/PyexpatDocumentEncodingTestCase.gs
 input src/smalltalk/PythonTests/PythonCallSitePositionsTestCase.gs
 input src/smalltalk/PythonTests/PythonClassEnumerationTestCase.gs
 input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs

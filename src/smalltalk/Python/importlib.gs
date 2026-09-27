@@ -3359,6 +3359,20 @@ loadModuleFromPath: pathString name: moduleName
 	self ___beginDepCollection___: moduleName.
 	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
+			"A NOTIFICATION IS NOT A FAILURE.  AlmostOutOfMemory (6013) arrives
+			asynchronously whenever temporary object memory runs low, and it is
+			resumable: its default action returns and the body carries on.  This
+			handler used to take it for a failed body -- unload the module, then
+			``ex outer'', whose resumption fell off the end of this block, so the
+			on:do: RETURNED and the body was abandoned in silence.  The import
+			reported success, the module was gone, and whatever imported it
+			stopped at that line with no exception: ``with cm: import
+			django.contrib.admin'' ended the whole program (test___all__, which
+			imports every stdlib module in one session).  pass keeps it a
+			notification -- any real handler above still sees it -- and the body
+			resumes where it was.  BaseException is not a Notification, so every
+			Python raise still takes the unload path below."
+			(ex isKindOf: Notification) ifTrue: [ex pass].
 			self removeModule: moduleName.
 			"A failed rebuild leaves the committed instance half re-executed
 			(in this transaction only).  Put the old hash back so the next
@@ -5992,11 +6006,36 @@ ___visibleMroOf___: aClass
 	so ``super().keys()'' in a dict subclass has to reach KeyValueDictionary.
 	isinstance, metaclass resolution and the enum mix-in scans read it too."
 
-	| mro hidden |
+	| mro |
 	mro := self ___mroOf___: aClass.
-	hidden := self ___builtinImplementationAncestors___.
-	hidden isEmpty ifTrue: [^ mro].
-	^ mro reject: [:k | (k ~~ aClass) and: [hidden includesIdentical: k]]
+	^ mro reject: [:k | self ___isHiddenBase___: k of: aClass]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___isHiddenBase___: k of: aClass
+	"Is k, a Smalltalk ancestor of aClass, left out of aClass's PYTHON
+	ancestry?  The one rule __mro__, __bases__ and __base__ share (Behavior >>
+	__bases__ / __base__ walk past such a class to the next one).
+
+	Two kinds.  A kernel class a built-in is implemented on
+	(___builtinImplementationAncestors___) -- see ___visibleMroOf___:.  And
+	an EXPOSED built-in that is only an implementation base of another: Grail
+	builds bytearray as a subclass of ByteArray, which builtins binds as
+	``bytes'', so the two share the byte-sequence methods.  CPython's
+	bytearray does not derive from bytes -- ``bytearray.__mro__'' is
+	(bytearray, object), and Grail's own issubclass(bytearray, bytes) already
+	answers False -- yet __mro__ and __bases__ both reported bytes, and
+	bytearray.__dict__, which folds in hidden ancestors only up to the first
+	class the MRO names, stopped there and listed none of those methods."
+
+	| ba |
+	k == aClass ifTrue: [^ false].
+	(self ___builtinImplementationAncestors___ includesIdentical: k) ifTrue: [^ true].
+	ba := Python @env0:at: #bytearray otherwise: nil.
+	^ ba notNil
+		and: [k == ba superclass
+		and: [aClass == ba or: [aClass inheritsFrom: ba]]]
 %
 
 category: 'Grail-Module Loading'

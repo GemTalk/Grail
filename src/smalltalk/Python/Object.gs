@@ -7102,6 +7102,11 @@ ___classDict___
 			@env0:on: AbstractException do: [:e | e @env0:return: false].
 		(nm @env0:size @env0:> 0 and: [((nm @env0:at: 1) @env0:isLetter
 			or: [(nm @env0:at: 1) == $_]) @env0:not]) ifTrue: [nm := ''].
+		"...and EVERY character of it: a keyword selector the decoder does not
+		recognise comes back with its colons (``__pyRaiseNew___:args'' was in
+		BaseException.__dict__)."
+		(nm @env0:anySatisfy: [:ch | (ch @env0:isAlphaNumeric or: [ch == $_]) @env0:not])
+			ifTrue: [nm := ''].
 		"A Grail-internal ``___x___'' transported as ``____x___:kw:'' decodes
 		to ``__x___'' -- the THREE trailing underscores still mark it."
 		(nm @env0:size @env0:> 3 and: [(nm @env0:copyFrom: nm @env0:size @env0:- 2
@@ -7277,6 +7282,66 @@ ___classDict___
 						ifTrue: [PyStaticMethod __new__: (self ___pyAttrLoad___: sel)]
 						ifFalse: [PyClassMethod __new__: v])]]] ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	"A BUILT-IN's class side, as CPython's type dicts show it.  Grail writes a
+	built-in's Python-level class and static methods as class-side Smalltalk
+	methods -- often on a kernel ancestor, not on the class builtins binds
+	(``str.maketrans'' lives on CharacterCollection class, ``dict.fromkeys''
+	on KeyValueDictionary class) -- and branch (b) reads only the receiver's
+	own metaclass.  So they were missing, or where (b) did find one
+	(``bytes.maketrans'', ``int.from_bytes'') a bare function.  CPython keeps
+	a staticmethod / classmethod descriptor there, which pickle refuses
+	(test_pickle's test_c_methods pickles ``bytearray.__dict__['maketrans']''
+	and ``dict.__dict__['fromkeys']'' and expects TypeError), and which
+	inspect.classify_class_attrs reports as a static / class method.
+
+	The same class side holds Grail's plumbing: the class-call transport
+	``_new:kw:'' (decoded as a phantom ``new''), the subscription hook
+	``__getitem__:'' (CPython spells that __class_getitem__, and int has
+	none), __instancecheck__ (type's, not int's).  So the names are listed,
+	not inferred: CPython 3.14's class and static methods on these types.
+	Python-defined classes are left to the branch below."
+	((self @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:isNil
+		and: [self @env0:isMeta @env0:not]) ifTrue: [
+		[ | mroSet walker found |
+		#('new' '__getitem__' '__instancecheck__') @env0:do: [:k | | v |
+			v := d @env0:at: k otherwise: nil.
+			((v @env0:isKindOf: UnboundMethod)
+				and: [v @env0:definingClass @env0:isMeta])
+					ifTrue: [d @env0:removeKey: k]].
+		mroSet := IdentitySet @env0:new.
+		[(self ___pyAttrLoad___: #'__mro__') @env0:do: [:m | mroSet @env0:add: m]]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		found := KeyValueDictionary @env0:new.
+		walker := self.
+		[walker @env0:notNil
+			and: [(walker == self or: [(mroSet @env0:includes: walker) @env0:not])
+			and: [walker ~~ PythonInstance and: [walker ~~ Object]]]] @env0:whileTrue: [
+				(walker @env0:class @env0:methodDictForEnv: 1) @env0:ifNotNil: [:md |
+					md @env0:keys @env0:do: [:sel | | nm |
+						nm := self ___grailPythonNameForSelector___: sel.
+						(nm @env0:notNil and: [(found @env0:includesKey: nm) @env0:not])
+							ifTrue: [found @env0:at: nm put: walker @env0:class]]].
+				walker := walker @env0:superclass].
+		#( #('maketrans' #static) #('fromhex' #class) #('fromkeys' #class)
+			#('from_bytes' #class) #('from_number' #class) #('__getformat__' #class) )
+			@env0:do: [:entry | | nm owner |
+				nm := entry @env0:at: 1.
+				owner := found @env0:at: nm otherwise: nil.
+				owner @env0:notNil ifTrue: [
+					d @env0:at: nm put: ((entry @env0:at: 2) == #static
+						"A staticmethod's __func__ is called with no receiver, so it
+						wraps what ``str.maketrans'' answers; a classmethod's takes
+						the class, which is what the metaclass handle expects."
+						ifTrue: [PyStaticMethod __new__: (self ___pyAttrLoad___: nm @env0:asSymbol)]
+						ifFalse: [PyClassMethod __new__:
+							(UnboundMethod definingClass: owner selector: nm @env0:asSymbol)])]].
+		"__doc__ is the docstring, not an accessor: CPython's
+		``object.__dict__['__doc__']'' is a str.  Every built-in type has one."
+		[ | doc |
+		doc := self ___pyAttrLoad___: #'__doc__'.
+		(doc @env0:isKindOf: CharacterCollection) ifTrue: [d @env0:at: '__doc__' put: doc]]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil] ]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
 	"(d) session-local overlay entries shadow everything (last setattr
 	wins; flag-on only, so the common case adds nothing)."
 	[ | ov inner |
