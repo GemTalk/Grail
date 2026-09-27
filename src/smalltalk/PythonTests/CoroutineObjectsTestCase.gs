@@ -153,33 +153,29 @@ testAnAsyncMethodIsACoroutineToo
 	self assert: (self resultAt: 'async_method_is_a_coroutine') asString equals: 'True'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Never awaited'
 method: CoroutineObjectsTestCase
-testDroppingAnUnawaitedCoroutineIsSilent
-	"A KNOWN GAP, pinned so a green run is not read as more than it is.
-	CPython's ``RuntimeWarning: coroutine ... was never awaited'' fires from
-	the coroutine's DESTRUCTOR at collection time.  This used to be recorded
-	as a platform limit -- no destruction hook for transient objects -- and
-	that was wrong: FinalizerEphemeron is one, and the async-generator step
-	objects already warn through it (AsyncgenShutdownHooksTestCase).  What
-	keeps the coroutine silent is a decision still to be made: a watch per
-	coroutine CALL, on the hottest async path.  See docs/Issues.md,
-	'OPEN (decision): no unawaited-coroutine warning'.
+testDroppingAnUnawaitedCoroutineWarnsWhenCollected
+	"Formerly the known-gap pin testDroppingAnUnawaitedCoroutineIsSilent, whose
+	comment asked to be turned round the day someone built the warning.
+	CPython's ``RuntimeWarning: coroutine ... was never awaited'' now fires
+	from the coroutine's destructor -- a FinalizerEphemeron registered at
+	creation -- so it arrives when the collector reclaims the coroutine, which
+	is why the check collects -- and why it collects FIRST as well: a
+	coroutine an earlier test dropped would otherwise report inside this
+	capture.  CoroutineNeverAwaitedTestCase covers the rest."
 
-	If this test ever FAILS, someone has built the warning -- move the seven
-	pinned test.test_coroutines scoreboard entries and delete the Issues.md
-	section along with it."
-
-	| r |
-	r := self eval: 'import warnings
+	self assert: (self eval: 'import warnings
+from test.support import gc_collect
 async def orphan():
     return 1
-with warnings.catch_warnings():
-    warnings.simplefilter(''error'')
+gc_collect()
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter(''always'')
     orphan()
-    out = ''silent''
-out'.
-	self assert: r asString equals: 'silent'.
+    gc_collect()
+repr([str(w.message) for w in caught if issubclass(w.category, RuntimeWarning)])')
+		equals: '["coroutine ''orphan'' was never awaited"]'
 %
 
 category: 'Grail-Tests - Identity'

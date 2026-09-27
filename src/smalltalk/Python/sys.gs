@@ -1171,6 +1171,29 @@ gettrace
 
 category: 'Grail-Built-in Functions'
 method: sys
+get_coroutine_origin_tracking_depth
+	"get_coroutine_origin_tracking_depth() -> how many frames a new coroutine
+	records in cr_origin; 0, the default, records nothing."
+
+	^ PythonCoroutine @env1:___originTrackingDepth___
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+set_coroutine_origin_tracking_depth: depth
+	"set_coroutine_origin_tracking_depth(depth) -- see PythonCoroutine's
+	never-awaited section.  A negative depth is CPython's ValueError, and
+	leaves the setting as it was."
+
+	| n |
+	n := depth ___asIndex___.
+	n @env0:< 0 ifTrue: [^ ValueError ___signal___: 'depth must be >= 0'].
+	PythonCoroutine @env1:___originTrackingDepth___: n.
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
 is_finalizing
 	"is_finalizing() -> False"
 	^ false

@@ -478,7 +478,7 @@ Worth fixing rather than tolerating: while it is live, a traceback in an affecte
 session silently misreports a line — or loses a frame — and the loss is reported
 by whatever reads the walk as a fact about *its own* request.
 
-## OPEN (decision): no unawaited-coroutine warning, no origin tracking
+## FIXED (one test left): the unawaited-coroutine warning and origin tracking
 
 CPython warns when a coroutine is garbage-collected without ever having been
 awaited -- ``RuntimeWarning: coroutine 'f' was never awaited`` -- and, with
@@ -487,7 +487,8 @@ created so the warning can point at it.  Both fire from the coroutine's
 **destructor**: the check lives in ``coro_dealloc``, and the report goes
 through ``warnings._warn_unawaited_coroutine`` at collection time.
 
-Grail still implements neither -- but this entry used to say "PLATFORM GAP
+**Both are implemented now (2026-09-26)** -- see the last part of this entry.
+This entry used to say "PLATFORM GAP
 (decided)", on the premise that GemStone gives transient session objects no
 destruction hook, and **that premise was wrong** (corrected 2026-09-25, in the
 test_asyncgen work).  GemStone's ephemerons work on transient objects: the VM
@@ -554,17 +555,53 @@ CPython), and an undriven ``asend`` / ``athrow`` / ``aclose`` step warns that
 it was never awaited (``TestUnawaitedWarnings.test_asend/test_athrow/
 test_aclose``), both through ``FinalizerEphemeron``.
 
-**What is left is a decision, not a platform limit:** the COROUTINE warning
-(seven ``test.test_coroutines`` tests: ``test_bpo_45813_1/2``, ``test_func_9``,
-``test_fatal_coro_warning``, and the three ``OriginTrackingTest`` cases, which
-also want ``sys.get/set_coroutine_origin_tracking_depth``).  It is the same
-hook on a different object, but a watch per coroutine CALL rather than per
-explicit step, on the hottest async path there is, and origin tracking adds a
-stack capture per call when enabled.  PyPy's precedent still applies to the
-warning's promptness: a tracing GC warns when it collects, not at the drop, so
-portable code treats it as best-effort diagnostics.
-``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineIsSilent`` pins
-the current behaviour so a green run is not read as more than it is.
+**The coroutine warning, decided and built (2026-09-26).**  The decision this
+entry left open was the cost of a watch per coroutine CALL.  Measured
+back-to-back against a build with the watch removed, on an otherwise idle
+stone: ``await leaf()`` in a tight loop went 26.6 -> 27.5 us (+0.9 us, ~3.5%),
+and create-then-close 6.05 -> 6.6 us.  That was judged worth paying for a
+warning every asyncio user relies on; ``async for`` steps stay unwatched,
+because that watch was ~10% of a far cheaper step and the loop cannot leave a
+step undriven.
+
+* ``PythonCoroutine class>>withBlock:`` -- the door every coroutine comes
+  through -- registers a ``FinalizerEphemeron``; ``___finalizeUnawaited___``
+  warns if the coroutine dies never started, through
+  ``warnings._warn_unawaited_coroutine`` (delegated to the vendored
+  ``_py_warnings`` function), and follows CPython's
+  ``_PyErr_WarnUnawaitedCoroutine`` step for step: a hook that raises, or an
+  ``error`` filter, goes to ``sys.unraisablehook`` as ``Exception ignored while
+  finalizing coroutine <repr>``, and a hook that did not warn still gets the
+  plain warning issued.
+* ``sys.get/set_coroutine_origin_tracking_depth`` and ``cr_origin`` (per
+  session; a stack capture per coroutine only while the depth is non-zero).
+* ``frame.clear()`` on a ``gi_frame``/``cr_frame`` is CPython 3.14's
+  ``frame_clear``: refused while executing or suspended, and otherwise a
+  finalization -- which for an unstarted coroutine only WARNS, exactly as
+  ``_PyGen_Finalize`` does (it stays unstarted and warns again when destroyed
+  unless closed).  The frame reaches its generator through a WEAK link, as
+  CPython's frame does not own its generator.
+* ``inspect.getframeinfo``, and CPython's docstrings on the coroutine and
+  generator types' ``send``/``throw``/``close``/``__name__``/``__qualname__``.
+
+test_coroutines went from 8 failures to 1.  Pinned by
+``CoroutineNeverAwaitedTestCase`` / ``tests/python/coroutine_never_awaited.py``
+and ``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineWarnsWhenCollected``.
+
+**The one left is timing, not a missing feature: ``test_bpo_45813_1``.**  It
+drops a coroutine inside ``assertWarns`` and expects the warning before the
+block closes, with no ``gc_collect()`` -- which holds in CPython only because
+reference counting destroys the coroutine at the drop.  A tracing collector
+warns when it collects; and a young-generation scavenge does NOT mourn
+ephemerons (measured: only the mark-sweep does), so no cheap safe point can
+fire it either.  The one way to pass it -- a full collection whenever a warning
+capture closes over an undriven coroutine -- was considered and rejected: it is
+aimed at where tests look, and it is a performance cliff for real code that
+holds unstarted coroutines across ``catch_warnings`` (every pytest test does
+that).  PyPy's precedent applies: portable code treats this warning's
+promptness as best-effort, and every other test here collects explicitly.
+Mind the same property when writing a test: a coroutine dropped EARLIER in the
+session reports at the next collection, so collect before opening a capture.
 
 ## OPEN: two codec-reach gaps (found while adding UTF-32, 2026-08-31)
 

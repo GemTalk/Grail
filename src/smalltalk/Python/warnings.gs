@@ -327,6 +327,19 @@ __add_filter: positional kw: kwargs
 
 category: 'Grail-Internal API'
 method: warnings
+_warn_unawaited_coroutine: coro
+	"_warn_unawaited_coroutine(coro) -- what a coroutine's destructor calls when
+	it dies never awaited (PythonCoroutine >> ___warnNeverAwaited___).
+	Delegated, like _add_filter: _py_warnings' own function renders cr_origin
+	through linecache and traceback exactly as CPython's does, and warns
+	through _wm -- this module -- so the warning lands in Grail's filters."
+
+	^ self ___pyWarningsCall___: #'_warn_unawaited_coroutine'
+		with: { coro } with: nil
+%
+
+category: 'Grail-Internal API'
+method: warnings
 __getcategory: positional kw: kwargs
 	"_getcategory(category) -- resolve a -W option's category name to a class."
 
