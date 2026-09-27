@@ -5344,10 +5344,34 @@ hasattr: anObject _: aName
 	___requireAttrName___:."
 	self ___requireAttrName___: aName.
 
-	^ [[anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject).
+	^ [[(self ___attrLoad___: anObject named: aName).
 	    true]
 		@env0:on: AttributeError do: [:___ex___ | false]]
 		@env0:on: Error do: [:___ex___ | false]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___attrLoad___: anObject named: aName
+	"The read behind getattr and hasattr.  A name that is a Symbol-able string
+	is an ordinary attribute load.  A SURROGATE name cannot be (see
+	___attrNameSymbol___:for:) -- except in a NAMESPACE: a module's or an
+	instance's __dict__ keeps a key it cannot make a Symbol of in its overflow
+	store, so ``globals()[name] = v'' can hold one, and ``getattr(module,
+	name)'' must then find it, as CPython's does.  pickle resolves every global
+	by exactly that read (test_pickle's test_nonencodable_global_name_error);
+	missing it, pickle fell back to an identity search and saved the object
+	under a different global's name."
+
+	(aName @env0:isKindOf: PyStrSurrogate) ifTrue: [ | d |
+		d := [anObject ___pyAttrLoad___: #'__dict__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		d @env0:notNil ifTrue: [
+			^ [d __getitem__: aName]
+				@env0:on: KeyError do: [:ex |
+					ex @env0:return: (anObject ___pyAttrLoad___:
+						(self ___attrNameSymbol___: aName for: anObject))]]].
+	^ anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)
 %
 
 category: 'Grail-Built-in Functions'
@@ -5365,7 +5389,7 @@ getattr: anObject _: aName
 	___requireAttrName___:."
 	self ___requireAttrName___: aName.
 
-	^ anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)
+	^ (self ___attrLoad___: anObject named: aName)
 %
 
 category: 'Grail-Built-in Functions'
@@ -5394,10 +5418,10 @@ _getattr: positional kw: kwargs
 	(positional @env0:size) @env0:>= 3 ifTrue: [
 		| default |
 		default := positional @env0:at: 3.
-		^ [anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)]
+		^ [(self ___attrLoad___: anObject named: aName)]
 			@env0:on: AttributeError do: [:ex | ex @env0:return: default]
 	].
-	^ anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)
+	^ (self ___attrLoad___: anObject named: aName)
 %
 
 category: 'Grail-Built-in Functions'
@@ -6359,7 +6383,11 @@ ___import__: positional kw: kwargs
 	missing parent.  test_import makes exactly that call and expects
 	ImportError, so a ValueError here would turn a handled case into an
 	unhandled one."
-	(nm @env0:isEmpty @env0:and: [(self ___importLevelOf___: args kw: kwargs) @env0:= 0])
+	"A PyStrSurrogate is never empty (it holds a surrogate by construction),
+	and answers no env-0 isEmpty: asking it ended the session."
+	((nm @env0:isKindOf: CharacterCollection)
+		@env0:and: [nm @env0:isEmpty
+		@env0:and: [(self ___importLevelOf___: args kw: kwargs) @env0:= 0]])
 		ifTrue: [^ ValueError ___signal___: 'Empty module name'].
 	^ (importlib instance) ___import__: args kw: kwargs
 %

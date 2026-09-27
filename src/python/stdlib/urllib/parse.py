@@ -533,3 +533,19 @@ def parse_qsl(qs, keep_blank_values=False, strict_parsing=False,
              unquote_plus(v, encoding, errors))
         )
     return out
+
+
+# CPython's own; urllib.request.urlretrieve splits the scheme off with it.
+_typeprog = None
+def _splittype(url):
+    """splittype('type:opaquestring') --> 'type', 'opaquestring'."""
+    import re
+    global _typeprog
+    if _typeprog is None:
+        _typeprog = re.compile('([^/:]+):(.*)', re.DOTALL)
+
+    match = _typeprog.match(url)
+    if match:
+        scheme, data = match.groups()
+        return scheme.lower(), data
+    return None, url

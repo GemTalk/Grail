@@ -170,14 +170,16 @@ testGrailDivergesOnADescriptorItDidNotOpen
 	"DELIBERATE DIVERGENCE (os.gs, the file-descriptor section): the gem's own
 	descriptors -- stone and NetLDI sockets, its log -- share the process with
 	Grail, so only a descriptor os.open handed out in this session is usable.
-	Every other number answers what CPython answers for a closed one.  fstat and
-	write are the probes because, were the guard missing, they would do no harm:
-	fstat reads, and descriptor 1 is the gem's own stdout."
+	Every other number answers what CPython answers for a closed one.  write is
+	a probe because, were the guard missing, it would do no harm: descriptor 1
+	is the gem's own stdout.  fstat is NOT guarded -- it only reads, and a
+	Python file's own fileno() is a descriptor os.open never saw -- see
+	testFstatReadsAPythonFilesOwnDescriptor."
 
 	self assert: (self eval:
 'import os
 out = []
-for call in (lambda: os.fstat(0), lambda: os.write(1, b"x"), lambda: os.read(0, 1),
+for call in (lambda: os.write(1, b"x"), lambda: os.read(0, 1),
              lambda: os.lseek(2, 0, 0)):
     try:
         call()
@@ -185,5 +187,24 @@ for call in (lambda: os.fstat(0), lambda: os.write(1, b"x"), lambda: os.read(0, 
     except OSError as e:
         out.append(e.errno)
 repr((out, os.isatty(0), os.isatty(1)))
-') equals: '([9, 9, 9, 9], False, False)'
+') equals: '([9, 9, 9], False, False)'
+%
+
+category: 'Grail-Tests - os'
+method: OsFileDescriptorsTestCase
+testFstatReadsAPythonFilesOwnDescriptor
+	"``os.fstat(f.fileno())'' for a file open() opened, which os.open never saw.
+	http.server's send_head does exactly this for every file it serves, and the
+	ownership guard answered EBADF."
+
+	self assert: (self eval:
+'import os, tempfile
+fd, p = tempfile.mkstemp()
+os.write(fd, b"12345")
+os.close(fd)
+with open(p, "rb") as f:
+    size = os.fstat(f.fileno()).st_size
+os.remove(p)
+repr(size)
+') equals: '5'
 %

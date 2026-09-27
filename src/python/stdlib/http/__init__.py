@@ -1,146 +1,230 @@
-# Grail http stdlib package.
+# GRAIL: CPython 3.14.6's http/__init__.py, with one adaptation.
 #
-# CPython's ``http`` package exposes ``HTTPStatus``, an ``IntEnum``
-# mapping numeric status codes to enum members (``HTTPStatus.OK``,
-# ``HTTPStatus.NOT_FOUND``, ...).  Each member is simultaneously an int
-# (its numeric value) and carries ``.phrase`` / ``.description`` / ``.name``.
+# CPython builds HTTPStatus and HTTPMethod with enum._simple_enum, a fast
+# path that converts a plain class into an enum; Grail's _simple_enum returns
+# the class unchanged, so here they are declared as ordinary IntEnum /
+# StrEnum subclasses, which is the result _simple_enum produces.  The two
+# definitions are otherwise CPython's: members, phrases, descriptions and the
+# is_* properties.
 #
-# # HTTPStatus is a real int-like number
-# GemStone forbids subclassing ``Integer`` (Python ``int``), but
-# ``Number`` is subclassable.  Grail's ``AbstractPyInt`` (a ``Number``
-# subclass) implements the kernel coercion protocol so it behaves as a
-# plain integer by value while carrying per-instance attributes.
-# ``HTTPStatus`` subclasses it, so members ARE ints:
-# ``isinstance(HTTPStatus.OK, int)`` is True, comparisons/arithmetic/
-# hashing all work (inherited), and ``200 == HTTPStatus.OK`` works in
-# both operand orders.  See ``src/smalltalk/Python/AbstractPyInt.gs``.
-#
-# Remaining nuance: ``HTTPStatus(404)`` value-lookup returns an equal
-# member but not the *same* object as ``HTTPStatus.NOT_FOUND`` (no
-# ``is`` identity), because Grail does not dispatch a user-defined
-# ``__new__`` on construction.
+# This replaces a hand-written stand-in that set each member as a class
+# attribute AFTER the class body (HTTPStatus.OK = HTTPStatus(200, ...)'').
+# A deployed module keeps only what its class bodies define, so in a fresh
+# session HTTPStatus had no members at all -- HTTPStatus.OK'' raised
+# AttributeError until something re-executed the module -- and the stand-in
+# was not an enum (no __members__, no value lookup identity).
 
-__all__ = ['HTTPStatus']
+from enum import StrEnum, IntEnum
 
-# value -> member registry, populated by the build branch of __init__.
-_value_map = {}
+__all__ = ['HTTPStatus', 'HTTPMethod']
 
 
-from grail import AbstractPyInt
+# GRAIL: an ordinary IntEnum subclass rather than @_simple_enum(IntEnum) --
+# see the header.
+class HTTPStatus(IntEnum):
+    """HTTP status codes and reason phrases
+
+    Status codes from the following RFCs are all observed:
+
+        * RFC 9110: HTTP Semantics, obsoletes 7231, which obsoleted 2616
+        * RFC 6585: Additional HTTP Status Codes
+        * RFC 3229: Delta encoding in HTTP
+        * RFC 4918: HTTP Extensions for WebDAV, obsoletes 2518
+        * RFC 5842: Binding Extensions to WebDAV
+        * RFC 7238: Permanent Redirect
+        * RFC 2295: Transparent Content Negotiation in HTTP
+        * RFC 2774: An HTTP Extension Framework
+        * RFC 7725: An HTTP Status Code to Report Legal Obstacles
+        * RFC 7540: Hypertext Transfer Protocol Version 2 (HTTP/2)
+        * RFC 2324: Hyper Text Coffee Pot Control Protocol (HTCPCP/1.0)
+        * RFC 8297: An HTTP Status Code for Indicating Hints
+        * RFC 8470: Using Early Data in HTTP
+    """
+    def __new__(cls, value, phrase, description=''):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        obj.phrase = phrase
+        obj.description = description
+        return obj
+
+    @property
+    def is_informational(self):
+        return 100 <= self <= 199
+
+    @property
+    def is_success(self):
+        return 200 <= self <= 299
+
+    @property
+    def is_redirection(self):
+        return 300 <= self <= 399
+
+    @property
+    def is_client_error(self):
+        return 400 <= self <= 499
+
+    @property
+    def is_server_error(self):
+        return 500 <= self <= 599
+
+    # informational
+    CONTINUE = 100, 'Continue', 'Request received, please continue'
+    SWITCHING_PROTOCOLS = (101, 'Switching Protocols',
+            'Switching to new protocol; obey Upgrade header')
+    PROCESSING = 102, 'Processing', 'Server is processing the request'
+    EARLY_HINTS = (103, 'Early Hints',
+            'Headers sent to prepare for the response')
+
+    # success
+    OK = 200, 'OK', 'Request fulfilled, document follows'
+    CREATED = 201, 'Created', 'Document created, URL follows'
+    ACCEPTED = (202, 'Accepted',
+        'Request accepted, processing continues off-line')
+    NON_AUTHORITATIVE_INFORMATION = (203,
+        'Non-Authoritative Information', 'Request fulfilled from cache')
+    NO_CONTENT = 204, 'No Content', 'Request fulfilled, nothing follows'
+    RESET_CONTENT = 205, 'Reset Content', 'Clear input form for further input'
+    PARTIAL_CONTENT = 206, 'Partial Content', 'Partial content follows'
+    MULTI_STATUS = (207, 'Multi-Status',
+        'Response contains multiple statuses in the body')
+    ALREADY_REPORTED = (208, 'Already Reported',
+        'Operation has already been reported')
+    IM_USED = 226, 'IM Used', 'Request completed using instance manipulations'
+
+    # redirection
+    MULTIPLE_CHOICES = (300, 'Multiple Choices',
+        'Object has several resources -- see URI list')
+    MOVED_PERMANENTLY = (301, 'Moved Permanently',
+        'Object moved permanently -- see URI list')
+    FOUND = 302, 'Found', 'Object moved temporarily -- see URI list'
+    SEE_OTHER = 303, 'See Other', 'Object moved -- see Method and URL list'
+    NOT_MODIFIED = (304, 'Not Modified',
+        'Document has not changed since given time')
+    USE_PROXY = (305, 'Use Proxy',
+        'You must use proxy specified in Location to access this resource')
+    TEMPORARY_REDIRECT = (307, 'Temporary Redirect',
+        'Object moved temporarily -- see URI list')
+    PERMANENT_REDIRECT = (308, 'Permanent Redirect',
+        'Object moved permanently -- see URI list')
+
+    # client error
+    BAD_REQUEST = (400, 'Bad Request',
+        'Bad request syntax or unsupported method')
+    UNAUTHORIZED = (401, 'Unauthorized',
+        'No permission -- see authorization schemes')
+    PAYMENT_REQUIRED = (402, 'Payment Required',
+        'No payment -- see charging schemes')
+    FORBIDDEN = (403, 'Forbidden',
+        'Request forbidden -- authorization will not help')
+    NOT_FOUND = (404, 'Not Found',
+        'Nothing matches the given URI')
+    METHOD_NOT_ALLOWED = (405, 'Method Not Allowed',
+        'Specified method is invalid for this resource')
+    NOT_ACCEPTABLE = (406, 'Not Acceptable',
+        'URI not available in preferred format')
+    PROXY_AUTHENTICATION_REQUIRED = (407,
+        'Proxy Authentication Required',
+        'You must authenticate with this proxy before proceeding')
+    REQUEST_TIMEOUT = (408, 'Request Timeout',
+        'Request timed out; try again later')
+    CONFLICT = 409, 'Conflict', 'Request conflict'
+    GONE = (410, 'Gone',
+        'URI no longer exists and has been permanently removed')
+    LENGTH_REQUIRED = (411, 'Length Required',
+        'Client must specify Content-Length')
+    PRECONDITION_FAILED = (412, 'Precondition Failed',
+        'Precondition in headers is false')
+    CONTENT_TOO_LARGE = (413, 'Content Too Large',
+        'Content is too large')
+    REQUEST_ENTITY_TOO_LARGE = CONTENT_TOO_LARGE
+    URI_TOO_LONG = (414, 'URI Too Long',
+        'URI is too long')
+    REQUEST_URI_TOO_LONG = URI_TOO_LONG
+    UNSUPPORTED_MEDIA_TYPE = (415, 'Unsupported Media Type',
+        'Entity body in unsupported format')
+    RANGE_NOT_SATISFIABLE = (416, 'Range Not Satisfiable',
+        'Cannot satisfy request range')
+    REQUESTED_RANGE_NOT_SATISFIABLE = RANGE_NOT_SATISFIABLE
+    EXPECTATION_FAILED = (417, 'Expectation Failed',
+        'Expect condition could not be satisfied')
+    IM_A_TEAPOT = (418, 'I\'m a Teapot',
+        'Server refuses to brew coffee because it is a teapot')
+    MISDIRECTED_REQUEST = (421, 'Misdirected Request',
+        'Server is not able to produce a response')
+    UNPROCESSABLE_CONTENT = (422, 'Unprocessable Content',
+        'Server is not able to process the contained instructions')
+    UNPROCESSABLE_ENTITY = UNPROCESSABLE_CONTENT
+    LOCKED = 423, 'Locked', 'Resource of a method is locked'
+    FAILED_DEPENDENCY = (424, 'Failed Dependency',
+        'Dependent action of the request failed')
+    TOO_EARLY = (425, 'Too Early',
+        'Server refuses to process a request that might be replayed')
+    UPGRADE_REQUIRED = (426, 'Upgrade Required',
+        'Server refuses to perform the request using the current protocol')
+    PRECONDITION_REQUIRED = (428, 'Precondition Required',
+        'The origin server requires the request to be conditional')
+    TOO_MANY_REQUESTS = (429, 'Too Many Requests',
+        'The user has sent too many requests in '
+        'a given amount of time ("rate limiting")')
+    REQUEST_HEADER_FIELDS_TOO_LARGE = (431,
+        'Request Header Fields Too Large',
+        'The server is unwilling to process the request because its header '
+        'fields are too large')
+    UNAVAILABLE_FOR_LEGAL_REASONS = (451,
+        'Unavailable For Legal Reasons',
+        'The server is denying access to the '
+        'resource as a consequence of a legal demand')
+
+    # server errors
+    INTERNAL_SERVER_ERROR = (500, 'Internal Server Error',
+        'Server got itself in trouble')
+    NOT_IMPLEMENTED = (501, 'Not Implemented',
+        'Server does not support this operation')
+    BAD_GATEWAY = (502, 'Bad Gateway',
+        'Invalid responses from another server/proxy')
+    SERVICE_UNAVAILABLE = (503, 'Service Unavailable',
+        'The server cannot process the request due to a high load')
+    GATEWAY_TIMEOUT = (504, 'Gateway Timeout',
+        'The gateway server did not receive a timely response')
+    HTTP_VERSION_NOT_SUPPORTED = (505, 'HTTP Version Not Supported',
+        'Cannot fulfill request')
+    VARIANT_ALSO_NEGOTIATES = (506, 'Variant Also Negotiates',
+        'Server has an internal configuration error')
+    INSUFFICIENT_STORAGE = (507, 'Insufficient Storage',
+        'Server is not able to store the representation')
+    LOOP_DETECTED = (508, 'Loop Detected',
+        'Server encountered an infinite loop while processing a request')
+    NOT_EXTENDED = (510, 'Not Extended',
+        'Request does not meet the resource access policy')
+    NETWORK_AUTHENTICATION_REQUIRED = (511,
+        'Network Authentication Required',
+        'The client needs to authenticate to gain network access')
 
 
-class HTTPStatus(AbstractPyInt):
-    """An HTTP status code — a real int-like value (subclass of the
-    Grail ``AbstractPyInt`` Number base) carrying extra ``.phrase`` /
-    ``.description`` / ``.name`` attributes.
+# GRAIL: likewise StrEnum, rather than @_simple_enum(StrEnum).
+class HTTPMethod(StrEnum):
+    """HTTP methods and descriptions
 
-    Because it is an ``AbstractPyInt``, ``isinstance(HTTPStatus.OK, int)``
-    is True and all comparison/arithmetic/hashing behave like an int
-    (inherited from the base; arithmetic coerces to a plain int, so
-    ``HTTPStatus.OK + 1`` is ``201``, matching CPython's IntEnum).
+    Methods from the following RFCs are all observed:
 
-    Construct-by-value (``HTTPStatus(404)``) looks the code up in the
-    registry; the four-argument form builds and registers a member."""
-
-    def __init__(self, value, phrase=None, description=''):
-        if phrase is None:
-            # Lookup form: HTTPStatus(code) -> copy of the registered member.
-            member = _value_map.get(value)
-            if member is None:
-                raise ValueError('%s is not a valid HTTPStatus' % value)
-            self.value = member.value
-            self.phrase = member.phrase
-            self.description = member.description
-            self.name = member.name
-        else:
-            # Build form: create + register a new member.  self.value is
-            # stored as a dynamic instVar that the AbstractPyInt numeric
-            # protocol (truncated/_generality/comparison) reads.
-            self.value = value
-            self.phrase = phrase
-            self.description = description
-            self.name = phrase.upper().replace(' ', '_').replace('-', '_').replace("'", '')
-            _value_map[value] = self
+        * RFC 9110: HTTP Semantics, obsoletes 7231, which obsoleted 2616
+        * RFC 5789: PATCH Method for HTTP
+    """
+    def __new__(cls, value, description):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.description = description
+        return obj
 
     def __repr__(self):
-        # Overrides AbstractPyInt's value-based repr to show the symbolic
-        # name.  (__int__/__index__/__hash__/__str__/comparisons and
-        # arithmetic are all inherited from AbstractPyInt.)
-        return '<HTTPStatus.' + self.name + ': ' + str(self.value) + '>'
+        return "<%s.%s>" % (self.__class__.__name__, self._name_)
 
-
-# ---------------------------------------------------------------------------
-# The standard status codes (CPython's http.HTTPStatus member set).
-# ---------------------------------------------------------------------------
-
-# 1xx informational
-HTTPStatus.CONTINUE = HTTPStatus(100, 'Continue', 'Request received, please continue')
-HTTPStatus.SWITCHING_PROTOCOLS = HTTPStatus(101, 'Switching Protocols', 'Switching to new protocol; obey Upgrade header')
-HTTPStatus.PROCESSING = HTTPStatus(102, 'Processing')
-HTTPStatus.EARLY_HINTS = HTTPStatus(103, 'Early Hints')
-
-# 2xx success
-HTTPStatus.OK = HTTPStatus(200, 'OK', 'Request fulfilled, document follows')
-HTTPStatus.CREATED = HTTPStatus(201, 'Created', 'Document created, URL follows')
-HTTPStatus.ACCEPTED = HTTPStatus(202, 'Accepted', 'Request accepted, processing continues off-line')
-HTTPStatus.NON_AUTHORITATIVE_INFORMATION = HTTPStatus(203, 'Non-Authoritative Information', 'Request fulfilled from cache')
-HTTPStatus.NO_CONTENT = HTTPStatus(204, 'No Content', 'Request fulfilled, nothing follows')
-HTTPStatus.RESET_CONTENT = HTTPStatus(205, 'Reset Content', 'Clear input form for further input')
-HTTPStatus.PARTIAL_CONTENT = HTTPStatus(206, 'Partial Content', 'Partial content follows')
-HTTPStatus.MULTI_STATUS = HTTPStatus(207, 'Multi-Status')
-HTTPStatus.ALREADY_REPORTED = HTTPStatus(208, 'Already Reported')
-HTTPStatus.IM_USED = HTTPStatus(226, 'IM Used')
-
-# 3xx redirection
-HTTPStatus.MULTIPLE_CHOICES = HTTPStatus(300, 'Multiple Choices', 'Object has several resources -- see URI list')
-HTTPStatus.MOVED_PERMANENTLY = HTTPStatus(301, 'Moved Permanently', 'Object moved permanently -- see URI list')
-HTTPStatus.FOUND = HTTPStatus(302, 'Found', 'Object moved temporarily -- see URI list')
-HTTPStatus.SEE_OTHER = HTTPStatus(303, 'See Other', 'Object moved -- see Method and URL list')
-HTTPStatus.NOT_MODIFIED = HTTPStatus(304, 'Not Modified', 'Document has not changed since given time')
-HTTPStatus.USE_PROXY = HTTPStatus(305, 'Use Proxy', 'You must use proxy specified in Location to access this resource')
-HTTPStatus.TEMPORARY_REDIRECT = HTTPStatus(307, 'Temporary Redirect', 'Object moved temporarily -- see URI list')
-HTTPStatus.PERMANENT_REDIRECT = HTTPStatus(308, 'Permanent Redirect', 'Object moved permanently -- see URI list')
-
-# 4xx client error
-HTTPStatus.BAD_REQUEST = HTTPStatus(400, 'Bad Request', 'Bad request syntax or unsupported method')
-HTTPStatus.UNAUTHORIZED = HTTPStatus(401, 'Unauthorized', 'No permission -- see authorization schemes')
-HTTPStatus.PAYMENT_REQUIRED = HTTPStatus(402, 'Payment Required', 'No payment -- see charging schemes')
-HTTPStatus.FORBIDDEN = HTTPStatus(403, 'Forbidden', 'Request forbidden -- authorization will not help')
-HTTPStatus.NOT_FOUND = HTTPStatus(404, 'Not Found', 'Nothing matches the given URI')
-HTTPStatus.METHOD_NOT_ALLOWED = HTTPStatus(405, 'Method Not Allowed', 'Specified method is invalid for this resource')
-HTTPStatus.NOT_ACCEPTABLE = HTTPStatus(406, 'Not Acceptable', 'URI not available in preferred format')
-HTTPStatus.PROXY_AUTHENTICATION_REQUIRED = HTTPStatus(407, 'Proxy Authentication Required', 'You must authenticate with this proxy before proceeding')
-HTTPStatus.REQUEST_TIMEOUT = HTTPStatus(408, 'Request Timeout', 'Request timed out; try again later')
-HTTPStatus.CONFLICT = HTTPStatus(409, 'Conflict', 'Request conflict')
-HTTPStatus.GONE = HTTPStatus(410, 'Gone', 'URI no longer exists and has been permanently removed')
-HTTPStatus.LENGTH_REQUIRED = HTTPStatus(411, 'Length Required', 'Client must specify Content-Length')
-HTTPStatus.PRECONDITION_FAILED = HTTPStatus(412, 'Precondition Failed', 'Precondition in headers is false')
-HTTPStatus.REQUEST_ENTITY_TOO_LARGE = HTTPStatus(413, 'Request Entity Too Large', 'Entity is too large')
-HTTPStatus.REQUEST_URI_TOO_LONG = HTTPStatus(414, 'Request-URI Too Long', 'URI is too long')
-HTTPStatus.UNSUPPORTED_MEDIA_TYPE = HTTPStatus(415, 'Unsupported Media Type', 'Entity body in unsupported format')
-HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE = HTTPStatus(416, 'Requested Range Not Satisfiable', 'Cannot satisfy request range')
-HTTPStatus.EXPECTATION_FAILED = HTTPStatus(417, 'Expectation Failed', 'Expect condition could not be satisfied')
-HTTPStatus.IM_A_TEAPOT = HTTPStatus(418, "I'm a Teapot", 'Server refuses to brew coffee because it is a teapot.')
-HTTPStatus.MISDIRECTED_REQUEST = HTTPStatus(421, 'Misdirected Request', 'Server is not able to produce a response')
-HTTPStatus.UNPROCESSABLE_ENTITY = HTTPStatus(422, 'Unprocessable Entity')
-HTTPStatus.LOCKED = HTTPStatus(423, 'Locked')
-HTTPStatus.FAILED_DEPENDENCY = HTTPStatus(424, 'Failed Dependency')
-HTTPStatus.TOO_EARLY = HTTPStatus(425, 'Too Early')
-HTTPStatus.UPGRADE_REQUIRED = HTTPStatus(426, 'Upgrade Required')
-HTTPStatus.PRECONDITION_REQUIRED = HTTPStatus(428, 'Precondition Required', 'The origin server requires the request to be conditional')
-HTTPStatus.TOO_MANY_REQUESTS = HTTPStatus(429, 'Too Many Requests', 'The user has sent too many requests in a given amount of time')
-HTTPStatus.REQUEST_HEADER_FIELDS_TOO_LARGE = HTTPStatus(431, 'Request Header Fields Too Large', 'The server is unwilling to process the request')
-HTTPStatus.UNAVAILABLE_FOR_LEGAL_REASONS = HTTPStatus(451, 'Unavailable For Legal Reasons', 'The server is denying access to the resource as a consequence of a legal demand')
-
-# 5xx server error
-HTTPStatus.INTERNAL_SERVER_ERROR = HTTPStatus(500, 'Internal Server Error', 'Server got itself in trouble')
-HTTPStatus.NOT_IMPLEMENTED = HTTPStatus(501, 'Not Implemented', 'Server does not support this operation')
-HTTPStatus.BAD_GATEWAY = HTTPStatus(502, 'Bad Gateway', 'Invalid responses from another server/proxy')
-HTTPStatus.SERVICE_UNAVAILABLE = HTTPStatus(503, 'Service Unavailable', 'The server cannot process the request due to a high load')
-HTTPStatus.GATEWAY_TIMEOUT = HTTPStatus(504, 'Gateway Timeout', 'The gateway server did not receive a timely response')
-HTTPStatus.HTTP_VERSION_NOT_SUPPORTED = HTTPStatus(505, 'HTTP Version Not Supported', 'Cannot fulfill request')
-HTTPStatus.VARIANT_ALSO_NEGOTIATES = HTTPStatus(506, 'Variant Also Negotiates')
-HTTPStatus.INSUFFICIENT_STORAGE = HTTPStatus(507, 'Insufficient Storage')
-HTTPStatus.LOOP_DETECTED = HTTPStatus(508, 'Loop Detected')
-HTTPStatus.NOT_EXTENDED = HTTPStatus(510, 'Not Extended')
-HTTPStatus.NETWORK_AUTHENTICATION_REQUIRED = HTTPStatus(511, 'Network Authentication Required', 'The client needs to authenticate to gain network access')
+    CONNECT = 'CONNECT', 'Establish a connection to the server.'
+    DELETE = 'DELETE', 'Remove the target.'
+    GET = 'GET', 'Retrieve the target.'
+    HEAD = 'HEAD', 'Same as GET, but only retrieve the status line and header section.'
+    OPTIONS = 'OPTIONS', 'Describe the communication options for the target.'
+    PATCH = 'PATCH', 'Apply partial modifications to a target.'
+    POST = 'POST', 'Perform target-specific processing with the request payload.'
+    PUT = 'PUT', 'Replace the target with the request payload.'
+    TRACE = 'TRACE', 'Perform a message loop-back test along the path to the target.'

@@ -108,6 +108,41 @@ value: positional value: kwargs
 		AttributeError ___signal___:
 			'super(): no parent method ''' @env0:, selector @env0:asString @env0:, ''''
 	].
+	"super() READS THE CLASS DICT, NEVER THE INSTANCE.  A store that shadows a
+	method on some instance replaces the method with a SELF-SEND DISPATCHER
+	(object class >> ___grailInstallSelfSendDispatchers___:), which consults the
+	receiver's instance attribute first -- right for ``self.m()'', wrong here.
+	The dispatcher goes on the class of whatever instance was patched, so once
+	ANY _Unpickler had ``u.persistent_load = f'', a subclass's
+	``super().persistent_load(pid)'' from inside its own override found the
+	dispatcher, which called the override again, without end
+	(test_pickle's test_unpickler_super_instance_attribute, then a session
+	killed by the unwinding).  The original is kept under the shadow selector
+	in the same class, so run that.  Gated on this session having installed a
+	dispatcher at all, so an ordinary super() call pays one lookup."
+	((SessionTemps @env0:current @env0:at: #'GrailSelfSendDispatcherInstalls' otherwise: 0) @env0:> 0)
+		ifTrue: [ | shadow cls ov found |
+			shadow := method @env0:inClass
+				@env0:compiledMethodAt: ('___grailOrig_' @env0:, method @env0:selector @env0:asString) @env0:asSymbol
+				environmentId: 1 otherwise: nil.
+			shadow @env0:notNil ifTrue: [
+				"Only the INSTANCE half of what the dispatcher honours is skipped.
+				A CLASS attribute stored over the method -- what
+				``mock.patch('mod.Base.m')'' does -- is in the class dict that
+				CPython's super() reads, so it is called, bound to obj, exactly
+				as the dispatcher would call it (test_htmlparser's
+				test_base_class_methods_called patches ParserBase.__init__ and
+				expects HTMLParser's ``super().__init__()'' to reach the mock)."
+				cls := method @env0:inClass.
+				ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+				[cls ~~ nil and: [found == nil]] @env0:whileTrue: [
+					found := object @env0:___grailStoredClassAttrIn___: cls
+						named: selector @env0:asSymbol overlay: ov.
+					cls := cls @env0:superclass].
+				found @env0:notNil ifTrue: [
+					^ obj @env0:___grailCallOverride___: { true. found }
+						name: selector @env0:asSymbol args: positional kw: kwargs].
+				method := shadow]].
 	"A CLASS-SIDE parent method takes the CLASS as its receiver.  Grail compiles
 	a Python @classmethod onto the metaclass, so when super() from an instance
 	method reaches one -- ``def cm(cls): return super().cm()'' whose MRO

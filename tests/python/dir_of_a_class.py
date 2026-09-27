@@ -97,11 +97,11 @@ except Exception as _e:
     r['reversed_userdict'] = '%s: %s' % (type(_e).__name__, _e)
 r['userdict_has_every_dict_name'] = repr(sorted(set(dir(dict)) - set(dir(UserDict))))
 
-# --- KNOWN GAPS, recorded rather than endorsed -------------------------------------
-# Both are about what a class __dict__ HOLDS, not about dir(), and each is its
-# own piece of work.  CPython is expected to DISAGREE with every value below.
+# --- KNOWN GAP, recorded rather than endorsed --------------------------------------
+# About what a class __dict__ HOLDS, not about dir(), and its own piece of work.
+# CPython is expected to DISAGREE with the value below.
 #
-# 1. A property reached through the class is not the property object -- ``C.prop''
+# A property reached through the class is not the property object -- ``C.prop''
 #    answers the getter as a plain function ('UnboundMethod' until the
 #    type-name correction; the leak changed spelling, not substance), so
 #    classify_class_attrs calls it a method where CPython calls it a property.
@@ -110,10 +110,11 @@ r['userdict_has_every_dict_name'] = repr(sorted(set(dir(dict)) - set(dir(UserDic
 r['property_on_a_class_is_a_known_gap'] = repr(
     [type(C.prop).__name__, _c['prop'].kind, C().prop])
 
-# 2. A staticmethod and a classmethod are both stored as an UnboundMethod, and
-#    ``kind'' is read off the stored object precisely because that object is what
-#    tells them apart -- so both come back as plain methods.
-r['staticmethod_kind_is_a_known_gap'] = repr(
+# A staticmethod and a classmethod are read off the stored object, which is
+# the staticmethod / classmethod descriptor, as in CPython.  This was the second
+# recorded gap here: both were stored as a plain function and came back as
+# plain methods.
+r['staticmethod_kind'] = repr(
     [_c['stat'].kind, _c['cls_m'].kind])
 
 
@@ -126,11 +127,11 @@ EXPECTED = {
     'dir_of_class_has_every_name': '[True, True, True, True, True, True, True]',
     'reversed_userdict': "TypeError: 'UserDict' object is not reversible",
     'userdict_has_every_dict_name': '[]',
+    'staticmethod_kind': "['static method', 'class method']",
 }
 
 GRAIL_ONLY = {
     'property_on_a_class_is_a_known_gap': "['function', 'method', 1]",
-    'staticmethod_kind_is_a_known_gap': "['method', 'method']",
 }
 
 

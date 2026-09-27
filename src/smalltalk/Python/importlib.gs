@@ -7775,6 +7775,17 @@ ___import__: positional kw: kwargs
 	call is the ordinary spelling, and ``__import__(name='sys')'' is the
 	smallest one."
 	name := positional @env0:at: 1.
+	"A name holding a LONE SURROGATE names no file and cannot be made a
+	Symbol, so the only module it can be is one already put in sys.modules
+	under it (which keeps such keys in its overflow).  Answer that or
+	CPython's ModuleNotFoundError; the path below would coerce the name to a
+	Smalltalk string and raise NotImplementedError instead
+	(test_pickle's test_nonencodable_module_name_error)."
+	(name @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ [(importlib @env1:modules) __getitem__: name]
+			@env0:on: KeyError do: [:ex |
+				ex @env0:return: ((Python @env0:at: #'ModuleNotFoundError') ___signal___:
+					'No module named ' @env0:, name @env0:___pyRepr___)]].
 	globals := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'globals' _: None] ifNil: [None]].

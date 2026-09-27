@@ -176,18 +176,14 @@ testCallingAnAsyncMethodAnswersACoroutine
 %
 
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Class dict'
 method: AsyncDefInClassBodyTestCase
-testAsyncKindsAreIndistinguishableWhichIsAKnownGap
-	"Recorded, NOT endorsed.  All three store the same way a plain def does,
-	so the class dict cannot tell a plain async def from an async
-	@staticmethod or @classmethod -- the same gap DirOfAClassTestCase records
-	for their synchronous counterparts.  The entries used to leak the
-	Smalltalk spelling ''UnboundMethod''; since the type-name correction they
-	read ''function'', which for the PLAIN async def is CPython''s own answer
-	-- that third of the gap is closed, and the remaining two thirds are the
-	missing kind wrappers, not the name."
+testTheClassDictTellsTheAsyncKindsApart
+	"A plain async def is a function in the class dict, an async @staticmethod /
+	@classmethod the descriptor object -- CPython's answer.  This was a recorded
+	gap: all three were stored as a plain function, and before the type-name
+	correction leaked the Smalltalk spelling 'UnboundMethod'."
 
-	self assert: (self resultAt: 'async_kinds_indistinguishable_is_a_known_gap') asString
-		equals: '[''function'', ''function'', ''function'']'.
+	self assert: (self resultAt: 'async_kinds') asString
+		equals: '[''function'', ''staticmethod'', ''classmethod'']'.
 %

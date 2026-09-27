@@ -1262,8 +1262,26 @@ getrefcount: obj
 category: 'Grail-Built-in Functions'
 method: sys
 intern: aString
-	"intern(string) -> interned string"
-	^ (aString @env0:asSymbol) @env0:asString
+	"intern(string) -> the canonical str equal to aString.
+
+	This answered ``aString asSymbol asString'', a NEW string each call, so
+	``sys.intern(a) is sys.intern(b)'' was never true -- which is the whole
+	contract.  The canonical strings now live in one session table, shared with
+	the key reads of an instance __dict__ (Symbol >> ___pyInterned___), so an
+	interned name is also identical to the attribute key it names.
+
+	CPython refuses a non-str and a str SUBCLASS.  A str holding lone
+	surrogates cannot become a Symbol, so it is answered as it is."
+
+	(aString @env0:isKindOf: CharacterCollection) ifFalse: [
+		(aString @env0:isKindOf: PyStrSurrogate) ifTrue: [^ aString].
+		^ TypeError ___signal___: 'intern() argument must be str, not '
+			@env0:, aString ___pyTypeNameForError___ @env0:asString].
+	((aString @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) @env0:notNil) ifTrue: [
+		^ TypeError ___signal___: 'can''t intern ' @env0:, aString ___pyTypeNameForError___ @env0:asString].
+	^ (aString @env0:asSymbol) @env0:___pyInternedAs___:
+		((aString @env0:isKindOf: Symbol) ifTrue: [aString @env0:asString] ifFalse: [aString])
 %
 
 category: 'Grail-Built-in Functions'
