@@ -4919,6 +4919,7 @@ ___pythonModuleAttrIdentity___
 	'_struct', not 'struct' -- struct.py does ``from _struct import *''."
 	(n @env0:= 'StructError') ifTrue: [^ #('error' 'struct')].
 	(n @env0:= 'PyStruct') ifTrue: [^ #('Struct' '_struct')].
+	(n @env0:= 'unpack_iterator') ifTrue: [^ #('unpack_iterator' '_struct')].
 
 	"sys.  ``sys.implementation'' is a plain types.SimpleNamespace in
 	CPython, not a bespoke type, so that is what it must report."

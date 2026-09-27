@@ -19,9 +19,10 @@ def import_module(name, deprecated=False, *, required_on=()):
 
 def import_fresh_module(name, fresh=(), blocked=(), *, deprecated=False,
                         usefrozen=False):
-    # Grail has no fresh-import isolation, so we do NOT pop-and-reload (which
-    # trips the loader's `sys.modules[name]` lookup mid-reload); we just import
-    # the module normally and return it.
+    # Grail does NOT pop-and-reload an already-imported module (that trips the
+    # loader's `sys.modules[name]` lookup mid-reload); it imports normally and
+    # returns the existing module.  A module not yet imported is imported
+    # genuinely fresh -- see below.
     #
     # `fresh=` IS honoured, though.  It names the modules the caller needs
     # actually present -- in practice the C accelerator, as in
@@ -42,6 +43,33 @@ def import_fresh_module(name, fresh=(), blocked=(), *, deprecated=False,
             __import__(required)
         except ImportError:
             return None
+    # A module NOT yet imported CAN be imported fresh, and is: grail marks the
+    # import session-local, so the module is built cold and recorded in no
+    # canonical registry, and _end_fresh_import then drops it from sys.modules
+    # again -- restoring sys.modules as CPython's helper does.  The caller then
+    # holds the only reference, which is the property
+    # test_struct's test__struct_reference_cycle_cleaned_up checks by watching
+    # the module be collected.  An ALREADY-imported module keeps the old
+    # behaviour above: its existing instance is returned.
+    #
+    # Only for a PLAIN fresh import -- no ``fresh=`` and no ``blocked=``.  Those
+    # two ask for a module with or without its C accelerator, and the caller
+    # then mixes the copy with the ordinary import's objects; a second,
+    # session-local copy of a module such as xml.etree.ElementTree gave it
+    # classes the rest of the package did not recognise ("expected an Element,
+    # not Element") and cost test_xml_etree 140 tests.  Returning the ordinary
+    # module, as before, is what those callers are built around here.
+    if not fresh and not blocked and name not in sys.modules:
+        import grail
+        grail._begin_fresh_import(name)
+        try:
+            try:
+                __import__(name)
+            except ImportError:
+                return None
+            return sys.modules.get(name)
+        finally:
+            grail._end_fresh_import(name)
     try:
         __import__(name)
     except ImportError:

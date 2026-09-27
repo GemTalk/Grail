@@ -1527,9 +1527,20 @@ ___isSessionLocalModule___: aModuleName
 	CPython re-executes __main__ every run; nothing about a script is meant to
 	outlive it.  An instance of a class the script defines that the script
 	COMMITS still persists, by reachability -- but its class has no name another
-	session can resolve, as with pickle and CPython's __main__."
+	session can resolve, as with pickle and CPython's __main__.
 
-	^ aModuleName asString = '__main__'
+	...and of a module a test is importing FRESH, for the length of that one
+	import: test.support.import_helper.import_fresh_module marks the name through
+	grail._begin_fresh_import.  CPython's helper hands back a module nothing else
+	holds, so a test can drop it and watch it be collected -- test_struct's
+	test__struct_reference_cycle_cleaned_up does exactly that.  A normal import
+	records its instance in the canonical registry, which by design holds it for
+	the session; a session-local one is recorded nowhere, and built cold, which
+	is what ``fresh'' means."
+
+	aModuleName asString = '__main__' ifTrue: [^ true].
+	^ ((SessionTemps current at: #'GrailFreshImports' otherwise: nil)
+		ifNil: [^ false]) includes: aModuleName asString
 %
 
 category: 'Grail-Canonical Classes'

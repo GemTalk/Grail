@@ -126,6 +126,53 @@ _smalltalk_class: args kw: kw
 %
 
 ! ===============================================================================
+! Fresh imports (test.support.import_helper.import_fresh_module)
+! ===============================================================================
+
+category: 'Grail-Fresh Import'
+method: grail
+_begin_fresh_import: aName
+	"grail._begin_fresh_import(name) -- the next import of ``name'' builds a
+	SESSION-LOCAL module: cold, recorded in no canonical registry, its class
+	filed in the session dictionary (importlib class >>
+	___isSessionLocalModule___:).  Paired with _end_fresh_import; only
+	import_fresh_module calls either."
+
+	(SessionTemps @env0:current @env0:at: #'GrailFreshImports'
+		ifAbsentPut: [Set @env0:new]) @env0:add: aName @env0:asString.
+	^ None
+%
+
+category: 'Grail-Fresh Import'
+method: grail
+_end_fresh_import: aName
+	"grail._end_fresh_import(name) -- end the fresh import of ``name'', and let
+	go of everything that still holds its module but the caller: the name's
+	sys.modules entry (CPython's helper restores sys.modules too), its class in
+	the session dictionary, and its entry in the module-singleton registry --
+	found by asking the kernel for the module's referrers, since nothing else
+	names them.  The class has to go as well, because generated
+	code resolves names against that dictionary AHEAD of PythonModules: left
+	there, a later ordinary import of the same name would compile against the
+	fresh module's class."
+
+	| name set mod classes |
+	name := aName @env0:asString.
+	set := SessionTemps @env0:current @env0:at: #'GrailFreshImports' otherwise: nil.
+	set == nil ifFalse: [set @env0:remove: name ifAbsent: []].
+	mod := importlib @env1:modules @env0:at: name @env0:asSymbol otherwise: nil.
+	importlib @env1:modules @env0:removeKey: name @env0:asSymbol ifAbsent: [].
+	classes := importlib @env0:___sessionModuleClasses___.
+	mod == nil ifFalse: [
+		(classes @env0:keys @env0:select: [:k | (classes @env0:at: k) == mod @env0:class])
+			@env0:do: [:k | classes @env0:removeKey: k].
+		"...and the per-session singleton registry (module class >>
+		___sessionInstances___), keyed by that class: the last thing holding it."
+		module @env0:___sessionInstances___ @env0:removeKey: mod @env0:class ifAbsent: []].
+	^ None
+%
+
+! ===============================================================================
 ! @smalltalk decorator
 ! ===============================================================================
 
