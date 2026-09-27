@@ -502,8 +502,12 @@ ___grailPinnedMethodFor___: aMethod receiver: obj
 	| pinnedAt shadow owner |
 	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
 	pinnedAt == nil ifTrue: [^ aMethod].
-	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt])
-		ifTrue: [^ aMethod].
+	"A stamp above this session's current generation was made by another
+	session (BoundMethod class >> ___grailSessionPinHolder___): it predates
+	every pin here as far as this session can know, so it redirects."
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
+			ifTrue: [^ aMethod].
 	shadow := ('___grailOrig_' @env0:, aMethod @env0:selector @env0:asString)
 		@env0:asSymbol.
 	"Resolved from the same root the method itself came from, so a shadow on an
@@ -708,8 +712,9 @@ __name__
 	A PRIVATE method reports the name it was WRITTEN with -- see
 	UnboundMethod class >> ___pyDisplayNameOf___:forClass:."
 
-	^ (UnboundMethod @env0:___pyDisplayNameOf___: selector forClass: definingClass)
-		ifNil: [selector @env0:asString]
+	^ self ___memoizedAttr___: '__name__' compute: [
+		(UnboundMethod @env0:___pyDisplayNameOf___: selector forClass: definingClass)
+			ifNil: [selector @env0:asString]]
 %
 
 category: 'Grail-Python Metadata'
@@ -735,10 +740,11 @@ __qualname__
 	'EnumType'.  A bare ``owner __qualname__'' misses the branch entirely and
 	came back with the two-word Smalltalk name, so ``Cls.m.__qualname__'' read
 	'Enum class.__contains__' where CPython has 'EnumType.__contains__'."
-	qn := [(owner @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
-		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: owner @env0:name @env0:asString].
-	^ qn @env0:, '.' @env0:, self __name__ @env0:asString
+	^ self ___memoizedAttr___: '__qualname__' compute: [
+		qn := [(owner @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: owner @env0:name @env0:asString].
+		qn @env0:, '.' @env0:, self __name__ @env0:asString]
 %
 
 category: 'Grail-Python Metadata'
@@ -989,14 +995,42 @@ ___metadataClass___
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+___memoizedAttr___: aKey compute: aBlock
+	"The value of a function attribute CPython fixes when the def runs --
+	__name__, __qualname__, __type_params__ -- computed once per (class,
+	selector) and then answered as the SAME object every time.
+
+	Identity is the point.  functools.update_wrapper and reprlib's
+	recursive_repr copy these onto a wrapper, and the test for that is
+	``getattr(wrapper, name) is getattr(wrapped, name)'' (test_reprlib's
+	test_assigned_attributes).  Each was rebuilt on every read -- a fresh
+	string, a fresh empty tuple -- so the copy was equal and never identical.
+	Keyed by the defining class and memoized per session, as __annotate__
+	already is, because a handle itself is not guaranteed to be the same
+	object on the next ``Cls.m''."
+
+	| store perClass key v |
+	definingClass == nil ifTrue: [^ aBlock value].
+	store := SessionTemps @env0:current
+		@env0:at: #'GrailMethodAttrCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	perClass := store @env0:at: definingClass ifAbsentPut: [KeyValueDictionary @env0:new].
+	key := aKey @env0:, ':' @env0:, selector @env0:asString.
+	v := perClass @env0:at: key otherwise: nil.
+	v == nil ifFalse: [^ v].
+	v := aBlock value.
+	perClass @env0:at: key put: v.
+	^ v
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 __annotate__
 	"PEP 649: the deferred annotations computation, which
 	functools.update_wrapper COPIES (``__annotate__'' is in
 	WRAPPER_ASSIGNMENTS; ``__annotations__'' is not).  Mirrors BoundMethod's,
 	including the memoization -- check_wrapper asserts the wrapper and the
-	wrapped share the very same object -- and raises rather than answering None
-	when nothing is annotated, so update_wrapper skips the name instead of
-	copying a None the reader would try to call."
+	wrapped share the very same object -- and None when nothing is annotated."
 
 	| store perClass cls fn |
 	cls := self ___metadataClass___.
@@ -1009,8 +1043,11 @@ __annotate__
 	fn := perClass @env0:at: selector @env0:asString otherwise: nil.
 	fn == nil ifFalse: [^ fn].
 	fn := self ___rawAnnotateForClass___: cls.
-	fn == nil ifTrue: [
-		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	"None for a def with no annotations, as CPython's function.__annotate__
+	answers -- and what functools.update_wrapper and reprlib.recursive_repr
+	copy onto a wrapper, which test_reprlib's test_assigned_attributes then
+	compares by identity.  None is a singleton, so it needs no memo entry."
+	fn == nil ifTrue: [^ None].
 	perClass @env0:at: selector @env0:asString put: fn.
 	^ fn
 %
@@ -1025,11 +1062,12 @@ __type_params__
 
 	| cls |
 	cls := self ___metadataClass___.
-	^ ExecBlock @env0:___pyTypeParamsForClass___: cls
-		name: selector
-		table: (cls == nil
-			ifTrue: [nil]
-			ifFalse: [self ___tableEntryFor___: cls table: #'___methodTypeParamsTable___'])
+	^ self ___memoizedAttr___: '__type_params__' compute: [
+		ExecBlock @env0:___pyTypeParamsForClass___: cls
+			name: selector
+			table: (cls == nil
+				ifTrue: [nil]
+				ifFalse: [self ___tableEntryFor___: cls table: #'___methodTypeParamsTable___'])]
 %
 
 category: 'Grail-Python Metadata'

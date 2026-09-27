@@ -103,14 +103,60 @@ class OverrideSuper(Base):
         return 'derived+' + super().m()
 
 
+def marks(fn):
+    """An __init__ decorator must hand back None, as __init__ must: CPython
+    raises ``__init__() should return None'' otherwise."""
+    @functools.wraps(fn)
+    def wrapper(self, *args):
+        fn(self, *args)
+        self.marked = True
+    return wrapper
+
+
+def strwraps(fn):
+    """A __repr__ decorator must hand back a str: CPython's repr() raises
+    ``__repr__ returned non-string'' otherwise."""
+    @functools.wraps(fn)
+    def wrapper(self, *args):
+        return 'W(' + fn(self, *args) + ')'
+    return wrapper
+
+
 class Dunder:
-    @tag('INIT')
+    @marks
     def __init__(self):
         self.made = True
 
-    @wrapsdeco
+    @strwraps
     def __repr__(self):
         return 'dunder-repr'
+
+
+captured = []
+
+
+def capturing(fn):
+    """Keeps what it was handed, the way typing's @_tp_cache keeps its
+    function in _caches and lru_cache holds it: the SUnit test reaches the
+    capture through ``captured''."""
+    captured.append(fn)
+
+    def wrapper(self, *args):
+        return ('wrapped', fn(self, *args))
+    return wrapper
+
+
+class CapturedDunder:
+    @capturing
+    def __probe__(self, x):
+        return ('orig', x)
+
+
+def captured_dunder_reaches_the_original():
+    """The wrapper calls its capture, and the capture must run the def --
+    not the dispatcher now answering to the name, whose override is this
+    wrapper again."""
+    return CapturedDunder().__probe__(3) == ('wrapped', ('orig', 3))
 
 
 class Patchable:
@@ -189,7 +235,13 @@ def super_sees_the_parents_decorated_method():
 
 
 def dunders_can_be_decorated():
-    return Dunder().made is True and repr(Dunder()) == 'dunder-repr'
+    """repr() has to run the DECORATED __repr__.  It used to run the raw one --
+    a decorated dunder reached the class holder but never the selector repr()
+    sends -- and this check was written against that, expecting the undecorated
+    'dunder-repr' (with decorators CPython rejects: a tagged __init__ returning
+    a str, a __repr__ returning a tuple)."""
+    d = Dunder()
+    return d.made is True and d.marked is True and repr(d) == 'W(dunder-repr)'
 
 
 def monkey_patching_a_method_is_visible_through_instances():

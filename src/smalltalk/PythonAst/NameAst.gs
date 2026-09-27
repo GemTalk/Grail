@@ -1054,12 +1054,7 @@ ___emitSmalltalkOn___: aStream
 			exactly."
 			(CallAst classFunctionNames notNil
 				and: [CallAst classFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
-				aStream
-					nextPutAll: '(BoundMethod receiver: nil selector: #';
-					nextPutAll: self ___mangledId___;
-					nextPutAll: ' definingClass: ';
-					nextPutAll: CallAst ___classBeingCompiledVar___;
-					nextPutAll: ')'.
+				self ___printSiblingFunctionOn___: aStream.
 				^self].
 			(CallAst classStaticFunctionNames notNil
 				and: [CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
@@ -1148,12 +1143,7 @@ ___emitSmalltalkOn___: aStream
 					plain value, not a receiver) can still reach the method when
 					the popped receiver's class does not implement it.  The pop
 					protocol is otherwise unchanged (BoundMethod>>value:value:)."
-					aStream
-						nextPutAll: '(BoundMethod receiver: nil selector: #';
-						nextPutAll: self ___mangledId___;
-						nextPutAll: ' definingClass: ';
-						nextPutAll: CallAst ___classBeingCompiledVar___;
-						nextPutAll: ')'.
+					self ___printSiblingFunctionOn___: aStream.
 					^self
 				].
 			"Class-body reference to a sibling @staticmethod (test_enum's
@@ -2747,4 +2737,29 @@ ___irFreeReadNeedsGuard___
 				and: [self ___guardedLocalNeedsCheck___: id asSymbol]].
 		node := node parent].
 	^ false
+%
+
+category: 'Grail-code generation'
+method: NameAst
+___printSiblingFunctionOn___: aStream
+	"A class-body read of a sibling def's name answers THE FUNCTION -- the
+	interned ``Cls.m'' handle, UnboundMethod definingClass:selector:, the very
+	object a later ``Cls.m'' read and a class-body decorator's base both
+	answer.
+
+	It used to be a receiver-less BoundMethod minted per read.  That called
+	correctly (both take the first argument as the receiver, and both resolve
+	a foreign first argument from the defining class -- enum's
+	``_generate_next_value_(name, ...)'') but it was a NEW object each time, so
+	``f = __repr__'' and ``recursive_repr()(__repr__)'' in one class body held
+	two different objects where CPython holds one (test_reprlib's
+	test__wrapped__), and it printed as ``<bound method
+	UndefinedObject.__repr__ of None>''."
+
+	aStream
+		nextPutAll: '(UnboundMethod @env1:definingClass: ';
+		nextPutAll: CallAst ___classBeingCompiledVar___;
+		nextPutAll: ' selector: #''';
+		nextPutAll: self ___mangledId___;
+		nextPutAll: ''')'
 %

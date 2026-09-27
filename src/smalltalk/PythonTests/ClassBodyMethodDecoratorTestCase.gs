@@ -279,3 +279,38 @@ testAPlainInstanceIsStillNotCallable
 	self assert: self loadFixture @env1:a_plain_instance_is_still_not_callable
 		equals: true
 %
+
+category: 'Grail-Tests-ClassBodyMethodDecorator'
+method: ClassBodyMethodDecoratorTestCase
+testACaptureStampedByAnotherSessionReachesTheOriginal
+	"A decorator's capture outlives the session that made it -- a deployed
+	module commits it inside the wrapper -- and a later session replays the
+	dispatcher and its pin under its OWN pin generations.  When those counted
+	from 0 in every session, a capture stamped late in the deploy session read
+	as newer than the binding session's pin, ran the dispatcher, and the
+	dispatcher's override is the wrapper holding that capture: typing's
+	``@_tp_cache def __getitem_inner__'' overflowed the stack on the first
+	``Callable[[], bytes]'' in CI (werkzeug's ClosingIterator).
+
+	Both halves of the fix, with the capture's stamp set as another session's
+	would be: a session's pins start at the clock, so a stamp from an EARLIER
+	session is below all of them; a stamp above this session's current
+	generation came from a LATER one.  Either way the capture predates every
+	pin this session can know of, and must reach the original."
+
+	| fixture handle slot saved pinnedAt |
+	fixture := self loadFixture.
+	handle := (fixture @env1:captured) @env1:__getitem__: 0.
+	self assert: (handle isKindOf: UnboundMethod).
+	pinnedAt := BoundMethod @env1:___grailPinnedAt___: #'__probe__:'.
+	self deny: pinnedAt isNil.
+	"Clock-based: a counter from 0 would need a billion pins to get here."
+	self assert: pinnedAt > 1048576000.
+	slot := UnboundMethod allInstVarNames indexOf: #pinGeneration.
+	saved := handle instVarAt: slot.
+	[handle instVarAt: slot
+		put: (BoundMethod @env1:___grailPinGeneration___) + 1000000000.
+	 self assert: fixture @env1:captured_dunder_reaches_the_original equals: true]
+		ensure: [handle instVarAt: slot put: saved].
+	self assert: fixture @env1:captured_dunder_reaches_the_original equals: true
+%

@@ -285,6 +285,53 @@ new
 			@env0:, (self @env0:name @env0:asString @env0:, ' module'))
 %
 
+category: 'Grail-Printing'
+method: module
+__repr__
+	"CPython's module repr -- importlib._bootstrap._module_repr and
+	_module_repr_from_spec, branch for branch:
+
+	    <module 'sys' (built-in)>          spec with an origin, no location
+	    <module 'p.p.p' from '/.../p.py'>  spec with a location
+	    <module 'x'>                       spec with neither
+	    <module 'x' from '/path'>          no spec, but a __file__
+
+	A module is a SymbolDictionary underneath, so without this it printed its
+	whole namespace as a dict -- repr(sys) was two thousand characters of
+	``{'version': ...''.  test_reprlib's LongReprTest.test_module asserts both
+	shapes.  Each read is guarded, as CPython's is: a repr must not raise
+	because a module's dunders are odd."
+
+	| rep name spec origin file |
+	rep := [:obj | (Python @env0:at: #builtins) @env1:instance @env1:repr: obj].
+	name := [self ___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: '?'].
+	spec := [self ___pyAttrLoad___: #'__spec__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	spec == None ifFalse: [
+		| specName hasLocation |
+		specName := [spec ___pyAttrLoad___: #name]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+		specName == None ifTrue: [specName := name].
+		origin := [spec ___pyAttrLoad___: #origin]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+		origin == None ifTrue: [
+			^ '<module ' @env0:, (rep value: specName) @env0:asString @env0:, '>'].
+		hasLocation := [spec ___pyAttrLoad___: #'has_location']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: false].
+		(hasLocation == true or: [hasLocation == True]) ifTrue: [
+			^ '<module ' @env0:, (rep value: specName) @env0:asString
+				@env0:, ' from ' @env0:, (rep value: origin) @env0:asString @env0:, '>'].
+		^ '<module ' @env0:, (rep value: specName) @env0:asString
+			@env0:, ' (' @env0:, origin @env0:asString @env0:, ')>'].
+	file := [self ___pyAttrLoad___: #'__file__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	file == None ifFalse: [
+		^ '<module ' @env0:, (rep value: name) @env0:asString
+			@env0:, ' from ' @env0:, (rep value: file) @env0:asString @env0:, '>'].
+	^ '<module ' @env0:, (rep value: name) @env0:asString @env0:, '>'
+%
+
 category: 'Grail-Accessors'
 method: module
 __annotate__
