@@ -77,6 +77,22 @@ __new__: anObject
 	``.cast('B')'' a reinterpretation rather than a no-op."
 
 	| fmt |
+	"``memoryview(mv)'' is a NEW view onto the SAME memory -- same source, same
+	window, same format, and read-only if mv is -- not a view over mv's bytes
+	rendered afresh, which is what the ``tobytes'' fallback below would make of
+	it (a copy, with ``obj'' naming the view instead of the exporter)."
+	(anObject isKindOf: memoryview) ifTrue: [^ anObject ___reexport___].
+	"PEP 688: a Python class exports a buffer by defining ``__buffer__'', which
+	answers a memoryview.  pickle.PickleBuffer is one -- ``memoryview(pb).obj''
+	has to be the object the buffer wraps, which is how test.picklecommon's
+	zero-copy reconstructors tell a view of their own instance from a copy."
+	((anObject isKindOf: ByteArray) not
+		and: [anObject ___respondsTo___: #'__buffer__:']) ifTrue: [
+			| exported |
+			exported := anObject @env1:__buffer__: 0.
+			(exported isKindOf: memoryview) ifFalse: [
+				^ TypeError ___signal___: '__buffer__ returned non-memoryview object'].
+			^ exported ___reexport___].
 	fmt := [| tc |
 		tc := anObject @env1:___pyAttrLoad___: #'typecode'.
 		((tc isKindOf: CharacterCollection) and: [tc @env0:size @env0:= 1])
@@ -134,8 +150,48 @@ ___over___: anObject format: fmt offset: anOffset length: aLength
 	inst @env0:dynamicInstVarAt: #'readonly' put: (self ___isReadOnly___: anObject).
 	inst @env0:dynamicInstVarAt: #'shape'
 		put: (tuple @env0:withAll: { aLength @env0:// itemsize }).
+	"``obj'' is the EXPORTER -- the object whose memory this is -- and the
+	contiguity flags are constant because every view here is 1-D with unit
+	stride.  pickle reads all of them: save_picklebuffer refuses a
+	non-contiguous buffer, and a zero-copy reconstructor tests ``m.obj''."
+	inst @env0:dynamicInstVarAt: #'obj' put: anObject.
+	inst @env0:dynamicInstVarAt: #'contiguous' put: true.
+	inst @env0:dynamicInstVarAt: #'c_contiguous' put: true.
+	inst @env0:dynamicInstVarAt: #'f_contiguous' put: true.
+	inst @env0:dynamicInstVarAt: #'strides' put: (tuple @env0:withAll: { itemsize }).
+	inst @env0:dynamicInstVarAt: #'suboffsets' put: (tuple @env0:withAll: #()).
 	inst @env0:dynamicInstVarAt: #'_released' put: false.
 	^ inst
+%
+
+category: 'Grail-Instance Creation'
+method: memoryview
+___reexport___
+	"A new view onto exactly this view's memory: same exporter, window, format
+	and writability.  What ``memoryview(self)'' answers."
+
+	| view |
+	self ___checkReleased___.
+	view := memoryview
+		___over___: (self @env0:dynamicInstVarAt: #'_obj')
+		format: (self @env0:dynamicInstVarAt: #'format')
+		offset: (self @env0:dynamicInstVarAt: #'_offset')
+		length: (self @env0:dynamicInstVarAt: #'_length').
+	view @env0:dynamicInstVarAt: #'readonly'
+		put: (self @env0:dynamicInstVarAt: #'readonly').
+	^ view
+%
+
+category: 'Grail-Conversion'
+method: memoryview
+toreadonly
+	"``mv.toreadonly()'' -- a read-only view onto the same memory.  pickle's
+	READONLY_BUFFER opcode applies it to an out-of-band buffer."
+
+	| view |
+	view := self ___reexport___.
+	view @env0:dynamicInstVarAt: #'readonly' put: true.
+	^ view
 %
 
 category: 'Grail-Instance Creation'

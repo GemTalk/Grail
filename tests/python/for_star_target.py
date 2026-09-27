@@ -16,13 +16,13 @@ had a starred unpack for ``a, *b = xs'' -- it goes through
 does NOT spell a for-loop target that way.  It uses an explicit slice object
 and an arithmetic length, and this fixture holds the two paths to that.
 
-WHICH MATTERS BECAUSE THE TWO DISAGREE ABOUT AN ERROR.  With too few values to
-unpack, CPython raises ``ValueError: not enough values to unpack''; the
-assignment shape does too, and the for-loop's slice shape runs off the end with
-an IndexError.  That is a gap in the TEXT, shared by both paths because both
-now spell the loop the same way -- so it is pinned here as an XFAIL rather than
-quietly fixed on one side, which would make the two codegen paths disagree
-about which exception a loop raises.
+THE TWO USED TO DISAGREE ABOUT AN ERROR.  With too few values to unpack,
+CPython raises ``ValueError: not enough values to unpack''; the assignment
+shape did too, while the for-loop's slice shape ran off the end with an
+IndexError.  That was a gap in the TEXT, shared by both paths, and it was
+pinned here as an XFAIL until both were fixed together: the loop now runs the
+assignment's ``___unpackCheck___:star:after:'' before reading any element
+(ForAst>>___unpackCheckArgs___), on the text and IR paths alike.
 
 Everything here is verified against real CPython by running the file directly.
 """
@@ -104,7 +104,7 @@ record('nested_plain_still_works', h.nested_plain_still_works)
 record('star_too_few', h.star_too_few)
 
 
-XFAIL = {'star_too_few'}
+XFAIL = set()
 
 
 EXPECTED = {
@@ -116,8 +116,7 @@ EXPECTED = {
     'star_over_a_string': [('a', ['b', 'c']), ('z', [])],
     'plain_tuple_still_works': [(1, 2), (3, 4)],
     'nested_plain_still_works': [(1, 2, 3)],
-    # CPython's message; Grail answers IndexError on BOTH paths -- the
-    # for-loop's slice shape runs off the end instead of checking the length.
+    # CPython's message, which Grail's loop unpack now raises on both paths.
     'star_too_few': 'ValueError: not enough values to unpack (expected at least 2, got 1)',
 }
 

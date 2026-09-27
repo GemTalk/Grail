@@ -3770,3 +3770,34 @@ __str__
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Introspection'
+method: CharacterCollection
+__dict__
+	"``obj.__dict__'' for a str SUBCLASS instance -- the live dynamic-instVar
+	view list and bytes publish.  A plain ``class X(str)'' stays a subclass of
+	the kernel string class (Class.gs says why), so this is where its instances
+	find it; ClassDefAst's stamp tells them from an EXACT str, which has no
+	instance dict, as in CPython."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) @env0:isNil ifTrue: [
+			^ AttributeError ___signal___: '''str'' object has no attribute ''__dict__'''].
+	^ PyInstanceDict @env0:on: self
+%
+
+set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so it must be an env-0 method.
+category: 'Grail-Introspection'
+classmethod: CharacterCollection
+___pythonValueAttrs___
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

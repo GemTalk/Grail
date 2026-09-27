@@ -450,6 +450,21 @@ read: n
 
 category: 'Grail-Reading'
 method: BytesIO
+readinto: b
+	"readinto(b) - read up to len(b) bytes into the writable buffer b and
+	answer how many were read.  pickle's _Unframer reads a protocol-5
+	bytearray this way, straight out of its frame."
+
+	| data |
+	self _checkOpen.
+	data := self read: b @env1:__len__.
+	1 @env0:to: data @env0:size do: [:i |
+		b @env1:__setitem__: i @env0:- 1 _: (data @env0:at: i)].
+	^ data @env0:size
+%
+
+category: 'Grail-Reading'
+method: BytesIO
 readline
 	^ self readline: -1
 %
@@ -655,6 +670,47 @@ writable
 
 	self _checkOpen.
 	^ true
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkSeekable
+	"IOBase's internal capability checks, which _pyio's buffered wrappers call
+	on the stream they wrap -- ``io.BufferedRandom(io.BytesIO())'' is how
+	test_pickle drives the unpickler's buffering.  A BytesIO has every
+	capability, so each check is the closed-stream check and nothing more."
+
+	^ self seekable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkSeekable: msg
+	^ self seekable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkReadable
+	^ self readable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkReadable: msg
+	^ self readable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkWritable
+	^ self writable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkWritable: msg
+	^ self writable
 %
 
 category: 'Grail-Protocol'

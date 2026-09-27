@@ -1696,8 +1696,13 @@ run
 "Python 3: IOError is an alias of OSError.  Register it in the Python dict so
 Python code that references IOError (jinja2/requests/django exceptions.py)
 resolves to the PYTHON OSError -- not the unrelated GemStone kernel IOError in
-Globals, which the Grail compile symbol list no longer includes."
+Globals, which the Grail compile symbol list no longer includes.
+EnvironmentError is the other alias (PEP 3151).  It was already listed among
+the builtin names, so codegen compiled it as a builtin read, but nothing bound
+it and every read raised NameError -- test.pickletester's exception table names
+both aliases and failed at import."
 Python at: #'IOError' put: (Python at: #'OSError').
+Python at: #'EnvironmentError' put: (Python at: #'OSError').
 true
 %
 input src/smalltalk/Python/ReferenceError.gs
@@ -1734,7 +1739,9 @@ input src/smalltalk/Python/ProcessLookupError.gs
 input src/smalltalk/Python/TimeoutError.gs
 input src/smalltalk/Python/NotImplementedError.gs
 input src/smalltalk/Python/RecursionError.gs
+input src/smalltalk/Python/PythonFinalizationError.gs
 input src/smalltalk/Python/IndentationError.gs
+input src/smalltalk/Python/IncompleteInputError.gs
 input src/smalltalk/Python/JSONDecodeError.gs
 input src/smalltalk/Python/StatisticsError.gs
 input src/smalltalk/Python/UnicodeError.gs

@@ -128,11 +128,11 @@ testAClassDefinedInAFunctionPicklesOnceItSaysWhereItLives
 
 category: 'Grail-Tests - Known gaps'
 method: ClassQualnameStoreTestCase
-testAnUnattachedClassStillPicklesIsAKnownGap
-	"Recorded, NOT endorsed.  CPython raises PicklingError for a class that was
-	never attached anywhere, because its qualname resolves to nothing; Grail's
-	pickle is more permissive.  Unrelated to the store above, and pinned so it
-	is not mistaken for part of it."
+testAnUnattachedClassRaisesAsInCPython
+	"CPython raises PicklingError for a class that was never attached
+	anywhere, because its qualname resolves to nothing.  Unrelated to the store
+	above.  This pinned the opposite while Grail's own pickle was more
+	permissive; pickle is CPython's pickle.py now."
 
-	self assert: (self resultAt: 'unattached_is_a_known_gap') asString equals: 'NO ERROR'.
+	self assert: (self resultAt: 'unattached_raises_as_in_cpython') asString equals: 'PicklingError'.
 %

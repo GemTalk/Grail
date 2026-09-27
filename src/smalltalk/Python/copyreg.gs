@@ -119,8 +119,162 @@ ___dispatchTable___
 		``super object has no attribute f'' because its cls and obj were nil
 		(test_deep_copying)."
 		tbl @env0:at: Super put:
-			(BoundMethod receiver: self instance selector: #'pickle_super')].
+			(BoundMethod receiver: self instance selector: #'pickle_super').
+		"``complex'' ships registered too (``pickle(complex, pickle_complex,
+		complex)'' in CPython's copyreg): complex has no __reduce__ of its own,
+		so the table is the only thing that makes it picklable."
+		tbl @env0:at: complex put:
+			(BoundMethod receiver: self instance selector: #'pickle_complex')].
 	^ tbl
+%
+
+category: 'Grail-Module Registry'
+classmethod: copyreg
+___sessionTable___: aKey
+	"A SESSION-LOCAL Python dict held class-side under aKey, created empty on
+	first read -- the extension-code tables, for the reason ___dispatchTable___
+	gives: a deployed module that captured one would otherwise read the
+	deploy session's dictionary forever."
+
+	| st tbl |
+	st := SessionTemps @env0:current.
+	tbl := st @env0:at: aKey otherwise: nil.
+	tbl @env0:== nil ifTrue: [
+		tbl := dict ___new___.
+		st @env0:at: aKey put: tbl].
+	^ tbl
+%
+
+category: 'Grail-Module Registry'
+classmethod: copyreg
+___helper___
+	"The Python-level half of this module (src/python/stdlib/_grail_copyreg.py):
+	CPython's copyreg functions, which this module hands out as its own
+	attributes -- see that file's header."
+
+	^ (importlib @env0:___instance___) @env1:import_module: '_grail_copyreg'
+%
+
+category: 'Grail-Module Registry'
+classmethod: copyreg
+___helperAt___: aName
+	^ self ___helper___ @env1:___pyAttrLoad___: aName
+%
+
+category: 'Grail-Built-in Functions'
+method: copyreg
+pickle_complex: aComplex
+	"CPython's copyreg.pickle_complex: ``return complex, (c.real, c.imag)''."
+
+	^ tuple
+		@env0:with: complex
+		with: (tuple
+			@env0:with: (aComplex @env1:___pyAttrLoad___: #'real')
+			with: (aComplex @env1:___pyAttrLoad___: #'imag'))
+%
+
+! ===============================================================================
+! Extension-code registry (CPython's copyreg._extension_registry and friends)
+! ===============================================================================
+
+category: 'Grail-Accessors'
+method: copyreg
+_extension_registry
+	"``(module, name) -> code''.  Session-local; see ___sessionTable___:."
+
+	^ (self @env0:class) ___sessionTable___: #'GrailCopyregExtensionRegistry'
+%
+
+category: 'Grail-Accessors'
+method: copyreg
+_inverted_registry
+	"``code -> (module, name)''.  Session-local; see ___sessionTable___:."
+
+	^ (self @env0:class) ___sessionTable___: #'GrailCopyregInvertedRegistry'
+%
+
+category: 'Grail-Accessors'
+method: copyreg
+_extension_cache
+	"``code -> object''.  Session-local; see ___sessionTable___:."
+
+	^ (self @env0:class) ___sessionTable___: #'GrailCopyregExtensionCache'
+%
+
+category: 'Grail-Built-in Functions'
+method: copyreg
+add_extension: aModule _: aName _: aCode
+	"Python copyreg.add_extension(module, name, code)."
+
+	^ ((self @env0:class) ___helperAt___: #'add_extension')
+		@env1:value: { aModule. aName. aCode } value: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: copyreg
+remove_extension: aModule _: aName _: aCode
+	"Python copyreg.remove_extension(module, name, code)."
+
+	^ ((self @env0:class) ___helperAt___: #'remove_extension')
+		@env1:value: { aModule. aName. aCode } value: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: copyreg
+clear_extension_cache
+	"Python copyreg.clear_extension_cache()."
+
+	^ ((self @env0:class) ___helperAt___: #'clear_extension_cache')
+		@env1:value: #() value: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: copyreg
+constructor: anObject
+	"Python copyreg.constructor(object): a callable check and nothing else."
+
+	^ ((self @env0:class) ___helperAt___: #'constructor')
+		@env1:value: { anObject } value: nil
+%
+
+! ===============================================================================
+! Reconstructors -- the functions pickle names on the wire as copyreg.<name>
+! ===============================================================================
+
+category: 'Grail-Accessors'
+method: copyreg
+__newobj__
+	^ (self @env0:class) ___helperAt___: #'__newobj__'
+%
+
+category: 'Grail-Accessors'
+method: copyreg
+__newobj_ex__
+	^ (self @env0:class) ___helperAt___: #'__newobj_ex__'
+%
+
+category: 'Grail-Accessors'
+method: copyreg
+_reconstructor
+	^ (self @env0:class) ___helperAt___: #'_reconstructor'
+%
+
+category: 'Grail-Accessors'
+method: copyreg
+_reduce_ex
+	^ (self @env0:class) ___helperAt___: #'_reduce_ex'
+%
+
+category: 'Grail-Accessors'
+method: copyreg
+_slotnames
+	^ (self @env0:class) ___helperAt___: #'_slotnames'
+%
+
+category: 'Grail-Accessors'
+method: copyreg
+pickle_union
+	^ (self @env0:class) ___helperAt___: #'pickle_union'
 %
 
 category: 'Grail-Built-in Functions'

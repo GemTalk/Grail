@@ -154,6 +154,24 @@ class _Proxy:
     def __bool__(self):
         return bool(self.__get())
 
+    # The conversions CPython's proxy forwards too.  ``float(p)'' reaches
+    # __float__ on the PROXY's class and never falls through to __getattr__, so
+    # without these a proxy of a number converted to nothing.
+    def __int__(self):
+        return int(self.__get())
+
+    def __float__(self):
+        return float(self.__get())
+
+    def __complex__(self):
+        return complex(self.__get())
+
+    def __index__(self):
+        return self.__get().__index__()
+
+    def __bytes__(self):
+        return bytes(self.__get())
+
 
 class _CallableProxy(_Proxy):
     """proxy for callable referents — adds __call__ delegation."""

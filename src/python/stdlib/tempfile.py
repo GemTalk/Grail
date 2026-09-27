@@ -101,6 +101,19 @@ def _mkstemp_inner(dir, pre, suf):
         % (dir, last))
 
 
+def mktemp(suffix="", prefix=None, dir=None):
+    """A pathname that did not exist when this was called -- CPython's
+    deprecated, race-prone mktemp, which creates nothing.  test_pickle's
+    command-line tests write their pickle file under such a name."""
+    prefix, suffix, dir = _sanitize_params(prefix, suffix, dir)
+    for _attempt in range(100):
+        path = os.path.join(dir, _next_candidate(prefix, suffix))
+        if not os.path.exists(path):
+            return path
+    raise FileExistsError(
+        "tempfile.mktemp: no unique name found in %r after 100 attempts" % (dir,))
+
+
 def mkstemp(suffix=None, prefix=None, dir=None, text=False):
     """Create a uniquely-named file and answer (fd, absolute path).  The
     caller owns both, as in CPython: close the descriptor and remove the file

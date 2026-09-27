@@ -190,9 +190,15 @@ ___allPairs___
 	order list for a case no test in the corpus depends on -- recorded here rather
 	than approximated."
 
-	| raw over result n |
+	| raw over result n hidden |
 	raw := source @env0:dynamicInstVarPairs.
 	over := self ___overflow___.
+	"A builtin root's own storage (AbstractPyInt keeps its value in #value) is
+	not an instance attribute -- see ___pyHiddenStateNames___."
+	hidden := ((source @env0:class @env0:whichClassIncludesSelector:
+			#'___pyHiddenStateNames___' environmentId: 1) @env0:notNil)
+		ifTrue: [source @env1:___pyHiddenStateNames___]
+		ifFalse: [#()].
 	result := OrderedCollection @env0:new.
 	"INFERRED slots (GRAIL_INFERRED_SLOTS) are ordinary instance attributes
 	that happen to live in named instVars; they come first, in the class's
@@ -206,7 +212,8 @@ ___allPairs___
 	n := 1.
 	[n @env0:< raw @env0:size] @env0:whileTrue: [
 		((raw @env0:at: n) @env0:== self ___overflowSlot___
-			@env0:or: [self ___slotPairs___: result name: (raw @env0:at: n)]) ifFalse: [
+			@env0:or: [(hidden @env0:includes: (raw @env0:at: n))
+			@env0:or: [self ___slotPairs___: result name: (raw @env0:at: n)]]) ifFalse: [
 			result @env0:add: (raw @env0:at: n);
 				add: (raw @env0:at: n @env0:+ 1)].
 		n := n @env0:+ 2].

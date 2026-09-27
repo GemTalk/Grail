@@ -77,6 +77,19 @@ ___signalMissing___: aName on: anObject
 			''' has no attribute ''' @env0:, aName @env0:asString @env0:, '''']
 		ifFalse: ['''' @env0:, (anObject @env0:___pyDnuTypeName___) @env0:asString @env0:,
 			''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
+	"A MODULE reads differently again: ``module 'os' has no attribute 'x'''.
+	Grail's modules are each an instance of their own class, so the generic
+	form named that class -- ``'os' object has no attribute 'x''' -- which is
+	the shape CPython uses for an instance, not for a module.  test_pickle
+	compares the full message pickle.find_class re-raises."
+	(anObject @env0:isKindOf: module) ifTrue: [
+		| modName |
+		modName := [anObject @env1:__name__] @env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+		(modName @env0:isKindOf: CharacterCollection) ifTrue: [
+			msg := 'module ''' @env0:, modName @env0:asString
+				@env0:, ''' has no attribute ''' @env0:, aName @env0:asString @env0:, '''']].
 	^ self ___signalAttr___: aName on: anObject message: msg
 %
 

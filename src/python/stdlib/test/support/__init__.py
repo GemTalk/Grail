@@ -251,6 +251,56 @@ def run_with_tz(tz):
     return decorator
 
 
+def run_with_locales(catstr, *locales):
+    """CPython's run_with_locales: run the test once per locale that can be
+    set, each as a subtest, and restore the original afterwards.
+
+    Upstream's implementation, not a passthrough, for the reason run_with_tz
+    above gives: a passthrough would run the body in whatever locale the
+    session happens to be in.  Grail has no OS locales -- setlocale accepts
+    only 'C'/'POSIX'/'' and raises locale.Error for the rest -- so a named
+    locale becomes a skipped subtest, and '' in the list (which every caller
+    in the tree includes as the fallback) is what the body actually runs
+    under, as it is on a CPython machine with no such locale installed.
+    """
+    def deco(func):
+        import functools
+
+        @functools.wraps(func)
+        def wrapper(self, /, *args, **kwargs):
+            dry_run = '' in locales
+            try:
+                import locale
+                category = getattr(locale, catstr)
+                orig_locale = locale.setlocale(category)
+            except AttributeError:
+                # if the test author gives us an invalid category string
+                raise
+            except Exception:
+                # cannot retrieve original locale, so do nothing
+                pass
+            else:
+                try:
+                    for loc in locales:
+                        with self.subTest(locale=loc):
+                            try:
+                                locale.setlocale(category, loc)
+                            except locale.Error:
+                                self.skipTest(f'no locale {loc!r}')
+                            else:
+                                dry_run = False
+                                func(self, *args, **kwargs)
+                finally:
+                    locale.setlocale(category, orig_locale)
+            if dry_run:
+                # no locales available, so just run the test
+                # with the current locale
+                with self.subTest(locale=None):
+                    func(self, *args, **kwargs)
+        return wrapper
+    return deco
+
+
 def check_sizeof(test, o, size):
     # sys.getsizeof has no meaning on GemStone objects
     raise unittest.SkipTest("sys.getsizeof unavailable under Grail")

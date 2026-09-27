@@ -80,11 +80,10 @@ r['qualname'] = NestedEnum.__qualname__
 r['roundtrip'] = pickle.loads(pickle.dumps(NestedEnum.twigs)) is NestedEnum.twigs
 r['roundtrip_class'] = pickle.loads(pickle.dumps(NestedEnum)) is NestedEnum
 
-# KNOWN GAP, recorded rather than endorsed: a class that was never attached
-# anywhere still pickles here, where CPython raises PicklingError because the
-# qualname resolves to nothing.  Unrelated to the store above -- Grail's pickle
-# is simply more permissive about an unreachable class -- and pinned so it is
-# not mistaken for part of it.
+# A class that was never attached anywhere: CPython raises PicklingError,
+# because the qualname resolves to nothing.  Unrelated to the store above.
+# This used to pin a known gap -- Grail's own pickle was more permissive and
+# pickled it -- and pickle is CPython's pickle.py now, so it raises too.
 
 
 def make2():
@@ -96,6 +95,6 @@ def make2():
 Unreachable = make2()
 try:
     pickle.dumps(Unreachable.a)
-    r['unattached_is_a_known_gap'] = 'NO ERROR'
+    r['unattached_raises_as_in_cpython'] = 'NO ERROR'
 except Exception as e:
-    r['unattached_is_a_known_gap'] = type(e).__name__
+    r['unattached_raises_as_in_cpython'] = type(e).__name__

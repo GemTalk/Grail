@@ -171,14 +171,15 @@ testARequiredExtraConstructorArgumentStillCannotBeRebuilt
 
 category: 'Grail-Tests - Known gaps'
 method: BuiltinSubclassPickleTestCase
-testListAndDictSubclassesStillFlattenWhichIsAKnownGap
-	"Recorded, NOT endorsed.  CPython rebuilds a list or dict subclass through
-	the reduction's listitems / dictitems, a different mechanism from
-	__getnewargs__ -- a mutable container's contents are not constructor
-	arguments.  Not covered here, so both still come back as plain containers."
+testListAndDictSubclassesKeepTheirClass
+	"CPython rebuilds a list or dict subclass through the reduction's
+	listitems / dictitems, a different mechanism from __getnewargs__ -- a
+	mutable container's contents are not constructor arguments.  This used to
+	pin the gap (both came back as plain containers); pickle is CPython's own
+	pickle.py now, whose default reduction carries both."
 
-	self assert: (self resultAt: 'list_subclass_is_a_known_gap') asString
-		equals: 'list:[1, 2]'.
-	self assert: (self resultAt: 'dict_subclass_is_a_known_gap') asString
-		equals: 'dict:{''a'': 1}'.
+	self assert: (self resultAt: 'list_subclass_keeps_its_class') asString
+		equals: 'MyList:[1, 2]'.
+	self assert: (self resultAt: 'dict_subclass_keeps_its_class') asString
+		equals: 'MyDict:{''a'': 1}'.
 %

@@ -4741,6 +4741,14 @@ ___pythonBuiltinTypeName___
 	explicitly."
 
 	| n |
+	"A class Python code DEFINED is never one of these kernel classes, whatever
+	it is called.  Keying the table by name made ``class Object(object)'' --
+	test.picklecommon's -- report __name__ 'object', so neither pickle nor
+	anything else could find it in its module by the name it reported; the same
+	went for a Python class named String, Interval, Float, ....  ClassDefAst's
+	stamp is the exact question, as it is for pickle's _is_python_subclass."
+	(self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifTrue: [^ nil].
 	n := self @env0:name @env0:asString.
 	(#('Object') @env0:includes: n) ifTrue: [^ 'object'].
 	(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
@@ -4772,6 +4780,12 @@ ___pythonBuiltinTypeName___
 		'PySysModules')
 		@env0:includes: n) ifTrue: [^ 'dict'].
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
+	"``property'' is PropertyDescriptor -- class-named for the Smalltalk side,
+	since AbstractPropertyDescriptor's other subclass (enum.property) must not
+	share its name.  Without this ``property.__name__'' read
+	'PropertyDescriptor' and ``property.__module__'' raised, so pickle could
+	not name the builtin (test_pickle's test_builtin_types)."
+	(#('PropertyDescriptor') @env0:includes: n) ifTrue: [^ 'property'].
 	"ScaledDecimal is NOT in this table, deliberately, and the absence is the
 	point.  It used to answer 'Decimal', from when install.gs bound the Python
 	name ``Decimal'' to it and GemStone's class WAS Grail's decimal.Decimal.
@@ -5005,8 +5019,9 @@ ___pythonBuiltinExceptionNames___
 	   #IsADirectoryError #NotADirectoryError #PermissionError #ProcessLookupError
 	   #TimeoutError #IOError #EnvironmentError
 	   #ReferenceError #RuntimeError #NotImplementedError #RecursionError
+	   #PythonFinalizationError
 	   #StopAsyncIteration #StopIteration
-	   #SyntaxError #IndentationError #TabError
+	   #SyntaxError #IndentationError #TabError #_IncompleteInputError
 	   #SystemError #TypeError
 	   #ValueError #UnicodeError #UnicodeDecodeError #UnicodeEncodeError
 	   #UnicodeTranslateError
@@ -5800,6 +5815,43 @@ ___hasProtocol___: aName
 		ifTrue: [self]
 		ifFalse: [self @env0:class].
 	^ self ___protocolOwnedBy___: walker name: aName
+%
+
+category: 'Grail-Python Protocol'
+method: object
+___pyKwargsSplat___
+	"The receiver is the operand of a ``**'' in a call.  A MAPPING passes
+	through unchanged -- the callee reads it as the call's keyword dict, as it
+	always has -- and anything else raises CPython's TypeError.
+
+	There was no check at all, so ``f(**[])'' handed the LIST to f as its
+	kwargs and ``f(**5)'' the int: the callee then answered it back, or sent
+	it a dictionary message it did not understand.  functools.partial did the
+	latter, ``valuesDo:'' on an OrderedCollection, an uncatchable
+	MessageNotUnderstood that ended the session (test_pickle's
+	test_bad_newobj_ex_args builds exactly that partial).  CPython prefixes the
+	callee's name (``f() argument after ** ...''); the operand is all this
+	sees, so the message starts at ``argument''."
+
+	"Grail's own dictionaries -- a dict, any Smalltalk dictionary Grail's
+	runtime builds keywords in (datetime's replace() hands a Dictionary), and
+	the live __dict__ / globals() views -- are what callees already read
+	keywords from."
+	((self @env0:isKindOf: AbstractDictionary)
+		or: [self @env0:isKindOf: PyInstanceDict]) ifTrue: [^ self].
+	"Any other MAPPING is copied into a dict, which is what CPython hands the
+	callee in every case: a user class with keys() and __getitem__ was passed
+	through as it stood, and the callee's first dictionary message to it was
+	an uncatchable MessageNotUnderstood."
+	((self ___hasProtocolForCall___: 'keys')
+		and: [self ___hasProtocolForCall___: '__getitem__']) ifTrue: [
+			| d |
+			d := PyDict @env0:new.
+			(list @env1:__new__: self keys) @env0:do: [:k |
+				d @env0:at: k put: (self __getitem__: k)].
+			^ d].
+	^ TypeError ___signal___: ('argument after ** must be a mapping, not '
+		@env0:, (self ___pyTypeNameForError___))
 %
 
 category: 'Grail-Python Protocol'
@@ -10956,8 +11008,12 @@ __getstate__
 	when there are none, matching CPython (an empty __dict__ with no slots
 	getstates to None so the reconstructor skips restoring state)."
 
-	| names d slotDict inferredPairs |
+	| names d slotDict inferredPairs hidden |
 	names := self @env0:dynamicInstanceVariables.
+	"Leave out a builtin root's own storage -- see ___pyHiddenStateNames___."
+	(self ___respondsTo___: #'___pyHiddenStateNames___') ifTrue: [
+		hidden := self ___pyHiddenStateNames___.
+		names := names @env0:reject: [:nm | hidden @env0:includes: nm]].
 	d := nil.
 	names @env0:isEmpty ifFalse: [
 		d := dict ___new___.
@@ -14195,6 +14251,15 @@ ___pyStarToArray___
 	((self isKindOf: SequenceableCollection)
 		and: [(self isKindOf: CharacterCollection) not
 		and: [(self @env1:___iterIsPythonDefined___) not]]) ifTrue: [^ self asArray].
+	"CPython's own message for a splat of a non-iterable -- ``[*42]'' and
+	``partial(f, *42)'' both say ``Value after * must be an iterable, not
+	int'' -- rather than list()'s ``'int' object is not iterable''.  Decided
+	by the protocol probe iter() itself uses (builtins>>___pyIter___:), so the
+	same objects count as iterable here as there."
+	((self @env1:___hasProtocolForCall___: '__iter__')
+		or: [self @env1:___hasProtocolForCall___: '__getitem__']) ifFalse: [
+			^ TypeError @env1:___signal___: 'Value after * must be an iterable, not '
+				, (self @env1:___pyTypeNameForError___) asString].
 	^ (list @env1:__new__: self) asArray
 %
 

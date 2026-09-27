@@ -25,10 +25,12 @@ The shapes below separate the three things that are easy to confuse:
     a name that appears only inside an eval string, so such a name is genuinely
     out of scope.
 
-TWO SHAPES ARE XFAILS, and neither is this cut's.  Grail's caller-namespace
-walk is blind to a COMPREHENSION's own target and to a name ``exec'' binds into
-the caller's namespace; both paths answer the same wrong thing, so they are
-pinned here rather than hidden.
+ONE SHAPE IS AN XFAIL, and it is not this cut's.  Grail's caller-namespace
+walk is blind to a COMPREHENSION's own target; both paths answer the same
+wrong thing, so it is pinned here rather than hidden.  (There were two: exec()
+with a None namespace inside a function could not see the function's locals
+either, until exec gained the caller-namespace fallback eval had --
+builtins>>___grailCallerExecNamespaces___.)
 
 Everything here is verified against real CPython by running the file directly.
 """
@@ -246,7 +248,7 @@ record('three_arguments_with_none_for_locals', three_arguments_with_none_for_loc
 
 
 # --------------------------------------------------------------------------
-# The two XFAILs.
+# The XFAIL, and the former one exec() now gets right.
 # --------------------------------------------------------------------------
 
 def none_in_a_comprehension():
@@ -268,7 +270,7 @@ def exec_with_none_binds_into_the_caller():
 record('exec_with_none_binds_into_the_caller', exec_with_none_binds_into_the_caller)
 
 
-XFAIL = {'none_in_a_comprehension', 'exec_with_none_binds_into_the_caller'}
+XFAIL = {'none_in_a_comprehension'}
 
 
 EXPECTED = {
@@ -293,7 +295,7 @@ EXPECTED = {
     'none_in_a_methods_nested_def_cannot_see_the_methods_local':
         "NameError: name 'w' is not defined",
     'three_arguments_with_none_for_locals': 42,
-    # The XFAILs hold CPython's answer; Grail answers a NameError on both
+    # The XFAIL holds CPython's answer; Grail answers a NameError on both
     # paths, which EvalInNestedScopeTestCase pins.
     'none_in_a_comprehension': [2, 3, 4],
     'exec_with_none_binds_into_the_caller': 42,
