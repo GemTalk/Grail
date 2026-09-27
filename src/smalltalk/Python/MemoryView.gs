@@ -224,6 +224,24 @@ ___viewBytes___
 
 category: 'Grail-Private'
 method: memoryview
+___writableWindow___
+	"{ source bytes. byte offset. byte length } for a caller that writes into
+	this view's memory in bulk -- os.readinto, which _pyio.FileIO reads through.
+	The LIVE source, never the copy ___viewBytes___ answers for a slice, so the
+	write lands where the view points."
+
+	| bytes |
+	bytes := self ___sourceBytes___.
+	((self @env0:dynamicInstVarAt: #'readonly') @env0:= true) ifTrue: [
+		TypeError ___signal___:
+			'readinto() argument 2 must be read-write bytes-like object, not memoryview'].
+	^ { bytes.
+		self @env0:dynamicInstVarAt: #'_offset'.
+		self @env0:dynamicInstVarAt: #'_length' }
+%
+
+category: 'Grail-Private'
+method: memoryview
 ___checkReleased___
 	"A released view refuses every operation, as CPython's does."
 

@@ -237,8 +237,8 @@ testOmissionsAreDeliberate
 
 	1. os.fdopen.  CPython's FileCookieJar.save creates the cookie file
 	   mode 0600 through os.open/os.fdopen so it is never world-readable.
-	   Grail's os module has no file-descriptor layer, so the two save
-	   sites go through _open_cookie_file_for_write.
+	   Grail's os has no os.fdopen, so the two save sites go through
+	   _open_cookie_file_for_write.
 
 	   THIS TRIPWIRE FIRED, AND WORKED.  It asserted that os had none of
 	   open/fdopen/close/chmod, and os.chmod arriving broke it -- which is
@@ -247,12 +247,13 @@ testOmissionsAreDeliberate
 	   STAYS world-readable on a multi-user host, and the assertion below
 	   drops chmod from the list.
 
-	   WHAT IS LEFT is the WINDOW: between open() and chmod the file exists
-	   at the process umask, and a reader who opens it in that instant keeps
-	   a readable descriptor.  CPython's O_CREAT-with-mode has no such
-	   window.  Closing it needs os.open with a mode argument, so the three
-	   remaining names stay on the list and this test stays a tripwire for
-	   them -- and the mode itself is now checked rather than assumed.
+	   IT FIRED AGAIN when os.open and os.close arrived, and that closed
+	   the WINDOW it was still guarding: between open() and chmod the file
+	   used to exist at the process umask.  The helper now creates it with
+	   os.open and mode 0600, as CPython does, and reopens it by name.
+	   os.fdopen is the one name left -- builtin open() refuses a
+	   descriptor too -- so it alone stays on the list, and the mode is
+	   checked rather than assumed.
 
 	2. HTTPCookieProcessor.  In CPython it lives in urllib.request, not
 	   here, and it needs the opener/handler chain that Grail's urlopen()
@@ -263,10 +264,11 @@ testOmissionsAreDeliberate
 
 	self assert: (self eval:
 'import os
-len([n for n in (''open'', ''fdopen'', ''close'') if hasattr(os, n)])
-') equals: 0.
-	"os.chmod DOES exist now, and the helper uses it -- so the file's mode is
-	 READ BACK rather than the absence of a name being taken as evidence."
+repr([n for n in (''open'', ''fdopen'', ''close'') if hasattr(os, n)])
+') equals: '[''open'', ''close'']'.
+	"os.open and os.chmod DO exist now, and the helper uses them -- so the
+	 file's mode is READ BACK rather than the absence of a name being taken as
+	 evidence."
 	self assert: (self eval:
 'import http.cookiejar as m
 import os, stat

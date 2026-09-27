@@ -21,20 +21,17 @@
 # FileCookieJar.save (both LWPCookieJar and MozillaCookieJar) writes through
 # ``os.fdopen(os.open(filename, O_CREAT|O_WRONLY|O_TRUNC, 0o600), 'w')`` so the
 # cookie file is created mode 0600 and never briefly world-readable.  Grail's
-# os module still has no file-descriptor layer (no os.open, os.fdopen,
-# os.close -- only the O_* constants), so both sites go through the
-# _open_cookie_file_for_write helper defined below, which uses builtin open()
-# and then os.chmod.
+# os has os.open and os.close but no os.fdopen, and builtin open() refuses a
+# descriptor, so both sites go through the _open_cookie_file_for_write helper
+# defined below.
 #
-# WHAT IS AND IS NOT LEFT OF THAT DEVIATION.  It used to be a real security
-# difference: a saved cookie file got the process umask (typically 0644), so on
-# a multi-user host another local user could read the saved session cookies.
-# os.chmod exists now, so the helper chmods to 0600 and the file does not STAY
-# world-readable.  What remains is the WINDOW that CPython's O_CREAT-with-mode
-# closes and a create-then-chmod cannot: between open() and chmod the file
-# exists at the umask, so a reader who opens it in that instant keeps a
-# readable descriptor.  Closing that needs os.open with a mode argument.  The
-# window is worth naming rather than calling this fixed.
+# WHAT IS LEFT OF THAT DEVIATION: nothing a reader can exploit.  It began as a
+# real security difference -- a saved cookie file got the process umask
+# (typically 0644), readable by any local user -- and then narrowed to a WINDOW
+# once os.chmod arrived: between open() and chmod the file existed at the
+# umask.  The helper now CREATES the file with os.open and mode 0600, as
+# CPython does, so it never exists at the umask at all; only then is it
+# reopened by name for the text-mode writer.
 #
 # ---------------------------------------------------------------------------
 
@@ -82,13 +79,14 @@ from calendar import timegm
 def _open_cookie_file_for_write(filename):
     """Open a cookie file for writing, mode 0600 (see the Grail header).
 
-    CPython creates it 0600 atomically via os.open/os.fdopen.  Grail has no
-    file-descriptor layer, so this creates the file and then chmods it: the
-    saved cookies do not stay world-readable, but there is a window between the
-    two calls that CPython does not have.  The chmod is on the file that open()
-    just created, so a failure to apply it is an OSError the caller sees rather
-    than a silently umask-moded cookie file -- os.chmod reads the mode back.
+    CPython creates it 0600 atomically via os.open/os.fdopen.  Grail has
+    os.open but no os.fdopen, so this creates the file 0600 with os.open --
+    it never exists at the umask -- and reopens it by name.  The chmod is kept
+    for a file that ALREADY existed, whose mode O_CREAT leaves alone; os.chmod
+    reads the mode back, so a failure to apply it is an OSError the caller
+    sees rather than a silently umask-moded cookie file.
     """
+    os.close(os.open(filename, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600))
     f = open(filename, 'w')
     try:
         os.chmod(filename, 0o600)
