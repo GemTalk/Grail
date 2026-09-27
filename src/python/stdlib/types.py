@@ -81,7 +81,13 @@ class _FunctionTypeMeta(type):
 
 
 class FunctionType(metaclass=_FunctionTypeMeta):
-    pass
+    # Declared so the class ANSWERS the protocol a function has: Callable's
+    # __subclasshook__ reads ``__call__`` off each MRO class's __dict__, and
+    # issubclass(FunctionType, Callable) is True in CPython (test_typing's
+    # test_self_subclass).  Never invoked -- no instance of this class exists;
+    # every real function is one of the Grail callables the metaclass admits.
+    def __call__(self, /, *args, **kwargs):
+        raise TypeError("'function' object is not callable")
 
 
 # CPython's LambdaType IS FunctionType -- the same object under two names, a

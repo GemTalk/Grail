@@ -86,6 +86,74 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
+## FIXED: typing's NamedTuple and TypedDict are CPython's, and the metaclass protocols they need
+
+`typing.py` replaced CPython's `NamedTuple` and `TypedDict` with Grail emulations
+(GRAIL DEVIATIONS 1 and 3). Three runtime limits were recorded as the reason:
+`type.__new__` could not rebuild a class with the bases a metaclass passed it, the
+namespace a metaclass received carried no annotations, and annotations were never
+evaluated. The emulations diverged visibly: `__bases__` read `(_TypedDictBase,
+Generic)` where CPython reads `(Generic, dict)`, `__orig_bases__` was missing, and
+the key sets were computed by a different algorithm.
+
+**Now** `typing.py` is CPython 3.14.6's byte for byte except GRAIL DEVIATION 2
+(`overload`), and `tests/python/metaclass_protocols.py` pins what made that possible
+(19 checks, CPython-measured):
+
+- **`type.__new__` builds the class a metaclass asks for.** When the bases differ
+  from the ones the class statement was building, it builds a fresh class from the
+  namespace, and the statement re-binds its name to it. That class is stamped in its
+  committed holder, so a re-import's class statement does not read its bases as a
+  declared base change (`importlib >> ___isMetaclassBuilt___:`).
+- **The metaclass namespace is CPython's.** `__module__` and `__qualname__` are
+  written first, before the body runs. `__orig_bases__` is added where
+  `__mro_entries__` substituted a base, and the stringified `__annotations__` under
+  `from __future__ import annotations`. A class without a docstring no longer
+  offers the namespace a `__doc__`.
+- **Calling a metaclass builds a class.** `M('X', (), {})` answered an `M`
+  *instance*, not a class. It builds a class of type `M` now, and the wrong argument
+  count is CPython's TypeError. An assigned metaclass `__call__` (`_TypedDictMeta`'s
+  `__call__ = dict`) is honoured.
+- **The metaclass comes from every base.** Only the first base's chain was searched,
+  so `class A(Generic[T], TypedDict)` never ran `_TypedDictMeta`, and `class X(Mixin,
+  ABC)` never enforced its abstract methods. The most derived metaclass among all
+  the bases is recorded when the namespace is prepared.
+- **A directly-built class keeps its metaclass after deployment.** `_NamedTuple` and
+  `_TypedDict` are minted by `type.__new__(M, ...)` at module level, and that record
+  was session-local, so a deployed `typing` lost both (jinja2's `Token`, a NamedTuple,
+  lost its fields). Such records are committed per module and restored on bind
+  (`importlib >> ___recordDirectMetaclass___:meta:`).
+- **Class-level reads follow the MRO.** A name CPython's `object` defines, or one the
+  class's own chain defines, is found there before a metaclass's plain method. An
+  inherited read is the defining class's object (`B.__init__ is A.__init__`):
+  `UnboundMethod class >> ___forClassRead___:family:selector:` now interns a
+  Python-defined class's read under its definer, where #1205 redirected only
+  what a class inherits from `object`; built-in types keep that rule. A
+  subclass's own `def` beats an attribute assigned on a base, which is what made a
+  concrete subclass of a `Protocol` run the protocol's refusal instead of its own
+  `__init__`.
+- **defaultdict and OrderedDict have their own `__repr__`.** An inherited method
+  now compares equal to the base's, and pprint keys its dispatch on
+  `type(obj).__repr__`, so the borrowed repr let the defaultdict entry replace
+  dict's and a plain dict too wide for one line crashed pprint. The two methods are
+  #1206's, taken verbatim.
+- **Merging a second base's methods checks by Python name.** `class S(dict,
+  MutableMapping)` copied the abstract `___iter__:kw:` because `dict` supplies the
+  unary `__iter__`. The ancestors are compared by name now; the class's own
+  dictionary, where the merge is writing, stays exact.
+- **A method held as an attribute answers a self-send.** NamedTupleMeta copies a
+  body's methods onto the class `collections.namedtuple` built. A sibling call inside
+  one is a plain Smalltalk send, which now falls back to the class attribute.
+- **CPython's refusals.** Subclassing `TypeVar`, `ParamSpec`, `TypeVarTuple`,
+  `P.args`/`P.kwargs`, `NoDefault`'s type, `re.Pattern`/`re.Match`, a union
+  instance or a type variable instance raises CPython's message. An error raised by
+  `__mro_entries__` propagates instead of being swallowed. `type.__instancecheck__`
+  and `type.__subclasscheck__` exist for `super()` from a metaclass.
+- Smaller: `typing.Pattern` prints as `typing.Pattern`;
+  `issubclass(types.FunctionType, Callable)` is True; `inspect.getattr_static` reads
+  class dicts again (it treated `type.__dict__['__dict__']` as a shadowing binding);
+  a starred vararg annotation (`*args: *Ts`) compiles to `(*Ts,)[0]`.
+
 ## FIXED: abc and collections.abc are CPython's, and the machinery that exposed
 
 Grail's `abc` was a stub: `ABCMeta` created nothing, `abc.ABC` had no
@@ -231,28 +299,37 @@ uses, so the change is tier 2 (0 regressions across the corpus):
 
 ### What is left, grouped by cause
 
-The abc / collections.abc / GenericAlias group is closed (see the section
-above): with it, **701 tests, 79 failures, 26 errors**. The largest groups
-still open:
+The abc / collections.abc / GenericAlias group closed at **701 tests, 79
+failures, 26 errors**; the NamedTuple / TypedDict / metaclass-protocol group
+(see *typing's NamedTuple and TypedDict are CPython's* above) at **47 failures,
+19 errors**. The largest groups still open:
 
-- **TypedDict and NamedTuple (~35).** Both are Grail's own emulations (GRAIL
-  DEVIATIONs 2 and 3 in `typing.py`), because `type.__new__` called from a
-  metaclass cannot rewrite the bases and class-body annotations are never
-  evaluated; their `__bases__`, `__mro__`, `__orig_bases__` and key sets
-  diverge.
-- **A TypeError CPython raises and Grail does not (~25).** A class without
+- **A TypeError CPython raises and Grail does not (~20).** A class without
   `__class_getitem__` answers itself when subscripted (`object`'s lenient
-  default), calling a metaclass with no arguments builds an instance, and
-  subclassing `TypeVar` / `ParamSpec` / `NoDefault`'s type succeeds.
-- **`get_type_hints` on classes and modules**, `__no_type_check__` on
-  methods, and `*`-unpack in call sites (`def f(*args: *Ts)`).
+  default: `Any[int]`, `Protocol[int]`); `object.__init__` / `object.__new__`
+  accept extra arguments; a non-type base without `__mro_entries__`, or one
+  whose `__mro_entries__` answers a non-type, is accepted; `NamedTuple` and
+  `TypedDict` multiple inheritance is not refused; iterating a class is not.
+- **`*`-unpack in call sites (~4).** `Unpack`, `*Ts` in a base list and
+  `class X(*bases)` still raise "`*`-unpack in call sites is not yet
+  supported".
+- **`get_type_hints` and `__no_type_check__` (~8).** Class and module hints come
+  back empty or unordered; `@no_type_check` does not reach methods, nested
+  classes or class/static methods (a BoundMethod refuses the attribute).
+- **`__parameters__` of a generic subclass (~4)** is not collected when the
+  class is built through an `__orig_bases__` chain, and TypeVar defaults are
+  not filled in during specialization.
+- **`__slots__` (~3).** A class with `__slots__` still accepts other
+  attributes, and a Protocol isinstance check through `__slots__` differs.
 - **A module body's store on another module's class is lost in a later
   session.** `typing`'s `_DeprecatedGenericAlias` sets `_removal_version` on
   `collections.abc.ByteString`; the store goes to the deploy session's overlay
   and never commits. This is the "write side" still open in
   `docs/Persistent_Modules_and_Classes.md` §4.3.
-- The typing doctests are not collected, and `io.Reader` / `io.Writer` do
-  not exist.
+- Singles: `Union` has no `__name__` and does not accept `| 'str'`; a metaclass
+  `__setattr__` on `@final`; `@override` on a classmethod written in the wrong
+  decorator order; the typing doctests are not collected; `io.Reader` /
+  `io.Writer` do not exist.
 
 ## FIXED: `sys.path[0]` was relative, and `-m` never saw the working directory
 

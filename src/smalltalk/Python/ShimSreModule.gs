@@ -824,6 +824,22 @@ __module__
 
 category: 'Grail-Python Attribute Hook'
 classmethod: SrePattern
+__name__
+	"type(x).__name__ -- 'Pattern', as __qualname__ below.  typing names its alias
+	after the origin's __name__ (``Pattern = _alias(stdlib_re.Pattern, 1)''), so
+	the Smalltalk name leaked into ``repr(typing.Pattern)'' as typing.SrePattern."
+	^ 'Pattern'
+%
+
+category: 'Grail-Instantiation'
+classmethod: SrePattern
+___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames
+	"``class B(re.Pattern)'' -- CPython's C type has no Py_TPFLAGS_BASETYPE."
+	^ TypeError ___signal___: 'type ''re.Pattern'' is not an acceptable base type'
+%
+
+category: 'Grail-Python Attribute Hook'
+classmethod: SrePattern
 __qualname__
 	"type(pattern).__qualname__ -- CPython spells it 'Pattern', not the
 	Smalltalk class name 'SrePattern'."
@@ -1231,6 +1247,22 @@ __module__
 	"type(match).__module__ (test_re.py's test_match_repr formats its
 	regex against this)."
 	^ 're'
+%
+
+category: 'Grail-Python Attribute Hook'
+classmethod: SreMatch
+__name__
+	"type(x).__name__ -- 'Match', as __qualname__ below.  typing names its alias
+	after the origin's __name__ (``Pattern = _alias(stdlib_re.Pattern, 1)''), so
+	the Smalltalk name leaked into ``repr(typing.Match)'' as typing.SreMatch."
+	^ 'Match'
+%
+
+category: 'Grail-Instantiation'
+classmethod: SreMatch
+___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames
+	"``class B(re.Match)'' -- CPython's C type has no Py_TPFLAGS_BASETYPE."
+	^ TypeError ___signal___: 'type ''re.Match'' is not an acceptable base type'
 %
 
 category: 'Grail-Python Attribute Hook'

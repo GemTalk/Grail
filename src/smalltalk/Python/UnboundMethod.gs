@@ -294,37 +294,51 @@ definingClass: aClass selector: aSym
 category: 'Grail-Instance Creation'
 classmethod: UnboundMethod
 ___forClassRead___: aClass selector: aSym
-	"``Cls.method'' as object >> ___pyAttrLoad___ reads it off a class --
-	definingClass:selector:, except that a method Cls INHERITS FROM ``object''
-	answers object's own handle.
+	"``Cls.method'' as object >> ___pyAttrLoad___ reads it off a class; see
+	___forClassRead___:family:selector:."
 
-	CPython's ``A.__init__'' for a class that does not define one IS
-	``object.__init__'' -- one slot wrapper, compared with ``is''.  Grail
-	interned the handle per class READ THROUGH, so the two were different
-	objects, and PEP 702's @deprecated, which asks ``cls.__init__ is
-	object.__init__'' to decide whether excess arguments are an error, never
-	raised ``A() takes no arguments'' (test_warnings DeprecatedTests.test_class).
+	^ self ___forClassRead___: aClass
+		family: ((self definingClass: aClass selector: aSym)
+			___selectorFamilyFor___: aSym string: aSym @env0:asString)
+		selector: aSym
+%
 
-	Only object is redirected, and only when it is the NEAREST class on Cls's
-	superclass chain to define the name in any spelling -- ``__init__'',
-	``__init__:'', ..., ``___init__:kw:''.  Nothing between Cls and object
-	defining it is what makes resolving from object run the very method
-	resolving from Cls would.  The walk is per class, all spellings at once,
-	and NOT ___pyImplementingClass___'s: that one tries the unary spelling up
-	the whole chain first, so for ``def __init__(self, x)'' -- compiled as
-	``__init__:'' -- it finds object's unary __init__ above the class's own.
-	Inheritance between two Python classes (``C.m is B.m'') is left as it
-	was."
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+___forClassRead___: aClass family: family selector: aSym
+	"``Cls.method'' as object >> ___pyAttrLoad___ reads it off a class: the
+	handle interned under the class that DEFINES the method, so an inherited
+	read is the definer's own object, as CPython's is.
 
-	| inst family cls |
+	CPython hands back the one function the defining class's __dict__ holds:
+	``B.f is A.f'', ``P.__init__ is Protocol.__init__'' when neither defines
+	__init__ -- the test typing's Protocol.__init_subclass__ makes before it
+	installs the refusal that stops a protocol being instantiated -- and
+	``A.__init__ is object.__init__'', which PEP 702's @deprecated asks to
+	decide whether excess arguments are an error (test_warnings
+	DeprecatedTests.test_class).  Interning per class READ THROUGH made every
+	such comparison False.
+
+	For a class a Python body defined, the definer is the nearest class up the
+	chain whose own env-1 dictionary holds the name in any arity
+	(definerOf:family:selector:).  Grail's own built-in types share methods
+	down their Smalltalk chain while documenting them per type -- coroutine
+	inherits generator's ``send'' and says ``into coroutine'' -- so theirs stay
+	keyed by the class read through, except that a method nothing between the
+	class and ``object'' defines, in any spelling, answers object's handle.
+	A METACLASS's chain ends at object too, through Class and Behavior, but
+	what it inherits there is type's: ``type(A).__init__'' is type.__init__."
+
+	| inst cls |
 	inst := self definingClass: aClass selector: aSym.
 	aClass == object ifTrue: [^ inst].
 	(aClass @env0:isKindOf: Behavior) ifFalse: [^ inst].
-	"A METACLASS's superclass chain ends at object too -- through Class and
-	Behavior -- but what it inherits there is type's, not object's:
-	``type(A).__init__'' is type.__init__ in CPython."
 	aClass @env0:isMeta ifTrue: [^ inst].
-	family := inst ___selectorFamilyFor___: aSym string: aSym @env0:asString.
+	(aClass @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) == nil
+		ifFalse: [^ self definingClass: (self definerOf: aClass family: family
+				selector: aSym)
+			selector: aSym].
 	cls := aClass.
 	[cls @env0:notNil and: [cls ~~ object]] @env0:whileTrue: [
 		((cls @env0:includesSelector: aSym environmentId: 1)
@@ -335,6 +349,34 @@ ___forClassRead___: aClass selector: aSym
 		cls := cls @env0:superclass].
 	cls == object ifFalse: [^ inst].
 	^ self definingClass: object selector: aSym
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+definerOf: aClass family: family selector: aSym
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+definerOf: aClass family: family selector: aSym
+	"The nearest class up aClass's chain whose own env-1 dictionary holds the
+	name in any arity, or aClass when none does -- whatever kind of class
+	aClass is.  What EQUALITY keys on: ``S.__iter__ == dict.__iter__'' for
+	``class S(dict, ...)'' names one method, defined on KeyValueDictionary,
+	however each handle was read.  ___forClassRead___:family:selector: uses it
+	for Python-defined classes when interning."
+
+	| c |
+	c := aClass.
+	[c == nil] @env0:whileFalse: [ | md |
+		md := c @env0:methodDictForEnv: 1.
+		md @env0:notNil ifTrue: [
+			(md @env0:includesKey: aSym) ifTrue: [^ c].
+			family @env0:notNil ifTrue: [
+				family @env0:do: [:sel |
+					(sel @env0:notNil and: [md @env0:includesKey: sel]) ifTrue: [^ c]]]].
+		c := c @env0:superclass].
+	^ aClass
 %
 
 category: 'Grail-Dynamic Rebinding'
@@ -715,9 +757,27 @@ __eq__: other
 	and lets unbound handles compare by value (only Python-level
 	__eq__/__hash__, not Smalltalk =/hash)."
 
+	"...by the class that OWNS the method, not the one the handle was read
+	through.  ``super(C, E).__reduce__'' names E's chain and ``E.__reduce__''
+	is interned under object, which defines it (UnboundMethod class >>
+	___forClassRead___:family:selector:); in CPython both are object's one function."
+
 	(other isKindOf: UnboundMethod) ifFalse: [^ false].
-	^ (definingClass == (other @env0:definingClass))
-		and: [selector == (other @env0:selector)]
+	selector == (other @env0:selector) ifFalse: [^ false].
+	definingClass == (other @env0:definingClass) ifTrue: [^ true].
+	^ self ___ownerClass___ == other ___ownerClass___
+%
+
+category: 'Grail-Comparison'
+method: UnboundMethod
+___ownerClass___
+	"The class up definingClass's chain that defines this method in any arity
+	-- what equality and hashing key on."
+
+	^ UnboundMethod
+		definerOf: definingClass
+		family: (importlib @env0:___pythonNameFamilyOf___: selector)
+		selector: selector
 %
 
 category: 'Grail-Comparison'
@@ -729,9 +789,9 @@ __ne__: other
 category: 'Grail-Comparison'
 method: UnboundMethod
 __hash__
-	"Consistent with __eq__ (definingClass identity + selector)."
+	"Consistent with __eq__ (owning class identity + selector)."
 
-	^ (definingClass @env0:identityHash) @env0:bitXor: (selector @env0:hash)
+	^ (self ___ownerClass___ @env0:identityHash) @env0:bitXor: (selector @env0:hash)
 %
 
 category: 'Grail-Callable'

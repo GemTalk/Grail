@@ -863,6 +863,17 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	^ TypeError ___signal___: 'type ''typing.Union'' is not an acceptable base type'
 %
 
+category: 'Grail-Instantiation'
+method: PyUnionType
+___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames
+	"``class E(int | str)'' -- a union INSTANCE as a base.  CPython 3.14's
+	union_mro_entries refuses with ``Cannot subclass int | str''; without this
+	the instance reached object >> ___subclass___ and said ``cannot subclass a
+	non-class base (PyUnionType)'', naming the Smalltalk class."
+
+	^ TypeError ___signal___: 'Cannot subclass ' @env0:, self __repr__ @env0:asString
+%
+
 category: 'Grail-Attribute Access'
 method: PyUnionType
 __args__

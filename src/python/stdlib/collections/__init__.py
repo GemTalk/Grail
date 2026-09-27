@@ -36,6 +36,23 @@ class defaultdict(dict):
             return super().__getitem__(key)
         return self.__missing__(key)
 
+    # CPython's defaultdict has its own repr, and pprint dispatches on
+    # ``type(obj).__repr__``, keeping a separate entry for dict's and for
+    # defaultdict's.  Inherited, the two were the same method, so pprint's
+    # defaultdict entry replaced dict's and every plain dict was printed as
+    # a defaultdict (test_pickle's CommandLineTest).
+    # A defaultdict that contains itself needs no guard here: dict.__repr__
+    # catches the cycle, so the inner one prints as ``defaultdict(f, {...})'',
+    # which is CPython's output too.
+    def __repr__(self):
+        return '%s(%r, %s)' % (type(self).__name__, self.default_factory,
+                               dict.__repr__(self))
+
+
+# The OrderedDicts whose repr is being built: one that contains itself prints
+# ``...'' for the inner one, as CPython's recursive_repr makes it.
+_odict_repr_running = set()
+
 
 class OrderedDict(dict):
     """OrderedDict - dict that preserves insertion order plus a few
@@ -84,6 +101,20 @@ class OrderedDict(dict):
     def clear(self):
         super().clear()
         self._order = []
+
+    # CPython 3.12+: ``OrderedDict({'a': 1})'', ``OrderedDict()'' when empty.
+    # Its own, not dict's -- see defaultdict.__repr__ for why pprint needs the
+    # two to be different methods.
+    def __repr__(self):
+        if not self:
+            return '%s()' % (type(self).__name__,)
+        if id(self) in _odict_repr_running:
+            return '...'
+        _odict_repr_running.add(id(self))
+        try:
+            return '%s(%r)' % (type(self).__name__, dict(self.items()))
+        finally:
+            _odict_repr_running.discard(id(self))
 
     def move_to_end(self, key, last=True):
         if key not in self:

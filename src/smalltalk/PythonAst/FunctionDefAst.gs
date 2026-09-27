@@ -2810,7 +2810,19 @@ emitOneAnnotation: aNode on: aStream
 	CallAst futureAnnotations ifTrue: [
 		^ self emitStringLiteral: (aNode ___unparse___: 4) on: aStream].
 	aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
-	aNode printSmalltalkOn: aStream.
+	"PEP 646's ``*args: *Ts'' -- a STARRED annotation, which CPython's compiler
+	evaluates as ``(*Ts,)[0]'': the first element the value iterates to
+	(Unpack[Ts] for a TypeVarTuple, the unpacked alias for ``*tuple[int,
+	...]'').  Emitted as exactly that here, where the VALUE is built, so the
+	node itself stays a StarredAst and the source text below keeps CPython's
+	``*Ts''.  StarredAst's own emit raises: a bare starred value means nothing
+	anywhere else."
+	(aNode isKindOf: StarredAst)
+		ifTrue: [
+			aStream nextPutAll: '(('.
+			aNode value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ' @env0:___pyStarToArray___) @env0:at: 1)']
+		ifFalse: [aNode printSmalltalkOn: aStream].
 	aStream nextPutAll: '] source: '.
 	self emitStringLiteral: aNode ___annotationSourceString___ on: aStream.
 	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'

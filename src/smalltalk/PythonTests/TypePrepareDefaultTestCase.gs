@@ -153,7 +153,9 @@ category: 'Grail-Tests - namespace'
 method: TypePrepareDefaultTestCase
 testAMetaclassesOwnPrepareStillSuppliesOne
 	"The control for the guard: a metaclass that DEFINES __prepare__ is still
-	asked, and what it answers is the namespace -- seeded through super()."
+	asked, and what it answers is the namespace -- seeded through super().
+	The body's implicit __module__ and __qualname__ follow the metaclass's own
+	entry, as they do in CPython, where the body writes them first."
 
 	| ns |
 	ns := self ___namespaceFor___: #ScratchForSeeding
@@ -161,7 +163,7 @@ testAMetaclassesOwnPrepareStillSuppliesOne
 	self deny: ns isNil.
 	self
 		assert: ((builtins @env1:instance) @env1:repr: ns) asString
-		equals: '{''seeded'': ''by Seeding''}'
+		equals: '{''seeded'': ''by Seeding'', ''__module__'': ''type_prepare_default'', ''__qualname__'': ''ScratchForSeeding''}'
 %
 
 category: 'Grail-Tests - Controls'

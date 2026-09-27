@@ -97,10 +97,15 @@ testEveryBindingIsOfferedInSourceOrder
 	is where the body binds them.  That they arrive IN ORDER rather than in a
 	pass of their own is the part that matters: CPython executes a body top to
 	bottom, so a mapping that transforms or refuses a write has to see the
-	same sequence."
+	same sequence.
+
+	__module__ and __qualname__ come first, as a CPython body binds them before
+	its first statement.  CPython 3.13+ also offers __firstlineno__ after them
+	and __static_attributes__ last; Grail does not yet, which is the one place
+	this list and CPython's differ."
 
 	self assert: (self resultAt: 'seen') asString
-		equals: '[''__doc__'', ''plain'', ''handle'', ''in_with'', ''in_if'', ''method'', ''Nested'']'.
+		equals: '[''__module__'', ''__qualname__'', ''__doc__'', ''plain'', ''handle'', ''in_with'', ''in_if'', ''method'', ''Nested'']'.
 %
 
 category: 'Grail-Tests - The namespace sees the body'

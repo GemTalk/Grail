@@ -1047,7 +1047,9 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 		and: [existing superclass ~~ aParent
 		and: [(self ___canonicalClassKnown___: aParent)
 		and: [(self ___remintedThisSession___ includes: aParent) not
-		and: [(self ___baseChangeAllowed___: key) not]]]]) ifTrue: [
+		and: [(self ___baseChangeAllowed___: key) not
+		and: [(self ___isMetaclassBuilt___: existing) not
+		and: [(self ___isMetaclassBuilt___: aParent) not]]]]]]) ifTrue: [
 			^ ImportError @env1:___signal___:
 				'class ' , key , ' changed its bases (' ,
 				(existing superclass isNil ifTrue: ['nil'] ifFalse: [existing superclass name asString]) ,
@@ -1062,6 +1064,29 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	reg at: key put: existing.
 	minted add: key.
 	^ existing
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___isMetaclassBuilt___: aClass
+	"Was aClass built by a metaclass that REWROTE the bases -- type >>
+	__new__:_:_:_:'s fresh-class branch, which stamps it?  Such a class is
+	what the class statement's name ends up bound to, and so what the registry
+	records, but its bases are the METACLASS's (``class Movie(TypedDict)'' is a
+	dict subclass), never the header's.  Comparing the two on a re-import is
+	not a declared base change: the statement builds its class afresh and the
+	metaclass rebuilds it again, exactly as the first import did.
+
+	Asked of the new PARENT too: a metaclass-built class is minted afresh by
+	every import (collections.namedtuple builds a new class each time), so a
+	subclass of one sees a different parent under the same name -- the
+	cascade the re-mint rule above already exempts, reached by another road."
+
+	| h |
+	(aClass isKindOf: Behavior) ifFalse: [^ false].
+	h := [aClass perform: #'___dynInstVars___' env: 1]
+		on: AbstractException do: [:ex | ex return: nil].
+	^ h notNil and: [(h dynamicInstVarAt: #'___grailMetaclassBuilt___') == true]
 %
 
 category: 'Grail-Canonical Classes'
@@ -1976,7 +2001,8 @@ ___canonicalGenerationCheck___
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
 	   #'GrailCommittedSelfSendOverrides'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
-	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
+	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure'
+	   #'GrailCanonicalDirectMetaclasses' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
 	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
 	^ self
@@ -2692,6 +2718,57 @@ ___restoreCanonicalMiRecords___
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___recordDirectMetaclass___: aClass meta: aMetaclass
+	"Remember, COMMITTED, that aClass -- built by a DIRECT metaclass call while
+	a module body runs -- is an instance of aMetaclass.
+
+	A class statement's metaclass is persisted by ___canonicalClassRegister___,
+	but a class minted by ``type.__new__(M, name, bases, ns)'' or ``M(name,
+	bases, ns)'' passes through no class statement.  typing mints the two roots
+	its class syntax hangs off exactly that way:
+
+	    _NamedTuple = type.__new__(NamedTupleMeta, 'NamedTuple', (), {})
+	    _TypedDict = type.__new__(_TypedDictMeta, 'TypedDict', (), {})
+
+	The metaclass record is session-local, so once typing was deployed a later
+	session saw _TypedDict with no metaclass: ``class Movie(TypedDict)'' never
+	ran _TypedDictMeta, ``total=False'' reached __init_subclass__ as a stray
+	keyword, and every jinja2 Token -- a NamedTuple -- lost its fields.
+
+	Keyed by the module whose body made the call, and dropped when that body
+	runs again (___forgetDirectMetaclassesOf___:), so a rebuild re-records what
+	it mints rather than accumulating the classes it superseded."
+
+	| origin reg inner |
+	origin := self ___initializingModuleName___.
+	origin isNil ifTrue: [^ self].
+	((aClass isKindOf: Behavior) and: [aMetaclass isKindOf: Behavior]) ifFalse: [^ self].
+	reg := UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalDirectMetaclasses' put: reg].
+	inner := reg at: origin asString otherwise: nil.
+	inner isNil ifTrue: [
+		inner := IdentityKeyValueDictionary new.
+		reg at: origin asString put: inner].
+	inner at: aClass put: aMetaclass
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___forgetDirectMetaclassesOf___: aModuleName
+	"Drop aModuleName's direct-metaclass records before its body runs again --
+	see ___recordDirectMetaclass___:meta:.  PEEKS the registry: a module that
+	recorded none leaves nothing to write."
+
+	| reg |
+	reg := UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___restoreAllCanonicalMetaclasses___
 	"Install the committed metaclass record for EVERY deployed class that has
 	one, not just for the module being bound -- ___restoreCanonicalMiRecords___'s
@@ -2721,16 +2798,23 @@ ___restoreAllCanonicalMetaclasses___
 
 	| reg classes |
 	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
-	reg isNil ifTrue: [^ self].
 	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
-	classes isNil ifTrue: [^ self].
-	reg keysAndValuesDo: [:modName :inner |
+	(reg isNil or: [classes isNil]) ifFalse: [reg keysAndValuesDo: [:modName :inner |
 		inner isNil ifFalse: [
 			inner keysAndValuesDo: [:aClassName :meta |
 				| cls |
 				cls := classes
 					at: (modName asString , '.' , aClassName asString)
 					otherwise: nil.
+				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
+					and: [(cls @env1:___grailOwnMetaclass___) isNil]])
+						ifTrue: [cls @env1:___grailSetMetaclass___: meta]]]]].
+	"And the classes a module body minted by calling a metaclass directly --
+	see ___recordDirectMetaclass___:meta:.  Keyed by the class itself, since
+	such a class has no registry name."
+	(UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil) ifNotNil: [:direct |
+		direct keysAndValuesDo: [:modName :inner |
+			inner keysAndValuesDo: [:cls :meta |
 				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
 					and: [(cls @env1:___grailOwnMetaclass___) isNil]])
 						ifTrue: [cls @env1:___grailSetMetaclass___: meta]]]].
@@ -5503,10 +5587,15 @@ ___resolveMroEntries___: basesArray
 				see it for why there are two."
 				hook := [b @env1:___grailMroEntriesHook___]
 					on: AbstractException do: [:ex | ex return: nil].
+				"The CALL is not guarded, only the lookup above.  A hook that
+				raises is how a base says it cannot be subclassed -- ``class
+				D(Ts)'' is CPython's ``Cannot subclass an instance of
+				TypeVarTuple'', raised from TypeVarTuple.__mro_entries__ -- and
+				swallowing it left the base in place for a later, wrong
+				diagnosis about a non-class base."
 				entries := hook == nil
 					ifTrue: [nil]
-					ifFalse: [[b @env1:___grailMroEntriesFor___: origTuple hook: hook]
-						on: AbstractException do: [:ex | ex return: nil]].
+					ifFalse: [b @env1:___grailMroEntriesFor___: origTuple hook: hook].
 				entries == nil
 					ifTrue: [out add: b]
 					ifFalse: [
@@ -6207,7 +6296,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					primary chain."
 					shouldCopy := overrideMode
 						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
-						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass) not].
+						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass mergingFrom: walker) not].
 					"Never copy a base's SLOT machinery: its ___pySlotIndexFor___:
 					table holds the BASE's instVar indices, and its inferred-slot
 					accessors (``Grail-Inferred Slots'') read the base's
@@ -6396,7 +6485,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					emd := eWalker methodDictForEnv: 1.
 					emd ~~ nil ifTrue: [
 						emd keys do: [:sel |
-							((self ___primaryChainProvides___: sel forClass: aClass) not) ifTrue: [
+							((self ___primaryChainProvides___: sel forClass: aClass mergingFrom: eWalker) not) ifTrue: [
 								| cat |
 								cat := [(eWalker categoryOfSelector: sel environmentId: 1) asString]
 									on: Error do: [:e | 'Grail-MI-Inherited'].
@@ -6407,21 +6496,84 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___primaryChainProvides___: aSelector forClass: aClass
+	^ self ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: nil
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 	"True if aSelector is defined on aClass or any superclass in its
 	primary chain, EXCLUDING the universal roots (PythonInstance /
 	Object) — those defaults must be overridable by a secondary base.
-	Used by ___mergeSecondaryBases___ to decide what to inherit."
+	Used by ___mergeSecondaryBases___ to decide what to inherit.
 
-	| walker |
+	BY PYTHON NAME up the ancestors that PRECEDE aSource in the MRO.  A Python
+	class has ONE attribute per name, and the arity it compiles to is Grail's
+	detail: dict supplies ``__iter__'' as the unary selector (on
+	KeyValueDictionary), while collections.abc's abstract ``def __iter__(self)''
+	compiles to the varargs ``___iter__:kw:''.  Asking for the exact selector
+	found no ``___iter__:kw:'' and copied the abstract one onto ``class S(dict,
+	MutableMapping)'', where ABCMeta then refused to instantiate Flask's
+	NullSession for abstract __iter__ and __len__.
+
+	...but only up to the first class aSource ALSO inherits from.  Such a shared
+	ancestor comes AFTER aSource in the MRO, so what it defines is exactly what
+	aSource is entitled to override: in test_enum's ``class JobStatus(
+	CaseInsensitiveStrEnum, LenientStrEnum)'', LenientStrEnum's ``__init__''
+	precedes str's and Enum's, and asking the whole chain by name lost it.
+	aSource nil means no stop, the old unbounded walk.
+
+	aClass's own dictionary is asked EXACTLY: it is where this merge is writing
+	its copies, one selector at a time, and asked by name the first arity
+	copied (``_register:kw:'') refused the rest -- the varargs forwarder then
+	performed a fixed selector that never arrived."
+
+	| walker family |
+	family := self ___pythonNameFamilyOf___: aSelector.
 	walker := aClass.
 	[(walker ~~ nil) and: [(walker ~~ PythonInstance) and: [walker ~~ Object]]]
 		whileTrue: [
 		| md |
 		md := walker methodDictForEnv: 1.
-		(md ~~ nil and: [md includesKey: aSelector]) ifTrue: [^ true].
+		md ~~ nil ifTrue: [
+			(walker == aClass
+				ifTrue: [md includesKey: aSelector]
+				ifFalse: [
+					((aSource isKindOf: Behavior)
+						and: [aSource == walker or: [aSource inheritsFrom: walker]])
+						ifTrue: [md includesKey: aSelector]
+						ifFalse: [family anySatisfy: [:sel | md includesKey: sel]]])
+					ifTrue: [^ true]].
 		walker := walker superClass
 	].
 	^ false
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___pythonNameFamilyOf___: aSelector
+	"Every selector the Python name behind aSelector compiles to -- the unary
+	``n'', the keyword forms ``n:'' .. ``n:_:_:_:_:_:'', and the varargs
+	``_n:kw:'' -- or just aSelector itself when it is Grail plumbing (a name
+	beginning with three underscores) rather than a Python name."
+
+	| s pyName |
+	s := aSelector asString.
+	pyName := ((s size > 4) and: [(s endsWith: ':kw:') and: [(s at: 1) == $_]])
+		ifTrue: [s copyFrom: 2 to: s size - 4]
+		ifFalse: [(s indexOf: $:) > 0
+			ifTrue: [s copyFrom: 1 to: (s indexOf: $:) - 1]
+			ifFalse: [s]].
+	((pyName size >= 3) and: [(pyName copyFrom: 1 to: 3) = '___'])
+		ifTrue: [^ Array with: aSelector].
+	^ Array new: 0 streamContents: [:out | | sel |
+		out nextPut: pyName asSymbol.
+		sel := pyName , ':'.
+		out nextPut: sel asSymbol.
+		1 to: 5 do: [:i |
+			sel := sel , '_:'.
+			out nextPut: sel asSymbol].
+		out nextPut: ('_' , pyName , ':kw:') asSymbol]
 %
 
 category: 'Grail-Module Loading'
@@ -6531,6 +6683,7 @@ ___pushInitializingModule___: aName
 	only runs when canonical classes are enabled and this must run always."
 
 	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
+	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
 %
 
