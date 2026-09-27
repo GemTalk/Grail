@@ -130,7 +130,7 @@ printSmalltalkRuntimeOn: aStream
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
 	  savedCellRebindable
 	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody
-	  savedMethodBodyEmit savedMethodDynamicLocals |
+	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -1414,7 +1414,7 @@ printSmalltalkRuntimeOn: aStream
 	test.test_traceback at import -- and the attr statements are emitted at that
 	point, so a table compiled afterwards would not exist yet.  The table is a
 	literal dict of compile-time constants, depending only on the class already
-	existing, so it is safe this early.  (The doc table stays late.)"
+	existing, so it is safe this early."
 	self emitMethodCodeTableOn: aStream className: name.
 	"The ``___methodAnnotationsTable___'' (method-name -> annotate function;
 	BoundMethod >> __annotations__ walks the superclass chain consulting it) is
@@ -1424,6 +1424,73 @@ printSmalltalkRuntimeOn: aStream
 	table and answered {}.  Safe this early: the annotate blocks are BUILT when
 	the table method runs and evaluate their names only when called."
 	self emitMethodAnnotationsTableOn: aStream className: name.
+
+	"The doc / signature / receiver / type-params / static tables and the
+	synthetic ``__module__'' are early too, for one reason: a class body runs
+	statements that READ a sibling def's metadata, and anything compiled after
+	those statements does not exist yet when they run.  reprlib's
+	recursive_repr copies __module__, __doc__, __qualname__ and
+	__type_params__ onto its wrapper -- ``wrapper = recursive_repr()(wrapped)''
+	in a class body (test_reprlib's MyContainer3) -- and read here late it
+	copied the class NAME as __module__ and None as __doc__.  CPython's class
+	body likewise opens with ``__module__ = __name__''.  Every table is a
+	literal of compile-time constants, needing only the class to exist."
+	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
+	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
+	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
+	a block, so it cannot carry the def-time cascade a nested def does."
+	self emitMethodSignatureTableOn: aStream className: name.
+	"And the receiver name that table drops, so the UNBOUND read can put it
+	back -- CPython's signature(Cls.method) shows ``self''."
+	self emitMethodReceiverTableOn: aStream className: name.
+	"And the same for docstrings.  A class-body def compiles to a Smalltalk
+	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
+	nested def does -- which left every method inheriting Object's own
+	__doc__ and claiming to be documented as ``The base class of the class
+	hierarchy...''."
+	self emitMethodDocTableOn: aStream className: name.
+	self emitMethodTypeParamsTableOn: aStream className: name.
+	self emitStaticMethodTableOn: aStream className: name.
+
+	"Compile the synthetic ``__module__'' accessor + setter on every
+	class (unless the user already declared ``__module__'' in the
+	class body — re._constants's PatternError sets ``__module__ =
+	're''').  Holder-backed, like every class attribute."
+	(classAttrs anySatisfy: [:p | p key == #'__module__']) ifFalse: [
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '__module__
+	^ self ___classAttrOwnOrInherited___: #''__module__'''
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '__module__: ___1
+	self ___classHolderAttrStore___: #''__module__'' put: ___1.'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		"__module__ is the defining module's dotted NAME STRING (CPython
+		semantics), emitted as a compile-time literal via the enclosing
+		ModuleAst.  Never the module instance — see
+		___enclosingModuleName___ for the reachability rationale.
+
+		EXCEPT IN A DOIT, where the literal was always '__main__' and so
+		ignored the globals exec() was handed (GemTalk/Grail#1170).  CPython's
+		class body opens with ``__module__ = __name__'', a run-time read of
+		the globals, so a doit's class reads its ``__name__'' when it runs.
+		Still a string, so the reachability constraint holds."
+		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
+		self ___readsModuleNameAtRunTime___
+			ifTrue: [aStream nextPutAll:
+				'(((Python @env0:at: #builtins) instance) ___doitModuleName___: ___pyGlobals___)']
+			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
+		aStream nextPutAll: '.'; lf.
+	].
+
 
 	"``___receiverlessMethods___'' is early for the SAME reason, and it is a
 	call rather than a read that needs it: a class body may CALL a sibling
@@ -1923,64 +1990,6 @@ printSmalltalkRuntimeOn: aStream
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
-	"(The class-side ``___methodAnnotationsTable___'' is compiled EARLY, beside
-	 ___methodCodeTable___ -- see there.)"
-	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
-	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
-	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
-	a block, so it cannot carry the def-time cascade a nested def does."
-	self emitMethodSignatureTableOn: aStream className: name.
-	"And the receiver name that table drops, so the UNBOUND read can put it
-	back -- CPython's signature(Cls.method) shows ``self''."
-	self emitMethodReceiverTableOn: aStream className: name.
-	"And the same for docstrings.  A class-body def compiles to a Smalltalk
-	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
-	nested def does -- which left every method inheriting Object's own
-	__doc__ and claiming to be documented as ``The base class of the class
-	hierarchy...''."
-	self emitMethodDocTableOn: aStream className: name.
-	self emitMethodTypeParamsTableOn: aStream className: name.
-	self emitStaticMethodTableOn: aStream className: name.
-
-	"Compile the synthetic ``__module__'' accessor + setter on every
-	class (unless the user already declared ``__module__'' in the
-	class body — re._constants's PatternError sets ``__module__ =
-	're''').  Holder-backed, like every class attribute."
-	(classAttrs anySatisfy: [:p | p key == #'__module__']) ifFalse: [
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: '__module__
-	^ self ___classAttrOwnOrInherited___: #''__module__'''
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: '__module__: ___1
-	self ___classHolderAttrStore___: #''__module__'' put: ___1.'
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		"__module__ is the defining module's dotted NAME STRING (CPython
-		semantics), emitted as a compile-time literal via the enclosing
-		ModuleAst.  Never the module instance — see
-		___enclosingModuleName___ for the reachability rationale.
-
-		EXCEPT IN A DOIT, where the literal was always '__main__' and so
-		ignored the globals exec() was handed (GemTalk/Grail#1170).  CPython's
-		class body opens with ``__module__ = __name__'', a run-time read of
-		the globals, so a doit's class reads its ``__name__'' when it runs.
-		Still a string, so the reachability constraint holds."
-		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
-		self ___readsModuleNameAtRunTime___
-			ifTrue: [aStream nextPutAll:
-				'(((Python @env0:at: #builtins) instance) ___doitModuleName___: ___pyGlobals___)']
-			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
-		aStream nextPutAll: '.'; lf.
-	].
-
 	"Compile the ``___dynInstVars___'' accessor + setter pair on every class.
 	The slot holds an Object new whose dynamic instVars serve as the
 	per-class dictionary for dynamically-set Python attributes
@@ -2358,10 +2367,12 @@ printSmalltalkRuntimeOn: aStream
 	stores its result over the compiled method in the per-class attribute
 	store, and a plain ``Cls name'' send looks for a compiled metaclass method
 	that is not there."
+	readInOrder := self ___classBodyAliasesReadInOrder___.
 	classAttrs do: [:pair |
 		(pair value notNil
 			and: [(pair value isKindOf: NameAst)
-			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
+			and: [(siblings includes: pair value id asSymbol)
+			and: [(readInOrder includes: pair key asSymbol) not]]]) ifTrue: [
 				"Marked store helper rather than a bare setter send -- see the
 				attribute-value emit above and ___grailClassAttrSetterDiverts___."
 				aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
@@ -3843,10 +3854,11 @@ ___classBodyMethodAliases___
 		(d compilesAsVarargs not and: [d applicableMethodDecorators isEmpty])
 			ifTrue: [defsByName at: d name asSymbol put: d]].
 	aliases := OrderedCollection new.
-	body body do: [:stmt |
+	body body doWithIndex: [:stmt :pos |
 		((stmt isKindOf: AssignAst)
 			and: [(stmt value isKindOf: NameAst)
-			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]]) ifTrue: [
+			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst])
+			and: [(self ___classBodyName___: stmt value id asSymbol isReboundAfter: pos) not]]]) ifTrue: [
 				| origDef |
 				origDef := defsByName at: stmt value id asSymbol ifAbsent: [nil].
 				origDef ifNotNil: [
@@ -3857,6 +3869,54 @@ ___classBodyMethodAliases___
 							or: [defsByName includesKey: t id asSymbol]) ifFalse: [
 								aliases add: t id asSymbol -> origDef]]]]].
 	^ aliases
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyName___: aSymbol isReboundAfter: aPosition
+	"Does a class-body statement AFTER position aPosition bind aSymbol again?
+
+	An alias ``b = a'' of a sibling def is compiled two ways that both assume
+	``a'' ends the body meaning what it meant at the alias: as a delegating
+	method (``b ^ self a''), or re-pointed after the decorators run, reading
+	``a'' then.  Right for a DECORATED ``a'' -- by CPython's order the decorator
+	had already run when the alias did -- and wrong when a LATER statement
+	rebinds ``a'':
+
+	    f = __repr__
+	    __repr__ = recursive_repr()(__repr__)
+
+	CPython's ``f'' is the original function; both of Grail's forms made it the
+	wrapper (test_reprlib's test__wrapped__, ``X.f is X.__repr__.__wrapped__'').
+	An alias whose target is rebound later is therefore left as an ordinary
+	class attribute, evaluated where it stands."
+
+	| rebound |
+	rebound := false.
+	body body doWithIndex: [:stmt :pos |
+		(pos > aPosition and: [(stmt ___boundTargetNames___ includes: aSymbol)
+			and: [((stmt isKindOf: AssignAst)
+				and: [(stmt value isKindOf: NameAst) and: [stmt value id asSymbol == aSymbol]]) not]])
+			ifTrue: [rebound := true]].
+	^ rebound
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyAliasesReadInOrder___
+	"The alias names (``b'' of ``b = a'', a a sibling def) whose target is
+	rebound by a later statement -- see ___classBodyName___:isReboundAfter:.
+	The post-decorator re-pointing skips these."
+
+	| names |
+	names := IdentitySet new.
+	body body doWithIndex: [:stmt :pos |
+		((stmt isKindOf: AssignAst)
+			and: [(stmt value isKindOf: NameAst)
+			and: [self ___classBodyName___: stmt value id asSymbol isReboundAfter: pos]])
+			ifTrue: [stmt targets do: [:t |
+				(t isKindOf: NameAst) ifTrue: [names add: t id asSymbol]]]].
+	^ names
 %
 
 category: 'Grail-Class Compilation'

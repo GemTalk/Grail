@@ -379,7 +379,12 @@ __type_params__
 	names := attrs @env0:staticSlotAt: self attr: '___typeParamNames___'.
 	built := (names == nil or: [names @env0:isEmpty])
 		ifTrue: [#()]
-		ifFalse: [names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n]].
+		ifFalse: [ | g |
+			"The live module namespace the def was written in -- what
+			``f.__globals__'' answers, computed by ExecBlockAttrs."
+			g := [attrs @env0:___globalsFor___: self]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n globals: g]].
 	^ attrs @env0:slotAt: self attr: '__type_params__'
 		put: ((ExecBlock @env0:___pyTupleClass___) @env0:withAll: built)
 %
@@ -462,8 +467,36 @@ ___pyTypeVarNamed___: aName
 	bare name STRING when typing cannot be had -- __type_params__ must answer
 	something rather than fail, since functools.update_wrapper copies it."
 
-	| bare kind typing kw |
+	^ self ___pyTypeVarNamed___: aName globals: nil
+%
+
+classmethod: ExecBlock
+___pyTypeVarNamed___: aName globals: aGlobalsOrNil
+	"The one builder, with the defining module's globals for a BOUND.
+
+	aName is the parser's entry (PythonParser >> skipTypeParams): the kind
+	prefix, the name, and optionally ``:b<hex>'' (a bound) or ``:c<hex>''
+	(constraints) carrying the bound's source.  The source is evaluated HERE, on
+	first read of __type_params__ -- CPython evaluates a PEP 695 bound lazily
+	too -- in aGlobalsOrNil, the defining module's namespace, which is where
+	CPython's annotation scope finds the builtins and module-level names a
+	bound almost always names.  A bound naming something only an enclosing
+	FUNCTION sees cannot be found there; it is dropped (None), which is what
+	every bound was before, rather than making the read fail.  (test_reprlib's
+	test__type_params__: ``T.__bound__ is str''.)"
+
+	| bare kind typing kw spec tpBound tpConstraints args idx |
 	bare := aName @env0:asString.
+	idx := bare @env0:indexOf: $:.
+	idx @env0:> 0 ifTrue: [
+		spec := bare @env0:copyFrom: idx @env0:+ 1 to: bare @env0:size.
+		bare := bare @env0:copyFrom: 1 to: idx @env0:- 1.
+		tpBound := self ___pyEvalTypeParamBound___: (spec @env0:copyFrom: 2 to: spec @env0:size)
+			globals: aGlobalsOrNil.
+		(tpBound @env0:notNil and: [(spec @env0:at: 1) == $c]) ifTrue: [
+			tpConstraints := [tpBound @env1:___pyAttrLoad___: #'__len__'. tpBound]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			tpBound := nil]].
 	kind := #'TypeVar'.
 	((bare @env0:size > 2) and: [(bare @env0:copyFrom: 1 to: 2) @env0:= '**'])
 		ifTrue: [bare := bare @env0:copyFrom: 3 to: bare @env0:size. kind := #'ParamSpec']
@@ -484,9 +517,54 @@ ___pyTypeVarNamed___: aName
 		ifTrue: [nil]
 		ifFalse: [((Python @env0:at: #'PyDict') @env0:new)
 			@env0:at: 'infer_variance' put: true; @env0:yourself].
-	^ [(typing @env1:___pyAttrLoad___: kind) @env1:___pyCallValue___: { bare } kw: kw]
+	args := { bare }.
+	kind == #'TypeVar' ifTrue: [
+		tpBound @env0:notNil ifTrue: [kw @env0:at: 'bound' put: tpBound].
+		tpConstraints @env0:notNil ifTrue: [
+			args := args @env0:, (Array @env0:withAll: tpConstraints)]].
+	^ [(typing @env1:___pyAttrLoad___: kind) @env1:___pyCallValue___: args kw: kw]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: bare]
+%
+
+classmethod: ExecBlock
+___pyGlobalsOfClass___: aClass
+	"The globals of the module that defined aClass -- a Python class, or a
+	module's own class for a module-level def -- or nil when they cannot be
+	found.  Where a class-side table's PEP 695 bounds are evaluated."
+
+	^ [| mod name none |
+		none := ExecBlock @env0:___pyNone___.
+		(aClass @env0:inheritsFrom: (Python @env0:at: #module))
+			ifTrue: [mod := aClass @env0:___instance___]
+			ifFalse: [
+				name := aClass @env1:___pyAttrLoad___: #'__module__'.
+				mod := ((Python @env0:at: #sys) @env0:___instance___ @env1:___pyAttrLoad___: #'modules')
+					@env1:get: name _: none].
+		mod == none
+			ifTrue: [nil]
+			ifFalse: [mod @env1:___pyAttrLoad___: #'__dict__']]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+classmethod: ExecBlock
+___pyEvalTypeParamBound___: aHex globals: aGlobalsOrNil
+	"Decode the hex-encoded source of a PEP 695 bound and evaluate it in
+	aGlobalsOrNil with Python's eval.  nil when there are no globals to look in,
+	or the expression cannot be evaluated there."
+
+	| bytes src |
+	aGlobalsOrNil @env0:isNil ifTrue: [^ nil].
+	aGlobalsOrNil == ExecBlock @env0:___pyNone___ ifTrue: [^ nil].
+	bytes := ByteArray @env0:new: aHex @env0:size @env0:// 2.
+	1 to: bytes @env0:size do: [:i |
+		bytes @env0:at: i put: (Integer @env0:fromHexString:
+			(aHex @env0:copyFrom: i @env0:* 2 @env0:- 1 to: i @env0:* 2))].
+	src := [bytes @env0:decodeFromUTF8] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	src @env0:isNil ifTrue: [^ nil].
+	^ [((Python @env0:at: #builtins) @env1:instance)
+			@env1:_eval: { src @env0:asString. aGlobalsOrNil } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 classmethod: ExecBlock
@@ -512,7 +590,8 @@ ___pyTypeParamsForClass___: aClass name: aName table: aTable
 	key := aName @env0:asString.
 	tup := perClass @env0:at: key otherwise: nil.
 	tup == nil ifFalse: [^ tup].
-	built := aTable @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n].
+	built := aTable @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n
+		globals: (ExecBlock @env0:___pyGlobalsOfClass___: aClass)].
 	tup := (ExecBlock @env0:___pyTupleClass___) @env0:withAll: built.
 	perClass @env0:at: key put: tup.
 	^ tup

@@ -664,8 +664,9 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	is entitled to see the change -- after ``del D.m'', ``d.m'' must find the
 	inherited method, and it carries the very selector the capture does.  The
 	generation stamped at construction is what separates them."
-	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt])
-		ifTrue: [^ aSelector].
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= GrailPinGeneration]])
+			ifTrue: [^ aSelector].
 	"A selector pinned on ONE class must not redirect a same-named send to an
 	unrelated one; the shadow existing is the proof that this receiver is the
 	one that was pinned.  Only pinned selectors pay for the check."
@@ -751,7 +752,25 @@ ___grailSessionPinHolder___
 	holder == nil ifFalse: [^ holder].
 	holder := SymbolDictionary @env0:new.
 	holder @env0:at: #'___grailSessionPins___' put: IdentityKeyValueDictionary @env0:new.
-	holder @env0:at: #'___grailSessionPinGeneration___' put: 0.
+	"THE FIRST GENERATION IS THE CLOCK, not 0.  A stamp outlives the session
+	that made it: a handle a decorator captured while a module was being
+	deployed is COMMITTED inside the wrapper, and a later session that binds
+	the module replays the store -- dispatcher, shadow, pin -- under ITS OWN
+	generations.  Counting from 0 in every session made that comparison
+	meaningless: the deploy session had pinned hundreds of selectors before
+	typing's ``@_tp_cache def __getitem_inner__'' captured its handle, the
+	binding session's replayed pin came out lower, the capture read as a
+	lookup made AFTER the pin and ran the dispatcher, whose override is the
+	wrapper holding that capture -- a stack overflow on the first
+	``Callable[[], bytes]'' (werkzeug's ClosingIterator) in every session
+	after a fresh deploy.  Milliseconds shifted 20 bits leave a million pins
+	per millisecond before one session's counter reaches the next one's
+	start, and stay a SmallInteger for decades; so a stamp from any earlier
+	session is below every pin of this one, and redirects.  The readers
+	treat a stamp ABOVE this session's current generation (one committed by
+	a session that started later) as foreign too."
+	holder @env0:at: #'___grailSessionPinGeneration___'
+		put: (System @env0:_timeMs @env0:- 1767225600000) @env0:* 1048576.
 	temps @env0:at: #'GrailPinHolder' put: holder.
 	{ { self @env0:class. #'___grailPinGeneration___'. 1 }.
 	  { self @env0:class. #'___grailPinnedAt___:'. 1 }.

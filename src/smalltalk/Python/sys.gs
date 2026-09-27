@@ -511,8 +511,9 @@ stdout
 category: 'Grail-Accessors'
 method: sys
 stdin
-	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924).  There is no
-	default __stdin__, so an unredirected read still reaches None."
+	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924).  The default is
+	the console's input stream, a PyConsoleStream named ``<stdin>'', as
+	__stdout__ / __stderr__ are its output streams."
 
 	| reg |
 	reg := sys ___sessionStreams___.
@@ -526,7 +527,12 @@ stdin
 category: 'Grail-Accessors'
 method: sys
 __stdin__
-	^ self @env0:at: #__stdin__
+	"SESSION-RESOLVED alongside ``stdin'' -- see ``__stderr__''.  It used to
+	read the instance slot bare, and there was no such slot, so a read was an
+	uncatchable Smalltalk LookupError rather than any Python answer at all."
+
+	^ sys ___sessionStreams___ @env0:at: #'__stdin__'
+		ifAbsent: [self @env0:at: #__stdin__ ifAbsent: [None]]
 %
 
 
@@ -1986,6 +1992,7 @@ initialize_runtime_info
 	for where the writes go and for why print does not change route."
 	self @env0:at: #__stdout__ put: (PyConsoleStream @env0:___named___: '<stdout>').
 	self @env0:at: #__stderr__ put: (PyConsoleStream @env0:___named___: '<stderr>').
+	self @env0:at: #__stdin__ put: (PyConsoleStream @env0:___named___: '<stdin>').
 %
 
 
@@ -2014,6 +2021,7 @@ ___sessionStreams___
 		reg := IdentityKeyValueDictionary @env0:new.
 		reg @env0:at: #'__stdout__' put: (PyConsoleStream @env0:___named___: '<stdout>').
 		reg @env0:at: #'__stderr__' put: (PyConsoleStream @env0:___named___: '<stderr>').
+		reg @env0:at: #'__stdin__' put: (PyConsoleStream @env0:___named___: '<stdin>').
 		SessionTemps @env0:current @env0:at: #GrailSysStreams put: reg].
 	^ reg
 %

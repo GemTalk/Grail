@@ -387,7 +387,8 @@ __type_params__
 		ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
 	"One builder for every shape, which also reads the ``*Ts'' / ``**P'' kind
 	 prefix -- a TypeVarTuple or ParamSpec was built as a TypeVar here."
-	vars := names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n].
+	vars := names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n
+		globals: (ExecBlock @env0:___pyGlobalsOfClass___: self)].
 	"BUILT ONCE, then cached where the ``assigned'' branch above reads it.  A
 	 class's type parameters are FIXED objects: ``(T,) = Gen.__type_params__''
 	 followed by a second read must answer the same T, and everything that

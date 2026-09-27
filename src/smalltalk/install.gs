@@ -661,6 +661,7 @@ run
 	at: #'AsyncWithCopyContractsTestCase' put: nil;
 	at: #'AsyncWithProtocolTestCase' put: nil;
 	at: #'AsyncgenShutdownHooksTestCase' put: nil;
+	at: #'ReprlibConformanceTestCase' put: nil;
 	at: #'AsyncioEagerTaskTestCase' put: nil;
 	at: #'AsyncioExceptionsTestCase' put: nil;
 	at: #'AsyncioIoTestCase' put: nil;
@@ -2074,6 +2075,7 @@ input src/smalltalk/PythonTests/AsyncForEdgesTestCase.gs
 input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
 input src/smalltalk/PythonTests/AsyncGenExpTestCase.gs
 input src/smalltalk/PythonTests/AsyncgenShutdownHooksTestCase.gs
+input src/smalltalk/PythonTests/ReprlibConformanceTestCase.gs
 input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
 input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
 input src/smalltalk/PythonTests/AsyncioIoTestCase.gs

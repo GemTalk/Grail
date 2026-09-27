@@ -237,15 +237,94 @@ exp: x
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
-___logHugeInt___: x
-	"Natural log of a positive integer too large to represent as a float:
-	ln(x) = ln(x >> shift) + shift*ln(2), keeping ~52 significant bits so
-	the reduced value converts to a finite float (log(10**1000))."
+___intFitsFloat___: x
+	"Does integer x convert to a FINITE float?  CPython's log family takes
+	the plain float path exactly then, and the frexp path only when the
+	conversion would overflow (loghelper in mathmodule.c)."
 
-	| shift |
-	shift := x @env0:highBit @env0:- 52.
-	^ ((x @env0:bitShift: shift @env0:negated) @env0:asFloat) @env0:ln
-		@env0:+ (shift @env0:* (2.0 @env0:ln))
+	| n |
+	n := x @env0:abs @env0:highBit.
+	n @env0:<= 1023 ifTrue: [^ true].
+	n @env0:> 1024 ifTrue: [^ false].
+	^ (x @env0:asFloat @env0:_getKind) @env0:~= 3
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+___libmLog10___
+	"libm's log10 as a CCallout, or false where it cannot be had.  Per session,
+	in SessionTemps, because a CCallout wraps per-process C state (os.gs keeps
+	its libc callouts the same way).
+
+	Why not Float>>log10: GemStone's primitive (_mathPrim: 9) is NOT libm's
+	log10 -- measured, 1000.0 log10 answers 2.9999999999999996 and 1e300
+	answers 299.99999999999994, where libm, and so CPython, answer 3.0 and
+	300.0.  Float>>ln and Float>>log2 do agree with libm.  Each candidate
+	library is proved by a real call before it is kept."
+
+	^ SessionTemps @env0:current @env0:at: #'Grail_math_log10' ifAbsentPut: [
+		| found |
+		found := false.
+		#('libm.dylib' 'libm.so.6') @env0:do: [:libName |
+			found == false ifTrue: [
+				found := [| c |
+					c := CCallout @env0:library: (CLibrary @env0:named: libName)
+						name: 'log10' result: #'double' args: #(#'double').
+					((c @env0:callWith: { 1000.0 }) @env0:= 3.0)
+						ifTrue: [c] ifFalse: [false]]
+					@env0:on: Error do: [:ex | ex @env0:return: false]]].
+		found]
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+___log10Of___: aFloat
+	"Base-10 log of a positive finite float, from libm when it is available
+	(see ___libmLog10___ for why not Float>>log10)."
+
+	| c |
+	c := self ___libmLog10___.
+	c == false ifTrue: [^ aFloat @env0:log10].
+	^ c @env0:callWith: { aFloat }
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+___hugeIntFrexp___: x
+	"CPython's _PyLong_Frexp for a positive integer: { m. e } with x = m * 2**e
+	and 0.5 <= m < 1, m CORRECTLY ROUNDED to a double.  The top 60 bits are
+	converted, with a sticky low bit standing for everything shifted out, so
+	the one rounding the float conversion does is the right one."
+
+	| n shift top |
+	n := x @env0:highBit.
+	shift := n @env0:- 60.
+	top := x @env0:bitShift: shift @env0:negated.
+	((x @env0:bitAnd: ((1 @env0:bitShift: shift) @env0:- 1)) @env0:= 0)
+		ifFalse: [top := top @env0:bitOr: 1].
+	^ { (top @env0:asFloat) @env0:/ (2.0 @env0:raisedTo: 60). n }
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+___logHugeInt___: x
+	"Natural log of a positive integer too large for a float, as CPython
+	computes it: ln(m) + e*ln(2) over x's frexp.  (It used to be
+	ln(x >> shift) + shift*ln(2) over a TRUNCATED 52-bit mantissa, and
+	log10 then divided by ln(10) -- two extra roundings, which is how
+	log10(10**400) came out 399.99999999999994 and reprlib reported an
+	integer's digit count one short, test_reprlib's test_numbers.)
+
+	The last ulp can still differ from a given CPython build, and that is
+	CPython's platform variance, not ours: clang on arm64 contracts
+	``func(x) + func(2.0) * e'' into one fused multiply-add, so macOS CPython
+	rounds once where a build without FMA rounds twice, as this does.
+	Measured on 3.14.6/arm64: math.fma(...) reproduces all of its huge-int
+	log, log2 and log10 results; the two-step sum misses about one in ten."
+
+	| me |
+	me := self ___hugeIntFrexp___: x.
+	^ ((me @env0:at: 1) @env0:ln) @env0:+ ((me @env0:at: 2) @env0:* (2.0 @env0:ln))
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -259,7 +338,7 @@ ___naturalLog___: x
 		"An integer argument carries no float value in its message (it could
 		be huge): CPython says just ``expected a positive input''."
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'expected a positive input'].
-		(x @env0:highBit @env0:> 1023) ifTrue: [^ self ___logHugeInt___: x]].
+		(self ___intFitsFloat___: x) ifFalse: [^ self ___logHugeInt___: x]].
 	f := self ___real___: x.
 	f @env0:<= 0.0 ifTrue: [
 		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
@@ -289,13 +368,18 @@ log10: x
 	natural log (log10(10**1000) = 1000) rather than overflowing."
 
 	| f |
-	((x isKindOf: Integer) and: [x @env0:highBit @env0:> 1023]) ifTrue: [
+	((x isKindOf: Integer) and: [(self ___intFitsFloat___: x) not]) ifTrue: [
+		| me |
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
-		^ (self ___logHugeInt___: x) @env0:/ (10.0 @env0:ln)].
+		"CPython's loghelper: log10(m) + e*log10(2) over the frexp."
+		me := self ___hugeIntFrexp___: x.
+		^ (self ___log10Of___: (me @env0:at: 1)) @env0:+ ((me @env0:at: 2) @env0:* (self ___log10Of___: 2.0))].
 	f := self ___real___: x.
 	f @env0:<= 0.0 ifTrue: [
 		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
-	^ f @env0:log10
+	"A NaN or inf goes to the primitive, which answers them as libm does."
+	((f @env0:_isNaN) or: [(f @env0:_getKind) @env0:= 3]) ifTrue: [^ f @env0:log10].
+	^ self ___log10Of___: f
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -313,7 +397,11 @@ log2: x
 	(x isKindOf: Integer) ifTrue: [
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
 		((x @env0:bitAnd: x @env0:- 1) @env0:= 0) ifTrue: [^ (x @env0:highBit @env0:- 1) @env0:asFloat].
-		(x @env0:highBit @env0:> 1023) ifTrue: [^ (self ___logHugeInt___: x) @env0:/ (2.0 @env0:ln)].
+		(self ___intFitsFloat___: x) ifFalse: [
+			"log2(m) + e over the frexp, CPython's loghelper."
+			| me |
+			me := self ___hugeIntFrexp___: x.
+			^ (((me @env0:at: 1) @env0:ln) @env0:/ (2.0 @env0:ln)) @env0:+ (me @env0:at: 2)].
 		^ (self ___naturalLog___: x) @env0:/ (2.0 @env0:ln)].
 	f := self ___real___: x.
 	((f @env0:> 0.0) and: [f @env0:_isNaN @env0:not and: [(f @env0:_getKind) @env0:~= 3]]) ifTrue: [

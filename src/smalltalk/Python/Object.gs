@@ -4776,6 +4776,11 @@ ___pythonBuiltinTypeName___
 	'PropertyDescriptor' and ``property.__module__'' raised, so pickle could
 	not name the builtin (test_pickle's test_builtin_types)."
 	(#('PropertyDescriptor') @env0:includes: n) ifTrue: [^ 'property'].
+	"The console streams sys.stdin / stdout / stderr answer ARE CPython's
+	io.TextIOWrapper as far as Python can tell -- their repr already says so --
+	and code dispatches on the name: reprlib looks up ``repr_TextIOWrapper''
+	(test_reprlib's test_custom_repr)."
+	(#('PyConsoleStream') @env0:includes: n) ifTrue: [^ 'TextIOWrapper'].
 	"ScaledDecimal is NOT in this table, deliberately, and the absence is the
 	point.  It used to answer 'Decimal', from when install.gs bound the Python
 	name ``Decimal'' to it and GemStone's class WAS Grail's decimal.Decimal.
@@ -13404,8 +13409,21 @@ ___grailClassBodyStoreShadows___: aValue name: aName
 	such def in every stdlib class.  The flag test comes first so the flag-off
 	path pays one primitive read."
 
-	| sel base fn |
-	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib @env0:___directCallsEnabled___]) == true
+	| sel base fn nm |
+	"A DUNDER is shadowed whatever the flag says.  The flag decides how an
+	ordinary ``obj.m()'' call compiles -- with it off, the call loads the
+	attribute first and so finds a stored wrapper on its own.  A special
+	method is never reached that way: repr(), len(), ``a + b'' send the
+	compiled selector (CPython looks special methods up on the TYPE, which is
+	the same thing), so with the flag off a decorated ``__repr__'' was stored
+	and never run -- reprlib.recursive_repr's wrapper sat on the class while
+	repr() recursed through the raw method (test_reprlib's
+	test_recursive_repr, a hard stack overflow rather than a RecursionError)."
+	nm := aName @env0:asString.
+	(((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib @env0:___directCallsEnabled___]) == true
+		or: [nm @env0:size @env0:> 4
+			and: [(nm @env0:at: 1) == $_ and: [(nm @env0:at: 2) == $_
+			and: [(nm @env0:last) == $_ and: [(nm @env0:at: nm @env0:size @env0:- 1) == $_]]]]])
 		ifFalse: [^ false].
 	"__init_subclass__ is run ON THE CLASS through performMethod: (PEP 487's
 	implicit classmethod) and has its own DNU dispatch; a dispatcher's

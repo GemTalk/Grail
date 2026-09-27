@@ -32,6 +32,25 @@ Workaround in the meantime, and what `mock.MagicMock` does: define the magic
 methods as `def`s and have them look up whatever should be configurable.  A
 plain `Mock` configured by assignment (`m.__iter__ = Mock(...)`) still hits the
 gap for the rows above.
+## PEP 695 bounds on a def are evaluated in the module's globals, not the annotation scope
+
+This is about FUNCTIONS AND METHODS only.  A generic CLASS or type alias at
+module or function level is rewritten into CPython's real annotation scope
+(PythonParser >> ___rewriteTypeParamStatement___, #1200), so its bounds see
+enclosing locals; a class nested in a class body still takes the path below.
+
+Since 2026-09-27 a def's type-parameter bound or constraints are real
+(``def f[T: str]`` gives ``T.__bound__ is str``, test_reprlib's
+test__type_params__).  The parser keeps the bound's SOURCE with the parameter's
+name (PythonParser >> ___recordTypeParamBound___:in:) and ExecBlock class >>
+___pyTypeVarNamed___:globals: evaluates it on the first read of
+``__type_params__`` -- lazily, as CPython does -- in the defining MODULE's
+globals.  CPython evaluates it in an annotation scope, which also sees an
+enclosing function's locals and, for a method, names the class body bound
+earlier.  A bound that needs either answers None (the previous behaviour for
+every bound) rather than raising; so does a bound written as a string literal,
+whose source the tokenizer does not keep.  PEP 696 defaults (``[T = int]``)
+are parsed and ignored.
 
 ## An emptied `__class__` cell raises `RuntimeError`, where CPython 3.14 raises `NameError`
 

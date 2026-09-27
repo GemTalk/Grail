@@ -7840,7 +7840,6 @@ ___import__: positional kw: kwargs
 			``from PKG import *'' or plain ``import X''."
 			alreadyBound := (fromName @env0:= '*')
 				or: [(fromName @env0:= absoluteName)
-				or: [(fromName @env0:= (nameParts @env0:last))
 				or: [(result isKindOf: module)
 				ifTrue: [
 					"Check dynamic instVars first (fast path), then env-1
@@ -7879,7 +7878,20 @@ ___import__: positional kw: kwargs
 								ifAbsent: [nil]) notNil]
 					]
 				]
-				ifFalse: [false]]]].
+				ifFalse: [false]]].
+			"A name equal to the package's own last component -- ``from a.b
+			import b'' -- used to count as bound OUTRIGHT, before anything
+			looked.  So when a/b/b.py exists, as in test_reprlib's
+			LongReprTest (package, subpackage and module all share one long
+			name), the submodule was never loaded and the attribute read that
+			follows raised ``'a_b' object has no attribute 'b'''.  It still
+			counts as bound -- the old behaviour, which nothing in the vendored
+			tree is known to need but which cost nothing to keep -- unless
+			such a submodule file actually exists; then it is loaded, as
+			CPython's _handle_fromlist would."
+			(alreadyBound not and: [fromName @env0:= (nameParts @env0:last)]) ifTrue: [
+				alreadyBound := (self @env0:class ___moduleNameToPath___:
+					((absoluteName @env0:, '.') @env0:, fromName @env0:asString)) isNil].
 			alreadyBound ifFalse: [
 				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
 				((self @env0:class lookupModule: subName)

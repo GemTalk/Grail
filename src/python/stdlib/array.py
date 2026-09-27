@@ -150,7 +150,17 @@ class _array:
         return NotImplemented
 
     def __repr__(self):
+        # CPython omits the initializer of an EMPTY array: array('i'), not
+        # array('i', []) (test_reprlib's test_container).
+        if not self._data:
+            return "array('" + self.typecode + "')"
         return "array('" + self.typecode + "', " + repr(self._data) + ")"
 
 
+# The class cannot be DEFINED as ``array`` (see the note at the top), but it
+# can be NAMED so: type(x).__name__ is what code dispatches on -- reprlib
+# looks up ``repr_`` + the type name, and found no ``repr__array``, so it
+# fell back to repr_instance and truncated an array like an arbitrary object.
+_array.__name__ = 'array'
+_array.__qualname__ = 'array'
 array = _array

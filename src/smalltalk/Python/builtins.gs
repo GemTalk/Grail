@@ -6684,7 +6684,30 @@ ___sysStdin___
 	in := [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'stdin']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(in @env0:isNil or: [in @env0:== None]) ifTrue: [^ nil].
+	"The CONSOLE's own stdin is not a redirect: it reads the very provider or
+	terminal the nil answer sends input() to, so answering nil keeps input()
+	on exactly the path it was on -- prompt handling included -- the way
+	___printTarget___ recognises the console stdout."
+	(in @env0:isKindOf: PyConsoleStream) ifTrue: [^ nil].
 	^ in
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___consoleReadLine___
+	"One line from the console -- the session's stdin provider when there is
+	one, else the gem's own terminal -- or nil at end of file.  input()'s two
+	console branches without the prompt, for sys.stdin's readline()
+	(PyConsoleStream).  A provider's #interrupt is KeyboardInterrupt here too."
+
+	| provider answer |
+	provider := builtins @env0:stdinProvider.
+	(provider @env0:== nil) ifFalse: [
+		answer := provider @env0:nextLinePrompt: ''.
+		answer @env0:== #'interrupt' ifTrue: [
+			^ KeyboardInterrupt ___signal___: ''].
+		^ answer].
+	^ self ___decodeTerminalLine___: (GsFile @env0:stdin @env0:nextLine)
 %
 
 category: 'Grail-Built-in Functions'

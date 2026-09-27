@@ -515,31 +515,107 @@ skipTypeParams
 	placeholder, so its constraints have nothing to act on.  A consumer that
 	wants the bare name strips the stars (ExecBlock >> ___pyTypeVarNamed___:)."
 
-	| depth tok names expectName stars |
+	| depth tok names expectName stars boundToks inBound |
 	names := OrderedCollection new.
 	tok := self peek.
 	(tok notNil and: [tok isOp: '[']) ifFalse: [^ names asArray].
 	depth := 0.
 	expectName := false.
 	stars := ''.
+	boundToks := nil.
+	inBound := false.
 	[
 		tok := self advance.
-		(tok isOp: '[') ifTrue: [
+		"ONE depth for every bracket kind.  It counted only [ and ], so the comma
+		inside a constraint tuple -- ``[U: (int, bytes)]'' -- read as the next
+		parameter and ``bytes'' became a type parameter of its own."
+		((tok isOp: ']') or: [(tok isOp: ')') or: [tok isOp: '}']])
+			ifTrue: [depth := depth - 1].
+		"A bound or constraint: every token after the colon, up to the comma or
+		bracket that ends the parameter (or a PEP 696 ``= default'', which is
+		skipped)."
+		(inBound and: [depth >= 1 and: [((depth = 1) and: [(tok isOp: ',') or: [tok isOp: '=']]) not]])
+			ifTrue: [boundToks add: tok].
+		((depth = 1 and: [(tok isOp: ',') or: [tok isOp: '=']]) or: [depth = 0]) ifTrue: [
+			inBound ifTrue: [self ___recordTypeParamBound___: boundToks in: names].
+			inBound := false].
+		((tok isOp: '[') or: [(tok isOp: '(') or: [tok isOp: '{']]) ifTrue: [
 			depth := depth + 1.
-			depth = 1 ifTrue: [expectName := true. stars := '']].
-		(tok isOp: ']') ifTrue: [depth := depth - 1].
+			(depth = 1 and: [tok isOp: '[']) ifTrue: [expectName := true. stars := '']].
 		"At depth 1 a comma starts the next parameter; the first identifier after
-		that (or after the opening bracket) is its name.  Anything else at that
-		depth -- a colon and its bound, a star -- is skipped."
+		that (or after the opening bracket) is its name."
 		(depth = 1 and: [tok isOp: ',']) ifTrue: [expectName := true. stars := ''].
 		(depth = 1 and: [expectName and: [tok isOp: '*']]) ifTrue: [stars := '*'].
 		(depth = 1 and: [expectName and: [tok isOp: '**']]) ifTrue: [stars := '**'].
 		(depth = 1 and: [expectName and: [tok type == #NAME]]) ifTrue: [
 			names add: stars , tok value asString.
 			expectName := false].
+		(depth = 1 and: [expectName not and: [inBound not and: [tok isOp: ':']]]) ifTrue: [
+			inBound := true.
+			boundToks := OrderedCollection new].
 		depth = 0
 	] whileFalse.
 	^ names asArray
+%
+
+category: 'Grail-token access'
+method: PythonParser
+___recordTypeParamBound___: someTokens in: names
+	"Append a TypeVar's bound to its entry in names -- ``T:b'' or, for a
+	parenthesised tuple, ``T:c'' (constraints, the syntactic distinction CPython
+	makes), then the bound's SOURCE, hex-encoded.
+
+	Source rather than an AST because the entry is a string literal in four
+	generated places (the def cascade and its IR twin, the class-side method
+	table, the class's own names) and in ExecBlock's side table, and only
+	ExecBlock class >> ___pyTypeVarNamed___:globals: ever reads it: that is where
+	the bound is evaluated, on first read of __type_params__, in the defining
+	module's globals -- CPython evaluates it lazily too.  HEX because a bound may
+	be anything, and nothing that lands in a Smalltalk literal can break it.
+
+	A bound holding a STRING token (``T: 'Fwd''') is dropped, as every bound
+	was before: its token value is the decoded string, not the source, so it
+	cannot be rebuilt faithfully."
+
+	| src kind last |
+	(someTokens isNil or: [someTokens isEmpty]) ifTrue: [^ self].
+	names isEmpty ifTrue: [^ self].
+	(someTokens anySatisfy: [:t | t type == #STRING]) ifTrue: [^ self].
+	src := WriteStream on: String new.
+	someTokens do: [:t | src nextPutAll: t value asString] separatedBy: [src space].
+	kind := 'b'.
+	((someTokens first isOp: '(') and: [(someTokens last isOp: ')')
+		and: [self ___tokensHaveTopLevelComma___: someTokens]]) ifTrue: [kind := 'c'].
+	last := names removeLast.
+	names add: last , ':' , kind , (self ___hexPairs___: src contents)
+%
+
+category: 'Grail-token access'
+method: PythonParser
+___hexPairs___: aString
+	"Two lowercase hex digits per UTF-8 byte."
+
+	| out |
+	out := WriteStream on: String new.
+	aString encodeAsUTF8 asByteArray do: [:byte |
+		out nextPut: ('0123456789abcdef' at: (byte bitShift: -4) + 1).
+		out nextPut: ('0123456789abcdef' at: (byte bitAnd: 15) + 1)].
+	^ out contents
+%
+
+category: 'Grail-token access'
+method: PythonParser
+___tokensHaveTopLevelComma___: someTokens
+	"Is ``( ... )'' a TUPLE -- a comma directly inside the outer parentheses --
+	rather than a parenthesised single expression?"
+
+	| depth |
+	depth := 0.
+	someTokens do: [:t |
+		((t isOp: '(') or: [(t isOp: '[') or: [t isOp: '{']]) ifTrue: [depth := depth + 1].
+		((t isOp: ')') or: [(t isOp: ']') or: [t isOp: '}']]) ifTrue: [depth := depth - 1].
+		(depth = 1 and: [t isOp: ',']) ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-parsing - helpers'
