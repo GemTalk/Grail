@@ -480,6 +480,17 @@ __len__
 	^ codePoints @env0:size
 %
 
+category: 'Grail-Type'
+method: PyStrSurrogate
+__class__
+	"``type(s) is str'' for a lone-surrogate str too -- the same rule as
+	CharacterCollection >> __class__.  Only this class: AbstractPyStr also
+	backs Python-defined str subclasses, which answer themselves."
+
+	self @env0:class @env0:== PyStrSurrogate ifTrue: [^ str].
+	^ self @env0:class
+%
+
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
 ___isTruthy___

@@ -3788,6 +3788,30 @@ __dict__
 	^ PyInstanceDict @env0:on: self
 %
 
+category: 'Grail-Type'
+method: CharacterCollection
+__class__
+	"Python ``type(s)'' is ``str'' for every str.  GemStone picks the kernel
+	class by CONTENT -- Unicode7 for ASCII, Unicode16 or Unicode32 once a wider
+	code point appears -- and ``str'' is Unicode7, so without this override
+	``type('\uc894') is str'' was False while its repr read ``<class 'str'>''.
+	Every CJK codec test asserts ``type(result) is str'' on a decode
+	(test_codecencodings_kr test_errorhandle).  Mirrors float >> __class__
+	and int >> __class__.
+
+	The same five kernel classes str >> __new__: treats as an exact str; any
+	other class -- a ``class N(str)'', a str-mixin enum member -- is a
+	subclass, and answers itself."
+
+	| c |
+	c := self @env0:class.
+	((c @env0:== Unicode16)
+		or: [(c @env0:== Unicode32)
+		or: [(c @env0:== String)
+		or: [c @env0:== Symbol]]]) ifTrue: [^ str].
+	^ c
+%
+
 set compile_env: 0
 
 ! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
