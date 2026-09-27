@@ -491,6 +491,16 @@ removeAt: aBlock attr: aName
 		self slotAt: aBlock attr: '__doc__'
 			put: (System myUserProfile symbolList objectNamed: #'None').
 		^ true].
+	"``del f.__module__'' is legal too, and the attribute then reads None: in
+	CPython it is a plain member, which a delete sets to NULL and a read of NULL
+	answers as None.  pickle's whichmodule treats a None module as ``search
+	sys.modules'', and test_pickle's test_local_lookup_error takes that path by
+	deleting it.  The def-time stamp stays, so __globals__ -- resolved from the
+	stamp, not the current value -- still finds the defining module."
+	(aName asString = '__module__') ifTrue: [
+		self slotAt: aBlock attr: '__module__'
+			put: (System myUserProfile symbolList objectNamed: #'None').
+		^ true].
 	holder := self table at: aBlock ifAbsent: [^ false].
 	(holder includesKey: aName asString) ifFalse: [^ false].
 	holder removeKey: aName asString.

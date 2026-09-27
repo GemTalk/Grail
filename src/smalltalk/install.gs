@@ -640,6 +640,7 @@ run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'AbstractBasesProtocolTestCase' put: nil;
 	at: #'ArchiveMetadataTestCase' put: nil;
+	at: #'RuntimeGapsBehindPickleTestCase' put: nil;
 	at: #'ArgparseTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'AstExportTestCase' put: nil;
@@ -1566,7 +1567,6 @@ input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
 input src/smalltalk/Python/PyCell.gs
-input src/smalltalk/Python/PyStatResult.gs
 input src/smalltalk/Python/PyConsoleStream.gs
 input src/smalltalk/Python/PyUnraisableHookArgs.gs
 input src/smalltalk/Python/PySourceFileLoader.gs
@@ -1623,6 +1623,8 @@ input src/smalltalk/Python/range_iterator.gs
 input src/smalltalk/Python/set_iterator.gs
 input src/smalltalk/Python/str_iterator.gs
 input src/smalltalk/Python/Tuple.gs
+! os.stat_result is a tuple subclass (a struct sequence).
+input src/smalltalk/Python/PyStatResult.gs
 input src/smalltalk/Python/GenericAlias.gs
 input src/smalltalk/Python/tuple_iterator.gs
 input src/smalltalk/Python/filter_iterator.gs
@@ -2060,6 +2062,7 @@ input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/AbstractBasesProtocolTestCase.gs
 input src/smalltalk/PythonTests/ArchiveMetadataTestCase.gs
+input src/smalltalk/PythonTests/RuntimeGapsBehindPickleTestCase.gs
 input src/smalltalk/PythonTests/ArgparseTestCase.gs
 input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
 input src/smalltalk/PythonTests/AstExportTestCase.gs

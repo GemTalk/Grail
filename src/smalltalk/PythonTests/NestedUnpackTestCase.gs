@@ -281,5 +281,5 @@ testNonIterableStillRaisesTypeError
 
 	self
 		assert: (self loadFixture @env1:flat_not_iterable)
-		equals: 'TypeError: ''BoundMethod'' object is not iterable'
+		equals: 'TypeError: ''builtin_function_or_method'' object is not iterable'
 %

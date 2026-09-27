@@ -287,6 +287,14 @@ definingClass: aClass selector: aSym
 	inst == nil ifFalse: [^ inst].
 	inst := self @env0:new.
 	inst @env0:_setClass: aClass selector: aSym.
+	"A method a PYTHON class merely inherits from a BUILTIN is the builtin's
+	own: CPython's ``Sub.count is tuple.count'' holds, because the class
+	dictionary lookup finds tuple's descriptor.  Minted per class, the two were
+	different handles, and pickle -- which saves ``Sub.count'' by its
+	qualified name, tuple.count -- refused it as not the object that name
+	resolves to (test_pickle's test_c_methods)."
+	(inst ___pyInheritedBuiltinOwner___) @env0:ifNotNil: [:owner |
+		inst := self definingClass: owner selector: aSym].
 	per @env0:at: aSym put: inst.
 	^ inst
 %
@@ -334,9 +342,15 @@ ___forClassRead___: aClass family: family selector: aSym
 	aClass == object ifTrue: [^ inst].
 	(aClass @env0:isKindOf: Behavior) ifFalse: [^ inst].
 	aClass @env0:isMeta ifTrue: [^ inst].
+	"...unless the Python class inherits it from a BUILTIN: then inst is
+	already that builtin's handle (definingClass:selector: redirects it), where
+	the definer can be a Smalltalk class further up -- CharacterCollection for
+	``class N(str)'''s count -- and ``N.count is str.count'' must hold."
 	(aClass @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
 			environmentId: 1) == nil
-		ifFalse: [^ self definingClass: (self definerOf: aClass family: family
+		ifFalse: [
+			inst @env0:definingClass == aClass ifFalse: [^ inst].
+			^ self definingClass: (self definerOf: aClass family: family
 				selector: aSym)
 			selector: aSym].
 	cls := aClass.
@@ -377,6 +391,108 @@ definerOf: aClass family: family selector: aSym
 					(sel @env0:notNil and: [md @env0:includesKey: sel]) ifTrue: [^ c]]]].
 		c := c @env0:superclass].
 	^ aClass
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___pyInheritedBuiltinOwner___
+	"The builtin class this handle's method really belongs to, when definingClass
+	is a PYTHON class that inherits it unchanged from that builtin; nil
+	otherwise.
+
+	Left alone: a method some Python class defines (the ordinary case), a
+	class-side one (a classmethod is bound to the class it is read from, so
+	``Sub.fromkeys'' is not ``dict.fromkeys'' in CPython either), and __new__,
+	whose builtin spellings take the value where the Python-subclass one takes
+	the class -- see UnboundMethod >> value:value:."
+
+	| found owner |
+	selector @env0:== #'__new__' ifTrue: [^ nil].
+	(definingClass @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	definingClass @env0:isMeta ifTrue: [^ nil].
+	(self ___isPythonClass___: definingClass) ifFalse: [^ nil].
+	found := self ___nearestImplementorOf___: selector
+		family: (self ___selectorFamilyFor___: selector string: selector @env0:asString)
+		in: definingClass.
+	(found @env0:isNil or: [self ___isPythonClass___: found]) ifTrue: [^ nil].
+	owner := self ___firstBuiltinAbove___: definingClass upTo: found.
+	(owner @env0:== definingClass or: [self ___isPythonClass___: owner]) ifTrue: [^ nil].
+	^ owner
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___nearestImplementorOf___: aSym family: family in: aClass
+	"The NEAREST class in aClass's chain that defines aSym in ANY spelling.
+
+	Not ___findImplementorOf___:family:in:, which asks the whole chain for the
+	unary spelling before trying any other: a Python ``def __init__(self, x)''
+	compiles as ``__init__:'', while object defines a unary ``__init__'', so
+	that search walked past every Python __init__ to object's -- and a caller
+	here that took its answer as the owner handed ``Reader.__init__'' out as
+	``object.__init__''."
+
+	| c |
+	c := aClass.
+	[c @env0:notNil] @env0:whileTrue: [
+		(c @env0:compiledMethodAt: aSym environmentId: 1 otherwise: nil) @env0:notNil
+			ifTrue: [^ c].
+		family @env0:do: [:sel |
+			(c @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil) @env0:notNil
+				ifTrue: [^ c]].
+		c := c @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___firstBuiltinAbove___: aClass upTo: found
+	"The first class above the Python classes at the bottom of aClass's chain
+	that Python can name -- has a module -- on the way to found (found itself
+	when none does).  The FIRST, so that a str subclass's inherited methods
+	belong to str (Unicode7) and not to a kernel class further up that also
+	happens to answer a module."
+
+	| c |
+	c := aClass.
+	[c @env0:notNil and: [c @env0:~~ found]] @env0:whileTrue: [
+		((self ___isPythonClass___: c) @env0:not
+			and: [(self ___pyModuleStringOf___: c) @env0:notNil]) ifTrue: [
+				^ self ___canonicalBuiltinFor___: c].
+		c := c @env0:superclass].
+	^ found
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___canonicalBuiltinFor___: aClass
+	"The class the builtins module binds for aClass's Python type, when that
+	is a different Smalltalk class.  Several kernel classes stand for one
+	Python type -- a ``class N(str)'' is a Unicode32 subclass, while ``str''
+	itself is Unicode7 -- and ``N.count is str.count'' holds in CPython, so the
+	handle must be minted for the class ``str'' names."
+
+	| bt canon |
+	bt := [aClass ___pythonBuiltinTypeName___]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	bt @env0:isNil ifTrue: [^ aClass].
+	canon := [((Python @env0:at: #builtins) @env0:___instance___)
+			@env1:___pyAttrLoad___: bt @env0:asSymbol]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"Not an inheritance test: Unicode32 and Unicode7 are siblings, not one
+	below the other, yet both are str."
+	(canon @env0:isKindOf: Behavior) ifTrue: [^ canon].
+	^ aClass
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___isPythonClass___: aClass
+	"Defined by a Python class statement (ClassDefAst's stamp), as opposed to a
+	Smalltalk class standing in for a builtin."
+
+	^ (aClass @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) @env0:notNil
 %
 
 category: 'Grail-Dynamic Rebinding'
@@ -898,10 +1014,48 @@ ___pyOwnerClass___
 
 	| found |
 	found := self ___pyImplementingClass___.
+	"A KERNEL implementation class that Python has no name for --
+	CharacterCollection behind str, Set behind set -- is not the owner Python
+	would report.  CPython's method descriptor belongs to the builtin type, so
+	``str.index'' is 'str.index' in module builtins; here it read
+	'CharacterCollection.index' in a module named 'CharacterCollection', and
+	pickle, which saves such a method by its qualified name, looked for that
+	module (test_pickle's test_c_methods).
+	Asked with isMeta, and BEFORE the branch below: ``isKindOf: Metaclass3''
+	answers true for an ordinary class as well as for a metaclass, so that
+	branch also catches every nameless kernel class and hands it back
+	unchanged."
+	((found @env0:isKindOf: Behavior)
+		and: [found @env0:isMeta @env0:not
+		and: [(self ___pyModuleStringOf___: found) @env0:isNil]])
+			ifTrue: [^ self ___pyNamedBuiltinBelow___: found].
 	((found @env0:isKindOf: Metaclass3)
 		and: [(self ___pyModuleStringOf___: found) @env0:isNil])
 			ifTrue: [^ found @env0:thisClass].
 	^ found
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___pyNamedBuiltinBelow___: found
+	"The class Python names as the owner of a method implemented on the unnamed
+	kernel class found: of the classes from definingClass up to (not including)
+	found, the one NEAREST found that has a Python module and is not a Python
+	class.  Nearest, so that ``Subclass.count'' on a list subclass reports list,
+	as CPython does, rather than the subclass it was reached through.  found
+	itself when no such class is on the way."
+
+	| c best |
+	(definingClass @env0:isKindOf: Behavior) ifFalse: [^ found].
+	best := found.
+	c := definingClass.
+	[c @env0:notNil and: [c @env0:~~ found]] @env0:whileTrue: [
+		((self ___pyModuleStringOf___: c) @env0:notNil
+			and: [(c @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+				environmentId: 1) @env0:isNil])
+					ifTrue: [best := c].
+		c := c @env0:superclass].
+	^ best
 %
 
 category: 'Grail-Python Metadata'
@@ -920,9 +1074,12 @@ ___pyImplementingClass___
 	(definingClass @env0:isKindOf: Behavior) @env0:ifFalse: [^ definingClass].
 	family := self ___selectorFamilyFor___: selector
 		string: selector @env0:asString.
-	found := self ___findImplementorOf___: selector family: family in: definingClass.
+	"NEAREST definer, in any spelling -- see ___nearestImplementorOf___:.  The
+	whole-chain unary search it replaces named object as the owner of every
+	Python ``__init__(self, x)'', which compiles as ``__init__:''."
+	found := self ___nearestImplementorOf___: selector family: family in: definingClass.
 	found @env0:isNil ifTrue: [
-		found := self ___findImplementorOf___: selector family: family
+		found := self ___nearestImplementorOf___: selector family: family
 			in: definingClass @env0:class].
 	^ found @env0:isNil ifTrue: [definingClass] ifFalse: [found]
 %
@@ -1644,6 +1801,7 @@ ___pythonValueAttrs___
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__module__';
+		add: #'__objclass__';
 		add: #'__annotations__';
 		add: #'__annotate__';
 		add: #'__signature_spec__';

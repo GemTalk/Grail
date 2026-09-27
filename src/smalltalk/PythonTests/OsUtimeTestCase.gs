@@ -53,8 +53,8 @@ OsUtimeTestCase category: 'Grail-SUnit'
 !     a single quote and a semicolon, and checks both that the times landed and
 !     that the command the semicolon introduces did not run.
 !
-! WHOLE SECONDS.  os.stat here answers an int st_mtime where CPython answers a
-! float (GsFileStat exposes whole seconds only), and os.utime floors to match,
+! WHOLE SECONDS.  os.stat here answers a float st_mtime that is always a whole
+! number (GsFileStat exposes whole seconds only), and os.utime floors to match,
 ! so a round trip agrees with CPython on math.floor(st_mtime) and not on
 ! st_mtime itself.  The fixture compares the floored value, which is true under
 ! CPython too.

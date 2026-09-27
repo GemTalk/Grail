@@ -1080,6 +1080,16 @@ __getattr__: name
 	``fi.a.x'' -- because the function is where the lookup actually ended."
 
 	self ___isPythonBoundMethod___ ifFalse: [
+		"A CLASSMETHOD bound to its class is a method object too, and CPython
+		defers its miss to __func__ the same way, so the miss names a
+		'function' -- see ___pyTypeNameForError___, which is 'method' for it."
+		((receiver @env0:isKindOf: Class)
+			and: [self ___pyTypeNameForError___ @env0:= 'method']) ifTrue: [
+				^ [super @env1:__getattr__: name]
+					@env0:on: AttributeError do: [:ex |
+						ex @env0:return: (AttributeError ___signal___:
+							'''function'' object has no attribute '''
+								@env0:, name @env0:asString @env0:, '''')]].
 		^ super @env1:__getattr__: name].
 	^ self __func__ ___pyAttrLoad___: name @env0:asSymbol
 %
@@ -1798,6 +1808,36 @@ ___moduleOfClass___: aClass
 	^ [(aClass __module__) @env0:asString @env0:asUnicodeString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
+%
+
+category: 'Grail-Printing'
+method: BoundMethod
+___pyTypeNameForError___
+	"The CPython type name for ``'X' object has no attribute ...'' and the other
+	messages that name a type: 'builtin_function_or_method', 'function' or
+	'method' -- never 'BoundMethod', which is a Grail class leaking into a
+	Python message (test_pickle's test_find_class compares the text).
+
+	The same split __repr__ below makes, by RECEIVER: a native module's or the
+	builtins' callable, and a method bound to a builtin-typed object or class,
+	are builtins; a Python module's def and a @staticmethod are functions; the
+	rest are bound methods."
+
+	(receiver @env0:isKindOf: module) ifTrue: [
+		^ (receiver @env0:isKindOf: NativeModule)
+			ifTrue: ['builtin_function_or_method']
+			ifFalse: ['function']].
+	(receiver @env0:isKindOf: Class) ifTrue: [
+		(self ___isStaticMethodOnClass___: receiver name: (self __name__))
+			ifTrue: [^ 'function'].
+		^ ((receiver @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+				environmentId: 1) @env0:isNil)
+			ifTrue: ['builtin_function_or_method']
+			ifFalse: ['method']].
+	^ ([receiver @env0:class ___pythonBuiltinTypeName___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
+		ifTrue: ['builtin_function_or_method']
+		ifFalse: ['method']
 %
 
 category: 'Grail-Printing'

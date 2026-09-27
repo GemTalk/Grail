@@ -265,7 +265,10 @@ _new: positional kw: kwargs
 
 	"encoding / errors are only meaningful for a str source."
 	(encoding @env0:notNil or: [errors @env0:notNil]) ifTrue: [
-		(source isKindOf: CharacterCollection) ifFalse: [
+		"AbstractPyStr counts: a str holding lone surrogates is a PyStrSurrogate,
+		and bytes(s, 'utf-8') refused it as not a string at all rather than
+		raising the UnicodeEncodeError its encode does."
+		((source isKindOf: CharacterCollection) or: [source isKindOf: AbstractPyStr]) ifFalse: [
 			TypeError ___signal___: (encoding @env0:notNil
 				ifTrue: ['encoding without a string argument']
 				ifFalse: ['errors without a string argument'])].
@@ -326,7 +329,7 @@ ___encodeSourceToSelf___: source _: enc _: errs
 	unicode_escape, with 'strict'/'ignore' errors), then copy into a fresh
 	instance of the RECEIVER class so a bytearray subclass ctor is self-typed."
 	| encoded r |
-	(source isKindOf: CharacterCollection) ifFalse: [
+	((source isKindOf: CharacterCollection) or: [source isKindOf: AbstractPyStr]) ifFalse: [
 		"A non-str source with a __bytes__ hook still converts through it
 		(gh-25766: bytes(StrWithBytes(b'abc'), 'iso8859-15'))."
 		TypeError ___signal___: 'encoding without a string argument'].

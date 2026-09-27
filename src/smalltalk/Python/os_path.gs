@@ -287,89 +287,69 @@ expanduser: aPath
 category: 'Grail-Path Manipulation'
 method: os_path
 basename: aPath
-	"os.path.basename(path) — return the base name of pathname."
+	"os.path.basename(path) -- CPython's posixpath.basename: everything after the
+	LAST slash, so a trailing slash yields ''.  The previous version stripped one
+	trailing slash first (basename('a/') was 'a') and answered '/' for ''."
 
-	| sep trimmedPath reversedPath index lastIndex path |
-	path := (os instance) ___fsPath___: aPath.
-	sep := '/'.
-	trimmedPath := path.
-	(path @env0:endsWith: sep) ifTrue: [
-		trimmedPath := path @env0:copyFrom: 1 to: ((path @env0:size) @env0:- 1)
-	].
-	(trimmedPath @env0:isEmpty) ifTrue: [^ sep].
-	reversedPath := trimmedPath @env0:reverse.
-	index := reversedPath @env0:findString: sep startingAt: 1.
-	(index == 0) ifTrue: [^ trimmedPath].
-	lastIndex := ((trimmedPath @env0:size) @env0:- (index)) @env0:+ 1.
-	^ trimmedPath @env0:copyFrom: (lastIndex @env0:+ 1) to: trimmedPath @env0:size
+	| p |
+	p := self ___plainPathString___: aPath.
+	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:basename: aPath].
+	^ p @env0:copyFrom: (self ___lastSlashIn___: p) @env0:+ 1 to: p @env0:size
 %
 
 category: 'Grail-Path Manipulation'
 method: os_path
 dirname: aPath
-	"os.path.dirname(path) — return the directory name of pathname."
+	"os.path.dirname(path) -- CPython's posixpath.dirname: everything up to the
+	LAST slash, with trailing slashes stripped unless the head is ONLY slashes
+	(so '//a' keeps '//').  A name with no slash has the dirname '' -- not '.',
+	which is what this answered before.  SimpleHTTPRequestHandler.translate_path
+	skips any component with a truthy dirname, so under '.' it skipped every
+	one and served the root directory for every URL."
 
-	| sep trimmedPath reversedPath index lastIndex path |
-	path := (os instance) ___fsPath___: aPath.
-	sep := '/'.
-	trimmedPath := path.
-	(path @env0:endsWith: sep) ifTrue: [
-		trimmedPath := path @env0:copyFrom: 1 to: ((path @env0:size) @env0:- 1)
-	].
-	(trimmedPath @env0:isEmpty) ifTrue: [^ sep].
-	reversedPath := trimmedPath @env0:reverse.
-	index := reversedPath @env0:findString: sep startingAt: 1.
-	(index == 0) ifTrue: [^ '.'].
-	lastIndex := ((trimmedPath @env0:size) @env0:- (index)) @env0:+ 1.
-	(lastIndex == 1) ifTrue: [^ sep].
-	^ trimmedPath @env0:copyFrom: 1 to: (lastIndex @env0:- 1)
+	| p |
+	p := self ___plainPathString___: aPath.
+	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:dirname: aPath].
+	^ self ___headOf___: p upTo: (self ___lastSlashIn___: p)
 %
 
 category: 'Grail-Path Manipulation'
 method: os_path
 split: aPath
-	"os.path.split(path) — split into (head, tail)."
+	"os.path.split(path) -- (dirname, basename), as CPython computes them, so
+	``head + sep + tail'' round-trips.  split('/a') was ('', 'a') before, and a
+	doubled slash was dropped from the head."
 
-	| sep pathSize reversedPath index lastIndex head tail path |
-	path := (os instance) ___fsPath___: aPath.
-	sep := '/'.
-	pathSize := path @env0:size.
-	reversedPath := path @env0:reverse.
-	index := reversedPath @env0:findString: sep startingAt: 1.
-	(index == 0) ifTrue: [^ tuple @env0:with: '' with: path].
-	lastIndex := (pathSize @env0:- (index)) @env0:+ 1.
-	(lastIndex @env0:= pathSize) ifTrue: [
-		head := path @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
-		(head @env0:isEmpty) ifTrue: [head := sep].
-		^ tuple @env0:with: head with: ''
-	].
-	head := path @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
-	tail := path @env0:copyFrom: (lastIndex @env0:+ 1) to: pathSize.
-	^ tuple @env0:with: head with: tail
+	| p i |
+	p := self ___plainPathString___: aPath.
+	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:split: aPath].
+	i := self ___lastSlashIn___: p.
+	^ tuple @env0:with: (self ___headOf___: p upTo: i)
+		with: (p @env0:copyFrom: i @env0:+ 1 to: p @env0:size)
 %
 
 category: 'Grail-Path Manipulation'
 method: os_path
 splitext: aPath
-	"os.path.splitext(path) — split into (root, ext)."
+	"os.path.splitext(path) -- genericpath._splitext.  The extension starts at
+	the last dot of the last component, unless everything before that dot in
+	the component is also dots: '.b' and '..b' have no extension.  A trailing
+	dot IS one ('a.' is ('a', '.')), and a dotfile in a subdirectory
+	('a/.b') has none -- the version this replaces had both of those backwards."
 
-	| pathSize reversedPath index lastDotIndex sepIndex root ext path |
-	path := (os instance) ___fsPath___: aPath.
-	pathSize := path @env0:size.
-	reversedPath := path @env0:reverse.
-	index := reversedPath @env0:findString: '.' startingAt: 1.
-	(index == 0) ifTrue: [^ tuple @env0:with: path with: ''].
-	lastDotIndex := (pathSize @env0:- (index)) @env0:+ 1.
-	(lastDotIndex @env0:= pathSize) ifTrue: [^ tuple @env0:with: path with: ''].
-	"Check for path separator after dot"
-	index := reversedPath @env0:findString: '/' startingAt: 1.
-	(index == 0) ifTrue: [sepIndex := 0]
-		ifFalse: [sepIndex := (pathSize @env0:- (index)) @env0:+ 1].
-	(sepIndex @env0:> lastDotIndex) ifTrue: [^ tuple @env0:with: path with: ''].
-	(lastDotIndex == 1) ifTrue: [^ tuple @env0:with: path with: ''].
-	root := path @env0:copyFrom: 1 to: (lastDotIndex @env0:- 1).
-	ext := path @env0:copyFrom: lastDotIndex to: pathSize.
-	^ tuple @env0:with: root with: ext
+	| p sepIndex dotIndex i |
+	p := self ___plainPathString___: aPath.
+	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:splitext: aPath].
+	sepIndex := self ___lastSlashIn___: p.
+	dotIndex := self ___lastIndexOf___: $. in: p.
+	dotIndex @env0:> sepIndex ifTrue: [
+		i := sepIndex @env0:+ 1.
+		[i @env0:< dotIndex] @env0:whileTrue: [
+			(p @env0:at: i) @env0:= $. ifFalse: [
+				^ tuple @env0:with: (p @env0:copyFrom: 1 to: dotIndex @env0:- 1)
+					with: (p @env0:copyFrom: dotIndex to: p @env0:size)].
+			i := i @env0:+ 1]].
+	^ tuple @env0:with: p with: (p @env0:copyFrom: 1 to: 0)
 %
 
 category: 'Grail-Path Manipulation'
@@ -448,59 +428,99 @@ getmtime: path
 category: 'Grail-Path Manipulation'
 method: os_path
 normpath: aPath
-	"os.path.normpath(path) — normalize a pathname."
+	"os.path.normpath(path) -- CPython's posixpath.normpath, component by
+	component.  EXACTLY two leading slashes survive (POSIX leaves '//'
+	implementation-defined, so CPython keeps it); one or three-plus collapse to
+	one.  A leading '..' survives only in a RELATIVE path.  The previous version
+	collapsed '//a' to '/a' along with the rest."
 
-	| parts sep isAbsolute earlyExit result dotDotIndex prevIndex path |
-	path := (os instance) ___fsPath___: aPath.
-	sep := '/'.
-	parts := $/ @env0:split: path.
-	isAbsolute := path @env0:beginsWith: sep.
-	parts := parts @env0:reject: [:each | (each @env0:isEmpty) or: [each @env0:= '.']].
-	(isAbsolute and: [(parts @env0:isEmpty) or: [((parts @env0:first) @env0:isEmpty) not]])
-		ifTrue: [parts @env0:addFirst: ''].
-	earlyExit := false.
-	result := nil.
-	[((parts @env0:indexOf: '..' ifAbsent: [0]) == 0) not] whileTrue: [
-		dotDotIndex := parts @env0:indexOf: '..' ifAbsent: [0].
-		(dotDotIndex == 1) ifTrue: [
-			isAbsolute ifTrue: [
-				parts @env0:removeAtIndex: 1
-			] ifFalse: [
-				result := parts @env0:inject: (parts @env0:first) into: [:acc :each |
-					((each @env0:= (parts @env0:first))) ifTrue: [acc]
-						ifFalse: [((acc @env0:, sep) @env0:, each)]
-				].
-				earlyExit := true
-			]
-		] ifFalse: [
-			prevIndex := dotDotIndex @env0:- (1).
-			((parts @env0:at: prevIndex) @env0:isEmpty) ifTrue: [
-				parts @env0:removeAtIndex: dotDotIndex
-			] ifFalse: [
-				parts @env0:removeAtIndex: dotDotIndex.
-				parts @env0:removeAtIndex: prevIndex
-			]
-		].
-		earlyExit ifTrue: [parts := list ___new___]
-	].
-	earlyExit ifTrue: [^ result].
-	(parts @env0:isEmpty) ifTrue: [^ '.'].
-	((parts @env0:size) == 1) ifTrue: [
-		^ ((parts @env0:first) @env0:isEmpty) ifTrue: [sep] ifFalse: [parts @env0:first]
-	].
-	((parts @env0:first) @env0:isEmpty) ifTrue: [
-		| rest |
-		rest := parts @env0:copyFrom: 2 to: parts @env0:size.
-		(rest @env0:isEmpty) ifTrue: [^ sep].
-		^ rest @env0:inject: (sep @env0:, (rest @env0:first)) into: [:acc :each |
-			((each @env0:= (rest @env0:first))) ifTrue: [acc]
-				ifFalse: [((acc @env0:, sep) @env0:, each)]
-		]
-	].
-	^ parts @env0:inject: (parts @env0:first) into: [:acc :each |
-		((each @env0:= (parts @env0:first))) ifTrue: [acc]
-			ifFalse: [((acc @env0:, sep) @env0:, each)]
-	]
+	| p initialSlashes comps newComps out |
+	p := self ___plainPathString___: aPath.
+	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:normpath: aPath].
+	p @env0:isEmpty ifTrue: [^ '.'].
+	initialSlashes := 0.
+	(p @env0:at: 1) @env0:= $/ ifTrue: [
+		initialSlashes := (self ___hasExactlyTwoLeadingSlashes___: p)
+			ifTrue: [2] ifFalse: [1]].
+	comps := OrderedCollection @env0:new.
+	self ___componentsOf___: p do: [:c | comps @env0:add: c].
+	newComps := OrderedCollection @env0:new.
+	comps @env0:do: [:comp |
+		(comp @env0:isEmpty or: [comp @env0:= '.']) ifFalse: [
+			((comp @env0:= '..') @env0:not
+				or: [(initialSlashes @env0:= 0 and: [newComps @env0:isEmpty])
+				or: [newComps @env0:notEmpty and: [newComps @env0:last @env0:= '..']]])
+				ifTrue: [newComps @env0:add: comp]
+				ifFalse: [newComps @env0:notEmpty ifTrue: [newComps @env0:removeLast]]]].
+	out := p @env0:copyFrom: 1 to: 0.
+	initialSlashes @env0:timesRepeat: [out := out @env0:, '/'].
+	newComps @env0:doWithIndex: [:comp :k |
+		k @env0:> 1 ifTrue: [out := out @env0:, '/'].
+		out := out @env0:, comp].
+	^ out @env0:isEmpty ifTrue: ['.'] ifFalse: [out]
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___plainPathString___: aPath
+	"aPath reduced by os.fspath, when the result is a plain Smalltalk string the
+	ports here can scan; nil for bytes or a str holding lone surrogates, both of
+	which CPython's own posixpath handles instead.  Strict, as CPython is: a
+	non-path is os.fspath's TypeError, not a pass-through.  The ports stay in
+	Smalltalk because the Python originals measured 5-17 times slower, and
+	these are called in loops."
+
+	| p |
+	p := (os instance) fspath: aPath.
+	^ (p @env0:isKindOf: CharacterCollection) ifTrue: [p] ifFalse: [nil]
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___lastSlashIn___: p
+	"The 1-based index of the last $/ in p, 0 when there is none -- CPython's
+	``p.rfind(sep) + 1''."
+
+	^ self ___lastIndexOf___: $/ in: p
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___lastIndexOf___: aCharacter in: p
+	| i |
+	i := p @env0:size.
+	[i @env0:> 0] @env0:whileTrue: [
+		(p @env0:at: i) @env0:= aCharacter ifTrue: [^ i].
+		i := i @env0:- 1].
+	^ 0
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___headOf___: p upTo: i
+	"``head = p[:i]; if head and head != sep*len(head): head = head.rstrip(sep)''
+	-- the head posixpath's dirname and split share."
+
+	| end |
+	end := i.
+	[end @env0:> 0 and: [(p @env0:at: end) @env0:= $/]] @env0:whileTrue: [end := end @env0:- 1].
+	"All slashes (or empty): kept whole."
+	end @env0:= 0 ifTrue: [^ p @env0:copyFrom: 1 to: i].
+	^ p @env0:copyFrom: 1 to: end
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+___componentsOf___: p do: aBlock
+	"``p.split('/')'', empty fields included, one block call per field."
+
+	| start |
+	start := 1.
+	1 @env0:to: p @env0:size do: [:i |
+		(p @env0:at: i) @env0:= $/ ifTrue: [
+			aBlock @env0:value: (p @env0:copyFrom: start to: i @env0:- 1).
+			start := i @env0:+ 1]].
+	aBlock @env0:value: (p @env0:copyFrom: start to: p @env0:size)
 %
 
 category: 'Grail-Path Manipulation'

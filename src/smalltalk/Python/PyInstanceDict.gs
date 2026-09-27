@@ -234,7 +234,10 @@ ___pythonKeyFor___: key
 	machinery sifts a namespace exactly that way."
 
 	^ (self ___isNamespaceStringKey___: key)
-		ifTrue: [key asString]
+		ifTrue: [
+			"The session's canonical str for the name, so two reads of one key
+			are the same object, and are the object sys.intern answers."
+			(key isKindOf: Symbol) ifTrue: [key ___pyInterned___] ifFalse: [key asString]]
 		ifFalse: [key]
 %
 

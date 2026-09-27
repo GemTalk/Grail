@@ -5,7 +5,8 @@
 # (bytes or str), arbitrary methods, basic redirect following
 # (301/302/303/307/308, capped at 10), HTTPError raised for 4xx/5xx
 # exactly like CPython.  Not supported: auth handlers, opener/handler
-# chains, file:// and ftp:// schemes.
+# chains, file:// and ftp:// schemes.  urlretrieve() is CPython's, over
+# that urlopen(), so it shares the same scheme limits.
 #
 # Proxies: the environment-variable query surface (getproxies,
 # getproxies_environment, proxy_bypass, proxy_bypass_environment) IS here
@@ -28,26 +29,90 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import quote, unquote, urlsplit, urljoin
 
 
-# State urlcleanup() owns, in CPython's shape so that a urlretrieve() or an
-# install_opener() added later drops straight in.  Both are empty here for
-# the reasons the header gives: this module has no handler chain to install
-# an opener in, and no urlretrieve to leave temporary files behind.
+# State urlcleanup() owns, in CPython's shape.  _url_tempfiles holds the
+# temporary files urlretrieve() creates; _opener stays None, because this
+# module has no handler chain to install an opener in.
 _url_tempfiles = []
 _opener = None
+
+
+def urlretrieve(url, filename=None, reporthook=None, data=None):
+    """
+    Retrieve a URL into a temporary location on disk.
+
+    Requires a URL argument. If a filename is passed, it is used as
+    the temporary file location. The reporthook argument should be
+    a callable that accepts a block number, a read size, and the
+    total file size of the URL target. The data argument should be
+    valid URL encoded data.
+
+    If a filename is passed and the URL points to a local resource,
+    the result is a copy from local file to new file.
+
+    Returns a tuple containing the path to the newly created
+    data file as well as the resulting HTTPMessage object.
+    """
+    # CPython 3.14's own.  _pickle's compat table maps Python 2's
+    # urllib.urlretrieve here, and test_pickle resolves every entry.
+    import contextlib
+    import tempfile
+    from urllib.error import ContentTooShortError
+    from urllib.parse import _splittype
+
+    url_type, path = _splittype(url)
+
+    with contextlib.closing(urlopen(url, data)) as fp:
+        headers = fp.info()
+
+        # Just return the local path and the "headers" for file://
+        # URLs. No sense in performing a copy unless requested.
+        if url_type == "file" and not filename:
+            return os.path.normpath(path), headers
+
+        # Handle temporary file setup.
+        if filename:
+            tfp = open(filename, 'wb')
+        else:
+            tfp = tempfile.NamedTemporaryFile(delete=False)
+            filename = tfp.name
+            _url_tempfiles.append(filename)
+
+        with tfp:
+            result = filename, headers
+            bs = 1024*8
+            size = -1
+            read = 0
+            blocknum = 0
+            if "content-length" in headers:
+                size = int(headers["Content-Length"])
+
+            if reporthook:
+                reporthook(blocknum, bs, size)
+
+            while block := fp.read(bs):
+                read += len(block)
+                tfp.write(block)
+                blocknum += 1
+                if reporthook:
+                    reporthook(blocknum, bs, size)
+
+    if size >= 0 and read < size:
+        raise ContentTooShortError(
+            "retrieval incomplete: got only %i out of %i bytes"
+            % (read, size), result)
+
+    return result
 
 
 def urlcleanup():
     """Clean up temporary files from urlretrieve calls, and drop the
     installed opener.
 
-    CPython's contract, over the state THIS module keeps -- which today is
-    none of it, so the call does nothing and says so honestly rather than
-    pretending.  It exists because callers invoke it defensively to reset
+    CPython's contract, over the state THIS module keeps: the files
+    urlretrieve() left behind.  It exists because callers invoke it defensively to reset
     global state between requests (test_urllib2_localnet's TestUrlopen
     registers it with addCleanup in setUp, so its absence raised
-    AttributeError before a single test in the class could run), and
-    because the loop below is what makes a future urlretrieve correct by
-    construction instead of by remembering.
+    AttributeError before a single test in the class could run).
     """
     import os
 

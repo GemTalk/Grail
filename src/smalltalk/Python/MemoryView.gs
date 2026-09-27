@@ -185,7 +185,9 @@ ___reexport___
 		length: (self @env0:dynamicInstVarAt: #'_length').
 	view @env0:dynamicInstVarAt: #'readonly'
 		put: (self @env0:dynamicInstVarAt: #'readonly').
-	^ view
+	"The STRIDE too: re-exporting ``memoryview(b)[::2]'' answered a
+	unit-stride view of the same window -- different bytes, and contiguous."
+	^ view ___setStep___: self ___step___
 %
 
 category: 'Grail-Conversion'
@@ -480,9 +482,25 @@ ___sliceView___: aSlice
 category: 'Grail-Sequence Protocol'
 method: memoryview
 ___setStep___: anInteger
-	"Record the item stride of a stepped slice, and answer the view."
+	"Record the item stride of a stepped slice, and answer the view.
 
+	The published geometry follows it: ``strides'' is the byte stride, and the
+	view is contiguous -- all three flags, it being 1-D -- exactly when CPython's
+	init_flags says so, one item or a stride of one item.  ___over___ set them
+	for a unit-stride view, and left as they were a stepped view claimed to be
+	contiguous, so pickle's save_picklebuffer took ``memoryview(b)[::2]'' for
+	raw memory (test_pickle's test_non_continuous_buffer)."
+
+	| itemsize count contiguous |
 	self @env0:dynamicInstVarAt: #'_step' put: anInteger.
+	itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
+	count := (self @env0:dynamicInstVarAt: #'_length') @env0:// itemsize.
+	contiguous := count @env0:= 1 or: [anInteger @env0:= 1].
+	self @env0:dynamicInstVarAt: #'strides'
+		put: (tuple @env0:withAll: { anInteger @env0:* itemsize }).
+	self @env0:dynamicInstVarAt: #'contiguous' put: contiguous.
+	self @env0:dynamicInstVarAt: #'c_contiguous' put: contiguous.
+	self @env0:dynamicInstVarAt: #'f_contiguous' put: contiguous.
 	^ self
 %
 

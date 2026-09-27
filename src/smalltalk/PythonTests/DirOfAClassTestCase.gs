@@ -193,16 +193,14 @@ testAPropertyReachedThroughItsClassIsAKnownGap
 		equals: '[''function'', ''method'', 1]'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Kinds'
 method: DirOfAClassTestCase
-testStaticAndClassMethodsAreNotDistinguishableWhichIsAKnownGap
-	"Recorded, NOT endorsed.  ``kind'' is read off the __dict__ entry precisely
-	because a staticmethod reached through getattr is a plain function and the
-	stored object is what tells them apart.  Grail stores an UnboundMethod for
-	both, so the distinction is not there to be read.  They were classified
-	``method'' before this change too -- what changed is that they are now
-	reached by the same route as every other method rather than by accident."
+testStaticAndClassMethodsAreDistinguished
+	"``kind'' is read off the __dict__ entry, which is the staticmethod /
+	classmethod descriptor, so classify_class_attrs reports 'static method' and
+	'class method' as CPython does.  This was a recorded gap: both were stored
+	as a plain function and classified 'method'."
 
-	self assert: (self resultAt: 'staticmethod_kind_is_a_known_gap') asString
-		equals: '[''method'', ''method'']'.
+	self assert: (self resultAt: 'staticmethod_kind') asString
+		equals: '[''static method'', ''class method'']'.
 %

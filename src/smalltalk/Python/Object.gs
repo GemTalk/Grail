@@ -5126,6 +5126,9 @@ ___pythonModuleAttrIdentity___
 	(n @env0:= 'os_ScandirIterator') ifTrue: [^ #('ScandirIterator' 'posix')].
 	(n @env0:= 'string_formatter') ifTrue: [^ #('Formatter' 'string')].
 	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
+	"os.stat_result -- a structseq CPython defines in posixmodule and publishes
+	from os; pickle saves it by that name."
+	(n @env0:= 'PyStatResult') ifTrue: [^ #('stat_result' 'os')].
 
 	"struct.  ``error'' and ``Struct'' are too generic to claim as
 	top-level names in the flat Python dictionary, so the Smalltalk
@@ -7243,6 +7246,37 @@ ___classDict___
 			(d @env0:includesKey: nm) ifTrue: [
 				d @env0:at: nm put: ((pair @env0:at: 2) __new__: (d @env0:at: nm))]]] ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	"A PYTHON class's @staticmethod and @classmethod defs, as the descriptor
+	objects CPython keeps in the class dict.  Both compile onto the metaclass,
+	so (b) above found each as a plain function; ClassDefAst's
+	___staticMethodNames___ record says which were static, and any other
+	class-side def compiled from the class body is a classmethod.  CPython's
+	``C.__dict__['f']'' is a staticmethod / classmethod object -- which pickle
+	refuses with TypeError, as test_pickle's test_py_methods checks -- where
+	Grail's was the bare function."
+	[ | metaCls statics |
+	metaCls := self @env0:class.
+	((self @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:notNil)
+		ifTrue: [
+			statics := ((metaCls @env0:compiledMethodAt: #'___staticMethodNames___'
+					environmentId: 1 otherwise: nil) @env0:notNil)
+				ifTrue: [self @env1:___staticMethodNames___]
+				ifFalse: [#()].
+			d @env0:keys @env0:asArray @env0:do: [:nm | | sel v |
+				sel := nm @env0:asSymbol.
+				v := d @env0:at: nm.
+				((v @env0:isKindOf: UnboundMethod)
+					and: [(nm @env0:asString @env0:beginsWith: '___') @env0:not
+					and: [(metaCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil) @env0:notNil
+					and: [self @env1:___isPythonSourceMethodCategory___:
+						(metaCls @env0:categoryOfSelector: sel environmentId: 1)]]]) ifTrue: [
+					d @env0:at: nm put: (((statics @env0:includes: nm) or: [statics @env0:includes: sel])
+						"A staticmethod's __func__ is called with no receiver, so it
+						wraps what ``C.f'' answers; a classmethod's takes cls, which
+						is what the metaclass UnboundMethod expects."
+						ifTrue: [PyStaticMethod __new__: (self ___pyAttrLoad___: sel)]
+						ifFalse: [PyClassMethod __new__: v])]]] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	"(d) session-local overlay entries shadow everything (last setattr
 	wins; flag-on only, so the common case adds nothing)."
 	[ | ov inner |
@@ -8644,8 +8678,19 @@ ___pyAttrLoad___: aSym
 	AttributeError, not the uncatchable GemStone ``instVar names cannot be
 	empty symbol'' that ``dynamicInstVarAt: #''''`` below would signal."
 	(aSym @env0:size @env0:= 0) ifTrue: [
-		^ AttributeError ___signal___: (self @env0:class @env0:name @env0:asString
-			@env0:, ' object has no attribute (empty name)')].
+		"CPython's own words, by receiver kind -- the Smalltalk class name and
+		an invented ``(empty name)'' matched none of them, and test_pickle's
+		test_find_class compares ``module 'math' has no attribute ''''."
+		^ AttributeError ___signal___: ((self @env0:isKindOf: module)
+			ifTrue: ['module ''' @env0:, ([(self @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: '?'])
+				@env0:, ''' has no attribute ''''']
+			ifFalse: [(self @env0:isKindOf: Behavior)
+				ifTrue: ['type object ''' @env0:, ([(self @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: self @env0:name @env0:asString])
+					@env0:, ''' has no attribute ''''']
+				ifFalse: ['''' @env0:, self ___pyTypeNameForError___ @env0:asString
+					@env0:, ''' object has no attribute ''''']])].
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any

@@ -1217,6 +1217,14 @@ class _Pickler:
         referent = _proxy_referent(obj)
         if referent is not None:
             return self._grail_reduce(referent)
+        # A staticmethod / classmethod OBJECT -- what ``C.__dict__['f']''
+        # holds -- is not picklable in CPython: object.__reduce_ex__ refuses a
+        # C type with no pickle support of its own.  Grail's wrappers forward
+        # attribute reads to the function they wrap, so the reads below would
+        # find the function's reduction and pickle that instead
+        # (test_py_methods / test_c_methods pickle the descriptors).
+        if isinstance(obj, (staticmethod, classmethod)):
+            raise TypeError(f"cannot pickle {type(obj).__name__!r} object")
         # An overridden __reduce__ is what object.__reduce_ex__ defers to --
         # CALLED even when it is not callable: ``__reduce__ = None'' is how a
         # class refuses pickling, and the TypeError from the call is the

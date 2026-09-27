@@ -449,7 +449,31 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId].
 	[:rec | rec == #'___noRecover___' ifFalse: [^ rec]] value: (self ___pyattrRecover___: aSelector args: anArray).
+	"A direct send of one of the placeholder methods -- ``replace:_:'',
+	``_split:kw:'' -- runs the same way as the call through __getattr__:."
+	(self ___placeholderSend___: aSelector args: anArray)
+		ifNotNil: [:answer | ^ answer value].
 	^ self ___unsupported___: aSelector asString
+%
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___placeholderSend___: aSelector args: anArray
+	"A block answering the result of the send, when aSelector spells one of
+	___viaPlaceholderNames___; nil otherwise.  A block, so that a method whose
+	answer is nil stays distinguishable from ``not one of these''."
+
+	| s idx pyName |
+	s := aSelector asString.
+	(s endsWith: ':kw:')
+		ifTrue: [pyName := (s copyFrom: 2 to: s size - 4) asSymbol]
+		ifFalse: [
+			idx := s indexOf: $:.
+			pyName := (idx = 0 ifTrue: [s] ifFalse: [s copyFrom: 1 to: idx - 1]) asSymbol].
+	(PyStrSurrogate ___viaPlaceholderNames___ includes: pyName) ifFalse: [^ nil].
+	(s endsWith: ':kw:') ifTrue: [
+		^ [self ___viaPlaceholders___: pyName positional: (anArray at: 1) kw: (anArray at: 2)]].
+	^ [self ___viaPlaceholders___: pyName positional: anArray kw: nil]
 %
 
 category: 'Grail-Python Protocol'
@@ -1340,3 +1364,227 @@ copyFrom: startIndex to: stopIndex
 
 set compile_env: 0
 
+
+! ------------------- The rest of the str surface, through placeholders
+!
+! Most str methods never look at WHAT a character is beyond its identity:
+! replace, find, split, strip, partition, the justifiers and the predicates
+! only compare code points, count them, or ask a property -- cased, space,
+! alphanumeric -- that a surrogate does not have.  So they are run on an
+! ordinary string in which each surrogate is swapped for a PLACEHOLDER: a
+! plane-16 private-use code point that occurs in none of the operands.  A
+! private-use character has exactly the properties a surrogate has (not
+! cased, not space, not alphanumeric, not printable, not an identifier
+! character), and because it occurs nowhere else it cannot match anything a
+! surrogate would not.  The answer is mapped back, so what comes out is
+! character-for-character what CPython answers.
+!
+! Only methods whose operands are ALL strings qualify; that is what makes the
+! "occurs in no operand" choice exact.  translate (a table keyed by code
+! point), format and % (arbitrary objects) and encode (its own
+! implementation) are left out.
+
+category: 'Grail-Placeholders'
+classmethod: PyStrSurrogate
+___viaPlaceholderNames___
+	"The str methods answered through placeholders -- see above."
+
+	^ #(#replace #split #rsplit #find #rfind #index #rindex #count
+		#strip #lstrip #rstrip #partition #rpartition #removeprefix #removesuffix
+		#splitlines #ljust #rjust #center #zfill #expandtabs
+		#title #capitalize #swapcase #join
+		#isalpha #isalnum #isdecimal #isdigit #isnumeric #isidentifier
+		#isprintable #isspace #islower #isupper #istitle #isascii)
+%
+
+set compile_env: 1
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+__getattr__: name
+	"``s.replace'' and the rest of ___viaPlaceholderNames___: a callable over
+	this string.  AbstractPyStr's version forwards the read to the wrapped
+	value, which this class does not have, so every such read raised.
+	Env 1, as AbstractPyStr's is -- that is the environment the attribute
+	load asks in."
+
+	| sym |
+	sym := name @env0:asSymbol.
+	(PyStrSurrogate @env0:___viaPlaceholderNames___ @env0:includes: sym) ifTrue: [
+		^ [:positional :kw | self @env0:___viaPlaceholders___: sym positional: positional kw: kw]].
+	"A name NO str has is an AttributeError, as for any str -- asked of an
+	empty one, which raises exactly CPython's.  ``hasattr(s, '__slots__')''
+	must answer False; the refusal below is a NotImplementedError, which
+	hasattr does not swallow, so it escaped test_pickle's assert_is_copy.
+	Only a name a str DOES have, but this class cannot compute, is refused."
+	(Unicode7 @env0:new) ___pyAttrLoad___: sym.
+	^ super __getattr__: name
+%
+
+set compile_env: 0
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___viaPlaceholders___: aName positional: positional kw: kwargs
+	"Run the str method aName on this string with surrogates swapped for
+	placeholders, and map the answer back."
+
+	| args operands map inverse carrier newArgs newKw result |
+	args := positional isNil ifTrue: [#()] ifFalse: [positional asArray].
+	"join's one argument is an ITERABLE of strings: materialize it, so each
+	element is an operand like any other."
+	(aName == #join and: [args size = 1]) ifTrue: [
+		args := { (args at: 1) ___pyStarToArray___ }].
+	operands := OrderedCollection new.
+	operands add: self.
+	args do: [:a | self ___addStrOperandsIn___: a to: operands].
+	(kwargs notNil and: [kwargs ~~ None]) ifTrue: [
+		kwargs valuesDo: [:v | self ___addStrOperandsIn___: v to: operands]].
+	map := self ___placeholderMapFor___: operands.
+	inverse := Dictionary new.
+	map keysAndValuesDo: [:k :v | inverse at: v put: k].
+	carrier := self ___carrierFor___: self map: map.
+	newArgs := args collect: [:a | self ___carrierIn___: a map: map].
+	newKw := (kwargs isNil or: [kwargs == None]) ifTrue: [nil] ifFalse: [
+		| d |
+		d := kwargs class new.
+		kwargs keysAndValuesDo: [:k :v | d at: k put: (self ___carrierFor___: v map: map)].
+		d].
+	result := (carrier @env1:___pyAttrLoad___: aName) @env1:value: newArgs value: newKw.
+	^ self ___restore___: result inverse: inverse
+%
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___isStrOperand___: anObject
+
+	^ (anObject isKindOf: CharacterCollection) or: [anObject isKindOf: PyStrSurrogate]
+%
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___addStrOperandsIn___: anObject to: operands
+	"A str operand, or each str in an Array of them (join's materialized
+	iterable)."
+
+	(self ___isStrOperand___: anObject) ifTrue: [^ operands add: anObject].
+	(anObject isKindOf: Array) ifTrue: [
+		anObject do: [:e | (self ___isStrOperand___: e) ifTrue: [operands add: e]]]
+%
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___placeholderMapFor___: operands
+	"Surrogate code point -> placeholder, one placeholder per distinct
+	surrogate, each a plane-16 private-use code point that no operand holds.
+	Plane 16 has 65534 of them and there are only 2048 surrogates, so the
+	search always succeeds."
+
+	| used map next |
+	used := Set new.
+	operands do: [:o |
+		o ___pyCodePoints___ do: [:cp | cp >= 16r100000 ifTrue: [used add: cp]]].
+	map := Dictionary new.
+	next := 16r100000.
+	operands do: [:o |
+		(o isKindOf: PyStrSurrogate) ifTrue: [
+			o ___codePoints___ do: [:cp |
+				((self ___isSurrogate___: cp) and: [(map includesKey: cp) not]) ifTrue: [
+					[used includes: next] whileTrue: [next := next + 1].
+					map at: cp put: next.
+					next := next + 1]]]].
+	^ map
+%
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___carrierFor___: anObject map: map
+	"anObject with its surrogates swapped for their placeholders, when it is a
+	surrogate str; anything else unchanged."
+
+	| out |
+	(anObject isKindOf: PyStrSurrogate) ifFalse: [^ anObject].
+	out := Unicode7 new.
+	anObject ___codePoints___ do: [:cp | out addCodePoint: (map at: cp ifAbsent: [cp])].
+	^ out
+%
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___carrierIn___: anObject map: map
+	"___carrierFor___:map:, reaching one level into join's Array too."
+
+	(anObject isKindOf: Array) ifTrue: [
+		^ anObject collect: [:e | self ___carrierFor___: e map: map]].
+	^ self ___carrierFor___: anObject map: map
+%
+
+category: 'Grail-Placeholders'
+method: PyStrSurrogate
+___restore___: aResult inverse: inverse
+	"aResult with every placeholder swapped back for its surrogate: a str, or
+	the strs in a list or tuple (split, partition).  Anything else -- an index,
+	a count, a bool -- is unchanged."
+
+	| cps hit |
+	inverse isEmpty ifTrue: [^ aResult].
+	(aResult isKindOf: CharacterCollection) ifTrue: [
+		hit := false.
+		cps := OrderedCollection new.
+		aResult do: [:c | | cp |
+			cp := c codePoint.
+			(inverse includesKey: cp) ifTrue: [hit := true. cp := inverse at: cp].
+			cps add: cp].
+		^ hit ifTrue: [PyStrSurrogate ___fromCodePoints___: cps] ifFalse: [aResult]].
+	(aResult isKindOf: OrderedCollection) ifTrue: [
+		1 to: aResult size do: [:i |
+			aResult at: i put: (self ___restore___: (aResult at: i) inverse: inverse)].
+		^ aResult].
+	(aResult isKindOf: tuple) ifTrue: [
+		^ aResult class withAll: (aResult asArray collect: [:e |
+			self ___restore___: e inverse: inverse])].
+	^ aResult
+%
+
+set compile_env: 1
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+translate: table
+	"Not a placeholder method: the table is keyed by code point, and a
+	surrogate's own key has to be found.  See the shared implementation."
+
+	^ PyStrSurrogate ___translate___: self table: table
+%
+
+category: 'Grail-Shared'
+classmethod: PyStrSurrogate
+___translate___: aStr table: table
+	"CPython's str.translate, on code points, for any str-like: each code point
+	is looked up in table (any mapping, or a sequence); a LookupError keeps it,
+	None deletes it, an int or a str replaces it.  The one implementation that
+	can produce -- or read -- a lone surrogate, so str.gs falls back to it when
+	a replacement is one."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	aStr @env0:___pyCodePoints___ @env0:do: [:cp | | v |
+		v := [table __getitem__: cp]
+			@env0:on: LookupError do: [:ex | ex @env0:return: #'___keep___'].
+		v == #'___keep___'
+			ifTrue: [out @env0:add: cp]
+			ifFalse: [
+				v == None ifFalse: [
+					(v @env0:isKindOf: Integer)
+						ifTrue: [
+							(v @env0:< 0 or: [v @env0:> 16r10FFFF]) ifTrue: [
+								^ ValueError ___signal___: 'character mapping must be in range(0x110000)'].
+							out @env0:add: v]
+						ifFalse: [
+							(v @env0:___pyCodePoints___) @env0:isNil ifTrue: [
+								^ TypeError ___signal___: 'character mapping must return integer, None or str'].
+							out @env0:addAll: v @env0:___pyCodePoints___]]]].
+	^ PyStrSurrogate @env0:___fromCodePoints___: out
+%
+
+set compile_env: 0

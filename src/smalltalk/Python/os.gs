@@ -338,10 +338,30 @@ fspath: path
 	short-circuits: strings and bytes pass through; user objects
 	delegate to __fspath__ if defined."
 
-	(path isKindOf: CharacterCollection) ifTrue: [^ path].
-	(path isKindOf: ByteArray) ifTrue: [^ path].
-	(self ___isPathLike___: path) ifTrue: [^ path __fspath__].
-	TypeError ___signal___: 'expected str, bytes, or os.PathLike'
+	| r |
+	(self ___isStrOrBytes___: path) ifTrue: [^ path].
+	(self ___isPathLike___: path) ifTrue: [
+		"CPython checks what __fspath__ hands back, and names the class in
+		the refusal."
+		r := path __fspath__.
+		(self ___isStrOrBytes___: r) ifTrue: [^ r].
+		TypeError ___signal___: 'expected ' @env0:, (path ___pyTypeNameForError___) @env0:asString
+			@env0:, '.__fspath__() to return str or bytes, not '
+			@env0:, (r ___pyTypeNameForError___) @env0:asString].
+	TypeError ___signal___: 'expected str, bytes or os.PathLike object, not '
+		@env0:, (path ___pyTypeNameForError___) @env0:asString
+%
+
+category: 'Grail-Filesystem'
+method: os
+___isStrOrBytes___: anObject
+	"A str or bytes as os.fspath means it.  AbstractPyStr counts: a str holding
+	lone surrogates is a PyStrSurrogate, which is how os.fsdecode spells an
+	undecodable byte, and fspath refused it as a non-path."
+
+	^ (anObject isKindOf: CharacterCollection)
+		or: [(anObject isKindOf: ByteArray)
+		or: [anObject isKindOf: AbstractPyStr]]
 %
 
 category: 'Grail-Filesystem'
@@ -2490,10 +2510,9 @@ _utime: positional kw: kwargs
 	WHAT A CALLER CAN RELY ON.  The times are REALLY SET -- ___applyUtime___
 	reads them back and raises if they did not take -- to WHOLE SECONDS.  Any
 	sub-second part of the argument is floored away, matching os.stat here,
-	which already answers an int st_mtime where CPython answers a float
-	(GsFileStat exposes whole seconds only).  So a round trip through
-	os.utime + os.stat agrees with CPython on math.floor(st_mtime) and not on
-	st_mtime itself.
+	whose float st_mtime is always a whole number of seconds (GsFileStat
+	exposes whole seconds only).  So a round trip through os.utime + os.stat
+	agrees with CPython on math.floor(st_mtime) and not on st_mtime itself.
 
 	times=None (or omitted) means NOW, and ``now'' is read from the gem's
 	clock and then set explicitly rather than left to touch's own default, so
@@ -3044,7 +3063,14 @@ fstat: fd
 	GsFileStat os.stat wraps, so the two agree field for field."
 
 	| n result |
-	n := self ___fd: fd.
+	"NOT ___fd:, which admits only descriptors os.open handed out.  That
+	guard exists so os.close / os.write cannot reach the gem's own
+	descriptors; fstat only READS, and the descriptor it is usually given is
+	a Python file's own -- ``os.fstat(f.fileno())'', which http.server's
+	send_head does for every file it serves -- which os.open never saw.  A
+	closed or bogus descriptor still answers EBADF, from the primitive."
+	n := self ___asCInt: fd.
+	n @env0:< 0 ifTrue: [^ self ___signalErrno: 9].
 	result := GsFile @env0:_fstat: n isLstat: false.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ PyStatResult @env0:on: result].
 	(result @env0:isKindOf: SmallInteger) ifTrue: [^ self ___signalErrno: result].
