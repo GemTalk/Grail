@@ -1,5 +1,38 @@
 # Known Issues
 
+## OPEN: a dunder set on a class at runtime is invisible to `iter()`, `len()`, `bool()`, `in`, `[]` and `int()`
+
+Found 2026-09-26 while fixing test_gettext (Grail's `MagicMock`).  A special
+method that reaches a class DYNAMICALLY -- `setattr(cls, '__iter__', f)`, or an
+entry in `type()`'s dict -- is honoured by some operations and not others.
+Measured, each row a fresh class:
+
+| installed at runtime | result |
+| --- | --- |
+| `__mul__`, `__enter__`/`__exit__` | works (`m * 3`, `with m:`) |
+| `__iter__` (setattr, subclass of it, or `type('D', (object,), {'__iter__': f})`) | `TypeError: 'D' object is not iterable` |
+| `__len__` | `TypeError: ... cannot be interpreted as an integer` |
+| `__bool__` | `TypeError: __bool__ should return bool` |
+| `__contains__` | `TypeError: argument of type ... is not a container or iterable` |
+| `__getitem__` | `TypeError: ... object is not subscriptable` |
+| `__int__` | `TypeError: int() argument must be a string or a number` |
+
+The same methods written as `def`s in a class body work.  The split follows
+`object`'s compiled defaults: `object >> __iter__`, `__contains__:` and the
+like are real methods, so the protocol send resolves to the default and raises
+before anything consults the class's attribute holder
+(`___classAttrOwnOrInherited___:`), where a runtime-set attribute lives.  A
+dunder with no compiled default misses, and `doesNotUnderstand:` finds the
+attribute -- which is why the binary operators work.  The defaults already make
+one such check before raising, for a METACLASS
+(`___grailMetaclassMethodFor___:`); a parallel check of the class's own
+holder is the likely fix, and it is shared machinery (tier 2).
+
+Workaround in the meantime, and what `mock.MagicMock` does: define the magic
+methods as `def`s and have them look up whatever should be configurable.  A
+plain `Mock` configured by assignment (`m.__iter__ = Mock(...)`) still hits the
+gap for the rows above.
+
 ## An emptied `__class__` cell raises `RuntimeError`, where CPython 3.14 raises `NameError`
 
 After `nonlocal __class__; del __class__`, a later zero-argument `super()` has
