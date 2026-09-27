@@ -1307,6 +1307,7 @@ run
 	at: #'StrSurrogateShimTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
 	at: #'StringModuleTestCase' put: nil;
+	at: #'StructBuffersAndHalfInitTestCase' put: nil;
 	at: #'StructGapsTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
 	at: #'SubclassAttrShadowTestCase' put: nil;
@@ -2728,6 +2729,7 @@ input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSurrogateProtocolTestCase.gs
 input src/smalltalk/PythonTests/StrSurrogateShimTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
+input src/smalltalk/PythonTests/StructBuffersAndHalfInitTestCase.gs
 input src/smalltalk/PythonTests/StructGapsTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
 input src/smalltalk/PythonTests/SubclassAttrShadowTestCase.gs

@@ -31,7 +31,32 @@ _SIGNED_CODES = 'bhilq'
 class _array:
     def __init__(self, typecode, initializer=None):
         self.typecode = typecode
-        self._data = list(initializer) if initializer is not None else []
+        self._data = []
+        if initializer is None:
+            return
+        # CPython reads a bytes-like initializer as raw MACHINE bytes, not as
+        # a sequence of small ints: array('h', b'\x01\x02\x03\x04') is TWO
+        # items.  The stub took ``list(initializer)'' and made it four, which
+        # only looked right while tobytes() also wrote one byte per item.
+        if isinstance(initializer, (bytes, bytearray)):
+            self.frombytes(initializer)
+        else:
+            self._data = list(initializer)
+
+    def frombytes(self, data):
+        """Append items read from ``data'' in native (little-endian) byte
+        order, as CPython's array.frombytes does.  A typecode _ITEMSIZES does
+        not cover keeps the stub's old reading, one item per byte."""
+        size = _ITEMSIZES.get(self.typecode)
+        data = bytes(data)
+        if size is None:
+            self._data.extend(data)
+            return
+        if len(data) % size:
+            raise ValueError("bytes length not a multiple of item size")
+        signed = self.typecode in _SIGNED_CODES
+        for i in range(0, len(data), size):
+            self._data.append(int.from_bytes(data[i:i + size], 'little', signed))
 
     @property
     def itemsize(self):
@@ -54,10 +79,28 @@ class _array:
         return list(self._data)
 
     def tobytes(self):
-        # Only meaningful for typecode 'B' (unsigned byte) -- the only
-        # code this stub's callers (int(array('B', b)), test_int.py)
-        # actually exercise; no per-typecode packing is implemented.
-        return bytes(self._data)
+        # Native (little-endian) packing per typecode, the layout fromfile
+        # and byteswap already assume.  It used to be ``bytes(self._data)'',
+        # which is right only for 'B' and raised for a negative 'b' item --
+        # and a writable memoryview over an array('b') writes such items.
+        # A typecode _ITEMSIZES does not cover keeps the old behaviour.
+        size = _ITEMSIZES.get(self.typecode)
+        if size is None or self.typecode == 'B':
+            return bytes(self._data)
+        signed = self.typecode in _SIGNED_CODES
+        return b''.join(x.to_bytes(size, 'little', signed) for x in self._data)
+
+    def _grail_set_byte(self, index, value):
+        """Store one BYTE of the array's native representation, at byte
+        offset ``index''.  memoryview's write hook: a view over this array
+        cannot write into tobytes(), which is a copy, so it writes here, and
+        the item the byte belongs to is rebuilt around it."""
+        size = _ITEMSIZES[self.typecode]
+        signed = self.typecode in _SIGNED_CODES
+        k, j = divmod(index, size)
+        raw = bytearray(self._data[k].to_bytes(size, 'little', signed))
+        raw[j] = value
+        self._data[k] = int.from_bytes(bytes(raw), 'little', signed)
 
     def fromfile(self, f, n):
         # array.fromfile(f, n): read n binary items in the machine's

@@ -2,6 +2,7 @@
 run
 NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].
 Exception ifNil: [self error: 'Exception is not defined. Check file ordering.'].
+list_iterator ifNil: [self error: 'list_iterator is not defined. Check file ordering.'].
 %
 
 ! ------- struct.error
@@ -27,6 +28,63 @@ expectvalue /Class
 doit
 StructError category: 'Grail-Exceptions'
 %
+
+! ------- unpack_iterator (what iter_unpack answers)
+expectvalue /Class
+doit
+list_iterator subclass: 'unpack_iterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+unpack_iterator comment:
+'Python ``_struct.unpack_iterator'''': what iter_unpack answers.
+
+iter_unpack decodes every record up front (see struct >> iter_unpack:_:), so the
+iteration itself is a list_iterator''s over the decoded tuples, and this class
+adds nothing but its NAME.  The name is the point: CPython''s type is its own and
+cannot be constructed from Python, and answering the list''s iterator made
+``type(s.iter_unpack(b''''))'''' the list''s type.'
+%
+
+expectvalue /Class
+doit
+unpack_iterator category: 'Grail-Modules'
+%
+
+set compile_env: 0
+
+category: 'Grail-Instance Creation'
+classmethod: unpack_iterator
+new
+	"Refused, which is what makes the type uninstantiable from Python:
+	``type(it)()'' reaches object's allocator, and this answers it with
+	CPython's own TypeError.  Raised here rather than left to the allocator's
+	generic ``cannot create ... instances'', because that one names the bare
+	Smalltalk class, and CPython's names the type as its module qualifies it:
+	'_struct.unpack_iterator'.  The one legitimate constructor is ___new___
+	below, reached through list_iterator class >> ___on:."
+
+	^ TypeError @env1:___signal___: 'cannot create ''_struct.unpack_iterator'' instances'
+%
+
+set compile_env: 1
+
+category: 'Grail-Instance Creation'
+classmethod: unpack_iterator
+___new___
+	"Allocate without #new, which this class refuses -- see there."
+
+	^ self @env0:basicNew
+%
+
+set compile_env: 0
 
 ! ------- struct module class
 expectvalue /Class
@@ -115,6 +173,17 @@ initialize
 ! ===============================================================================
 ! Public API
 ! ===============================================================================
+
+category: 'Grail-Public'
+method: struct
+_clearcache
+	"struct._clearcache() -- CPython empties its cache of compiled Struct objects.
+	This module keeps no such cache (every call parses its format), so there is
+	nothing to clear; it exists because _struct.py re-exports it under CPython's
+	_struct names, and code written for CPython may call it."
+
+	^ None
+%
 
 category: 'Grail-Public'
 method: struct
@@ -317,7 +386,11 @@ iter_unpack: format _: buffer
 	0 @env0:to: bytes @env0:size @env0:- size by: size do: [:off |
 		results @env0:add: (self _unpackAll: parsed bytes: bytes offset: off)
 	].
-	^ (list @env0:withAll: results @env0:asArray) @env1:__iter__
+	"An unpack_iterator, CPython's type, rather than the list's own iterator:
+	``type(s.iter_unpack(b''))'' is not constructible from Python, which
+	test_struct's UnpackIteratorTest.test_uninstantiable checks -- and a
+	list_iterator answer made that the list's type instead."
+	^ unpack_iterator ___on: (list @env0:withAll: results @env0:asArray)
 %
 
 category: 'Grail-Public'
@@ -365,8 +438,7 @@ pack_into: format _: buffer _: rawOffset args: values
 		The ByteArray guard matters: immutable bytes IS a ByteArray and
 		must stay a TypeError here, so only NON-byte objects (array.array,
 		and the memoryview Grail answers as one) take the indexable path."
-		((buffer @env0:isKindOf: ByteArray) @env0:not
-			@env0:and: [buffer ___respondsTo___: #'__setitem__:_:'])
+		(self ___isWritableBuffer___: buffer)
 			ifTrue: [^ self _packIntoIndexable: format _: buffer _: rawOffset args: values].
 		^ TypeError ___signal___: 'argument must be read-write bytes-like object, not '
 			@env0:, (bytes ___pyTypeNameOf___: buffer)
@@ -386,6 +458,27 @@ pack_into: format _: buffer _: rawOffset args: values
 	].
 	self _copyBytes: packed into: buffer at: offset.
 	^ nil
+%
+
+category: 'Grail-Private'
+method: struct
+___isWritableBuffer___: buffer
+	"Is ``buffer'' -- anything but a bytearray, which pack_into handles directly
+	-- a read-write buffer pack_into may write into byte by byte?
+
+	A WRITABLE, CONTIGUOUS memoryview, or an object with the byte-level write
+	hook memoryview itself uses for a non-bytes source (``_grail_set_byte'':
+	array.array).  It used to be ``anything with __setitem__'', which accepted
+	a list -- ``struct.pack_into('21s', [0] * 100, 0, s)'' filled it with ints
+	where CPython raises TypeError, since a list has no buffer at all -- and a
+	read-only or stepped view got as far as __setitem__ before failing with the
+	wrong error.  CPython's message is the same for all of them."
+
+	(buffer @env0:isKindOf: ByteArray) ifTrue: [^ false].
+	(buffer @env0:isKindOf: memoryview) ifTrue: [
+		^ ((buffer @env0:dynamicInstVarAt: #'readonly') @env0:= true) @env0:not
+			and: [buffer ___isContiguous___]].
+	^ buffer ___respondsTo___: #'_grail_set_byte:_:'
 %
 
 ! ===============================================================================
@@ -1448,22 +1541,67 @@ __new__: fmt
 
 	| inst |
 	inst := self @env0:new.
+	"``Struct.__new__(Struct)'' spelled out in Python arrives HERE, with the CLASS
+	as its argument -- the explicit-cls convention -- while ``Struct(fmt)''
+	arrives with the format.  The explicit form allocates a Struct that
+	__init__ has not run on, which CPython keeps as a distinct state: every
+	operation refuses it (PyStruct >> format) and its size is -1.  Treating the
+	class as a format string reported ``bad char in struct format'' instead
+	(test_struct test_operations_on_half_initialized_Struct)."
+	((fmt isKindOf: Behavior) and: [fmt == self or: [fmt @env0:inheritsFrom: PyStruct]])
+		ifTrue: [^ fmt == self ifTrue: [inst] ifFalse: [fmt @env0:new]].
 	inst @env0:dynamicInstVarAt: #_format put: (struct instance _validatedFormat: fmt).
 	^ inst
 %
 
 category: 'Grail-Accessors'
 method: PyStruct
-format
-	"Phase B+1: read from dynamic-instVar storage."
+___formatOrNil___
+	"The stored format, or nil for a Struct that __init__ never ran on --
+	``Struct.__new__(Struct)'' allocates one.  Guarded, because the slot is
+	simply absent then, and an absent dynamic instVar is not a nil one."
 
-	^ self @env0:dynamicInstVarAt: #_format
+	^ [self @env0:dynamicInstVarAt: #_format]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Accessors'
+method: PyStruct
+format
+	"Phase B+1: read from dynamic-instVar storage.
+
+	Every operation reads the format through here, so this is also where a
+	HALF-INITIALIZED Struct refuses: CPython raises ``RuntimeError: Struct
+	object is not initialized'' from pack, unpack, iter_unpack, pack_into,
+	format, __sizeof__ and repr alike.  Grail had no such state -- the missing
+	format read as nil and reached the parser, which reported ``bad char in
+	struct format'' (test_struct test_operations_on_half_initialized_Struct)."
+
+	| fmt |
+	fmt := self ___formatOrNil___.
+	fmt == nil ifTrue: [
+		^ RuntimeError ___signal___: 'Struct object is not initialized'].
+	^ fmt
 %
 
 category: 'Grail-Accessors'
 method: PyStruct
 size
+	"-1 for a half-initialized Struct, as CPython reports -- the one read that
+	does not refuse."
+
+	self ___formatOrNil___ == nil ifTrue: [^ -1].
 	^ struct instance calcsize: self format
+%
+
+category: 'Grail-Accessors'
+method: PyStruct
+__sizeof__
+	"Refuses a half-initialized Struct like every other operation, and is
+	otherwise object's answer (object >> __sizeof__)."
+
+	self format.
+	^ self @env0:physicalSize
 %
 
 category: 'Grail-Public'
