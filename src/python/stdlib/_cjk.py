@@ -77,7 +77,11 @@ def _decode_error(errors, codec_name, data, start, end, reason):
         return (''.join(out), end)
     handler = codecs.lookup_error(errors)
     result = handler(exc)
-    if not isinstance(result, tuple) or len(result) != 2:
+    # The element types too, as CPython checks them: a handler answering
+    # ([], end) otherwise decoded as if [] were an empty replacement.
+    if (not isinstance(result, tuple) or len(result) != 2
+            or not isinstance(result[0], str)
+            or not isinstance(result[1], int)):
         raise TypeError('decoding error handler must return (str, int) tuple')
     replacement, position = result
     if position < 0:
@@ -99,7 +103,13 @@ def _encode_error(errors, codec_name, text, start, end):
         return ('?' * (end - start), end)
     handler = codecs.lookup_error(errors)
     result = handler(exc)
-    if not isinstance(result, tuple) or len(result) != 2:
+    # The element types too, as CPython checks them: a handler answering
+    # ([], end) otherwise encoded [] as an empty replacement
+    # (multibytecodec_support's test_callback_wrong_objects).  A multibyte
+    # encoder also takes bytes, used as they are (test_callback_returns_bytes).
+    if (not isinstance(result, tuple) or len(result) != 2
+            or not isinstance(result[0], (str, bytes))
+            or not isinstance(result[1], int)):
         raise TypeError('encoding error handler must return (str, int) tuple')
     replacement, position = result
     if position < 0:

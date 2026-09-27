@@ -339,11 +339,20 @@ printSmalltalkAttributeAugAssignOn: aStream
 	"General receiver: route through the polymorphic attribute
 	protocol.  ``at: #attr put:'' would hit Behavior>>at:put: (indexed
 	subscript) when the receiver is a CLASS — ``Field.creation_counter
-	+= 1'' in django's Field.__init__ crashed exactly there."
+	+= 1'' in django's Field.__init__ crashed exactly there.
+
+	The STORE is ``__setattr__:_:'', as the plain ``obj.x = v'' emits and as
+	the self branch above has since #1123.  It was ___pyAttrStore___:put:,
+	which steps past everything __setattr__ dispatches: a __setattr__
+	override, a @property setter, and a nested function's side table
+	(ExecBlock >> __setattr__:_:) -- so ``f.limit -= 1'' on a local closure
+	raised ``'function' object has no attribute 'limit''' one line after
+	``f.limit = 3'' had worked (test_codecencodings_kr
+	test_callback_backward_index)."
 	target value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' @env1:___pyAttrStore___: #'''.
+	aStream nextPutAll: ' @env1:__setattr__: '''.
 	aStream nextPutAll: target ___mangledAttr___.
-	aStream nextPutAll: ''' put: (('.
+	aStream nextPutAll: ''' _: (('.
 	target value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:___pyAttrLoad___: #''';
 		nextPutAll: target ___mangledAttr___;
@@ -556,7 +565,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
 	  self ___pyattr_x___: ((self ___pyattr_x___)
 	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
-	  (obj) @env1:___pyAttrStore___: #x put: (((obj) @env1:___pyAttrLoad___: #x)
+	  (obj) @env1:__setattr__: 'x' _: (((obj) @env1:___pyAttrLoad___: #x)
 	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
 	  (obj) __setitem__: (i) _: (((obj) __getitem__: (i))
 	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
@@ -628,9 +637,12 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		load := aBuilder send: #'___pyAttrLoad___:' to: recv2 with: { aBuilder obj: attr } env: 1.
 		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
+		"``__setattr__:_:'' with a String name, as the text emits -- see
+		printSmalltalkAttributeAugAssignOn: for what ___pyAttrStore___:put:
+		stepped past."
 		aBuilder add: (aBuilder
-			send: #'___pyAttrStore___:put:' to: recv1
-			with: { aBuilder obj: attr. augOf value: load value: v }
+			send: #'__setattr__:_:' to: recv1
+			with: { aBuilder obj: attr asString. augOf value: load value: v }
 			env: 1).
 		^ self].
 	aKind == #subscript ifTrue: [

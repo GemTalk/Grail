@@ -31,6 +31,21 @@ def _check_errors(owner, errors):
     return errors
 
 
+# ``errors'' is a getset in CPython, shared by all four classes below: it can
+# be reassigned, only to a str, and never deleted (multibytecodec_support's
+# test_incrementalencoder_del_segfault).  Each class spells the property out
+# rather than inheriting it from a mixin, so that their __mro__ stays
+# CPython's (the class, then object).
+def _errors_value(value):
+    if not isinstance(value, str):
+        raise TypeError('errors must be a string')
+    return value
+
+
+def _refuse_errors_delete():
+    raise AttributeError('cannot delete attribute')
+
+
 def _pack_encoder_state(pending, state):
     """pending text (at most a few characters) and the engine's int state as
     one non-negative int: state in the low 32 bits, then 21 bits a character
@@ -55,6 +70,18 @@ def _unpack_encoder_state(value):
 
 class MultibyteIncrementalEncoder:
     codec = None
+
+    @property
+    def errors(self):
+        return self._errors
+
+    @errors.setter
+    def errors(self, value):
+        self._errors = _errors_value(value)
+
+    @errors.deleter
+    def errors(self):
+        _refuse_errors_delete()
 
     def __init__(self, errors='strict'):
         self.errors = _check_errors(self, errors)
@@ -93,6 +120,18 @@ class MultibyteIncrementalEncoder:
 class MultibyteIncrementalDecoder:
     codec = None
 
+    @property
+    def errors(self):
+        return self._errors
+
+    @errors.setter
+    def errors(self, value):
+        self._errors = _errors_value(value)
+
+    @errors.deleter
+    def errors(self):
+        _refuse_errors_delete()
+
     def __init__(self, errors='strict'):
         self.errors = _check_errors(self, errors)
         self._pending = b''
@@ -127,6 +166,18 @@ class MultibyteIncrementalDecoder:
 
 class MultibyteStreamReader:
     codec = None
+
+    @property
+    def errors(self):
+        return self._errors
+
+    @errors.setter
+    def errors(self, value):
+        self._errors = _errors_value(value)
+
+    @errors.deleter
+    def errors(self):
+        _refuse_errors_delete()
 
     def __init__(self, stream, errors='strict'):
         self.stream = stream
@@ -176,6 +227,18 @@ class MultibyteStreamReader:
 
 class MultibyteStreamWriter:
     codec = None
+
+    @property
+    def errors(self):
+        return self._errors
+
+    @errors.setter
+    def errors(self, value):
+        self._errors = _errors_value(value)
+
+    @errors.deleter
+    def errors(self):
+        _refuse_errors_delete()
 
     def __init__(self, stream, errors='strict'):
         self.stream = stream
