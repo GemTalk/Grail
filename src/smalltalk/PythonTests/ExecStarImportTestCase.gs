@@ -52,14 +52,17 @@ ExecStarImportTestCase category: 'Grail-SUnit'
 ! turns declared names into slots.  The other way round, every name it found
 ! would compile to an undefined symbol -- the same class of error, just later.
 !
-! WHAT A DOIT GIVES UP is the runtime merge.  A module-level star import also
-! emits ``self ___mergePublicAttrsFrom: X'', which picks up names that exist only
-! at run time (something injected via globals().update() -- re._constants does
-! this).  An exec'd body has no module instance: ``self'' is nil, so that send
-! would be a doesNotUnderstand on nil -- precisely the uncatchable failure being
-! removed.  So it is skipped in a doit, and what remains is every name the module
-! declares statically, which is what a star import means in practice.  The gap is
-! narrow and deliberate, not overlooked.
+! A DOIT NOW HAS A RUNTIME MERGE OF ITS OWN (builtins >> ___doitStarImport___:
+! into:), and the per-name bindings are no longer emitted there.  The expansion
+! still runs, but only to DECLARE the names, so a later read in the same body
+! compiles; the merge binds exactly what CPython's rule selects -- __all__ when
+! the module has one, underscored names included and a listed submodule of a
+! package imported first, else the public names -- and _exec:'s reflect-back
+! skips the declared slots it left unbound.  The parse-time bindings alone had
+! bound nothing for a module whose __all__ is computed (Grail's
+! _collections_abc takes its own from collections.abc) and every public name
+! for one that fell back (django.db.models), which is what test___all__ hit.
+! See tests/python/all_conformance.py and AllConformanceTestCase.
 !
 ! Fixture: tests/python/exec_star_import.py (self-verifying under CPython 3.14).
 ! ===============================================================================

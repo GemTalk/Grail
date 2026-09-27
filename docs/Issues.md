@@ -32,6 +32,74 @@ Workaround in the meantime, and what `mock.MagicMock` does: define the magic
 methods as `def`s and have them look up whatever should be configurable.  A
 plain `Mock` configured by assignment (`m.__iter__ = Mock(...)`) still hits the
 gap for the rows above.
+## OPEN: a module's session footprint -- test___all__ needs a 2GB temporary-memory budget
+
+Found 2026-09-27 while fixing test___all__, which imports every stdlib module
+with an `__all__` (about 220, django included) into ONE session.  Measured with
+a mark-sweep after each import: **820MB of temporary object memory is still
+live after the last one**, before the compiles' own transient garbage.  At the
+CPython suite's `GEM_TEMPOBJ_CACHE_SIZE=1000000` the gem ran out partway
+through the `test` package and exited with no message at all; at 2000000 the
+test passes, so `run_cpython_suite.sh` gives that one module 2000000
+(`module_topaz_cfg`).
+
+Where it goes, from `GsObjectInventory profileMemoryNoPom` after importing
+test.test_typing alone (114MB used): `LargeObjectNode` 2953 instances /
+346MB, `Unicode7` 55108 / 63MB, `GsNMethod` 40363 / 14MB -- large strings and
+arrays, most plausibly method source kept per compiled method.  The largest
+single imports were django.conf.urls (183MB, the whole of django's core) and
+the big test modules at 50-62MB each (test_typing, test_enum,
+test.datetimetester, test_decimal, test_traceback) -- several KB per source
+line.  Shrinking that per-method footprint would retire the override.
+
+## OPEN: test_typing's `test_bytestring` fails once the frameworks are deployed
+
+Found 2026-09-27 (test___all__, while checking test_typing for a regression it
+turned out not to be).  `CollectionsAbcTests.test_bytestring` raises
+`AttributeError: type object 'ByteString' has no attribute '_removal_version'`
+when `scripts/deployFrameworks.gs` has committed the framework closure --
+which `run_tests.sh` does first, so a CPython-suite run straight after a
+`run_tests.sh` sees it -- and passes after a fresh `install.sh`, which clears
+those deployments.  Measured both ways on main and on the test___all__ branch:
+27 errors deployed, 26 not, identical per test.
+
+`typing.ByteString` is a `_DeprecatedGenericAlias`, whose `__init__` sets
+`self._removal_version`; `_BaseGenericAlias.__setattr__` forwards that to the
+ORIGIN, so it lands as a class attribute on `collections.abc.ByteString`, and
+`__instancecheck__` reads it back through `__getattr__`.  With typing and
+collections.abc deployed, that class attribute is not there to read.  Not yet
+narrowed further than that.
+
+## OPEN: `subTest` does not isolate a failure
+
+Found 2026-09-27 (test___all__).  A failing assertion inside `with
+self.subTest(...)` ends the test method, as it would without the `subTest`,
+instead of being recorded and letting the loop carry on:
+
+    for i in range(3):
+        with self.subTest(i=i):
+            self.assertEqual(i, 0)
+
+CPython: 2 failures, `addSubTest` called with an error twice.  Grail: 1 failure,
+`addSubTest` never called with one.  Fixing it moves failure COUNTS across the
+CPython scoreboard (every module whose failing test uses `subTest`), so it wants
+its own PR and a baseline refresh rather than riding along with another fix.
+
+## OPEN: a class body reads an enclosing function's local that the class body also binds
+
+Found 2026-09-27 (test___all__).  A name BOUND in a class body is class-local,
+so CPython resolves a read of it through the class namespace, then globals, then
+builtins -- never the enclosing function:
+
+    def f():
+        zzz = 'enclosing'
+        class F:
+            y = zzz      # CPython: NameError (unless a global zzz exists)
+            zzz = 9
+
+Grail answers `'enclosing'`.  A name the class body only READS does see the
+enclosing function, in both.
+
 ## PEP 695 bounds on a def are evaluated in the module's globals, not the annotation scope
 
 This is about FUNCTIONS AND METHODS only.  A generic CLASS or type alias at

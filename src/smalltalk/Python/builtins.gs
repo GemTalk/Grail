@@ -491,6 +491,71 @@ ___doitGlobalsView___: aScope
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___doitStarImport___: aModule into: aScope
+	"``from X import *'' in a DOIT (exec/eval), with CPython's rule: exactly the
+	names in X.__all__ when X defines one -- underscored names included, a
+	missing one an AttributeError -- and otherwise every name in X's namespace
+	that does not start with an underscore.
+
+	Written into the doit's scope, under each name's doit-scope spelling, which
+	is where an assignment in the exec'd body lands: _exec:'s reflect-back
+	copies it to the caller's mapping from there.
+
+	A module-level star import is expanded at PARSE time from a literal
+	``__all__'' and topped up by module >> ___mergePublicAttrsFrom:.  A doit
+	had only the parse-time half, so a module whose __all__ is not a literal
+	bound nothing at all: ``exec('from _collections_abc import *', ns)'' left
+	ns empty, because Grail's _collections_abc takes its __all__ from
+	collections.abc (test___all__)."
+
+	| all iter done bind |
+	"A PACKAGE's __all__ may name a SUBMODULE its __init__ never imported --
+	CPython's import-all imports ``package.name'' for each such entry first
+	(importlib._bootstrap._handle_fromlist) and only then reads the
+	attribute, which is how ``from multiprocessing import *'' binds ``pool''.
+	The attempt is made only for a missing attribute of a package; if the
+	submodule does not exist either, the read below raises the AttributeError
+	CPython raises."
+	bind := [:nm | | sym value |
+		sym := nm @env0:asString @env0:asSymbol.
+		value := [aModule @env1:___pyAttrLoad___: sym]
+			@env0:on: AttributeError do: [:ex |
+				(all @env0:notNil and: [self ___isPackage___: aModule])
+					ifFalse: [ex @env0:pass].
+				[self ___import__: { (aModule @env1:___pyAttrLoad___: #'__name__') @env0:asString
+						@env0:, '.' @env0:, sym @env0:asString. nil. nil. { '*' }. 0 } kw: nil]
+					@env0:on: ImportError do: [:ie | ie @env0:return: nil].
+				ex @env0:return: (aModule @env1:___pyAttrLoad___: sym)].
+		aScope @env0:at: (NameAst @env0:doitScopeNameFor: sym) put: value].
+	all := [aModule @env1:___pyAttrLoad___: #'__all__']
+		@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
+	all @env0:isNil
+		ifTrue: [iter := (aModule @env1:__dict__) __iter__]
+		ifFalse: [iter := all __iter__].
+	done := false.
+	[done] @env0:whileFalse: [
+		| nm |
+		nm := [iter __next__] @env0:on: StopIteration do: [:ex | done := true. ex @env0:return: nil].
+		done ifFalse: [
+			(all @env0:notNil
+				or: [nm @env0:asString @env0:isEmpty @env0:not
+					and: [(nm @env0:asString @env0:at: 1) @env0:~= $_]])
+				ifTrue: [bind value: nm]]].
+	^ nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isPackage___: aModule
+	"Does aModule have a ``__path__'' -- is it a package, whose missing
+	attributes may be submodules?"
+
+	^ ([aModule @env1:___pyAttrLoad___: #'__path__']
+		@env0:on: AttributeError do: [:ex | ex @env0:return: nil]) @env0:notNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___doitModuleName___: aScope
 	"What a class statement in a DOIT stamps as ``__module__'': the value of
 	``__name__'', looked up in the globals and then in builtins.
@@ -575,8 +640,15 @@ ___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: glob
 		the caller's namespace."
 		((key @env0:== #'___pyGlobals___')
 			@env0:or: [key @env0:== #'___pyGlobalsView___']) @env0:ifFalse: [
-		((seeded @env0:includesKey: key)
-			@env0:and: [(seeded @env0:at: key) @env0:== value])
+		"A slot the source never BOUND is not a binding either: nil, and not
+		in the caller's mapping to begin with.  A doit's star import declares
+		every name the module might export, so that a later read in the same
+		body compiles, and then binds only the ones CPython's rule selects
+		(builtins >> ___doitStarImport___:into:); the rest stay nil and must
+		not surface as keys (test___all__, ``from django.db.models import *'')."
+		(((value @env0:== nil) @env0:and: [(seeded @env0:includesKey: key) @env0:not])
+			@env0:or: [(seeded @env0:includesKey: key)
+				@env0:and: [(seeded @env0:at: key) @env0:== value]])
 			@env0:ifFalse: [ | pyName target |
 				pyName := NameAst @env0:doitScopeNameToPythonName: key.
 				target := ((globalNames @env0:notNil)

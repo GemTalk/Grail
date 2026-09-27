@@ -158,6 +158,20 @@ printSmalltalkOn: aStream
 	exported names (`__all__` or every non-underscore attribute) and
 	binding each one into the local namespace.  See TODO.md."
 
+	"A STAR IMPORT IN A DOIT is the runtime merge alone, with CPython's rule
+	(builtins >> ___doitStarImport___:into:).  The parse-time expansion is not
+	emitted: without a literal ``__all__'' it falls back to every public
+	top-level name, which binds names the module's real __all__ leaves out,
+	and a module whose names all arrive by its own star import expands to
+	nothing."
+	(self wasStarImport and: [ModuleAst compilingDoitScope notNil]) ifTrue: [
+		aStream
+			nextPutAll: '(((Python @env0:at: #builtins) instance) ___doitStarImport___: (((Python @env0:at: #builtins) instance) ';
+			nextPutAll: self ___importSelectorPrefix___;
+			nextPutAll: ': { ''';
+			nextPutAll: self resolvedModuleName;
+			nextPutAll: '''. nil. nil. { ''*'' }. 0 } kw: nil) into: ___pyGlobals___).'.
+		^ self].
 	names doWithIndex: [:each :index |
 		| targetName needsClose |
 		targetName := self boundNameFor: each.
@@ -177,14 +191,8 @@ printSmalltalkOn: aStream
 	self wasStarImport ifTrue: [
 		| absoluteName |
 		absoluteName := self resolvedModuleName.
-		"IN A DOIT THERE IS NO MODULE INSTANCE to merge into: an exec'd body runs
-		with a nil receiver, so this send would be a doesNotUnderstand on nil --
-		uncatchable, and so strictly worse than the names the parse-time expansion
-		above has already bound.  Those cover every name the imported module
-		declares statically, which is what a star import means; what is given up
-		is only the dynamic tail (a name a helper injected via globals().update()),
-		and only for exec'd source."
-		ModuleAst compilingDoitScope isNil ifFalse: [^ self].
+		"A doit never gets here: it has no module instance to send this to, and
+		its star import returned above with a merge of its own."
 		names isEmpty ifFalse: [aStream lf].
 		"Pass `('*',)` as fromlist so the importer returns the leaf
 		submodule (matches CPython semantics for `from X import *`)

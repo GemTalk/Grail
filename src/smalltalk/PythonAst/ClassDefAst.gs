@@ -1590,9 +1590,16 @@ printSmalltalkRuntimeOn: aStream
 		to later siblings by implementing those methods -- it does not have to
 		be added to a list of isKindOf: tests here."
 		body body doWithIndex: [:stmt :pos |
-			stmt ___boundTargetNames___ do: [:nm |
-				(firstBinding includesKey: nm) ifFalse: [
-					firstBinding at: nm put: pos]].
+			"A BARE annotation (``x: int'', no value) binds nothing: CPython only
+			records it in __annotations__, and a later read of ``x'' in the body
+			or in an annotation goes past the class to the enclosing scope.
+			Counted here, ``class C: bytes: int; x: bytes'' sent #bytes to a class
+			that has no such accessor -- an uncatchable doesNotUnderstand on
+			importing asgiref.typing (test___all__)."
+			((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifFalse: [
+				stmt ___boundTargetNames___ do: [:nm |
+					(firstBinding includesKey: nm) ifFalse: [
+						firstBinding at: nm put: pos]]].
 			"Last assignment wins — that's the statement the classAttrs pair
 			came from (``args_check = staticmethod(args_check)'' rebinding a
 			sibling def must see the def as already bound).  Driven by the
@@ -1853,11 +1860,13 @@ printSmalltalkRuntimeOn: aStream
 		 own U read the FUNCTION's U, and in a METHOD an enclosing local became a
 		 class-cell load on the method's receiver -- ``free variable referenced
 		 before assignment'' (test_annotationlib test_nonlocal_in_annotation_scope).
-		 And with EVERY class-body name bound (nil): classBodyBoundNames is
+		 And with EVERY class-body name bound: classBodyBoundNames is
 		 position-gated per statement and is left holding whatever the last one
 		 set, but an annotation is evaluated lazily, after the whole body ran --
-		 class namespace first, then the enclosing scope."
-		CallAst classBodyBoundNames: nil.
+		 class namespace first, then the enclosing scope.  EVERY name except one
+		 that only a bare annotation mentions, which is not in the namespace at
+		 all (___annotateScopeBoundNames___:)."
+		CallAst classBodyBoundNames: (self ___annotateScopeBoundNames___: firstBinding).
 		"PEP 649 ``__annotate__'' for a class with class-body annotations: ONE
 		annotate block, stored in the class's own holder under CPython's class-dict
 		key ``__annotate_func__''.  The generic class-side accessors on object
@@ -5261,6 +5270,34 @@ classAnnotationPairs
 			ifTrue: [pairs add:
 				stmt target id asString -> stmt annotation ___annotationSourceString___]].
 	^ pairs
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___annotateScopeBoundNames___: firstBinding
+	"The class-body names the annotate block may read from the class: every
+	name the body binds anywhere -- it runs after the whole body -- and NOT one
+	that only a bare annotation mentions (``bytes: int'' with no value and no
+	other binding).  CPython has no such key in the class namespace, so the
+	read goes to the enclosing scope; Grail has no accessor for it either, and
+	sending one was an uncatchable doesNotUnderstand.
+
+	This was nil, which NameAst reads as ``every name is bound''.  It is still
+	every name NameAst's class-body branches consult, so nothing else that
+	resolved through the class before stops doing so."
+
+	| names bareOnly |
+	names := IdentitySet new.
+	{ CallAst classAttrNames. CallAst classFunctionNames. CallAst classStaticFunctionNames.
+	  CallAst classNestedClassNames. CallAst classBodyConditionalNames. firstBinding keys }
+		do: [:each | each isNil ifFalse: [names addAll: each]].
+	bareOnly := IdentitySet new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifTrue: [
+			stmt ___boundTargetNames___ do: [:nm |
+				(firstBinding includesKey: nm) ifFalse: [bareOnly add: nm]]]].
+	bareOnly do: [:nm | names remove: nm ifAbsent: []].
+	^ names
 %
 
 category: 'Grail-code generation'
