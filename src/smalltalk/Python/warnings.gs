@@ -2561,7 +2561,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'CatchWarnings'
-  instVarNames: #( _owner _savedFilters _savedSeen _record _savedShowwarning _hadShowwarning _filterSpec _entered )
+  instVarNames: #( _owner _savedFilters _savedSeen _record _savedShowwarning _hadShowwarning _filterSpec _entered _coroutineMark )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2653,6 +2653,7 @@ __enter__
 		RuntimeError ___signal___: 'Cannot enter ' @env0:, self @env0:printString
 			@env0:, ' twice'].
 	_entered := true.
+	_coroutineMark := PythonCoroutine ___openCapture___.
 	_savedFilters := _owner _filters.
 	_owner ___setFilters___: _savedFilters @env0:copy.
 	_savedSeen := KeyValueDictionary @env0:new.
@@ -2709,6 +2710,15 @@ __exit__: excType _: excValue _: tb
 	the first call raises.  That is a codegen bug of its own, but a guard
 	stricter than CPython's would turn it into an error in code that is doing
 	nothing wrong."
+	"A coroutine dropped undriven inside the block warns NOW, while this
+	capture is still recording and its filters still apply -- CPython would
+	have warned at the drop (PythonCoroutine class >> ___closeCapture___:).
+	Cleared first, so the second __exit__ Grail's with-statement can send
+	closes nothing twice."
+	_coroutineMark @env0:notNil ifTrue: [ | mark |
+		mark := _coroutineMark.
+		_coroutineMark := nil.
+		PythonCoroutine ___closeCapture___: mark].
 	"Pop this context's buffer first, so an outer recorder resumes receiving."
 	_record == true ifTrue: [_owner _grail_stop_recording].
 	"Rebind the saved list rather than refilling the current one: the block

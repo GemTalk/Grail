@@ -478,7 +478,7 @@ Worth fixing rather than tolerating: while it is live, a traceback in an affecte
 session silently misreports a line — or loses a frame — and the loss is reported
 by whatever reads the walk as a fact about *its own* request.
 
-## FIXED (one test left): the unawaited-coroutine warning and origin tracking
+## FIXED: the unawaited-coroutine warning and origin tracking
 
 CPython warns when a coroutine is garbage-collected without ever having been
 awaited -- ``RuntimeWarning: coroutine 'f' was never awaited`` -- and, with
@@ -584,24 +584,42 @@ step undriven.
 * ``inspect.getframeinfo``, and CPython's docstrings on the coroutine and
   generator types' ``send``/``throw``/``close``/``__name__``/``__qualname__``.
 
-test_coroutines went from 8 failures to 1.  Pinned by
+test_coroutines went from 8 failures to 0 (OK, 99 tests).  Pinned by
 ``CoroutineNeverAwaitedTestCase`` / ``tests/python/coroutine_never_awaited.py``
 and ``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineWarnsWhenCollected``.
 
-**The one left is timing, not a missing feature: ``test_bpo_45813_1``.**  It
-drops a coroutine inside ``assertWarns`` and expects the warning before the
-block closes, with no ``gc_collect()`` -- which holds in CPython only because
-reference counting destroys the coroutine at the drop.  A tracing collector
-warns when it collects; and a young-generation scavenge does NOT mourn
-ephemerons (measured: only the mark-sweep does), so no cheap safe point can
-fire it either.  The one way to pass it -- a full collection whenever a warning
-capture closes over an undriven coroutine -- was considered and rejected: it is
-aimed at where tests look, and it is a performance cliff for real code that
-holds unstarted coroutines across ``catch_warnings`` (every pytest test does
-that).  PyPy's precedent applies: portable code treats this warning's
-promptness as best-effort, and every other test here collects explicitly.
-Mind the same property when writing a test: a coroutine dropped EARLIER in the
-session reports at the next collection, so collect before opening a capture.
+**The last one was timing: ``test_bpo_45813_1``, and a warnings capture now
+closes the gap.**  The test drops a coroutine inside ``assertWarns`` and expects
+the warning before the block closes, with no ``gc_collect()`` -- which CPython
+gives by reference counting, destroying the coroutine at the drop.  A tracing
+collector warns when it collects, and a young-generation scavenge does NOT
+mourn ephemerons (measured: only the mark-sweep does), so no cheap safe point
+fires it.
+
+So a capture does the catching up itself.  While any ``catch_warnings`` is open
+(``assertWarns`` is one), ``PythonCoroutine class>>withBlock:`` records each new
+coroutine's WATCH -- the ephemeron, never the coroutine -- and
+``CatchWarnings>>__exit__``, before it stops recording, asks
+``___closeCapture___:`` whether any coroutine made INSIDE the capture is still
+undriven; only then does it run a full collection (``gc.collect()``), which
+delivers the warning into the capture that should see it.  Grail's
+``_AssertWarnsContext`` now exits its capture before reading the records, which
+is CPython's order anyway.  Measured, per capture: ~9.6 us with no coroutine
+made inside (the unchanged baseline); ~10 us more when coroutines were made and
+driven; ~1.4 ms when one is still undriven -- the collection.
+
+The trade, stated: a coroutine the program merely KEEPS unstarted across a
+capture pays that collection and warns about nothing.  That case is uncommon
+(an unstarted coroutine at the end of a capture is usually a bug the warning
+exists for), and it costs a collection, not a failure.  A first version
+scanned every pending watch rather than the capture's own list, and the
+backlog grows between collections, so it cost ~190 us a capture and grew --
+the list is what keeps the common cases flat.  The list is dropped when the
+outermost capture closes, and bounded if one is abandoned open.
+
+Mind the same property when writing a test OUTSIDE a capture: a coroutine
+dropped earlier in the session reports at the next collection, so collect
+before opening a capture you mean to assert on.
 
 ## OPEN: two codec-reach gaps (found while adding UTF-32, 2026-08-31)
 

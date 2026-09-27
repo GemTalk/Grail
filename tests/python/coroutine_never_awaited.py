@@ -119,6 +119,36 @@ check('a_broken_hook_is_reported_and_the_plain_warning_still_issued',
       _broken_hook(),
       (True, 'ZeroDivisionError', ["coroutine 'orphan' was never awaited"]))
 
+# ----------------------------------------------------------- inside a capture
+# No gc_collect() in these two, on purpose.  CPython warns at the drop; Grail
+# warns as the capture closes, having collected only because a coroutine made
+# inside it was still undriven -- so the capture sees the warning either way.
+
+def _dropped_inside_a_capture():
+    gc_collect()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        orphan().cr_frame
+    return [str(w.message) for w in caught]
+
+
+check('a_capture_sees_a_coroutine_dropped_inside_it', _dropped_inside_a_capture(),
+      ["coroutine 'orphan' was never awaited"])
+
+
+def _kept_across_a_capture():
+    gc_collect()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        kept = orphan()
+    messages = [str(w.message) for w in caught]
+    kept.close()
+    return messages
+
+
+check('a_coroutine_kept_across_a_capture_is_not_reported', _kept_across_a_capture(),
+      [])
+
 # ----------------------------------------------------------- origin tracking
 
 def _make_orphan():

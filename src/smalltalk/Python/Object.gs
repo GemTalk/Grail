@@ -2242,6 +2242,16 @@ ___grailUnimplementedAbstract___
 	^ nil
 %
 
+category: 'Grail-Finalization'
+method: object
+___isUndrivenCoroutine___
+	"Only a coroutine can be one (PythonCoroutine overrides this).  Asked of
+	a watched object's referent -- nil once it has died -- as a warnings
+	capture closes."
+
+	^ false
+%
+
 category: 'Grail-Metaclass'
 method: object
 ___grailCachedUnimplementedAbstract___

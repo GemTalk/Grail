@@ -482,9 +482,10 @@ withBlock: aBlock
 
 	| coro depth |
 	coro := super withBlock: aBlock.
-	FinalizerEphemeron @env0:on: coro
-		do: [:aCoro :unused | aCoro ___finalizeUnawaited___]
-		with: nil.
+	self ___noteCreatedInCapture___:
+		(FinalizerEphemeron @env0:on: coro
+			do: [:aCoro :unused | aCoro ___finalizeUnawaited___]
+			with: nil).
 	depth := self ___originTrackingDepth___.
 	depth @env0:> 0 ifTrue: [
 		coro @env0:dynamicInstVarAt: #'cr_origin' put: (self ___originOfDepth___: depth)].
@@ -578,6 +579,91 @@ ___finalizeUnawaited___
 	(started == true or: [done == true]) ifTrue: [^ self].
 	done := true.
 	self ___warnNeverAwaited___
+%
+
+category: 'Grail-Finalization'
+classmethod: PythonCoroutine
+___openCapture___
+	"A warnings capture is opening (CatchWarnings >> __enter__).  While any is
+	open, withBlock: records each new coroutine's WATCH -- the ephemeron, never
+	the coroutine, which must stay free to die -- so the capture can ask, as it
+	closes, about exactly the coroutines made inside it.  Answers the mark
+	that capture hands back to ___closeCapture___:."
+
+	| temps recent |
+	temps := SessionTemps @env0:current.
+	recent := temps @env0:at: #'GrailCaptureCoroutines' otherwise: nil.
+	recent == nil ifTrue: [
+		recent := OrderedCollection @env0:new.
+		temps @env0:at: #'GrailCaptureCoroutines' put: recent].
+	temps @env0:at: #'GrailCaptureDepth'
+		put: (temps @env0:at: #'GrailCaptureDepth' otherwise: 0) @env0:+ 1.
+	^ recent @env0:size
+%
+
+category: 'Grail-Finalization'
+classmethod: PythonCoroutine
+___closeCapture___: aMark
+	"A warnings capture is closing (CatchWarnings >> __exit__): deliver the
+	never-awaited warning for a coroutine made inside it and dropped there
+	undriven, BEFORE it stops recording.
+
+	Why it is needed at all: CPython destroys a dropped coroutine at the drop,
+	by reference counting, so its warning lands in whatever capture was open
+	-- ``with assertWarns(RuntimeWarning): frame = f().cr_frame'' holds on that
+	alone (test_bpo_45813_1).  Grail's destructor runs at a collection, and
+	only a full mark-sweep mourns an ephemeron (measured: a scavenge does not),
+	so without this the warning arrives after the capture that should see it.
+
+	What it costs, by case (measured, per capture):
+	  * no coroutine made inside -- nothing to look at;
+	  * coroutines made and started (awaited, closed) -- a look at each of
+	    THOSE, and only those: not the session's whole backlog of pending
+	    watches, which a first version scanned and which grows between
+	    collections;
+	  * one still undriven -- a full collection (gc.collect()), which is what
+	    finds out whether it was dropped.  A coroutine the program merely KEEPS
+	    unstarted across the capture pays that and warns about nothing; that
+	    is the trade, recorded in docs/Issues.md.
+
+	The list is dropped when the outermost capture closes, and bounded in case
+	a capture is abandoned without closing."
+
+	| temps recent depth found |
+	temps := SessionTemps @env0:current.
+	recent := temps @env0:at: #'GrailCaptureCoroutines' otherwise: nil.
+	recent == nil ifTrue: [^ self].
+	found := false.
+	(aMark @env0:+ 1) @env0:to: recent @env0:size do: [:i |
+		found ifFalse: [
+			((recent @env0:at: i) @env0:referent ___isUndrivenCoroutine___)
+				ifTrue: [found := true]]].
+	depth := (temps @env0:at: #'GrailCaptureDepth' otherwise: 1) @env0:- 1.
+	temps @env0:at: #'GrailCaptureDepth' put: depth.
+	depth @env0:<= 0 ifTrue: [temps @env0:removeKey: #'GrailCaptureCoroutines' ifAbsent: []].
+	found ifTrue: [WeakReference @env1:_collect]
+%
+
+category: 'Grail-Finalization'
+classmethod: PythonCoroutine
+___noteCreatedInCapture___: aWatch
+	"Record a new coroutine's watch while a warnings capture is open.  Outside
+	one, this is a single SessionTemps read."
+
+	| recent |
+	aWatch == nil ifTrue: [^ self].
+	recent := SessionTemps @env0:current @env0:at: #'GrailCaptureCoroutines' otherwise: nil.
+	recent == nil ifTrue: [^ self].
+	recent @env0:size @env0:>= 100000 ifTrue: [recent @env0:removeAll: recent @env0:copy].
+	recent @env0:addLast: aWatch
+%
+
+category: 'Grail-Finalization'
+method: PythonCoroutine
+___isUndrivenCoroutine___
+	"Neither started nor finished: a coroutine that would warn if it died."
+
+	^ started ~~ true and: [done ~~ true]
 %
 
 category: 'Grail-Finalization'

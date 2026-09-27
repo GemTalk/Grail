@@ -87,6 +87,18 @@ testWhatEscapesTheDestructorIsReportedAsUnraisable
 		'a_broken_hook_is_reported_and_the_plain_warning_still_issued')
 %
 
+category: 'Grail-Tests - The warning'
+method: CoroutineNeverAwaitedTestCase
+testACaptureSeesACoroutineDroppedInsideIt
+	"No collection in either check.  CPython warns at the drop; Grail warns as
+	the capture closes (PythonCoroutine class >> ___closeCapture___:),
+	and a coroutine merely KEPT unstarted across the capture is reported by
+	neither -- test_bpo_45813_1 depends on the first."
+
+	self assertAll: #('a_capture_sees_a_coroutine_dropped_inside_it'
+		'a_coroutine_kept_across_a_capture_is_not_reported')
+%
+
 category: 'Grail-Tests - Origin tracking'
 method: CoroutineNeverAwaitedTestCase
 testOriginTracking
