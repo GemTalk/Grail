@@ -784,7 +784,10 @@ ___patternMatches___: aPattern _: aString
 
 	| r |
 	aString @env0:isNil ifTrue: [^ false].
-	r := [aPattern @env1:match: aString @env0:asString]
+	"A text holding a lone surrogate is matched AS ITSELF -- re handles a
+	PyStrSurrogate -- where asString refused it and the filter silently
+	never applied."
+	r := [aPattern @env1:match: (self ___textPart___: aString)]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ r @env0:notNil and: [r @env0:~~ None and: [r @env0:~~ false]]
 %
@@ -1371,8 +1374,20 @@ ___registryKey___: text _: cat _: lineno
 	``version'' -- and a string hashes the same way in every dictionary Grail
 	might be handed, including one built in Python."
 
-	^ text @env0:asString @env0:, '|' @env0:, (self ___categoryName___: cat)
+	^ (self ___keyText___: text) @env0:, '|' @env0:, (self ___categoryName___: cat)
 		@env0:, '|' @env0:, lineno @env0:printString
+%
+
+category: 'Grail-Private'
+method: warnings
+___keyText___: text
+	"The message text as a registry-key string.  A text holding a LONE
+	SURROGATE cannot become a Smalltalk string, so it keys on its
+	backslash-escaped spelling (``te\udc81xt'') -- the same one the console
+	shows.  asString refused it, so ``warn('te\udc81xt')'' raised
+	NotImplementedError where CPython warns."
+
+	^ (self ___backslashReplaced___: (self ___textPart___: text)) @env0:asString
 %
 
 category: 'Grail-Private'
@@ -1446,7 +1461,7 @@ ___recordAction___: action text: text category: cat lineno: lineno registry: reg
 	action @env0:= 'once' ifTrue: [
 		(registry @env0:isNil or: [key @env0:isNil])
 			ifFalse: [registry @env0:at: key put: 1].
-		oncekey := text @env0:asString @env0:, '|' @env0:, (self ___categoryName___: cat).
+		oncekey := (self ___keyText___: text) @env0:, '|' @env0:, (self ___categoryName___: cat).
 		((self onceregistry) @env0:at: oncekey ifAbsent: [nil]) @env0:isNil
 			ifFalse: [^ false].
 		(self onceregistry) @env0:at: oncekey put: 1.
@@ -1803,8 +1818,8 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 	text := fmt @env0:isNil
 		ifTrue: [self formatwarning: message _: category _: filename
 			_: lineno _: line]
-		ifFalse: [(fmt @env1:value: { message. category. filename. lineno.
-			line } value: nil) @env0:asString].
+		ifFalse: [self ___textPart___: (fmt @env1:value: { message. category.
+			filename. lineno. line } value: nil)].
 	target := file.
 	(target @env0:isNil or: [target @env0:== None]) ifTrue: [
 		target := ((Python @env0:at: #sys) @env0:___instance___)
@@ -1836,7 +1851,9 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 		console := box == nil
 			ifTrue: [Transcript]
 			ifFalse: [box @env0:at: 1].
-		shown := text.
+		"A lone surrogate cannot reach the console as itself; it is escaped,
+		as CPython's backslashreplace stderr escapes it."
+		shown := self ___backslashReplaced___: text.
 		(shown @env0:isEmpty @env0:not
 			and: [(shown @env0:last) @env0:== Character @env0:lf]) ifTrue: [
 				shown := shown @env0:copyFrom: 1 to: shown @env0:size @env0:- 1].
@@ -1958,7 +1975,7 @@ formatwarning: message _: category _: filename _: lineno _: line
 	empty result (no such file, no such line) drops the second line rather
 	than printing a blank one."
 
-	| stream src text |
+	| parts src text |
 	"CPython renders str(message), and the message is normally a Warning
 	INSTANCE rather than text.  Smalltalk's asString on an exception answers
 	its GemStone description (``a UserWarning occurred (error 2702)''), so
@@ -1967,26 +1984,109 @@ formatwarning: message _: category _: filename _: lineno _: line
 	text := [message @env1:__str__]
 		@env0:on: AbstractException do: [:ex |
 			ex @env0:return: message @env0:asString].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: filename @env0:asString.
-	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: lineno @env0:printString.
-	stream @env0:nextPutAll: ': '.
-	stream @env0:nextPutAll: (self ___categoryName___: category).
-	stream @env0:nextPutAll: ': '.
-	stream @env0:nextPutAll: text @env0:asString.
-	stream @env0:nextPut: Character @env0:lf.
+	"Assembled from PARTS rather than straight onto a stream, because any of
+	the filename, the text and the source line may hold a LONE SURROGATE --
+	a PyStrSurrogate, which no Smalltalk string can hold.  CPython answers a
+	str that still contains it (test_warnings'
+	test_warn_explicit_non_ascii_filename's ``surrogate\udc80''); see
+	___joinedText___:."
+	parts := OrderedCollection @env0:new.
+	parts @env0:add: (self ___textPart___: filename).
+	parts @env0:add: ':'.
+	parts @env0:add: lineno @env0:printString.
+	parts @env0:add: ': '.
+	parts @env0:add: (self ___categoryName___: category).
+	parts @env0:add: ': '.
+	parts @env0:add: (self ___textPart___: text).
+	parts @env0:add: (String @env0:with: Character @env0:lf).
 	src := line.
 	(src @env0:isNil or: [src @env0:== None]) ifTrue: [
 		src := self ___sourceLine___: filename _: lineno].
 	(src @env0:isNil or: [src @env0:== None]) ifFalse: [
-		src := src @env0:asString.
+		src := self ___textPart___: src.
 		"CPython tests the RAW line for truth and prints the STRIPPED one, so
 		a whitespace-only line still produces its (empty) second line."
-		src @env0:isEmpty ifFalse: [
-			stream @env0:nextPutAll: '  '.
-			stream @env0:nextPutAll: src @env0:trimSeparators.
-			stream @env0:nextPut: Character @env0:lf]].
+		(src @env0:isKindOf: PyStrSurrogate)
+			ifTrue: [
+				parts @env0:add: '  '.
+				parts @env0:add: (self ___strippedSurrogate___: src).
+				parts @env0:add: (String @env0:with: Character @env0:lf)]
+			ifFalse: [
+				src @env0:isEmpty ifFalse: [
+					parts @env0:add: '  '.
+					parts @env0:add: src @env0:trimSeparators.
+					parts @env0:add: (String @env0:with: Character @env0:lf)]]].
+	^ self ___joinedText___: parts
+%
+
+category: 'Grail-Display'
+method: warnings
+___textPart___: aValue
+	"aValue as display text: a PyStrSurrogate as itself, anything else as a
+	Smalltalk string.  asString is what every part used to get, and a
+	surrogate refuses it with NotImplementedError."
+
+	(aValue @env0:isKindOf: PyStrSurrogate) ifTrue: [^ aValue].
+	^ aValue @env0:asString
+%
+
+category: 'Grail-Display'
+method: warnings
+___joinedText___: parts
+	"The concatenation of parts -- an ordinary string, or a PyStrSurrogate
+	built from code points when a part holds a lone surrogate."
+
+	| stream cps |
+	(parts @env0:detect: [:p | p @env0:isKindOf: PyStrSurrogate] ifNone: [nil])
+		@env0:isNil ifTrue: [
+			stream := WriteStream @env0:on: Unicode7 @env0:new.
+			parts @env0:do: [:p | stream @env0:nextPutAll: p].
+			^ stream @env0:contents].
+	cps := OrderedCollection @env0:new.
+	parts @env0:do: [:p |
+		(p @env0:isKindOf: PyStrSurrogate)
+			ifTrue: [cps @env0:addAll: p @env0:___codePoints___]
+			ifFalse: [p @env0:do: [:c | cps @env0:add: c @env0:codePoint]]].
+	^ PyStrSurrogate @env0:___fromCodePoints___: cps @env0:asArray
+%
+
+category: 'Grail-Display'
+method: warnings
+___strippedSurrogate___: aSurrogate
+	"str.strip() of a PyStrSurrogate, over its code points: a surrogate is
+	never whitespace, and every other code point is asked as a Character."
+
+	| cps first last blank |
+	cps := aSurrogate @env0:___codePoints___.
+	blank := [:cp | (cp @env0:between: 16rD800 and: 16rDFFF) @env0:not
+		and: [(Character @env0:codePoint: cp) @env0:isSeparator]].
+	first := 1.
+	[first @env0:<= cps @env0:size and: [blank value: (cps @env0:at: first)]]
+		@env0:whileTrue: [first := first @env0:+ 1].
+	last := cps @env0:size.
+	[last @env0:>= first and: [blank value: (cps @env0:at: last)]]
+		@env0:whileTrue: [last := last @env0:- 1].
+	^ PyStrSurrogate @env0:___fromCodePoints___:
+		(cps @env0:copyFrom: first to: last)
+%
+
+category: 'Grail-Display'
+method: warnings
+___backslashReplaced___: aText
+	"aText as the console can show it: a lone surrogate written as
+	``\udc80'', which is what CPython's stderr prints -- its error handler
+	is backslashreplace.  An ordinary string is answered as it is."
+
+	| stream hex |
+	(aText @env0:isKindOf: PyStrSurrogate) ifFalse: [^ aText].
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	aText @env0:___codePoints___ @env0:do: [:cp |
+		(cp @env0:between: 16rD800 and: 16rDFFF)
+			ifTrue: [
+				hex := (cp @env0:printStringRadix: 16) @env0:asLowercase.
+				stream @env0:nextPutAll: '\u'.
+				stream @env0:nextPutAll: hex]
+			ifFalse: [stream @env0:nextPut: (Character @env0:codePoint: cp)]].
 	^ stream @env0:contents
 %
 

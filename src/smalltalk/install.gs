@@ -1170,6 +1170,7 @@ run
 	at: #'NotImplementedSingletonTestCase' put: nil;
 	at: #'NumbersTestCase' put: nil;
 	at: #'OSErrorTestCase' put: nil;
+	at: #'ObjectNewArgsAndSurrogateWarningsTestCase' put: nil;
 	at: #'ObjectTestCase' put: nil;
 	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
@@ -2596,6 +2597,7 @@ input src/smalltalk/PythonTests/NotADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedErrorTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
+input src/smalltalk/PythonTests/ObjectNewArgsAndSurrogateWarningsTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/OSErrorTestCase.gs
