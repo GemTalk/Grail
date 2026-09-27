@@ -4797,7 +4797,8 @@ ___classBodyValueAt___: aSym
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	((cat @env0:= #'Grail-Class Methods')
 		or: [(cat @env0:= #'Grail-Fixed Arity Forwarders')
-			or: [cat @env0:= #'Grail-Method Aliases']]) ifTrue: [^ nil].
+			or: [(cat @env0:= #'Grail-Method Aliases')
+			or: [cat @env0:= #'Grail-Class Side Forwarders']]]) ifTrue: [^ nil].
 	^ [self @env0:perform: aSym env: 1]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil]
@@ -6434,7 +6435,8 @@ ___grailResetClassMethods___
 		((cat @env0:= #'Grail-Class Methods')
 			or: [(cat @env0:= #'Grail-Fixed Arity Forwarders')
 				or: [(cat @env0:= #'Grail-Method Aliases')
-				or: [cat @env0:= #'Grail-Dynamic Rebinding Originals']]])
+				or: [(cat @env0:= #'Grail-Class Side Forwarders')
+				or: [cat @env0:= #'Grail-Dynamic Rebinding Originals']]]])
 					ifTrue: [self @env1:___removeSelector: sel environmentId: 1]].
 	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		((meta @env0:categoryOfSelector: sel environmentId: 1)
@@ -7270,11 +7272,14 @@ ___classDict___
 			d @env0:keys @env0:asArray @env0:do: [:nm | | sel v |
 				sel := nm @env0:asSymbol.
 				v := d @env0:at: nm.
+				"Any spelling: ``def f(a, b)'' compiles ``f:_:'' and its varargs
+				transport, never a unary ``f'', so asking for the bare name
+				missed every static or class method that takes an argument."
 				((v @env0:isKindOf: UnboundMethod)
 					and: [(nm @env0:asString @env0:beginsWith: '___') @env0:not
-					and: [(metaCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil) @env0:notNil
-					and: [self @env1:___isPythonSourceMethodCategory___:
-						(metaCls @env0:categoryOfSelector: sel environmentId: 1)]]]) ifTrue: [
+					and: [metaCls ___grailOwnsPythonDef___: sel
+						family: (importlib @env0:___pythonNameFamilyOf___: sel)
+						forwarders: false]]) ifTrue: [
 					d @env0:at: nm put: (((statics @env0:includes: nm) or: [statics @env0:includes: sel])
 						"A staticmethod's __func__ is called with no receiver, so it
 						wraps what ``C.f'' answers; a classmethod's takes cls, which
@@ -8014,7 +8019,8 @@ ___isPythonSourceMethodCategory___: aCategory
 	c := aCategory @env0:asString.
 	^ c @env0:= 'Grail-Class Methods'
 		or: [c @env0:= 'Grail-Fixed Arity Forwarders'
-		or: [c @env0:= 'Grail-Method Aliases']]
+		or: [c @env0:= 'Grail-Method Aliases'
+		or: [c @env0:= 'Grail-Class Side Forwarders']]]
 %
 
 category: 'Grail-Iterator Protocol'
@@ -9486,7 +9492,14 @@ ___pyAttrLoad___: aSym
 		measurably lowers the recursion depth Grail can reach -- test_richcmp's
 		test_recursion failed on a temp alone.  The second probe runs only when
 		the first says the hit came from a root, which is the uncommon case."
-		(self ___chainOwnsAnyOf___: family orUnary: aSym from: self)
+		"...unless a @staticmethod / @classmethod of the name is NEARER: the
+		instance side found a base's ordinary def, or this class's own
+		forwarder to the class-side one (Behavior >>
+		___grailClassSideDefIsNearer___:family:).  Only a class carrying
+		forwarders asks, so everything else pays one cached respondsTo:."
+		((self ___chainOwnsAnyOf___: family orUnary: aSym from: self)
+			and: [((self ___respondsTo___: #'___grailClassSideOverrides___')
+				and: [self ___grailClassSideDefIsNearer___: aSym family: family]) not])
 			ifTrue: [
 				((self ___ownChainOwnsAnyOf___: family orUnary: aSym from: self)
 					or: [(self @env0:class ___ownChainOwnsAnyOf___: family
@@ -9578,9 +9591,11 @@ ___pyAttrLoad___: aSym
 						___setterOwner := self @env0:class
 							@env0:whichClassIncludesSelector: sym1 environmentId: 1.
 						___setterOwner == nil
-							or: [(___setterOwner @env0:categoryOfSelector: sym1
-									environmentId: 1) @env0:asString
-								@env0:~= 'Grail-Fixed Arity Forwarders']]]]])
+							or: [| ___setterCat |
+								___setterCat := (___setterOwner @env0:categoryOfSelector: sym1
+									environmentId: 1) @env0:asString.
+								___setterCat @env0:~= 'Grail-Fixed Arity Forwarders'
+									and: [___setterCat @env0:~= 'Grail-Class Side Forwarders']]]]]])
 		ifTrue: [
 			| instVal metaclass |
 			instVal := self @env0:perform: aSym env: 1.
