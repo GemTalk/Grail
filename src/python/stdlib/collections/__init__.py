@@ -191,6 +191,7 @@ class _deque_reverse_iterator(_deque_iterator):
 class deque:
     """Double-ended queue backed by a list.  O(n) for arbitrary
     indexing, O(1) amortized for append/appendleft/pop/popleft."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     # Bumped by every structural mutation so a live _deque_iterator can detect
     # one (CPython's deque->state).  Also a class-level default, so an instance
@@ -737,7 +738,9 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
         _field_defaults = field_defaults
         __match_args__ = fields
 
-        def __new__(cls, *args, **kwargs):
+        # ``cls, /'': a field may be NAMED cls (or self), and its keyword must
+        # reach **kwargs rather than collide with the receiver.
+        def __new__(cls, /, *args, **kwargs):
             nfields = len(cls._fields)
             tname = cls._typename
             if len(args) > nfields:
@@ -850,7 +853,7 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
                 )
             return tuple.__new__(cls, values)
 
-        def _replace(self, **kwargs):
+        def _replace(self, /, **kwargs):
             extra = [k for k in kwargs if k not in self._fields]
             if extra:
                 raise TypeError('Got unexpected field names: ' + repr(extra))
@@ -1356,6 +1359,7 @@ __all__ = [
 class UserList:
     """List wrapper with .data — subclassed by django.utils.datastructures
     and forms.utils.ErrorList."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, initlist=None):
         self.data = []
@@ -1520,6 +1524,7 @@ class UserList:
 
 class UserDict:
     """Dict wrapper with .data."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     # Upstream's UserDict subclasses MutableMapping and inherits this marker
     # from Mapping; Grail's is standalone, so it has to say so itself.  ``None''

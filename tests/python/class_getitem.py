@@ -17,10 +17,11 @@ different places:
 The last is the one that must still raise: an assignment that is not callable
 is a TypeError, not a silently ignored subscript.
 
-The permissive default STAYS for a class with no __class_getitem__ at all.
-CPython raises there, but ``class Foo(list[V])'' has to keep compiling to
-``class Foo(list)'' here, and annotations subscript classes constantly -- so
-the second half of this file is regression cover for exactly that.
+A class written in Python with no __class_getitem__ anywhere on its MRO is
+CPython's TypeError, ``type 'C' is not subscriptable''.  Grail's permissive
+default survives only for a chain through a Grail built-in, which does not
+all carry the hook CPython's own types do -- so ``class Foo(list[V])'' keeps
+compiling to ``class Foo(list)''.
 
 Every expectation below was checked against CPython 3.14.
 """
@@ -125,18 +126,23 @@ check('classmethod_form_also_binds_the_subclass',
 
 # ------------------------------------------------ what must NOT change
 
-# A class with no __class_getitem__ must stay subscriptable here: Grail
-# compiles ``class Foo(list[V])'' to ``class Foo(list)'', and annotations
-# subscript classes constantly.  CPython raises; this is a documented
-# divergence, so it is asserted rather than left to chance.
+# A plain class with no __class_getitem__ is not subscriptable, as in CPython.
 class NoGetitem:
     pass
 
 
-GRAIL_ONLY = ['plain_class_stays_subscriptable']
+def _subscript_no_getitem():
+    try:
+        NoGetitem[int]
+    except TypeError as e:
+        return str(e)
+    return 'no error'
 
-check('plain_class_stays_subscriptable', lambda: NoGetitem[int] is NoGetitem,
-      True)
+
+GRAIL_ONLY = []
+
+check('plain_class_is_not_subscriptable', _subscript_no_getitem,
+      "type 'NoGetitem' is not subscriptable")
 check('builtin_container_stays_subscriptable',
       lambda: list[int] is not None, True)
 

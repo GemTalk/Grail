@@ -130,11 +130,17 @@ def subs_parameters(alias, args, parameters, item):
             continue
         unpack = _is_unpacked_typevartuple(arg)
         subst = getattr(arg, '__typing_subst__', None)
+        param = arg
         if subst is not None:
             arg = subst(argitems[_index(parameters, arg)])
         else:
             arg = _subs_tvars(arg, parameters, argitems)
         if unpack:
+            # GH-138497: an unpacked parameter's substitution must be a tuple.
+            if not isinstance(arg, tuple):
+                raise TypeError(
+                    f"expected __typing_subst__ of {type(param).__qualname__} "
+                    f"objects to return a tuple, not {type(arg).__qualname__}")
             newargs.extend(arg)
         else:
             newargs.append(arg)
@@ -232,6 +238,10 @@ def union_hash(union):
     """union_hash: the hash of the member SET, so equal unions hash alike
     whatever their order -- and an unhashable member raises, as it does in
     CPython (``unhashable type: 'UnhashableMeta'``)."""
+    # Each member through hash() first: a frozenset of classes hashes them
+    # with the Smalltalk hash, which does not consult a metaclass __hash__.
+    for arg in union.__args__:
+        hash(arg)
     return hash(frozenset(union.__args__))
 
 

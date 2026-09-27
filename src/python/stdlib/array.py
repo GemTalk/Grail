@@ -29,6 +29,8 @@ _SIGNED_CODES = 'bhilq'
 
 
 class _array:
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self, typecode, initializer=None):
         self.typecode = typecode
         self._data = []

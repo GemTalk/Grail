@@ -982,11 +982,21 @@ __deprecated: positional kw: keywords
 				@env0:, removeFormatted @env0:, ' alpha')].
 
 	"CPython formats with str.format; the two fields are all wave uses."
-	msg := message.
-	msg := msg @env1:replace: '{name!r}' _: name @env0:printString.
-	msg := msg @env1:replace: '{name}' _: name.
-	msg := msg @env1:replace: '{remove}' _: removeFormatted.
-	^ self warn: msg _: DeprecationWarning
+	"``message.format(name=name, remove=remove_formatted)'' -- a real
+	str.format, not substitution: typing writes ``{{}}'' into its TypedDict
+	message for format to collapse to ``{}'', and a literal replace left the
+	doubled braces in the text test_typing matches."
+	msg := (message @env1:___pyAttrLoad___: #'format')
+		@env1:___pyCallValue___: #()
+		kw: ((KeyValueDictionary @env0:new)
+			@env0:at: 'name' put: name;
+			@env0:at: 'remove' put: removeFormatted;
+			@env0:yourself).
+	"stacklevel=3 in CPython counts _deprecated's own frame, which a
+	Smalltalk method is not; 2 names the same frame -- the caller of the
+	function that is deprecated -- so the warning is filed against the code
+	that should change (test_typing checks ``cm.filename == __file__'')."
+	^ self warn: msg _: DeprecationWarning _: 2
 %
 
 category: 'Grail-Private'

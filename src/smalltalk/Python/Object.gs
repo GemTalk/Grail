@@ -1928,6 +1928,22 @@ ___new__: positional kw: kwargs
 			ifFalse: [nil].
 		(owner @env0:notNil and: [owner ~~ (Object @env0:class)]) ifTrue: [
 			^ cls @env0:perform: sel env: 1 withArguments: rest]].
+	"CPython's object_new refuses excess arguments for a class that defines
+	__new__ (it is forwarding what it should have consumed), and for one that
+	defines neither __new__ nor __init__.  Judged, as in ___init__:kw:, only
+	for a class written entirely in Python."
+	((positional @env0:size @env0:> 1 or: [kwargs ~~ nil and: [kwargs @env0:notEmpty]])
+		and: [((positional @env0:at: 1) @env0:isKindOf: Behavior)
+			and: [((positional @env0:at: 1) @env0:inheritsFrom: PythonInstance)
+			and: [(positional @env0:at: 1) ___grailPurePythonChain___]]]) ifTrue: [
+		| cls |
+		cls := positional @env0:at: 1.
+		cls ___grailOwnsNew___ ifTrue: [
+			^ TypeError ___signal___:
+				'object.__new__() takes exactly one argument (the type to instantiate)'].
+		(cls ___grailOwnsInit___
+			or: [(cls @env1:___dynamicClassAttr___: #'__init__') ~~ nil])
+			ifFalse: [^ cls ___grailTakesNoArgumentsError___]].
 
 	^ [(positional @env0:at: 1) @env0:new]
 		@env0:on: Error
@@ -2238,6 +2254,72 @@ ___grailInheritsObjectInitAndNew___
 	^ true
 %
 
+category: 'Grail-Instantiation'
+classmethod: object
+___grailPurePythonChain___
+	"True when every class from self up to PythonInstance was written as a
+	Python class body -- so nothing between self and ``object'' is a Grail
+	built-in whose own construction takes arguments (an Exception, a dict,
+	...).  The classes whose excess constructor arguments CPython's
+	object.__new__ / object.__init__ refuse, and the only ones Grail can
+	judge exactly: a built-in base constructs through paths of its own."
+
+	| c |
+	c := self.
+	[c == PythonInstance] @env0:whileFalse: [
+		(c @env0:isNil or: [c == object]) ifTrue: [^ false].
+		(c @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+			ifFalse: [^ false].
+		c := c @env0:superclass].
+	^ true
+%
+
+category: 'Grail-Instantiation'
+classmethod: object
+___grailOwnsNew___
+	"Does this class (or a Python ancestor) define __new__ -- CPython's
+	``type->tp_new != object_new''?  A class-body def compiles instance-side,
+	a staticmethod class-side, an assignment into the class-attribute store."
+
+	#(#'__new__' #'__new__:' #'__new__:_:' #'__new__:_:_:' #'__new__:_:_:_:'
+	  #'__new__:_:_:_:_:' #'__new__:_:_:_:_:_:' #'___new__:kw:') @env0:do: [:sel |
+		| owner |
+		owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil and: [owner ~~ object and: [owner ~~ PythonInstance]])
+			ifTrue: [^ true].
+		owner := self @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil and: [owner ~~ object @env0:class
+				and: [owner ~~ PythonInstance @env0:class]])
+			ifTrue: [^ true]].
+	^ (self ___classAttrOverlayLookup___: self name: #'__new__') ~~ nil
+		or: [(self ___classChainAttrLookup___: #'__new__') ~~ nil]
+%
+
+category: 'Grail-Instantiation'
+classmethod: object
+___grailOwnsInit___
+	"Does this class (or a Python ancestor) define __init__ with a def --
+	CPython's ``type->tp_init != object_init'' for the compiled case?"
+
+	#(#'__init__' #'__init__:' #'__init__:_:' #'__init__:_:_:' #'__init__:_:_:_:'
+	  #'__init__:_:_:_:_:' #'__init__:_:_:_:_:_:' #'___init__:kw:') @env0:do: [:sel |
+		| owner |
+		owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil and: [owner ~~ object and: [owner ~~ PythonInstance]])
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Instantiation'
+classmethod: object
+___grailTakesNoArgumentsError___
+	"CPython's ``C() takes no arguments'', named by the class's __name__."
+
+	| n |
+	n := [self @env1:___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: self @env0:name].
+	^ TypeError ___signal___: n @env0:asString @env0:, '() takes no arguments'
+%
 
 category: 'Grail-Metaclass'
 classmethod: object
@@ -2411,11 +2493,12 @@ ___allocateInstance___: positional kw: keywords
 			TypeError ___signal___: 'type.__new__() takes exactly 3 arguments ('
 				@env0:, n @env0:printString @env0:, ' given)'].
 		(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not]) ifTrue: [ | built |
-			built := (builtins @env1:instance)
-				@env1:type: (positional @env0:at: 1)
-				_: (positional @env0:at: 2)
-				_: (positional @env0:at: 3)
-				kw: keywords.
+			built := (Python @env0:at: #type) ___grailBuildWithMetaclass___: self
+				as: [(builtins @env1:instance)
+					@env1:type: (positional @env0:at: 1)
+					_: (positional @env0:at: 2)
+					_: (positional @env0:at: 3)
+					kw: keywords].
 			built @env1:___grailSetMetaclass___: self.
 			importlib @env0:___recordDirectMetaclass___: built meta: self.
 			^ built].
@@ -3211,6 +3294,17 @@ ___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 	by class handles a nested class statement without a stack."
 
 	| prep ns tbl |
+	"DUPLICATE BASES are type.__new__'s refusal.  With no metaclass that takes
+	part in construction, nothing stands between this statement and type, so
+	refuse them now; a constructing one may discard them (a TypedDict's), and
+	its own type.__new__ call is asked instead."
+	((basesArray @env0:isKindOf: SequenceableCollection)
+			and: [basesArray @env0:size @env0:> 1]) ifTrue: [
+		| meta |
+		meta := aMetaclass ifNil: [self ___grailMostDerivedMetaclassOf___: basesArray].
+		((meta notNil and: [meta @env0:isKindOf: Behavior])
+				and: [self ___grailMetaclassConstructs___: meta])
+			ifFalse: [(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: basesArray]].
 	"RECORD THE METACLASS HERE.  ClassDefAst also emits a ___grailSetMetaclass___
 	from its class-keyword loop, but that runs AFTER ___pyClassDefined___: --
 	where the metaclass __new__/__init__ dispatch happens -- so a record written
@@ -3251,10 +3345,18 @@ ___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 		header's resolved bases are asked directly: ``class A2(Generic[T],
 		TypedDict)'' gets _TypedDictMeta from its second base, as CPython's
 		most-derived rule gives it.  Recorded on the class, as a keyword would
-		be, so type(A2) reports it too."
-		inherited isNil ifTrue: [
-			inherited := self ___grailMostDerivedMetaclassOf___: basesArray.
-			inherited notNil ifTrue: [self ___grailSetMetaclass___: inherited]].
+		be, so type(A2) reports it too.
+		A primary base's metaclass does not settle it either: a LATER base's
+		may be more derived, and wins.  ``class S(Mapping[T], Protocol[T])''
+		inherits ABCMeta through Mapping but must run _ProtocolMeta -- which
+		is what refuses a protocol with a non-protocol base."
+		[| derived |
+		derived := self ___grailMostDerivedMetaclassOf___: basesArray.
+		(derived notNil and: [inherited isNil
+				or: [derived ~~ inherited and: [derived @env0:inheritsFrom: inherited]]])
+			ifTrue: [
+				inherited := derived.
+				self ___grailSetMetaclass___: derived]] value.
 		((inherited notNil)
 			and: [(inherited isKindOf: Behavior)
 			and: [self ___grailMetaclassConstructs___: inherited]])
@@ -4102,12 +4204,33 @@ ___grailDispatchMetaclass___
 						@env0:on: AbstractException do: [:ex |
 							(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 							ex @env0:return: nil]].
-		#( #'__module__' #'__qualname__' #'__orig_bases__' ) @env0:do: [:k |
+		"__orig_bases__ only when it is the class's OWN: read through
+		inheritance, ``class Child(Parent)'' for a TypedDict Parent handed
+		_TypedDictMeta Parent's (TypedDict,), which it kept as Child's.  The
+		sole-base path's substitution is still waiting in
+		GrailPendingOrigBases at this point (___grailInstallOrigBases___
+		stores it at the end of the statement); a multi-base one is already
+		in the class's dict."
+		#( #'__module__' #'__qualname__' ) @env0:do: [:k |
 			(ns @env1:__contains__: k @env0:asString) ___isTruthy___ ifFalse: [
 				[ns @env1:__setitem__: k @env0:asString _: (self ___pyAttrLoad___: k)]
 					@env0:on: AbstractException do: [:ex |
 						(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 						ex @env0:return: nil]]].
+		(ns @env1:__contains__: '__orig_bases__') ___isTruthy___ ifFalse: [
+			[ | pending |
+			pending := (SessionTemps @env0:current
+				@env0:at: #'GrailPendingOrigBases' otherwise: nil)
+					@env0:ifNotNil: [:tbl | tbl @env0:at: self otherwise: nil].
+			pending == nil ifTrue: [
+				(((self ___pyAttrLoad___: #'__dict__')
+						@env1:__contains__: '__orig_bases__') ___isTruthy___)
+					ifTrue: [pending := self ___pyAttrLoad___: #'__orig_bases__']].
+			pending == nil ifFalse: [
+				ns @env1:__setitem__: '__orig_bases__' _: pending]]
+				@env0:on: AbstractException do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil]].
 		self ___grailSnapshotNamespace___: ns.
 		stk := SessionTemps @env0:current
 			@env0:at: #'GrailClassUnderConstruction'
@@ -4117,7 +4240,16 @@ ___grailDispatchMetaclass___
 		the stack, or the NEXT class statement's super().__new__ answers this
 		one.  Nothing about the raise is swallowed; it propagates as CPython's
 		does."
-		[result := fn @env1:___pyCallValue___: { meta. clsName. clsBases. ns } kw: hdrKw]
+		"A metaclass that RAISES means the class never existed, in CPython's
+		terms -- type.__new__ is where it would have been made.  Grail made it
+		first, and linked it into its bases' __subclasses__; left there, the
+		refused ``class Foo(Mapping, Protocol)'' was found by the next
+		isinstance([], Mapping), whose walk asked it for protocol attributes
+		it never got (test_typing test_isinstance_checks_not_at_whim_of_gc).
+		So an unwinding call takes the links back."
+		[[result := fn @env1:___pyCallValue___: { meta. clsName. clsBases. ns } kw: hdrKw]
+			@env0:ifCurtailed: [
+				(Python @env0:at: #importlib) @env0:___forgetSubclass___: self]]
 			@env0:ensure: [stk @env0:removeLast]].
 	"A metaclass that answered a DIFFERENT class -- typing's NamedTupleMeta
 	returns the one collections.namedtuple built, and type.__new__ builds a
@@ -4331,10 +4463,18 @@ ___grailInstallOrigBases___
 	SessionTemps until here -- the end of the class statement, which every
 	generated class reaches."
 
-	| tbl origTuple |
+	| tbl origTuple resolved |
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingResolvedBases' otherwise: nil.
-	tbl == nil ifFalse: [tbl @env0:removeKey: self ifAbsent: [nil]].
+	tbl == nil ifFalse: [resolved := tbl @env0:removeKey: self ifAbsent: [nil]].
+	"A sole base whose __mro_entries__ answered MORE than one class --
+	``class T1(Tuple[T, KT])'' resolves to (tuple, Generic) -- was built on the
+	first alone and the rest dropped, so T1 had no Generic base, no
+	__parameters__, and Generic's __init_subclass__ never ran.  The others join
+	as a multi-base statement's do, before that hook is asked."
+	(resolved @env0:notNil and: [resolved @env0:size @env0:> 1]) ifTrue: [
+		(Python @env0:at: #importlib) @env0:___mergeSecondaryBases___: self
+			bases: resolved @env0:asArray resolved: resolved @env0:asArray].
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingOrigBases' otherwise: nil.
 	tbl == nil ifTrue: [^ self].
@@ -5261,8 +5401,12 @@ ___pythonBuiltinTypeModule___
 	id @env0:notNil ifTrue: [
 		(id @env0:at: 2) @env0:ifNotNil: [:___mod | ^ ___mod]].
 	nm := self @env0:name @env0:asString @env0:asSymbol.
+	"NoneType, ellipsis and NotImplementedType too: CPython's
+	``type(None).__module__'' is 'builtins', and typing's _type_repr reads it
+	-- ``repr(Callable[..., None])'' raised AttributeError without it."
 	((#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
-		#memoryview #object #property #range #set #slice #str #tuple #type )
+		#memoryview #object #property #range #set #slice #str #tuple #type
+		#NoneType #ellipsis #NotImplementedType )
 		@env0:includes: nm)
 		@env0:or: [(self ___pythonBuiltinExceptionNames___) @env0:includes: nm])
 		@env0:ifFalse: [^ nil].
@@ -7363,6 +7507,30 @@ ___classDict___
 		| gnvSm |
 		gnvSm := Enum ___grailGnvStaticFor: self.
 		gnvSm @env0:isNil ifFalse: [d @env0:at: '_generate_next_value_' put: gnvSm]].
+	"``new'' is Smalltalk's allocator, compiled in env 1 on the kernel classes
+	(and their ancestors, folded in above) so Grail's own code reaches it --
+	not a Python attribute.  int, list, tuple, float and bytes listed it, and
+	an enum member's dir(), which walks its mro's dicts, grew a name CPython's
+	does not have (test_enum test_dir_on_item).  A Python class that DEFINES
+	``new'' keeps it."
+	((self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:not)
+		ifTrue: [d @env0:removeKey: 'new' ifAbsent: [nil]].
+	"Each DECLARED __slots__ name is a member descriptor in CPython's class
+	dict -- ``<member 'x' of 'S' objects>''.  inspect.getattr_static finds a
+	slot through exactly that entry, and typing's runtime protocols ask it:
+	a class whose only ``x'' is an unset slot still satisfies a protocol
+	requiring ``x'' (test_typing test_protocols_isinstance___slots__)."
+	((self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)) ifTrue: [
+		[ | mdt |
+		mdt := ((importlib @env0:___instance___) @env1:import_module: 'types')
+			@env1:___pyAttrLoad___: #'MemberDescriptorType'.
+		self ___pyDeclaredSlotNames___ @env0:do: [:sym | | nm |
+			nm := sym @env0:asString.
+			((d @env1:__contains__: nm) ___isTruthy___) ifFalse: [
+				d @env0:at: nm put: (mdt @env1:value: { nm. self } value: nil)]]]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil]].
 	^ d
 %
 
@@ -7807,7 +7975,36 @@ ___classAttrDunder___: baseSym
 		ifTrue: [
 			v := cls @env0:perform: baseSym env: 1.
 			v == nil ifFalse: [^ v]].
-	^ self ___dynamicClassAttr___: baseSym
+	v := self ___dynamicClassAttr___: baseSym.
+	v == nil ifFalse: [^ v].
+	"...or a SECONDARY base's.  The accessor pair lives on that base's own
+	metaclass, which a multiple-inheritance class's Smalltalk chain does not
+	reach, and the method merge copies methods, not class attributes.  So
+	typing's _SpecialGenericAlias(_NotIterable, _BaseGenericAlias), rooted at
+	the deeper second base, lost _NotIterable's ``__iter__ = None'' and
+	iterated through __getitem__ (``list(typing.List)'' built List[0],
+	List[1], ... ).  Every class on the chain that has an MI record is asked,
+	nearest first -- typing.Tuple's _TupleType has one base, and the
+	_NotIterable it needs is its PARENT's secondary base -- and each walks
+	its recorded MRO; a compiled method met first is not a class attribute
+	and ends the walk.  Only reached once the ordinary lookups found nothing."
+	[ | reg walker |
+	reg := (Python @env0:at: #importlib) @env0:___miRegistry___.
+	walker := cls.
+	[walker @env0:notNil and: [walker ~~ PythonInstance and: [walker ~~ object]]]
+		@env0:whileTrue: [
+			(reg @env0:at: walker otherwise: nil) @env0:ifNotNil: [:rec |
+				(rec @env0:at: 2) @env0:do: [:b |
+					(b ~~ walker and: [(b @env0:isKindOf: Behavior)
+							and: [b ~~ object and: [b ~~ PythonInstance]]]) ifTrue: [
+						(b @env0:includesSelector: baseSym environmentId: 1)
+							ifTrue: [^ nil].
+						((b @env0:class @env0:includesSelector: baseSym environmentId: 1)
+							and: [b @env0:class @env0:includesSelector: sym1 environmentId: 1])
+							ifTrue: [^ b @env0:perform: baseSym env: 1]]]].
+			(walker @env0:includesSelector: baseSym environmentId: 1) ifTrue: [^ nil].
+			walker := walker @env0:superclass]] @env0:value.
+	^ nil
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -10322,10 +10519,14 @@ __dir__
 	selectors := selectors @env0:reject: [:selector |
 		| selectorStr prefix |
 		selectorStr := selector @env0:asString.
+		"``asFloat'' is PythonInstance's kernel-numeric bridge, compiled in env 1
+		so GemStone's own math reaches __float__ -- a Smalltalk selector, not a
+		Python attribute, and every class and instance listed it."
+		(selectorStr @env0:= 'asFloat') or: [
 		((selectorStr @env0:size) @env0:>= 3) ifTrue: [
 			prefix := selectorStr @env0:copyFrom: 1 to: 3.
 			prefix @env0:= '___'
-		] ifFalse: [false]
+		] ifFalse: [false]]
 	].
 	"Each selector as the Python name it implements -- see
 	___grailPythonNameForSelector___:, which also explains the two encodings
@@ -10360,6 +10561,32 @@ __dir__
 	Guarded to non-classes: for a class, self class is its METAclass, and the
 	scan above already reaches the class's own attributes through it.  Recursing
 	there would add the metaclass's selectors, which Python does not report."
+	"A CLASS lists every name in the __dict__ of each class on its MRO, which
+	is CPython's type.__dir__.  The selector scan above sees methods and the
+	class-body data accessors, but not what lives in a class's attribute
+	holder -- a NESTED CLASS among them -- so ``dir(A)'' omitted A.B, and
+	typing.no_type_check, which walks dir(), never reached a nested class."
+	self @env0:isBehavior ifTrue: [
+		[ | names |
+		names := result @env0:asSet.
+		(self @env1:___pyAttrLoad___: #'__mro__') @env0:do: [:k |
+			"Python-written classes only: a built-in's __dict__ is assembled from
+			its Smalltalk selectors, which the scan above already reports, and it
+			carries kernel names too -- ``new'' made dir(list) no longer a subset
+			of dir(UserList) (test_collections test_list_protocol)."
+			((k @env0:isKindOf: Behavior)
+				and: [k @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]) ifTrue: [
+				[((k @env1:___pyAttrLoad___: #'__dict__') @env1:keys) @env0:do: [:key |
+					(key @env0:isKindOf: CharacterCollection) ifTrue: [
+						(names @env0:includes: key @env0:asString) ifFalse: [
+							names @env0:add: key @env0:asString.
+							result := result @env0:copyWith: key @env0:asString]]]]
+					@env0:on: AbstractException do: [:ex |
+						(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+						ex @env0:return: nil]]]]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil]].
 	self @env0:isBehavior ifFalse: [
 		| names |
 		names := result @env0:asSet.
@@ -10380,6 +10607,16 @@ __dir__
 			names @env0:add: ((k @env0:isKindOf: CharacterCollection)
 				ifTrue: [k @env0:asString]
 				ifFalse: [k])]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		"...and the DATA attributes a Grail-built class declares through
+		___pythonValueAttrs___ (a GenericAlias's __args__ / __origin__ /
+		__parameters__).  They live in instance storage that the __dict__ read
+		above reaches only when the class has one: collections.abc's
+		_CallableGenericAlias is a slotted subclass, so dir() of a Callable alias
+		lacked all three (test_typing CollectionsCallableTests.test_dir)."
+		[(self @env0:class @env0:respondsTo: #'___pythonValueAttrs___') ifTrue: [
+			(self @env0:class @env0:___pythonValueAttrs___) @env0:do: [:n |
+				names @env0:add: n @env0:asString]]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		result := names].
 	"THE DUNDERS GRAIL SYNTHESIZES ARE NOT LISTED WHERE A CLASS LACKS THEM.
@@ -11624,7 +11861,30 @@ ___init__: positional kw: kwargs
 	Fraction maps to a kernel number) died with an UNCATCHABLE
 	MessageNotUnderstood instead of being ignored."
 
-	^ None
+	"...except for excess arguments CPython's object_init refuses, which
+	Grail judges only for a class written entirely in Python
+	(___grailPurePythonChain___).  With no __init__ and no __new__ of its
+	own anywhere below object, ``C(42)'' is ``C() takes no arguments''.  An
+	ASSIGNED __init__ -- typing.Protocol installs one on every subclass --
+	makes tp_init not object_init, so the excess arguments it forwards here
+	are ``object.__init__() takes exactly one argument''.
+
+	A class that DEFS __init__ and passes arguments on to object is refused
+	by CPython as well, but not here: Grail's multiple inheritance merges a
+	second base's methods rather than linearising, so a mixin's cooperative
+	``super().__init__(*args)'' can reach object where CPython's MRO reaches
+	the next base."
+	| cls |
+	(positional @env0:isEmpty and: [kwargs == nil or: [kwargs @env0:isEmpty]])
+		ifTrue: [^ None].
+	cls := self @env0:class.
+	((cls @env0:inheritsFrom: PythonInstance) and: [cls ___grailPurePythonChain___])
+		ifFalse: [^ None].
+	(cls @env1:___dynamicClassAttr___: #'__init__') == nil ifFalse: [
+		^ TypeError ___signal___:
+			'object.__init__() takes exactly one argument (the instance to initialize)'].
+	(cls ___grailOwnsInit___ or: [cls ___grailOwnsNew___]) ifTrue: [^ None].
+	^ cls ___grailTakesNoArgumentsError___
 %
 
 category: 'Grail-Comparison'
@@ -12122,6 +12382,17 @@ category: 'Grail-Comparison'
 method: object
 ___cmpEq___: other
 	| pri r |
+	"Two CLASSES: the right operand's METACLASS goes first when it defines
+	__eq__.  CPython tries the reflected side first when type(other) is a
+	subclass of type(self), and for ``int == C'' with ``class C(metaclass=M)''
+	that is M against type.  The kernel's own class equality answers a
+	Boolean, so the reflected step below never ran and typing's
+	``Union == _UnionGenericAlias'' (whose metaclass says True) read False."
+	((self @env0:isKindOf: Behavior) and: [(other @env0:isKindOf: Behavior)
+			and: [self ~~ other and: [other ___grailMetaclassDefines___: #'__eq__']]])
+		ifTrue: [
+			r := other ___grailMetaclassCmp___: #'__eq__' with: self.
+			r ~~ nil ifTrue: [^ r]].
 	pri := self ___reflectedFirst___: other
 		selector: #'__eq__:' kwSelector: #'___eq__:kw:'.
 	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
@@ -12134,6 +12405,24 @@ ___cmpEq___: other
 		pri @env0:== nil ifTrue: [^ self ___eqValue___: other].
 		^ self @env0:== other].
 	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___grailMetaclassDefines___: baseSym
+	"Does this class's recorded metaclass define baseSym itself -- a method
+	below type and object, or an attribute -- rather than inherit type's?"
+
+	| meta |
+	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
+	meta := self ___grailMetaclass___.
+	(meta @env0:notNil and: [meta @env0:isKindOf: Behavior]) ifFalse: [^ false].
+	#( '' ':' ) @env0:do: [:suffix | | o |
+		o := meta @env0:whichClassIncludesSelector:
+			(baseSym @env0:asString @env0:, suffix) @env0:asSymbol environmentId: 1.
+		(o @env0:notNil and: [o ~~ Object and: [o ~~ object
+				and: [o ~~ (Python @env0:at: #type)]]]) ifTrue: [^ true]].
+	^ (meta ___classChainAttrLookup___: baseSym) @env0:notNil
 %
 
 category: 'Grail-Comparison'
@@ -14479,6 +14768,145 @@ set compile_env: 1
 
 category: 'Grail-Attribute Access'
 method: object
+___grailMetaclassSetattr___: aName value: aValue
+	"Run the recorded metaclass's own __setattr__ for ``self.aName = aValue''
+	on a class receiver, answering true when it ran.  CPython routes every
+	class attribute store through type(cls).__setattr__, so a metaclass that
+	refuses -- typing's NoDefault type is immutable, as NoneType is -- or
+	that records the write, sees it.  Grail stored straight into the class.
+
+	Only a metaclass that DEFINES __setattr__ below type and object, compiled
+	as the class-body ``def __setattr__(cls, name, value)'' gives it.  Its
+	``super().__setattr__(name, value)'' comes back here for the same class
+	and name, and that nested call must do the plain store: the pair is held
+	in SessionTemps for the duration, and a store already inside the hook
+	for it is not intercepted again."
+
+	| meta owner active pair m |
+	meta := self ___grailMetaclass___.
+	(meta @env0:notNil and: [meta @env0:isKindOf: Behavior]) ifFalse: [^ false].
+	owner := meta @env0:whichClassIncludesSelector: #'__setattr__:_:' environmentId: 1.
+	(owner @env0:isNil or: [owner == object or: [owner == (Python @env0:at: #type)]])
+		ifTrue: [^ false].
+	active := SessionTemps @env0:current @env0:at: #'GrailMetaSetattrActive'
+		ifAbsentPut: [OrderedCollection @env0:new].
+	(active @env0:anySatisfy: [:p | (p @env0:at: 1) == self
+			and: [(p @env0:at: 2) @env0:= aName @env0:asString]])
+		ifTrue: [^ false].
+	m := owner @env0:compiledMethodAt: #'__setattr__:_:' environmentId: 1.
+	pair := Array @env0:with: self with: aName @env0:asString.
+	active @env0:addLast: pair.
+	[self @env0:with: aName @env0:asString with: aValue performMethod: m]
+		@env0:ensure: [active @env0:removeIdentical: pair ifAbsent: [nil]].
+	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailNearestImplementorIsBuiltin___: aString
+	"Does the nearest class above this one that compiles the Python name
+	aString, in any arity, belong to a Grail BUILT-IN rather than to object,
+	PythonInstance or a class written in Python?"
+
+	| fam c |
+	fam := object ___grailShadowFamilyFor___: aString.
+	c := self @env0:superclass.
+	[c @env0:notNil] @env0:whileTrue: [
+		(fam @env0:anySatisfy: [:pair |
+				c @env0:includesSelector: (pair @env0:at: 1) environmentId: 1])
+			ifTrue: [
+				^ (c ~~ object and: [c ~~ PythonInstance
+					and: [(c @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:not]])].
+		c := c @env0:superclass].
+	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailShadowRuntimeDunder___: aName
+	"``Cls.__str__ = f'' after the class exists must beat a method Cls
+	INHERITS, as the same assignment in the class body does
+	(___grailInstallAttrMethodShadows___:, run at the end of a class
+	statement).  Protocol dispatch -- str(), +, len(), == -- is an ordinary
+	send, which found the inherited compiled method first: on a tuple
+	subclass every one of them ignored the assignment, and on a plain class
+	str() ran the assigned __repr__ instead.  typing's NamedTupleMeta copies a
+	body's methods onto the class collections.namedtuple built exactly this
+	way, so a NamedTuple's own __str__ and __add__ never ran.
+
+	Dunders only, which is where dispatch bypasses the attribute store.  Not
+	on a COMMITTED class -- a compiled forwarder there is code every session
+	shares, where the store itself is data.  (No build-in-progress test:
+	___grailClassIsBuilding___: stays true for a class made outside module
+	scope, whose mark is never closed, and a forwarder compiled twice is
+	harmless.)"
+
+	| s |
+	s := aName @env0:asString.
+	((s @env0:size @env0:> 4) and: [((s @env0:copyFrom: 1 to: 2) @env0:= '__')
+		and: [(s @env0:copyFrom: s @env0:size @env0:- 1 to: s @env0:size) @env0:= '__']])
+		ifFalse: [^ self].
+	self @env0:isCommitted ifTrue: [^ self].
+	"ONLY over a BUILT-IN's method.  Everything a Python class inherits from
+	object, PythonInstance or another Python class already consults the
+	attribute store -- functools.total_ordering, dataclasses and
+	typing.Protocol all install dunders this way and depend on that route --
+	and a compiled forwarder in front of it looped (total_ordering's derived
+	operators), shadowed an enum's own __repr__ with a dataclass mixin's, and
+	skipped Protocol's instantiation refusal.  What never consults the store
+	is a KERNEL method -- tuple's __str__ and __add__ under a namedtuple."
+	(self ___grailNearestImplementorIsBuiltin___: s) ifFalse: [^ self].
+	[self ___grailInstallAttrMethodShadows___: { s }]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil]
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailAssignBases___: newBases
+	"``cls.__bases__ = newBases'' for a class receiver.  Answers true when
+	the assignment was carried out, false to leave the store to the general
+	path (which is what every shape Grail cannot honour gets, as before).
+
+	CPython rebuilds the MRO.  Grail's first base is the Smalltalk superclass
+	and cannot change, and a base whose methods were merged in cannot be
+	taken out, so what is honoured is the shape a class factory uses: every
+	current base kept, in whatever order, with more ADDED -- ``(tuple,)''
+	becoming ``(tuple, Generic)'' or ``(Generic, tuple)''.  The appended bases join exactly as a class
+	statement's secondary bases do (importlib >> ___mergeSecondaryBases___:),
+	which re-records __bases__ / __mro__ and brings their methods in.
+	CPython's own refusals come first: a non-tuple, an empty tuple, a non-class."
+
+	| current |
+	(newBases @env0:isKindOf: tuple) ifFalse: [
+		TypeError ___signal___: 'can only assign tuple to ' @env0:,
+			(self @env1:___pyAttrLoad___: #'__name__') @env0:asString @env0:,
+			'.__bases__, not ' @env0:, newBases ___pyTypeNameForError___].
+	newBases @env0:isEmpty ifTrue: [
+		TypeError ___signal___: 'can only assign non-empty tuple to ' @env0:,
+			(self @env1:___pyAttrLoad___: #'__name__') @env0:asString @env0:,
+			'.__bases__, not ()'].
+	newBases @env0:do: [:b |
+		(b @env0:isKindOf: Behavior) ifFalse: [
+			TypeError ___signal___: (self @env1:___pyAttrLoad___: #'__name__') @env0:asString
+				@env0:, '.__bases__ must be tuple of classes, not '''
+				@env0:, b ___pyTypeNameForError___ @env0:, '''']].
+	"type_set_bases refuses a duplicate, as type.__new__ does -- which is how
+	``class Z(NamedTuple, NamedTuple)'' fails: NamedTupleMeta assigns
+	(tuple, tuple)."
+	(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: newBases.
+	current := self @env1:___pyAttrLoad___: #'__bases__'.
+	(current @env0:size @env0:< newBases @env0:size) ifFalse: [^ false].
+	current @env0:do: [:b |
+		(newBases @env0:includesIdentical: b) ifFalse: [^ false]].
+	(Python @env0:at: #importlib) @env0:___mergeSecondaryBases___: self
+		bases: newBases @env0:asArray.
+	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: object
 ___pyAttrStore___: aName put: aValue
 	"Polymorphic attribute store called by AssignAst / builtins.setattr
 	for ``obj.attr = value'' codegen.
@@ -14505,6 +14933,9 @@ ___pyAttrStore___: aName put: aValue
 
 	(self isKindOf: Behavior) ifTrue: [
 		| setterSym getterSym |
+		"``Cls.x = v'' is type(Cls).__setattr__(Cls, 'x', v): a METACLASS that
+		defines __setattr__ decides.  See ___grailMetaclassSetattr___:value:."
+		(self ___grailMetaclassSetattr___: aName value: aValue) ifTrue: [^ aValue].
 		"Installing __hash__ on a class at runtime has to become visible to
 		hash(), which reaches Object >> __hash__ by an ordinary message send and
 		so cannot see a dynamic class attribute.  Record that one exists; that
@@ -14536,6 +14967,14 @@ ___pyAttrStore___: aName put: aValue
 		time.  Route the store to that slot, so an assignment overrides the
 		build-time value through the one path the getter already honours.
 		test_enum test_pickle_nested_class."
+		"``cls.__bases__ = (...)'' -- typing's NamedTupleMeta writes
+		``nm_tpl.__bases__ = (tuple, Generic)'' on the class
+		collections.namedtuple built, and that is what gives a generic
+		NamedTuple its Generic base, its __class_getitem__ and its
+		__parameters__.  The class-side read performs the getter, so the store
+		was silently lost.  See ___grailAssignBases___:."
+		(aName @env0:asString @env0:= '__bases__') ifTrue: [
+			(self ___grailAssignBases___: aValue) ifTrue: [^ aValue]].
 		(aName @env0:asString @env0:= '__qualname__') ifTrue: [
 			"CPython accepts only a STRING here, and the refusal has to come
 			BEFORE the store or a rejected assignment still lands -- the test
@@ -14613,7 +15052,10 @@ ___pyAttrStore___: aName put: aValue
 			ifTrue: [^ object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: aValue].
 		"Python user class — store in the per-class ___dynInstVars___ dict."
 		(self ___respondsTo___: #___dynInstVars___)
-			ifTrue: [^ self ___classHolderAttrStore___: aName put: aValue].
+			ifTrue: [
+				self ___classHolderAttrStore___: aName put: aValue.
+				self ___grailShadowRuntimeDunder___: aName.
+				^ aValue].
 		"Built-in / non-Python class with no setter.  CPython's refusal here is
 		a TypeError naming the type as IMMUTABLE, not an AttributeError:
 

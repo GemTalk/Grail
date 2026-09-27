@@ -514,8 +514,16 @@ __bases__
 		importlib ___withoutImplementationRoots___:for: makes for __mro__."
 		entry == nil ifFalse: [
 			^ self ___grailAsTuple___: ((entry @env0:at: 1) @env0:collect: [:b |
-				b == PythonInstance ifTrue: [Object] ifFalse: [b]])]].
+				b == PythonInstance
+					ifTrue: [Object]
+					ifFalse: [(il @env0:___exposedBuiltinFor___: b) ifNil: [b]]])]].
 	s := self ___grailVisibleSuperclass___: il.
+	"A stand-in root reports as the builtin it stands for -- ``class Y(int)''
+	sits on AbstractPyInt, and __bases__ is (int,).  See importlib >>
+	___visibleMroOf___:."
+	(il ~~ nil and: [s ~~ nil]) ifTrue: [
+		(il @env0:___exposedBuiltinFor___: s) ifNotNil: [:ex |
+			^ self ___grailAsTuple___: (Array @env0:with: ex)]].
 	"``PythonInstance'' -> ``object'', for the reason __base__ gives above.
 	Without it ``class Plain: pass'' reported __bases__ == (PythonInstance,)
 	where CPython reports (object,), and inspect.getclasstree -- which builds

@@ -5608,14 +5608,62 @@ ___resolveMroEntries___: basesArray
 				swallowing it left the base in place for a later, wrong
 				diagnosis about a non-class base."
 				entries := hook == nil
-					ifTrue: [nil]
+					ifTrue: [#'___noHook___']
 					ifFalse: [b @env1:___grailMroEntriesFor___: origTuple hook: hook].
-				entries == nil
+				entries == #'___noHook___'
 					ifTrue: [out add: b]
 					ifFalse: [
+						"CPython's __build_class__ refuses anything but a tuple --
+						a hook answering None was a Smalltalk DNU on ``do:''
+						that took the whole session down."
+						"Array, not tuple: Grail's own hooks (PyGenericAlias's)
+						answer a Smalltalk Array, of which tuple is a subclass."
+						(entries @env0:isKindOf: Array) ifFalse: [
+							^ TypeError @env1:___signal___:
+								'__mro_entries__ must return a tuple'].
 						any := true.
 						entries do: [:each | out add: each]]]].
-	^ any ifTrue: [out asArray] ifFalse: [basesArray]
+	"A base that is still not a class once every hook has run is type.__new__'s
+	``bases must be types'' -- ``class A(List[int], object())''.  Only when
+	there is more than one base, which is where CPython's message comes from
+	(a sole non-class base reaches ___subclass___:, which has its own
+	diagnosis), and never for a BoundMethod: Grail's canonical ``type'' and
+	its module-level class stand-ins are BoundMethods, and ___subclass___:
+	handles those."
+	any ifTrue: [
+		out size > 1 ifTrue: [
+			out do: [:each |
+				((each @env0:isKindOf: Behavior) or: [each @env0:isKindOf: BoundMethod])
+					ifFalse: [^ TypeError @env1:___signal___: 'bases must be types']]].
+		^ out asArray].
+	^ basesArray
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___refuseDuplicateBases___: bases
+	"CPython's type.__new__ refuses the same class twice among its bases --
+	``class D(int, int)'', or ``class R(Protocol[T], Protocol[S])'' once both
+	entries resolve to Protocol -- with ``duplicate base class int''.
+
+	Asked where CPython asks it, which is NOT at base resolution: PEP 560 may
+	legitimately yield a duplicate that a metaclass then discards.
+	``class M(GenericParent[int], GenericParent[float])'' for a TypedDict
+	resolves to (GenericParent, GenericParent, Generic), and _TypedDictMeta
+	builds the class from other bases entirely.  So type >> __new__:_:_:_:
+	asks, and a class statement asks only when no constructing metaclass
+	stands between it and type (object class >>
+	___grailPrepareNamespace___:bases:keywords:)."
+
+	(bases isKindOf: SequenceableCollection) ifFalse: [^ self].
+	1 to: bases size do: [:i |
+		((bases at: i) @env0:isKindOf: Behavior) ifTrue: [
+			i + 1 to: bases size do: [:j |
+				(bases at: i) == (bases at: j) ifTrue: [
+					^ TypeError @env1:___signal___: 'duplicate base class '
+						, ([(bases at: i) @env1:___pyAttrLoad___: #'__name__']
+							on: AbstractException do: [:ex | ex return: (bases at: i) name])
+							asString]]]]
 %
 
 category: 'Grail-Module Loading'
@@ -5801,6 +5849,22 @@ ___subclassOriginRegistry___
 		reg := KeyValueDictionary new.
 		SessionTemps current at: #GrailSubclassOrigins put: reg].
 	^ reg
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___forgetSubclass___: aClass
+	"Take aClass out of every base's __subclasses__ -- for a class
+	statement that failed after Grail had already made the class (object >>
+	___grailDispatchMetaclass___).  The origin trail keeps its pair; the purge
+	it drives removes by identity and finds nothing to remove."
+
+	self ___subclassRegistry___ valuesDo: [:bucket |
+		bucket removeAllSuchThat: [:c | c == aClass]].
+	"...and out of the MI registry, which functools >>
+	___pyDirectSubclassesOf___: also reads: a class with several bases reaches
+	its secondary ones' __subclasses__ only through its record there."
+	self ___miRegistry___ removeKey: aClass ifAbsent: [nil]
 %
 
 category: 'Grail-Module Loading'
@@ -6006,9 +6070,33 @@ ___visibleMroOf___: aClass
 	so ``super().keys()'' in a dict subclass has to reach KeyValueDictionary.
 	isinstance, metaclass resolution and the enum mix-in scans read it too."
 
-	| mro |
+	| mro out skip |
 	mro := self ___mroOf___: aClass.
-	^ mro reject: [:k | self ___isHiddenBase___: k of: aClass]
+	mro := mro reject: [:k | self ___isHiddenBase___: k of: aClass].
+	"A class that STANDS IN for a builtin is reported AS that builtin.  A user
+	``class Y(int)'' is built on AbstractPyInt, a sibling of Integer (which is
+	builtins.int) that answers the name ``int'' without being it -- so
+	``Y.__mro__'' read (Y, int, object) with an int that was not int, and
+	Annotated's transparency test failed on that (test_typing
+	test_annotated_mro).  A str subclass is built on Unicode32 and showed
+	``str'' twice and MultiByteString.  The stand-in's own ancestors are its
+	implementation: they give way to the builtin's visible MRO."
+	out := OrderedCollection new.
+	skip := IdentitySet new.
+	mro do: [:k | | ex |
+		ex := k == aClass ifTrue: [nil] ifFalse: [self ___exposedBuiltinFor___: k].
+		ex isNil
+			ifTrue: [
+				((skip includesIdentical: k) or: [out includesIdentical: k])
+					ifFalse: [out add: k]]
+			ifFalse: [ | exMro c |
+				(out includesIdentical: ex) ifFalse: [out add: ex].
+				exMro := self ___visibleMroOf___: ex.
+				c := k superclass.
+				[c notNil] whileTrue: [
+					(exMro includesIdentical: c) ifFalse: [skip add: c].
+					c := c superclass]]].
+	^ out asArray
 %
 
 category: 'Grail-Module Loading'
@@ -6036,6 +6124,36 @@ ___isHiddenBase___: k of: aClass
 	^ ba notNil
 		and: [k == ba superclass
 		and: [aClass == ba or: [aClass inheritsFrom: ba]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___exposedBuiltinFor___: aClass
+	"The class builtins exposes that aClass STANDS IN for -- AbstractPyInt for
+	int, Unicode32 for str -- or nil when aClass is itself exposed, is written
+	in Python, or names no builtin type.  Cached per session: the answer is
+	fixed for the life of one."
+
+	| cache hit n b |
+	cache := SessionTemps current at: #'GrailExposedBuiltinFor' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailExposedBuiltinFor' put: cache].
+	hit := cache at: aClass otherwise: #'___miss___'.
+	hit == #'___miss___' ifFalse: [^ hit].
+	b := nil.
+	((aClass isKindOf: Behavior)
+		and: [(aClass includesSelector: #'___pyDefinedClass___' environmentId: 1) not])
+		ifTrue: [
+			n := [aClass @env1:___pythonBuiltinTypeName___]
+				on: AbstractException do: [:ex | ex return: nil].
+			n isNil ifFalse: [
+				b := [((Python at: #builtins) ___instance___)
+						@env1:___pyAttrLoad___: n asString asSymbol]
+					on: AbstractException do: [:ex | ex return: nil].
+				((b isKindOf: Behavior) and: [b ~~ aClass]) ifFalse: [b := nil]]].
+	cache at: aClass put: b.
+	^ b
 %
 
 category: 'Grail-Module Loading'
@@ -6452,7 +6570,26 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 								holder dynamicInstVarAt: sel put: v
 							]
 						]
-					]
+					].
+					"``__iter__ = None'' from a base the MRO puts AHEAD of
+					the primary chain must beat a METHOD that chain supplies --
+					typing's _CallableGenericAlias(_NotIterable, _GenericAlias)
+					is rooted at _GenericAlias, whose ``def __iter__'' a for loop
+					reached by an ordinary send (iter() already consults the
+					attribute).  Outside the value pass, which skips __iter__:
+					``Object class'' defines one class-side, so the name always
+					reads as shadowed there.  A refusal compiled on aClass is
+					nearer than the chain; the pragma keeps it out of the class
+					dict and of collections.abc.Iterable, as int's is."
+					(overrideMode and: [sel == #'__iter__'
+						and: [cat == #'Grail-Class Attrs'
+						and: [(self ___classAttrValueSeenFrom___: base upTo: walker name: sel) == None]]])
+						ifTrue: [
+							aClass @env1:___compileMethod: '__iter__
+	<grailProtocolRefusal>
+	^ TypeError ___signal___: '''''''' @env0:, self ___pyTypeNameForError___
+		@env0:, '''''' object is not iterable'''
+								category: 'Grail-Protocol Refusal']
 				]
 			].
 			walker := walker superClass

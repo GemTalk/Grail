@@ -10,3 +10,6 @@
 
 from collections.abc import *
 from collections.abc import __all__
+# The private helper CPython's io, os and contextlib import from here too; the
+# star import above does not carry it.
+from collections.abc import _check_methods

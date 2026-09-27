@@ -64,6 +64,43 @@ __getitem__: index
 
 category: 'Grail-Python protocol'
 method: Metaclass3
+___grailMroClassGetitem___: index
+	"The subscript a __class_getitem__ on a class of self's Python __mro__
+	other than self and object answers, with cls bound to SELF, wrapped in a
+	one-element Array -- or nil when none of them defines one.  The shapes
+	are ___grailClassGetitemDispatch___:'s: a class-body def (instance side),
+	an assigned value (a class-side accessor, usually
+	``classmethod(GenericAlias)''), an explicit classmethod (class side)."
+
+	| mro objectMeta |
+	mro := [self @env1:___pyAttrLoad___: #'__mro__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mro == nil ifTrue: [^ nil].
+	objectMeta := object @env0:class.
+	mro @env0:do: [:b |
+		((b ~~ self and: [b ~~ object]) and: [b @env0:isKindOf: Behavior]) ifTrue: [
+			((b @env0:includesSelector: #'__class_getitem__:' environmentId: 1)
+				or: [b @env0:includesSelector: #'___class_getitem__:kw:' environmentId: 1])
+				ifTrue: [^ { (UnboundMethod definingClass: b selector: #'__class_getitem__')
+					@env1:value: { self. index } value: nil }].
+			(b @env0:class @env0:includesSelector: #'__class_getitem__' environmentId: 1)
+				ifTrue: [ | attr |
+					attr := b @env0:perform: #'__class_getitem__' env: 1.
+					(attr @env0:isKindOf: PyClassMethod) ifTrue: [
+						^ { (attr @env0:dynamicInstVarAt: #'__func__')
+							@env1:value: { self. index } value: nil }].
+					(attr @env0:isKindOf: PyStaticMethod) ifTrue: [
+						^ { (attr @env0:dynamicInstVarAt: #'__func__')
+							@env1:value: { index } value: nil }]].
+			((b @env0:class @env0:includesSelector: #'__class_getitem__:' environmentId: 1)
+				and: [b @env0:class ~~ objectMeta])
+				ifTrue: [^ { (b @env0:class @env0:compiledMethodAt: #'__class_getitem__:'
+						environmentId: 1) ifNotNil: [:m | self @env0:with: index performMethod: m] }]]].
+	^ nil
+%
+
+category: 'Grail-Python protocol'
+method: Metaclass3
 ___grailClassGetitemDispatch___: index
 	"Class-side subscript.  PEP 560: if the class defines
 	__class_getitem__, ``C[x]'' means ``C.__class_getitem__(x)'' with the
@@ -82,9 +119,10 @@ ___grailClassGetitemDispatch___: index
 	      the class-attribute store;
 	  (c) neither, which is the overwhelmingly common case.
 
-	For (c) the answer stays the class itself.  CPython raises
-	``type 'C' is not subscriptable'' there, but Grail's permissive default
-	is load-bearing: ``class Foo(list[V])'' has to compile to
+	For (c) the answer stays the class itself unless the class was written
+	entirely in Python (see (c) below).  CPython raises ``type 'C' is not
+	subscriptable'' there, but Grail's permissive default is load-bearing
+	for chains through a built-in: ``class Foo(list[V])'' has to compile to
 	``class Foo(list)'', and annotations subscript classes constantly.  The
 	tests that want a TypeError want it for a __class_getitem__ that exists
 	and cannot be called -- wrong arity, or not callable at all -- and those
@@ -193,8 +231,27 @@ ___grailClassGetitemDispatch___: index
 		call: it unwraps the wrapper BY HAND, so nothing has bound the class
 		yet at that point."
 		^ attr @env1:value: { index } value: nil].
-	"(c) no __class_getitem__ anywhere: the subscript carries no runtime
-	semantics here."
+	"(c) no __class_getitem__ anywhere.  For a class written entirely in
+	Python, and for object itself, that is CPython's TypeError -- ``Any[int]''
+	(typing's Any is a plain class), ``class Q(Protocol[int])''.  A chain
+	through a Grail BUILT-IN stays permissive: CPython gives most built-in
+	types a __class_getitem__, and Grail's own classes do not all carry one,
+	so ``class Foo(list[V])'' and the annotations that subscript them keep
+	answering the class."
+	(self == object or: [(self @env0:inheritsFrom: PythonInstance)
+			and: [self ___grailPurePythonChain___]])
+		ifTrue: [
+			"...unless a base OFF the primary chain supplies the hook.  Grail
+			merges a secondary base's instance methods but not its class-side
+			ones, so ``class D(Deque[T])'' -- whose Generic arrives second --
+			and UserDict, whose Collection gets __class_getitem__ from
+			Iterable and Container, would refuse.  CPython reads the hook off
+			the MRO; ask each class on it, binding cls to self."
+			(self ___grailMroClassGetitem___: index) @env0:ifNotNil: [:r | ^ r @env0:at: 1].
+			^ TypeError ___signal___: 'type ''' @env0:,
+				([self @env1:___pyAttrLoad___: #'__name__']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: self @env0:name])
+					@env0:asString @env0:, ''' is not subscriptable'].
 	^ self
 %
 

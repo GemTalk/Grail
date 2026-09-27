@@ -28,6 +28,7 @@ _FINISHED = 'FINISHED'
 
 class Future:
     """A result that is not available yet."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     # Read by Task._step to tell "a future was awaited" from "a bare yield".
     # CPython uses the same attribute name for the same purpose, so third-party

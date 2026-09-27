@@ -154,6 +154,98 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
+## FIXED: test_typing's refusals, and the object-model gaps behind them (66 -> 11)
+
+Follow-up to the NamedTuple/TypedDict section above. `test.test_typing` goes from
+66 failures+errors to 11. Almost nothing here is in `typing`; each item is a Grail
+object-model difference test_typing happened to exercise.
+
+**CPython's refusals, which Grail accepted.**
+
+- `object.__new__` / `object.__init__` refuse excess arguments by CPython's rule
+  (`C() takes no arguments`, `object.__init__() takes exactly one argument`), for
+  a class written entirely in Python. A class that DEFS `__init__` and forwards
+  arguments to `object.__init__` is still accepted: Grail's multiple inheritance
+  merges methods rather than linearising, so a mixin's cooperative
+  `super().__init__(*args)` can reach object where CPython's MRO reaches the next
+  base.
+- A class written in Python with no `__class_getitem__` anywhere on its MRO is not
+  subscriptable (`type 'A' is not subscriptable`, so `Any[int]` refuses). Chains
+  through a Grail built-in stay permissive. The stdlib classes CPython makes
+  generic got the hook they lacked (`queue.Queue`, `weakref.WeakSet`,
+  `asyncio.Future`, `array.array`, `contextlib.AbstractContextManager`, ... -- the
+  list is test_genericalias's), and the hook is looked for on the whole MRO, since
+  a secondary base's class-side methods are not merged.
+- `duplicate base class X` from `type.__new__` and from a class statement with no
+  constructing metaclass -- not from base resolution, where a TypedDict may
+  legitimately resolve to duplicates it then discards. `__mro_entries__` must
+  answer a tuple; a non-class base after resolution is `bases must be types`.
+- TypeVar/ParamSpec bounds and constraints are type-checked; `issubclass(x, type)`
+  validates `x`; a union of unhashable-metaclass classes is unhashable;
+  `NoDefault`'s type is immutable; a function's `__new__` refuses.
+- `__iter__ = None` is honoured by every consumer -- `list()`, `tuple()`, `for`,
+  not just `iter()` -- including when it comes from a secondary base that CPython's
+  MRO puts ahead of the Smalltalk superclass (the merge compiles a refusal then).
+  The union type refuses iteration.
+
+**Class construction.**
+
+- The most derived metaclass among ALL the bases wins, even when the primary base
+  supplies one (`class S(Mapping[T], Protocol[T])` runs `_ProtocolMeta`).
+- A class whose metaclass raises leaves no subclass links behind.
+- The metaclass is recorded before `__set_name__` / `__init_subclass__` run, so a
+  hook asking `type(cls)` sees it.
+- A sole base whose `__mro_entries__` answers several classes keeps them all
+  (`class T1(Tuple[T, KT])` has `Generic`).
+- `cls.__bases__ = (...)` is honoured when every current base is kept and more are
+  added (NamedTupleMeta's `(tuple, Generic)`).
+- An explicit `C.__init_subclass__()` runs C's own hook.
+- `class X(*bases)` works (the header takes the multi-base path).
+- A keyword-called `__new__` (`A(cls=1)`) forwards non-virtually; it ran object's
+  allocator, an uncatchable `1 new`.
+- A metaclass `__setattr__` decides class attribute stores; metaclass `__eq__` /
+  `__hash__` apply to classes, reflected between two classes as CPython does.
+- A dunder assigned at runtime over a BUILT-IN's method (`tuple.__str__` under a
+  namedtuple) gets a forwarder, so protocol dispatch sees it.
+
+**Reflection.**
+
+- `__mro__` / `__bases__` report a builtin's stand-in root as the builtin
+  (`class Y(int)` has `int`, not `AbstractPyInt`; a str subclass no longer shows
+  `str` twice and `MultiByteString`).
+- `dir(cls)` merges the `__dict__` of each Python class on the MRO (a nested class
+  is listed; `asFloat` is not); an instance lists its class's declared value
+  attributes; a built-in's `__dict__` no longer lists Smalltalk's `new`.
+- Slots appear in the class dict as member descriptors; `__slots__` may be a dict;
+  `Generic` has `__slots__ = ()`.
+- Qualnames name the nearest implementor (`A.__init__` is `A.__init__`, not
+  `object.__init__`), and an inherited classmethod is qualified by its definer.
+  A method's attribute miss forwards to `__func__`.
+- `()` is a singleton. A submodule's frames know their file, so `typing._caller()`
+  works in a package. `(x): int` is not a simple annotation.
+- A class annotation reading an enclosing local takes the text path, which sees
+  later assignments (the IR helper seeded a snapshot).
+- Smaller: `io.Reader` / `io.Writer`; `Union | 'str'`; union `__name__`;
+  `NoneType.__module__`; `warnings._deprecated` uses `str.format` and the caller's
+  frame; inspect renders typing annotations as CPython does; complex `=` answers a
+  Boolean when `__eq__` punts (it was an uncatchable error in a dict lookup).
+
+### Still failing (11)
+
+- `overload` (Grail's DEVIATION 2): a top-level `def` cannot rebind a decorated
+  name.
+- `@override` over `@classmethod` / `@property`: Grail's decorators do not build
+  those wrapper objects, so the attribute lands on the function.
+- `@final` over a metaclass `@property`: a metaclass data descriptor does not take
+  precedence over the class's own attribute.
+- `get_type_hints`: a method-local class's methods lose their annotations when one
+  names an enclosing local; methods of a class made by `exec` report the wrong
+  `__globals__`; NamedTuple's `__new__.__annotate__` is not kept.
+- A metaclass `__getattribute__` is not consulted for class attribute reads.
+- Pickling a nested NamedTuple; `typing._eval_type`'s deprecation warning from
+  inside the test module; `ByteString._removal_version` (the cross-module store
+  already recorded above).
+
 ## FIXED: typing's NamedTuple and TypedDict are CPython's, and the metaclass protocols they need
 
 `typing.py` replaced CPython's `NamedTuple` and `TypedDict` with Grail emulations

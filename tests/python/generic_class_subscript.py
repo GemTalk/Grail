@@ -69,10 +69,15 @@ def subscription_returns_self_for_use_as_alias():
     ``list`` has opted IN to real parameterised generics, so ``list[int]`` is a
     GenericAlias whose __origin__ is list -- CPython's answer, and what lets
     singledispatch reject a subscripted generic instead of silently registering
-    the unsubscripted class.  ``dict`` has opted in too.  A class that has not
-    still collapses to itself, which is the per-class model.
+    the unsubscripted class.  ``dict`` has opted in too.  A plain class that
+    has not is CPython's TypeError.
     """
     class NotOptedIn:
         pass
+    try:
+        NotOptedIn[int]
+        refused = False
+    except TypeError:
+        refused = True
     return (list[int].__origin__ is list and dict[str, int].__origin__ is dict,
-            NotOptedIn[int] is NotOptedIn)
+            refused)

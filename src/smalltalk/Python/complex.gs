@@ -85,9 +85,18 @@ method: complex
 category: 'Grail-Arithmetic Operators'
 method: complex
 = anObject
-	"Equality comparison."
+	"Equality comparison -- the SMALLTALK one, which collections use and which
+	must answer a Boolean.  __eq__ answers NotImplemented for a non-number, and
+	handed back raw that was ``Expected NotImplemented to be a Boolean'', an
+	uncatchable error: ``(2+3j,) == (K(),)'' compared elements with this, and so
+	did a dict lookup whose hash met a complex key -- typing's typed cache ran
+	into it at random, as Literal[3j + 2, ...] (test_typing LiteralTests).
+	NotImplemented means not equal here, as it does at the end of Python's
+	own comparison."
 
-	^ self @env1:__eq__: anObject
+	| r |
+	r := self @env1:__eq__: anObject.
+	^ r == true
 %
 
 category: 'Grail-Arithmetic Operators'

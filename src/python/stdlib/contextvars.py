@@ -59,6 +59,7 @@ class Token:
     had none in that context, which is why reset can remove a variable rather
     than only overwrite it.
     """
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     MISSING = _MISSING
 
@@ -160,6 +161,7 @@ class Context:
 
 class ContextVar:
     """A variable whose value is per-Context rather than global."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     # ``default'' is KEYWORD-ONLY, as it is upstream.  Grail's stub had it
     # positional-or-keyword, which is looser and so accepts everything CPython

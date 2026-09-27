@@ -185,6 +185,7 @@ class _CallableProxy(_Proxy):
 class WeakValueDictionary:
     """Mapping whose values are held weakly. An entry vanishes when its value
     is reclaimed."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, dict_or_iter=None):
         self._data = {}
@@ -341,6 +342,7 @@ def _make_key_entry_remover(entries):
 class WeakKeyDictionary:
     """Mapping whose keys are held weakly. An entry vanishes when its key
     is reclaimed. Lookup is by identity (`is`)."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, dict_or_iter=None):
         # list of (key_ref, value) — order preserved.
@@ -478,6 +480,7 @@ class WeakKeyDictionary:
 
 class WeakSet:
     """Set holding its members weakly; members drop out on reclamation."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, iterable=None):
         self._refs = []
@@ -557,6 +560,7 @@ class WeakMethod:
     Python can't directly subclass with the required slot layout). If a
     consumer needs `isinstance(x, weakref.ref)` to match WeakMethod, that
     use site would need separate handling."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, meth, callback=None):
         self._inst_ref = ref(meth.__self__, self._make_cb(callback))

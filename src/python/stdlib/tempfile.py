@@ -220,6 +220,7 @@ class SpooledTemporaryFile:
     file-backed spooling is not supported under Grail.  Constructing
     raises NotImplementedError so callers that try to actually use
     it see the same fail loudly as TemporaryFile."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, max_size=0, mode='w+b', buffering=-1,
                  encoding=None, newline=None, suffix=None, prefix=None,
@@ -249,6 +250,7 @@ class TemporaryDirectory:
     caller that wants to inspect it; ``ignore_cleanup_errors`` swallows an OSError
     from the removal, which is CPython's escape hatch for a directory whose
     contents another process is holding open."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, suffix=None, prefix=None, dir=None,
                  ignore_cleanup_errors=False, *, delete=True):

@@ -150,6 +150,20 @@ _new: positional kw: kwargs
 
 category: 'Grail-Class Construction'
 classmethod: type
+___grailBuildWithMetaclass___: mcls as: aBlock
+	"Run aBlock -- a type() build -- with mcls recorded for the class it makes
+	before that class's __set_name__ / __init_subclass__ run (builtins >>
+	type:_:_:kw: takes it).  Cleared however the build ends, so a build that
+	raises before taking it cannot hand it to an unrelated later class."
+
+	^ [SessionTemps @env0:current @env0:at: #'GrailTypeBuildMetaclass' put: mcls.
+	   aBlock @env0:value]
+		@env0:ensure: [SessionTemps @env0:current
+			@env0:removeKey: #'GrailTypeBuildMetaclass' ifAbsent: [nil]]
+%
+
+category: 'Grail-Class Construction'
+classmethod: type
 __new__: mcls _: aName _: bases _: ns
 	"``super().__new__(cls, name, bases, namespace)'' from inside a metaclass
 	__new__.  This is the single shape almost every metaclass in the corpus is
@@ -247,6 +261,7 @@ __new__: mcls _: aName _: bases _: ns
 			^ TypeError @env1:___signal___:
 				('__classcell__ must be a nonlocal cell, not <class ''' @env0:,
 					(___cellVal ___pyTypeNameForError___) @env0:, '''>')]].
+	(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: bases.
 	pending := type ___classUnderConstruction___.
 	"DIFFERENT BASES BUILD A DIFFERENT CLASS.  The class under construction can
 	only be answered when the metaclass asks for the class the statement was
@@ -265,7 +280,8 @@ __new__: mcls _: aName _: bases _: ns
 	is recorded unconditionally, since it built this class itself."
 	(pending @env0:notNil
 		and: [type ___grailBases___: bases differFrom: pending]) ifTrue: [ | rebuilt |
-			rebuilt := (builtins @env1:instance) @env1:type: aName _: bases _: ns.
+			rebuilt := type ___grailBuildWithMetaclass___: mcls
+				as: [(builtins @env1:instance) @env1:type: aName _: bases _: ns].
 			rebuilt @env1:___grailSetMetaclass___: mcls.
 			^ rebuilt].
 	pending @env0:notNil ifTrue: [

@@ -131,7 +131,7 @@ testOrdinarySubscriptingIsUnaffected
 	including the list[int] in an annotation -- so instances, containers and
 	strings are all cover here, not decoration."
 
-	self assertAll: #('plain_class_stays_subscriptable'
+	self assertAll: #('plain_class_is_not_subscriptable'
 		'builtin_container_stays_subscriptable' 'instance_subscript_unaffected'
 		'list_subscript' 'dict_subscript' 'tuple_subscript' 'str_subscript')
 %

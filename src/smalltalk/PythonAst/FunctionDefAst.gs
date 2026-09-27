@@ -3215,7 +3215,37 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		positional-only parameter."
 		stream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf.
 	].
-	"Forward to the fixed-arity selector."
+	"Forward to the fixed-arity selector.
+
+	NON-VIRTUALLY for a def that runs against a CLASS receiver -- __new__,
+	and the implicit classmethods __init_subclass__ / __class_getitem__.
+	They compile instance-side, and a virtual ``self __new__: x'' on the
+	class finds the CLASS-side ``object class >> __new__:'' first -- object's
+	allocator, which took the argument for the class to instantiate.
+	``A(cls=1)'' for ``def __new__(_cls, cls)'' therefore ran ``1 new'', an
+	uncatchable error, while ``A(1)'' worked: only the keyword path goes
+	through this forwarder (collections.namedtuple builds exactly this
+	__new__, and typing's NamedTuple test calls it with cls=...).  The kernel
+	performMethod: forms take at most four arguments; beyond that the send
+	stays virtual, as it was."
+	((#('__new__' '__init_subclass__' '__class_getitem__') includes: name asString)
+		and: [callParams size <= 4]) ifTrue: [
+			| fixedSel |
+			fixedSel := name.
+			callParams isEmpty ifFalse: [
+				fixedSel := name , ':'.
+				2 to: callParams size do: [:i | fixedSel := fixedSel , '_:']].
+			stream nextPutAll: '^ self @env0:'.
+			callParams do: [:p |
+				stream nextPutAll: 'with: '; nextPutAll: (self transportParamName: p); space].
+			stream
+				nextPutAll: 'performMethod: ';
+				nextPutAll: '((self @env0:whichClassIncludesSelector: #''';
+				nextPutAll: fixedSel;
+				nextPutAll: ''' environmentId: 1) @env0:compiledMethodAt: #''';
+				nextPutAll: fixedSel;
+				nextPutAll: ''' environmentId: 1)'.
+			^ stream contents].
 	stream nextPutAll: '^ self '.
 	stripSelf
 		ifTrue: [

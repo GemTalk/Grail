@@ -94,8 +94,8 @@ method: GenericClassSubscriptTestCase
 testSubscriptionReturnsSelfForAlias
 	"Bare subscription, per class.  ``list'' and ``dict'' have opted IN to
 	real parameterised generics, so ``list[int]'' is a GenericAlias whose
-	__origin__ is list -- CPython's answer.  A class that has not still
-	collapses to itself.
+	__origin__ is list -- CPython's answer.  A plain class that has not is
+	CPython's TypeError.
 
 	This test used to assert that BOTH collapsed.  list had to change:
 	while ``list[int] is list'' held, singledispatch's register() accepted

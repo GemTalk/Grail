@@ -84,6 +84,17 @@ simple
 	^ simple
 %
 
+category: 'Grail-accessing'
+method: AnnAssignAst
+___isSimpleAnnotation___
+	"Does this statement contribute to its scope's __annotations__?  Only a
+	bare name, unparenthesised -- ``x: int'', not ``(x): int'' or ``a.b:
+	int'' (ast.AnnAssign.simple).  nil counts as simple: a node built without
+	the parser's flag is the ordinary case."
+
+	^ (target isKindOf: NameAst) and: [simple ~= 0]
+%
+
 category: 'Grail-other'
 method: AnnAssignAst
 printSmalltalkOn: aStream

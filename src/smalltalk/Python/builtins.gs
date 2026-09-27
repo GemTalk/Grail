@@ -2423,7 +2423,24 @@ hash: anObject
 	dict and set bucket arithmetic, where it is a wrong answer rather
 	than an error (test_builtin test_invalid_hash_typeerror)."
 
-	(anObject @env0:isKindOf: Behavior) ifTrue: [^ anObject @env0:identityHash].
+	"...by type.__hash__, which a METACLASS may replace: ``class M(type):
+	__hash__ = None'' makes every class of M unhashable, as test_typing's
+	union of such classes checks (``unhashable type: 'M''')."
+	(anObject @env0:isKindOf: Behavior) ifTrue: [
+		(anObject ___grailMetaclass___) @env0:ifNotNil: [:meta |
+			((meta @env0:isKindOf: Behavior)
+				and: [([meta @env1:___pyAttrLoad___: #'__hash__']
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) == None])
+				ifTrue: [
+					^ TypeError ___signal___: 'unhashable type: '''
+						@env0:, (meta @env1:___pyAttrLoad___: #'__name__') @env0:asString
+						@env0:, '''']].
+		"...or computes its own: typing's _UnionGenericAliasMeta hashes as Union."
+		(anObject ___grailMetaclassDefines___: #'__hash__') ifTrue: [
+			^ self ___requireHashInteger___:
+				((UnboundMethod definingClass: anObject ___grailMetaclass___
+					selector: #'__hash__') ___pyCallValue___: { anObject } kw: nil)].
+		^ anObject @env0:identityHash].
 	^ self ___requireHashInteger___: ([anObject __hash__]
 		@env0:on: MessageNotUnderstood do: [:ex |
 			TypeError ___signal___: 'unhashable type'])
@@ -2528,7 +2545,7 @@ iter: anObject
 	iterable is unaffected."
 	(anObject ___classAttrDunder___: #'__iter__') == None
 		ifTrue: [
-			TypeError @env0:signal: ('''' @env0:,
+			TypeError ___signal___: ('''' @env0:,
 				(anObject ___pyTypeNameForError___) @env0:,
 				''' object is not iterable')
 		].
@@ -2538,7 +2555,7 @@ iter: anObject
 	for sets, etc., not on the leaf class."
 	(anObject ___respondsTo___: #'__iter__')
 		ifFalse: [
-			TypeError @env0:signal: ('''' @env0:,
+			TypeError ___signal___: ('''' @env0:,
 				(anObject ___pyTypeNameForError___) @env0:,
 				''' object is not iterable')
 		].
@@ -5732,6 +5749,11 @@ ___isSubclassSingle___: sub of: target
 	the OTHER reading of the same name (``is x a class'') and the two can no
 	longer share one substitution -- see ___isInstanceSingle___."
 	(target == type) @env0:ifTrue: [
+		"Argument 1 is validated first here too: ``issubclass(list[int], type)''
+		is CPython's ``arg 1 must be a class'', not False."
+		(sub @env0:isKindOf: Behavior) ifFalse: [
+			self ___abstractClassCheck___: sub
+				argMessage: 'issubclass() arg 1 must be a class'].
 		^ (sub == type)
 			or: [(sub @env0:isKindOf: Behavior)
 				and: [(sub @env0:inheritsFrom: type)
@@ -6353,6 +6375,16 @@ type: className _: bases _: namespace kw: classKeywords
 	``classKeywords'' are CPython's ``type(name, bases, ns, **kwds)'' -- the
 	3.6+ form, forwarded to __init_subclass__ exactly as a class header's
 	keywords are.  nil for the ordinary three-argument call."
+	"THE METACLASS IS SETTLED FIRST.  ``type.__new__(M, name, bases, ns)''
+	builds a class whose type IS M before either PEP 487 half runs, so an
+	__init_subclass__ asking ``type(cls)'' sees M -- typing's
+	_generic_init_subclass allows ``Generic'' among a TypedDict's bases only
+	when type(cls) is _TypedDictMeta.  type >> __new__:_:_:_: and a direct
+	metaclass call leave M here for the one class they are about to build."
+	(SessionTemps @env0:current @env0:at: #'GrailTypeBuildMetaclass' otherwise: nil)
+		@env0:ifNotNil: [:m |
+			SessionTemps @env0:current @env0:removeKey: #'GrailTypeBuildMetaclass'.
+			newClass @env1:___grailSetMetaclass___: m].
 	newClass @env1:___invokeSetNameHooks___: ownAttrNames @env0:asArray.
 	newClass @env1:___grailInitSubclass___: classKeywords.
 	^ newClass

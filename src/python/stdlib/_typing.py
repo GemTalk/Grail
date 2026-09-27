@@ -117,18 +117,29 @@ def _cannot_subclass_instance(obj):
     return f"Cannot subclass an instance of {type(obj).__name__}"
 
 
-class _NoDefaultType:
+class _ImmutableType(type):
+    """A C-level type's immutability (Py_TPFLAGS_IMMUTABLETYPE): setting an
+    attribute on the TYPE is a TypeError, as it is on NoneType."""
+
+    def __setattr__(cls, name, value):
+        raise TypeError(
+            f"cannot set {name!r} attribute of immutable type {cls.__name__!r}")
+
+
+_no_default_instance = []
+
+
+class _NoDefaultType(metaclass=_ImmutableType):
     """The type of the ``NoDefault`` sentinel."""
 
     __slots__ = ()
     __init_subclass__ = _not_a_base('NoDefaultType')
 
-    _instance = None
-
+    # The singleton lives outside the class: the type refuses attribute stores.
     def __new__(cls):
-        if cls._instance is None:
-            cls._instance = object.__new__(cls)
-        return cls._instance
+        if not _no_default_instance:
+            _no_default_instance.append(object.__new__(cls))
+        return _no_default_instance[0]
 
     def __repr__(self):
         return 'typing.NoDefault'
@@ -221,16 +232,36 @@ class TypeVar(_Common):
         self.__contravariant__ = bool(contravariant)
         self.__infer_variance__ = bool(infer_variance)
         self.__default__ = default
+        # typevarobject.c type-checks the bound and each constraint through
+        # typing._type_check, which is what refuses ``bound=Optional``.
+        if bound is not None:
+            bound = _typing_module()._type_check(bound, "Bound must be a type.")
         if constraints and bound is not None:
             raise TypeError("Constraints cannot be combined with bound=...")
         if constraints and len(constraints) == 1:
             raise TypeError("A single constraint is not allowed")
-        self.__constraints__ = tuple(constraints)
+        _tc = _typing_module()._type_check
+        self.__constraints__ = tuple(
+            _tc(c, "TypeVar(name, constraint, ...): constraints must be types.")
+            for c in constraints)
         self.__bound__ = bound
         self.__module__ = _caller_module(1)
 
     def __typing_subst__(self, arg):
         return _typing_module()._typevar_subst(self, arg)
+
+    def __typing_prepare_subst__(self, alias, args):
+        # typevarobject.c's typevar_typing_prepare_subst: a TypeVar with no
+        # argument of its own takes its default, when it has one.
+        params = alias.__parameters__
+        i = params.index(self)
+        if i < len(args):
+            return args
+        if i == len(args) and self.has_default():
+            return (*args, self.__default__)
+        raise TypeError(
+            f"Too few arguments for {alias!r}; actual {len(args)}, "
+            f"expected at least {i + 1}")
 
     def evaluate_bound(self):
         return self.__bound__
@@ -312,6 +343,8 @@ class ParamSpec(_Common):
         self.__contravariant__ = bool(contravariant)
         self.__infer_variance__ = bool(infer_variance)
         self.__default__ = default
+        if bound is not None:
+            bound = _typing_module()._type_check(bound, "Bound must be a type.")
         self.__bound__ = bound
         self.__module__ = _caller_module(1)
 
@@ -515,20 +548,16 @@ class Generic:
     live in ``typing``, and this only routes to them.  See the module
     docstring.
 
-    NO ``__slots__``, where CPython's C type has ``()``.  Grail enforces a
-    slots declaration on every subclass; CPython only does when EVERY base is
-    slotted.  So an empty tuple here silently took ``__dict__`` away from
-    classes that plainly need one:
-
-        class RecentlyUsedContainer(Generic[K, V], MutableMapping[K, V]):
-            def __init__(self):
-                self._d = {}
-
-    ran its ``__init__``, and then ``self._d`` did not exist.  urllib3 is
-    written that way, and so is a large fraction of every annotated container
-    class.
+    ``__slots__ = ()``, as CPython's C type has, so a slotted subclass is
+    strict: ``class C(Generic[T]): __slots__ = ('potato',)`` refuses
+    ``c.tomato``.  It once went without, because Grail's slot strictness then
+    stripped ``__dict__`` from a subclass that declared no slots of its own
+    (urllib3's ``RecentlyUsedContainer(Generic[K, V], MutableMapping[K, V])``,
+    which sets ``self._d`` in ``__init__``); that is no longer so -- a class
+    without ``__slots__`` keeps its ``__dict__`` whatever its bases declare.
     """
 
+    __slots__ = ()
     _is_protocol = False
 
     def __class_getitem__(cls, args):

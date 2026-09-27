@@ -65,9 +65,18 @@ set compile_env: 0
 category: 'Grail-instance creation'
 classmethod: tuple
 new
-	"Return an empty, frozen tuple."
+	"Return an empty, frozen tuple.
 
-	^ self ___frozenInstance: (self new: 0)
+	For tuple itself, THE empty tuple: CPython's is a singleton, and code
+	compares with ``is'' -- ``TypeVar(name='T', default=()).__default__ is ()''
+	(test_typing TypeVarTests.test_constructor).  One per session, and safe to
+	share because an exact tuple is invariant: anything that tried to grow it
+	in place raises rather than changing every ``()'' at once.  A subclass
+	instance stays fresh and mutable, as ___frozenInstance: explains."
+
+	self == tuple ifFalse: [^ self ___frozenInstance: (self new: 0)].
+	^ SessionTemps current at: #'GrailEmptyTuple'
+		ifAbsentPut: [self ___frozenInstance: (self new: 0)]
 %
 
 category: 'Grail-instance creation'
@@ -134,6 +143,7 @@ classmethod: tuple
 withAll: aCollection
 
 	| inst i |
+	(self == tuple and: [aCollection size = 0]) ifTrue: [^ self new].
 	inst := self new: aCollection size.
 	i := 1.
 	aCollection do: [:each |

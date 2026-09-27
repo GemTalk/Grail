@@ -1917,7 +1917,11 @@ parseExpressionOrAssignment
 				value := self parseExpression.
 			].
 			self setStoreCtx: expr.
-			simple := (expr isKindOf: NameAst) ifTrue: [1] ifFalse: [0].
+			"``(x): int = 1'' is NOT simple: CPython evaluates the annotation
+			and binds x, but records nothing in __annotations__.  The parens
+			are gone from the tree, so the statement's first token says it."
+			simple := ((expr isKindOf: NameAst) and: [(startTok isOp: '(') not])
+				ifTrue: [1] ifFalse: [0].
 			"Remember the ANNOTATED name: ``x: int'' with no value binds
 			nothing, so it never reaches the write set, yet it still makes a
 			later ``global x'' an error -- with its own wording."
