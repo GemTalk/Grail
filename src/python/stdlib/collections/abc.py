@@ -1,392 +1,570 @@
-# GRAIL collections.abc -- recognizing ABCs.
+# Copyright 2007 Google, Inc. All Rights Reserved.
+# Licensed to PSF under a Contributor Agreement.
+
+"""Abstract Base Classes (ABCs) for collections, according to PEP 3119.
+
+Unit tests are in test_collections.
+"""
+
+############ Maintenance notes #########################################
 #
-# CPython's collections.abc has ~20 abstract base classes used pervasively
-# for isinstance()/issubclass() checks, as mixin bases, and as
-# type-annotation generics (``Callable[[int], str]``).  This Grail version
-# gives them REAL semantics without CPython's ABCMeta machinery:
+# ABCs are different from other standard library modules in that they
+# specify compliance tests.  In general, once an ABC has been published,
+# new methods (either abstract or concrete) cannot be added.
 #
-#   * The ABCs form CPython's actual inheritance DAG (Sequence inherits
-#     Reversible and Collection, ...).  Grail keeps the first base on the
-#     Smalltalk chain and records the rest in the C3 MI registry, which
-#     builtins isinstance/issubclass already consult -- so
-#     ``issubclass(Sequence, Reversible)`` holds with no hook at all, and a
-#     user class that REALLY subclasses an ABC passes both checks on the
-#     ordinary chain.  (Method inheritance still follows the FIRST base
-#     only -- Grail has no MRO-walk dispatch -- so every composite ABC
-#     defines its mixin methods locally rather than relying on a secondary
-#     base.)
-#   * The "one-trick pony" ABCs (Hashable, Iterable, Iterator, Reversible,
-#     Sized, Container, Callable, async variants) do STRUCTURAL checks --
-#     CPython implements those with __subclasshook__; here the shared
-#     __instancecheck__/__subclasscheck__ classmethods (reached through the
-#     metaclass-chain probes in builtins.gs, which fire only after the real
-#     class chain and C3 MRO both miss) test for the protocol methods,
-#     honoring the ``__iter__ = None`` blocking convention.
-#   * The composite ABCs (Sequence, Mapping, Set, ...) are NOT structural in
-#     CPython and are not here either: they recognize builtin types via
-#     explicit whitelists (standing in for CPython's _collections_abc
-#     ``.register(list)`` calls) plus a module-level virtual-subclass
-#     registry that ``ABC.register(cls)`` feeds.
-#   * Mixin methods are provided on the composite ABCs (Sequence.index,
-#     Set.__le__, MutableMapping.update, ...) so tiny concrete subclasses
-#     get working derived behavior, as in CPython.
+# Though classes that inherit from an ABC would automatically receive a
+# new mixin method, registered classes would become non-compliant and
+# violate the contract promised by ``isinstance(someobj, SomeABC)``.
 #
-# Deliberate approximations (documented, test-visible):
-#   * No ABCMeta and no instantiation enforcement -- ``Hashable()`` does not
-#     raise.  (A __new__ check is possible but would run on every
-#     instantiation of every ABC subclass, e.g. Werkzeug's HeaderSet.)
-#   * Hashability is decided by CPython ground truth for builtins
-#     (list/set/dict/bytearray unhashable) plus the ``__hash__ = None``
-#     convention for user classes -- Grail's builtin classes carry internal
-#     hash methods that would fool a purely structural probe.
+# Though irritating, the correct procedure for adding new abstract or
+# mixin methods is to create a new ABC as a subclass of the previous
+# ABC.  For example, union(), intersection(), and difference() cannot
+# be added to Set but could go into a new ABC that extends Set.
+#
+# Because they are so hard to change, new ABCs should have their APIs
+# carefully thought through prior to publication.
+#
+# Since ABCMeta only checks for the presence of methods, it is possible
+# to alter the signature of a method by adding optional arguments
+# or changing parameters names.  This is still a bit dubious but at
+# least it won't cause isinstance() to return an incorrect result.
+#
+#
+#######################################################################
 
-_registry = {}  # ABC name -> list of classes registered via ABC.register()
+from abc import ABCMeta, abstractmethod
+import sys
 
-# Protocol methods per structural ABC (CPython's __subclasshook__ set: the
-# one-trick ponies plus Collection and Generator, which are structural
-# upstream too).
-_STRUCTURAL = {
-    'Hashable': ('__hash__',),
-    'Callable': ('__call__',),
-    'Iterable': ('__iter__',),
-    'Iterator': ('__iter__', '__next__'),
-    'Reversible': ('__reversed__', '__iter__'),
-    'Sized': ('__len__',),
-    'Container': ('__contains__',),
-    'Collection': ('__len__', '__iter__', '__contains__'),
-    'Generator': ('__iter__', '__next__', 'send', 'throw', 'close'),
-    'AsyncIterable': ('__aiter__',),
-    'AsyncIterator': ('__aiter__', '__anext__'),
-    'Awaitable': ('__await__',),
-}
+GenericAlias = type(list[int])
+EllipsisType = type(...)
+def _f(): pass
+FunctionType = type(_f)
+del _f
 
-# CPython marks these unhashable with ``__hash__ = None`` in the type object,
-# which the general rule below reads via getattr.  Grail's hand-written classes
-# raise from a compiled __hash__ instead of exposing the attribute, so they have
-# to be named here.  dict_values is deliberately ABSENT: it has no set-like
-# __eq__, so CPython leaves it hashable on identity.
-# The concrete dict-view types (CPython's dict_keys / dict_values / dict_items).
-_DICT_KEYS = type({}.keys())
-_DICT_VALUES = type({}.values())
-_DICT_ITEMS = type({}.items())
+__all__ = ["Awaitable", "Coroutine",
+           "AsyncIterable", "AsyncIterator", "AsyncGenerator",
+           "Hashable", "Iterable", "Iterator", "Generator", "Reversible",
+           "Sized", "Container", "Callable", "Collection",
+           "Set", "MutableSet",
+           "Mapping", "MutableMapping",
+           "MappingView", "KeysView", "ItemsView", "ValuesView",
+           "Sequence", "MutableSequence",
+           "ByteString", "Buffer",
+           ]
 
-_UNHASHABLE_BUILTINS = (list, set, dict, bytearray,
-                        _DICT_KEYS, _DICT_ITEMS)
+# GRAIL DEVIATION: CPython keeps this file as _collections_abc and has the
+# collections package publish it as collections.abc, so the line here reads
+# ``__name__ = "collections.abc"''.  Grail keeps it AS collections/abc.py --
+# the module that has always defined these classes, which a deployed class
+# with instances in the repository requires (gemdb refuses a module that
+# stops defining one) -- and _collections_abc re-exports it, so the name is
+# already right and needs no assignment.
 
-# Builtins CPython registers as virtual subclasses of the composite ABCs in
-# _collections_abc; these whitelists are the Grail equivalent.  Used for both
-# instance checks (via isinstance against the tuple) and subclass checks.
-# CPython registration propagates to ancestor ABCs (bytes registered on
-# Sequence counts for Reversible too) -- the Reversible row spells that out.
-_BUILTIN_WHITELIST = {
-    'Mapping': (dict,),
-    'MutableMapping': (dict,),
-    'Sequence': (list, tuple, str, bytes, bytearray),
-    'MutableSequence': (list, bytearray),
-    # dict_keys / dict_items are set-like (CPython registers them on Set).
-    'Set': (set, frozenset, _DICT_KEYS, _DICT_ITEMS),
-    'MutableSet': (set,),
-    'ByteString': (bytes, bytearray),
-    'Buffer': (bytes, bytearray),
-    'Reversible': (list, tuple, str, bytes, bytearray, dict),
-    # dict views: CPython registers each concrete view on its view ABC, all of
-    # which descend from MappingView (test_dictviews test_abc_registry).  The
-    # one-trick ABCs (Sized / Iterable / Container / Collection) match these
-    # structurally via __len__ / __iter__ / __contains__.
-    'KeysView': (_DICT_KEYS,),
-    'ItemsView': (_DICT_ITEMS,),
-    'ValuesView': (_DICT_VALUES,),
-    'MappingView': (_DICT_KEYS, _DICT_VALUES, _DICT_ITEMS),
-}
+# Private list of types that we want to register with the various ABCs
+# so that they will pass tests like:
+#       it = iter(somebytearray)
+#       assert isinstance(it, Iterable)
+# Note:  in other implementations, these types might not be distinct
+# and they may have their own implementation specific types that
+# are not included on this list.
+bytes_iterator = type(iter(b''))
+bytearray_iterator = type(iter(bytearray()))
+#callable_iterator = ???
+dict_keyiterator = type(iter({}.keys()))
+dict_valueiterator = type(iter({}.values()))
+dict_itemiterator = type(iter({}.items()))
+list_iterator = type(iter([]))
+list_reverseiterator = type(iter(reversed([])))
+range_iterator = type(iter(range(0)))
+longrange_iterator = type(iter(range(1 << 1000)))
+set_iterator = type(iter(set()))
+str_iterator = type(iter(""))
+tuple_iterator = type(iter(()))
+zip_iterator = type(iter(zip()))
+## views ##
+dict_keys = type({}.keys())
+dict_values = type({}.values())
+dict_items = type({}.items())
+## misc ##
+mappingproxy = type(type.__dict__)
+def _get_framelocalsproxy():
+    # GRAIL DEVIATION: a live function frame with NO bound locals has no
+    # f_locals under Grail (PyFrame >> f_locals explains why, and SUnit pins
+    # it), where CPython hands back an empty proxy.  One bound local gives
+    # this frame something to report, so the type is readable.
+    _bound = None
+    return type(sys._getframe().f_locals)
+framelocalsproxy = _get_framelocalsproxy()
+del _get_framelocalsproxy
+generator = type((lambda: (yield))())
+## coroutine ##
+async def _coro(): pass
+_coro = _coro()
+coroutine = type(_coro)
+_coro.close()  # Prevent ResourceWarning
+del _coro
+## asynchronous generator ##
+async def _ag(): yield
+_ag = _ag()
+async_generator = type(_ag)
+del _ag
 
-# Concrete iterator/generator classes, captured at import so the structural
-# checks can recognize builtin iterators whose Grail classes share the
-# backing collection's hierarchy (a list iterator must be Iterator/Iterable
-# but NOT Sized/Reversible/Collection, whatever its Smalltalk parentage).
 
+### ONE-TRICK PONIES ###
 
-def _gen():
-    yield None
-
-
-_GEN_TYPE = type(_gen())
-_ITER_TYPES = (type(iter([])), type(iter(())), type(iter({})),
-               type(iter(set())), type(iter('')), _GEN_TYPE)
-
-
-def _has(obj, names):
-    # Protocol probe.  Two layers: getattr first, honoring the
-    # ``__iter__ = None`` blocking convention (a None class attr shadows an
-    # inherited real method); then Grail's ___hasProtocol___ ownership check,
-    # because PythonInstance compiles catchable-TypeError FALLBACKS for
-    # __iter__/__next__/__getitem__ onto every instance -- getattr alone
-    # would make every object look Iterable.
-    for n in names:
-        if getattr(obj, n, None) is None:
-            return False
-        if not ___hasProtocol___(obj, n):
-            return False
+def _check_methods(C, *methods):
+    mro = C.__mro__
+    for method in methods:
+        for B in mro:
+            if method in B.__dict__:
+                if B.__dict__[method] is None:
+                    return NotImplemented
+                break
+        else:
+            return NotImplemented
     return True
 
+class Hashable(metaclass=ABCMeta):
 
-class _ABCRoot:
-    """Shared ABC machinery; every exported ABC descends from this, so the
-    classmethods below are found through the metaclass chain by the
-    ``__instancecheck__:`` / ``__subclasscheck__:`` probes in builtins.gs."""
+    __slots__ = ()
 
-    def __getitem__(self, item):
-        return self
-
-    def __class_getitem__(cls, item):
-        # ``Callable[[int], str]`` / ``MutableSet[str]`` -- generics erase.
-        return cls
-
-    def __call__(self, *args, **kwargs):
-        return self
+    @abstractmethod
+    def __hash__(self):
+        return 0
 
     @classmethod
-    def register(cls, sub_cls):
-        """CPython's ABC.register(cls): record a virtual subclass.  The
-        registry feeds __instancecheck__/__subclasscheck__; returns the
-        argument (documented contract, usable as a class decorator)."""
-        name = cls.__name__
-        if name not in _registry:
-            _registry[name] = []
-        _registry[name].append(sub_cls)
-        # Anything caching an issubclass()-dependent answer has just been
-        # invalidated -- functools.singledispatch caches class -> impl and this
-        # call can change what it should be, without touching the dispatcher.
-        # CPython invalidates through abc.get_cache_token(); the counter behind
-        # it lives in abc because that is where CPython keeps it.
-        import abc as _abc
-
-        _abc._bump_invalidation_counter()
-        return sub_cls
-
-    def __subclasshook__(self, cls):
+    def __subclasshook__(cls, C):
+        if cls is Hashable:
+            return _check_methods(C, "__hash__")
         return NotImplemented
 
-    @classmethod
-    def __instancecheck__(cls, instance):
-        """isinstance(x, ABC) fallback -- builtins.gs calls this only after
-        the real class chain and C3 MRO both missed, so real subclasses
-        never reach here.  Order: registry (registration wins in CPython),
-        callable/iterator special cases, builtin whitelist, structural
-        protocol."""
-        name = cls.__name__
-        regs = _registry.get(name)
-        if regs is not None:
-            for r in regs:
-                if isinstance(instance, r):
-                    return True
-        if name == 'Callable':
-            return callable(instance) is True
-        # Builtin iterators/generators: their Grail classes share the backing
-        # collection's Smalltalk hierarchy, so both the whitelists and the
-        # ownership-based structural probes would misclassify them -- decide
-        # them explicitly and stop.
-        if type(instance) in _ITER_TYPES:
-            if name in ('Iterable', 'Iterator'):
-                return True
-            if name == 'Generator':
-                return type(instance) is _GEN_TYPE
-            return False
-        if name == 'Hashable':
-            if isinstance(instance, _UNHASHABLE_BUILTINS):
-                return False
-            return getattr(instance, '__hash__', 'missing') is not None
-        builtin = _BUILTIN_WHITELIST.get(name)
-        if builtin is not None and isinstance(instance, builtin):
-            return True
-        structural = _STRUCTURAL.get(name)
-        if structural is not None and _has(instance, structural):
-            return True
-        return False
+
+class Awaitable(metaclass=ABCMeta):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __await__(self):
+        yield
 
     @classmethod
-    def __subclasscheck__(cls, sub):
-        """issubclass(C, ABC) fallback -- same layering as
-        __instancecheck__, applied to the class object."""
-        name = cls.__name__
-        regs = _registry.get(name)
-        if regs is not None:
-            for r in regs:
-                if sub is r or issubclass(sub, r):
-                    return True
-        if sub in _ITER_TYPES:
-            if name in ('Iterable', 'Iterator'):
-                return True
-            if name == 'Generator':
-                return sub is _GEN_TYPE
-            return False
-        if name == 'Hashable':
-            for b in _UNHASHABLE_BUILTINS:
-                if sub is b or issubclass(sub, b):
-                    return False
-            return getattr(sub, '__hash__', 'missing') is not None
-        builtin = _BUILTIN_WHITELIST.get(name)
-        if builtin is not None:
-            for b in builtin:
-                if sub is b or issubclass(sub, b):
-                    return True
-        structural = _STRUCTURAL.get(name)
-        if structural is not None and _has(sub, structural):
-            return True
-        return False
+    def __subclasshook__(cls, C):
+        if cls is Awaitable:
+            return _check_methods(C, "__await__")
+        return NotImplemented
+
+    __class_getitem__ = classmethod(GenericAlias)
 
 
-# ---------------------------------------------------------------------------
-# The ABC DAG (CPython's real bases; the first base carries the Smalltalk
-# chain, the rest live in the C3 MI registry for isinstance/issubclass).
-# ---------------------------------------------------------------------------
+class Coroutine(Awaitable):
 
-class Hashable(_ABCRoot): pass
-class Callable(_ABCRoot): pass
-class Sized(_ABCRoot): pass
-class Container(_ABCRoot): pass
-class Buffer(_ABCRoot): pass
+    __slots__ = ()
+
+    @abstractmethod
+    def send(self, value):
+        """Send a value into the coroutine.
+        Return next yielded value or raise StopIteration.
+        """
+        raise StopIteration
+
+    @abstractmethod
+    def throw(self, typ, val=None, tb=None):
+        """Raise an exception in the coroutine.
+        Return next yielded value or raise StopIteration.
+        """
+        if val is None:
+            if tb is None:
+                raise typ
+            val = typ()
+        if tb is not None:
+            val = val.with_traceback(tb)
+        raise val
+
+    def close(self):
+        """Raise GeneratorExit inside coroutine.
+        """
+        try:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
+            pass
+        else:
+            raise RuntimeError("coroutine ignored GeneratorExit")
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Coroutine:
+            return _check_methods(C, '__await__', 'send', 'throw', 'close')
+        return NotImplemented
 
 
-class Iterable(_ABCRoot):
+Coroutine.register(coroutine)
+
+
+class AsyncIterable(metaclass=ABCMeta):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __aiter__(self):
+        return AsyncIterator()
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is AsyncIterable:
+            return _check_methods(C, "__aiter__")
+        return NotImplemented
+
+    __class_getitem__ = classmethod(GenericAlias)
+
+
+class AsyncIterator(AsyncIterable):
+
+    __slots__ = ()
+
+    @abstractmethod
+    async def __anext__(self):
+        """Return the next item or raise StopAsyncIteration when exhausted."""
+        raise StopAsyncIteration
+
+    def __aiter__(self):
+        return self
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is AsyncIterator:
+            return _check_methods(C, "__anext__", "__aiter__")
+        return NotImplemented
+
+
+class AsyncGenerator(AsyncIterator):
+
+    __slots__ = ()
+
+    async def __anext__(self):
+        """Return the next item from the asynchronous generator.
+        When exhausted, raise StopAsyncIteration.
+        """
+        return await self.asend(None)
+
+    @abstractmethod
+    async def asend(self, value):
+        """Send a value into the asynchronous generator.
+        Return next yielded value or raise StopAsyncIteration.
+        """
+        raise StopAsyncIteration
+
+    @abstractmethod
+    async def athrow(self, typ, val=None, tb=None):
+        """Raise an exception in the asynchronous generator.
+        Return next yielded value or raise StopAsyncIteration.
+        """
+        if val is None:
+            if tb is None:
+                raise typ
+            val = typ()
+        if tb is not None:
+            val = val.with_traceback(tb)
+        raise val
+
+    async def aclose(self):
+        """Raise GeneratorExit inside coroutine.
+        """
+        try:
+            await self.athrow(GeneratorExit)
+        except (GeneratorExit, StopAsyncIteration):
+            pass
+        else:
+            raise RuntimeError("asynchronous generator ignored GeneratorExit")
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is AsyncGenerator:
+            return _check_methods(C, '__aiter__', '__anext__',
+                                  'asend', 'athrow', 'aclose')
+        return NotImplemented
+
+
+AsyncGenerator.register(async_generator)
+
+
+class Iterable(metaclass=ABCMeta):
+
+    __slots__ = ()
+
+    @abstractmethod
     def __iter__(self):
-        return iter([])
+        while False:
+            yield None
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Iterable:
+            return _check_methods(C, "__iter__")
+        return NotImplemented
+
+    __class_getitem__ = classmethod(GenericAlias)
 
 
 class Iterator(Iterable):
+
+    __slots__ = ()
+
+    @abstractmethod
     def __next__(self):
+        'Return the next item from the iterator. When exhausted, raise StopIteration'
         raise StopIteration
 
     def __iter__(self):
         return self
 
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Iterator:
+            return _check_methods(C, '__iter__', '__next__')
+        return NotImplemented
 
-class Reversible(Iterable): pass
+
+Iterator.register(bytes_iterator)
+Iterator.register(bytearray_iterator)
+#Iterator.register(callable_iterator)
+Iterator.register(dict_keyiterator)
+Iterator.register(dict_valueiterator)
+Iterator.register(dict_itemiterator)
+Iterator.register(list_iterator)
+Iterator.register(list_reverseiterator)
+Iterator.register(range_iterator)
+Iterator.register(longrange_iterator)
+Iterator.register(set_iterator)
+Iterator.register(str_iterator)
+Iterator.register(tuple_iterator)
+Iterator.register(zip_iterator)
+
+
+class Reversible(Iterable):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __reversed__(self):
+        while False:
+            yield None
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Reversible:
+            return _check_methods(C, "__reversed__", "__iter__")
+        return NotImplemented
 
 
 class Generator(Iterator):
+
+    __slots__ = ()
+
+    def __next__(self):
+        """Return the next item from the generator.
+        When exhausted, raise StopIteration.
+        """
+        return self.send(None)
+
+    @abstractmethod
     def send(self, value):
+        """Send a value into the generator.
+        Return next yielded value or raise StopIteration.
+        """
         raise StopIteration
 
+    @abstractmethod
     def throw(self, typ, val=None, tb=None):
-        raise typ
+        """Raise an exception in the generator.
+        Return next yielded value or raise StopIteration.
+        """
+        if val is None:
+            if tb is None:
+                raise typ
+            val = typ()
+        if tb is not None:
+            val = val.with_traceback(tb)
+        raise val
 
     def close(self):
-        pass
-
-
-class Awaitable(_ABCRoot): pass
-class Coroutine(Awaitable): pass
-class AsyncIterable(_ABCRoot): pass
-class AsyncIterator(AsyncIterable): pass
-class AsyncGenerator(AsyncIterator): pass
-
-
-class Collection(Sized, Iterable, Container): pass
-
-
-class Sequence(Reversible, Collection):
-    """Mixin methods derive everything from __getitem__ + __len__."""
-
-    def __iter__(self):
-        i = 0
-        result = []
+        """Raise GeneratorExit inside generator.
+        """
         try:
-            while True:
-                result.append(self[i])
-                i += 1
-        except IndexError:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
             pass
-        return iter(result)
+        else:
+            raise RuntimeError("generator ignored GeneratorExit")
 
-    def __contains__(self, value):
-        for v in self:
-            if v is value or v == value:
-                return True
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Generator:
+            return _check_methods(C, '__iter__', '__next__',
+                                  'send', 'throw', 'close')
+        return NotImplemented
+
+
+Generator.register(generator)
+
+
+class Sized(metaclass=ABCMeta):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __len__(self):
+        return 0
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Sized:
+            return _check_methods(C, "__len__")
+        return NotImplemented
+
+
+class Container(metaclass=ABCMeta):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __contains__(self, x):
         return False
 
-    def __reversed__(self):
-        result = []
-        i = len(self) - 1
-        while i >= 0:
-            result.append(self[i])
-            i -= 1
-        return iter(result)
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Container:
+            return _check_methods(C, "__contains__")
+        return NotImplemented
 
-    def index(self, value, start=0, stop=None):
-        if start is not None and start < 0:
-            start = len(self) + start
-            if start < 0:
-                start = 0
-        if stop is not None and stop < 0:
-            stop += len(self)
-        i = start
-        while stop is None or i < stop:
-            try:
-                v = self[i]
-            except IndexError:
-                break
-            if v is value or v == value:
-                return i
-            i += 1
-        raise ValueError
-
-    def count(self, value):
-        n = 0
-        for v in self:
-            if v is value or v == value:
-                n += 1
-        return n
+    __class_getitem__ = classmethod(GenericAlias)
 
 
-class MutableSequence(Sequence):
-    def append(self, value):
-        self.insert(len(self), value)
+class Collection(Sized, Iterable, Container):
 
-    def clear(self):
-        try:
-            while True:
-                self.pop()
-        except IndexError:
-            pass
+    __slots__ = ()
 
-    def reverse(self):
-        n = len(self)
-        i = 0
-        while i < (n // 2):
-            tmp = self[i]
-            self[i] = self[n - i - 1]
-            self[n - i - 1] = tmp
-            i += 1
-
-    def extend(self, values):
-        if values is self:
-            values = list(values)
-        for v in values:
-            self.append(v)
-
-    def pop(self, index=-1):
-        v = self[index]
-        del self[index]
-        return v
-
-    def remove(self, value):
-        del self[self.index(value)]
-
-    def __iadd__(self, values):
-        self.extend(values)
-        return self
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Collection:
+            return _check_methods(C,  "__len__", "__iter__", "__contains__")
+        return NotImplemented
 
 
-class ByteString(Sequence): pass
+class Buffer(metaclass=ABCMeta):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __buffer__(self, flags: int, /) -> memoryview:
+        raise NotImplementedError
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Buffer:
+            return _check_methods(C, "__buffer__")
+        return NotImplemented
+
+
+class _CallableGenericAlias(GenericAlias):
+    """ Represent `Callable[argtypes, resulttype]`.
+
+    This sets ``__args__`` to a tuple containing the flattened
+    ``argtypes`` followed by ``resulttype``.
+
+    Example: ``Callable[[int, str], float]`` sets ``__args__`` to
+    ``(int, str, float)``.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, origin, args):
+        if not (isinstance(args, tuple) and len(args) == 2):
+            raise TypeError(
+                "Callable must be used as Callable[[arg, ...], result].")
+        t_args, t_result = args
+        if isinstance(t_args, (tuple, list)):
+            args = (*t_args, t_result)
+        elif not _is_param_expr(t_args):
+            raise TypeError(f"Expected a list of types, an ellipsis, "
+                            f"ParamSpec, or Concatenate. Got {t_args}")
+        return super().__new__(cls, origin, args)
+
+    def __repr__(self):
+        if len(self.__args__) == 2 and _is_param_expr(self.__args__[0]):
+            return super().__repr__()
+        from annotationlib import type_repr
+        return (f'collections.abc.Callable'
+                f'[[{", ".join([type_repr(a) for a in self.__args__[:-1]])}], '
+                f'{type_repr(self.__args__[-1])}]')
+
+    def __reduce__(self):
+        args = self.__args__
+        if not (len(args) == 2 and _is_param_expr(args[0])):
+            args = list(args[:-1]), args[-1]
+        return _CallableGenericAlias, (Callable, args)
+
+    def __getitem__(self, item):
+        # Called during TypeVar substitution, returns the custom subclass
+        # rather than the default types.GenericAlias object.  Most of the
+        # code is copied from typing's _GenericAlias and the builtin
+        # types.GenericAlias.
+        if not isinstance(item, tuple):
+            item = (item,)
+
+        new_args = super().__getitem__(item).__args__
+
+        # args[0] occurs due to things like Z[[int, str, bool]] from PEP 612
+        if not isinstance(new_args[0], (tuple, list)):
+            t_result = new_args[-1]
+            t_args = new_args[:-1]
+            new_args = (t_args, t_result)
+        return _CallableGenericAlias(Callable, tuple(new_args))
+
+def _is_param_expr(obj):
+    """Checks if obj matches either a list of types, ``...``, ``ParamSpec`` or
+    ``_ConcatenateGenericAlias`` from typing.py
+    """
+    if obj is Ellipsis:
+        return True
+    if isinstance(obj, list):
+        return True
+    obj = type(obj)
+    names = ('ParamSpec', '_ConcatenateGenericAlias')
+    return obj.__module__ == 'typing' and any(obj.__name__ == name for name in names)
+
+
+class Callable(metaclass=ABCMeta):
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __call__(self, *args, **kwds):
+        return False
+
+    @classmethod
+    def __subclasshook__(cls, C):
+        if cls is Callable:
+            return _check_methods(C, "__call__")
+        return NotImplemented
+
+    __class_getitem__ = classmethod(_CallableGenericAlias)
+
+
+### SETS ###
 
 
 class Set(Collection):
-    """Mixin methods derive the set algebra from __contains__ + __iter__ +
-    __len__, exactly as CPython's collections.abc.Set does."""
+    """A set is a finite, iterable container.
 
-    @classmethod
-    def _from_iterable(cls, it):
-        return cls(it)
+    This class provides concrete generic implementations of all
+    methods except for __contains__, __iter__ and __len__.
+
+    To override the comparisons (presumably for speed, as the
+    semantics are fixed), redefine __le__ and __ge__,
+    then the other operations will automatically follow suit.
+    """
+
+    __slots__ = ()
 
     def __le__(self, other):
         if not isinstance(other, Set):
@@ -423,29 +601,33 @@ class Set(Collection):
             return NotImplemented
         return len(self) == len(other) and self.__le__(other)
 
-    def __ne__(self, other):
-        result = self.__eq__(other)
-        if result is NotImplemented:
-            return result
-        return not result
+    @classmethod
+    def _from_iterable(cls, it):
+        '''Construct an instance of the class from any iterable input.
+
+        Must override this method if the class constructor signature
+        does not accept an iterable for an input.
+        '''
+        return cls(it)
 
     def __and__(self, other):
         if not isinstance(other, Iterable):
             return NotImplemented
-        result = []
-        for value in other:
-            if value in self:
-                result.append(value)
-        return self._from_iterable(result)
+        return self._from_iterable(value for value in other if value in self)
 
     __rand__ = __and__
+
+    def isdisjoint(self, other):
+        'Return True if two sets have a null intersection.'
+        for value in other:
+            if value in self:
+                return False
+        return True
 
     def __or__(self, other):
         if not isinstance(other, Iterable):
             return NotImplemented
-        chain = list(self)
-        for v in other:
-            chain.append(v)
+        chain = (e for s in (self, other) for e in s)
         return self._from_iterable(chain)
 
     __ror__ = __or__
@@ -455,22 +637,16 @@ class Set(Collection):
             if not isinstance(other, Iterable):
                 return NotImplemented
             other = self._from_iterable(other)
-        result = []
-        for value in self:
-            if value not in other:
-                result.append(value)
-        return self._from_iterable(result)
+        return self._from_iterable(value for value in self
+                                   if value not in other)
 
     def __rsub__(self, other):
         if not isinstance(other, Set):
             if not isinstance(other, Iterable):
                 return NotImplemented
             other = self._from_iterable(other)
-        result = []
-        for value in other:
-            if value not in self:
-                result.append(value)
-        return self._from_iterable(result)
+        return self._from_iterable(value for value in other
+                                   if value not in self)
 
     def __xor__(self, other):
         if not isinstance(other, Set):
@@ -481,45 +657,85 @@ class Set(Collection):
 
     __rxor__ = __xor__
 
-    def isdisjoint(self, other):
-        for value in other:
-            if value in self:
-                return False
-        return True
-
     def _hash(self):
+        """Compute the hash value of a set.
+
+        Note that we don't define __hash__: not all sets are hashable.
+        But if you define a hashable set type, its __hash__ should
+        call this function.
+
+        This must be compatible __eq__.
+
+        All sets ought to compare equal if they contain the same
+        elements, regardless of how they are implemented, and
+        regardless of the order of the elements; so there's not much
+        freedom for __eq__ or __hash__.  We match the algorithm used
+        by the built-in frozenset type.
+        """
+        MAX = sys.maxsize
+        MASK = 2 * MAX + 1
         n = len(self)
         h = 1927868237 * (n + 1)
-        h &= 0xFFFFFFFFFFFFFFFF
+        h &= MASK
         for x in self:
             hx = hash(x)
-            h ^= (hx ^ (hx << 16) ^ 89869747) * 3644798167
-            h &= 0xFFFFFFFFFFFFFFFF
+            h ^= (hx ^ (hx << 16) ^ 89869747)  * 3644798167
+            h &= MASK
+        h ^= (h >> 11) ^ (h >> 25)
         h = h * 69069 + 907133923
-        h &= 0xFFFFFFFFFFFFFFFF
-        if h > 0x7FFFFFFFFFFFFFFF:
-            h -= 0x10000000000000000
+        h &= MASK
+        if h > MAX:
+            h -= MASK + 1
         if h == -1:
             h = 590923713
         return h
 
 
+Set.register(frozenset)
+
+
 class MutableSet(Set):
+    """A mutable set is a finite, iterable container.
+
+    This class provides concrete generic implementations of all
+    methods except for __contains__, __iter__, __len__,
+    add(), and discard().
+
+    To override the comparisons (presumably for speed, as the
+    semantics are fixed), all you have to do is redefine __le__ and
+    then the other operations will automatically follow suit.
+    """
+
+    __slots__ = ()
+
+    @abstractmethod
+    def add(self, value):
+        """Add an element."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def discard(self, value):
+        """Remove an element.  Do not raise an exception if absent."""
+        raise NotImplementedError
+
     def remove(self, value):
+        """Remove an element. If not a member, raise a KeyError."""
         if value not in self:
             raise KeyError(value)
         self.discard(value)
 
     def pop(self):
+        """Return the popped value.  Raise KeyError if empty."""
         it = iter(self)
         try:
             value = next(it)
         except StopIteration:
-            raise KeyError
+            raise KeyError from None
         self.discard(value)
         return value
 
     def clear(self):
+        """This is slow (creates N new iterators!) but effective."""
         try:
             while True:
                 self.pop()
@@ -558,12 +774,30 @@ class MutableSet(Set):
         return self
 
 
+MutableSet.register(set)
+
+
+### MAPPINGS ###
+
 class Mapping(Collection):
-    # Real mixin methods (as in CPython's collections.abc.Mapping) built on
-    # the subclass's __getitem__/__iter__/__len__, so e.g.
-    # ``CaseInsensitiveMapping`` (django's HttpHeaders base) inherits a
-    # working .get/.keys/.items/.values/__contains__/__eq__.
+    """A Mapping is a generic container for associating key/value
+    pairs.
+
+    This class provides concrete generic implementations of all
+    methods except for __getitem__, __iter__, and __len__.
+    """
+
+    __slots__ = ()
+
+    # Tell ABCMeta.__new__ that this class should have TPFLAGS_MAPPING set.
+    __abc_tpflags__ = 1 << 6 # Py_TPFLAGS_MAPPING
+
+    @abstractmethod
+    def __getitem__(self, key):
+        raise KeyError
+
     def get(self, key, default=None):
+        'D.get(k[,d]) -> D[k] if k in D, else d.  d defaults to None.'
         try:
             return self[key]
         except KeyError:
@@ -574,33 +808,136 @@ class Mapping(Collection):
             self[key]
         except KeyError:
             return False
-        return True
+        else:
+            return True
 
     def keys(self):
-        return list(self.__iter__())
+        "D.keys() -> a set-like object providing a view on D's keys"
+        return KeysView(self)
 
     def items(self):
-        return [(k, self[k]) for k in self.__iter__()]
+        "D.items() -> a set-like object providing a view on D's items"
+        return ItemsView(self)
 
     def values(self):
-        return [self[k] for k in self.__iter__()]
+        "D.values() -> an object providing a view on D's values"
+        return ValuesView(self)
 
     def __eq__(self, other):
         if not isinstance(other, Mapping):
             return NotImplemented
         return dict(self.items()) == dict(other.items())
 
-    def __ne__(self, other):
-        result = self.__eq__(other)
-        if result is NotImplemented:
-            return result
-        return not result
+    __reversed__ = None
+
+Mapping.register(mappingproxy)
+Mapping.register(framelocalsproxy)
+
+
+class MappingView(Sized):
+
+    __slots__ = '_mapping',
+
+    def __init__(self, mapping):
+        self._mapping = mapping
+
+    def __len__(self):
+        return len(self._mapping)
+
+    def __repr__(self):
+        return '{0.__class__.__name__}({0._mapping!r})'.format(self)
+
+    __class_getitem__ = classmethod(GenericAlias)
+
+
+class KeysView(MappingView, Set):
+
+    __slots__ = ()
+
+    @classmethod
+    def _from_iterable(cls, it):
+        return set(it)
+
+    def __contains__(self, key):
+        return key in self._mapping
+
+    def __iter__(self):
+        yield from self._mapping
+
+
+KeysView.register(dict_keys)
+
+
+class ItemsView(MappingView, Set):
+
+    __slots__ = ()
+
+    @classmethod
+    def _from_iterable(cls, it):
+        return set(it)
+
+    def __contains__(self, item):
+        key, value = item
+        try:
+            v = self._mapping[key]
+        except KeyError:
+            return False
+        else:
+            return v is value or v == value
+
+    def __iter__(self):
+        for key in self._mapping:
+            yield (key, self._mapping[key])
+
+
+ItemsView.register(dict_items)
+
+
+class ValuesView(MappingView, Collection):
+
+    __slots__ = ()
+
+    def __contains__(self, value):
+        for key in self._mapping:
+            v = self._mapping[key]
+            if v is value or v == value:
+                return True
+        return False
+
+    def __iter__(self):
+        for key in self._mapping:
+            yield self._mapping[key]
+
+
+ValuesView.register(dict_values)
 
 
 class MutableMapping(Mapping):
+    """A MutableMapping is a generic container for associating
+    key/value pairs.
+
+    This class provides concrete generic implementations of all
+    methods except for __getitem__, __setitem__, __delitem__,
+    __iter__, and __len__.
+    """
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __setitem__(self, key, value):
+        raise KeyError
+
+    @abstractmethod
+    def __delitem__(self, key):
+        raise KeyError
+
     __marker = object()
 
     def pop(self, key, default=__marker):
+        '''D.pop(k[,d]) -> v, remove specified key and return the corresponding
+        value.  If key is not found, d is returned if given, otherwise
+        KeyError is raised.
+        '''
         try:
             value = self[key]
         except KeyError:
@@ -612,30 +949,38 @@ class MutableMapping(Mapping):
             return value
 
     def popitem(self):
+        '''D.popitem() -> (k, v), remove and return some (key, value) pair
+           as a 2-tuple; but raise KeyError if D is empty.
+        '''
         try:
             key = next(iter(self))
         except StopIteration:
-            raise KeyError
+            raise KeyError from None
         value = self[key]
         del self[key]
         return key, value
 
-    def setdefault(self, key, default=None):
-        try:
-            return self[key]
-        except KeyError:
-            self[key] = default
-        return default
-
     def clear(self):
+        'D.clear() -> None.  Remove all items from D.'
         try:
             while True:
                 self.popitem()
         except KeyError:
             pass
 
-    def update(self, other=(), **kwds):
-        if hasattr(other, "keys"):
+    def update(self, other=(), /, **kwds):
+        ''' D.update([E, ]**F) -> None.  Update D from mapping/iterable E and F.
+            If E present and has a .keys() method, does:
+                for k in E.keys(): D[k] = E[k]
+            If E present and lacks .keys() method, does:
+                for (k, v) in E: D[k] = v
+            In either case, this is followed by:
+                for k, v in F.items(): D[k] = v
+        '''
+        if isinstance(other, Mapping):
+            for key in other:
+                self[key] = other[key]
+        elif hasattr(other, "keys"):
             for key in other.keys():
                 self[key] = other[key]
         else:
@@ -644,68 +989,191 @@ class MutableMapping(Mapping):
         for key, value in kwds.items():
             self[key] = value
 
-
-class MappingView(Sized):
-    def __init__(self, mapping):
-        self._mapping = mapping
-
-    def __len__(self):
-        return len(self._mapping)
-
-
-class KeysView(MappingView, Set):
-    @classmethod
-    def _from_iterable(cls, it):
-        return set(it)
-
-    def __contains__(self, key):
-        return key in self._mapping
-
-    def __iter__(self):
-        return iter(list(self._mapping))
-
-
-class ItemsView(MappingView, Set):
-    @classmethod
-    def _from_iterable(cls, it):
-        return set(it)
-
-    def __contains__(self, item):
-        key, value = item
+    def setdefault(self, key, default=None):
+        'D.setdefault(k[,d]) -> D.get(k,d), also set D[k]=d if k not in D'
         try:
-            v = self._mapping[key]
+            return self[key]
         except KeyError:
-            return False
-        return v is value or v == value
+            self[key] = default
+        return default
+
+
+MutableMapping.register(dict)
+
+
+### SEQUENCES ###
+
+class Sequence(Reversible, Collection):
+    """All the operations on a read-only sequence.
+
+    Concrete subclasses must override __new__ or __init__,
+    __getitem__, and __len__.
+    """
+
+    __slots__ = ()
+
+    # Tell ABCMeta.__new__ that this class should have TPFLAGS_SEQUENCE set.
+    __abc_tpflags__ = 1 << 5 # Py_TPFLAGS_SEQUENCE
+
+    @abstractmethod
+    def __getitem__(self, index):
+        raise IndexError
 
     def __iter__(self):
-        result = []
-        for key in self._mapping:
-            result.append((key, self._mapping[key]))
-        return iter(result)
+        i = 0
+        try:
+            while True:
+                v = self[i]
+                yield v
+                i += 1
+        except IndexError:
+            return
 
-
-class ValuesView(MappingView, Collection):
     def __contains__(self, value):
-        for key in self._mapping:
-            v = self._mapping[key]
+        for v in self:
             if v is value or v == value:
                 return True
         return False
 
-    def __iter__(self):
-        result = []
-        for key in self._mapping:
-            result.append(self._mapping[key])
-        return iter(result)
+    def __reversed__(self):
+        for i in reversed(range(len(self))):
+            yield self[i]
+
+    def index(self, value, start=0, stop=None):
+        '''S.index(value, [start, [stop]]) -> integer -- return first index of
+           value.  Raises ValueError if the value is not present.
+
+           Supporting start and stop arguments is optional, but
+           recommended.
+        '''
+        if start is not None and start < 0:
+            start = max(len(self) + start, 0)
+        if stop is not None and stop < 0:
+            stop += len(self)
+
+        i = start
+        while stop is None or i < stop:
+            try:
+                v = self[i]
+            except IndexError:
+                break
+            if v is value or v == value:
+                return i
+            i += 1
+        raise ValueError
+
+    def count(self, value):
+        'S.count(value) -> integer -- return number of occurrences of value'
+        return sum(1 for v in self if v is value or v == value)
+
+Sequence.register(tuple)
+Sequence.register(str)
+Sequence.register(bytes)
+Sequence.register(range)
+Sequence.register(memoryview)
+
+class _DeprecateByteStringMeta(ABCMeta):
+    def __new__(cls, name, bases, namespace, **kwargs):
+        if name != "ByteString":
+            import warnings
+
+            warnings._deprecated(
+                "collections.abc.ByteString",
+                remove=(3, 17),
+            )
+        return super().__new__(cls, name, bases, namespace, **kwargs)
+
+    def __instancecheck__(cls, instance):
+        import warnings
+
+        warnings._deprecated(
+            "collections.abc.ByteString",
+            remove=(3, 17),
+        )
+        return super().__instancecheck__(instance)
+
+class ByteString(Sequence, metaclass=_DeprecateByteStringMeta):
+    """Deprecated ABC serving as a common supertype of ``bytes`` and ``bytearray``.
+
+    This ABC is scheduled for removal in Python 3.17.
+    Use ``isinstance(obj, collections.abc.Buffer)`` to test if ``obj``
+    implements the buffer protocol at runtime. For use in type annotations,
+    either use ``Buffer`` or a union that explicitly specifies the types your
+    code supports (e.g., ``bytes | bytearray | memoryview``).
+    """
+
+    __slots__ = ()
+
+ByteString.register(bytes)
+ByteString.register(bytearray)
 
 
-__all__ = [
-    'Hashable', 'Callable', 'Iterable', 'Iterator', 'Generator',
-    'Coroutine', 'Awaitable', 'Sequence', 'MutableSequence',
-    'Mapping', 'MutableMapping', 'Set', 'MutableSet', 'Container',
-    'Sized', 'Collection',
-    'AsyncIterable', 'AsyncIterator', 'AsyncGenerator',
-    'Reversible', 'ByteString', 'Buffer',
-    'ItemsView', 'KeysView', 'ValuesView', 'MappingView',
-]
+class MutableSequence(Sequence):
+    """All the operations on a read-write sequence.
+
+    Concrete subclasses must provide __new__ or __init__,
+    __getitem__, __setitem__, __delitem__, __len__, and insert().
+    """
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __setitem__(self, index, value):
+        raise IndexError
+
+    @abstractmethod
+    def __delitem__(self, index):
+        raise IndexError
+
+    @abstractmethod
+    def insert(self, index, value):
+        'S.insert(index, value) -- insert value before index'
+        raise IndexError
+
+    def append(self, value):
+        'S.append(value) -- append value to the end of the sequence'
+        self.insert(len(self), value)
+
+    def clear(self):
+        'S.clear() -> None -- remove all items from S'
+        try:
+            while True:
+                self.pop()
+        except IndexError:
+            pass
+
+    def reverse(self):
+        'S.reverse() -- reverse *IN PLACE*'
+        n = len(self)
+        for i in range(n//2):
+            self[i], self[n-i-1] = self[n-i-1], self[i]
+
+    def extend(self, values):
+        """S.extend(iterable) -- extend sequence by appending elements from the
+        iterable"""
+        if values is self:
+            values = list(values)
+        for v in values:
+            self.append(v)
+
+    def pop(self, index=-1):
+        '''S.pop([index]) -> item -- remove and return item at index (default
+        last).  Raise IndexError if list is empty or index is out of range.
+        '''
+        v = self[index]
+        del self[index]
+        return v
+
+    def remove(self, value):
+        '''S.remove(value) -- remove first occurrence of value.
+           Raise ValueError if the value is not present.
+        '''
+        del self[self.index(value)]
+
+    def __iadd__(self, values):
+        self.extend(values)
+        return self
+
+
+MutableSequence.register(list)
+MutableSequence.register(bytearray)

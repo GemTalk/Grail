@@ -119,17 +119,12 @@ r['abc_concrete_works'] = repr(Concrete().f())
 # guard is the reason this change costs the corpus nothing -- ABCMeta is
 # everywhere.
 #
-# The two entries below are a PRE-EXISTING, DELIBERATE Grail gap, recorded here
-# as a guard rather than as a claim: src/python/stdlib/abc.py spells the marker
-# ``class ABC:'' and not ``class ABC(metaclass=ABCMeta)'', with a comment saying
-# why -- routing every ABC subclass's isinstance/issubclass miss through
-# ABCMeta.__instancecheck__ is a performance and semantic change worth measuring
-# on its own. So an ABC subclass has no metaclass record to inherit, abstract
-# instantiation is not refused, and type(Abstract) is type. Verified unchanged
-# by this commit: identical before and after, in both spellings.
+# CLOSED: abstract instantiation through ``abc.ABC'' is refused, and
+# type(Abstract) is ABCMeta, as in CPython.  These two used to be a recorded
+# Grail gap -- abc.py wrote ``class ABC:'' with no metaclass -- and abc.py is
+# CPython's own now.
 #
-# ``metaclass=ABCMeta'' written directly DOES enforce, and is asserted below so
-# the two spellings cannot silently converge.
+# ``metaclass=ABCMeta'' written directly enforces too, and is asserted below.
 try:
     Abstract()
     r['abc_base_refuses'] = 'instantiated'
@@ -202,6 +197,8 @@ r['enum_metaclass_mro'] = repr(_mro)
 
 
 EXPECTED = {
+    'abc_base_refuses': 'TypeError',
+    'abc_base_type': "'ABCMeta'",
     'abc_concrete_works': "'f'",
     # The metaclass injects <NAME>_DESC into the classdict and CPython builds
     # those as members, because EnumType.__new__ runs INSIDE the
@@ -217,8 +214,6 @@ EXPECTED = {
 }
 
 GRAIL_ONLY = {
-    'abc_base_refuses': 'instantiated',
-    'abc_base_type': "'type'",
     # Still a deviation, but a smaller one: PythonInstance no longer sits
     # between type and object, now that Grail's implementation root is hidden
     # from the Python-visible mro.  What remains is EnumType's absence -- Grail's

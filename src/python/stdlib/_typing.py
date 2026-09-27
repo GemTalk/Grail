@@ -89,42 +89,15 @@ def _typing_module():
 
 
 def _make_union(parameters):
-    """Build a union directly, without going through ``|``.
+    """``Union[parameters]`` -- CPython's spelling of a type variable's ``|``.
 
-    This is the base case that stops typing's ``|`` from recursing.  CPython's
-    typing.py defines ``__or__`` on ``_GenericAlias``, ``_SpecialForm`` and
-    each type-variable kind as ``Union[self, other]``, so if ``Union[...]``
-    were in turn built by folding ``|`` the two would call each other forever.
-    They do not merely loop: the failure surfaces as a RecursionError raised
-    inside an unrelated package's import, naming neither typing nor the
-    operator, which is most of what made it expensive to find.
-
-    Arguments have already been through ``typing._type_check`` by the time
-    they reach here, so ``___grailUnionFrom___`` applies no further gate.
+    It used to build the union straight from the Smalltalk side, because
+    ``Union[...]`` here was a Python shim whose subscript folded ``|`` and so
+    recursed back into this.  Union IS the union type now, as in 3.14, and its
+    subscript builds without ``|`` -- converting a string member to a
+    ForwardRef on the way, which ``T | 'x'`` needs (TypeVarTests.test_or).
     """
-    import types
-    return types.UnionType.___grailUnionFrom___(list(parameters))
-
-
-def _union_getitem(parameters):
-    """``Union[X, Y]``.
-
-    Answers the same kind of object ``X | Y`` does -- Grail's
-    ``PyUnionType`` -- so the two spellings compare equal instead of being
-    two representations of one idea.  It gets there through
-    ``_make_union`` and NOT by folding ``|``: see that function.
-    """
-    if not isinstance(parameters, tuple):
-        parameters = (parameters,)
-    if len(parameters) == 0:
-        raise TypeError("Cannot take a Union of no types.")
-    typing = _typing_module()
-    parameters = tuple(
-        typing._type_check(p, "Union[arg, ...]: each arg must be a type.")
-        for p in parameters)
-    parameters = tuple(typing._deduplicate(parameters,
-                                           unhashable_fallback=True))
-    return _make_union(parameters)
+    return Union[tuple(parameters)]
 
 
 class _NoDefaultType:
@@ -185,8 +158,7 @@ class _Common:
     def __or__(self, right):
         """``T | None``, PEP 604.
 
-        Built with ``_make_union`` rather than as CPython's ``Union[self,
-        right]``, which is a cycle here -- see ``_make_union``.  Defining it at
+        CPython's ``Union[self, right]`` (see ``_make_union``).  Defining it at
         all is what makes a type variable usable on the LEFT of ``|``: Grail
         dispatches ``x | y`` on the left operand's own ``__or__``, and a type
         variable is a plain object with no builtin one.
@@ -521,68 +493,20 @@ class Generic:
         return _typing_module()._generic_init_subclass(cls, *args, **kwargs)
 
 
-class _UnionMeta(type):
-    """Makes ``Union`` answer for the objects ``int | str`` actually creates.
-
-    In 3.14 ``typing.Union`` IS ``types.UnionType``: the C code made the
-    special form and the ``|`` operator's result the same class, so
-    ``typing.py`` now asks ``isinstance(t, Union)`` in a dozen places and
-    expects ``int | str`` to say yes.  Grail builds ``int | str`` as its own
-    ``PyUnionType``, which is not this class and cannot be made to be, so
-    the identity is faked at the only two places typing looks: instance and
-    subclass checks.
-    """
-
-    def _union_class(cls):
-        u = cls.__dict__.get('_grail_union_class')
-        if u is None:
-            u = type(int | str)
-            cls._grail_union_class = u
-        return u
-
-    def __instancecheck__(cls, obj):
-        return isinstance(obj, cls._union_class())
-
-    def __subclasscheck__(cls, other):
-        return other is cls or issubclass(other, cls._union_class())
-
-    def __repr__(cls):
-        return 'typing.Union'
-
-
-class Union(metaclass=_UnionMeta):
-    """``Union[X, Y]``, and the type of ``X | Y``.
-
-    Unified with ``types.UnionType`` in 3.14.  Here it is a shim -- see
-    ``_UnionMeta`` for why the unification cannot be literal under Grail.
-    No ``__slots__``, for the reason given on ``Generic``.
-    """
-
-    def __class_getitem__(cls, parameters):
-        """``Union[X, Y]``.
-
-        Spelled as ``__class_getitem__`` rather than as ``__getitem__`` on the
-        metaclass, which is where CPython's equivalent lives.  Grail does not
-        consult a metaclass ``__getitem__`` for ``Cls[...]`` and -- the part
-        that cost the time -- does not raise either: it answers the CLASS.
-        ``Union[int, str]`` came back as ``Union`` itself and flowed onwards as
-        a well-formed value meaning nothing, so ``Optional[int]`` reprd as
-        ``typing.Union``.  See docs/Issues.md.
-
-        The work is a module-level function and not a method on ``_UnionMeta``
-        for a second reason from the same family: Grail records a ``metaclass=``
-        only when the metaclass takes part in class CREATION (it must define
-        ``__new__`` or ``__init__`` -- see ___grailMetaclassConstructs___:), and
-        ``_UnionMeta`` defines neither.  So ``type(Union)`` is plain ``type``
-        here, and reaching the metaclass through it fails.
-        """
-        return _union_getitem(parameters)
+# ``typing.Union`` IS the union type in 3.14 -- ``int | str`` and
+# ``Union[int, str]`` build one kind of object, and ``isinstance(t, Union)`` is
+# how typing.py asks whether it has one.  Grail's union type is the Smalltalk
+# PyUnionType, which reports itself as ``typing.Union``; this used to be a
+# Python class faking that identity with a metaclass's instance and subclass
+# checks, and pickling a union found it out ("typing.Union is a different
+# object").
+Union = type(int | str)
 
 
 # The C types report themselves as typing's -- ``typing.Generic[~T]'',
 # ``<class 'typing.TypeVar'>'' -- because that is where they are published.
 # Classes defined in this file would otherwise print as ``_typing.Generic``.
 for _cls in (TypeVar, ParamSpec, TypeVarTuple, ParamSpecArgs, ParamSpecKwargs,
-             TypeAliasType, Generic, Union, _NoDefaultType):
+             TypeAliasType, Generic, _NoDefaultType):
     _cls.__module__ = 'typing'
 del _cls

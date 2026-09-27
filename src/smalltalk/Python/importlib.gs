@@ -2612,8 +2612,12 @@ ___restoreCanonicalClassStructure___: aModuleName
 				"Idempotent: ___registerSubclass___ ignores a class already
 				recorded under that base, so re-binding a module in the same
 				session changes nothing."
+				"Credited to the BOUND module, whose body would have made the
+				link, never to whichever importer is running -- see
+				___registerSubclass___:of:origin:."
 				cls superclass isNil ifFalse: [
-					self ___registerSubclass___: cls of: cls superclass].
+					self ___registerSubclass___: cls of: cls superclass
+						origin: aModuleName asString].
 				rec := inner isNil ifTrue: [nil] ifFalse: [inner at: shortName otherwise: nil].
 				rec isNil ifFalse: [
 					"Same shape ___registerBases___: stores: {basesArray. mroArray}."
@@ -2683,6 +2687,53 @@ ___restoreCanonicalMiRecords___
 					otherwise: nil.
 				((cls isKindOf: Behavior) and: [(reg includesKey: cls) not])
 					ifTrue: [reg at: cls put: rec]]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreAllCanonicalMetaclasses___
+	"Install the committed metaclass record for EVERY deployed class that has
+	one, not just for the module being bound -- ___restoreCanonicalMiRecords___'s
+	reasoning, applied to the other record only the class build writes.
+
+	``_collections_abc'' is the shape that needed it.  It is a bridge whose body
+	is ``from collections.abc import *'', so once deployed its body does not run
+	and collections.abc is never bound by it -- yet collections.abc's classes are
+	reachable the whole time through its committed globals.  pathlib reaches
+	Sequence exactly that way.  When pathlib then REBUILT (stale because ``re'',
+	which deployFrameworks deliberately leaves undeployed, was imported first),
+	``class _PathParents(Sequence)'' found no metaclass on Sequence's chain, so
+	ABCMeta.__new__ never ran: no __abstractmethods__ of its own, the inherited
+	Sequence set in its place, and ``Path('/a/b').parents'' refused to
+	instantiate.  Measured in a fresh session after a deploy:
+
+	    import re, pathlib, collections.abc      -> parents[0] raises TypeError
+	    import collections.abc, re, pathlib      -> '/a'
+
+	so, like the MI record, the answer depended on whether anything had bound
+	the owning module yet.  A metaclass record says what type(C) IS, so it is
+	wrong rather than early when missing.
+
+	Fills only what is MISSING, so it never overwrites a record this session's
+	own cold build wrote, and re-running it is free: 65 entries across 16
+	modules on a deployed gs40."
+
+	| reg classes |
+	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes isNil ifTrue: [^ self].
+	reg keysAndValuesDo: [:modName :inner |
+		inner isNil ifFalse: [
+			inner keysAndValuesDo: [:aClassName :meta |
+				| cls |
+				cls := classes
+					at: (modName asString , '.' , aClassName asString)
+					otherwise: nil.
+				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
+					and: [(cls @env1:___grailOwnMetaclass___) isNil]])
+						ifTrue: [cls @env1:___grailSetMetaclass___: meta]]]].
 	^ self
 %
 
@@ -2912,6 +2963,7 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 			self ___restoreCanonicalMetaclasses___: aName asString.
 			self ___restoreCanonicalClassStructure___: aName asString.
 			self ___restoreCanonicalMiRecords___.
+			self ___restoreAllCanonicalMetaclasses___.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -3092,6 +3144,9 @@ loadModuleFromPath: pathString name: moduleName
 			"And the MI records of every OTHER deployed class, whose module this
 			session may never bind -- see ___restoreCanonicalMiRecords___."
 			self ___restoreCanonicalMiRecords___.
+			"And the metaclass record of every other deployed class, for the
+			same reason -- see ___restoreAllCanonicalMetaclasses___."
+			self ___restoreAllCanonicalMetaclasses___.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
@@ -4878,6 +4933,31 @@ ___ensureClassAttrHolder___: aClass
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___carriesSlots___: b
+	"Does base b's nearest ``__slots__'' declaration name at least one slot?
+
+	The DECLARATION, not the slot layout: Grail also lays out the attributes it
+	infers from ``self.x = ...'', so nearly every class has a layout, and
+	counting those would let any mixin that assigns an attribute displace the
+	substantial base ___selectStorageBase___: exists to find.  A declared slot
+	is different in kind -- a strict-slots instance has no __dict__, so a
+	declared name that does not reach the superclass layout has nowhere to go.
+
+	The nearest declaration is what the class attribute reads, which is the
+	one that matters for b itself: ``class Set(Collection): __slots__ = ()''
+	answers false, ``class MappingView: __slots__ = '_mapping''' answers true."
+
+	| decl |
+	(b isKindOf: Behavior) ifFalse: [^ false].
+	decl := [b @env1:___pyAttrLoad___: #'__slots__']
+		on: AbstractException do: [:ex | ex return: nil].
+	decl == nil ifTrue: [^ false].
+	^ [(decl @env1:__len__) > 0]
+		on: AbstractException do: [:ex | ex return: false]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___hasBuiltinStorage___: b
 	"Does base b carry BUILT-IN storage, as opposed to being a
 	behaviour-only mixin?  ___selectStorageBase___: asks this first,
@@ -4956,6 +5036,17 @@ ___selectStorageBase___: rawBases
 		(self ___hasBuiltinStorage___: b)
 			ifTrue: [^ self ___widenStrBase___: b]
 	].
+	"A base carrying SLOTS carries storage too -- CPython's ``solid base'',
+	the one whose instance layout the new class must extend -- so it wins
+	over chain depth.  Slots are positions in the Smalltalk class's indexed
+	part, and only the SUPERCLASS contributes those: a secondary base's
+	methods are merged, its layout is not.  collections.abc's
+	``class KeysView(MappingView, Set)'' is the case: Set's chain (through
+	Collection) is deeper, so it was chosen, MappingView's ``__slots__ =
+	'_mapping''' went with it, and every dict-view mixin raised
+	AttributeError on its own __init__."
+	bases do: [:b |
+		(self ___carriesSlots___: b) ifTrue: [^ b]].
 	"No built-in storage base.  Prefer the base with the DEEPEST
 	superclass chain: the ``class DateField(DateTimeCheckMixin, Field)''
 	idiom (and Django's exception / descriptor hierarchies) puts a
@@ -5547,6 +5638,27 @@ ___registerSubclass___: aClass of: aBase
 	Idempotent: re-running a module re-creates its classes, and a class object
 	that is identical to one already recorded must not be listed twice."
 
+	^ self
+		___registerSubclass___: aClass
+		of: aBase
+		origin: self ___initializingModuleName___
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registerSubclass___: aClass of: aBase origin: aModuleNameOrNil
+	"The registration, crediting it to aModuleNameOrNil's body -- the module
+	whose re-run ___forgetSubclassesFromModule___: lets take it back.
+
+	Separate from the creation entry above because a BIND is not a creation.
+	___restoreCanonicalClassStructure___ re-derives a bound module's links while
+	some OTHER module's body may be the innermost one running -- the one that
+	said ``import collections.abc'' -- and crediting the links to that importer
+	meant its next re-run forgot them: after a re-import of DunderNewTestCase's
+	fixture, Sequence.__subclasses__() answered only the fixture's own MySeq,
+	so issubclass(list, Sequence) no longer reached MutableSequence's
+	registration and answered False the moment the ABC caches were cold."
+
 	| bucket origin |
 	(aClass isKindOf: Behavior) ifFalse: [^ aClass].
 	(aBase isKindOf: Behavior) ifFalse: [^ aClass].
@@ -5559,7 +5671,7 @@ ___registerSubclass___: aClass of: aBase
 	it back -- see ___forgetSubclassesFromModule___:.  nil outside any import
 	(``type(name, bases, ns)'' from a test, a class built in a function called
 	after the import): nothing supersedes those, so nothing tracks them."
-	origin := self ___initializingModuleName___.
+	origin := aModuleNameOrNil.
 	origin isNil ifFalse: [
 		| trail |
 		trail := self ___subclassOriginRegistry___ at: origin otherwise: nil.

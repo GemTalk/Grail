@@ -172,17 +172,20 @@ category: 'Grail-Tests-PropertyIsinstance'
 method: PropertyAndIsinstanceTestCase
 testUnionMembersAreStillValidated
 	"Per-member checking must keep CPython's TypeErrors: a non-class first
-	argument, and a parameterised generic as classinfo."
+	argument, and a parameterised generic as classinfo -- which types.GenericAlias
+	refuses itself now, with CPython 3.14's own wording, through its
+	__instancecheck__/__subclasscheck__ rather than by failing the old-style
+	__bases__ probe."
 
 	self
 		assertResult: 'issubclass_union_bad_arg1'
 		equals: 'TypeError: issubclass() arg 1 must be a class'.
 	self
 		assertResult: 'issubclass_union_generic_alias'
-		equals: 'TypeError: issubclass() arg 2 must be a class, a tuple of classes, or a union'.
+		equals: 'TypeError: issubclass() argument 2 cannot be a parameterized generic'.
 	self
 		assertResult: 'isinstance_generic_alias_rejected'
-		equals: 'TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union'
+		equals: 'TypeError: isinstance() argument 2 cannot be a parameterized generic'
 %
 
 category: 'Grail-Tests-PropertyIsinstance'

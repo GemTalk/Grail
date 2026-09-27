@@ -430,7 +430,11 @@ __dict__
 	class __dict__ is a live proxy generally -- which is the wider fix, since
 	CPython hands back a mappingproxy for EVERY class."
 
-	^ mappingproxy @env1:___on: (dict @env1:___new___)
+	"NOW TYPE'S REAL NAMESPACE, not an empty dict.  collections.abc is
+	CPython's own now, and its Callable check is _check_methods over the MRO's
+	__dict__s: ``isinstance(int, Callable)'' asks whether ``type.__dict__''
+	holds __call__, so the empty proxy made every class non-callable."
+	^ mappingproxy @env1:___on: self ___classDict___
 %
 
 category: 'Grail-Class Attrs'

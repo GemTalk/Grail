@@ -482,8 +482,20 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '___curPos___ := '; nextPutAll: bodyLit;
 			nextPutAll: '.'; lf].
 
-	"Emit the body expression (single expression, not a statement list)"
-	body printSmalltalkOn: aStream.
+	"Emit the body expression (single expression, not a statement list).
+
+	A GENERATOR LAMBDA -- ``lambda: (yield)'', which is how _collections_abc
+	names the generator type -- has its body wrapped as a generator def's is,
+	so the call answers a PythonGenerator and the ___gen___ its yield reads is
+	declared.  It used to be emitted bare, and the module failed to compile
+	with ``undefined symbol ___gen___''.  (The IR path already refuses such a
+	lambda, so this is the only emit.)"
+	(self ___irBodyHasYieldOrAwait___: body)
+		ifTrue: [
+			aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
+			body printSmalltalkOn: aStream.
+			aStream nextPutAll: ']']
+		ifFalse: [body printSmalltalkOn: aStream].
 
 	"A LINE BREAK before the closing bracket, so the restore below cannot share a
 	line with the body.  The scan that recovers a position works at LINE
