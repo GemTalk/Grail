@@ -270,6 +270,22 @@ test.test_wave
 test.test_xml_etree
 test.test_zipapp
 
+# --- Added to guard a vendoring, not drawn by the sample ---------------------
+#
+# test_urlparse is not one of the P3/P4 draws.  It is here because
+# urllib.parse is now CPython's own (vendored for test_urllib2_localnet,
+# replacing a hand-rolled subset whose urlparse answered a 5-tuple), and this
+# is CPython's test of exactly that file -- without it, a regression in the
+# vendored parser would show up nowhere in the corpus.
+#
+# Its last blocker was not in urllib at all: test_urlsplit_normalization needs
+# unicodedata.decomposition AND a real NFKC, because _checknetloc rejects a
+# netloc character that normalizes to one of '/?#@:' (bpo-36742).  Grail's
+# unicodedata.normalize returned its argument, so that check was silently
+# off.  The module-level unicodedata queries now read a generated,
+# CPython-verified database (scripts/generate_ucd.py, _ucd_current.py).
+test.test_urlparse
+
 # --- test_asyncio, one SUBMODULE at a time --------------------------------
 #
 # CPython's test_asyncio is a 41-file, 31k-line PACKAGE, and naming the package

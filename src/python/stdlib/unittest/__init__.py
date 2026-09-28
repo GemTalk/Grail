@@ -206,10 +206,18 @@ class _AssertRaisesContext:
 # ---- subTest context manager ---------------------------------------------
 
 class _SubTest:
-    # Minimal subTest: the body runs inline and nothing is swallowed, so
-    # the first failing subTest fails the enclosing test right away
-    # (CPython would record it, continue, and report each params set).
-    def __init__(self, msg, params):
+    # Minimal subTest: the body runs inline and a FAILURE is not swallowed, so
+    # the first failing subTest fails the enclosing test right away (CPython
+    # would record it, continue, and report each params set).
+    #
+    # A SKIP is swallowed, as CPython's testPartExecutor does: it is recorded
+    # against this subtest and the method carries on with the next one.  It
+    # used to escape like a failure, so one skipped subtest silently took
+    # every LATER subtest with it -- they never ran, and the test still
+    # scored as a pass.  test_urlparse's test_attributes_bad_port skips its
+    # bytes variant of one port and has more ports after it.
+    def __init__(self, test_case, msg, params):
+        self.test_case = test_case
         self._msg = msg
         self.params = params
 
@@ -217,7 +225,33 @@ class _SubTest:
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        return False
+        if exc_type is None or not issubclass(exc_type, SkipTest):
+            return False
+        result = getattr(self.test_case, '_grail_subtest_result', None)
+        if result is None:
+            return False     # outside run() (debug()): let it propagate
+        result.addSkip(self, str(exc_value))
+        self.test_case._grail_subtest_skipped = True
+        return True
+
+    # CPython's _SubTest naming, so a skip line identifies the subtest.
+    def _subDescription(self):
+        parts = []
+        if self._msg is not None:
+            parts.append("[{}]".format(self._msg))
+        if self.params:
+            parts.append("({})".format(', '.join(
+                "{}={!r}".format(k, v) for (k, v) in self.params.items())))
+        return " ".join(parts) or '(<subtest>)'
+
+    def id(self):
+        return "{} {}".format(self.test_case.id(), self._subDescription())
+
+    def shortDescription(self):
+        return self.test_case.shortDescription()
+
+    def __str__(self):
+        return "{} {}".format(self.test_case, self._subDescription())
 
 
 # Bind the ``case`` submodule as an attribute of the package, which is what
@@ -417,7 +451,7 @@ class TestCase:
         raise SkipTest(reason)
 
     def subTest(self, msg=None, **params):
-        return _SubTest(msg, params)
+        return _SubTest(self, msg, params)
 
     def addCleanup(self, function, *args, **kwargs):
         self._cleanups.append((function, args, kwargs))
@@ -872,6 +906,9 @@ class TestCase:
             result.addError(self, _describe_exception(e))
             result.stopTest(self)
             return result
+        # Where a skipped subTest records itself (see _SubTest).
+        self._grail_subtest_result = result
+        self._grail_subtest_skipped = False
         try:
             method = getattr(self, self._testMethodName)
             self._callTestMethod(method)
@@ -916,7 +953,14 @@ class TestCase:
             expecting_failure = getattr(
                 marked, "__unittest_expecting_failure__", False)
 
-        if status == "skip":
+        # A test whose subtests were partly SKIPPED is neither a success nor
+        # an unexpected success, exactly as in CPython (a skip clears
+        # outcome.success there): its skips are already recorded, and only a
+        # failure or error still gets reported.
+        self._grail_subtest_result = None
+        if status == "success" and self._grail_subtest_skipped:
+            pass
+        elif status == "skip":
             result.addSkip(self, message)
         elif expecting_failure:
             if status == "success":

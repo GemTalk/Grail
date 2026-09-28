@@ -1,49 +1,59 @@
-# Grail unicodedata stub.
+# Grail unicodedata.
 #
-# CPython's unicodedata is C-implemented and exposes Unicode
-# Character Database queries (category, bidirectional, mirrored,
-# combining, decimal, normalization, etc).  Werkzeug.utils
-# imports it for ``unicodedata.normalize('NFKD', filename)'' in
-# secure_filename — which strips combining marks from filenames
-# before ASCII-encoding them.
+# CPython's unicodedata is C-implemented and exposes Unicode Character
+# Database queries.  Here:
 #
-# Grail strings are already a mix of byte/wide representations;
-# the stub passes through ASCII strings and approximates NFKD
-# decomposition by stripping anything outside [0x20, 0x7e].
+#   * REAL, over tables generated from CPython's own database by
+#     scripts/generate_ucd.py and verified against it on every code point
+#     (_ucd_current.py, read by _ucd.Database): category, bidirectional,
+#     combining, decomposition, normalize and is_normalized, and
+#     unidata_version.  Likewise ``ucd_3_2_0'' below, for stringprep/IDNA.
+#   * REAL, from the generated name tables: lookup and name.
+#   * STILL STUBS: east_asian_width (always 'N'); mirrored, decimal, digit
+#     and numeric are absent.
+#
+# normalize used to return its argument unchanged.  That silently disabled
+# urllib.parse's _checknetloc (bpo-36742: a netloc character that NFKC-
+# normalizes to one of '/?#@:' must raise), and it made Werkzeug's
+# secure_filename keep combining marks.
+#
+# The table module is imported INSIDE _current(), for the deploy reason in
+# the note further down.
 
 
-def normalize(form, s):
-    """Approximate normalization.  ``NFKD'' / ``NFC'' / ``NFD'' /
-    ``NFKC'' — Grail returns the input string unchanged.  Callers
-    that depend on real decomposition for security-sensitive
-    filename sanitization should not rely on this stub."""
-    return s
+# A literal, not _ucd_current.VERSION: no module-level import (NOTE below).
+# tests/python/unicodedata_current.py pins the two equal.
+unidata_version = '16.0.0'
+
+
+def _current():
+    import _ucd
+    import _ucd_current
+    return _ucd.database(_ucd_current)
+
+
+def normalize(form, unistr):
+    return _current().normalize(form, unistr)
+
+
+def is_normalized(form, unistr):
+    return _current().is_normalized(form, unistr)
 
 
 def category(ch):
-    """Default Unicode category — returns ``'Cn''  for unassigned.
-    A real implementation would consult the UCD; for now return
-    ``Ll'' for lowercase ASCII letters, ``Lu'' for uppercase, ``Nd''
-    for digits, ``Zs'' for space, ``Po'' for other punctuation."""
-    if len(ch) != 1:
-        raise TypeError('category() takes a single character')
-    code = ord(ch)
-    if 0x30 <= code <= 0x39:
-        return 'Nd'
-    if 0x41 <= code <= 0x5a:
-        return 'Lu'
-    if 0x61 <= code <= 0x7a:
-        return 'Ll'
-    if code == 0x20:
-        return 'Zs'
-    if 0x21 <= code <= 0x2f:
-        return 'Po'
-    return 'Cn'
+    return _current().category(ch)
+
+
+def bidirectional(ch):
+    return _current().bidirectional(ch)
 
 
 def combining(ch):
-    """Combining class — Grail returns 0 (non-combining) always."""
-    return 0
+    return _current().combining(ch)
+
+
+def decomposition(ch):
+    return _current().decomposition(ch)
 
 
 def east_asian_width(ch):

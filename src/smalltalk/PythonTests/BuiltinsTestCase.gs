@@ -1463,15 +1463,18 @@ testIsinstanceStrAcceptsWideStrings
 
 category: 'Grail-Tests - Conversions'
 method: BuiltinsTestCase
-testChrLoneSurrogateRaisesValueError
-	"DELIBERATE DEVIATION: CPython chr() accepts lone surrogates, but a
-	GemStone string cannot hold one -- downstream construction died
-	UNCATCHABLY ('codePoint not valid for Unicode', killing the whole
-	test_re run in test_bigcharset).  chr() raises catchable ValueError
-	at the source instead."
+testChrLoneSurrogateIsAStr
+	"chr() of a lone surrogate answers a one-character str, as in CPython.
+	It used to raise ValueError as a deliberate deviation, from before a
+	PyStrSurrogate could stand in for a str; test_urlparse's
+	test_urlsplit_normalization calls chr() on every code point.  Expected
+	values measured under CPython 3.14.6."
 
-	self should: [self eval: 'chr(0xD800)'] raise: ValueError.
-	self should: [self eval: 'chr(0xDFFF)'] raise: ValueError.
+	self assert: (self eval: 'type(chr(0xD800)).__name__') equals: 'str'.
+	self assert: (self eval: 'len(chr(0xD800))') equals: 1.
+	self assert: (self eval: 'ord(chr(0xDFFF))') equals: 16rDFFF.
+	self assert: (self eval: 'chr(0xD800) == ''\ud800''') equals: true.
+	self assert: (self eval: 'repr(chr(0xDFFF) + ''a'')') equals: '''\udfffa'''.
 	self assert: (self eval: 'ord(chr(0xD7FF))') equals: 16rD7FF.
 	self assert: (self eval: 'ord(chr(0xE000))') equals: 16rE000
 %

@@ -87,6 +87,25 @@ testCodecsCjkAndIdna
 
 category: 'Grail-Tests'
 method: SelfCheckingFixturesTestCase
+testUnittestSubtestSkip
+	"A skipTest() inside a subTest skips that subtest only; the method goes
+	on to the next one.  It used to end the whole method, so later subtests
+	never ran and the test still passed."
+	self assert: (self ___failingChecksIn___: 'unittest_subtest_skip') equals: #()
+%
+
+category: 'Grail-Tests'
+method: SelfCheckingFixturesTestCase
+testUnicodedataCurrent
+	"unicodedata's module-level category / bidirectional / combining /
+	decomposition / normalize / is_normalized, over the generated current
+	database -- and urllib.parse's NFKC netloc check, which the old
+	pass-through normalize() silently disabled."
+	self assert: (self ___failingChecksIn___: 'unicodedata_current') equals: #()
+%
+
+category: 'Grail-Tests'
+method: SelfCheckingFixturesTestCase
 testMroBuiltinsAndMiClosures
 	"PR #1126's fixture, which until now was only ever run under CPython."
 	self assert: (self ___failingChecksIn___: 'mro_builtins_and_mi_closures') equals: #()
