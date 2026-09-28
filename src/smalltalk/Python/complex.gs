@@ -85,9 +85,18 @@ method: complex
 category: 'Grail-Arithmetic Operators'
 method: complex
 = anObject
-	"Equality comparison."
+	"Equality comparison -- the SMALLTALK one, which collections use and which
+	must answer a Boolean.  __eq__ answers NotImplemented for a non-number, and
+	handed back raw that was ``Expected NotImplemented to be a Boolean'', an
+	uncatchable error: ``(2+3j,) == (K(),)'' compared elements with this, and so
+	did a dict lookup whose hash met a complex key -- typing's typed cache ran
+	into it at random, as Literal[3j + 2, ...] (test_typing LiteralTests).
+	NotImplemented means not equal here, as it does at the end of Python's
+	own comparison."
 
-	^ self @env1:__eq__: anObject
+	| r |
+	r := self @env1:__eq__: anObject.
+	^ r == true
 %
 
 category: 'Grail-Arithmetic Operators'
@@ -990,9 +999,21 @@ __getnewargs__
 category: 'Grail-Serialization'
 method: complex
 __getstate__
-	"Return state for pickling. Complex numbers have no additional state."
+	"object's __getstate__, which answers None for an exact complex -- its
+	real/imag storage is hidden (___pyHiddenStateNames___) -- and a SUBCLASS
+	instance's own attributes otherwise.  Answering None outright dropped
+	those, so a pickled ``class C(complex)'' instance lost its attributes."
 
-	^ None
+	^ super __getstate__
+%
+
+category: 'Grail-Serialization'
+method: complex
+___pyHiddenStateNames___
+	"complex keeps its two parts as dynamic instVars; they are its value, not
+	instance attributes.  See object >> __getstate__ and PyInstanceDict."
+
+	^ #( #real #imag )
 %
 
 category: 'Grail-Comparison'
@@ -1706,3 +1727,36 @@ real
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Introspection'
+method: complex
+__dict__
+	"``obj.__dict__'' for a complex SUBCLASS instance -- the live dynamic-instVar
+	view list and bytes publish.  Only a class PYTHON defined gets one: an EXACT
+	complex, and Grail's own Smalltalk subclasses of it (struct_time is a tuple),
+	have no instance dict, as in CPython.  test_pickle's round trips compare
+	subclass instances' __dict__."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) @env0:isNil ifTrue: [
+		^ AttributeError ___signal___:
+			'''complex'' object has no attribute ''__dict__'''].
+	^ PyInstanceDict @env0:on: self
+%
+
+set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like list's and bytes' copies) it must be an
+! env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: complex
+___pythonValueAttrs___
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

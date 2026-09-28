@@ -264,4 +264,31 @@ indices: length
 	^ tuple @env0:with: lo with: hi with: st
 %
 
+category: 'Python-Methods'
+method: slice
+___unpackedSlice___
+	"This slice with every component already run through __index__ --
+	CPython's PySlice_Unpack, the step BEFORE PySlice_AdjustIndices.
+
+	A caller that normalises against its own length has to read that length
+	AFTER the components' __index__ has run, because __index__ may resize the
+	very sequence being sliced (gh-72050, gh-143200: ``def __index__(self):
+	e[:] = []'').  ``aSlice indices: self size'' reads the size first, then
+	runs __index__ inside indices:, and a list emptied in between was indexed
+	with its old bounds -- an uncatchable OffsetError (test_xml_etree's
+	BadElementTest).  So: ``(aSlice ___unpackedSlice___) indices: self size''.
+	Answers self when there is nothing to run."
+
+	| plain |
+	plain := [:v | v @env0:isNil or: [v == None or: [v @env0:isKindOf: Integer]]].
+	((plain value: self start) and: [(plain value: self stop)
+		and: [plain value: self step]]) ifTrue: [^ self].
+	^ slice @env0:___newStart: ((plain value: self start)
+			ifTrue: [self start] ifFalse: [bytes ___coerceIndex___: self start])
+		stop: ((plain value: self stop)
+			ifTrue: [self stop] ifFalse: [bytes ___coerceIndex___: self stop])
+		step: ((plain value: self step)
+			ifTrue: [self step] ifFalse: [bytes ___coerceIndex___: self step])
+%
+
 set compile_env: 0

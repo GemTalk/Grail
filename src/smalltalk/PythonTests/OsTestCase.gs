@@ -408,11 +408,12 @@ testPathBasename
 	result := path @env1:basename: '/usr/bin/python'.
 	self assert: result equals: 'python'.
 
+	"CPython: everything after the LAST slash, so a trailing slash yields ''."
 	result := path @env1:basename: '/usr/bin/'.
-	self assert: result equals: 'bin'.
+	self assert: result equals: ''.
 
 	result := path @env1:basename: '/usr/'.
-	self assert: result equals: 'usr'.
+	self assert: result equals: ''.
 
 	result := path @env1:basename: 'python'.
 	self assert: result equals: 'python'
@@ -470,11 +471,13 @@ testPathDirname
 	result := path @env1:dirname: '/usr/bin/python'.
 	self assert: result equals: '/usr/bin'.
 
+	"CPython: up to the LAST slash, so a trailing slash keeps the whole
+	directory, and a bare name has the dirname ''."
 	result := path @env1:dirname: '/usr/bin/'.
-	self assert: result equals: '/usr'.
+	self assert: result equals: '/usr/bin'.
 
 	result := path @env1:dirname: 'python'.
-	self assert: result equals: '.'.
+	self assert: result equals: ''.
 
 	result := path @env1:dirname: '/'.
 	self assert: result equals: '/'

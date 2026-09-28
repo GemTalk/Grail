@@ -758,6 +758,23 @@ The 1024-character cap has never been hit and is not an ask. The empty-Symbol
 refusal is Grail work — route `''` into the spill dictionary that already
 handles non-string namespace keys (`tests/python/namespace_non_string_keys.py:17-27`).
 
+
+### 2.5 `Float>>log10` is not libm's `log10` — Small
+
+`Float>>log10` is `^ self _mathPrim: 9`, and primitive 9 is not the C
+library's `log10`: measured on 4.0.0, `1000.0 log10` answers
+`2.9999999999999996` and `1.0e300 log10` answers `299.99999999999994`, where
+libm (and so CPython) answers `3.0` and `300.0` exactly. Its neighbours are
+fine -- `Float>>ln` and `Float>>log2` (`_mathPrim: 23`, documented as
+"log2() from math.h") agree with libm on every value tried -- so this looks
+like a `log(x)/log(10)` in the primitive rather than a call to `log10()`.
+
+Grail works around it with a `CCallout` to libm's `log10`
+(`src/smalltalk/Python/math.gs` `___libmLog10___`), which is per-session C
+state for what should be a primitive. It surfaced as test_reprlib's
+`test_numbers`: an integer's digit count estimated from `log10` came out one
+short. The ask is small: have primitive 9 call `log10()`.
+
 ---
 
 ## 3. Unicode and string primitives

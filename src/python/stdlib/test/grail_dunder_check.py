@@ -411,7 +411,10 @@ def _phase2b_results():
             return 42
 
         def bad(self):
-            return (lambda: (yield))()  # generator lambda: known codegen gap
+            # A name the method cannot resolve: the class must still define and
+            # its siblings still work.  (This used to be a generator lambda,
+            # the codegen gap of its day; generator lambdas compile now.)
+            return undefined_name_for_the_stub_check
 
     inst = HasBadMethod()
     out['good_still_works'] = inst.good()

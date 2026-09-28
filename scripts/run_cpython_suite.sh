@@ -71,15 +71,18 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=1000000;GEM_MAX_S
 # genuine hang still fails the gate, just after 600s.
 PER_MODULE_TIMEOUT="${GRAIL_TEST_TIMEOUT:-600}"
 
-# Run "$@" with a PER_MODULE_TIMEOUT-second cap; return 124 if it had to be
-# killed, else the process's own exit status.  Caller redirects stdout.
-run_capped() {
+# Run "$@" with a $1-second cap; return 124 if it had to be killed, else the
+# process's own exit status.  Caller redirects stdout.
+run_capped() { # $1=limit, then the command
+    local limit="$1"; shift
     "$@" &
-    local pid=$! waited=0
+    # Wall-clock from bash's SECONDS, not a count of 2s naps: on a loaded host
+    # one `sleep 2` iteration was measured at ~8.6s, so counting iterations
+    # stretched the 600s cap to 2580s while a hung gem held the stone.
+    local pid=$! started=$SECONDS
     while kill -0 "$pid" 2>/dev/null; do
         sleep 2
-        waited=$((waited + 2))
-        if [ "$waited" -ge "$PER_MODULE_TIMEOUT" ]; then
+        if [ $((SECONDS - started)) -ge "$limit" ]; then
             kill -9 "$pid" 2>/dev/null
             wait "$pid" 2>/dev/null
             return 124
@@ -130,12 +133,41 @@ SCOREBOARD_JSON="$OUTDIR/scoreboard.json"
 CONCURRENCY="${GRAIL_CPYTHON_WORKERS:-4}"
 SUITE_T0=$SECONDS
 
+# Per-module memory budget.  test___all__ imports every stdlib module that has
+# an __all__ -- about 220 of them, django included -- into ONE session, and
+# keeps them all: measured, 820MB of temporary object memory is still live after
+# the last import (mark-swept), before the compiles' own transient garbage.  At
+# the suite's 1000000 it died silently partway through the test package (the gem
+# exits when temporary memory is exhausted); at 2000000 it passes.  The budget is
+# a ceiling, not an allocation, so the other modules are unaffected.
+# docs/Issues.md, ``A module's session footprint'', has where that memory goes.
+module_topaz_cfg() { # $1=mod
+    case "$1" in
+        test.test___all__)
+            echo "${TOPAZ_CFG/GEM_TEMPOBJ_CACHE_SIZE=1000000/GEM_TEMPOBJ_CACHE_SIZE=2000000}" ;;
+        *)
+            echo "$TOPAZ_CFG" ;;
+    esac
+}
+
+# Per-module wall-clock cap, beside module_topaz_cfg's per-module memory
+# budget.  Every module gets PER_MODULE_TIMEOUT; give one more with a case
+# here.  test_set had 2x (#1243) while its TestOperationsMutating defined a
+# fresh class per call, which Kermit #52123 made slower as the run went on;
+# its test now uses one class, and runs in a third of the time.
+module_timeout() { # $1=mod
+    case "$1" in
+        *)
+            echo "$PER_MODULE_TIMEOUT" ;;
+    esac
+}
+
 run_module() { # $1=mod -- run one module capped; record exit code + duration sidecars
     local mod="$1" log="$OUTDIR/$1.out" t0
     rm -f "$log" "$OUTDIR/$1.rc"
     export GRAIL_TEST_MODULE="$mod"
     t0=$(date +%s)
-    run_capped topaz -lq -C "$TOPAZ_CFG" -S "$DRIVER" < /dev/null > "$log" 2>&1
+    run_capped "$(module_timeout "$mod")" topaz -lq -C "$(module_topaz_cfg "$mod")" -S "$DRIVER" < /dev/null > "$log" 2>&1
     echo $? > "$OUTDIR/$1.rc"
     # Wall clock, for the NEXT run's launch order (see launch_order).  Written
     # last and never removed at start-up: a `.sec' is the one artifact here that
@@ -271,7 +303,7 @@ for mod in $MODULES; do
 
     if [ "$rc" -eq 124 ] && [ -z "$line" ]; then
         status="TIMEOUT"; tests=0; failures=0; errors=0; skipped=0
-        detail="killed after ${PER_MODULE_TIMEOUT}s"
+        detail="killed after $(module_timeout "$mod")s"
     elif [ -z "$line" ]; then
         status="CRASH"; tests=0; failures=0; errors=0; skipped=0
         detail="topaz exit ${rc}, no result line (see out/cpython/${mod}.out)"

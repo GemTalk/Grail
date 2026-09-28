@@ -356,7 +356,12 @@ __getitem__: index
 	((idx @env0:< 0) or: [
 		idx @env0:>= size
 	]) ifTrue: [
-		IndexError ___signal___: 'list index out of range'
+		"Named for the type, as the TypeError above is: a tuple is an Array, and
+		CPython says ``tuple index out of range'' (test_pickle's
+		test_bad_newobj_args matches the message __newobj__'s args[0] raises)."
+		IndexError ___signal___: ((self @env0:isKindOf: Array)
+			ifTrue: ['tuple index out of range']
+			ifFalse: ['list index out of range'])
 	].
 
 	"Convert to 1-based Smalltalk index"
@@ -374,8 +379,7 @@ ___getslice___: lower _: upper _: step
 	This is the runtime target for Python `self[lower:upper:step]`
 	expressions emitted by SubscriptAst when its slice is a SliceAst."
 
-	| size lo hi st result i lwr upr |
-	size := self @env0:size.
+	| size lo hi st result i lwr upr builtin |
 	"The subscript slice passes the Python None singleton (not Smalltalk nil)
 	for an unset bound/step; normalise so the ifNil: defaults fire instead of
 	comparing None with an integer (a[2:4] has step None -- test_list's
@@ -385,6 +389,9 @@ ___getslice___: lower _: upper _: step
 	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asIndex___].
 	lwr := (lwr @env0:== None) ifTrue: [nil] ifFalse: [lwr].
 	upr := (upr @env0:== None) ifTrue: [nil] ifFalse: [upr].
+	"The size AFTER the bounds' __index__ has run: it may resize self
+	(gh-72050; see slice >> ___unpackedSlice___)."
+	size := self @env0:size.
 	"Each bound is FETCHED through __index__ (PEP 357): a slice literal keeps
 	whatever objects the source wrote, so ``seq[o:o2]'' with __index__ objects
 	used to reach the env-0 arithmetic below and die on an uncatchable
@@ -414,7 +421,23 @@ ___getslice___: lower _: upper _: step
 	"Walk lo, lo+st, lo+2st, ... while the index is on the correct side
 	of hi for the step direction. Result is an instance of the same
 	species (OrderedCollection for lists, String for strings, ...)."
-	result := self @env0:species @env0:new.
+	"A SUBCLASS's slice is an instance of the BUILT-IN it derives from, not of
+	the subclass: CPython's ``L([1, 2])[:1]'' is a list, ``S('ab')[1:]'' a str,
+	``B(b'ab')[:1]'' bytes -- only __getitem__ overrides make it otherwise.
+	``species'' is the receiver's own class for all three, so the slice came
+	back as the subclass, and a str subclass's __eq__ then answered for it:
+	ElementPath's ``path[-1:] == '/''' ran a test path's mutating __eq__ on a
+	fragment with none of its attributes (test_xml_etree BadElementPathTest).
+	Walk past the Python-defined classes to the first built-in and build one
+	of those (no Python class derives from a kernel class whose species is
+	not itself); a built-in receiver keeps its species and costs one
+	method-dictionary probe."
+	builtin := self @env0:class.
+	[builtin @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]
+		whileTrue: [builtin := builtin @env0:superclass].
+	result := (builtin @env0:== self @env0:class
+		ifTrue: [self @env0:species]
+		ifFalse: [builtin]) @env0:new.
 	i := lo.
 	st @env0:> 0
 		ifTrue: [[i @env0:< hi] whileTrue: [

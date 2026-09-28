@@ -60,6 +60,11 @@ ___pythonValueAttrs___
 		add: #tm_wday;
 		add: #tm_yday;
 		add: #tm_isdst;
+		"Inherited from tuple, which lists it in its own copy of this set --
+		the first class answering the hook wins, so a subclass that lists its
+		own attributes has to list this one too, or ``t.__dict__'' reads as a
+		bound method instead of raising AttributeError."
+		add: #'__dict__';
 		yourself
 %
 
@@ -268,6 +273,9 @@ initialize
 	both do -- and ``isinstance(t, struct_time)'' behave as in CPython."
 
 	self @env0:dynamicInstVarAt: #struct_time put: struct_time.
+	"CPython's timemodule.c exports the struct_time field count, and _strptime
+	reads it (``time._STRUCT_TM_ITEMS'') to build its result."
+	self @env0:dynamicInstVarAt: #_STRUCT_TM_ITEMS put: 11.
 	"``time.tzset'' has to READ as a callable.  A UNARY method on a module is
 	treated as a value attribute, so the attribute load invoked it and
 	answered its return -- ``time.tzset'' was None and ``time.tzset()'' then
@@ -1152,6 +1160,28 @@ mktime: structTime
 		@env0:+ (localDt @env0:hourGmt @env0:* 3600)
 		@env0:+ (localDt @env0:minuteGmt @env0:* 60)
 		@env0:+ localDt @env0:secondGmt) @env0:asFloat
+%
+
+category: 'Grail-Formatting'
+method: time
+strptime: aString
+	"``time.strptime(string)'' -- CPython's default format."
+
+	^ self strptime: aString _: '%a %b %d %H:%M:%S %Y'
+%
+
+category: 'Grail-Formatting'
+method: time
+strptime: aString _: format
+	"``time.strptime(string, format)'' -- delegates to the vendored _strptime,
+	as CPython's timemodule.c does and as PyDateTime>>strptime:_: already
+	does.  ssl.cert_time_to_seconds is a caller: ``from time import
+	strptime''."
+
+	| path strptimeMod |
+	path := importlib ___moduleNameToPath___: '_strptime'.
+	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
+	^ strptimeMod _strptime_time: aString _: format
 %
 
 category: 'Grail-Formatting'

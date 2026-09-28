@@ -13,6 +13,12 @@
 #     the expected category and resets ALL filters on exit;
 #   * tracebacks are reported as "ExceptionName: message" strings.
 
+# Three sys.modules reads were already here -- TestCase's __file__ lookup and
+# the setUpModule/tearDownModule fixture walk -- with nothing importing sys, so
+# each would have raised NameError on the path that reaches it.  main()'s
+# sys.exit is what finally ran into it.
+import sys
+
 __all__ = ["TestCase", "TestSuite", "TestLoader", "TestResult",
            "TextTestRunner", "SkipTest", "main", "defaultTestLoader",
            "skip", "skipIf", "skipUnless", "expectedFailure",
@@ -206,10 +212,18 @@ class _AssertRaisesContext:
 # ---- subTest context manager ---------------------------------------------
 
 class _SubTest:
-    # Minimal subTest: the body runs inline and nothing is swallowed, so
-    # the first failing subTest fails the enclosing test right away
-    # (CPython would record it, continue, and report each params set).
-    def __init__(self, msg, params):
+    # Minimal subTest: the body runs inline and a FAILURE is not swallowed, so
+    # the first failing subTest fails the enclosing test right away (CPython
+    # would record it, continue, and report each params set).
+    #
+    # A SKIP is swallowed, as CPython's testPartExecutor does: it is recorded
+    # against this subtest and the method carries on with the next one.  It
+    # used to escape like a failure, so one skipped subtest silently took
+    # every LATER subtest with it -- they never ran, and the test still
+    # scored as a pass.  test_urlparse's test_attributes_bad_port skips its
+    # bytes variant of one port and has more ports after it.
+    def __init__(self, test_case, msg, params):
+        self.test_case = test_case
         self._msg = msg
         self.params = params
 
@@ -217,7 +231,33 @@ class _SubTest:
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        return False
+        if exc_type is None or not issubclass(exc_type, SkipTest):
+            return False
+        result = getattr(self.test_case, '_grail_subtest_result', None)
+        if result is None:
+            return False     # outside run() (debug()): let it propagate
+        result.addSkip(self, str(exc_value))
+        self.test_case._grail_subtest_skipped = True
+        return True
+
+    # CPython's _SubTest naming, so a skip line identifies the subtest.
+    def _subDescription(self):
+        parts = []
+        if self._msg is not None:
+            parts.append("[{}]".format(self._msg))
+        if self.params:
+            parts.append("({})".format(', '.join(
+                "{}={!r}".format(k, v) for (k, v) in self.params.items())))
+        return " ".join(parts) or '(<subtest>)'
+
+    def id(self):
+        return "{} {}".format(self.test_case.id(), self._subDescription())
+
+    def shortDescription(self):
+        return self.test_case.shortDescription()
+
+    def __str__(self):
+        return "{} {}".format(self.test_case, self._subDescription())
 
 
 # Bind the ``case`` submodule as an attribute of the package, which is what
@@ -279,8 +319,12 @@ class _AssertWarnsContext:
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        recorded = list(self._recorded or [])
+        # Exit FIRST and read the live list after, in CPython's order.  The
+        # exit can itself add a record: a coroutine dropped undriven in the
+        # block warns as the capture closes (PythonCoroutine class >>
+        # ___closeCapture___:), where CPython warned at the drop.
         self._catcher.__exit__(exc_type, exc_value, tb)
+        recorded = list(self._recorded or [])
         if exc_type is not None:
             # A real exception escaped the block -- let it propagate.
             return False
@@ -329,8 +373,12 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
     # WAS recorded.  Reuses __enter__ (same recording setup) and just
     # inverts __exit__'s pass/fail condition.
     def __exit__(self, exc_type, exc_value, tb):
-        recorded = list(self._recorded or [])
+        # Exit FIRST and read the live list after, in CPython's order.  The
+        # exit can itself add a record: a coroutine dropped undriven in the
+        # block warns as the capture closes (PythonCoroutine class >>
+        # ___closeCapture___:), where CPython warned at the drop.
         self._catcher.__exit__(exc_type, exc_value, tb)
+        recorded = list(self._recorded or [])
         if exc_type is not None:
             return False
         for rec in recorded:
@@ -409,7 +457,7 @@ class TestCase:
         raise SkipTest(reason)
 
     def subTest(self, msg=None, **params):
-        return _SubTest(msg, params)
+        return _SubTest(self, msg, params)
 
     def addCleanup(self, function, *args, **kwargs):
         self._cleanups.append((function, args, kwargs))
@@ -562,6 +610,14 @@ class TestCase:
 
     def assertListEqual(self, list1, list2, msg=None):
         self.assertSequenceEqual(list1, list2, msg, seq_type=list)
+
+    def assertDictEqual(self, d1, d2, msg=None):
+        # CPython's: both must be dicts, then plain equality.  (test_pickle's
+        # buffer and persistent-id tests compare pickler memos with it.)
+        self.assertIsInstance(d1, dict, 'First argument is not a dictionary')
+        self.assertIsInstance(d2, dict, 'Second argument is not a dictionary')
+        if d1 != d2:
+            self._failWith(msg, repr(d1) + " != " + repr(d2))
 
     def assertSetEqual(self, set1, set2, msg=None):
         # Set-specific equality with a symmetric-difference failure message
@@ -856,6 +912,9 @@ class TestCase:
             result.addError(self, _describe_exception(e))
             result.stopTest(self)
             return result
+        # Where a skipped subTest records itself (see _SubTest).
+        self._grail_subtest_result = result
+        self._grail_subtest_skipped = False
         try:
             method = getattr(self, self._testMethodName)
             self._callTestMethod(method)
@@ -900,7 +959,14 @@ class TestCase:
             expecting_failure = getattr(
                 marked, "__unittest_expecting_failure__", False)
 
-        if status == "skip":
+        # A test whose subtests were partly SKIPPED is neither a success nor
+        # an unexpected success, exactly as in CPython (a skip clears
+        # outcome.success there): its skips are already recorded, and only a
+        # failure or error still gets reported.
+        self._grail_subtest_result = None
+        if status == "success" and self._grail_subtest_skipped:
+            pass
+        elif status == "skip":
             result.addSkip(self, message)
         elif expecting_failure:
             if status == "success":
@@ -1242,15 +1308,42 @@ class TextTestRunner:
         return result
 
 
-def main(module=None, verbosity=1, exit=False):
-    """Run all TestCase subclasses found in `module`.  Unlike CPython,
-    the module argument is required (Grail has no __main__
-    introspection) and argv is not parsed."""
+def main(module=None, verbosity=1, exit=True):
+    """Run all TestCase subclasses found in `module`, then exit with 1 if any
+    of them did not pass.
+
+    `module` defaults to `sys.modules['__main__']`, as CPython's does.  It used
+    to be required, and the reason given was that "Grail has no __main__
+    introspection" -- that is no longer true: under ./grail a script IS
+    sys.modules['__main__'], with __name__ == '__main__', and
+    loadTestsFromModule finds its tests.  A string is accepted too, since
+    `main(module='__main__')` is a common spelling of the same thing.
+
+    `exit` DEFAULTS TO TRUE, as CPython's does, and that is the point of this
+    signature rather than a detail of it.  Returning the result instead meant a
+    failing run left the process at 0: the summary said FAILED (failures=1) and
+    `./grail failing_test.py` still exited 0, so any CI step calling main()
+    reported every failing run as green (#1237).  Pass exit=False to get the
+    result back instead.
+
+    argv is still not parsed; `grail -m unittest` needs a TestProgram, which is
+    its own piece of work."""
     if module is None:
-        raise TypeError("unittest.main() requires a module argument in Grail")
+        module = sys.modules.get('__main__')
+        if module is None:
+            raise TypeError(
+                "unittest.main() found no '__main__' module to run: pass "
+                "module= explicitly (there is no __main__ outside a script, "
+                "e.g. in an embedded or topaz session)")
+    elif isinstance(module, str):
+        __import__(module)
+        module = sys.modules[module]
     suite = defaultTestLoader.loadTestsFromModule(module)
     runner = TextTestRunner(verbosity=verbosity)
-    return runner.run(suite)
+    result = runner.run(suite)
+    if exit:
+        sys.exit(not result.wasSuccessful())
+    return result
 
 
 # IsolatedAsyncioTestCase, imported LAST so the cycle resolves.

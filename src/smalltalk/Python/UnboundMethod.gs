@@ -227,6 +227,18 @@ ___pyDisplayNameOf___: aSelector forClass: aClass
 	| s sym c |
 	aClass isNil ifTrue: [^ nil].
 	s := aSelector asString.
+	"A property ACCESSOR compiled under a private selector -- a deleter as
+	``___propDeleter_x'', a decorated property's setter as ``___propSetter_x''
+	(ClassDefAst >> ___redirectedAccessorNameFor___:) -- was written ``def x''.
+	Only ClassDefAst emits either prefix, so stripping it renames nothing
+	written by hand, and a decorator's functools.wraps then copies the name
+	CPython would (test_warnings DeprecatedTests.test_property)."
+	#('___propSetter_' '___propDeleter_') do: [:prefix |
+		(s size > prefix size and: [(s copyFrom: 1 to: prefix size) = prefix])
+			ifTrue: [
+				| rest |
+				rest := s copyFrom: prefix size + 1 to: s size.
+				^ (self ___pyDisplayNameOf___: rest forClass: aClass) ifNil: [rest]]].
 	(s size > 3 and: [(s at: 1) == $_ and: [(s at: 2) ~~ $_]]) ifFalse: [^ nil].
 	(s indexOfSubCollection: '__' startingAt: 3) = 0 ifTrue: [^ nil].
 	sym := s asSymbol.
@@ -275,8 +287,212 @@ definingClass: aClass selector: aSym
 	inst == nil ifFalse: [^ inst].
 	inst := self @env0:new.
 	inst @env0:_setClass: aClass selector: aSym.
+	"A method a PYTHON class merely inherits from a BUILTIN is the builtin's
+	own: CPython's ``Sub.count is tuple.count'' holds, because the class
+	dictionary lookup finds tuple's descriptor.  Minted per class, the two were
+	different handles, and pickle -- which saves ``Sub.count'' by its
+	qualified name, tuple.count -- refused it as not the object that name
+	resolves to (test_pickle's test_c_methods)."
+	(inst ___pyInheritedBuiltinOwner___) @env0:ifNotNil: [:owner |
+		inst := self definingClass: owner selector: aSym].
 	per @env0:at: aSym put: inst.
 	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+___forClassRead___: aClass selector: aSym
+	"``Cls.method'' as object >> ___pyAttrLoad___ reads it off a class; see
+	___forClassRead___:family:selector:."
+
+	^ self ___forClassRead___: aClass
+		family: ((self definingClass: aClass selector: aSym)
+			___selectorFamilyFor___: aSym string: aSym @env0:asString)
+		selector: aSym
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+___forClassRead___: aClass family: family selector: aSym
+	"``Cls.method'' as object >> ___pyAttrLoad___ reads it off a class: the
+	handle interned under the class that DEFINES the method, so an inherited
+	read is the definer's own object, as CPython's is.
+
+	CPython hands back the one function the defining class's __dict__ holds:
+	``B.f is A.f'', ``P.__init__ is Protocol.__init__'' when neither defines
+	__init__ -- the test typing's Protocol.__init_subclass__ makes before it
+	installs the refusal that stops a protocol being instantiated -- and
+	``A.__init__ is object.__init__'', which PEP 702's @deprecated asks to
+	decide whether excess arguments are an error (test_warnings
+	DeprecatedTests.test_class).  Interning per class READ THROUGH made every
+	such comparison False.
+
+	For a class a Python body defined, the definer is the nearest class up the
+	chain whose own env-1 dictionary holds the name in any arity
+	(definerOf:family:selector:).  Grail's own built-in types share methods
+	down their Smalltalk chain while documenting them per type -- coroutine
+	inherits generator's ``send'' and says ``into coroutine'' -- so theirs stay
+	keyed by the class read through, except that a method nothing between the
+	class and ``object'' defines, in any spelling, answers object's handle.
+	A METACLASS's chain ends at object too, through Class and Behavior, but
+	what it inherits there is type's: ``type(A).__init__'' is type.__init__."
+
+	| inst cls |
+	inst := self definingClass: aClass selector: aSym.
+	aClass == object ifTrue: [^ inst].
+	(aClass @env0:isKindOf: Behavior) ifFalse: [^ inst].
+	aClass @env0:isMeta ifTrue: [^ inst].
+	"...unless the Python class inherits it from a BUILTIN: then inst is
+	already that builtin's handle (definingClass:selector: redirects it), where
+	the definer can be a Smalltalk class further up -- CharacterCollection for
+	``class N(str)'''s count -- and ``N.count is str.count'' must hold."
+	(aClass @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) == nil
+		ifFalse: [
+			inst @env0:definingClass == aClass ifFalse: [^ inst].
+			^ self definingClass: (self definerOf: aClass family: family
+				selector: aSym)
+			selector: aSym].
+	cls := aClass.
+	[cls @env0:notNil and: [cls ~~ object]] @env0:whileTrue: [
+		((cls @env0:includesSelector: aSym environmentId: 1)
+			or: [(family @env0:detect: [:s |
+					cls @env0:includesSelector: s environmentId: 1]
+				ifNone: [nil]) @env0:notNil])
+			ifTrue: [^ inst].
+		cls := cls @env0:superclass].
+	cls == object ifFalse: [^ inst].
+	^ self definingClass: object selector: aSym
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+definerOf: aClass family: family selector: aSym
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+definerOf: aClass family: family selector: aSym
+	"The nearest class up aClass's chain whose own env-1 dictionary holds the
+	name in any arity, or aClass when none does -- whatever kind of class
+	aClass is.  What EQUALITY keys on: ``S.__iter__ == dict.__iter__'' for
+	``class S(dict, ...)'' names one method, defined on KeyValueDictionary,
+	however each handle was read.  ___forClassRead___:family:selector: uses it
+	for Python-defined classes when interning."
+
+	| c |
+	c := aClass.
+	[c == nil] @env0:whileFalse: [ | md |
+		md := c @env0:methodDictForEnv: 1.
+		md @env0:notNil ifTrue: [
+			(md @env0:includesKey: aSym) ifTrue: [^ c].
+			family @env0:notNil ifTrue: [
+				family @env0:do: [:sel |
+					(sel @env0:notNil and: [md @env0:includesKey: sel]) ifTrue: [^ c]]]].
+		c := c @env0:superclass].
+	^ aClass
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___pyInheritedBuiltinOwner___
+	"The builtin class this handle's method really belongs to, when definingClass
+	is a PYTHON class that inherits it unchanged from that builtin; nil
+	otherwise.
+
+	Left alone: a method some Python class defines (the ordinary case), a
+	class-side one (a classmethod is bound to the class it is read from, so
+	``Sub.fromkeys'' is not ``dict.fromkeys'' in CPython either), and __new__,
+	whose builtin spellings take the value where the Python-subclass one takes
+	the class -- see UnboundMethod >> value:value:."
+
+	| found owner |
+	selector @env0:== #'__new__' ifTrue: [^ nil].
+	(definingClass @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	definingClass @env0:isMeta ifTrue: [^ nil].
+	(self ___isPythonClass___: definingClass) ifFalse: [^ nil].
+	found := self ___nearestImplementorOf___: selector
+		family: (self ___selectorFamilyFor___: selector string: selector @env0:asString)
+		in: definingClass.
+	(found @env0:isNil or: [self ___isPythonClass___: found]) ifTrue: [^ nil].
+	owner := self ___firstBuiltinAbove___: definingClass upTo: found.
+	(owner @env0:== definingClass or: [self ___isPythonClass___: owner]) ifTrue: [^ nil].
+	^ owner
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___nearestImplementorOf___: aSym family: family in: aClass
+	"The NEAREST class in aClass's chain that defines aSym in ANY spelling.
+
+	Not ___findImplementorOf___:family:in:, which asks the whole chain for the
+	unary spelling before trying any other: a Python ``def __init__(self, x)''
+	compiles as ``__init__:'', while object defines a unary ``__init__'', so
+	that search walked past every Python __init__ to object's -- and a caller
+	here that took its answer as the owner handed ``Reader.__init__'' out as
+	``object.__init__''."
+
+	| c |
+	c := aClass.
+	[c @env0:notNil] @env0:whileTrue: [
+		(c @env0:compiledMethodAt: aSym environmentId: 1 otherwise: nil) @env0:notNil
+			ifTrue: [^ c].
+		family @env0:do: [:sel |
+			(c @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil) @env0:notNil
+				ifTrue: [^ c]].
+		c := c @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___firstBuiltinAbove___: aClass upTo: found
+	"The first class above the Python classes at the bottom of aClass's chain
+	that Python can name -- has a module -- on the way to found (found itself
+	when none does).  The FIRST, so that a str subclass's inherited methods
+	belong to str (Unicode7) and not to a kernel class further up that also
+	happens to answer a module."
+
+	| c |
+	c := aClass.
+	[c @env0:notNil and: [c @env0:~~ found]] @env0:whileTrue: [
+		((self ___isPythonClass___: c) @env0:not
+			and: [(self ___pyModuleStringOf___: c) @env0:notNil]) ifTrue: [
+				^ self ___canonicalBuiltinFor___: c].
+		c := c @env0:superclass].
+	^ found
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___canonicalBuiltinFor___: aClass
+	"The class the builtins module binds for aClass's Python type, when that
+	is a different Smalltalk class.  Several kernel classes stand for one
+	Python type -- a ``class N(str)'' is a Unicode32 subclass, while ``str''
+	itself is Unicode7 -- and ``N.count is str.count'' holds in CPython, so the
+	handle must be minted for the class ``str'' names."
+
+	| bt canon |
+	bt := [aClass ___pythonBuiltinTypeName___]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	bt @env0:isNil ifTrue: [^ aClass].
+	canon := [((Python @env0:at: #builtins) @env0:___instance___)
+			@env1:___pyAttrLoad___: bt @env0:asSymbol]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"Not an inheritance test: Unicode32 and Unicode7 are siblings, not one
+	below the other, yet both are str."
+	(canon @env0:isKindOf: Behavior) ifTrue: [^ canon].
+	^ aClass
+%
+
+category: 'Grail-Instance Creation'
+method: UnboundMethod
+___isPythonClass___: aClass
+	"Defined by a Python class statement (ClassDefAst's stamp), as opposed to a
+	Smalltalk class standing in for a builtin."
+
+	^ (aClass @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) @env0:notNil
 %
 
 category: 'Grail-Dynamic Rebinding'
@@ -330,18 +546,28 @@ __get__: instance _: owner
 	right-hand side of the assignment above unbound in the first place, and a
 	BoundMethod on the class would send the selector to the class object.
 
-	The resulting BoundMethod dispatches ``selector'' to the instance, so the
-	method must be reachable from the instance's own class -- true for the
-	inheritance case above.  A function grafted onto an UNRELATED class is not
-	covered; that needs the whole function object to travel, not a
-	(class, selector) handle."
+	THE RESULT RUNS THIS FUNCTION, NOT WHATEVER THE NAME RESOLVES TO.  It used
+	to be a BoundMethod on (instance, selector), which RE-SENDS the selector:
+	correct only while the instance's class reaches this very method under
+	that name.  When the class overrides the name, the binding ran the
+	override instead.  CPython's urllib.error does exactly that --
+
+	    class HTTPError(URLError, urllib.response.addinfourl):
+	        __super_init = urllib.response.addinfourl.__init__
+	        def __init__(self, url, code, msg, hdrs, fp):
+	            ...
+	            self.__super_init(fp, hdrs, url, code)
+
+	-- and the call re-entered HTTPError.__init__ with four arguments.  A
+	MethodBinding carries the function itself and calls it with the instance
+	prepended, which is value:value: below: a non-virtual performMethod: on
+	definingClass.  It is also what an ordinary instance's class-attribute
+	read already answers (object >> ___instanceClassAttrGet___:); this is the
+	path an exception instance, among others, takes to the same place."
 
 	(instance == nil or: [instance == None]) ifTrue: [^ self].
 	(instance @env0:isKindOf: Behavior) ifTrue: [^ self].
-	"``receiver:selector:'' is an env-1 classmethod, so NO @env0: prefix -- with
-	one it MNUs, and inside an attribute read that escapes as an uncatchable
-	Smalltalk error (the module scored STERROR, 0 tests, not a failure)."
-	^ BoundMethod receiver: instance selector: selector
+	^ MethodBinding instance: instance callable: self
 %
 
 category: 'Grail-Calling'
@@ -500,10 +726,19 @@ ___grailPinnedMethodFor___: aMethod receiver: obj
 	almost every program is forever."
 
 	| pinnedAt shadow owner |
+	"``object.__eq__(a, b)'' called explicitly runs object's comparison, not
+	__eq__:'s dispatch to a setattr-installed __eq__ -- see object >>
+	___grailObjectEq___:."
+	((aMethod @env0:selector == #'__eq__:') and: [aMethod @env0:inClass == Object])
+		ifTrue: [^ Object @env0:compiledMethodAt: #'___grailObjectEq___:' environmentId: 1].
 	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
 	pinnedAt == nil ifTrue: [^ aMethod].
-	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt])
-		ifTrue: [^ aMethod].
+	"A stamp above this session's current generation was made by another
+	session (BoundMethod class >> ___grailSessionPinHolder___): it predates
+	every pin here as far as this session can know, so it redirects."
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
+			ifTrue: [^ aMethod].
 	shadow := ('___grailOrig_' @env0:, aMethod @env0:selector @env0:asString)
 		@env0:asSymbol.
 	"Resolved from the same root the method itself came from, so a shadow on an
@@ -653,9 +888,27 @@ __eq__: other
 	and lets unbound handles compare by value (only Python-level
 	__eq__/__hash__, not Smalltalk =/hash)."
 
+	"...by the class that OWNS the method, not the one the handle was read
+	through.  ``super(C, E).__reduce__'' names E's chain and ``E.__reduce__''
+	is interned under object, which defines it (UnboundMethod class >>
+	___forClassRead___:family:selector:); in CPython both are object's one function."
+
 	(other isKindOf: UnboundMethod) ifFalse: [^ false].
-	^ (definingClass == (other @env0:definingClass))
-		and: [selector == (other @env0:selector)]
+	selector == (other @env0:selector) ifFalse: [^ false].
+	definingClass == (other @env0:definingClass) ifTrue: [^ true].
+	^ self ___ownerClass___ == other ___ownerClass___
+%
+
+category: 'Grail-Comparison'
+method: UnboundMethod
+___ownerClass___
+	"The class up definingClass's chain that defines this method in any arity
+	-- what equality and hashing key on."
+
+	^ UnboundMethod
+		definerOf: definingClass
+		family: (importlib @env0:___pythonNameFamilyOf___: selector)
+		selector: selector
 %
 
 category: 'Grail-Comparison'
@@ -667,9 +920,9 @@ __ne__: other
 category: 'Grail-Comparison'
 method: UnboundMethod
 __hash__
-	"Consistent with __eq__ (definingClass identity + selector)."
+	"Consistent with __eq__ (owning class identity + selector)."
 
-	^ (definingClass @env0:identityHash) @env0:bitXor: (selector @env0:hash)
+	^ (self ___ownerClass___ @env0:identityHash) @env0:bitXor: (selector @env0:hash)
 %
 
 category: 'Grail-Callable'
@@ -708,8 +961,9 @@ __name__
 	A PRIVATE method reports the name it was WRITTEN with -- see
 	UnboundMethod class >> ___pyDisplayNameOf___:forClass:."
 
-	^ (UnboundMethod @env0:___pyDisplayNameOf___: selector forClass: definingClass)
-		ifNil: [selector @env0:asString]
+	^ self ___memoizedAttr___: '__name__' compute: [
+		(UnboundMethod @env0:___pyDisplayNameOf___: selector forClass: definingClass)
+			ifNil: [selector @env0:asString]]
 %
 
 category: 'Grail-Python Metadata'
@@ -735,10 +989,11 @@ __qualname__
 	'EnumType'.  A bare ``owner __qualname__'' misses the branch entirely and
 	came back with the two-word Smalltalk name, so ``Cls.m.__qualname__'' read
 	'Enum class.__contains__' where CPython has 'EnumType.__contains__'."
-	qn := [(owner @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
-		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: owner @env0:name @env0:asString].
-	^ qn @env0:, '.' @env0:, self __name__ @env0:asString
+	^ self ___memoizedAttr___: '__qualname__' compute: [
+		qn := [(owner @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: owner @env0:name @env0:asString].
+		qn @env0:, '.' @env0:, self __name__ @env0:asString]
 %
 
 category: 'Grail-Python Metadata'
@@ -774,10 +1029,48 @@ ___pyOwnerClass___
 
 	| found |
 	found := self ___pyImplementingClass___.
+	"A KERNEL implementation class that Python has no name for --
+	CharacterCollection behind str, Set behind set -- is not the owner Python
+	would report.  CPython's method descriptor belongs to the builtin type, so
+	``str.index'' is 'str.index' in module builtins; here it read
+	'CharacterCollection.index' in a module named 'CharacterCollection', and
+	pickle, which saves such a method by its qualified name, looked for that
+	module (test_pickle's test_c_methods).
+	Asked with isMeta, and BEFORE the branch below: ``isKindOf: Metaclass3''
+	answers true for an ordinary class as well as for a metaclass, so that
+	branch also catches every nameless kernel class and hands it back
+	unchanged."
+	((found @env0:isKindOf: Behavior)
+		and: [found @env0:isMeta @env0:not
+		and: [(self ___pyModuleStringOf___: found) @env0:isNil]])
+			ifTrue: [^ self ___pyNamedBuiltinBelow___: found].
 	((found @env0:isKindOf: Metaclass3)
 		and: [(self ___pyModuleStringOf___: found) @env0:isNil])
 			ifTrue: [^ found @env0:thisClass].
 	^ found
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___pyNamedBuiltinBelow___: found
+	"The class Python names as the owner of a method implemented on the unnamed
+	kernel class found: of the classes from definingClass up to (not including)
+	found, the one NEAREST found that has a Python module and is not a Python
+	class.  Nearest, so that ``Subclass.count'' on a list subclass reports list,
+	as CPython does, rather than the subclass it was reached through.  found
+	itself when no such class is on the way."
+
+	| c best |
+	(definingClass @env0:isKindOf: Behavior) ifFalse: [^ found].
+	best := found.
+	c := definingClass.
+	[c @env0:notNil and: [c @env0:~~ found]] @env0:whileTrue: [
+		((self ___pyModuleStringOf___: c) @env0:notNil
+			and: [(c @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+				environmentId: 1) @env0:isNil])
+					ifTrue: [best := c].
+		c := c @env0:superclass].
+	^ best
 %
 
 category: 'Grail-Python Metadata'
@@ -796,9 +1089,12 @@ ___pyImplementingClass___
 	(definingClass @env0:isKindOf: Behavior) @env0:ifFalse: [^ definingClass].
 	family := self ___selectorFamilyFor___: selector
 		string: selector @env0:asString.
-	found := self ___findImplementorOf___: selector family: family in: definingClass.
+	"NEAREST definer, in any spelling -- see ___nearestImplementorOf___:.  The
+	whole-chain unary search it replaces named object as the owner of every
+	Python ``__init__(self, x)'', which compiles as ``__init__:''."
+	found := self ___nearestImplementorOf___: selector family: family in: definingClass.
 	found @env0:isNil ifTrue: [
-		found := self ___findImplementorOf___: selector family: family
+		found := self ___nearestImplementorOf___: selector family: family
 			in: definingClass @env0:class].
 	^ found @env0:isNil ifTrue: [definingClass] ifFalse: [found]
 %
@@ -806,16 +1102,25 @@ ___pyImplementingClass___
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___findImplementorOf___: aSym family: family in: aClass
-	"The class in aClass's chain defining aSym or any of its arity variants, in
-	env 1; nil when none does."
+	"The NEAREST class in aClass's chain defining aSym or any of its arity
+	variants, in env 1; nil when none does.
 
-	| found |
-	found := aClass @env0:whichClassIncludesSelector: aSym environmentId: 1.
-	found @env0:isNil ifFalse: [^ found].
-	1 to: 7 do: [:i |
-		found := aClass @env0:whichClassIncludesSelector: (family @env0:at: i)
-			environmentId: 1.
-		found @env0:isNil ifFalse: [^ found]].
+	One walk, every spelling asked at each class.  It used to look for the
+	unary spelling up the WHOLE chain first, and object defines a unary
+	__init__ -- so for ``def __init__(self, x)'', compiled as the varargs
+	``___init__:kw:'', every class's own __init__ reported object as its
+	owner: ``A.__init__.__qualname__'' read 'object.__init__', and
+	typing.no_type_check, which checks that qualname, skipped every
+	constructor (test_typing test_respect_no_type_check)."
+
+	| c |
+	c := aClass.
+	[c @env0:notNil] @env0:whileTrue: [
+		(c @env0:includesSelector: aSym environmentId: 1) ifTrue: [^ c].
+		family @env0:do: [:s |
+			(s @env0:notNil and: [c @env0:includesSelector: s environmentId: 1])
+				ifTrue: [^ c]].
+		c := c @env0:superclass].
 	^ nil
 %
 
@@ -911,6 +1216,12 @@ __globals__
 	the BoundMethod twin for why."
 
 	| view |
+	"A class made by exec() carries the namespace it was made in."
+	((definingClass @env0:isKindOf: Behavior)
+		and: [definingClass @env0:isMeta @env0:not]) ifTrue: [
+			([definingClass @env1:___dynamicClassAttr___: #'___grailDoitGlobals___']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil])
+				@env0:ifNotNil: [:g | ^ g]].
 	view := (Python @env0:at: #'PyModuleDict')
 		@env0:___forModuleNamed___: ([self __module__]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]).
@@ -963,6 +1274,12 @@ __annotations__
 	the inference reported ``no type annotation found'', and the registration
 	was lost."
 
+	"An ASSIGNED __annotate__ answers for the function: typing's _make_nmtuple
+	writes ``nm_tpl.__new__.__annotate__ = annotate'', and get_type_hints of a
+	NamedTuple's __new__ then read the (empty) compiled table instead
+	(test_typing test_get_type_hints_classes)."
+	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:fn |
+		fn ~~ None ifTrue: [^ fn @env1:___pyCallValue___: { 1 } kw: nil]]).
 	^ self ___annotationsForClass___: self ___metadataClass___
 %
 
@@ -989,14 +1306,42 @@ ___metadataClass___
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+___memoizedAttr___: aKey compute: aBlock
+	"The value of a function attribute CPython fixes when the def runs --
+	__name__, __qualname__, __type_params__ -- computed once per (class,
+	selector) and then answered as the SAME object every time.
+
+	Identity is the point.  functools.update_wrapper and reprlib's
+	recursive_repr copy these onto a wrapper, and the test for that is
+	``getattr(wrapper, name) is getattr(wrapped, name)'' (test_reprlib's
+	test_assigned_attributes).  Each was rebuilt on every read -- a fresh
+	string, a fresh empty tuple -- so the copy was equal and never identical.
+	Keyed by the defining class and memoized per session, as __annotate__
+	already is, because a handle itself is not guaranteed to be the same
+	object on the next ``Cls.m''."
+
+	| store perClass key v |
+	definingClass == nil ifTrue: [^ aBlock value].
+	store := SessionTemps @env0:current
+		@env0:at: #'GrailMethodAttrCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	perClass := store @env0:at: definingClass ifAbsentPut: [KeyValueDictionary @env0:new].
+	key := aKey @env0:, ':' @env0:, selector @env0:asString.
+	v := perClass @env0:at: key otherwise: nil.
+	v == nil ifFalse: [^ v].
+	v := aBlock value.
+	perClass @env0:at: key put: v.
+	^ v
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 __annotate__
 	"PEP 649: the deferred annotations computation, which
 	functools.update_wrapper COPIES (``__annotate__'' is in
 	WRAPPER_ASSIGNMENTS; ``__annotations__'' is not).  Mirrors BoundMethod's,
 	including the memoization -- check_wrapper asserts the wrapper and the
-	wrapped share the very same object -- and raises rather than answering None
-	when nothing is annotated, so update_wrapper skips the name instead of
-	copying a None the reader would try to call."
+	wrapped share the very same object -- and None when nothing is annotated."
 
 	| store perClass cls fn |
 	cls := self ___metadataClass___.
@@ -1009,8 +1354,11 @@ __annotate__
 	fn := perClass @env0:at: selector @env0:asString otherwise: nil.
 	fn == nil ifFalse: [^ fn].
 	fn := self ___rawAnnotateForClass___: cls.
-	fn == nil ifTrue: [
-		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	"None for a def with no annotations, as CPython's function.__annotate__
+	answers -- and what functools.update_wrapper and reprlib.recursive_repr
+	copy onto a wrapper, which test_reprlib's test_assigned_attributes then
+	compares by identity.  None is a singleton, so it needs no memo entry."
+	fn == nil ifTrue: [^ None].
 	perClass @env0:at: selector @env0:asString put: fn.
 	^ fn
 %
@@ -1025,11 +1373,12 @@ __type_params__
 
 	| cls |
 	cls := self ___metadataClass___.
-	^ ExecBlock @env0:___pyTypeParamsForClass___: cls
-		name: selector
-		table: (cls == nil
-			ifTrue: [nil]
-			ifFalse: [self ___tableEntryFor___: cls table: #'___methodTypeParamsTable___'])
+	^ self ___memoizedAttr___: '__type_params__' compute: [
+		ExecBlock @env0:___pyTypeParamsForClass___: cls
+			name: selector
+			table: (cls == nil
+				ifTrue: [nil]
+				ifFalse: [self ___tableEntryFor___: cls table: #'___methodTypeParamsTable___'])]
 %
 
 category: 'Grail-Python Metadata'
@@ -1488,6 +1837,7 @@ ___pythonValueAttrs___
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__module__';
+		add: #'__objclass__';
 		add: #'__annotations__';
 		add: #'__annotate__';
 		add: #'__signature_spec__';

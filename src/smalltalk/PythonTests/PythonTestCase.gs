@@ -223,6 +223,42 @@ ___forgetCanonicalModule___: aModuleName
 
 category: 'Grail-helpers'
 method: PythonTestCase
+___recordedFixture___: aRelativePath name: aModuleName
+	"The fixture at aRelativePath (under grailDir), imported as aModuleName at
+	most ONCE per session while its file is unchanged.
+
+	FOR A FIXTURE THAT RECORDS AND IS THEN ONLY READ.  Many fixtures do all
+	their work in the module body -- build a tree, run the calls, store every
+	answer in a RESULTS-style dict -- and their tests only read slices of it.
+	Their setUp used to re-import in every test, redoing the whole body once
+	per test to read the same answers: ArchiveMetadataTestCase did it twenty
+	times (151s), and it and three others like it were what made one SUnit
+	shard run twice as long as the next.  A class whose tests CHANGE module
+	state, or assert on what the import did, must keep importing fresh.
+
+	The cache is keyed by path and reused only while the file is byte-for-byte
+	what was imported, so a long-lived session that edits a fixture reloads it.
+	Session-local (SessionTemps): every shard is a fresh session, so each run
+	still imports each fixture once."
+
+	| path file source cache cached mods module |
+	path := importlib grailDir , aRelativePath.
+	file := GsFile openReadOnServer: path.
+	source := file contents.
+	file close.
+	cache := SessionTemps current at: #GrailRecordedFixtures
+		ifAbsentPut: [Dictionary new].
+	cached := cache at: path otherwise: nil.
+	(cached notNil and: [(cached at: 1) = source]) ifTrue: [^ cached at: 2].
+	mods := importlib @env1:modules.
+	mods removeKey: aModuleName asSymbol ifAbsent: [].
+	module := importlib loadModuleFromPath: path name: aModuleName.
+	cache at: path put: (Array with: source with: module).
+	^ module
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
 tmpRoot
 	"This checkout's private fixture directory, ``/tmp/Grail<N>'', created on
 	demand.  Four checkouts share one stone on the dev host as four users, so

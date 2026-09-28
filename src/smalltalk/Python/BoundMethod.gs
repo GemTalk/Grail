@@ -215,6 +215,48 @@ receiver: aReceiver selector: aSymbol
 
 category: 'Grail-Instance Creation'
 classmethod: BoundMethod
+___forAttrRead___: aReceiver selector: aSymbol
+	"receiver:selector:, as object >> ___pyAttrLoad___'s generic method wrap
+	asks for it -- except for a CLASS reading an INHERITED ``__new__'', which
+	answers object.__new__ itself.
+
+	CPython's __new__ is a staticmethod, so ``A.__new__'' for a class that does
+	not define one IS ``object.__new__'': the same object, compared with
+	``is''.  PEP 702's @deprecated decides how to forward construction that
+	way -- ``if original_new is not object.__new__'' -- and Grail's
+	per-receiver handle took the other branch, calling ``A.__new__(A, 42)''
+	where CPython raises ``A() takes no arguments'' (test_warnings
+	DeprecatedTests.test_class).
+
+	Sound because object's own __new__ implementations never consult their
+	receiver: each allocates from its ``cls'' argument.  So the redirect is
+	taken only when EVERY spelling of the __new__ family the class side can
+	reach is object's -- a class, Python or built-in, that defines any
+	__new__ of its own keeps a handle bound to itself, exactly as before."
+
+	| objectMeta fromObject |
+	(aSymbol == #'__new__' and: [aReceiver @env0:isKindOf: Behavior])
+		ifFalse: [^ self receiver: aReceiver selector: aSymbol].
+	aReceiver == object ifTrue: [^ self receiver: aReceiver selector: aSymbol].
+	objectMeta := object @env0:class.
+	fromObject := false.
+	#(#'__new__' #'__new__:' #'__new__:_:' #'__new__:_:_:' #'__new__:_:_:_:'
+	  #'__new__:_:_:_:_:' #'__new__:_:_:_:_:_:' #'___new__:kw:') @env0:do: [:sel |
+		| owner |
+		owner := aReceiver @env0:class
+			@env0:whichClassIncludesSelector: sel environmentId: 1.
+		owner == objectMeta
+			ifTrue: [fromObject := true]
+			ifFalse: [owner @env0:isNil ifFalse: [
+				^ self receiver: aReceiver selector: aSymbol]]].
+	"...and at least one of them must BE object's: a class reaching __new__
+	some other way is not inheriting object's."
+	fromObject ifFalse: [^ self receiver: aReceiver selector: aSymbol].
+	^ self receiver: object selector: aSymbol
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
 receiver: aReceiver selector: aSymbol definingClass: aClass
 	"As receiver:selector:, but also record the defining class so a
 	receiver-LESS (unbound) reference can still invoke its method
@@ -622,8 +664,9 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	is entitled to see the change -- after ``del D.m'', ``d.m'' must find the
 	inherited method, and it carries the very selector the capture does.  The
 	generation stamped at construction is what separates them."
-	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt])
-		ifTrue: [^ aSelector].
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= GrailPinGeneration]])
+			ifTrue: [^ aSelector].
 	"A selector pinned on ONE class must not redirect a same-named send to an
 	unrelated one; the shadow existing is the proof that this receiver is the
 	one that was pinned.  Only pinned selectors pay for the check."
@@ -709,7 +752,25 @@ ___grailSessionPinHolder___
 	holder == nil ifFalse: [^ holder].
 	holder := SymbolDictionary @env0:new.
 	holder @env0:at: #'___grailSessionPins___' put: IdentityKeyValueDictionary @env0:new.
-	holder @env0:at: #'___grailSessionPinGeneration___' put: 0.
+	"THE FIRST GENERATION IS THE CLOCK, not 0.  A stamp outlives the session
+	that made it: a handle a decorator captured while a module was being
+	deployed is COMMITTED inside the wrapper, and a later session that binds
+	the module replays the store -- dispatcher, shadow, pin -- under ITS OWN
+	generations.  Counting from 0 in every session made that comparison
+	meaningless: the deploy session had pinned hundreds of selectors before
+	typing's ``@_tp_cache def __getitem_inner__'' captured its handle, the
+	binding session's replayed pin came out lower, the capture read as a
+	lookup made AFTER the pin and ran the dispatcher, whose override is the
+	wrapper holding that capture -- a stack overflow on the first
+	``Callable[[], bytes]'' (werkzeug's ClosingIterator) in every session
+	after a fresh deploy.  Milliseconds shifted 20 bits leave a million pins
+	per millisecond before one session's counter reaches the next one's
+	start, and stay a SmallInteger for decades; so a stamp from any earlier
+	session is below every pin of this one, and redirects.  The readers
+	treat a stamp ABOVE this session's current generation (one committed by
+	a session that started later) as foreign too."
+	holder @env0:at: #'___grailSessionPinGeneration___'
+		put: (System @env0:_timeMs @env0:- 1767225600000) @env0:* 1048576.
 	temps @env0:at: #'GrailPinHolder' put: holder.
 	{ { self @env0:class. #'___grailPinGeneration___'. 1 }.
 	  { self @env0:class. #'___grailPinnedAt___:'. 1 }.
@@ -767,6 +828,23 @@ value: positional value: kwargs
 		coerce to an exact Array."
 		(actualArgs @env0:class == Array)
 			@env0:ifFalse: [actualArgs := Array @env0:withAll: actualArgs].
+	"AN EXPLICIT ``C.__init_subclass__()''.  The read binds the implicit
+	classmethod to C (definingClass == receiver), and CPython resolves it from
+	C ITSELF: a hook C defines, or one a base supplies, runs with cls = C.  The
+	fixed-arity lookup below finds ``object class >> __init_subclass__'', the
+	class-side no-op, first -- so the call did nothing, and typing's
+	NamedTupleMeta, which ends ``nm_tpl.__init_subclass__()'' to give a generic
+	NamedTuple its __parameters__, built one without.  A hook compiled
+	instance-side below object wins; the automatic PEP 487 call
+	(___grailInitSubclass___) is unaffected, as it starts at the superclass."
+	(selector == #'__init_subclass__' and: [definingClass == actualReceiver
+		and: [actualReceiver @env0:isKindOf: Behavior]]) ifTrue: [ | owner |
+			owner := actualReceiver @env0:whichClassIncludesSelector:
+				#'___init_subclass__:kw:' environmentId: 1.
+			(owner @env0:notNil and: [owner ~~ object]) ifTrue: [
+				^ (UnboundMethod definingClass: actualReceiver selector: selector)
+					value: (Array @env0:with: actualReceiver) @env0:, actualArgs
+					value: kwargs]].
 	"RESOLVED BEFORE THE LOOKUPS, not at the perform.  A pinned selector's
 	original survives under a ``___grailOrig_'' shadow and the plain one may be
 	GONE -- ``del D.add'' removes every arity variant -- so asking whether the
@@ -949,6 +1027,62 @@ cache_info
 	^ tuple @env0:withAll: #(0 0 nil 0)
 %
 
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+__new__
+	"``f.__new__()'' -- a function's type is ``function'', whose __new__ needs
+	a code object and globals.  typing's TypedDict and NamedTuple are
+	functions, and test_typing calls ``TypedDict.__new__()'' expecting
+	CPython's TypeError; the inherited object.__new__ allocated from nil
+	instead.  Python code cannot build a Grail function this way, so every
+	arity refuses; Grail's own code makes BoundMethods with Smalltalk #new."
+
+	^ TypeError ___signal___: 'function.__new__(): not enough arguments'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+__new__: cls
+	^ TypeError ___signal___: 'function() missing required argument ''code'' (pos 1)'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+___new__: positional kw: kwargs
+	positional @env0:isEmpty ifTrue: [^ self __new__].
+	^ TypeError ___signal___: 'function() argument ''code'' must be code, not '
+		@env0:, (positional @env0:size @env0:> 1
+			ifTrue: [(positional @env0:at: 2) ___pyTypeNameForError___]
+			ifFalse: ['nothing'])
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___pyAttrLoad___: aSym
+	"A METHOD forwards what it does not have to its function, as CPython's
+	method_getattro does: ``C.cm.__func__.flag = True'' then ``C.cm.flag''.
+	typing.no_type_check marks a classmethod exactly that way, and the read
+	came back AttributeError.  Only when the method itself misses, and only
+	for a method that HAS a separate function -- a classmethod or staticmethod
+	read through its class, or a Python bound method; a module-level function
+	is its own __func__.  When the function misses too the method's own error
+	stands."
+
+	| fn val |
+	^ [super ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError
+		do: [:ex |
+			((receiver @env0:isKindOf: Behavior) or: [self ___isPythonBoundMethod___])
+				ifTrue: [
+					fn := [self __func__] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+					(fn @env0:notNil and: [fn ~~ self]) ifTrue: [
+						val := [fn @env1:___pyAttrLoad___: aSym]
+							@env0:on: AttributeError
+							do: [:e2 | e2 @env0:return: #'___grailMiss___'].
+						val == #'___grailMiss___' ifFalse: [^ val]]].
+			ex @env0:pass]
+%
+
 category: 'Grail-Attribute Access'
 method: BoundMethod
 __func__
@@ -1019,6 +1153,16 @@ __getattr__: name
 	``fi.a.x'' -- because the function is where the lookup actually ended."
 
 	self ___isPythonBoundMethod___ ifFalse: [
+		"A CLASSMETHOD bound to its class is a method object too, and CPython
+		defers its miss to __func__ the same way, so the miss names a
+		'function' -- see ___pyTypeNameForError___, which is 'method' for it."
+		((receiver @env0:isKindOf: Class)
+			and: [self ___pyTypeNameForError___ @env0:= 'method']) ifTrue: [
+				^ [super @env1:__getattr__: name]
+					@env0:on: AttributeError do: [:ex |
+						ex @env0:return: (AttributeError ___signal___:
+							'''function'' object has no attribute '''
+								@env0:, name @env0:asString @env0:, '''')]].
 		^ super @env1:__getattr__: name].
 	^ self __func__ ___pyAttrLoad___: name @env0:asSymbol
 %
@@ -1101,6 +1245,12 @@ __annotations__
 	reports an empty dict, matching CPython's ``always has one''."
 
 	| cls |
+	"An ASSIGNED __annotate__ -- typing's _make_nmtuple writes
+	``nm_tpl.__new__.__annotate__ = annotate'' on a class's interned handle --
+	answers for the function, as a function's own assignment does in CPython
+	(test_typing test_get_type_hints_classes reads a NamedTuple's __new__)."
+	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:fn |
+		fn ~~ None ifTrue: [^ fn @env1:___pyCallValue___: { 1 } kw: nil]]).
 	"A class-body sibling reference is receiver-less but carries its
 	 definingClass, exactly as __annotate__ resolves it.  Answering {} for it
 	 was wrong only while the class body RUNS -- the one time that handle is
@@ -1144,6 +1294,8 @@ __annotate__
 	nothing reads."
 
 	| cls fn |
+	"An assigned __annotate__ wins -- see __annotations__."
+	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:v | ^ v]).
 	"A class-body sibling reference is emitted receiver-less but WITH its
 	definingClass (NameAst: ``BoundMethod receiver: nil selector: #m
 	definingClass: C''), and that is the handle a class-body decorator chain
@@ -1585,9 +1737,27 @@ __qualname__
 	builtin answers its Python name (list.append, dict.keys, int.bit_length,
 	str.lower) and only the inherited case differs."
 
-	| n owner |
+	| n owner fq |
 	n := self __name__ @env0:asString.
 	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		"The DEFINING class, which the function knows: an inherited classmethod
+		or ``__init_subclass__'' read through a subclass is ``Base.cm'' in
+		CPython, not ``Sub.cm'' -- typing names the hook that way in its
+		not-called-super() note (test_typing
+		test_generic_init_subclass_not_called_error).  The receiver's name is
+		the fallback when the function cannot say."
+		"Python classes only: a built-in's function is implemented on a Smalltalk
+		class with no Python name -- str.lower would read
+		CharacterCollection.lower."
+		fq := ((receiver @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+				or: [receiver @env0:isMeta
+					and: [receiver @env0:thisClass @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]])
+			ifTrue: [[self __func__ @env1:__qualname__]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+			ifFalse: [nil].
+		((fq @env0:isKindOf: CharacterCollection)
+			and: [fq @env0:includes: $.])
+			ifTrue: [^ fq @env0:asUnicodeString].
 		^ ((self ___receiverQualname___) @env0:, '.' @env0:, n) @env0:asUnicodeString].
 	(receiver @env0:isKindOf: module) ifTrue: [^ self __name__].
 	owner := self ___receiverTypeName___.
@@ -1684,7 +1854,16 @@ __globals__
 	defined.  It is also what the attribute did before it existed at all, so
 	nothing that already probes with hasattr changes behaviour."
 
-	| view |
+	| view cls |
+	"A method of a class made by exec() answers the namespace that class was
+	made in (UnboundMethod >> __globals__ says why)."
+	cls := (receiver @env0:isKindOf: Behavior)
+		ifTrue: [receiver]
+		ifFalse: [(receiver @env0:isKindOf: module) ifTrue: [nil] ifFalse: [receiver @env0:class]].
+	cls @env0:notNil ifTrue: [
+		([cls @env1:___dynamicClassAttr___: #'___grailDoitGlobals___']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil])
+			@env0:ifNotNil: [:g | ^ g]].
 	view := (Python @env0:at: #'PyModuleDict')
 		@env0:___forModuleNamed___: ([self __module__]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]).
@@ -1737,6 +1916,36 @@ ___moduleOfClass___: aClass
 	^ [(aClass __module__) @env0:asString @env0:asUnicodeString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
+%
+
+category: 'Grail-Printing'
+method: BoundMethod
+___pyTypeNameForError___
+	"The CPython type name for ``'X' object has no attribute ...'' and the other
+	messages that name a type: 'builtin_function_or_method', 'function' or
+	'method' -- never 'BoundMethod', which is a Grail class leaking into a
+	Python message (test_pickle's test_find_class compares the text).
+
+	The same split __repr__ below makes, by RECEIVER: a native module's or the
+	builtins' callable, and a method bound to a builtin-typed object or class,
+	are builtins; a Python module's def and a @staticmethod are functions; the
+	rest are bound methods."
+
+	(receiver @env0:isKindOf: module) ifTrue: [
+		^ (receiver @env0:isKindOf: NativeModule)
+			ifTrue: ['builtin_function_or_method']
+			ifFalse: ['function']].
+	(receiver @env0:isKindOf: Class) ifTrue: [
+		(self ___isStaticMethodOnClass___: receiver name: (self __name__))
+			ifTrue: [^ 'function'].
+		^ ((receiver @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+				environmentId: 1) @env0:isNil)
+			ifTrue: ['builtin_function_or_method']
+			ifFalse: ['method']].
+	^ ([receiver @env0:class ___pythonBuiltinTypeName___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
+		ifTrue: ['builtin_function_or_method']
+		ifFalse: ['method']
 %
 
 category: 'Grail-Printing'

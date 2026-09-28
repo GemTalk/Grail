@@ -178,6 +178,18 @@ guess_type: url
 
 category: 'Grail-Public'
 method: mimetypes
+guess_file_type: path
+	"guess_file_type(path) - CPython 3.13's guess_type for a FILESYSTEM path
+	rather than a URL.  http.server's SimpleHTTPRequestHandler.guess_type
+	calls it.  Grail's guess_type already splits on the last dot of the
+	string it is given, so the one difference that matters here is the
+	argument: a path-like object is reduced with os.fspath first."
+
+	^ self guess_type: (((Python @env0:at: #os) @env0:___instance___) @env1:fspath: path) _: true
+%
+
+category: 'Grail-Public'
+method: mimetypes
 guess_type: url _: strict
 	"guess_type(url, strict=True) - return a (type, encoding) tuple.
 	The path is split on `.` from the right; the trailing segment is

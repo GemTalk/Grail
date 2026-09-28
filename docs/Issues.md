@@ -1,5 +1,255 @@
 # Known Issues
 
+## FIXED: the three items test_xml_etree left open
+
+The xml_etree section's *Still open* list (below) had three entries. Each is
+now measured against the real thing: CPython for str, and CPython 3.14's
+bundled expat 2.7.4 for pyexpat, driven through the same handlers.
+
+- **A str subclass's methods answer exact str.** `S('a').upper()`,
+  `.strip()`, `+`, `.replace()`, the `split` pieces, a no-op `.strip()` or
+  `.ljust(1)`, `f'{s}'` and `s.__str__()` answered `S`. They are kernel
+  primitives (`copyFrom:to:`, `,`, `copyEmpty`, `copyReplaceAll:with:`) that
+  keep the receiver's class. `CharacterCollection >> ___asExactStr___` now
+  narrows the receiver, and each result-producing method re-sends to it; an
+  exact str pays one class test. 26 of 26 probed methods now agree with
+  CPython, including CPython's own exception: `partition`/`rpartition` hand
+  back the original object when the separator is absent.
+- **Reparse deferral.** pyexpat reports 2.6.0 and implements expat's
+  heuristic from xmlparse.c. Once a parse consumes nothing, it waits until
+  the unconsumed bytes have doubled, or until the next request would outgrow
+  expat's buffer, which is modelled in bytes as far as the heuristic reads it.
+  `flush()` parses at once. "Consumed" is counted as expat counts it: this
+  scanner holds back a trailing text run, a complete reference, an open CDATA
+  section and an unfinished DOCTYPE, all of which expat has already taken.
+  Undecoded chunks are held as well, so an encoding error surfaces when expat
+  would report it. Measured: 2,400 randomized documents and chunkings (tags,
+  comments, PIs, CDATA, DOCTYPEs, 5,000-byte attributes, feeds up to 20,000
+  bytes, str and bytes input, random flushes) give element events identical
+  to expat's, chunk for chunk. `test_flush_reparse_deferral_enabled` runs
+  in both test_xml_etree and test_sax.
+- **The default handler sees what expat hands it.** The internal subset was
+  the reported case, but the gap was wider:
+  - a declaration arrived whole, or, for ENTITY and NOTATION, not at all;
+  - start and end tags, `<![CDATA[`/`]]>`, `&amp;` and `&#65;` never
+    reached the default handler;
+  - data arrived without its newline pieces;
+  - the DOCTYPE's closing `>` was dropped after a subset.
+
+  Every token nobody claims now goes to the default handler. For DTD tokens
+  that is decided by the token's role (xmlrole.c) and doProlog's
+  `handleDefault`, so a redeclared entity's name and value reach it even with
+  `EntityDeclHandler` set. `DefaultHandler` and `DefaultHandlerExpand` are
+  one slot, and the later assignment wins, even a `None`. `DefaultHandler`
+  hands over an internal entity reference instead of expanding it.
+  `ElementDeclHandler` is implemented, with pyexpat's content-model tuples.
+  Measured: 15,000 runs (20 documents × random handler sets × both default
+  slots, with and without namespaces) give identical event logs.
+
+`tests/python/str_subclass_method_results.py` and
+`tests/python/pyexpat_default_handler_and_deferral.py` pin both halves.
+
+### Still open
+
+- `S('abc').format()`, `.format_map({})` and `S('abc') % ()` answer an
+  equal `str`. CPython returns `self` when there is nothing to format.
+- Character data split across Parse calls arrives in different pieces.
+  expat delivers the part of a text run it has, while this scanner waits for
+  the `<` that ends it. Element events are unaffected, as measured above.
+- The default handler sees newline-normalised text. expat hands it the raw
+  bytes, so a CRLF arrives as `\r\n` there.
+
+## FIXED: test_xml_etree passes (37 -> 0), and the runtime gaps behind it
+
+`test.test_xml_etree` goes from 7 failures and 30 errors to **OK, 226 tests**.
+`xml/etree/ElementTree.py` and `ElementPath.py` were already CPython's verbatim,
+so nothing here changes ElementTree itself. ElementTree's suite probes
+object-model edges that most code never reaches, and Grail's pure-Python
+`pyexpat` stand-in had fidelity gaps.
+
+**Object model and builtins.**
+
+- **A bound method in a class dict is not re-bound.** iterparse is
+  `class IterParseIterator: __next__ = gen.__next__`. Grail bound it again, so
+  `next(it)` passed the iterator to the generator's `__next__` (12 tests).
+  `___isDescriptorCallable___:` now binds a BoundMethod only when its receiver
+  is a Python module (a top-level `def`). The class-attribute shadow forwarder
+  is installed for an already-bound callable too.
+- **A slice's `__index__` runs before the length is read.** gh-72050 /
+  gh-143200 empty the list from `__index__`. Grail read the size first and
+  indexed with stale bounds, an uncatchable OffsetError. The fix is
+  `slice >> ___unpackedSlice___`, and `___getslice___` reads the size after
+  coercing. `list.remove` survives an `__eq__` that clears the list.
+- **A subclass's slice is its builtin's type.** `L([1, 2])[:1]` is a `list`,
+  and likewise `str` and `bytes`. It was the subclass, so a str subclass's
+  mutating `__eq__` ran on ElementPath's `path[-1:]`. Other str methods on a
+  subclass (`upper`, `strip`, `+`, ...) still answer the subclass: see
+  *Still open*.
+- **An explicit `object.__eq__(a, b)` does not re-dispatch** to a
+  setattr-installed `__eq__`. `mock.patch.object(E, '__eq__', wraps=E.__eq__)`
+  recursed forever.
+- **An instance `__dict__` is live.** `keys()` / `values()` / `items()` /
+  iteration answer `dict_keys` etc. over the instance, and they notice growth.
+  `object.__getstate__` answers that dict, not a copy, and deepcopy walks it
+  live. This is gh-133009's "dictionary changed size during iteration", which
+  CPython's pure-Python ElementTree test expects.
+- **MI onto an exception base.** `class MyElement(ET.Element, ValueError)` is
+  built on ValueError, whose chain carries AbstractException's `tag` instVar.
+  Element's methods, copied by the MI merge, declared `tag` as a method temp
+  (GemStone error 1030) and became codegen-gap stubs. The copier now renames
+  such names into a block, as the codegen does for a class that knows its
+  instVars, and shifts the `___GRAILPOS___` map (tracebacks verified).
+  `object >> __iter__` walks `__getitem__` for such a class.
+- **A generator closed before it started never runs.** `next()` on it is
+  StopIteration. It forked the body, which read the file close() had released.
+
+**pyexpat** (Grail's pure-Python stand-in), each measured against CPython's
+expat:
+
+- CRLF and lone CR normalise to LF on input (a literal CRLF in an attribute is
+  one space). A CR ending a chunk waits for the next.
+- ATTLIST declarations: defaulted attributes appear on the element (unless
+  `specified_attributes`), tokenized types collapse their spaces, and
+  `AttlistDeclHandler` is called.
+- DOCTYPE tokens reach the default handler piecewise when no
+  `StartDoctypeDeclHandler` claims them. This is how ElementTree's
+  `XMLParser` finds `target.doctype`.
+- Text outside the root is tokenized as expat does: `foobar<` is an invalid
+  token at the `<`, while `foo` is a syntax error at 0 (33 shapes compared).
+- An unresolved entity reference reports the `&`'s position during its
+  callback, and the error-position attributes track the current position. An
+  undefined external entity with no `ExternalEntityRefHandler` goes to the
+  default handler, where ElementTree raises.
+- A chunk ending inside `<!--`, `<![CDATA[` or `<!DOCTYPE` waits for more
+  (XMLPullParser fed one character at a time).
+
+**Smaller.** `xml.etree.ElementInclude` (CPython's) and the `xmltestdata` files
+the suite needed are vendored. Grail's `mock` honours `autospec=True` for a
+function target, without the signature check. (XInclude also needs
+`urljoin('Recursive2.xml', 'Recursive3.xml')` to be `'Recursive3.xml'`, which
+#1246's vendored `urllib.parse` provides; the fixture pins it.)
+
+`tests/python/runtime_edges_behind_xml_etree.py` (15 self-running checks) and
+`RuntimeEdgesBehindXmlEtreeTestCase` pin the runtime half.
+
+### Still open
+
+All three are fixed: see *FIXED: the three items test_xml_etree left open*
+above.
+
+- **A str subclass's methods answer the subclass.** `S('ab').upper()`,
+  `.strip()`, `+`, `.replace()`, `.split()` pieces, `.partition()`, `f'{s}'`
+  and about ten more answer `S` where CPython answers `str`. They are kernel
+  primitives that keep the receiver's class; slicing is fixed because it builds
+  through `species`. It wants one narrowing step across str.gs's
+  result-producing methods, as its own PR.
+- **Reparse deferral.** Grail's pyexpat reports expat 2.5.0, so
+  `test_flush_reparse_deferral_enabled` skips. CPython with expat 2.6+ runs it.
+- A declaration inside the internal subset reaches the default handler whole;
+  expat splits it into tokens as it does the DOCTYPE head.
+
+## OPEN: a dunder set on a class at runtime is invisible to `iter()`, `len()`, `bool()`, `in`, `[]` and `int()`
+
+Found 2026-09-26 while fixing test_gettext (Grail's `MagicMock`).  A special
+method that reaches a class DYNAMICALLY -- `setattr(cls, '__iter__', f)`, or an
+entry in `type()`'s dict -- is honoured by some operations and not others.
+Measured, each row a fresh class:
+
+| installed at runtime | result |
+| --- | --- |
+| `__mul__`, `__enter__`/`__exit__` | works (`m * 3`, `with m:`) |
+| `__iter__` (setattr, subclass of it, or `type('D', (object,), {'__iter__': f})`) | `TypeError: 'D' object is not iterable` |
+| `__len__` | `TypeError: ... cannot be interpreted as an integer` |
+| `__bool__` | `TypeError: __bool__ should return bool` |
+| `__contains__` | `TypeError: argument of type ... is not a container or iterable` |
+| `__getitem__` | `TypeError: ... object is not subscriptable` |
+| `__int__` | `TypeError: int() argument must be a string or a number` |
+
+The same methods written as `def`s in a class body work.  The split follows
+`object`'s compiled defaults: `object >> __iter__`, `__contains__:` and the
+like are real methods, so the protocol send resolves to the default and raises
+before anything consults the class's attribute holder
+(`___classAttrOwnOrInherited___:`), where a runtime-set attribute lives.  A
+dunder with no compiled default misses, and `doesNotUnderstand:` finds the
+attribute -- which is why the binary operators work.  The defaults already make
+one such check before raising, for a METACLASS
+(`___grailMetaclassMethodFor___:`); a parallel check of the class's own
+holder is the likely fix, and it is shared machinery (tier 2).
+
+Workaround in the meantime, and what `mock.MagicMock` does: define the magic
+methods as `def`s and have them look up whatever should be configurable.  A
+plain `Mock` configured by assignment (`m.__iter__ = Mock(...)`) still hits the
+gap for the rows above.
+## OPEN: a module's session footprint -- test___all__ needs a 2GB temporary-memory budget
+
+Found 2026-09-27 while fixing test___all__, which imports every stdlib module
+with an `__all__` (about 220, django included) into ONE session.  Measured with
+a mark-sweep after each import: **820MB of temporary object memory is still
+live after the last one**, before the compiles' own transient garbage.  At the
+CPython suite's `GEM_TEMPOBJ_CACHE_SIZE=1000000` the gem ran out partway
+through the `test` package and exited with no message at all; at 2000000 the
+test passes, so `run_cpython_suite.sh` gives that one module 2000000
+(`module_topaz_cfg`).
+
+Where it goes, from `GsObjectInventory profileMemoryNoPom` after importing
+test.test_typing alone (114MB used): `LargeObjectNode` 2953 instances /
+346MB, `Unicode7` 55108 / 63MB, `GsNMethod` 40363 / 14MB -- large strings and
+arrays, most plausibly method source kept per compiled method.  The largest
+single imports were django.conf.urls (183MB, the whole of django's core) and
+the big test modules at 50-62MB each (test_typing, test_enum,
+test.datetimetester, test_decimal, test_traceback) -- several KB per source
+line.  Shrinking that per-method footprint would retire the override.
+
+## OPEN: `subTest` does not isolate a failure
+
+Found 2026-09-27 (test___all__).  A failing assertion inside `with
+self.subTest(...)` ends the test method, as it would without the `subTest`,
+instead of being recorded and letting the loop carry on:
+
+    for i in range(3):
+        with self.subTest(i=i):
+            self.assertEqual(i, 0)
+
+CPython: 2 failures, `addSubTest` called with an error twice.  Grail: 1 failure,
+`addSubTest` never called with one.  Fixing it moves failure COUNTS across the
+CPython scoreboard (every module whose failing test uses `subTest`), so it wants
+its own PR and a baseline refresh rather than riding along with another fix.
+
+## OPEN: a class body reads an enclosing function's local that the class body also binds
+
+Found 2026-09-27 (test___all__).  A name BOUND in a class body is class-local,
+so CPython resolves a read of it through the class namespace, then globals, then
+builtins -- never the enclosing function:
+
+    def f():
+        zzz = 'enclosing'
+        class F:
+            y = zzz      # CPython: NameError (unless a global zzz exists)
+            zzz = 9
+
+Grail answers `'enclosing'`.  A name the class body only READS does see the
+enclosing function, in both.
+
+## PEP 695 bounds on a def are evaluated in the module's globals, not the annotation scope
+
+This is about FUNCTIONS AND METHODS only.  A generic CLASS or type alias at
+module or function level is rewritten into CPython's real annotation scope
+(PythonParser >> ___rewriteTypeParamStatement___, #1200), so its bounds see
+enclosing locals; a class nested in a class body still takes the path below.
+
+Since 2026-09-27 a def's type-parameter bound or constraints are real
+(``def f[T: str]`` gives ``T.__bound__ is str``, test_reprlib's
+test__type_params__).  The parser keeps the bound's SOURCE with the parameter's
+name (PythonParser >> ___recordTypeParamBound___:in:) and ExecBlock class >>
+___pyTypeVarNamed___:globals: evaluates it on the first read of
+``__type_params__`` -- lazily, as CPython does -- in the defining MODULE's
+globals.  CPython evaluates it in an annotation scope, which also sees an
+enclosing function's locals and, for a method, names the class body bound
+earlier.  A bound that needs either answers None (the previous behaviour for
+every bound) rather than raising; so does a bound written as a string literal,
+whose source the tokenizer does not keep.  PEP 696 defaults (``[T = int]``)
+are parsed and ignored.
+
 ## An emptied `__class__` cell raises `RuntimeError`, where CPython 3.14 raises `NameError`
 
 After `nonlocal __class__; del __class__`, a later zero-argument `super()` has
@@ -33,6 +283,419 @@ CPython extensions fall into two categories with respect to our shim:
 The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro that accesses internal struct fields.
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
+
+## FIXED: test_typing passes (11 -> 0), and typing.py is CPython's byte for byte
+
+Follow-up to the section above. `test.test_typing` goes from 11 failures+errors
+to **OK, 701 run**. `src/python/stdlib/typing.py` is now identical to CPython
+3.14.6's: the last deviation, GRAIL DEVIATION 2 (`overload`), was a workaround
+for a codegen defect, and the defect is fixed.
+
+**A top-level `def` rebinds its name.** A top-level def compiles to a method on
+the module class and emitted nothing at module-body time. A decorator, an
+assignment, or a def nested in an `if`/`try` stores the module *slot*, and the
+slot out-ranks the method. So an earlier binding survived the def:
+
+```python
+@deco
+def g(): ...
+def g(): return "real"      # g() answered deco's result
+
+h = None
+def h(): ...                # h() was "'NoneType' object is not callable"
+```
+
+The def now clears the slot when an earlier statement of the module body stored
+it (`FunctionDefAst >> ___rebindsAnEarlierModuleBinding___`, with
+`AbstractNode >> ___storesModuleSlot___:` walking if/try/for/with arms). An
+absent slot IS the method, so clearing it is the rebinding. The unconditional
+clear recorded under "A top-level def cannot rebind a name a decorator stored"
+was reverted after breaking `socket` post-deploy; this one fires only where an
+earlier statement names the def, which no def in `socket` does.
+
+A DECORATED def clears the slot too, before its chain runs, because the chain
+reads its base through the slot. Without that, jinja2's
+`@overload ×2` + `@pass_context def sync_do_map` wrapped the second stub's
+`_overload_dummy` instead of its own method. `|map` then raised "You should not
+call an overloaded function" (`FlaskScaffoldingTestCase>>testJinja2RenderMapFilter`,
+caught by the first full run). A stdlib scan finds nine defs the clear fires on
+(flask, asgiref, jinja2, werkzeug), all overload stubs followed by an
+implementation.
+
+With that fixed, CPython's `overload` works as written: the stubs answer
+`_overload_dummy`, the implementation displaces it, and calling a lone stub
+raises `NotImplementedError` (`OverloadTests.test_overload_fails`).
+`tests/python/module_def_rebinding.py` (self-running, 20 checks) and
+`ModuleDefRebindingTestCase` pin both halves of this section.
+
+**A module body's class-attribute store survives a bind.** This was
+`test_bytestring`, which failed only once `deployFrameworks` had run.
+`typing.ByteString`'s `__init__` sets `_removal_version`, and
+`_BaseGenericAlias.__setattr__` forwards it to `collections.abc.ByteString`.
+That class is canonical, so the store went to the deploy session's overlay, and
+a later session that bound typing never saw it. jinja2's
+`Environment.template_class = Template` was lost the same way. The store is now
+recorded and replayed on bind (docs/Persistent_Modules_and_Classes.md par.4.3;
+`BodyClassAttrReplayTestCase`). Only plain-data values are recorded, and abc's
+cache stamps are skipped.
+
+**An outer decorator over `@classmethod` / `@staticmethod` / `@property` sees the
+descriptor.** `@deco @classmethod def m` is `deco(classmethod(m))`; CPython hands
+`deco` the classmethod object. Grail compiles the declarative form itself, so the
+chain handed `deco` the compiled method's handle, and `@override @classmethod`
+put `__override__` on the function. When the declarative form is the innermost
+decorator, the chain now starts from a `PyClassMethod` / `PyStaticMethod` /
+`PropertyDescriptor` over that handle
+(`FunctionDefAst >> ___innermostDeclarativeWrapper___`). The builtin `property`
+also refuses a new attribute as CPython's does (it has no `__dict__`; `__doc__`
+and `__name__` stay writable, and a Python subclass keeps its dict). That refusal
+is what `@override @property` depends on. singledispatchmethod's repr qualifies a
+wrapped descriptor through its function.
+
+**The rest of the eleven:**
+
+- A nested NamedTuple pickles: the class namespace carries the full qualname.
+- A metaclass `@property` is a data descriptor on class reads and writes, so
+  `@final` over one applies. A metaclass `__getattribute__` is consulted for class
+  attribute reads.
+- `get_type_hints`: an assigned `__annotate__` answers a function's annotations
+  (NamedTuple's `__new__`). A method of a class made by `exec` answers the exec
+  namespace as `__globals__`. A method annotation naming an enclosing local reads
+  it through the class cell.
+- `ForwardRef._evaluate` issues the deprecation warnings CPython's does.
+
+**Known divergences left behind, not failing anything:** a metaclass
+`__getattribute__` also sees Grail's own internal `__mro__`/`__bases__` reads. The
+metaclass-property refusal message names the class (`'W class'`) where CPython
+names the metaclass. Module-level `get_overloads(f)` answers one entry, the
+implementation itself, where CPython answers the two stubs. The stubs are not
+compiled (one method per name), so the decorator's base is the implementation.
+Stubs local to a function are unaffected and answer both.
+
+## FIXED: test_typing's refusals, and the object-model gaps behind them (66 -> 11)
+
+Follow-up to the NamedTuple/TypedDict section above. `test.test_typing` goes from
+66 failures+errors to 11. Almost nothing here is in `typing`; each item is a Grail
+object-model difference test_typing happened to exercise.
+
+**CPython's refusals, which Grail accepted.**
+
+- `object.__new__` / `object.__init__` refuse excess arguments by CPython's rule
+  (`C() takes no arguments`, `object.__init__() takes exactly one argument`), for
+  a class written entirely in Python. A class that DEFS `__init__` and forwards
+  arguments to `object.__init__` is still accepted: Grail's multiple inheritance
+  merges methods rather than linearising, so a mixin's cooperative
+  `super().__init__(*args)` can reach object where CPython's MRO reaches the next
+  base.
+- A class written in Python with no `__class_getitem__` anywhere on its MRO is not
+  subscriptable (`type 'A' is not subscriptable`, so `Any[int]` refuses). Chains
+  through a Grail built-in stay permissive. The stdlib classes CPython makes
+  generic got the hook they lacked (`queue.Queue`, `weakref.WeakSet`,
+  `asyncio.Future`, `array.array`, `contextlib.AbstractContextManager`, ... -- the
+  list is test_genericalias's), and the hook is looked for on the whole MRO, since
+  a secondary base's class-side methods are not merged.
+- `duplicate base class X` from `type.__new__` and from a class statement with no
+  constructing metaclass -- not from base resolution, where a TypedDict may
+  legitimately resolve to duplicates it then discards. `__mro_entries__` must
+  answer a tuple; a non-class base after resolution is `bases must be types`.
+- TypeVar/ParamSpec bounds and constraints are type-checked; `issubclass(x, type)`
+  validates `x`; a union of unhashable-metaclass classes is unhashable;
+  `NoDefault`'s type is immutable; a function's `__new__` refuses.
+- `__iter__ = None` is honoured by every consumer -- `list()`, `tuple()`, `for`,
+  not just `iter()` -- including when it comes from a secondary base that CPython's
+  MRO puts ahead of the Smalltalk superclass (the merge compiles a refusal then).
+  The union type refuses iteration.
+
+**Class construction.**
+
+- The most derived metaclass among ALL the bases wins, even when the primary base
+  supplies one (`class S(Mapping[T], Protocol[T])` runs `_ProtocolMeta`).
+- A class whose metaclass raises leaves no subclass links behind.
+- The metaclass is recorded before `__set_name__` / `__init_subclass__` run, so a
+  hook asking `type(cls)` sees it.
+- A sole base whose `__mro_entries__` answers several classes keeps them all
+  (`class T1(Tuple[T, KT])` has `Generic`).
+- `cls.__bases__ = (...)` is honoured when every current base is kept and more are
+  added (NamedTupleMeta's `(tuple, Generic)`).
+- An explicit `C.__init_subclass__()` runs C's own hook.
+- `class X(*bases)` works (the header takes the multi-base path).
+- A keyword-called `__new__` (`A(cls=1)`) forwards non-virtually; it ran object's
+  allocator, an uncatchable `1 new`.
+- A metaclass `__setattr__` decides class attribute stores; metaclass `__eq__` /
+  `__hash__` apply to classes, reflected between two classes as CPython does.
+- A dunder assigned at runtime over a BUILT-IN's method (`tuple.__str__` under a
+  namedtuple) gets a forwarder, so protocol dispatch sees it.
+
+**Reflection.**
+
+- `__mro__` / `__bases__` report a builtin's stand-in root as the builtin
+  (`class Y(int)` has `int`, not `AbstractPyInt`; a str subclass no longer shows
+  `str` twice and `MultiByteString`).
+- `dir(cls)` merges the `__dict__` of each Python class on the MRO (a nested class
+  is listed; `asFloat` is not); an instance lists its class's declared value
+  attributes; a built-in's `__dict__` no longer lists Smalltalk's `new`.
+- Slots appear in the class dict as member descriptors; `__slots__` may be a dict;
+  `Generic` has `__slots__ = ()`.
+- Qualnames name the nearest implementor (`A.__init__` is `A.__init__`, not
+  `object.__init__`), and an inherited classmethod is qualified by its definer.
+  A method's attribute miss forwards to `__func__`.
+- `()` is a singleton. A submodule's frames know their file, so `typing._caller()`
+  works in a package. `(x): int` is not a simple annotation.
+- A class annotation reading an enclosing local takes the text path, which sees
+  later assignments (the IR helper seeded a snapshot).
+- Smaller: `io.Reader` / `io.Writer`; `Union | 'str'`; union `__name__`;
+  `NoneType.__module__`; `warnings._deprecated` uses `str.format` and the caller's
+  frame; inspect renders typing annotations as CPython does; complex `=` answers a
+  Boolean when `__eq__` punts (it was an uncatchable error in a dict lookup).
+
+### Still failing (11)
+
+All eleven are fixed; see the section above.
+
+## FIXED: typing's NamedTuple and TypedDict are CPython's, and the metaclass protocols they need
+
+`typing.py` replaced CPython's `NamedTuple` and `TypedDict` with Grail emulations
+(GRAIL DEVIATIONS 1 and 3). Three runtime limits were recorded as the reason:
+`type.__new__` could not rebuild a class with the bases a metaclass passed it, the
+namespace a metaclass received carried no annotations, and annotations were never
+evaluated. The emulations diverged visibly: `__bases__` read `(_TypedDictBase,
+Generic)` where CPython reads `(Generic, dict)`, `__orig_bases__` was missing, and
+the key sets were computed by a different algorithm.
+
+**Now** `typing.py` is CPython 3.14.6's byte for byte (GRAIL DEVIATION 2,
+`overload`, went later with the codegen defect behind it), and `tests/python/metaclass_protocols.py` pins what made that possible
+(19 checks, CPython-measured):
+
+- **`type.__new__` builds the class a metaclass asks for.** When the bases differ
+  from the ones the class statement was building, it builds a fresh class from the
+  namespace, and the statement re-binds its name to it. That class is stamped in its
+  committed holder, so a re-import's class statement does not read its bases as a
+  declared base change (`importlib >> ___isMetaclassBuilt___:`).
+- **The metaclass namespace is CPython's.** `__module__` and `__qualname__` are
+  written first, before the body runs. `__orig_bases__` is added where
+  `__mro_entries__` substituted a base, and the stringified `__annotations__` under
+  `from __future__ import annotations`. A class without a docstring no longer
+  offers the namespace a `__doc__`.
+- **Calling a metaclass builds a class.** `M('X', (), {})` answered an `M`
+  *instance*, not a class. It builds a class of type `M` now, and the wrong argument
+  count is CPython's TypeError. An assigned metaclass `__call__` (`_TypedDictMeta`'s
+  `__call__ = dict`) is honoured.
+- **The metaclass comes from every base.** Only the first base's chain was searched,
+  so `class A(Generic[T], TypedDict)` never ran `_TypedDictMeta`, and `class X(Mixin,
+  ABC)` never enforced its abstract methods. The most derived metaclass among all
+  the bases is recorded when the namespace is prepared.
+- **A directly-built class keeps its metaclass after deployment.** `_NamedTuple` and
+  `_TypedDict` are minted by `type.__new__(M, ...)` at module level, and that record
+  was session-local, so a deployed `typing` lost both (jinja2's `Token`, a NamedTuple,
+  lost its fields). Such records are committed per module and restored on bind
+  (`importlib >> ___recordDirectMetaclass___:meta:`).
+- **Class-level reads follow the MRO.** A name CPython's `object` defines, or one the
+  class's own chain defines, is found there before a metaclass's plain method. An
+  inherited read is the defining class's object (`B.__init__ is A.__init__`):
+  `UnboundMethod class >> ___forClassRead___:family:selector:` now interns a
+  Python-defined class's read under its definer, where #1205 redirected only
+  what a class inherits from `object`; built-in types keep that rule. A
+  subclass's own `def` beats an attribute assigned on a base, which is what made a
+  concrete subclass of a `Protocol` run the protocol's refusal instead of its own
+  `__init__`.
+- **defaultdict and OrderedDict have their own `__repr__`.** An inherited method
+  now compares equal to the base's, and pprint keys its dispatch on
+  `type(obj).__repr__`, so the borrowed repr let the defaultdict entry replace
+  dict's and a plain dict too wide for one line crashed pprint. The two methods are
+  #1206's, taken verbatim.
+- **Merging a second base's methods checks by Python name.** `class S(dict,
+  MutableMapping)` copied the abstract `___iter__:kw:` because `dict` supplies the
+  unary `__iter__`. The ancestors are compared by name now; the class's own
+  dictionary, where the merge is writing, stays exact.
+- **A method held as an attribute answers a self-send.** NamedTupleMeta copies a
+  body's methods onto the class `collections.namedtuple` built. A sibling call inside
+  one is a plain Smalltalk send, which now falls back to the class attribute.
+- **CPython's refusals.** Subclassing `TypeVar`, `ParamSpec`, `TypeVarTuple`,
+  `P.args`/`P.kwargs`, `NoDefault`'s type, `re.Pattern`/`re.Match`, a union
+  instance or a type variable instance raises CPython's message. An error raised by
+  `__mro_entries__` propagates instead of being swallowed. `type.__instancecheck__`
+  and `type.__subclasscheck__` exist for `super()` from a metaclass.
+- Smaller: `typing.Pattern` prints as `typing.Pattern`;
+  `issubclass(types.FunctionType, Callable)` is True; `inspect.getattr_static` reads
+  class dicts again (it treated `type.__dict__['__dict__']` as a shadowing binding);
+  a starred vararg annotation (`*args: *Ts`) compiles to `(*Ts,)[0]`.
+
+## FIXED: abc and collections.abc are CPython's, and the machinery that exposed
+
+Grail's `abc` was a stub: `ABCMeta` created nothing, `abc.ABC` had no
+metaclass, and an abstract class instantiated unless it named
+`metaclass=abc.ABCMeta` itself. `collections.abc` was a hand-written stand-in
+answering structural questions from whitelists, with `Callable[[int], str]`
+evaluating to the class. `types.GenericAlias` and the union type were
+Smalltalk classes with no parameter collection and no substitution, reporting
+themselves as `PyGenericAlias` / `PyUnionType`. test_typing's ABC, Protocol,
+Callable and GenericAlias tests could not pass on any of that.
+
+**Now**: `abc.py` is CPython 3.14.6's, with `ABCMeta` defined in it from
+`_py_abc`'s code; `collections/abc.py` is CPython's `_collections_abc.py`;
+`_grail_generic_alias.py` ports genericaliasobject.c's and unionobject.c's
+rules (`_Py_make_parameters`, `_Py_subs_parameters`, the reprs), which the two
+Smalltalk classes call; and `typing.Union` IS the union type, as in 3.14.
+`tests/python/abc_machinery.py` pins it (35 checks, CPython-measured).
+
+### The recorded deviations
+
+- `ABCMeta` is defined in `abc.py`, not re-exported from `_py_abc`: gemdb
+  refuses an import in which a module stops defining a class that has
+  instances in the repository.
+- The ABC registry is a strong `set`: weak references do not survive a
+  deployed module's commit, so every registration `_collections_abc` makes at
+  import was gone in the next session.
+- The ABC caches belong to a session (keyed by the gem's pid): committed
+  caches are whatever the deploy session left, and a session's own stores can
+  be dropped wholesale with the class-attribute overlay.
+
+### What it exposed
+
+Each of these was reached by a regression, and each is fixed where it
+originates:
+
+- **The class-attribute overlay walk skipped a nearer class's own value.**
+  `object >> ___classAttrOverlayLookup___:name:` walked up the superclass chain
+  returning the first overlay entry, so once `Sized`'s ABC caches were reset
+  in a session every `Sized` subclass read `Sized`'s caches instead of its
+  own. It stops now at the first class holding the name in either home.
+- **Builtin class dicts listed almost nothing.** `dict.__dict__` had no
+  `__len__`, `__iter__` or `__contains__`: the methods live on Smalltalk
+  ancestors the Python `__mro__` does not name. `___classDict___` folds those
+  ancestors in (stopping at `PythonInstance` / `Object`), and gives the
+  unhashable builtins their `__hash__ = None`.
+- **Protocol-refusing stand-ins read as methods.** `int.__iter__` and
+  `NoneType.__len__` exist only to raise the interpreter's TypeError, but made
+  `isinstance(3, Iterable)` True. They carry `<grailProtocolRefusal>` (a
+  pragma, because a kernel class's session methods report no category), and
+  the class dict skips them -- as it now skips the synthesized
+  `__iter__`/`__enter__` defaults on classes that lack them.
+- **A strict-slots base lost its slots to a deeper one.**
+  `importlib >> ___selectStorageBase___:` preferred the deepest chain, so
+  `KeysView(MappingView, Set)` was rooted at `Set` and `MappingView`'s
+  `__slots__ = '_mapping'` had nowhere to go. A base whose nearest `__slots__`
+  names a slot wins now.
+- **A warm bind restored only the bound module's metaclass records.**
+  `_collections_abc` is `from collections.abc import *`, so once deployed its
+  body does not run and nothing binds `collections.abc` -- but pathlib reaches
+  `Sequence` through it. After a stale rebuild of pathlib (anything importing
+  `re` first; `re` is never deployed), `class _PathParents(Sequence)` found no
+  metaclass on its chain, skipped `ABCMeta.__new__`, and `Path.parents`
+  refused to instantiate. `importlib >> ___restoreAllCanonicalMetaclasses___`
+  restores every deployed record, as `___restoreCanonicalMiRecords___` already
+  did for MI records.
+- **A bind's subclass links were credited to the importer.** The restore
+  re-derives a bound module's `__subclasses__` links while the importing
+  module's body is running, and credited them to that body -- so re-importing
+  the importer took them back, leaving `Sequence.__subclasses__()` without
+  `MutableSequence` and `isinstance([], Sequence)` False on a cold cache. The
+  links are credited to the bound module now
+  (`___registerSubclass___:of:origin:`).
+- A function found through a recorded metaclass was answered unbound
+  (`C.__subclasses__()` raised); a generator lambda did not compile; the dict
+  views pickled once pickle could find them by name; builtin iterator types
+  constructed empty objects; `singledispatch` read a counter only the stub
+  `abc` kept and never dropped its cache; the storage-base and `__subclasses__`
+  code consulted `_ABCRoot`, which no longer exists.
+
+## FIXED (partly): `test_typing` could not be imported -- PEP 695 scopes, and what it hit next
+
+`test.test_typing` scored IMPORTERROR on `type type_alias[*_] = 0`: the parser
+refused a parameterised type alias, and `class C[T]` kept only the parameter
+NAMES, so `T` was unbound in the class body and no `Generic[T]` base was added.
+It now imports and runs: **701 tests, 114 failures, 58 errors** (CPython runs
+712; the other 11 are the typing doctests `load_tests` adds).
+
+### PEP 695 is a token rewrite into CPython's annotation scope
+
+`class C[T: int](Base, metaclass=M): body` and `type A[T] = V` are rewritten in
+the token stream (`PythonParser >> ___rewriteTypeParamStatement___`) into what
+CPython's compiler builds: a hidden `___generic_parameters_of_C___` function
+that binds each parameter to a TypeVar (`_typing._grail_type_param`, with the
+bound, constraints and default as lazy lambdas), defines the class with
+`_typing._grail_generic_base((T,))` appended after the positional bases, stores
+`C.__type_params__` on the finished class, and returns it; the enclosing scope
+binds the name and deletes the function. The alias form returns
+`_typing._grail_type_alias('A', lambda: V, (T,))`.
+
+Tokens rather than a hand-built AST because the parser keeps scope books as it
+goes -- writes, reads, globals, nonlocals, class nesting, the mangling stack --
+and a synthesized node would have to reproduce every one. The scope function
+is transparent to `__qualname__` (`CallAst class >> ___isTypeParamScope___:`).
+`__type_params__` is stored after the class exists, not bound in its body, so a
+subclass does not inherit it. Not done directly in a class BODY, where the
+function would be a method called mid-body; the old names-only path stands
+there. `tests/python/type_param_scopes.py` pins it (24 checks).
+
+### The shared-machinery defects the module hit next
+
+Each was found by the next import or crash, and each is in code every module
+uses, so the change is tier 2 (0 regressions across the corpus):
+
+- `obj.attr: T = v` compiled to the setter send `obj @env1:attr: v`, which
+  stored nothing and raised nothing (`test.typinganndata.ann_module2`).
+  `AnnAssignAst` now emits the `AssignAst` for `obj.attr = v`.
+- `dir(cls)` listed the ten dunders Grail synthesizes (`__enter__`,
+  `__iter__`, `__getitem__`, ...) that `getattr(cls, name)` refuses, so
+  `@no_type_check` -- which getattrs every name dir lists -- raised on any class.
+- A metaclass `__repr__` ending `return super().__repr__()` (typing's
+  `_AnyMeta`) recursed until the stack ran out inside a kernel primitive,
+  the uncatchable ERROR 2758 that took the whole session down. The
+  metaclass dispatch in `___typeReprString___` is now guarded per receiver.
+- `type.__new__`'s namespace replay stored every body `def` back onto the
+  class as a bound method, so an `__init_subclass__` read as an ASSIGNED hook
+  and ran with no class: a class with `metaclass=` never told its parent about
+  subclasses, and every `typing.Protocol` subclass lost its `__parameters__`.
+  Only bindings the metaclass added or changed are replayed now.
+- The class `__dict__` cut each selector at its first colon, so the
+  transport `_<name>:kw:` named `def star(self, *a)` as `_star`, added a
+  phantom `__meth` beside `_meth`, and dropped any dunder with a default
+  (`___init__:kw:` looks internal). It now decodes selectors with the same
+  helper `__dir__` uses, and lists class-side methods that take arguments.
+- A bare annotation `x: int` made a class attribute holding Smalltalk nil:
+  `C.x` answered an `UndefinedObject`, `hasattr` was True, and runtime
+  protocols found `x` on everything. It binds nothing now, as in CPython; the
+  names NamedTuple and dataclasses need moved from `_fields` (which leaked
+  into every annotated class's namespace) to `___bareAnnotatedFields___`.
+- `inspect.getattr_static` was `getattr` with a default of None; it is
+  CPython's MRO walk now, and raises for a missing name.
+- Calling a non-callable instance fell through to a DNU that no `except`
+  could catch; it is CPython's `TypeError: 'K' object is not callable`.
+
+### What is left, grouped by cause
+
+The abc / collections.abc / GenericAlias group closed at **701 tests, 79
+failures, 26 errors**; the NamedTuple / TypedDict / metaclass-protocol group
+(see *typing's NamedTuple and TypedDict are CPython's* above) at **47 failures,
+19 errors**. The largest groups still open:
+
+- **A TypeError CPython raises and Grail does not (~20).** A class without
+  `__class_getitem__` answers itself when subscripted (`object`'s lenient
+  default: `Any[int]`, `Protocol[int]`); `object.__init__` / `object.__new__`
+  accept extra arguments; a non-type base without `__mro_entries__`, or one
+  whose `__mro_entries__` answers a non-type, is accepted; `NamedTuple` and
+  `TypedDict` multiple inheritance is not refused; iterating a class is not.
+- **`*`-unpack in call sites (~4).** `Unpack`, `*Ts` in a base list and
+  `class X(*bases)` still raise "`*`-unpack in call sites is not yet
+  supported".
+- **`get_type_hints` and `__no_type_check__` (~8).** Class and module hints come
+  back empty or unordered; `@no_type_check` does not reach methods, nested
+  classes or class/static methods (a BoundMethod refuses the attribute).
+- **`__parameters__` of a generic subclass (~4)** is not collected when the
+  class is built through an `__orig_bases__` chain, and TypeVar defaults are
+  not filled in during specialization.
+- **`__slots__` (~3).** A class with `__slots__` still accepts other
+  attributes, and a Protocol isinstance check through `__slots__` differs.
+- **A module body's store on another module's class is lost in a later
+  session** (FIXED since; see "test_typing passes" above). `typing`'s `_DeprecatedGenericAlias` sets `_removal_version` on
+  `collections.abc.ByteString`; the store goes to the deploy session's overlay
+  and never commits. This is the "write side" still open in
+  `docs/Persistent_Modules_and_Classes.md` §4.3.
+- Singles: `Union` has no `__name__` and does not accept `| 'str'`; a metaclass
+  `__setattr__` on `@final`; `@override` on a classmethod written in the wrong
+  decorator order; the typing doctests are not collected; `io.Reader` /
+  `io.Writer` do not exist.
 
 ## FIXED: `sys.path[0]` was relative, and `-m` never saw the working directory
 
@@ -478,7 +1141,7 @@ Worth fixing rather than tolerating: while it is live, a traceback in an affecte
 session silently misreports a line — or loses a frame — and the loss is reported
 by whatever reads the walk as a fact about *its own* request.
 
-## PLATFORM GAP (decided): no unawaited-coroutine warning, no origin tracking
+## FIXED: the unawaited-coroutine warning and origin tracking
 
 CPython warns when a coroutine is garbage-collected without ever having been
 awaited -- ``RuntimeWarning: coroutine 'f' was never awaited`` -- and, with
@@ -487,60 +1150,139 @@ created so the warning can point at it.  Both fire from the coroutine's
 **destructor**: the check lives in ``coro_dealloc``, and the report goes
 through ``warnings._warn_unawaited_coroutine`` at collection time.
 
-Grail deliberately implements neither, and the reason is the platform, not
-the effort.  A Grail coroutine is an ordinary GemStone session object; nothing
-runs when one becomes unreachable -- there is no per-object finalization hook
-for transient objects, and the in-memory collector gives no destruction
-callback the runtime could attach the check to.  Every route that fakes it
-gives a worse answer than absence:
+**Both are implemented now (2026-09-26)** -- see the last part of this entry.
+This entry used to say "PLATFORM GAP
+(decided)", on the premise that GemStone gives transient session objects no
+destruction hook, and **that premise was wrong** (corrected 2026-09-25, in the
+test_asyncgen work).  GemStone's ephemerons work on transient objects: the VM
+fires one when its key is reachable only through ephemerons and sends it
+``#mourn`` from ``GcFinalizeNotification`` -- "executed as needed by the VM",
+per the kernel class comment, so automatically, and synchronously when
+``gc.collect()`` drains the queue.  ``weakref`` had been built on exactly that
+all along.  ``FinalizerEphemeron`` (``src/weakref/WeakReference.gs``) is the
+hook in the form a destructor needs: it hands the dying object itself to the
+action (resurrected, PEP 442's contract), and a session-local registry keeps
+pending watches reachable.  Measured: ~0.45 µs to register, ~0.3 µs to mourn,
+~0.06 µs to run a queued hook; 200,000 watched steps with no ``gc.collect()``
+left 1,872 pending, so the VM's own collections keep the registry bounded.
 
-* **Sweep at commit/abort/session end.**  Warns arbitrarily late (CPython
-  warns at collection, which is usually promptly after the drop), attributes
-  the warning to the sweep point rather than the drop site, and costs a scan
-  of session memory that grows with the session.  A warning whose line points
-  at ``System commitTransaction`` teaches nobody anything.
-* **Warn on reuse instead of on drop.**  Reuse already raises
-  (``cannot reuse already awaited coroutine``, PR #672); the never-awaited
-  bug is precisely the coroutine nobody ever touches AGAIN, so a reuse hook
-  never sees it.
-* **A weak-reference/ephemeron registry.**  GemStone's finalization story is
-  for persistent objects and epochs, not per-temp-object callbacks; polling a
-  registry is the sweep option wearing a different hat.
+Two things about it were learned the hard way, and both are load-bearing:
 
-This is the same platform-honesty call as ``os.fork``: CPython itself ships
-platforms where pieces are absent (Windows and WASI have no fork; PyPy warns
-about unawaited coroutines only when its GC happens to run, and its docs tell
-users not to rely on it).  PyPy is the precedent that matters here: a
-tracing-GC Python already cannot promise CPython's prompt warning, so
-portable code treats it as best-effort diagnostics, never semantics.
+* **``#mourn`` only QUEUES the hook.**  Mourning lands wherever the VM
+  finalizes, and in one SUnit shard 132 mournings landed in the middle of a
+  module compile; a never-awaited warning run from one of them -- Python code,
+  importing as it goes -- left the interrupted compile unable to resolve a
+  module function (``IR codegen: unhandled name load``, a different
+  AsendLifecycleTestCase test each run).  The queue runs at known-safe points:
+  ``gc.collect()``, straight after it drains the ephemerons (so a collection
+  still runs its hooks before it returns), and every new registration.
+  ``weakref`` callbacks still run AT mourning, as they always have; the same
+  instrumented shard saw none of them land in a compile, but they are the same
+  exposure.
+* **The compiled ``async for`` makes its steps unwatched**
+  (``PythonCoroutine class>>___grailAnext___:``): the loop awaits each step in
+  the same expression, so it cannot go undriven, and the watch cost ~10% of a
+  tight ``async for``.  Explicit ``asend``/``athrow``/``aclose``/``__anext__``
+  calls keep it.
 
-What this costs on the scoreboard, recorded rather than hidden -- seven
-tests of ``test.test_coroutines``, all of which EXIST to test the warning
-machinery itself: ``test_bpo_45813_1/2``, ``test_func_9``,
-``test_fatal_coro_warning``, and the three ``OriginTrackingTest`` cases
-(which also want ``sys.get/set_coroutine_origin_tracking_depth``; adding
-no-op depth accessors without the warning they configure would be a stub
-that lies, so they stay absent too).
-``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineIsSilent`` pins
-the deviation so a green run is not read as more than it is.
-``test.test_asyncgen`` carries the same gap's three twins --
-``TestUnawaitedWarnings.test_asend/test_athrow/test_aclose`` warn about a
-step object collected undriven, from the same destructor -- counted here
-rather than re-decided there.  Two more members, same root, recorded with
-the asyncgen-hooks work: ``test_async_gen_asyncio_gc_aclose_09`` (the
-FINALIZER hook fires at collection; Grail's substitute is the
-shutdown_asyncgens sweep, which runs later than the test's two
-sleep(0)s), and ``test_async_gen_asyncio_shutdown_exception_02``'s phase
-label (the abandoned generator's close error reaches the exception
-handler with the SWEEP's message -- 'an error occurred during closing of
-asynchronous generator' -- where CPython's GC-finalizer path reports
-'unhandled exception during asyncio.run() shutdown'; right exception,
-right handler, different funnel).
+What had ACTUALLY hidden every destructor hook was a different defect: **a
+suspended generator could never be collected.**  Its parked producer process
+sat in the scheduler's ``waitingSet`` (``Semaphore>>wait`` →
+``_waitOnSema:``), a GC root, and the parked stack holds the generator.
+Measured: 2000 calls of ``for x in gen(): return x`` left 2000 live
+GsProcesses after a full mark-sweep -- a per-session leak of one process and
+its stack per abandoned generator, independent of any warning.  Two changes
+fix it:
 
-What would reopen the decision: a GemStone finalization hook for transient
-session objects, or the async runtime growing a real event loop whose task
-lifecycle (asyncio warns about un-retrieved exceptions from its own
-bookkeeping, not from the GC) gives the warning a natural, prompt home.
+* ``PythonGenerator>>___unrootParkedProducer___`` takes a producer parked on
+  its own semaphore out of ``waitingSet`` each time the consumer gets control
+  back (cost within noise: 268 vs 273 ms per 100k sync-generator items).  The
+  semaphore still records the waiter, so a signal resumes it normally.  The
+  invariant it rests on: nothing terminates, suspends or resumes a parked
+  producer -- the kernel's ``_resumeProcess:`` expects a semaphore waiter to
+  be in ``waitingSet``.
+* ``WeakReference class>>_flushProcessStackAreas``, run by ``gc.collect()``:
+  the VM keeps the stacks of the last ``OM_MAX_PROCESS_STACKS`` (8) processes
+  in C stack areas, which are roots too -- the last seven parked processes
+  always survived a collection, so the generator abandoned just before
+  ``gc.collect()`` was exactly the one that did not die.
+
+And ``for`` loops on the IR path now drop their iterator at loop exit (it was a
+method temp, alive until the function returned), as CPython's do.
+
+**Fixed with that, in test_asyncgen (now 85/0/0):** the finalizer hook of
+``sys.set_asyncgen_hooks`` fires (``test_async_gen_asyncio_gc_aclose_09``,
+``test_async_gen_asyncio_shutdown_exception_02`` -- asyncio's
+``_asyncgen_finalizer_hook`` and a ``WeakSet`` for ``loop._asyncgens``, as
+CPython), and an undriven ``asend`` / ``athrow`` / ``aclose`` step warns that
+it was never awaited (``TestUnawaitedWarnings.test_asend/test_athrow/
+test_aclose``), both through ``FinalizerEphemeron``.
+
+**The coroutine warning, decided and built (2026-09-26).**  The decision this
+entry left open was the cost of a watch per coroutine CALL.  Measured
+back-to-back against a build with the watch removed, on an otherwise idle
+stone: ``await leaf()`` in a tight loop went 26.6 -> 27.5 us (+0.9 us, ~3.5%),
+and create-then-close 6.05 -> 6.6 us.  That was judged worth paying for a
+warning every asyncio user relies on; ``async for`` steps stay unwatched,
+because that watch was ~10% of a far cheaper step and the loop cannot leave a
+step undriven.
+
+* ``PythonCoroutine class>>withBlock:`` -- the door every coroutine comes
+  through -- registers a ``FinalizerEphemeron``; ``___finalizeUnawaited___``
+  warns if the coroutine dies never started, through
+  ``warnings._warn_unawaited_coroutine`` (delegated to the vendored
+  ``_py_warnings`` function), and follows CPython's
+  ``_PyErr_WarnUnawaitedCoroutine`` step for step: a hook that raises, or an
+  ``error`` filter, goes to ``sys.unraisablehook`` as ``Exception ignored while
+  finalizing coroutine <repr>``, and a hook that did not warn still gets the
+  plain warning issued.
+* ``sys.get/set_coroutine_origin_tracking_depth`` and ``cr_origin`` (per
+  session; a stack capture per coroutine only while the depth is non-zero).
+* ``frame.clear()`` on a ``gi_frame``/``cr_frame`` is CPython 3.14's
+  ``frame_clear``: refused while executing or suspended, and otherwise a
+  finalization -- which for an unstarted coroutine only WARNS, exactly as
+  ``_PyGen_Finalize`` does (it stays unstarted and warns again when destroyed
+  unless closed).  The frame reaches its generator through a WEAK link, as
+  CPython's frame does not own its generator.
+* ``inspect.getframeinfo``, and CPython's docstrings on the coroutine and
+  generator types' ``send``/``throw``/``close``/``__name__``/``__qualname__``.
+
+test_coroutines went from 8 failures to 0 (OK, 99 tests).  Pinned by
+``CoroutineNeverAwaitedTestCase`` / ``tests/python/coroutine_never_awaited.py``
+and ``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineWarnsWhenCollected``.
+
+**The last one was timing: ``test_bpo_45813_1``, and a warnings capture now
+closes the gap.**  The test drops a coroutine inside ``assertWarns`` and expects
+the warning before the block closes, with no ``gc_collect()`` -- which CPython
+gives by reference counting, destroying the coroutine at the drop.  A tracing
+collector warns when it collects, and a young-generation scavenge does NOT
+mourn ephemerons (measured: only the mark-sweep does), so no cheap safe point
+fires it.
+
+So a capture does the catching up itself.  While any ``catch_warnings`` is open
+(``assertWarns`` is one), ``PythonCoroutine class>>withBlock:`` records each new
+coroutine's WATCH -- the ephemeron, never the coroutine -- and
+``CatchWarnings>>__exit__``, before it stops recording, asks
+``___closeCapture___:`` whether any coroutine made INSIDE the capture is still
+undriven; only then does it run a full collection (``gc.collect()``), which
+delivers the warning into the capture that should see it.  Grail's
+``_AssertWarnsContext`` now exits its capture before reading the records, which
+is CPython's order anyway.  Measured, per capture: ~9.6 us with no coroutine
+made inside (the unchanged baseline); ~10 us more when coroutines were made and
+driven; ~1.4 ms when one is still undriven -- the collection.
+
+The trade, stated: a coroutine the program merely KEEPS unstarted across a
+capture pays that collection and warns about nothing.  That case is uncommon
+(an unstarted coroutine at the end of a capture is usually a bug the warning
+exists for), and it costs a collection, not a failure.  A first version
+scanned every pending watch rather than the capture's own list, and the
+backlog grows between collections, so it cost ~190 us a capture and grew --
+the list is what keeps the common cases flat.  The list is dropped when the
+outermost capture closes, and bounded if one is abandoned open.
+
+Mind the same property when writing a test OUTSIDE a capture: a coroutine
+dropped earlier in the session reports at the next collection, so collect
+before opening a capture you mean to assert on.
 
 ## OPEN: two codec-reach gaps (found while adding UTF-32, 2026-08-31)
 
@@ -2757,7 +3499,7 @@ typing_extensions and pydantic_core read as a version-detection API.
 
 ### NOT fixed -- open, with repros
 
-**A top-level `def` cannot rebind a name a decorator stored.**
+**FIXED since (see "test_typing passes" above): a top-level `def` cannot rebind a name a decorator stored.**
 
 ```python
 def deco(f): return "DECORATED"
@@ -2834,11 +3576,12 @@ described in full below under *`typing.overload` recursed forever*. It is fixed,
 `test.test_warnings` reads one error BETTER than before, and the vendoring
 carries no conformance cost at all.
 
-**`test.test_typing` cannot measure any of this.** It is IMPORTERROR before and
-after, on `type type_alias[...] = ...` at line 5860 -- PEP 695 syntax Grail's
-parser does not have. The typing surface is therefore covered by
-`tests/python/typing_surface.py` (28 checks, all of which also pass under
-CPython 3.14.6) and not by the module named after it.
+**`test.test_typing` could not measure any of this** when it was written: it
+was IMPORTERROR before and after, on `type type_alias[...] = ...` at line 5860
+-- PEP 695 syntax Grail's parser did not have. The typing surface was
+therefore covered by `tests/python/typing_surface.py` (28 checks, all of which
+also pass under CPython 3.14.6). The module imports now; see *`test_typing`
+could not be imported* above.
 
 ### What this bought, measured
 

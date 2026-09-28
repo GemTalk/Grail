@@ -36,6 +36,7 @@ import errno as _errno
 import heapq
 import select as _select
 import time as _time
+import weakref
 
 from asyncio import exceptions as _exceptions
 
@@ -116,11 +117,12 @@ class EventLoop(AbstractEventLoop):
         self._debug = False
         # Async generators first-iterated while this loop runs, registered by
         # the sys.set_asyncgen_hooks firstiter hook installed in run_forever.
-        # A STRONG set where CPython keeps weakrefs: Grail has no per-object
-        # finalization (the recorded platform gap), so the shutdown sweep in
-        # shutdown_asyncgens() is the collection point, and holding the
-        # references until then is the price of having one.
-        self._asyncgens = set()
+        # WEAK, as CPython keeps it: one that is abandoned is collected, and
+        # the finalizer hook schedules its aclose() then; shutdown_asyncgens()
+        # closes whatever is still alive at the end.  (This was a strong set
+        # while a suspended generator could never be collected -- its parked
+        # process was a GC root -- and the sweep was the only closing point.)
+        self._asyncgens = weakref.WeakSet()
 
     # --- clock ------------------------------------------------------------
 
@@ -310,7 +312,8 @@ class EventLoop(AbstractEventLoop):
             # Inside the protected region: anything raising between the
             # _running_loop assignment and here would skip the finally and
             # poison every later run with 'another loop is running'.
-            _sys.set_asyncgen_hooks(firstiter=self._asyncgen_firstiter_hook)
+            _sys.set_asyncgen_hooks(firstiter=self._asyncgen_firstiter_hook,
+                                    finalizer=self._asyncgen_finalizer_hook)
             while True:
                 self._run_once()
                 if self._stopping:
@@ -318,8 +321,8 @@ class EventLoop(AbstractEventLoop):
         finally:
             _running_loop = None
             self._stopping = False
-            if old_hooks[0] is not None:
-                _sys.set_asyncgen_hooks(firstiter=old_hooks[0])
+            _sys.set_asyncgen_hooks(firstiter=old_hooks[0],
+                                    finalizer=old_hooks[1])
 
     def run_until_complete(self, future):
         """Run until ``future`` completes, then answer its result.
@@ -403,15 +406,24 @@ class EventLoop(AbstractEventLoop):
     def _asyncgen_firstiter_hook(self, agen):
         self._asyncgens.add(agen)
 
+    def _asyncgen_finalizer_hook(self, agen):
+        # CPython's: an async generator of this loop was collected before it
+        # finished, so close it -- as a task, because aclose() runs the body's
+        # ``finally`` and that may await.  What the close raises reaches the
+        # exception handler through the task, like any other task's error.
+        self._asyncgens.discard(agen)
+        if not self.is_closed():
+            self.call_soon_threadsafe(self.create_task, agen.aclose())
+
     async def shutdown_asyncgens(self):
         """Close every async generator first-iterated under this loop.
 
-        CPython's contract, and the working substitute for the finalizer
-        hook Grail cannot fire (no destruction-time callbacks -- the
-        recorded platform gap): asyncio.run() awaits this after cancelling
-        tasks, so abandoned generators still run their ``finally`` blocks.
-        A close that raises is reported through the exception handler with
-        CPython's message and context keys, and does not stop the sweep.
+        CPython's contract: asyncio.run() awaits this after cancelling
+        tasks, so a generator that is still alive at the end -- one nobody
+        abandoned, or one collected too late for the finalizer hook to have
+        scheduled its close -- still runs its ``finally`` blocks.  A close
+        that raises is reported through the exception handler with CPython's
+        message and context keys, and does not stop the sweep.
         """
         closing = [ag for ag in self._asyncgens]
         self._asyncgens.clear()

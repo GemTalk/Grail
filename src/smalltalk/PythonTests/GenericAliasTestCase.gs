@@ -179,13 +179,14 @@ testClassesThatDidNotOptInStillCollapse
 	subscripted generic and silently registered the unsubscripted class,
 	where CPython raises.  tuple and dict followed: PEP 646's ``tuple[*Ts]''
 	and a ForwardRef's partial evaluation (``dict[int, ForwardRef('undef')]'')
-	both need the arguments kept.  A plain class is the collapse's example now,
-	and the per-class model is what this pins."
+	both need the arguments kept.  A plain Python class with no hook is
+	CPython's TypeError now, not a collapse."
 
 	self assert: (self at: 'list_opted_in') equals: true.
 	self assert: (self at: 'dict_opted_in') equals: true.
 	self assert: (self at: 'tuple_opted_in') equals: true.
-	self assert: (self at: 'plain_class_collapses') equals: true.
+	self assert: (self at: 'plain_class_refuses')
+		equals: 'type ''_NotOptedIn'' is not subscriptable'.
 %
 
 ! --- reaching the class by its name in types ---

@@ -458,6 +458,7 @@ method: CharacterCollection
 __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ __add__: other].
 	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:, other].
 	"An EXACT str in the other representation concatenates here rather than
 	via the reflected __radd__: -- see object >> ___isExactPyStr___ for why a
@@ -545,6 +546,7 @@ __format__: formatSpec
 	truncation and the 's' type — see the shared engine in builtins
 	___formatValue___:spec:."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ __format__: formatSpec].
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [^ self].
 	^ (builtins instance) ___formatValue___: self spec: formatSpec
 %
@@ -1069,7 +1071,31 @@ method: CharacterCollection
 __str__
 	"Return a string representation for display. In Python: str(obj)"
 
-	^ self
+	^ self ___asExactStr___
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___asExactStr___
+	"The receiver as a genuine str: itself when it already is one, else a
+	kernel string carrying the same characters.
+
+	CPython's str methods answer exact str for a subclass instance --
+	``S('a').upper()'', ``S(' a').strip()'', ``S('a') + 'b''', even a no-op
+	``S('a').strip()'' -- because they build from the characters, never from
+	type(self).  The kernel primitives these methods use (copyFrom:to:, ``,'',
+	copyEmpty, copyReplaceAll:with:, asLowercase) keep the RECEIVER's class,
+	so each result-producing method narrows its receiver here first and
+	re-sends.  An exact str pays one class test.  Slicing narrows through
+	SequenceableCollection >> ___getslice___ instead.
+
+	A str subclass is a Unicode32 subclass (importlib ___widenStrBase___:),
+	so the copy goes through Unicode7, which the kernel widens only as far
+	as the content needs -- the representation a plain str with these
+	characters would have."
+
+	self @env0:___isExactPyStr___ ifTrue: [^ self].
+	^ Unicode7 ___allocateStringLike___: self
 %
 
 category: 'Grail-String Methods'
@@ -1095,6 +1121,7 @@ method: CharacterCollection
 casefold
 	"Return a casefolded copy of the string. Similar to lowercase but more aggressive."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ casefold].
 	^ self @env0:asLowercase
 %
 
@@ -1148,6 +1175,7 @@ ___padCentered___: width fill: aCharacter
 	one-argument form pads with spaces and nobody counts spaces."
 
 	| mySize marg leftPad rightPad stream |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___padCentered___: width fill: aCharacter].
 	mySize := self @env0:size.
 	width @env0:<= mySize ifTrue: [^ self].
 	marg := width @env0:- mySize.
@@ -1165,6 +1193,7 @@ category: 'Grail-String Methods'
 method: CharacterCollection
 ___padLeftJustified___: width fill: aCharacter
 	| mySize stream |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___padLeftJustified___: width fill: aCharacter].
 	mySize := self @env0:size.
 	width @env0:<= mySize ifTrue: [^ self].
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
@@ -1178,6 +1207,7 @@ category: 'Grail-String Methods'
 method: CharacterCollection
 ___padRightJustified___: width fill: aCharacter
 	| mySize stream |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___padRightJustified___: width fill: aCharacter].
 	mySize := self @env0:size.
 	width @env0:<= mySize ifTrue: [^ self].
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
@@ -1699,6 +1729,7 @@ ___expandtabs: tabsize
 	on ``copyEmpty'' so it keeps the receiver's str class."
 
 	| ws col n cp nSpaces |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___expandtabs: tabsize].
 	ws := WriteStream @env0:on: (self @env0:copyEmpty).
 	col := 0.
 	n := self @env0:size.
@@ -2563,6 +2594,7 @@ lower
 	"Return a copy of the string with all characters converted to lowercase,
 	including multi-character SpecialCasing expansions (İ->i̇)."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ lower].
 	^ self ___applyFullCase___: false
 %
 
@@ -2607,6 +2639,7 @@ method: CharacterCollection
 lstrip
 	"Return a copy of the string with leading whitespace removed."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ lstrip].
 	^ self ___pyTrimLeft___
 %
 
@@ -2617,6 +2650,7 @@ lstrip: chars
 	``chars'' removed.  None / nil means whitespace, matching
 	Python's str.lstrip()."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ lstrip: chars].
 	(chars == nil or: [chars == None])
 		ifTrue: [^ self ___pyTrimLeft___].
 	^ self @env0:___lstripChars___: chars
@@ -2633,6 +2667,10 @@ partition: sep
 		^ tuple @env0:with: self with: '' with: ''
 	].
 
+	"A miss answers the receiver itself, subclass and all, as CPython's does;
+	a hit builds its pieces from an exact str -- see ___asExactStr___."
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ partition: sep].
+
 	before := self @env0:copyFrom: 1 to: (index @env0:- 1).
 	after := self @env0:copyFrom: (index @env0:+ sep @env0:size) to: self @env0:size.
 	^ tuple @env0:with: before with: sep with: after
@@ -2648,6 +2686,7 @@ removeprefix: prefix
 	string comes back unchanged -- and beginsWith: raises an UNCATCHABLE
 	ArgumentTypeError if handed one.  A non-str argument is passed through so
 	the kernel still complains about it."
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ removeprefix: prefix].
 	p := prefix @env0:___isPyStr___
 		ifTrue: [prefix @env0:___pyPlainStr___]
 		ifFalse: [prefix].
@@ -2666,6 +2705,7 @@ removesuffix: suffix
 
 	| ends p |
 	"See removeprefix:."
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ removesuffix: suffix].
 	p := suffix @env0:___isPyStr___
 		ifTrue: [suffix @env0:___pyPlainStr___]
 		ifFalse: [suffix].
@@ -2685,6 +2725,7 @@ replace: old _: new
 	"``old'' holding a surrogate never occurs here, so the string is unchanged
 	-- and copyReplaceAll:with: cannot be handed one.  A surrogate-bearing
 	``new'' has to be spliced in by code point instead."
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ replace: old _: new].
 	(old @env0:___isPyStr___ @env0:and: [(old @env0:___pyPlainStr___) @env0:== nil])
 		ifTrue: [^ self].
 	(new @env0:___isPyStr___ @env0:and: [(new @env0:___pyPlainStr___) @env0:== nil])
@@ -2730,7 +2771,9 @@ replace: old _: new _: count
 	occurrences (negative count means all).  django's WSGIRequest
 	path handling uses ``path_info.replace('/', '', 1)''."
 
-	| n | n := count.
+	| n |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ replace: old _: new _: count].
+	n := count.
 	(n == nil or: [n == None or: [n @env0:< 0]]) ifTrue: [
 		^ self replace: old _: new].
 	"Same two surrogate cases as the 2-arg form -- see replace:_:."
@@ -2971,6 +3014,10 @@ rpartition: sep
 		^ tuple @env0:with: '' with: '' with: self
 	].
 
+	"A miss answers the receiver itself, subclass and all, as CPython's does;
+	a hit builds its pieces from an exact str -- see ___asExactStr___."
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ rpartition: sep].
+
 	before := self @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
 	after := self @env0:copyFrom: (lastIndex @env0:+ sep @env0:size) to: self @env0:size.
 	^ tuple @env0:with: before with: sep with: after
@@ -3009,6 +3056,7 @@ _rsplit: positional kw: kwargs
 	``doc.rsplit('\n', 1)`` docstring surgery)."
 
 	| sep maxsplit base keep head |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ _rsplit: positional kw: kwargs].
 	sep := nil.
 	maxsplit := -1.
 	positional @env0:isEmpty ifFalse: [
@@ -3050,6 +3098,7 @@ method: CharacterCollection
 rstrip
 	"Return a copy of the string with trailing whitespace removed."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ rstrip].
 	^ self ___pyTrimRight___
 %
 
@@ -3060,6 +3109,7 @@ rstrip: chars
 	``chars'' removed.  None / nil means whitespace, matching
 	Python's str.rstrip()."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ rstrip: chars].
 	(chars == nil or: [chars == None])
 		ifTrue: [^ self ___pyTrimRight___].
 	^ self @env0:___rstripChars___: chars
@@ -3078,6 +3128,7 @@ split
 	broke ``text.split() == wrap(...)'' comparisons (class-strict
 	sequence __eq__) and would reject list mutations like append."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ split].
 	^ OrderedCollection @env0:withAll:
 		((self @env0:subStrings) @env0:collect: [:p | (self @env0:copyEmpty) @env0:, p])
 %
@@ -3093,6 +3144,7 @@ split: sep
 	"A separator holding a surrogate cannot occur in a surrogate-free string,
 	so there is nothing to split on and CPython's answer is [self].  Asked
 	before ``asString'', which REFUSES for such a separator."
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ split: sep].
 	(sep @env0:___isPyStr___ @env0:and: [(sep @env0:___pyPlainStr___) @env0:== nil])
 		ifTrue: [^ OrderedCollection @env0:with: self].
 	sepStr := sep @env0:asString.
@@ -3135,6 +3187,7 @@ _split: positional kw: kwargs
 	positive."
 
 	| sep maxsplit base trimmed |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ _split: positional kw: kwargs].
 	sep := nil.
 	maxsplit := -1.
 	positional @env0:isEmpty ifFalse: [
@@ -3250,6 +3303,7 @@ ___splitlinesKeepends: keepends
 	lines (unlike subStrings:), and treats CR+LF as one boundary."
 
 	| n result start i cp termLen |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___splitlinesKeepends: keepends].
 	n := self @env0:size.
 	result := OrderedCollection @env0:new.
 	start := 1.
@@ -3373,6 +3427,7 @@ method: CharacterCollection
 strip
 	"Return a copy of the string with leading and trailing whitespace removed."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ strip].
 	^ self ___pyTrimLeft___ ___pyTrimRight___
 %
 
@@ -3383,6 +3438,7 @@ strip: chars
 	ends.  None / nil means whitespace, matching Python's str.strip().
 	Empty string strips nothing."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ strip: chars].
 	(chars == nil or: [chars == None])
 		ifTrue: [^ self ___pyTrimLeft___ ___pyTrimRight___].
 	^ (self @env0:___lstripChars___: chars) @env0:___rstripChars___: chars
@@ -3485,6 +3541,14 @@ translate: table
 			@env0:on: KeyError do: [:ex | ex @env0:return: ch].
 		replacement == ch ifTrue: [stream @env0:nextPut: ch] ifFalse: [
 			replacement == None ifFalse: [
+				"A replacement no Character can hold -- a lone surrogate, as an
+				int or inside a str -- makes the answer a PyStrSurrogate, which
+				only the code-point implementation can build.  Streaming it
+				died on an env-0 MessageNotUnderstood no Python code can catch."
+				(((replacement isKindOf: Integer)
+						and: [replacement @env0:>= 16rD800 and: [replacement @env0:<= 16rDFFF]])
+					or: [replacement @env0:isKindOf: PyStrSurrogate]) ifTrue: [
+						^ PyStrSurrogate ___translate___: self table: table].
 				(replacement isKindOf: Integer) ifTrue: [
 					stream @env0:nextPut: (Character @env0:codePoint: replacement)
 				] ifFalse: [
@@ -3502,6 +3566,7 @@ upper
 	"Return a copy of the string with all characters converted to uppercase,
 	including the multi-character SpecialCasing expansions (ß->SS, ﬅ->ST)."
 
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ upper].
 	^ self ___applyFullCase___: true
 %
 
@@ -3623,6 +3688,7 @@ zfill: width
 	"Pad a numeric string with zeros on the left, to fill a field of the given width."
 
 	| stream mySize padding hasSign firstChar |
+	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ zfill: width].
 	mySize := self @env0:size.
 	(width @env0:<= mySize) ifTrue: [ ^ self ].
 
@@ -3770,3 +3836,93 @@ __str__
 %
 
 set compile_env: 0
+
+category: 'Grail-Interning'
+method: Symbol
+___pyInterned___
+	"The session's CANONICAL str for this name: the same object every time, and
+	the one sys.intern answers for an equal string.
+
+	A namespace stores its string keys as Symbols and hands them to Python as
+	strs, and each hand-over used to be a fresh ``asString''.  So two reads of
+	one key were never ``is''-identical, and neither was a key pickle interned
+	on load (test_pickle's test_attribute_name_interning) -- where CPython's
+	attribute names are interned strings that ``is'' compares equal."
+
+	^ self ___pyInternedAs___: self asString
+%
+
+category: 'Grail-Interning'
+method: Symbol
+___pyInternedAs___: aString
+	"The canonical str for this Symbol, recording aString as it when there is
+	none yet.  CPython's sys.intern answers its argument itself the first time,
+	so aString is stored, not a copy.
+
+	SESSION-LOCAL, like every other Grail cache of transient Python objects:
+	the strings are session objects, and a persistent table would pin every
+	name ever interned."
+
+	| temps table |
+	temps := SessionTemps current.
+	table := temps at: #'___GrailInternedStrings___' otherwise: nil.
+	table == nil ifTrue: [
+		table := IdentityKeyValueDictionary new.
+		temps at: #'___GrailInternedStrings___' put: table].
+	^ table at: self ifAbsent: [table at: self put: aString]
+%
+
+set compile_env: 1
+
+category: 'Grail-Introspection'
+method: CharacterCollection
+__dict__
+	"``obj.__dict__'' for a str SUBCLASS instance -- the live dynamic-instVar
+	view list and bytes publish.  A plain ``class X(str)'' stays a subclass of
+	the kernel string class (Class.gs says why), so this is where its instances
+	find it; ClassDefAst's stamp tells them from an EXACT str, which has no
+	instance dict, as in CPython."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) @env0:isNil ifTrue: [
+			^ AttributeError ___signal___: '''str'' object has no attribute ''__dict__'''].
+	^ PyInstanceDict @env0:on: self
+%
+
+category: 'Grail-Type'
+method: CharacterCollection
+__class__
+	"Python ``type(s)'' is ``str'' for every str.  GemStone picks the kernel
+	class by CONTENT -- Unicode7 for ASCII, Unicode16 or Unicode32 once a wider
+	code point appears -- and ``str'' is Unicode7, so without this override
+	``type('\uc894') is str'' was False while its repr read ``<class 'str'>''.
+	Every CJK codec test asserts ``type(result) is str'' on a decode
+	(test_codecencodings_kr test_errorhandle).  Mirrors float >> __class__
+	and int >> __class__.
+
+	The same five kernel classes str >> __new__: treats as an exact str; any
+	other class -- a ``class N(str)'', a str-mixin enum member -- is a
+	subclass, and answers itself."
+
+	| c |
+	c := self @env0:class.
+	((c @env0:== Unicode16)
+		or: [(c @env0:== Unicode32)
+		or: [(c @env0:== String)
+		or: [c @env0:== Symbol]]]) ifTrue: [^ str].
+	^ c
+%
+
+set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so it must be an env-0 method.
+category: 'Grail-Introspection'
+classmethod: CharacterCollection
+___pythonValueAttrs___
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

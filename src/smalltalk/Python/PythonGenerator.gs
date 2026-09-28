@@ -150,6 +150,11 @@ _forkBody
 
 	started := true.
 	proc := [
+		"Which generator this process is the body of, so a lookup can find the
+		Python THREAD it runs for: the process blocked resuming it, and that
+		one's, and so on (importlib class >> ___pythonThreadOf___:).  A
+		generator's body is not a thread of its own in Python."
+		GsProcess @env0:current @env0:environmentAt: #'GrailPyGenerator' put: self.
 		[
 			[returnValue := block value: self]
 				on: AbstractException
@@ -167,7 +172,23 @@ _forkBody
 					are the only record of where inside the generator the raise
 					happened, and re-signalling on the consumer would otherwise
 					keep them and lose the consumer's half instead (§9.12)."
-					BaseException ___stashGeneratorStack___: ex.
+					"The PAYLOAD's, when ex is a carrier: that is the object
+					the consumer will catch and walk, so a stash keyed by the
+					carrier was never read -- a bare ``raise'' out of the body's
+					own except clause escapes as one, and so does an exception
+					thrown in with throw()/athrow() that the body lets pass.
+
+					Then the carrier's own capture goes too.  It is the
+					generator side's, and ___payloadOf___: hands a carrier's
+					capture to a payload that has none -- which, just stashed,
+					this payload has not.  The consumer's re-signal unwraps the
+					carrier on its way out, so leaving it would give the payload
+					THIS side's frames a second time in place of the consumer's:
+					``[f@yield, body@raise]'' where CPython reports
+					``[body@raise]''."
+					BaseException ___stashGeneratorStack___:
+						(BaseException ___payloadOf___: ex).
+					ex _gsStack: nil.
 					ex return: nil]
 		] ensure: [
 			done := true.
@@ -188,6 +209,50 @@ ___consumerProcess___
 	GsProcess is not something Python code should be handed."
 
 	^ consumerProcess
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___unrootParkedProducer___
+	"Let a SUSPENDED generator be garbage like any other object.  Sent by the
+	consumer each time it gets control back from the body.
+
+	A body parked at a yield is its producer process blocked in ``producerSem
+	wait'', and Semaphore>>wait files the waiter in the scheduler's waitingSet
+	(ProcessorScheduler>>_waitOnSema:).  That set is a GC ROOT, and the parked
+	stack holds the generator -- it is the receiver of the ___yield___: frame
+	-- so every generator ever suspended stayed alive for the rest of the
+	session, whoever still referred to it.  Measured: 2000 ``for x in gen():
+	return x'' calls left 2000 live GsProcesses after a full mark-sweep.  That
+	is a leak in its own right, and it is also why CPython's destruction-time
+	hooks had nothing to fire on: an abandoned async generator was never
+	collected at all (test_asyncgen's gc_aclose_09).
+
+	The semaphore still records the waiter, so dropping the scheduler's entry
+	leaves generator -> producerSem -> process -> stack -> generator: a cycle
+	that is collected when nothing outside it refers to the generator, and
+	that resumes normally when something does -- Semaphore>>signal reaches
+	_scheduleProcess:, which files a process whose onQueue is nil straight on
+	the ready queue.
+
+	THE INVARIANT this relies on: nothing terminates, suspends or resumes a
+	parked producer.  _resumeProcess: and _resumeForTermination: expect a
+	semaphore waiter to be in waitingSet and raise ('bad waiting state')
+	when it is not.  Grail only ever SIGNALS producerSem, and a finished body
+	returns off the end of its block; a future close-by-terminate would have
+	to re-file the process first.  Only a waiter on OUR semaphore is touched:
+	a body blocked on anything else (a lock, a socket, a Delay) is a running
+	body in the middle of its own business, and stays where the kernel put
+	it."
+
+	| q |
+	done ifTrue: [^ self].
+	proc == nil ifTrue: [^ self].
+	proc waitingOn == producerSem ifFalse: [^ self].
+	proc _isSuspended ifTrue: [^ self].
+	(q := proc onQueue) == nil ifTrue: [^ self].
+	ProcessorScheduler scheduler _remove: proc fromSet: q.
+	proc _onQueue: nil
 %
 
 set compile_env: 1
@@ -377,8 +442,59 @@ gi_frame
 			ifTrue: [0]
 			ifFalse: [(code @env0:dynamicInstVarAt: #'co_firstlineno')
 				@env0:ifNil: [0]].
-		frameObject := PyFrame @env0:code: code lineno: lineno back: None globals: None].
+		frameObject := PyFrame @env0:code: code lineno: lineno back: None globals: None.
+		"A WEAK way back, for frame.clear() (PyFrame>>clear): CPython's frame
+		 finds its generator from the frame's own memory and does not own it, so
+		 a frame kept after its generator is dropped must not keep it alive."
+		frameObject @env0:dynamicInstVarAt: #'___generator___'
+			put: (WeakReference @env0:on: self)].
 	^ frameObject
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___clearFromFrame___
+	"frame.clear() on this generator's frame -- CPython 3.14's frame_clear for a
+	generator-owned frame: refused while the body runs or is parked at a yield,
+	and otherwise the generator is finalized, as its destructor would."
+
+	running == true ifTrue: [
+		^ RuntimeError ___signal___: 'cannot clear an executing frame'].
+	(started == true and: [done ~~ true]) ifTrue: [
+		^ RuntimeError ___signal___: 'cannot clear a suspended frame'].
+	self ___finalizeFromFrameClear___
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___finalizeFromFrameClear___
+	"_PyGen_Finalize for a generator that is not suspended: one never started
+	is closed; a finished one has nothing left to do."
+
+	started == true ifFalse: [done := true]
+%
+
+category: 'Grail-Docstrings'
+classmethod: PythonGenerator
+___methodDocTable___
+	"CPython 3.14's __doc__ for the generator type's methods and name
+	descriptors, transcribed from the running interpreter.  PythonCoroutine
+	carries its own table with the coroutine wording."
+
+	^ (KeyValueDictionary @env0:new)
+		@env0:at: 'send' put: 'send(value) -> send ''value'' into generator,
+return next yielded value or raise StopIteration.';
+		@env0:at: 'throw' put: 'throw(value)
+throw(type[,value[,tb]])
+
+Raise exception in generator, return next yielded value or raise
+StopIteration.
+the (type, val, tb) signature is deprecated, 
+and may be removed in a future version of Python.';
+		@env0:at: 'close' put: 'close() -> raise GeneratorExit inside generator.';
+		@env0:at: '__name__' put: 'name of the generator';
+		@env0:at: '__qualname__' put: 'qualified name of the generator';
+		yourself
 %
 
 category: 'Grail-Iterator Protocol'
@@ -407,6 +523,12 @@ send: aValue
 	process does not yield until it blocks on consumerSem, so the body can never
 	observe a stale value."
 	consumerProcess := GsProcess @env0:current.
+	"close() before the first resume finishes the generator without starting
+	it (``done'', not ``started''), so the body must never run: CPython's next()
+	on it is StopIteration.  It forked the body instead, which then read from
+	whatever close() had released -- ElementTree's iterparse read a closed
+	file (test_xml_etree's IterparseTest.test_close_not_exhausted)."
+	(started not and: [done]) ifTrue: [^ self ___resumeFinishedWith___: nil].
 	started ifFalse: [
 		aValue == None ifFalse: [
 			TypeError ___signal___:
@@ -423,6 +545,7 @@ send: aValue
 		producerSem @env0:signal.
 	].
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
+	self @env0:___unrootParkedProducer___.
 	done ifTrue: [
 		escapedException == nil ifFalse: [^ self _signalEscapedException].
 		^ self ___signalExhausted___].
@@ -717,6 +840,7 @@ throw: anException
 	running := true.
 	producerSem @env0:signal.
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
+	self @env0:___unrootParkedProducer___.
 	done ifTrue: [
 		"Body finished — normal completion raises StopIteration; an
 		exception that bubbled out of the body (stowed by _forkBody)
@@ -910,6 +1034,7 @@ close
 	running := true.
 	producerSem @env0:signal.
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
+	self @env0:___unrootParkedProducer___.
 	done ifFalse: [
 		RuntimeError ___signal___:
 			(self ___pyKindWords___ @env0:, ' ignored GeneratorExit')

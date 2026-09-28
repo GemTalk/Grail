@@ -228,8 +228,8 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock outerSou
 	same reasons; see AsyncForAst and PythonGenerator >> ___grailAwaitAnext___:."
 	isAsyncClause := gen is_async = 1.
 	nextExpr := isAsyncClause
-		ifTrue: ['(___gen___ @env1:___grailAwaitAnext___: ('
-			, iterTemp , ' __anext__))']
+		ifTrue: ['(___gen___ @env1:___grailAwaitAnext___: (PythonCoroutine @env1:___grailAnext___: '
+			, iterTemp , '))']
 		ifFalse: [iterTemp , ' __next__'].
 	exhaustedName := isAsyncClause
 		ifTrue: ['StopAsyncIteration']
@@ -701,7 +701,9 @@ ___emitIRClauseNext___: gen from: iterLeaf on: aBuilder
 		^ Error signal: 'IR codegen: async comprehension outside a coroutine body'].
 	^ aBuilder
 		send: #'___grailAwaitAnext___:' to: (aBuilder var: genLeaf)
-		with: { aBuilder send: #'__anext__' to: (aBuilder var: iterLeaf) with: { } env: 1 }
+		with: { aBuilder
+			send: #'___grailAnext___:' to: (aBuilder globalNamed: #PythonCoroutine)
+			with: { aBuilder var: iterLeaf } env: 1 }
 		env: 1
 %
 

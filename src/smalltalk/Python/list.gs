@@ -180,9 +180,11 @@ ___delSlice___: aSlice
 	indices in descending order so earlier removes don't shift the
 	later ones."
 
-	| size indices lo hi st indicesArray |
+	| size indices lo hi st indicesArray unpacked |
+	"__index__ first, the size after -- see slice >> ___unpackedSlice___."
+	unpacked := aSlice ___unpackedSlice___.
 	size := self @env0:size.
-	indices := aSlice indices: size.
+	indices := unpacked indices: size.
 	lo := indices @env0:at: 1.
 	hi := indices @env0:at: 2.
 	st := indices @env0:at: 3.
@@ -425,8 +427,10 @@ ___setSlice___: aSlice _: anIterable
 		ifTrue: [anIterable @env0:asArray]
 		ifFalse: [(list __new__: anIterable) @env0:asArray].
 	len := values @env0:size.
+	"__index__ first, the size after -- see slice >> ___unpackedSlice___."
+	indices := aSlice ___unpackedSlice___.
 	size := self @env0:size.
-	indices := aSlice indices: size.
+	indices := indices indices: size.
 	lo := indices @env0:at: 1.
 	hi := indices @env0:at: 2.
 	st := indices @env0:at: 3.
@@ -622,7 +626,11 @@ remove: value
 	i := 1.
 	[i @env0:<= self @env0:size] @env0:whileTrue: [
 		((self @env0:at: i) ___pyRichEqBool___: value) ifTrue: [
-			self @env0:removeAtIndex: i.
+			"The __eq__ just run may have shrunk self (gh-126033: it clears the
+			list and answers True).  CPython deletes through list_ass_slice,
+			which clamps, so the call then removes nothing and returns None;
+			removeAtIndex: past the end is an uncatchable OffsetError."
+			i @env0:<= self @env0:size ifTrue: [self @env0:removeAtIndex: i].
 			^ None].
 		i := i @env0:+ 1].
 	^ ValueError ___signal___: 'list.remove(x): x not in list'

@@ -216,16 +216,15 @@ initialize
 	self @env0:at: #extsep put: '.'.
 	self @env0:at: #altsep put: None.
 	self @env0:at: #devnull put: '/dev/null'.
-	"open(2) flag constants (POSIX values, macOS/Linux common set)."
+	"open(2) flag constants -- THIS platform's numbers, because os.open hands
+	them straight to libc.  Only the access modes agree across platforms: the
+	set used to be Darwin's alone, which on Linux made O_CREAT (512) mean
+	O_TRUNC, and O_TRUNC (1024) mean O_APPEND."
 	self @env0:at: #O_RDONLY put: 0.
 	self @env0:at: #O_WRONLY put: 1.
 	self @env0:at: #O_RDWR put: 2.
-	self @env0:at: #O_APPEND put: 8.
-	self @env0:at: #O_CREAT put: 512.
-	self @env0:at: #O_TRUNC put: 1024.
-	self @env0:at: #O_EXCL put: 2048.
-	self @env0:at: #O_NOFOLLOW put: 256.
-	self @env0:at: #O_CLOEXEC put: 16777216.
+	self @env0:class ___openFlags @env0:keysAndValuesDo: [:name :value |
+		self @env0:at: name put: value].
 	"lseek(2) whence values, spelled as CPython's os and io spell them.  CPython's
 	own zipfile seeks with os.SEEK_SET / SEEK_CUR / SEEK_END, so without them the
 	real module could not even be imported."
@@ -339,10 +338,30 @@ fspath: path
 	short-circuits: strings and bytes pass through; user objects
 	delegate to __fspath__ if defined."
 
-	(path isKindOf: CharacterCollection) ifTrue: [^ path].
-	(path isKindOf: ByteArray) ifTrue: [^ path].
-	(self ___isPathLike___: path) ifTrue: [^ path __fspath__].
-	TypeError ___signal___: 'expected str, bytes, or os.PathLike'
+	| r |
+	(self ___isStrOrBytes___: path) ifTrue: [^ path].
+	(self ___isPathLike___: path) ifTrue: [
+		"CPython checks what __fspath__ hands back, and names the class in
+		the refusal."
+		r := path __fspath__.
+		(self ___isStrOrBytes___: r) ifTrue: [^ r].
+		TypeError ___signal___: 'expected ' @env0:, (path ___pyTypeNameForError___) @env0:asString
+			@env0:, '.__fspath__() to return str or bytes, not '
+			@env0:, (r ___pyTypeNameForError___) @env0:asString].
+	TypeError ___signal___: 'expected str, bytes or os.PathLike object, not '
+		@env0:, (path ___pyTypeNameForError___) @env0:asString
+%
+
+category: 'Grail-Filesystem'
+method: os
+___isStrOrBytes___: anObject
+	"A str or bytes as os.fspath means it.  AbstractPyStr counts: a str holding
+	lone surrogates is a PyStrSurrogate, which is how os.fsdecode spells an
+	undecodable byte, and fspath refused it as a non-path."
+
+	^ (anObject isKindOf: CharacterCollection)
+		or: [(anObject isKindOf: ByteArray)
+		or: [anObject isKindOf: AbstractPyStr]]
 %
 
 category: 'Grail-Filesystem'
@@ -407,21 +426,30 @@ method: os
 fsdecode: filename
 	"``os.fsdecode(filename)'' — decode a bytes filename to str using
 	the filesystem encoding.  Grail uses UTF-8 throughout.  Bytes
-	input decodes; str input passes through."
+	input decodes; str input passes through.  CPython runs the argument
+	through fspath() first, so a PathLike is honoured and anything else --
+	None, an int -- is its TypeError rather than an echo."
 
-	(filename isKindOf: ByteArray)
-		ifTrue: [^ filename decode: 'utf-8'].
-	^ filename
+	| path |
+	path := self fspath: filename.
+	(path isKindOf: ByteArray)
+		ifTrue: [^ path decode: 'utf-8'].
+	^ path
 %
 
 category: 'Grail-Filesystem'
 method: os
 fsencode: filename
-	"``os.fsencode(filename)'' — inverse of fsdecode."
+	"``os.fsencode(filename)'' — inverse of fsdecode, and like it goes
+	through fspath() first.  The echo it used to give a non-path let
+	``ssl.SSLContext.set_ecdh_curve(None)'' hand OpenSSL a NULL name,
+	which is a SIGSEGV rather than CPython's TypeError."
 
-	(filename isKindOf: CharacterCollection)
-		ifTrue: [^ filename encode: 'utf-8'].
-	^ filename
+	| path |
+	path := self fspath: filename.
+	(path isKindOf: CharacterCollection)
+		ifTrue: [^ path encode: 'utf-8'].
+	^ path
 %
 
 ! ===============================================================================
@@ -784,6 +812,24 @@ getpid
 
 category: 'Grail-Built-in Functions'
 method: os
+urandom: size
+	"os.urandom(size) — size bytes from the OS CSPRNG.
+
+	secrets already draws them, from GemStone's HostRandom, so this is that
+	with CPython's argument checks.  urllib.request needs it at import: its
+	digest-auth handler takes ``_randombytes = os.urandom'' for client
+	nonces, and a missing name failed the whole module."
+
+	| n |
+	"___asIndex___ is CPython's Py_ssize_t conversion: an int, or __index__,
+	 else TypeError naming the PYTHON type (not 'SmallDouble')."
+	n := size ___asIndex___.
+	n @env0:< 0 ifTrue: [^ ValueError ___signal___: 'negative argument not allowed'].
+	^ (secrets instance) token_bytes: n
+%
+
+category: 'Grail-Built-in Functions'
+method: os
 getcwd
 	"os.getcwd() — return the current working directory."
 
@@ -801,7 +847,7 @@ chdir: aPath
 	"os.chdir(path) — change the current working directory."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'chdir' arg: 'path'.
 	"The primitive answers 0 on success and the ERRNO on failure, never nil --
 	the one answer this tested for, so a chdir to a missing directory changed
 	nothing and said nothing, exactly as os.rename did (see Issues.md)."
@@ -825,7 +871,7 @@ mkdir: aPath
 	"os.mkdir(path) — create a directory."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
 	result := GsFile @env0:createServerDirectory: path.
 	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
@@ -837,7 +883,7 @@ mkdir: aPath _: mode
 	"os.mkdir(path, mode) — create a directory with numeric mode."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
 	result := GsFile @env0:createServerDirectory: path mode: mode.
 	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
@@ -999,6 +1045,53 @@ ___isDarwin
 	^ (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
 %
 
+category: 'Grail-Initialization'
+classmethod: os
+___openFlags
+	"This platform's row of ___openFlagsDarwin:arch:."
+
+	^ self
+		___openFlagsDarwin: self ___isDarwin
+		arch: (System @env0:gemVersionAt: #cpuArchitecture)
+%
+
+category: 'Grail-Initialization'
+classmethod: os
+___openFlagsDarwin: isDarwin arch: anArchitecture
+	"The open(2) flags whose numbers differ by platform, as glibc and Darwin's
+	<fcntl.h> define them.  Linux's O_NOFOLLOW is itself per-architecture:
+	x86_64 keeps the historic 0400000, aarch64 uses the asm-generic 0100000.
+
+	The platform is an ARGUMENT so every row can be exercised from any one
+	machine: OsFileDescriptorsTestCase asks for the Linux rows on a Mac.  The
+	first version read the platform itself, and its Linux branch -- which no
+	Mac run ever executed -- carried a missing pair of parentheses that turned
+	``at:put:'' into an at:put:ifTrue:ifFalse: send, so os failed to
+	initialise on the first Linux install."
+
+	| d arch nofollow |
+	d := SymbolKeyValueDictionary @env0:new.
+	isDarwin ifTrue: [
+		d @env0:at: #O_APPEND put: 8.
+		d @env0:at: #O_CREAT put: 512.
+		d @env0:at: #O_TRUNC put: 1024.
+		d @env0:at: #O_EXCL put: 2048.
+		d @env0:at: #O_NOFOLLOW put: 256.
+		d @env0:at: #O_CLOEXEC put: 16777216.
+		^ d].
+	arch := anArchitecture @env0:asLowercase.
+	nofollow := ((arch @env0:includesString: 'arm') @env0:or: [arch @env0:includesString: 'aarch'])
+		ifTrue: [32768]
+		ifFalse: [131072].
+	d @env0:at: #O_APPEND put: 1024.
+	d @env0:at: #O_CREAT put: 64.
+	d @env0:at: #O_TRUNC put: 512.
+	d @env0:at: #O_EXCL put: 128.
+	d @env0:at: #O_NOFOLLOW put: nofollow.
+	d @env0:at: #O_CLOEXEC put: 524288.
+	^ d
+%
+
 category: 'Grail-Error Messages'
 classmethod: os
 ___errnoOfADirectoryNotEmpty
@@ -1030,7 +1123,7 @@ makedirs: aPath
 	"os.makedirs(path) — recursive directory creation."
 
 	| parts currentPath sep path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
 	sep := '/'.
 	parts := $/ @env0:split: path.
 	currentPath := ''.
@@ -1183,7 +1276,7 @@ rmdir: aPath
 	"os.rmdir(path) — remove a directory."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'rmdir' arg: 'path'.
 	self ___refuseShellExpandedPath___: path for: 'rmdir'.
 	result := GsFile @env0:removeServerDirectory: path.
 	result == nil ifTrue: [^ self ___signalDirectoryNotRemoved: path].
@@ -1258,7 +1351,7 @@ remove: aPath
 	and would otherwise propagate a bare OSError out of every cleanup."
 
 	| result path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'remove' arg: 'path'.
 	"BEFORE the existence check, which is itself expanding and would otherwise
 	report on whatever the expansion names -- see ___refuseShellExpandedPath___."
 	self ___refuseShellExpandedPath___: path for: 'remove'.
@@ -1335,8 +1428,8 @@ rename: anOldPath _: aNewPath
 	said nothing, and pathlib's Path.rename inherited it."
 
 	| result oldPath newPath |
-	oldPath := self ___fsPath___: anOldPath.
-	newPath := self ___fsPath___: aNewPath.
+	oldPath := self ___fsPathChecked___: anOldPath for: 'rename' arg: 'src'.
+	newPath := self ___fsPathChecked___: aNewPath for: 'rename' arg: 'dst'.
 	"Both ends: a rename can destroy the destination as surely as remove does,
 	and an expanded SOURCE renames a file the caller never named."
 	self ___refuseShellExpandedPath___: oldPath for: 'rename'.
@@ -1383,7 +1476,7 @@ _listdir: positional kw: kwargs
 	actualPath == nil ifTrue: [actualPath := self getcwd].
 	"listdir: routes its 1-arg fast path through here, so this one
 	coercion covers both spellings."
-	actualPath := self ___fsPath___: actualPath.
+	actualPath := self ___fsPathChecked___: actualPath for: 'listdir' arg: 'path'.
 	"GsFile>>contentsOfDirectory: expands a PATTERN; it does not open a
 	directory, so it answers something plausible for two paths CPython
 	refuses outright, and neither answer looked like an error:
@@ -1711,7 +1804,7 @@ _scandir: positional kw: kwargs
 			((kwargs @env0:isNil) @env0:not and: [kwargs @env0:includesKey: 'path'])
 				ifTrue: [kwargs @env0:at: 'path']
 				ifFalse: ['.']].
-	target := self ___fsPath___: target.
+	target := self ___fsPathChecked___: target for: 'scandir' arg: 'path'.
 	names := self listdir: target.
 	entries := OrderedCollection @env0:new.
 	names @env0:do: [:name |
@@ -1800,8 +1893,8 @@ symlink: src _: dst
 	after the fact by asking whether the link now exists."
 
 	| srcPath dstPath errno |
-	srcPath := self ___fsPath___: src.
-	dstPath := self ___fsPath___: dst.
+	srcPath := self ___fsPathChecked___: src for: 'symlink' arg: 'src'.
+	dstPath := self ___fsPathChecked___: dst for: 'symlink' arg: 'dst'.
 	errno := self ___errnoPreventingCreationOf: dstPath.
 	errno == 0 ifFalse: [^ self ___signalErrno: errno filename: srcPath filename2: dstPath].
 	self ___runShell___: 'ln -s -- ' @env0:,
@@ -1846,7 +1939,7 @@ readlink: aPath
 	and code branches on it."
 
 	| path out |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'readlink' arg: 'path'.
 	self ___statOrSignal___: path isLstat: true.
 	(self ___isLink___: path) ifFalse: [^ self ___signalErrno: 22 filename: path].
 	out := self ___runShell___: 'readlink -- ' @env0:, (self ___shellQuote___: path).
@@ -1870,9 +1963,15 @@ ___statOrNil___: aPath lstat: isLstat
 	And it is the only file primitive that does NOT expand ``$'' in the path,
 	which is why every predicate was rebuilt on it: GsFile>>existsOnServer:
 	does expand, so ``exists('dir/a$b')'' answered about ``dir/a'' -- true, if
-	such a file happened to be there."
+	such a file happened to be there.
+
+	A path with an embedded NUL cannot be stat'd, and CPython's predicates say
+	no to it (genericpath catches the ValueError).  Asking the primitive
+	instead answered about the path cut short at the NUL -- ``exists('/tmp\\x00x')''
+	was true.  See ___fsPathChecked___:."
 
 	| result |
+	(self ___hasNul___: aPath) ifTrue: [^ nil].
 	result := GsFile @env0:stat: aPath isLstat: isLstat.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
 	^ nil
@@ -2021,7 +2120,7 @@ ___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks link
 	^ PythonGenerator withBlock: [:gen |
 		| stack |
 		stack := OrderedCollection @env0:new.
-		stack @env0:addLast: (self ___fsPath___: aTop).
+		stack @env0:addLast: (self ___fsPathChecked___: aTop for: 'scandir' arg: 'path').
 		[stack @env0:isEmpty] @env0:whileFalse: [
 			| top dirs nondirs walkDirs names |
 			top := stack @env0:removeLast.
@@ -2151,6 +2250,53 @@ isfile: aPath
 
 category: 'Grail-Filesystem'
 method: os
+___fsPathChecked___: aPath for: aFunctionName arg: anArgName
+	"___fsPath___:, for a path that is about to reach the FILESYSTEM: an
+	embedded NUL is CPython's ValueError.
+
+	The kernel reads a path as a C string, so everything after a NUL is
+	silently dropped and the call acts on a DIFFERENT file from the one named:
+	``os.stat('/tmp/x\x00junk')'' reported on /tmp/x, ``os.listdir('\x00')''
+	listed the current directory, and ``os.remove(p + '\x00.bak')'' would
+	remove p itself.  CPython's path converter refuses the NUL before any
+	system call, in every os function that takes a path; this is that check.
+
+	Not folded into ___fsPath___: itself, which the pure string functions of
+	os.path share -- join, split, basename and the rest never touch the
+	filesystem, and CPython lets a NUL pass through them unremarked.  The
+	predicates (exists, isdir, isfile, islink) do not come here either: they
+	answer False for such a path, as genericpath does, which ___statOrNil___:
+	arranges.  Found by test_linecache test_invalid_names, where
+	updatecache('\x00') stat'ed sys.path's first directory and then died
+	opening it.
+
+	The message is CPython's, and names the function and the argument --
+	``stat: embedded null character in path'', ``rename: ... in dst'' --
+	because that is what its path converter reports.  (``embedded null byte''
+	is what open() says, from a different converter.)"
+
+	| path |
+	path := self ___fsPath___: aPath.
+	(self ___hasNul___: path) ifTrue: [
+		^ ValueError ___signal___:
+			aFunctionName @env0:, ': embedded null character in ' @env0:, anArgName].
+	^ path
+%
+
+category: 'Grail-Filesystem'
+method: os
+___hasNul___: aPath
+	"Does a str or bytes path contain a NUL?  Anything else answers false and
+	is left to the caller's own type check."
+
+	(aPath @env0:isKindOf: ByteArray) ifTrue: [^ aPath @env0:includes: 0].
+	(aPath @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ aPath @env0:includes: (Character @env0:withValue: 0)].
+	^ false
+%
+
+category: 'Grail-Filesystem'
+method: os
 ___statOrSignal___: path isLstat: isLstat
 	"GsFile>>stat:isLstat: answers a GsFileStat on success but a SmallInteger
 	ERRNO on failure -- never nil, which is what the callers here used to test
@@ -2193,7 +2339,7 @@ stat: aPath
 	"os.stat(path) — get file status."
 
 	| statResult path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'stat' arg: 'path'.
 	statResult := self ___statOrSignal___: path isLstat: false.
 	"Answer CPython's os.stat_result, not the raw GsFileStat: the fields are the
 	same but Python code reads them as ``st_size'' / ``st_mtime'' (linecache does
@@ -2212,7 +2358,7 @@ getmtime: aPath
 	happened)."
 
 	| st path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'stat' arg: 'path'.
 	st := self ___statOrSignal___: path @env0:asString isLstat: false.
 	^ st @env0:mtimeUtcSeconds
 %
@@ -2223,7 +2369,7 @@ lstat: aPath
 	"os.lstat(path) — like stat but does not follow symlinks."
 
 	| statResult path |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'lstat' arg: 'path'.
 	statResult := self ___statOrSignal___: path isLstat: true.
 	^ PyStatResult @env0:on: statResult
 %
@@ -2357,7 +2503,7 @@ ___applyUtime___: aPath atime: at mtime: mt follow: followSymlinks
 	touch acted: lstat when -h was used, stat when it was not."
 
 	| path st q base atIso mtIso |
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'utime' arg: 'path'.
 	"Format BEFORE the existence check so an out-of-range timestamp is an
 	OverflowError rather than a FileNotFoundError, which is the order CPython
 	reports them in: argument conversion, then the syscall."
@@ -2391,10 +2537,9 @@ _utime: positional kw: kwargs
 	WHAT A CALLER CAN RELY ON.  The times are REALLY SET -- ___applyUtime___
 	reads them back and raises if they did not take -- to WHOLE SECONDS.  Any
 	sub-second part of the argument is floored away, matching os.stat here,
-	which already answers an int st_mtime where CPython answers a float
-	(GsFileStat exposes whole seconds only).  So a round trip through
-	os.utime + os.stat agrees with CPython on math.floor(st_mtime) and not on
-	st_mtime itself.
+	whose float st_mtime is always a whole number of seconds (GsFileStat
+	exposes whole seconds only).  So a round trip through os.utime + os.stat
+	agrees with CPython on math.floor(st_mtime) and not on st_mtime itself.
 
 	times=None (or omitted) means NOW, and ``now'' is read from the gem's
 	clock and then set explicitly rather than left to touch's own default, so
@@ -2577,7 +2722,7 @@ ___applyChmod___: aPath mode: aMode
 
 	| path st want |
 	want := aMode @env0:bitAnd: 8r7777.
-	path := self ___fsPath___: aPath.
+	path := self ___fsPathChecked___: aPath for: 'chmod' arg: 'path'.
 	st := self ___statOrSignal___: path isLstat: false.
 	(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want ifTrue: [^ None].
 	self ___runShell___: 'chmod ' @env0:, (self ___octalString___: want)
@@ -2666,6 +2811,331 @@ chmod: aPath _: aMode
 	there is one set of semantics."
 
 	^ self _chmod: { aPath . aMode } kw: nil
+%
+
+! ===============================================================================
+! File descriptors — os.open / read / readinto / write / lseek / fstat /
+! ftruncate / isatty / close, straight onto libc
+! ===============================================================================
+!
+! _pyio.FileIO is built entirely on these, so without them every _pyio file
+! (test_bufio's PyBufferSizeTest, and any code importing _pyio) died on its
+! first ``os.open'' with AttributeError.
+!
+! ONE DELIBERATE DIVERGENCE: a descriptor is usable only if os.open handed it
+! out in this session.  Any other number is EBADF, exactly what CPython
+! answers for a descriptor that is not open.  The gem shares its process with
+! Grail, and its own descriptors -- the stone and NetLDI sockets, its log --
+! sit in the same table: the first os.open in a fresh gem answered 10, not 3.
+! ``os.close(5)'' or ``os.write(6, ...)'' on one of those would break the
+! session in ways no Python handler can see, so the answer CPython gives for a
+! closed descriptor is the one given for a descriptor that is not Grail's.
+
+category: 'Grail-File Descriptors'
+classmethod: os
+___fdCallouts
+	"The libc callouts behind the descriptor functions.  A CCallout wraps
+	per-process C state, so the table lives in SessionTemps, as strerror's does.
+
+	open(2) is VARIADIC, and it has to be declared so: on Apple arm64 a
+	variadic argument travels on the stack rather than in a register, so a
+	fixed three-argument declaration would hand open() a garbage mode."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_fd_callouts'
+		ifAbsentPut: [ | lib d |
+			lib := CLibrary @env0:named: self ___libcName.
+			d := SymbolKeyValueDictionary @env0:new.
+			d @env0:at: #open put: (CCallout @env0:library: lib name: 'open'
+				result: #'int32' args: #(#'ptr' #'int32') varArgsAfter: 2).
+			d @env0:at: #close put: (CCallout @env0:library: lib name: 'close'
+				result: #'int32' args: #(#'int32')).
+			d @env0:at: #read put: (CCallout @env0:library: lib name: 'read'
+				result: #'int64' args: #(#'int32' #'ptr' #'uint64')).
+			d @env0:at: #write put: (CCallout @env0:library: lib name: 'write'
+				result: #'int64' args: #(#'int32' #'ptr' #'uint64')).
+			d @env0:at: #lseek put: (CCallout @env0:library: lib name: 'lseek'
+				result: #'int64' args: #(#'int32' #'int64' #'int32')).
+			d @env0:at: #ftruncate put: (CCallout @env0:library: lib name: 'ftruncate'
+				result: #'int32' args: #(#'int32' #'int64')).
+			d @env0:at: #isatty put: (CCallout @env0:library: lib name: 'isatty'
+				result: #'int32' args: #(#'int32')).
+			d]
+%
+
+category: 'Grail-File Descriptors'
+classmethod: os
+___openFds
+	"The descriptors os.open has handed out in this session and os.close has
+	not yet taken back.  Per session, like the descriptors themselves: they
+	belong to this gem's process."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_open_fds'
+		ifAbsentPut: [IdentitySet @env0:new]
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___libc: aName with: anArray
+	"Call libc's aName, answering its result, or raising the errno's own OSError
+	subclass when it reports failure with -1."
+
+	^ self ___libc: aName with: anArray ifFail: [:errno | self ___signalErrno: errno]
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___libc: aName with: anArray ifFail: aBlock
+	"As ___libc:with:, handing the errno of a failure to aBlock."
+
+	| errno result |
+	errno := Array @env0:new: 1.
+	result := (self @env0:class ___fdCallouts @env0:at: aName)
+		@env0:callWith: anArray errno: errno.
+	result @env0:= -1 ifTrue: [^ aBlock @env0:value: (errno @env0:at: 1)].
+	^ result
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___signalErrno: anErrno
+	"CPython's OSError for a call on a DESCRIPTOR: no filename, so it prints
+	``[Errno 9] Bad file descriptor'' with nothing after it."
+
+	^ (self @env0:class ___errorClassForErrno: anErrno)
+		___signalNew___: { anErrno. self strerror: anErrno }
+		kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___fd: anObject
+	"anObject as a descriptor this session may use -- see the section comment.
+	EBADF, which Darwin and Linux both number 9, for anything else."
+
+	| fd sockets |
+	fd := self ___asCInt: anObject.
+	(self @env0:class ___openFds @env0:includes: fd) ifTrue: [^ fd].
+	"A socket this session created is Grail's as surely as an os.open one, and
+	CPython code reads it by number: ssl's test_makefile_close does
+	``os.read(ss.fileno(), 0)'' and expects EBADF only after ss.close().
+	PyRawSocket's session registry holds exactly those, and drops each on
+	close.  Looked up by name: _socket_module.gs is filed in after this file."
+	sockets := Python @env0:at: #PyRawSocket otherwise: nil.
+	(sockets @env0:notNil
+		and: [(sockets @env0:___gsSocketForFd___: fd) @env0:notNil])
+		ifTrue: [^ fd].
+	^ self ___signalErrno: 9
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___cPathFor: aPath
+	"aPath as the NUL-terminated bytes libc takes: a str as UTF-8, bytes as
+	they are.  An embedded NUL would silently cut the path short in C, so it
+	is CPython's ValueError instead."
+
+	| path encoded |
+	path := self ___fsPath___: aPath.
+	(path @env0:isKindOf: ByteArray)
+		ifTrue: [encoded := path]
+		ifFalse: [
+			(path @env0:isKindOf: CharacterCollection) ifFalse: [
+				^ TypeError ___signal___:
+					('open: path should be string, bytes or os.PathLike, not '
+						@env0:, (bytes ___pyTypeNameOf___: aPath))].
+			encoded := path @env0:encodeAsUTF8 @env0:asByteArray].
+	(encoded @env0:includes: 0) ifTrue: [
+		^ ValueError ___signal___: 'open: embedded null character in path'].
+	^ CByteArray @env0:withAll: encoded nullTerminate: true
+%
+
+category: 'Grail-File Descriptors'
+method: os
+open: aPath _: flags
+	"os.open(path, flags) -- the default mode is 0o777, as CPython's is."
+
+	^ self _open: { aPath. flags } kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+open: aPath _: flags _: mode
+
+	^ self _open: { aPath. flags. mode } kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+_open: positional kw: kwargs
+	"os.open(path, flags, mode=0o777, *, dir_fd=None) -- open(2), answering the
+	new descriptor.  The flags are this platform's own (see ___openFlags), and
+	libc sees the path exactly as given: none of the ``$'' expansion the GsFile
+	primitives apply.
+
+	dir_fd is refused, as os.stat refuses it: resolving the path against the
+	wrong directory would open a different file."
+
+	| path flags mode fd |
+	path := self ___requiredArgument: 'path' at: 1 in: positional kw: kwargs for: 'open'.
+	flags := self ___requiredArgument: 'flags' at: 2 in: positional kw: kwargs for: 'open'.
+	mode := positional @env0:size @env0:>= 3
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [(kwargs isNil) ifTrue: [8r777] ifFalse: [kwargs @env0:at: 'mode' ifAbsent: [8r777]]].
+	(kwargs notNil and: [(kwargs @env0:at: 'dir_fd' ifAbsent: [None]) ~~ None])
+		ifTrue: [^ NotImplementedError ___signal___: (self @env0:class ___dirFdUnavailableMessage: 'open')].
+	flags := self ___asCInt: flags.
+	mode := self ___asCInt: mode.
+	fd := self ___libc: #open
+		with: { self ___cPathFor: path. flags. #'int32'. mode }
+		ifFail: [:errno | ^ self ___signalErrno: errno filename: (self ___fsPath___: path)].
+	self @env0:class ___openFds @env0:add: fd.
+	^ fd
+%
+
+category: 'Grail-File Descriptors'
+method: os
+close: fd
+	"os.close(fd).  The descriptor is forgotten BEFORE close(2) runs: on an
+	error (even EINTR) Linux has already released it, so keeping it would let a
+	later os.open's reuse of the number be refused."
+
+	| n |
+	n := self ___fd: fd.
+	self @env0:class ___openFds @env0:remove: n.
+	self ___libc: #close with: { n }.
+	^ None
+%
+
+category: 'Grail-File Descriptors'
+method: os
+read: fd _: size
+	"os.read(fd, n) -- at most n bytes, and b'' at end of file.  A negative n
+	is EINVAL, as in CPython 3.14."
+
+	| n count buffer got |
+	n := self ___fd: fd.
+	count := size ___asIndex___.
+	count @env0:< 0 ifTrue: [^ self ___signalErrno: 22].
+	buffer := CByteArray @env0:gcMalloc: (count @env0:max: 1).
+	got := self ___libc: #read with: { n. buffer. count }.
+	got @env0:= 0 ifTrue: [^ ByteArray @env0:new].
+	^ buffer @env0:byteArrayFrom: 0 numBytes: got
+%
+
+category: 'Grail-File Descriptors'
+method: os
+readinto: fd _: aBuffer
+	"os.readinto(fd, buffer) -- read into a writable buffer (a bytearray, or a
+	memoryview over one), answering how many bytes arrived.  _pyio.FileIO reads
+	this way, into a memoryview SLICE of its result, so the bytes land at the
+	view's own offset in the source."
+
+	| n window target offset length buffer got |
+	n := self ___fd: fd.
+	window := self ___writableWindowOf: aBuffer.
+	target := window @env0:at: 1.
+	offset := window @env0:at: 2.
+	length := window @env0:at: 3.
+	buffer := CByteArray @env0:gcMalloc: (length @env0:max: 1).
+	got := self ___libc: #read with: { n. buffer. length }.
+	got @env0:> 0 ifTrue: [
+		target @env0:replaceFrom: offset @env0:+ 1
+			to: offset @env0:+ got
+			with: (buffer @env0:byteArrayFrom: 0 numBytes: got)
+			startingAt: 1].
+	^ got
+%
+
+category: 'Grail-File Descriptors'
+method: os
+___writableWindowOf: aBuffer
+	"{ bytes. offset. length } -- where a read into aBuffer must write."
+
+	(aBuffer @env0:isKindOf: memoryview) ifTrue: [^ aBuffer ___writableWindow___].
+	(aBuffer @env0:isKindOf: bytearray) ifTrue: [^ { aBuffer. 0. aBuffer @env0:size }].
+	^ TypeError ___signal___:
+		('readinto() argument 2 must be read-write bytes-like object, not '
+			@env0:, (bytes ___pyTypeNameOf___: aBuffer))
+%
+
+category: 'Grail-File Descriptors'
+method: os
+write: fd _: data
+	"os.write(fd, data) -- one write(2), answering how many bytes it took."
+
+	| n contents |
+	n := self ___fd: fd.
+	contents := (data @env0:isKindOf: memoryview)
+		ifTrue: [data tobytes]
+		ifFalse: [data].
+	(contents @env0:isKindOf: ByteArray) ifFalse: [
+		^ TypeError ___signal___:
+			('a bytes-like object is required, not '''
+				@env0:, (bytes ___pyTypeNameOf___: data) @env0:, '''')].
+	contents @env0:isEmpty ifTrue: [^ self ___libc: #write with: { n. nil. 0 }].
+	^ self ___libc: #write
+		with: { n. CByteArray @env0:withAll: contents nullTerminate: false. contents @env0:size }
+%
+
+category: 'Grail-File Descriptors'
+method: os
+lseek: fd _: position _: how
+	"os.lseek(fd, pos, how) -- answering the new offset from the start."
+
+	| n pos |
+	n := self ___fd: fd.
+	pos := position ___asIndex___.
+	(pos @env0:between: -9223372036854775808 and: 9223372036854775807) ifFalse: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C long'].
+	^ self ___libc: #lseek with: { n. pos. self ___asCInt: how }
+%
+
+category: 'Grail-File Descriptors'
+method: os
+fstat: fd
+	"os.fstat(fd) -- the kernel's own fstat primitive, which answers the same
+	GsFileStat os.stat wraps, so the two agree field for field."
+
+	| n result |
+	"NOT ___fd:, which admits only descriptors os.open handed out.  That
+	guard exists so os.close / os.write cannot reach the gem's own
+	descriptors; fstat only READS, and the descriptor it is usually given is
+	a Python file's own -- ``os.fstat(f.fileno())'', which http.server's
+	send_head does for every file it serves -- which os.open never saw.  A
+	closed or bogus descriptor still answers EBADF, from the primitive."
+	n := self ___asCInt: fd.
+	n @env0:< 0 ifTrue: [^ self ___signalErrno: 9].
+	result := GsFile @env0:_fstat: n isLstat: false.
+	(result @env0:isKindOf: GsFileStat) ifTrue: [^ PyStatResult @env0:on: result].
+	(result @env0:isKindOf: SmallInteger) ifTrue: [^ self ___signalErrno: result].
+	^ self ___signalErrno: 9
+%
+
+category: 'Grail-File Descriptors'
+method: os
+ftruncate: fd _: length
+	"os.ftruncate(fd, length)."
+
+	| n size |
+	n := self ___fd: fd.
+	size := length ___asIndex___.
+	self ___libc: #ftruncate with: { n. size }.
+	^ None
+%
+
+category: 'Grail-File Descriptors'
+method: os
+isatty: fd
+	"os.isatty(fd) -- never raises: CPython answers False for a descriptor that
+	is not open, and so for one that is not Grail's."
+
+	| n |
+	n := [self ___asCInt: fd] @env0:on: OverflowError do: [:ex | ex @env0:return: nil].
+	n isNil ifTrue: [^ false].
+	(self @env0:class ___openFds @env0:includes: n) ifFalse: [^ false].
+	^ ((self @env0:class ___fdCallouts @env0:at: #isatty) @env0:callWith: { n }) @env0:= 1
 %
 
 ! ===============================================================================

@@ -58,12 +58,11 @@ set compile_env: 0
 category: 'Grail-Setup'
 method: InspectAsyncPredicatesTestCase
 setUp
-	| mods |
-	mods := importlib @env1:modules.
-	mods removeKey: #'inspect_async_predicates' ifAbsent: [].
-	testModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/inspect_async_predicates.py')
-		name: 'inspect_async_predicates'.
+	"Imported once per session: the tests only read RESULTS, which the
+	module body records -- see PythonTestCase >> ___recordedFixture___:name:."
+
+	testModule := self ___recordedFixture___: '/tests/python/inspect_async_predicates.py'
+		name: 'inspect_async_predicates'
 %
 
 category: 'Grail-Helpers'

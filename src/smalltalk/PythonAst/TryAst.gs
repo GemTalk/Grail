@@ -127,10 +127,11 @@ printSmalltalkOn: aStream
 	].
 	"finally-during-propagation: route the finally through
 	BaseException>>___ensureFinally___:finally: (instead of a bare ensure:) so
-	sys.exc_info() inside the finally sees a propagating exception -- but ONLY in
-	a non-generator scope (the helper's ``ex pass'' re-raise is generator-unsafe;
-	a generator try/finally keeps the plain ensure:).  Module-level try/finally
-	(functionBeingCompiled nil) is never a generator, so it uses the helper too."
+	sys.exc_info() inside the finally sees a propagating exception.  EVERY scope,
+	generators included: the helper once re-raised with ``ex pass'', which was
+	unsafe in a generator's forked process, and so a generator try/finally kept
+	the plain ensure:.  The helper now returns from its handler and re-signals,
+	which is safe anywhere, and this test lost its generator clause with it."
 	useEnsureFinally := finalbody size > 0.
 	"A TRY WITH TWO OR MORE CLAUSES needs a per-ACTIVATION token, shared by its
 	clauses, so a later clause can tell ``my own earlier handler raised this''

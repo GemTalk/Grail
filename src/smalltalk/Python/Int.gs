@@ -44,7 +44,9 @@ _new: positional kw: kwargs
 		].
 	base := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [kwargs @env0:at: 'base' ifAbsent: [nil]].
+		ifFalse: [kwargs == nil
+			ifTrue: [nil]
+			ifFalse: [kwargs @env0:at: 'base' ifAbsent: [nil]]].
 	base == nil ifTrue: [^ self __new__: obj].
 	^ self __new__: obj _: base
 %
@@ -70,7 +72,65 @@ __new__: obj _: base _: extra
 	env-1 DNU backstop.  Raise the same TypeError CPython does instead
 	(test_int.py: assertRaises(TypeError, int, '10', 2, 1))."
 
+	"``int.__new__(S, 'FACE', 16)'': three positionals are the allocation form
+	when the first is a class -- the class, the value and its base."
+	(obj isKindOf: Behavior) ifTrue: [
+		^ self ___new__: { obj. base. extra } kw: nil].
 	TypeError ___signal___: 'int expected at most 2 arguments, got 3'
+%
+
+category: 'Grail-Initialization'
+classmethod: int
+___new__: positional kw: kwargs
+	"``int.__new__(cls, *args, **kwargs)'' -- the target class first, then
+	int()'s own arguments, keywords included.  A call carrying keywords lands
+	here (the varargs transport of __new__); without this it reached the
+	generic object-class one, which read the class as the value:
+	``int.__new__(S, 'FACE', base=16)'' answered an S holding nil and
+	``int.__new__(int, 'FACE', base=16)'' ignored the base.  Unpickling
+	NEWOBJ_EX below protocol 4 calls exactly that, through ``partial(
+	cls.__new__, cls, *args, **kwargs)'' (test_pickle
+	test_complex_newobj_ex)."
+
+	| cls v |
+	positional @env0:isEmpty ifTrue: [
+		TypeError ___signal___: 'int.__new__(): not enough arguments'].
+	cls := positional @env0:at: 1.
+	(cls isKindOf: Behavior) ifFalse: [
+		TypeError ___signal___: 'int.__new__(X): X is not a type object ('
+			@env0:, cls ___pyTypeNameForError___ @env0:, ')'].
+	^ self ___allocate___: cls
+		value: (self _new: (positional @env0:copyFrom: 2 to: positional @env0:size) kw: kwargs)
+%
+
+category: 'Grail-Initialization'
+classmethod: int
+___allocate___: cls value: v
+	"An instance of cls, an int type, carrying the int v -- the allocation
+	half of ``int.__new__(cls, ...)'', which __new__:_: and ___new__:kw: share.
+
+	An int subclass is either rooted at AbstractPyInt (a plain ``class C(int)'')
+	or Integer-chained (``class E(int, Flag)''); either is allocated, and int
+	itself is v.  Anything else is CPython's TypeError: the allocation used to
+	accept ANY class, so ``int.__new__(str, 1)'' answered an empty str.
+
+	CPython refuses ``int.__new__(bool, 0)'': bool overrides __new__ to return
+	one of its two singletons, so allocating one through int's __new__ is
+	unsafe.  Grail's Boolean cannot be allocated at all -- ``Boolean
+	class>>new'' is shouldNotImplement, an UNCATCHABLE Smalltalk Error where
+	Python code expects a TypeError (test_bool.py test_subclass)."
+
+	| inst nm |
+	cls == self ifTrue: [^ v].
+	cls == Boolean ifTrue: [
+		TypeError ___signal___: 'int.__new__(bool) is not safe, use bool.__new__()'].
+	((cls @env0:inheritsFrom: AbstractPyInt) or: [cls @env0:inheritsFrom: self]) ifFalse: [
+		nm := (cls ___pyAttrLoad___: #'__name__') @env0:asString.
+		TypeError ___signal___: (('int.__new__(' @env0:, nm) @env0:, '): ')
+			@env0:, (nm @env0:, ' is not a subtype of int')].
+	inst := cls @env0:new.
+	inst @env0:dynamicInstVarAt: #value put: v.
+	^ inst
 %
 
 category: 'Grail-Initialization'
@@ -269,20 +329,7 @@ __new__: obj _: base
 	-- lands here with obj = the class and base = the value, NOT a string and a
 	radix.  int(obj, base) never passes a class, so a leading Behavior is
 	unambiguously the allocation form: build a cls instance carrying int(value)."
-	(obj isKindOf: Behavior) ifTrue: [
-		| inst |
-		"CPython refuses ``int.__new__(bool, 0)'': bool overrides __new__ to
-		return one of its two singletons, so allocating one through int's
-		__new__ is unsafe.  Grail's Boolean cannot be allocated at all --
-		``Boolean class>>new'' is shouldNotImplement, an UNCATCHABLE
-		Smalltalk Error where Python code expects a TypeError
-		(test_bool.py test_subclass)."
-		obj == Boolean ifTrue: [
-			TypeError ___signal___:
-				'int.__new__(bool) is not safe, use bool.__new__()'].
-		inst := obj @env0:new.
-		inst @env0:dynamicInstVarAt: #value put: (self __new__: base).
-		^ inst].
+	(obj isKindOf: Behavior) ifTrue: [^ self ___new__: { obj. base } kw: nil].
 	"base must be an integer -- or an object implementing __index__
 	(PEP 357), e.g. a class with a plain __index__ method, coerced the
 	same way the arithmetic dunders above fall back to __index__ for a
@@ -967,10 +1014,20 @@ __le__: other
 category: 'Grail-Bitwise Operations'
 method: int
 __lshift__: other
-	"Left shift."
+	"Left shift.
+
+	A shift past GemStone's LargeInteger ceiling (~130144 bits) raises the
+	kernel's NumericError, which no Python ``except'' catches and which ends a
+	``./grail'' run outright; it is resignalled as the catchable OverflowError
+	__pow__: already raises for the same ceiling.  Only a count that could
+	reach it pays for the handler."
 
 	(other isKindOf: Integer) ifTrue: [
 		(other @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
+		(other @env0:> 64) ifTrue: [
+			^ [self @env0:bitShift: other]
+				@env0:on: NumericError
+				do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity']].
 		^ self @env0:bitShift: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [ | idx |
@@ -1569,18 +1626,20 @@ numerator
 	^ self
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: int
 __iter__
+	<grailProtocolRefusal>
 	"iter(int) raises catchable TypeError (CPython) -- heapify(non-
 	sequence) sent an uncatchable env-1 MNU."
 
 	TypeError ___signal___: '''int'' object is not iterable'
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: int
 __getitem__: idx
+	<grailProtocolRefusal>
 	"x[i] on an int raises catchable TypeError (CPython).  Without a
 	real method the send died as an UNCATCHABLE env-1 MNU and killed
 	the test_fractions module run.  Safe as a real method on int alone

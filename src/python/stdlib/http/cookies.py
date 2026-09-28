@@ -335,8 +335,16 @@ class BaseCookie(dict):
         dict.__setitem__(self, key, M)
 
     def __setitem__(self, key, value):
-        rval, cval = self.value_encode(value)
-        self._set(key, rval, cval)
+        # CPython's: a Morsel is stored as-is.  Encoding it instead turned the
+        # whole morsel into its ``Set-Cookie:'' text and stored THAT as the
+        # value -- which is what unpickling a cookie does, since SETITEMS hands
+        # the rebuilt Morsel straight to this method (test_pickle's
+        # test_unpickle_from_2x).
+        if isinstance(value, Morsel):
+            dict.__setitem__(self, key, value)
+        else:
+            rval, cval = self.value_encode(value)
+            self._set(key, rval, cval)
 
     def output(self, attrs=None, header='Set-Cookie:', sep='\r\n'):
         result = []

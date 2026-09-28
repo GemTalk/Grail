@@ -154,6 +154,24 @@ class _Proxy:
     def __bool__(self):
         return bool(self.__get())
 
+    # The conversions CPython's proxy forwards too.  ``float(p)'' reaches
+    # __float__ on the PROXY's class and never falls through to __getattr__, so
+    # without these a proxy of a number converted to nothing.
+    def __int__(self):
+        return int(self.__get())
+
+    def __float__(self):
+        return float(self.__get())
+
+    def __complex__(self):
+        return complex(self.__get())
+
+    def __index__(self):
+        return self.__get().__index__()
+
+    def __bytes__(self):
+        return bytes(self.__get())
+
 
 class _CallableProxy(_Proxy):
     """proxy for callable referents — adds __call__ delegation."""
@@ -167,6 +185,7 @@ class _CallableProxy(_Proxy):
 class WeakValueDictionary:
     """Mapping whose values are held weakly. An entry vanishes when its value
     is reclaimed."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, dict_or_iter=None):
         self._data = {}
@@ -323,6 +342,7 @@ def _make_key_entry_remover(entries):
 class WeakKeyDictionary:
     """Mapping whose keys are held weakly. An entry vanishes when its key
     is reclaimed. Lookup is by identity (`is`)."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, dict_or_iter=None):
         # list of (key_ref, value) — order preserved.
@@ -460,6 +480,7 @@ class WeakKeyDictionary:
 
 class WeakSet:
     """Set holding its members weakly; members drop out on reclamation."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, iterable=None):
         self._refs = []
@@ -539,6 +560,7 @@ class WeakMethod:
     Python can't directly subclass with the required slot layout). If a
     consumer needs `isinstance(x, weakref.ref)` to match WeakMethod, that
     use site would need separate handling."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, meth, callback=None):
         self._inst_ref = ref(meth.__self__, self._make_cb(callback))

@@ -106,21 +106,14 @@ r['dir_of_a_class_lists_its_methods'] = repr(
 r['plain_methods_are_found'] = repr(
     [n in _c for n in ('meth', 'prop', 'inherited')])
 
-# --- KNOWN GAP, recorded rather than endorsed -------------------------------------------
-# Inherited from the substrate, not from the port, and its own piece of work.
-# CPython is expected to DISAGREE with the value below.
-#
-# A user class's __dict__ holds a plain function where CPython holds a
-# staticmethod or classmethod OBJECT, and ``kind'' is read off the __dict__
-# entry precisely because that object is what distinguishes them.  So both come
-# back as plain methods.  (The entry used to leak the Smalltalk spelling
-# 'UnboundMethod'; the type-name correction makes it read 'function', which
-# changes what the leak looks like without closing it -- CPython answers
-# ['staticmethod', 'classmethod'].)  object's own three hooks ARE wrapped (see
-# init_subclass_kind below) because their kinds are fixed and known; doing the
-# same for a class body's defs means telling a @classmethod from a metaclass
-# method at compile time, which the category marker only settles for enums.
-r['staticmethod_kind_is_a_known_gap'] = repr(
+# --- staticmethod / classmethod kinds -----------------------------------------------------
+# A user class's __dict__ holds the staticmethod or classmethod OBJECT, as
+# CPython's does, and ``kind'' is read off that entry precisely because the
+# object is what distinguishes them.  This was a recorded gap: the entry was a
+# plain function for both (the Smalltalk spelling 'UnboundMethod' before the
+# type-name correction), so both came back as plain methods.  ClassDefAst's
+# ___staticMethodNames___ record is what tells the two apart now.
+r['staticmethod_kind'] = repr(
     [type(C.__dict__['stat']).__name__, type(C.__dict__['cls_m']).__name__])
 
 
@@ -184,10 +177,10 @@ EXPECTED = {
     'object_dict_has_no_internals': '[False, False, False, False, False]',
     'plain_data': "('data', True)",
     'plain_methods_are_found': '[True, True, True]',
+    'staticmethod_kind': "['staticmethod', 'classmethod']",
 }
 
 GRAIL_ONLY = {
-    'staticmethod_kind_is_a_known_gap': "['function', 'function']",
 }
 
 

@@ -50,7 +50,8 @@ is exported, so the length cannot change under a live view.
 
 Scope, stated rather than discovered later:
   * ONE-DIMENSIONAL only.  ndim is always 1; CPython''s multi-dimensional views
-    (from arrays with shape/strides) are not modelled.
+    (from arrays with shape/strides) are not modelled.  A stepped slice IS: it
+    carries its stride in ``_step''.
   * Integer formats only -- B b H h I i L l Q q -- plus the native-order
     assumption that Grail runs little-endian.  ''f''/''d'' and the struct
     modifiers raise ValueError from cast rather than answering wrong numbers.
@@ -77,6 +78,22 @@ __new__: anObject
 	``.cast('B')'' a reinterpretation rather than a no-op."
 
 	| fmt |
+	"``memoryview(mv)'' is a NEW view onto the SAME memory -- same source, same
+	window, same format, and read-only if mv is -- not a view over mv's bytes
+	rendered afresh, which is what the ``tobytes'' fallback below would make of
+	it (a copy, with ``obj'' naming the view instead of the exporter)."
+	(anObject isKindOf: memoryview) ifTrue: [^ anObject ___reexport___].
+	"PEP 688: a Python class exports a buffer by defining ``__buffer__'', which
+	answers a memoryview.  pickle.PickleBuffer is one -- ``memoryview(pb).obj''
+	has to be the object the buffer wraps, which is how test.picklecommon's
+	zero-copy reconstructors tell a view of their own instance from a copy."
+	((anObject isKindOf: ByteArray) not
+		and: [anObject ___respondsTo___: #'__buffer__:']) ifTrue: [
+			| exported |
+			exported := anObject @env1:__buffer__: 0.
+			(exported isKindOf: memoryview) ifFalse: [
+				^ TypeError ___signal___: '__buffer__ returned non-memoryview object'].
+			^ exported ___reexport___].
 	fmt := [| tc |
 		tc := anObject @env1:___pyAttrLoad___: #'typecode'.
 		((tc isKindOf: CharacterCollection) and: [tc @env0:size @env0:= 1])
@@ -127,6 +144,11 @@ ___over___: anObject format: fmt offset: anOffset length: aLength
 	inst @env0:dynamicInstVarAt: #'_obj' put: anObject.
 	inst @env0:dynamicInstVarAt: #'_offset' put: anOffset.
 	inst @env0:dynamicInstVarAt: #'_length' put: aLength.
+	"The stride in ITEMS between consecutive items of this view: 1 for every
+	 view but a stepped slice (see ___sliceView___:).  ``_offset'' is always the
+	 byte offset of ITEM 0, which for a negative step is the LAST item of the
+	 source window, not the first."
+	inst @env0:dynamicInstVarAt: #'_step' put: 1.
 	inst @env0:dynamicInstVarAt: #'format' put: fmt.
 	inst @env0:dynamicInstVarAt: #'itemsize' put: itemsize.
 	inst @env0:dynamicInstVarAt: #'nbytes' put: aLength.
@@ -134,8 +156,50 @@ ___over___: anObject format: fmt offset: anOffset length: aLength
 	inst @env0:dynamicInstVarAt: #'readonly' put: (self ___isReadOnly___: anObject).
 	inst @env0:dynamicInstVarAt: #'shape'
 		put: (tuple @env0:withAll: { aLength @env0:// itemsize }).
+	"``obj'' is the EXPORTER -- the object whose memory this is -- and the
+	contiguity flags are constant because every view here is 1-D with unit
+	stride.  pickle reads all of them: save_picklebuffer refuses a
+	non-contiguous buffer, and a zero-copy reconstructor tests ``m.obj''."
+	inst @env0:dynamicInstVarAt: #'obj' put: anObject.
+	inst @env0:dynamicInstVarAt: #'contiguous' put: true.
+	inst @env0:dynamicInstVarAt: #'c_contiguous' put: true.
+	inst @env0:dynamicInstVarAt: #'f_contiguous' put: true.
+	inst @env0:dynamicInstVarAt: #'strides' put: (tuple @env0:withAll: { itemsize }).
+	inst @env0:dynamicInstVarAt: #'suboffsets' put: (tuple @env0:withAll: #()).
 	inst @env0:dynamicInstVarAt: #'_released' put: false.
 	^ inst
+%
+
+category: 'Grail-Instance Creation'
+method: memoryview
+___reexport___
+	"A new view onto exactly this view's memory: same exporter, window, format
+	and writability.  What ``memoryview(self)'' answers."
+
+	| view |
+	self ___checkReleased___.
+	view := memoryview
+		___over___: (self @env0:dynamicInstVarAt: #'_obj')
+		format: (self @env0:dynamicInstVarAt: #'format')
+		offset: (self @env0:dynamicInstVarAt: #'_offset')
+		length: (self @env0:dynamicInstVarAt: #'_length').
+	view @env0:dynamicInstVarAt: #'readonly'
+		put: (self @env0:dynamicInstVarAt: #'readonly').
+	"The STRIDE too: re-exporting ``memoryview(b)[::2]'' answered a
+	unit-stride view of the same window -- different bytes, and contiguous."
+	^ view ___setStep___: self ___step___
+%
+
+category: 'Grail-Conversion'
+method: memoryview
+toreadonly
+	"``mv.toreadonly()'' -- a read-only view onto the same memory.  pickle's
+	READONLY_BUFFER opcode applies it to an out-of-band buffer."
+
+	| view |
+	view := self ___reexport___.
+	view @env0:dynamicInstVarAt: #'readonly' put: true.
+	^ view
 %
 
 category: 'Grail-Instance Creation'
@@ -174,9 +238,17 @@ ___isReadOnly___: anObject
 	``bytes subclass: 'bytearray''' -- a real Smalltalk class, so the mutable case
 	is an identity question and not a string one.  The first version asked for a
 	Python type NAME instead, which answered nil here and silently made every view
-	read-only; the fixture's write_through check is what caught it."
+	read-only; the fixture's write_through check is what caught it.
 
-	^ (anObject isKindOf: bytearray) @env0:not
+	A source that is not a ByteArray at all -- array.array -- is WRITABLE when it
+	offers the byte-level write hook ``_grail_set_byte(i, v)'', which is how
+	__setitem__ reaches it (see there).  CPython's view over an array is
+	writable, and struct.pack_into into ``memoryview(array('b', ...))'' is the
+	idiom test_struct's _test_pack_into is built on; answering read-only made
+	both of its pack_into tests ``cannot modify read-only memory''."
+
+	(anObject isKindOf: ByteArray) ifTrue: [^ (anObject isKindOf: bytearray) @env0:not].
+	^ (anObject ___respondsTo___: #'_grail_set_byte:_:') @env0:not
 %
 
 ! ------------------- Reading the source
@@ -214,12 +286,68 @@ ___viewBytes___
 	sliced view reads only its own window while still re-deriving from the live
 	source on each call."
 
-	| all off len |
+	| all off len step itemsize out |
 	all := self ___sourceBytes___.
 	off := self @env0:dynamicInstVarAt: #'_offset'.
 	len := self @env0:dynamicInstVarAt: #'_length'.
+	step := self ___step___.
+	step @env0:= 1 ifFalse: [
+		"A STEPPED view: gather its items, in view order, out of the source."
+		itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
+		out := ByteArray @env0:new: len.
+		0 @env0:to: (len @env0:// itemsize) @env0:- 1 do: [:k |
+			| from |
+			from := off @env0:+ (k @env0:* step @env0:* itemsize).
+			1 @env0:to: itemsize do: [:j |
+				out @env0:at: (k @env0:* itemsize) @env0:+ j
+					put: (all @env0:at: from @env0:+ j)]].
+		^ out].
 	(off @env0:= 0 and: [len @env0:= all @env0:size]) ifTrue: [^ all].
 	^ all @env0:copyFrom: off @env0:+ 1 to: off @env0:+ len
+%
+
+category: 'Grail-Private'
+method: memoryview
+___step___
+	"The item stride, 1 for a contiguous view.  Guarded: a view built before
+	the slot existed has none."
+
+	^ ([self @env0:dynamicInstVarAt: #'_step'] @env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]) ifNil: [1]
+%
+
+category: 'Grail-Private'
+method: memoryview
+___isContiguous___
+	"True unless this is a stepped slice.  CPython's ``contiguous''; the
+	operations that need raw contiguous memory -- a bulk write, cast,
+	struct.pack_into -- refuse a view for which this is false."
+
+	^ self ___step___ @env0:= 1
+%
+
+category: 'Grail-Private'
+method: memoryview
+___writableWindow___
+	"{ source bytes. byte offset. byte length } for a caller that writes into
+	this view's memory in bulk -- os.readinto, which _pyio.FileIO reads through.
+	The LIVE source, never the copy ___viewBytes___ answers for a slice, so the
+	write lands where the view points."
+
+	| bytes |
+	bytes := self ___sourceBytes___.
+	"Refused for a source that is not a ByteArray even when it is writable: its
+	bytes here are a COPY, so a bulk write into them would vanish.  Such a view
+	is written one byte at a time, through __setitem__."
+	(((self @env0:dynamicInstVarAt: #'readonly') @env0:= true)
+		@env0:or: [((self @env0:dynamicInstVarAt: #'_obj') isKindOf: ByteArray) @env0:not
+		@env0:or: [self ___isContiguous___ @env0:not]])
+		ifTrue: [
+			TypeError ___signal___:
+				'readinto() argument 2 must be read-write bytes-like object, not memoryview'].
+	^ { bytes.
+		self @env0:dynamicInstVarAt: #'_offset'.
+		self @env0:dynamicInstVarAt: #'_length' }
 %
 
 category: 'Grail-Private'
@@ -299,42 +427,97 @@ __getitem__: index
 category: 'Grail-Sequence Protocol'
 method: memoryview
 ___sliceView___: aSlice
-	"``mv[start:stop]'' as a sub-view over the same source object.
+	"``mv[start:stop:step]'' as a sub-view over the same source object.
 
-	Step is not supported, matching CPython for a NON-CONTIGUOUS slice of a
-	memoryview: ``memoryview(b'abcd')[::2]'' answers a view there, but only
-	because CPython carries strides, which this 1-D implementation does not.
-	Raising is the honest answer -- a silently-contiguous result would answer
-	the wrong bytes."
+	A STEPPED slice is a real view too, as CPython's is: ``_step'' carries the
+	stride, reads gather through it and a write lands on the right byte of the
+	source.  It used to raise NotImplementedError, which is not what CPython
+	does and not what code catches -- test_struct's _test_pack_into builds
+	``writable_buf[::2]'' and ``[::-1]'' as ARGUMENTS, expecting the view to
+	exist and pack_into to refuse it with TypeError because it is not
+	contiguous, and the NotImplementedError escaped from the argument list.
 
-	| n start stop step itemsize |
+	The bounds follow CPython's slice.indices: a negative step counts down
+	from the end, and the result's _offset is the byte offset of its FIRST
+	item in view order.  Slicing a stepped view composes the strides."
+
+	| n start stop step itemsize count oldStep |
 	n := self __len__.
 	itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
 	"``step'' / ``start'' / ``stop'' are read through slice's own ACCESSORS, not
 	 through ___pyAttrLoad___.  An attribute load on a slice built by codegen
 	 answers a BoundMethod wrapping the accessor rather than the value -- the
 	 unary-method branch of the load, since the slot is not a dynamic instVar on
-	 that object -- so every ``mv[1:3]'' saw a step of ``aBoundMethod'' and was
-	 rejected as non-contiguous.  The accessor is unambiguous."
+	 that object -- so every ``mv[1:3]'' saw a step of ``aBoundMethod''."
 	step := aSlice @env1:step.
-	((step == nil) @env0:or: [step == None @env0:or: [step @env0:= 1]]) ifFalse: [
-		"Names the offending step and its class.  The first version said only
-		 ``only contiguous slices are supported'', which sent me looking for a
-		 stepped slice in tests that all use ``[1:3]'' -- the step was not 2, it
-		 was a value this test did not recognise as absent."
-		NotImplementedError ___signal___:
-			('memoryview: only contiguous (step 1) slices are supported, got step '
-				@env0:, step @env0:printString
-				@env0:, ' (' @env0:, step @env0:class @env0:name @env0:asString @env0:, ')')].
-	start := self ___normaliseSliceBound___: (aSlice @env1:start) default: 0 length: n.
-	stop := self ___normaliseSliceBound___: (aSlice @env1:stop) default: n length: n.
-	stop @env0:< start ifTrue: [stop := start].
-	^ memoryview
+	((step == nil) @env0:or: [step == None]) ifTrue: [step := 1].
+	(step isKindOf: Integer) ifFalse: [
+		TypeError ___signal___: 'slice indices must be integers or None or have an __index__ method'].
+	step @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
+	step @env0:> 0
+		ifTrue: [
+			start := self ___normaliseSliceBound___: (aSlice @env1:start) default: 0 length: n.
+			stop := self ___normaliseSliceBound___: (aSlice @env1:stop) default: n length: n.
+			count := stop @env0:> start
+				ifTrue: [((stop @env0:- start) @env0:- 1) @env0:// step @env0:+ 1]
+				ifFalse: [0]]
+		ifFalse: [
+			start := self ___normaliseDownBound___: (aSlice @env1:start) default: n @env0:- 1 length: n.
+			stop := self ___normaliseDownBound___: (aSlice @env1:stop) default: -1 length: n.
+			count := start @env0:> stop
+				ifTrue: [((start @env0:- stop) @env0:- 1) @env0:// step @env0:negated @env0:+ 1]
+				ifFalse: [0]].
+	oldStep := self ___step___.
+	^ (memoryview
 		___over___: (self @env0:dynamicInstVarAt: #'_obj')
 		format: (self @env0:dynamicInstVarAt: #'format')
 		offset: (self @env0:dynamicInstVarAt: #'_offset')
-			@env0:+ (start @env0:* itemsize)
-		length: (stop @env0:- start) @env0:* itemsize
+			@env0:+ (count @env0:= 0
+				ifTrue: [0]
+				ifFalse: [start @env0:* oldStep @env0:* itemsize])
+		length: count @env0:* itemsize)
+			___setStep___: oldStep @env0:* step
+%
+
+category: 'Grail-Sequence Protocol'
+method: memoryview
+___setStep___: anInteger
+	"Record the item stride of a stepped slice, and answer the view.
+
+	The published geometry follows it: ``strides'' is the byte stride, and the
+	view is contiguous -- all three flags, it being 1-D -- exactly when CPython's
+	init_flags says so, one item or a stride of one item.  ___over___ set them
+	for a unit-stride view, and left as they were a stepped view claimed to be
+	contiguous, so pickle's save_picklebuffer took ``memoryview(b)[::2]'' for
+	raw memory (test_pickle's test_non_continuous_buffer)."
+
+	| itemsize count contiguous |
+	self @env0:dynamicInstVarAt: #'_step' put: anInteger.
+	itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
+	count := (self @env0:dynamicInstVarAt: #'_length') @env0:// itemsize.
+	contiguous := count @env0:= 1 or: [anInteger @env0:= 1].
+	self @env0:dynamicInstVarAt: #'strides'
+		put: (tuple @env0:withAll: { anInteger @env0:* itemsize }).
+	self @env0:dynamicInstVarAt: #'contiguous' put: contiguous.
+	self @env0:dynamicInstVarAt: #'c_contiguous' put: contiguous.
+	self @env0:dynamicInstVarAt: #'f_contiguous' put: contiguous.
+	^ self
+%
+
+category: 'Grail-Sequence Protocol'
+method: memoryview
+___normaliseDownBound___: value default: aDefault length: n
+	"A slice bound for a NEGATIVE step, as CPython's PySlice_AdjustIndices
+	clamps it: absent means the default, negative counts from the end, and the
+	result lies in -1..n-1 -- -1 standing for ``before the first item''."
+
+	| v |
+	((value == nil) @env0:or: [value == None]) ifTrue: [^ aDefault].
+	v := value.
+	v @env0:< 0 ifTrue: [v := v @env0:+ n].
+	v @env0:< 0 ifTrue: [^ -1].
+	v @env0:>= n ifTrue: [^ n @env0:- 1].
+	^ v
 %
 
 category: 'Grail-Sequence Protocol'
@@ -362,10 +545,29 @@ __setitem__: index _: value
 	itemsize bytes, and nothing in the corpus does that yet -- so it raises
 	rather than silently writing the low byte."
 
-	| n i bytes itemsize |
+	| n i bytes itemsize at |
 	self ___checkReleased___.
 	((self @env0:dynamicInstVarAt: #'readonly') @env0:= true) ifTrue: [
 		TypeError ___signal___: 'cannot modify read-only memory'].
+	"``mv[a:b] = data'' -- the same sub-view mv[a:b] answers, written item by
+	 item through the integer path below, so a stepped slice and a non-ByteArray
+	 source are handled once.  It fell into that path whole and sent < to the
+	 slice, an MNU no Python handler sees (ssl's recv_into reads into
+	 ``view[:n]'')."
+	(index isKindOf: slice) ifTrue: [ | sub src |
+		sub := self ___sliceView___: index.
+		src := (value isKindOf: memoryview)
+			ifTrue: [value tobytes]
+			ifFalse: [value].
+		(src isKindOf: ByteArray) ifFalse: [
+			TypeError ___signal___: 'a bytes-like object is required, not '''
+				@env0:, (value ___pyTypeNameForError___) @env0:asString @env0:, ''''].
+		sub __len__ @env0:= src @env0:size ifFalse: [
+			ValueError ___signal___:
+				'memoryview assignment: lvalue and rvalue have different structures'].
+		0 @env0:to: src @env0:size @env0:- 1 do: [:j |
+			sub __setitem__: j _: (src @env0:at: j @env0:+ 1)].
+		^ None].
 	itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
 	itemsize @env0:= 1 ifFalse: [
 		NotImplementedError ___signal___:
@@ -380,10 +582,20 @@ __setitem__: index _: value
 			ValueError ___signal___: 'memoryview: invalid value for format ''B'''].
 	"The SOURCE, offset by this view's window -- writing into ___viewBytes___
 	 would write into the copy a sliced view answers, and the source would never
-	 see it."
+	 see it.
+
+	 A source that is not a ByteArray renders its bytes as a COPY (tobytes), so
+	 writing there would be lost; it takes the write itself, through the hook
+	 ___isReadOnly___: checked for.  The hook's index is a byte offset into the
+	 whole source, which it maps onto its own items."
+	"A stepped view's item i sits ``step'' items apart; itemsize is 1 here."
+	at := (self @env0:dynamicInstVarAt: #'_offset') @env0:+ (i @env0:* self ___step___).
+	bytes := self @env0:dynamicInstVarAt: #'_obj'.
+	(bytes isKindOf: ByteArray) ifFalse: [
+		bytes @env1:_grail_set_byte: at _: value.
+		^ None].
 	bytes := self ___sourceBytes___.
-	bytes @env0:at: (self @env0:dynamicInstVarAt: #'_offset') @env0:+ i @env0:+ 1
-		put: value.
+	bytes @env0:at: at @env0:+ 1 put: value.
 	^ None
 %
 
@@ -411,6 +623,8 @@ cast: fmt
 	view of the thing the first memoryview was made from."
 
 	self ___checkReleased___.
+	self ___isContiguous___ ifFalse: [
+		TypeError ___signal___: 'memoryview: casts are restricted to C-contiguous views'].
 	^ memoryview ___over___: (self @env0:dynamicInstVarAt: #'_obj') format: fmt
 %
 

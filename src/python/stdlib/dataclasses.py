@@ -9,7 +9,7 @@
 #       at call time.
 #   (2) ``__annotations__'' isn't exposed as a runtime class
 #       attribute — Grail's ClassDefAst processes annotations at
-#       parse time and surfaces them as ``_fields'' (bare annotations
+#       parse time and surfaces them as ``___bareAnnotatedFields___'' (bare annotations
 #       only — annotated lines with a default value go to class-
 #       attribute storage instead).
 #   (3) ``cls.__new__(cls)'' descriptor read for built-in __new__
@@ -60,6 +60,7 @@ class FrozenInstanceError(AttributeError):
 class Field:
     """Field descriptor — what ``field()'' returns and what
     ``fields()'' enumerates."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, default=MISSING, default_factory=MISSING,
                  init=True, repr=True, hash=None, compare=True,
@@ -125,19 +126,12 @@ class _Params:
 
 def _is_class(obj):
     """True if obj is a class object (rather than an instance).
-    CPython uses ``isinstance(obj, type)''; Grail's ``type'' isn't
-    usable as a class argument to isinstance, so we sniff for a
-    class-shaped marker (``__name__'' returns a string on both
-    classes and modules, but only classes also have a metaclass-
-    side ``mro'' equivalent).  Simpler proxy: check for the
-    ``_fields'' classInstVar that ClassDefAst stamps on every
-    Python user class."""
-    # Cheap structural test: classes respond to type(...) returning
-    # something that isn't themselves (their metaclass), instances
-    # respond with their class.  Try-except around type() since
-    # weird shim wrappers may not respond at all.
+
+    It used to sniff for the ``_fields'' pair ClassDefAst stamped on
+    every annotated class, from when ``isinstance(obj, type)'' did not
+    work; that does now, and the pair is ``___bareAnnotatedFields___''."""
     try:
-        return type(obj) is not obj and hasattr(obj, '_fields')
+        return isinstance(obj, type)
     except Exception:
         return False
 
@@ -265,22 +259,22 @@ def _collect_fields(cls):
 
     Field order + the full name set come from ClassDefAst's
     ``___annotatedFields___'' (every annotated line, including those
-    with a default), falling back to ``_fields'' (bare annotations
+    with a default), falling back to ``___bareAnnotatedFields___'' (bare annotations
     only) for classes compiled before that accessor existed.
 
-    ``_fields'' separately tells us which names are BARE annotations
+    ``___bareAnnotatedFields___'' separately tells us which names are BARE annotations
     (``x: int'' — required, no default).  For every other annotated
     name the class attribute holds the default: a ``Field'' descriptor
     (from ``field(...)'') is used directly, anything else is the plain
-    default value.  Splitting on ``_fields'' membership sidesteps the
+    default value.  Splitting on that membership sidesteps the
     Smalltalk-nil-vs-Python-None ambiguity for unset bare slots."""
     order = getattr(cls, '___annotatedFields___', None)
     if order is None:
-        order = getattr(cls, '_fields', None)
+        order = getattr(cls, '___bareAnnotatedFields___', None)
     if order is None:
         return OrderedDict()
 
-    bare = set(getattr(cls, '_fields', ()) or ())
+    bare = set(getattr(cls, '___bareAnnotatedFields___', ()) or ())
     # OrderedDict, not {} — Grail's plain dict is hash-ordered, but
     # dataclass field layout (and thus positional __init__ binding,
     # fields(), asdict, ...) must follow declaration order.

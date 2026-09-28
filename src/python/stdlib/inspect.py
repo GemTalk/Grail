@@ -477,6 +477,13 @@ def formatannotation(annotation, base_module=None):
     test is "does it have a __name__" rather than isinstance(x, type): ``str``
     is a BoundMethod here and would otherwise have printed as its repr.
     """
+    # CPython's first rule: a typing construct prints as its repr with the
+    # ``typing.`` prefixes dropped -- ``int | None``, ``List[int]``.  It has to
+    # come before the __name__ test, since a union answers __name__ 'Union'.
+    if getattr(annotation, '__module__', None) == 'typing':
+        import re
+        return re.sub(r'[\w\.]+', lambda m: m.group().removeprefix('typing.'),
+                      repr(annotation))
     name = getattr(annotation, '__name__', None)
     if isinstance(name, str):
         return name
@@ -1021,6 +1028,43 @@ FrameInfo = _namedtuple(
     'FrameInfo', 'frame filename lineno function code_context index')
 
 
+Traceback = _namedtuple(
+    'Traceback', 'filename lineno function code_context index')
+
+
+def getframeinfo(frame, context=1):
+    """(filename, lineno, function, code_context, index) for a frame or a
+    traceback, as CPython's inspect.getframeinfo answers.
+
+    code_context is up to ``context`` source lines centred on the current one,
+    read through linecache as CPython reads them, and index is the current
+    line's position in it.  Both are None when the source cannot be found --
+    generated code, or a file that has gone -- rather than a plausible wrong
+    line.
+
+    GRAIL: the record has no ``positions`` (3.11's column range): Grail's
+    frames carry a line number only.
+    """
+    if hasattr(frame, 'tb_frame'):
+        lineno = frame.tb_lineno
+        frame = frame.tb_frame
+    else:
+        lineno = getattr(frame, 'f_lineno', None)
+    code = getattr(frame, 'f_code', None)
+    if code is None or lineno is None:
+        raise TypeError('{!r} is not a frame or traceback object'.format(frame))
+    filename = code.co_filename
+    code_context = index = None
+    if context > 0:
+        import linecache
+        lines = linecache.getlines(filename)
+        if lines and 0 < lineno <= len(lines):
+            start = max(0, min(lineno - 1 - context // 2, len(lines) - context))
+            code_context = lines[start:start + context]
+            index = lineno - 1 - start
+    return Traceback(filename, lineno, code.co_name, code_context, index)
+
+
 def getouterframes(frame, context=1):
     """The frame and all its callers, innermost first, as FrameInfo records.
 
@@ -1086,16 +1130,122 @@ def currentframe():
         return None
 
 
-def getattr_static(obj, name, default=None):
-    """``inspect.getattr_static(obj, name)`` — CPython's
-    descriptor-bypassing attribute lookup.  Grail has no descriptor
-    machinery and getattr() already returns the underlying value
-    rather than running descriptors, so the stub just delegates to
-    builtin ``getattr`` with the same default-fallback semantics."""
+_sentinel = object()
+
+
+def _static_getmro(klass):
     try:
-        return getattr(obj, name)
+        return type.__getattribute__(klass, '__mro__')
+    except (AttributeError, TypeError):
+        return (klass,)
+
+
+def _getattr_static_class_dict(entry, cache):
+    # A class's __dict__ is built afresh on every read under Grail, so one
+    # getattr_static call reads each class's at most once.
+    d = cache.get(id(entry))
+    if d is None:
+        try:
+            d = type.__getattribute__(entry, '__dict__')
+        except (AttributeError, TypeError):
+            d = {}
+        cache[id(entry)] = d
+    return d
+
+
+def _check_instance(obj, attr):
+    instance_dict = {}
+    try:
+        instance_dict = object.__getattribute__(obj, "__dict__")
     except AttributeError:
+        pass
+    try:
+        return dict.get(instance_dict, attr, _sentinel)
+    except TypeError:
+        return instance_dict.get(attr, _sentinel)
+
+
+def _check_class(klass, attr, cache):
+    for entry in _static_getmro(klass):
+        if _shadowed_dict(type(entry), cache) is _sentinel:
+            d = _getattr_static_class_dict(entry, cache)
+            if attr in d:
+                return d[attr]
+    return _sentinel
+
+
+def _shadowed_dict(klass, cache):
+    # A class body that binds ``__dict__`` itself (a property, say) hides the
+    # instance dict; CPython's check also excludes the ordinary getset
+    # descriptor, which Grail's class dict never lists.
+    for entry in _static_getmro(klass):
+        # ``type`` and ``object`` list their own ``__dict__`` -- the getset
+        # descriptor CPython's check excludes by type -- so an entry on one
+        # of those roots is never a shadowing binding.  Counting type's made
+        # every class look shadowed, and getattr_static then never read a
+        # class's __dict__ at all.
+        if entry is type or entry is object:
+            continue
+        d = _getattr_static_class_dict(entry, cache)
+        if '__dict__' in d:
+            return d['__dict__']
+    return _sentinel
+
+
+def getattr_static(obj, attr, default=_sentinel):
+    """Retrieve attributes without triggering dynamic lookup via the
+       descriptor protocol,  __getattr__ or __getattribute__.
+
+       Note: this function may not be able to retrieve all attributes
+       that getattr can fetch (like dynamically created attributes)
+       and may find attributes that getattr can't (like descriptors
+       that raise AttributeError). It can also return descriptor objects
+       instead of instance members in some cases. See the
+       documentation for details.
+
+       CPython's algorithm, over the instance dict and each class's own
+       __dict__ along the MRO.  This used to be ``getattr(obj, name)`` with
+       a default of None, which ran every descriptor and __getattr__ it was
+       meant to bypass and answered None for an attribute that did not exist
+       -- so typing's runtime-checkable protocols, which read members
+       through it, found every member on every object.
+    """
+    cache = {}
+    instance_result = _sentinel
+
+    objtype = type(obj)
+    if type not in _static_getmro(objtype):
+        klass = objtype
+        dict_attr = _shadowed_dict(klass, cache)
+        if dict_attr is _sentinel:
+            instance_result = _check_instance(obj, attr)
+    else:
+        klass = obj
+
+    klass_result = _check_class(klass, attr, cache)
+
+    if instance_result is not _sentinel and klass_result is not _sentinel:
+        if _check_class(type(klass_result), "__get__", cache) is not _sentinel and (
+            _check_class(type(klass_result), "__set__", cache) is not _sentinel
+            or _check_class(type(klass_result), "__delete__", cache) is not _sentinel
+        ):
+            return klass_result
+
+    if instance_result is not _sentinel:
+        return instance_result
+    if klass_result is not _sentinel:
+        return klass_result
+
+    if obj is klass:
+        # for types we check the metaclass too
+        for entry in _static_getmro(type(klass)):
+            if _shadowed_dict(type(entry), cache) is _sentinel:
+                d = _getattr_static_class_dict(entry, cache)
+                if attr in d:
+                    return d[attr]
+    if default is not _sentinel:
         return default
+    raise AttributeError(attr)
 
 
 def cleandoc(doc):

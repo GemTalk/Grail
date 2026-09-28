@@ -97,10 +97,10 @@ testEveryArityBuildsTheSameKindOfDescriptor
 	"The 1-argument form was the odd one out: it answered a bare function while
 	property(), property(g, s), property(g, s, doc=) all built descriptors."
 
-	self assertResult: 'one_arg_type' equals: '''PropertyDescriptor'''.
-	self assertResult: 'two_arg_type' equals: '''PropertyDescriptor'''.
-	self assertResult: 'no_arg_type' equals: '''PropertyDescriptor'''.
-	self assertResult: 'kwarg_type' equals: '''PropertyDescriptor'''
+	self assertResult: 'one_arg_type' equals: '''property'''.
+	self assertResult: 'two_arg_type' equals: '''property'''.
+	self assertResult: 'no_arg_type' equals: '''property'''.
+	self assertResult: 'kwarg_type' equals: '''property'''
 %
 
 category: 'Grail-Tests-PropertyIsinstance'
@@ -109,7 +109,7 @@ testClassAccessAnswersTheDescriptorItself
 	"CPython's property.__get__(None, owner) is the property, which is what
 	makes ``C.prop.fget'' work."
 
-	self assertResult: 'class_access_is_descriptor' equals: '''PropertyDescriptor'''.
+	self assertResult: 'class_access_is_descriptor' equals: '''property'''.
 	self assertResult: 'fget_reachable' equals: 'True'
 %
 
@@ -172,17 +172,20 @@ category: 'Grail-Tests-PropertyIsinstance'
 method: PropertyAndIsinstanceTestCase
 testUnionMembersAreStillValidated
 	"Per-member checking must keep CPython's TypeErrors: a non-class first
-	argument, and a parameterised generic as classinfo."
+	argument, and a parameterised generic as classinfo -- which types.GenericAlias
+	refuses itself now, with CPython 3.14's own wording, through its
+	__instancecheck__/__subclasscheck__ rather than by failing the old-style
+	__bases__ probe."
 
 	self
 		assertResult: 'issubclass_union_bad_arg1'
 		equals: 'TypeError: issubclass() arg 1 must be a class'.
 	self
 		assertResult: 'issubclass_union_generic_alias'
-		equals: 'TypeError: issubclass() arg 2 must be a class, a tuple of classes, or a union'.
+		equals: 'TypeError: issubclass() argument 2 cannot be a parameterized generic'.
 	self
 		assertResult: 'isinstance_generic_alias_rejected'
-		equals: 'TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union'
+		equals: 'TypeError: isinstance() argument 2 cannot be a parameterized generic'
 %
 
 category: 'Grail-Tests-PropertyIsinstance'

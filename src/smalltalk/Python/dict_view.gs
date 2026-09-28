@@ -134,6 +134,21 @@ __copy__
 
 category: 'Grail-Copy Protocol'
 method: dict_view
+__reduce_ex__: aProtocol
+	"CPython refuses to pickle a view: ``cannot pickle 'dict_keys' object''.
+	Grail used to refuse by ACCIDENT -- pickle could not find the class under
+	any module name -- and stopped the moment collections.abc became
+	CPython's own, which binds ``dict_keys = type({}.keys())'' at module level
+	for its registrations: pickle then found the class there, and the generic
+	reduction pickled a view as an empty object (test_dictviews test_pickle)."
+
+	^ TypeError ___signal___:
+		('cannot pickle ''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' object')
+%
+
+category: 'Grail-Copy Protocol'
+method: dict_view
 __deepcopy__: memo
 	"See __copy__: a view is not deep-copyable either."
 

@@ -47,7 +47,8 @@ HttpCookiejarTestCase category: 'Grail-SUnit'
 ! dozen patterns, several with named groups and re.X), time/datetime/calendar
 ! arithmetic, threading.RLock, copy.copy, urllib.parse -- so it can be
 ! byte-identical to CPython and still behave differently here.  It also drives
-! urllib.request.Request, which this change extended and which is NOT vendored.
+! urllib.request.Request, which was hand-written when this landed and is
+! CPython's own since test_urllib2_localnet's vendoring.
 !
 ! What is deliberately absent is pinned by testOmissionsAreDeliberate below.
 ! ===============================================================================
@@ -189,10 +190,11 @@ repr((issubclass(MozillaCookieJar, FileCookieJar),
 category: 'Grail-Tests - http.cookiejar'
 method: HttpCookiejarTestCase
 testRequestCarriesThePolicySurface
-	"urllib.request.Request is NOT vendored -- Grail's is a small hand-written
-	class -- and CookiePolicy reads eight things off a request.  Before this
-	change it had four of them, and ``jar.extract_cookies(resp, Request(url))''
-	died on request.unverifiable.  Pin the whole surface, because the failure
+	"CookiePolicy reads eight things off a request.  When Grail's
+	urllib.request.Request was a small hand-written class it had four of them,
+	and ``jar.extract_cookies(resp, Request(url))'' died on
+	request.unverifiable.  Request is CPython's own now (vendored for
+	test_urllib2_localnet), but the surface stays pinned, because the failure
 	mode of a missing one is an AttributeError deep inside vendored code."
 
 	self assert: (self eval:
@@ -211,11 +213,13 @@ len(missing)
 r = urllib.request.Request(''http://www.example.com:8080/a/b?q=1'')
 repr((r.type, r.host, r.selector, r.origin_req_host, r.unverifiable))
 ') equals: '(''http'', ''www.example.com:8080'', ''/a/b?q=1'', ''www.example.com'', False)'.
-	"origin_req_host is host-only and lowercased, and drops userinfo."
+	"origin_req_host is lowercased and drops the port but KEEPS userinfo --
+	 measured under CPython 3.14.6.  The hand-written Request dropped it, and
+	 this test used to pin that divergence."
 	self assert: (self eval:
 'import urllib.request
 urllib.request.Request(''http://User@WWW.Example.COM:8080/'').origin_req_host
-') equals: 'www.example.com'.
+') equals: 'user@www.example.com'.
 	"add_unredirected_header is a separate store from add_header, and
 	 get_header/has_header see both.  That separation is the point: a
 	 redirect to another host must not re-send the Cookie header."
@@ -237,8 +241,8 @@ testOmissionsAreDeliberate
 
 	1. os.fdopen.  CPython's FileCookieJar.save creates the cookie file
 	   mode 0600 through os.open/os.fdopen so it is never world-readable.
-	   Grail's os module has no file-descriptor layer, so the two save
-	   sites go through _open_cookie_file_for_write.
+	   Grail's os has no os.fdopen, so the two save sites go through
+	   _open_cookie_file_for_write.
 
 	   THIS TRIPWIRE FIRED, AND WORKED.  It asserted that os had none of
 	   open/fdopen/close/chmod, and os.chmod arriving broke it -- which is
@@ -247,26 +251,27 @@ testOmissionsAreDeliberate
 	   STAYS world-readable on a multi-user host, and the assertion below
 	   drops chmod from the list.
 
-	   WHAT IS LEFT is the WINDOW: between open() and chmod the file exists
-	   at the process umask, and a reader who opens it in that instant keeps
-	   a readable descriptor.  CPython's O_CREAT-with-mode has no such
-	   window.  Closing it needs os.open with a mode argument, so the three
-	   remaining names stay on the list and this test stays a tripwire for
-	   them -- and the mode itself is now checked rather than assumed.
+	   IT FIRED AGAIN when os.open and os.close arrived, and that closed
+	   the WINDOW it was still guarding: between open() and chmod the file
+	   used to exist at the process umask.  The helper now creates it with
+	   os.open and mode 0600, as CPython does, and reopens it by name.
+	   os.fdopen is the one name left, so it alone stays on the list, and
+	   the mode is checked rather than assumed.
 
-	2. HTTPCookieProcessor.  In CPython it lives in urllib.request, not
-	   here, and it needs the opener/handler chain that Grail's urlopen()
-	   does not have.  A caller wires a jar up by hand instead:
-	   add_cookie_header before the call, extract_cookies after.  Stubbing
-	   it would let code that expects automatic cookie handling get
-	   something that merely looks like it."
+	2. HTTPCookieProcessor.  THIS TRIPWIRE FIRED TOO, and is now a positive
+	   check.  It lives in urllib.request, not here, and needed the
+	   opener/handler chain the hand-written urlopen() lacked, so it was
+	   pinned as absent rather than stubbed.  urllib.request is CPython's
+	   own now, handler chain and all, so HTTPCookieProcessor and
+	   build_opener are the real ones."
 
 	self assert: (self eval:
 'import os
-len([n for n in (''open'', ''fdopen'', ''close'') if hasattr(os, n)])
-') equals: 0.
-	"os.chmod DOES exist now, and the helper uses it -- so the file's mode is
-	 READ BACK rather than the absence of a name being taken as evidence."
+repr([n for n in (''open'', ''fdopen'', ''close'') if hasattr(os, n)])
+') equals: '[''open'', ''close'']'.
+	"os.open and os.chmod DO exist now, and the helper uses them -- so the
+	 file's mode is READ BACK rather than the absence of a name being taken as
+	 evidence."
 	self assert: (self eval:
 'import http.cookiejar as m
 import os, stat
@@ -282,8 +287,8 @@ oct(mode)
 ') equals: '0o600'.
 	self assert: (self eval:
 'import urllib.request
-hasattr(urllib.request, ''HTTPCookieProcessor'') or hasattr(urllib.request, ''build_opener'')
-') equals: false.
+hasattr(urllib.request, ''HTTPCookieProcessor'') and hasattr(urllib.request, ''build_opener'')
+') equals: true.
 	"MSIECookieJar and the bsddb-backed jars are not in CPython's __all__
 	 either -- they are Windows/bsddb specific and the vendored file does
 	 not define them."

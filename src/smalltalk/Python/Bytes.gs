@@ -99,6 +99,19 @@ __new__: source
 		^ self ___copyBytesOf___: source
 	].
 
+	"PEP 688: a Python class exports a buffer by defining ``__buffer__'', which
+	answers a memoryview -- pickle.PickleBuffer is one, and test_pickle's
+	out-of-band tests rebuild with ``bytearray(pb)''.  Without this branch the
+	object fell through to iteration and raised ``not iterable''.  A bytes
+	answer is accepted too: that is what Grail's own memoryview>>__buffer__:
+	hands back, and what ___bufferOperand___: already takes from it."
+	(source ___respondsTo___: #'__buffer__:') ifTrue: [
+		| exported |
+		exported := source @env1:__buffer__: 0.
+		(exported isKindOf: memoryview) ifTrue: [exported := exported @env1:tobytes].
+		(exported isKindOf: bytes) ifTrue: [^ self ___copyBytesOf___: exported].
+		TypeError ___signal___: '__buffer__ returned non-memoryview object'].
+
 	"If source is a list, tuple, or array, convert elements to bytes.
 	The length is re-read on every step (as CPython's _PyBytes_FromList does):
 	an element's __index__ may mutate the very list being consumed (gh-34973 --
@@ -252,7 +265,10 @@ _new: positional kw: kwargs
 
 	"encoding / errors are only meaningful for a str source."
 	(encoding @env0:notNil or: [errors @env0:notNil]) ifTrue: [
-		(source isKindOf: CharacterCollection) ifFalse: [
+		"AbstractPyStr counts: a str holding lone surrogates is a PyStrSurrogate,
+		and bytes(s, 'utf-8') refused it as not a string at all rather than
+		raising the UnicodeEncodeError its encode does."
+		((source isKindOf: CharacterCollection) or: [source isKindOf: AbstractPyStr]) ifFalse: [
 			TypeError ___signal___: (encoding @env0:notNil
 				ifTrue: ['encoding without a string argument']
 				ifFalse: ['errors without a string argument'])].
@@ -313,7 +329,7 @@ ___encodeSourceToSelf___: source _: enc _: errs
 	unicode_escape, with 'strict'/'ignore' errors), then copy into a fresh
 	instance of the RECEIVER class so a bytearray subclass ctor is self-typed."
 	| encoded r |
-	(source isKindOf: CharacterCollection) ifFalse: [
+	((source isKindOf: CharacterCollection) or: [source isKindOf: AbstractPyStr]) ifFalse: [
 		"A non-str source with a __bytes__ hook still converts through it
 		(gh-25766: bytes(StrWithBytes(b'abc'), 'iso8859-15'))."
 		TypeError ___signal___: 'encoding without a string argument'].
@@ -2679,14 +2695,25 @@ ___stringFromCodePoints___: codePoints
 	The ordinary case is unchanged in kind and pays one pass: no surrogate,
 	no PyStrSurrogate."
 
-	| anySurrogate out |
+	| anySurrogate out maxCp |
 	anySurrogate := false.
+	maxCp := 0.
 	codePoints @env0:do: [:cp |
 		((cp @env0:>= 16rD800) @env0:and: [cp @env0:<= 16rDFFF])
-			ifTrue: [anySurrogate := true]].
+			ifTrue: [anySurrogate := true].
+		cp @env0:> maxCp ifTrue: [maxCp := cp]].
 	anySurrogate ifTrue: [
 		^ PyStrSurrogate @env0:___fromCodePoints___: codePoints @env0:asArray].
-	out := Unicode32 @env0:new: codePoints @env0:size.
+	"THE NARROWEST CLASS THAT HOLDS THEM, as the strict decoder
+	(decodeFromUTF8) and a source literal both choose: Unicode7 for ASCII,
+	Unicode16 inside the BMP, Unicode32 beyond it.  Always building a Unicode32
+	made ``str(b'ab', 'utf-8', 'surrogatepass')'' a different type from
+	``'ab''', and ``type(a) is type(b)'' is a Python-visible question --
+	test_pickle's test_unicode asks it of every string the unpickler builds."
+	out := (maxCp @env0:< 128
+		ifTrue: [Unicode7]
+		ifFalse: [maxCp @env0:< 16r10000 ifTrue: [Unicode16] ifFalse: [Unicode32]])
+			@env0:new: codePoints @env0:size.
 	1 @env0:to: codePoints @env0:size do: [:k |
 		out @env0:at: k put: (Character @env0:codePoint: (codePoints @env0:at: k))].
 	^ out

@@ -794,9 +794,15 @@ testWithOnNonContextManagerRaises
 category: 'Grail-Tests - phase2 conformance'
 method: DunderNewTestCase
 testUncompilableMethodStubbed
-	"A classdef method hitting a codegen gap (generator lambda) no
-	longer aborts the classdef: the class defines, sibling methods
-	work, and CALLING the bad method raises catchable NameError."
+	"A classdef method hitting a codegen gap no longer aborts the classdef:
+	the class defines, sibling methods work, and CALLING the bad method raises
+	catchable NameError.
+
+	The fixture's gap was a generator lambda, and generator lambdas compile
+	now (LambdaAst), so it has none left to use: ``bad'' reads an undefined
+	name instead.  That keeps the class-level half of this -- one bad method
+	does not take its siblings down -- but no longer drives the STUB itself;
+	no Python construct is known to reach it today."
 
 	self assert: (self phase2b @env1:__getitem__: 'good_still_works') equals: 42.
 	self assert: (self phase2b @env1:__getitem__: 'bad_raises') equals: 'NameError'

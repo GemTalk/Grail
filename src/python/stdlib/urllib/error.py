@@ -1,90 +1,76 @@
-# Grail urllib.error — URLError + HTTPError for the minimal
-# urllib.request.urlopen.
-#
-# CPython's HTTPError multiple-inherits (URLError, http.client
-# addinfourl response mixin); Grail has no multiple inheritance, so
-# HTTPError subclasses URLError alone and carries the file-like
-# response surface (read/headers/getcode) directly.
+# Vendored from CPython 3.14.6, unmodified, alongside urllib.request.
+
+"""Exception classes raised by urllib.
+
+The base exception class is URLError, which inherits from OSError.  It
+doesn't define any behavior of its own, but is the base class for all
+exceptions defined in this package.
+
+HTTPError is an exception class that is also a valid HTTP response
+instance.  It behaves this way because HTTP protocol errors are valid
+responses, with a status code, headers, and a body.  In some contexts,
+an application may want to handle an exception like a regular
+response.
+"""
+import io
+import urllib.response
+
+__all__ = ['URLError', 'HTTPError', 'ContentTooShortError']
 
 
 class URLError(OSError):
+    # URLError is a sub-type of OSError, but it doesn't share any of
+    # the implementation.  need to override __init__ and __str__.
+    # It sets self.args for compatibility with other OSError
+    # subclasses, but args doesn't have the typical format with errno in
+    # slot 0 and strerror in slot 1.  This may be better than nothing.
     def __init__(self, reason, filename=None):
-        self.args = (reason,)
+        self.args = reason,
         self.reason = reason
         if filename is not None:
             self.filename = filename
 
     def __str__(self):
-        return '<urlopen error %s>' % (self.reason,)
+        return '<urlopen error %s>' % self.reason
 
 
-class HTTPError(URLError):
+class HTTPError(URLError, urllib.response.addinfourl):
+    """Raised when HTTP error occurs, but also acts like non-error return"""
+    __super_init = urllib.response.addinfourl.__init__
+
     def __init__(self, url, code, msg, hdrs, fp):
         self.code = code
         self.msg = msg
         self.hdrs = hdrs
         self.fp = fp
         self.filename = url
-        self.url = url
-        self.args = (url, code, msg, hdrs, fp)
-        self.reason = msg
-        self._body = None
+        if fp is None:
+            fp = io.BytesIO()
+        self.__super_init(fp, hdrs, url, code)
 
     def __str__(self):
         return 'HTTP Error %s: %s' % (self.code, self.msg)
+
+    def __repr__(self):
+        return '<HTTPError %s: %r>' % (self.code, self.msg)
+
+    # since URLError specifies a .reason attribute, HTTPError should also
+    #  provide this attribute. See issue13211 for discussion.
+    @property
+    def reason(self):
+        return self.msg
 
     @property
     def headers(self):
         return self.hdrs
 
-    def read(self, amt=None):
-        if self.fp is None:
-            return b''
-        return self.fp.read(amt)
-
-    def getcode(self):
-        return self.code
-
-    def geturl(self):
-        return self.url
-
-    def info(self):
-        return self.hdrs
-
-    def close(self):
-        """Close the underlying response.
-
-        CPython's HTTPError IS a response -- it subclasses addinfourl -- so
-        the file protocol comes with it, and callers use the error exactly
-        as they would a successful response: ``data = f.read(); f.close()``
-        (test_urllib2_localnet's test_404).  Grail's carries read/info/
-        geturl but stopped short of close, so that ordinary pairing raised
-        AttributeError on the second line, after the read had worked.
-
-        The fp is CLOSED, not dropped: CPython leaves it in place, so a
-        read after close raises ValueError from the file itself rather
-        than quietly answering b''.  Setting self.fp to None instead --
-        the first shape this took -- turns that error into empty data,
-        which is the kind of divergence a caller never notices until it
-        matters.
-
-        Idempotent, and safe when there is no fp: an error constructed
-        without a body (fp=None) still answers close()."""
-        if self.fp is not None:
-            self.fp.close()
-
-    def __enter__(self):
-        """A response is a context manager in CPython, and an HTTPError is
-        a response -- ``with urlopen(...) as f'' has to keep working when
-        the server answers 4xx and the caller catches the error."""
-        return self
-
-    def __exit__(self, exc_type, exc_value, tb):
-        self.close()
-        return False
+    @headers.setter
+    def headers(self, headers):
+        self.hdrs = headers
 
 
 class ContentTooShortError(URLError):
+    """Exception raised when downloaded size does not match content-length."""
     def __init__(self, message, content):
         URLError.__init__(self, message)
         self.content = content

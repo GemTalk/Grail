@@ -755,6 +755,41 @@ ___importScanInto___: aSet value: v
 	^ self
 %
 
+category: 'Grail-code generation'
+method: AbstractNode
+___storesModuleSlot___: aSymbol
+	"Does this module-body statement -- or one nested in its if / try / for /
+	with / while arms -- bind aSymbol by STORING the module slot?  Every
+	binding form does except an undecorated top-level def, which compiles to a
+	method and stores nothing (see FunctionDefAst >>
+	___rebindsAnEarlierModuleBinding___).  Does not descend into a def, lambda
+	or class, which bind their own scope; reflective over the instVars, like
+	___importBoundNamesInto___:."
+
+	| v |
+	(self isKindOf: StatementAst) ifTrue: [
+		(((self isKindOf: FunctionDefAst)
+			and: [self isModuleLevelDef
+			and: [self applicableModuleDecorators isEmpty]]) not
+			and: [self ___boundTargetNames___ anySatisfy: [:n | n asSymbol == aSymbol]])
+				ifTrue: [^ true]].
+	((self isKindOf: FunctionDefAst)
+		or: [(self isKindOf: LambdaAst) or: [self isKindOf: ClassDefAst]])
+		ifTrue: [^ false].
+	2 to: self class instSize do: [:i |
+		v := self instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(v ___storesModuleSlot___: aSymbol) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						((each isKindOf: AbstractNode)
+							and: [each ___storesModuleSlot___: aSymbol])
+								ifTrue: [^ true]]]]].
+	^ false
+%
+
 category: 'Grail-other'
 method: AbstractNode
 printSmalltalkWithParenthesisOn: aStream

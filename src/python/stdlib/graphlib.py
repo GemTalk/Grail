@@ -1,6 +1,3 @@
-# GRAIL: Grail's types stub has no GenericAlias; subscripting
-# TopologicalSorter (typing-only sugar) is dropped.
-
 __all__ = ["TopologicalSorter", "CycleError"]
 
 _NODE_OUT = -1
@@ -41,6 +38,7 @@ class CycleError(ValueError):
 
 class TopologicalSorter:
     """Provides functionality to topologically sort a graph of hashable nodes"""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, graph=None):
         self._node2info = {}

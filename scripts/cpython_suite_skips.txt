@@ -320,6 +320,15 @@ test.test_enum|TestStdLib.test_test_simple_enum|_simple_enum/_test_simple_enum a
 # bits (~39000 digits).  So this one test cannot pass without a different
 # digit-generation strategy.  Everything it was previously masking is now fixed.
 test.test_format|FormatTest.test_common_format|CPython builds a 123456-fraction-digit float string (no overflowok); Grail scales by 10^precision and GemStone's LargeInteger ceiling is ~39000 digits -- a VM limit, now raised catchably as OverflowError instead of an uncatchable NumericError
+# test_pickle's test_long ends with ``a monster'': ``nbase += nbase << 1000000'',
+# a 1,000,064-bit integer.  GemStone's LargeInteger is capped by the VM at 4067
+# 32-bit digits (~130144 bits; gemstone specs/gs6430summary.txt, raised from every
+# primitive in lrgint.c), so that integer cannot exist -- the same VM ceiling as
+# test_format's entry above, and like it now a catchable OverflowError (the
+# shift) rather than an uncatchable NumericError.  Every smaller case in the
+# test, up through LONG4's 8*257-bit boundary, passes.  Both runners.
+test.test_pickle|InMemoryPickleTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
+test.test_pickle|PyPicklerTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
 # --- Phase 4 (2026-08-03): two tests that HANG the scoring session ---
 # Both are single-line hangs inside an otherwise-scorable module, so they are
 # skip-listed (never counted as passes) to let the rest of the module score;

@@ -62,14 +62,13 @@ set compile_env: 0
 category: 'Grail-Tests-Printf'
 method: PrintableReprAndPrintfTestCase
 results
-	"Load tests/python/printable_repr_and_printf.py fresh."
+	"tests/python/printable_repr_and_printf.py's RESULTS.  Imported once per
+	session (PythonTestCase >> ___recordedFixture___:name:): this is called
+	once per ASSERTION, 91 times in all, and it used to re-import the fixture
+	every time -- 103s, the third most expensive class in the suite."
 
-	| mod |
-	importlib @env1:modules removeKey: #'printable_repr_and_printf' ifAbsent: [].
-	mod := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/printable_repr_and_printf.py')
-		name: 'printable_repr_and_printf'.
-	^ mod @env1:___pyAttrLoad___: #RESULTS
+	^ (self ___recordedFixture___: '/tests/python/printable_repr_and_printf.py'
+		name: 'printable_repr_and_printf') @env1:___pyAttrLoad___: #RESULTS
 %
 
 category: 'Grail-Tests-Printf'
@@ -81,18 +80,15 @@ assertResult: aKey equals: expected
 category: 'Grail-Tests-Printf'
 method: PrintableReprAndPrintfTestCase
 charRangeResults
-	"Load tests/python/printf_char_range.py fresh.  A SEPARATE fixture on
+	"tests/python/printf_char_range.py's RESULTS.  A SEPARATE fixture on
 	purpose: before the fix its first line aborted the module load outright (a
 	Smalltalk OutOfRange, uncatchable from Python), which would otherwise have
 	taken every other expectation in this class down with it and made a
-	regression anywhere indistinguishable from that one."
+	regression anywhere indistinguishable from that one.  Imported once per
+	session, like the other."
 
-	| mod |
-	importlib @env1:modules removeKey: #'printf_char_range' ifAbsent: [].
-	mod := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/printf_char_range.py')
-		name: 'printf_char_range'.
-	^ mod @env1:___pyAttrLoad___: #RESULTS
+	^ (self ___recordedFixture___: '/tests/python/printf_char_range.py'
+		name: 'printf_char_range') @env1:___pyAttrLoad___: #RESULTS
 %
 
 category: 'Grail-Tests-Printf'

@@ -120,7 +120,7 @@ printSmalltalkRuntimeOn: aStream
 	  methodSources fixedArityForwarderSources classMethodSources staticMethodSources
 	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope propertyFuncNames savedPropertyFuncNames
 	  savedClass savedFuncNames savedVarargsFuncNames
-	  savedSelfParam savedClassAttrNames settersByName
+	  savedSelfParam savedClassAttrNames settersByName decoratedProps
 	  slotNamesOrdered slotNameSet mangledSlotNames savedBackingInstVars
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
 	  slotPropertyNames accessorInferredNames accessorPairsWanted renamedPairsOrdered
@@ -130,7 +130,7 @@ printSmalltalkRuntimeOn: aStream
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
 	  savedCellRebindable
 	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody
-	  savedMethodBodyEmit savedMethodDynamicLocals |
+	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -440,6 +440,13 @@ printSmalltalkRuntimeOn: aStream
 				decorators, so emit a self.skipTest(...) body in place of the
 				real one -- the method stays discoverable under its plain
 				selector but is counted as skipped, matching CPython."
+				def isBigmemtestWithoutDryRun
+					ifTrue: [
+						"``@bigmemtest(..., dry_run=False)'' skips in a default
+						run -- see isBigmemtestWithoutDryRun."
+						methodSources add: def ___mangledName___ asString
+							-> def generateBigmemSkipSource]
+					ifFalse: [
 				def isRequiresResourceDecorated
 					ifTrue: [
 						methodSources add: def ___mangledName___ asString
@@ -456,20 +463,26 @@ printSmalltalkRuntimeOn: aStream
 						s := PrettyWriteStream on: Unicode7 new.
 						s markStartOfMethod.
 						def generateMethodSourceOn: s.
-						def isDeleterDecorated
+						(def isDeleterDecorated
+							or: [self ___isRedirectedPropertySetter___: def])
 							ifTrue: [
 								"A property DELETER (``@x.deleter def x(self)'') is unary
 								like the getter; emitting it as ``x'' would clobber the
 								getter.  Redirect to ``___propDeleter_x'', invoked by
 								object>>___pyAttrDelete___ for ``del obj.x''."
+								"The SETTER of a DECORATED property goes the same way, to
+								``___propSetter_x:'': compiled as ``x:'' it would pair with
+								the getter, and the pair wins every read and write over the
+								property object that carries the decorated accessors -- see
+								___decoratedPropertyNames___."
 								"The one caller that edits the source after the generator
 								is done with it: the rewrite lengthens the leading selector,
 								moving every offset the map describes."
 								mSrc := s contents.
 								mRedirect := self ___redirectUnarySelectorIn: mSrc
 									from: def ___mangledName___ asString
-									to: ('___propDeleter_' , def ___mangledName___ asString).
-								methodSources add: ('___propDeleter_' , def ___mangledName___ asString)
+									to: (self ___redirectedAccessorNameFor___: def).
+								methodSources add: (self ___redirectedAccessorNameFor___: def)
 									-> (mRedirect , (s mapCommentShiftedBy: mRedirect size - mSrc size))]
 							ifFalse: [
 								s writeMapAsComment.
@@ -531,7 +544,7 @@ printSmalltalkRuntimeOn: aStream
 						plain unary forwarder so getTestCaseNames finds it."
 						def isBigmemtestDecorated ifTrue: [
 							methodSources add: ('bigmem_' , def ___mangledName___ asString)
-								-> def generateBigmemtestUnaryForwarderSource]]].
+								-> def generateBigmemtestUnaryForwarderSource]]]].
 			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
 		"@classmethod bodies use the same per-method source generator
@@ -657,7 +670,7 @@ printSmalltalkRuntimeOn: aStream
 	holding the per-class attribute store (an Object whose dynamic instVars are
 	the class dict; a Class refuses dynamicInstVarAt:put: itself).  Every class
 	attribute -- the body's own, and the synthetic ``__module__'', ``__doc__'',
-	``_fields'', ``___annotatedFields___'' and ``__annotations__'' -- is an
+	``___bareAnnotatedFields___'', ``___annotatedFields___'' and ``__annotations__'' -- is an
 	entry in it behind an accessor pair, so the metaclass shape is the SAME for
 	every class from every creation site (here, type(), the functional Enum
 	API), and a rebuild can always reuse the class identity.  See
@@ -1113,6 +1126,16 @@ printSmalltalkRuntimeOn: aStream
 		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
 	importlib ___irForgetClassDefIds___: self.
 
+	"A @staticmethod / @classmethod that shadows a BASE's ordinary method needs
+	an instance-side entry point too, or the base's own ``self.m(...)'' -- a
+	plain Smalltalk send -- never reaches it (Behavior >>
+	___grailInstallClassSideForwarders___).  Whether a base defines the name is
+	a RUNTIME question, as for the fixed-arity forwarders above, so the call is
+	emitted only for a body that has such defs and decides there."
+	(staticMethodSources notEmpty or: [classMethodSources notEmpty]) ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' ___grailInstallClassSideForwarders___.'; lf].
+
 	"Compile a class-side unary accessor + 1-arg setter for each class
 	attribute (``class Color: RED = 1'').  The pair is the PROTOCOL, not the
 	storage: ___pyAttrLoad___ tells a value attribute (paired getter+setter,
@@ -1137,8 +1160,16 @@ printSmalltalkRuntimeOn: aStream
 	one-dict-per-class MRO walk -- instead of a build-time copy.  Raw, because
 	every reader of a pair applies the descriptor protocol itself.  The setter
 	stores into the receiver's OWN holder through ___classHolderAttrStore___,
-	the same door a decorator's rebinding and a conditional binding use."
-	classAttrs do: [:pair |
+	the same door a decorator's rebinding and a conditional binding use.
+
+	NOT FOR A BARE ANNOTATION.  ``x: int'' with no value binds nothing in
+	CPython -- ``C.x'' is an AttributeError and ``hasattr(C, 'x')'' is
+	False -- but a pair made it a class attribute holding Smalltalk nil, and
+	every reader of a pair answered that nil: ``C.x'' was a raw
+	UndefinedObject, hasattr was True, and typing's runtime protocols found
+	an ``x'' on every instance of an annotated class.  The name still reaches
+	___bareAnnotatedFields___, which is what NamedTuple and dataclasses read."
+	(classAttrs reject: [:pair | pair value isNil]) do: [:pair |
 		| attrName lf accessorSrc setterSrc |
 		attrName := pair key asString.
 		lf := Character lf asString.
@@ -1393,7 +1424,7 @@ printSmalltalkRuntimeOn: aStream
 	test.test_traceback at import -- and the attr statements are emitted at that
 	point, so a table compiled afterwards would not exist yet.  The table is a
 	literal dict of compile-time constants, depending only on the class already
-	existing, so it is safe this early.  (The doc table stays late.)"
+	existing, so it is safe this early."
 	self emitMethodCodeTableOn: aStream className: name.
 	"The ``___methodAnnotationsTable___'' (method-name -> annotate function;
 	BoundMethod >> __annotations__ walks the superclass chain consulting it) is
@@ -1402,7 +1433,85 @@ printSmalltalkRuntimeOn: aStream
 	test_annotationlib's GH-143831 test -- and compiled late the read found no
 	table and answered {}.  Safe this early: the annotate blocks are BUILT when
 	the table method runs and evaluate their names only when called."
-	self emitMethodAnnotationsTableOn: aStream className: name.
+	"NOT under inClassBodyValueEmit, which is on for the class body's own
+	values here: the table compiles as a separate CLASS-SIDE method, where the
+	enclosing function's temps do not exist.  With the flag on, an annotation
+	naming an enclosing local (``def m(self, o: X)'' in a class inside a def)
+	emitted a bare temp read, the table failed to compile, and every method of
+	the class lost its annotations (test_typing
+	test_get_type_hints_annotated_refs).  Off, NameAst reads such a name
+	through the class cell as a method body does, and registers it so the cell
+	is stored."
+	[CallAst inClassBodyValueEmit: false.
+	 self emitMethodAnnotationsTableOn: aStream className: name]
+		ensure: [CallAst inClassBodyValueEmit: true].
+
+	"The doc / signature / receiver / type-params / static tables and the
+	synthetic ``__module__'' are early too, for one reason: a class body runs
+	statements that READ a sibling def's metadata, and anything compiled after
+	those statements does not exist yet when they run.  reprlib's
+	recursive_repr copies __module__, __doc__, __qualname__ and
+	__type_params__ onto its wrapper -- ``wrapper = recursive_repr()(wrapped)''
+	in a class body (test_reprlib's MyContainer3) -- and read here late it
+	copied the class NAME as __module__ and None as __doc__.  CPython's class
+	body likewise opens with ``__module__ = __name__''.  Every table is a
+	literal of compile-time constants, needing only the class to exist."
+	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
+	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
+	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
+	a block, so it cannot carry the def-time cascade a nested def does."
+	self emitMethodSignatureTableOn: aStream className: name.
+	"And the receiver name that table drops, so the UNBOUND read can put it
+	back -- CPython's signature(Cls.method) shows ``self''."
+	self emitMethodReceiverTableOn: aStream className: name.
+	"And the same for docstrings.  A class-body def compiles to a Smalltalk
+	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
+	nested def does -- which left every method inheriting Object's own
+	__doc__ and claiming to be documented as ``The base class of the class
+	hierarchy...''."
+	self emitMethodDocTableOn: aStream className: name.
+	self emitMethodTypeParamsTableOn: aStream className: name.
+	self emitStaticMethodTableOn: aStream className: name.
+
+	"Compile the synthetic ``__module__'' accessor + setter on every
+	class (unless the user already declared ``__module__'' in the
+	class body — re._constants's PatternError sets ``__module__ =
+	're''').  Holder-backed, like every class attribute."
+	(classAttrs anySatisfy: [:p | p key == #'__module__']) ifFalse: [
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '__module__
+	^ self ___classAttrOwnOrInherited___: #''__module__'''
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '__module__: ___1
+	self ___classHolderAttrStore___: #''__module__'' put: ___1.'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		"__module__ is the defining module's dotted NAME STRING (CPython
+		semantics), emitted as a compile-time literal via the enclosing
+		ModuleAst.  Never the module instance — see
+		___enclosingModuleName___ for the reachability rationale.
+
+		EXCEPT IN A DOIT, where the literal was always '__main__' and so
+		ignored the globals exec() was handed (GemTalk/Grail#1170).  CPython's
+		class body opens with ``__module__ = __name__'', a run-time read of
+		the globals, so a doit's class reads its ``__name__'' when it runs.
+		Still a string, so the reachability constraint holds."
+		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
+		self ___readsModuleNameAtRunTime___
+			ifTrue: [aStream nextPutAll:
+				'(((Python @env0:at: #builtins) instance) ___doitModuleName___: ___pyGlobals___)']
+			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
+		aStream nextPutAll: '.'; lf.
+	].
+
 
 	"``___receiverlessMethods___'' is early for the SAME reason, and it is a
 	call rather than a read that needs it: a class body may CALL a sibling
@@ -1478,7 +1587,7 @@ printSmalltalkRuntimeOn: aStream
 	aStream nextPutAll: ' bases: '.
 	bases isEmpty
 		ifTrue: [aStream nextPutAll: '#()']
-		ifFalse: [aStream nextPutAll: (bases size = 1
+		ifFalse: [aStream nextPutAll: ((bases size = 1 and: [self ___hasStarredBase___ not])
 			ifTrue: ['___hdrBases___']
 			ifFalse: ['___hdrResolved___'])].
 	aStream nextPutAll: ' keywords: '.
@@ -1502,9 +1611,16 @@ printSmalltalkRuntimeOn: aStream
 		to later siblings by implementing those methods -- it does not have to
 		be added to a list of isKindOf: tests here."
 		body body doWithIndex: [:stmt :pos |
-			stmt ___boundTargetNames___ do: [:nm |
-				(firstBinding includesKey: nm) ifFalse: [
-					firstBinding at: nm put: pos]].
+			"A BARE annotation (``x: int'', no value) binds nothing: CPython only
+			records it in __annotations__, and a later read of ``x'' in the body
+			or in an annotation goes past the class to the enclosing scope.
+			Counted here, ``class C: bytes: int; x: bytes'' sent #bytes to a class
+			that has no such accessor -- an uncatchable doesNotUnderstand on
+			importing asgiref.typing (test___all__)."
+			((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifFalse: [
+				stmt ___boundTargetNames___ do: [:nm |
+					(firstBinding includesKey: nm) ifFalse: [
+						firstBinding at: nm put: pos]]].
 			"Last assignment wins — that's the statement the classAttrs pair
 			came from (``args_check = staticmethod(args_check)'' rebinding a
 			sibling def must see the def as already bound).  Driven by the
@@ -1672,13 +1788,28 @@ printSmalltalkRuntimeOn: aStream
 								"Through the marked store helper, not a bare ``Cls attr: v'' send:
 								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
 								send as a Python call (see ___grailClassAttrSetterDiverts___)."
+								"...EXCEPT a docstring-less class's __doc__.  That None is
+								Grail's stamp (see the __doc__ injection in this method's
+								caller), not a binding the body made: CPython's body binds
+								__doc__ only when there IS a docstring, so a watching
+								namespace must not be offered one."
+								((pair key asSymbol == #'__doc__')
+									and: [(pair value isKindOf: ConstantAst)
+									and: [pair value value isNil]])
+									ifTrue: [
+										aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
+											nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+											nextPutAll: ' with: ('.
+										pair value printSmalltalkWithParenthesisOn: aStream.
+										aStream nextPutAll: ').'; lf]
+									ifFalse: [
 								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
 									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
 									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('.
 								pair value printSmalltalkWithParenthesisOn: aStream.
-								aStream nextPutAll: ')).'; lf]]
+								aStream nextPutAll: ')).'; lf]]]
 			].
 		]] value: IdentityKeyValueDictionary new.
 		"Whatever is left stands after the last attribute in the body.
@@ -1750,11 +1881,13 @@ printSmalltalkRuntimeOn: aStream
 		 own U read the FUNCTION's U, and in a METHOD an enclosing local became a
 		 class-cell load on the method's receiver -- ``free variable referenced
 		 before assignment'' (test_annotationlib test_nonlocal_in_annotation_scope).
-		 And with EVERY class-body name bound (nil): classBodyBoundNames is
+		 And with EVERY class-body name bound: classBodyBoundNames is
 		 position-gated per statement and is left holding whatever the last one
 		 set, but an annotation is evaluated lazily, after the whole body ran --
-		 class namespace first, then the enclosing scope."
-		CallAst classBodyBoundNames: nil.
+		 class namespace first, then the enclosing scope.  EVERY name except one
+		 that only a bare annotation mentions, which is not in the namespace at
+		 all (___annotateScopeBoundNames___:)."
+		CallAst classBodyBoundNames: (self ___annotateScopeBoundNames___: firstBinding).
 		"PEP 649 ``__annotate__'' for a class with class-body annotations: ONE
 		annotate block, stored in the class's own holder under CPython's class-dict
 		key ``__annotate_func__''.  The generic class-side accessors on object
@@ -1825,17 +1958,26 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classMethodAliasTargets: savedAliasTargets.
 		CallAst classBodyDynamicLocals: (savedDynamicLocals == true).
 	].
-	"NamedTuple-style classes get a ``_fields'' accessor/setter pair on the
-	metaclass, initialised to a tuple of declaration-order bare-annotation
-	names.  Holder-backed like every class attribute; the getter walks own
+	"Every class with a BARE annotation (``x: int'', no value) gets a
+	``___bareAnnotatedFields___'' accessor/setter pair on the metaclass,
+	initialised to a tuple of those names in declaration order -- which
+	typing.NamedTuple and dataclasses read to tell a required field from a
+	defaulted one.
+
+	It used to be called ``_fields'', a real Python name, and that leaked:
+	every annotated class answered ``C._fields'', listed it in dir() and
+	__dict__, and typing.Protocol counted it as a protocol member -- so
+	``class HasX(Protocol): x: int'' demanded ``_fields'' of anything claiming
+	to implement it.  An internal name is hidden by the same ``___'' rule
+	that hides every other piece of Grail scaffolding.  Holder-backed like every class attribute; the getter walks own
 	holder then superclasses, so ``class Sub(SomeNamedTuple): pass'' reads the
 	parent's fields without the copy ___inheritClassAttrs___ used to make."
 	((classAttrs anySatisfy: [:p | p value isNil])
-		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
+		and: [(classAttrs anySatisfy: [:p | p key == #'___bareAnnotatedFields___']) not])
 			ifTrue: [
 		| lf accessorSrc setterSrc bareNames |
 		lf := Character lf asString.
-		accessorSrc := '_fields' , lf , '	^ self ___classAttrOwnOrInherited___: #''_fields'''.
+		accessorSrc := '___bareAnnotatedFields___' , lf , '	^ self ___classAttrOwnOrInherited___: #''___bareAnnotatedFields___'''.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: accessorSrc
@@ -1843,7 +1985,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := '_fields: ___1' , lf , '	self ___classHolderAttrStore___: #''_fields'' put: ___1.'.
+		setterSrc := '___bareAnnotatedFields___: ___1' , lf , '	self ___classHolderAttrStore___: #''___bareAnnotatedFields___'' put: ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1855,14 +1997,14 @@ printSmalltalkRuntimeOn: aStream
 			collect: [:p | p key].
 		aStream
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' _fields: (___tuple___ @env0:withAll: #('.
+			nextPutAll: ' ___bareAnnotatedFields___: (___tuple___ @env0:withAll: #('.
 		bareNames do: [:n |
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
 	"``___annotatedFields___`` accessor/setter + init — every annotated
 	field name in declaration order (see the slot registration above).
-	Mirrors the ``_fields'' emission but includes annotated-with-value
+	Mirrors the ``___bareAnnotatedFields___'' emission but includes annotated-with-value
 	lines, so dataclasses can recover defaulted fields, and
 	typing.NamedTuple the ordered field layout of a class with defaults."
 	((self annotatedFieldNames notEmpty)
@@ -1893,64 +2035,6 @@ printSmalltalkRuntimeOn: aStream
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
-	"(The class-side ``___methodAnnotationsTable___'' is compiled EARLY, beside
-	 ___methodCodeTable___ -- see there.)"
-	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
-	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
-	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
-	a block, so it cannot carry the def-time cascade a nested def does."
-	self emitMethodSignatureTableOn: aStream className: name.
-	"And the receiver name that table drops, so the UNBOUND read can put it
-	back -- CPython's signature(Cls.method) shows ``self''."
-	self emitMethodReceiverTableOn: aStream className: name.
-	"And the same for docstrings.  A class-body def compiles to a Smalltalk
-	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
-	nested def does -- which left every method inheriting Object's own
-	__doc__ and claiming to be documented as ``The base class of the class
-	hierarchy...''."
-	self emitMethodDocTableOn: aStream className: name.
-	self emitMethodTypeParamsTableOn: aStream className: name.
-	self emitStaticMethodTableOn: aStream className: name.
-
-	"Compile the synthetic ``__module__'' accessor + setter on every
-	class (unless the user already declared ``__module__'' in the
-	class body — re._constants's PatternError sets ``__module__ =
-	're''').  Holder-backed, like every class attribute."
-	(classAttrs anySatisfy: [:p | p key == #'__module__']) ifFalse: [
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: '__module__
-	^ self ___classAttrOwnOrInherited___: #''__module__'''
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: '__module__: ___1
-	self ___classHolderAttrStore___: #''__module__'' put: ___1.'
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		"__module__ is the defining module's dotted NAME STRING (CPython
-		semantics), emitted as a compile-time literal via the enclosing
-		ModuleAst.  Never the module instance — see
-		___enclosingModuleName___ for the reachability rationale.
-
-		EXCEPT IN A DOIT, where the literal was always '__main__' and so
-		ignored the globals exec() was handed (GemTalk/Grail#1170).  CPython's
-		class body opens with ``__module__ = __name__'', a run-time read of
-		the globals, so a doit's class reads its ``__name__'' when it runs.
-		Still a string, so the reachability constraint holds."
-		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
-		self ___readsModuleNameAtRunTime___
-			ifTrue: [aStream nextPutAll:
-				'(((Python @env0:at: #builtins) instance) ___doitModuleName___: ___pyGlobals___)']
-			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
-		aStream nextPutAll: '.'; lf.
-	].
-
 	"Compile the ``___dynInstVars___'' accessor + setter pair on every class.
 	The slot holds an Object new whose dynamic instVars serve as the
 	per-class dictionary for dynamically-set Python attributes
@@ -1997,11 +2081,26 @@ printSmalltalkRuntimeOn: aStream
 	returns a marker with no holder.  Emitted here it precedes the decorator
 	loop, which is also where CPython stamps it -- a decorator that returns
 	something else never receives the qualname in CPython either."
-	(CallAst ___qualnamePrefixBefore___: self) ifNotNil: [:prefix |
+	"A class whose name the enclosing function declares ``global'' binds at
+	module level and so has the BARE qualname -- CallAst ___qualnameFor___:name:
+	applies that rule for a def, and the prefix walk alone does not.
+	``def f(): global Bad; class Bad: ...'' reported ``f.<locals>.Bad'', so
+	pickle refused it as a local object (test_pickle's test_evil_* tests)."
+	((CallAst ___isGlobalDeclaredScope___: self)
+		ifTrue: [nil]
+		ifFalse: [CallAst ___qualnamePrefixBefore___: self]) ifNotNil: [:prefix |
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: '.
 		self printQuotedString: prefix , '.' , name asString on: aStream.
 		aStream nextPutAll: '.'; lf].
+	"A class made by exec() records the namespace it was made in: its methods'
+	__globals__ is that dict in CPython, and get_type_hints resolves a string
+	annotation there (test_typing test_default_globals).  Module-built classes
+	need nothing -- their methods resolve __globals__ through __module__."
+	self ___readsModuleNameAtRunTime___ ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''___grailDoitGlobals___'' put: (((Python @env0:at: #builtins) instance) ___doitGlobalsView___: ___pyGlobals___).';
+			lf].
 
 	"For each @property (and @cached_property) method, compile a 1-arg
 	setter that signals AttributeError.  Pairing the getter with a
@@ -2039,11 +2138,17 @@ printSmalltalkRuntimeOn: aStream
 			]
 		]
 	].
+	"...and skip it for a DECORATED property, which is a property object in
+	the class holder rather than a pair: a stub here would re-create the pair
+	that object has to win against (___decoratedPropertyNames___).  Its
+	read-only-ness is the property object's own -- no fset."
+	decoratedProps := self ___decoratedPropertyNames___.
 	methodDefs do: [:def |
 		((def decoratorList notNil
 			and: [(def decoratorList includes: #'property')
 				or: [def decoratorList includes: #'cached_property']])
-			and: [(settersByName includes: def name asSymbol) not]) ifTrue: [
+			and: [(settersByName includes: def name asSymbol) not
+			and: [(decoratedProps includes: def name asSymbol) not]]) ifTrue: [
 			| propSetterSrc lf2 isCached |
 			lf2 := Character lf asString.
 			isCached := def decoratorList includes: #'cached_property'.
@@ -2195,7 +2300,7 @@ printSmalltalkRuntimeOn: aStream
 	(its methods are inherited, so ___primaryChainProvides___ sees
 	them).  Emitted after the class's own methods are compiled so they
 	take precedence.  See importlib >> ___mergeSecondaryBases___:bases:."
-	bases size > 1 ifTrue: [
+	(bases size > 1 or: [self ___hasStarredBase___]) ifTrue: [
 		"The SAME bases the storage-base choice saw, read from the header temps
 		rather than re-emitted.  Re-emitting them is what evaluated every base
 		expression twice.  Both lists go: the raw one because __orig_bases__
@@ -2282,12 +2387,17 @@ printSmalltalkRuntimeOn: aStream
 	self ___allFunctionDefs___ do: [:def |
 		| decos |
 		decos := def applicableMethodDecorators.
-		decos isEmpty ifFalse: [
+		(decos isEmpty not
+			and: [(decoratedProps includes: def name asSymbol) not]) ifTrue: [
 			def
 				printMethodDecoratorsOn: aStream
 				decorators: decos
 				className: self ___stVarName___
 				siblingNames: decoratorScope]].
+	"A DECORATED property's accessors are not rebound one by one: together
+	they are ONE property object -- see ___decoratedPropertyNames___."
+	decoratedProps do: [:n |
+		self ___printDecoratedProperty___: n on: aStream siblingNames: decoratorScope].
 
 	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
 	guarantees it by applying a decorator at the def statement, so by the time
@@ -2310,10 +2420,12 @@ printSmalltalkRuntimeOn: aStream
 	stores its result over the compiled method in the per-class attribute
 	store, and a plain ``Cls name'' send looks for a compiled metaclass method
 	that is not there."
+	readInOrder := self ___classBodyAliasesReadInOrder___.
 	classAttrs do: [:pair |
 		(pair value notNil
 			and: [(pair value isKindOf: NameAst)
-			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
+			and: [(siblings includes: pair value id asSymbol)
+			and: [(readInOrder includes: pair key asSymbol) not]]]) ifTrue: [
 				"Marked store helper rather than a bare setter send -- see the
 				attribute-value emit above and ___grailClassAttrSetterDiverts___."
 				aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
@@ -2397,6 +2509,34 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream].
+
+	"The names this class declares as @property (or @cached_property), as a
+	class-side method so the record is committed with the class -- a session
+	stamp would not survive deployment.  A property compiles to an accessor
+	pair that looks, from outside, exactly like a method with a default
+	argument (both answer unary ``x'' and keyword ``x:''), so nothing else at
+	run time can tell ``super().x'' -- a property, whose getter must run --
+	from ``super().m'', a method to bind.  Super >> ___pyAttrLoad___: asks the
+	nearest parent defining the name."
+	[:propNames |
+	self instanceMethodDefs do: [:def |
+		(def ___isPropertyDef___ and: [(propNames includes: def name asSymbol) not])
+			ifTrue: [propNames add: def name asSymbol]].
+	propNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___grailOwnPropertyNames___'; lf.
+		src nextPutAll: '	^ #('.
+		propNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
 
 	"Names the body binds MORE THAN ONCE, counting defs and assignments alike.
 
@@ -2843,7 +2983,7 @@ printSuperclassOn: aStream
 	see importlib >> ___selectStorageBase___:."
 
 	bases isEmpty ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
-	bases size = 1 ifTrue: [
+	(bases size = 1 and: [self ___hasStarredBase___ not]) ifTrue: [
 		| only |
 		only := bases first.
 		"``class C(object):`` is identical to ``class C:`` in Python 3.
@@ -2898,6 +3038,17 @@ printSuperclassOn: aStream
 
 category: 'Grail-code generation'
 method: ClassDefAst
+___hasStarredBase___
+	"``class C(*bases)'' -- a header whose base list is known only at run time.
+	Such a statement takes the multiple-base path (runtime storage-base choice,
+	resolve, merge) whatever the written count: the sole-base path reads its one
+	base as written, and a starred expression is a list, not a class."
+
+	^ bases notNil and: [bases anySatisfy: [:b | b isKindOf: StarredAst]]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 ___classHeaderTemps___
 	"The temps the class HEADER is evaluated into -- see printClassHeaderOn:.
 
@@ -2913,7 +3064,8 @@ ___classHeaderTemps___
 	| temps |
 	temps := OrderedCollection new.
 	(bases notNil and: [bases notEmpty]) ifTrue: [temps add: '___hdrBases___'].
-	(bases notNil and: [bases size > 1]) ifTrue: [temps add: '___hdrResolved___'].
+	(bases notNil and: [bases size > 1 or: [self ___hasStarredBase___]])
+		ifTrue: [temps add: '___hdrResolved___'].
 	keywords isNil ifFalse: [
 		1 to: keywords size do: [:i | temps add: (self ___hdrKeywordTempAt___: i)]].
 	^ temps
@@ -2994,11 +3146,31 @@ printClassHeaderOn: aStream
 		| savedBasesFlag |
 		savedBasesFlag := CallAst inBasesEmit.
 		CallAst inBasesEmit: true.
-		[aStream nextPutAll: '___hdrBases___ := { '.
-		1 to: bases size do: [:i |
-			i > 1 ifTrue: [aStream nextPutAll: '. '].
-			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
-		aStream nextPutAll: ' }.'; lf]
+		[self ___hasStarredBase___
+			ifTrue: [
+				"``class C(A, *more)'': the list is built at run time, each
+				starred expression splatted in place -- TupleAst's splat
+				shape -- and the statement takes the multiple-base path
+				whatever the written count (___hasStarredBase___)."
+				aStream nextPutAll: '___hdrBases___ := (({}'.
+				bases do: [:each |
+					aStream nextPutAll: ' @env0:, '.
+					(each isKindOf: StarredAst)
+						ifTrue: [
+							aStream nextPut: $(.
+							each value printSmalltalkWithParenthesisOn: aStream.
+							aStream nextPutAll: ' @env0:___pyStarToArray___)']
+						ifFalse: [
+							aStream nextPutAll: '{ '.
+							each printSmalltalkWithParenthesisOn: aStream.
+							aStream nextPutAll: '. }']].
+				aStream nextPutAll: ')).'; lf]
+			ifFalse: [
+				aStream nextPutAll: '___hdrBases___ := { '.
+				1 to: bases size do: [:i |
+					i > 1 ifTrue: [aStream nextPutAll: '. '].
+					(bases at: i) printSmalltalkWithParenthesisOn: aStream].
+				aStream nextPutAll: ' }.'; lf]]
 			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)]].
 	keywords isNil ifFalse: [
 		| savedDeco |
@@ -3009,7 +3181,7 @@ printClassHeaderOn: aStream
 			(keywords at: i) value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: '.'; lf]]
 			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]].
-	(bases notNil and: [bases size > 1]) ifTrue: [
+	(bases notNil and: [bases size > 1 or: [self ___hasStarredBase___]]) ifTrue: [
 		aStream
 			nextPutAll: '___hdrResolved___ := (Python @env0:at: #importlib) @env0:___resolveMroEntries___: ___hdrBases___.';
 			lf]
@@ -3063,6 +3235,155 @@ ___redirectUnarySelectorIn: sourceString from: oldName to: newName
 		ifTrue: [
 			^ newName , (sourceString copyFrom: oldName size + 1 to: sourceString size)].
 	^ sourceString
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___decoratedPropertyNames___
+	"The names of this body's DECORATED properties: a @property whose getter,
+	setter or deleter carries a decorator that replaces the function --
+
+	    @property
+	    @deprecated('x will go away soon')
+	    def x(self): ...
+
+	Grail compiles a @property as a getter/setter PAIR of methods, which
+	___pyAttrLoad___ reads by performing the getter.  That reads the compiled
+	body, so the decorator's result -- which the decorator loop does store,
+	in the class holder -- was never reached: the DeprecationWarning above
+	never fired (test_warnings DeprecatedTests.test_property).
+
+	Such a property is built as what CPython builds, a property OBJECT over
+	the decorated accessors, stored in the class holder where an attribute
+	read or write finds it as a data descriptor.  For that to be found, the
+	pair must not exist: the read-only setter stub is not synthesized, and an
+	explicit setter compiles as ``___propSetter_x:'' (see
+	___isRedirectedPropertySetter___:).
+
+	Conservative by construction, because every property NOT listed keeps the
+	pair it had: exactly one @property getter, at most one setter and one
+	deleter, each with its property form OUTERMOST, all instance-side and
+	fixed-arity, no other def sharing the name, and at least one accessor
+	carrying a wrapping decorator."
+
+	| getters setters deleters wrapped excluded answer |
+	getters := Dictionary new. setters := Dictionary new. deleters := Dictionary new.
+	wrapped := IdentitySet new. excluded := IdentitySet new.
+	self ___allFunctionDefs___ do: [:def | | n kind |
+		n := def name asSymbol.
+		kind := def ___propertyAccessorKind___.
+		(kind isNil or: [kind == #other
+			or: [def ___decoratorBaseIsClassSide___
+			or: [def compilesAsVarargs]]])
+			ifTrue: [excluded add: n]
+			ifFalse: [
+				| tally |
+				tally := kind == #getter ifTrue: [getters]
+					ifFalse: [kind == #setter ifTrue: [setters] ifFalse: [deleters]].
+				tally at: n put: (tally at: n ifAbsent: [0]) + 1.
+				def ___wrapsPropertyAccessor___ ifTrue: [wrapped add: n]]].
+	answer := IdentitySet new.
+	wrapped do: [:n |
+		((excluded includes: n) not
+			and: [(getters at: n ifAbsent: [0]) = 1
+			and: [(setters at: n ifAbsent: [0]) <= 1
+			and: [(deleters at: n ifAbsent: [0]) <= 1]]])
+				ifTrue: [answer add: n]].
+	^ answer
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___printDecoratedProperty___: aName on: aStream siblingNames: siblingNames
+	"Store ``property(fget, fset, fdel)'' for the decorated property aName in
+	the class holder, each accessor its def's decorator chain over the
+	method it compiled to -- the getter under the plain name, the setter and
+	deleter under their private ones.  An absent accessor is None.
+
+	Guarded like printMethodDecoratorsOn:'s rebinding, with one difference.
+	There a decorator that raises leaves the compiled method in place, which
+	is still the undecorated method.  Here it would leave nothing usable --
+	no pair was compiled, and the setter is under its private name -- so the
+	handler stores the property over the UNDECORATED accessors instead: the
+	property works as it did before, just without the decorators, which is
+	what a failed decorator has always meant."
+
+	| byKind |
+	byKind := Dictionary new.
+	self ___allFunctionDefs___ do: [:def |
+		def name asSymbol == aName ifTrue: [
+			byKind at: def ___propertyAccessorKind___ put: def]].
+	aStream nextPutAll: '['.
+	self ___printPropertyStore___: aName accessors: byKind decorated: true
+		on: aStream siblingNames: siblingNames.
+	aStream
+		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
+		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass].'; lf;
+		nextPutAll: '	'.
+	self ___printPropertyStore___: aName accessors: byKind decorated: false
+		on: aStream siblingNames: siblingNames.
+	aStream nextPutAll: '].'; lf
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___printPropertyStore___: aName accessors: byKind decorated: aBoolean on: aStream siblingNames: siblingNames
+	"The holder store ___printDecoratedProperty___:on:siblingNames: emits, with
+	each accessor's decorator chain (aBoolean) or bare."
+
+	| className |
+	className := self ___stVarName___.
+	aStream
+		nextPutAll: className;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
+		nextPutAll: aName;
+		nextPutAll: ''' put: (PropertyDescriptor @env1:__new__: '.
+	#(#getter #setter #deleter) doWithIndex: [:kind :i | | def baseName |
+		i > 1 ifTrue: [aStream nextPutAll: ' _: '].
+		def := byKind at: kind ifAbsent: [nil].
+		def isNil
+			ifTrue: [aStream nextPutAll: 'None']
+			ifFalse: [
+				baseName := kind == #getter
+					ifTrue: [def name asString]
+					ifFalse: [self ___redirectedAccessorNameFor___: def].
+				aBoolean
+					ifTrue: [
+						def
+							printPropertyAccessorOn: aStream
+							className: className
+							siblingNames: siblingNames
+							baseName: baseName]
+					ifFalse: [
+						aStream
+							nextPutAll: '(UnboundMethod definingClass: ';
+							nextPutAll: className;
+							nextPutAll: ' selector: #''';
+							nextPutAll: baseName;
+							nextPutAll: ''')']]].
+	aStream nextPutAll: ')'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___isRedirectedPropertySetter___: aDef
+	"Is aDef the explicit setter of one of this body's decorated properties,
+	which compiles as ``___propSetter_x:'' rather than ``x:''?"
+
+	^ aDef ___propertyAccessorKind___ == #setter
+		and: [self ___decoratedPropertyNames___ includes: aDef name asSymbol]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___redirectedAccessorNameFor___: aDef
+	"The private selector base a property accessor that must not claim the
+	plain name compiles under: ``___propDeleter_x'' for a deleter (which
+	object >> ___pyAttrDelete___ looks for), ``___propSetter_x'' for a
+	decorated property's setter."
+
+	^ (aDef isDeleterDecorated ifTrue: ['___propDeleter_'] ifFalse: ['___propSetter_'])
+		, aDef ___mangledName___ asString
 %
 
 category: 'Grail-code generation'
@@ -3646,10 +3967,11 @@ ___classBodyMethodAliases___
 		(d compilesAsVarargs not and: [d applicableMethodDecorators isEmpty])
 			ifTrue: [defsByName at: d name asSymbol put: d]].
 	aliases := OrderedCollection new.
-	body body do: [:stmt |
+	body body doWithIndex: [:stmt :pos |
 		((stmt isKindOf: AssignAst)
 			and: [(stmt value isKindOf: NameAst)
-			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]]) ifTrue: [
+			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst])
+			and: [(self ___classBodyName___: stmt value id asSymbol isReboundAfter: pos) not]]]) ifTrue: [
 				| origDef |
 				origDef := defsByName at: stmt value id asSymbol ifAbsent: [nil].
 				origDef ifNotNil: [
@@ -3660,6 +3982,54 @@ ___classBodyMethodAliases___
 							or: [defsByName includesKey: t id asSymbol]) ifFalse: [
 								aliases add: t id asSymbol -> origDef]]]]].
 	^ aliases
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyName___: aSymbol isReboundAfter: aPosition
+	"Does a class-body statement AFTER position aPosition bind aSymbol again?
+
+	An alias ``b = a'' of a sibling def is compiled two ways that both assume
+	``a'' ends the body meaning what it meant at the alias: as a delegating
+	method (``b ^ self a''), or re-pointed after the decorators run, reading
+	``a'' then.  Right for a DECORATED ``a'' -- by CPython's order the decorator
+	had already run when the alias did -- and wrong when a LATER statement
+	rebinds ``a'':
+
+	    f = __repr__
+	    __repr__ = recursive_repr()(__repr__)
+
+	CPython's ``f'' is the original function; both of Grail's forms made it the
+	wrapper (test_reprlib's test__wrapped__, ``X.f is X.__repr__.__wrapped__'').
+	An alias whose target is rebound later is therefore left as an ordinary
+	class attribute, evaluated where it stands."
+
+	| rebound |
+	rebound := false.
+	body body doWithIndex: [:stmt :pos |
+		(pos > aPosition and: [(stmt ___boundTargetNames___ includes: aSymbol)
+			and: [((stmt isKindOf: AssignAst)
+				and: [(stmt value isKindOf: NameAst) and: [stmt value id asSymbol == aSymbol]]) not]])
+			ifTrue: [rebound := true]].
+	^ rebound
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyAliasesReadInOrder___
+	"The alias names (``b'' of ``b = a'', a a sibling def) whose target is
+	rebound by a later statement -- see ___classBodyName___:isReboundAfter:.
+	The post-decorator re-pointing skips these."
+
+	| names |
+	names := IdentitySet new.
+	body body doWithIndex: [:stmt :pos |
+		((stmt isKindOf: AssignAst)
+			and: [(stmt value isKindOf: NameAst)
+			and: [self ___classBodyName___: stmt value id asSymbol isReboundAfter: pos]])
+			ifTrue: [stmt targets do: [:t |
+				(t isKindOf: NameAst) ifTrue: [names add: t id asSymbol]]]].
+	^ names
 %
 
 category: 'Grail-Class Compilation'
@@ -3876,7 +4246,13 @@ slotNames
 			((valueAst isKindOf: TupleAst) or: [valueAst isKindOf: ListAst]) ifTrue: [
 				valueAst elts do: [:elt |
 					((elt isKindOf: ConstantAst) and: [elt value isKindOf: String])
-						ifTrue: [addName value: elt value]]]].
+						ifTrue: [addName value: elt value]]].
+			"``__slots__ = {'banana': 42}'' -- a dict's KEYS are the slots, its
+			values their docstrings (test_typing test_parameterized_slots_dict)."
+			(valueAst isKindOf: DictAst) ifTrue: [
+				(valueAst keys ifNil: [#()]) do: [:k |
+					((k isKindOf: ConstantAst) and: [k value isKindOf: String])
+						ifTrue: [addName value: k value]]]].
 	^ names
 %
 
@@ -3895,10 +4271,13 @@ slotsDeclaredStrict
 	valueAst ifNil: [^ false].
 	(valueAst isKindOf: ConstantAst) ifTrue: [
 		^ valueAst value isKindOf: String].
-	((valueAst isKindOf: TupleAst) or: [valueAst isKindOf: ListAst]) ifFalse: [
+	((valueAst isKindOf: TupleAst) or: [(valueAst isKindOf: ListAst)
+			or: [valueAst isKindOf: DictAst]]) ifFalse: [
 		^ false].
 	hasDict := false.
-	valueAst elts do: [:elt |
+	"A dict's keys name the slots; a ``**'' splat has a nil key, and a
+	declaration Grail cannot read stays lenient."
+	((valueAst isKindOf: DictAst) ifTrue: [valueAst keys ifNil: [#()]] ifFalse: [valueAst elts]) do: [:elt |
 		((elt isKindOf: ConstantAst) and: [elt value isKindOf: String])
 			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
 			ifFalse: [^ false]].
@@ -4954,7 +5333,7 @@ method: ClassDefAst
 annotatedFieldNames
 	"Ordered names of every annotated assignment in the class body —
 	bare ``x: int'' AND ``x: int = default'' alike.  ClassDefAst's
-	``_fields'' captures only the bare ones (annotated-with-value lines
+	``___bareAnnotatedFields___'' captures only the bare ones (annotated-with-value lines
 	route to class-attribute storage), so this is what
 	dataclasses._collect_fields and typing.NamedTuple need to recover the
 	full field layout and each field's default.  Plain (un-annotated)
@@ -4967,7 +5346,7 @@ annotatedFieldNames
 	| names |
 	names := OrderedCollection new.
 	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst])
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___])
 			ifTrue: [names add: stmt target id asString]].
 	^ names
 %
@@ -4985,10 +5364,38 @@ classAnnotationPairs
 	| pairs |
 	pairs := OrderedCollection new.
 	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst])
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___])
 			ifTrue: [pairs add:
 				stmt target id asString -> stmt annotation ___annotationSourceString___]].
 	^ pairs
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___annotateScopeBoundNames___: firstBinding
+	"The class-body names the annotate block may read from the class: every
+	name the body binds anywhere -- it runs after the whole body -- and NOT one
+	that only a bare annotation mentions (``bytes: int'' with no value and no
+	other binding).  CPython has no such key in the class namespace, so the
+	read goes to the enclosing scope; Grail has no accessor for it either, and
+	sending one was an uncatchable doesNotUnderstand.
+
+	This was nil, which NameAst reads as ``every name is bound''.  It is still
+	every name NameAst's class-body branches consult, so nothing else that
+	resolved through the class before stops doing so."
+
+	| names bareOnly |
+	names := IdentitySet new.
+	{ CallAst classAttrNames. CallAst classFunctionNames. CallAst classStaticFunctionNames.
+	  CallAst classNestedClassNames. CallAst classBodyConditionalNames. firstBinding keys }
+		do: [:each | each isNil ifFalse: [names addAll: each]].
+	bareOnly := IdentitySet new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifTrue: [
+			stmt ___boundTargetNames___ do: [:nm |
+				(firstBinding includesKey: nm) ifFalse: [bareOnly add: nm]]]].
+	bareOnly do: [:nm | names remove: nm ifAbsent: []].
+	^ names
 %
 
 category: 'Grail-code generation'
@@ -5004,7 +5411,7 @@ emitClassAnnotateBlockOn: aStream
 
 	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
 	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst]) ifTrue: [
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___]) ifTrue: [
 			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
 			aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
 			stmt annotation printSmalltalkOn: aStream.
@@ -5702,7 +6109,8 @@ isDerivedFrom: aClass scope: aScope
 2) isSubclassOf: checks the Smalltalk class hierarchy"
 
 	(aClass name = name) ifTrue: [^true].
-	bases do: [:base | ((aScope get: base id) astNode isDerivedFrom: aClass scope: aScope) ifTrue: [^true]].
+	bases do: [:base | ((base isKindOf: NameAst)
+		and: [(aScope get: base id) astNode isDerivedFrom: aClass scope: aScope]) ifTrue: [^true]].
 	^false
 %
 
@@ -6260,6 +6668,16 @@ ___irMethodLocalClassReason___: localNames
 	those through the block as well."
 	(self ___irDeferredReadsOfNonlocalBelow___ isEmpty)
 		ifFalse: [^ #'classDef:deferredReadOfNonlocal'].
+	"A class-body ANNOTATION is a deferred read of the same kind: PEP 649
+	evaluates it through __annotate__ when asked, not when the class statement
+	runs, so it must see an enclosing binding as it is THEN.  ``class X: y:
+	undefined'' followed by ``undefined = int'' answers {'y': int} in CPython and
+	on the text path; the helper's seeded temp answered UnboundLocalError
+	(test_typing test_deferred_annotations).  An annotation naming ANY enclosing
+	local refuses -- AnnAssignAst's read walk skips annotations, so such a name
+	may not be among the carried captures at all."
+	(self ___irClassAnnotationLocalReads___: localNames) isEmpty
+		ifFalse: [^ #'classDef:deferredAnnotationRead'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
 	by reference -- which is what an enclosing PARAMETER that the body never
@@ -6691,6 +7109,20 @@ ___irCarriedCaptureNames___: localNames
 	self ___irEnclosingFunctionDef___ isNil ifTrue: [^ #()].
 	^ (self ___irClassCapturedNames___: localNames)
 		asSortedCollection: [:a :b | a asString <= b asString]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irClassAnnotationLocalReads___: localNames
+	"The enclosing def's locals that a class-body annotation names."
+
+	| out |
+	out := Set new.
+	body isNil ifTrue: [^ out].
+	(body body ifNil: [#()]) do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___])
+			ifTrue: [stmt annotation ___irReadLocalNamesInto___: out locals: localNames]].
+	^ out
 %
 
 category: 'Grail-IR Codegen'

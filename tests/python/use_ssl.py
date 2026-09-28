@@ -1,12 +1,12 @@
-# Fixtures for SslModuleTestCase — a TLS round-trip over GsSecureSocket.
+# Fixtures for SslModuleTestCase — a TLS round-trip through ssl/_ssl (OpenSSL).
 #
 # Unlike the plain-HTTP socket fixtures (where the client's request fits in the
 # OS buffer before the server accepts, so one green thread suffices), a TLS
 # handshake is bidirectional: server and client must both be live to exchange
 # ClientHello/ServerHello.  The Smalltalk test therefore forks the client into
-# its own GsProcess; GsSecureSocket's secureAccept/secureConnect suspend on
-# readWillNotBlockWithin:, so the two green threads drive the handshake
-# cooperatively.
+# its own GsProcess.  _ssl runs OpenSSL over memory BIOs and moves the bytes
+# through Grail's non-blocking GsSocket, whose reads suspend only the calling
+# green thread, so the two drive the handshake cooperatively.
 
 import ssl
 import socket
@@ -48,6 +48,52 @@ def client_roundtrip(port, payload):
     return [resp, version]
 
 
+def make_plain_listener():
+    """A plain TCP listener, answered as ``[raw, port]``: the TLS upgrade
+    happens per connection, after accept(), in serve_upgraded_then_drop."""
+    raw = socket.socket()
+    raw.bind(("127.0.0.1", 0))
+    raw.listen(1)
+    return [raw, raw.getsockname()[1]]
+
+
+def serve_upgraded_then_drop(raw, certfile, keyfile, password, payload):
+    """Accept a PLAIN connection and only then wrap it server-side -- the
+    socketserver shape test.ssl_servers uses, as opposed to wrapping the
+    listener.  Send ``payload`` and close WITHOUT a TLS close_notify (no
+    unwrap), which is a ragged EOF for the client.  Answer the server names
+    the SNI callback saw."""
+    seen = []
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(certfile, keyfile, password)
+    ctx.set_servername_callback(lambda sock, name, context: seen.append(name))
+    conn, addr = raw.accept()
+    tls = ctx.wrap_socket(conn, server_side=True)
+    tls.sendall(payload)
+    tls.close()
+    raw.close()
+    return seen
+
+
+def client_read_to_eof(port):
+    """Connect with SNI ``localhost`` and read until EOF, then read twice more.
+    Answer ``[data, [after1, after2]]``.  Under suppress_ragged_eofs (the
+    default) a ragged EOF reads as b'' -- every time, not just the first."""
+    ctx = ssl._create_unverified_context()
+    raw = socket.socket()
+    raw.connect(("127.0.0.1", port))
+    c = ctx.wrap_socket(raw, server_hostname="localhost")
+    data = b""
+    while True:
+        chunk = c.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    after = [c.recv(4096), c.recv(4096)]
+    c.close()
+    return [data, after]
+
+
 def trust_store_defaults():
     """The default-context trust store, resolved without touching the net.
 
@@ -72,20 +118,25 @@ def trust_store_defaults():
         'cafile_exists': bool(paths.cafile) and os.path.isfile(paths.cafile),
         'default_verifies': default_ctx.verify_mode == ssl.CERT_REQUIRED,
         'default_checks_hostname': default_ctx.check_hostname is True,
-        'default_loaded_anchors': default_ctx._cafile is not None
-                                  or default_ctx._capath is not None,
+        'default_loaded_anchors': _ca_count(default_ctx) > 0,
         'unverified_off': unverified.verify_mode == ssl.CERT_NONE,
-        'unverified_has_no_anchors': unverified._cafile is None,
+        'unverified_has_no_anchors': _ca_count(unverified) == 0,
         'omitted_args_raise': omitted_raises,
         'explicit_cafile_kept': explicit is not None
-                                and explicit._cafile == paths.cafile,
+                                and _ca_count(explicit) > 0,
     }
+
+
+def _ca_count(ctx):
+    """CA certificates loaded into ctx's store -- the public view of "has
+    anchors" (CPython's SSLContext has no record of which file it read)."""
+    return ctx.cert_store_stats()['x509_ca']
 
 
 # --- OpenSSL identity --------------------------------------------------------
 # ssl.OPENSSL_VERSION / _INFO / _NUMBER.  CPython gets them from the ``_ssl''
-# extension's link line; Grail has no ``_ssl'' and reads them from the OpenSSL
-# GemStone loaded into the gem.  Either way the three must agree with each
+# extension's link line; Grail's ``_ssl'' asks the OpenSSL that GemStone ships
+# (OpenSSL_version / OpenSSL_version_num, through CCallout).  Either way the three must agree with each
 # other, which is what these check -- and they check it by INVERTING the
 # derivation (number -> tuple -> dotted string), so a bug in Grail's forward
 # parse cannot also write the expectation.  The same functions run under CPython

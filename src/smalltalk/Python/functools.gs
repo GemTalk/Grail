@@ -2388,7 +2388,14 @@ ___checkAbcCacheToken___
 		@env0:objectNamed: #importlib) @env1:modules)
 			@env0:at: 'abc' otherwise: nil.
 	abcModule == nil ifTrue: [^ self].
-	token := [abcModule ___pyAttrLoad___: #'_abc_invalidation_counter']
+	"abc.get_cache_token(), the public spelling CPython's singledispatch uses.
+	This read a module global, _abc_invalidation_counter, that only Grail's
+	old stub abc kept; with CPython's abc the counter is ABCMeta's, the read
+	answered nothing, and the cache was never dropped -- so a class registered
+	on an ABC after its first dispatch kept dispatching the old way
+	(test_functools test_mro_conflicts)."
+	token := [(abcModule ___pyAttrLoad___: #'get_cache_token')
+			___pyCallValue___: #() kw: nil]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
 	token == nil ifTrue: [^ self].
@@ -2458,13 +2465,10 @@ category: 'Grail-ABC MRO'
 method: functools
 ___isHiddenBase___: aBase of: aClass
 	"True when aBase is a Smalltalk ancestor CPython has no class for, so the
-	C3 walk must look THROUGH it at its own bases.  Three kinds:
+	C3 walk must look THROUGH it at its own bases.  Two kinds:
 
 	  * no __module__ at all -- AbstractDictionary, Collection,
 	    SequenceableCollection, PythonInstance;
-	  * _ABCRoot, Grail's internal root for the collections.abc ABCs; CPython
-	    derives those from object with an ABCMeta metaclass, so the root has
-	    no CPython counterpart and must not appear in a linearization;
 	  * the builtin TWIN -- one Python class over two Smalltalk classes, the
 	    inner one reporting the SAME __name__ and __module__ as the outer
 	    (dict is PyDict over KeyValueDictionary).  Collapsing it is what keeps
@@ -2475,7 +2479,6 @@ ___isHiddenBase___: aBase of: aClass
 	(aBase isKindOf: Behavior) ifFalse: [^ true].
 	baseModule := self ___pyModuleOf___: aBase.
 	baseModule == nil ifTrue: [^ true].
-	((self ___pyNameOf___: aBase) @env0:= '_ABCRoot') ifTrue: [^ true].
 	ownModule := self ___pyModuleOf___: aClass.
 	^ (ownModule @env0:notNil
 		and: [ownModule @env0:asString @env0:= baseModule @env0:asString])
@@ -2522,27 +2525,16 @@ category: 'Grail-ABC MRO'
 method: functools
 ___isAbcClass___: aClass
 	"CPython's _c3_mro asks ``hasattr(base, '__abstractmethods__')'' to find
-	where a class's explicit ABC bases stop.  Grail's abc is a
-	no-enforcement stub and defines __abstractmethods__ on nothing, so the
-	stand-in is membership of _ABCRoot in the mro -- the root every
-	collections.abc ABC derives from, and which a user class inheriting one
-	keeps.
+	where a class's explicit ABC bases stop, and so does this now.  It used to
+	look for Grail's own _ABCRoot in the mro, because Grail's abc was a stub
+	that set __abstractmethods__ on nothing; abc and collections.abc are
+	CPython's own now, ABCMeta sets it on every class it builds, and _ABCRoot
+	is gone -- so the old test answered false for every class, user ABCs on
+	abc.ABC and the numbers tower included."
 
-	LIMIT: a user ABC built on abc.ABC is NOT recognized (abc.ABC is an
-	ordinary class here, deriving from PythonInstance), and neither are the
-	numbers ABCs (numbers.Number derives from PythonInstance too).  Both
-	would need Grail's abc to be real; until then the boundary is computed
-	over collections.abc, which is what singledispatch's ABC handling is
-	about in practice."
-
-	| mro |
-	mro := [aClass __mro__]
+	^ [aClass ___pyAttrLoad___: #'__abstractmethods__'. true]
 		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: nil].
-	mro == nil ifTrue: [^ false].
-	mro @env0:do: [:c |
-		((self ___pyNameOf___: c) @env0:= '_ABCRoot') ifTrue: [^ true]].
-	^ false
+		do: [:ex | ex @env0:return: false]
 %
 
 category: 'Grail-ABC MRO'
@@ -3650,6 +3642,12 @@ __qualname__
 
 	| fn cls owner |
 	fn := self @env0:dynamicInstVarAt: #func.
+	"A @classmethod / @staticmethod DESCRIPTOR -- what the class body now hands
+	an outer decorator -- forwards __qualname__ to the function it wraps,
+	which is already qualified."
+	((fn @env0:isKindOf: BoundMethod)
+		and: [fn @env0:receiver @env0:isKindOf: Behavior])
+		ifFalse: [^ fn @env1:___pyAttrLoad___: #'__qualname__'].
 	self ___wrapsClassSideMethod___ ifTrue: [
 		cls := fn @env0:receiver.
 		owner := [(cls __qualname__) @env0:asString]

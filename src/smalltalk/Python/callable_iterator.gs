@@ -73,6 +73,19 @@ ___callable: aCallable sentinel: aSentinel
 
 category: 'Grail-Iterator Protocol'
 method: callable_iterator
+__iter__
+	"An iterator is its own iterator.  Defined HERE, not only inherited from
+	the Smalltalk ``iterator'' class, because that class is not in this
+	type's Python __mro__ -- and collections.abc.Iterator is
+	_check_methods over the MRO's __dict__s, so an inherited __iter__ left
+	``isinstance(iter(seq), Iterator)'' False.  CPython registers neither
+	type, and needs not: its own classes carry the method."
+
+	^ self
+%
+
+category: 'Grail-Iterator Protocol'
+method: callable_iterator
 __next__
 	"Call callable(); stop when the result equals the sentinel.  Mirrors
 	CPython calliter_iternext:

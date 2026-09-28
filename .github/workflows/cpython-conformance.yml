@@ -1,7 +1,7 @@
 name: CPython conformance
 
 # The CPython regression-suite scoreboard (scripts/run_cpython_suite.sh) is a
-# heavy job -- ~20-30 min on a CI runner, dominated by the biggest modules
+# heavy job -- ~50-60 min on a CI runner as of 2026-09-27, dominated by the biggest modules
 # (test_enum, test_set) contending on the single shared stone -- so it is too
 # slow for the every-push critical path (that is the SUnit gate in ci.yml).
 # It runs here on a NIGHTLY schedule + on-demand instead.
@@ -64,7 +64,13 @@ permissions:
 jobs:
   conformance:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    # 90, not 60.  The suite outgrew 60 on 2026-09-27: #1200 and #1202 turned
+    # test_typing (701 tests) and test_pickle (468, the slowest module in the
+    # corpus) from IMPORTERRORs that cost nothing into full runs, on top of a
+    # suite already measured at 52 minutes.  That day's nightly and the manual
+    # run after it were both killed at 60:00 mid-suite, so the gate saw no
+    # summary and failed closed -- a red nightly that measured nothing.
+    timeout-minutes: 90
     outputs:
       regressions: ${{ steps.gate.outputs.regressions }}
       improvements: ${{ steps.gate.outputs.improvements }}
@@ -93,8 +99,16 @@ jobs:
       # settle.  restore-keys lets a run inherit the previous day's timings, and
       # the always-unique key makes every run save a fresh copy.  A cache miss
       # is harmless -- the estimate is the documented fallback.
+      #
+      # RESTORE AND SAVE ARE SEPARATE STEPS so the save can run on a failed or
+      # timed-out job.  The combined actions/cache saves in its post step, which
+      # is skipped unless the job succeeds -- so a run killed by the timeout
+      # never recorded what it had measured, the next run inherited the same
+      # stale schedule, and it was killed the same way.  That is how a module
+      # newly unblocked (test_pickle, costed at ~0s while it was an IMPORTERROR)
+      # kept being launched LAST and stretched the tail of every run.
       - name: Restore module durations
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: out/cpython/*.sec
           key: cpython-durations-${{ github.run_id }}
@@ -194,6 +208,15 @@ jobs:
             echo "\`${line:-(no summary line -- see the log)}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Every module that FINISHED wrote its .sec, including on a run the
+      # timeout killed; saving them is what lets the next run schedule by them.
+      - name: Save module durations
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: out/cpython/*.sec
+          key: cpython-durations-${{ github.run_id }}
+
       - name: Upload scoreboard + logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -202,10 +225,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
           # The regenerated scoreboard (commit it to move the baseline forward)
-          # + per-module logs + JSON + stone/gem logs.
+          # + per-module logs + JSON + stone/gem logs + per-module wall clock
+          # (.sec), so a slow run can be read module by module.
           path: |
             docs/CPython_Suite_Scoreboard.md
             out/cpython/*.out
+            out/cpython/*.sec
             out/codegen/**
             out/cpython/scoreboard.json
             gate-output.txt

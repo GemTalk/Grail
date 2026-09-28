@@ -24,8 +24,8 @@
 #     quote and a semicolon, and the check is not only that the file keeps its
 #     times but that the command the semicolon would have started did not run.
 #
-# WHOLE SECONDS.  os.stat here answers an int st_mtime where CPython answers a
-# float (GsFileStat exposes whole seconds only), and os.utime floors to match.
+# WHOLE SECONDS.  os.stat here answers a float st_mtime with no fractional part
+# (GsFileStat exposes whole seconds only), and os.utime floors to match.
 # So the checks compare math.floor(st_mtime), which is true under CPython too,
 # and NOT st_mtime itself.
 #

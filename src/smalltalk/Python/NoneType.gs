@@ -280,9 +280,10 @@ __ge__: other
 		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: NoneType
 __iter__
+	<grailProtocolRefusal>
 	"Iterating None raises catchable TypeError (CPython).  Without a
 	real method the send died as an UNCATCHABLE env-1 MNU -- Object's
 	DNU deliberately does not intercept the probe selectors
@@ -292,25 +293,28 @@ __iter__
 	TypeError ___signal___: '''NoneType'' object is not iterable'
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: NoneType
 __len__
+	<grailProtocolRefusal>
 	"len(None) raises catchable TypeError (CPython)."
 
 	TypeError ___signal___: 'object of type ''NoneType'' has no len()'
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: NoneType
 __getitem__: idx
+	<grailProtocolRefusal>
 	"None[i] raises catchable TypeError (CPython)."
 
 	TypeError ___signal___: '''NoneType'' object is not subscriptable'
 %
 
-category: 'Grail-Python protocol'
+category: 'Grail-Protocol Refusal'
 method: NoneType
 __contains__: item
+	<grailProtocolRefusal>
 	"``x in None`` raises catchable TypeError (CPython)."
 
 	TypeError ___signal___: 'argument of type ''NoneType'' is not iterable'

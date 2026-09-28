@@ -511,8 +511,9 @@ stdout
 category: 'Grail-Accessors'
 method: sys
 stdin
-	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924).  There is no
-	default __stdin__, so an unredirected read still reaches None."
+	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924).  The default is
+	the console's input stream, a PyConsoleStream named ``<stdin>'', as
+	__stdout__ / __stderr__ are its output streams."
 
 	| reg |
 	reg := sys ___sessionStreams___.
@@ -526,7 +527,12 @@ stdin
 category: 'Grail-Accessors'
 method: sys
 __stdin__
-	^ self @env0:at: #__stdin__
+	"SESSION-RESOLVED alongside ``stdin'' -- see ``__stderr__''.  It used to
+	read the instance slot bare, and there was no such slot, so a read was an
+	uncatchable Smalltalk LookupError rather than any Python answer at all."
+
+	^ sys ___sessionStreams___ @env0:at: #'__stdin__'
+		ifAbsent: [self @env0:at: #__stdin__ ifAbsent: [None]]
 %
 
 
@@ -937,18 +943,24 @@ method: sys
 _set_asyncgen_hooks: positional kw: kwargs
 	"sys.set_asyncgen_hooks(firstiter=..., finalizer=...) -- both keyword
 	arguments optional, and CPython only changes the ones actually given.
-	Stored session-locally; PythonAsyncGenerator fires firstiter at an async
-	generator's first drive, which is how an event loop learns which
-	generators to close in shutdown_asyncgens().  The FINALIZER half is
-	stored but never fires: it is the destruction-time hook of the recorded
-	platform gap (docs/Issues.md, 'no unawaited-coroutine warning') -- the
-	shutdown sweep is the working substitute."
+	Stored session-locally, and captured by each async generator at its first
+	drive (PythonAsyncGenerator>>___fireFirstiterIfNeeded___): firstiter fires
+	then, which is how an event loop learns which generators to close in
+	shutdown_asyncgens(), and the finalizer is bound then and fires if the
+	generator is collected unfinished.
+
+	None CLEARS a hook, as in CPython -- an event loop restores the hooks it
+	found, and those are usually (None, None).  Storing None instead left a
+	hook that every later first drive tried to call."
 
 	kwargs @env0:ifNotNil: [
-		(kwargs @env0:at: 'firstiter' ifAbsent: [nil]) @env0:ifNotNil: [:fi |
-			SessionTemps @env0:current @env0:at: #'GrailAsyncgenFirstiter' put: fi].
-		(kwargs @env0:at: 'finalizer' ifAbsent: [nil]) @env0:ifNotNil: [:fin |
-			SessionTemps @env0:current @env0:at: #'GrailAsyncgenFinalizer' put: fin]].
+		#( #('firstiter' #'GrailAsyncgenFirstiter') #('finalizer' #'GrailAsyncgenFinalizer') )
+			@env0:do: [:pair | | hook |
+				hook := kwargs @env0:at: (pair @env0:at: 1) ifAbsent: [nil].
+				hook == nil ifFalse: [
+					hook == None
+						ifTrue: [SessionTemps @env0:current @env0:removeKey: (pair @env0:at: 2) ifAbsent: [nil]]
+						ifFalse: [SessionTemps @env0:current @env0:at: (pair @env0:at: 2) put: hook]]]].
 	^ None
 %
 
@@ -1165,6 +1177,29 @@ gettrace
 
 category: 'Grail-Built-in Functions'
 method: sys
+get_coroutine_origin_tracking_depth
+	"get_coroutine_origin_tracking_depth() -> how many frames a new coroutine
+	records in cr_origin; 0, the default, records nothing."
+
+	^ PythonCoroutine @env1:___originTrackingDepth___
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+set_coroutine_origin_tracking_depth: depth
+	"set_coroutine_origin_tracking_depth(depth) -- see PythonCoroutine's
+	never-awaited section.  A negative depth is CPython's ValueError, and
+	leaves the setting as it was."
+
+	| n |
+	n := depth ___asIndex___.
+	n @env0:< 0 ifTrue: [^ ValueError ___signal___: 'depth must be >= 0'].
+	PythonCoroutine @env1:___originTrackingDepth___: n.
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
 is_finalizing
 	"is_finalizing() -> False"
 	^ false
@@ -1227,8 +1262,26 @@ getrefcount: obj
 category: 'Grail-Built-in Functions'
 method: sys
 intern: aString
-	"intern(string) -> interned string"
-	^ (aString @env0:asSymbol) @env0:asString
+	"intern(string) -> the canonical str equal to aString.
+
+	This answered ``aString asSymbol asString'', a NEW string each call, so
+	``sys.intern(a) is sys.intern(b)'' was never true -- which is the whole
+	contract.  The canonical strings now live in one session table, shared with
+	the key reads of an instance __dict__ (Symbol >> ___pyInterned___), so an
+	interned name is also identical to the attribute key it names.
+
+	CPython refuses a non-str and a str SUBCLASS.  A str holding lone
+	surrogates cannot become a Symbol, so it is answered as it is."
+
+	(aString @env0:isKindOf: CharacterCollection) ifFalse: [
+		(aString @env0:isKindOf: PyStrSurrogate) ifTrue: [^ aString].
+		^ TypeError ___signal___: 'intern() argument must be str, not '
+			@env0:, aString ___pyTypeNameForError___ @env0:asString].
+	((aString @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) @env0:notNil) ifTrue: [
+		^ TypeError ___signal___: 'can''t intern ' @env0:, aString ___pyTypeNameForError___ @env0:asString].
+	^ (aString @env0:asSymbol) @env0:___pyInternedAs___:
+		((aString @env0:isKindOf: Symbol) ifTrue: [aString @env0:asString] ifFalse: [aString])
 %
 
 category: 'Grail-Built-in Functions'
@@ -1957,6 +2010,7 @@ initialize_runtime_info
 	for where the writes go and for why print does not change route."
 	self @env0:at: #__stdout__ put: (PyConsoleStream @env0:___named___: '<stdout>').
 	self @env0:at: #__stderr__ put: (PyConsoleStream @env0:___named___: '<stderr>').
+	self @env0:at: #__stdin__ put: (PyConsoleStream @env0:___named___: '<stdin>').
 %
 
 
@@ -1985,6 +2039,7 @@ ___sessionStreams___
 		reg := IdentityKeyValueDictionary @env0:new.
 		reg @env0:at: #'__stdout__' put: (PyConsoleStream @env0:___named___: '<stdout>').
 		reg @env0:at: #'__stderr__' put: (PyConsoleStream @env0:___named___: '<stderr>').
+		reg @env0:at: #'__stdin__' put: (PyConsoleStream @env0:___named___: '<stdin>').
 		SessionTemps @env0:current @env0:at: #GrailSysStreams put: reg].
 	^ reg
 %

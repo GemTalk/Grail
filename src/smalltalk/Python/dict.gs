@@ -763,21 +763,32 @@ ___removeStoredKey___: key
 
 	Resolution order: the key as given, then its Symbol form, then a scan
 	comparing as text -- a Symbol and an equal String are not interchangeable to
-	removeKey:, so the scan is what covers the residue."
+	removeKey:, so the scan is what covers the residue.
 
-	| absent stored value |
+	The Symbol form is only tried for a key SHORT ENOUGH TO HAVE ONE.  GemStone
+	refuses a Symbol over 1024 characters -- ImproperOperation 2402, which no
+	Python handler can catch -- and asking for one killed the program on a
+	plain ``d.pop(long_str, None)'' against an empty dict.  No Symbol key can
+	equal such a string, so skipping the probe loses nothing.  test_linecache
+	test_invalid_names is the case: linecache.updatecache('a' * 1_000_000)
+	opens with ``cache.pop(filename, None)''."
+
+	| absent stored value symbolic |
 	absent := self ___absentMarker___.
+	symbolic := ((key isKindOf: CharacterCollection)
+			and: [(key isKindOf: Symbol) not
+			and: [key @env0:size @env0:<= 1024]])
+		ifTrue: [key @env0:asSymbol]
+		ifFalse: [nil].
 	(self @env0:includesKey: key) ifFalse: [
-		((key isKindOf: CharacterCollection)
-			and: [self @env0:includesKey: key @env0:asSymbol]) ifFalse: [^ absent]].
+		(symbolic notNil and: [self @env0:includesKey: symbolic]) ifFalse: [^ absent]].
 	stored := nil.
 	"Prefer an exact removal; only look further when it cannot be done."
 	(self @env0:includesKey: key) ifTrue: [
 		value := self @env0:at: key.
 		(self @env0:removeKey: key ifAbsent: [absent]) == absent
 			ifFalse: [^ value]].
-	(key isKindOf: CharacterCollection) ifTrue: [
-		(self @env0:includesKey: key @env0:asSymbol) ifTrue: [stored := key @env0:asSymbol]].
+	(symbolic notNil and: [self @env0:includesKey: symbolic]) ifTrue: [stored := symbolic].
 	stored isNil ifTrue: [
 		self @env0:keysDo: [:k |
 			(stored isNil and: [

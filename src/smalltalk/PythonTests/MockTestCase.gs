@@ -189,3 +189,58 @@ alias = sys.modules["unittest.mock"] is sys.modules["mock"]
 a is b and a is not c and repr(a) == "sentinel.MISSING" and alias'.
 	self assert: result
 %
+
+category: 'Grail-Tests - MagicMock'
+method: MockTestCase
+testMagicMockDefaults
+	"MagicMock answers CPython's defaults for magic methods nobody configured
+	-- it used to be an alias of Mock, so ``for x in patched_fn()'' raised
+	``'Mock' object is not iterable'' (test_gettext's FindTestCase).  The
+	expected string is CPython 3.14's output for the same snippet."
+
+	| result |
+	result := self eval: 'from unittest import mock
+m = mock.MagicMock()
+repr((list(m), len(m), bool(m), 3 in m, int(m), float(m),
+      type(m[0]).__name__, type(m + 1).__name__, type(-m).__name__,
+      m.__exit__(None, None, None), type(m.child).__name__, type(m()).__name__))'.
+	self assert: result asString
+		equals: '([], 0, True, False, 1, 1.0, ''MagicMock'', ''MagicMock'', ''MagicMock'', False, ''MagicMock'', ''MagicMock'')'
+%
+
+category: 'Grail-Tests - MagicMock'
+method: MockTestCase
+testMagicMockConfiguredMagicWins
+	"An ASSIGNED magic outranks the default, for that mock only; the
+	comparisons stay unsupported, as CPython's NotImplemented makes them."
+
+	| result |
+	result := self eval: 'from unittest import mock
+m = mock.MagicMock()
+m.__iter__ = mock.Mock(return_value=iter([1, 2]))
+m.__len__ = mock.Mock(return_value=5)
+fresh = mock.MagicMock()
+try:
+    fresh < 1
+    cmp = "no error"
+except TypeError:
+    cmp = "TypeError"
+repr((list(m), len(m), len(fresh), cmp))'.
+	self assert: result asString equals: '([1, 2], 5, 0, ''TypeError'')'
+%
+
+category: 'Grail-Tests - MagicMock'
+method: MockTestCase
+testPatchSubstitutesAMagicMock
+	| result |
+	result := self eval: 'from unittest import mock
+class Box:
+    def lookup(self):
+        return ["real"]
+b = Box()
+with mock.patch.object(b, "lookup") as p:
+    got = b.lookup()
+    kinds = (type(p).__name__, list(got), len(got))
+repr(kinds + (p.call_count, b.lookup()))'.
+	self assert: result asString equals: '(''MagicMock'', [], 0, 1, [''real''])'
+%

@@ -450,6 +450,21 @@ read: n
 
 category: 'Grail-Reading'
 method: BytesIO
+readinto: b
+	"readinto(b) - read up to len(b) bytes into the writable buffer b and
+	answer how many were read.  pickle's _Unframer reads a protocol-5
+	bytearray this way, straight out of its frame."
+
+	| data |
+	self _checkOpen.
+	data := self read: b @env1:__len__.
+	1 @env0:to: data @env0:size do: [:i |
+		b @env1:__setitem__: i @env0:- 1 _: (data @env0:at: i)].
+	^ data @env0:size
+%
+
+category: 'Grail-Reading'
+method: BytesIO
 readline
 	^ self readline: -1
 %
@@ -659,6 +674,47 @@ writable
 
 category: 'Grail-Protocol'
 method: BytesIO
+_checkSeekable
+	"IOBase's internal capability checks, which _pyio's buffered wrappers call
+	on the stream they wrap -- ``io.BufferedRandom(io.BytesIO())'' is how
+	test_pickle drives the unpickler's buffering.  A BytesIO has every
+	capability, so each check is the closed-stream check and nothing more."
+
+	^ self seekable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkSeekable: msg
+	^ self seekable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkReadable
+	^ self readable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkReadable: msg
+	^ self readable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkWritable
+	^ self writable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+_checkWritable: msg
+	^ self writable
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
 isatty
 	"Never a terminal."
 
@@ -769,29 +825,6 @@ ___pythonValueAttrs___
 %
 
 set compile_env: 1
-
-category: 'Grail-Opening'
-classmethod: FileIO
-___resolveEncoding___: anEncoding
-	"Normalize an open() encoding argument to one of the three encodings
-	Grail's text layer supports: 'utf-8' (also covers ascii, a strict subset),
-	'latin-1' (identity mapping over single-byte Strings) and 'iso-8859-15'
-	(latin-9: latin-1 with 8 code points substituted, which the str and bytes
-	codecs already implement -- the branches here route to them rather than
-	carrying a second copy of the table)."
-
-	| e |
-	(anEncoding == nil @env0:or: [anEncoding == None]) ifTrue: [^ 'utf-8'].
-	(anEncoding isKindOf: CharacterCollection) ifFalse: [
-		TypeError ___signal___: 'open() argument ''encoding'' must be str or None'].
-	e := anEncoding @env0:asLowercase.
-	((e @env0:= 'utf-8') @env0:or: [(e @env0:= 'utf8') @env0:or: [(e @env0:= 'ascii') @env0:or: [e @env0:= 'us-ascii']]]) ifTrue: [^ 'utf-8'].
-	((e @env0:= 'latin-1') @env0:or: [(e @env0:= 'latin1') @env0:or: [(e @env0:= 'iso-8859-1') @env0:or: [e @env0:= 'l1']]]) ifTrue: [^ 'latin-1'].
-	((e @env0:= 'iso-8859-15') @env0:or: [(e @env0:= 'iso8859-15') @env0:or: [(e @env0:= 'iso8859_15')
-		@env0:or: [(e @env0:= 'latin-9') @env0:or: [(e @env0:= 'latin9') @env0:or: [e @env0:= 'l9']]]]])
-			ifTrue: [^ 'iso-8859-15'].
-	LookupError ___signal___: ('unknown encoding: ' @env0:, anEncoding)
-%
 
 category: 'Grail-Opening'
 classmethod: FileIO
@@ -1075,24 +1108,58 @@ ___pathHasNul___: aPath
 category: 'Grail-Opening'
 classmethod: FileIO
 ___open___: fileArg mode: modeArg encoding: encodingArg
+	"open(file, mode, encoding=encoding) with every later argument at its
+	default."
+
+	^ self ___open___: fileArg mode: modeArg encoding: encodingArg
+		errors: nil newline: nil closefd: true
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+___open___: fileArg mode: modeArg encoding: encodingArg errors: errorsArg newline: newlineArg closefd: closefdArg
 	"Master entry point behind the open() builtin and io.open().
 	Parses the Python mode string, maps it to a GsFile fopen mode
 	(always with 'b' - decoding is the TextIOWrapper's job), and
-	answers a FileIO (binary) or TextIOWrapper (text) instance."
+	answers a FileIO (binary) or TextIOWrapper (text) instance.
 
-	| file mode hasR hasW hasA hasX hasPlus hasB hasT count gsMode gsfile inst |
+	TEXT MODE HAS TWO IMPLEMENTATIONS.  Grail's own TextIOWrapper decodes
+	three encodings over the GsFile directly -- UTF-8, latin-1 and latin-9
+	-- strictly, and that is what nearly every open() asks for.  Anything
+	else (another encoding, or an errors handler other than strict) answers
+	_pyio's TextIOWrapper over the binary file, which is how CPython's
+	open() is built and which has the whole codec registry behind it.  Those
+	arguments used to be dropped or refused: errors=xmlcharrefreplace was
+	ignored, so a latin-1 file raised UnicodeEncodeError at the first
+	character outside it; utf-16 and utf-8-sig were LookupError; and ascii
+	silently wrote UTF-8.  test_sax's ParseTest writes its fixtures with
+	each of these.
+
+	``file'' may also be a descriptor, as in CPython -- see
+	___openDescriptor___:."
+
+	| file mode hasR hasW hasA hasX hasPlus hasB hasT count gsMode gsfile inst fd native |
 	file := fileArg.
+	fd := nil.
 	(file isKindOf: CharacterCollection) ifFalse: [
-		(file isKindOf: Number) ifTrue: [
-			TypeError ___signal___: 'integer file descriptors are not supported in Grail'].
-		"PEP 519 first: CPython's open() asks __fspath__, and only a
-		PathLike is guaranteed to answer the actual filesystem path there.
-		__str__ stays as the fallback because it is what this has always
-		used and the two coincide for pathlib.Path — but a class free to
-		define a display __str__ alongside a real __fspath__ would
-		otherwise be opened under whatever its repr-ish text happened to be."
-		file := (os instance) ___fsPath___: file.
-		(file isKindOf: CharacterCollection) ifFalse: [file := file __str__]].
+		(file isKindOf: Integer)
+			ifTrue: [fd := file]
+			ifFalse: [
+				"A bytes path is a filesystem name in the filesystem encoding,
+				as os.fsdecode reads it.  It fell through to __str__ and was
+				opened under its repr -- a name starting b' -- which never
+				exists (test_sax test_expat_binary_file_bytes_name).  The
+				file's NAME stays the bytes, as in CPython."
+				(file isKindOf: ByteArray) ifTrue: [
+					file := (os instance) fsdecode: file].
+				"PEP 519 first: CPython's open() asks __fspath__, and only a
+				PathLike is guaranteed to answer the actual filesystem path there.
+				__str__ stays as the fallback because it is what this has always
+				used and the two coincide for pathlib.Path — but a class free to
+				define a display __str__ alongside a real __fspath__ would
+				otherwise be opened under whatever its repr-ish text happened to be."
+				file := (os instance) ___fsPath___: file.
+				(file isKindOf: CharacterCollection) ifFalse: [file := file __str__]]].
 	"AN EMBEDDED NUL IS A BAD ARGUMENT, not a missing file.  A path cannot
 	hold one -- the OS call takes a NUL-terminated string, so everything after
 	it is silently dropped -- and CPython refuses up front with ``ValueError:
@@ -1103,8 +1170,10 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 	exception for the wrong reason: a caller catching FileNotFoundError to
 	CREATE the file would go on to create it under the truncated name.
 	test_builtin test_open checks the str and the bytes spelling."
-	((FileIO ___pathHasNul___: file) @env0:or: [FileIO ___pathHasNul___: fileArg]) ifTrue: [
+	(fd == nil @env0:and: [(FileIO ___pathHasNul___: file) @env0:or: [FileIO ___pathHasNul___: fileArg]]) ifTrue: [
 		^ ValueError ___signal___: 'embedded null byte'].
+	(fd == nil @env0:and: [closefdArg ___isTruthy___ @env0:not]) ifTrue: [
+		^ ValueError ___signal___: 'Cannot use closefd=False with file name'].
 	mode := (modeArg == nil @env0:or: [modeArg == None]) ifTrue: ['r'] ifFalse: [modeArg].
 	(mode isKindOf: CharacterCollection) ifFalse: [
 		TypeError ___signal___: 'open() argument ''mode'' must be str'].
@@ -1139,6 +1208,14 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 	the NotADirectoryError CPython raises.  ``== true'' alone also subsumes
 	the old existsOnServer: pre-guard: isServerDirectory: answers nil for a
 	path that is not there, which is not true."
+	native := hasB ifTrue: [nil] ifFalse: [
+		FileIO ___nativeEncoding___: encodingArg errors: errorsArg].
+	fd == nil ifFalse: [
+		^ FileIO ___openDescriptor___: fd mode: mode binary: hasB
+			readable: ((hasR) @env0:or: [hasPlus])
+			writable: ((hasR @env0:not) @env0:or: [hasPlus])
+			native: native encoding: encodingArg errors: errorsArg
+			newline: newlineArg closefd: closefdArg].
 	((GsFile @env0:isServerDirectory: file) == true) ifTrue: [
 		(os instance) ___signalErrno: 21 filename: file].
 	hasX ifTrue: [
@@ -1159,13 +1236,122 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 		another reason."
 		(os instance) ___statOrSignal___: file isLstat: false.
 		OSError ___signal___: ('could not open file: ''' @env0:, file @env0:, '''')].
-	inst := (hasB ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
-	inst ___initGsFile___: gsfile name: file mode: mode
+	inst := ((hasB @env0:or: [native == nil]) ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
+	inst ___initGsFile___: gsfile
+		name: ((fileArg isKindOf: ByteArray) ifTrue: [fileArg] ifFalse: [file])
+		mode: mode
 		readable: ((hasR) @env0:or: [hasPlus])
 		writable: ((hasR @env0:not) @env0:or: [hasPlus]).
-	hasB ifFalse: [
-		inst @env0:dynamicInstVarAt: #_encoding put: (FileIO ___resolveEncoding___: encodingArg)].
+	hasB ifTrue: [^ inst].
+	native == nil ifTrue: [
+		^ FileIO ___codecText___: inst mode: mode encoding: encodingArg
+			errors: errorsArg newline: newlineArg].
+	inst @env0:dynamicInstVarAt: #_encoding put: native.
 	^ inst
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+___nativeEncoding___: anEncoding errors: anErrors
+	"The encoding Grail's own TextIOWrapper decodes for this open(), or nil
+	when the file needs _pyio's (see ___open___:mode:encoding:errors:...).
+	Only strict error handling is native: every other handler needs the
+	codec."
+
+	| e |
+	(anErrors == nil @env0:or: [anErrors == None @env0:or: [
+		(anErrors isKindOf: CharacterCollection) @env0:and: [anErrors @env0:= 'strict']]])
+			ifFalse: [^ nil].
+	(anEncoding == nil @env0:or: [anEncoding == None]) ifTrue: [^ 'utf-8'].
+	(anEncoding isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___: 'open() argument ''encoding'' must be str or None'].
+	e := anEncoding @env0:asLowercase.
+	((e @env0:= 'utf-8') @env0:or: [e @env0:= 'utf8']) ifTrue: [^ 'utf-8'].
+	((e @env0:= 'latin-1') @env0:or: [(e @env0:= 'latin1') @env0:or: [(e @env0:= 'iso-8859-1') @env0:or: [e @env0:= 'l1']]]) ifTrue: [^ 'latin-1'].
+	((e @env0:= 'iso-8859-15') @env0:or: [(e @env0:= 'iso8859-15') @env0:or: [(e @env0:= 'iso8859_15')
+		@env0:or: [(e @env0:= 'latin-9') @env0:or: [(e @env0:= 'latin9') @env0:or: [e @env0:= 'l9']]]]])
+			ifTrue: [^ 'iso-8859-15'].
+	^ nil
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+___codecText___: aFileIO mode: modeArg encoding: encodingArg errors: errorsArg newline: newlineArg
+	"_pyio's TextIOWrapper over an open binary file, with ``mode'' set as
+	CPython's open() sets it.  An encoding the codec registry does not know
+	raises LookupError from here, and the binary file is closed first."
+
+	| text |
+	text := [((io instance) ___pyioClass___: #'TextIOWrapper')
+			@env1:value: { aFileIO.
+				(encodingArg == nil) ifTrue: [None] ifFalse: [encodingArg].
+				(errorsArg == nil) ifTrue: [None] ifFalse: [errorsArg].
+				(newlineArg == nil) ifTrue: [None] ifFalse: [newlineArg] }
+			value: nil]
+		@env0:ifCurtailed: [aFileIO close].
+	text @env1:__setattr__: 'mode' _: modeArg.
+	^ text
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+___fdOwners___
+	"descriptor -> the Grail file whose fileno() handed it out, this session.
+	Per session, as the descriptors are: they belong to this gem's process."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_io_fd_owners'
+		ifAbsentPut: [IntegerKeyValueDictionary @env0:new]
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+___openDescriptor___: fd mode: mode binary: isBinary readable: isReadable writable: isWritable native: native encoding: encodingArg errors: errorsArg newline: newlineArg closefd: closefdArg
+	"open(fd, ...) -- a file object over a descriptor this session already
+	has, as open(f.fileno(), 'rb', closefd=False) does (test_sax
+	test_expat_binary_file_int_name).  Two kinds qualify:
+
+	  * one a Grail file's fileno() handed out: the new object shares that
+	    file's GsFile, and so its position -- which is what sharing a
+	    descriptor means in CPython too.  closefd=False leaves it open when
+	    the new object closes;
+	  * one os.open handed out: _pyio.open, which is built on os's
+	    descriptor functions, opens it.
+
+	Any other number is EBADF, the answer os gives for the same reason (see
+	os's descriptor section): the gem's own descriptors share this process,
+	and a Python file object over one of them could break the session."
+
+	| owner gsfile inst |
+	(fd isKindOf: SmallInteger) ifFalse: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C int'].
+	fd @env0:< 0 ifTrue: [^ ValueError ___signal___: 'negative file descriptor'].
+	owner := self ___fdOwners___ @env0:at: fd ifAbsent: [nil].
+	(owner ~~ nil
+		@env0:and: [(owner @env0:dynamicInstVarAt: #_closed) ~~ true
+		@env0:and: [((owner @env0:dynamicInstVarAt: #_gsfile) @env0:fileDescriptor) @env0:= fd]])
+			ifTrue: [
+				gsfile := owner @env0:dynamicInstVarAt: #_gsfile.
+				inst := ((isBinary @env0:or: [native == nil]) ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
+				inst ___initGsFile___: gsfile name: fd mode: mode
+					readable: isReadable writable: isWritable.
+				closefdArg ___isTruthy___ ifFalse: [
+					inst @env0:dynamicInstVarAt: #_closefd put: false].
+				isBinary ifTrue: [^ inst].
+				native == nil ifTrue: [
+					^ self ___codecText___: inst mode: mode encoding: encodingArg
+						errors: errorsArg newline: newlineArg].
+				inst @env0:dynamicInstVarAt: #_encoding put: native.
+				^ inst].
+	(os ___openFds @env0:includes: fd) ifTrue: [
+		^ ((io instance) ___pyioModule___ @env1:___pyAttrLoad___: #'open')
+			@env1:value: { fd. mode. -1.
+				(encodingArg == nil) ifTrue: [None] ifFalse: [encodingArg].
+				(errorsArg == nil) ifTrue: [None] ifFalse: [errorsArg].
+				(newlineArg == nil) ifTrue: [None] ifFalse: [newlineArg].
+				closefdArg }
+			value: nil].
+	^ (os instance) ___signalErrno: 9
 %
 
 category: 'Grail-Opening'
@@ -1451,10 +1637,18 @@ flush
 category: 'Grail-State'
 method: FileIO
 close
-	"Idempotent, like CPython."
+	"Idempotent, like CPython.  A file opened over a borrowed descriptor
+	with closefd=False leaves the GsFile to its owner."
 
+	| gsfile owners fd |
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [^ None].
-	(self @env0:dynamicInstVarAt: #_gsfile) @env0:close.
+	gsfile := self @env0:dynamicInstVarAt: #_gsfile.
+	owners := SessionTemps @env0:current @env0:at: #'Grail_io_fd_owners' ifAbsent: [nil].
+	owners == nil ifFalse: [
+		fd := gsfile @env0:fileDescriptor.
+		((fd isKindOf: SmallInteger) @env0:and: [(owners @env0:at: fd ifAbsent: [nil]) == self])
+			ifTrue: [owners @env0:removeKey: fd]].
+	(self @env0:dynamicInstVarAt: #_closefd) == false ifFalse: [gsfile @env0:close].
 	self @env0:dynamicInstVarAt: #_closed put: true.
 	^ None
 %
@@ -1499,6 +1693,8 @@ fileno
 	((fd isKindOf: Integer) and: [fd @env0:>= 0]) ifFalse: [
 		OSError ___signal___: 'fileno() is unavailable for this file'
 	].
+	"Remembered, so open(fd) can find the file it belongs to."
+	FileIO ___fdOwners___ @env0:at: fd put: self.
 	^ fd
 %
 
@@ -1881,6 +2077,25 @@ category: 'Grail-Type Accessors'
 method: io
 TextIOBase
 	^ self ___pyioClass___: #'TextIOBase'
+%
+
+category: 'Grail-Type Accessors'
+method: io
+Reader
+	"CPython 3.14's io.Reader, defined in Lib/io.py and so in neither _io nor
+	_pyio: src/python/stdlib/_grail_io.py holds it."
+
+	^ ((importlib @env0:___instance___) @env1:import_module: '_grail_io')
+		@env1:___pyAttrLoad___: #'Reader'
+%
+
+category: 'Grail-Type Accessors'
+method: io
+Writer
+	"io.Writer; see io >> Reader."
+
+	^ ((importlib @env0:___instance___) @env1:import_module: '_grail_io')
+		@env1:___pyAttrLoad___: #'Writer'
 %
 
 category: 'Grail-Type Accessors'

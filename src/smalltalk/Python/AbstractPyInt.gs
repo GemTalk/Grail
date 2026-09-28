@@ -446,11 +446,10 @@ ___new__: positional kw: keywords
 
 	| inst v |
 	inst := self @env0:new.
-	v := [positional @env0:size @env0:= 0
-			ifTrue: [0]
-			ifFalse: [positional @env0:size @env0:= 1
-				ifTrue: [int __new__: (positional @env0:at: 1)]
-				ifFalse: [int __new__: (positional @env0:at: 1) _: (positional @env0:at: 2)]]]
+	"Through int()'s own keyword-aware entry, so ``MyInt('FACE', base=16)''
+	honours the base, as ``int('FACE', base=16)'' does: the positional-only
+	spelling here dropped every keyword and then read 'FACE' in base 10."
+	v := [int _new: positional kw: keywords]
 		@env0:on: AbstractException
 		do: [:ex | (self ___hasUserInit___) ifTrue: [ex @env0:return: nil] ifFalse: [ex @env0:pass]].
 	v == nil ifFalse: [
@@ -585,3 +584,43 @@ __getnewargs__
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Introspection'
+method: AbstractPyInt
+___pyHiddenStateNames___
+	"The dynamic instVars that are Grail's IMPLEMENTATION rather than Python
+	attributes: a subclass instance of this root keeps its builtin value under
+	#value.  The __dict__ view and __getstate__ leave them out -- otherwise
+	``vars(MyInt(7))'' answered {'value': 7} and a pickle of it carried that as
+	instance state, which CPython would read back as a real attribute."
+
+	^ #( #value )
+%
+
+category: 'Grail-Introspection'
+method: AbstractPyInt
+__dict__
+	"``obj.__dict__'' for a SUBCLASS instance (every instance of this root is
+	one: an exact builtin value is a kernel object) -- the live dynamic-instVar
+	view list and bytes publish, minus ___pyHiddenStateNames___.  test_pickle's
+	newobj tests read it to compare a round-tripped object's attributes."
+
+	^ PyInstanceDict @env0:on: self
+%
+
+set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like list's and bytes' copies) it must be an
+! env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: AbstractPyInt
+___pythonValueAttrs___
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

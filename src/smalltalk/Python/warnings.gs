@@ -56,7 +56,35 @@ initialize
 	A separate `_seen` dict tracks what has already been emitted."
 
 	self @env0:at: #filters put: OrderedCollection @env0:new.
-	self @env0:at: #_seen put: KeyValueDictionary @env0:new
+	self @env0:at: #_seen put: KeyValueDictionary @env0:new.
+	"``__all__'', CPython's list exactly -- every name on it is defined here
+	(deprecated is delegated to _py_warnings, see there).  The module had none,
+	so test_warnings' CPublicAPITests.test_module_all_attribute failed at
+	hasattr."
+	self @env0:at: #'__all__' put: (list @env0:withAll: #(
+		'warn' 'warn_explicit' 'showwarning' 'formatwarning' 'filterwarnings'
+		'simplefilter' 'resetwarnings' 'catch_warnings' 'deprecated'))
+%
+
+category: 'Grail-Singleton'
+classmethod: warnings
+___hasFreshInstances___
+	"Yes.  A second warnings object is a faithful fresh import: its methods
+	take everything from ``self'' and reach no warnings singleton, so it
+	behaves exactly as the canonical module does -- over the same state,
+	which a native module keeps per session and per CLASS.
+
+	That is CPython's arrangement for this very call.
+	``import_fresh_module('warnings', fresh=['_warnings', ...])'' builds a new
+	warnings module whose filters, once-registry and default action are the C
+	accelerator's, held by the interpreter and shared with every other copy.
+	test_warnings runs its C-variant tests against that copy and checks it is
+	a different object (CWarnTests.test_accelerated).
+
+	Grail's own Smalltalk callers that raise a warning keep using the
+	canonical instance, as CPython's C callers use the canonical state."
+
+	^ true
 %
 
 category: 'Grail-Built-in Functions'
@@ -323,6 +351,19 @@ __add_filter: positional kw: kwargs
 
 	^ self ___pyWarningsCall___: #'_add_filter'
 		with: positional with: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_warn_unawaited_coroutine: coro
+	"_warn_unawaited_coroutine(coro) -- what a coroutine's destructor calls when
+	it dies never awaited (PythonCoroutine >> ___warnNeverAwaited___).
+	Delegated, like _add_filter: _py_warnings' own function renders cr_origin
+	through linecache and traceback exactly as CPython's does, and warns
+	through _wm -- this module -- so the warning lands in Grail's filters."
+
+	^ self ___pyWarningsCall___: #'_warn_unawaited_coroutine'
+		with: { coro } with: nil
 %
 
 category: 'Grail-Internal API'
@@ -743,7 +784,10 @@ ___patternMatches___: aPattern _: aString
 
 	| r |
 	aString @env0:isNil ifTrue: [^ false].
-	r := [aPattern @env1:match: aString @env0:asString]
+	"A text holding a lone surrogate is matched AS ITSELF -- re handles a
+	PyStrSurrogate -- where asString refused it and the filter silently
+	never applied."
+	r := [aPattern @env1:match: (self ___textPart___: aString)]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ r @env0:notNil and: [r @env0:~~ None and: [r @env0:~~ false]]
 %
@@ -938,11 +982,21 @@ __deprecated: positional kw: keywords
 				@env0:, removeFormatted @env0:, ' alpha')].
 
 	"CPython formats with str.format; the two fields are all wave uses."
-	msg := message.
-	msg := msg @env1:replace: '{name!r}' _: name @env0:printString.
-	msg := msg @env1:replace: '{name}' _: name.
-	msg := msg @env1:replace: '{remove}' _: removeFormatted.
-	^ self warn: msg _: DeprecationWarning
+	"``message.format(name=name, remove=remove_formatted)'' -- a real
+	str.format, not substitution: typing writes ``{{}}'' into its TypedDict
+	message for format to collapse to ``{}'', and a literal replace left the
+	doubled braces in the text test_typing matches."
+	msg := (message @env1:___pyAttrLoad___: #'format')
+		@env1:___pyCallValue___: #()
+		kw: ((KeyValueDictionary @env0:new)
+			@env0:at: 'name' put: name;
+			@env0:at: 'remove' put: removeFormatted;
+			@env0:yourself).
+	"stacklevel=3 in CPython counts _deprecated's own frame, which a
+	Smalltalk method is not; 2 names the same frame -- the caller of the
+	function that is deprecated -- so the warning is filed against the code
+	that should change (test_typing checks ``cm.filename == __file__'')."
+	^ self warn: msg _: DeprecationWarning _: 2
 %
 
 category: 'Grail-Private'
@@ -1215,10 +1269,9 @@ ___resolveModuleGlobals___: moduleGlobals
 	fires whether or not the warning would have been shown.  A dict, including
 	an empty one, goes to _bless_my_loader.
 
-	The loader is answered for symmetry with CPython and then dropped: Grail
-	reads source lines off the filesystem rather than through a loader's
-	get_source, so nothing downstream needs it.  What the call is FOR is its
-	side effects -- the DeprecationWarnings and the two errors."
+	The loader is answered for ___sourceLineFrom___:globals:lineno:, which
+	asks it for the source the way _warnings.c does.  The other thing the call
+	is FOR is its side effects -- the DeprecationWarnings and the two errors."
 
 	| b typeName |
 	(moduleGlobals @env0:isNil or: [moduleGlobals @env0:== None])
@@ -1229,6 +1282,48 @@ ___resolveModuleGlobals___: moduleGlobals
 		TypeError ___signal___:
 			'module_globals must be a dict, not ''' @env0:, typeName @env0:, ''''].
 	^ self ___blessMyLoader___: moduleGlobals
+%
+
+category: 'Grail-Private'
+method: warnings
+___sourceLineFrom___: aLoader globals: moduleGlobals lineno: lineno
+	"_warnings.c's get_source_line: the source line ``lineno'' of the module
+	``moduleGlobals'' names, fetched through its loader's get_source, or nil.
+
+	Nothing displays the answer -- CPython builds the WarningMessage with
+	line=None, so the source line printed is linecache's reading of the
+	filename -- and it is computed anyway, because computing it is observable:
+	get_source is called with the module's ``__name__'', whatever it raises
+	propagates, a non-str source is a TypeError, and a line number the source
+	does not have is an IndexError.  All of that happens before the filters are
+	consulted, so an ignored warning raises it too.  test_warnings'
+	test_issue31285 counts the get_source calls.
+
+	The split is str's OWN splitlines, as PyUnicode_Splitlines is: a str
+	subclass overriding splitlines -- that test's BadSource -- does not get a
+	say.
+
+	Nil, and nothing called, when there is no loader, no ``__name__'', or a
+	loader without get_source, as in C."
+
+	| b name getSource src lines |
+	(aLoader @env0:isNil or: [aLoader @env0:== None]) ifTrue: [^ nil].
+	name := moduleGlobals @env1:get: '__name__' _: None.
+	name @env0:== None ifTrue: [^ nil].
+	b := (Python @env0:at: #builtins) @env0:___instance___.
+	(b @env1:hasattr: aLoader _: 'get_source') == true ifFalse: [^ nil].
+	getSource := aLoader @env1:___pyAttrLoad___: #'get_source'.
+	src := getSource @env1:___pyCallValue___: { name } kw: nil.
+	src @env0:== None ifTrue: [^ nil].
+	((src @env0:isKindOf: CharacterCollection)
+		or: [src @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+			^ TypeError ___signal___: 'must be str, not '
+				@env0:, ((b @env1:type: src) @env1:___pyAttrLoad___: #'__name__')].
+	lines := ((b @env1:___pyAttrLoad___: #'str') @env1:___pyAttrLoad___: #'splitlines')
+		@env1:___pyCallValue___: { src } kw: nil.
+	(lineno @env0:< 1 or: [lineno @env0:> lines @env1:__len__]) ifTrue: [
+		^ IndexError ___signal___: 'list index out of range'].
+	^ lines @env1:__getitem__: lineno @env0:- 1
 %
 
 category: 'Grail-Public'
@@ -1289,8 +1384,20 @@ ___registryKey___: text _: cat _: lineno
 	``version'' -- and a string hashes the same way in every dictionary Grail
 	might be handed, including one built in Python."
 
-	^ text @env0:asString @env0:, '|' @env0:, (self ___categoryName___: cat)
+	^ (self ___keyText___: text) @env0:, '|' @env0:, (self ___categoryName___: cat)
 		@env0:, '|' @env0:, lineno @env0:printString
+%
+
+category: 'Grail-Private'
+method: warnings
+___keyText___: text
+	"The message text as a registry-key string.  A text holding a LONE
+	SURROGATE cannot become a Smalltalk string, so it keys on its
+	backslash-escaped spelling (``te\udc81xt'') -- the same one the console
+	shows.  asString refused it, so ``warn('te\udc81xt')'' raised
+	NotImplementedError where CPython warns."
+
+	^ (self ___backslashReplaced___: (self ___textPart___: text)) @env0:asString
 %
 
 category: 'Grail-Private'
@@ -1364,7 +1471,7 @@ ___recordAction___: action text: text category: cat lineno: lineno registry: reg
 	action @env0:= 'once' ifTrue: [
 		(registry @env0:isNil or: [key @env0:isNil])
 			ifFalse: [registry @env0:at: key put: 1].
-		oncekey := text @env0:asString @env0:, '|' @env0:, (self ___categoryName___: cat).
+		oncekey := (self ___keyText___: text) @env0:, '|' @env0:, (self ___categoryName___: cat).
 		((self onceregistry) @env0:at: oncekey ifAbsent: [nil]) @env0:isNil
 			ifFalse: [^ false].
 		(self onceregistry) @env0:at: oncekey put: 1.
@@ -1452,6 +1559,15 @@ ___moduleFor___: module _: filename
 
 	| mod |
 	(module @env0:isNil or: [module @env0:== None]) ifFalse: [^ module].
+	"A filename holding a LONE SURROGATE stays a Python str throughout:
+	GemStone Characters cannot hold D800-DFFF, so asString refused it with
+	NotImplementedError and the warning was never issued.  CPython accepts
+	it -- a POSIX filesystem name decoded with surrogateescape looks exactly
+	like this (test_warnings test_warn_explicit_non_ascii_filename)."
+	(filename @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ (filename @env1:lower @env1:endswith: '.py')
+			ifTrue: [filename @env1:__getitem__: (slice __new__: None _: -3)]
+			ifFalse: [filename]].
 	mod := (filename @env0:isNil or: [filename @env0:== None])
 		ifTrue: ['<unknown>'] ifFalse: [filename @env0:asString].
 	mod @env0:isEmpty ifTrue: [^ '<unknown>'].
@@ -1712,8 +1828,8 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 	text := fmt @env0:isNil
 		ifTrue: [self formatwarning: message _: category _: filename
 			_: lineno _: line]
-		ifFalse: [(fmt @env1:value: { message. category. filename. lineno.
-			line } value: nil) @env0:asString].
+		ifFalse: [self ___textPart___: (fmt @env1:value: { message. category.
+			filename. lineno. line } value: nil)].
 	target := file.
 	(target @env0:isNil or: [target @env0:== None]) ifTrue: [
 		target := ((Python @env0:at: #sys) @env0:___instance___)
@@ -1745,7 +1861,9 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 		console := box == nil
 			ifTrue: [Transcript]
 			ifFalse: [box @env0:at: 1].
-		shown := text.
+		"A lone surrogate cannot reach the console as itself; it is escaped,
+		as CPython's backslashreplace stderr escapes it."
+		shown := self ___backslashReplaced___: text.
 		(shown @env0:isEmpty @env0:not
 			and: [(shown @env0:last) @env0:== Character @env0:lf]) ifTrue: [
 				shown := shown @env0:copyFrom: 1 to: shown @env0:size @env0:- 1].
@@ -1827,7 +1945,8 @@ _warn_explicit: positional kw: kwargs
 		ifTrue: [kwargs @env0:at: 'module_globals']
 		ifFalse: [positional @env0:size @env0:>= 7
 			ifTrue: [positional @env0:at: 7] ifFalse: [nil]].
-	self ___resolveModuleGlobals___: mg.
+	self ___sourceLineFrom___: (self ___resolveModuleGlobals___: mg)
+		globals: mg lineno: lineno.
 	^ self
 		warn_explicit: msg
 		_: cat
@@ -1866,7 +1985,7 @@ formatwarning: message _: category _: filename _: lineno _: line
 	empty result (no such file, no such line) drops the second line rather
 	than printing a blank one."
 
-	| stream src text |
+	| parts src text |
 	"CPython renders str(message), and the message is normally a Warning
 	INSTANCE rather than text.  Smalltalk's asString on an exception answers
 	its GemStone description (``a UserWarning occurred (error 2702)''), so
@@ -1875,26 +1994,109 @@ formatwarning: message _: category _: filename _: lineno _: line
 	text := [message @env1:__str__]
 		@env0:on: AbstractException do: [:ex |
 			ex @env0:return: message @env0:asString].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: filename @env0:asString.
-	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: lineno @env0:printString.
-	stream @env0:nextPutAll: ': '.
-	stream @env0:nextPutAll: (self ___categoryName___: category).
-	stream @env0:nextPutAll: ': '.
-	stream @env0:nextPutAll: text @env0:asString.
-	stream @env0:nextPut: Character @env0:lf.
+	"Assembled from PARTS rather than straight onto a stream, because any of
+	the filename, the text and the source line may hold a LONE SURROGATE --
+	a PyStrSurrogate, which no Smalltalk string can hold.  CPython answers a
+	str that still contains it (test_warnings'
+	test_warn_explicit_non_ascii_filename's ``surrogate\udc80''); see
+	___joinedText___:."
+	parts := OrderedCollection @env0:new.
+	parts @env0:add: (self ___textPart___: filename).
+	parts @env0:add: ':'.
+	parts @env0:add: lineno @env0:printString.
+	parts @env0:add: ': '.
+	parts @env0:add: (self ___categoryName___: category).
+	parts @env0:add: ': '.
+	parts @env0:add: (self ___textPart___: text).
+	parts @env0:add: (String @env0:with: Character @env0:lf).
 	src := line.
 	(src @env0:isNil or: [src @env0:== None]) ifTrue: [
 		src := self ___sourceLine___: filename _: lineno].
 	(src @env0:isNil or: [src @env0:== None]) ifFalse: [
-		src := src @env0:asString.
+		src := self ___textPart___: src.
 		"CPython tests the RAW line for truth and prints the STRIPPED one, so
 		a whitespace-only line still produces its (empty) second line."
-		src @env0:isEmpty ifFalse: [
-			stream @env0:nextPutAll: '  '.
-			stream @env0:nextPutAll: src @env0:trimSeparators.
-			stream @env0:nextPut: Character @env0:lf]].
+		(src @env0:isKindOf: PyStrSurrogate)
+			ifTrue: [
+				parts @env0:add: '  '.
+				parts @env0:add: (self ___strippedSurrogate___: src).
+				parts @env0:add: (String @env0:with: Character @env0:lf)]
+			ifFalse: [
+				src @env0:isEmpty ifFalse: [
+					parts @env0:add: '  '.
+					parts @env0:add: src @env0:trimSeparators.
+					parts @env0:add: (String @env0:with: Character @env0:lf)]]].
+	^ self ___joinedText___: parts
+%
+
+category: 'Grail-Display'
+method: warnings
+___textPart___: aValue
+	"aValue as display text: a PyStrSurrogate as itself, anything else as a
+	Smalltalk string.  asString is what every part used to get, and a
+	surrogate refuses it with NotImplementedError."
+
+	(aValue @env0:isKindOf: PyStrSurrogate) ifTrue: [^ aValue].
+	^ aValue @env0:asString
+%
+
+category: 'Grail-Display'
+method: warnings
+___joinedText___: parts
+	"The concatenation of parts -- an ordinary string, or a PyStrSurrogate
+	built from code points when a part holds a lone surrogate."
+
+	| stream cps |
+	(parts @env0:detect: [:p | p @env0:isKindOf: PyStrSurrogate] ifNone: [nil])
+		@env0:isNil ifTrue: [
+			stream := WriteStream @env0:on: Unicode7 @env0:new.
+			parts @env0:do: [:p | stream @env0:nextPutAll: p].
+			^ stream @env0:contents].
+	cps := OrderedCollection @env0:new.
+	parts @env0:do: [:p |
+		(p @env0:isKindOf: PyStrSurrogate)
+			ifTrue: [cps @env0:addAll: p @env0:___codePoints___]
+			ifFalse: [p @env0:do: [:c | cps @env0:add: c @env0:codePoint]]].
+	^ PyStrSurrogate @env0:___fromCodePoints___: cps @env0:asArray
+%
+
+category: 'Grail-Display'
+method: warnings
+___strippedSurrogate___: aSurrogate
+	"str.strip() of a PyStrSurrogate, over its code points: a surrogate is
+	never whitespace, and every other code point is asked as a Character."
+
+	| cps first last blank |
+	cps := aSurrogate @env0:___codePoints___.
+	blank := [:cp | (cp @env0:between: 16rD800 and: 16rDFFF) @env0:not
+		and: [(Character @env0:codePoint: cp) @env0:isSeparator]].
+	first := 1.
+	[first @env0:<= cps @env0:size and: [blank value: (cps @env0:at: first)]]
+		@env0:whileTrue: [first := first @env0:+ 1].
+	last := cps @env0:size.
+	[last @env0:>= first and: [blank value: (cps @env0:at: last)]]
+		@env0:whileTrue: [last := last @env0:- 1].
+	^ PyStrSurrogate @env0:___fromCodePoints___:
+		(cps @env0:copyFrom: first to: last)
+%
+
+category: 'Grail-Display'
+method: warnings
+___backslashReplaced___: aText
+	"aText as the console can show it: a lone surrogate written as
+	``\udc80'', which is what CPython's stderr prints -- its error handler
+	is backslashreplace.  An ordinary string is answered as it is."
+
+	| stream hex |
+	(aText @env0:isKindOf: PyStrSurrogate) ifFalse: [^ aText].
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	aText @env0:___codePoints___ @env0:do: [:cp |
+		(cp @env0:between: 16rD800 and: 16rDFFF)
+			ifTrue: [
+				hex := (cp @env0:printStringRadix: 16) @env0:asLowercase.
+				stream @env0:nextPutAll: '\u'.
+				stream @env0:nextPutAll: hex]
+			ifFalse: [stream @env0:nextPut: (Character @env0:codePoint: cp)]].
 	^ stream @env0:contents
 %
 
@@ -2548,7 +2750,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'CatchWarnings'
-  instVarNames: #( _owner _savedFilters _savedSeen _record _savedShowwarning _hadShowwarning _filterSpec _entered )
+  instVarNames: #( _owner _savedFilters _savedSeen _record _savedShowwarning _hadShowwarning _filterSpec _entered _coroutineMark )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2640,6 +2842,7 @@ __enter__
 		RuntimeError ___signal___: 'Cannot enter ' @env0:, self @env0:printString
 			@env0:, ' twice'].
 	_entered := true.
+	_coroutineMark := PythonCoroutine ___openCapture___.
 	_savedFilters := _owner _filters.
 	_owner ___setFilters___: _savedFilters @env0:copy.
 	_savedSeen := KeyValueDictionary @env0:new.
@@ -2696,6 +2899,15 @@ __exit__: excType _: excValue _: tb
 	the first call raises.  That is a codegen bug of its own, but a guard
 	stricter than CPython's would turn it into an error in code that is doing
 	nothing wrong."
+	"A coroutine dropped undriven inside the block warns NOW, while this
+	capture is still recording and its filters still apply -- CPython would
+	have warned at the drop (PythonCoroutine class >> ___closeCapture___:).
+	Cleared first, so the second __exit__ Grail's with-statement can send
+	closes nothing twice."
+	_coroutineMark @env0:notNil ifTrue: [ | mark |
+		mark := _coroutineMark.
+		_coroutineMark := nil.
+		PythonCoroutine ___closeCapture___: mark].
 	"Pop this context's buffer first, so an outer recorder resumes receiving."
 	_record == true ifTrue: [_owner _grail_stop_recording].
 	"Rebind the saved list rather than refilling the current one: the block

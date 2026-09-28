@@ -46,8 +46,8 @@
 # zipfile.  So the zip checks here assert that the recorded mode and date_time
 # are IGNORED.  That is conformance; wiring them up would be the deviation.
 #
-# WHOLE SECONDS.  Grail's os.stat answers an int st_mtime where CPython
-# answers a float, so everything here compares int(st.st_mtime).
+# WHOLE SECONDS.  Grail's os.stat answers a float st_mtime with no fractional
+# part, so everything here compares int(st.st_mtime).
 #
 # The two archives are produced by CPython's own tarfile/zipfile;
 # tests/scripts/make_archive_fixtures.py regenerates them and its --check mode

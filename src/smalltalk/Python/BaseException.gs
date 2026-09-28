@@ -572,6 +572,37 @@ ___pyRaise___: excValue cause: aCause
 		does, and declines to build a cycle."
 		excValue ___applyImplicitContext___.
 		aCause == nil ifFalse: [self ___applyCause___: aCause to: excValue].
+		"RAISING AN EXCEPTION THAT ALREADY HAS A TRACEBACK ADDS THE FRAMES OF THIS
+		RAISE ON TOP OF IT.  That is CPython's rule for ``raise exc'', and it is
+		the same rule with_traceback() asks for, so this takes the same road: the
+		mark tells the next catch to PREPEND this raise's frames to the chain
+		instead of reading the chain as a partial unwind record.
+
+		Without it the next catch saw a head frame naming the function it was in
+		-- the frame the EARLIER catch recorded -- took that for ``already
+		located'' and added nothing, so the line of the ``raise exc'' itself was
+		missing.  ExitStack's own __exit__ is exactly this shape:
+
+		    try:
+		        raise exc          # CPython reports this line ...
+		    except BaseException:  # ... above the one exc was first caught at
+		        exc.__context__ = fixed_ctx
+		        raise
+
+		(test_contextlib[_async] test_exit_exception_traceback).
+
+		The capture has to be taken HERE, at the re-raise, since the frames
+		wanted are the ones between this raise and its catcher.  Primitive 2022
+		fills _gsStack only when it is nil, so the first raise's capture is
+		cleared -- it is spent: its frames are already in the chain being kept --
+		and so is any generator stash it carries, which describes that earlier
+		raise and would otherwise be spliced in front of this one.  A bare
+		``raise'' does not come here (___reRaise___), and correctly so: CPython
+		adds no frame for it."
+		(excValue __traceback__ == None) ifFalse: [
+			excValue @env0:dynamicInstVarAt: #'___tbUserAttached___' put: true.
+			excValue @env0:_gsStack: nil.
+			BaseException @env0:___dropGeneratorStack___: excValue].
 		"In flight -- its handler is running, so the object is a live anchor and
 		cannot be signalled again.  A CARRIER re-raises it without re-signalling
 		it, which keeps CPython's identity AND gets a fresh handler search; #pass
@@ -1542,8 +1573,24 @@ ___applyImplicitContext___
 	its traceback is already built and it is no longer propagating.  Release its
 	raise-time capture here: that is what keeps a long chain affordable, since
 	otherwise every link retains a full-stack capture and the retained total is
-	quadratic in the chain's length (see ___releaseCapturedStack___)."
-	current @env0:___releaseCapturedStack___.
+	quadratic in the chain's length (see ___releaseCapturedStack___).
+
+	But only once that traceback EXISTS.  ``Being handled'' is not the same as
+	``its traceback was built'': an except clause builds one on entry, but a
+	``with'' statement's handler and a finally do not -- they run on behalf of
+	the exception and then let it keep propagating, so the frames are built
+	later, by whichever except clause finally catches it, FROM THIS CAPTURE.
+	Releasing it here left that clause nothing to walk.  The case that found it
+	is an ``async with'' whose body raises: awaiting __aexit__ ends that
+	coroutine with an internal StopIteration (StopIteration class >>
+	___signalReturn___:), which chains to the in-flight exception and so
+	released its capture before anything had read it -- the exception then
+	arrived at its handler with __traceback__ None (test_contextlib_async
+	test_contextmanager_traceback's StopIteration / StopAsyncIteration cases).
+	A chain built in except clauses still releases at every link, which is the
+	case the quadratic bound is about."
+	current __traceback__ == None ifFalse: [
+		current @env0:___releaseCapturedStack___].
 	^ self
 %
 
@@ -1659,6 +1706,42 @@ args
 	^ args ifNil: [ tuple @env0:withAll: #() ]
 %
 
+category: 'Grail-Attribute Access'
+method: BaseException
+__dict__
+	"``e.__dict__'' -- the live view of the exception's Python attributes,
+	as for any instance.  Exceptions had none: the read raised
+	AttributeError, and a class that also defines __getattr__ recursed
+	forever, because CPython code reaches for __dict__ precisely INSIDE
+	__getattr__.  urllib.error.HTTPError is such a class -- it inherits
+	tempfile._TemporaryFileWrapper, whose __getattr__ begins
+	``file = self.__dict__['file']'' -- so every HTTPError read died of
+	RecursionError (test_urllib2_localnet test_404)."
+
+	^ PyInstanceDict @env0:on: self
+%
+
+category: 'Grail-Attribute Access'
+method: BaseException
+___pyHiddenStateNames___
+	"The dynamic instVars that are Grail's own bookkeeping, not Python
+	attributes -- the context and cause links, the traceback mark, a
+	payload: every one is spelled with Grail's ``___'' prefix.  Computed
+	rather than listed, so bookkeeping added later stays out of __dict__
+	too.  (The kernel's named instVars -- gsNumber, gsResumable, ... --
+	are never in the view, which lists dynamic instVars only.)"
+
+	| pairs names |
+	pairs := self @env0:dynamicInstVarPairs.
+	names := OrderedCollection @env0:new.
+	1 @env0:to: pairs @env0:size by: 2 do: [:i | | n |
+		n := pairs @env0:at: i.
+		((n isKindOf: CharacterCollection)
+			@env0:and: [n @env0:asString @env0:beginsWith: '___'])
+				ifTrue: [names @env0:add: n]].
+	^ names @env0:asArray
+%
+
 set compile_env: 0
 category: 'Grail-Python Attribute Hook'
 classmethod: BaseException
@@ -1687,6 +1770,7 @@ ___pythonValueAttrs___
 		add: #'__context__';
 		add: #'__cause__';
 		add: #'__suppress_context__';
+		add: #'__dict__';
 		yourself
 %
 set compile_env: 1
@@ -1727,13 +1811,17 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 
 	No-op for Grail's control-flow signals and StopIteration: those are not real
 	Python exceptions and must not grow a traceback -- the caller re-raises them
-	unchanged."
+	unchanged.  The one exception is a StopIteration being CAUGHT by an except
+	clause, which ___pushCatchingFrame___:pos: marks for the length of its walk:
+	that one is a real Python exception and gets a real traceback."
 
 	| frame tb payload |
 	((self isKindOf: PythonReturn)
 		or: [(self isKindOf: PythonBreak)
 		or: [(self isKindOf: PythonContinue)
-		or: [self isKindOf: StopIteration]]]) ifTrue: [^ self].
+		or: [(self isKindOf: StopIteration)
+			and: [(SessionTemps current at: #'GrailTracebackCatching' otherwise: nil)
+				~~ (BaseException ___payloadOf___: self)]]]]) ifTrue: [^ self].
 	"A CARRIER is the object propagating, but the PAYLOAD is the one Python
 	holds -- so a frame recorded while a carrier is unwinding has to land on the
 	payload or it is discarded with the carrier.  That is what dropped the
@@ -3560,6 +3648,37 @@ ___generatorStackFor___: anException
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___withExitTraceback___: anException code: aCode pos: posArray
+	"The traceback a ``with'' statement hands __exit__, after recording the
+	frame running the statement on anException -- what an except clause's entry
+	does, and for the same reason: the statement is a catch in that frame.  See
+	WithAst >> ___emitExitTracebackOn___:.
+
+	aCode is nil where codegen had no frame to name; the exception's current
+	traceback, if any, is still answered.  Answers None rather than nil when
+	there is none, because this is a Python argument."
+
+	(anException isKindOf: BaseException) ifFalse: [^ None].
+	aCode isNil ifFalse: [anException ___pushCatchingFrame___: aCode pos: posArray].
+	^ anException @env1:__traceback__
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___dropGeneratorStack___: anException
+	"Forget anException's stashed generator-side capture, if it has one.  For a
+	re-raise that takes a fresh capture (___pyRaise___:cause:): the stash
+	describes the EARLIER raise, whose frames are already in the traceback."
+
+	| reg |
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	reg removeKey: anException ifAbsent: [].
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___trimCapturedStack___: st
 	"The (method, ip, receiver) triples of a captured stack, without its header
 	element and without the trailing nils it is over-allocated with."
@@ -3692,7 +3811,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending frameSpan |
+	| st catchName pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending frameSpan flushPending |
 	st := walkable @env0:at: 1.
 	"Record the frame just pushed, against the capture triple it came from.
 	Read back off ``tracebackObj'' rather than returned by the push, because
@@ -3707,6 +3826,42 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 			f notNil ifTrue: [pushedFrames @env0:add: { f. parts }]]].
 	"Indices where a generator level ends; nil when no generator is involved."
 	boundary := walkable @env0:at: 2.
+	"Push the pending block's home as a frame of its own, and clear it.  A
+	generator body is a BLOCK whose home method frame is never on the stack it
+	runs on -- the body runs on a forked process -- so nothing in the walk below
+	ever consumes its pending line, and this is the only place its frame can come
+	from.  Two places need it.
+
+	  * THE GENERATOR/CONSUMER BOUNDARY, where the exception left the body: flush
+	    it before the consumer's half starts, or the first consumer frame would
+	    read as an already-unwound one (§9.11).
+	  * THE END OF THE CAPTURE, where the exception was CAUGHT INSIDE the body and
+	    there is no consumer half at all.  This case was missing, so every
+	    exception caught inside a generator, a coroutine or an async generator --
+	    ``try: 1/0 except ZeroDivisionError as e:'' in an ``async def'' -- had
+	    __traceback__ None: the walk found no frame, and the single-frame fallback
+	    had no ___curPos___ to build one from.  test_contextlib_async's
+	    test_contextmanager_traceback runs its whole body inside a coroutine.
+	    Reaching the end with a block still pending means its home frame is not
+	    on this stack, which on an ordinary call chain cannot happen: the home
+	    method frame always sits below its blocks and clears them on the way
+	    past."
+	flushPending := [
+		pendingHome notNil ifTrue: [
+			| gname |
+			gname := BaseException ___pythonFrameNameFor___: pendingHome @env0:selector.
+			((gname notNil) and: [pendingLine notNil]) ifTrue: [
+				self ___pushTracebackFrame___:
+						(self ___codeForMethod___: pendingHome name: gname ip: 0
+							aCode: aCode)
+					lineno: pendingLine
+					colno: nil endLineno: nil endColno: nil line: nil.
+				noteFrame @env0:value: nil.
+				pushed := pushed @env0:+ 1].
+			pendingHome := nil.
+			pendingLine := nil.
+			pendingSpan := nil.
+			pendingParts := nil]].
 	st isNil ifTrue: [^ false].
 	"PyCode keeps its fields in DYNAMIC INSTVARS with no accessor methods (a
 	Python read resolves them through ___pyAttrLoad___'s dynamic probe), so this
@@ -3726,24 +3881,12 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 		consumer's half with nothing pending, or the first consumer frame would
 		read as an already-unwound one (§9.11)."
 		(boundary notNil and: [boundary @env0:includes: i]) ifTrue: [
-			pendingHome notNil ifTrue: [
-				| gname |
-				gname := BaseException ___pythonFrameNameFor___: pendingHome @env0:selector.
-				((gname notNil) and: [pendingLine notNil]) ifTrue: [
-					self ___pushTracebackFrame___:
-							(self ___codeForMethod___: pendingHome name: gname ip: 0
-								aCode: aCode)
-						lineno: pendingLine
-						colno: nil endLineno: nil endColno: nil line: nil.
-					noteFrame @env0:value: nil.
-					pushed := pushed @env0:+ 1].
-				pendingHome := nil.
-				pendingLine := nil.
-				pendingSpan := nil.
-				pendingParts := nil]].
+			flushPending @env0:value].
 		meth := st @env0:at: i.
 		"Trailing nils pad the array -- the real frames end here."
-		meth isNil ifTrue: [^ pushed @env0:> 0].
+		meth isNil ifTrue: [
+			flushPending @env0:value.
+			^ pushed @env0:> 0].
 		ip := st @env0:at: i @env0:+ 1.
 		"Which METHOD a frame belongs to: a block answers its home, a method
 		answers itself.  CPython has no frame of its own for a block (a
@@ -4114,6 +4257,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 					"Reached the function holding the except clause: the traceback
 					ends here."
 					isCatcher ifTrue: [^ true]]]].
+	flushPending @env0:value.
 	^ pushed @env0:> 0
 %
 
@@ -4333,6 +4477,7 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 		ifTrue: [BaseException ___pythonFilenameForMethod___: aMethod]
 		ifFalse: [nil].
 	own isNil ifTrue: [own := BaseException ___pythonFileForClassOf___: aMethod].
+	own isNil ifTrue: [own := BaseException ___pythonFileForClassBodyMethod___: aMethod].
 	"...and last, the DOIT this frame was generated into, for a function that
 	EVALUATED code defined: no class to ask, and not the body that carries the
 	stamp.  See ___pythonFileForDoitOf___, which answers nil for a doit nobody
@@ -4443,6 +4588,47 @@ ___pythonFileForClassOf___: aMethod
 			ifFalse: [self ___pythonFilenameForMethod___: init].
 		cache @env0:at: cls put: file.
 		file]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonFileForClassBodyMethod___: aMethod
+	"The Python file a CLASS-BODY def was compiled from, or nil.
+
+	___pythonFileForClassOf___ asks the method's inClass for a module-body
+	stamp, which answers for a module-level def -- its inClass IS the module --
+	and for nothing else: a method's inClass is the PYTHON class, which has no
+	module body.  The frame then fell back to the CATCHING code's file, which is
+	right only while raiser and catcher share a module.  They need not: a
+	coroutine method whose body passes an exception through an
+	@asynccontextmanager is first caught by contextlib's own __aexit__, and its
+	frame was recorded there as ``File ""contextlib.py"", line 19, in test_x'' --
+	the right line of the wrong file, so linecache printed some unrelated line
+	of contextlib (test_contextlib_async test_contextmanager_traceback).
+
+	___liveFrameFilenameFor___ already derives this for sys._getframe, from the
+	class-side code table that backs __code__, so the two cannot disagree.  That
+	table is rebuilt on every read, so the answer is cached per METHOD -- the
+	object, not its asOop, for the reason ___pythonFileForClassOf___ gives -- and
+	a miss is cached too, as '<grail>'."
+
+	| cache file |
+	aMethod isNil ifTrue: [^ nil].
+	cache := SessionTemps current at: #'GrailMethodFileCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailMethodFileCache' put: cache].
+	file := cache @env0:at: aMethod ifAbsent: [
+		| f |
+		f := [self ___liveFrameFilenameFor___: aMethod] @env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+		f := (f @env0:isKindOf: CharacterCollection)
+			ifTrue: [f @env0:asString]
+			ifFalse: ['<grail>'].
+		cache @env0:at: aMethod put: f.
+		f].
+	^ file @env0:= '<grail>' ifTrue: [nil] ifFalse: [file]
 %
 
 category: 'Grail-Traceback Building'
@@ -4565,6 +4751,38 @@ ___pushCatchingFrame___: aCode pos: posArray target: aTargetName
 category: 'Grail-Traceback Building'
 method: BaseException
 ___pushCatchingFrame___: aCode pos: posArray
+	"___pushCatchingFrameWork___:pos:, which does the work, with StopIteration let
+	through for the length of it.
+
+	___pushTracebackFrame___ declines to grow a StopIteration's traceback, and at
+	the site it was written for that is right: a comprehension's iterator clause
+	sees the StopIteration that ENDS the iteration, which is protocol rather than
+	an error, and recording a frame there on every exhausted iterator would cost
+	every comprehension a traceback node.  But the same refusal also reached this
+	path, which is a user's own ``except StopIteration as e:'' -- a real catch of
+	a real exception, where CPython gives it a traceback like any other.  So
+	``e.__traceback__'' was None for every caught StopIteration, and a frame
+	count read off it was 0 (test_contextlib_async
+	test_contextmanager_traceback, whose @asynccontextmanager must re-raise a
+	StopIteration from the ``async with'' body with its one frame intact).
+
+	The exemption is keyed on THIS exception in SessionTemps, not on a flag on the
+	object: the walk does not run Python code, so nothing else can be pushing in
+	the meantime, and the object is left exactly as it was."
+
+	| temps saved |
+	(self isKindOf: StopIteration)
+		ifFalse: [^ self ___pushCatchingFrameWork___: aCode pos: posArray].
+	temps := SessionTemps current.
+	saved := temps at: #'GrailTracebackCatching' otherwise: nil.
+	temps at: #'GrailTracebackCatching' put: self.
+	^ [self ___pushCatchingFrameWork___: aCode pos: posArray]
+		ensure: [temps at: #'GrailTracebackCatching' put: saved]
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___pushCatchingFrameWork___: aCode pos: posArray
 	"Add the frames for an exception arriving at this except handler (TryAst emits
 	this there).  Three cases, distinguished by what -- if anything -- is already
 	on the exception:
@@ -4635,9 +4853,54 @@ ___pushCatchingFrame___: aCode pos: posArray
 	saved := tracebackObj.
 	tracebackObj := nil.
 	(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: false)
-		ifTrue: [^ self].
+		ifTrue: [
+			self ___graftTraceback___: saved under: headName.
+			^ self].
 	tracebackObj := saved.
 	^ self ___pushFrameFromPos___: aCode pos: posArray
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___graftTraceback___: oldChain under: oldHeadName
+	"Case 3 of ___pushCatchingFrame___ rebuilt the chain from the capture; put
+	the part the EARLIER catch already recorded back under it.
+
+	The rebuild is right about the frames ABOVE the earlier catcher -- the
+	functions this re-raise has since unwound through, which is what case 3
+	exists to add -- and it re-derives the rest from the same capture.  But the
+	rest is not always in the capture.  An exception caught inside a
+	generator or a coroutine and re-raised from there crosses a process
+	boundary, and the capture the walk splices together names the frames of
+	the RE-RAISE, not of the original raise: ExitStack's __aexit__ re-raises a
+	callback's exception, and the callback, its wrapper and the line __aexit__
+	first caught it at were all gone from the rebuilt chain, leaving the frame
+	of the re-raise alone (test_contextlib_async test_exit_exception_traceback).
+	CPython never loses them, because it only ever PREPENDS.
+
+	So keep the rebuilt chain down to the earlier catcher's frame and the
+	earlier chain from there on.  The earlier catcher is the LAST frame of the
+	rebuilt chain with its name, which is also how that earlier walk found it:
+	a walk stops at the first frame named for its catcher going OUTWARD from
+	the raise, and the chain runs outermost first.  When the rebuilt chain
+	does not name it at all, the rebuild stands as it did before."
+
+	| node prev graftAt |
+	(oldChain isNil or: [oldHeadName isNil]) ifTrue: [^ self].
+	node := tracebackObj.
+	prev := nil.
+	graftAt := nil.
+	[node notNil and: [node ~~ None]] whileTrue: [
+		| frame code |
+		frame := node @env0:dynamicInstVarAt: #'tb_frame'.
+		code := frame isNil ifTrue: [nil] ifFalse: [frame @env0:dynamicInstVarAt: #'f_code'].
+		(code notNil and: [(code @env0:dynamicInstVarAt: #'co_name') @env0:= oldHeadName])
+			ifTrue: [graftAt := prev].
+		prev := node.
+		node := node @env0:dynamicInstVarAt: #'tb_next'].
+	graftAt isNil ifTrue: [^ self].
+	graftAt @env0:dynamicInstVarAt: #'tb_next' put: oldChain.
+	^ self
 %
 
 category: 'Grail-Traceback Building'
@@ -5076,7 +5339,20 @@ ___payloadOf___: anException
 	(anException @env0:isKindOf: AbstractException) @env0:ifFalse: [^ anException].
 	payload := [anException @env0:dynamicInstVarAt: #'___grailPayload___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	^ payload == nil ifTrue: [anException] ifFalse: [payload]
+	payload == nil ifTrue: [^ anException].
+	"The CAPTURE crosses too, when the payload has none of its own.  A carrier is
+	what gets signalled, so the VM's raise-time capture lands on the carrier --
+	and a payload whose own capture was spent (released once its traceback was
+	built, cleared by a re-raise, or stashed as it left a generator) then reached
+	its next catch with nothing to walk.  That is how a bare ``raise'' out of a
+	generator's except clause lost every frame of the consumer: the generator
+	stash held the body's half and the consumer's half was on a carrier nobody
+	read.  A payload that still has its capture keeps it -- that one describes
+	its first raise, which the bare-re-raise splice depends on."
+	((payload @env0:isKindOf: AbstractException)
+		@env0:and: [payload @env0:_gsStack @env0:isNil]) @env0:ifTrue: [
+			payload @env0:_gsStack: anException @env0:_gsStack].
+	^ payload
 %
 
 category: 'Grail-Current Exception'
@@ -5121,10 +5397,11 @@ ___ensureFinally___: protectedBlock finally: finallyBlock
 	exc_info untouched (correct -- CPython shows the ENCLOSING handled exception
 	there, not a fresh one).
 
-	TryAst emits this in place of a bare ``ensure:'' ONLY in non-generator
-	scopes: the ``ex pass'' re-raise below is unsafe inside a forked generator
-	process (``exception has already been signalled''), so a try/finally inside a
-	generator keeps the plain ensure: and this one exc_info gap.
+	TryAst emits this in place of a bare ``ensure:'' for EVERY try/finally,
+	generator bodies included.  (It once skipped generators, because the
+	exceptional path re-raised with ``ex pass'', which is unsafe on a forked
+	generator process; it now returns from the handler and re-signals -- see
+	below -- and the carve-out went with that.)
 
 	WHEN the finally runs matters as much as that it runs.  It used to run from
 	the ensure: block for every exit, including the exceptional one -- but an
@@ -5323,11 +5600,22 @@ ___runFinally___: finallyBlock during: anException
 	control-flow signals with ___isControlFlowSignal___: first, so a return /
 	break / continue through a finally leaves exc_info untouched -- correct,
 	since CPython shows the ENCLOSING handled exception there rather than a
-	fresh one."
+	fresh one.
+
+	What is installed is the PAYLOAD, not the object the handler caught.  When
+	the in-flight exception still had live handler frames it was raised through
+	a CARRIER (see ___signalCarrying___:), and the carrier is a bare instance of
+	the same class that nothing is meant to see.  Installing it made
+	sys.exception() in the finally a blank ``Exception()'' and gave anything the
+	finally raised that blank as its __context__ -- every @contextmanager whose
+	cleanup raises during a thrown-in exception, since the throw is made from
+	inside the ``with'' statement's own handler (test_contextlib_async
+	test_exit_exception_with_correct_context).  The except-clause entry and the
+	``with'' statement already unwrap; this was the one install that did not."
 
 	| saved |
 	saved := self ___currentException___.
-	self ___setCurrentException___: anException.
+	self ___setCurrentException___: (self ___payloadOf___: anException).
 	^ [finallyBlock value]
 		ensure: [self ___setCurrentException___: saved]
 %
@@ -6273,6 +6561,15 @@ ___liveFrameFilenameFor___: aMethod
 	always reported."
 
 	| cls clsName mod file pyName code |
+	"Route 0: a NAMED DOIT -- code run by exec()/eval() under the filename
+	compile() was given.  Neither route below can see it: a doit has no module
+	class and no code table, so every live frame of exec'd code reported
+	``<grail>'' while its traceback, which already asks the doit registry
+	(___codeForMethod___:name:ip:aCode:), reported the real name.  A warning raised there
+	was then recorded against ``<grail>'' (test_warnings test_exec_filename).
+	Nil for an unnamed doit and for every ordinary method, so the other routes
+	are unchanged."
+	(self ___pythonFileForDoitOf___: aMethod) ifNotNil: [:f | ^ f @env0:asString].
 	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	cls isNil ifTrue: [^ '<grail>'].
 	"A @classmethod or @staticmethod compiles to a CLASS-SIDE Smalltalk method,
@@ -6327,6 +6624,15 @@ ___liveFrameFilenameFor___: aMethod
 	clsName isNil ifTrue: [^ '<grail>'].
 	mod := [(importlib @env1:modules) @env0:at: clsName @env0:asSymbol otherwise: nil]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"A SUBMODULE's class is not named by its dotted module name -- module class
+	names flatten the dots -- so ``pk.sub'' missed by name and every frame of
+	its body reported ``<grail>'', f_globals None: typing's _caller() then
+	answered None for every TypeVar and NewType a package module defines
+	(test.test_typing's SpecialAttrsT).  The module whose class IS this one."
+	mod isNil ifTrue: [
+		mod := [(importlib @env1:modules) @env0:detect: [:m | m @env0:class == cls]
+				ifNone: [nil]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	mod isNil ifTrue: [^ '<grail>'].
 	file := [mod @env0:dynamicInstVarAt: #'__file__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].

@@ -46,9 +46,11 @@ ForStarTargetTestCase category: 'Grail-SUnit'
 ! ``ValueError: not enough values to unpack'' while the for-loop's slice shape
 ! runs off the end with an IndexError.  Had the IR borrowed the assignment's
 ! shape, a loop would have raised a DIFFERENT EXCEPTION under the flag than
-! without it -- the one divergence the seam exists to prevent.  So the gap is
-! reproduced, pinned as the fixture's XFAIL, and left for whoever fixes the
-! text's loop unpack; testBothPathsAgreeOnTheTooFewError is what would notice.
+! without it -- the one divergence the seam exists to prevent.  So the gap was
+! reproduced and pinned as the fixture's XFAIL until the text's loop unpack was
+! fixed; both paths now run ``___unpackCheck___:star:after:'' before reading an
+! element (ForAst>>___unpackCheckArgs___), and testBothPathsAgreeOnTheTooFewError
+! pins the CPython ValueError they agree on.
 ! ===============================================================================
 
 doit
@@ -176,8 +178,10 @@ testBothPathsAgreeOnTheTooFewError
 	exception depending on the codegen path, which is the one thing the seam
 	exists to prevent.
 
-	So this asserts the two paths AGREE, not that either is right.  When the
-	text's loop unpack is fixed, this fails and both sides move together."
+	So this asserts the two paths AGREE -- and, since both now run the
+	assignment's value-count check before reading an element
+	(ForAst>>___unpackCheckArgs___), that what they agree on is CPython's
+	ValueError."
 
 	| ir text |
 	ir := self ___reprOf___: self ___irModule___ key: 'star_too_few'.
@@ -185,8 +189,8 @@ testBothPathsAgreeOnTheTooFewError
 	self assert: ir = text
 		description: 'the two paths now raise different errors for a short '
 			, 'unpack -- IR: ' , ir , ' text: ' , text.
-	self assert: (ir includesString: 'IndexError')
-		description: 'the short-unpack gap moved (CPython raises ValueError): ' , ir
+	self assert: (ir includesString: 'ValueError: not enough values to unpack')
+		description: 'a short loop unpack must raise CPython''s ValueError: ' , ir
 %
 
 category: 'Grail-Tests - a starred for target'

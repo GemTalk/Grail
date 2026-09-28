@@ -92,6 +92,8 @@ class CalledProcessError(SubprocessError):
 
 
 class CompletedProcess:
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self, args, returncode, stdout=None, stderr=None):
         self.args = args
         self.returncode = returncode
@@ -244,6 +246,8 @@ class _PipeWriter:
 
 
 class Popen:
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self, args, bufsize=-1, executable=None,
                  stdin=None, stdout=None, stderr=None,
                  preexec_fn=None, close_fds=True, shell=False,

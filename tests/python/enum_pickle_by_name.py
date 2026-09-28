@@ -67,6 +67,12 @@ def _make():
 # Without it the failure below is an unreachable-class PicklingError rather than
 # the constructor TypeError this is about.
 NamedInt, NEI = _make()
+# ...and NAMED as module-level classes, which is what binding them there makes
+# them in test_enum.  Built inside _make() their qualnames carry ``<locals>'',
+# and CPython's pickle refuses a local class outright -- the fixture only
+# passed while Grail's own, more permissive pickle was in place.
+NamedInt.__qualname__ = 'NamedInt'
+NEI.__qualname__ = 'NEI'
 
 # Without the replacement, the default reduction cannot rebuild the value.
 try:

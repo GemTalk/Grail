@@ -122,6 +122,44 @@ isBigmemtestDecorated
 
 category: 'Grail-other'
 method: FunctionDefAst
+isBigmemtestWithoutDryRun
+	"True for ``@bigmemtest(..., dry_run=False)'' (or a sibling spelled that
+	way).  CPython's bigmemtest runs a test at the small dry-run size only when
+	the decorator allows a dry run; with dry_run=False and no ``-M'' memory
+	limit -- a default run -- it raises SkipTest('not enough memory') instead,
+	because the body cannot say anything useful about a small input
+	(test_pickle's test_huge_* tests assert that a >4GiB value is REFUSED).
+	The dry-run normalisation below would run those bodies at 5147 anyway, so
+	ClassDefAst emits a skipping body for them instead."
+
+	| names |
+	decorator_list isNil ifTrue: [^ false].
+	names := #('bigmemtest' 'bigaddrspacetest' 'precisionbigmemtest').
+	^ decorator_list anySatisfy: [:deco | | fn |
+		(deco isKindOf: CallAst) and: [
+			fn := deco function.
+			(((fn isKindOf: NameAst) and: [names includes: fn id asString])
+				or: [(fn isKindOf: AttributeAst) and: [names includes: fn attr asString]])
+			and: [deco keywords notNil and: [deco keywords anySatisfy: [:kw |
+				kw arg asString = 'dry_run'
+					and: [(kw value isKindOf: ConstantAst) and: [kw value value == false]]]]]]]
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
+generateBigmemSkipSource
+	"Body for a ``@bigmemtest(..., dry_run=False)'' test (see
+	isBigmemtestWithoutDryRun): skip it, as CPython's default run does."
+
+	| stream |
+	stream := AppendStream on: Unicode7 new.
+	stream nextPutAll: name; lf.
+	stream nextPutAll: '^ self skipTest: ''not enough memory (bigmemtest without a dry run)'''.
+	^ stream contents
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
 applyBigmemtestDefaultIfNeeded
 	"Normalisation pass for ``@bigmemtest''-family test methods (see
 	isBigmemtestDecorated).  Injects a synthetic trailing default equal
@@ -437,6 +475,17 @@ printSmalltalkOn: aStream
 				nextPutAll: ''' spec: '.
 			self emitSignatureSpecOn: aStream.
 			aStream nextPutAll: '.'].
+		"Clear a slot an earlier statement stored, for a decorated def as well:
+		its chain reads the base through the slot, so the real
+		``@pass_context def sync_do_map'' after two @overload stubs wrapped the
+		previous stub's _overload_dummy instead of its own method (jinja2's
+		|map filter)."
+		self ___rebindsAnEarlierModuleBinding___ ifTrue: [
+			aStream
+				lf;
+				nextPutAll: 'self @env0:removeDynamicInstVar: #''';
+				nextPutAll: name;
+				nextPutAll: '''.'].
 		moduleDecorators := self applicableModuleDecorators.
 		moduleDecorators isEmpty ifTrue: [^self].
 		self printModuleDecoratorsOn: aStream decorators: moduleDecorators.
@@ -862,7 +911,8 @@ printSmalltalkOn: aStream
 	A def inside an ``if'' in a class BODY is the other case: classNesting is
 	still positive there, so it WAS re-classed, and applying the decorator again
 	double-wraps it (six ClassBodyConditionalTestCase errors when this
-	distinction was missing).  ___parserReclassedThisDef___ tells the two apart."
+	distinction was missing).  ___decoratorRealisedByReclass___: tells the two
+	apart, per decorator."
 	decorator_list isNil ifFalse: [ | applicable |
 		"CPython evaluates every decorator EXPRESSION top-down and only then
 		APPLIES the resulting decorators, bottom-up.  test_decorators
@@ -876,14 +926,12 @@ printSmalltalkOn: aStream
 		module-scope path (printModuleDecoratorsOn:) already nests its chain into
 		one expression and was never affected."
 		applicable := decorator_list reject: [:deco |
-			(self isClassDeclarativeDecorator: deco)
-				and: [self ___parserReclassedThisDef___]].
+			self ___decoratorRealisedByReclass___: deco].
 		applicable size > 1 ifTrue: [
 			self emitOrderedLocalDecoratorsOn: aStream decorators: applicable.
 			^ self].
 		applicable reverseDo: [:deco |
-			((self isClassDeclarativeDecorator: deco) not
-				or: [self ___parserReclassedThisDef___ not]) ifTrue: [
+			(self ___decoratorRealisedByReclass___: deco) not ifTrue: [
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
 				the target name is module-scope (parser-declared in module
 				body and not shadowed by an enclosing function)."
@@ -1101,6 +1149,44 @@ ___enclosingDefDeclares___: funcAst named: aSymbol
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___rebindsAnEarlierModuleBinding___
+	"Does an EARLIER statement of this module body store the module slot of
+	this top-level def's name?
+
+	    @overload
+	    def f(x: int) -> int: ...
+	    def f(x): return x          # the implementation
+
+	    f = None
+	    def f(): ...
+
+	A top-level def compiles to a method on the module class and emits nothing
+	at module-body time, while a decorator (printModuleDecoratorsOn:decorators:),
+	an assignment or a def nested in an ``if'' / ``try'' stores the module slot
+	-- and the slot out-ranks the method.  So the earlier binding stayed what
+	every later ``f(...)'' called: for @overload the dummy that raises, which
+	is why typing.py had to deviate.  CPython rebinds the name at the def;
+	clearing the slot here is that rebinding, since an absent slot IS the
+	method.
+
+	Only after such a binding.  An unconditional clear for every undecorated
+	def was tried and reverted (docs/Issues.md, ``A top-level def cannot rebind
+	a decorated name''); a def no earlier statement stored over is not reached."
+
+	| siblings sym |
+	parent isNil ifTrue: [^ false].
+	siblings := parent body.
+	siblings isNil ifTrue: [^ false].
+	sym := self ___mangledName___ asSymbol.
+	siblings do: [:stmt |
+		stmt == self ifTrue: [^ false].
+		((stmt isKindOf: AbstractNode) and: [stmt ___storesModuleSlot___: sym])
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 applicableModuleDecorators
 	"Decorators to apply at module-body time for a top-level def: ALL of
 	decorator_list.  Source order preserved (outermost first), so ``@A @B def f''
@@ -1261,6 +1347,82 @@ isDeleterDecorated
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___propertyAccessorKind___
+	"Which accessor of a property this def is, read off its OUTERMOST
+	decorator: #getter for ``@property'', #setter / #deleter for
+	``@<name>.setter'' / ``@<name>.deleter'' naming this def's own name, #other
+	for any other accessor shape (``@<name>.getter'', a mismatched name), and
+	nil for a def whose outermost decorator is not a property form at all.
+
+	Only the outermost counts because that is the object the class ends up
+	holding: ``@property @deco def x'' is property(deco(x)).  A property form
+	further in is not a property this class declares."
+
+	| first |
+	decorator_list isNil ifTrue: [^ nil].
+	decorator_list isEmpty ifTrue: [^ nil].
+	first := decorator_list at: 1.
+	(first isKindOf: Symbol) ifTrue: [
+		^ first asSymbol == #'property' ifTrue: [#getter] ifFalse: [nil]].
+	(self isPropertyAccessorDecorator: first) ifFalse: [^ nil].
+	first value id asString = name asString ifFalse: [^ #other].
+	first attr asString = 'setter' ifTrue: [^ #setter].
+	first attr asString = 'deleter' ifTrue: [^ #deleter].
+	^ #other
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___wrapsPropertyAccessor___
+	"Does a decorator BENEATH this property accessor's property form replace
+	the function -- ``@property @deprecated(...) def x'' -- so the accessor the
+	property must call is the decorator's result rather than the compiled
+	body?
+
+	@abstractmethod does not count, bare or as ``@abc.abstractmethod'': it
+	marks the function and hands the same one back, so the compiled body is
+	still the accessor, and the ordinary property path already serves it."
+
+	| marking |
+	marking := #('abstractmethod' 'abstractproperty').
+	^ self applicableMethodDecorators anySatisfy: [:deco |
+		(deco isKindOf: Symbol)
+			ifTrue: [(marking includes: deco asString) not]
+			ifFalse: [
+				"``@abc.abstractmethod'' is the same marker, spelled dotted."
+				((deco isKindOf: AttributeAst)
+					and: [marking includes: deco attr asString]) not]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printPropertyAccessorOn: aStream className: aClassName siblingNames: siblingNames baseName: baseName
+	"The callable this def contributes to a DECORATED property's
+	``property(fget, fset, fdel)'': its decorator chain over the method
+	compiled as baseName, or -- an accessor with no decorator of its own --
+	that method alone, as an UnboundMethod.
+
+	The same scope bookkeeping as printMethodDecoratorsOn:, for the same
+	reasons: a decorator may name a sibling def, and the chain emits inline in
+	the scope that emits the classdef."
+
+	| savedDecoEmit |
+	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
+	savedDecoEmit := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
+	[self
+		printMethodDecoratorChainOn: aStream
+		decorators: self applicableMethodDecorators
+		index: 1
+		className: aClassName
+		baseName: baseName]
+			ensure: [
+				CallAst classBodyDecoratorScope: nil.
+				CallAst inDecoratorEmit: savedDecoEmit]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
 	| ___savedDecoEmit___ |
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
@@ -1372,6 +1534,39 @@ ___classMethodIsOutermost___
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___innermostDeclarativeWrapper___
+	"The runtime class of the descriptor an OUTER decorator must receive --
+	#PyClassMethod, #PyStaticMethod or #PropertyDescriptor -- when
+	@classmethod / @staticmethod / @property is this def's INNERMOST decorator
+	and every decorator outside it is an ordinary one; nil otherwise.
+
+	``@deco @classmethod def m'' is deco(classmethod(m)): CPython hands deco the
+	classmethod OBJECT, and whatever deco does to it stays on that object.
+	Grail compiles the declarative form itself (the def is re-classed or paired
+	at parse time), so the chain used to hand deco the compiled method's handle
+	instead -- and an attribute store landed on the FUNCTION.  ``@override
+	@classmethod'' then marked the method itself, which test_typing's
+	OverrideDecoratorTests asserts it must not; over @property, where CPython's
+	store fails silently (a property has no __dict__), it marked the getter.
+
+	Only the innermost position: a declarative form in the MIDDLE of a chain
+	(``@a @classmethod @b'') keeps the pre-existing emit, and the outermost
+	@classmethod has its own re-wrap (___classMethodIsOutermost___)."
+
+	| last |
+	decorator_list isNil ifTrue: [^ nil].
+	decorator_list size < 2 ifTrue: [^ nil].
+	last := decorator_list last.
+	(self isClassDeclarativeDecorator: last) ifFalse: [^ nil].
+	1 to: decorator_list size - 1 do: [:i |
+		(self isClassDeclarativeDecorator: (decorator_list at: i)) ifTrue: [^ nil]].
+	last asSymbol == #'classmethod' ifTrue: [^ #'PyClassMethod'].
+	last asSymbol == #'staticmethod' ifTrue: [^ #'PyStaticMethod'].
+	^ #'PropertyDescriptor'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 ___decoratorBaseIsClassMethod___
 	"Is this def a @classmethod?  False here; ClassFunctionDefAst overrides.
 
@@ -1398,6 +1593,15 @@ ___decoratorBaseIsClassSide___
 category: 'Grail-code generation'
 method: FunctionDefAst
 printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName
+	"The chain over the method compiled under this def's own name."
+
+	^ self printMethodDecoratorChainOn: aStream decorators: decoList index: i
+		className: aClassName baseName: name
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName baseName: baseName
 	"Nested decorator application A(B(...(the method)...)).  At the base case
 	emit an UnboundMethod naming the COMPILED method -- what CPython hands a
 	decorator, a plain function taking self first.
@@ -1411,6 +1615,36 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 	directly makes re-execution replace the wrapper instead of stacking on it."
 
 	i > decoList size ifTrue: [
+		self ___innermostDeclarativeWrapper___ ifNotNil: [:wrapper |
+			"The outer decorators receive the descriptor itself; see
+			___innermostDeclarativeWrapper___.  It wraps the same handle the
+			outermost-classmethod path uses: an UnboundMethod rooted at the
+			metaclass, which PyClassMethod >> __get__ binds to ``cls''."
+			aStream
+				nextPutAll: '(';
+				nextPutAll: wrapper;
+				nextPutAll: ' @env1:__new__: '.
+			wrapper == #'PyClassMethod'
+				ifTrue: [
+					aStream
+						nextPutAll: '(UnboundMethod definingClass: ';
+						nextPutAll: aClassName;
+						nextPutAll: ' @env0:class selector: #''']
+				ifFalse: [wrapper == #'PyStaticMethod'
+					ifTrue: [
+						aStream
+							nextPutAll: '(BoundMethod receiver: ';
+							nextPutAll: aClassName;
+							nextPutAll: ' selector: #''']
+					ifFalse: [
+						aStream
+							nextPutAll: '(UnboundMethod definingClass: ';
+							nextPutAll: aClassName;
+							nextPutAll: ' selector: #''']].
+			aStream
+				nextPutAll: baseName;
+				nextPutAll: '''))'.
+			^ self].
 		"A @classmethod / @staticmethod def is compiled CLASS-side, so the
 		UnboundMethod form -- which resolves instance-side -- names nothing and
 		the decorator dies on the first call.  Hand those a BoundMethod on the
@@ -1433,7 +1667,7 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 					nextPutAll: '(UnboundMethod definingClass: ';
 					nextPutAll: aClassName;
 					nextPutAll: ' @env0:class selector: #''';
-					nextPutAll: name;
+					nextPutAll: baseName;
 					nextPutAll: ''')']
 			ifFalse: [self ___decoratorBaseIsClassSide___
 			ifTrue: [
@@ -1443,14 +1677,14 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 					nextPutAll: '(BoundMethod receiver: ';
 					nextPutAll: aClassName;
 					nextPutAll: ' selector: #''';
-					nextPutAll: name;
+					nextPutAll: baseName;
 					nextPutAll: ''')']
 			ifFalse: [
 				aStream
 					nextPutAll: '(UnboundMethod definingClass: ';
 					nextPutAll: aClassName;
 					nextPutAll: ' selector: #''';
-					nextPutAll: name;
+					nextPutAll: baseName;
 					nextPutAll: ''')']].
 		^ self].
 	aStream nextPutAll: '(('.
@@ -1460,7 +1694,8 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 		printMethodDecoratorChainOn: aStream
 		decorators: decoList
 		index: i + 1
-		className: aClassName.
+		className: aClassName
+		baseName: baseName.
 	aStream nextPutAll: ' } kw: nil)'
 %
 
@@ -1738,6 +1973,29 @@ ___parserReclassedThisDef___
 	^ (self isKindOf: StaticFunctionDefAst)
 		or: [(self isKindOf: ClassFunctionDefAst)
 			or: [self isKindOf: InstanceFunctionDefAst]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorRealisedByReclass___: deco
+	"Whether the parser's re-classing already realised decorator deco, so that
+	a local-def emit must not apply it again.
+
+	Only @staticmethod and @classmethod are realised that way -- the def
+	BECOMES a StaticFunctionDefAst / ClassFunctionDefAst.  @property is not:
+	it re-classes the def only to InstanceFunctionDefAst, which means no more
+	than ``defined in a class'', and the property itself is made by
+	ClassDefAst's method compile -- which a def inside an ``if'' in a class
+	body never gets.  So that def lost its @property outright and stayed a
+	plain method: ``@y.setter'' then raised ``no attribute 'setter''', which
+	is how CPython's ssl.py, whose SSLContext defines minimum_version under
+	``if hasattr(_SSLContext, 'minimum_version'):'', failed to import.
+	Applying it at runtime, as ``y := property(y)'', is what CPython does."
+
+	(self isClassDeclarativeDecorator: deco) ifFalse: [^ false].
+	deco asSymbol == #'staticmethod' ifTrue: [^ self isKindOf: StaticFunctionDefAst].
+	deco asSymbol == #'classmethod' ifTrue: [^ self isKindOf: ClassFunctionDefAst].
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -2686,7 +2944,19 @@ emitOneAnnotation: aNode on: aStream
 	CallAst futureAnnotations ifTrue: [
 		^ self emitStringLiteral: (aNode ___unparse___: 4) on: aStream].
 	aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
-	aNode printSmalltalkOn: aStream.
+	"PEP 646's ``*args: *Ts'' -- a STARRED annotation, which CPython's compiler
+	evaluates as ``(*Ts,)[0]'': the first element the value iterates to
+	(Unpack[Ts] for a TypeVarTuple, the unpacked alias for ``*tuple[int,
+	...]'').  Emitted as exactly that here, where the VALUE is built, so the
+	node itself stays a StarredAst and the source text below keeps CPython's
+	``*Ts''.  StarredAst's own emit raises: a bare starred value means nothing
+	anywhere else."
+	(aNode isKindOf: StarredAst)
+		ifTrue: [
+			aStream nextPutAll: '(('.
+			aNode value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ' @env0:___pyStarToArray___) @env0:at: 1)']
+		ifFalse: [aNode printSmalltalkOn: aStream].
 	aStream nextPutAll: '] source: '.
 	self emitStringLiteral: aNode ___annotationSourceString___ on: aStream.
 	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'
@@ -3079,7 +3349,37 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		positional-only parameter."
 		stream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf.
 	].
-	"Forward to the fixed-arity selector."
+	"Forward to the fixed-arity selector.
+
+	NON-VIRTUALLY for a def that runs against a CLASS receiver -- __new__,
+	and the implicit classmethods __init_subclass__ / __class_getitem__.
+	They compile instance-side, and a virtual ``self __new__: x'' on the
+	class finds the CLASS-side ``object class >> __new__:'' first -- object's
+	allocator, which took the argument for the class to instantiate.
+	``A(cls=1)'' for ``def __new__(_cls, cls)'' therefore ran ``1 new'', an
+	uncatchable error, while ``A(1)'' worked: only the keyword path goes
+	through this forwarder (collections.namedtuple builds exactly this
+	__new__, and typing's NamedTuple test calls it with cls=...).  The kernel
+	performMethod: forms take at most four arguments; beyond that the send
+	stays virtual, as it was."
+	((#('__new__' '__init_subclass__' '__class_getitem__') includes: name asString)
+		and: [callParams size <= 4]) ifTrue: [
+			| fixedSel |
+			fixedSel := name.
+			callParams isEmpty ifFalse: [
+				fixedSel := name , ':'.
+				2 to: callParams size do: [:i | fixedSel := fixedSel , '_:']].
+			stream nextPutAll: '^ self @env0:'.
+			callParams do: [:p |
+				stream nextPutAll: 'with: '; nextPutAll: (self transportParamName: p); space].
+			stream
+				nextPutAll: 'performMethod: ';
+				nextPutAll: '((self @env0:whichClassIncludesSelector: #''';
+				nextPutAll: fixedSel;
+				nextPutAll: ''' environmentId: 1) @env0:compiledMethodAt: #''';
+				nextPutAll: fixedSel;
+				nextPutAll: ''' environmentId: 1)'.
+			^ stream contents].
 	stream nextPutAll: '^ self '.
 	stripSelf
 		ifTrue: [
@@ -8302,7 +8602,7 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 
 	| applicable |
 	applicable := (decorator_list ifNil: [#()]) reject: [:deco |
-		(self isClassDeclarativeDecorator: deco) and: [self ___parserReclassedThisDef___]].
+		self ___decoratorRealisedByReclass___: deco].
 	applicable isEmpty ifTrue: [^ self].
 	applicable size = 1 ifTrue: [
 		| dv |

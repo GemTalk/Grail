@@ -87,9 +87,15 @@ ___nextExpressionFor___: iterTemp
 	StopAsyncIteration, an __anext__ answering something inert then spins
 	FOREVER -- test_coroutines' test_for_4 (``def __anext__: return ()'') took
 	the module from failing to CRASHING on exhausted VM memory.  The strict
-	variant raises CPython's TypeError instead."
+	variant raises CPython's TypeError instead.
 
-	^ '(___gen___ @env1:___grailAwaitAnext___: (' , iterTemp , ' __anext__))'
+	The step itself comes from PythonCoroutine ___grailAnext___:, not a bare
+	__anext__ send: for a real async generator that makes the step without the
+	never-awaited watch, which this loop -- awaiting it in the same breath --
+	has no use for."
+
+	^ '(___gen___ @env1:___grailAwaitAnext___: (PythonCoroutine @env1:___grailAnext___: '
+		, iterTemp , '))'
 %
 
 category: 'Grail-IR Codegen'
@@ -106,7 +112,8 @@ ___emitIRIteratorFrom___: iterNode on: aBuilder
 category: 'Grail-IR Codegen'
 method: AsyncForAst
 ___emitIRNextFrom___: iterLeaf on: aBuilder
-	"``(___gen___ @env1:___grailAwaitAnext___: (___iterN___ __anext__))'' --
+	"``(___gen___ @env1:___grailAwaitAnext___: (PythonCoroutine
+	@env1:___grailAnext___: ___iterN___))'' --
 	the text's ___nextExpressionFor___:, awaited through the enclosing
 	coroutine (the strict variant: a non-awaitable __anext__ is a TypeError,
 	not an endless loop).  ``async for'' is only legal in an async def, whose
@@ -119,7 +126,9 @@ ___emitIRNextFrom___: iterLeaf on: aBuilder
 		^ Error signal: 'IR codegen: async for outside a coroutine body'].
 	^ aBuilder
 		send: #'___grailAwaitAnext___:' to: (aBuilder var: gen)
-		with: { aBuilder send: #'__anext__' to: (aBuilder var: iterLeaf) with: { } env: 1 }
+		with: { aBuilder
+			send: #'___grailAnext___:' to: (aBuilder globalNamed: #PythonCoroutine)
+			with: { aBuilder var: iterLeaf } env: 1 }
 		env: 1
 %
 

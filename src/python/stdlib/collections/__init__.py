@@ -36,6 +36,23 @@ class defaultdict(dict):
             return super().__getitem__(key)
         return self.__missing__(key)
 
+    # CPython's defaultdict has its own repr, and pprint dispatches on
+    # ``type(obj).__repr__``, keeping a separate entry for dict's and for
+    # defaultdict's.  Inherited, the two were the same method, so pprint's
+    # defaultdict entry replaced dict's and every plain dict was printed as
+    # a defaultdict (test_pickle's CommandLineTest).
+    # A defaultdict that contains itself needs no guard here: dict.__repr__
+    # catches the cycle, so the inner one prints as ``defaultdict(f, {...})'',
+    # which is CPython's output too.
+    def __repr__(self):
+        return '%s(%r, %s)' % (type(self).__name__, self.default_factory,
+                               dict.__repr__(self))
+
+
+# The OrderedDicts whose repr is being built: one that contains itself prints
+# ``...'' for the inner one, as CPython's recursive_repr makes it.
+_odict_repr_running = set()
+
 
 class OrderedDict(dict):
     """OrderedDict - dict that preserves insertion order plus a few
@@ -84,6 +101,20 @@ class OrderedDict(dict):
     def clear(self):
         super().clear()
         self._order = []
+
+    # CPython 3.12+: ``OrderedDict({'a': 1})'', ``OrderedDict()'' when empty.
+    # Its own, not dict's -- see defaultdict.__repr__ for why pprint needs the
+    # two to be different methods.
+    def __repr__(self):
+        if not self:
+            return '%s()' % (type(self).__name__,)
+        if id(self) in _odict_repr_running:
+            return '...'
+        _odict_repr_running.add(id(self))
+        try:
+            return '%s(%r)' % (type(self).__name__, dict(self.items()))
+        finally:
+            _odict_repr_running.discard(id(self))
 
     def move_to_end(self, key, last=True):
         if key not in self:
@@ -160,6 +191,7 @@ class _deque_reverse_iterator(_deque_iterator):
 class deque:
     """Double-ended queue backed by a list.  O(n) for arbitrary
     indexing, O(1) amortized for append/appendleft/pop/popleft."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     # Bumped by every structural mutation so a live _deque_iterator can detect
     # one (CPython's deque->state).  Also a class-level default, so an instance
@@ -706,7 +738,9 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
         _field_defaults = field_defaults
         __match_args__ = fields
 
-        def __new__(cls, *args, **kwargs):
+        # ``cls, /'': a field may be NAMED cls (or self), and its keyword must
+        # reach **kwargs rather than collide with the receiver.
+        def __new__(cls, /, *args, **kwargs):
             nfields = len(cls._fields)
             tname = cls._typename
             if len(args) > nfields:
@@ -819,7 +853,7 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
                 )
             return tuple.__new__(cls, values)
 
-        def _replace(self, **kwargs):
+        def _replace(self, /, **kwargs):
             extra = [k for k in kwargs if k not in self._fields]
             if extra:
                 raise TypeError('Got unexpected field names: ' + repr(extra))
@@ -1325,6 +1359,7 @@ __all__ = [
 class UserList:
     """List wrapper with .data — subclassed by django.utils.datastructures
     and forms.utils.ErrorList."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, initlist=None):
         self.data = []
@@ -1489,6 +1524,7 @@ class UserList:
 
 class UserDict:
     """Dict wrapper with .data."""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     # Upstream's UserDict subclasses MutableMapping and inherits this marker
     # from Mapping; Grail's is standalone, so it has to say so itself.  ``None''

@@ -109,6 +109,7 @@ r['scalar_types'] = repr(
 
 # What CPython 3.14 answers, measured rather than assumed.
 EXPECTED = {
+    'abc_metaclass_is_abcmeta': 'True',
     'enum_metaclass': '[True, True]',
     'explicit_metaclass': 'True',
     'explicit_metaclass_isinstance': 'True',
@@ -148,15 +149,12 @@ r['explicit_metaclass'] = repr(type(WithMeta) is Meta)
 r['explicit_metaclass_isinstance'] = repr(isinstance(WithMeta, Meta))
 r['subclass_of_type'] = repr(issubclass(Meta, type))
 
-# A DIFFERENT GAP, and not this machinery's: Grail's vendored abc.py writes
-# ``class ABC:'' where upstream writes ``class ABC(metaclass=ABCMeta)'', so
-# there is no ``metaclass='' here to report.  The divergence note in abc.py
-# explains the choice (ABCMeta's __instancecheck__ is a cost Grail declines to
-# pay by default).  Closing it means changing abc.py, not type().
-r['abc_metaclass_is_a_vendored_divergence'] = repr(type(ABC) is ABCMeta)
+# CLOSED.  Grail's abc.py used to write ``class ABC:'' where upstream writes
+# ``class ABC(metaclass=ABCMeta)'', so there was no ``metaclass='' to report.
+# abc.py is CPython's own now, with a real ABCMeta, and the answer is CPython's.
+r['abc_metaclass_is_abcmeta'] = repr(type(ABC) is ABCMeta)
 
 GRAIL_ONLY = {
-    'abc_metaclass_is_a_vendored_divergence': 'False',
 }
 
 

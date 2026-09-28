@@ -29,9 +29,36 @@ _SIGNED_CODES = 'bhilq'
 
 
 class _array:
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
     def __init__(self, typecode, initializer=None):
         self.typecode = typecode
-        self._data = list(initializer) if initializer is not None else []
+        self._data = []
+        if initializer is None:
+            return
+        # CPython reads a bytes-like initializer as raw MACHINE bytes, not as
+        # a sequence of small ints: array('h', b'\x01\x02\x03\x04') is TWO
+        # items.  The stub took ``list(initializer)'' and made it four, which
+        # only looked right while tobytes() also wrote one byte per item.
+        if isinstance(initializer, (bytes, bytearray)):
+            self.frombytes(initializer)
+        else:
+            self._data = list(initializer)
+
+    def frombytes(self, data):
+        """Append items read from ``data'' in native (little-endian) byte
+        order, as CPython's array.frombytes does.  A typecode _ITEMSIZES does
+        not cover keeps the stub's old reading, one item per byte."""
+        size = _ITEMSIZES.get(self.typecode)
+        data = bytes(data)
+        if size is None:
+            self._data.extend(data)
+            return
+        if len(data) % size:
+            raise ValueError("bytes length not a multiple of item size")
+        signed = self.typecode in _SIGNED_CODES
+        for i in range(0, len(data), size):
+            self._data.append(int.from_bytes(data[i:i + size], 'little', signed))
 
     @property
     def itemsize(self):
@@ -54,10 +81,36 @@ class _array:
         return list(self._data)
 
     def tobytes(self):
-        # Only meaningful for typecode 'B' (unsigned byte) -- the only
-        # code this stub's callers (int(array('B', b)), test_int.py)
-        # actually exercise; no per-typecode packing is implemented.
-        return bytes(self._data)
+        # Native (little-endian) packing per typecode, the layout fromfile
+        # and byteswap already assume.  It used to be ``bytes(self._data)'',
+        # which is right only for 'B' and raised for a negative 'b' item --
+        # and a writable memoryview over an array('b') writes such items.
+        # A typecode _ITEMSIZES does not cover keeps the old behaviour.
+        size = _ITEMSIZES.get(self.typecode)
+        if size is None or self.typecode == 'B':
+            return bytes(self._data)
+        signed = self.typecode in _SIGNED_CODES
+        return b''.join(x.to_bytes(size, 'little', signed) for x in self._data)
+
+    def __bytes__(self):
+        # CPython's bytes(arr) reads the array through the buffer protocol:
+        # its native bytes, not its items.  This stub has no buffer, so it
+        # answers through __bytes__, which bytes() consults first; without it
+        # bytes(array('I', [1635017060])) iterated the ITEMS and refused one
+        # above 255 (test_ssl test_recv_into_buffer_protocol_len).
+        return self.tobytes()
+
+    def _grail_set_byte(self, index, value):
+        """Store one BYTE of the array's native representation, at byte
+        offset ``index''.  memoryview's write hook: a view over this array
+        cannot write into tobytes(), which is a copy, so it writes here, and
+        the item the byte belongs to is rebuilt around it."""
+        size = _ITEMSIZES[self.typecode]
+        signed = self.typecode in _SIGNED_CODES
+        k, j = divmod(index, size)
+        raw = bytearray(self._data[k].to_bytes(size, 'little', signed))
+        raw[j] = value
+        self._data[k] = int.from_bytes(bytes(raw), 'little', signed)
 
     def fromfile(self, f, n):
         # array.fromfile(f, n): read n binary items in the machine's
@@ -107,7 +160,17 @@ class _array:
         return NotImplemented
 
     def __repr__(self):
+        # CPython omits the initializer of an EMPTY array: array('i'), not
+        # array('i', []) (test_reprlib's test_container).
+        if not self._data:
+            return "array('" + self.typecode + "')"
         return "array('" + self.typecode + "', " + repr(self._data) + ")"
 
 
+# The class cannot be DEFINED as ``array`` (see the note at the top), but it
+# can be NAMED so: type(x).__name__ is what code dispatches on -- reprlib
+# looks up ``repr_`` + the type name, and found no ``repr__array``, so it
+# fell back to repr_instance and truncated an array like an arbitrary object.
+_array.__name__ = 'array'
+_array.__qualname__ = 'array'
 array = _array

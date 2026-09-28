@@ -21,10 +21,11 @@ module there was.
 
 Still a subset of CPython's select:
 
-  * It selects on socket OBJECTS, not file descriptors.  A raw int fd cannot
-    be registered -- the event registry is keyed by GsSocket -- so anything
-    exposing ``_readableNow`` (a socket, or an object with a ``.socket``, e.g.
-    a socketserver) works and an int does not.
+  * The event registry is keyed by GsSocket, so what it selects on must come
+    down to a socket this session created: the socket itself, an object with
+    a ``.socket`` (e.g. a socketserver), or an int fd -- or an object whose
+    ``fileno()`` answers one -- that belongs to such a socket (asyncore
+    selects on fds).  Any other descriptor is EBADF.
   * ``xlist`` is accepted and always answers empty.  ``whenReadable:`` fires
     on an exceptional condition as well as on data, so an error state surfaces
     as readability, which is what a caller then discovers on read.
@@ -70,16 +71,24 @@ def _readiness(obj, _depth=0):
 def _resolve_all(objs, name):
     out = []
     for o in objs:
+        if isinstance(o, int) and not isinstance(o, bool):
+            # An fd: the backend finds the socket that owns it, or says EBADF.
+            if o < 0:
+                raise ValueError(
+                    "file descriptor cannot be a negative integer (%d)" % o)
+            out.append(o)
+            continue
         s = _readiness(o)
         if s is None:
-            if isinstance(o, int):
+            fileno = getattr(o, "fileno", None)
+            if fileno is None:
                 raise TypeError(
-                    "select() on a raw file descriptor is not supported in "
-                    "Grail: readiness events are keyed by socket, so pass the "
-                    "socket object (%s contained %r)" % (name, o))
-            raise TypeError(
-                "%s contained %r, which is neither a socket nor an object "
-                "with a .socket attribute" % (name, o))
+                    "argument must be an int, or have a fileno() method "
+                    "(%s contained %r)" % (name, o))
+            fd = fileno()
+            if not isinstance(fd, int):
+                raise TypeError("fileno() returned a non-integer")
+            s = fd
         out.append(s)
     return out
 

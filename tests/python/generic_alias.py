@@ -69,13 +69,21 @@ def probe():
         'list_opted_in': list[int].__origin__ is list,
         'dict_opted_in': dict[str, int].__origin__ is dict,
         'tuple_opted_in': tuple[int].__origin__ is tuple,
-        # a class that did NOT opt in still collapses
-        'plain_class_collapses': _NotOptedIn[int] is _NotOptedIn,
+        # a plain class that did NOT opt in is not subscriptable, as in CPython
+        'plain_class_refuses': _subscript_not_opted_in(),
     }
 
 
 class _NotOptedIn:
     pass
+
+
+def _subscript_not_opted_in():
+    try:
+        _NotOptedIn[int]
+    except TypeError as e:
+        return str(e)
+    return 'no error'
 
 
 def _subclass_of_alias():

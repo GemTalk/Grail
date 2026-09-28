@@ -1047,7 +1047,9 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 		and: [existing superclass ~~ aParent
 		and: [(self ___canonicalClassKnown___: aParent)
 		and: [(self ___remintedThisSession___ includes: aParent) not
-		and: [(self ___baseChangeAllowed___: key) not]]]]) ifTrue: [
+		and: [(self ___baseChangeAllowed___: key) not
+		and: [(self ___isMetaclassBuilt___: existing) not
+		and: [(self ___isMetaclassBuilt___: aParent) not]]]]]]) ifTrue: [
 			^ ImportError @env1:___signal___:
 				'class ' , key , ' changed its bases (' ,
 				(existing superclass isNil ifTrue: ['nil'] ifFalse: [existing superclass name asString]) ,
@@ -1062,6 +1064,29 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	reg at: key put: existing.
 	minted add: key.
 	^ existing
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___isMetaclassBuilt___: aClass
+	"Was aClass built by a metaclass that REWROTE the bases -- type >>
+	__new__:_:_:_:'s fresh-class branch, which stamps it?  Such a class is
+	what the class statement's name ends up bound to, and so what the registry
+	records, but its bases are the METACLASS's (``class Movie(TypedDict)'' is a
+	dict subclass), never the header's.  Comparing the two on a re-import is
+	not a declared base change: the statement builds its class afresh and the
+	metaclass rebuilds it again, exactly as the first import did.
+
+	Asked of the new PARENT too: a metaclass-built class is minted afresh by
+	every import (collections.namedtuple builds a new class each time), so a
+	subclass of one sees a different parent under the same name -- the
+	cascade the re-mint rule above already exempts, reached by another road."
+
+	| h |
+	(aClass isKindOf: Behavior) ifFalse: [^ false].
+	h := [aClass perform: #'___dynInstVars___' env: 1]
+		on: AbstractException do: [:ex | ex return: nil].
+	^ h notNil and: [(h dynamicInstVarAt: #'___grailMetaclassBuilt___') == true]
 %
 
 category: 'Grail-Canonical Classes'
@@ -1527,9 +1552,20 @@ ___isSessionLocalModule___: aModuleName
 	CPython re-executes __main__ every run; nothing about a script is meant to
 	outlive it.  An instance of a class the script defines that the script
 	COMMITS still persists, by reachability -- but its class has no name another
-	session can resolve, as with pickle and CPython's __main__."
+	session can resolve, as with pickle and CPython's __main__.
 
-	^ aModuleName asString = '__main__'
+	...and of a module a test is importing FRESH, for the length of that one
+	import: test.support.import_helper.import_fresh_module marks the name through
+	grail._begin_fresh_import.  CPython's helper hands back a module nothing else
+	holds, so a test can drop it and watch it be collected -- test_struct's
+	test__struct_reference_cycle_cleaned_up does exactly that.  A normal import
+	records its instance in the canonical registry, which by design holds it for
+	the session; a session-local one is recorded nowhere, and built cold, which
+	is what ``fresh'' means."
+
+	aModuleName asString = '__main__' ifTrue: [^ true].
+	^ ((SessionTemps current at: #'GrailFreshImports' otherwise: nil)
+		ifNil: [^ false]) includes: aModuleName asString
 %
 
 category: 'Grail-Canonical Classes'
@@ -1965,7 +2001,8 @@ ___canonicalGenerationCheck___
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
 	   #'GrailCommittedSelfSendOverrides'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
-	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
+	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure'
+	   #'GrailCanonicalDirectMetaclasses' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
 	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
 	^ self
@@ -2601,8 +2638,12 @@ ___restoreCanonicalClassStructure___: aModuleName
 				"Idempotent: ___registerSubclass___ ignores a class already
 				recorded under that base, so re-binding a module in the same
 				session changes nothing."
+				"Credited to the BOUND module, whose body would have made the
+				link, never to whichever importer is running -- see
+				___registerSubclass___:of:origin:."
 				cls superclass isNil ifFalse: [
-					self ___registerSubclass___: cls of: cls superclass].
+					self ___registerSubclass___: cls of: cls superclass
+						origin: aModuleName asString].
 				rec := inner isNil ifTrue: [nil] ifFalse: [inner at: shortName otherwise: nil].
 				rec isNil ifFalse: [
 					"Same shape ___registerBases___: stores: {basesArray. mroArray}."
@@ -2672,6 +2713,260 @@ ___restoreCanonicalMiRecords___
 					otherwise: nil.
 				((cls isKindOf: Behavior) and: [(reg includesKey: cls) not])
 					ifTrue: [reg at: cls put: rec]]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___recordDirectMetaclass___: aClass meta: aMetaclass
+	"Remember, COMMITTED, that aClass -- built by a DIRECT metaclass call while
+	a module body runs -- is an instance of aMetaclass.
+
+	A class statement's metaclass is persisted by ___canonicalClassRegister___,
+	but a class minted by ``type.__new__(M, name, bases, ns)'' or ``M(name,
+	bases, ns)'' passes through no class statement.  typing mints the two roots
+	its class syntax hangs off exactly that way:
+
+	    _NamedTuple = type.__new__(NamedTupleMeta, 'NamedTuple', (), {})
+	    _TypedDict = type.__new__(_TypedDictMeta, 'TypedDict', (), {})
+
+	The metaclass record is session-local, so once typing was deployed a later
+	session saw _TypedDict with no metaclass: ``class Movie(TypedDict)'' never
+	ran _TypedDictMeta, ``total=False'' reached __init_subclass__ as a stray
+	keyword, and every jinja2 Token -- a NamedTuple -- lost its fields.
+
+	Keyed by the module whose body made the call, and dropped when that body
+	runs again (___forgetDirectMetaclassesOf___:), so a rebuild re-records what
+	it mints rather than accumulating the classes it superseded."
+
+	| origin reg inner |
+	origin := self ___initializingModuleName___.
+	origin isNil ifTrue: [^ self].
+	((aClass isKindOf: Behavior) and: [aMetaclass isKindOf: Behavior]) ifFalse: [^ self].
+	reg := UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalDirectMetaclasses' put: reg].
+	inner := reg at: origin asString otherwise: nil.
+	inner isNil ifTrue: [
+		inner := IdentityKeyValueDictionary new.
+		reg at: origin asString put: inner].
+	inner at: aClass put: aMetaclass
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___forgetDirectMetaclassesOf___: aModuleName
+	"Drop aModuleName's direct-metaclass records before its body runs again --
+	see ___recordDirectMetaclass___:meta:.  PEEKS the registry: a module that
+	recorded none leaves nothing to write."
+
+	| reg |
+	reg := UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___recordBodyClassAttr___: aClass name: aSym value: aValue
+	"Remember, COMMITTED, a class-attribute store a module BODY made on a
+	canonical class -- one object >> ___classAttrOverlayStore___:name:value:
+	routed into this session's overlay.
+
+	That routing is right for runtime mutation and wrong for a module body,
+	whose stores are part of what importing the module MEANS.  A session that
+	binds the deployed module does not run the body, so the store never
+	happened there.  typing is the case that showed it:
+
+	    ByteString = _DeprecatedGenericAlias(collections.abc.ByteString, 0,
+	                                         removal_version=(3, 17))
+
+	_BaseGenericAlias.__setattr__ forwards ``self._removal_version = ...'' to
+	the ORIGIN, collections.abc.ByteString -- already canonical -- so it went
+	to the deploy session's overlay, and every later session's
+	``isinstance(b'', typing.ByteString)'' raised AttributeError
+	(test_typing's CollectionsAbcTests.test_bytestring, once deployFrameworks
+	had run).  This is the write side docs/Persistent_Modules_and_Classes.md
+	par.4.3 records as open: record what the body did, replay it on bind
+	(___restoreAllBodyClassAttrs___).
+
+	PLAIN DATA ONLY (___isReplayableClassAttrValue___:), and not abc's cache
+	stamps.  The record commits with the deployment, and a body can hang
+	anything on a class -- a lock, a socket, a cache of session objects --
+	that must not be swept into a commit.
+	Anything else stays exactly as before: session-local, gone on bind.
+
+	Keyed by the module whose body made the store, and dropped when that body
+	runs again (___forgetBodyClassAttrsOf___:), as the direct-metaclass record
+	is."
+
+	| origin reg inner attrs |
+	origin := self ___initializingModuleName___.
+	origin isNil ifTrue: [^ self].
+	(self ___isSessionLocalModule___: origin) ifTrue: [^ self].
+	(self ___isReplayableClassAttrValue___: aValue depth: 0) ifFalse: [^ self].
+	"abc's cache bookkeeping (``_abc_negative_cache_version'' and friends) is
+	not a definition: the version stamps a WeakSet cache that is not
+	replayable, and a stamp replayed without its cache would vouch for a
+	cache this session never built."
+	((aSym asString size >= 5) and: [(aSym asString copyFrom: 1 to: 5) = '_abc_'])
+		ifTrue: [^ self].
+	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalBodyClassAttrs' put: reg].
+	inner := reg at: origin asString otherwise: nil.
+	inner isNil ifTrue: [
+		inner := IdentityKeyValueDictionary new.
+		reg at: origin asString put: inner].
+	attrs := inner at: aClass otherwise: nil.
+	attrs isNil ifTrue: [
+		attrs := KeyValueDictionary new.
+		inner at: aClass put: attrs].
+	attrs at: aSym asSymbol put: aValue
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___isReplayableClassAttrValue___: aValue depth: aDepth
+	"Is aValue safe to commit as a module body's class-attribute store, and
+	identical in meaning in every session?  None, booleans, numbers, strings,
+	classes, and tuples of those -- the configuration-shaped values a body
+	stamps on a class.  Bounded depth for a tuple that contains itself."
+
+	aDepth > 8 ifTrue: [^ false].
+	(aValue isNil or: [aValue == None or: [aValue == true or: [aValue == false]]])
+		ifTrue: [^ true].
+	((aValue isKindOf: Number) or: [(aValue isKindOf: CharacterCollection)
+		or: [aValue isKindOf: Behavior]]) ifTrue: [^ true].
+	(aValue isKindOf: tuple) ifTrue: [
+		^ aValue allSatisfy: [:each |
+			self ___isReplayableClassAttrValue___: each depth: aDepth + 1]].
+	^ false
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___forgetBodyClassAttrsOf___: aModuleName
+	"Drop aModuleName's recorded body stores before its body runs again --
+	see ___recordBodyClassAttr___:name:value:.  PEEKS the registry."
+
+	| reg |
+	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___markBodyClassAttrsReplayed___: aModuleName
+	"This session is running aModuleName's body itself, so its stores reach the
+	overlay first hand; a later replay must not add the committed record's
+	(possibly older) values on top."
+
+	| st done |
+	st := SessionTemps current.
+	done := st at: #'GrailBodyClassAttrsReplayed' otherwise: nil.
+	done isNil ifTrue: [
+		done := Set new.
+		st at: #'GrailBodyClassAttrsReplayed' put: done].
+	done add: aModuleName asString
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreAllBodyClassAttrs___
+	"Replay every deployed module body's recorded class-attribute stores into
+	this session's overlay -- see ___recordBodyClassAttr___:name:value:.
+
+	ALL modules, not just the one being bound, for ___restoreAllCanonical-
+	Metaclasses___'s reason: a deployed module's classes are reachable through
+	other modules' committed globals without that module ever being bound.
+
+	Once per session per module (GrailBodyClassAttrsReplayed), so a later bind
+	cannot resurrect an attribute this session deleted, and only into an EMPTY
+	overlay slot, so it never overwrites this session's own store.  A module
+	whose body ran in this session is marked too: its stores are already in the
+	overlay, first hand.  PEEKS the registry, since this is a read path."
+
+	| reg st done ov |
+	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	st := SessionTemps current.
+	done := st at: #'GrailBodyClassAttrsReplayed' otherwise: nil.
+	done isNil ifTrue: [
+		done := Set new.
+		st at: #'GrailBodyClassAttrsReplayed' put: done].
+	reg keysAndValuesDo: [:modName :inner |
+		(done includes: modName asString) ifFalse: [
+			done add: modName asString.
+			inner keysAndValuesDo: [:cls :attrs |
+				(cls isKindOf: Behavior) ifTrue: [
+					ov := st at: #'GrailClassAttrOverlay' otherwise: nil.
+					ov isNil ifTrue: [
+						ov := IdentityKeyValueDictionary new.
+						st at: #'GrailClassAttrOverlay' put: ov].
+					attrs keysAndValuesDo: [:sym :val | | slot |
+						slot := ov at: cls otherwise: nil.
+						slot isNil ifTrue: [
+							slot := KeyValueDictionary new.
+							ov at: cls put: slot].
+						(slot includesKey: sym) ifFalse: [slot at: sym put: val]]]]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreAllCanonicalMetaclasses___
+	"Install the committed metaclass record for EVERY deployed class that has
+	one, not just for the module being bound -- ___restoreCanonicalMiRecords___'s
+	reasoning, applied to the other record only the class build writes.
+
+	``_collections_abc'' is the shape that needed it.  It is a bridge whose body
+	is ``from collections.abc import *'', so once deployed its body does not run
+	and collections.abc is never bound by it -- yet collections.abc's classes are
+	reachable the whole time through its committed globals.  pathlib reaches
+	Sequence exactly that way.  When pathlib then REBUILT (stale because ``re'',
+	which deployFrameworks deliberately leaves undeployed, was imported first),
+	``class _PathParents(Sequence)'' found no metaclass on Sequence's chain, so
+	ABCMeta.__new__ never ran: no __abstractmethods__ of its own, the inherited
+	Sequence set in its place, and ``Path('/a/b').parents'' refused to
+	instantiate.  Measured in a fresh session after a deploy:
+
+	    import re, pathlib, collections.abc      -> parents[0] raises TypeError
+	    import collections.abc, re, pathlib      -> '/a'
+
+	so, like the MI record, the answer depended on whether anything had bound
+	the owning module yet.  A metaclass record says what type(C) IS, so it is
+	wrong rather than early when missing.
+
+	Fills only what is MISSING, so it never overwrites a record this session's
+	own cold build wrote, and re-running it is free: 65 entries across 16
+	modules on a deployed gs40."
+
+	| reg classes |
+	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	(reg isNil or: [classes isNil]) ifFalse: [reg keysAndValuesDo: [:modName :inner |
+		inner isNil ifFalse: [
+			inner keysAndValuesDo: [:aClassName :meta |
+				| cls |
+				cls := classes
+					at: (modName asString , '.' , aClassName asString)
+					otherwise: nil.
+				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
+					and: [(cls @env1:___grailOwnMetaclass___) isNil]])
+						ifTrue: [cls @env1:___grailSetMetaclass___: meta]]]]].
+	"And the classes a module body minted by calling a metaclass directly --
+	see ___recordDirectMetaclass___:meta:.  Keyed by the class itself, since
+	such a class has no registry name."
+	(UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil) ifNotNil: [:direct |
+		direct keysAndValuesDo: [:modName :inner |
+			inner keysAndValuesDo: [:cls :meta |
+				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
+					and: [(cls @env1:___grailOwnMetaclass___) isNil]])
+						ifTrue: [cls @env1:___grailSetMetaclass___: meta]]]].
 	^ self
 %
 
@@ -2901,6 +3196,8 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 			self ___restoreCanonicalMetaclasses___: aName asString.
 			self ___restoreCanonicalClassStructure___: aName asString.
 			self ___restoreCanonicalMiRecords___.
+			self ___restoreAllCanonicalMetaclasses___.
+			self ___restoreAllBodyClassAttrs___.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -3081,6 +3378,10 @@ loadModuleFromPath: pathString name: moduleName
 			"And the MI records of every OTHER deployed class, whose module this
 			session may never bind -- see ___restoreCanonicalMiRecords___."
 			self ___restoreCanonicalMiRecords___.
+			"And the metaclass record of every other deployed class, for the
+			same reason -- see ___restoreAllCanonicalMetaclasses___."
+			self ___restoreAllCanonicalMetaclasses___.
+			self ___restoreAllBodyClassAttrs___.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
@@ -3206,9 +3507,24 @@ loadModuleFromPath: pathString name: moduleName
 	modules and the innermost one is the answer.  ensure:, so a body that
 	raises still pops."
 	self ___pushInitializingModule___: moduleName.
+	self ___claimModuleInit___: moduleName.
 	self ___beginDepCollection___: moduleName.
 	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
+			"A NOTIFICATION IS NOT A FAILURE.  AlmostOutOfMemory (6013) arrives
+			asynchronously whenever temporary object memory runs low, and it is
+			resumable: its default action returns and the body carries on.  This
+			handler used to take it for a failed body -- unload the module, then
+			``ex outer'', whose resumption fell off the end of this block, so the
+			on:do: RETURNED and the body was abandoned in silence.  The import
+			reported success, the module was gone, and whatever imported it
+			stopped at that line with no exception: ``with cm: import
+			django.contrib.admin'' ended the whole program (test___all__, which
+			imports every stdlib module in one session).  pass keeps it a
+			notification -- any real handler above still sees it -- and the body
+			resumes where it was.  BaseException is not a Notification, so every
+			Python raise still takes the unload path below."
+			(ex isKindOf: Notification) ifTrue: [ex pass].
 			self removeModule: moduleName.
 			"A failed rebuild leaves the committed instance half re-executed
 			(in this transaction only).  Put the old hash back so the next
@@ -3222,6 +3538,7 @@ loadModuleFromPath: pathString name: moduleName
 		ensure: [
 			imported := self ___endDepCollection___: moduleName.
 			self ___popInitializingModule___.
+			self ___releaseModuleInit___: moduleName.
 			"Registrations for this module's class methods that no class-build
 			statement consumed -- a module whose class bodies were compiled but
 			whose body did not run in this session (a deployed module bound
@@ -4867,6 +5184,31 @@ ___ensureClassAttrHolder___: aClass
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___carriesSlots___: b
+	"Does base b's nearest ``__slots__'' declaration name at least one slot?
+
+	The DECLARATION, not the slot layout: Grail also lays out the attributes it
+	infers from ``self.x = ...'', so nearly every class has a layout, and
+	counting those would let any mixin that assigns an attribute displace the
+	substantial base ___selectStorageBase___: exists to find.  A declared slot
+	is different in kind -- a strict-slots instance has no __dict__, so a
+	declared name that does not reach the superclass layout has nowhere to go.
+
+	The nearest declaration is what the class attribute reads, which is the
+	one that matters for b itself: ``class Set(Collection): __slots__ = ()''
+	answers false, ``class MappingView: __slots__ = '_mapping''' answers true."
+
+	| decl |
+	(b isKindOf: Behavior) ifFalse: [^ false].
+	decl := [b @env1:___pyAttrLoad___: #'__slots__']
+		on: AbstractException do: [:ex | ex return: nil].
+	decl == nil ifTrue: [^ false].
+	^ [(decl @env1:__len__) > 0]
+		on: AbstractException do: [:ex | ex return: false]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___hasBuiltinStorage___: b
 	"Does base b carry BUILT-IN storage, as opposed to being a
 	behaviour-only mixin?  ___selectStorageBase___: asks this first,
@@ -4945,6 +5287,17 @@ ___selectStorageBase___: rawBases
 		(self ___hasBuiltinStorage___: b)
 			ifTrue: [^ self ___widenStrBase___: b]
 	].
+	"A base carrying SLOTS carries storage too -- CPython's ``solid base'',
+	the one whose instance layout the new class must extend -- so it wins
+	over chain depth.  Slots are positions in the Smalltalk class's indexed
+	part, and only the SUPERCLASS contributes those: a secondary base's
+	methods are merged, its layout is not.  collections.abc's
+	``class KeysView(MappingView, Set)'' is the case: Set's chain (through
+	Collection) is deeper, so it was chosen, MappingView's ``__slots__ =
+	'_mapping''' went with it, and every dict-view mixin raised
+	AttributeError on its own __init__."
+	bases do: [:b |
+		(self ___carriesSlots___: b) ifTrue: [^ b]].
 	"No built-in storage base.  Prefer the base with the DEEPEST
 	superclass chain: the ``class DateField(DateTimeCheckMixin, Field)''
 	idiom (and Django's exception / descriptor hierarchies) puts a
@@ -5401,16 +5754,69 @@ ___resolveMroEntries___: basesArray
 				see it for why there are two."
 				hook := [b @env1:___grailMroEntriesHook___]
 					on: AbstractException do: [:ex | ex return: nil].
+				"The CALL is not guarded, only the lookup above.  A hook that
+				raises is how a base says it cannot be subclassed -- ``class
+				D(Ts)'' is CPython's ``Cannot subclass an instance of
+				TypeVarTuple'', raised from TypeVarTuple.__mro_entries__ -- and
+				swallowing it left the base in place for a later, wrong
+				diagnosis about a non-class base."
 				entries := hook == nil
-					ifTrue: [nil]
-					ifFalse: [[b @env1:___grailMroEntriesFor___: origTuple hook: hook]
-						on: AbstractException do: [:ex | ex return: nil]].
-				entries == nil
+					ifTrue: [#'___noHook___']
+					ifFalse: [b @env1:___grailMroEntriesFor___: origTuple hook: hook].
+				entries == #'___noHook___'
 					ifTrue: [out add: b]
 					ifFalse: [
+						"CPython's __build_class__ refuses anything but a tuple --
+						a hook answering None was a Smalltalk DNU on ``do:''
+						that took the whole session down."
+						"Array, not tuple: Grail's own hooks (PyGenericAlias's)
+						answer a Smalltalk Array, of which tuple is a subclass."
+						(entries @env0:isKindOf: Array) ifFalse: [
+							^ TypeError @env1:___signal___:
+								'__mro_entries__ must return a tuple'].
 						any := true.
 						entries do: [:each | out add: each]]]].
-	^ any ifTrue: [out asArray] ifFalse: [basesArray]
+	"A base that is still not a class once every hook has run is type.__new__'s
+	``bases must be types'' -- ``class A(List[int], object())''.  Only when
+	there is more than one base, which is where CPython's message comes from
+	(a sole non-class base reaches ___subclass___:, which has its own
+	diagnosis), and never for a BoundMethod: Grail's canonical ``type'' and
+	its module-level class stand-ins are BoundMethods, and ___subclass___:
+	handles those."
+	any ifTrue: [
+		out size > 1 ifTrue: [
+			out do: [:each |
+				((each @env0:isKindOf: Behavior) or: [each @env0:isKindOf: BoundMethod])
+					ifFalse: [^ TypeError @env1:___signal___: 'bases must be types']]].
+		^ out asArray].
+	^ basesArray
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___refuseDuplicateBases___: bases
+	"CPython's type.__new__ refuses the same class twice among its bases --
+	``class D(int, int)'', or ``class R(Protocol[T], Protocol[S])'' once both
+	entries resolve to Protocol -- with ``duplicate base class int''.
+
+	Asked where CPython asks it, which is NOT at base resolution: PEP 560 may
+	legitimately yield a duplicate that a metaclass then discards.
+	``class M(GenericParent[int], GenericParent[float])'' for a TypedDict
+	resolves to (GenericParent, GenericParent, Generic), and _TypedDictMeta
+	builds the class from other bases entirely.  So type >> __new__:_:_:_:
+	asks, and a class statement asks only when no constructing metaclass
+	stands between it and type (object class >>
+	___grailPrepareNamespace___:bases:keywords:)."
+
+	(bases isKindOf: SequenceableCollection) ifFalse: [^ self].
+	1 to: bases size do: [:i |
+		((bases at: i) @env0:isKindOf: Behavior) ifTrue: [
+			i + 1 to: bases size do: [:j |
+				(bases at: i) == (bases at: j) ifTrue: [
+					^ TypeError @env1:___signal___: 'duplicate base class '
+						, ([(bases at: i) @env1:___pyAttrLoad___: #'__name__']
+							on: AbstractException do: [:ex | ex return: (bases at: i) name])
+							asString]]]]
 %
 
 category: 'Grail-Module Loading'
@@ -5536,6 +5942,27 @@ ___registerSubclass___: aClass of: aBase
 	Idempotent: re-running a module re-creates its classes, and a class object
 	that is identical to one already recorded must not be listed twice."
 
+	^ self
+		___registerSubclass___: aClass
+		of: aBase
+		origin: self ___initializingModuleName___
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registerSubclass___: aClass of: aBase origin: aModuleNameOrNil
+	"The registration, crediting it to aModuleNameOrNil's body -- the module
+	whose re-run ___forgetSubclassesFromModule___: lets take it back.
+
+	Separate from the creation entry above because a BIND is not a creation.
+	___restoreCanonicalClassStructure___ re-derives a bound module's links while
+	some OTHER module's body may be the innermost one running -- the one that
+	said ``import collections.abc'' -- and crediting the links to that importer
+	meant its next re-run forgot them: after a re-import of DunderNewTestCase's
+	fixture, Sequence.__subclasses__() answered only the fixture's own MySeq,
+	so issubclass(list, Sequence) no longer reached MutableSequence's
+	registration and answered False the moment the ABC caches were cold."
+
 	| bucket origin |
 	(aClass isKindOf: Behavior) ifFalse: [^ aClass].
 	(aBase isKindOf: Behavior) ifFalse: [^ aClass].
@@ -5548,7 +5975,7 @@ ___registerSubclass___: aClass of: aBase
 	it back -- see ___forgetSubclassesFromModule___:.  nil outside any import
 	(``type(name, bases, ns)'' from a test, a class built in a function called
 	after the import): nothing supersedes those, so nothing tracks them."
-	origin := self ___initializingModuleName___.
+	origin := aModuleNameOrNil.
 	origin isNil ifFalse: [
 		| trail |
 		trail := self ___subclassOriginRegistry___ at: origin otherwise: nil.
@@ -5575,6 +6002,22 @@ ___subclassOriginRegistry___
 		reg := KeyValueDictionary new.
 		SessionTemps current at: #GrailSubclassOrigins put: reg].
 	^ reg
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___forgetSubclass___: aClass
+	"Take aClass out of every base's __subclasses__ -- for a class
+	statement that failed after Grail had already made the class (object >>
+	___grailDispatchMetaclass___).  The origin trail keeps its pair; the purge
+	it drives removes by identity and finds nothing to remove."
+
+	self ___subclassRegistry___ valuesDo: [:bucket |
+		bucket removeAllSuchThat: [:c | c == aClass]].
+	"...and out of the MI registry, which functools >>
+	___pyDirectSubclassesOf___: also reads: a class with several bases reaches
+	its secondary ones' __subclasses__ only through its record there."
+	self ___miRegistry___ removeKey: aClass ifAbsent: [nil]
 %
 
 category: 'Grail-Module Loading'
@@ -5780,11 +6223,90 @@ ___visibleMroOf___: aClass
 	so ``super().keys()'' in a dict subclass has to reach KeyValueDictionary.
 	isinstance, metaclass resolution and the enum mix-in scans read it too."
 
-	| mro hidden |
+	| mro out skip |
 	mro := self ___mroOf___: aClass.
-	hidden := self ___builtinImplementationAncestors___.
-	hidden isEmpty ifTrue: [^ mro].
-	^ mro reject: [:k | (k ~~ aClass) and: [hidden includesIdentical: k]]
+	mro := mro reject: [:k | self ___isHiddenBase___: k of: aClass].
+	"A class that STANDS IN for a builtin is reported AS that builtin.  A user
+	``class Y(int)'' is built on AbstractPyInt, a sibling of Integer (which is
+	builtins.int) that answers the name ``int'' without being it -- so
+	``Y.__mro__'' read (Y, int, object) with an int that was not int, and
+	Annotated's transparency test failed on that (test_typing
+	test_annotated_mro).  A str subclass is built on Unicode32 and showed
+	``str'' twice and MultiByteString.  The stand-in's own ancestors are its
+	implementation: they give way to the builtin's visible MRO."
+	out := OrderedCollection new.
+	skip := IdentitySet new.
+	mro do: [:k | | ex |
+		ex := k == aClass ifTrue: [nil] ifFalse: [self ___exposedBuiltinFor___: k].
+		ex isNil
+			ifTrue: [
+				((skip includesIdentical: k) or: [out includesIdentical: k])
+					ifFalse: [out add: k]]
+			ifFalse: [ | exMro c |
+				(out includesIdentical: ex) ifFalse: [out add: ex].
+				exMro := self ___visibleMroOf___: ex.
+				c := k superclass.
+				[c notNil] whileTrue: [
+					(exMro includesIdentical: c) ifFalse: [skip add: c].
+					c := c superclass]]].
+	^ out asArray
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___isHiddenBase___: k of: aClass
+	"Is k, a Smalltalk ancestor of aClass, left out of aClass's PYTHON
+	ancestry?  The one rule __mro__, __bases__ and __base__ share (Behavior >>
+	__bases__ / __base__ walk past such a class to the next one).
+
+	Two kinds.  A kernel class a built-in is implemented on
+	(___builtinImplementationAncestors___) -- see ___visibleMroOf___:.  And
+	an EXPOSED built-in that is only an implementation base of another: Grail
+	builds bytearray as a subclass of ByteArray, which builtins binds as
+	``bytes'', so the two share the byte-sequence methods.  CPython's
+	bytearray does not derive from bytes -- ``bytearray.__mro__'' is
+	(bytearray, object), and Grail's own issubclass(bytearray, bytes) already
+	answers False -- yet __mro__ and __bases__ both reported bytes, and
+	bytearray.__dict__, which folds in hidden ancestors only up to the first
+	class the MRO names, stopped there and listed none of those methods."
+
+	| ba |
+	k == aClass ifTrue: [^ false].
+	(self ___builtinImplementationAncestors___ includesIdentical: k) ifTrue: [^ true].
+	ba := Python @env0:at: #bytearray otherwise: nil.
+	^ ba notNil
+		and: [k == ba superclass
+		and: [aClass == ba or: [aClass inheritsFrom: ba]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___exposedBuiltinFor___: aClass
+	"The class builtins exposes that aClass STANDS IN for -- AbstractPyInt for
+	int, Unicode32 for str -- or nil when aClass is itself exposed, is written
+	in Python, or names no builtin type.  Cached per session: the answer is
+	fixed for the life of one."
+
+	| cache hit n b |
+	cache := SessionTemps current at: #'GrailExposedBuiltinFor' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailExposedBuiltinFor' put: cache].
+	hit := cache at: aClass otherwise: #'___miss___'.
+	hit == #'___miss___' ifFalse: [^ hit].
+	b := nil.
+	((aClass isKindOf: Behavior)
+		and: [(aClass includesSelector: #'___pyDefinedClass___' environmentId: 1) not])
+		ifTrue: [
+			n := [aClass @env1:___pythonBuiltinTypeName___]
+				on: AbstractException do: [:ex | ex return: nil].
+			n isNil ifFalse: [
+				b := [((Python at: #builtins) ___instance___)
+						@env1:___pyAttrLoad___: n asString asSymbol]
+					on: AbstractException do: [:ex | ex return: nil].
+				((b isKindOf: Behavior) and: [b ~~ aClass]) ifFalse: [b := nil]]].
+	cache at: aClass put: b.
+	^ b
 %
 
 category: 'Grail-Module Loading'
@@ -6084,7 +6606,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					primary chain."
 					shouldCopy := overrideMode
 						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
-						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass) not].
+						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass mergingFrom: walker) not].
 					"Never copy a base's SLOT machinery: its ___pySlotIndexFor___:
 					table holds the BASE's instVar indices, and its inferred-slot
 					accessors (``Grail-Inferred Slots'') read the base's
@@ -6092,10 +6614,23 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					from the primary base only -- does not have.  A copied method
 					body that sends ``self ___pyattr_x___'' is answered by
 					PythonInstance's doesNotUnderstand hook through the attribute
-					protocol instead."
+					protocol instead.
+
+					Nor its ___pySlotsStrict___ marker.  Strictness is a verdict
+					ClassDefAst already reached for aClass itself -- true when
+					it declares strict __slots__, false when it declares none
+					over a strict primary chain -- and it reached it from the
+					PRIMARY chain alone, before this merge runs.  So a class
+					declaring no __slots__ whose strict base is SECONDARY found
+					nothing to override, and the copy then made it strict:
+					``class ExitStack(_BaseExitStack, AbstractContextManager)''
+					with a ``__slots__ = ()'' ABC could not keep the
+					_exit_callbacks its own __init__ assigned.  CPython gives a
+					class without __slots__ a __dict__ whatever its bases say."
 					(shouldCopy and: [sel == #'___pySlotIndexFor___:'
+						or: [sel == #'___pySlotsStrict___'
 						or: [([walker categoryOfSelector: sel environmentId: 1] on: Error do: [:e | nil])
-							= #'Grail-Inferred Slots']]) ifTrue: [shouldCopy := false].
+							= #'Grail-Inferred Slots']]]) ifTrue: [shouldCopy := false].
 					shouldCopy ifTrue: [
 						self ___copyMethod___: sel from: walker to: aClass
 							category: 'Grail-MI-Inherited'.
@@ -6188,7 +6723,26 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 								holder dynamicInstVarAt: sel put: v
 							]
 						]
-					]
+					].
+					"``__iter__ = None'' from a base the MRO puts AHEAD of
+					the primary chain must beat a METHOD that chain supplies --
+					typing's _CallableGenericAlias(_NotIterable, _GenericAlias)
+					is rooted at _GenericAlias, whose ``def __iter__'' a for loop
+					reached by an ordinary send (iter() already consults the
+					attribute).  Outside the value pass, which skips __iter__:
+					``Object class'' defines one class-side, so the name always
+					reads as shadowed there.  A refusal compiled on aClass is
+					nearer than the chain; the pragma keeps it out of the class
+					dict and of collections.abc.Iterable, as int's is."
+					(overrideMode and: [sel == #'__iter__'
+						and: [cat == #'Grail-Class Attrs'
+						and: [(self ___classAttrValueSeenFrom___: base upTo: walker name: sel) == None]]])
+						ifTrue: [
+							aClass @env1:___compileMethod: '__iter__
+	<grailProtocolRefusal>
+	^ TypeError ___signal___: '''''''' @env0:, self ___pyTypeNameForError___
+		@env0:, '''''' object is not iterable'''
+								category: 'Grail-Protocol Refusal']
 				]
 			].
 			walker := walker superClass
@@ -6260,7 +6814,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					emd := eWalker methodDictForEnv: 1.
 					emd ~~ nil ifTrue: [
 						emd keys do: [:sel |
-							((self ___primaryChainProvides___: sel forClass: aClass) not) ifTrue: [
+							((self ___primaryChainProvides___: sel forClass: aClass mergingFrom: eWalker) not) ifTrue: [
 								| cat |
 								cat := [(eWalker categoryOfSelector: sel environmentId: 1) asString]
 									on: Error do: [:e | 'Grail-MI-Inherited'].
@@ -6271,21 +6825,84 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___primaryChainProvides___: aSelector forClass: aClass
+	^ self ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: nil
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 	"True if aSelector is defined on aClass or any superclass in its
 	primary chain, EXCLUDING the universal roots (PythonInstance /
 	Object) — those defaults must be overridable by a secondary base.
-	Used by ___mergeSecondaryBases___ to decide what to inherit."
+	Used by ___mergeSecondaryBases___ to decide what to inherit.
 
-	| walker |
+	BY PYTHON NAME up the ancestors that PRECEDE aSource in the MRO.  A Python
+	class has ONE attribute per name, and the arity it compiles to is Grail's
+	detail: dict supplies ``__iter__'' as the unary selector (on
+	KeyValueDictionary), while collections.abc's abstract ``def __iter__(self)''
+	compiles to the varargs ``___iter__:kw:''.  Asking for the exact selector
+	found no ``___iter__:kw:'' and copied the abstract one onto ``class S(dict,
+	MutableMapping)'', where ABCMeta then refused to instantiate Flask's
+	NullSession for abstract __iter__ and __len__.
+
+	...but only up to the first class aSource ALSO inherits from.  Such a shared
+	ancestor comes AFTER aSource in the MRO, so what it defines is exactly what
+	aSource is entitled to override: in test_enum's ``class JobStatus(
+	CaseInsensitiveStrEnum, LenientStrEnum)'', LenientStrEnum's ``__init__''
+	precedes str's and Enum's, and asking the whole chain by name lost it.
+	aSource nil means no stop, the old unbounded walk.
+
+	aClass's own dictionary is asked EXACTLY: it is where this merge is writing
+	its copies, one selector at a time, and asked by name the first arity
+	copied (``_register:kw:'') refused the rest -- the varargs forwarder then
+	performed a fixed selector that never arrived."
+
+	| walker family |
+	family := self ___pythonNameFamilyOf___: aSelector.
 	walker := aClass.
 	[(walker ~~ nil) and: [(walker ~~ PythonInstance) and: [walker ~~ Object]]]
 		whileTrue: [
 		| md |
 		md := walker methodDictForEnv: 1.
-		(md ~~ nil and: [md includesKey: aSelector]) ifTrue: [^ true].
+		md ~~ nil ifTrue: [
+			(walker == aClass
+				ifTrue: [md includesKey: aSelector]
+				ifFalse: [
+					((aSource isKindOf: Behavior)
+						and: [aSource == walker or: [aSource inheritsFrom: walker]])
+						ifTrue: [md includesKey: aSelector]
+						ifFalse: [family anySatisfy: [:sel | md includesKey: sel]]])
+					ifTrue: [^ true]].
 		walker := walker superClass
 	].
 	^ false
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___pythonNameFamilyOf___: aSelector
+	"Every selector the Python name behind aSelector compiles to -- the unary
+	``n'', the keyword forms ``n:'' .. ``n:_:_:_:_:_:'', and the varargs
+	``_n:kw:'' -- or just aSelector itself when it is Grail plumbing (a name
+	beginning with three underscores) rather than a Python name."
+
+	| s pyName |
+	s := aSelector asString.
+	pyName := ((s size > 4) and: [(s endsWith: ':kw:') and: [(s at: 1) == $_]])
+		ifTrue: [s copyFrom: 2 to: s size - 4]
+		ifFalse: [(s indexOf: $:) > 0
+			ifTrue: [s copyFrom: 1 to: (s indexOf: $:) - 1]
+			ifFalse: [s]].
+	((pyName size >= 3) and: [(pyName copyFrom: 1 to: 3) = '___'])
+		ifTrue: [^ Array with: aSelector].
+	^ Array new: 0 streamContents: [:out | | sel |
+		out nextPut: pyName asSymbol.
+		sel := pyName , ':'.
+		out nextPut: sel asSymbol.
+		1 to: 5 do: [:i |
+			sel := sel , '_:'.
+			out nextPut: sel asSymbol].
+		out nextPut: ('_' , pyName , ':kw:') asSymbol]
 %
 
 category: 'Grail-Module Loading'
@@ -6395,6 +7012,9 @@ ___pushInitializingModule___: aName
 	only runs when canonical classes are enabled and this must run always."
 
 	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
+	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
+	self @env0:___forgetBodyClassAttrsOf___: aName @env0:asString.
+	self @env0:___markBodyClassAttrsReplayed___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
 %
 
@@ -6404,6 +7024,121 @@ ___popInitializingModule___
 	| stack |
 	stack := self ___initializingModuleStack___.
 	stack @env0:isEmpty ifFalse: [stack @env0:removeLast]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___moduleInitOwners___
+	"Module name -> the GsProcess running that module's body, for every body
+	running now.  CPython's per-module import lock, in the one form Grail
+	needs: registration happens BEFORE the body runs (so a circular import
+	finds the module), which means another THREAD importing the same name
+	meanwhile found it in sys.modules and took a half-built module as done.
+	test_pickle's test_unpickle_module_race unpickles a class from a module
+	whose body is blocked on a barrier, from two threads at once; the second
+	got ``module 'locking_import' has no attribute 'ToBeUnpickled'''.  See
+	___awaitModuleInit___:."
+
+	^ SessionTemps current at: #'GrailModuleInitOwners'
+		ifAbsentPut: [KeyValueDictionary new]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___claimModuleInit___: aName
+	self ___moduleInitOwners___ at: aName asString
+		put: (self ___pythonThreadOf___: Processor activeProcess)
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___pythonThreadOf___: aProcess
+	"The GsProcess that is aProcess's Python THREAD.  A generator (or
+	coroutine) body runs on a process of its own, but in Python it runs on the
+	thread that resumed it -- whose process is blocked in that resume while
+	the body runs.  So the answer follows each generator body to its current
+	resumer until it reaches a process that is no generator's body
+	(PythonGenerator >> _forkBody stamps the process).
+
+	Without this, a generator in a module's own body that imported the module
+	-- pickle.loads of a class defined there, from a generator expression --
+	found the module owned by ANOTHER process, the one running the body, and
+	waited for it forever: that process was waiting for the generator."
+
+	| p gen hops |
+	p := aProcess.
+	hops := 0.
+	[hops < 64
+		and: [(gen := p environmentAt: #'GrailPyGenerator' ifAbsent: [nil]) ~~ nil
+		and: [gen ___consumerProcess___ ~~ nil]]]
+			whileTrue: [
+				p := gen ___consumerProcess___.
+				hops := hops + 1].
+	^ p
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___releaseModuleInit___: aName
+	| owners |
+	owners := self ___moduleInitOwners___.
+	(owners at: aName asString otherwise: nil)
+			== (self ___pythonThreadOf___: Processor activeProcess)
+		ifTrue: [owners removeKey: aName asString]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___awaitModuleInit___: aName
+	"A sys.modules HIT on a module whose body ANOTHER GsProcess is still
+	running: wait until that body finishes, as CPython's import does on the
+	module's lock -- unless waiting would deadlock, which CPython detects too
+	and answers the partial module (two threads importing each other's
+	modules).  Its own process's body is a circular import and passes, as
+	before.
+
+	The common case is one dictionary probe: nothing is being initialized
+	(the table is empty outside imports), or nothing by anyone else.  The wait
+	polls rather than parking on a semaphore -- it is reached only when two
+	threads really race one import -- and stops if the owner dies without
+	releasing."
+
+	| owners owner me waits |
+	owners := SessionTemps current at: #'GrailModuleInitOwners' otherwise: nil.
+	(owners == nil or: [owners isEmpty]) ifTrue: [^ self].
+	owner := owners at: aName asString otherwise: nil.
+	owner == nil ifTrue: [^ self].
+	"The THREAD, not the process: a generator in the module's own body is the
+	same thread importing it circularly."
+	me := self ___pythonThreadOf___: Processor activeProcess.
+	owner == me ifTrue: [^ self].
+	waits := SessionTemps current at: #'GrailImportWaits'
+		ifAbsentPut: [IdentityKeyValueDictionary new].
+	(self ___importWaitFrom___: me on: owner wouldDeadlock: waits owners: owners)
+		ifTrue: [^ self].
+	waits at: me put: aName asString.
+	[[(owners at: aName asString otherwise: nil) == owner
+		and: [owner _isTerminated not]]
+			whileTrue: [(Delay forMilliseconds: 1) wait]]
+		ensure: [waits removeKey: me ifAbsent: []]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___importWaitFrom___: me on: owner wouldDeadlock: waits owners: owners
+	"Follow owner -> the module it waits on -> that module's owner ...; a chain
+	that reaches me is a cycle of imports each thread holds the next of."
+
+	| p seen n |
+	p := owner.
+	seen := IdentitySet new.
+	[p ~~ nil and: [(seen includes: p) not]] whileTrue: [
+		seen add: p.
+		n := waits at: p otherwise: nil.
+		n == nil ifTrue: [^ false].
+		p := owners at: n otherwise: nil.
+		p == me ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Module Loading'
@@ -6713,6 +7448,45 @@ ___loadNamespacePackageIfAny___: moduleName
 	portions := self ___namespacePortionsFor___: moduleName.
 	portions @env0:isEmpty ifTrue: [^ nil].
 	^ self ___loadNamespacePackage___: moduleName portions: portions
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___loadEmptyMainModule___
+	"Build and register an EMPTY ``__main__'' for a session that is running no
+	script.
+
+	CPython's interpreter creates __main__ at startup, before any code runs, so
+	``import __main__'' never searches and never fails -- under ``python -m
+	test'' it is the test runner, in an embedding it is an empty module.  Grail
+	makes one only when runPath:/runModule: loads a script under that name, so
+	code imported any other way -- the CPython suite harness, a test importing
+	a module by its real name, a Smalltalk-driven import -- got ``No module
+	named '__main__''' where CPython hands back a module.  test.pickletester is
+	the case that found it: it does ``import __main__'' at the top and then
+	stores classes on it for the unpickler to find by ``__main__.<name>''.
+
+	Built the way ___loadNamespacePackage___: builds one -- an empty module
+	body -- and filed session-local like any other __main__
+	(___isSessionLocalModule___:), so it is gone at the next login exactly as a
+	script's __main__ is.  Resolved BEFORE the path search: CPython never looks
+	for a __main__.py to satisfy the import, and one in the current directory
+	must not be run as the program by an unrelated import."
+
+	| moduleAst moduleClass moduleInstance |
+	moduleAst := ModuleAst @env0:parseSource: ''.
+	moduleClass := self @env0:___buildModuleClass: moduleAst name: '__main__'.
+	moduleInstance := moduleClass @env0:new.
+	moduleClass @env0:___adoptInstance___: moduleInstance.
+	self
+		@env0:___initModuleAttrsFrom___: (self
+			@env0:___specFor___: '__main__'
+			origin: nil
+			loader: nil
+			locations: nil)
+		on: moduleInstance.
+	self @env0:registerModule: '__main__' with: moduleInstance.
+	^ moduleInstance
 %
 
 category: 'Grail-Module Loading'
@@ -7320,7 +8094,9 @@ lookupModule: aName
 		otherwise be re-bound, stale, onto the fresh one -- and, since #824,
 		so does this session's hash-state verdict, which used to be swept
 		here by hand and nowhere else."
-		(self @env0:___moduleEntryIsLive___: found) ifTrue: [^ found].
+		(self @env0:___moduleEntryIsLive___: found) ifTrue: [
+			self @env0:___awaitModuleInit___: aName.
+			^ found].
 		self @env0:removeModule: sym @env0:asString].
 	"A vendored .py SHADOWS the Smalltalk builtin of the same name --
 	the old committed registry expressed this by never containing
@@ -7447,6 +8223,17 @@ ___import__: positional kw: kwargs
 	call is the ordinary spelling, and ``__import__(name='sys')'' is the
 	smallest one."
 	name := positional @env0:at: 1.
+	"A name holding a LONE SURROGATE names no file and cannot be made a
+	Symbol, so the only module it can be is one already put in sys.modules
+	under it (which keeps such keys in its overflow).  Answer that or
+	CPython's ModuleNotFoundError; the path below would coerce the name to a
+	Smalltalk string and raise NotImplementedError instead
+	(test_pickle's test_nonencodable_module_name_error)."
+	(name @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ [(importlib @env1:modules) __getitem__: name]
+			@env0:on: KeyError do: [:ex |
+				ex @env0:return: ((Python @env0:at: #'ModuleNotFoundError') ___signal___:
+					'No module named ' @env0:, name @env0:___pyRepr___)]].
 	globals := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'globals' _: None] ifNil: [None]].
@@ -7456,6 +8243,15 @@ ___import__: positional kw: kwargs
 	fromlist := (positional __len__ @env0:> 3)
 		ifTrue: [positional @env0:at: 4]
 		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'fromlist' _: {}] ifNil: [{}]].
+	"A None fromlist is an EMPTY one: CPython only asks whether it is truthy.
+	It is also what IMPORT_NAME passes for a plain ``import x'', so any code
+	run under a __builtins__ override -- which routes its imports through
+	builtins ___gatedImport___ and so through here with CPython's five
+	arguments -- failed every plain import with ``object of type 'NoneType'
+	has no len()''.  A bare in-function exec() is such code: its namespace
+	is the module's globals, ``__builtins__'' included (test_warnings
+	test_exec_filename)."
+	(fromlist @env0:== None) ifTrue: [fromlist := {}].
 	level := (positional __len__ @env0:> 4)
 		ifTrue: [positional @env0:at: 5]
 		ifFalse: [kwargs ifNotNil: [kwargs @env1:get: 'level' _: 0] ifNil: [0]].
@@ -7569,6 +8365,10 @@ ___import__: positional kw: kwargs
 		keeps Grail's OWN tree out of a user finder's reach.  See
 		___findViaMetaPath___:."
 		moduleInstance := self @env0:class ___findViaMetaPath___: absoluteName].
+	"No __main__ yet means no script is running: supply CPython's empty one
+	rather than searching the path -- see ___loadEmptyMainModule___."
+	(moduleInstance isNil and: [absoluteName @env0:asString @env0:= '__main__'])
+		ifTrue: [moduleInstance := self @env0:class ___loadEmptyMainModule___].
 	moduleInstance notNil ifTrue: [
 		result := moduleInstance
 	] ifFalse: [
@@ -7652,7 +8452,6 @@ ___import__: positional kw: kwargs
 			``from PKG import *'' or plain ``import X''."
 			alreadyBound := (fromName @env0:= '*')
 				or: [(fromName @env0:= absoluteName)
-				or: [(fromName @env0:= (nameParts @env0:last))
 				or: [(result isKindOf: module)
 				ifTrue: [
 					"Check dynamic instVars first (fast path), then env-1
@@ -7691,7 +8490,20 @@ ___import__: positional kw: kwargs
 								ifAbsent: [nil]) notNil]
 					]
 				]
-				ifFalse: [false]]]].
+				ifFalse: [false]]].
+			"A name equal to the package's own last component -- ``from a.b
+			import b'' -- used to count as bound OUTRIGHT, before anything
+			looked.  So when a/b/b.py exists, as in test_reprlib's
+			LongReprTest (package, subpackage and module all share one long
+			name), the submodule was never loaded and the attribute read that
+			follows raised ``'a_b' object has no attribute 'b'''.  It still
+			counts as bound -- the old behaviour, which nothing in the vendored
+			tree is known to need but which cost nothing to keep -- unless
+			such a submodule file actually exists; then it is loaded, as
+			CPython's _handle_fromlist would."
+			(alreadyBound not and: [fromName @env0:= (nameParts @env0:last)]) ifTrue: [
+				alreadyBound := (self @env0:class ___moduleNameToPath___:
+					((absoluteName @env0:, '.') @env0:, fromName @env0:asString)) isNil].
 			alreadyBound ifFalse: [
 				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
 				((self @env0:class lookupModule: subName)
@@ -8335,6 +9147,126 @@ ___irPurgeDefTableForModule___: aModuleName
 	victims do: [:id | table removeKey: id ifAbsent: []]
 %
 
+category: 'Grail-MI Merge'
+classmethod: importlib
+___unshadowInstVarsIn___: aSource for: aClass
+	"aSource -- a method compiled for another class -- rewritten so it compiles
+	on aClass even where one of its method-level names is an instVar aClass
+	inherits.  Answers aSource itself when nothing collides, which is nearly
+	always.
+
+	A method is compiled for ITS class's instVars.  The MI merge copies a
+	secondary base's methods onto a class whose SMALLTALK chain can differ --
+	``class MyElement(ET.Element, ValueError)'' is a ValueError, and every
+	exception inherits AbstractException's ``tag''.  Element's
+	``makeelement(self, tag, attrib)'' declares a method temp ``tag'', which
+	there is GemStone error 1030, ``variable has already been declared''; the
+	copy compiled to the codegen-gap stub, and constructing a MyElement raised
+	NameError (test_xml_etree's test_element_factory_pure_python_subclass).
+
+	The codegen's own answer, for a class body that knows its instVars, is the
+	shape used here: a colliding argument is renamed, and the method's temps
+	and statements move into a block, whose temps may shadow an instVar where
+	the method's may not.  The block is evaluated and the method answers self
+	after it, so a body with no final return still does.  The trailing
+	``___GRAILPOS___'' map records Smalltalk source offsets, so every offset
+	after the insertion shifts by what was inserted."
+
+	| lines header rest ivs toks args hits newHeader i tempsLine tempNames
+	  body bodyText mapStart map insertAt delta out renamed |
+	ivs := (aClass allInstVarNames collect: [:n | n asString]) asSet.
+	ivs isEmpty ifTrue: [^ aSource].
+	i := aSource indexOf: Character lf.
+	i = 0 ifTrue: [^ aSource].
+	header := aSource copyFrom: 1 to: i - 1.
+	rest := aSource copyFrom: i + 1 to: aSource size.
+	"Keyword header: the arguments are the words after each ``kw:''."
+	toks := header subStrings: ' '.
+	args := OrderedCollection new.
+	(toks notEmpty and: [(toks first) last = $:]) ifTrue: [
+		2 to: toks size by: 2 do: [:k | args add: (toks at: k)]].
+	(toks size = 2 and: [(toks first) last ~= $:]) ifTrue: [args add: toks last].
+	"The method temps: the first ``| ... |'' line after the pragmas."
+	lines := rest subStrings: (String with: Character lf).
+	tempsLine := nil.
+	lines do: [:ln | | t |
+		tempsLine isNil ifTrue: [
+			t := ln trimSeparators.
+			(t notEmpty and: [t first = $|]) ifTrue: [tempsLine := ln]]].
+	tempNames := tempsLine isNil
+		ifTrue: [#()]
+		ifFalse: [(tempsLine trimSeparators subStrings: ' ')
+			reject: [:w | w = '|' or: [w isEmpty]]].
+	hits := (args select: [:a | ivs includes: a]) ,
+		(tempNames select: [:t | ivs includes: t]).
+	hits isEmpty ifTrue: [^ aSource].
+	"Only the simple generated shape is rewritten: temps first, then
+	statements.  Anything else keeps the old behaviour (the compile fails and
+	the stub stands)."
+	tempsLine isNil ifTrue: [^ aSource].
+	renamed := args select: [:a | ivs includes: a].
+	newHeader := WriteStream on: String new.
+	toks doWithIndex: [:w :k |
+		k > 1 ifTrue: [newHeader nextPut: $ ].
+		newHeader nextPutAll: ((renamed includes: w) ifTrue: ['___iv_' , w] ifFalse: [w])].
+	newHeader := newHeader contents.
+	"Split rest at the temps line; the map comment, if any, stays last."
+	insertAt := rest indexOfSubCollection: tempsLine.
+	mapStart := rest indexOfSubCollection: '"___GRAILPOS___'.
+	body := mapStart = 0
+		ifTrue: [rest copyFrom: insertAt to: rest size]
+		ifFalse: [rest copyFrom: insertAt to: mapStart - 1].
+	map := mapStart = 0 ifTrue: [''] ifFalse: [rest copyFrom: mapStart to: rest size].
+	bodyText := WriteStream on: String new.
+	bodyText nextPut: $[.
+	"A renamed argument joins the block's temps and is copied in first."
+	renamed isEmpty
+		ifTrue: [bodyText nextPutAll: body]
+		ifFalse: [ | bar |
+			bar := body indexOf: $| startingAt: (body indexOf: $|) + 1.
+			bodyText nextPutAll: (body copyFrom: 1 to: bar - 1).
+			renamed do: [:a | bodyText nextPutAll: ' '; nextPutAll: a].
+			bodyText nextPutAll: ' |'.
+			renamed do: [:a |
+				bodyText nextPutAll: ' '; nextPutAll: a; nextPutAll: ' := ___iv_';
+					nextPutAll: a; nextPut: $.].
+			bodyText nextPutAll: (body copyFrom: bar + 1 to: body size)].
+	out := newHeader , (String with: Character lf) , (rest copyFrom: 1 to: insertAt - 1) ,
+		bodyText contents.
+	"Every insertion precedes the first statement, so each mapped offset -- all
+	of them lie in the statements -- moves by the same amount: how much longer
+	the rewritten text is than the original, up to the map."
+	delta := out size - (header size + 1 + insertAt - 1 + body size).
+	out := out , (String with: Character lf) , '] value.' , (String with: Character lf) ,
+		'^ self' , (String with: Character lf).
+	map isEmpty ifFalse: [
+		out := out , (self ___shiftGrailPosMap___: map by: delta
+			after: header size + 1 + insertAt)].
+	^ out
+%
+
+category: 'Grail-MI Merge'
+classmethod: importlib
+___shiftGrailPosMap___: aMapComment by: delta after: aPosition
+	"aMapComment -- a ``___GRAILPOS___'' comment, six numbers per entry of
+	which the first two are Smalltalk source offsets -- with every such offset
+	past aPosition moved by delta.  See ___unshadowInstVarsIn___:for:."
+
+	| words out nums |
+	words := ((aMapComment copyReplaceAll: '"' with: ' ') subStrings: ' ')
+		reject: [:w | w isEmpty].
+	(words notEmpty and: [words first = '___GRAILPOS___']) ifFalse: [^ aMapComment].
+	nums := (words copyFrom: 2 to: words size) collect: [:w | w asNumber].
+	out := WriteStream on: String new.
+	out nextPutAll: '"___GRAILPOS___ '.
+	nums doWithIndex: [:n :k | | v |
+		v := n.
+		(((k - 1) \\ 6) < 2 and: [n > aPosition]) ifTrue: [v := n + delta].
+		out print: v; nextPut: $ ].
+	out nextPut: $".
+	^ out contents
+%
+
 category: 'Grail-Class Compilation'
 classmethod: importlib
 ___copyMethod___: sel from: aProvider to: aClass category: aCategory
@@ -8383,6 +9315,7 @@ ___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCate
 	meth isNil ifTrue: [^ self].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	src notNil ifTrue: [
+		src := self ___unshadowInstVarsIn___: src for: aClass.
 		^ [aClass perform: #'___compileMethod:category:' env: 1
 			withArguments: { aPrefix , src. aCategory }] on: Error do: [:e | e return: nil]].
 	"No text source to recompile (an IR method of a class built before the

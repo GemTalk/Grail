@@ -387,7 +387,8 @@ __type_params__
 		ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
 	"One builder for every shape, which also reads the ``*Ts'' / ``**P'' kind
 	 prefix -- a TypeVarTuple or ParamSpec was built as a TypeVar here."
-	vars := names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n].
+	vars := names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n
+		globals: (ExecBlock @env0:___pyGlobalsOfClass___: self)].
 	"BUILT ONCE, then cached where the ``assigned'' branch above reads it.  A
 	 class's type parameters are FIXED objects: ``(T,) = Gen.__type_params__''
 	 followed by a second read must answer the same T, and everything that
@@ -461,7 +462,7 @@ __base__
 				^ declared
 					@env0:detect: [:b | self ___grailInheritsStorageOf___: b]
 					ifNone: [declared @env0:at: 1]]]].
-	s := self @env0:superclass.
+	s := self ___grailVisibleSuperclass___: il.
 	"A Python-defined class's Smalltalk superclass is ``PythonInstance'', which
 	is Grail's implementation of the role CPython gives to ``object'' -- so that
 	is the name to report.  See
@@ -513,8 +514,16 @@ __bases__
 		importlib ___withoutImplementationRoots___:for: makes for __mro__."
 		entry == nil ifFalse: [
 			^ self ___grailAsTuple___: ((entry @env0:at: 1) @env0:collect: [:b |
-				b == PythonInstance ifTrue: [Object] ifFalse: [b]])]].
-	s := self @env0:superclass.
+				b == PythonInstance
+					ifTrue: [Object]
+					ifFalse: [(il @env0:___exposedBuiltinFor___: b) ifNil: [b]]])]].
+	s := self ___grailVisibleSuperclass___: il.
+	"A stand-in root reports as the builtin it stands for -- ``class Y(int)''
+	sits on AbstractPyInt, and __bases__ is (int,).  See importlib >>
+	___visibleMroOf___:."
+	(il ~~ nil and: [s ~~ nil]) ifTrue: [
+		(il @env0:___exposedBuiltinFor___: s) ifNotNil: [:ex |
+			^ self ___grailAsTuple___: (Array @env0:with: ex)]].
 	"``PythonInstance'' -> ``object'', for the reason __base__ gives above.
 	Without it ``class Plain: pass'' reported __bases__ == (PythonInstance,)
 	where CPython reports (object,), and inspect.getclasstree -- which builds
@@ -522,6 +531,167 @@ __bases__
 	s == PythonInstance ifTrue: [^ self ___grailAsTuple___: (Array @env0:with: Object)].
 	^ self ___grailAsTuple___:
 		(s == nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s])
+%
+
+category: 'Grail-Reflection'
+method: Behavior
+___grailVisibleSuperclass___: il
+	"The nearest Smalltalk superclass Python can see as a base -- the
+	receiver's superclass, walked past every class __mro__ leaves out
+	(importlib class >> ___isHiddenBase___:of:).  il is importlib, or nil
+	before it exists, when this is the bare superclass.
+
+	__mro__ has hidden those classes since ___visibleMroOf___:, but __bases__
+	and __base__ still answered the raw superclass: ``int.__bases__'' was
+	(Number,), ``tuple.__bases__'' (Array,), ``BaseException.__bases__'' the
+	kernel Exception, and ``dict.__bases__'' / ``str.__bases__'' a kernel
+	class that prints the same name -- fourteen of the builtins types, each
+	disagreeing with its own __mro__.  inspect.getclasstree builds its tree
+	from __bases__ alone."
+
+	| s |
+	s := self @env0:superclass.
+	il == nil ifTrue: [^ s].
+	[s ~~ nil and: [s ~~ Object
+		and: [(il @env0:___isHiddenBase___: s of: self) and: [s ~~ PythonInstance]]]]
+			whileTrue: [s := s @env0:superclass].
+	^ s
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___grailInstallClassSideForwarders___
+	"Give each @staticmethod / @classmethod that shadows a Python BASE's
+	ordinary method an instance-side entry point that forwards to it.
+
+	Both decorators compile onto the METACLASS, a base's ``def m(self, ...)''
+	onto the base's instance side, and a base's ``self.m(a, b)'' is a plain
+	send of ``m:_:'' to an instance -- which finds the base's method and never
+	sees the subclass's.  CPython looks ``m'' up on type(self) and finds the
+	subclass's staticmethod first, so pickle's _Unpickler, whose load_global
+	calls ``self.find_class(module, name)'', ignored a subclass's
+	``@staticmethod def find_class(module, name)'' (test_pickle
+	test_custom_find_class).  The forwarder is ``m:_: a _: b  ^ self class
+	m: a _: b'': the class side receives the class, which a classmethod wants
+	as cls and a staticmethod ignores.
+
+	Only where a Python base below the universal roots defines the selector on
+	its instance side, in a class-body category: nothing else sends it to an
+	instance.  A base's own forwarder does not count -- it already sends to
+	``self class'', which is this class for this class's instances.  __new__
+	is static by nature and never an instance method.
+
+	The forwarders are filed under their own category, and a class-side
+	marker ___grailClassSideOverrides___ records that the class has any: a
+	CLASS read of the name must still answer the class-side def
+	(___grailClassSideDefIsNearer___:family:), which the forwarder, being an
+	instance method nearer than the base's, would otherwise shadow."
+
+	| meta sup installed md lf |
+	meta := self @env0:class.
+	sup := self @env0:superclass.
+	sup == nil ifTrue: [^ self].
+	md := meta @env0:methodDictForEnv: 1.
+	md == nil ifTrue: [^ self].
+	installed := false.
+	md @env0:keys @env0:asArray
+		@env0:do: [:sel | | owner |
+			((meta @env0:categoryOfSelector: sel environmentId: 1) @env0:= #'Grail-Class Methods'
+				and: [sel ~~ #'__new__'
+				and: [((sel @env0:asString @env0:copyFrom: 1 to: (3 @env0:min: sel @env0:size)) @env0:= '___') @env0:not]])
+				ifTrue: [
+					owner := sup @env0:whichClassIncludesSelector: sel environmentId: 1.
+					(owner ~~ nil
+						and: [owner ~~ PythonInstance
+						and: [owner ~~ Object
+						and: [(owner @env0:categoryOfSelector: sel environmentId: 1)
+								@env0:~= #'Grail-Class Side Forwarders'
+						and: [self ___isPythonSourceMethodCategory___:
+								(owner @env0:categoryOfSelector: sel environmentId: 1)]]]])
+						ifTrue: [
+							self ___compileMethod: (self ___grailForwarderSourceTo___: sel)
+								category: 'Grail-Class Side Forwarders'.
+							installed := true]]].
+	installed ifTrue: [
+		lf := String @env0:with: Character @env0:lf.
+		meta ___compileMethod: ('___grailClassSideOverrides___' @env0:, lf) @env0:, '	^ true'
+			category: 'Grail-Class Side Forwarders']
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___grailForwarderSourceTo___: aSelector
+	"``m:_: a1 _: a2  ^ self class m: a1 _: a2'' -- an instance method that
+	resends aSelector, arguments unchanged, to the receiver's class."
+
+	| kws head send lf part |
+	lf := String @env0:with: Character @env0:lf.
+	(aSelector @env0:includes: $:) ifFalse: [
+		^ ((aSelector @env0:asString @env0:, lf) @env0:, '	^ self @env0:class ')
+			@env0:, aSelector @env0:asString].
+	"Split at each colon by hand: every keyword ends in one, and ``_'' is a
+	keyword of its own (``m:_:'')."
+	kws := OrderedCollection @env0:new.
+	part := WriteStream @env0:on: String @env0:new.
+	aSelector @env0:asString @env0:do: [:ch |
+		ch == $:
+			ifTrue: [kws @env0:add: part @env0:contents. part := WriteStream @env0:on: String @env0:new]
+			ifFalse: [part @env0:nextPut: ch]].
+	head := WriteStream @env0:on: String @env0:new.
+	send := WriteStream @env0:on: String @env0:new.
+	kws @env0:doWithIndex: [:kw :i | | arg |
+		arg := ((kw @env0:, ': ___a') @env0:, i @env0:printString) @env0:, ' '.
+		head @env0:nextPutAll: arg.
+		send @env0:nextPutAll: arg].
+	^ ((head @env0:contents @env0:, lf) @env0:, '	^ self @env0:class ')
+		@env0:, send @env0:contents
+%
+
+category: 'Grail-Reflection'
+method: Behavior
+___grailClassSideDefIsNearer___: aSym family: family
+	"Does a class-side def (@staticmethod / @classmethod) of this name sit at
+	or below the nearest instance-side one on the receiver's chain?  Then a
+	CLASS read of the name must answer the class-side def: in CPython the
+	nearest class dict in the MRO wins, whichever decorator put it there.
+	``S.find_class(a, b)'' for a @staticmethod over a base's ordinary
+	find_class resolved to the BASE's method -- the instance-side search runs
+	first and found it -- and raised a missing-argument TypeError.
+
+	At one class, the class side is asked first: an instance method there
+	under ``Grail-Class Side Forwarders'' is the forwarder for that very def.
+	Only reached for a class carrying ___grailClassSideOverrides___, so the
+	common read pays one cached respondsTo: and no walk."
+
+	| c |
+	c := self.
+	[c ~~ nil and: [c ~~ PythonInstance and: [c ~~ Object]]] whileTrue: [
+		(c @env0:class ___grailOwnsPythonDef___: aSym family: family forwarders: false)
+			ifTrue: [^ true].
+		(c ___grailOwnsPythonDef___: aSym family: family forwarders: false)
+			ifTrue: [^ false].
+		c := c @env0:superclass].
+	^ false
+%
+
+category: 'Grail-Reflection'
+method: Behavior
+___grailOwnsPythonDef___: aSym family: family forwarders: includeForwarders
+	"Does the receiver's OWN env-1 method dictionary hold aSym, or a
+	spelling of it in family, compiled from a class-body def?  The
+	class-side forwarders count only when includeForwarders is true."
+
+	| md hit |
+	md := self @env0:methodDictForEnv: 1.
+	md == nil ifTrue: [^ false].
+	hit := [:sel | (md @env0:includesKey: sel) and: [ | cat |
+		cat := self @env0:categoryOfSelector: sel environmentId: 1.
+		(cat @env0:= #'Grail-Class Side Forwarders')
+			ifTrue: [includeForwarders]
+			ifFalse: [self ___isPythonSourceMethodCategory___: cat]]].
+	(hit @env0:value: aSym) ifTrue: [^ true].
+	family == nil ifTrue: [^ false].
+	^ family @env0:anySatisfy: [:sel | sel ~~ nil and: [hit @env0:value: sel]]
 %
 
 category: 'Grail-Class Compilation'

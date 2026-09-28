@@ -1004,7 +1004,13 @@ tokenizeString
 				ifFalse: [escaped == $t ifTrue: [ str add: Tab ]
 				ifFalse: [escaped == $r ifTrue: [ str addCodePoint: 13 ]
 				ifFalse: [escaped == $\ ifTrue: [ str add: $\ ]
-				ifFalse: [escaped == quoteChar ifTrue: [ str add: quoteChar]
+				"BOTH quote characters, whichever one delimits the literal: backslash-
+				apostrophe and backslash-doublequote are escapes in every string.
+				Only the delimiter was decoded, so a double-quoted ``it\''s'' kept its
+				backslash -- a wrong VALUE -- and warned that the escape was invalid
+				(sqlparse's triple-quoted ``Identifier`\''s'' docstring, on every
+				import of django's db backends)."
+				ifFalse: [(escaped == $' or: [escaped == $"]) ifTrue: [ str add: escaped]
 				ifFalse: [escaped == $a ifTrue: [ str addCodePoint: 7 ]
 				ifFalse: [escaped == $b ifTrue: [ str addCodePoint: 8 ]
 				ifFalse: [escaped == $f ifTrue: [ str addCodePoint: 12 ]

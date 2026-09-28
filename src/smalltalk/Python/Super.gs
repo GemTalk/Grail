@@ -732,6 +732,29 @@ ___pyAttrLoad___: aSym
 		ifTrue: [
 			^ (SuperBoundMethod obj: obj resolver: pickMethod selector: aSym)
 				value: #() value: nil].
+	"A @PROPERTY reached through super() must answer its value too, for the
+	same reason: ``super().x'' inside a property getter answered the proxy,
+	and ``super().x * 2'' then failed on it.  CPython's ssl.py reads every
+	property it overrides this way (``TLSVersion(super().minimum_version)'').
+	A property's accessor pair is indistinguishable from a method with a
+	default argument, so the NEAREST parent that defines the name is asked
+	whether it declared it a property (___grailOwnPropertyNames___, recorded
+	at class build).  Only for an INSTANCE receiver: ``super(C, C).x'' is a
+	read off the class, which in CPython answers the property object itself
+	-- the proxy stands in for it, and answers __get__ / __set__."
+	(obj @env0:isKindOf: Behavior) ifFalse: [
+		| definer |
+		definer := cls @env0:superClass.
+		[definer @env0:notNil
+			and: [(definer @env0:includesSelector: aSym @env0:asSymbol environmentId: 1) not]]
+			whileTrue: [definer := definer @env0:superClass].
+		(definer @env0:notNil
+			and: [(definer @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___'
+					environmentId: 1)
+			and: [(definer @env1:___grailOwnPropertyNames___) @env0:includes: aSym @env0:asSymbol]])
+			ifTrue: [
+				^ (SuperBoundMethod obj: obj resolver: pickMethod selector: aSym)
+					value: #() value: nil]].
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the
 	method at call time once arity is known."
 	^ SuperBoundMethod obj: obj resolver: pickMethod selector: aSym

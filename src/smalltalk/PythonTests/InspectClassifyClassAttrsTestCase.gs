@@ -177,20 +177,18 @@ testAPlainClassesMethodsAreCandidates
 		equals: '[True, True, True]'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Kinds'
 method: InspectClassifyClassAttrsTestCase
-testStaticAndClassMethodsAreNotDistinguishableWhichIsAKnownGap
-	"Recorded, NOT endorsed.  ``kind'' is read off the __dict__ entry precisely
-	because a staticmethod reached through getattr is a plain function and the
-	stored object is what tells them apart.  Grail stores an UnboundMethod for
-	both, so the distinction is not there to be read."
+testStaticAndClassMethodsAreDistinguished
+	"``kind'' is read off the __dict__ entry precisely because a staticmethod
+	reached through getattr is a plain function and the stored object is what
+	tells them apart.  That object is the staticmethod / classmethod descriptor
+	now, as in CPython.  This was a recorded gap: Grail stored a plain function
+	for both (an UnboundMethod, whose name leaked before the type-name
+	correction)."
 
-	"The entries used to leak the Smalltalk spelling ''UnboundMethod''; since
-	the type-name correction they read ''function'' -- the leak changed
-	spelling, not substance, and CPython still answers
-	[''staticmethod'', ''classmethod'']."
-	self assert: (self resultAt: 'staticmethod_kind_is_a_known_gap') asString
-		equals: '[''function'', ''function'']'.
+	self assert: (self resultAt: 'staticmethod_kind') asString
+		equals: '[''staticmethod'', ''classmethod'']'.
 %
 
 category: 'Grail-Tests - The metaclass half'

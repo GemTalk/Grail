@@ -68,6 +68,7 @@ class Interpolation:
 
 class Template:
     """Template object"""
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     def __init__(self, *args, **kwargs):
         if kwargs:

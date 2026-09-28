@@ -5,12 +5,19 @@
 # Registered under "unittest.mock" too, so both `import mock` and
 # `import unittest.mock` work.  Deviations from CPython, kept
 # deliberately small for V1:
-#   * MagicMock is an alias of Mock, but a magic method CAN be configured
+#   * a magic method CAN be configured on any mock
 #     (``m.__mul__ = Mock(return_value=15)``): Grail resolves dunders through
 #     the CLASS - as CPython does - so the assignment installs a forwarder on
-#     a class private to that one mock.  See _install_magic;
+#     a class private to that one mock.  MagicMock additionally answers
+#     CPython's defaults for the ones left unconfigured (iter(m) is empty,
+#     len(m) is 0, m + 1 is a child MagicMock, ...), and it is what patch()
+#     substitutes.  Reading ``m.__iter__`` gives the method, not CPython's
+#     child mock, so configure a magic by assignment, not through
+#     ``m.__iter__.return_value``;
 #   * patch works as a context manager only (method @-decorators are
-#     dropped by Grail), and there is no spec/autospec;
+#     dropped by Grail), and there is no spec; ``autospec=True`` is honoured
+#     for a FUNCTION target only (a real function forwarding to the mock),
+#     without CPython's signature check;
 #   * ``wraps`` IS supported -- on Mock and through patch/patch.object's
 #     trailing keywords -- for the call-through case: the mock records the
 #     call and returns what the wrapped callable returns, and an
@@ -190,7 +197,7 @@ class Mock:
             # Implicit return value: a child Mock, created lazily and
             # stored as a real attribute so user assignment
             # (m.return_value = x) and this default share one slot.
-            rv = Mock(name=self._mock_label() + "()")
+            rv = self._mock_new_child(name=self._mock_label() + "()")
             # object.__setattr__, NOT self.return_value = rv: going through
             # __setattr__ would mark this IMPLICIT default as an explicit
             # configuration and so suppress ``wraps'' on the very first call.
@@ -212,13 +219,18 @@ class Mock:
                     wrapped = getattr(self._mock_wraps, name)
                 except AttributeError:
                     wrapped = None
-            children[name] = Mock(name=child_name, wraps=wrapped)
+            children[name] = self._mock_new_child(name=child_name, wraps=wrapped)
         return children[name]
 
     def _mock_label(self):
         if self._mock_name is None:
             return "mock"
         return self._mock_name
+
+    def _mock_new_child(self, **kw):
+        """The kind of mock this one hands out as a child or a return value:
+        its own, as in CPython, so a MagicMock's children are MagicMocks."""
+        return Mock(**kw)
 
     def __call__(self, *args, **kw):
         record = _Call(args, kw)
@@ -241,7 +253,10 @@ class Mock:
         return self.return_value
 
     def __repr__(self):
-        return "<Mock name=" + repr(self._mock_label()) + " id=" + str(id(self)) + ">"
+        # type(self) is this mock's private subclass, named after the class it
+        # was made from -- so a MagicMock says so, as CPython's repr does.
+        return ("<" + type(self).__name__ + " name=" + repr(self._mock_label())
+                + " id=" + str(id(self)) + ">")
 
     def reset_mock(self):
         self.call_count = 0
@@ -304,7 +319,212 @@ def _is_exception(obj):
 
 
 NonCallableMock = Mock
-MagicMock = Mock
+
+
+# --- MagicMock ---------------------------------------------------------------
+#
+# A Mock whose magic methods work before anyone configures them, answering what
+# CPython's MagicMock answers (unittest.mock._return_values and friends,
+# measured on 3.14): the fixed values below, an EMPTY iterator for __iter__ --
+# which is what ``for x in patched_function(...)`` needs, test_gettext's
+# FindTestCase -- and a child MagicMock for everything else.  The comparisons
+# stay unsupported (CPython answers NotImplemented, so ``m < 1`` is a
+# TypeError), and __hash__ / __str__ / __eq__ keep Mock's identity behaviour.
+#
+# The magic methods are written out as ordinary ``def``s, deliberately, and
+# not installed by a loop of setattr(MagicMock, name, fn) -- which is shorter
+# and does not work: a dunder that reaches the class DYNAMICALLY (setattr, or
+# an entry in type()'s dict) is found by the binary operators and ``with``,
+# but not by iter(), len(), bool(), ``in``, ``[]`` or int(), which resolve to
+# object's compiled defaults first (see docs/Issues.md, "A dunder set on a
+# class at runtime ...").  Compiled methods are found by every path.
+#
+# Each one makes its default child the first time it is used; making them
+# eagerly would not terminate, since the children are MagicMocks too.  A magic
+# the user ASSIGNS still wins: Mock's __setattr__ stores it in the instance's
+# __dict__, which _mock_magic consults first -- and for a MagicMock that is
+# what makes configuring __iter__ or __len__ work at all, where on a plain
+# Mock those assignments reach only the dynamic forwarder.
+
+_MAGIC_RETURN_DEFAULTS = {
+    "__int__": 1, "__contains__": False, "__len__": 0, "__exit__": False,
+    "__complex__": 1j, "__float__": 1.0, "__bool__": True, "__index__": 1,
+}
+
+
+def _magic_iter_default(child):
+    """__iter__'s default side effect, CPython's: iterate the configured
+    return value, or nothing."""
+
+    def side_effect(*args):
+        if child._mock_return_set:
+            return iter(child.return_value)
+        return iter([])
+    return side_effect
+
+
+class MagicMock(Mock):
+    def _mock_new_child(self, **kw):
+        return MagicMock(**kw)
+
+    def _mock_magic(self, name):
+        impl = self.__dict__.get(name)
+        if impl is None:
+            impl = MagicMock(name=self._mock_label() + "." + name)
+            if name == "__iter__":
+                impl.side_effect = _magic_iter_default(impl)
+            elif name in _MAGIC_RETURN_DEFAULTS:
+                impl.return_value = _MAGIC_RETURN_DEFAULTS[name]
+            object.__setattr__(self, name, impl)
+        return impl
+
+    def __neg__(self):
+        return self._mock_magic('__neg__')()
+
+    def __pos__(self):
+        return self._mock_magic('__pos__')()
+
+    def __abs__(self):
+        return self._mock_magic('__abs__')()
+
+    def __invert__(self):
+        return self._mock_magic('__invert__')()
+
+    def __int__(self):
+        return self._mock_magic('__int__')()
+
+    def __float__(self):
+        return self._mock_magic('__float__')()
+
+    def __index__(self):
+        return self._mock_magic('__index__')()
+
+    def __complex__(self):
+        return self._mock_magic('__complex__')()
+
+    def __trunc__(self):
+        return self._mock_magic('__trunc__')()
+
+    def __len__(self):
+        return self._mock_magic('__len__')()
+
+    def __iter__(self):
+        return self._mock_magic('__iter__')()
+
+    def __next__(self):
+        return self._mock_magic('__next__')()
+
+    def __bool__(self):
+        return self._mock_magic('__bool__')()
+
+    def __enter__(self):
+        return self._mock_magic('__enter__')()
+
+    def __add__(self, other):
+        return self._mock_magic('__add__')(other)
+
+    def __radd__(self, other):
+        return self._mock_magic('__radd__')(other)
+
+    def __sub__(self, other):
+        return self._mock_magic('__sub__')(other)
+
+    def __rsub__(self, other):
+        return self._mock_magic('__rsub__')(other)
+
+    def __mul__(self, other):
+        return self._mock_magic('__mul__')(other)
+
+    def __rmul__(self, other):
+        return self._mock_magic('__rmul__')(other)
+
+    def __truediv__(self, other):
+        return self._mock_magic('__truediv__')(other)
+
+    def __rtruediv__(self, other):
+        return self._mock_magic('__rtruediv__')(other)
+
+    def __floordiv__(self, other):
+        return self._mock_magic('__floordiv__')(other)
+
+    def __rfloordiv__(self, other):
+        return self._mock_magic('__rfloordiv__')(other)
+
+    def __mod__(self, other):
+        return self._mock_magic('__mod__')(other)
+
+    def __rmod__(self, other):
+        return self._mock_magic('__rmod__')(other)
+
+    def __divmod__(self, other):
+        return self._mock_magic('__divmod__')(other)
+
+    def __rdivmod__(self, other):
+        return self._mock_magic('__rdivmod__')(other)
+
+    def __rpow__(self, other):
+        return self._mock_magic('__rpow__')(other)
+
+    def __matmul__(self, other):
+        return self._mock_magic('__matmul__')(other)
+
+    def __rmatmul__(self, other):
+        return self._mock_magic('__rmatmul__')(other)
+
+    def __lshift__(self, other):
+        return self._mock_magic('__lshift__')(other)
+
+    def __rlshift__(self, other):
+        return self._mock_magic('__rlshift__')(other)
+
+    def __rshift__(self, other):
+        return self._mock_magic('__rshift__')(other)
+
+    def __rrshift__(self, other):
+        return self._mock_magic('__rrshift__')(other)
+
+    def __and__(self, other):
+        return self._mock_magic('__and__')(other)
+
+    def __rand__(self, other):
+        return self._mock_magic('__rand__')(other)
+
+    def __or__(self, other):
+        return self._mock_magic('__or__')(other)
+
+    def __ror__(self, other):
+        return self._mock_magic('__ror__')(other)
+
+    def __xor__(self, other):
+        return self._mock_magic('__xor__')(other)
+
+    def __rxor__(self, other):
+        return self._mock_magic('__rxor__')(other)
+
+    def __contains__(self, other):
+        return self._mock_magic('__contains__')(other)
+
+    def __getitem__(self, other):
+        return self._mock_magic('__getitem__')(other)
+
+    def __delitem__(self, other):
+        return self._mock_magic('__delitem__')(other)
+
+    def __setitem__(self, key, value):
+        return self._mock_magic('__setitem__')(key, value)
+
+    def __pow__(self, other, modulo=None):
+        if modulo is None:
+            return self._mock_magic('__pow__')(other)
+        return self._mock_magic('__pow__')(other, modulo)
+
+    def __round__(self, ndigits=None):
+        if ndigits is None:
+            return self._mock_magic('__round__')()
+        return self._mock_magic('__round__')(ndigits)
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._mock_magic('__exit__')(exc_type, exc, tb)
 
 
 def _is_module(obj):
@@ -325,6 +545,41 @@ def _is_module(obj):
     if name is None:
         return False
     return sys.modules.get(name) is obj
+
+
+_AUTOSPEC_API = ("assert_called", "assert_not_called", "assert_called_once",
+                 "assert_called_with", "assert_called_once_with",
+                 "assert_any_call", "reset_mock")
+
+
+def _autospec_function(mock):
+    """``autospec=True`` over a FUNCTION: what CPython's create_autospec
+    answers for one -- a real function, so it binds ``self`` exactly as the
+    attribute it replaces did (``patch.object(cls, "__eq__", autospec=True,
+    wraps=eq)'' in test_xml_etree's equal_wrapper), carrying the mock's
+    assertion API and call record.  The mock does the work; ``wraps`` passes
+    each call through.
+
+    Not reproduced: CPython also checks each call against the original's
+    signature, raising TypeError for a call the real function would refuse.
+    """
+    def autospecced(*args, **kw):
+        try:
+            return mock(*args, **kw)
+        finally:
+            autospecced.called = mock.called
+            autospecced.call_count = mock.call_count
+            autospecced.call_args = mock.call_args
+            autospecced.call_args_list = mock.call_args_list
+
+    for name in _AUTOSPEC_API:
+        setattr(autospecced, name, getattr(mock, name))
+    autospecced.mock = mock
+    autospecced.called = False
+    autospecced.call_count = 0
+    autospecced.call_args = None
+    autospecced.call_args_list = []
+    return autospecced
 
 
 class _Patcher:
@@ -361,8 +616,14 @@ class _Patcher:
                 raise
             self._created = True
         replacement = self._new
+        kwargs = dict(self._kwargs)
+        autospec = kwargs.pop("autospec", None)
         if replacement is DEFAULT:
-            replacement = Mock(name=self._attribute, **self._kwargs)
+            replacement = MagicMock(name=self._attribute, **kwargs)
+            if autospec:
+                spec = self._old if autospec is True else autospec
+                if callable(spec) and not isinstance(spec, type):
+                    replacement = _autospec_function(replacement)
         elif self._kwargs:
             raise TypeError(
                 "Cannot use 'new' and configuration keywords together")
@@ -491,6 +752,91 @@ def patch_object(target_obj, attribute, new=DEFAULT, **kwargs):
 patch.object = patch_object
 
 
+def _clear_dict(in_dict):
+    try:
+        in_dict.clear()
+    except AttributeError:
+        for key in list(in_dict):
+            del in_dict[key]
+
+
+class _PatchDict:
+    """patch.dict(in_dict, values=(), clear=False, **kwargs) -- CPython's
+    _patch_dict: set values in a mapping (or a dotted name naming one) for
+    the duration, then put back exactly what was there.  A context manager, a
+    decorator, and start()/stop(), as in CPython.  test_ssl's test_keylog_env
+    patches os.environ with it."""
+
+    def __init__(self, in_dict, values=(), clear=False, **kwargs):
+        self.in_dict = in_dict
+        self.values = dict(values)
+        self.values.update(kwargs)
+        self.clear = clear
+        self._original = None
+
+    def __call__(self, func):
+        if isinstance(func, type):
+            raise TypeError(
+                "patch.dict() as a class decorator is not supported in Grail; "
+                "decorate the individual test methods")
+        patcher = self
+
+        def wrapper(*args, **kwargs):
+            fresh = _PatchDict(patcher.in_dict, patcher.values, patcher.clear)
+            fresh.__enter__()
+            try:
+                return func(*args, **kwargs)
+            finally:
+                fresh.__exit__(None, None, None)
+
+        wrapper.__name__ = getattr(func, "__name__", "wrapper")
+        wrapper.__doc__ = getattr(func, "__doc__", None)
+        wrapper.__wrapped__ = func
+        return wrapper
+
+    def __enter__(self):
+        if isinstance(self.in_dict, str):
+            owner, attribute = _resolve_patch_target(self.in_dict)
+            self.in_dict = getattr(owner, attribute)
+        in_dict = self.in_dict
+        try:
+            original = in_dict.copy()
+        except AttributeError:
+            original = {}
+            for key in in_dict:
+                original[key] = in_dict[key]
+        self._original = original
+        if self.clear:
+            _clear_dict(in_dict)
+        try:
+            in_dict.update(self.values)
+        except AttributeError:
+            for key in self.values:
+                in_dict[key] = self.values[key]
+        return in_dict
+
+    def __exit__(self, *args):
+        if self._original is not None:
+            in_dict = self.in_dict
+            _clear_dict(in_dict)
+            try:
+                in_dict.update(self._original)
+            except AttributeError:
+                for key in self._original:
+                    in_dict[key] = self._original[key]
+            self._original = None
+        return False
+
+    def start(self):
+        return self.__enter__()
+
+    def stop(self):
+        return self.__exit__(None, None, None)
+
+
+patch.dict = _PatchDict
+
+
 def _to_stream(read_data):
     if isinstance(read_data, bytes):
         import io
@@ -562,10 +908,22 @@ def mock_open(mock=None, read_data=''):
 
 
 def _register_as_unittest_mock():
+    """Make this module ``unittest.mock`` as well, both ways the name is
+    reached: the sys.modules entry, and -- when unittest is already imported
+    -- the package's ``mock`` attribute, which is what an import of the
+    submodule would have set.  Without the attribute, ``import unittest;
+    import mock; from unittest import mock`` raised ``'unittest' object has
+    no attribute 'mock'``: CPython's from-import falls back to
+    sys.modules['unittest.mock'] for exactly this case, and Grail's does not.
+    Order-dependent, so it surfaced only in a SUnit shard that had imported
+    unittest first."""
     try:
         import sys
         mods = sys.modules
         mods["unittest.mock"] = mods["mock"]
+        package = mods.get("unittest")
+        if package is not None:
+            setattr(package, "mock", mods["mock"])
     except Exception:
         pass
 

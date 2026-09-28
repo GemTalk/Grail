@@ -25,16 +25,16 @@ Consequences worth knowing before editing:
 * ``TypeVar`` and friends here are ordinary classes, so unlike the C ones
   they are subclassable and their instances have a ``__dict__``.  Nothing
   in ``typing.py`` depends on either being false.
-* PEP 695's ``type X = ...`` statement and the ``class C[T]`` /
-  ``def f[T]()`` syntax are compiler features, not library ones.  Grail's
-  parser does not implement them, so ``TypeAliasType`` here is reachable
-  only by direct construction -- which is exactly how ``typing.TypeAliasType``
-  and ``typing_extensions`` use it.
+* PEP 695's ``class C[T]`` and ``type X[T] = ...`` are compiler features.
+  Grail's parser rewrites each into a call of a hidden function that binds
+  the type params, as CPython's annotation scope does, and that function
+  calls the three ``_grail_*`` helpers at the foot of the TypeAliasType
+  section to build them.  Nothing else in this module knows about the
+  syntax.
 * PEP 649's lazy annotations (``evaluate_bound`` and the other
   ``evaluate_*`` hooks) are likewise a compiler feature.  The versions here
-  answer the already-evaluated value, which is correct for every
-  eagerly-constructed type variable and is all the vendored ``typing.py``
-  asks of them.
+  answer the value (evaluating a PEP 695 thunk first, if there is one),
+  which is all the vendored ``typing.py`` asks of them.
 """
 
 __all__ = [
@@ -61,6 +61,23 @@ def _idfunc(_, x):
     return x
 
 
+def _caller_module(depth):
+    """The ``__name__`` of the module whose code is ``depth`` frames up.
+
+    CPython's C type variables record where they were CREATED as their
+    ``__module__`` -- ``T = TypeVar('T')`` in ``test.test_typing`` answers
+    ``'test.test_typing'`` -- read from the calling frame's globals, and None
+    when those globals have no ``__name__`` (code run by ``exec`` with a bare
+    dict).  A class defined in this file would otherwise report ``'_typing'``
+    for every one of them.
+    """
+    import sys
+    try:
+        return sys._getframe(depth + 1).f_globals.get('__name__')
+    except (AttributeError, ValueError):
+        return None
+
+
 def _typing_module():
     """Answer the ``typing`` module, imported on demand.
 
@@ -72,53 +89,57 @@ def _typing_module():
 
 
 def _make_union(parameters):
-    """Build a union directly, without going through ``|``.
+    """``Union[parameters]`` -- CPython's spelling of a type variable's ``|``.
 
-    This is the base case that stops typing's ``|`` from recursing.  CPython's
-    typing.py defines ``__or__`` on ``_GenericAlias``, ``_SpecialForm`` and
-    each type-variable kind as ``Union[self, other]``, so if ``Union[...]``
-    were in turn built by folding ``|`` the two would call each other forever.
-    They do not merely loop: the failure surfaces as a RecursionError raised
-    inside an unrelated package's import, naming neither typing nor the
-    operator, which is most of what made it expensive to find.
-
-    Arguments have already been through ``typing._type_check`` by the time
-    they reach here, so ``___grailUnionFrom___`` applies no further gate.
+    It used to build the union straight from the Smalltalk side, because
+    ``Union[...]`` here was a Python shim whose subscript folded ``|`` and so
+    recursed back into this.  Union IS the union type now, as in 3.14, and its
+    subscript builds without ``|`` -- converting a string member to a
+    ForwardRef on the way, which ``T | 'x'`` needs (TypeVarTests.test_or).
     """
-    import types
-    return types.UnionType.___grailUnionFrom___(list(parameters))
+    return Union[tuple(parameters)]
 
 
-def _union_getitem(parameters):
-    """``Union[X, Y]``.
-
-    Answers the same kind of object ``X | Y`` does -- Grail's
-    ``PyUnionType`` -- so the two spellings compare equal instead of being
-    two representations of one idea.  It gets there through
-    ``_make_union`` and NOT by folding ``|``: see that function.
-    """
-    if not isinstance(parameters, tuple):
-        parameters = (parameters,)
-    if len(parameters) == 0:
-        raise TypeError("Cannot take a Union of no types.")
-    typing = _typing_module()
-    parameters = tuple(
-        typing._type_check(p, "Union[arg, ...]: each arg must be a type.")
-        for p in parameters)
-    parameters = tuple(typing._deduplicate(parameters,
-                                           unhashable_fallback=True))
-    return _make_union(parameters)
+def _not_a_base(name):
+    """``__init_subclass__`` for a type CPython implements in C without
+    Py_TPFLAGS_BASETYPE -- ``class V(TypeVar)'' is refused there with
+    ``type 'typing.TypeVar' is not an acceptable base type''.  Grail's
+    stand-ins are ordinary Python classes, so the refusal is spelled out;
+    PEP 487 runs it on the parent as the subclass is created."""
+    def __init_subclass__(cls, *args, **kwargs):
+        raise TypeError(f"type '{name}' is not an acceptable base type")
+    return classmethod(__init_subclass__)
 
 
-class _NoDefaultType:
+def _cannot_subclass_instance(obj):
+    """``class W(T)'' for a type variable is CPython's ``Cannot subclass an
+    instance of TypeVar'', raised from the variable's ``__mro_entries__''."""
+    return f"Cannot subclass an instance of {type(obj).__name__}"
+
+
+class _ImmutableType(type):
+    """A C-level type's immutability (Py_TPFLAGS_IMMUTABLETYPE): setting an
+    attribute on the TYPE is a TypeError, as it is on NoneType."""
+
+    def __setattr__(cls, name, value):
+        raise TypeError(
+            f"cannot set {name!r} attribute of immutable type {cls.__name__!r}")
+
+
+_no_default_instance = []
+
+
+class _NoDefaultType(metaclass=_ImmutableType):
     """The type of the ``NoDefault`` sentinel."""
 
-    _instance = None
+    __slots__ = ()
+    __init_subclass__ = _not_a_base('NoDefaultType')
 
+    # The singleton lives outside the class: the type refuses attribute stores.
     def __new__(cls):
-        if cls._instance is None:
-            cls._instance = object.__new__(cls)
-        return cls._instance
+        if not _no_default_instance:
+            _no_default_instance.append(object.__new__(cls))
+        return _no_default_instance[0]
 
     def __repr__(self):
         return 'typing.NoDefault'
@@ -141,6 +162,25 @@ class _Common:
     def has_default(self):
         return self.__default__ is not NoDefault
 
+    def __getattr__(self, name):
+        """Evaluate a PEP 695 bound, constraint tuple or default on first read.
+
+        ``class C[T: Undefined]`` is legal: CPython evaluates the bound lazily,
+        in the scope the class was written in, only when ``T.__bound__`` is
+        asked for.  _grail_type_param stores the unevaluated form as a thunk
+        under ``_lazy`` and leaves the attribute itself unset, so the first
+        read arrives here, runs the thunk once, and keeps the answer.
+        """
+        lazy = self.__dict__.get('_lazy')
+        if lazy is not None and name in lazy:
+            value = lazy.pop(name)()
+            if name == '__constraints__':
+                value = tuple(value)
+            self.__dict__[name] = value
+            return value
+        raise AttributeError(
+            f"{type(self).__name__!r} object has no attribute {name!r}")
+
     def evaluate_default(self):
         # PEP 649 lazy form.  Grail evaluates defaults eagerly, so the
         # "evaluate" step is already done; answer the value.
@@ -149,8 +189,7 @@ class _Common:
     def __or__(self, right):
         """``T | None``, PEP 604.
 
-        Built with ``_make_union`` rather than as CPython's ``Union[self,
-        right]``, which is a cycle here -- see ``_make_union``.  Defining it at
+        CPython's ``Union[self, right]`` (see ``_make_union``).  Defining it at
         all is what makes a type variable usable on the LEFT of ``|``: Grail
         dispatches ``x | y`` on the left operand's own ``__or__``, and a type
         variable is a plain object with no builtin one.
@@ -174,9 +213,13 @@ class TypeVar(_Common):
     """Type variable.
 
     Constructed either the old way, ``T = TypeVar('T')``, or by the PEP 695
-    ``class C[T]`` syntax, which Grail's parser does not have.  Only the
-    first form can occur here.
+    ``class C[T]`` syntax, through _grail_type_param.
     """
+
+    __init_subclass__ = _not_a_base('typing.TypeVar')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
 
     def __init__(self, name, *constraints, bound=None, covariant=False,
                  contravariant=False, default=NoDefault, infer_variance=False):
@@ -189,15 +232,36 @@ class TypeVar(_Common):
         self.__contravariant__ = bool(contravariant)
         self.__infer_variance__ = bool(infer_variance)
         self.__default__ = default
+        # typevarobject.c type-checks the bound and each constraint through
+        # typing._type_check, which is what refuses ``bound=Optional``.
+        if bound is not None:
+            bound = _typing_module()._type_check(bound, "Bound must be a type.")
         if constraints and bound is not None:
             raise TypeError("Constraints cannot be combined with bound=...")
         if constraints and len(constraints) == 1:
             raise TypeError("A single constraint is not allowed")
-        self.__constraints__ = tuple(constraints)
+        _tc = _typing_module()._type_check
+        self.__constraints__ = tuple(
+            _tc(c, "TypeVar(name, constraint, ...): constraints must be types.")
+            for c in constraints)
         self.__bound__ = bound
+        self.__module__ = _caller_module(1)
 
     def __typing_subst__(self, arg):
         return _typing_module()._typevar_subst(self, arg)
+
+    def __typing_prepare_subst__(self, alias, args):
+        # typevarobject.c's typevar_typing_prepare_subst: a TypeVar with no
+        # argument of its own takes its default, when it has one.
+        params = alias.__parameters__
+        i = params.index(self)
+        if i < len(args):
+            return args
+        if i == len(args) and self.has_default():
+            return (*args, self.__default__)
+        raise TypeError(
+            f"Too few arguments for {alias!r}; actual {len(args)}, "
+            f"expected at least {i + 1}")
 
     def evaluate_bound(self):
         return self.__bound__
@@ -221,6 +285,11 @@ class TypeVar(_Common):
 class ParamSpecArgs:
     """The args for a ParamSpec object -- ``P.args``."""
 
+    __init_subclass__ = _not_a_base('typing.ParamSpecArgs')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
+
     def __init__(self, origin):
         self.__origin__ = origin
 
@@ -238,6 +307,11 @@ class ParamSpecArgs:
 
 class ParamSpecKwargs:
     """The kwargs for a ParamSpec object -- ``P.kwargs``."""
+
+    __init_subclass__ = _not_a_base('typing.ParamSpecKwargs')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
 
     def __init__(self, origin):
         self.__origin__ = origin
@@ -257,6 +331,11 @@ class ParamSpecKwargs:
 class ParamSpec(_Common):
     """Parameter specification variable (PEP 612)."""
 
+    __init_subclass__ = _not_a_base('typing.ParamSpec')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
+
     def __init__(self, name, *, bound=None, covariant=False,
                  contravariant=False, default=NoDefault, infer_variance=False):
         self.__name__ = name
@@ -264,7 +343,10 @@ class ParamSpec(_Common):
         self.__contravariant__ = bool(contravariant)
         self.__infer_variance__ = bool(infer_variance)
         self.__default__ = default
+        if bound is not None:
+            bound = _typing_module()._type_check(bound, "Bound must be a type.")
         self.__bound__ = bound
+        self.__module__ = _caller_module(1)
 
     @property
     def args(self):
@@ -298,9 +380,15 @@ class ParamSpec(_Common):
 class TypeVarTuple(_Common):
     """Type variable tuple (PEP 646)."""
 
+    __init_subclass__ = _not_a_base('typing.TypeVarTuple')
+
+    def __mro_entries__(self, bases):
+        raise TypeError(_cannot_subclass_instance(self))
+
     def __init__(self, name, *, default=NoDefault):
         self.__name__ = name
         self.__default__ = default
+        self.__module__ = _caller_module(1)
 
     def __iter__(self):
         yield _typing_module().Unpack[self]
@@ -316,18 +404,49 @@ class TypeVarTuple(_Common):
 
 
 class TypeAliasType:
-    """Type alias (PEP 695), as produced by ``type X = int``.
+    """Type alias (PEP 695).
 
-    Grail's parser has no ``type`` statement, so instances are only ever
-    built by an explicit call -- which is what ``typing_extensions`` does.
+    Built either by an explicit call -- which is what ``typing_extensions``
+    does -- or by the ``type X[T] = ...`` statement, which the parser rewrites
+    into a call of ``_grail_type_alias`` (see PythonParser >>
+    ___rewriteTypeParamStatement___).  The statement's value is LAZY: it is
+    evaluated on the first read of ``__value__``, which is what lets an alias
+    name something defined later, or itself.  An explicit call passes the
+    value itself, so there is nothing left to evaluate.
     """
 
     def __init__(self, name, value, *, type_params=()):
+        if not isinstance(name, str):
+            raise TypeError("TypeAliasType.__new__() argument 'name' must be "
+                            f"str, not {type(name).__name__}")
+        if not isinstance(type_params, tuple):
+            raise TypeError("type_params must be a tuple")
+        for p in type_params:
+            if not isinstance(p, (TypeVar, ParamSpec, TypeVarTuple)):
+                raise TypeError(f"Expected a type param, got {p!r}")
         self.__name__ = name
         self.__value__ = value
-        self.__type_params__ = tuple(type_params)
-        self.__parameters__ = tuple(type_params)
-        self.__module__ = None
+        self.__type_params__ = type_params
+        self.__module__ = _caller_module(1)
+
+    def __getattr__(self, name):
+        # The lazy value of a ``type`` statement: see _grail_type_alias.
+        if name == '__value__':
+            thunk = self.__dict__.pop('_value_thunk', None)
+            if thunk is not None:
+                value = thunk()
+                self.__dict__['__value__'] = value
+                return value
+        raise AttributeError(
+            f"'typing.TypeAliasType' object has no attribute {name!r}")
+
+    @property
+    def __parameters__(self):
+        # The type params with each TypeVarTuple unpacked, as CPython's
+        # typealias_parameters builds it -- ``type A[*Ts] = ...`` has
+        # __parameters__ ``(*Ts,)``, not ``(Ts,)``.
+        return tuple(_typing_module().Unpack[p] if isinstance(p, TypeVarTuple)
+                     else p for p in self.__type_params__)
 
     def evaluate_value(self):
         return self.__value__
@@ -335,16 +454,90 @@ class TypeAliasType:
     def __repr__(self):
         return self.__name__
 
+    def __reduce__(self):
+        return self.__name__
+
     def __getitem__(self, args):
-        return _typing_module()._GenericAlias(self, args
-                                              if isinstance(args, tuple)
-                                              else (args,))
+        if not self.__type_params__:
+            raise TypeError("Only generic type aliases are subscriptable")
+        import types
+        return types.GenericAlias(self, args if isinstance(args, tuple)
+                                  else (args,))
+
+    def __init_subclass__(cls, *args, **kwargs):
+        raise TypeError(
+            "type 'typing.TypeAliasType' is not an acceptable base type")
 
     def __or__(self, right):
         return _make_union((self, right))
 
     def __ror__(self, left):
         return _make_union((left, self))
+
+
+def _grail_type_alias(name, value_thunk, type_params):
+    """``type name[type_params] = value``, with the value left unevaluated.
+
+    The parser rewrites the statement into a call of this function from a
+    hidden ``___generic_parameters_of_<name>___`` function that binds the type
+    params (see PythonParser >> ___rewriteTypeParamStatement___).  value_thunk
+    is a lambda over that function's scope, so the value sees every type
+    param and is not evaluated until ``__value__`` is read.
+    """
+    alias = TypeAliasType.__new__(TypeAliasType)
+    alias.__name__ = name
+    alias.__type_params__ = tuple(type_params)
+    alias.__module__ = _caller_module(1)
+    alias._value_thunk = value_thunk
+    return alias
+
+
+def _grail_type_param(kind, name, bound=None, constraints=None, default=None):
+    """One PEP 695 type parameter: ``T``, ``T: bound``, ``T: (A, B)``,
+    ``*Ts``, ``**P``, each optionally ``= default``.
+
+    kind is 0 for a TypeVar, 1 for a TypeVarTuple, 2 for a ParamSpec.  bound,
+    constraints and default are zero-argument lambdas, or None when absent:
+    CPython evaluates all three lazily, in the scope that declared the
+    parameter (see _Common.__getattr__).  A parameter made this way infers its
+    variance, as CPython's does.
+    """
+    # CPython's typevarobject.c makes these with ``__module__`` 'typing', not
+    # the declaring module: the intrinsic runs with no Python caller of its own.
+    module = 'typing'
+    if kind == 1:
+        param = TypeVarTuple(name)
+    elif kind == 2:
+        param = ParamSpec(name, infer_variance=True)
+    else:
+        param = TypeVar(name, infer_variance=True)
+    lazy = {}
+    if bound is not None:
+        lazy['__bound__'] = bound
+        del param.__bound__
+    if constraints is not None:
+        lazy['__constraints__'] = constraints
+        del param.__constraints__
+    if default is not None:
+        lazy['__default__'] = default
+        del param.__default__
+    if lazy:
+        param._lazy = lazy
+    param.__module__ = module
+    return param
+
+
+def _grail_generic_base(type_params):
+    """The ``Generic[...]`` base CPython's compiler appends to ``class C[T]``.
+
+    ``_Py_subscript_generic`` builds it as ``typing._GenericAlias(Generic,
+    params)`` directly -- not through ``Generic.__class_getitem__``, which
+    would refuse a bare TypeVarTuple -- after unpacking each TypeVarTuple.
+    """
+    typing = _typing_module()
+    params = tuple(typing.Unpack[p] if isinstance(p, TypeVarTuple) else p
+                   for p in type_params)
+    return typing._GenericAlias(Generic, params)
 
 
 
@@ -355,20 +548,16 @@ class Generic:
     live in ``typing``, and this only routes to them.  See the module
     docstring.
 
-    NO ``__slots__``, where CPython's C type has ``()``.  Grail enforces a
-    slots declaration on every subclass; CPython only does when EVERY base is
-    slotted.  So an empty tuple here silently took ``__dict__`` away from
-    classes that plainly need one:
-
-        class RecentlyUsedContainer(Generic[K, V], MutableMapping[K, V]):
-            def __init__(self):
-                self._d = {}
-
-    ran its ``__init__``, and then ``self._d`` did not exist.  urllib3 is
-    written that way, and so is a large fraction of every annotated container
-    class.
+    ``__slots__ = ()``, as CPython's C type has, so a slotted subclass is
+    strict: ``class C(Generic[T]): __slots__ = ('potato',)`` refuses
+    ``c.tomato``.  It once went without, because Grail's slot strictness then
+    stripped ``__dict__`` from a subclass that declared no slots of its own
+    (urllib3's ``RecentlyUsedContainer(Generic[K, V], MutableMapping[K, V])``,
+    which sets ``self._d`` in ``__init__``); that is no longer so -- a class
+    without ``__slots__`` keeps its ``__dict__`` whatever its bases declare.
     """
 
+    __slots__ = ()
     _is_protocol = False
 
     def __class_getitem__(cls, args):
@@ -378,59 +567,20 @@ class Generic:
         return _typing_module()._generic_init_subclass(cls, *args, **kwargs)
 
 
-class _UnionMeta(type):
-    """Makes ``Union`` answer for the objects ``int | str`` actually creates.
-
-    In 3.14 ``typing.Union`` IS ``types.UnionType``: the C code made the
-    special form and the ``|`` operator's result the same class, so
-    ``typing.py`` now asks ``isinstance(t, Union)`` in a dozen places and
-    expects ``int | str`` to say yes.  Grail builds ``int | str`` as its own
-    ``PyUnionType``, which is not this class and cannot be made to be, so
-    the identity is faked at the only two places typing looks: instance and
-    subclass checks.
-    """
-
-    def _union_class(cls):
-        u = cls.__dict__.get('_grail_union_class')
-        if u is None:
-            u = type(int | str)
-            cls._grail_union_class = u
-        return u
-
-    def __instancecheck__(cls, obj):
-        return isinstance(obj, cls._union_class())
-
-    def __subclasscheck__(cls, other):
-        return other is cls or issubclass(other, cls._union_class())
-
-    def __repr__(cls):
-        return 'typing.Union'
+# ``typing.Union`` IS the union type in 3.14 -- ``int | str`` and
+# ``Union[int, str]`` build one kind of object, and ``isinstance(t, Union)`` is
+# how typing.py asks whether it has one.  Grail's union type is the Smalltalk
+# PyUnionType, which reports itself as ``typing.Union``; this used to be a
+# Python class faking that identity with a metaclass's instance and subclass
+# checks, and pickling a union found it out ("typing.Union is a different
+# object").
+Union = type(int | str)
 
 
-class Union(metaclass=_UnionMeta):
-    """``Union[X, Y]``, and the type of ``X | Y``.
-
-    Unified with ``types.UnionType`` in 3.14.  Here it is a shim -- see
-    ``_UnionMeta`` for why the unification cannot be literal under Grail.
-    No ``__slots__``, for the reason given on ``Generic``.
-    """
-
-    def __class_getitem__(cls, parameters):
-        """``Union[X, Y]``.
-
-        Spelled as ``__class_getitem__`` rather than as ``__getitem__`` on the
-        metaclass, which is where CPython's equivalent lives.  Grail does not
-        consult a metaclass ``__getitem__`` for ``Cls[...]`` and -- the part
-        that cost the time -- does not raise either: it answers the CLASS.
-        ``Union[int, str]`` came back as ``Union`` itself and flowed onwards as
-        a well-formed value meaning nothing, so ``Optional[int]`` reprd as
-        ``typing.Union``.  See docs/Issues.md.
-
-        The work is a module-level function and not a method on ``_UnionMeta``
-        for a second reason from the same family: Grail records a ``metaclass=``
-        only when the metaclass takes part in class CREATION (it must define
-        ``__new__`` or ``__init__`` -- see ___grailMetaclassConstructs___:), and
-        ``_UnionMeta`` defines neither.  So ``type(Union)`` is plain ``type``
-        here, and reaching the metaclass through it fails.
-        """
-        return _union_getitem(parameters)
+# The C types report themselves as typing's -- ``typing.Generic[~T]'',
+# ``<class 'typing.TypeVar'>'' -- because that is where they are published.
+# Classes defined in this file would otherwise print as ``_typing.Generic``.
+for _cls in (TypeVar, ParamSpec, TypeVarTuple, ParamSpecArgs, ParamSpecKwargs,
+             TypeAliasType, Generic, _NoDefaultType):
+    _cls.__module__ = 'typing'
+del _cls

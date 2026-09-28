@@ -65,9 +65,18 @@ set compile_env: 0
 category: 'Grail-instance creation'
 classmethod: tuple
 new
-	"Return an empty, frozen tuple."
+	"Return an empty, frozen tuple.
 
-	^ self ___frozenInstance: (self new: 0)
+	For tuple itself, THE empty tuple: CPython's is a singleton, and code
+	compares with ``is'' -- ``TypeVar(name='T', default=()).__default__ is ()''
+	(test_typing TypeVarTests.test_constructor).  One per session, and safe to
+	share because an exact tuple is invariant: anything that tried to grow it
+	in place raises rather than changing every ``()'' at once.  A subclass
+	instance stays fresh and mutable, as ___frozenInstance: explains."
+
+	self == tuple ifFalse: [^ self ___frozenInstance: (self new: 0)].
+	^ SessionTemps current at: #'GrailEmptyTuple'
+		ifAbsentPut: [self ___frozenInstance: (self new: 0)]
 %
 
 category: 'Grail-instance creation'
@@ -134,6 +143,7 @@ classmethod: tuple
 withAll: aCollection
 
 	| inst i |
+	(self == tuple and: [aCollection size = 0]) ifTrue: [^ self new].
 	inst := self new: aCollection size.
 	i := 1.
 	aCollection do: [:each |
@@ -525,3 +535,36 @@ __getitem__: item
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Introspection'
+method: tuple
+__dict__
+	"``obj.__dict__'' for a tuple SUBCLASS instance -- the live dynamic-instVar
+	view list and bytes publish.  Only a class PYTHON defined gets one: an EXACT
+	tuple, and Grail's own Smalltalk subclasses of it (struct_time is a tuple),
+	have no instance dict, as in CPython.  test_pickle's round trips compare
+	subclass instances' __dict__."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) @env0:isNil ifTrue: [
+		^ AttributeError ___signal___:
+			'''tuple'' object has no attribute ''__dict__'''].
+	^ PyInstanceDict @env0:on: self
+%
+
+set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like list's and bytes' copies) it must be an
+! env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: tuple
+___pythonValueAttrs___
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

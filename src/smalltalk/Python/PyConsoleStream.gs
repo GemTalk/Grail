@@ -18,7 +18,9 @@ object subclass: 'PyConsoleStream'
 expectvalue /Class
 doit
 PyConsoleStream comment:
-'The writable stream object ``sys.stdout'' and ``sys.stderr'' answer.
+'The stream objects ``sys.stdout'', ``sys.stderr'' and ``sys.stdin'' answer --
+the first two writable, the third readable (see ___isInput___), all three
+reading as io.TextIOWrapper to Python code.
 
 WHY IT EXISTS.  Both were the Python None singleton.  That is invisible for as
 long as everything writes with ``print'' -- Grail''s print treats a None
@@ -127,6 +129,7 @@ write: data
 	raises rather than stringifying, and a bare send would have been an
 	uncatchable MessageNotUnderstood."
 
+	self ___isInput___ ifTrue: [^ UnsupportedOperation ___signal___: 'not writable'].
 	(data @env0:isKindOf: CharacterCollection) ifFalse: [
 		^ TypeError ___signal___: 'write() argument must be str, not '
 			@env0:, (bytes ___pyTypeNameOf___: data)].
@@ -180,13 +183,13 @@ closed
 category: 'Grail-State'
 method: PyConsoleStream
 writable
-	^ true
+	^ self ___isInput___ not
 %
 
 category: 'Grail-State'
 method: PyConsoleStream
 readable
-	^ false
+	^ self ___isInput___
 %
 
 category: 'Grail-State'
@@ -229,9 +232,9 @@ name
 category: 'Grail-State'
 method: PyConsoleStream
 mode
-	"``w'' -- what CPython reports for sys.stdout and sys.stderr."
+	"``w'' for sys.stdout and sys.stderr, ``r'' for sys.stdin -- CPython's."
 
-	^ 'w'
+	^ self ___isInput___ ifTrue: ['r'] ifFalse: ['w']
 %
 
 category: 'Grail-State'
@@ -287,7 +290,111 @@ __repr__
 
 	^ '<_io.TextIOWrapper name=''' @env0:,
 		(self @env0:dynamicInstVarAt: #'_name') @env0:asString @env0:,
-		''' mode=''w'' encoding=''utf-8''>'
+		''' mode=''' @env0:, self mode @env0:, ''' encoding=''utf-8''>'
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+readline
+	"One line, WITH its newline, or '' at end of file -- CPython's contract,
+	which ``for line in sys.stdin'' and every read below are built on.  The line
+	comes from the console: the session's stdin provider, else the gem's
+	terminal (builtins >> ___consoleReadLine___, the source input() reads)."
+
+	| pending line |
+	self ___requireReadable___.
+	pending := self @env0:dynamicInstVarAt: #'_pending'.
+	(pending @env0:notNil and: [pending @env0:notEmpty]) ifTrue: [
+		self @env0:dynamicInstVarAt: #'_pending' put: nil.
+		^ pending].
+	line := (builtins @env0:___instance___) ___consoleReadLine___.
+	line @env0:isNil ifTrue: [^ ''].
+	line := line @env0:asString.
+	(line @env0:notEmpty and: [(line @env0:last) @env0:== (Character @env0:lf)])
+		ifFalse: [line := line @env0:, (String @env0:with: Character @env0:lf)].
+	^ line
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+readline: size
+	"At most ``size'' characters of the next line; the rest stays for the next
+	read.  A negative or None size reads the whole line."
+
+	| line |
+	line := self readline.
+	(size == None or: [size @env0:< 0 or: [line @env0:size @env0:<= size]]) ifTrue: [^ line].
+	self @env0:dynamicInstVarAt: #'_pending'
+		put: (line @env0:copyFrom: size @env0:+ 1 to: line @env0:size).
+	^ line @env0:copyFrom: 1 to: size
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+read
+	"Everything up to end of file."
+
+	| out line |
+	out := WriteStream @env0:on: String @env0:new.
+	[(line := self readline) @env0:isEmpty] @env0:whileFalse: [out @env0:nextPutAll: line].
+	^ out @env0:contents
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+read: size
+	"At most ``size'' characters; a negative or None size reads to end of file."
+
+	| out line |
+	(size == None or: [size @env0:< 0]) ifTrue: [^ self read].
+	out := WriteStream @env0:on: String @env0:new.
+	[out @env0:size @env0:< size and: [(line := self readline: size @env0:- out @env0:size) @env0:notEmpty]]
+		@env0:whileTrue: [out @env0:nextPutAll: line].
+	^ out @env0:contents
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+readlines
+	| lines line |
+	lines := OrderedCollection @env0:new.
+	[(line := self readline) @env0:isEmpty] @env0:whileFalse: [lines @env0:add: line].
+	^ lines
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+__iter__
+	self ___requireReadable___.
+	^ self
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+__next__
+	| line |
+	line := self readline.
+	line @env0:isEmpty ifTrue: [^ StopIteration ___signal___: None].
+	^ line
+%
+
+category: 'Grail-Reading'
+method: PyConsoleStream
+___requireReadable___
+	"sys.stdout.read() is CPython's io.UnsupportedOperation, not a read."
+
+	self ___isInput___ ifFalse: [^ UnsupportedOperation ___signal___: 'not readable'].
+	^ self
+%
+
+category: 'Grail-State'
+method: PyConsoleStream
+___isInput___
+	"The console's INPUT stream -- sys.stdin -- as opposed to its two output
+	streams.  One class for all three, told apart by name, as stdout and stderr
+	already were."
+
+	^ (self @env0:dynamicInstVarAt: #'_name') @env0:= '<stdin>'
 %
 
 category: 'Grail-String Representation'

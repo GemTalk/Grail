@@ -53,8 +53,8 @@ OsUtimeTestCase category: 'Grail-SUnit'
 !     a single quote and a semicolon, and checks both that the times landed and
 !     that the command the semicolon introduces did not run.
 !
-! WHOLE SECONDS.  os.stat here answers an int st_mtime where CPython answers a
-! float (GsFileStat exposes whole seconds only), and os.utime floors to match,
+! WHOLE SECONDS.  os.stat here answers a float st_mtime that is always a whole
+! number (GsFileStat exposes whole seconds only), and os.utime floors to match,
 ! so a round trip agrees with CPython on math.floor(st_mtime) and not on
 ! st_mtime itself.  The fixture compares the floored value, which is true under
 ! CPython too.
@@ -76,16 +76,13 @@ set compile_env: 0
 category: 'Grail-Setup'
 method: OsUtimeTestCase
 setUp
-	"Reload tests/python/os_utime.py fresh each test.  The module body builds
-	its tree, records every answer, and tears the tree down again, so the tests
-	read recorded results rather than sharing filesystem state."
+	"tests/python/os_utime.py, imported once per session.  The module body
+	builds its tree, records every answer, and tears the tree down again, so
+	the tests read recorded results (r, EXPECTED and g) rather than sharing
+	filesystem state -- see PythonTestCase >> ___recordedFixture___:name:."
 
-	| mods |
-	mods := importlib @env1:modules.
-	mods removeKey: #'os_utime' ifAbsent: [].
-	testModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/os_utime.py')
-		name: 'os_utime'.
+	testModule := self ___recordedFixture___: '/tests/python/os_utime.py'
+		name: 'os_utime'
 %
 
 category: 'Grail-Private'

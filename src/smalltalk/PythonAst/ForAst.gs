@@ -125,6 +125,9 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: itemTemp;
 			nextPutAll: ' := PythonCoroutine @env0:___unpackNormalize___: ';
 			nextPutAll: itemTemp; nextPutAll: '.'; lf.
+		"The VALUE COUNT, checked as an assignment checks it -- see
+		___unpackCheckArgs___."
+		self ___emitUnpackCheckOn: aStream item: itemTemp.
 		"Unpack each element, recursing into nested tuples like
 		``for target, (action, param) in items``."
 		self
@@ -588,6 +591,15 @@ ___emitIRStatementOn___: aBuilder
 		with: { aBuilder globalNamed: #PythonBreak.
 			aBuilder handlerBlockNamed: #'___ex___' }
 		env: 0).
+	"Release the iterator once the loop is over, drained or broken out of.
+	 CPython pops it off the value stack at loop exit; a METHOD temp would
+	 otherwise keep it -- and the generator behind it -- alive until the
+	 function returns, so ``for x in agen(): break'' followed by
+	 gc.collect() in the same function could not reclaim the generator
+	 (test_async_gen_asyncio_shutdown_exception_02 expects its finalizer to
+	 have run).  The text path's iterator is a BLOCK temp, which the loop's
+	 own block takes with it."
+	aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit).
 	^ self
 %
 
@@ -771,6 +783,63 @@ ___irTargetNames___: localSet
 	^ names
 %
 
+category: 'Grail-Code Generation'
+method: ForAst
+___unpackCheckArgs___
+	"{ nBefore. hasStar. nAfter } for this loop's tuple target -- the arguments
+	of ``___unpackCheck___:star:after:'', computed as an assignment computes
+	them (AbstractNode>>emitUnpackCoercionAndStoresOn:elts:holder:).
+
+	A LOOP TARGET IS AN ASSIGNMENT TARGET, and CPython runs the same
+	UNPACK_SEQUENCE for both.  Grail's loop used to index the elements with no
+	count check, so a short item ran off the end with IndexError -- ``for k, v
+	in [('a',)]'' where CPython says ``not enough values to unpack (expected 2,
+	got 1)'' -- and a LONG one was silently truncated where CPython raises
+	``too many values to unpack''.  pickle's _batch_setitems is a real caller:
+	test_pickle's test_bad_object_dict_items asserts the ValueError.  Both
+	codegen paths emit the check, so they still agree with each other."
+
+	| elts starIdx hasStar |
+	elts := target elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	^ Array
+		with: (hasStar ifTrue: [starIdx - 1] ifFalse: [elts size])
+		with: hasStar
+		with: (hasStar ifTrue: [elts size - starIdx] ifFalse: [0])
+%
+
+category: 'Grail-Code Generation'
+method: ForAst
+___emitUnpackCheckOn: aStream item: itemTemp
+	"``item := item ___unpackCheck___: n star: b after: m.'' -- assigned back,
+	because with a star the check answers the materialised LIST the elements
+	are then read from.  See ___unpackCheckArgs___."
+
+	| args |
+	args := self ___unpackCheckArgs___.
+	aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: itemTemp;
+		nextPutAll: ' ___unpackCheck___: '; nextPutAll: (args at: 1) printString;
+		nextPutAll: ' star: '; nextPutAll: ((args at: 2) ifTrue: ['true'] ifFalse: ['false']);
+		nextPutAll: ' after: '; nextPutAll: (args at: 3) printString;
+		nextPutAll: '.'; lf
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRUnpackCheck___: itemLeaf on: aBuilder
+	"The IR twin of ___emitUnpackCheckOn:item:, send for send."
+
+	| args |
+	args := self ___unpackCheckArgs___.
+	aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
+		send: #'___unpackCheck___:star:after:'
+		to: (aBuilder var: itemLeaf)
+		with: { aBuilder obj: (args at: 1).
+			(args at: 2) ifTrue: [aBuilder trueLit] ifFalse: [aBuilder falseLit].
+			aBuilder obj: (args at: 3) }))
+%
+
 category: 'Grail-IR Codegen'
 method: ForAst
 ___emitIRTargetBindFrom___: stepNode on: aBuilder
@@ -827,6 +896,8 @@ ___emitIRTargetBindFrom___: stepNode on: aBuilder
 	aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
 		send: #'___unpackNormalize___:' to: (aBuilder globalNamed: #PythonCoroutine)
 		with: { aBuilder var: itemLeaf } env: 0)).
+	"The text's value-count check, send for send -- see ___unpackCheckArgs___."
+	self ___emitIRUnpackCheck___: itemLeaf on: aBuilder.
 	aBuilder atNode: target.
 	self ___emitIRForUnpack___: target source: [aBuilder var: itemLeaf] on: aBuilder
 %

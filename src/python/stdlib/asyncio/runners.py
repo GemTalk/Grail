@@ -58,11 +58,10 @@ def _cancel_all_tasks(loop):
         _tasks._all_tasks.discard(task)
     # CPython's runners report a cancelled task that died of something OTHER
     # than the cancellation -- its cleanup raised -- through the exception
-    # handler with the shutdown-phase label.  (An asyncgen abandoned mid-run
-    # surfaces its close error through loop.shutdown_asyncgens' own message
-    # instead: Grail's collection point is that sweep, not a GC finalizer,
-    # so test_async_gen_asyncio_shutdown_exception_02's phase label is the
-    # one funnel difference -- recorded in docs/Issues.md.)
+    # handler with the shutdown-phase label.  That includes the aclose() task
+    # the finalizer hook scheduled for an async generator abandoned mid-run:
+    # its close error is reported here, not by shutdown_asyncgens
+    # (test_async_gen_asyncio_shutdown_exception_02).
     for task in to_cancel:
         if task.cancelled():
             continue
