@@ -334,8 +334,22 @@ class ForwardRef:
         the private method introspectively, and guessing an object would be
         worse than answering the text.
         """
+        # CPython's two warnings, in its order: the missing type_params
+        # (filed against the caller, which test_typing checks), then the
+        # private-API notice.
+        import typing
+        import warnings
         if type_params is _sentinel:
+            typing._deprecation_warning_for_no_type_params_passed(
+                "typing.ForwardRef._evaluate"
+            )
             type_params = None
+        warnings._deprecated(
+            "ForwardRef._evaluate",
+            "{name} is a private API and is retained for compatibility, but will be removed"
+            " in Python 3.16. Use ForwardRef.evaluate() or typing.evaluate_forward_ref() instead.",
+            remove=(3, 16),
+        )
         try:
             return self.evaluate(globals=globalns, locals=localns,
                                  type_params=type_params)

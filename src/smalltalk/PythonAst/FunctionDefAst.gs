@@ -475,6 +475,17 @@ printSmalltalkOn: aStream
 				nextPutAll: ''' spec: '.
 			self emitSignatureSpecOn: aStream.
 			aStream nextPutAll: '.'].
+		"Clear a slot an earlier statement stored, for a decorated def as well:
+		its chain reads the base through the slot, so the real
+		``@pass_context def sync_do_map'' after two @overload stubs wrapped the
+		previous stub's _overload_dummy instead of its own method (jinja2's
+		|map filter)."
+		self ___rebindsAnEarlierModuleBinding___ ifTrue: [
+			aStream
+				lf;
+				nextPutAll: 'self @env0:removeDynamicInstVar: #''';
+				nextPutAll: name;
+				nextPutAll: '''.'].
 		moduleDecorators := self applicableModuleDecorators.
 		moduleDecorators isEmpty ifTrue: [^self].
 		self printModuleDecoratorsOn: aStream decorators: moduleDecorators.
@@ -1139,6 +1150,44 @@ ___enclosingDefDeclares___: funcAst named: aSymbol
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___rebindsAnEarlierModuleBinding___
+	"Does an EARLIER statement of this module body store the module slot of
+	this top-level def's name?
+
+	    @overload
+	    def f(x: int) -> int: ...
+	    def f(x): return x          # the implementation
+
+	    f = None
+	    def f(): ...
+
+	A top-level def compiles to a method on the module class and emits nothing
+	at module-body time, while a decorator (printModuleDecoratorsOn:decorators:),
+	an assignment or a def nested in an ``if'' / ``try'' stores the module slot
+	-- and the slot out-ranks the method.  So the earlier binding stayed what
+	every later ``f(...)'' called: for @overload the dummy that raises, which
+	is why typing.py had to deviate.  CPython rebinds the name at the def;
+	clearing the slot here is that rebinding, since an absent slot IS the
+	method.
+
+	Only after such a binding.  An unconditional clear for every undecorated
+	def was tried and reverted (docs/Issues.md, ``A top-level def cannot rebind
+	a decorated name''); a def no earlier statement stored over is not reached."
+
+	| siblings sym |
+	parent isNil ifTrue: [^ false].
+	siblings := parent body.
+	siblings isNil ifTrue: [^ false].
+	sym := self ___mangledName___ asSymbol.
+	siblings do: [:stmt |
+		stmt == self ifTrue: [^ false].
+		((stmt isKindOf: AbstractNode) and: [stmt ___storesModuleSlot___: sym])
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 applicableModuleDecorators
 	"Decorators to apply at module-body time for a top-level def: ALL of
 	decorator_list.  Source order preserved (outermost first), so ``@A @B def f''
@@ -1486,6 +1535,39 @@ ___classMethodIsOutermost___
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___innermostDeclarativeWrapper___
+	"The runtime class of the descriptor an OUTER decorator must receive --
+	#PyClassMethod, #PyStaticMethod or #PropertyDescriptor -- when
+	@classmethod / @staticmethod / @property is this def's INNERMOST decorator
+	and every decorator outside it is an ordinary one; nil otherwise.
+
+	``@deco @classmethod def m'' is deco(classmethod(m)): CPython hands deco the
+	classmethod OBJECT, and whatever deco does to it stays on that object.
+	Grail compiles the declarative form itself (the def is re-classed or paired
+	at parse time), so the chain used to hand deco the compiled method's handle
+	instead -- and an attribute store landed on the FUNCTION.  ``@override
+	@classmethod'' then marked the method itself, which test_typing's
+	OverrideDecoratorTests asserts it must not; over @property, where CPython's
+	store fails silently (a property has no __dict__), it marked the getter.
+
+	Only the innermost position: a declarative form in the MIDDLE of a chain
+	(``@a @classmethod @b'') keeps the pre-existing emit, and the outermost
+	@classmethod has its own re-wrap (___classMethodIsOutermost___)."
+
+	| last |
+	decorator_list isNil ifTrue: [^ nil].
+	decorator_list size < 2 ifTrue: [^ nil].
+	last := decorator_list last.
+	(self isClassDeclarativeDecorator: last) ifFalse: [^ nil].
+	1 to: decorator_list size - 1 do: [:i |
+		(self isClassDeclarativeDecorator: (decorator_list at: i)) ifTrue: [^ nil]].
+	last asSymbol == #'classmethod' ifTrue: [^ #'PyClassMethod'].
+	last asSymbol == #'staticmethod' ifTrue: [^ #'PyStaticMethod'].
+	^ #'PropertyDescriptor'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 ___decoratorBaseIsClassMethod___
 	"Is this def a @classmethod?  False here; ClassFunctionDefAst overrides.
 
@@ -1534,6 +1616,36 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 	directly makes re-execution replace the wrapper instead of stacking on it."
 
 	i > decoList size ifTrue: [
+		self ___innermostDeclarativeWrapper___ ifNotNil: [:wrapper |
+			"The outer decorators receive the descriptor itself; see
+			___innermostDeclarativeWrapper___.  It wraps the same handle the
+			outermost-classmethod path uses: an UnboundMethod rooted at the
+			metaclass, which PyClassMethod >> __get__ binds to ``cls''."
+			aStream
+				nextPutAll: '(';
+				nextPutAll: wrapper;
+				nextPutAll: ' @env1:__new__: '.
+			wrapper == #'PyClassMethod'
+				ifTrue: [
+					aStream
+						nextPutAll: '(UnboundMethod definingClass: ';
+						nextPutAll: aClassName;
+						nextPutAll: ' @env0:class selector: #''']
+				ifFalse: [wrapper == #'PyStaticMethod'
+					ifTrue: [
+						aStream
+							nextPutAll: '(BoundMethod receiver: ';
+							nextPutAll: aClassName;
+							nextPutAll: ' selector: #''']
+					ifFalse: [
+						aStream
+							nextPutAll: '(UnboundMethod definingClass: ';
+							nextPutAll: aClassName;
+							nextPutAll: ' selector: #''']].
+			aStream
+				nextPutAll: baseName;
+				nextPutAll: '''))'.
+			^ self].
 		"A @classmethod / @staticmethod def is compiled CLASS-side, so the
 		UnboundMethod form -- which resolves instance-side -- names nothing and
 		the decorator dies on the first call.  Hand those a BoundMethod on the

@@ -285,12 +285,9 @@ def the_soft_deprecated_names_resolve():
 def get_overloads_reads_back_what_overload_registered():
     """``@overload`` registers the stub; ``get_overloads`` reads it back.
 
-    Grail's ``overload`` is a DEVIATION -- it answers the function unchanged
-    where CPython answers ``_overload_dummy`` (see the GRAIL DEVIATION 2 block
-    in src/python/stdlib/typing.py) -- so the return value cannot be checked
-    here without disagreeing with CPython.  The REGISTRY can, and it is the
-    half that broke: the first spelling of that deviation aliased the name it
-    was replacing, which under Grail resolves to the replacement, so calling
+    typing.py's ``overload`` is CPython's own now; it used to be a Grail
+    deviation, and the first spelling of that deviation aliased the name it
+    was replacing, which under Grail resolved to the replacement -- so calling
     ``typing.overload`` recursed until the stack was gone and nothing was ever
     registered.  test.test_warnings noticed; this notices sooner.
     """
