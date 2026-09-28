@@ -42,7 +42,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_list | OK | 68 | 0 | 0 | 4 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
-| test.test_set | OK | 630 | 0 | 0 | 21 |  |
+| test.test_set | TIMEOUT | 0 | 0 | 0 | 0 | killed after 1800s |
 | test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 40 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
@@ -100,31 +100,31 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_string_literals | OK | 20 | 0 | 0 | 0 |  |
 | test.test_genericclass | OK | 22 | 0 | 0 | 1 |  |
 | test.test_annotationlib | OK | 117 | 0 | 0 | 8 |  |
-| test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
+| test.test_bufio | OK | 4 | 0 | 0 | 0 |  |
 | test.test_codecs | OK | 287 | 0 | 0 | 22 |  |
 | test.test_contextlib_async | OK | 58 | 0 | 0 | 0 |  |
 | test.test_asyncgen | OK | 85 | 0 | 0 | 0 |  |
-| test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
+| test.test_coroutines | OK | 99 | 0 | 0 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
-| test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
-| test.test_linecache | ERROR | 29 | 0 | 11 | 1 |  |
-| test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '__main__' |
-| test.test_reprlib | ERROR | 33 | 6 | 2 | 2 |  |
-| test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
-| test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
-| test.test_warnings | ERROR | 187 | 5 | 4 | 29 |  |
-| test.test___all__ | FAIL | 1 | 1 | 0 | 0 |  |
-| test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | 2 |
+| test.test_gettext | OK | 73 | 0 | 0 | 1 |  |
+| test.test_linecache | OK | 29 | 0 | 0 | 1 |  |
+| test.test_pickle | ERROR | 468 | 3 | 4 | 47 |  |
+| test.test_reprlib | OK | 33 | 0 | 0 | 2 |  |
+| test.test_struct | OK | 43 | 0 | 0 | 7 |  |
+| test.test_typing | ERROR | 701 | 46 | 18 | 2 |  |
+| test.test_warnings | OK | 187 | 0 | 0 | 29 |  |
+| test.test___all__ | OK | 1 | 0 | 0 | 0 |  |
+| test.test_codecencodings_kr | OK | 54 | 0 | 0 | 0 |  |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
 | test.test_ipaddress | OK | 211 | 0 | 0 | 0 |  |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
-| test.test_pulldom | ERROR | 11 | 0 | 1 | 0 |  |
-| test.test_sax | ERROR | 186 | 12 | 15 | 1 |  |
+| test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
+| test.test_sax | ERROR | 186 | 12 | 6 | 1 |  |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
-| test.test_xml_etree | ERROR | 226 | 14 | 34 | 3 |  |
+| test.test_xml_etree | ERROR | 226 | 11 | 33 | 3 |  |
 | test.test_zipapp | ERROR | 35 | 0 | 9 | 0 |  |
 | test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
