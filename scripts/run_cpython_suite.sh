@@ -76,11 +76,13 @@ PER_MODULE_TIMEOUT="${GRAIL_TEST_TIMEOUT:-600}"
 run_capped() { # $1=limit, then the command
     local limit="$1"; shift
     "$@" &
-    local pid=$! waited=0
+    # Wall-clock from bash's SECONDS, not a count of 2s naps: on a loaded host
+    # one `sleep 2` iteration was measured at ~8.6s, so counting iterations
+    # stretched the 600s cap to 2580s while a hung gem held the stone.
+    local pid=$! started=$SECONDS
     while kill -0 "$pid" 2>/dev/null; do
         sleep 2
-        waited=$((waited + 2))
-        if [ "$waited" -ge "$limit" ]; then
+        if [ $((SECONDS - started)) -ge "$limit" ]; then
             kill -9 "$pid" 2>/dev/null
             wait "$pid" 2>/dev/null
             return 124
