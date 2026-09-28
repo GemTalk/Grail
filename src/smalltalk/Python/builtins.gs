@@ -2270,12 +2270,16 @@ method: builtins
 chr: anInteger
 	"Python builtin chr(i) — fixed-arity fast path.
 
-	DELIBERATE DEVIATION: CPython's chr() accepts lone surrogates
-	(0xD800-0xDFFF), but a GemStone Unicode string cannot hold one —
-	downstream string construction dies with the UNCATCHABLE 'receiver
-	contains a codePoint not valid for Unicode' error (it killed the
-	whole test_re module run via test_bigcharset).  Raise a catchable
-	ValueError at the source instead."
+	A LONE SURROGATE (0xD800-0xDFFF) answers a PyStrSurrogate, as CPython
+	answers a one-character str.  A GemStone Unicode string cannot hold one
+	(building it dies with the UNCATCHABLE 'receiver contains a codePoint not
+	valid for Unicode', which once killed the whole test_re run via
+	test_bigcharset), so chr() used to raise a catchable ValueError instead.
+	That was the right call before PR #722 made PyStrSurrogate a working str,
+	and the wrong one after: literals, the surrogatepass/surrogateescape
+	decoders and _ucd._char all already build surrogate strs, and
+	test_urlparse's test_urlsplit_normalization runs chr() over every code
+	point up to sys.maxunicode."
 
 	| cp |
 	"CPython coerces with __index__, so chr(65.0) is a TypeError, not a
@@ -2293,7 +2297,7 @@ chr: anInteger
 		test_sre_character_literals / _class_literals: \U00110000)."
 		ValueError ___signal___: 'chr() arg not in range(0x110000)'].
 	(cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF]) ifTrue: [
-		ValueError ___signal___: 'chr() arg is a lone surrogate, which Grail strings cannot represent'].
+		^ PyStrSurrogate @env0:___fromCodePoints___: { cp }].
 	^ (Character @env0:codePoint: cp) @env0:asString
 %
 

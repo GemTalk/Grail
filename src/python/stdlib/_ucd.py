@@ -2,9 +2,11 @@
 #
 # One ``Database`` per UCD version, built from a data module that
 # scripts/generate_ucd.py writes from the tables of the CPython that runs it.
-# Only Unicode 3.2.0 is generated today, as ``unicodedata.ucd_3_2_0``: it is
-# what ``stringprep`` and ``encodings.idna`` are specified against (RFC 3454 /
-# RFC 3490 freeze it), and until it existed Grail had no IDNA codec at all.
+# Two are generated: _ucd_current.py, the version CPython itself answers with,
+# behind unicodedata's module-level functions; and _ucd_3_2_0.py, as
+# ``unicodedata.ucd_3_2_0'': what ``stringprep`` and ``encodings.idna`` are
+# specified against (RFC 3454 / RFC 3490 freeze it), and until it existed
+# Grail had no IDNA codec at all.
 #
 # The generator VERIFIES this module against CPython before it writes a byte:
 # category, bidirectional, combining and decomposition for every code point,
