@@ -42,7 +42,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_list | OK | 68 | 0 | 0 | 4 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
-| test.test_set | TIMEOUT | 0 | 0 | 0 | 0 | killed after 1800s |
+| test.test_set | OK | 630 | 0 | 0 | 21 |  |
 | test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 40 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
@@ -59,7 +59,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | OK | 370 | 0 | 0 | 225 |  |
+| test.test_traceback | OK | 370 | 0 | 0 | 270 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -108,10 +108,10 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
 | test.test_gettext | OK | 73 | 0 | 0 | 1 |  |
 | test.test_linecache | OK | 29 | 0 | 0 | 1 |  |
-| test.test_pickle | ERROR | 468 | 3 | 4 | 47 |  |
+| test.test_pickle | OK | 468 | 0 | 0 | 51 |  |
 | test.test_reprlib | OK | 33 | 0 | 0 | 2 |  |
 | test.test_struct | OK | 43 | 0 | 0 | 7 |  |
-| test.test_typing | ERROR | 701 | 46 | 18 | 2 |  |
+| test.test_typing | OK | 701 | 0 | 0 | 2 |  |
 | test.test_warnings | OK | 187 | 0 | 0 | 29 |  |
 | test.test___all__ | OK | 1 | 0 | 0 | 0 |  |
 | test.test_codecencodings_kr | OK | 54 | 0 | 0 | 0 |  |
@@ -120,12 +120,13 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_ipaddress | OK | 211 | 0 | 0 | 0 |  |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
-| test.test_sax | ERROR | 186 | 12 | 6 | 1 |  |
-| test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
-| test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
+| test.test_sax | OK | 186 | 0 | 0 | 0 |  |
+| test.test_ssl | ERROR | 196 | 6 | 9 | 24 |  |
+| test.test_urllib2_localnet | OK | 21 | 0 | 0 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
-| test.test_xml_etree | ERROR | 226 | 11 | 33 | 3 |  |
+| test.test_xml_etree | OK | 226 | 0 | 0 | 6 |  |
 | test.test_zipapp | ERROR | 35 | 0 | 9 | 0 |  |
+| test.test_urlparse | OK | 77 | 0 | 0 | 5 |  |
 | test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
