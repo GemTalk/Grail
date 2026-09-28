@@ -8815,6 +8815,28 @@ ___isValueDescriptor___: aValue
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___grailIsDunderName___: aSym
+	"Whether aSym is a __dunder__ name.
+
+	The module attribute read uses it to keep the OBJECT protocol reachable while
+	refusing the dict protocol: both live above `module' in the Smalltalk chain,
+	but __class__ is a real module attribute in CPython too, and the destructive
+	dict methods (clear, popitem, keys, values, items, copy) are all plain names.
+	So the dunder test is where the evidence divides them.
+
+	``__x__'' is the shortest possible one, hence the length floor."
+
+	| s size |
+
+	s := aSym @env0:asString.
+	size := s @env0:size.
+	size @env0:< 5 ifTrue: [^ false].
+	^ ((s @env0:copyFrom: 1 to: 2) @env0:= '__')
+		@env0:and: [(s @env0:copyFrom: size @env0:- 1 to: size) @env0:= '__']
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___unboundMethodClosure___: aSym
 	"Return a 2-arg closure that runs ``self''-class env-1 method
 	`aSym' on the first positional argument, with the remaining
@@ -9194,6 +9216,42 @@ ___pyAttrLoad___: aSym
 		    import f'' would assign f := m.f() — the return value —
 		    losing the function handle."
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+		"A selector INHERITED FROM THE SMALLTALK CONTAINERS `module' is built on is
+		not a module attribute, and performing one is destructive rather than
+		merely wrong.  `module' is a SymbolDictionary, so the chain above it --
+		SymbolDictionary, IdentityDictionary, KeyValueDictionary, AbstractDictionary,
+		Collection, Object -- carries the env-1 Python DICT protocol, against the
+		module's own storage.  So ``hasattr(json, 'clear')'' answered True AND
+		emptied the module: json.JSONEncoder then raised AttributeError, for the
+		rest of the session, surviving abort and resetSessionForReinstall.
+		``hasattr(json, 'popitem')'' deleted an entry, and keys/values/items/copy
+		answered the dict's view of the module (#1233).  A plain read, and
+		inspect.getmembers / pydoc walk these namespaces.
+
+		Measured across the loaded modules: clear, popitem, keys, values, items and
+		copy all resolve to KeyValueDictionary with a nil category, while every
+		legitimate attribute -- __name__, __doc__ on `module' itself, a module's own
+		Grail-Accessors and Grail-Methods -- is module-side.  So refusing the
+		inherited ones loses nothing and the read falls through to AttributeError,
+		which is what CPython answers.
+
+		A DUNDER is exempt, because the object protocol legitimately lives above
+		`module': __class__ is Object's, and a module has one in CPython too.
+		Refusing it broke test.test_typing with ``module 'typing' has no attribute
+		'__class__''' -- caught by the conformance gate, and a reminder that the
+		sample of names measured by hand was a sample.  The destructive protocol is
+		entirely non-dunder (clear, popitem, keys, values, items, copy), so the
+		split falls exactly where the evidence does.
+
+		This does NOT address the rest of #1233: the default for an unlisted
+		module-side category is still perform, `sys.breakpoint' still halts on a
+		read because it is misfiled as an accessor, and the module body still owns
+		the plain selector `initialize'."
+		(owner notNil @env0:and: [
+			owner ~~ module @env0:and: [
+				(owner @env0:inheritsFrom: module) @env0:not @env0:and: [
+					(self ___grailIsDunderName___: aSym) @env0:not]]])
+						ifTrue: [owner := nil].
 		owner notNil ifTrue: [
 			"A 0-arg selector is either a data accessor (``__name__'',
 			``Grail-Constants'') that must be PERFORMED to yield its value,
