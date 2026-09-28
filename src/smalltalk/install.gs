@@ -1432,6 +1432,7 @@ run
 	at: #'UnicodeEncodeErrorTestCase' put: nil;
 	at: #'UnicodeErrorArgsTestCase' put: nil;
 	at: #'UnicodeErrorTestCase' put: nil;
+	at: #'UnittestMainExitStatusTestCase' put: nil;
 	at: #'UnicodeNamesTestCase' put: nil;
 	at: #'UnicodeTranslateErrorTestCase' put: nil;
 	at: #'UnicodeWarningTestCase' put: nil;
@@ -2885,6 +2886,7 @@ input src/smalltalk/PythonTests/UnicodeDigitsTestCase.gs
 input src/smalltalk/PythonTests/UnicodeEncodeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeErrorArgsTestCase.gs
 input src/smalltalk/PythonTests/UnicodeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnittestMainExitStatusTestCase.gs
 input src/smalltalk/PythonTests/UnicodeNamesTestCase.gs
 input src/smalltalk/PythonTests/UnicodeTranslateErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeWarningTestCase.gs
