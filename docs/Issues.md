@@ -1,5 +1,91 @@
 # Known Issues
 
+## FIXED: test_xml_etree passes (37 -> 0), and the runtime gaps behind it
+
+`test.test_xml_etree` goes from 7 failures and 30 errors to **OK, 226 tests**.
+`xml/etree/ElementTree.py` and `ElementPath.py` were already CPython's verbatim,
+so nothing here changes ElementTree itself. ElementTree's suite probes
+object-model edges that most code never reaches, and Grail's pure-Python
+`pyexpat` stand-in had fidelity gaps.
+
+**Object model and builtins.**
+
+- **A bound method in a class dict is not re-bound.** iterparse is
+  `class IterParseIterator: __next__ = gen.__next__`. Grail bound it again, so
+  `next(it)` passed the iterator to the generator's `__next__` (12 tests).
+  `___isDescriptorCallable___:` now binds a BoundMethod only when its receiver
+  is a Python module (a top-level `def`). The class-attribute shadow forwarder
+  is installed for an already-bound callable too.
+- **A slice's `__index__` runs before the length is read.** gh-72050 /
+  gh-143200 empty the list from `__index__`. Grail read the size first and
+  indexed with stale bounds, an uncatchable OffsetError. The fix is
+  `slice >> ___unpackedSlice___`, and `___getslice___` reads the size after
+  coercing. `list.remove` survives an `__eq__` that clears the list.
+- **A subclass's slice is its builtin's type.** `L([1, 2])[:1]` is a `list`,
+  and likewise `str` and `bytes`. It was the subclass, so a str subclass's
+  mutating `__eq__` ran on ElementPath's `path[-1:]`. Other str methods on a
+  subclass (`upper`, `strip`, `+`, ...) still answer the subclass: see
+  *Still open*.
+- **An explicit `object.__eq__(a, b)` does not re-dispatch** to a
+  setattr-installed `__eq__`. `mock.patch.object(E, '__eq__', wraps=E.__eq__)`
+  recursed forever.
+- **An instance `__dict__` is live.** `keys()` / `values()` / `items()` /
+  iteration answer `dict_keys` etc. over the instance, and they notice growth.
+  `object.__getstate__` answers that dict, not a copy, and deepcopy walks it
+  live. This is gh-133009's "dictionary changed size during iteration", which
+  CPython's pure-Python ElementTree test expects.
+- **MI onto an exception base.** `class MyElement(ET.Element, ValueError)` is
+  built on ValueError, whose chain carries AbstractException's `tag` instVar.
+  Element's methods, copied by the MI merge, declared `tag` as a method temp
+  (GemStone error 1030) and became codegen-gap stubs. The copier now renames
+  such names into a block, as the codegen does for a class that knows its
+  instVars, and shifts the `___GRAILPOS___` map (tracebacks verified).
+  `object >> __iter__` walks `__getitem__` for such a class.
+- **A generator closed before it started never runs.** `next()` on it is
+  StopIteration. It forked the body, which read the file close() had released.
+
+**pyexpat** (Grail's pure-Python stand-in), each measured against CPython's
+expat:
+
+- CRLF and lone CR normalise to LF on input (a literal CRLF in an attribute is
+  one space). A CR ending a chunk waits for the next.
+- ATTLIST declarations: defaulted attributes appear on the element (unless
+  `specified_attributes`), tokenized types collapse their spaces, and
+  `AttlistDeclHandler` is called.
+- DOCTYPE tokens reach the default handler piecewise when no
+  `StartDoctypeDeclHandler` claims them. This is how ElementTree's
+  `XMLParser` finds `target.doctype`.
+- Text outside the root is tokenized as expat does: `foobar<` is an invalid
+  token at the `<`, while `foo` is a syntax error at 0 (33 shapes compared).
+- An unresolved entity reference reports the `&`'s position during its
+  callback, and the error-position attributes track the current position. An
+  undefined external entity with no `ExternalEntityRefHandler` goes to the
+  default handler, where ElementTree raises.
+- A chunk ending inside `<!--`, `<![CDATA[` or `<!DOCTYPE` waits for more
+  (XMLPullParser fed one character at a time).
+
+**Smaller.** `xml.etree.ElementInclude` (CPython's) and the `xmltestdata` files
+the suite needed are vendored. Grail's `mock` honours `autospec=True` for a
+function target, without the signature check. (XInclude also needs
+`urljoin('Recursive2.xml', 'Recursive3.xml')` to be `'Recursive3.xml'`, which
+#1246's vendored `urllib.parse` provides; the fixture pins it.)
+
+`tests/python/runtime_edges_behind_xml_etree.py` (15 self-running checks) and
+`RuntimeEdgesBehindXmlEtreeTestCase` pin the runtime half.
+
+### Still open
+
+- **A str subclass's methods answer the subclass.** `S('ab').upper()`,
+  `.strip()`, `+`, `.replace()`, `.split()` pieces, `.partition()`, `f'{s}'`
+  and about ten more answer `S` where CPython answers `str`. They are kernel
+  primitives that keep the receiver's class; slicing is fixed because it builds
+  through `species`. It wants one narrowing step across str.gs's
+  result-producing methods, as its own PR.
+- **Reparse deferral.** Grail's pyexpat reports expat 2.5.0, so
+  `test_flush_reparse_deferral_enabled` skips. CPython with expat 2.6+ runs it.
+- A declaration inside the internal subset reaches the default handler whole;
+  expat splits it into tokens as it does the DOCTYPE head.
+
 ## OPEN: a dunder set on a class at runtime is invisible to `iter()`, `len()`, `bool()`, `in`, `[]` and `int()`
 
 Found 2026-09-26 while fixing test_gettext (Grail's `MagicMock`).  A special

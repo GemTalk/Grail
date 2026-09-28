@@ -4650,7 +4650,7 @@ ___grailInstallAttrMethodShadows___: attrNames
 	class's env-1 dictionary once (that fetch, a merge of the persistent and
 	transient dicts, is the expensive part).  The attribute VALUE is read only
 	for a name the chain actually implements, and a forwarder is compiled only
-	when that value is a callable that binds self."
+	when that value is a callable -- one that binds self, or one already bound."
 
 	| sup ownDict pending inherited walker md |
 	attrNames == nil ifTrue: [^ self].
@@ -4734,7 +4734,12 @@ ___grailInstallAttrMethodShadows___: attrNames
 			really shadowing something."
 			val := [self ___pyAttrLoad___: s @env0:asSymbol]
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-			(self ___isDescriptorCallable___: val) ifTrue: [
+			"A callable that binds self, or one that is ALREADY bound -- a
+			BoundMethod on a non-module receiver or a MethodBinding, which
+			___grailAttrMethodShadow___ hands back unbound and the forwarder
+			calls with just the arguments (``__next__ = gen.__next__'')."
+			((self ___isDescriptorCallable___: val)
+				or: [(val isKindOf: BoundMethod) or: [val isKindOf: MethodBinding]]) ifTrue: [
 				shadowed @env0:do: [:pair |
 					self
 						___compileMethod: (self ___grailShadowSourceFor___: s
@@ -8151,8 +8156,15 @@ ___isDescriptorCallable___: aValue
 		of TestCmpToKeyC died on the resulting arity error rather than on
 		anything to do with cmp_to_key."
 		rcvr := aValue @env0:receiver.
-		^ ((rcvr isKindOf: module)
-			and: [(rcvr @env0:dynamicInstVarAt: #'__file__') == nil]) not].
+		"And only a function at all when the receiver IS a module.  A
+		BoundMethod on anything else is CPython's bound method -- ``gen.__next__'',
+		``lst.append'', ``C.cm'' -- which is not a descriptor either: stored in a
+		class dict it comes back unchanged.  ElementTree's iterparse is built on
+		exactly that, ``class IterParseIterator: __next__ = gen.__next__'', and
+		binding it passed the iterator to the generator's __next__ (``takes a
+		different number of arguments''), so next() on every iterparse failed."
+		(rcvr isKindOf: module) ifFalse: [^ false].
+		^ (rcvr @env0:dynamicInstVarAt: #'__file__') ~~ nil].
 	(aValue isKindOf: ExecBlock) ifTrue: [^ true].
 	"UnboundMethod -- what ``Cls.m'' answers, i.e. CPython's plain function
 	taking self first.  A decorator that returns its argument unchanged
@@ -11017,9 +11029,28 @@ __eq__: other
 	(test_compare.test_comparisons / test_issue_1393 /
 	test_comp_classes_different)."
 
-	| fn r |
+	| fn |
 	fn := self ___dynamicClassAttr___: #'__eq__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
+	^ self ___grailObjectEq___: other
+%
+
+category: 'Grail-Python Protocol'
+method: object
+___grailObjectEq___: other
+	"object.__eq__ ITSELF -- what __eq__: answers once it has found no
+	setattr-installed ``__eq__'' to forward to, and what an EXPLICIT call of
+	``object.__eq__(a, b)'' runs (UnboundMethod >> ___grailPinnedMethodFor___:
+	receiver: maps the one to the other).
+
+	The explicit call must not re-dispatch.  ``eq = E.__eq__'' captures
+	object's; ``mock.patch.object(E, '__eq__', autospec=True, wraps=eq)''
+	then installs a function calling eq -- and eq, running __eq__:, found that
+	very function on the class and called it again, forever (test_xml_etree's
+	equal_wrapper, gh-126033's BadElementTest).  CPython's object.__eq__ is
+	a fixed slot; it never looks at the class dict."
+
+	| r |
 	r := self ___varargsDunder___: #'___eq__:kw:' with: other.
 	r == nil ifFalse: [^ r].
 	"A CLASS compares through its metaclass, as __lt__ below already does:
@@ -11377,6 +11408,23 @@ __iter__
 	not have a metaclass pays more than one nil test."
 	(self ___grailMetaclassMethodFor___: #'__iter__') @env0:ifNotNil: [:___m |
 		^ self @env0:performMethod: ___m].
+	"The SEQUENCE protocol, for a Python class that did not derive from
+	PythonInstance: ``iter(x)'' on a class with __getitem__ and no __iter__
+	walks it by index, as PythonInstance >> __iter__ already does for the
+	ordinary chain.  An MI class built on a kernel base reached this default
+	instead -- ``class MyElement(ET.Element, ValueError)'' is a ValueError, and
+	Element iterates only through __getitem__, so the element was not
+	iterable (test_xml_etree's test_element_factory_pure_python_subclass).
+	Only Python-defined classes, with a __getitem__ of a Python class, and not
+	one that set ``__iter__ = None''."
+	(((self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) @env0:notNil)
+		and: [(((self @env0:class @env0:whichClassIncludesSelector: #'__getitem__:'
+				environmentId: 1) @env0:ifNil: [nil] ifNotNil: [:owner |
+					owner @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+						environmentId: 1]) @env0:notNil)
+		and: [(self ___classAttrDunder___: #'__iter__') ~~ None]])
+			ifTrue: [^ seq_iterator ___on: self].
 	TypeError ___signal___: ('''' @env0:, (self ___pyTypeNameForError___)
 		@env0:, ''' object is not iterable')
 %
@@ -11948,7 +11996,17 @@ __getstate__
 		d __setitem__: ((inferredPairs @env0:at: i) @env0:asString @env0:asUnicodeString)
 			_: (inferredPairs @env0:at: i @env0:+ 1)].
 	slotDict @env0:isNil ifTrue: [
-		^ d @env0:isNil ifTrue: [None] ifFalse: [d]].
+		"The LIVE __dict__ where it holds exactly what the copy would: CPython's
+		object.__getstate__ answers the instance's own dict, not a copy, and
+		copy.deepcopy depends on it -- it walks the state with ``for key, value
+		in x.items()'', and an attribute added underneath it by a child's
+		__deepcopy__ is ``dictionary changed size during iteration''
+		(test_xml_etree's BadElementTest.test_deepcopy_clear).  The view
+		(PyInstanceDict >> ___allPairs___) lists inferred slots and hides a
+		builtin root's storage exactly as the copy does, so it answers whenever
+		there is any state at all; only declared __slots__ need the tuple form."
+		d @env0:notNil ifTrue: [^ PyInstanceDict @env0:on: self].
+		^ None].
 	^ tuple @env0:withAll: { d @env0:isNil ifTrue: [None] ifFalse: [d]. slotDict }
 %
 

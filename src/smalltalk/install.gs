@@ -476,6 +476,7 @@ run
 	at: #'PythonClass' put: nil;
 	at: #'PythonInstance' put: nil;
 	at: #'PyInstanceDict' put: nil;
+	at: #'PyInstanceDictMapping' put: nil;
 	at: #'GrailClassAttrHolder' put: nil;
 	at: #'PyModuleDict' put: nil;
 	at: #'PySysModules' put: nil;
@@ -816,6 +817,7 @@ run
 	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
 	at: #'ModuleDefRebindingTestCase' put: nil;
 	at: #'BodyClassAttrReplayTestCase' put: nil;
+	at: #'RuntimeEdgesBehindXmlEtreeTestCase' put: nil;
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
 	at: #'ClassMethodViaInstanceTestCase' put: nil;
 	at: #'ClassNewAttributeTestCase' put: nil;
@@ -2252,6 +2254,7 @@ input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/ModuleDefRebindingTestCase.gs
 input src/smalltalk/PythonTests/BodyClassAttrReplayTestCase.gs
+input src/smalltalk/PythonTests/RuntimeEdgesBehindXmlEtreeTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs

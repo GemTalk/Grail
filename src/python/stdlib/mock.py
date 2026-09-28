@@ -15,7 +15,9 @@
 #     child mock, so configure a magic by assignment, not through
 #     ``m.__iter__.return_value``;
 #   * patch works as a context manager only (method @-decorators are
-#     dropped by Grail), and there is no spec/autospec;
+#     dropped by Grail), and there is no spec; ``autospec=True`` is honoured
+#     for a FUNCTION target only (a real function forwarding to the mock),
+#     without CPython's signature check;
 #   * ``wraps`` IS supported -- on Mock and through patch/patch.object's
 #     trailing keywords -- for the call-through case: the mock records the
 #     call and returns what the wrapped callable returns, and an
@@ -545,6 +547,41 @@ def _is_module(obj):
     return sys.modules.get(name) is obj
 
 
+_AUTOSPEC_API = ("assert_called", "assert_not_called", "assert_called_once",
+                 "assert_called_with", "assert_called_once_with",
+                 "assert_any_call", "reset_mock")
+
+
+def _autospec_function(mock):
+    """``autospec=True`` over a FUNCTION: what CPython's create_autospec
+    answers for one -- a real function, so it binds ``self`` exactly as the
+    attribute it replaces did (``patch.object(cls, "__eq__", autospec=True,
+    wraps=eq)'' in test_xml_etree's equal_wrapper), carrying the mock's
+    assertion API and call record.  The mock does the work; ``wraps`` passes
+    each call through.
+
+    Not reproduced: CPython also checks each call against the original's
+    signature, raising TypeError for a call the real function would refuse.
+    """
+    def autospecced(*args, **kw):
+        try:
+            return mock(*args, **kw)
+        finally:
+            autospecced.called = mock.called
+            autospecced.call_count = mock.call_count
+            autospecced.call_args = mock.call_args
+            autospecced.call_args_list = mock.call_args_list
+
+    for name in _AUTOSPEC_API:
+        setattr(autospecced, name, getattr(mock, name))
+    autospecced.mock = mock
+    autospecced.called = False
+    autospecced.call_count = 0
+    autospecced.call_args = None
+    autospecced.call_args_list = []
+    return autospecced
+
+
 class _Patcher:
     def __init__(self, target_obj, attribute, new, kwargs=None):
         self._target_obj = target_obj
@@ -579,8 +616,14 @@ class _Patcher:
                 raise
             self._created = True
         replacement = self._new
+        kwargs = dict(self._kwargs)
+        autospec = kwargs.pop("autospec", None)
         if replacement is DEFAULT:
-            replacement = MagicMock(name=self._attribute, **self._kwargs)
+            replacement = MagicMock(name=self._attribute, **kwargs)
+            if autospec:
+                spec = self._old if autospec is True else autospec
+                if callable(spec) and not isinstance(spec, type):
+                    replacement = _autospec_function(replacement)
         elif self._kwargs:
             raise TypeError(
                 "Cannot use 'new' and configuration keywords together")

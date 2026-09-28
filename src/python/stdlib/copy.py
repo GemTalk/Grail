@@ -559,9 +559,19 @@ def _reconstruct(x, memo, func, args,
         memo[id(x)] = y
 
     if state is not None:
-        state = _plain_state(state)
-        if deep:
-            state = deepcopy(state, memo)
+        if deep and type(state) is _INSTANCE_DICT_TYPE:
+            # GRAIL: walk the LIVE view, as CPython's deepcopy walks the live
+            # __dict__ -- so an attribute a value's __deepcopy__ adds to the
+            # original underneath the walk is "dictionary changed size during
+            # iteration" there too (test_xml_etree's test_deepcopy_clear).
+            # Materialising it first (_plain_state) took the snapshot before
+            # any value was copied, and the mutation went unseen.
+            # _deepcopy_dict builds a real dict, so nothing writes through.
+            state = _deepcopy_dict(state, memo)
+        else:
+            state = _plain_state(state)
+            if deep:
+                state = deepcopy(state, memo)
         # GRAIL: y is HALF-BUILT here -- allocated but not yet given its
         # state -- and a class whose attribute machinery reads that state
         # (UserDict's __getattr__ reaches for self.data) raises from the

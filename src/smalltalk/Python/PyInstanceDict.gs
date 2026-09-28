@@ -567,9 +567,26 @@ get: key _: default
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 keys
-	"Python ``dict.keys()'' — return a list of String keys (the
-	dynamic-instVar keys are Symbols; we expose them as Python
-	``str''s)."
+	"Python ``dict.keys()'' -- a LIVE dict_keys view, as CPython answers.
+
+	These three were snapshot lists, so iterating one while the instance
+	changed could not notice.  CPython raises ``dictionary changed size during
+	iteration'', and Element's deepcopy relies on it: copy.deepcopy walks the
+	instance's __dict__ with ``for key, value in x.items()'', and a child whose
+	__deepcopy__ clears the root adds keys underneath it (test_xml_etree's
+	BadElementTest.test_deepcopy_clear).  The views share dict's own view and
+	iterator classes over PyInstanceDictMapping, which yields the keys as
+	Python sees them (a str, not the stored Symbol) and reports the live size
+	the iterators check."
+
+	^ dict_keys ___on: (PyInstanceDictMapping @env0:___on: self)
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+___keysList___
+	"The keys as a list, in order -- what ``keys'' answered before it became a
+	view, for the internal readers that want a sequence (__reversed__)."
 
 	| pairs result |
 	pairs := self @env0:___allPairs___.
@@ -583,30 +600,17 @@ keys
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 values
-	| pairs result |
-	pairs := self @env0:___allPairs___.
-	result := list ___new___.
-	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		result append: (pairs @env0:at: i @env0:+ 1)
-	].
-	^ result
+	"A live dict_values view -- see ``keys''."
+
+	^ dict_values ___on: (PyInstanceDictMapping @env0:___on: self)
 %
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 items
-	"Return a list of (key, value) tuples — matches CPython
-	``dict.items()'' enough for the ``for k, v in d.items()'' idiom."
+	"A live dict_items view -- see ``keys''."
 
-	| pairs result |
-	pairs := self @env0:___allPairs___.
-	result := list ___new___.
-	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		result append: (tuple @env0:withAll:
-			{ self @env0:___pythonKeyFor___: (pairs @env0:at: i).
-			  (pairs @env0:at: i @env0:+ 1) })
-	].
-	^ result
+	^ dict_items ___on: (PyInstanceDictMapping @env0:___on: self)
 %
 
 category: 'Grail-Python-Protocol'
@@ -696,7 +700,7 @@ __iter__
 	"Iterating a dict yields its KEYS in Python (the values come from
 	indexing).  Match by yielding the dict-keys list's iterator."
 
-	^ self keys __iter__
+	^ dict_keyiterator ___on: (PyInstanceDictMapping @env0:___on: self)
 %
 
 category: 'Grail-Python-Protocol'
@@ -709,7 +713,7 @@ __reversed__
 	(test_dict test_reverse_iterator_for_shared_shared_dicts: reversed(__dict__)
 	== ['y', 'x'])."
 
-	^ (self keys @env0:reverse) __iter__
+	^ (self ___keysList___ @env0:reverse) __iter__
 %
 
 category: 'Grail-Python-Protocol'
@@ -736,3 +740,105 @@ __repr__
 %
 
 set compile_env: 0
+
+! ===============================================================================
+! PyInstanceDictMapping -- a PyInstanceDict as dict's views and iterators read a
+! mapping: keys as Python sees them, and the LIVE size their mutation check
+! compares against.
+! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'PyInstanceDictMapping'
+  instVarNames: #( dict )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyInstanceDictMapping comment:
+'What dict_keys / dict_values / dict_items and the dict iterators are built on
+for an instance''s __dict__.  PyInstanceDict''s own Smalltalk-side enumeration
+yields the STORED keys (Symbols for string keys), which internal callers rely
+on; the views must yield the keys Python sees, so they read through this.'
+%
+
+expectvalue /Class
+doit
+PyInstanceDictMapping category: 'Grail-Modules'
+%
+
+removeallmethods PyInstanceDictMapping
+removeallclassmethods PyInstanceDictMapping
+
+set compile_env: 0
+
+category: 'Grail-Instance Creation'
+classmethod: PyInstanceDictMapping
+___on: aPyInstanceDict
+	^ self new ___setDict: aPyInstanceDict
+%
+
+category: 'Grail-Private'
+method: PyInstanceDictMapping
+___setDict: aPyInstanceDict
+	dict := aPyInstanceDict
+%
+
+category: 'Grail-Smalltalk-Protocol'
+method: PyInstanceDictMapping
+size
+	^ dict size
+%
+
+category: 'Grail-Smalltalk-Protocol'
+method: PyInstanceDictMapping
+keysAndValuesDo: aBlock
+	"Through the dict's OWN enumeration, which is what its ``size'' counts: a
+	PyModuleDict lists the module's names, not the raw slot pairs, and a
+	mismatch reads as a size change to the iterators."
+	dict keysAndValuesDo: [:k :v |
+		aBlock value: (dict ___pythonKeyFor___: k) value: v]
+%
+
+category: 'Grail-Smalltalk-Protocol'
+method: PyInstanceDictMapping
+keysDo: aBlock
+	"The KEYS alone, through the dict's own Smalltalk-side ``keys'' -- never by
+	way of keysAndValuesDo:, which for a PyModuleDict READS each value, and a
+	module's value read can run code (sys's ``breakpoint'' is a method it
+	performs).  Iterating ``vars(sys)'' halted the session."
+	dict keys do: [:k | aBlock value: (dict ___pythonKeyFor___: k)]
+%
+
+category: 'Grail-Smalltalk-Protocol'
+method: PyInstanceDictMapping
+valuesDo: aBlock
+	self keysAndValuesDo: [:k :v | aBlock value: v]
+%
+
+category: 'Grail-Smalltalk-Protocol'
+method: PyInstanceDictMapping
+includesKey: aKey
+	^ (dict ___rawAt___: aKey) ~~ nil
+%
+
+category: 'Grail-Smalltalk-Protocol'
+method: PyInstanceDictMapping
+at: aKey
+	| v |
+	v := dict ___rawAt___: aKey.
+	v == nil ifTrue: [^ KeyError ___signal___: aKey].
+	^ v
+%
+
+category: 'Grail-Smalltalk-Protocol'
+method: PyInstanceDictMapping
+___instanceDict___
+	"The PyInstanceDict this reads."
+	^ dict
+%

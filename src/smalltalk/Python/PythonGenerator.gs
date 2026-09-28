@@ -523,6 +523,12 @@ send: aValue
 	process does not yield until it blocks on consumerSem, so the body can never
 	observe a stale value."
 	consumerProcess := GsProcess @env0:current.
+	"close() before the first resume finishes the generator without starting
+	it (``done'', not ``started''), so the body must never run: CPython's next()
+	on it is StopIteration.  It forked the body instead, which then read from
+	whatever close() had released -- ElementTree's iterparse read a closed
+	file (test_xml_etree's IterparseTest.test_close_not_exhausted)."
+	(started not and: [done]) ifTrue: [^ self ___resumeFinishedWith___: nil].
 	started ifFalse: [
 		aValue == None ifFalse: [
 			TypeError ___signal___:
