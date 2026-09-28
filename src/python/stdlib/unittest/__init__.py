@@ -13,6 +13,12 @@
 #     the expected category and resets ALL filters on exit;
 #   * tracebacks are reported as "ExceptionName: message" strings.
 
+# Three sys.modules reads were already here -- TestCase's __file__ lookup and
+# the setUpModule/tearDownModule fixture walk -- with nothing importing sys, so
+# each would have raised NameError on the path that reaches it.  main()'s
+# sys.exit is what finally ran into it.
+import sys
+
 __all__ = ["TestCase", "TestSuite", "TestLoader", "TestResult",
            "TextTestRunner", "SkipTest", "main", "defaultTestLoader",
            "skip", "skipIf", "skipUnless", "expectedFailure",
@@ -1302,15 +1308,42 @@ class TextTestRunner:
         return result
 
 
-def main(module=None, verbosity=1, exit=False):
-    """Run all TestCase subclasses found in `module`.  Unlike CPython,
-    the module argument is required (Grail has no __main__
-    introspection) and argv is not parsed."""
+def main(module=None, verbosity=1, exit=True):
+    """Run all TestCase subclasses found in `module`, then exit with 1 if any
+    of them did not pass.
+
+    `module` defaults to `sys.modules['__main__']`, as CPython's does.  It used
+    to be required, and the reason given was that "Grail has no __main__
+    introspection" -- that is no longer true: under ./grail a script IS
+    sys.modules['__main__'], with __name__ == '__main__', and
+    loadTestsFromModule finds its tests.  A string is accepted too, since
+    `main(module='__main__')` is a common spelling of the same thing.
+
+    `exit` DEFAULTS TO TRUE, as CPython's does, and that is the point of this
+    signature rather than a detail of it.  Returning the result instead meant a
+    failing run left the process at 0: the summary said FAILED (failures=1) and
+    `./grail failing_test.py` still exited 0, so any CI step calling main()
+    reported every failing run as green (#1237).  Pass exit=False to get the
+    result back instead.
+
+    argv is still not parsed; `grail -m unittest` needs a TestProgram, which is
+    its own piece of work."""
     if module is None:
-        raise TypeError("unittest.main() requires a module argument in Grail")
+        module = sys.modules.get('__main__')
+        if module is None:
+            raise TypeError(
+                "unittest.main() found no '__main__' module to run: pass "
+                "module= explicitly (there is no __main__ outside a script, "
+                "e.g. in an embedded or topaz session)")
+    elif isinstance(module, str):
+        __import__(module)
+        module = sys.modules[module]
     suite = defaultTestLoader.loadTestsFromModule(module)
     runner = TextTestRunner(verbosity=verbosity)
-    return runner.run(suite)
+    result = runner.run(suite)
+    if exit:
+        sys.exit(not result.wasSuccessful())
+    return result
 
 
 # IsolatedAsyncioTestCase, imported LAST so the cycle resolves.
