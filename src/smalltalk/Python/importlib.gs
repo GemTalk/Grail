@@ -2769,6 +2769,155 @@ ___forgetDirectMetaclassesOf___: aModuleName
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___recordBodyClassAttr___: aClass name: aSym value: aValue
+	"Remember, COMMITTED, a class-attribute store a module BODY made on a
+	canonical class -- one object >> ___classAttrOverlayStore___:name:value:
+	routed into this session's overlay.
+
+	That routing is right for runtime mutation and wrong for a module body,
+	whose stores are part of what importing the module MEANS.  A session that
+	binds the deployed module does not run the body, so the store never
+	happened there.  typing is the case that showed it:
+
+	    ByteString = _DeprecatedGenericAlias(collections.abc.ByteString, 0,
+	                                         removal_version=(3, 17))
+
+	_BaseGenericAlias.__setattr__ forwards ``self._removal_version = ...'' to
+	the ORIGIN, collections.abc.ByteString -- already canonical -- so it went
+	to the deploy session's overlay, and every later session's
+	``isinstance(b'', typing.ByteString)'' raised AttributeError
+	(test_typing's CollectionsAbcTests.test_bytestring, once deployFrameworks
+	had run).  This is the write side docs/Persistent_Modules_and_Classes.md
+	par.4.3 records as open: record what the body did, replay it on bind
+	(___restoreAllBodyClassAttrs___).
+
+	PLAIN DATA ONLY (___isReplayableClassAttrValue___:), and not abc's cache
+	stamps.  The record commits with the deployment, and a body can hang
+	anything on a class -- a lock, a socket, a cache of session objects --
+	that must not be swept into a commit.
+	Anything else stays exactly as before: session-local, gone on bind.
+
+	Keyed by the module whose body made the store, and dropped when that body
+	runs again (___forgetBodyClassAttrsOf___:), as the direct-metaclass record
+	is."
+
+	| origin reg inner attrs |
+	origin := self ___initializingModuleName___.
+	origin isNil ifTrue: [^ self].
+	(self ___isSessionLocalModule___: origin) ifTrue: [^ self].
+	(self ___isReplayableClassAttrValue___: aValue depth: 0) ifFalse: [^ self].
+	"abc's cache bookkeeping (``_abc_negative_cache_version'' and friends) is
+	not a definition: the version stamps a WeakSet cache that is not
+	replayable, and a stamp replayed without its cache would vouch for a
+	cache this session never built."
+	((aSym asString size >= 5) and: [(aSym asString copyFrom: 1 to: 5) = '_abc_'])
+		ifTrue: [^ self].
+	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalBodyClassAttrs' put: reg].
+	inner := reg at: origin asString otherwise: nil.
+	inner isNil ifTrue: [
+		inner := IdentityKeyValueDictionary new.
+		reg at: origin asString put: inner].
+	attrs := inner at: aClass otherwise: nil.
+	attrs isNil ifTrue: [
+		attrs := KeyValueDictionary new.
+		inner at: aClass put: attrs].
+	attrs at: aSym asSymbol put: aValue
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___isReplayableClassAttrValue___: aValue depth: aDepth
+	"Is aValue safe to commit as a module body's class-attribute store, and
+	identical in meaning in every session?  None, booleans, numbers, strings,
+	classes, and tuples of those -- the configuration-shaped values a body
+	stamps on a class.  Bounded depth for a tuple that contains itself."
+
+	aDepth > 8 ifTrue: [^ false].
+	(aValue isNil or: [aValue == None or: [aValue == true or: [aValue == false]]])
+		ifTrue: [^ true].
+	((aValue isKindOf: Number) or: [(aValue isKindOf: CharacterCollection)
+		or: [aValue isKindOf: Behavior]]) ifTrue: [^ true].
+	(aValue isKindOf: tuple) ifTrue: [
+		^ aValue allSatisfy: [:each |
+			self ___isReplayableClassAttrValue___: each depth: aDepth + 1]].
+	^ false
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___forgetBodyClassAttrsOf___: aModuleName
+	"Drop aModuleName's recorded body stores before its body runs again --
+	see ___recordBodyClassAttr___:name:value:.  PEEKS the registry."
+
+	| reg |
+	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___markBodyClassAttrsReplayed___: aModuleName
+	"This session is running aModuleName's body itself, so its stores reach the
+	overlay first hand; a later replay must not add the committed record's
+	(possibly older) values on top."
+
+	| st done |
+	st := SessionTemps current.
+	done := st at: #'GrailBodyClassAttrsReplayed' otherwise: nil.
+	done isNil ifTrue: [
+		done := Set new.
+		st at: #'GrailBodyClassAttrsReplayed' put: done].
+	done add: aModuleName asString
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreAllBodyClassAttrs___
+	"Replay every deployed module body's recorded class-attribute stores into
+	this session's overlay -- see ___recordBodyClassAttr___:name:value:.
+
+	ALL modules, not just the one being bound, for ___restoreAllCanonical-
+	Metaclasses___'s reason: a deployed module's classes are reachable through
+	other modules' committed globals without that module ever being bound.
+
+	Once per session per module (GrailBodyClassAttrsReplayed), so a later bind
+	cannot resurrect an attribute this session deleted, and only into an EMPTY
+	overlay slot, so it never overwrites this session's own store.  A module
+	whose body ran in this session is marked too: its stores are already in the
+	overlay, first hand.  PEEKS the registry, since this is a read path."
+
+	| reg st done ov |
+	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	st := SessionTemps current.
+	done := st at: #'GrailBodyClassAttrsReplayed' otherwise: nil.
+	done isNil ifTrue: [
+		done := Set new.
+		st at: #'GrailBodyClassAttrsReplayed' put: done].
+	reg keysAndValuesDo: [:modName :inner |
+		(done includes: modName asString) ifFalse: [
+			done add: modName asString.
+			inner keysAndValuesDo: [:cls :attrs |
+				(cls isKindOf: Behavior) ifTrue: [
+					ov := st at: #'GrailClassAttrOverlay' otherwise: nil.
+					ov isNil ifTrue: [
+						ov := IdentityKeyValueDictionary new.
+						st at: #'GrailClassAttrOverlay' put: ov].
+					attrs keysAndValuesDo: [:sym :val | | slot |
+						slot := ov at: cls otherwise: nil.
+						slot isNil ifTrue: [
+							slot := KeyValueDictionary new.
+							ov at: cls put: slot].
+						(slot includesKey: sym) ifFalse: [slot at: sym put: val]]]]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___restoreAllCanonicalMetaclasses___
 	"Install the committed metaclass record for EVERY deployed class that has
 	one, not just for the module being bound -- ___restoreCanonicalMiRecords___'s
@@ -3048,6 +3197,7 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 			self ___restoreCanonicalClassStructure___: aName asString.
 			self ___restoreCanonicalMiRecords___.
 			self ___restoreAllCanonicalMetaclasses___.
+			self ___restoreAllBodyClassAttrs___.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -3231,6 +3381,7 @@ loadModuleFromPath: pathString name: moduleName
 			"And the metaclass record of every other deployed class, for the
 			same reason -- see ___restoreAllCanonicalMetaclasses___."
 			self ___restoreAllCanonicalMetaclasses___.
+			self ___restoreAllBodyClassAttrs___.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
@@ -6862,6 +7013,8 @@ ___pushInitializingModule___: aName
 
 	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
 	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
+	self @env0:___forgetBodyClassAttrsOf___: aName @env0:asString.
+	self @env0:___markBodyClassAttrsReplayed___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
 %
 

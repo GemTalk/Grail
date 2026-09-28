@@ -3642,6 +3642,12 @@ __qualname__
 
 	| fn cls owner |
 	fn := self @env0:dynamicInstVarAt: #func.
+	"A @classmethod / @staticmethod DESCRIPTOR -- what the class body now hands
+	an outer decorator -- forwards __qualname__ to the function it wraps,
+	which is already qualified."
+	((fn @env0:isKindOf: BoundMethod)
+		and: [fn @env0:receiver @env0:isKindOf: Behavior])
+		ifFalse: [^ fn @env1:___pyAttrLoad___: #'__qualname__'].
 	self ___wrapsClassSideMethod___ ifTrue: [
 		cls := fn @env0:receiver.
 		owner := [(cls __qualname__) @env0:asString]

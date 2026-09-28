@@ -52,24 +52,6 @@ the big test modules at 50-62MB each (test_typing, test_enum,
 test.datetimetester, test_decimal, test_traceback) -- several KB per source
 line.  Shrinking that per-method footprint would retire the override.
 
-## OPEN: test_typing's `test_bytestring` fails once the frameworks are deployed
-
-Found 2026-09-27 (test___all__, while checking test_typing for a regression it
-turned out not to be).  `CollectionsAbcTests.test_bytestring` raises
-`AttributeError: type object 'ByteString' has no attribute '_removal_version'`
-when `scripts/deployFrameworks.gs` has committed the framework closure --
-which `run_tests.sh` does first, so a CPython-suite run straight after a
-`run_tests.sh` sees it -- and passes after a fresh `install.sh`, which clears
-those deployments.  Measured both ways on main and on the test___all__ branch:
-27 errors deployed, 26 not, identical per test.
-
-`typing.ByteString` is a `_DeprecatedGenericAlias`, whose `__init__` sets
-`self._removal_version`; `_BaseGenericAlias.__setattr__` forwards that to the
-ORIGIN, so it lands as a class attribute on `collections.abc.ByteString`, and
-`__instancecheck__` reads it back through `__getattr__`.  With typing and
-collections.abc deployed, that class attribute is not there to read.  Not yet
-narrowed further than that.
-
 ## OPEN: `subTest` does not isolate a failure
 
 Found 2026-09-27 (test___all__).  A failing assertion inside `with
@@ -154,6 +136,94 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
+## FIXED: test_typing passes (11 -> 0), and typing.py is CPython's byte for byte
+
+Follow-up to the section above. `test.test_typing` goes from 11 failures+errors
+to **OK, 701 run**. `src/python/stdlib/typing.py` is now identical to CPython
+3.14.6's: the last deviation, GRAIL DEVIATION 2 (`overload`), was a workaround
+for a codegen defect, and the defect is fixed.
+
+**A top-level `def` rebinds its name.** A top-level def compiles to a method on
+the module class and emitted nothing at module-body time. A decorator, an
+assignment, or a def nested in an `if`/`try` stores the module *slot*, and the
+slot out-ranks the method. So an earlier binding survived the def:
+
+```python
+@deco
+def g(): ...
+def g(): return "real"      # g() answered deco's result
+
+h = None
+def h(): ...                # h() was "'NoneType' object is not callable"
+```
+
+The def now clears the slot when an earlier statement of the module body stored
+it (`FunctionDefAst >> ___rebindsAnEarlierModuleBinding___`, with
+`AbstractNode >> ___storesModuleSlot___:` walking if/try/for/with arms). An
+absent slot IS the method, so clearing it is the rebinding. The unconditional
+clear recorded under "A top-level def cannot rebind a name a decorator stored"
+was reverted after breaking `socket` post-deploy; this one fires only where an
+earlier statement names the def, which no def in `socket` does.
+
+A DECORATED def clears the slot too, before its chain runs, because the chain
+reads its base through the slot. Without that, jinja2's
+`@overload ×2` + `@pass_context def sync_do_map` wrapped the second stub's
+`_overload_dummy` instead of its own method. `|map` then raised "You should not
+call an overloaded function" (`FlaskScaffoldingTestCase>>testJinja2RenderMapFilter`,
+caught by the first full run). A stdlib scan finds nine defs the clear fires on
+(flask, asgiref, jinja2, werkzeug), all overload stubs followed by an
+implementation.
+
+With that fixed, CPython's `overload` works as written: the stubs answer
+`_overload_dummy`, the implementation displaces it, and calling a lone stub
+raises `NotImplementedError` (`OverloadTests.test_overload_fails`).
+`tests/python/module_def_rebinding.py` (self-running, 20 checks) and
+`ModuleDefRebindingTestCase` pin both halves of this section.
+
+**A module body's class-attribute store survives a bind.** This was
+`test_bytestring`, which failed only once `deployFrameworks` had run.
+`typing.ByteString`'s `__init__` sets `_removal_version`, and
+`_BaseGenericAlias.__setattr__` forwards it to `collections.abc.ByteString`.
+That class is canonical, so the store went to the deploy session's overlay, and
+a later session that bound typing never saw it. jinja2's
+`Environment.template_class = Template` was lost the same way. The store is now
+recorded and replayed on bind (docs/Persistent_Modules_and_Classes.md par.4.3;
+`BodyClassAttrReplayTestCase`). Only plain-data values are recorded, and abc's
+cache stamps are skipped.
+
+**An outer decorator over `@classmethod` / `@staticmethod` / `@property` sees the
+descriptor.** `@deco @classmethod def m` is `deco(classmethod(m))`; CPython hands
+`deco` the classmethod object. Grail compiles the declarative form itself, so the
+chain handed `deco` the compiled method's handle, and `@override @classmethod`
+put `__override__` on the function. When the declarative form is the innermost
+decorator, the chain now starts from a `PyClassMethod` / `PyStaticMethod` /
+`PropertyDescriptor` over that handle
+(`FunctionDefAst >> ___innermostDeclarativeWrapper___`). The builtin `property`
+also refuses a new attribute as CPython's does (it has no `__dict__`; `__doc__`
+and `__name__` stay writable, and a Python subclass keeps its dict). That refusal
+is what `@override @property` depends on. singledispatchmethod's repr qualifies a
+wrapped descriptor through its function.
+
+**The rest of the eleven:**
+
+- A nested NamedTuple pickles: the class namespace carries the full qualname.
+- A metaclass `@property` is a data descriptor on class reads and writes, so
+  `@final` over one applies. A metaclass `__getattribute__` is consulted for class
+  attribute reads.
+- `get_type_hints`: an assigned `__annotate__` answers a function's annotations
+  (NamedTuple's `__new__`). A method of a class made by `exec` answers the exec
+  namespace as `__globals__`. A method annotation naming an enclosing local reads
+  it through the class cell.
+- `ForwardRef._evaluate` issues the deprecation warnings CPython's does.
+
+**Known divergences left behind, not failing anything:** a metaclass
+`__getattribute__` also sees Grail's own internal `__mro__`/`__bases__` reads. The
+metaclass-property refusal message names the class (`'W class'`) where CPython
+names the metaclass. Module-level `get_overloads(f)` answers one entry, the
+implementation itself, where CPython answers the two stubs. The stubs are not
+compiled (one method per name), so the decorator's base is the implementation.
+Stubs local to a function are unaffected and answer both.
+
 ## FIXED: test_typing's refusals, and the object-model gaps behind them (66 -> 11)
 
 Follow-up to the NamedTuple/TypedDict section above. `test.test_typing` goes from
@@ -232,19 +302,7 @@ object-model difference test_typing happened to exercise.
 
 ### Still failing (11)
 
-- `overload` (Grail's DEVIATION 2): a top-level `def` cannot rebind a decorated
-  name.
-- `@override` over `@classmethod` / `@property`: Grail's decorators do not build
-  those wrapper objects, so the attribute lands on the function.
-- `@final` over a metaclass `@property`: a metaclass data descriptor does not take
-  precedence over the class's own attribute.
-- `get_type_hints`: a method-local class's methods lose their annotations when one
-  names an enclosing local; methods of a class made by `exec` report the wrong
-  `__globals__`; NamedTuple's `__new__.__annotate__` is not kept.
-- A metaclass `__getattribute__` is not consulted for class attribute reads.
-- Pickling a nested NamedTuple; `typing._eval_type`'s deprecation warning from
-  inside the test module; `ByteString._removal_version` (the cross-module store
-  already recorded above).
+All eleven are fixed; see the section above.
 
 ## FIXED: typing's NamedTuple and TypedDict are CPython's, and the metaclass protocols they need
 
@@ -256,8 +314,8 @@ evaluated. The emulations diverged visibly: `__bases__` read `(_TypedDictBase,
 Generic)` where CPython reads `(Generic, dict)`, `__orig_bases__` was missing, and
 the key sets were computed by a different algorithm.
 
-**Now** `typing.py` is CPython 3.14.6's byte for byte except GRAIL DEVIATION 2
-(`overload`), and `tests/python/metaclass_protocols.py` pins what made that possible
+**Now** `typing.py` is CPython 3.14.6's byte for byte (GRAIL DEVIATION 2,
+`overload`, went later with the codegen defect behind it), and `tests/python/metaclass_protocols.py` pins what made that possible
 (19 checks, CPython-measured):
 
 - **`type.__new__` builds the class a metaclass asks for.** When the bases differ
@@ -482,7 +540,7 @@ failures, 26 errors**; the NamedTuple / TypedDict / metaclass-protocol group
 - **`__slots__` (~3).** A class with `__slots__` still accepts other
   attributes, and a Protocol isinstance check through `__slots__` differs.
 - **A module body's store on another module's class is lost in a later
-  session.** `typing`'s `_DeprecatedGenericAlias` sets `_removal_version` on
+  session** (FIXED since; see "test_typing passes" above). `typing`'s `_DeprecatedGenericAlias` sets `_removal_version` on
   `collections.abc.ByteString`; the store goes to the deploy session's overlay
   and never commits. This is the "write side" still open in
   `docs/Persistent_Modules_and_Classes.md` §4.3.
@@ -3293,7 +3351,7 @@ typing_extensions and pydantic_core read as a version-detection API.
 
 ### NOT fixed -- open, with repros
 
-**A top-level `def` cannot rebind a name a decorator stored.**
+**FIXED since (see "test_typing passes" above): a top-level `def` cannot rebind a name a decorator stored.**
 
 ```python
 def deco(f): return "DECORATED"

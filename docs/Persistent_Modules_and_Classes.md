@@ -244,6 +244,22 @@ module that registers a reducer at import time, and pickling those types breaks
 silently in the next session. The fix, when it is needed, is the third instance of
 the pattern above: record what the body registered and replay it on bind.
 
+**Class-attribute stores are the first registration that does this.** A body's
+store on an already-canonical class (its own class after the class statement,
+or another module's) goes to the session overlay by D3, and so it was lost on
+bind as well. typing's `ByteString` alias forwards `_removal_version` onto
+`collections.abc.ByteString`, and jinja2 ends `environment.py` with
+`Environment.template_class = Template`. Both were missing in every session
+that bound the deployed modules. `importlib >> ___recordBodyClassAttr___:name:value:`
+now records such a store under the module whose body made it. The record is
+committed in `GrailCanonicalBodyClassAttrs`, dropped when that body runs
+again, and `___restoreAllBodyClassAttrs___` replays it at both acquisition
+points. Replay happens once per session per module, and only into an empty
+overlay slot. Only plain data is recorded (None, booleans, numbers, strings,
+classes, tuples of those), and never abc's `_abc_*` cache stamps, because the
+record commits with the deployment. Any other value stays session-local, as
+before.
+
 The mirror-image trap applies to module state: a **deployed** module's committed
 globals hold whatever its body captured, so an early-bound name
 (`from copyreg import dispatch_table`) freezes the deploy session's object while

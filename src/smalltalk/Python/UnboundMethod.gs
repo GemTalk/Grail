@@ -1201,6 +1201,12 @@ __globals__
 	the BoundMethod twin for why."
 
 	| view |
+	"A class made by exec() carries the namespace it was made in."
+	((definingClass @env0:isKindOf: Behavior)
+		and: [definingClass @env0:isMeta @env0:not]) ifTrue: [
+			([definingClass @env1:___dynamicClassAttr___: #'___grailDoitGlobals___']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil])
+				@env0:ifNotNil: [:g | ^ g]].
 	view := (Python @env0:at: #'PyModuleDict')
 		@env0:___forModuleNamed___: ([self __module__]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]).
@@ -1253,6 +1259,12 @@ __annotations__
 	the inference reported ``no type annotation found'', and the registration
 	was lost."
 
+	"An ASSIGNED __annotate__ answers for the function: typing's _make_nmtuple
+	writes ``nm_tpl.__new__.__annotate__ = annotate'', and get_type_hints of a
+	NamedTuple's __new__ then read the (empty) compiled table instead
+	(test_typing test_get_type_hints_classes)."
+	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:fn |
+		fn ~~ None ifTrue: [^ fn @env1:___pyCallValue___: { 1 } kw: nil]]).
 	^ self ___annotationsForClass___: self ___metadataClass___
 %
 

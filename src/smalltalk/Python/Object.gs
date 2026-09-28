@@ -4217,6 +4217,24 @@ ___grailDispatchMetaclass___
 					@env0:on: AbstractException do: [:ex |
 						(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 						ex @env0:return: nil]]].
+		"A NESTED class's __qualname__ is stamped after __prepare__ ran -- the
+		store needs the class holder, which exists only by then -- so the seed
+		the namespace got there is the bare name.  NamedTupleMeta copies the
+		namespace's __qualname__ onto the class it builds, and ``Outer.Inner''
+		came out ``Inner'', which pickle cannot find (test_typing
+		test_copy_and_pickle).  Refresh a seed that is still the bare name."
+		[ | cur seeded |
+		cur := self ___pyAttrLoad___: #'__qualname__'.
+		seeded := (ns @env1:__contains__: '__qualname__') ___isTruthy___
+			ifTrue: [ns @env1:__getitem__: '__qualname__'] ifFalse: [nil].
+		((seeded @env0:isKindOf: CharacterCollection)
+			and: [(cur @env0:isKindOf: CharacterCollection)
+			and: [(seeded @env0:asString @env0:= (self ___pyAttrLoad___: #'__name__') @env0:asString)
+			and: [(cur @env0:asString @env0:= seeded @env0:asString) @env0:not]]])
+			ifTrue: [ns @env1:__setitem__: '__qualname__' _: cur]]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
 		(ns @env1:__contains__: '__orig_bases__') ___isTruthy___ ifFalse: [
 			[ | pending |
 			pending := (SessionTemps @env0:current
@@ -6987,6 +7005,10 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 		inner := KeyValueDictionary @env0:new.
 		ov @env0:at: aClass put: inner].
 	inner @env0:at: aSym put: aValue.
+	"A module BODY's store is part of what importing the module means, and a
+	session that binds the deployed module will not run the body -- record it
+	for replay (importlib >> ___recordBodyClassAttr___:name:value:)."
+	importlib @env0:___recordBodyClassAttr___: aClass name: aSym value: aValue.
 	^ true
 %
 
@@ -9353,6 +9375,13 @@ ___pyAttrLoad___: aSym
 			and: [(s @env0:= '__class__') @env0:not
 				or: [(self ___declaresOwnClassAttr___: aSym) @env0:not]]])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
+	"A METACLASS __getattribute__ owns every read off its classes.  Flagged per
+	session when such a metaclass is first recorded, so the ordinary class read
+	pays one SessionTemps probe and nothing else; see
+	___grailMetaGetattribute___:."
+	((SessionTemps @env0:current @env0:at: #'GrailMetaGetattribute' otherwise: nil) ~~ nil
+		and: [self isKindOf: Behavior]) ifTrue: [
+			(self ___grailMetaGetattribute___: aSym) @env0:ifNotNil: [:___r | ^ ___r @env0:at: 1]].
 	(self isKindOf: Behavior) ifTrue: [
 		"``Sub.__new__'' for a Python class that inherits __new__ from a
 		built-in IS the built-in's: CPython's ``class C(int): pass'' has
@@ -9681,6 +9710,13 @@ ___pyAttrLoad___: aSym
 		each to raise a clean RecursionError -- and it failed on the temp alone,
 		with the reordering logic unchanged."
 		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
+			"A @property ON THE METACLASS is a data descriptor of the class's
+			type, and answers first: ``class Meta(type): @property def
+			__final__(self)'' makes ``WithMeta.__final__'' the property's value
+			(test_typing test_dunder_final)."
+			(self ___grailMetaclassPropertyOwner___: aSym)
+				@env0:ifNotNil: [:___po | ^ self @env0:performMethod:
+					(___po @env0:compiledMethodAt: aSym environmentId: 1)].
 			(___meta ___classChainAttrLookup___: aSym)
 				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv].
 			"A CLASS-BODY ASSIGNMENT IN THE METACLASS -- ``class Meta(type):
@@ -12842,7 +12878,54 @@ ___grailSetMetaclass___: aMetaclass
 		@env0:at: #'GrailClassMetaclass'
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: aMetaclass.
+	"Arm ___pyAttrLoad___'s metaclass-__getattribute__ probe the first time a
+	metaclass that defines one is recorded."
+	(object ___grailMetaclassDefinesGetattribute___: aMetaclass) ifTrue: [
+		SessionTemps @env0:current @env0:at: #'GrailMetaGetattribute' put: true].
 	^ self
+%
+
+category: 'Grail-Metaclass'
+classmethod: object
+___grailMetaclassDefinesGetattribute___: aMetaclass
+	"Does this Python metaclass define __getattribute__ itself, below type?"
+
+	| owner |
+	(aMetaclass @env0:isKindOf: Behavior) ifFalse: [^ false].
+	owner := aMetaclass @env0:whichClassIncludesSelector: #'__getattribute__:'
+		environmentId: 1.
+	^ owner @env0:notNil
+		and: [owner ~~ object and: [owner ~~ Object
+		and: [owner ~~ (Python @env0:at: #type)
+		and: [owner @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]]]]
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaGetattribute___: aSym
+	"``type(cls).__getattribute__(cls, name)'' for a class whose metaclass
+	defines one, wrapped in a one-element Array; nil to fall through to the
+	ordinary class read.  The hook's own ``object.__getattribute__(self,
+	name)'' / ``super().__getattribute__(name)'' comes back here for the same
+	class and name, and that nested read is the ordinary one: the pair is held
+	in SessionTemps while the hook runs.  typing's NamedTupleMeta reads
+	``type(val).__set_name__'' and must see what such a hook raises (test_typing
+	test_strange_errors_when_accessing_set_name_itself)."
+
+	| meta active pair m owner |
+	meta := self ___grailMetaclass___.
+	(object ___grailMetaclassDefinesGetattribute___: meta) ifFalse: [^ nil].
+	active := SessionTemps @env0:current @env0:at: #'GrailMetaGetattributeActive'
+		ifAbsentPut: [OrderedCollection @env0:new].
+	(active @env0:anySatisfy: [:p | (p @env0:at: 1) == self
+			and: [(p @env0:at: 2) == aSym]])
+		ifTrue: [^ nil].
+	owner := meta @env0:whichClassIncludesSelector: #'__getattribute__:' environmentId: 1.
+	m := owner @env0:compiledMethodAt: #'__getattribute__:' environmentId: 1.
+	pair := Array @env0:with: self with: aSym.
+	active @env0:addLast: pair.
+	^ [Array @env0:with: (self @env0:with: aSym @env0:asString performMethod: m)]
+		@env0:ensure: [active @env0:removeIdentical: pair ifAbsent: [nil]]
 %
 
 category: 'Grail-Metaclass'
@@ -14873,6 +14956,28 @@ set compile_env: 1
 
 category: 'Grail-Attribute Access'
 method: object
+___grailMetaclassPropertyOwner___: aSym
+	"The Python-written class on this class's recorded metaclass chain that
+	holds aSym as a PROPERTY -- a unary getter with its one-argument setter, the
+	pair ClassDefAst compiles for @property (a read-only one's setter refuses)
+	-- or nil.  Nil fast for a class with no metaclass, which is nearly all."
+
+	| meta owner |
+	(self @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	meta := self ___grailMetaclass___.
+	(meta @env0:notNil and: [meta @env0:isKindOf: Behavior]) ifFalse: [^ nil].
+	owner := meta @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner @env0:isNil ifTrue: [^ nil].
+	(owner @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifFalse: [^ nil].
+	(owner @env0:includesSelector: (aSym @env0:asString @env0:, ':') @env0:asSymbol
+			environmentId: 1)
+		ifFalse: [^ nil].
+	^ owner
+%
+
+category: 'Grail-Attribute Access'
+method: object
 ___grailMetaclassSetattr___: aName value: aValue
 	"Run the recorded metaclass's own __setattr__ for ``self.aName = aValue''
 	on a class receiver, answering true when it ran.  CPython routes every
@@ -15041,6 +15146,14 @@ ___pyAttrStore___: aName put: aValue
 		"``Cls.x = v'' is type(Cls).__setattr__(Cls, 'x', v): a METACLASS that
 		defines __setattr__ decides.  See ___grailMetaclassSetattr___:value:."
 		(self ___grailMetaclassSetattr___: aName value: aValue) ifTrue: [^ aValue].
+		"...and a metaclass @property takes the store through its setter -- a
+		read-only one refuses it, which typing.final swallows (see the read side
+		in ___pyAttrLoad___)."
+		(self ___grailMetaclassPropertyOwner___: aName @env0:asString @env0:asSymbol)
+			@env0:ifNotNil: [:___po |
+				self @env0:with: aValue performMethod: (___po @env0:compiledMethodAt:
+					(aName @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1).
+				^ aValue].
 		"Installing __hash__ on a class at runtime has to become visible to
 		hash(), which reaches Object >> __hash__ by an ordinary message send and
 		so cannot see a dynamic class attribute.  Record that one exists; that

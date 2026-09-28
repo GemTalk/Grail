@@ -791,6 +791,8 @@ run
 	at: #'ClassMetaclassIdentityTestCase' put: nil;
 	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
 	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
+	at: #'ModuleDefRebindingTestCase' put: nil;
+	at: #'BodyClassAttrReplayTestCase' put: nil;
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
 	at: #'ClassMethodViaInstanceTestCase' put: nil;
 	at: #'ClassNewAttributeTestCase' put: nil;
@@ -2223,6 +2225,8 @@ input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
+input src/smalltalk/PythonTests/ModuleDefRebindingTestCase.gs
+input src/smalltalk/PythonTests/BodyClassAttrReplayTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs

@@ -1433,7 +1433,18 @@ printSmalltalkRuntimeOn: aStream
 	test_annotationlib's GH-143831 test -- and compiled late the read found no
 	table and answered {}.  Safe this early: the annotate blocks are BUILT when
 	the table method runs and evaluate their names only when called."
-	self emitMethodAnnotationsTableOn: aStream className: name.
+	"NOT under inClassBodyValueEmit, which is on for the class body's own
+	values here: the table compiles as a separate CLASS-SIDE method, where the
+	enclosing function's temps do not exist.  With the flag on, an annotation
+	naming an enclosing local (``def m(self, o: X)'' in a class inside a def)
+	emitted a bare temp read, the table failed to compile, and every method of
+	the class lost its annotations (test_typing
+	test_get_type_hints_annotated_refs).  Off, NameAst reads such a name
+	through the class cell as a method body does, and registers it so the cell
+	is stored."
+	[CallAst inClassBodyValueEmit: false.
+	 self emitMethodAnnotationsTableOn: aStream className: name]
+		ensure: [CallAst inClassBodyValueEmit: true].
 
 	"The doc / signature / receiver / type-params / static tables and the
 	synthetic ``__module__'' are early too, for one reason: a class body runs
@@ -2082,6 +2093,14 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: '.
 		self printQuotedString: prefix , '.' , name asString on: aStream.
 		aStream nextPutAll: '.'; lf].
+	"A class made by exec() records the namespace it was made in: its methods'
+	__globals__ is that dict in CPython, and get_type_hints resolves a string
+	annotation there (test_typing test_default_globals).  Module-built classes
+	need nothing -- their methods resolve __globals__ through __module__."
+	self ___readsModuleNameAtRunTime___ ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''___grailDoitGlobals___'' put: (((Python @env0:at: #builtins) instance) ___doitGlobalsView___: ___pyGlobals___).';
+			lf].
 
 	"For each @property (and @cached_property) method, compile a 1-arg
 	setter that signals AttributeError.  Pairing the getter with a

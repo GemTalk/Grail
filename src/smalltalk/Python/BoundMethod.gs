@@ -1245,6 +1245,12 @@ __annotations__
 	reports an empty dict, matching CPython's ``always has one''."
 
 	| cls |
+	"An ASSIGNED __annotate__ -- typing's _make_nmtuple writes
+	``nm_tpl.__new__.__annotate__ = annotate'' on a class's interned handle --
+	answers for the function, as a function's own assignment does in CPython
+	(test_typing test_get_type_hints_classes reads a NamedTuple's __new__)."
+	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:fn |
+		fn ~~ None ifTrue: [^ fn @env1:___pyCallValue___: { 1 } kw: nil]]).
 	"A class-body sibling reference is receiver-less but carries its
 	 definingClass, exactly as __annotate__ resolves it.  Answering {} for it
 	 was wrong only while the class body RUNS -- the one time that handle is
@@ -1288,6 +1294,8 @@ __annotate__
 	nothing reads."
 
 	| cls fn |
+	"An assigned __annotate__ wins -- see __annotations__."
+	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:v | ^ v]).
 	"A class-body sibling reference is emitted receiver-less but WITH its
 	definingClass (NameAst: ``BoundMethod receiver: nil selector: #m
 	definingClass: C''), and that is the handle a class-body decorator chain
@@ -1846,7 +1854,16 @@ __globals__
 	defined.  It is also what the attribute did before it existed at all, so
 	nothing that already probes with hasattr changes behaviour."
 
-	| view |
+	| view cls |
+	"A method of a class made by exec() answers the namespace that class was
+	made in (UnboundMethod >> __globals__ says why)."
+	cls := (receiver @env0:isKindOf: Behavior)
+		ifTrue: [receiver]
+		ifFalse: [(receiver @env0:isKindOf: module) ifTrue: [nil] ifFalse: [receiver @env0:class]].
+	cls @env0:notNil ifTrue: [
+		([cls @env1:___dynamicClassAttr___: #'___grailDoitGlobals___']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil])
+			@env0:ifNotNil: [:g | ^ g]].
 	view := (Python @env0:at: #'PyModuleDict')
 		@env0:___forModuleNamed___: ([self __module__]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]).
