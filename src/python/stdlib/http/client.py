@@ -79,6 +79,10 @@ __all__ = [
 HTTP_PORT = 80
 HTTPS_PORT = 443
 
+# Methods whose request carries a body, so an absent one is sent as
+# ``Content-Length: 0'' (RFC 7230, section 3.3.2).  CPython's.
+_METHODS_EXPECTING_BODY = {'PATCH', 'POST', 'PUT'}
+
 _MAX_LINE = 65536
 _MAX_HEADERS = 100
 
@@ -425,7 +429,8 @@ class HTTPResponse(io.BufferedIOBase):
                 break
             # discard the informational response's headers
             self._read_headers()
-        self.status = status
+        # CPython sets both: urllib.request's handlers read ``code''.
+        self.code = self.status = status
         self.reason = reason
         self.headers = self._read_headers()
         self.msg = self.headers
@@ -573,6 +578,41 @@ class HTTPConnection:
     default_port = HTTP_PORT
     auto_open = 1
     debuglevel = 0
+
+    @staticmethod
+    def _get_content_length(body, method):
+        """Get the content-length based on the body.
+
+        If the body is None, we set Content-Length: 0 for methods that expect
+        a body (RFC 7230, Section 3.3.2). We also set the Content-Length for
+        any method if the body is a str or bytes-like object and not a file.
+
+        CPython's own.  urllib.request's AbstractHTTPHandler sizes a request
+        body with it before request() is ever called.
+        """
+        if body is None:
+            # do an explicit check for not None here to distinguish
+            # between unset and set but empty
+            if method.upper() in _METHODS_EXPECTING_BODY:
+                return 0
+            else:
+                return None
+
+        if hasattr(body, 'read'):
+            # file-like object.
+            return None
+
+        try:
+            # does it implement the buffer protocol (bytes, bytearray, array)?
+            mv = memoryview(body)
+            return mv.nbytes
+        except TypeError:
+            pass
+
+        if isinstance(body, str):
+            return len(body)
+
+        return None
 
     def __init__(self, host, port=None,
                  timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
@@ -784,12 +824,21 @@ class HTTPConnection:
             headers = {}
         header_names = [k.lower() for k in headers]
         self.putrequest(method, url)
-        if body is not None and 'content-length' not in header_names:
+        if ('content-length' not in header_names
+                and 'transfer-encoding' not in header_names):
+            # CPython's sizing, including an empty POST's Content-Length: 0 --
+            # except that a body it cannot size (a file, an iterable) is
+            # measured with len() here rather than sent chunked: send() has no
+            # chunked encoder.  A str body is sent as UTF-8, so it is measured
+            # as that rather than in characters.
             if isinstance(body, str):
                 length = len(body.encode('utf-8'))
             else:
-                length = len(body)
-            self.putheader('Content-Length', str(length))
+                length = self._get_content_length(body, method)
+                if length is None and body is not None:
+                    length = len(body)
+            if length is not None:
+                self.putheader('Content-Length', str(length))
         for name in headers:
             self.putheader(name, headers[name])
         self.endheaders(body)
@@ -808,6 +857,22 @@ class HTTPConnection:
         else:
             self._response = response
         return response
+
+
+def _create_https_context(http_version):
+    """CPython's own: the context an HTTPS connection gets by default.
+    urllib.request's HTTPSHandler builds its context here, so that it can set
+    check_hostname on it.  post_handshake_auth is read with getattr because
+    Grail's ssl has no TLS 1.3 post-handshake authentication to enable."""
+    import ssl
+    context = ssl._create_default_https_context()
+    # send ALPN extension to indicate HTTP/1.1 protocol
+    if http_version == 11:
+        context.set_alpn_protocols(['http/1.1'])
+    # enable PHA for TLS 1.3 connections if available
+    if getattr(context, 'post_handshake_auth', None) is not None:
+        context.post_handshake_auth = True
+    return context
 
 
 class HTTPSConnection(HTTPConnection):

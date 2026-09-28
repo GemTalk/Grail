@@ -45,11 +45,10 @@ name.  Their expectations live in tests/python/urllib_defrag_and_proxies.py,
 which is self-running and therefore measured against real CPython by
 scripts/check_python_fixtures.sh.
 
-Four of them are deliberately LESS than CPython, and the tests say so rather
+Three of them are deliberately LESS than CPython, and the tests say so rather
 than papering over it: atexit keeps the registry but never fires it by itself
 (a gem has no observable shutdown); http.client.IncompleteRead is a name and a
-shape that Grail''s HTTPResponse does not yet raise; urldefrag returns the URL
-exactly as given where CPython lowercases the scheme; and
+shape that Grail''s HTTPResponse does not yet raise; and
 getproxies_environment cannot honour an EMPTY proxy variable, because GemStone
 has no representation for one -- setting a variable to the empty string is
 precisely how it unsets it.'
@@ -552,17 +551,14 @@ testUrldefragIsBytesInBytesOut
 
 category: 'Grail-Tests - urllib.parse.urldefrag'
 method: StdlibLongTailTestCase
-testUrldefragLeavesTheSchemeAlone
-	"DELIBERATELY LESS than CPython, and the test says so rather than papering
-	over it.  CPython's urldefrag rebuilds through urlsplit()/urlunsplit(),
-	which lowercases the scheme, so ``HTTP://Example.COM/p#f'' comes back as
-	``http://Example.COM/p'' there.  Grail partitions at the '#' and returns the
-	URL exactly as given, because no urlsplit/urlparse in Grail's urllib.parse
-	lowercases a scheme -- singling urldefrag out would be the inconsistency.
-	The fixture marks this check grail_only, so the CPython gate expects it to
-	disagree."
+testUrldefragLowercasesTheScheme
+	"urldefrag rebuilds through urlsplit()/urlunsplit(), which lowercase the
+	scheme and nothing else, so ``HTTP://Example.COM/p#f'' comes back as
+	``http://Example.COM/p''.  This was pinned as a deliberate deviation while
+	Grail's urllib.parse was hand-rolled and lowercased no scheme anywhere;
+	urllib.parse is now CPython's own, so the difference went away."
 
-	self assertUrllibChecks: #( #'defrag_leaves_the_scheme_alone' )
+	self assertUrllibChecks: #( #'defrag_lowercases_the_scheme' )
 %
 
 category: 'Grail-Tests - urllib.request proxies'
@@ -686,4 +682,116 @@ _p = getproxies_environment()
 				ifFalse: [ temps at: #'___GrailOsEnviron___' put: saved ] ].
 	self assert: (seen @env1:__getitem__: 0) equals: 'http://seeded:1'.
 	self assert: (seen @env1:__getitem__: 1) == None
+%
+
+! ===============================================================================
+! Runtime gaps behind test.test_urllib2_localnet
+! ===============================================================================
+! Vendoring CPython's urllib.request / urllib.parse / urllib.error surfaced
+! runtime gaps unrelated to urllib itself.  Each is pinned in isolation in
+! tests/python/urllib_localnet_runtime.py, which is self-running and so
+! measured against real CPython by scripts/check_python_fixtures.sh.  The TLS
+! half (server-side wrap of an accepted connection, SNI callback, ragged EOF)
+! is SslModuleTestCase>>testUpgradedAcceptRaggedEofAndSni.
+! ===============================================================================
+
+category: 'Grail-helpers'
+method: StdlibLongTailTestCase
+assertLocalnetChecks: aCollectionOfSelectors
+	"Run the named zero-argument checks from urllib_localnet_runtime.py, fresh,
+	and report any that did not answer true BY NAME."
+
+	| fixture failures |
+	importlib @env1:modules removeKey: #'urllib_localnet_runtime' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/urllib_localnet_runtime.py')
+		name: 'urllib_localnet_runtime'.
+	failures := OrderedCollection new.
+	aCollectionOfSelectors do: [:each |
+		((fixture @env0:perform: each env: 1) = true)
+			ifFalse: [ failures add: each ] ].
+	self assert: failures isEmpty
+		description: 'checks that did not answer true: ' , failures printString
+%
+
+category: 'Grail-Tests - urllib localnet runtime'
+method: StdlibLongTailTestCase
+testExceptionDictAndVars
+	"An exception has a live __dict__ of the attributes set on it, and vars()
+	answers it -- not GemStone's gsNumber/gsStack slots.  HTTPError reads
+	through tempfile's _TemporaryFileWrapper, whose __getattr__ consults
+	self.__dict__ and recursed without end when there was none."
+
+	self assertLocalnetChecks: #(
+		#'exception_dict_holds_set_attributes'
+		#'exception_vars_is_its_dict'
+		#'exception_dict_is_live' )
+%
+
+category: 'Grail-Tests - urllib localnet runtime'
+method: StdlibLongTailTestCase
+testAliasOfBaseInitRunsTheBase
+	"urllib.error.HTTPError keeps ``__super_init = URLError.__init__'' and
+	calls it from its own __init__.  The alias used to bind by SELECTOR, so on
+	an HTTPError it re-sent __init__ and ran the override -- 'missing fp'.  It
+	must bind the function it was taken from."
+
+	self assertLocalnetChecks: #( #'alias_of_base_init_runs_the_base' )
+%
+
+category: 'Grail-Tests - urllib localnet runtime'
+method: StdlibLongTailTestCase
+testClassAttrSetAtLoadOnBuiltinSubclass
+	"A class attribute stored after the class statement, at module load, on a
+	subclass of tuple or str must be visible on its instances.  urllib.parse's
+	_fix_result_transcoding does exactly that for _encoded_counterpart, and
+	every encode()/decode() of a parse result failed without it."
+
+	self assertLocalnetChecks: #(
+		#'class_attr_set_at_load_seen_on_tuple_subclass_instance'
+		#'class_attr_set_at_load_seen_on_str_subclass_instance' )
+%
+
+category: 'Grail-Tests - urllib localnet runtime'
+method: StdlibLongTailTestCase
+testHashlibKeywordForms
+	"hashlib.md5(b'', usedforsecurity=True), sha256(data=...) and
+	new(name, data=..., usedforsecurity=...) -- the digest-auth handler in
+	urllib.request passes usedforsecurity."
+
+	self assertLocalnetChecks: #(
+		#'hashlib_named_constructor_accepts_keywords'
+		#'hashlib_new_accepts_keywords' )
+%
+
+category: 'Grail-Tests - urllib localnet runtime'
+method: StdlibLongTailTestCase
+testOsUrandom
+	"os.urandom exists (urllib.request binds it at import) with CPython's
+	argument checks, the TypeError naming the Python type."
+
+	self assertLocalnetChecks: #(
+		#'urandom_answers_bytes_of_the_length_asked'
+		#'urandom_rejects_a_negative_size'
+		#'urandom_rejects_a_non_integer' )
+%
+
+category: 'Grail-Tests - urllib localnet runtime'
+method: StdlibLongTailTestCase
+testHttpClientContentLength
+	"HTTPConnection._get_content_length: bytes by length, no body on GET is
+	None, no body on POST is 0, an iterator is None (chunked)."
+
+	self assertLocalnetChecks: #( #'content_length_by_body_and_method' )
+%
+
+category: 'Grail-Tests - urllib localnet runtime'
+method: StdlibLongTailTestCase
+testUrlparseIsCPythons
+	"urlparse answers six fields, and a result encodes to its bytes twin and
+	back -- CPython's urllib.parse, vendored."
+
+	self assertLocalnetChecks: #(
+		#'urlparse_has_six_fields'
+		#'urlsplit_encode_decode_round_trip' )
 %

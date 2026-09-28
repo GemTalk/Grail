@@ -11,8 +11,8 @@
 # check written from a Grail session rather than measured against CPython gets
 # caught here instead of becoming permanent "conformance evidence".
 #
-# Two checks are marked grail_only and print XFAIL under CPython.  They document
-# Grail deviations that are real and deliberate; see the comments on each.
+# One check is marked grail_only and prints XFAIL under CPython.  It documents
+# a Grail deviation that is real and deliberate; see the comment on it.
 
 import os
 
@@ -100,15 +100,12 @@ def defrag_str_result_encodes_to_bytes():
     return r.url == b'http://e/p' and r.fragment == b'f'
 
 
-def defrag_leaves_the_scheme_alone():
-    # GRAIL DEVIATION -- XFAIL under CPython, deliberately.  CPython's
-    # urldefrag builds its result with urlsplit() + urlunsplit(), and urlsplit
-    # LOWERCASES the scheme on the way through, so there this URL comes back as
-    # 'http://Example.COM/p'.  Grail partitions at the '#' and returns the URL
-    # untouched, because none of Grail's urlsplit/urlparse lowercase a scheme
-    # either -- making urldefrag alone do it would put it out of step with the
-    # module around it.  See the deviation note in urllib/parse.py.
-    return urldefrag('HTTP://Example.COM/p#f').url == 'HTTP://Example.COM/p'
+def defrag_lowercases_the_scheme():
+    # Was a deliberate Grail deviation (XFAIL) while Grail's urllib.parse was
+    # hand-rolled and lowercased no scheme anywhere.  urllib.parse is now
+    # CPython's own, whose urldefrag round-trips through urlsplit/urlunsplit
+    # and so lowercases the scheme -- and only the scheme.
+    return urldefrag('HTTP://Example.COM/p#f').url == 'http://Example.COM/p'
 
 
 # ------------------------------------------------------- proxy environment
@@ -335,7 +332,7 @@ checks = [
     defrag_bytes_in_bytes_out,
     defrag_bytes_result_decodes_back_to_str,
     defrag_str_result_encodes_to_bytes,
-    defrag_leaves_the_scheme_alone,
+    defrag_lowercases_the_scheme,
     getproxies_reads_lowercase_scheme_variables,
     getproxies_strips_the_proxy_suffix_and_lowercases_the_scheme,
     getproxies_prefers_the_lowercase_spelling,
@@ -363,16 +360,11 @@ checks = [
 # deviation, so they print XFAIL rather than FAIL under CPython and an XPASS
 # (the difference having gone away) is a failure of this gate.
 #
-#   defrag_leaves_the_scheme_alone -- Grail returns the URL exactly as given;
-#     CPython lowercases the scheme, because its urldefrag round-trips through
-#     urlsplit/urlunsplit.  See the deviation note in urllib/parse.py.
-#
 #   getproxies_empty_value_cannot_unset_the_uppercase_one -- GemStone has no
 #     representation for an empty environment variable ('' is how it unsets
 #     one), so CPython's "empty lowercase name suppresses the uppercase one"
 #     rule cannot fire.  See the comment on the check.
 grail_only = {
-    'defrag_leaves_the_scheme_alone',
     'getproxies_empty_value_cannot_unset_the_uppercase_one',
 }
 
