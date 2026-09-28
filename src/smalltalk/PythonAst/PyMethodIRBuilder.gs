@@ -811,25 +811,10 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
     selector: aSelector env: anEnvId .  "includes special selectors optimization"
 	argNodes do: [:a | sendNode appendArgument: a] .
 	self setSourcePosition: sendNode .
-  "optimize must be sent after setting rcvr, selector and all args.
+  "optimize must be sent after setting rcvr, selector and all args."
 
-   NOT for the value:-family.  GsComSendNode>>optimize does two unrelated
-   things: it inlines control selectors (ifTrue:, whileTrue:, to:do:, ...) when
-   their arguments are block nodes -- which this builder relies on -- and, for
-   value: .. value:value:value:value:value:, it marks the selector leaf with the
-   Bc_SEND_VALUE_u1_u32 special opcode (fix 52088).  On 4.0.0.a2 (Darwin build
-   2026-09-15, and the CI container build of 2026-09-21) a method built that way
-   crashes the gem with SIGBUS the first time the send runs, WHATEVER the
-   receiver -- a block, an Array, or an object with its own env-1 value: --
-   while the same send built without optimize dispatches as an ordinary env-1
-   send.  In CI it surfaced as every SUnit shard dying in a forced-IR test, and
-   locally as `a PyDict does not understand #'__selectorIdNotFound:''.  Nothing
-   needs the opcode: CallAst's IR emit calls through ___pyCallValue___:kw:,
-   which reaches a block by ordinary env-1 lookup."
-  (#(#value: #value:value: #value:value:value: #value:value:value:value:
-     #value:value:value:value:value:) includesIdentical: aSelector)
-      ifFalse: [isOptimized := sendNode optimize].  "isOptimized method temp is for ease of debugging"
-  ^ sendNode
+	isOptimized := sendNode optimize .  "isOptimized method temp is for ease of debugging"
+	^ sendNode
 %
 
 category: 'nodes'
