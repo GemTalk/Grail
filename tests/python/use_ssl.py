@@ -48,6 +48,52 @@ def client_roundtrip(port, payload):
     return [resp, version]
 
 
+def make_plain_listener():
+    """A plain TCP listener, answered as ``[raw, port]``: the TLS upgrade
+    happens per connection, after accept(), in serve_upgraded_then_drop."""
+    raw = socket.socket()
+    raw.bind(("127.0.0.1", 0))
+    raw.listen(1)
+    return [raw, raw.getsockname()[1]]
+
+
+def serve_upgraded_then_drop(raw, certfile, keyfile, password, payload):
+    """Accept a PLAIN connection and only then wrap it server-side -- the
+    socketserver shape test.ssl_servers uses, as opposed to wrapping the
+    listener.  Send ``payload`` and close WITHOUT a TLS close_notify (no
+    unwrap), which is a ragged EOF for the client.  Answer the server names
+    the SNI callback saw."""
+    seen = []
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(certfile, keyfile, password)
+    ctx.set_servername_callback(lambda sock, name, context: seen.append(name))
+    conn, addr = raw.accept()
+    tls = ctx.wrap_socket(conn, server_side=True)
+    tls.sendall(payload)
+    tls.close()
+    raw.close()
+    return seen
+
+
+def client_read_to_eof(port):
+    """Connect with SNI ``localhost`` and read until EOF, then read twice more.
+    Answer ``[data, [after1, after2]]``.  Under suppress_ragged_eofs (the
+    default) a ragged EOF reads as b'' -- every time, not just the first."""
+    ctx = ssl._create_unverified_context()
+    raw = socket.socket()
+    raw.connect(("127.0.0.1", port))
+    c = ctx.wrap_socket(raw, server_hostname="localhost")
+    data = b""
+    while True:
+        chunk = c.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    after = [c.recv(4096), c.recv(4096)]
+    c.close()
+    return [data, after]
+
+
 def trust_store_defaults():
     """The default-context trust store, resolved without touching the net.
 

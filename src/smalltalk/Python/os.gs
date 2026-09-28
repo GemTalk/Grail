@@ -803,6 +803,24 @@ getpid
 
 category: 'Grail-Built-in Functions'
 method: os
+urandom: size
+	"os.urandom(size) — size bytes from the OS CSPRNG.
+
+	secrets already draws them, from GemStone's HostRandom, so this is that
+	with CPython's argument checks.  urllib.request needs it at import: its
+	digest-auth handler takes ``_randombytes = os.urandom'' for client
+	nonces, and a missing name failed the whole module."
+
+	| n |
+	"___asIndex___ is CPython's Py_ssize_t conversion: an int, or __index__,
+	 else TypeError naming the PYTHON type (not 'SmallDouble')."
+	n := size ___asIndex___.
+	n @env0:< 0 ifTrue: [^ ValueError ___signal___: 'negative argument not allowed'].
+	^ (secrets instance) token_bytes: n
+%
+
+category: 'Grail-Built-in Functions'
+method: os
 getcwd
 	"os.getcwd() — return the current working directory."
 

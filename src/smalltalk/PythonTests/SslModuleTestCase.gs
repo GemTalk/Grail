@@ -106,6 +106,49 @@ testTlsRoundtrip
 
 category: 'Grail-Tests-Ssl'
 method: SslModuleTestCase
+testUpgradedAcceptRaggedEofAndSni
+	"The socketserver shape (test.ssl_servers, hence test_urllib2_localnet's
+	HTTPS tests): accept a PLAIN connection, then wrap it server-side, and
+	close without a close_notify.  Three things used to break:
+
+	- wrap_socket(server_side=True) on a CONNECTED socket took the listener
+	  path and never handshook ('wrong version number' at the client);
+	- set_servername_callback did not exist;
+	- the client's read past the ragged EOF -- which GsSecureSocket SIGNALS
+	  as a SocketError rather than answering nil -- escaped Python entirely
+	  and ended the process.  CPython reads it as b'' under
+	  suppress_ragged_eofs, and so does every later read (OpenSSL then says
+	  SSL_ERROR_SYSCALL).
+
+	Expected values measured under CPython 3.14.6 with the same helpers."
+
+	| mod res raw port sem holder result seen |
+	mod := self loadFixture.
+	res := mod @env1:make_plain_listener.
+	raw := res at: 1.
+	port := res at: 2.
+	sem := Semaphore new.
+	holder := Array new: 1.
+	[
+		[holder at: 1 put: (mod @env1:client_read_to_eof: port)]
+			on: Error do: [:e | holder at: 1 put: e].
+		sem signal
+	] fork.
+	seen := mod @env1:serve_upgraded_then_drop: raw _: self serverCertFile
+		_: self serverKeyFile _: self serverKeyPassword
+		_: 'hello over tls' asByteArray.
+	sem wait.
+	result := holder at: 1.
+	self assert: (result isKindOf: OrderedCollection)
+		description: 'client raised: ', result printString.
+	self assert: (result at: 1) equals: 'hello over tls' asByteArray.
+	self assert: ((result at: 2) collect: [:b | b size]) asArray equals: #(0 0).
+	self assert: seen size equals: 1.
+	self assert: (seen at: 1) asString equals: 'localhost'
+%
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
 testDefaultContextLoadsTrustStore
 	"ssl.create_default_context() must arrive with CA anchors loaded, the
 	way CPython's does via load_default_certs().  Without them every

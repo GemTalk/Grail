@@ -546,18 +546,28 @@ __get__: instance _: owner
 	right-hand side of the assignment above unbound in the first place, and a
 	BoundMethod on the class would send the selector to the class object.
 
-	The resulting BoundMethod dispatches ``selector'' to the instance, so the
-	method must be reachable from the instance's own class -- true for the
-	inheritance case above.  A function grafted onto an UNRELATED class is not
-	covered; that needs the whole function object to travel, not a
-	(class, selector) handle."
+	THE RESULT RUNS THIS FUNCTION, NOT WHATEVER THE NAME RESOLVES TO.  It used
+	to be a BoundMethod on (instance, selector), which RE-SENDS the selector:
+	correct only while the instance's class reaches this very method under
+	that name.  When the class overrides the name, the binding ran the
+	override instead.  CPython's urllib.error does exactly that --
+
+	    class HTTPError(URLError, urllib.response.addinfourl):
+	        __super_init = urllib.response.addinfourl.__init__
+	        def __init__(self, url, code, msg, hdrs, fp):
+	            ...
+	            self.__super_init(fp, hdrs, url, code)
+
+	-- and the call re-entered HTTPError.__init__ with four arguments.  A
+	MethodBinding carries the function itself and calls it with the instance
+	prepended, which is value:value: below: a non-virtual performMethod: on
+	definingClass.  It is also what an ordinary instance's class-attribute
+	read already answers (object >> ___instanceClassAttrGet___:); this is the
+	path an exception instance, among others, takes to the same place."
 
 	(instance == nil or: [instance == None]) ifTrue: [^ self].
 	(instance @env0:isKindOf: Behavior) ifTrue: [^ self].
-	"``receiver:selector:'' is an env-1 classmethod, so NO @env0: prefix -- with
-	one it MNUs, and inside an attribute read that escapes as an uncatchable
-	Smalltalk error (the module scored STERROR, 0 tests, not a failure)."
-	^ BoundMethod receiver: instance selector: selector
+	^ MethodBinding instance: instance callable: self
 %
 
 category: 'Grail-Calling'

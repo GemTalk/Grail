@@ -278,6 +278,38 @@ ___fail: what
 
 category: 'Grail-Private'
 method: PyRawSocket
+___tlsReadError: aSocketError
+	"A TLS read failed.  GsSecureSocket reports that by SIGNALLING a
+	SocketError (or its subclass SecureSocketError), not by answering nil as
+	a plain GsSocket read does.  A Smalltalk exception is invisible to Python:
+	it escaped every ``except'' and ended the whole process with OpenSSL's
+	bare text.
+
+	A peer that closes without a close_notify alert is a RAGGED EOF.
+	http.server does exactly that after an HTTP/1.0 response with no
+	Content-Length, which the client must read to EOF.  OpenSSL 3 reports it
+	as ``unexpected eof while reading'', and every later read on the same
+	connection as SSL_ERROR_SYSCALL.  CPython maps both to SSLEOFError (a
+	syscall error with no errno is EOF), and SSLSocket.read answers b'' for
+	that under suppress_ragged_eofs, which defaults to True.  So answer EOF
+	for both.  The later SSL_ERROR_SYSCALL counts as EOF only once this socket
+	has seen the ragged EOF: a reset in mid-stream reports the same code, and
+	that must still raise.  Anything else raises as a catchable OSError."
+
+	| text |
+	text := aSocketError messageText.
+	text := text isNil ifTrue: ['no details'] ifFalse: [text asString].
+	(text includesString: 'unexpected eof') ifTrue: [
+		self dynamicInstVarAt: #'___tlsRaggedEof' put: true.
+		^ ByteArray new].
+	((text includesString: 'SSL_ERROR_SYSCALL')
+		and: [(self dynamicInstVarAt: #'___tlsRaggedEof') == true])
+			ifTrue: [^ ByteArray new].
+	^ OSError @env1:___signal___: 'recv failed: ' , text
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
 ___toByteArray: data
 	"Python bytes (a ByteArray) or str -> a ByteArray GsSocket can write."
 
@@ -980,9 +1012,18 @@ getsockname
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 getpeername
-	| sock |
+	"A socket with no peer -- a listener, or one never connected -- raises
+	OSError(ENOTCONN) as CPython does.  It used to answer ['', 0], which is
+	truthy and so read as a connection: ssl's wrap_socket(server_side=True)
+	tells a listener from an accepted connection by exactly this call.  The
+	errno is errno.py's ENOTCONN (57), like the EAGAIN in ___notReadyNow___."
+
+	| sock peer |
 	sock := self @env0:___ensureOpen.
-	^ { (sock @env0:peerAddress @env0:ifNil: ['']) @env0:asString .
+	peer := sock @env0:peerAddress.
+	peer @env0:isNil ifTrue: [
+		^ OSError ___signalNew___: { 57 . 'Socket is not connected' } kw: nil].
+	^ { peer @env0:asString .
 		(sock @env0:peerPort @env0:ifNil: [0]) }
 %
 
@@ -1102,11 +1143,15 @@ recv: bufsize _: flags
 		^ ValueError ___signal___: 'negative buffersize in recv'].
 	bufsize @env0:= 0 ifTrue: [^ ByteArray @env0:new].
 	ms := self @env0:___timeoutMs.
-	ms @env0:notNil ifTrue: [
-		(sock @env0:readWillNotBlockWithin: ms) == true ifFalse: [
-			^ self ___notReadyNow___]].
 	ba := ByteArray @env0:new: bufsize.
-	n := sock @env0:read: bufsize into: ba startingAt: 1.
+	"Both the readiness probe (GsSecureSocket>>_peek) and the read itself
+	SIGNAL a SocketError on a TLS failure; see ___tlsReadError:."
+	n := [ms @env0:notNil ifTrue: [
+			(sock @env0:readWillNotBlockWithin: ms) == true ifFalse: [
+				^ self ___notReadyNow___]].
+		sock @env0:read: bufsize into: ba startingAt: 1]
+			@env0:on: SocketError
+			do: [:e | ^ self @env0:___tlsReadError: e].
 	n @env0:isNil ifTrue: [^ self @env0:___fail: 'recv failed'].
 	n @env0:= 0 ifTrue: [^ ByteArray @env0:new].
 	^ ba @env0:copyFrom: 1 to: n
@@ -1884,6 +1929,21 @@ _sslLastVerifyError
 	err := [GsSecureSocket @env0:fetchLastCertificateVerificationErrorForClient]
 		@env0:on: Error do: [:e | e @env0:return: nil].
 	^ err @env0:isNil ifTrue: [''] ifFalse: [err @env0:asString]
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslServerName
+	"The server name (SNI) the handshake carried: on a SERVER endpoint, the
+	name the client asked for; None when it sent none.  ssl.py hands it to
+	SSLContext.sni_callback, as CPython does (test_urllib2_localnet
+	test_https_sni)."
+
+	| name |
+	name := [(self @env0:___ensureOpen) @env0:getServerNameIndication]
+		@env0:on: Error do: [:e | e @env0:return: nil].
+	(name == nil @env0:or: [name @env0:isEmpty]) ifTrue: [^ None].
+	^ name @env0:asString
 %
 
 category: 'Grail-TLS'

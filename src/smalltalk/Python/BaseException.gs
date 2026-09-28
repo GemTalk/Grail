@@ -1706,6 +1706,42 @@ args
 	^ args ifNil: [ tuple @env0:withAll: #() ]
 %
 
+category: 'Grail-Attribute Access'
+method: BaseException
+__dict__
+	"``e.__dict__'' -- the live view of the exception's Python attributes,
+	as for any instance.  Exceptions had none: the read raised
+	AttributeError, and a class that also defines __getattr__ recursed
+	forever, because CPython code reaches for __dict__ precisely INSIDE
+	__getattr__.  urllib.error.HTTPError is such a class -- it inherits
+	tempfile._TemporaryFileWrapper, whose __getattr__ begins
+	``file = self.__dict__['file']'' -- so every HTTPError read died of
+	RecursionError (test_urllib2_localnet test_404)."
+
+	^ PyInstanceDict @env0:on: self
+%
+
+category: 'Grail-Attribute Access'
+method: BaseException
+___pyHiddenStateNames___
+	"The dynamic instVars that are Grail's own bookkeeping, not Python
+	attributes -- the context and cause links, the traceback mark, a
+	payload: every one is spelled with Grail's ``___'' prefix.  Computed
+	rather than listed, so bookkeeping added later stays out of __dict__
+	too.  (The kernel's named instVars -- gsNumber, gsResumable, ... --
+	are never in the view, which lists dynamic instVars only.)"
+
+	| pairs names |
+	pairs := self @env0:dynamicInstVarPairs.
+	names := OrderedCollection @env0:new.
+	1 @env0:to: pairs @env0:size by: 2 do: [:i | | n |
+		n := pairs @env0:at: i.
+		((n isKindOf: CharacterCollection)
+			@env0:and: [n @env0:asString @env0:beginsWith: '___'])
+				ifTrue: [names @env0:add: n]].
+	^ names @env0:asArray
+%
+
 set compile_env: 0
 category: 'Grail-Python Attribute Hook'
 classmethod: BaseException
@@ -1734,6 +1770,7 @@ ___pythonValueAttrs___
 		add: #'__context__';
 		add: #'__cause__';
 		add: #'__suppress_context__';
+		add: #'__dict__';
 		yourself
 %
 set compile_env: 1

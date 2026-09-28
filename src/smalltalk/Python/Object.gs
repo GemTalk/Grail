@@ -10221,6 +10221,29 @@ ___pyAttrLoad___: aSym
 	Instance receivers only.  A class receiver consulted this store in the
 	Behavior branch above, before ITS wrap, so it is already correct; probing
 	again here would be redundant."
+	"...AND THE SESSION OVERLAY FIRST, for an instance that is not a
+	PythonInstance -- one of a Python subclass of a built-in (tuple, list,
+	dict, str, int) or of an exception.  A runtime ``Cls.x = v'' on a
+	CANONICAL class, i.e. any class an imported module defines, lands in the
+	overlay rather than the holder (see ___classAttrOverlayLookup___:name:),
+	and only the PythonInstance branch above read it.  So ``Cls.x'' answered
+	while ``inst.x'' raised -- the asymmetry that marks a missed home.
+	urllib.parse wires its result classes together that way at import
+	(``SplitResult._encoded_counterpart = SplitResultBytes''), and every
+	encode() of a SplitResult failed.  Gated on the class HAVING a holder,
+	which only a Python-defined class has, so a plain str or int read does
+	not pay for the SessionTemps probe; the binding is the PythonInstance
+	branch's."
+	((self isKindOf: Behavior) not
+		and: [(self isKindOf: PythonInstance) not
+		and: [self @env0:class ___respondsTo___: #___dynInstVars___]]) ifTrue: [
+		(self ___classAttrOverlayLookup___: self @env0:class name: aSym)
+			@env0:ifNotNil: [:___ovv |
+				(self ___isValueDescriptor___: ___ovv)
+					ifTrue: [^ self ___descriptorGet___: ___ovv].
+				(self ___isDescriptorCallable___: ___ovv)
+					ifTrue: [^ MethodBinding instance: self callable: ___ovv].
+				^ ___ovv]].
 	(self isKindOf: Behavior) ifFalse: [
 		(self ___classChainAttrLookup___: aSym)
 			@env0:ifNotNil: [:___cv | ^ ___cv]].

@@ -11,7 +11,8 @@
 # works over HTTPS with only the handshake added.
 #
 # Supported: a TLS server (``wrap_socket(server_side=True)`` over a listener,
-# whose ``accept()`` performs the per-connection handshake) and a TLS client
+# whose ``accept()`` performs the per-connection handshake, or over a
+# connection a plain ``accept()`` already answered) and a TLS client
 # (``wrap_socket(server_hostname=...)`` over a connected socket).  Out of scope:
 # mutual-TLS (requesting a client certificate), in-memory BIO / ``MemoryBIO``,
 # certificate introspection (``getpeercert`` returns ``None``), and the SSL
@@ -315,6 +316,20 @@ class SSLContext:
     def set_ciphers(self, ciphers):
         pass
 
+    # The server-name callback.  CPython runs it DURING the handshake, from
+    # OpenSSL's servername hook, which is what lets it swap in another
+    # context -- another certificate -- before the server answers.
+    # GsSecureSocket has no such hook, so Grail runs it just AFTER a
+    # server-side handshake, with the name the client sent: enough to see
+    # which host was asked for (test_urllib2_localnet test_https_sni), not to
+    # choose the certificate that answers it.
+    sni_callback = None
+
+    def set_servername_callback(self, server_name_callback):
+        if server_name_callback is not None and not callable(server_name_callback):
+            raise TypeError('not a callable object')
+        self.sni_callback = server_name_callback
+
     def set_alpn_protocols(self, protocols):
         pass
 
@@ -323,6 +338,12 @@ class SSLContext:
                     suppress_ragged_eofs=True,
                     server_hostname=None, session=None):
         if server_side:
+            if _is_connected(sock):
+                # A connection a plain accept() already answered -- which is
+                # how socketserver-based TLS servers (test.ssl_servers) wrap:
+                # upgrade and handshake it here, as CPython does.
+                return SSLSocket(sock, self, server_side=True,
+                                 do_handshake_on_connect=do_handshake_on_connect)
             # Wrap a *listening* socket: TLS happens per-connection in accept().
             return SSLSocket(sock, self, server_side=True,
                              do_handshake_on_connect=do_handshake_on_connect,
@@ -331,6 +352,16 @@ class SSLContext:
         return SSLSocket(sock, self, server_side=False,
                          do_handshake_on_connect=do_handshake_on_connect,
                          server_hostname=server_hostname)
+
+
+def _is_connected(sock):
+    """Whether ``sock`` is a connection rather than a listener: only a
+    connection has a peer."""
+    try:
+        sock.getpeername()
+    except OSError:
+        return False
+    return True
 
 
 def create_default_context(purpose=Purpose.SERVER_AUTH, cafile=None,
@@ -395,6 +426,8 @@ class SSLSocket:
                                           context._password or "")
             if do_handshake_on_connect:
                 self._sock._sslSecureAccept()
+                self._secured = True
+                self._run_sni_callback()
         else:
             verify = context.verify_mode != CERT_NONE
             if verify:
@@ -432,13 +465,24 @@ class SSLSocket:
         conn._sslSecureAccept()
         ssl_conn = SSLSocket(conn, self.context, server_side=True,
                              do_handshake_on_connect=False, _secured=True)
+        ssl_conn._run_sni_callback()
         return ssl_conn, addr
+
+    def _run_sni_callback(self):
+        """SSLContext.sni_callback, after a server-side handshake -- see
+        SSLContext.set_servername_callback for why after rather than during."""
+        callback = self.context.sni_callback
+        if callback is not None:
+            callback(self, self._sock._sslServerName(), self.context)
 
     def do_handshake(self):
         if self._secured:
             return
         if self.server_side:
             self._sock._sslSecureAccept()
+            self._secured = True
+            self._run_sni_callback()
+            return
         else:
             self._sock._sslSecureConnect()
         self._secured = True

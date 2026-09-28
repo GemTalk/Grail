@@ -4505,6 +4505,11 @@ vars: anObject
 	a callable for the ones that have no view.  test_builtin test_vars."
 	((anObject @env0:class @env1:___dynamicClassAttr___: #'__dict__') @env0:notNil)
 		ifTrue: [^ anObject ___pyAttrLoad___: #'__dict__'].
+	"An EXCEPTION is a kernel object whose named instVars are GemStone's own
+	(gsNumber, gsResumable, gsStack, ...): the walk below listed them all,
+	stack included, where CPython answers only what Python code stored.
+	BaseException >> __dict__ is that view."
+	(anObject isKindOf: BaseException) ifTrue: [^ anObject __dict__].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
