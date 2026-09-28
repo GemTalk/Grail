@@ -13,6 +13,8 @@
     recvfrom_into did not exist; os.read and select() refused a socket's fd.
   * time.strptime and time._STRUCT_TM_ITEMS were missing; so was
     unittest.mock.patch.dict.
+  * threading.Event.wait answered the flag at once instead of waiting, so a
+    thread that started a server raced ahead of it (test_ssl on Linux).
 
 Every expectation was measured against CPython 3.14.
 """
@@ -233,6 +235,28 @@ def _closed_socket_fd_is_ebadf():
 
 
 check('a_closed_socket_fd_is_ebadf', _closed_socket_fd_is_ebadf(), True)
+
+
+# ------------------------------------------------ threading.Event.wait
+
+def _event_wait():
+    import threading
+    ev = threading.Event()
+    order = []
+
+    def setter():
+        order.append('setter ran')
+        ev.set()
+
+    threading.Thread(target=setter, daemon=True).start()
+    got = ev.wait()                 # must wait for the setter, not answer False
+    order.append('waiter resumed')
+    idle = threading.Event()
+    return (got, order, idle.wait(0.05), idle.wait(0), ev.wait(0))
+
+
+check('event_wait_blocks_until_set_or_timeout', _event_wait(),
+      (True, ['setter ran', 'waiter resumed'], False, False, True))
 
 
 # ------------------------------------------------ time.strptime

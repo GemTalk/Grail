@@ -114,7 +114,7 @@ expectvalue /Class
 doit
 Object subclass: 'PyRawSocket'
   instVarNames: #('gsSocket' 'sockFamily' 'sockType' 'sockProto'
-                  'timeoutSecs' 'sockClosed' 'connectIssued')
+                  'timeoutSecs' 'sockClosed' 'connectIssued' 'hadPeer')
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -222,6 +222,9 @@ ___setSock: aGsSocket family: fam type: typ proto: prot
 	sockClosed := false.
 	timeoutSecs := PyRawSocket ___defaultTimeout___.
 	aGsSocket ifNotNil: [PyRawSocket ___registerFd___: aGsSocket].
+	"An adopted socket -- the fd accept() hands back -- is connected already."
+	hadPeer := aGsSocket notNil
+		and: [([aGsSocket peerAddress] on: Error do: [:e | e return: nil]) notNil].
 	^ self
 %
 
@@ -953,6 +956,7 @@ connect: address
 		(ms @env0:notNil @env0:and: [ok @env0:isNil]) ifTrue: [
 			^ TimeoutError ___signal___: 'timed out'].
 		^ self @env0:___fail: 'connect failed'].
+	hadPeer := true.
 	^ None
 %
 
@@ -992,15 +996,18 @@ connect_ex: address
 			ifTrue: [sock @env0:connectTo: port on: host]
 			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
 		ok == true
-			ifTrue: [0]
+			ifTrue: [hadPeer := true. 0]
 			ifFalse: [ | code |
 				code := self ___connectCodeFallback___: sock on: host port: port.
-				"A connect still in progress when a TIMEOUT expired is CPython's
-				SOCK_TIMEOUT_ERR, EWOULDBLOCK -- not the EINPROGRESS a
-				non-blocking socket answers (test_ssl test_timeout_connect_ex).
-				35 is Grail's errno.EWOULDBLOCK, as for ___notReadyNow___."
-				(code @env0:= 36 and: [ms @env0:notNil])
-					ifTrue: [35]
+				"The fallback's EINPROGRESS cannot stand here: this connect was
+				WAITED for.  With a TIMEOUT that expired it is CPython's
+				SOCK_TIMEOUT_ERR, EWOULDBLOCK (test_ssl test_timeout_connect_ex;
+				35 is Grail's errno.EWOULDBLOCK, as for ___notReadyNow___).  With
+				no timeout the wait ran until the connect resolved, so it FAILED:
+				Linux reports a refused socket writable, which the fallback reads
+				as still going (test_ssl test_connect_ex_error)."
+				code @env0:= 36
+					ifTrue: [ms @env0:notNil ifTrue: [35] ifFalse: [61]]
 					ifFalse: [code]] ]
 		@env0:on: Error
 		do: [:e | | code |
@@ -1047,7 +1054,7 @@ ___noPeerErrno___: sock
 	first made recv() on a reset socket raise ENOTCONN, where CPython reads
 	what arrived or gets ECONNRESET (test_ssl test_wrong_cert_tls12)."
 
-	sock @env0:peerAddress @env0:notNil ifTrue: [^ nil].
+	sock @env0:peerAddress @env0:notNil ifTrue: [hadPeer := true. ^ nil].
 	"lastErrorCode is the PLATFORM's errno -- ENOTCONN is 107 on Linux -- so it
 	is mapped onto Grail's errno module, which ssl.py compares it against
 	(``e.errno != errno.ENOTCONN'' in SSLSocket._create).  Unmapped, every TLS
@@ -1055,6 +1062,23 @@ ___noPeerErrno___: sock
 	^ self ___normalizeConnectErrno___:
 		(([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
 			@env0:ifNil: [57])
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___neverConnected___: sock
+	"Whether sock is a stream socket that NEVER had a peer, the case recv(),
+	recvfrom() and sendto() answer ENOTCONN for without touching the socket.
+
+	getpeername cannot say so by itself.  After a peer's RESET it fails with
+	EINVAL on Darwin but with ENOTCONN on Linux -- the same errno as a socket
+	that never connected -- so on Linux the reset socket of test_ssl's
+	test_wrong_cert_tls12 was answered ENOTCONN where CPython reads the TLS
+	alert that arrived before the reset.  So a peer, once seen (connect,
+	accept, any getpeername that found one), is remembered in hadPeer."
+
+	hadPeer == true ifTrue: [^ false].
+	^ (self ___noPeerErrno___: sock) @env0:= 57
 %
 
 category: 'Grail-Private'
@@ -1209,7 +1233,7 @@ ___recvBytes___: bufsize
 	(or the wait) the readiness check below would answer.  ssl.py's
 	SSLSocket._create probes an unconnected socket with exactly this call and
 	accepts only ENOTCONN or EINVAL."
-	(self type @env0:= 1 and: [(self ___noPeerErrno___: sock) @env0:= 57]) ifTrue: [
+	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
 		^ self ___notConnected___].
 	ms := self @env0:___timeoutMs.
 	ba := ByteArray @env0:new: bufsize.
@@ -1395,7 +1419,7 @@ ___recvfromBytes___: bufsize
 
 	| sock res data info |
 	sock := self @env0:___ensureOpen.
-	(self type @env0:= 1 and: [(self ___noPeerErrno___: sock) @env0:= 57]) ifTrue: [
+	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
 		^ self ___notConnected___].
 	res := sock @env0:recvfrom: bufsize.
 	res @env0:isNil ifTrue: [^ self @env0:___fail: 'recvfrom failed'].
@@ -1421,7 +1445,7 @@ sendto: data _: flags _: address
 
 	| sock ba host port |
 	sock := self @env0:___ensureOpen.
-	(self type @env0:= 1 and: [(self ___noPeerErrno___: sock) @env0:= 57]) ifTrue: [
+	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
 		^ self ___notConnected___].
 	ba := self @env0:___toByteArray: data.
 	host := (address @env0:at: 1) @env0:asString.

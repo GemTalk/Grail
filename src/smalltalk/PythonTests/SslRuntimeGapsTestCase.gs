@@ -39,8 +39,9 @@ SslRuntimeGapsTestCase category: 'Grail-SUnit'
 !   * socket       -- tuple addresses, recv_into(buf, n, flags), select on an
 !                     fd (_socket_module.gs, select.py).
 !   * time / mock  -- time.strptime, time._STRUCT_TM_ITEMS, mock.patch.dict.
+!   * threading    -- Event.wait waits until set or the timeout (threading.py).
 !
-! tests/python/ssl_runtime_gaps.py holds the 12 checks, run under real
+! tests/python/ssl_runtime_gaps.py holds the 13 checks, run under real
 ! CPython 3.14 by scripts/check_python_fixtures.sh.
 ! ===============================================================================
 
@@ -125,14 +126,15 @@ method: SslRuntimeGapsTestCase
 testStrptimeAndPatchDict
 
 	self assertAll: #('time_strptime_is_available'
-		'mock_patch_dict_patches_and_restores')
+		'mock_patch_dict_patches_and_restores'
+		'event_wait_blocks_until_set_or_timeout')
 %
 
 category: 'Grail-Tests - time and mock'
 method: SslRuntimeGapsTestCase
 testEveryFixtureCheckIsAssertedByATestHere
-	"The lists above name 12 checks.  A check added to the fixture without
+	"The lists above name 13 checks.  A check added to the fixture without
 	being listed would pass unasserted here, so the count is pinned."
 
-	self assert: (self results @env1:__len__) equals: 12
+	self assert: (self results @env1:__len__) equals: 13
 %
