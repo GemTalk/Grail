@@ -768,6 +768,7 @@ run
 	at: #'AbcMachineryTestCase' put: nil;
 	at: #'MetaclassProtocolsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
+	at: #'AnyAllShareTheTruthTestTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
 	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
@@ -2202,6 +2203,7 @@ input src/smalltalk/PythonTests/TypeParamScopesTestCase.gs
 input src/smalltalk/PythonTests/AbcMachineryTestCase.gs
 input src/smalltalk/PythonTests/MetaclassProtocolsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
+input src/smalltalk/PythonTests/AnyAllShareTheTruthTestTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
