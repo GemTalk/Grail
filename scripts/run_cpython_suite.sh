@@ -75,11 +75,13 @@ PER_MODULE_TIMEOUT="${GRAIL_TEST_TIMEOUT:-600}"
 # killed, else the process's own exit status.  Caller redirects stdout.
 run_capped() {
     "$@" &
-    local pid=$! waited=0
+    # Wall-clock from bash's SECONDS, not a count of 2s naps: on a loaded host
+    # one `sleep 2` iteration was measured at ~8.6s, so counting iterations
+    # stretched the 600s cap to 2580s while a hung gem held the stone.
+    local pid=$! started=$SECONDS
     while kill -0 "$pid" 2>/dev/null; do
         sleep 2
-        waited=$((waited + 2))
-        if [ "$waited" -ge "$PER_MODULE_TIMEOUT" ]; then
+        if [ $((SECONDS - started)) -ge "$PER_MODULE_TIMEOUT" ]; then
             kill -9 "$pid" 2>/dev/null
             wait "$pid" 2>/dev/null
             return 124
