@@ -1268,8 +1268,34 @@ __ge__: other
 category: 'Grail-Hash'
 method: ScaledDecimal
 __hash__
-	"Return hash value"
-	^ self @env0:hash
+	"CPython numeric hash of the exact rational mantissa / 10^scale:
+	(|mantissa| * inverse(10)^scale) mod P with the sign of the mantissa,
+	P = 2**61 - 1 (sys.hash_info.modulus), and -1 -> -2.  That is the
+	construction Float>>__hash__ and Int>>__hash__ already implement, so
+	hash(0.5s1) == hash(0.5) == hash(Fraction(1, 2)) and a dict keyed by one
+	finds the other (#857).  env-0 #hash knew nothing of the modulus and
+	agreed with float only for integral values, by accident.
+
+	The inverse of 10 mod P is CPython's _PyHASH_10INV.  P is prime and does
+	not divide 10, so it always exists, and the power is square-and-multiply
+	because scale reaches 30000 (testVmRangeCeilingsRaiseOverflowError).
+	Trailing zeros change mantissa and scale together, so 1.50 and 1.5 still
+	hash alike."
+
+	| p m dinv b e h |
+	p := 2305843009213693951.
+	m := self @env0:mantissa.
+	dinv := 1.
+	b := 2075258708292324556.
+	e := self @env0:scale.
+	[e @env0:> 0] @env0:whileTrue: [
+		((e @env0:bitAnd: 1) @env0:= 1) ifTrue: [dinv := (dinv @env0:* b) @env0:\\ p].
+		e := e @env0:bitShift: -1.
+		b := (b @env0:* b) @env0:\\ p].
+	h := ((m @env0:abs @env0:\\ p) @env0:* dinv) @env0:\\ p.
+	(m @env0:< 0) ifTrue: [h := h @env0:negated].
+	(h @env0:= -1) ifTrue: [^ -2].
+	^ h
 %
 
 set compile_env: 0
