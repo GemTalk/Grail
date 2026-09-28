@@ -488,7 +488,7 @@ ___grailMarkGlobalEnum: cls
 	(the dotted NAME string ClassDefAst stamps, same accessor global_enum: uses)."
 
 	| mod |
-	mod := [(cls @env0:perform: #'__module__' env: 1) @env0:asString]
+	mod := [(cls ___pyAttrLoad___: #'__module__') @env0:asString]
 		@env0:on: AbstractException do: [:e | cls @env0:name @env0:asString].
 	^ self ___grailMarkGlobalEnum: cls moduleName: mod
 %
@@ -4097,6 +4097,12 @@ ___grailFunctional: cls positional: positional keywords: keywords
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailConvert: positional kw: kwargs forType: etype
+	^ self ___grailConvert: positional kw: kwargs forType: etype export: true
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailConvert: positional kw: kwargs forType: etype export: exports
 	"``Enum._convert_(name, module, filter, source=None, *, boundary=None,
 	as_global=False)'' -- build a new enum (of THIS type: IntEnum, StrEnum,
 	...) from the constants in ``module''s globals whose NAME passes
@@ -4199,10 +4205,72 @@ ___grailConvert: positional kw: kwargs forType: etype
 	Guarded on modGlobals: a caller may pass an explicit ``source'' with a
 	module name that is not in sys.modules, and building the enum is still
 	worth doing there.  Nothing to export to is not an error."
-	modGlobals == nil ifFalse: [
+	"enum._old_convert_ builds the same class and exports nothing: test_ssl
+	compares its result with the ssl.py class that _convert_ exported."
+	(modGlobals ~~ nil and: [exports]) ifTrue: [
 		newEnum _member_map_ @env0:keysAndValuesDo: [:k :v |
 			modGlobals __setitem__: k @env0:asString _: v].
 		modGlobals __setitem__: enumName @env0:asString _: newEnum].
+	^ newEnum
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailSimpleEnum: cls type: etype kw: kwargs
+	"CPython enum._simple_enum(etype, *, boundary=None, use_args=None): the
+	decorator that turns a PLAIN class into an enum of type etype -- ssl.py's
+	TLSVersion, _TLSContentType, _TLSAlertType and _TLSMessageType.  CPython
+	walks cls.__dict__ in definition order: a dunder, sunder, private or
+	descriptor entry stays in the class body and anything else is a member.
+
+	Built on the functional API, which keeps member order and already turns a
+	callable under a dunder name into a method override.  Every other
+	underscore name, and every non-member callable, is stored on the new class
+	afterwards.  A @property arrives from ___classDict___ as its getter FUNCTION
+	(Grail compiles a property to an accessor pair, not an object), so the
+	class-side ___grailOwnPropertyNames___ list is what re-wraps it."
+
+	| ns propNames pairs later keywords doc newEnum |
+	ns := cls ___classDict___.
+	propNames := ((cls @env0:class) @env0:includesSelector: #'___grailOwnPropertyNames___' environmentId: 1)
+		ifTrue: [cls ___grailOwnPropertyNames___]
+		ifFalse: [#()].
+	pairs := OrderedCollection @env0:new.
+	later := OrderedCollection @env0:new.
+	doc := nil.
+	keywords := KeyValueDictionary @env0:new.
+	ns @env0:keysAndValuesDo: [:k :v | | nm |
+		nm := k @env0:asString.
+		nm @env0:= '__doc__' ifTrue: [doc := v].
+		nm @env0:= '__module__' ifTrue: [keywords @env0:at: 'module' put: v].
+		nm @env0:= '__qualname__' ifTrue: [keywords @env0:at: 'qualname' put: v].
+		(#('__doc__' '__module__' '__qualname__' '__dict__' '__weakref__') @env0:includes: nm) ifFalse: [
+			(propNames @env0:includes: nm @env0:asSymbol)
+				ifTrue: [later @env0:add: (Array @env0:with: nm with: (PropertyDescriptor __new__: v))]
+				ifFalse: [
+					((nm @env0:size @env0:> 0) and: [(nm @env0:at: 1) @env0:= $_])
+						ifTrue: [
+							"The functional builder keeps a dunder CALLABLE as an override
+							and drops every other underscore name, so those go in later."
+							((nm @env0:size @env0:>= 5)
+								and: [(nm @env0:copyFrom: 1 to: 2) @env0:= '__'
+								and: [(nm @env0:copyFrom: nm @env0:size @env0:- 1 to: nm @env0:size) @env0:= '__'
+								and: [(v isKindOf: BoundMethod) or: [(v isKindOf: UnboundMethod) or: [v isKindOf: ExecBlock]]]]])
+								ifTrue: [pairs @env0:add: (Array @env0:with: nm with: v)]
+								ifFalse: [later @env0:add: (Array @env0:with: nm with: v)]]
+						ifFalse: [
+							((v isKindOf: BoundMethod) or: [(v isKindOf: UnboundMethod)
+								or: [(v isKindOf: ExecBlock) or: [(v isKindOf: PyStaticMethod)
+								or: [(v isKindOf: AbstractPropertyDescriptor) or: [self ___isValueDescriptor___: v]]]]])
+								ifTrue: [later @env0:add: (Array @env0:with: nm with: v)]
+								ifFalse: [pairs @env0:add: (Array @env0:with: nm with: v)]]]]].
+	newEnum := Enum ___grailFunctional: etype
+		positional: (Array @env0:with: (cls __name__) @env0:asString with: pairs @env0:asArray)
+		keywords: keywords.
+	later @env0:do: [:each |
+		newEnum ___pyAttrStore___: (each @env0:at: 1) @env0:asSymbol put: (each @env0:at: 2)].
+	(doc ~~ nil and: [doc ~~ None]) ifTrue: [
+		newEnum ___pyAttrStore___: #'__doc__' put: doc].
 	^ newEnum
 %
 

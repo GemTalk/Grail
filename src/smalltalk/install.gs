@@ -467,6 +467,7 @@ run
 	at: #'FileIO' put: nil;
 	at: #'TextIOWrapper' put: nil;
 	at: #'zlib' put: nil;
+	at: #'_grail_openssl' put: nil;
 	at: #'ZlibError' put: nil;
 	at: #'ZlibDecompress' put: nil;
 	at: #'ZlibCompress' put: nil;
@@ -1467,6 +1468,7 @@ run
 	at: #'WeakReferenceTestSubject' put: nil;
 	at: #'WeakrefModuleTestCase' put: nil;
 	at: #'WideStrTypeAndAugmentedAttrStoreTestCase' put: nil;
+	at: #'SslRuntimeGapsTestCase' put: nil;
 	at: #'WithAsTargetsTestCase' put: nil;
 	at: #'WithBlockShapesTestCase' put: nil;
 	at: #'WithExitRaisesTestCase' put: nil;
@@ -1709,6 +1711,7 @@ input src/smalltalk/Python/json_module.gs
 input src/smalltalk/Python/json_decoder.gs
 input src/smalltalk/Python/io_module.gs
 input src/smalltalk/Python/zlib_module.gs
+input src/smalltalk/Python/_grail_openssl.gs
 input src/smalltalk/Python/math.gs
 input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
@@ -2916,6 +2919,7 @@ input src/weakref/WeakReferenceTestCase.gs
 input src/smalltalk/PythonTests/WarningTestCase.gs
 input src/smalltalk/PythonTests/WeakrefModuleTestCase.gs
 input src/smalltalk/PythonTests/WideStrTypeAndAugmentedAttrStoreTestCase.gs
+input src/smalltalk/PythonTests/SslRuntimeGapsTestCase.gs
 input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
 input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
 input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs

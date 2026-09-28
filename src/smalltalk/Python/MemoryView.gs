@@ -549,6 +549,25 @@ __setitem__: index _: value
 	self ___checkReleased___.
 	((self @env0:dynamicInstVarAt: #'readonly') @env0:= true) ifTrue: [
 		TypeError ___signal___: 'cannot modify read-only memory'].
+	"``mv[a:b] = data'' -- the same sub-view mv[a:b] answers, written item by
+	 item through the integer path below, so a stepped slice and a non-ByteArray
+	 source are handled once.  It fell into that path whole and sent < to the
+	 slice, an MNU no Python handler sees (ssl's recv_into reads into
+	 ``view[:n]'')."
+	(index isKindOf: slice) ifTrue: [ | sub src |
+		sub := self ___sliceView___: index.
+		src := (value isKindOf: memoryview)
+			ifTrue: [value tobytes]
+			ifFalse: [value].
+		(src isKindOf: ByteArray) ifFalse: [
+			TypeError ___signal___: 'a bytes-like object is required, not '''
+				@env0:, (value ___pyTypeNameForError___) @env0:asString @env0:, ''''].
+		sub __len__ @env0:= src @env0:size ifFalse: [
+			ValueError ___signal___:
+				'memoryview assignment: lvalue and rvalue have different structures'].
+		0 @env0:to: src @env0:size @env0:- 1 do: [:j |
+			sub __setitem__: j _: (src @env0:at: j @env0:+ 1)].
+		^ None].
 	itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
 	itemsize @env0:= 1 ifFalse: [
 		NotImplementedError ___signal___:

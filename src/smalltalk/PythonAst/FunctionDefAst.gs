@@ -911,7 +911,8 @@ printSmalltalkOn: aStream
 	A def inside an ``if'' in a class BODY is the other case: classNesting is
 	still positive there, so it WAS re-classed, and applying the decorator again
 	double-wraps it (six ClassBodyConditionalTestCase errors when this
-	distinction was missing).  ___parserReclassedThisDef___ tells the two apart."
+	distinction was missing).  ___decoratorRealisedByReclass___: tells the two
+	apart, per decorator."
 	decorator_list isNil ifFalse: [ | applicable |
 		"CPython evaluates every decorator EXPRESSION top-down and only then
 		APPLIES the resulting decorators, bottom-up.  test_decorators
@@ -925,14 +926,12 @@ printSmalltalkOn: aStream
 		module-scope path (printModuleDecoratorsOn:) already nests its chain into
 		one expression and was never affected."
 		applicable := decorator_list reject: [:deco |
-			(self isClassDeclarativeDecorator: deco)
-				and: [self ___parserReclassedThisDef___]].
+			self ___decoratorRealisedByReclass___: deco].
 		applicable size > 1 ifTrue: [
 			self emitOrderedLocalDecoratorsOn: aStream decorators: applicable.
 			^ self].
 		applicable reverseDo: [:deco |
-			((self isClassDeclarativeDecorator: deco) not
-				or: [self ___parserReclassedThisDef___ not]) ifTrue: [
+			(self ___decoratorRealisedByReclass___: deco) not ifTrue: [
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
 				the target name is module-scope (parser-declared in module
 				body and not shadowed by an enclosing function)."
@@ -1974,6 +1973,29 @@ ___parserReclassedThisDef___
 	^ (self isKindOf: StaticFunctionDefAst)
 		or: [(self isKindOf: ClassFunctionDefAst)
 			or: [self isKindOf: InstanceFunctionDefAst]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorRealisedByReclass___: deco
+	"Whether the parser's re-classing already realised decorator deco, so that
+	a local-def emit must not apply it again.
+
+	Only @staticmethod and @classmethod are realised that way -- the def
+	BECOMES a StaticFunctionDefAst / ClassFunctionDefAst.  @property is not:
+	it re-classes the def only to InstanceFunctionDefAst, which means no more
+	than ``defined in a class'', and the property itself is made by
+	ClassDefAst's method compile -- which a def inside an ``if'' in a class
+	body never gets.  So that def lost its @property outright and stayed a
+	plain method: ``@y.setter'' then raised ``no attribute 'setter''', which
+	is how CPython's ssl.py, whose SSLContext defines minimum_version under
+	``if hasattr(_SSLContext, 'minimum_version'):'', failed to import.
+	Applying it at runtime, as ``y := property(y)'', is what CPython does."
+
+	(self isClassDeclarativeDecorator: deco) ifFalse: [^ false].
+	deco asSymbol == #'staticmethod' ifTrue: [^ self isKindOf: StaticFunctionDefAst].
+	deco asSymbol == #'classmethod' ifTrue: [^ self isKindOf: ClassFunctionDefAst].
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -8580,7 +8602,7 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 
 	| applicable |
 	applicable := (decorator_list ifNil: [#()]) reject: [:deco |
-		(self isClassDeclarativeDecorator: deco) and: [self ___parserReclassedThisDef___]].
+		self ___decoratorRealisedByReclass___: deco].
 	applicable isEmpty ifTrue: [^ self].
 	applicable size = 1 ifTrue: [
 		| dv |

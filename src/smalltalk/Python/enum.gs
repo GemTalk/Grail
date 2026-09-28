@@ -323,8 +323,10 @@ global_enum: cls
 	Names starting with ``_`` are skipped — they're not enum members
 	(internal ones include ``__module__`` itself)."
 
-	| module classMd processed |
-	module := cls @env0:perform: #'__module__' env: 1.
+	| module classMd processed rec |
+	"Read through the attribute path, not a direct send: a FUNCTIONAL enum
+	(_convert_, _simple_enum) has no compiled __module__ accessor."
+	module := cls ___pyAttrLoad___: #'__module__'.
 	"__module__ is the dotted NAME STRING (CPython semantics) -- resolve
 	the instance through sys.modules; tolerate a module INSTANCE stored
 	by older codegen.  Unresolvable name -> decorator is a no-op."
@@ -333,6 +335,17 @@ global_enum: cls
 			@env0:at: (module @env0:asString @env0:asSymbol)
 			otherwise: nil.
 		module @env0:isNil ifTrue: [^ cls]].
+	"CPython: ``sys.modules[cls.__module__].__dict__.update(cls.__members__)''.
+	An enum's registry record holds exactly that name -> member map, aliases
+	included.  A functional enum compiles member GETTERS only, so the
+	accessor-pair walk below would export none of its members; it remains for
+	a class with no record."
+	rec := Enum ___grailRecordFor: cls.
+	rec @env0:notNil ifTrue: [
+		(rec @env0:at: 2) @env0:keysAndValuesDo: [:k :v |
+			module @env0:dynamicInstVarAt: k @env0:asSymbol put: v].
+		Enum ___grailMarkGlobalEnum: cls.
+		^ cls].
 	classMd := cls @env0:class @env0:methodDictForEnv: 1.
 	processed := IdentitySet @env0:new.
 	classMd @env0:keysDo: [:sel |
@@ -360,14 +373,35 @@ global_enum: cls
 category: 'Grail-Built-in Functions'
 method: enum
 __simple_enum: positional kw: kwargs
-	"_simple_enum(cls) or _simple_enum(cls, boundary=...) -> decorator.
-	Returns a decorator that returns the class unchanged.
-	Used by re module: @enum._simple_enum(IntFlag, boundary=enum.KEEP).
-	Grail's varargs-selector convention prepends one underscore to
-	the Python name, so the Python ``_simple_enum`` becomes the
-	Smalltalk selector ``__simple_enum:kw:``."
+	"_simple_enum(etype, *, boundary=None, use_args=None) -> decorator that
+	converts the plain class it decorates into an enum of type etype (see
+	Enum class>>___grailSimpleEnum:type:kw:).  Grail's varargs-selector
+	convention prepends one underscore to the Python name, so the Python
+	``_simple_enum'' becomes the Smalltalk selector ``__simple_enum:kw:''."
 
-	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
+	| etype |
+	etype := positional @env0:isEmpty
+		ifTrue: [self @env0:at: #Enum]
+		ifFalse: [positional @env0:at: 1].
+	^ [:positional2 :keywords2 |
+		Enum ___grailSimpleEnum: (positional2 @env0:at: 1) type: etype kw: kwargs]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+__old_convert_: positional kw: kwargs
+	"CPython enum._old_convert_(etype, name, module, filter, source=None, *,
+	boundary=None): _convert_'s class, built the same way but NOT exported to
+	the module -- CPython keeps it so tests can rebuild a converted enum and
+	compare it with the one the module exported (test_ssl's TestEnumerations).
+	Varargs selector: the Python name gains one leading underscore."
+
+	positional @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: '_old_convert_() missing required argument: ''etype'''].
+	^ Enum ___grailConvert: (positional @env0:copyFrom: 2 to: positional @env0:size)
+		kw: kwargs
+		forType: (positional @env0:at: 1)
+		export: false
 %
 
 category: 'Grail-Built-in Functions'
