@@ -1,5 +1,64 @@
 # Known Issues
 
+## FIXED: the three items test_xml_etree left open
+
+The xml_etree section's *Still open* list (below) had three entries. Each is
+now measured against the real thing: CPython for str, and CPython 3.14's
+bundled expat 2.7.4 for pyexpat, driven through the same handlers.
+
+- **A str subclass's methods answer exact str.** `S('a').upper()`,
+  `.strip()`, `+`, `.replace()`, the `split` pieces, a no-op `.strip()` or
+  `.ljust(1)`, `f'{s}'` and `s.__str__()` answered `S`. They are kernel
+  primitives (`copyFrom:to:`, `,`, `copyEmpty`, `copyReplaceAll:with:`) that
+  keep the receiver's class. `CharacterCollection >> ___asExactStr___` now
+  narrows the receiver, and each result-producing method re-sends to it; an
+  exact str pays one class test. 26 of 26 probed methods now agree with
+  CPython, including CPython's own exception: `partition`/`rpartition` hand
+  back the original object when the separator is absent.
+- **Reparse deferral.** pyexpat reports 2.6.0 and implements expat's
+  heuristic from xmlparse.c. Once a parse consumes nothing, it waits until
+  the unconsumed bytes have doubled, or until the next request would outgrow
+  expat's buffer, which is modelled in bytes as far as the heuristic reads it.
+  `flush()` parses at once. "Consumed" is counted as expat counts it: this
+  scanner holds back a trailing text run, a complete reference, an open CDATA
+  section and an unfinished DOCTYPE, all of which expat has already taken.
+  Undecoded chunks are held as well, so an encoding error surfaces when expat
+  would report it. Measured: 2,400 randomized documents and chunkings (tags,
+  comments, PIs, CDATA, DOCTYPEs, 5,000-byte attributes, feeds up to 20,000
+  bytes, str and bytes input, random flushes) give element events identical
+  to expat's, chunk for chunk. `test_flush_reparse_deferral_enabled` runs
+  in both test_xml_etree and test_sax.
+- **The default handler sees what expat hands it.** The internal subset was
+  the reported case, but the gap was wider:
+  - a declaration arrived whole, or, for ENTITY and NOTATION, not at all;
+  - start and end tags, `<![CDATA[`/`]]>`, `&amp;` and `&#65;` never
+    reached the default handler;
+  - data arrived without its newline pieces;
+  - the DOCTYPE's closing `>` was dropped after a subset.
+
+  Every token nobody claims now goes to the default handler. For DTD tokens
+  that is decided by the token's role (xmlrole.c) and doProlog's
+  `handleDefault`, so a redeclared entity's name and value reach it even with
+  `EntityDeclHandler` set. `DefaultHandler` and `DefaultHandlerExpand` are
+  one slot, and the later assignment wins, even a `None`. `DefaultHandler`
+  hands over an internal entity reference instead of expanding it.
+  `ElementDeclHandler` is implemented, with pyexpat's content-model tuples.
+  Measured: 15,000 runs (20 documents × random handler sets × both default
+  slots, with and without namespaces) give identical event logs.
+
+`tests/python/str_subclass_method_results.py` and
+`tests/python/pyexpat_default_handler_and_deferral.py` pin both halves.
+
+### Still open
+
+- `S('abc').format()`, `.format_map({})` and `S('abc') % ()` answer an
+  equal `str`. CPython returns `self` when there is nothing to format.
+- Character data split across Parse calls arrives in different pieces.
+  expat delivers the part of a text run it has, while this scanner waits for
+  the `<` that ends it. Element events are unaffected, as measured above.
+- The default handler sees newline-normalised text. expat hands it the raw
+  bytes, so a CRLF arrives as `\r\n` there.
+
 ## FIXED: test_xml_etree passes (37 -> 0), and the runtime gaps behind it
 
 `test.test_xml_etree` goes from 7 failures and 30 errors to **OK, 226 tests**.
@@ -74,6 +133,9 @@ function target, without the signature check. (XInclude also needs
 `RuntimeEdgesBehindXmlEtreeTestCase` pin the runtime half.
 
 ### Still open
+
+All three are fixed: see *FIXED: the three items test_xml_etree left open*
+above.
 
 - **A str subclass's methods answer the subclass.** `S('ab').upper()`,
   `.strip()`, `+`, `.replace()`, `.split()` pieces, `.partition()`, `f'{s}'`

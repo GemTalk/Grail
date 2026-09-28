@@ -36,9 +36,11 @@ buffer_text every newline, and every reference, is a call of its own.
 Positions are 0-based columns and 1-based lines, as expat reports them.
 """
 
-__version__ = '2.5.0-grail'
-EXPAT_VERSION = 'expat_2.5.0-grail'
-version_info = (2, 5, 0)
+# 2.6.0 is the release whose incremental behaviour this reproduces: reparse
+# deferral (xmlparser._reparse_due) arrived in it, and callers gate on it.
+__version__ = '2.6.0-grail'
+EXPAT_VERSION = 'expat_2.6.0-grail'
+version_info = (2, 6, 0)
 native_encoding = 'UTF-8'
 
 import codecs
@@ -173,6 +175,8 @@ _HANDLER_NAMES = (
     'EntityDeclHandler',
 )
 
+_DEFAULT_SLOT = ('DefaultHandler', 'DefaultHandlerExpand')
+
 
 class xmlparser:
     """One parse in progress. Handlers are ASSIGNED onto the instance.
@@ -181,6 +185,32 @@ class xmlparser:
     `self._parser.StartElementHandler = self.start_element`, so an unset
     handler must simply be absent/None rather than raising.
     """
+
+    # DefaultHandler and DefaultHandlerExpand are ONE slot in expat: each
+    # assignment installs its own callback there (XML_SetDefaultHandler /
+    # XML_SetDefaultHandlerExpand), so the later one wins -- even a None, which
+    # leaves no default handler at all.  Each also sets whether an internal
+    # entity reference in content is expanded or handed over as &name;''
+    # (m_defaultExpandInternalEntities), and that flag is set by a None too.
+    # Reading either attribute answers what was assigned to it, as CPython's
+    # pyexpat does.
+    @property
+    def DefaultHandler(self):
+        return self._dh
+
+    @DefaultHandler.setter
+    def DefaultHandler(self, handler):
+        self._dh = handler
+        self._dflt, self._dflt_expand = handler, False
+
+    @property
+    def DefaultHandlerExpand(self):
+        return self._dhe
+
+    @DefaultHandlerExpand.setter
+    def DefaultHandlerExpand(self, handler):
+        self._dhe = handler
+        self._dflt, self._dflt_expand = handler, True
 
     def __init__(self, encoding=None, namespace_separator=None, intern=None):
         if namespace_separator is not None:
@@ -225,6 +255,7 @@ class xmlparser:
         # parser ExternalEntityParserCreate makes, so an entity an external
         # subset declares is known to the document that loaded it.
         self._entities = {}       # name -> replacement text (internal)
+        self._pe_names = set()    # parameter entities declared
         self._external = {}       # name -> (base, sysid, pubid)
         self._unparsed = {}       # name -> notation (NDATA: binary)
         self._param_parsing = XML_PARAM_ENTITY_PARSING_NEVER
@@ -241,6 +272,12 @@ class xmlparser:
         self._encoding_col = None # where a declared encoding's value starts
         self._attlists = {}       # element -> {attribute: (type, default)}
         self._pending_cr = False  # a CR ending the last chunk, maybe of a CRLF
+        # Reparse deferral: expat's input buffer, in bytes, as far as its
+        # heuristic reads it -- allocated size, bufferPtr, bufferEnd.
+        self._reparse_deferral = True
+        self._xsize = self._xptr = self._xend = 0
+        self._partial_before = 0  # bytes on hand when a parse consumed none
+        self._deferred = []       # chunks a deferred Parse call set aside
 
     # ---------------------------------------------------------- public API
 
@@ -248,15 +285,29 @@ class xmlparser:
         """Feed a chunk. Text is accumulated, so a token split across two
         chunks is handled by leaving it unconsumed until more arrives."""
         if isinstance(data, (bytes, bytearray)):
-            try:
-                data = self._decode(bytes(data), isfinal)
-            except _UndecodableBytes as bad:
-                self._fail_at_undecodable(bad)
-        self._buf += self._normalise_newlines(data, isfinal)
+            data = bytes(data)
+            nbytes = len(data)
+        else:
+            nbytes = len(data.encode('utf-8', 'surrogatepass'))
+        if not self._reparse_due(nbytes, isfinal):
+            # Not even decoded: expat has not looked at these bytes, so an
+            # error in them is not reported yet either.
+            self._deferred.append(data)
+            return 1
+        pieces, self._deferred = self._deferred + [data], []
+        for k, piece in enumerate(pieces):
+            final = isfinal and k == len(pieces) - 1
+            if isinstance(piece, bytes):
+                try:
+                    piece = self._decode(piece, final)
+                except _UndecodableBytes as bad:
+                    self._fail_at_undecodable(bad)
+            self._buf += self._normalise_newlines(piece, final)
         if self._dtd_mode:
             self._advance(self._subset(self._buf[self._pos:], isfinal, True))
         else:
             self._scan(isfinal)
+        self._note_consumed()
         # CPython's pyexpat flushes buffer_text's held text at the end of
         # every Parse call, not only when another event arrives.
         self._flush_text()
@@ -307,15 +358,109 @@ class xmlparser:
         self._param_parsing = flag
         return 1
 
-    # Reparse deferral arrived in expat 2.6.0, and this reports 2.5.0 --
-    # which is what callers consult (test_sax skips the "enabled" test on
-    # version_info).  So it is off and cannot be turned on, as it is under a
-    # real 2.5 expat, where CPython's setter does nothing.
     def SetReparseDeferralEnabled(self, enabled):
-        return None
+        self._reparse_deferral = bool(enabled)
 
     def GetReparseDeferralEnabled(self):
-        return False
+        return self._reparse_deferral
+
+    def _reparse_due(self, nbytes, isfinal):
+        """Whether this Parse call parses at all -- expat 2.6's reparse
+        deferral, reproduced from xmlparse.c (XML_GetBuffer, callProcessor).
+
+        A token split across chunks is re-scanned from its start on every
+        Parse call, which is quadratic in a large token fed a little at a
+        time.  So once a parse has consumed nothing, expat does not try again
+        until the unconsumed bytes have at least doubled -- or until the next
+        request of this size would outgrow its buffer.  Visible as events that
+        arrive late: ``<doc'' then ``>'' starts no element until flush() (or
+        more input), because 5 bytes is not twice 4.  A final chunk, and a
+        parser with deferral off, always parse.
+
+        The byte counts are expat's, of the undecoded input: the buffer below
+        is modelled only as far as the heuristic reads it."""
+        # XML_GetBuffer(nbytes), keeping XML_CONTEXT_BYTES (1024) of context.
+        if nbytes > self._xsize - self._xend:
+            keep = min(self._xptr, 1024)
+            needed = nbytes + (self._xend - self._xptr) + keep
+            if self._xsize and needed <= self._xsize:
+                if keep < self._xptr:
+                    offset = self._xptr - keep
+                    self._xend -= offset
+                    self._xptr -= offset
+            else:
+                size = (self._xsize or 1024) * 2
+                while size < needed:
+                    size *= 2
+                if self._xsize:
+                    self._xend = self._xend - self._xptr + keep
+                    self._xptr = keep
+                self._xsize = size
+        # XML_ParseBuffer, then callProcessor's test.
+        self._xend += nbytes
+        if isfinal or not self._reparse_deferral:
+            return True
+        have_now = self._xend - self._xptr
+        available = (self._xptr - min(self._xptr, 1024)
+                     + self._xsize - self._xend)
+        return have_now >= 2 * self._partial_before or nbytes > available
+
+    def _note_consumed(self):
+        """After a parse: advance the modelled bufferPtr past what expat
+        would have consumed, and remember the bytes on hand if that was none.
+
+        Consumed as expat counts it, not as this scanner does: a text run at
+        the end of the buffer is held back here for want of a ``<'', but expat
+        has already delivered it.  What expat leaves is the incomplete token
+        -- from the first ``<'', or ``&'' without its ``;'', on -- plus a
+        trailing CR and any bytes not yet decoded."""
+        rest = self._buf[self._pos:]
+        if not self._dtd_mode:
+            i = 0
+            while True:
+                lt, amp = rest.find('<', i), rest.find('&', i)
+                if amp < 0 or 0 <= lt < amp:
+                    i = len(rest) if lt < 0 else lt
+                    # An open CDATA section is not one token to expat: its
+                    # text is delivered as it comes, all but a ``]'' or
+                    # ``]]'' that may begin its end.
+                    if lt >= 0 and rest.startswith('<![CDATA[', lt):
+                        tail = rest[lt + 9:]
+                        i = len(rest) - (len(tail) - len(tail.rstrip(']')))
+                        i = max(i, len(rest) - 2)
+                    # Nor is a DOCTYPE, which is scanned whole here.
+                    elif lt >= 0 and rest.startswith('<!DOCTYPE', lt):
+                        i = lt + _doctype_partial(rest[lt:])
+                    break
+                semi = rest.find(';', amp)
+                if semi < 0:
+                    i = amp
+                    break
+                i = semi + 1
+            rest = rest[i:]
+        left = self._text_bytes(rest) + len(self._rawhead)
+        if self._pending_cr:
+            left += 1
+        if self._decoder is not None:
+            try:
+                left += len(self._decoder.getstate()[0])
+            except Exception:
+                pass
+        have_now = self._xend - self._xptr
+        self._partial_before = have_now if left >= have_now else 0
+        self._xptr = max(self._xptr, self._xend - left)
+
+    def _text_bytes(self, text):
+        """len(text) in the bytes it arrived as: UTF-8 for str input, as
+        CPython's pyexpat encodes it, else the document's encoding."""
+        enc = self._encoding_used or 'utf-8'
+        try:
+            name = codecs.lookup(enc).name
+            if name in ('utf-16', 'utf-32'):
+                enc = name + '-le'    # no BOM per call
+            return len(text.encode(enc, 'surrogatepass'))
+        except (LookupError, UnicodeError):
+            return len(text.encode('utf-8', 'surrogatepass'))
 
     def GetInputContext(self):
         if self._buf is None:
@@ -334,17 +479,25 @@ class xmlparser:
         takes what it needs from this one -- the handlers, the namespace
         bindings in scope, and the DTD itself, shared rather than copied."""
         sub = xmlparser(encoding or self.encoding, self._ns_sep)
+        # expat's new parser inherits the default slot as it stands; CPython
+        # then re-installs each handler that is set, in its table's order, so
+        # a set DefaultHandlerExpand wins over a set DefaultHandler.
+        sub._dflt, sub._dflt_expand = self._dflt, self._dflt_expand
         for name in _HANDLER_NAMES:
-            setattr(sub, name, getattr(self, name, None))
+            h = getattr(self, name, None)
+            if h is not None or name not in _DEFAULT_SLOT:
+                setattr(sub, name, h)
         for name in ('buffer_text', 'ordered_attributes',
                      'specified_attributes', 'namespace_prefixes'):
             setattr(sub, name, getattr(self, name))
         sub._base = self._base
         sub._entities = self._entities
+        sub._pe_names = self._pe_names
         sub._external = self._external
         sub._unparsed = self._unparsed
         sub._param_parsing = self._param_parsing
         sub._standalone = self._standalone
+        sub._reparse_deferral = self._reparse_deferral
         if context is None:
             sub._dtd_mode = True
         else:
@@ -518,8 +671,15 @@ class xmlparser:
             return h(*args)
         return None
 
+    def _markup(self, handler, text):
+        """A handler's event, or else the markup to the default handler."""
+        if getattr(self, handler) is not None:
+            self._call(handler)
+        else:
+            self._default(text)
+
     def _default(self, text):
-        h = self.DefaultHandlerExpand or self.DefaultHandler
+        h = self._dflt
         if h is not None:
             self._flush_text()
             h(text)
@@ -538,9 +698,12 @@ class xmlparser:
             return
         h = self.CharacterDataHandler
         if h is None:
-            self._default(text)
-            return
-        if self.buffer_text:
+            # expat's reportDefault gets the same tokens: each newline apart.
+            h = self._dflt
+            if h is None:
+                return
+            self._flush_text()
+        elif self.buffer_text:
             self._textbuf.append(text)
             return
         start = 0
@@ -615,9 +778,9 @@ class xmlparser:
                 return False
             text = buf[i + 9:end]
             self._advance(end + 3 - i)
-            self._call('StartCdataSectionHandler')
+            self._markup('StartCdataSectionHandler', '<![CDATA[')
             self._emit_chars(text)
-            self._call('EndCdataSectionHandler')
+            self._markup('EndCdataSectionHandler', ']]>')
             return True
         if rest.startswith('<?'):
             end = buf.find('?>', i + 2)
@@ -641,7 +804,8 @@ class xmlparser:
             # captured BEFORE consuming: expat blames the name, two in from '<'
             nline, ncol = self._line, self._col + 2
             self._advance(end + 1 - i)
-            self._end_element(name, line=nline, col=ncol)
+            self._end_element(name, line=nline, col=ncol,
+                              raw=buf[i:end + 1])
             return True
         if len(rest) < 2 and not isfinal:
             return False
@@ -752,14 +916,28 @@ class xmlparser:
             ref = raw[amp + 1:end]
             i = end + 1
             if ref.startswith('#'):
-                self._emit_chars(self._char_ref(ref, eline, ecol))
+                ch = self._char_ref(ref, eline, ecol)
+                if self.CharacterDataHandler is None:
+                    self._default(raw[amp:i])
+                else:
+                    self._emit_chars(ch)
             elif ref in _PREDEFINED:
-                self._emit_chars(_PREDEFINED[ref])
+                if self.CharacterDataHandler is None:
+                    self._default(raw[amp:i])
+                else:
+                    self._emit_chars(_PREDEFINED[ref])
             else:
                 self._entity_in_content(ref, eline, ecol)
 
     def _entity_in_content(self, name, line, col):
         if name in self._entities:
+            if not self._dflt_expand:
+                # Installed with DefaultHandler (not ...Expand): the reference
+                # is reported, not expanded -- to SkippedEntityHandler if set.
+                if name in self._open_entities:
+                    self._fail(errors.XML_ERROR_RECURSIVE_ENTITY_REF, line, col)
+                self._report_skipped(name, line, col, skipped=True)
+                return
             text = self._entities[name]
             if '<' in text or '&' in text:
                 self._expand_entity_text(name, text, line, col)
@@ -931,9 +1109,8 @@ class xmlparser:
         # (XMLParser._default collects ['html', 'PUBLIC', '"...", '"..."'] and
         # calls target.doctype), so without it TreeBuilder never saw one
         # (test_xml_etree's test_doctype, test_subclass_doctype).
-        piecewise = (self.StartDoctypeDeclHandler is None and (
-            self.DefaultHandler is not None
-            or self.DefaultHandlerExpand is not None))
+        piecewise = (self.StartDoctypeDeclHandler is None
+                     and self._dflt is not None)
         if piecewise:
             self._default('<!DOCTYPE')
             for piece in _doctype_pieces(head):
@@ -946,8 +1123,16 @@ class xmlparser:
             self._subset(buf[subset[0]:subset[1]], True, False)
             if piecewise:
                 self._default(']')
-        if piecewise:
-            self._default('>')
+                # the whitespace between ``]'' and ``>'', a token too
+                gap = buf[buf.index(']', subset[1]) + 1:j]
+                if gap:
+                    self._default(gap)
+        # The closing ``>'' is the default handler's unless a handler is
+        # called at it: StartDoctypeDeclHandler when there was no subset to
+        # call it at, or EndDoctypeDeclHandler.  expat reports it last.
+        close_to_default = not (
+            (self.StartDoctypeDeclHandler is not None and subset is None)
+            or self.EndDoctypeDeclHandler is not None)
         if sysid is not None:
             self._dtd_skips = True
             h = self.ExternalEntityRefHandler
@@ -959,6 +1144,8 @@ class xmlparser:
                 if _refused(h(None, self._base, sysid, pubid)):
                     self._fail(errors.XML_ERROR_EXTERNAL_ENTITY_HANDLING)
         self._call('EndDoctypeDeclHandler')
+        if close_to_default:
+            self._default('>')
         return True
 
     def _doctype_end(self, k):
@@ -1038,17 +1225,37 @@ class xmlparser:
         return k
 
     def _declaration(self, piece):
+        """One markup declaration: its handler, and to the default handler
+        each token no handler claimed -- expat decides that token by token
+        (doProlog's handleDefault), by the token's role in the declaration.
+        For ELEMENT, NOTATION and ATTLIST the answer is the same for every
+        token: all of them go when the declaration's handler is unset (an
+        ATTLIST's also once declarations stop being processed).  ENTITY is
+        decided per token -- see _entity_decl."""
+        toks = _prolog_tokens(piece)
         if piece.startswith('<!ENTITY') and piece[8:9].isspace():
-            self._entity_decl(piece[8:-1])
-        elif piece.startswith('<!NOTATION') and piece[10:11].isspace():
+            self._entity_decl(piece[8:-1], toks)
+            return
+        if piece.startswith('<!NOTATION') and piece[10:11].isspace():
             self._notation_decl(piece[10:-1])
+            claimed = self.NotationDeclHandler is not None
         elif (piece.startswith('<!ATTLIST') and piece[9:10].isspace()
                 and self._attlist_decl(piece[9:-1])):
-            pass
+            claimed = (self._keep_decls
+                       and self.AttlistDeclHandler is not None)
+        elif piece.startswith('<!ELEMENT') and piece[9:10].isspace():
+            decl = _content_model(toks)
+            if decl is None:
+                self._fail(errors.XML_ERROR_SYNTAX)
+            claimed = self.ElementDeclHandler is not None
+            if claimed:
+                self._call('ElementDeclHandler', *decl)
         else:
-            # ELEMENT: no content models here, so only the default handler
-            # sees it.
             self._default(piece)
+            return
+        if not claimed:
+            for tok in toks:
+                self._default(tok)
 
     def _attlist_decl(self, body):
         """``<!ATTLIST elem (name type default)*>``: remember each attribute's
@@ -1113,8 +1320,6 @@ class xmlparser:
             if self.AttlistDeclHandler is not None:
                 self._call('AttlistDeclHandler', elem, att, type_str, dflt,
                            required)
-        if self.AttlistDeclHandler is None:
-            self._default('<!ATTLIST' + body + '>')
         return True
 
     def _apply_attlist(self, raw_name, attrs_raw):
@@ -1137,7 +1342,20 @@ class xmlparser:
                     out.append((an, value))
         return out
 
-    def _entity_decl(self, body):
+    def _entity_decl(self, body, ptoks):
+        """<!ENTITY ...>'': record it, report it, and hand the default
+        handler the tokens nobody claimed.
+
+        Unlike the other declarations that is decided per token (xmlrole.c's
+        roles, doProlog's handleDefault).  With EntityDeclHandler set, the
+        keywords, whitespace and >'' are claimed while declarations are being
+        processed at all; the name, value and ids only when the declaration
+        takes effect -- not for a redeclaration, nor for one of the five
+        predefined names -- so those reach the default handler even then.  An
+        NDATA notation name is claimed by UnparsedEntityDeclHandler as well.
+        The handler is called at the token that completes the declaration (the
+        value, the notation name, or the closing >''), so the default
+        handler sees the unclaimed tokens before it on either side."""
         toks = _decl_tokens(body)
         is_pe = bool(toks) and toks[0] == ('name', '%')
         if is_pe:
@@ -1145,14 +1363,51 @@ class xmlparser:
         if not toks or toks[0][0] != 'name' or len(toks) < 2:
             self._fail(errors.XML_ERROR_SYNTAX)
         name, rest = toks[0][1], toks[1:]
-        if not self._keep_decls:
+        keep = self._keep_decls
+        takes = keep and not (
+            name in self._pe_names if is_pe
+            else name in _PREDEFINED or self._declared(name))
+        handler = self.EntityDeclHandler is not None
+        words = [k for k, t in enumerate(ptoks) if not t.isspace()]
+        ndata = any(ptoks[k] == 'NDATA' for k in words)
+        external = rest[0][0] != 'lit'
+        name_at = words[2 if is_pe else 1]
+        claim, call_at = [], len(ptoks)
+        for k, t in enumerate(ptoks):
+            if k == name_at:
+                c = takes and handler
+            elif k > name_at and t[:1] in '"\'':
+                c = takes and handler
+                if not external:
+                    call_at = k
+            elif k == words[-1] and external and not ndata:
+                c, call_at = takes and handler, k
+            elif ndata and k == words[-2]:
+                c = takes and (handler
+                               or self.UnparsedEntityDeclHandler is not None)
+                call_at = k
+            else:
+                c = keep and handler
+            claim.append(c)
+        for k in range(call_at):
+            if not claim[k]:
+                self._default(ptoks[k])
+        try:
+            self._entity_semantics(name, rest, is_pe, takes)
+        finally:
+            for k in range(call_at, len(ptoks)):
+                if not claim[k]:
+                    self._default(ptoks[k])
+
+    def _entity_semantics(self, name, rest, is_pe, takes):
+        if not takes:
             return
+        if is_pe:
+            self._pe_names.add(name)
         base = self._base
         if rest[0][0] == 'lit':
             value = self._entity_value(rest[0][1])
             if not is_pe:
-                if self._declared(name):
-                    return          # the first declaration is binding
                 self._entities[name] = value
             self._call('EntityDeclHandler', name, int(is_pe), value, base,
                        None, None, None)
@@ -1166,8 +1421,6 @@ class xmlparser:
                 self._fail(errors.XML_ERROR_SYNTAX)
             notation = rest[k + 1][1]
         if not is_pe:
-            if self._declared(name):
-                return
             if notation is not None:
                 self._unparsed[name] = notation
                 if self.UnparsedEntityDeclHandler is not None:
@@ -1232,6 +1485,7 @@ class xmlparser:
     # --------------------------------------------------------- element tags
 
     def _start_element(self, body, consumed):
+        raw_tag = '<' + body + '>'
         selfclose = body.rstrip().endswith('/')
         if selfclose:
             body = body.rstrip()[:-1]
@@ -1265,9 +1519,12 @@ class xmlparser:
         name = self._expand_name(raw_name, is_attr=False)
         attrs = self._build_attrs(attrs_raw)
         self._stack.append((name, raw_name))
-        self._call('StartElementHandler', name, attrs)
+        if self.StartElementHandler is not None:
+            self._call('StartElementHandler', name, attrs)
+        elif not selfclose:
+            self._default(raw_tag)
         if selfclose:
-            self._end_element(raw_name, synthetic=True)
+            self._end_element(raw_name, synthetic=True, raw=raw_tag)
 
     def _parse_attrs(self, body, i):
         """`name="value"` pairs, in source order, values reference-expanded.
@@ -1357,14 +1614,20 @@ class xmlparser:
         uri = self._ns_map[-1].get('')
         return (uri + self._ns_sep + raw) if uri else raw
 
-    def _end_element(self, raw_name, synthetic=False, line=None, col=None):
+    def _end_element(self, raw_name, synthetic=False, line=None, col=None,
+                     raw=None):
         if not self._stack:
             self._fail(errors.XML_ERROR_NO_ELEMENTS, line, col)
         name, opened_raw = self._stack[-1]
         if raw_name != opened_raw:
             self._fail(errors.XML_ERROR_TAG_MISMATCH, line, col)
         self._stack.pop()
-        self._call('EndElementHandler', name)
+        if self.EndElementHandler is not None:
+            self._call('EndElementHandler', name)
+        elif not synthetic or self.StartElementHandler is None:
+            # An empty element goes to the default handler only when neither
+            # element handler took it (expat's noElmHandlers).
+            self._default(raw)
         decls = self._ns_stack.pop()
         if self._ns_sep is not None:
             self._ns_map.pop()
@@ -1468,6 +1731,129 @@ def _doctype_pieces(head):
                 k += 1
         out.append(head[start:k])
     return out
+
+
+def _doctype_partial(text):
+    """Where expat's unconsumed input starts in `text`, an unfinished
+    DOCTYPE: it has consumed every complete token of the head and every
+    complete item of the subset, and holds back the last token only -- unless
+    that is whitespace, which is complete where it stops."""
+    if len(text) <= 9:
+        return 0
+    k, quote = 9, ''
+    while k < len(text):
+        c = text[k]
+        if quote:
+            if c == quote:
+                quote = ''
+        elif c in '"\'':
+            quote = c
+        elif c == '[':
+            break
+        k += 1
+    else:
+        pieces = _doctype_pieces(text[9:])
+        last = pieces[-1] if pieces else ''
+        return len(text) if last.isspace() else len(text) - len(last)
+    k += 1
+    while k < len(text):
+        item = _next_decl(text, k)
+        if item is None or item[0] == 'bad':
+            toks = _prolog_tokens(text[k:]) if text.startswith('<!', k) else []
+            if len(toks) > 1 and toks[-1].isspace():
+                return len(text)
+            if len(toks) > 1:
+                return len(text) - len(toks[-1])
+            return k
+        if item[0] == 'close':
+            return len(text)
+        k = item[1]
+    return len(text)
+
+
+def _prolog_tokens(piece):
+    """A markup declaration (<!ENTITY ... >'') as expat's prolog tokenizer
+    splits it, which is what a default handler receives: the opening
+    <!KEYWORD'', each whitespace run, each name (#PCDATA'' included, and a
+    trailing ?'', *'' or +'' with it), each literal WITH its quotes,
+    ('', |'', ,'', %'', a )'' with any quantifier, and >''."""
+    k = 2
+    while k < len(piece) and not piece[k].isspace() and piece[k] not in '>"\'(':
+        k += 1
+    out, n = [piece[:k]], len(piece)
+    while k < n:
+        c, start = piece[k], k
+        if c.isspace():
+            while k < n and piece[k].isspace():
+                k += 1
+        elif c in '"\'':
+            end = piece.find(c, k + 1)
+            k = n if end < 0 else end + 1
+        elif c == ')':
+            k += 2 if piece[k + 1:k + 2] in ('?', '*', '+') else 1
+        elif c in '(|,%>':
+            k += 1
+        else:
+            while (k < n and not piece[k].isspace()
+                   and piece[k] not in '"\'()|,%>?*+'):
+                k += 1
+            if piece[k:k + 1] in ('?', '*', '+'):
+                k += 1
+            if k == start:
+                k += 1
+        out.append(piece[start:k])
+    return out
+
+
+_QUANT = {'?': 1, '*': 2, '+': 3}
+
+
+def _content_model(toks):
+    """(name, model) for an ELEMENT declaration's tokens, the model as
+    pyexpat hands ElementDeclHandler: (type, quant, name, children), with
+    model.XML_CTYPE_* types and XML_CQUANT_* quantifiers.  None when the
+    declaration cannot be read."""
+    words = [t for t in toks[1:-1] if not t.isspace()]
+    if len(words) < 2:
+        return None
+    name, spec = words[0], words[1:]
+    if spec == ['EMPTY']:
+        return name, (1, 0, None, ())
+    if spec == ['ANY']:
+        return name, (2, 0, None, ())
+    if len(spec) >= 3 and spec[0] == '(' and spec[1] == '#PCDATA':
+        names = [w for w in spec[2:-1] if w != '|']
+        close = spec[-1]
+        return name, (3, _QUANT.get(close[1:], 0), None,
+                      tuple((4, 0, w, ()) for w in names))
+    pos = [0]
+
+    def particle():
+        if pos[0] >= len(spec):
+            raise ValueError
+        w = spec[pos[0]]
+        pos[0] += 1
+        if w != '(':
+            q = _QUANT.get(w[-1], 0)
+            return (4, q, w[:-1] if q else w, ())
+        kids, kind = [particle()], 6
+        while pos[0] < len(spec) and spec[pos[0]] in '|,':
+            kind = 5 if spec[pos[0]] == '|' else 6
+            pos[0] += 1
+            kids.append(particle())
+        if pos[0] >= len(spec) or not spec[pos[0]].startswith(')'):
+            raise ValueError
+        close = spec[pos[0]]
+        pos[0] += 1
+        return (kind, _QUANT.get(close[1:], 0), None, tuple(kids))
+
+    try:
+        model = particle()
+    except ValueError:
+        return None
+    if pos[0] != len(spec) or model[0] == 4:
+        return None
+    return name, model
 
 
 def _collapse_spaces(value):
