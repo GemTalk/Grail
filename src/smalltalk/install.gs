@@ -190,8 +190,30 @@ headroomMB := capMB <= 0
 	ifFalse: [(capMB - usedMB) + freeMB].
 "1 GB is what MFC needs to work in; the failed install had 16 MB."
 headroomMB < 1024 ifTrue: [
-	SystemRepository markForCollection; reclaimAll.
-	System abort.
+	"SKIP, DON'T CONTEND, when another GC is under way.  Several worktrees
+	 share one stone, so another session's MFC, reclaim or epoch -- or a vote
+	 its test shards have not finished -- is routine.  markForCollection then
+	 waits up to 2 minutes for the gcLock and raises ERROR 2501
+	 (rtErrGetGcLockFailed), killing an install whose code was fine.  This MFC
+	 is housekeeping and the next install can run it, so a busy collector is a
+	 reason to skip it, not to fail.  Both probes work for an ordinary user:
+	 sessionsHoldingGcLock answers an empty Array, and voteState 0 (IDLE),
+	 when nothing is collecting.  The handler covers what the probe cannot see:
+	 a GC that starts after the probe, or a vote that stalls on a session in a
+	 long transaction."
+	(System sessionsHoldingGcLock notEmpty or: [System voteState ~~ 0])
+		ifTrue: [
+			GsFile gciLogServer: 'install: MFC skipped -- gcLock held by session(s) '
+				, System sessionsHoldingGcLock printString
+				, ', vote state ' , System voteStateString]
+		ifFalse: [
+			[SystemRepository markForCollection; reclaimAll]
+				on: Error
+				do: [:e |
+					GsFile gciLogServer: 'install: MFC skipped -- '
+						, e messageText asString.
+					e return: nil].
+			System abort]
 ]
 %
 
