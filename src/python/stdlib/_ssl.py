@@ -305,6 +305,8 @@ K.SSL_FILETYPE_PEM = 1
 K.SSL_FILETYPE_ASN1 = 2
 K.BIO_CTRL_RESET = 1
 K.BIO_CTRL_EOF = 2
+K.BIO_CTRL_INFO = 3
+K.SSL_R_CALLBACK_FAILED = 234
 K.BIO_C_SET_BUF_MEM_EOF_RETURN = 130
 K.BIO_FLAGS_READ = 0x01
 K.BIO_FLAGS_RWS = 0x07
@@ -1642,8 +1644,9 @@ class _SSLContext:
             return
         if not callable(value):
             raise TypeError('not a callable object')
-        raise NotImplementedError(
-            'sni_callback needs an OpenSSL callback, which Grail does not provide yet')
+        # Run by _SSLSocket._servername_callback; see there for how, without
+        # an OpenSSL callback.
+        self._sni_callback = value
 
     @property
     def _msg_callback(self):
@@ -1754,6 +1757,93 @@ def _hostname_bytes(server_hostname):
     return b
 
 
+# ------------------------------------------------------------ SNI helpers
+
+_HELLO_INCOMPLETE = 'incomplete'
+_HELLO_INVALID = 'invalid'
+_HELLO_OK = 'ok'
+
+
+def _u16(b, i):
+    return (b[i] << 8) | b[i + 1]
+
+
+def _client_hello_server_name(data):
+    """(status, name) for the TLS records at the start of ``data``: status
+    _HELLO_INCOMPLETE until a whole ClientHello has arrived, _HELLO_INVALID
+    when the bytes are not one, else _HELLO_OK with the host_name from its
+    server_name extension (RFC 6066), or None when it carries none.  A
+    ClientHello may span several handshake records, so they are joined."""
+    hs = bytearray()
+    pos = 0
+    while True:
+        if len(hs) >= 4 and len(hs) >= 4 + (hs[1] << 16 | _u16(hs, 2)):
+            break
+        if len(data) - pos < 5:
+            return _HELLO_INCOMPLETE, None
+        length = _u16(data, pos + 3)
+        if data[pos] != 22:
+            return _HELLO_INVALID, None
+        if len(data) - pos - 5 < length:
+            return _HELLO_INCOMPLETE, None
+        hs += data[pos + 5:pos + 5 + length]
+        pos += 5 + length
+    if hs[0] != 1:
+        return _HELLO_INVALID, None
+    body = bytes(hs[4:4 + (hs[1] << 16 | _u16(hs, 2))])
+    try:
+        p = 2 + 32                      # legacy_version, random
+        p += 1 + body[p]                # session id
+        p += 2 + _u16(body, p)          # cipher suites
+        p += 1 + body[p]                # compression methods
+        if p >= len(body):
+            return _HELLO_OK, None
+        end = p + 2 + _u16(body, p)
+        p += 2
+        while p + 4 <= end:
+            etype, elen = _u16(body, p), _u16(body, p + 2)
+            p += 4
+            if etype == 0:              # server_name
+                q, qend = p + 2, p + 2 + _u16(body, p)
+                while q + 3 <= qend:
+                    ntype, nlen = body[q], _u16(body, q + 1)
+                    q += 3
+                    if ntype == 0:      # host_name
+                        return _HELLO_OK, body[q:q + nlen]
+                    q += nlen
+                return _HELLO_OK, None
+            p += elen
+    except IndexError:
+        return _HELLO_INVALID, None
+    return _HELLO_OK, None
+
+
+class _UnraisableHookArgs:
+    """The one argument sys.unraisablehook takes (sys.UnraisableHookArgs)."""
+
+    def __init__(self, exc_type, exc_value, exc_traceback, err_msg, object):
+        self.exc_type = exc_type
+        self.exc_value = exc_value
+        self.exc_traceback = exc_traceback
+        self.err_msg = err_msg
+        self.object = object
+
+
+def _write_unraisable(exc, err_msg):
+    """PyErr_FormatUnraisable: hand exc to whatever sys.unraisablehook is
+    now (test.support.catch_unraisable_exception replaces it).  A failing
+    hook is swallowed; there is no one left to report to."""
+    import sys
+    try:
+        # Read as an attribute, not called as sys.unraisablehook(...): that call
+        # compiles to sys's own method and skips a hook assigned over it.
+        hook = getattr(sys, 'unraisablehook')
+        hook(_UnraisableHookArgs(
+            type(exc), exc, getattr(exc, '__traceback__', None), err_msg, None))
+    except BaseException:
+        pass
+
+
 # ------------------------------------------------------------ _SSLSocket
 
 # The largest TLS record: 5-byte header + 2^14 plaintext + 2048 expansion.
@@ -1795,6 +1885,7 @@ class _SSLSocket:
         self._err = 0
         self._outbuf = b''
         self._eof_seen = False
+        self._sni_done = False       # the servername callback has run
         self._record_head = b''      # header bytes of the record being read
         self._record_body_left = 0   # its body bytes not yet read
         L.ERR_clear_error()
@@ -2096,9 +2187,97 @@ class _SSLSocket:
         L.ERR_clear_error()
         return exc
 
+    # -- the servername (SNI) callback --------------------------------
+
+    def _servername_callback(self):
+        """_ssl.c's _servername_callback, run BEFORE OpenSSL reads the
+        ClientHello rather than from inside it.
+
+        CPython registers it as OpenSSL's servername hook, which needs a C
+        callback; Grail has none (CCallin needs native code).  It does not need
+        one: the connection runs over memory BIOs, so the ClientHello is in
+        the input BIO before OpenSSL has seen a byte of it.  The server name is
+        parsed from there, the callback runs, and a context it switches to
+        (``ssl_sock.context = other``) is installed with SSL_set_SSL_CTX while
+        that still decides which certificate answers -- the moment CPython's
+        callback gets.  A returned alert, or the handshake_failure /
+        internal_error that an exception or a non-int answer turns into, is
+        sent as the plaintext alert record OpenSSL would send, and the
+        handshake fails with SSL_R_CALLBACK_FAILED as it does in CPython."""
+        cb = self._ctx._sni_callback
+        if cb is None:
+            self._sni_done = True
+            return
+        sock = self._get_socket()
+        timeout = None if sock is None else sock.gettimeout()
+        deadline = _time.monotonic() + timeout if timeout else None
+        while True:
+            status, name = _client_hello_server_name(self._peek_input())
+            if status != _HELLO_INCOMPLETE:
+                break
+            if sock is None or not self._fill(sock, timeout, deadline, 'handshake'):
+                if self._eof_seen:
+                    status = _HELLO_INVALID
+                    break
+                self._err = SSL_ERROR_WANT_READ
+                raise self._set_error()
+        self._sni_done = True
+        if status == _HELLO_INVALID:
+            return                  # not a ClientHello: OpenSSL refuses it
+        # CPython's choice of what the callback receives: the owner (an
+        # SSLObject or SSLSocket), else the socket, else the _SSLSocket.  An
+        # owner that has died fails the handshake without calling it.
+        if self._owner is not None:
+            target = self._owner()
+            if target is None:
+                return self._servername_failed(ALERT_DESCRIPTION_INTERNAL_ERROR)
+        else:
+            target = sock if sock is not None else self
+        servername = None if name is None else name.decode('latin-1')
+        try:
+            result = cb(target, servername, self._ctx)
+        except BaseException as exc:
+            _write_unraisable(exc, 'Exception ignored in ssl servername callback '
+                              'while calling set SNI callback %r' % (cb,))
+            return self._servername_failed(ALERT_DESCRIPTION_HANDSHAKE_FAILURE)
+        if result is None:
+            return
+        try:
+            alert = _index(result)
+        except BaseException as exc:
+            _write_unraisable(exc, 'Exception ignored in ssl servername callback '
+                              'while calling set SNI callback %r' % (cb,))
+            alert = ALERT_DESCRIPTION_INTERNAL_ERROR
+        return self._servername_failed(alert)
+
+    def _peek_input(self):
+        """The ciphertext waiting in the input BIO, left where it is."""
+        out = _C.malloc(8)
+        n = L.BIO_ctrl(self._rbio, K.BIO_CTRL_INFO, 0, out)
+        if n <= 0:
+            return b''
+        return _C.read(_C.read_ptr(out, 0), 0, n)
+
+    def _servername_failed(self, alert):
+        record = bytes((21, 3, 3, 0, 2, 2, alert & 0xFF))   # fatal alert
+        sock = self._get_socket()
+        if sock is not None:
+            self._outbuf += record
+            try:
+                self._flush(sock, sock.gettimeout(), None, 'handshake')
+            except OSError:
+                pass
+        else:
+            L.BIO_write(self._wbio, record, len(record))
+        self._err = SSL_ERROR_SSL
+        raise _fill_and_make(SSLError, SSL_ERROR_SSL, None, 0,
+                             (K.ERR_LIB_SSL << 23) | K.SSL_R_CALLBACK_FAILED, self)
+
     # -- operations ---------------------------------------------------
 
     def do_handshake(self):
+        if self._server_side and not self._sni_done:
+            self._servername_callback()
         ret = self._run(lambda: L.SSL_do_handshake(self._ssl), lambda r: r < 1,
                         'handshake')
         if ret < 1:

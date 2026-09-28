@@ -163,8 +163,14 @@ _argument: aValue as: aType
 	(aType == #ptr or: [aType == #'const char*']) ifTrue: [
 		aValue == nil ifTrue: [^ nil].
 		((aValue isKindOf: CPointer) or: [aValue isKindOf: CByteArray]) ifTrue: [^ aValue].
+		"ALWAYS NUL-terminated, #ptr as well.  OpenSSL takes many C strings as
+		 void* -- SSL_ctrl's SSL_CTRL_SET_TLSEXT_HOSTNAME, SSL_CTX_ctrl's groups
+		 list -- and reads them with strlen, so an unterminated copy ran on into
+		 whatever followed: the SNI name reached the server as
+		 'supermessage' plus four stray bytes.  A binary buffer's length always
+		 travels in its own argument, so one extra byte never reaches it."
 		(self _bytesOf: aValue) ifNotNil: [:b |
-			^ CByteArray withAll: b nullTerminate: aType == #'const char*'].
+			^ CByteArray withAll: b nullTerminate: true].
 		^ nil].
 	aType == #bool ifTrue: [^ aValue == true].
 	^ aValue
