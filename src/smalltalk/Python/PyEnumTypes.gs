@@ -31,7 +31,7 @@ doit
 PythonInstance subclass: 'Enum'
   instVarNames: #()
   classVars: #( EnumRegistry )
-  classInstVars: #( ___dynInstVars___ )
+  classInstVars: #( ___dynInstVars___ grailEnumRecord )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -170,7 +170,7 @@ doit
 AbstractPyInt subclass: 'IntEnum'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( grailEnumRecord )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -196,7 +196,7 @@ doit
 AbstractPyStr subclass: 'StrEnum'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( grailEnumRecord )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -375,9 +375,81 @@ ___grailRegistry___
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailRecordFor: cls
-	"The {byValue. byName. members} record for an enum class, or nil."
+	"The {byValue. byName. members} record for an enum class, or nil.
 
-	^ self ___grailRegistry___ @env0:at: cls otherwise: nil
+	The session registry first.  A class it has never seen may still be an
+	enum built in ANOTHER session and committed -- a module deployed by
+	run_tests.sh's framework deploy, or any committed module.  Its record then
+	rides on the class itself, in the grailEnumRecord class instVar
+	(___grailStoreRecord:for:), and is brought into this session as a COPY of
+	its containers, so a later pseudo-member (a Flag composite) or alias
+	lands in session state rather than dirtying the committed dictionaries.
+
+	Without the class-side copy, every enum in a deployed module read as
+	having no members: http.HTTPStatus, socket.AddressFamily, and ssl's
+	VerifyMode/VerifyFlags/Options, where create_default_context() raised
+	``<flag 'VerifyFlags'> has no members''."
+
+	| rec stored |
+	rec := self ___grailRegistry___ @env0:at: cls otherwise: nil.
+	rec @env0:notNil ifTrue: [^ rec].
+	((cls @env0:isKindOf: Behavior)
+		and: [(cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot'
+			environmentId: 1) @env0:notNil]) ifFalse: [^ nil].
+	stored := cls ___grailEnumRecordSlot.
+	stored @env0:isNil ifTrue: [^ nil].
+	rec := stored @env0:collect: [:each | each @env0:copy].
+	self ___grailRegistry___ @env0:at: cls put: rec.
+	^ rec
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailStoreRecord: rec for: cls
+	"Register cls's record in this session AND on the class (see
+	___grailRecordFor:), so it survives the class being committed."
+
+	self ___grailRegistry___ @env0:at: cls put: rec.
+	((cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot:'
+		environmentId: 1) @env0:notNil)
+		ifTrue: [cls ___grailEnumRecordSlot: rec].
+	^ rec
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailEnumRecordSlot
+	^ grailEnumRecord
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailEnumRecordSlot: aRecord
+	grailEnumRecord := aRecord
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___grailEnumRecordSlot
+	^ grailEnumRecord
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___grailEnumRecordSlot: aRecord
+	grailEnumRecord := aRecord
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+___grailEnumRecordSlot
+	^ grailEnumRecord
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+___grailEnumRecordSlot: aRecord
+	grailEnumRecord := aRecord
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1058,7 +1130,7 @@ ___grailBuildMembers: cls names: attrNames
 	AFTER its __new__ runs, so member N+1 sees exactly the N prior members).
 	The post-loop registration overwrites this with identical content plus any
 	composite/order handling."
-	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members with: allOrdered).
+	self ___grailStoreRecord: (Array @env0:with: byValue with: byName with: members with: allOrdered) for: cls.
 	lastInt := 0.
 	"maxInt: the running MAXIMUM member value -- Flag auto() numbers from the
 	highest bit seen so far, NOT the last value, so a manual value LOWER
@@ -1677,7 +1749,7 @@ ___grailBuildMembers: cls names: attrNames
 						(nameStr @env0:, ':') @env0:asSymbol on: cls with: member]
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
-	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members with: allOrdered).
+	self ___grailStoreRecord: (Array @env0:with: byValue with: byName with: members with: allOrdered) for: cls.
 	"CPython EnumType wraps a user _generate_next_value_ as a staticmethod in the
 	class __dict__ (test_gnv_is_static: type(cls.__dict__['_generate_next_value_'])
 	is staticmethod).  Grail compiles gnv as a plain method; store a PyStaticMethod
@@ -4063,7 +4135,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
 				category: 'Grail-Class Attrs']
 			@env0:on: AbstractException do: [:e | nil]]]] value.
-	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
+	self ___grailStoreRecord: (Array @env0:with: byValue with: byName with: members) for: newCls.
 	"Record the functional gnv as a staticmethod in the session gnv-static store;
 	___classDict___ surfaces it in newCls.__dict__ (functional enums have no
 	___dynInstVars___ holder, so the class-syntax holder path can't be used).  A value
