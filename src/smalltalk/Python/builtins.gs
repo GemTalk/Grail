@@ -2083,7 +2083,16 @@ ___grailCompiledModeRegistry___
 category: 'Grail-Built-in Functions'
 method: builtins
 all: anIterable
-	"Python builtin all(iterable) — fixed-arity fast path."
+	"Python builtin all(iterable) — fixed-arity fast path.
+
+	Truth is ___isTruthy___, the send ``if'' compiles to, NOT a private
+	``item __bool__'' probe.  str/list/dict and every other container define no
+	__bool__, so the probe's MessageNotUnderstood handler answered TRUE for all
+	of them and ``all([\'x\', \'\'])'' was True -- a wrong answer that looks
+	plausible, which is how it survived (#1234, found in a Flask roster importer
+	whose blank-row check never saw a blank row).  ___truthOf___ goes on to
+	__len__ where __bool__ is absent, which is why bool() and ``if'' were always
+	right; sharing it is what stops the two diverging again."
 
 	| iter result done |
 	iter := anIterable __iter__.
@@ -2093,8 +2102,7 @@ all: anIterable
 		| item isTruthy |
 		[
 			item := iter __next__.
-			[isTruthy := item __bool__]
-				@env0:on: MessageNotUnderstood do: [:ex | isTruthy := true].
+			isTruthy := item ___isTruthy___.
 			isTruthy ifFalse: [
 				result := false.
 				done := true
@@ -2107,7 +2115,14 @@ all: anIterable
 category: 'Grail-Built-in Functions'
 method: builtins
 any: anIterable
-	"Python builtin any(iterable) — fixed-arity fast path."
+	"Python builtin any(iterable) — fixed-arity fast path.
+
+	Truth is ___isTruthy___, the send ``if'' compiles to -- see all: for the
+	container case the private __bool__ probe got wrong (#1234).  It also carries
+	the two smaller consequences: a MessageNotUnderstood raised INSIDE a user's
+	__bool__ was swallowed and read as true, and a __bool__ returning a non-bool
+	raised an uncatchable ImproperOperation (error 2085) instead of the catchable
+	TypeError bool() gives."
 
 	| iter result done |
 	iter := anIterable __iter__.
@@ -2117,8 +2132,7 @@ any: anIterable
 		| item isTruthy |
 		[
 			item := iter __next__.
-			[isTruthy := item __bool__]
-				@env0:on: MessageNotUnderstood do: [:ex | isTruthy := true].
+			isTruthy := item ___isTruthy___.
 			isTruthy ifTrue: [
 				result := true.
 				done := true
