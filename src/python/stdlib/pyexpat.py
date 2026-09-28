@@ -239,6 +239,8 @@ class xmlparser:
         self._rawhead = b''       # bytes held back until it is
         self._encoding_used = None
         self._encoding_col = None # where a declared encoding's value starts
+        self._attlists = {}       # element -> {attribute: (type, default)}
+        self._pending_cr = False  # a CR ending the last chunk, maybe of a CRLF
 
     # ---------------------------------------------------------- public API
 
@@ -250,7 +252,7 @@ class xmlparser:
                 data = self._decode(bytes(data), isfinal)
             except _UndecodableBytes as bad:
                 self._fail_at_undecodable(bad)
-        self._buf += data
+        self._buf += self._normalise_newlines(data, isfinal)
         if self._dtd_mode:
             self._advance(self._subset(self._buf[self._pos:], isfinal, True))
         else:
@@ -266,6 +268,24 @@ class xmlparser:
                     self._fail(errors.XML_ERROR_NO_ELEMENTS)
             self._done = True
         return 1
+
+    def _normalise_newlines(self, data, isfinal):
+        """XML 2.11: every CRLF, and every lone CR, is a LF before anything
+        else sees the text -- expat does it on input, so content, attribute
+        values and positions all see one line break.  An attribute value holding
+        a literal CRLF therefore normalises to ONE space, not two
+        (test_xml_etree's expat224_utf8_bug.xml).  A CR a character reference
+        produces is not input, and survives.  A CR ending a chunk is held back
+        until the next one says whether an LF follows it."""
+        if self._pending_cr:
+            data = '\r' + data
+            self._pending_cr = False
+        if not isfinal and data.endswith('\r'):
+            data = data[:-1]
+            self._pending_cr = True
+        if '\r' in data:
+            data = data.replace('\r\n', '\n').replace('\r', '\n')
+        return data
 
     def ParseFile(self, file):
         while True:
@@ -471,6 +491,10 @@ class xmlparser:
         self._pos += n
         self.CurrentLineNumber = self._line
         self.CurrentColumnNumber = self._col
+        # expat's error-position getters ARE its current-position getters;
+        # only a failure (_fail) pins them.
+        self.ErrorLineNumber = self._line
+        self.ErrorColumnNumber = self._col
 
     def _offset_pos(self, base_line, base_col, text, index):
         """(line, col) of `index` within `text`, given where `text` started.
@@ -565,6 +589,14 @@ class xmlparser:
     def _scan_markup(self, isfinal):
         buf, i = self._buf, self._pos
         rest = buf[i:]
+        # A chunk can end partway into ``<!--'', ``<![CDATA['' or
+        # ``<!DOCTYPE'': that is not yet anything, so wait for the next one
+        # rather than judging ``<!'' an invalid token (XMLPullParser fed one
+        # character at a time -- test_xml_etree's test_simple_xml_chunk_1).
+        if (not isfinal and rest.startswith('<!')
+                and any(t.startswith(rest) and t != rest
+                        for t in ('<!--', '<![CDATA[', '<!DOCTYPE'))):
+            return False
         if rest.startswith('<!--'):
             end = buf.find('-->', i + 4)
             if end < 0:
@@ -657,13 +689,12 @@ class xmlparser:
         raw = buf[i:end]
         if ']]>' in raw:
             self._fail(errors.XML_ERROR_INVALID_TOKEN)
-        if not self._fragment:
-            if not self._seen_root and raw.strip():
-                self._fail(errors.XML_ERROR_SYNTAX)
-            if self._done and raw.strip():
-                self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
-            if not self._stack and raw.strip():
-                self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
+        if not self._fragment and raw.strip():
+            if not self._seen_root:
+                self._junk_error(raw, end, errors.XML_ERROR_SYNTAX)
+            if self._done or not self._stack:
+                self._junk_error(raw, end,
+                                 errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
         tline, tcol = self._line, self._col
         self._advance(end - i)
         if self._stack or self._fragment:
@@ -671,6 +702,35 @@ class xmlparser:
         else:
             self._default(raw)
         return True
+
+    def _junk_error(self, raw, end, message):
+        """Fail on text outside the root element the way expat's prolog
+        tokenizer does.  It reads a run of name characters as ONE token only
+        when what follows can end one -- whitespace, the end of the input, or
+        one of ``> ) [ % ? * + | ,'' -- and then the token is out of place:
+        `message`, blamed at its start.  Anything else following the run is
+        an invalid token AT that character, and so is a character that
+        cannot begin a name at all.  So ``foo'' is a syntax error at column
+        0 while ``foobar<'' is an invalid token at column 6 (test_xml_etree's
+        test_error_position), and after the root ``<a/> x'' is blamed at the
+        x, not at the space before it."""
+        k = len(raw) - len(raw.lstrip())
+        if _is_name_char(raw[k]):
+            m = k
+            while m < len(raw) and _is_name_char(raw[m]):
+                m += 1
+            if m < len(raw):
+                follow = raw[m]
+            else:
+                follow = self._buf[end] if end < len(self._buf) else None
+            if (follow is None or follow.isspace()
+                    or follow in '>)[%?*+|,'):
+                self._fail(message, *self._offset_pos(
+                    self._line, self._col, raw, k))
+            self._fail(errors.XML_ERROR_INVALID_TOKEN, *self._offset_pos(
+                self._line, self._col, raw, m))
+        self._fail(errors.XML_ERROR_INVALID_TOKEN, *self._offset_pos(
+            self._line, self._col, raw, k))
 
     def _content(self, raw, line, col):
         """A text run inside an element: its character data, and what each
@@ -709,22 +769,49 @@ class xmlparser:
         if name in self._unparsed:
             self._fail(errors.XML_ERROR_BINARY_ENTITY_REF, line, col)
         if name in self._external:
-            # No handler: expat drops the reference without a word.
             h = self.ExternalEntityRefHandler
-            if h is not None:
-                base, sysid, pubid = self._external[name]
-                self._flush_text()
-                if _refused(h(name, base, sysid, pubid)):
-                    self._fail(errors.XML_ERROR_EXTERNAL_ENTITY_HANDLING,
-                               line, col)
+            if h is None:
+                # No handler: expat reports the reference to the default
+                # handler, which is where ElementTree raises "undefined
+                # entity" for an external entity it cannot load
+                # (test_xml_etree's test_entity, EXTERNAL_ENTITY_XML).
+                self._report_skipped(name, line, col, skipped=False)
+                return
+            base, sysid, pubid = self._external[name]
+            self._flush_text()
+            if _refused(h(name, base, sysid, pubid)):
+                self._fail(errors.XML_ERROR_EXTERNAL_ENTITY_HANDLING,
+                           line, col)
             return
         if self._skips_undefined():
-            if self.SkippedEntityHandler is not None:
+            # During the callback expat's position is the REFERENCE's -- the
+            # ``&'' -- and its error-position getters are the current-position
+            # ones.  ElementTree reports an undefined entity from inside its
+            # default handler with ErrorLineNumber / ErrorColumnNumber, so
+            # they read 1/0 here and the message named the wrong place
+            # (test_xml_etree's test_entity, test_bug_xmltoolkit55).
+            self._report_skipped(name, line, col, skipped=True)
+            return
+        self._fail(errors.XML_ERROR_UNDEFINED_ENTITY, line, col)
+
+    def _report_skipped(self, name, line, col, skipped):
+        """An entity reference nothing resolves, to SkippedEntityHandler (when
+        `skipped` and one is set) or else to the default handler as the
+        reference text, with the parser's position at the ``&'' for the
+        duration of the call -- where expat reports it."""
+        saved = (self.CurrentLineNumber, self.CurrentColumnNumber,
+                 self.ErrorLineNumber, self.ErrorColumnNumber)
+        if line is not None:
+            self.CurrentLineNumber = self.ErrorLineNumber = line
+            self.CurrentColumnNumber = self.ErrorColumnNumber = col
+        try:
+            if skipped and self.SkippedEntityHandler is not None:
                 self._call('SkippedEntityHandler', name, 0)
             else:
                 self._default('&%s;' % name)
-            return
-        self._fail(errors.XML_ERROR_UNDEFINED_ENTITY, line, col)
+        finally:
+            (self.CurrentLineNumber, self.CurrentColumnNumber,
+             self.ErrorLineNumber, self.ErrorColumnNumber) = saved
 
     def _skips_undefined(self):
         """expat's rule for a reference to an entity nobody declared: an
@@ -837,10 +924,30 @@ class xmlparser:
         name = toks[0][1]
         sysid, pubid, _ = self._external_id(toks, 1)
         self._advance(j + 1 - i)
+        # With no StartDoctypeDeclHandler to claim it, expat hands the
+        # declaration to the default handler a token at a time -- markup,
+        # whitespace runs, the name, each keyword and each QUOTED literal.
+        # ElementTree's XMLParser reads the doctype exactly that way
+        # (XMLParser._default collects ['html', 'PUBLIC', '"...", '"..."'] and
+        # calls target.doctype), so without it TreeBuilder never saw one
+        # (test_xml_etree's test_doctype, test_subclass_doctype).
+        piecewise = (self.StartDoctypeDeclHandler is None and (
+            self.DefaultHandler is not None
+            or self.DefaultHandlerExpand is not None))
+        if piecewise:
+            self._default('<!DOCTYPE')
+            for piece in _doctype_pieces(head):
+                self._default(piece)
+            if subset is not None:
+                self._default('[')
         self._call('StartDoctypeDeclHandler', name, sysid, pubid,
                    0 if subset is None else 1)
         if subset is not None:
             self._subset(buf[subset[0]:subset[1]], True, False)
+            if piecewise:
+                self._default(']')
+        if piecewise:
+            self._default('>')
         if sysid is not None:
             self._dtd_skips = True
             h = self.ExternalEntityRefHandler
@@ -935,10 +1042,100 @@ class xmlparser:
             self._entity_decl(piece[8:-1])
         elif piece.startswith('<!NOTATION') and piece[10:11].isspace():
             self._notation_decl(piece[10:-1])
+        elif (piece.startswith('<!ATTLIST') and piece[9:10].isspace()
+                and self._attlist_decl(piece[9:-1])):
+            pass
         else:
-            # ELEMENT and ATTLIST: no content models or attribute defaults
-            # here, so only the default handler sees them.
+            # ELEMENT: no content models here, so only the default handler
+            # sees it.
             self._default(piece)
+
+    def _attlist_decl(self, body):
+        """``<!ATTLIST elem (name type default)*>``: remember each attribute's
+        type and default, and report it to AttlistDeclHandler -- or, with none
+        set, to the default handler, as expat does.  Answers False for a body
+        it cannot read, which then reaches the default handler untouched.
+
+        What expat does with the record, and what this is for: a DEFAULTED
+        attribute appears on the element (test_xml_etree's attlist_default,
+        ``xml:lang`` from the DTD), and a TOKENIZED one -- any type but CDATA --
+        has its value's space runs collapsed and trimmed (XML 3.3.3; the
+        c14n-20 suite's normNames / normId).  The first declaration of an
+        attribute is binding."""
+        toks = _attlist_tokens(body)
+        if toks is None or not toks or toks[0][0] != 'name':
+            return False
+        elem, i, decls = toks[0][1], 1, []
+        while i < len(toks):
+            if toks[i][0] != 'name' or i + 1 >= len(toks):
+                return False
+            att, typ = toks[i][1], toks[i + 1]
+            i += 2
+            if typ[0] == 'group':
+                type_str = '(' + '|'.join(typ[1]) + ')'
+            elif typ == ('name', 'NOTATION'):
+                if i >= len(toks) or toks[i][0] != 'group':
+                    return False
+                type_str = 'NOTATION(' + '|'.join(toks[i][1]) + ')'
+                i += 1
+            elif typ[0] == 'name':
+                type_str = typ[1]
+            else:
+                return False
+            if i >= len(toks):
+                return False
+            dflt, required = None, 0
+            if toks[i] == ('name', '#REQUIRED'):
+                required = 1
+                i += 1
+            elif toks[i] == ('name', '#IMPLIED'):
+                i += 1
+            else:
+                if toks[i] == ('name', '#FIXED'):
+                    required = 1
+                    i += 1
+                if i >= len(toks) or toks[i][0] != 'lit':
+                    return False
+                dflt = toks[i][1]
+                i += 1
+            decls.append((att, type_str, dflt, required))
+        if not self._keep_decls:
+            return True
+        table = self._attlists.setdefault(elem, {})
+        for att, type_str, dflt, required in decls:
+            if att not in table:
+                value = None
+                if dflt is not None:
+                    value = self._expand(dflt)
+                    if type_str != 'CDATA':
+                        value = _collapse_spaces(value)
+                table[att] = (type_str, value)
+            if self.AttlistDeclHandler is not None:
+                self._call('AttlistDeclHandler', elem, att, type_str, dflt,
+                           required)
+        if self.AttlistDeclHandler is None:
+            self._default('<!ATTLIST' + body + '>')
+        return True
+
+    def _apply_attlist(self, raw_name, attrs_raw):
+        """The start tag's attributes as the DTD makes them: tokenized values
+        normalised, and declared defaults added after the specified ones
+        unless specified_attributes asks for those alone."""
+        table = self._attlists.get(raw_name)
+        if not table:
+            return attrs_raw
+        out, present = [], set()
+        for an, av in attrs_raw:
+            present.add(an)
+            decl = table.get(an)
+            if decl is not None and decl[0] != 'CDATA':
+                av = _collapse_spaces(av)
+            out.append((an, av))
+        if not self.specified_attributes:
+            for an, (type_str, value) in table.items():
+                if value is not None and an not in present:
+                    out.append((an, value))
+        return out
 
     def _entity_decl(self, body):
         toks = _decl_tokens(body)
@@ -1046,7 +1243,7 @@ class xmlparser:
             self._fail(errors.XML_ERROR_INVALID_TOKEN)
         if self._done and not self._fragment:
             self._fail(errors.XML_ERROR_JUNK_AFTER_DOC_ELEMENT)
-        attrs_raw = self._parse_attrs(body, k)
+        attrs_raw = self._apply_attlist(raw_name, self._parse_attrs(body, k))
         self._advance(consumed)
         self._seen_root = True
 
@@ -1250,6 +1447,63 @@ def _refused(result):
     None -- the common case for one that simply does its work -- is not a
     refusal here."""
     return result is not None and result == 0
+
+
+def _doctype_pieces(head):
+    """The tokens of a DOCTYPE's head (after ``<!DOCTYPE'', before ``['' or
+    ``>''), as expat reports them to a default handler: each whitespace run,
+    each name or keyword, and each literal WITH its quotes."""
+    out, k, n = [], 0, len(head)
+    while k < n:
+        c = head[k]
+        start = k
+        if c.isspace():
+            while k < n and head[k].isspace():
+                k += 1
+        elif c in '"\'':
+            end = head.find(c, k + 1)
+            k = n if end < 0 else end + 1
+        else:
+            while k < n and not head[k].isspace() and head[k] not in '"\'':
+                k += 1
+        out.append(head[start:k])
+    return out
+
+
+def _collapse_spaces(value):
+    """XML 3.3.3's extra step for a non-CDATA attribute: space (#x20) runs
+    become one space, leading and trailing ones go.  Only #x20: a tab or line
+    break a character reference produced is kept."""
+    return ' '.join(part for part in value.split(' ') if part)
+
+
+def _attlist_tokens(body):
+    """An ATTLIST body as ('name', w), ('lit', text) and ('group', [w...])
+    tokens -- an enumeration ``( a | b )'' is one group, whatever its spacing.
+    None when a literal or a group is unterminated."""
+    toks, k, n = [], 0, len(body)
+    while k < n:
+        c = body[k]
+        if c.isspace():
+            k += 1
+        elif c in '"\'':
+            end = body.find(c, k + 1)
+            if end < 0:
+                return None
+            toks.append(('lit', body[k + 1:end]))
+            k = end + 1
+        elif c == '(':
+            end = body.find(')', k + 1)
+            if end < 0:
+                return None
+            toks.append(('group', [w.strip() for w in body[k + 1:end].split('|')]))
+            k = end + 1
+        else:
+            start = k
+            while k < n and not body[k].isspace() and body[k] not in '"\'(':
+                k += 1
+            toks.append(('name', body[start:k]))
+    return toks
 
 
 def _decl_tokens(text):

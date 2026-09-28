@@ -9147,6 +9147,126 @@ ___irPurgeDefTableForModule___: aModuleName
 	victims do: [:id | table removeKey: id ifAbsent: []]
 %
 
+category: 'Grail-MI Merge'
+classmethod: importlib
+___unshadowInstVarsIn___: aSource for: aClass
+	"aSource -- a method compiled for another class -- rewritten so it compiles
+	on aClass even where one of its method-level names is an instVar aClass
+	inherits.  Answers aSource itself when nothing collides, which is nearly
+	always.
+
+	A method is compiled for ITS class's instVars.  The MI merge copies a
+	secondary base's methods onto a class whose SMALLTALK chain can differ --
+	``class MyElement(ET.Element, ValueError)'' is a ValueError, and every
+	exception inherits AbstractException's ``tag''.  Element's
+	``makeelement(self, tag, attrib)'' declares a method temp ``tag'', which
+	there is GemStone error 1030, ``variable has already been declared''; the
+	copy compiled to the codegen-gap stub, and constructing a MyElement raised
+	NameError (test_xml_etree's test_element_factory_pure_python_subclass).
+
+	The codegen's own answer, for a class body that knows its instVars, is the
+	shape used here: a colliding argument is renamed, and the method's temps
+	and statements move into a block, whose temps may shadow an instVar where
+	the method's may not.  The block is evaluated and the method answers self
+	after it, so a body with no final return still does.  The trailing
+	``___GRAILPOS___'' map records Smalltalk source offsets, so every offset
+	after the insertion shifts by what was inserted."
+
+	| lines header rest ivs toks args hits newHeader i tempsLine tempNames
+	  body bodyText mapStart map insertAt delta out renamed |
+	ivs := (aClass allInstVarNames collect: [:n | n asString]) asSet.
+	ivs isEmpty ifTrue: [^ aSource].
+	i := aSource indexOf: Character lf.
+	i = 0 ifTrue: [^ aSource].
+	header := aSource copyFrom: 1 to: i - 1.
+	rest := aSource copyFrom: i + 1 to: aSource size.
+	"Keyword header: the arguments are the words after each ``kw:''."
+	toks := header subStrings: ' '.
+	args := OrderedCollection new.
+	(toks notEmpty and: [(toks first) last = $:]) ifTrue: [
+		2 to: toks size by: 2 do: [:k | args add: (toks at: k)]].
+	(toks size = 2 and: [(toks first) last ~= $:]) ifTrue: [args add: toks last].
+	"The method temps: the first ``| ... |'' line after the pragmas."
+	lines := rest subStrings: (String with: Character lf).
+	tempsLine := nil.
+	lines do: [:ln | | t |
+		tempsLine isNil ifTrue: [
+			t := ln trimSeparators.
+			(t notEmpty and: [t first = $|]) ifTrue: [tempsLine := ln]]].
+	tempNames := tempsLine isNil
+		ifTrue: [#()]
+		ifFalse: [(tempsLine trimSeparators subStrings: ' ')
+			reject: [:w | w = '|' or: [w isEmpty]]].
+	hits := (args select: [:a | ivs includes: a]) ,
+		(tempNames select: [:t | ivs includes: t]).
+	hits isEmpty ifTrue: [^ aSource].
+	"Only the simple generated shape is rewritten: temps first, then
+	statements.  Anything else keeps the old behaviour (the compile fails and
+	the stub stands)."
+	tempsLine isNil ifTrue: [^ aSource].
+	renamed := args select: [:a | ivs includes: a].
+	newHeader := WriteStream on: String new.
+	toks doWithIndex: [:w :k |
+		k > 1 ifTrue: [newHeader nextPut: $ ].
+		newHeader nextPutAll: ((renamed includes: w) ifTrue: ['___iv_' , w] ifFalse: [w])].
+	newHeader := newHeader contents.
+	"Split rest at the temps line; the map comment, if any, stays last."
+	insertAt := rest indexOfSubCollection: tempsLine.
+	mapStart := rest indexOfSubCollection: '"___GRAILPOS___'.
+	body := mapStart = 0
+		ifTrue: [rest copyFrom: insertAt to: rest size]
+		ifFalse: [rest copyFrom: insertAt to: mapStart - 1].
+	map := mapStart = 0 ifTrue: [''] ifFalse: [rest copyFrom: mapStart to: rest size].
+	bodyText := WriteStream on: String new.
+	bodyText nextPut: $[.
+	"A renamed argument joins the block's temps and is copied in first."
+	renamed isEmpty
+		ifTrue: [bodyText nextPutAll: body]
+		ifFalse: [ | bar |
+			bar := body indexOf: $| startingAt: (body indexOf: $|) + 1.
+			bodyText nextPutAll: (body copyFrom: 1 to: bar - 1).
+			renamed do: [:a | bodyText nextPutAll: ' '; nextPutAll: a].
+			bodyText nextPutAll: ' |'.
+			renamed do: [:a |
+				bodyText nextPutAll: ' '; nextPutAll: a; nextPutAll: ' := ___iv_';
+					nextPutAll: a; nextPut: $.].
+			bodyText nextPutAll: (body copyFrom: bar + 1 to: body size)].
+	out := newHeader , (String with: Character lf) , (rest copyFrom: 1 to: insertAt - 1) ,
+		bodyText contents.
+	"Every insertion precedes the first statement, so each mapped offset -- all
+	of them lie in the statements -- moves by the same amount: how much longer
+	the rewritten text is than the original, up to the map."
+	delta := out size - (header size + 1 + insertAt - 1 + body size).
+	out := out , (String with: Character lf) , '] value.' , (String with: Character lf) ,
+		'^ self' , (String with: Character lf).
+	map isEmpty ifFalse: [
+		out := out , (self ___shiftGrailPosMap___: map by: delta
+			after: header size + 1 + insertAt)].
+	^ out
+%
+
+category: 'Grail-MI Merge'
+classmethod: importlib
+___shiftGrailPosMap___: aMapComment by: delta after: aPosition
+	"aMapComment -- a ``___GRAILPOS___'' comment, six numbers per entry of
+	which the first two are Smalltalk source offsets -- with every such offset
+	past aPosition moved by delta.  See ___unshadowInstVarsIn___:for:."
+
+	| words out nums |
+	words := ((aMapComment copyReplaceAll: '"' with: ' ') subStrings: ' ')
+		reject: [:w | w isEmpty].
+	(words notEmpty and: [words first = '___GRAILPOS___']) ifFalse: [^ aMapComment].
+	nums := (words copyFrom: 2 to: words size) collect: [:w | w asNumber].
+	out := WriteStream on: String new.
+	out nextPutAll: '"___GRAILPOS___ '.
+	nums doWithIndex: [:n :k | | v |
+		v := n.
+		(((k - 1) \\ 6) < 2 and: [n > aPosition]) ifTrue: [v := n + delta].
+		out print: v; nextPut: $ ].
+	out nextPut: $".
+	^ out contents
+%
+
 category: 'Grail-Class Compilation'
 classmethod: importlib
 ___copyMethod___: sel from: aProvider to: aClass category: aCategory
@@ -9195,6 +9315,7 @@ ___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCate
 	meth isNil ifTrue: [^ self].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	src notNil ifTrue: [
+		src := self ___unshadowInstVarsIn___: src for: aClass.
 		^ [aClass perform: #'___compileMethod:category:' env: 1
 			withArguments: { aPrefix , src. aCategory }] on: Error do: [:e | e return: nil]].
 	"No text source to recompile (an IR method of a class built before the

@@ -726,6 +726,11 @@ ___grailPinnedMethodFor___: aMethod receiver: obj
 	almost every program is forever."
 
 	| pinnedAt shadow owner |
+	"``object.__eq__(a, b)'' called explicitly runs object's comparison, not
+	__eq__:'s dispatch to a setattr-installed __eq__ -- see object >>
+	___grailObjectEq___:."
+	((aMethod @env0:selector == #'__eq__:') and: [aMethod @env0:inClass == Object])
+		ifTrue: [^ Object @env0:compiledMethodAt: #'___grailObjectEq___:' environmentId: 1].
 	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
 	pinnedAt == nil ifTrue: [^ aMethod].
 	"A stamp above this session's current generation was made by another
