@@ -150,23 +150,13 @@ module_topaz_cfg() { # $1=mod
     esac
 }
 
-# Per-module wall-clock cap: PER_MODULE_TIMEOUT, doubled for test_set.  Its
-# ten TestOperationsMutating classes define a fresh local `class Bad' on every
-# one of thousands of randomized operations, each class retains ~29KB of
-# temporary object memory that no collection reclaims, and every later
-# operation slows as that heap grows.  Measured per test on the nightly
-# runner (2026-09-27, run 36370118680): 1219 of the module's 1231s are in
-# those classes, running 2x slower than this Mac at 20% of the memory budget
-# and 5.7x at 68%, against 2.5x for the rest of the suite.  The randomized
-# sizes then spread it across 1231-1800s+ at one SHA -- the nightly of
-# 2026-09-26 was killed at 1800s and its re-run passed at 1569s.  So at 1800s
-# the row was a coin flip, not a measurement.  Doubling makes it a result
-# again; a real hang still fails, just later.  The retained memory is the
-# defect, and the case goes when it does.
+# Per-module wall-clock cap, beside module_topaz_cfg's per-module memory
+# budget.  Every module gets PER_MODULE_TIMEOUT; give one more with a case
+# here.  test_set had 2x (#1243) while its TestOperationsMutating defined a
+# fresh class per call, which Kermit #52123 made slower as the run went on;
+# its test now uses one class, and runs in a third of the time.
 module_timeout() { # $1=mod
     case "$1" in
-        test.test_set)
-            echo $((PER_MODULE_TIMEOUT * 2)) ;;
         *)
             echo "$PER_MODULE_TIMEOUT" ;;
     esac

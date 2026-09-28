@@ -1924,31 +1924,51 @@ class TestWeirdBugs(unittest.TestCase):
         set() | s
 
 
+# Grail: the one ``Bad`` class for TestOperationsMutating (Kermit #52123,
+# GitHub issue #1250).
+class _MutatingBadState:
+    pass
+
+
+class _MutatingBad:
+    def __init__(self, state):
+        self.state = state
+    def __eq__(self, other):
+        state = self.state
+        if not state.enabled:
+            return False
+        if randrange(20) == 0:
+            state.set1.clear()
+        if randrange(20) == 0:
+            state.set2.clear()
+        return bool(randrange(2))
+    def __hash__(self):
+        return randrange(2)
+
+
 class TestOperationsMutating:
     """Regression test for bpo-46615"""
 
     constructor1 = None
     constructor2 = None
 
+    # Grail: CPython defines ``class Bad`` inside this method, so every call
+    # makes a new class -- about 6,000 in this module.  GemStone never
+    # reclaims a dead class whose methods have run, and each one slows every
+    # later compile and mark-sweep (Kermit #52123), which made this module take
+    # 300s here and up to 1,800s in CI.  One class, with the per-call state the
+    # closure carried held on a shared record, makes the same randrange calls
+    # in the same order.  Restore CPython's version once #52123 is fixed
+    # (GitHub issue #1250).
     def make_sets_of_bad_objects(self):
-        class Bad:
-            def __eq__(self, other):
-                if not enabled:
-                    return False
-                if randrange(20) == 0:
-                    set1.clear()
-                if randrange(20) == 0:
-                    set2.clear()
-                return bool(randrange(2))
-            def __hash__(self):
-                return randrange(2)
+        state = _MutatingBadState()
         # Don't behave poorly during construction.
-        enabled = False
-        set1 = self.constructor1(Bad() for _ in range(randrange(50)))
-        set2 = self.constructor2(Bad() for _ in range(randrange(50)))
+        state.enabled = False
+        state.set1 = self.constructor1(_MutatingBad(state) for _ in range(randrange(50)))
+        state.set2 = self.constructor2(_MutatingBad(state) for _ in range(randrange(50)))
         # Now start behaving poorly
-        enabled = True
-        return set1, set2
+        state.enabled = True
+        return state.set1, state.set2
 
     def check_set_op_does_not_crash(self, function):
         for _ in range(100):
