@@ -838,6 +838,7 @@ ___normalizeConnectErrno___: code
 	((code @env0:= 60) @env0:or: [code @env0:= 110]) ifTrue: [^ 60].   "ETIMEDOUT"
 	((code @env0:= 51) @env0:or: [code @env0:= 101]) ifTrue: [^ 51].   "ENETUNREACH"
 	((code @env0:= 65) @env0:or: [code @env0:= 113]) ifTrue: [^ 65].   "EHOSTUNREACH"
+	((code @env0:= 57) @env0:or: [code @env0:= 107]) ifTrue: [^ 57].   "ENOTCONN"
 	^ code
 %
 
@@ -1047,8 +1048,13 @@ ___noPeerErrno___: sock
 	what arrived or gets ECONNRESET (test_ssl test_wrong_cert_tls12)."
 
 	sock @env0:peerAddress @env0:notNil ifTrue: [^ nil].
-	^ ([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
-		@env0:ifNil: [57]
+	"lastErrorCode is the PLATFORM's errno -- ENOTCONN is 107 on Linux -- so it
+	is mapped onto Grail's errno module, which ssl.py compares it against
+	(``e.errno != errno.ENOTCONN'' in SSLSocket._create).  Unmapped, every TLS
+	wrap on Linux re-raised OSError 107.  EINVAL is 22 on both."
+	^ self ___normalizeConnectErrno___:
+		(([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
+			@env0:ifNil: [57])
 %
 
 category: 'Grail-Private'
