@@ -21,12 +21,12 @@ SslModuleTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
-! SslModuleTestCase — the native ``ssl`` module (SSLContext/SSLSocket over
-! GsSecureSocket).  A TLS handshake is bidirectional, so the test forks the
-! client into its own GsProcess while the server runs on the main thread;
-! GsSecureSocket's secureAccept/secureConnect suspend on readiness, so the two
-! green threads drive the handshake cooperatively.  Uses the OpenSSL example
-! certificate shipped with GemStone.
+! SslModuleTestCase — CPython's ``ssl`` over Grail's ``_ssl``, an OpenSSL
+! binding through CCallout (_grail_openssl.gs).  A TLS handshake is
+! bidirectional, so the test forks the client into its own GsProcess while the
+! server runs on the main thread; socket reads suspend only the calling green
+! thread, so the two drive the handshake cooperatively.  Uses the OpenSSL
+! example certificate shipped with GemStone.
 ! ===============================================================================
 
 set compile_env: 0
@@ -76,8 +76,8 @@ category: 'Grail-Tests-Ssl'
 method: SslModuleTestCase
 testTlsRoundtrip
 	"A full TLS client<->server exchange: the server wraps a listener with a
-	certificate and accepts (secureAccept handshake); a forked client connects,
-	completes the client handshake (secureConnect), sends 'ping' and reads back
+	certificate and accepts (server handshake); a forked client connects,
+	completes the client handshake, sends 'ping' and reads back
 	'echo:ping' — all encrypted.  Also checks the negotiated protocol version."
 
 	| mod res lsock port sem holder result resp version |

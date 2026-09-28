@@ -32,21 +32,21 @@ method taking arguments must still receive them.  A fix that eagerly invoked
 everything would pass the first checks and break every ``super().m(...)'' in
 the corpus.
 
-STILL BROKEN, and recorded rather than hidden: a plain Python ``@property'' on
-a parent, read through super(), also comes back as a proxy.  That is a
-DIFFERENT mechanism -- Grail recognises such a property by a getter/setter
-PAIR of compiled methods, a test that lives inline in object >>
-___pyAttrLoad___ with several measured exclusions -- so reusing it here means
-factoring that predicate out of the hottest path in the system, which deserves
-its own change.  ``pure_python_property_via_super_is_a_proxy'' asserts the
-limitation, so CPython is expected to DISAGREE with it (XFAIL); the day it
-reads XPASS, the gap is closed and the check should be inverted.
+A plain Python ``@property'' on a parent, read through super(), used to come
+back as a proxy too.  That was a DIFFERENT mechanism -- Grail recognises such a
+property by a getter/setter PAIR of compiled methods, a test inline in object >>
+___pyAttrLoad___ -- and it is closed without touching that path: ClassDefAst
+records each class's own @property names (___grailOwnPropertyNames___), and
+Super.gs runs the parent's getter when the name is one of them (ssl.py's
+``super().verify_flags'' needs exactly that).
+``pure_python_property_via_super_is_its_value'' was the XFAIL recording the gap,
+and is now an ordinary check.
 """
 
 import _socket
 
 RESULTS = {}
-GRAIL_ONLY = ['pure_python_property_via_super_is_a_proxy']
+GRAIL_ONLY = []
 
 
 def check(name, fn, expected):
@@ -142,7 +142,7 @@ class Derived(Base):
 check('pure_python_method_via_super', lambda: Derived().m(), 'derived+base')
 
 
-# ---------------------------------------- the documented remaining gap
+# ---------------------------------------- a parent's @property through super()
 class PropBase:
     @property
     def x(self):
@@ -154,8 +154,8 @@ class PropDerived(PropBase):
         return super().x
 
 
-check('pure_python_property_via_super_is_a_proxy',
-      lambda: not isinstance(PropDerived().probe(), int), True)
+check('pure_python_property_via_super_is_its_value',
+      lambda: PropDerived().probe(), 7)
 
 
 if __name__ == '__main__':
@@ -168,7 +168,8 @@ if __name__ == '__main__':
     # This asserts a Grail LIMITATION, so CPython is expected to disagree.
     # XFAIL is that expected disagreement and is not a failure; XPASS means
     # CPython now agrees and the check no longer documents anything.
-    print('--- documented Grail limits: CPython is expected to differ ---')
+    if GRAIL_ONLY:
+        print('--- documented Grail limits: CPython is expected to differ ---')
     for _name in GRAIL_ONLY:
         _v = RESULTS[_name]
         print('%-5s %s' % ('XPASS' if _v is True else 'XFAIL', _name))

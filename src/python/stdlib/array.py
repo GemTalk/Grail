@@ -92,6 +92,14 @@ class _array:
         signed = self.typecode in _SIGNED_CODES
         return b''.join(x.to_bytes(size, 'little', signed) for x in self._data)
 
+    def __bytes__(self):
+        # CPython's bytes(arr) reads the array through the buffer protocol:
+        # its native bytes, not its items.  This stub has no buffer, so it
+        # answers through __bytes__, which bytes() consults first; without it
+        # bytes(array('I', [1635017060])) iterated the ITEMS and refused one
+        # above 255 (test_ssl test_recv_into_buffer_protocol_len).
+        return self.tobytes()
+
     def _grail_set_byte(self, index, value):
         """Store one BYTE of the array's native representation, at byte
         offset ``index''.  memoryview's write hook: a view over this array

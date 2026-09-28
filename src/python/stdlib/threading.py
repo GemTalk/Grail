@@ -228,22 +228,51 @@ def _invoke_excepthook(thread):
 
 
 class Event:
-    """A simple event flag.  ``wait`` returns the current flag state — fine for
-    the cooperative dev-server use; it does not block a thread until set."""
+    """An event flag whose ``wait`` really waits: until ``set`` or the timeout.
+
+    Each waiter parks on its own pre-acquired lock, as Barrier's do, and
+    ``set`` releases every one of them.  A parked waiter yields, so the thread
+    that will set the flag gets to run.
+
+    ``wait`` used to answer the flag at once without waiting.  The thread
+    starting a server then raced ahead of it: test_ssl's ThreadedEchoServer
+    does ``self.start(threading.Event()); self.flag.wait()`` and then connects,
+    and on Linux the server thread had not reached listen() yet, so every client
+    connect failed (the Mac's scheduling happened to let it get there first).
+    """
 
     def __init__(self):
         self._flag = False
+        self._waiters = []
 
     def is_set(self):
         return self._flag
 
     def set(self):
         self._flag = True
+        waiters = self._waiters
+        self._waiters = []
+        for w in waiters:
+            w.release()
 
     def clear(self):
         self._flag = False
 
     def wait(self, timeout=None):
+        if self._flag:
+            return True
+        own = _new_lock()
+        own.acquire()               # pre-acquired, so the next acquire parks
+        self._waiters.append(own)
+        if timeout is None:
+            own.acquire()           # parks until set() releases it
+        elif not own.acquire(True, max(timeout, 0)):
+            # Timed out.  A set() racing with this may already have taken
+            # ``own'' off the list; releasing a lock nobody waits on is harmless.
+            try:
+                self._waiters.remove(own)
+            except ValueError:
+                pass
         return self._flag
 
 

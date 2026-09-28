@@ -2510,6 +2510,34 @@ printSmalltalkRuntimeOn: aStream
 			classSide: true
 			onStream: aStream].
 
+	"The names this class declares as @property (or @cached_property), as a
+	class-side method so the record is committed with the class -- a session
+	stamp would not survive deployment.  A property compiles to an accessor
+	pair that looks, from outside, exactly like a method with a default
+	argument (both answer unary ``x'' and keyword ``x:''), so nothing else at
+	run time can tell ``super().x'' -- a property, whose getter must run --
+	from ``super().m'', a method to bind.  Super >> ___pyAttrLoad___: asks the
+	nearest parent defining the name."
+	[:propNames |
+	self instanceMethodDefs do: [:def |
+		(def ___isPropertyDef___ and: [(propNames includes: def name asSymbol) not])
+			ifTrue: [propNames add: def name asSymbol]].
+	propNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___grailOwnPropertyNames___'; lf.
+		src nextPutAll: '	^ #('.
+		propNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
+
 	"Names the body binds MORE THAN ONCE, counting defs and assignments alike.
 
 	CPython tracks this in _EnumDict.__setitem__ -- an enum class body may not

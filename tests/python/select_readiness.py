@@ -1,4 +1,5 @@
 """select() over the scheduler's readiness events (see select.py)."""
+import errno
 import select
 import socket
 import time
@@ -62,12 +63,21 @@ r, w, x = select.select([wrapped], [], [], 2.0)
 R['wrapper_resolves'] = (r == [wrapped])
 conn.recv(1)
 
-# --- a raw fd is refused with an explanation, not silently ignored -----------
+# --- an int fd works when a live socket owns it (asyncore selects on fds) ----
+cli.sendall(b'f')
+r, w, x = select.select([conn.fileno()], [], [], 2.0)
+R['socket_fd_selects'] = (r == [conn.fileno()])
+conn.recv(1)
+
+# --- a closed socket's fd is EBADF, as in CPython -----------------------------
+_gone = socket.socket()
+_gone_fd = _gone.fileno()
+_gone.close()
 try:
-    select.select([3], [], [], 0)
-    R['raw_fd_refused'] = False
-except TypeError:
-    R['raw_fd_refused'] = True
+    select.select([_gone_fd], [], [], 0)
+    R['closed_fd_ebadf'] = False
+except OSError as e:
+    R['closed_fd_ebadf'] = (e.errno == errno.EBADF)
 
 # --- empty lists with no timeout would hang: refused ------------------------
 try:

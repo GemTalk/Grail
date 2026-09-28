@@ -709,6 +709,91 @@ def patch_object(target_obj, attribute, new=DEFAULT, **kwargs):
 patch.object = patch_object
 
 
+def _clear_dict(in_dict):
+    try:
+        in_dict.clear()
+    except AttributeError:
+        for key in list(in_dict):
+            del in_dict[key]
+
+
+class _PatchDict:
+    """patch.dict(in_dict, values=(), clear=False, **kwargs) -- CPython's
+    _patch_dict: set values in a mapping (or a dotted name naming one) for
+    the duration, then put back exactly what was there.  A context manager, a
+    decorator, and start()/stop(), as in CPython.  test_ssl's test_keylog_env
+    patches os.environ with it."""
+
+    def __init__(self, in_dict, values=(), clear=False, **kwargs):
+        self.in_dict = in_dict
+        self.values = dict(values)
+        self.values.update(kwargs)
+        self.clear = clear
+        self._original = None
+
+    def __call__(self, func):
+        if isinstance(func, type):
+            raise TypeError(
+                "patch.dict() as a class decorator is not supported in Grail; "
+                "decorate the individual test methods")
+        patcher = self
+
+        def wrapper(*args, **kwargs):
+            fresh = _PatchDict(patcher.in_dict, patcher.values, patcher.clear)
+            fresh.__enter__()
+            try:
+                return func(*args, **kwargs)
+            finally:
+                fresh.__exit__(None, None, None)
+
+        wrapper.__name__ = getattr(func, "__name__", "wrapper")
+        wrapper.__doc__ = getattr(func, "__doc__", None)
+        wrapper.__wrapped__ = func
+        return wrapper
+
+    def __enter__(self):
+        if isinstance(self.in_dict, str):
+            owner, attribute = _resolve_patch_target(self.in_dict)
+            self.in_dict = getattr(owner, attribute)
+        in_dict = self.in_dict
+        try:
+            original = in_dict.copy()
+        except AttributeError:
+            original = {}
+            for key in in_dict:
+                original[key] = in_dict[key]
+        self._original = original
+        if self.clear:
+            _clear_dict(in_dict)
+        try:
+            in_dict.update(self.values)
+        except AttributeError:
+            for key in self.values:
+                in_dict[key] = self.values[key]
+        return in_dict
+
+    def __exit__(self, *args):
+        if self._original is not None:
+            in_dict = self.in_dict
+            _clear_dict(in_dict)
+            try:
+                in_dict.update(self._original)
+            except AttributeError:
+                for key in self._original:
+                    in_dict[key] = self._original[key]
+            self._original = None
+        return False
+
+    def start(self):
+        return self.__enter__()
+
+    def stop(self):
+        return self.__exit__(None, None, None)
+
+
+patch.dict = _PatchDict
+
+
 def _to_stream(read_data):
     if isinstance(read_data, bytes):
         import io

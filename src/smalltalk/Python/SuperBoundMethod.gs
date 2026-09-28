@@ -325,4 +325,40 @@ ___pyCallValue___: positional kw: kwargs
 	^ self @env1:value: positional value: kwargs
 %
 
+category: 'Grail-Descriptor Protocol'
+method: SuperBoundMethod
+__get__: anInstance _: anOwner
+	"``super(C, C).prop.__get__(inst, C)'' -- the parent's property GETTER run on
+	inst.  A @property compiles to an accessor pair and no property object, so
+	a read through super answers this handle, not the property; CPython code
+	that reaches the descriptor this way (ssl.py's SSLContext does it for every
+	property it overrides) needs the handle to answer the descriptor protocol.
+	With no instance it answers itself, as a property read off a class does."
+
+	anInstance == None ifTrue: [^ self].
+	^ (SuperBoundMethod obj: anInstance resolver: resolver selector: selector)
+		@env1:value: #() value: nil
+%
+
+category: 'Grail-Descriptor Protocol'
+method: SuperBoundMethod
+__get__: anInstance
+	^ self __get__: anInstance _: None
+%
+
+category: 'Grail-Descriptor Protocol'
+method: SuperBoundMethod
+__set__: anInstance _: aValue
+	"``super(C, C).prop.__set__(inst, v)'' -- the parent's property SETTER run on
+	inst, which is how ssl.py's SSLContext delegates minimum_version,
+	verify_mode and the rest to _ssl._SSLContext.  The one-argument call
+	resolves to the setter half of the accessor pair (``prop:''), from the same
+	point in the MRO the super() handle was made at."
+
+	(SuperBoundMethod obj: anInstance resolver: resolver selector: selector)
+		@env1:value: { aValue } value: nil.
+	^ None
+%
+
+
 set compile_env: 0

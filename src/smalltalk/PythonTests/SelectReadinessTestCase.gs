@@ -61,7 +61,7 @@ testSelectAndSelectorsSurface
 	#('idle_listener_not_ready' 'idle_listener_waited' 'poll_is_immediate'
 	  'pending_conn_ready' 'data_makes_readable' 'data_roundtrip'
 	  'quiet_socket_not_readable' 'writable_reported' 'mixed_lists'
-	  'wrapper_resolves' 'raw_fd_refused' 'empty_forever_refused'
+	  'wrapper_resolves' 'socket_fd_selects' 'closed_fd_ebadf' 'empty_forever_refused'
 	  'empty_with_timeout_ok' 'selectors_read' 'selectors_timeout_empty'
 	  'selectors_write' 'selectors_unregister' 'selectors_empty_returns_empty'
 	  'selectorkey_unpacks' 'selector_aliases'
@@ -127,14 +127,18 @@ category: 'Grail-Tests - TLS'
 method: SelectReadinessTestCase
 testTlsSocketHandsOverItsSocket
 	"REGRESSION.  select resolves what to watch by protocol, and the backend
-	then reaches the GsSocket underneath -- so a wrapper must hand over the
-	SOCKET, not itself.  ssl.SSLSocket answering only ``_readableNow'' passed
-	the wrapper down, the backend sent it the socket-only ``_sock'', and the
-	resulting DNU took the whole HTTPS server down with a connection reset
-	rather than any diagnosable error.  ``_selectSocket'' is that hand-off."
+	then reaches the GsSocket underneath -- so what it is handed must come down
+	to a SOCKET.  Grail's old ssl.SSLSocket was a wrapper answering only
+	``_readableNow''; the backend sent it the socket-only ``_sock'', and the DNU
+	took the whole HTTPS server down with a connection reset.
 
-	self assert: (self eval: 'import ssl
-hasattr(ssl.SSLSocket, "_selectSocket")') equals: true.
+	CPython's ssl.py, now vendored unchanged, makes SSLSocket a socket.socket
+	SUBCLASS, so select watches it as the socket it is.  ``_selectSocket''
+	remains select.py's hand-off for any other wrapper, and FakeTls below keeps
+	that path covered."
+
+	self assert: (self eval: 'import ssl, socket
+issubclass(ssl.SSLSocket, socket.socket)') equals: true.
 	self assert: (self eval: 'import select, socket, ssl
 
 class FakeTls:
@@ -157,10 +161,12 @@ ok') equals: true
 
 category: 'Grail-Tests - Errors'
 method: SelectReadinessTestCase
-testRawFileDescriptorIsRefused
-	"Readiness events are keyed by GsSocket, so an int fd cannot be
-	registered.  Refusing beats silently never reporting it ready."
+testForeignFileDescriptorIsEbadf
+	"Readiness events are keyed by GsSocket, so an int fd is watched only when
+	one of this session's sockets owns it.  Any other descriptor -- here one
+	this session never opened -- is CPython's OSError(EBADF), not a silent
+	never-ready."
 
 	self should: [self eval: 'import select
-select.select([3], [], [], 0)'] raise: TypeError
+select.select([987], [], [], 0)'] raise: OSError
 %

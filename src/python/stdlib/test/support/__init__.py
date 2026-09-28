@@ -800,11 +800,50 @@ def is_resource_enabled(resource):
     return resource in _ENABLED_RESOURCES
 
 
+class ResourceDenied(unittest.SkipTest):
+    """Test skipped because it requested a disallowed resource.
+
+    CPython's: requires() raises it, and socket_helper.transient_internet
+    builds one, so test_ssl's NetworkedTests reach for the name.
+    """
+
+
 def requires(resource, msg=None):
     if not is_resource_enabled(resource):
         if msg is None:
             msg = "resource {!r} is not enabled".format(resource)
-        raise unittest.SkipTest(msg)
+        raise ResourceDenied(msg)
+
+
+def busy_retry(timeout, err_msg=None, /, *, error=True):
+    """CPython 3.14's: yield until timeout seconds have passed, then raise
+    AssertionError (or just stop, with error=False)."""
+    import time
+    if timeout <= 0:
+        raise ValueError("timeout must be greater than zero")
+    start_time = time.monotonic()
+    deadline = start_time + timeout
+    while True:
+        yield
+        if time.monotonic() >= deadline:
+            break
+    if error:
+        dt = time.monotonic() - start_time
+        msg = f"timeout ({dt:.1f} seconds)"
+        if err_msg:
+            msg = f"{msg}: {err_msg}"
+        raise AssertionError(msg)
+
+
+def sleeping_retry(timeout, err_msg=None, /,
+                   *, init_delay=0.010, max_delay=1.0, error=True):
+    """CPython 3.14's: busy_retry with an exponential sleep between tries."""
+    import time
+    delay = init_delay
+    for _ in busy_retry(timeout, err_msg, error=error):
+        yield
+        time.sleep(delay)
+        delay = min(delay * 2, max_delay)
 
 
 def requires_resource(resource):

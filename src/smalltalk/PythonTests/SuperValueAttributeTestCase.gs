@@ -69,16 +69,13 @@ SuperValueAttributeTestCase category: 'Grail-SUnit'
 ! and break every ``super().m(...)'' in the corpus.  testMethodThroughSuperStill*
 ! are those controls.
 !
-! STILL BROKEN, and recorded rather than hidden: a plain Python ``@property'' on
-! a parent, read through super(), also answers a proxy.  That is a DIFFERENT
-! mechanism -- Grail recognises such a property by a getter/setter PAIR of
-! compiled methods, a test that lives inline in object >> ___pyAttrLoad___ and
-! carries several exclusions the comments there mark as measured rather than
-! reasoned (fixed-arity forwarders, arity-widening overrides).  Reusing it from
-! Super.gs means factoring that predicate out of the hottest path in the system,
-! which deserves its own change and its own full-suite run.  The fixture asserts
-! the limitation as a documented Grail-only check, so CPython disagreeing with
-! it is an XFAIL; when it reads XPASS the gap has closed.
+! A plain Python ``@property'' on a parent, read through super(), used to answer
+! a proxy as well -- a DIFFERENT mechanism, since Grail recognises such a
+! property by a getter/setter PAIR of compiled methods inline in object >>
+! ___pyAttrLoad___.  It is closed without touching that path: ClassDefAst
+! records each class's own @property names (___grailOwnPropertyNames___) and
+! Super.gs runs the parent's getter for one of them.  The fixture's XFAIL for it
+! became an ordinary check.
 !
 ! A second, pre-existing gap left alone: super() reads a parent's class-attribute
 ! store from the COMMITTED store only, not the session-local canonical overlay,
@@ -88,7 +85,7 @@ SuperValueAttributeTestCase category: 'Grail-SUnit'
 ! because nothing in reach could demonstrate it firing.
 !
 ! Fixture: tests/python/super_value_attribute.py (self-verifying under CPython
-! 3.14.6 -- all 10 checks pass there unchanged, plus the one documented XFAIL).
+! 3.14.6 -- all 11 checks pass there unchanged).
 ! ===============================================================================
 
 set compile_env: 0
@@ -199,23 +196,17 @@ testPurePythonMethodChainingThroughSuperIsUnaffected
 	self assert: (self resultAt: 'pure_python_method_via_super') equals: 'True'.
 %
 
-! ---- the gap that remains ---------------------------------------------------
+! ---- a parent's @property through super() ----------------------------------
 
 category: 'Grail-Tests'
 method: SuperValueAttributeTestCase
-testPurePythonPropertyThroughSuperIsStillAProxy
-	"A DOCUMENTED LIMITATION, asserted so that closing it is noticed.  A plain
-	``@property'' on a parent read through super() still answers a proxy: Grail
-	recognises such a property by a getter/setter PAIR of compiled methods, a
-	predicate that lives inline in object >> ___pyAttrLoad___ with exclusions
-	its own comments mark as measured rather than reasoned.  Reusing it here
-	means factoring it out of the hottest path in the system.
+testPurePythonPropertyThroughSuperIsItsValue
+	"``super().x'' for a plain @property on the parent runs the parent's getter,
+	as in CPython.  This was a documented limitation asserted the other way
+	round (it answered a proxy), inverted when ssl.py's ``super().verify_flags''
+	closed it."
 
-	When this test starts FAILING, the gap has closed and the assertion should
-	be inverted rather than deleted -- and the fixture's GRAIL_ONLY entry moved
-	up with it."
-
-	self assert: (self resultAt: 'pure_python_property_via_super_is_a_proxy')
+	self assert: (self resultAt: 'pure_python_property_via_super_is_its_value')
 		equals: 'True'.
 %
 

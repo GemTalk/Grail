@@ -426,21 +426,30 @@ method: os
 fsdecode: filename
 	"``os.fsdecode(filename)'' — decode a bytes filename to str using
 	the filesystem encoding.  Grail uses UTF-8 throughout.  Bytes
-	input decodes; str input passes through."
+	input decodes; str input passes through.  CPython runs the argument
+	through fspath() first, so a PathLike is honoured and anything else --
+	None, an int -- is its TypeError rather than an echo."
 
-	(filename isKindOf: ByteArray)
-		ifTrue: [^ filename decode: 'utf-8'].
-	^ filename
+	| path |
+	path := self fspath: filename.
+	(path isKindOf: ByteArray)
+		ifTrue: [^ path decode: 'utf-8'].
+	^ path
 %
 
 category: 'Grail-Filesystem'
 method: os
 fsencode: filename
-	"``os.fsencode(filename)'' — inverse of fsdecode."
+	"``os.fsencode(filename)'' — inverse of fsdecode, and like it goes
+	through fspath() first.  The echo it used to give a non-path let
+	``ssl.SSLContext.set_ecdh_curve(None)'' hand OpenSSL a NULL name,
+	which is a SIGSEGV rather than CPython's TypeError."
 
-	(filename isKindOf: CharacterCollection)
-		ifTrue: [^ filename encode: 'utf-8'].
-	^ filename
+	| path |
+	path := self fspath: filename.
+	(path isKindOf: CharacterCollection)
+		ifTrue: [^ path encode: 'utf-8'].
+	^ path
 %
 
 ! ===============================================================================
@@ -2905,10 +2914,19 @@ ___fd: anObject
 	"anObject as a descriptor this session may use -- see the section comment.
 	EBADF, which Darwin and Linux both number 9, for anything else."
 
-	| fd |
+	| fd sockets |
 	fd := self ___asCInt: anObject.
-	(self @env0:class ___openFds @env0:includes: fd) ifFalse: [^ self ___signalErrno: 9].
-	^ fd
+	(self @env0:class ___openFds @env0:includes: fd) ifTrue: [^ fd].
+	"A socket this session created is Grail's as surely as an os.open one, and
+	CPython code reads it by number: ssl's test_makefile_close does
+	``os.read(ss.fileno(), 0)'' and expects EBADF only after ss.close().
+	PyRawSocket's session registry holds exactly those, and drops each on
+	close.  Looked up by name: _socket_module.gs is filed in after this file."
+	sockets := Python @env0:at: #PyRawSocket otherwise: nil.
+	(sockets @env0:notNil
+		and: [(sockets @env0:___gsSocketForFd___: fd) @env0:notNil])
+		ifTrue: [^ fd].
+	^ self ___signalErrno: 9
 %
 
 category: 'Grail-File Descriptors'

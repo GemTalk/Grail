@@ -114,7 +114,7 @@ expectvalue /Class
 doit
 Object subclass: 'PyRawSocket'
   instVarNames: #('gsSocket' 'sockFamily' 'sockType' 'sockProto'
-                  'timeoutSecs' 'sockClosed' 'connectIssued')
+                  'timeoutSecs' 'sockClosed' 'connectIssued' 'hadPeer')
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -222,6 +222,9 @@ ___setSock: aGsSocket family: fam type: typ proto: prot
 	sockClosed := false.
 	timeoutSecs := PyRawSocket ___defaultTimeout___.
 	aGsSocket ifNotNil: [PyRawSocket ___registerFd___: aGsSocket].
+	"An adopted socket -- the fd accept() hands back -- is connected already."
+	hadPeer := aGsSocket notNil
+		and: [([aGsSocket peerAddress] on: Error do: [:e | e return: nil]) notNil].
 	^ self
 %
 
@@ -714,7 +717,7 @@ _accept
 	"Keep the fd alive past this GsSocket's own GC: socket.py will adopt it."
 	[conn @env0:setCloseOnGc: false] @env0:on: Error do: [:e | e @env0:return: nil].
 	fd := PyRawSocket @env0:___registerFd___: conn.
-	^ { fd . { (conn @env0:peerAddress @env0:ifNil: ['']) .
+	^ tuple @env0:withAll: { fd . tuple @env0:withAll: { (conn @env0:peerAddress @env0:ifNil: ['']) .
 			(conn @env0:peerPort @env0:ifNil: [0]) } }
 %
 
@@ -838,6 +841,7 @@ ___normalizeConnectErrno___: code
 	((code @env0:= 60) @env0:or: [code @env0:= 110]) ifTrue: [^ 60].   "ETIMEDOUT"
 	((code @env0:= 51) @env0:or: [code @env0:= 101]) ifTrue: [^ 51].   "ENETUNREACH"
 	((code @env0:= 65) @env0:or: [code @env0:= 113]) ifTrue: [^ 65].   "EHOSTUNREACH"
+	((code @env0:= 57) @env0:or: [code @env0:= 107]) ifTrue: [^ 57].   "ENOTCONN"
 	^ code
 %
 
@@ -952,6 +956,7 @@ connect: address
 		(ms @env0:notNil @env0:and: [ok @env0:isNil]) ifTrue: [
 			^ TimeoutError ___signal___: 'timed out'].
 		^ self @env0:___fail: 'connect failed'].
+	hadPeer := true.
 	^ None
 %
 
@@ -991,8 +996,19 @@ connect_ex: address
 			ifTrue: [sock @env0:connectTo: port on: host]
 			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
 		ok == true
-			ifTrue: [0]
-			ifFalse: [self ___connectCodeFallback___: sock on: host port: port] ]
+			ifTrue: [hadPeer := true. 0]
+			ifFalse: [ | code |
+				code := self ___connectCodeFallback___: sock on: host port: port.
+				"The fallback's EINPROGRESS cannot stand here: this connect was
+				WAITED for.  With a TIMEOUT that expired it is CPython's
+				SOCK_TIMEOUT_ERR, EWOULDBLOCK (test_ssl test_timeout_connect_ex;
+				35 is Grail's errno.EWOULDBLOCK, as for ___notReadyNow___).  With
+				no timeout the wait ran until the connect resolved, so it FAILED:
+				Linux reports a refused socket writable, which the fallback reads
+				as still going (test_ssl test_connect_ex_error)."
+				code @env0:= 36
+					ifTrue: [ms @env0:notNil ifTrue: [35] ifFalse: [61]]
+					ifFalse: [code]] ]
 		@env0:on: Error
 		do: [:e | | code |
 			code := [gsSocket @env0:isNil ifTrue: [nil] ifFalse: [gsSocket @env0:lastErrorCode]]
@@ -1005,26 +1021,74 @@ method: PyRawSocket
 getsockname
 	| sock |
 	sock := self @env0:___ensureOpen.
-	^ { (sock @env0:address @env0:ifNil: ['0.0.0.0']) @env0:asString .
+	"A TUPLE, as in CPython: ``s.getsockname() == ('127.0.0.1', port)''."
+	^ tuple @env0:withAll: { (sock @env0:address @env0:ifNil: ['0.0.0.0']) @env0:asString .
 		(sock @env0:port @env0:ifNil: [0]) }
 %
 
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 getpeername
-	"A socket with no peer -- a listener, or one never connected -- raises
-	OSError(ENOTCONN) as CPython does.  It used to answer ['', 0], which is
-	truthy and so read as a connection: ssl's wrap_socket(server_side=True)
-	tells a listener from an accepted connection by exactly this call.  The
-	errno is errno.py's ENOTCONN (57), like the EAGAIN in ___notReadyNow___."
+	"The peer's address, or CPython's ENOTCONN when there is none.  It
+	answered ``('', 0)'' for an unconnected socket, which is how ssl.py tells
+	a LISTENER from a connection: SSLSocket._create asks getpeername() and
+	only an OSError(ENOTCONN) means ``not connected, do not handshake''."
 
-	| sock peer |
+	| sock code |
 	sock := self @env0:___ensureOpen.
-	peer := sock @env0:peerAddress.
-	peer @env0:isNil ifTrue: [
-		^ OSError ___signalNew___: { 57 . 'Socket is not connected' } kw: nil].
-	^ { peer @env0:asString .
+	code := self ___noPeerErrno___: sock.
+	code @env0:notNil ifTrue: [
+		code @env0:= 57 ifTrue: [^ self ___notConnected___].
+		^ OSError ___signalNew___: { code . (sock @env0:lastErrorString) @env0:asString } kw: nil].
+	^ tuple @env0:withAll: { (sock @env0:peerAddress @env0:ifNil: ['']) @env0:asString .
 		(sock @env0:peerPort @env0:ifNil: [0]) }
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___noPeerErrno___: sock
+	"nil when sock has a peer, else the errno its getpeername() failed with.
+	The two errnos mean different things and only one is ``not connected'':
+	57 (ENOTCONN) is a socket that never had a peer; 22 (EINVAL) is Darwin's
+	answer once the peer RESET the connection.  Treating the second as the
+	first made recv() on a reset socket raise ENOTCONN, where CPython reads
+	what arrived or gets ECONNRESET (test_ssl test_wrong_cert_tls12)."
+
+	sock @env0:peerAddress @env0:notNil ifTrue: [hadPeer := true. ^ nil].
+	"lastErrorCode is the PLATFORM's errno -- ENOTCONN is 107 on Linux -- so it
+	is mapped onto Grail's errno module, which ssl.py compares it against
+	(``e.errno != errno.ENOTCONN'' in SSLSocket._create).  Unmapped, every TLS
+	wrap on Linux re-raised OSError 107.  EINVAL is 22 on both."
+	^ self ___normalizeConnectErrno___:
+		(([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
+			@env0:ifNil: [57])
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___neverConnected___: sock
+	"Whether sock is a stream socket that NEVER had a peer, the case recv(),
+	recvfrom() and sendto() answer ENOTCONN for without touching the socket.
+
+	getpeername cannot say so by itself.  After a peer's RESET it fails with
+	EINVAL on Darwin but with ENOTCONN on Linux -- the same errno as a socket
+	that never connected -- so on Linux the reset socket of test_ssl's
+	test_wrong_cert_tls12 was answered ENOTCONN where CPython reads the TLS
+	alert that arrived before the reset.  So a peer, once seen (connect,
+	accept, any getpeername that found one), is remembered in hadPeer."
+
+	hadPeer == true ifTrue: [^ false].
+	^ (self ___noPeerErrno___: sock) @env0:= 57
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___notConnected___
+	"OSError(ENOTCONN), CPython's answer for getpeername() or recv() on a
+	stream socket that has no peer.  The errno is Grail's errno module's
+	(57), for the reason ___notReadyNow___ gives for EAGAIN."
+
+	^ OSError ___signalNew___: { 57 . 'Socket is not connected' } kw: nil
 %
 
 ! ---- options ----------------------------------------------------------------
@@ -1079,13 +1143,27 @@ getsockopt: level _: optname _: buflen
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 settimeout: seconds
-	"CPython's three states: None = blocking, 0 = non-blocking, n = timeout."
+	"CPython's three states: None = blocking, 0 = non-blocking, n = timeout.
+
+	THE GsSocket STAYS NON-BLOCKING IN ALL THREE.  Python's ``blocking'' is a
+	promise about the CALLER -- recv() does not return until there is data --
+	and a non-blocking GsSocket already keeps it: read:into:startingAt:,
+	write:from:startingAt: and accept suspend just the calling GsProcess
+	(_waitForReadReady / _waitForWriteReady) until the socket is ready.
+	``makeBlocking'', which this used to send for None and for a timeout,
+	blocks the OS THREAD instead, and every Grail thread is a green thread on
+	that one OS thread -- so a blocking recv() stopped the whole gem, and a
+	server on another Grail thread could never answer it.  That deadlocked
+	any in-process client/server pair on blocking sockets: TwilioClientTestCase
+	(PR #741, worked around there) and every TLS handshake through CPython's
+	ssl.py, whose SSLSocket calls settimeout(None) on the socket it wraps.
+	The timeout state still bounds each wait with readWillNotBlockWithin:."
 
 	| sock |
 	sock := self @env0:___ensureOpen.
 	(seconds @env0:isNil @env0:or: [seconds @env0:== None]) ifTrue: [
 		timeoutSecs := nil.
-		sock @env0:makeBlocking.
+		sock @env0:makeNonBlocking.
 		^ None].
 	seconds @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: 'Timeout value out of range'].
@@ -1095,9 +1173,7 @@ settimeout: seconds
 	CPython reports -- and tests/python/raw_socket.py had pinned the integer as
 	though it were the expectation."
 	timeoutSecs := seconds @env0:asFloat.
-	seconds @env0:= 0
-		ifTrue: [sock @env0:makeNonBlocking]
-		ifFalse: [sock @env0:makeBlocking].
+	sock @env0:makeNonBlocking.
 	^ None
 %
 
@@ -1137,11 +1213,28 @@ method: PyRawSocket
 recv: bufsize _: flags
 	"Read up to bufsize bytes.  An empty result is EOF, as in CPython."
 
+	^ self ___recvBytes___: bufsize
+%
+
+category: 'Grail-Socket Protocol'
+method: PyRawSocket
+___recvBytes___: bufsize
+	"The read behind every recv arity and recv_into.  A Grail-internal name so
+	that no Python subclass can override it: ssl.SSLSocket overrides recv and
+	recv_into, and a base recv_into that self-sent ``recv:'' ran the SSL
+	override -- which asks the base again, and recursed."
+
 	| sock ba n ms |
 	sock := self @env0:___ensureOpen.
 	bufsize @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: 'negative buffersize in recv'].
 	bufsize @env0:= 0 ifTrue: [^ ByteArray @env0:new].
+	"A stream socket with no peer: ENOTCONN, as in CPython -- not the EAGAIN
+	(or the wait) the readiness check below would answer.  ssl.py's
+	SSLSocket._create probes an unconnected socket with exactly this call and
+	accepts only ENOTCONN or EINVAL."
+	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
+		^ self ___notConnected___].
 	ms := self @env0:___timeoutMs.
 	ba := ByteArray @env0:new: bufsize.
 	"Both the readiness probe (GsSecureSocket>>_peek) and the read itself
@@ -1166,19 +1259,41 @@ recv_into: buffer
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 recv_into: buffer _: nbytes
-	"Read straight into a bytearray/memoryview, answering the count.  This
-	is what makefile()'s buffered reader uses, so it matters for throughput."
+	^ self recv_into: buffer _: nbytes _: 0
+%
 
-	| sock want n data |
-	sock := self @env0:___ensureOpen.
-	want := ((nbytes @env0:isNil @env0:or: [nbytes @env0:= 0])
-		ifTrue: [buffer @env0:size]
-		ifFalse: [nbytes @env0:min: buffer @env0:size]).
+category: 'Grail-Socket Protocol'
+method: PyRawSocket
+recv_into: buffer _: nbytes _: flags
+	"Read straight into a bytearray/memoryview, answering the count.  This
+	is what makefile()'s buffered reader uses, so it matters for throughput.
+	The three-argument form is the one ssl.SSLSocket reaches through
+	``super().recv_into(buffer, nbytes, flags)''."
+
+	| want n data |
+	self @env0:___ensureOpen.
+	want := self ___intoCount___: nbytes for: buffer what: 'recv_into'.
 	want @env0:= 0 ifTrue: [^ 0].
-	data := self recv: want.
+	data := self ___recvBytes___: want.
 	n := data @env0:size.
 	1 @env0:to: n do: [:i | buffer @env0:at: i put: (data @env0:at: i)].
 	^ n
+%
+
+category: 'Grail-Socket Protocol'
+method: PyRawSocket
+___intoCount___: nbytes for: buffer what: aName
+	"How many bytes a recv_into / recvfrom_into may read: the whole buffer
+	for nbytes 0 or None, else nbytes, which CPython refuses when it is
+	negative or larger than the buffer."
+
+	(nbytes @env0:isNil or: [nbytes == None or: [nbytes @env0:= 0]])
+		ifTrue: [^ buffer @env0:size].
+	nbytes @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: 'negative buffersize in ' @env0:, aName].
+	nbytes @env0:> buffer @env0:size ifTrue: [
+		^ ValueError ___signal___: 'buffer too small for requested bytes'].
+	^ nbytes
 %
 
 category: 'Grail-Socket Protocol'
@@ -1210,7 +1325,20 @@ send: data _: flags
 	self ___isNonBlocking___ ifTrue: [
 		([sock @env0:writeWillNotBlock] @env0:on: Error
 			do: [:e | e @env0:return: true]) == false ifTrue: [
-				^ self ___notReadyNow___]].
+				^ self ___notReadyNow___].
+		"ONE write, of what fits.  GsSocket >> write:from: loops until every byte
+		is out and suspends the green thread between tries, so a non-blocking
+		send of 8K into a buffer with 1K of room blocked -- and with a peer that
+		was not reading, it blocked for good (test_ssl test_nonblocking_send).
+		The primitive answers the count written, true for EINTR (retry), nil for
+		an error, and anything else for EAGAIN."
+		ba := self @env0:___toByteArray: data.
+		ba @env0:isEmpty ifTrue: [^ 0].
+		[n := sock @env0:_write: ba startingAt: 1 ofSize: ba @env0:size.
+		 n == true] @env0:whileTrue.
+		n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
+		(n @env0:isKindOf: SmallInteger) ifFalse: [^ self ___notReadyNow___].
+		^ n].
 	ba := self @env0:___toByteArray: data.
 	n := sock @env0:write: ba @env0:size from: ba.
 	n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
@@ -1250,18 +1378,55 @@ recvfrom: bufsize
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 recvfrom: bufsize _: flags
+	^ self ___recvfromBytes___: bufsize
+%
+
+category: 'Grail-Socket Protocol'
+method: PyRawSocket
+recvfrom_into: buffer
+	^ self recvfrom_into: buffer _: 0 _: 0
+%
+
+category: 'Grail-Socket Protocol'
+method: PyRawSocket
+recvfrom_into: buffer _: nbytes
+	^ self recvfrom_into: buffer _: nbytes _: 0
+%
+
+category: 'Grail-Socket Protocol'
+method: PyRawSocket
+recvfrom_into: buffer _: nbytes _: flags
+	"``(nbytes, address)'', the datagram read into buffer."
+
+	| want res data n |
+	self @env0:___ensureOpen.
+	want := self ___intoCount___: nbytes for: buffer what: 'recvfrom_into'.
+	res := self ___recvfromBytes___: want.
+	data := res @env0:at: 1.
+	n := data @env0:size.
+	1 @env0:to: n do: [:i | buffer @env0:at: i put: (data @env0:at: i)].
+	^ tuple @env0:withAll: { n . res @env0:at: 2 }
+%
+
+category: 'Grail-Socket Protocol'
+method: PyRawSocket
+___recvfromBytes___: bufsize
 	"``(data, address)'' from a UDP socket.  GsSocket >> recvfrom: answers
 	{ data . { af . port . nil . ip } }, so the address tuple is rebuilt
-	here in CPython's (host, port) order."
+	here in CPython's (host, port) order.  A stream socket with no peer is
+	ENOTCONN, as for recv.  Grail-internal for the reason ___recvBytes___:
+	is."
 
 	| sock res data info |
 	sock := self @env0:___ensureOpen.
+	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
+		^ self ___notConnected___].
 	res := sock @env0:recvfrom: bufsize.
 	res @env0:isNil ifTrue: [^ self @env0:___fail: 'recvfrom failed'].
 	data := res @env0:at: 1.
 	info := res @env0:at: 2.
-	^ { (self @env0:___toByteArray: data) .
-		{ ((info @env0:at: 4) @env0:ifNil: ['']) @env0:asString .
+	^ tuple @env0:withAll: { (self @env0:___toByteArray: data) .
+		tuple @env0:withAll: { ((info @env0:at: 4) @env0:ifNil: ['']) @env0:asString .
 		  ((info @env0:at: 2) @env0:ifNil: [0]) } }
 %
 
@@ -1274,10 +1439,14 @@ sendto: data _: address
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 sendto: data _: flags _: address
-	"Send one datagram to (host, port), answering the byte count."
+	"Send one datagram to (host, port), answering the byte count.  On a stream
+	socket with no peer it is ENOTCONN, which Darwin answers too -- GsSocket
+	instead signals its own error, which no Python handler sees as OSError."
 
 	| sock ba host port |
 	sock := self @env0:___ensureOpen.
+	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
+		^ self ___notConnected___].
 	ba := self @env0:___toByteArray: data.
 	host := (address @env0:at: 1) @env0:asString.
 	port := address @env0:at: 2.
@@ -2131,6 +2300,24 @@ ___indexResult___: rIdx _: wIdx
 
 category: 'Grail-Select'
 classmethod: PyRawSocket
+___selectGsSocketFor___: anEntry
+	"The GsSocket select() watches for one entry: a socket, or an int file
+	descriptor.  asyncore (test.support.asyncore, and test_ssl's
+	AsyncoreEchoServer on it) selects on fds, so an fd this session's sockets
+	own is resolved through the registry; any other fd is EBADF, CPython's
+	answer for a descriptor that is not open."
+
+	| gs |
+	anEntry == None ifTrue: [^ nil].
+	(anEntry @env0:isKindOf: SmallInteger) ifFalse: [^ anEntry @env0:___gsSocket].
+	gs := self @env0:___gsSocketForFd___: anEntry.
+	gs @env0:isNil ifTrue: [
+		^ OSError ___signalNew___: { 9 . 'Bad file descriptor' } kw: nil].
+	^ gs
+%
+
+category: 'Grail-Select'
+classmethod: PyRawSocket
 ___select___: readSocks _: writeSocks _: timeoutMs
 	"N-way readiness wait.  Answers a list of two lists holding the 1-based
 	INDICES of the ready sockets in readSocks and writeSocks respectively.
@@ -2141,18 +2328,15 @@ ___select___: readSocks _: writeSocks _: timeoutMs
 	map back to the ORIGINAL objects it was handed -- which may be socketserver
 	instances wrapping a socket, not sockets.
 
-	The GsSocket is reached through ___gsSocket, so every element must be a
-	PyRawSocket (or a subclass -- socket.socket is one).  select.py guarantees
-	that: it resolves wrappers first, and ssl.SSLSocket hands over the real
-	socket through ``_selectSocket''."
+	Every element must be a PyRawSocket (or a subclass -- socket.socket and
+	ssl.SSLSocket are) or an int descriptor one of them owns; select.py
+	resolves wrappers first."
 
 	| rGs wGs rReady wReady sem armedR armedW waitForever ms |
 	rGs := OrderedCollection @env0:new.
-	readSocks @env0:do: [:s |
-		rGs @env0:add: (s == None ifTrue: [nil] ifFalse: [s @env0:___gsSocket])].
+	readSocks @env0:do: [:s | rGs @env0:add: (self ___selectGsSocketFor___: s)].
 	wGs := OrderedCollection @env0:new.
-	writeSocks @env0:do: [:s |
-		wGs @env0:add: (s == None ifTrue: [nil] ifFalse: [s @env0:___gsSocket])].
+	writeSocks @env0:do: [:s | wGs @env0:add: (self ___selectGsSocketFor___: s)].
 
 	"1. Cheap pass first: if anything is already ready, no event machinery."
 	rReady := PyRawSocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
