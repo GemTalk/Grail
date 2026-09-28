@@ -71,9 +71,10 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=1000000;GEM_MAX_S
 # genuine hang still fails the gate, just after 600s.
 PER_MODULE_TIMEOUT="${GRAIL_TEST_TIMEOUT:-600}"
 
-# Run "$@" with a PER_MODULE_TIMEOUT-second cap; return 124 if it had to be
-# killed, else the process's own exit status.  Caller redirects stdout.
-run_capped() {
+# Run "$@" with a $1-second cap; return 124 if it had to be killed, else the
+# process's own exit status.  Caller redirects stdout.
+run_capped() { # $1=limit, then the command
+    local limit="$1"; shift
     "$@" &
     # Wall-clock from bash's SECONDS, not a count of 2s naps: on a loaded host
     # one `sleep 2` iteration was measured at ~8.6s, so counting iterations
@@ -81,7 +82,7 @@ run_capped() {
     local pid=$! started=$SECONDS
     while kill -0 "$pid" 2>/dev/null; do
         sleep 2
-        if [ $((SECONDS - started)) -ge "$PER_MODULE_TIMEOUT" ]; then
+        if [ $((SECONDS - started)) -ge "$limit" ]; then
             kill -9 "$pid" 2>/dev/null
             wait "$pid" 2>/dev/null
             return 124
@@ -149,12 +150,34 @@ module_topaz_cfg() { # $1=mod
     esac
 }
 
+# Per-module wall-clock cap: PER_MODULE_TIMEOUT, doubled for test_set.  Its
+# ten TestOperationsMutating classes define a fresh local `class Bad' on every
+# one of thousands of randomized operations, each class retains ~29KB of
+# temporary object memory that no collection reclaims, and every later
+# operation slows as that heap grows.  Measured per test on the nightly
+# runner (2026-09-27, run 36370118680): 1219 of the module's 1231s are in
+# those classes, running 2x slower than this Mac at 20% of the memory budget
+# and 5.7x at 68%, against 2.5x for the rest of the suite.  The randomized
+# sizes then spread it across 1231-1800s+ at one SHA -- the nightly of
+# 2026-09-26 was killed at 1800s and its re-run passed at 1569s.  So at 1800s
+# the row was a coin flip, not a measurement.  Doubling makes it a result
+# again; a real hang still fails, just later.  The retained memory is the
+# defect, and the case goes when it does.
+module_timeout() { # $1=mod
+    case "$1" in
+        test.test_set)
+            echo $((PER_MODULE_TIMEOUT * 2)) ;;
+        *)
+            echo "$PER_MODULE_TIMEOUT" ;;
+    esac
+}
+
 run_module() { # $1=mod -- run one module capped; record exit code + duration sidecars
     local mod="$1" log="$OUTDIR/$1.out" t0
     rm -f "$log" "$OUTDIR/$1.rc"
     export GRAIL_TEST_MODULE="$mod"
     t0=$(date +%s)
-    run_capped topaz -lq -C "$(module_topaz_cfg "$mod")" -S "$DRIVER" < /dev/null > "$log" 2>&1
+    run_capped "$(module_timeout "$mod")" topaz -lq -C "$(module_topaz_cfg "$mod")" -S "$DRIVER" < /dev/null > "$log" 2>&1
     echo $? > "$OUTDIR/$1.rc"
     # Wall clock, for the NEXT run's launch order (see launch_order).  Written
     # last and never removed at start-up: a `.sec' is the one artifact here that
@@ -290,7 +313,7 @@ for mod in $MODULES; do
 
     if [ "$rc" -eq 124 ] && [ -z "$line" ]; then
         status="TIMEOUT"; tests=0; failures=0; errors=0; skipped=0
-        detail="killed after ${PER_MODULE_TIMEOUT}s"
+        detail="killed after $(module_timeout "$mod")s"
     elif [ -z "$line" ]; then
         status="CRASH"; tests=0; failures=0; errors=0; skipped=0
         detail="topaz exit ${rc}, no result line (see out/cpython/${mod}.out)"
