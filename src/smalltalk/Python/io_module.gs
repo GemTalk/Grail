@@ -54,9 +54,97 @@ classmethod: StringIO
 __new__: initialValue
 	"StringIO([initial]) - text buffer seeded with initial."
 
-	| inst |
+	^ self ___construct___: initialValue newline: (String @env0:with: Character @env0:lf)
+%
+
+category: 'Grail-Initialization'
+classmethod: StringIO
+__new__: initialValue _: newlineArg
+	"StringIO(initial_value, newline)."
+
+	^ self ___construct___: initialValue newline: newlineArg
+%
+
+category: 'Grail-Initialization'
+classmethod: StringIO
+__new__: initialValue _: newlineArg _: extra
+	"A positional-only call with too many arguments reaches this arity, not
+	``_new:kw:''; answer CPython's message rather than the generic one."
+
+	^ self _new: { initialValue. newlineArg. extra } kw: nil
+%
+
+category: 'Grail-Initialization'
+classmethod: StringIO
+_new: posArgs kw: kwArgs
+	"``StringIO(initial_value='', newline='\n')'' -- the keyword form, and
+	any call with more positionals than the fixed arities.  CPython's names
+	and messages; ``patch(..., new_callable=io.StringIO, initial_value=...)''
+	calls it this way."
+
+	| n initial newline |
+	n := posArgs @env0:size.
+	n @env0:> 2 ifTrue: [
+		TypeError ___signal___: 'StringIO() takes at most 2 arguments ('
+			@env0:, n @env0:printString @env0:, ' given)'].
+	initial := n @env0:>= 1 ifTrue: [posArgs @env0:at: 1] ifFalse: [nil].
+	newline := n @env0:>= 2 ifTrue: [posArgs @env0:at: 2] ifFalse: [nil].
+	(kwArgs == nil @env0:or: [kwArgs == None]) ifFalse: [
+		kwArgs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'initial_value' ifTrue: [
+				n @env0:>= 1 ifTrue: [TypeError ___signal___:
+					'argument for StringIO() given by name (''initial_value'') and position (1)'].
+				initial := v]
+			ifFalse: [key @env0:= 'newline' ifTrue: [
+				n @env0:>= 2 ifTrue: [TypeError ___signal___:
+					'argument for StringIO() given by name (''newline'') and position (2)'].
+				newline := v]
+			ifFalse: [
+				TypeError ___signal___: ('StringIO() got an unexpected keyword argument '''
+					@env0:, key @env0:, '''')]]]].
+	^ self ___construct___: initial newline: (newline == nil
+		ifTrue: [String @env0:with: Character @env0:lf]
+		ifFalse: [newline])
+%
+
+category: 'Grail-Initialization'
+classmethod: StringIO
+___construct___: initialValue newline: newlineArg
+	"The one constructor.  initial_value is a str or None (None is empty);
+	anything else is CPython's TypeError, where it used to be printString'd
+	into the buffer (``StringIO(5)'' held '5').
+
+	newline: CPython translates newlines on write for None, '\r' and '\r\n'.
+	This StringIO never translates, which is exactly the behaviour of '\n'
+	(the default) and '' -- so those two are accepted and the others refused
+	rather than silently ignored."
+
+	| inst initial lf cr |
+	(initialValue == None @env0:or: [initialValue == nil])
+		ifTrue: [initial := '']
+		ifFalse: [
+			((initialValue @env0:isKindOf: CharacterCollection)
+				@env0:or: [initialValue @env0:isKindOf: AbstractPyStr]) ifFalse: [
+					TypeError ___signal___: 'initial_value must be str or None, not '
+						@env0:, (initialValue @env1:__class__ @env1:__name__) @env0:asString].
+			initial := initialValue].
+	lf := String @env0:with: Character @env0:lf.
+	cr := String @env0:with: Character @env0:cr.
+	newlineArg == None ifFalse: [
+		(newlineArg @env0:isKindOf: CharacterCollection) ifFalse: [
+			TypeError ___signal___: 'newline must be str or None, not '
+				@env0:, (newlineArg @env1:__class__ @env1:__name__) @env0:asString].
+		((newlineArg @env0:= '') @env0:or: [newlineArg @env0:= lf]) ifFalse: [
+			((newlineArg @env0:= cr) @env0:or: [newlineArg @env0:= (cr @env0:, lf)]) ifFalse: [
+				ValueError ___signal___: 'illegal newline value: '
+					@env0:, (newlineArg @env1:__repr__) @env0:asString]]].
+	(newlineArg == None @env0:or: [(newlineArg @env0:= '') @env0:not
+			@env0:and: [(newlineArg @env0:= lf) @env0:not]]) ifTrue: [
+		NotImplementedError ___signal___:
+			'Grail''s StringIO does not translate newlines; newline must be ''\n'' or '''''].
 	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #_buffer put: initialValue @env0:asString @env0:copy.
+	inst @env0:dynamicInstVarAt: #_buffer put: initial @env0:asString @env0:copy.
 	inst @env0:dynamicInstVarAt: #_pos put: 0.
 	inst @env0:dynamicInstVarAt: #_closed put: false.
 	^ inst

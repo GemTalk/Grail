@@ -673,6 +673,7 @@ run
 	at: #'AsendLifecycleTestCase' put: nil;
 	at: #'AsgiServerTestCase' put: nil;
 	at: #'PickleFinalRuntimeGapsTestCase' put: nil;
+	at: #'ZipappRuntimeGapsTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
@@ -2111,6 +2112,7 @@ input src/smalltalk/PythonTests/StaticmethodOverridesBaseMethodTestCase.gs
 input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
 input src/smalltalk/PythonTests/AsgiServerTestCase.gs
 input src/smalltalk/PythonTests/PickleFinalRuntimeGapsTestCase.gs
+input src/smalltalk/PythonTests/ZipappRuntimeGapsTestCase.gs
 input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs

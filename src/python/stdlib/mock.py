@@ -14,10 +14,10 @@
 #     substitutes.  Reading ``m.__iter__`` gives the method, not CPython's
 #     child mock, so configure a magic by assignment, not through
 #     ``m.__iter__.return_value``;
-#   * patch works as a context manager only (method @-decorators are
-#     dropped by Grail), and there is no spec; ``autospec=True`` is honoured
+#   * patch works as a context manager and as a function decorator (not a
+#     class decorator), and there is no spec; ``autospec=True`` is honoured
 #     for a FUNCTION target only (a real function forwarding to the mock),
-#     without CPython's signature check;
+#     without CPython's signature check; ``new_callable`` is honoured;
 #   * ``wraps`` IS supported -- on Mock and through patch/patch.object's
 #     trailing keywords -- for the call-through case: the mock records the
 #     call and returns what the wrapped callable returns, and an
@@ -593,6 +593,16 @@ class _Patcher:
         # configure; so does this, at __enter__ time where the error is
         # attributable to the with-statement.
         self._kwargs = kwargs or {}
+        # ``new_callable`` stands in for MagicMock as the thing CALLED to make
+        # the replacement (``patch('sys.stdout', new_callable=io.StringIO)``);
+        # the trailing keywords go to it.  CPython refuses it beside an
+        # explicit ``new`` or ``autospec`` when the patcher is made.
+        if self._kwargs.get("new_callable") is not None:
+            if new is not DEFAULT:
+                raise ValueError("Cannot use 'new' and 'new_callable' together")
+            if self._kwargs.get("autospec") is not None:
+                raise ValueError(
+                    "Cannot use 'autospec' and 'new_callable' together")
         self._old = None
         self._created = False
 
@@ -618,7 +628,15 @@ class _Patcher:
         replacement = self._new
         kwargs = dict(self._kwargs)
         autospec = kwargs.pop("autospec", None)
-        if replacement is DEFAULT:
+        new_callable = kwargs.pop("new_callable", None)
+        if replacement is DEFAULT and new_callable is not None:
+            # A mock class gets the attribute as its name, as MagicMock does;
+            # anything else is called with just the keywords, as in CPython.
+            if isinstance(new_callable, type) and issubclass(new_callable,
+                                                             NonCallableMock):
+                kwargs.setdefault("name", self._attribute)
+            replacement = new_callable(**kwargs)
+        elif replacement is DEFAULT:
             replacement = MagicMock(name=self._attribute, **kwargs)
             if autospec:
                 spec = self._old if autospec is True else autospec
