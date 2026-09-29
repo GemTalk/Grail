@@ -3,6 +3,37 @@
 **Grail requires GemStone 4.0** (build 2026-07-29 or later). Support for 3.7.x
 was removed; `install.sh` and `install_base.sh` refuse a 3.x product up front.
 
+**That floor is not sufficient for the IR path, which is ON by default since PR
+#1087.** Measured on 4.0.0 build 2026-08-05 — i.e. NEWER than the floor above —
+an `./install.sh` with IR enabled exits 1 at the gemdb deploy step with
+
+```
+ERROR 2010, a MessageNotUnderstood occurred, a GsComMethNode does not understand #'envId'
+  GsComMethNode >> selector:
+  PyMethodIRBuilder >> initClass:selector:env:
+  FunctionDefAst >> ___irMethodBodyCoreOn___:install:
+```
+
+The defect is in the PRODUCT, not in Grail: the kernel's own
+`GsComMethNode >> selector:` sends `self envId`, and nothing in that hierarchy
+implements it (`GsComMethNode canUnderstand: #envId` is false,
+`whichClassIncludesSelector: #envId` is nil) — its comment reads "different
+implementation(s) in .mcz", so the shipped fallback is incomplete. Every IR
+method build therefore raises, and `importlib` hits it on the first module.
+
+Which builds DO carry a working `envId` is not established here: what is measured
+is that 2026-08-05 does not, and that GemTalk's container does. The comment in
+`tests/scripts/run_unittest_main_exit_test.sh` reads it as the builder needing a
+server newer than the product, which fits but is not proven by the above.
+
+Consequences on such a machine: Grail itself still installs (only gemdb fails to
+deploy), but **every local run has to spell `GRAIL_IR_CODEGEN=0`**, and the
+`...UnderIR` SUnit tests then fail as a block — a full local suite reads
+`3 failed, 146 errors` with the same numbers on a clean checkout, so compare
+against a measured baseline rather than expecting green. CI is unaffected: it
+runs GemTalk's container, and the `test-main ir` shards pass there, which makes
+CI the first real exercise of the IR arm for any local change.
+
 The manuals below are the 3.7 ones because GemTalk has published no 4.0 manual
 set yet (the 4.0.x doc URLs 404). They remain the reference for everything that
 did not change; where 4.0 differs, the kernel itself is the authority — probe it
@@ -149,9 +180,23 @@ Two traps in this harness, both of which look like a passing run:
   `IMPORTERROR` ("no file on search path") and writes `out/cpython/test_enum.out`
   — leaving the previous `out/cpython/test.test_enum.out` in place, so the
   obvious next command reads a STALE result that looks fine.
-* **`check_cpython_regressions.sh` does NOT run the suite.** It compares
-  `out/cpython/scoreboard.json` against the checked-in scoreboard, so it happily
-  passes against whatever the last run left behind. Run the suite first.
+* **`check_cpython_regressions.sh` does NOT run the suite, and it does NOT read
+  `out/cpython/scoreboard.json`.** Both sides of its diff are the scoreboard
+  MARKDOWN: `CURRENT` defaults to the WORKING-TREE
+  `docs/CPython_Suite_Scoreboard.md` and `BASELINE` is
+  `git show HEAD:docs/CPython_Suite_Scoreboard.md`. The JSON is written by the
+  suite and read by nothing in the gate.
+
+  That makes the ORDER OF OPERATIONS load-bearing, and getting it wrong passes
+  vacuously. The rule against committing a local board (above) says to
+  `git checkout -- docs/CPython_Suite_Scoreboard.md`, so the obvious sequence —
+  revert the board, then gate — compares HEAD against HEAD, reports
+  `0 regression(s), 0 improvement(s)` and tells you nothing. Measured: that
+  verdict was quoted in a PR body before anyone noticed it contradicted its own
+  inputs. Always **run the suite, then gate, THEN revert the board**.
+
+  It still happily passes against whatever the last run left behind, so run the
+  suite first.
 
 ## No Grail code goes in the shared base
 `install_base.sh` files nothing of Grail's: MR #6 permits env-1 session methods
