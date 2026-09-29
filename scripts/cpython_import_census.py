@@ -119,8 +119,10 @@ def unmeasured_by_tier():
     Reads the same tables scripts/sync_scope_status.py maintains; an empty
     Status cell is precisely "not in the manifest, never run".
     """
+    # A package's submodule (test.test_asyncio.test_locks) wires the PACKAGE's
+    # row, not a same-named top-level module -- as sync_scope_status.scope_name.
     wired = {
-        line.strip().split(".")[-1]
+        line.strip().split(".")[1]
         for line in MANIFEST.read_text().splitlines()
         if line.strip() and not line.strip().startswith("#")
     }
@@ -240,7 +242,7 @@ VERDICTS = ("IMPORTS", "NO_SUBJECT", "ERROR", "MISSING", "CRASH")
 def report(rows):
     tiers = sorted({r[0] for r in rows})
     print("\nUnmeasured in-scope modules, by whether their subject imports today")
-    print("(%d modules; the 50 already wired are excluded)\n" % len(rows))
+    print("(%d modules; the wired ones are excluded)\n" % len(rows))
     head = "%-6s" % "tier" + "".join("%12s" % v for v in VERDICTS) + "%8s" % "total"
     print(head)
     print("-" * len(head))
