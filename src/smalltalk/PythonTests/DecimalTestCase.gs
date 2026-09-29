@@ -1143,6 +1143,35 @@ testComparisonsStayWideWhereArithmeticIsNarrow
 		equals: '[True, True, True, True, True, True, True, True, True, False, True]'
 %
 
+category: 'Grail-Tests - Arithmetic'
+method: DecimalTestCase
+testHashAgreesWithEqualNumbersOfOtherTypes
+	"REGRESSION (#857): a ScaledDecimal hashes like the equal int, float and
+	Fraction, so a dict or set keyed by one finds the other.
+
+	__hash__ used to answer env-0 #hash, which agreed with float only for
+	integral values: hash(0.5s1) was 534773760 where hash(0.5) is
+	1152921504606846976, and {0.5: 'f'}.get(ScaledDecimal('0.5')) missed a
+	key that compared equal.
+
+	The literal hashes are CPython 3.14's hash(Decimal(...)) for the same
+	strings, so they pin the construction itself -- including -1 -> -2, a
+	value no double holds exactly (0.1), and 1e-30, whose scale is past the
+	point where the 10-inverse power could be skipped."
+
+	self assert: (self eval: 'import fractions
+D = ScaledDecimal
+[[hash(D(s)) for s in ["0.5", "-0.25", "1.50", "0.1", "1e-30", "-1", "0",
+                       "12345678901234567890.123"]],
+ hash(D("0.5")) == hash(0.5), hash(D("-0.25")) == hash(-0.25),
+ hash(D("1e-30")) == hash(fractions.Fraction(1, 10**30)),
+ hash(D("2")) == hash(2), hash(D("1.50")) == hash(D("1.5")),
+ {0.5: "f"}.get(D("0.5")), {D("0.5"): "d"}.get(0.5),
+ len({D("0.25"), 0.25, fractions.Fraction(1, 4)})]' with: { #ScaledDecimal -> ScaledDecimal })
+		@env1:__repr__
+		equals: '[[1152921504606846976, -576460752303423488, 1152921504606846977, 2075258708292324556, 1318993825257351686, -2, 0, 1339890218257606662], True, True, True, True, True, ''f'', ''d'', 1]'
+%
+
 category: 'Grail-Tests - ScaledDecimal storage'
 method: DecimalTestCase
 testOrderingAgainstNonNumberRaisesTypeError
