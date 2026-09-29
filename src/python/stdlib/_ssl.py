@@ -22,10 +22,20 @@ WHERE IT DIFFERS FROM _ssl.c, ON PURPOSE:
     callback as its passphrase (the userdata pointer), rather than through a
     C callback.  A callable password is called only when the key turns out to
     be encrypted, as in CPython.
-  * Callbacks OpenSSL would call back into Python -- SNI, server-side ALPN
-    selection, the message callback, the keylog file and PSK -- are not
-    available yet.  They need a C function pointer; setting one raises
-    NotImplementedError rather than being silently ignored.
+  * Callbacks OpenSSL calls back.  SNI needs none: the ClientHello is read
+    out of the input BIO before OpenSSL sees it (_servername_callback).  The
+    others need a C function pointer, which CCallout cannot make, so they come
+    from a small C library, src/c/ssl/grail_ssl.c, that install.sh builds
+    (bound below as G).  No Python ever runs inside OpenSSL:
+      - server-side ALPN selection is done in C;
+      - message-callback records and keylog lines are queued in C and
+        delivered after the OpenSSL call that produced them returns
+        (_deliver_events);
+      - a PSK callback, whose answer OpenSSL needs on the spot, pauses the
+        handshake's ASYNC job instead (the connection runs in
+        SSL_MODE_ASYNC); the call returns SSL_ERROR_WANT_ASYNC, _answer_psk
+        asks the Python callback, and the repeated call resumes the job.
+    Without the library those four raise NotImplementedError.
 """
 
 import os as _os
@@ -92,6 +102,27 @@ def _def(pyname, name, restype, *argtypes):
 _P, _I, _U, _L, _UL, _S, _V, _CS = ('ptr', 'int32', 'uint32', 'int64',
                                     'uint64', 'char*', 'void', 'const char*')
 
+G = _Functions()
+
+
+def _gdef(name, restype, *argtypes):
+    """Bind one function of the callback library (src/c/ssl/grail_ssl.c) as
+    G.<name>.  Only called after _C.callbacks() has answered True."""
+    def call(*args):
+        return _C.cb(name, restype, argtypes, *args)
+    call.__name__ = name
+    G._d[name] = call
+
+
+_gdef('grail_ssl_async_capable', _I)
+_gdef('grail_ssl_alpn', _I, _P, _P, _U)
+_gdef('grail_ssl_events', _I, _P, _I, _I)
+_gdef('grail_ssl_psk', _I, _P, _I, _I)
+_gdef('grail_ssl_queued', _UL, _P)
+_gdef('grail_ssl_take', _UL, _P, _P, _UL)
+_gdef('grail_ssl_psk_request', _I, _P, _P, _UL)
+_gdef('grail_ssl_psk_answer', _I, _P, _P, _UL)
+
 # errors
 _def('ERR_get_error', 'ERR_get_error', _UL)
 _def('ERR_peek_last_error', 'ERR_peek_last_error', _UL)
@@ -122,6 +153,7 @@ _def('SSL_CTX_set_default_passwd_cb_userdata', 'SSL_CTX_set_default_passwd_cb_us
 _def('SSL_CTX_load_verify_locations', 'SSL_CTX_load_verify_locations', _I, _P, _CS, _CS)
 _def('SSL_CTX_set_default_verify_paths', 'SSL_CTX_set_default_verify_paths', _I, _P)
 _def('SSL_CTX_set_alpn_protos', 'SSL_CTX_set_alpn_protos', _I, _P, _P, _U)
+_def('SSL_CTX_use_psk_identity_hint', 'SSL_CTX_use_psk_identity_hint', _I, _P, _CS)
 _def('SSL_CTX_get_security_level', 'SSL_CTX_get_security_level', _I, _P)
 _def('SSL_CTX_set_num_tickets', 'SSL_CTX_set_num_tickets', _I, _P, _UL)
 _def('SSL_CTX_get_num_tickets', 'SSL_CTX_get_num_tickets', _UL, _P)
@@ -293,6 +325,8 @@ K.SSL_CTRL_SESS = {'number': 20, 'connect': 21, 'connect_good': 22,
                   'timeouts': 30, 'cache_full': 31}
 K.SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER = 0x2
 K.SSL_MODE_AUTO_RETRY = 0x4
+K.SSL_MODE_ASYNC = 0x100
+K.SSL_ERROR_WANT_ASYNC = 9
 K.SSL_MODE_RELEASE_BUFFERS = 0x10
 _TLSEXT_NAMETYPE_host_name = 0
 K.SSL_VERIFY_NONE = 0x00
@@ -1151,8 +1185,11 @@ class _SSLContext:
         self._check_hostname = False
         self._post_handshake_auth = False
         self._sni_callback = None
-        self._msg_callback = None
+        self.__dict__['_msg_cb'] = None
         self._keylog_filename = None
+        self._keylog_bio = None
+        self._psk_client_callback = None
+        self._psk_server_callback = None
         self._alpn_protocols = None
         # OpenSSL's default password callback answers its userdata as the
         # passphrase; an empty one makes an encrypted key fail instead of
@@ -1393,10 +1430,12 @@ class _SSLContext:
     def _set_alpn_protocols(self, protos):
         data = bytes(memoryview(protos))
         self._alpn_protocols = data
-        # The CLIENT half: the list offered in the ClientHello.  A SERVER
-        # selects through SSL_CTX_set_alpn_select_cb, a C callback -- not
-        # available here yet, so a server context offers no ALPN.
+        # The CLIENT half: the list offered in the ClientHello.
         if L.SSL_CTX_set_alpn_protos(self._ctx, data, len(data)):
+            raise MemoryError()
+        # The SERVER half, SSL_CTX_set_alpn_select_cb, is C (src/c/ssl).
+        # Without that library a server context selects no protocol.
+        if _C.callbacks() and not G.grail_ssl_alpn(self._ctx, data, len(data)):
             raise MemoryError()
 
     # -- certificates --------------------------------------------------
@@ -1654,13 +1693,20 @@ class _SSLContext:
 
     @_msg_callback.setter
     def _msg_callback(self, value):
+        # debughelpers.c's _PySSLContext_set_msg_callback: the old callback
+        # goes first, a non-callable included.  The records are queued in C
+        # and handed to the callback by _SSLSocket._deliver_events.
+        had = self.__dict__.get('_msg_cb') is not None
+        self.__dict__['_msg_cb'] = None
+        if had:
+            G.grail_ssl_events(self._ctx, 0, 0)
         if value is None:
-            self.__dict__['_msg_cb'] = None
             return
         if not callable(value):
-            raise TypeError('%r is not callable.' % (value,))
-        raise NotImplementedError(
-            '_msg_callback needs an OpenSSL callback, which Grail does not provide yet')
+            raise TypeError('not a callable object')
+        _need_callbacks('_msg_callback')
+        self.__dict__['_msg_cb'] = value
+        G.grail_ssl_events(self._ctx, 0, 1)
 
     @property
     def keylog_filename(self):
@@ -1668,19 +1714,58 @@ class _SSLContext:
 
     @keylog_filename.setter
     def keylog_filename(self, value):
+        # _PySSLContext_set_keylog_filename.  OpenSSL's keylog callback queues
+        # each line in C; _SSLSocket._deliver_events writes it to this file.
+        if self._keylog_bio is not None:
+            G.grail_ssl_events(self._ctx, 1, 0)
+            bio = self._keylog_bio
+            self._keylog_bio = None
+            bio.close()
+        self._keylog_filename = None
         if value is None:
-            self._keylog_filename = None
             return
-        raise NotImplementedError(
-            'keylog_filename needs an OpenSSL callback, which Grail does not provide yet')
+        path = _os.fspath(value)         # Py_fopen's type check
+        _need_callbacks('keylog_filename')
+        bio = open(path, 'a')
+        self._keylog_bio = bio
+        self._keylog_filename = value
+        # A header for a seekable, empty file (not a pipe).
+        try:
+            empty = bio.tell() == 0
+        except OSError:
+            empty = False
+        if empty:
+            bio.write('# TLS secrets log file, generated by OpenSSL / Python\n')
+            bio.flush()
+        G.grail_ssl_events(self._ctx, 1, 1)
 
     def set_psk_client_callback(self, callback):
-        raise NotImplementedError(
-            'PSK callbacks need an OpenSSL callback, which Grail does not provide yet')
+        if self._protocol == PROTOCOL_TLS_SERVER:
+            raise _ssl_error('Cannot add PSK client callback to a '
+                             'PROTOCOL_TLS_SERVER context')
+        if callback is not None and not callable(callback):
+            raise TypeError('callback must be callable')
+        _need_callbacks('set_psk_client_callback', psk=True)
+        self._psk_client_callback = callback
+        G.grail_ssl_psk(self._ctx, 0, int(callback is not None))
 
     def set_psk_server_callback(self, callback, identity_hint=None):
-        raise NotImplementedError(
-            'PSK callbacks need an OpenSSL callback, which Grail does not provide yet')
+        if self._protocol == PROTOCOL_TLS_CLIENT:
+            raise _ssl_error('Cannot add PSK server callback to a '
+                             'PROTOCOL_TLS_CLIENT context')
+        if callback is None:
+            identity_hint = None
+        elif not callable(callback):
+            raise TypeError('callback must be callable')
+        if identity_hint is not None and not isinstance(identity_hint, str):
+            raise TypeError('set_psk_server_callback() argument '
+                            "'identity_hint' must be str or None, not %s"
+                            % type(identity_hint).__name__)
+        _need_callbacks('set_psk_server_callback', psk=True)
+        if L.SSL_CTX_use_psk_identity_hint(self._ctx, identity_hint) != 1:
+            raise ValueError('failed to set identity hint')
+        self._psk_server_callback = callback
+        G.grail_ssl_psk(self._ctx, 1, int(callback is not None))
 
     # -- connections -------------------------------------------------
 
@@ -1844,6 +1929,19 @@ def _write_unraisable(exc, err_msg):
         pass
 
 
+def _need_callbacks(what, psk=False):
+    """Refuse, rather than silently ignore, a callback the C library would
+    make when it is not there -- or, for PSK, when OpenSSL cannot pause a
+    handshake (no ASYNC support)."""
+    if not _C.callbacks():
+        raise NotImplementedError(
+            '%s needs the OpenSSL callback library (src/c/ssl): %s'
+            % (what, _C.callbacks_problem()))
+    if psk and not G.grail_ssl_async_capable():
+        raise NotImplementedError(
+            '%s needs OpenSSL ASYNC jobs, which this libssl lacks' % what)
+
+
 # ------------------------------------------------------------ _SSLSocket
 
 # The largest TLS record: 5-byte header + 2^14 plaintext + 2048 expansion.
@@ -1888,6 +1986,11 @@ class _SSLSocket:
         self._sni_done = False       # the servername callback has run
         self._record_head = b''      # header bytes of the record being read
         self._record_body_left = 0   # its body bytes not yet read
+        # OpenSSL copies a context's PSK callbacks into the SSL at SSL_new, so
+        # whether this connection can call one is decided now; if it can, it
+        # runs in ASYNC mode so that the callback can pause (_answer_psk).
+        self._async = (sslctx._psk_client_callback is not None or
+                       sslctx._psk_server_callback is not None)
         L.ERR_clear_error()
         ssl = L.SSL_new(sslctx._ctx)
         if ssl is None:
@@ -1913,7 +2016,8 @@ class _SSLSocket:
             self._rbio = inbio._bio
             self._wbio = outbio._bio
         L.SSL_ctrl(ssl, K.SSL_CTRL_MODE,
-                 K.SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER | K.SSL_MODE_AUTO_RETRY, None)
+                 K.SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER | K.SSL_MODE_AUTO_RETRY |
+                 (K.SSL_MODE_ASYNC if self._async else 0), None)
         if sslctx._post_handshake_auth:
             if server_side:
                 mode = L.SSL_get_verify_mode(ssl)
@@ -2116,6 +2220,14 @@ class _SSLSocket:
         while True:
             ret = attempt()
             self._err = L.SSL_get_error(self._ssl, ret) if failed(ret) else 0
+            self._deliver_events()
+            if self._err == K.SSL_ERROR_WANT_ASYNC:
+                # A PSK callback paused the job: answer it, and the same call
+                # again resumes it (with the same arguments, which is why a
+                # write's buffer is C memory held across the retry).
+                if not self._answer_psk():
+                    return ret
+                continue
             if sock is None:
                 return ret
             self._flush(sock, timeout, deadline, op)
@@ -2126,6 +2238,132 @@ class _SSLSocket:
             if self._err == SSL_ERROR_WANT_WRITE:
                 continue
             return ret
+
+    def _deliver_events(self):
+        """Hand what OpenSSL reported during the last call to Python: message
+        records to the context's _msg_callback (_PySSL_msg_callback), keylog
+        lines to its keylog file (_PySSL_keylog_callback).  The C library
+        queued them, in order, rather than calling Python from inside
+        OpenSSL.  A callback's exception is raised once all are delivered,
+        where _ssl.c raises the one its callback stored."""
+        # Records queued while a since-cleared callback was set are dropped;
+        # the C queue is freed with the SSL.
+        ctx = self._ctx
+        if ctx._keylog_bio is None and ctx.__dict__.get('_msg_cb') is None:
+            return
+        if not _C.callbacks():
+            return
+        n = G.grail_ssl_queued(self._ssl)
+        if not n:
+            return
+        buf = _C.malloc(n)
+        if G.grail_ssl_take(self._ssl, buf, n) != n:
+            return
+        raw = _C.read(buf, 0, n)
+        exc = None
+        at = 0
+        while at < n:
+            # grail_ssl_take's record: kind, write_p, version (2), content
+            # type (2), length (4), little endian; then the bytes.
+            kind = raw[at]
+            write_p = raw[at + 1]
+            version = raw[at + 2] | raw[at + 3] << 8
+            content_type = raw[at + 4] | raw[at + 5] << 8
+            length = int.from_bytes(raw[at + 6:at + 10], 'little')
+            data = raw[at + 10:at + 10 + length]
+            at += 10 + length
+            try:
+                if kind == 1:
+                    bio = self._ctx._keylog_bio
+                    if bio is not None:
+                        bio.write(data.decode('latin-1') + '\n')
+                        bio.flush()
+                else:
+                    cb = self._ctx.__dict__.get('_msg_cb')
+                    if cb is not None:
+                        self._call_msg_callback(cb, write_p, version,
+                                                content_type, bytes(data))
+            except BaseException as e:
+                exc = e
+        if exc is not None:
+            raise exc
+
+    def _call_msg_callback(self, cb, write_p, version, content_type, data):
+        # _PySSL_msg_callback's choice of first argument and of msg_type.
+        if self._owner is not None:
+            target = self._owner()
+        else:
+            sock = self._get_socket()
+            target = sock if sock is not None else self
+        if content_type == 20:                  # SSL3_RT_CHANGE_CIPHER_SPEC
+            msg_type = 0x0101                   # SSL3_MT_CHANGE_CIPHER_SPEC
+        elif content_type == 21:                # SSL3_RT_ALERT: level, type
+            msg_type = data[1] if len(data) > 1 else -1
+        elif content_type == 22:                # SSL3_RT_HANDSHAKE
+            msg_type = data[0] if data else -1
+        elif content_type == 256:               # SSL3_RT_HEADER
+            if len(data) > 2:
+                version = data[1] << 8 | data[2]
+            msg_type = data[0] if data else -1
+        elif content_type == 257:               # SSL3_RT_INNER_CONTENT_TYPE
+            msg_type = data[0] if data else -1
+        else:
+            msg_type = -1
+        cb(target, 'write' if write_p else 'read', version, content_type,
+           msg_type, data)
+
+    def _answer_psk(self):
+        """Answer the PSK question a paused handshake is waiting on (see the
+        module docstring).  False when there is none."""
+        question = _C.malloc(1024)
+        kind = G.grail_ssl_psk_request(self._ssl, question, 1024)
+        if kind < 0:
+            return False
+        answer = self._psk_answer(kind, _C.cstring(question))
+        G.grail_ssl_psk_answer(self._ssl, answer, len(answer))
+        return True
+
+    def _psk_answer(self, kind, arg):
+        """_ssl.c's psk_client_callback (kind 0) / psk_server_callback (kind
+        1), as bytes for grail_ssl_psk_answer.  arg is the server's hint or the
+        client's identity, b'' for none.  The client's answer is a 4-byte
+        little-endian identity length, the identity and the key; the server's
+        is the key; b'' refuses.  An exception is reported as unraisable and
+        refuses, as in _ssl.c."""
+        ctx = self._ctx
+        callback = ctx._psk_client_callback if kind == 0 else ctx._psk_server_callback
+        if callback is None:
+            return b''
+        try:
+            try:
+                text = bytes(arg).decode('utf-8') if arg else None
+            except UnicodeDecodeError:
+                return b''              # the peer broke the standard: drop it
+            result = callback(text)
+            if kind == 1:
+                if not isinstance(result, (bytes, bytearray)):
+                    raise TypeError('expected bytes, %s found' % type(result).__name__)
+                return bytes(result)
+            if not isinstance(result, tuple) or len(result) != 2:
+                raise TypeError('PSK client callback must return a tuple '
+                                '(identity, psk)')
+            # PyArg_ParseTuple(result, "z#y#"): the identity a str, a
+            # bytes-like or None; the key a bytes-like.
+            identity, psk = result
+            if identity is None:
+                identity = b''
+            elif isinstance(identity, str):
+                identity = identity.encode('utf-8')
+            else:
+                identity = bytes(memoryview(identity))
+            psk = bytes(memoryview(psk))
+            n = len(identity)
+            return bytes((n & 255, (n >> 8) & 255, (n >> 16) & 255, n >> 24)) + identity + psk
+        except BaseException as exc:
+            _write_unraisable(exc, 'Exception ignored in ssl PSK %s callback '
+                              'while calling callback %r'
+                              % ('client' if kind == 0 else 'server', callback))
+            return b''
 
     def _set_error(self):
         """PySSL_SetError(): the exception for self._err."""
@@ -2286,7 +2524,8 @@ class _SSLSocket:
     def write(self, b):
         data = bytes(memoryview(b))
         count = _C.malloc(8)
-        ret = self._run(lambda: L.SSL_write_ex(self._ssl, data, len(data), count),
+        buf = _C.from_bytes(data) if self._async else data
+        ret = self._run(lambda: L.SSL_write_ex(self._ssl, buf, len(data), count),
                         lambda r: r == 0, 'write')
         if ret == 0:
             raise self._set_error()
@@ -2355,6 +2594,7 @@ class _SSLSocket:
                 L.SSL_set_read_ahead(self._ssl, 0)
             ret = L.SSL_shutdown(self._ssl)
             self._err = L.SSL_get_error(self._ssl, ret) if ret < 0 else 0
+            self._deliver_events()
             if sock is not None and not self._flush(sock, timeout, deadline, 'shutdown'):
                 # A full non-blocking socket: close_notify is queued, not sent.
                 self._err = SSL_ERROR_WANT_WRITE
@@ -2481,6 +2721,10 @@ class _SSLSocket:
             raise TypeError('The value must be a SSLContext')
         self._ctx = value
         L.SSL_set_SSL_CTX(self._ssl, value._ctx)
+        # SSL_set_SSL_CTX does not carry the message callback over (_ssl.c's
+        # context setter sets it on the SSL itself).
+        if _C.callbacks():
+            G.grail_ssl_events(self._ssl, 2, int(value.__dict__.get('_msg_cb') is not None))
 
     @property
     def server_side(self):
