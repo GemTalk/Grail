@@ -187,9 +187,46 @@ __format__: formatSpec
 category: 'Grail-Hash'
 method: AbstractFraction
 __hash__
-	"Return hash value."
+	"CPython's numeric hash for a rational, so a kernel Fraction hashes equal to
+	every other numeric type it compares equal to.
 
-	^ self @env0:hash
+	It used to answer ``self hash'', GemStone's own, which knows nothing about
+	sys.hash_info.modulus and so agreed with float only by accident: (1/2) hashed
+	534773760 where hash(0.5) is 1152921504606846976, while (1/2) __eq__ 0.5
+	answered true.  Equal values with different hashes are invisible to a dict --
+	a dict keyed by one does not find the other, and nothing raises (#1258).
+
+	The value is numerator/denominator, so its hash is
+	(|numerator| * inverse(denominator)) mod P carrying the numerator's sign,
+	P = 2**61 - 1.  The closing four lines are Float >> __hash__'s, deliberately:
+	this is that method's formula with the one step it can skip put back.  A
+	float's denominator is a power of two, whose inverse is another power of two
+	because 2**61 == 1 (mod P), but a rational's denominator is arbitrary and
+	needs a real modular inverse.
+
+	A DENOMINATOR THAT IS A MULTIPLE OF P has no inverse, and unlike the power-of-
+	two and power-of-ten cases that branch is reachable here -- Fraction(1, P).
+	CPython answers sys.hash_info.inf for it, and ___modInverse___ raises the same
+	ValueError that CPython's pow(den, -1, P) raises, so the handler is where that
+	answer belongs.
+
+	The ScaledDecimal half of this is #857; fractions.Fraction is unaffected,
+	being pure Python with CPython's own __hash__."
+
+	| modulus numerator denominator hashValue |
+
+	modulus := 2305843009213693951.
+	numerator := self @env0:numerator.
+	denominator := self @env0:denominator.
+	hashValue := [
+		((numerator @env0:abs @env0:\\ modulus)
+			@env0:* (builtins instance ___modInverse___: denominator mod: modulus))
+				@env0:\\ modulus]
+		@env0:on: ValueError
+		do: [:anException | anException @env0:return: 314159].
+	(numerator @env0:< 0) ifTrue: [hashValue := hashValue @env0:negated].
+	(hashValue @env0:= -1) ifTrue: [^ -2].
+	^ hashValue
 %
 
 category: 'Grail-Conversion'

@@ -22,7 +22,23 @@ FractionTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
-! FractionTestCase - Tests for Python fractions.Fraction type
+! FractionTestCase - Tests for Grail's TWO fractions.Fraction
+!
+! There are two, and which one a test gets depends on how it asks:
+!
+!   fractions @env1:instance -- the NATIVE module, src/smalltalk/Python/fractions.gs,
+!       whose `Fraction' accessor answers GemStone's own KERNEL Fraction class.  So
+!       `fracClass ___new___: fracClass _: 1 _: 3' builds a kernel SmallFraction,
+!       identical (==) to what 1/3 evaluates to in Smalltalk.  Most tests in this
+!       file take that path, so most of this file covers the kernel fraction.
+!
+!   self eval: 'import fractions' -- the VENDORED pure-Python module,
+!       src/python/stdlib/fractions.py, which shadows the native one on the search
+!       path.  This is what ordinary Python code gets.
+!
+! The distinction bites: a test that compares `Fraction(1, 3)' across the two
+! paths compares an object with ITSELF along the first, and so passes whatever
+! __hash__ happens to do.
 ! ===============================================================================
 
 set compile_env: 0
@@ -158,6 +174,89 @@ hash(fractions.Fraction(10**50)) == hash(10**50)').
 	numeric hash must differ from the exact integer's."
 	self assert: (self eval: 'import fractions
 hash(float(10**23)) != hash(fractions.Fraction(10**23))').
+%
+
+category: 'Grail-Tests - Hash'
+method: FractionTestCase
+testKernelFractionHashesLikeTheEqualFloat
+	"GemStone's own Fraction -- what 1/2 evaluates to in Smalltalk, not
+	fractions.Fraction -- used to answer the Smalltalk `self hash'.  That is
+	a different number from the numeric hash of the equal float, and
+	CPython's contract is that equal numbers hash equally whatever their
+	type (#1258)."
+
+	self assert: ((1/2) @env1:__hash__) equals: (0.5 @env1:__hash__).
+	self assert: ((1/2) @env1:__hash__) equals: 1152921504606846976
+%
+
+category: 'Grail-Tests - Hash'
+method: FractionTestCase
+testNegativeKernelFractionHashesLikeTheEqualFloat
+	"CPython hashes |numerator|/denominator and negates the result, rather
+	than reducing a negative numerator mod P.  Those two give different
+	answers, so the sign is a branch of its own."
+
+	self assert: ((-5/2) @env1:__hash__) equals: (-2.5 @env1:__hash__).
+	self assert: ((-5/2) @env1:__hash__) equals: -1152921504606846978
+%
+
+category: 'Grail-Tests - Hash'
+method: FractionTestCase
+testLargeKernelFractionHashesAsCPythonDoes
+	"No float equals 1/3, so only a pinned literal can witness these two.
+	Both are CPython 3.14's own hash of the same rational, measured with
+	fractions.Fraction.  10**50/3 is a Fraction rather than a SmallFraction,
+	and is the only test here that reaches the large-fraction class.
+
+	Comparing the two spellings against EACH OTHER would prove nothing: the
+	native module's Fraction IS the kernel class, so `Fraction(1, 3)' along
+	that path answers the very object 1/3 does."
+
+	self assert: ((1/3) @env1:__hash__) equals: 1537228672809129301.
+	self assert: (((10 raisedTo: 50) / 3) @env1:__hash__) equals: 975058526797455899
+%
+
+category: 'Grail-Tests - Hash'
+method: FractionTestCase
+testKernelFractionWhoseDenominatorIsAMultipleOfTheModulusHashesAsInfinity
+	"A denominator that is a multiple of P = 2**61 - 1 has no inverse mod P,
+	and CPython answers _PyHASH_INF there, signed by the numerator.  Neither
+	a float nor a ScaledDecimal can reach this branch -- their denominators
+	are powers of 2 and of 10 -- so only a fraction tests it."
+
+	self assert: ((1 / 2305843009213693951) @env1:__hash__) equals: 314159.
+	self assert: ((-1 / 2305843009213693951) @env1:__hash__) equals: -314159
+%
+
+category: 'Grail-Tests - Hash'
+method: FractionTestCase
+testADictKeyedByAKernelFractionIsFoundByTheEqualFloat
+	"The symptom #1258 reports.  A dict finds a key by hash first, so two
+	equal numbers that hash differently land in different buckets and 0.5
+	missed the entry 1/2 had made."
+
+	| dictionary |
+	dictionary := PyDict new.
+	dictionary @env1:__setitem__: (1/2) _: 'half'.
+
+	self assert: (dictionary @env1:__getitem__: 0.5) equals: 'half'
+%
+
+category: 'Grail-Tests - Hash'
+method: FractionTestCase
+testStoringUnderAFloatReplacesTheEqualKernelFractionEntry
+	"The direction that makes the dict itself wrong rather than merely
+	unhelpful: 1/2 and 0.5 are ONE key, so either store must replace the
+	other and leave a dict of size one.  While they hashed differently a
+	single dict held both, and iterating it yielded the same number twice."
+
+	| dictionary |
+	dictionary := PyDict new.
+	dictionary @env1:__setitem__: (1/2) _: 'from the fraction'.
+	dictionary @env1:__setitem__: 0.5 _: 'from the float'.
+
+	self assert: (dictionary @env1:__len__) equals: 1.
+	self assert: (dictionary @env1:__getitem__: (1/2)) equals: 'from the float'
 %
 
 category: 'Grail-Tests - Repr'
