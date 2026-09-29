@@ -1398,6 +1398,7 @@ run
 	at: #'TimeoutErrorTestCase' put: nil;
 	at: #'TomllibTestCase' put: nil;
 	at: #'TotalOrderingTestCase' put: nil;
+	at: #'TracebackExcShorthandsTestCase' put: nil;
 	at: #'TracebackObjectTestCase' put: nil;
 	at: #'TracebackTestCase' put: nil;
 	at: #'TransformCodecsTestCase' put: nil;
@@ -2855,6 +2856,7 @@ input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/TimeoutErrorTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/TotalOrderingTestCase.gs
+input src/smalltalk/PythonTests/TracebackExcShorthandsTestCase.gs
 input src/smalltalk/PythonTests/TracebackObjectTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/TransformCodecsTestCase.gs
