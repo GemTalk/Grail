@@ -198,6 +198,22 @@ fi
 
 echo "SHIM_LIB_PATH = $SHIM_LIB_PATH"
 
+# Build the OpenSSL callback library for _ssl (src/c/ssl), a plain C library
+# _ssl.py reaches through CCallout.  Optional: without it _ssl works, and only
+# the callbacks (server-side ALPN, msg_callback, keylog, PSK) raise
+# NotImplementedError.
+export GRAIL_SSL_LIB_PATH=""
+echo "Building the OpenSSL callback library..."
+if make -C "$GRAIL_DIR/src/c/ssl" clean all; then
+    case "$OSTYPE" in
+      linux*)  export GRAIL_SSL_LIB_PATH="$GRAIL_DIR/src/c/ssl/libgrail_ssl.so" ;;
+      *)       export GRAIL_SSL_LIB_PATH="$GRAIL_DIR/src/c/ssl/libgrail_ssl.dylib" ;;
+    esac
+else
+    echo "Warning: the OpenSSL callback library did not build; ssl callbacks are unavailable."
+fi
+echo "GRAIL_SSL_LIB_PATH = $GRAIL_SSL_LIB_PATH"
+
 # Detect CPython shared library for embedded FFI integration
 PYTHON_LIB_PATH=""
 PYTHON_PREFIX=""

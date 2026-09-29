@@ -12,7 +12,7 @@ doit
 NativeModule subclass: '_grail_openssl'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( callbackLibraryPath )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -43,6 +43,17 @@ THE WHOLE SURFACE:
     cstring(p)                             the NUL-terminated bytes at p
     address(p)                             p as an int (0 for None)
     library_path()                         which file was loaded
+    callbacks()                            load the callback library; True if it is there
+    callbacks_problem()                    why it is not, or None
+    cb(name, restype, argtypes, *args)     call() into that library
+
+CALLBACKS.  What OpenSSL calls back (ALPN selection, the message callback,
+keylog, PSK) needs a C function pointer, which CCallout cannot make: CCallin
+needs native code.  src/c/ssl/grail_ssl.c supplies them, as a plain library
+built by install.sh, whose path install.gs records here
+(callbackLibraryPath).  Its header says how each callback reaches Python
+without Python ever running inside OpenSSL, and why that rules out a user
+action.
 
 TYPES are CCallout''s, spelled as strings: ptr, int8..int64, uint8..uint64,
 bool, double, float, void, char* (a RESULT, answered as bytes) and
@@ -130,8 +141,16 @@ _calloutFor: aName result: resType args: argTypes
 	NUL-terminated CByteArray, which is what lets a Unicode str through at all
 	(CCallout's own const char* refuses Unicode16/32)."
 
-	| st key cache co |
-	st := self _state.
+	^ self _calloutIn: self _state name: aName result: resType args: argTypes
+%
+
+category: 'Grail-Private'
+classmethod: _grail_openssl
+_calloutIn: st name: aName result: resType args: argTypes
+	"_calloutFor:result:args: against st, a {path. CLibrary. cache} state:
+	libssl's (_state) or the callback library's (_callbackState)."
+
+	| key cache co |
 	cache := st at: 3.
 	key := String new.
 	key addAll: aName; add: $|; addAll: resType asString.
@@ -199,7 +218,88 @@ _view: aPointer size: aSize
 	^ CByteArray fromCPointer: aPointer numBytes: aSize
 %
 
+category: 'Grail-Configuration'
+classmethod: _grail_openssl
+callbackLibraryPath
+	"The user action library of OpenSSL callbacks (src/c/ssl), or nil when
+	install.sh did not build one."
+
+	^ callbackLibraryPath
+%
+
+category: 'Grail-Configuration'
+classmethod: _grail_openssl
+callbackLibraryPath: aString
+	callbackLibraryPath := aString
+%
+
+category: 'Grail-Private'
+classmethod: _grail_openssl
+_callbackState
+	"{CLibrary. callout cache} for the callback library, initialised against
+	the libssl _state loads, once per session; nil when it is not there, with
+	the reason in SessionTemps (_callbacksProblem).  C state, so SessionTemps,
+	as for _state."
+
+	| sessionTemps known path ssl lib init problem |
+	sessionTemps := SessionTemps current.
+	known := sessionTemps at: #GrailOpenSslCallbacks otherwise: nil.
+	known ifNotNil: [^ (known isKindOf: Array) ifTrue: [known] ifFalse: [nil]].
+	path := callbackLibraryPath.
+	ssl := self _state.
+	problem := nil.
+	(path isNil or: [ssl isNil])
+		ifTrue: [problem := 'install.sh did not build it']
+		ifFalse: [
+			[lib := CLibrary named: path.
+			 init := CCallout library: lib name: 'grail_ssl_init' result: #int32 args: #(#ptr).
+			 (init callWith: {CByteArray withAll: (ssl at: 1) encodeAsUTF8 asByteArray nullTerminate: true}) = 1
+				ifFalse: [
+					problem := ((CCallout library: lib name: 'grail_ssl_problem' result: #'char*' args: #())
+						callWith: #()) asString]]
+				on: Error do: [:e | problem := e messageText asString]].
+	problem ifNotNil: [
+		sessionTemps at: #GrailOpenSslCallbacks put: problem.
+		^ nil].
+	known := Array with: path with: lib with: KeyValueDictionary new.
+	sessionTemps at: #GrailOpenSslCallbacks put: known.
+	^ known
+%
+
 set compile_env: 1
+
+category: 'Grail-Built-in Functions'
+method: _grail_openssl
+callbacks
+	"callbacks() -- True when the OpenSSL callback library is loaded (loading
+	it into this session the first time)."
+
+	^ ((self @env0:class) @env0:_callbackState) @env0:notNil
+%
+
+category: 'Grail-Built-in Functions'
+method: _grail_openssl
+callbacks_problem
+	"callbacks_problem() -- why callbacks() is False, or None."
+
+	| known |
+	(self @env0:class) @env0:_callbackState.
+	known := SessionTemps @env0:current @env0:at: #GrailOpenSslCallbacks otherwise: nil.
+	(known @env0:isKindOf: CharacterCollection) ifTrue: [^ known].
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: _grail_openssl
+_cb: positional kw: kwargs
+	"cb(name, restype, argtypes, *args) -- call() into the callback library."
+
+	| st |
+	st := (self @env0:class) @env0:_callbackState.
+	st @env0:ifNil: [
+		^ OSError ___signal___: 'the OpenSSL callback library is not loaded'].
+	^ self ___call: positional in: st
+%
 
 category: 'Grail-Built-in Functions'
 method: _grail_openssl
@@ -208,13 +308,22 @@ _call: positional kw: kwargs
 	See the class comment for the type spellings and the value conversions.
 	(Spelled _call:kw:, the varargs form Python's ``call(...)'' dispatches to.)"
 
-	| name resType argTypes args co cls st |
+	| st |
+	st := (self @env0:class) @env0:_state.
+	st @env0:ifNil: [
+		^ OSError ___signal___: 'the OpenSSL library GemStone ships was not found in $GEMSTONE/lib'].
+	^ self ___call: positional in: st
+%
+
+category: 'Grail-Private'
+method: _grail_openssl
+___call: positional in: st
+	"call()'s work, against st: libssl's state or the callback library's."
+
+	| name resType argTypes args co cls |
 	cls := self @env0:class.
 	(positional @env0:size @env0:< 3) ifTrue: [
 		^ TypeError ___signal___: 'call() takes at least 3 arguments'].
-	st := cls @env0:_state.
-	st @env0:ifNil: [
-		^ OSError ___signal___: 'the OpenSSL library GemStone ships was not found in $GEMSTONE/lib'].
 	name := (positional @env0:at: 1) @env0:asString.
 	resType := cls @env0:_typeSymbol: (positional @env0:at: 2).
 	resType @env0:ifNil: [
@@ -231,7 +340,7 @@ _call: positional kw: kwargs
 		v := positional @env0:at: i @env0:+ 3.
 		v == None ifTrue: [v := nil].
 		args @env0:at: i put: (cls @env0:_argument: v as: (argTypes @env0:at: i))].
-	co := cls @env0:_calloutFor: name result: resType args: argTypes.
+	co := cls @env0:_calloutIn: st name: name result: resType args: argTypes.
 	^ self ___none___: (cls @env0:_result: (co @env0:callWith: args) as: resType)
 %
 
@@ -311,8 +420,12 @@ cstring: aPointer
 		n := 0.
 		[n @env0:< aPointer @env0:size and: [(aPointer @env0:uint8At: n) @env0:~= 0]]
 			@env0:whileTrue: [n := n @env0:+ 1].
+		"byteArrayFrom:numBytes: refuses 0 (``number of bytes argument must be
+		 > 0''), and an empty C string is common: a PSK hint nobody set."
+		n @env0:= 0 ifTrue: [^ ByteArray @env0:new].
 		^ aPointer @env0:byteArrayFrom: 0 numBytes: n].
 	view := CByteArray @env0:fromCharStar: aPointer.
+	view @env0:size @env0:= 0 ifTrue: [^ ByteArray @env0:new].
 	^ view @env0:byteArrayFrom: 0 numBytes: view @env0:size
 %
 

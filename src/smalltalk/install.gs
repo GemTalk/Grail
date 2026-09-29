@@ -1475,6 +1475,7 @@ run
 	at: #'WeakrefModuleTestCase' put: nil;
 	at: #'WideStrTypeAndAugmentedAttrStoreTestCase' put: nil;
 	at: #'SslRuntimeGapsTestCase' put: nil;
+	at: #'SslCallbacksTestCase' put: nil;
 	at: #'WithAsTargetsTestCase' put: nil;
 	at: #'WithBlockShapesTestCase' put: nil;
 	at: #'WithExitRaisesTestCase' put: nil;
@@ -2931,6 +2932,7 @@ input src/smalltalk/PythonTests/WarningTestCase.gs
 input src/smalltalk/PythonTests/WeakrefModuleTestCase.gs
 input src/smalltalk/PythonTests/WideStrTypeAndAugmentedAttrStoreTestCase.gs
 input src/smalltalk/PythonTests/SslRuntimeGapsTestCase.gs
+input src/smalltalk/PythonTests/SslCallbacksTestCase.gs
 input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
 input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
 input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
@@ -3080,6 +3082,10 @@ libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
 	lazily instead (see CPythonShim>>builtinModuleNamed:)."
 	CPythonShim libraryPath: libPath .
 ].
+"The OpenSSL callback library (src/c/ssl), when install.sh built one.
+Recorded unconditionally so a rebuild without it clears a stale path."
+_grail_openssl callbackLibraryPath: ((System gemEnvironmentVariable: 'GRAIL_SSL_LIB_PATH')
+	ifNotNil: [:p | p isEmpty ifTrue: [nil] ifFalse: [p]]).
 pyPath := System gemEnvironmentVariable:'PYTHON_LIB_PATH' .
 (pyPath notNil and: [pyPath notEmpty]) ifTrue: [
 	CPythonLibrary libraryPath: pyPath .
