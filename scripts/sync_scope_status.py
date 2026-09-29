@@ -58,24 +58,39 @@ ROW = re.compile(
 )
 
 
+def scope_name(dotted):
+    """The scope-document row a manifest/scoreboard name belongs to.
+
+    ``test.test_foo'' is row test_foo.  A package's submodule --
+    ``test.test_asyncio.test_locks'' -- belongs to its PACKAGE's row,
+    test_asyncio.  Taking the LAST component instead filed
+    test.test_asyncio.test_context under the unrelated top-level
+    test_context (contextvars), which nobody had measured."""
+    parts = dotted.split(".")
+    return parts[1] if len(parts) > 1 and parts[0] == "test" else parts[-1]
+
+
 def manifest_modules():
-    """Dotted module names wired into the harness, as bare test_* names."""
+    """Dotted module names wired into the harness, as scope row names."""
     names = []
     for line in MANIFEST.read_text().splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
-            names.append(line.split(".")[-1])
+            names.append(scope_name(line))
     return names
 
 
 def scoreboard_status():
-    """{test_foo: 'OK'|'ERROR'|...} from the committed per-module rows."""
+    """{test_foo: 'OK'|'ERROR'|...} from the committed per-module rows.  A
+    package row is OK only while every one of its wired submodules is."""
     status = {}
-    row = re.compile(r"^\|\s*test\.(test_\w+)\s*\|\s*(\w+)\s*\|")
+    row = re.compile(r"^\|\s*(test\.test_\w+(?:\.\w+)*)\s*\|\s*(\w+)\s*\|")
     for line in SCOREBOARD.read_text().splitlines():
         m = row.match(line)
         if m:
-            status[m.group(1)] = m.group(2)
+            name = scope_name(m.group(1))
+            if status.get(name, "OK") == "OK":
+                status[name] = m.group(2)
     return status
 
 

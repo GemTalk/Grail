@@ -408,3 +408,35 @@ test.test_asyncio.test_queues
 # that file.  test_taskgroups imports one 13-line function from it, and the real
 # 609-line version needs wsgiref (~1,090 lines) and a BaseEventLoop to subclass.
 test.test_asyncio.test_taskgroups
+
+# --- Tracked baselines (added 2026-09-28) ---
+#
+# Chosen by trialing 26 unwired in-scope candidates (CPython 3.14.6's own files)
+# and keeping the ones that RUN today -- no IMPORTERROR, CRASH or TIMEOUT -- so
+# each enters the board with a real count, and most of each count traces to
+# one or two causes.  Vendored verbatim.  Measured on Darwin arm64 at
+# 84821c1e; docs/Grail_CPython_Scope.md ("Trialed and deferred") lists the 17
+# that were trialed and left out, with the blocker each one's log named.
+#
+#   test_statistics          371t 37F/201E  statistics lacks NormalDist and
+#                                           StatisticsError; Decimal has no
+#                                           _generality
+#   test_abc                  72t  0F/64E   62 are ONE "could not compile this
+#                                           method (codegen gap)"
+#   test_userstring           71t  1F/59E   UserString lacks str methods (find,
+#                                           strip, ...); str + UserString
+#   test_exception_group      52t 23F/1E    mostly "TypeError not raised"
+#   test_except_star          60t 10F/11E
+#   test_generators           50t 10F/10E   frame f_locals, gi_* details
+#   test_long                 47t  6F/8E    Grail's integer capacity limit
+#   test_exception_hierarchy  16t  2F/3E
+#   test_copyreg               6t  2F/0E
+test.test_statistics
+test.test_abc
+test.test_userstring
+test.test_exception_group
+test.test_except_star
+test.test_generators
+test.test_long
+test.test_exception_hierarchy
+test.test_copyreg
