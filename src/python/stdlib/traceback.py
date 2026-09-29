@@ -991,15 +991,20 @@ def format_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
     return lines
 
 
-def format_exc(*args):
-    """Return the current exception formatted as a string.  Pulls the
-    type/value from sys.exc_info().
+def format_exc(limit=None, chain=True):
+    """CPython's ``format_exc(limit=None, chain=True)'': the current exception
+    formatted as a string, with the type/value pulled from sys.exc_info().
 
-    Takes *args so the compiled selector becomes _format_exc:kw:
-    (varargs) - that way Grail's module __pyAttrLoad__ wraps it as a
-    BoundMethod instead of invoking on read.  The unary form would
-    return the string, then `()` would try to call the string and
-    surface as `value:value: not understood by Unicode7`."""
+    THE SIGNATURE USED TO BE ``format_exc(*args)'', and the reason no longer
+    holds.  A zero-parameter function read as a module attribute used to be
+    INVOKED on read, so the unary form returned the string and the caller's
+    ``()'' then tried to call it -- surfacing as ``value:value: not understood
+    by Unicode7''.  Varargs dodged that by compiling to _format_exc:kw:.  The
+    module attribute read no longer performs (measured: reading a zero-parameter
+    module function answers a BoundMethod), so CPython's own signature works,
+    and it has to be spelled out because ``*args'' silently DROPPED both
+    arguments: format_exc(1) ignored the limit and format_exc(limit=1) raised
+    TypeError from inside the very except block it was reporting (#1263)."""
 
     try:
         info = sys.exc_info()
@@ -1009,8 +1014,10 @@ def format_exc(*args):
     # No special case for "no active exception": format_exception(None, None,
     # None) now renders CPython's own answer for it, ``NoneType: None''.  This
     # used to short-circuit to 'None\n', which was neither CPython's text nor
-    # reachable any other way.
-    return ''.join(format_exception(exc_type, value, tb))
+    # reachable any other way.  The legacy TRIPLE is passed rather than
+    # sys.exception() so that path stays exactly as it was.
+    return ''.join(format_exception(exc_type, value, tb,
+                                    limit=limit, chain=chain))
 
 
 def print_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
@@ -1024,7 +1031,11 @@ def print_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
     exc_type = exc
     if file is None:
         file = sys.stderr
-    for line in format_exception(exc_type, value, tb, limit):
+    # ``chain'' has to be forwarded, not just accepted.  It was dropped here,
+    # so print_exception(e, chain=False) still rendered the __context__ chain --
+    # and because print_exc delegates to this function, fixing print_exc alone
+    # would not have fixed print_exc(chain=False) either (#1263).
+    for line in format_exception(exc_type, value, tb, limit, chain=chain):
         file.write(line)
 
 
@@ -1036,17 +1047,17 @@ def print_last(limit=None, file=None, chain=True):
     Raises ValueError when neither is set, which is CPython's answer for "there
     is no last exception" -- callers distinguish that from an empty render.
 
-    ``limit'' is honoured; ``chain'' is accepted and not yet acted on (it needs
-    __cause__/__context__ rendering)."""
+    Both ``limit'' and ``chain'' are honoured; ``chain'' used to be accepted and
+    dropped (#1263)."""
     have_exc = hasattr(sys, 'last_exc')
     if not have_exc and not hasattr(sys, 'last_type'):
         raise ValueError('no last exception')
     if have_exc:
-        print_exception(sys.last_exc, limit=limit, file=file)
+        print_exception(sys.last_exc, limit=limit, file=file, chain=chain)
     else:
         print_exception(sys.last_type, sys.last_value,
                         getattr(sys, 'last_traceback', None),
-                        limit=limit, file=file)
+                        limit=limit, file=file, chain=chain)
 
 
 def print_exc(limit=None, file=None, chain=True):
@@ -1054,13 +1065,14 @@ def print_exc(limit=None, file=None, chain=True):
 
     ``limit'' is the FIRST positional parameter, not ``file'' -- the signature
     here used to be ``print_exc(file=None)'', so a caller writing CPython's
-    ``print_exc(None, file=f)'' bound None to the wrong parameter.  ``limit''
-    and ``chain'' are accepted and not yet acted on (limit needs multi-frame
-    tracebacks, chain needs __cause__/__context__ rendering); taking them keeps
-    such a call working instead of raising TypeError."""
+    ``print_exc(None, file=f)'' bound None to the wrong parameter.
+
+    Both ``limit'' and ``chain'' are now honoured.  They used to be accepted and
+    dropped, which is the quieter half of #1263: unlike format_exc's TypeError,
+    print_exc(limit=1) raised nothing and simply printed the whole traceback."""
     if file is None:
         file = sys.stderr
-    file.write(format_exc())
+    file.write(format_exc(limit=limit, chain=chain))
 
 
 # ---------------------------------------------------------------- PEP 657
