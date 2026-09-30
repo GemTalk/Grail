@@ -425,6 +425,12 @@ timed "overlay-reuse" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/ru
 # to it before the overlay, and the store reached the COMMITTED holder -- so two
 # gems configuring one framework class conflicted on commit.
 timed "class-attr-session-local" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runClassAttrSessionLocalTest.gs < /dev/null || EXIT=$?
+# An lru_cache in a DEPLOYED module is per-session, as CPython's is
+# per-process (#1229).  Its own script because the wrapper under test has to be
+# COMMITTED, and the suite must not commit.  Guards the leak where a module-level
+# cache kept its entries in the committed wrapper: every hit wrote a shared
+# object, and every miss's argument reached the repository with the next commit.
+timed "lru-cache-session-local" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runLruCacheSessionLocalTest.gs < /dev/null || EXIT=$?
 
 # Phase-5 module-bind acceptance (docs/Persistent_Modules_and_Classes.md
 # par.10.6). Session A (flag on) imports a fixture exercising @dataclass,
