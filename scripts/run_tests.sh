@@ -417,6 +417,15 @@ timed "persistent-state" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts
 # (a class-stored function binds self). No commit.
 timed "overlay-reuse" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /dev/null || EXIT=$?
 
+# A runtime store on a DEPLOYED class is session-local whichever name it uses
+# (docs/Persistent_Modules_and_Classes.md D3).  Needs its own script rather than
+# a SUnit case because "session-local" is only observable across a commit +
+# logout + login boundary, and the suite must not commit.  Guards #1240: a name
+# the class body declared leaves an accessor pair behind, __setattr__ dispatched
+# to it before the overlay, and the store reached the COMMITTED holder -- so two
+# gems configuring one framework class conflicted on commit.
+timed "class-attr-session-local" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runClassAttrSessionLocalTest.gs < /dev/null || EXIT=$?
+
 # Phase-5 module-bind acceptance (docs/Persistent_Modules_and_Classes.md
 # par.10.6). Session A (flag on) imports a fixture exercising @dataclass,
 # @enum.global_enum, and a decorator registry, then commits; session B must
