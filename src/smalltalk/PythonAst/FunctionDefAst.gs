@@ -366,6 +366,29 @@ printOn: aStream
 
 category: 'Grail-Class Body'
 method: FunctionDefAst
+___classBodyValueWrapper___
+	"The descriptor class a class-body def emitted as a VALUE is stored under,
+	or nil for a plain function.
+
+	@staticmethod / @classmethod reach here re-classed by the parser rather than
+	carrying a runtime decorator, so the wrapper is applied by the emitter.  So
+	are the three IMPLICIT ones: CPython's type.__new__ turns a plain-function
+	``__new__'' into a staticmethod and ``__init_subclass__'' /
+	``__class_getitem__'' into classmethods, wherever in the body the def was
+	written.  An unconditional def gets that from its method compile; a def in
+	a class-body ``if'' / ``for'' / ``try'' / ``with'' did not, so ``A[int]''
+	called ``__class_getitem__(int)'' and raised a missing-argument TypeError."
+
+	(self isKindOf: StaticFunctionDefAst) ifTrue: [^ 'PyStaticMethod'].
+	(self isKindOf: ClassFunctionDefAst) ifTrue: [^ 'PyClassMethod'].
+	self ___mangledName___ asString = '__new__' ifTrue: [^ 'PyStaticMethod'].
+	(#('__init_subclass__' '__class_getitem__') includes: self ___mangledName___ asString)
+		ifTrue: [^ 'PyClassMethod'].
+	^ nil
+%
+
+category: 'Grail-Class Body'
+method: FunctionDefAst
 printSmalltalkClassBodyRuntimeDefOn: aStream
 	"Emit a ``def'' that a class-body try/for/while/with binds:
 
@@ -385,11 +408,7 @@ printSmalltalkClassBodyRuntimeDefOn: aStream
 
 	| clsName wrapper savedRuntimeClass savedValueDefNode |
 	clsName := CallAst classBodyRuntimeClass.
-	wrapper := (self isKindOf: StaticFunctionDefAst)
-		ifTrue: ['PyStaticMethod']
-		ifFalse: [(self isKindOf: ClassFunctionDefAst)
-			ifTrue: ['PyClassMethod']
-			ifFalse: [nil]].
+	wrapper := self ___classBodyValueWrapper___.
 	aStream nextPutAll: '[ | '; nextPutAll: self ___mangledName___; nextPutAll: ' |'; lf.
 	savedRuntimeClass := CallAst classBodyRuntimeClass.
 	savedValueDefNode := CallAst classBodyValueDefNode.
@@ -652,18 +671,26 @@ printSmalltalkOn: aStream
 			lf.
 	].
 	"Bind **kwarg to the keyword dict (or an empty dict if nil was passed).
-	When the def also has keyword-only params, COPY first and drop those names
-	so they bind to their own parameters, not into **kwargs (mirrors the
-	module-method path); without keyword-only params the plain alias is kept
-	unchanged."
+	When the def also has keyword-only or regular named params, COPY first and
+	drop those names so they bind to their own parameters, not into **kwargs
+	(mirrors the module-method path); with neither, the plain alias is kept
+	unchanged.
+
+	The regular named params used to be missing here, although the method path
+	has dropped them since twilio: a NESTED ``def f(tag=None, **kw)'' called as
+	``f(tag=1)'' bound tag AND left it in kw.  A class-body def under ``if'' is
+	emitted in this closure form too, so ``__init_subclass__(cls, tag=None,
+	**kw)'' there passed tag on to ``super().__init_subclass__(**kw)''.
+	Positional-only names stay, as on the method path: a keyword spelled like
+	one legitimately lands in **kwargs."
 	args kwarg ifNotNil: [
-		hasKwonly
+		(hasKwonly or: [args args notEmpty])
 			ifTrue: [
 				aStream
 					nextPutAll: (self transportParamName: args kwarg name);
 					nextPutAll: ' := (___kwargs___ ifNil: [(PyDict perform: #new env: 0)]) @env0:copy.';
 					lf.
-				args kwonlyargs do: [:each |
+				((args kwonlyargs ifNil: [#()]) , args args) do: [:each |
 					aStream
 						nextPutAll: (self transportParamName: args kwarg name);
 						nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;
@@ -8315,30 +8342,32 @@ ___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf
 	"The closure form's **kwarg (printSmalltalkOn:'s kwarg branch), in its two
 	shapes.
 
-	WITHOUT keyword-only parameters, the plain alias -- no copy, nothing
-	removed:
+	WITHOUT keyword-only or regular named parameters, the plain alias -- no
+	copy, nothing removed:
 
 	    kw := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)].
 
-	WITH them, a COPY with each keyword-only name dropped, so those bind to
-	their own parameters instead of arriving in **kwargs as well:
+	WITH them, a COPY with each such name dropped, so those bind to their own
+	parameters instead of arriving in **kwargs as well:
 
 	    kw := (___kwargs___ ifNil: [(PyDict perform: #new env: 0)]) @env0:copy.
 	    kw @env0:removeKey: 'k' ifAbsent: [].
 
-	The copy is what keeps the CALLER's dict unmutated, and it is why this is
-	not simply the method form with a different receiver."
+	Regular named params are dropped as well as keyword-only ones -- see the
+	text twin's comment for the bug that omission was.  Positional-only names
+	stay.  The copy is what keeps the CALLER's dict unmutated, and it is why
+	this is not simply the method form with a different receiver."
 
-	| leaf base kwonly |
+	| leaf base dropped |
 	args kwarg isNil ifTrue: [^ self].
-	kwonly := args kwonlyargs ifNil: [#()].
+	dropped := (args kwonlyargs ifNil: [#()]) , args args.
 	leaf := aBuilder leafFor: args kwarg name asString asSymbol.
 	base := aBuilder ifNilValue: (aBuilder var: kwLeaf) then: [
 		aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)].
-	kwonly isEmpty ifTrue: [^ aBuilder add: (aBuilder assign: leaf from: base)].
+	dropped isEmpty ifTrue: [^ aBuilder add: (aBuilder assign: leaf from: base)].
 	aBuilder add: (aBuilder assign: leaf
 		from: (aBuilder send: #copy to: base with: { } env: 0)).
-	kwonly do: [:each |
+	dropped do: [:each |
 		aBuilder add: (aBuilder send: #removeKey:ifAbsent: to: (aBuilder var: leaf)
 			with: { aBuilder obj: each name asString. aBuilder inBlockDo: [] } env: 0)]
 %

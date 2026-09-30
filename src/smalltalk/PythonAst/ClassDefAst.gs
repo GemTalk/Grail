@@ -5005,15 +5005,13 @@ emitClassBodyIfDef: aDef on: aStream
 	@staticmethod / @classmethod reach here re-classed by the parser rather
 	than carrying a runtime decorator, so the wrapper that would otherwise
 	have been applied structurally is applied here instead -- PyStaticMethod
-	suppresses the receiver bind, PyClassMethod redirects it to the owner."
+	suppresses the receiver bind, PyClassMethod redirects it to the owner.
+	The implicit ones (__new__, __init_subclass__, __class_getitem__) come
+	from the same place: FunctionDefAst >> ___classBodyValueWrapper___."
 
 	| fname wrapper savedValueDefNode |
 	fname := aDef name asString.
-	wrapper := (aDef isKindOf: StaticFunctionDefAst)
-		ifTrue: ['PyStaticMethod']
-		ifFalse: [(aDef isKindOf: ClassFunctionDefAst)
-			ifTrue: ['PyClassMethod']
-			ifFalse: [nil]].
+	wrapper := aDef ___classBodyValueWrapper___.
 	aStream nextPutAll: '[ | '; nextPutAll: fname; nextPutAll: ' |'; lf.
 	savedValueDefNode := CallAst classBodyValueDefNode.
 	CallAst classBodyValueDefNode: aDef.

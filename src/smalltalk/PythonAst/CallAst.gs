@@ -402,7 +402,9 @@ ___emitSmalltalkOn___: aStream
 							nextPutAll: ' @env0:___instance___) @env1:';
 							nextPutAll: (CallAst ___moduleClassReadSelector___: CallAst classBeingCompiled asString);
 							nextPutAll: ')']].
-			aStream nextPutAll: ' obj: self)'.
+			aStream nextPutAll: ' obj: ';
+				nextPutAll: (self ___superObjTempName___ ifNil: ['self']);
+				nextPutAll: ')'.
 			argZero == nil ifFalse: [aStream nextPutAll: '])']].
 			^self].
 
@@ -2965,6 +2967,32 @@ ___superArgZeroGuardName___
 
 category: 'Grail-Class Compile Context'
 method: CallAst
+___superObjTempName___
+	"The Smalltalk temp a zero-argument ``super()'' binds as its OBJECT, or nil
+	for the Smalltalk receiver.
+
+	A class-body def compiles to a METHOD, whose first parameter IS the
+	receiver, so the proxy binds ``self''.  A def inside a class-body ``if'' /
+	``for'' / ``try'' / ``with'' compiles to a BLOCK instead (ClassDefAst >>
+	emitClassBodyIfDef:on:, FunctionDefAst's class-body value form), and there
+	Smalltalk ``self'' is the MODULE INSTANCE running the class body.  Binding
+	that made every such super() a proxy over the module: ``super().f()'' ran
+	P.f with ``type(self) is <module>'', and annotated_types' Protocol
+	``__init_subclass__'' -- defined under ``if not TYPE_CHECKING:'' -- raised
+	``obj (instance of annotated_types) is not an instance or subtype of type
+	(Generic)''.  The first parameter's temp is what CPython binds.
+
+	Only for the value-form def ITSELF.  A def nested inside it keeps the
+	outer-receiver rule the method case has (see printSmalltalkOn:'s
+	precondition-2 comment), which this does not change."
+
+	CallAst classBodyValueDefNode == nil ifTrue: [^ nil].
+	CallAst functionBeingCompiled == CallAst classBodyValueDefNode ifFalse: [^ nil].
+	^ self ___superArgZeroGuardName___
+%
+
+category: 'Grail-Class Compile Context'
+method: CallAst
 ___printShadowableSuperOn___: aStream arm: aBlock
 	"Wrap a zero-argument ``super()'' emit in the run-time shadow probe.
 
@@ -4857,15 +4885,19 @@ ___emitIRSuperProxyOn___: aBuilder
 	factored out because the argument-0 guard needs it in one arm of a
 	conditional and the unguarded case needs the identical node."
 
-	| classRead |
+	| classRead objName |
 	classRead := self ___emitIRDefiningClassReadOn___: aBuilder
 		cellSelector: #'___classCellForSuper___:'.
 	CallAst classCellRebindable ifTrue: [
 		classRead := aBuilder
 			send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
+	objName := self ___superObjTempName___.
 	^ aBuilder
 		send: #cls:obj: to: (aBuilder globalNamed: #Super)
-		with: { classRead. aBuilder selfNode } env: 1
+		with: { classRead.
+			objName isNil
+				ifTrue: [aBuilder selfNode]
+				ifFalse: [aBuilder localVar: objName asSymbol] } env: 1
 %
 
 category: 'Grail-IR Codegen'
