@@ -819,6 +819,46 @@ testSysPathImportAndFromImportErrors
 
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
+testImportOfAnUnfindableParentRaises
+	"``import a.b as m'' where the leaf ``a.b'' can be found and its package
+	``a'' cannot.
+
+	__import__ with no fromlist answers the TOP package, and it answered a bare
+	registry lookup of it -- nil, when nothing had loaded ``a''.  Nothing raised,
+	so the alias form reported ``UnboundLocalError: local variable referenced
+	before assignment (received #'b' on nil)'' and ``import a.b'' bound an unset
+	name.  CPython imports the top package at that point, and raises
+	ModuleNotFoundError naming it.
+
+	Met from a session whose sys.path did not reach a package compiled into the
+	repository; the fixture puts the leaf in sys.modules with no parent, which
+	is the same shape and runs under CPython.  The last three checks are the
+	guard: the from-import, and both forms with the parent present, already
+	matched CPython and must go on doing so.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/import_unfindable_parent.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'import_unfindable_parent' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/import_unfindable_parent.py')
+		name: 'import_unfindable_parent'.
+	#( 'dunder_import_of_the_leaf_raises'
+	   'the_error_names_the_parent_package'
+	   'the_error_carries_the_parent_as_its_name'
+	   'import_as_in_a_function_raises_module_not_found'
+	   'import_as_at_module_level_raises_module_not_found'
+	   'a_plain_dotted_import_raises_module_not_found'
+	   'a_from_import_still_raises_module_not_found'
+	   'with_the_parent_present_import_as_binds_the_leaf'
+	   'with_the_parent_present_a_plain_import_binds_the_parent' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'unfindable-parent import check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
 testModuleDictOpsAndNameErrorName
 	"The mapping operations a module namespace must support, and the ``name'' every
 	NameError must carry.
