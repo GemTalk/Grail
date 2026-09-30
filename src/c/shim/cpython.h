@@ -366,6 +366,9 @@ extern PyTypeObject PyTuple_Type;
 extern PyTypeObject PyBaseObject_Type;
 extern PyTypeObject PyType_Type;
 extern PyTypeObject _PyNone_Type;
+extern PyTypeObject PyByteArray_Type;
+extern PyTypeObject PyFunction_Type;
+extern PyTypeObject PyModule_Type;
 
 /* ========== NULL ========== */
 
@@ -632,6 +635,8 @@ extern PyObject *PyExc_UnicodeDecodeError;
 extern PyObject *PyExc_UnicodeEncodeError;
 extern PyObject *PyExc_RuntimeWarning;
 extern PyObject *PyExc_UserWarning;
+extern PyObject *PyExc_AssertionError;
+extern PyObject *PyExc_BaseExceptionGroup;
 
 /* ========== Float API ========== */
 

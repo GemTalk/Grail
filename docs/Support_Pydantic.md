@@ -1,6 +1,7 @@
 # Supporting pydantic v2 — loading `_pydantic_core` through the CPython shim
 
-Status: **plan, nothing implemented yet** (recorded 2026-09-29, to resume
+Status: **Phases 0–1 done, Phase 2 half done — `import pydantic_core` works;
+Phase 3 (calling into it) is next** (plan recorded 2026-09-29, work
 2026-09-30). Branch `jmason/pydantic`.
 
 ## The decision
@@ -156,11 +157,28 @@ Each phase ends at a measurable exit, and the next phase starts from whatever
 wall that exit hits — as `Shim_NumPy.md` did. Record each wall and its fix in
 this file as it falls.
 
-### Phase 0 — Python-side prerequisite (W4)
+### Phase 0 — Python-side prerequisite (W4) — **done 2026-09-30**
 Fix method-in-compound-statement `super()` in a class body; add a regression
 test (both codegen paths — `...UnderIR` variant). Exit: census probe reports
 `annotated_types` `IMPORTS`. Independent of everything below; do it first
 because it is small and it is on pydantic's import path.
+
+**Result: exit met** — `annotated_types` and `typing_inspection` report
+`IMPORTS`; `import pydantic` now stops only at the `.so`. W4 was wider than the
+reduction suggested. A class-body `def` inside `if`/`for`/`try`/`with` compiles
+to a block stored as a class attribute rather than to a method, and that form
+had **four** defects, all fixed on both codegen paths:
+
+| defect | effect | fix |
+| --- | --- | --- |
+| zero-arg `super()` bound Smalltalk `self` — the **module** running the class body | `super().f()` ran with `type(self)` answering the module; silently wrong for any base method that reads `self` (the W4 symptom) | `CallAst>>___superObjTempName___`: bind the def's first-parameter temp |
+| `__class__` read as class-body code | `NameError` | the two `__class__` branches in `NameAst` treat `classBodyValueDefNode` as method context |
+| no implicit `classmethod` for `__init_subclass__`/`__class_getitem__`, nor `staticmethod` for `__new__` | `A[int]` → missing-argument `TypeError` | `FunctionDefAst>>___classBodyValueWrapper___`, used by both value-def emitters |
+| **every nested def** (not only class-body ones) left a keyword bound to a named parameter in `**kw` too | `def f(tag=None, **kw)`; `f(tag=1)` gave `kw == {'tag': 1}` — `__init_subclass__` then passed `tag` on to `super()` | the closure form's kwarg binding drops `args args` as the method form already did (text and IR) |
+
+Guarded by `tests/python/class_body_nested_def_binding.py` (18 checks, CPython
+3.14 via `check_python_fixtures.sh`) and `ClassBodyNestedDefBindingTestCase`
+(default path, forced IR, and an IR-actually-compiled guard).
 
 ### Phase 1 — symbol floor
 New `src/c/shim/shim_pyo3.cc` (the `shim_numpy.cc` pattern; add to
@@ -173,6 +191,31 @@ stubs otherwise. The five data symbols as real type objects / exceptions.
 Exit: `./scripts/shim_symbol_floor.sh` reports **0 missing**, `dlopen` succeeds,
 `PyInit__pydantic_core` runs to its first behavioural wall.
 
+**Result (2026-09-30): exit met** — floor 162 = **141 real / 21 stub / 0
+missing**. The 33 functions are in `src/c/shim/shim_pyo3.cc`; the five data
+symbols in `cpython.cc` (three unregistered static types, two exceptions in the
+sentinel tables). Real, not stubbed: `PyCMethod_New` (a builtin-function object
+in CPython 3.14's `PyCMethodObject` layout, with `tp_call` and vectorcall over
+every `METH_*` convention), and `PyErr_GetRaisedException` /
+`SetRaisedException` as an *interim* token carrying (type, message) whose
+`ob_type` is the exception type — enough for PyO3's `PyErr` to round-trip and
+match, not a Grail exception. `PyUnicode_New`/`PyUnicode_DATA` stay stubs that
+raise: they need a writable real-layout str (W5).
+
+Found on the way, and fixed because a PyO3 wheel hits them at once:
+* **`PyObject_Vectorcall` ignored `kwnames`** — every keyword argument through
+  vectorcall was silently dropped. PyO3 makes all keyword calls this way.
+* **`shimDynLoad` walked `m_methods` unconditionally**; PyO3 leaves it NULL
+  (functions arrive from the exec slot), so loading would have segfaulted.
+* **W2 pulled forward: the exception sentinels became real `PyTypeObject`s.**
+  pyo3-ffi *inlines* `PyExceptionClass_Check` as `Py_TYPE(t)->tp_flags`, and a
+  sentinel's `ob_type` was NULL — the first error PyO3 raised would have
+  segfaulted. Identity is unchanged (`get_error_type` and the parent table
+  still compare pointers); each now has `ob_type = &PyType_Type`, `tp_name`,
+  `tp_base` from the parent table, `BASE_EXC_SUBCLASS`, and a `tp_new` that
+  allocates a `PyBaseExceptionObject`-layout body. Dynamic
+  (`PyErr_NewException`) exceptions likewise.
+
 ### Phase 2 — module init (W2, W3a, the init-time stubs)
 Expected, in order of likelihood: `PyCMethod_New` (module functions),
 `PyImport_Import` (real, via `CPythonShim>>PyImport_ImportModule:`),
@@ -183,6 +226,40 @@ allocates a `PyBaseExceptionObject`-layout body; `PyErr_GetRaisedException` /
 `SetRaisedException` over instances. Then export heap types as module
 attributes (foreign proxies). Exit: **`import pydantic_core` succeeds in
 Grail** and `pydantic_core.SchemaValidator` is callable.
+
+**Result (2026-09-30): first half met — `import pydantic_core` reports
+`IMPORTS`** (`__version__` answers `2.46.5`), and so does `import pydantic`
+(its `__init__` is lazy, so that proves less). `SchemaValidator(...)` fails
+`'ShimForeignObject' object is not callable`, which is Phase 3. Walls, in the
+order they fell:
+
+| # | wall | fix |
+| --- | --- | --- |
+| 1 | segfault: `Py_TYPE(module)` NULL — PyO3's exec slot runs `PyModule_Check` on the module, which in the shim is the bare `PyModuleDef` | `PyModuleDef_Init` stamps the def `PyModule_Type` (unregistered, so it still crosses as foreign) |
+| 2 | `getattr(module, "__all__")` went to Grail as a foreign proxy; the miss raised `MessageNotUnderstood` (`,` sent in env 1 in `ShimForeignObject>>___pyAttrLoad___:`) and unwound across the user action (6011 cascade, stack overflow) | the env-0 concat; and module get/set/has-attr answered in C from `module_attrs` (`shim_module_getattr`/`setattr`), capacity 32 → 256 |
+| 3 | `setattr(<pyclass>, "__match_args__", …)` → `ShimForeignObject` DNU | attribute writes on a wheel's TYPE objects go to `tp_dict`; reads consult the `tp_dict` chain first |
+| 4 | Rust panic in `PydanticUndefinedType::new`: `TypeError: base type without tp_new` — PyO3 0.28 allocates every object-based pyclass through the base's `tp_new` | `PyBaseObject_Type` gets `tp_new`/`tp_alloc`/`tp_basicsize` |
+| 5 | session died silently: `module subclass: 'pydantic_core._pydantic_core'` — GemStone 4.0 rejects a dotted class name (ArgumentError 2149, not a `GrailShimError`, so no ImportError) | `CPythonShim>>loadDynamicModule:` names the class by a sanitised identifier |
+| 6 | `cannot import name 'ArgsKwargs'` — `shimModuleAttrs` exported only Grail value types (W3a) | every plausible object attr is exported through `pyobj_oop` — C-only objects as foreign proxies |
+| 7 | `cannot import name 'from_json'` — `add_function` names each export by `getattr(fun, "__name__")`, and the proxy answered its TYPE's name | the builtin-function type answers `__name__`/`__qualname__`/`__module__`/`__doc__`/`__self__` via `tp_getattro`; a foreign object's own `tp_getattro` is consulted (except the still-stubbed `PyObject_GenericGetAttr`) |
+
+Validated 2026-09-30 (Darwin arm64, local, so not a gate result for the
+nightly): SUnit 7644/7644 once `CPythonShimTestCase>>testModuleAttrsExport` was
+updated for wall 6 (it pinned "capsules are skipped"; a capsule now crosses as
+a foreign proxy, as CPython exposes one). CPython gate: 2 regressions, neither
+caused here — `test_pickle` TIMEOUT is load at the 600 s limit (OK alone in
+518 s), and `test_xml_etree`'s `test_recursive_repr` (a stack-depth test) fails
+identically on a clean `HEAD` install on this machine.
+
+Diagnostics kept: `Py_TYPE` reports a NULL `ob_type` with a C backtrace (the
+crash is otherwise inside stripped Rust); under `GRAIL_SHIM_DIAG`, exec-slot
+entry and every `PyErr_GetRaisedException` (type and message) are logged.
+
+Noted for later: `PyType_FromSpec` does **no slot inheritance** from the base
+(a pyclass extending `ValueError` gets no `tp_new` from it — PyO3 reaches the
+base's directly, which is why wall 4's fix is on the base), and a foreign
+type's `repr` is `<ShimForeignObject object at …>`, which is what PyO3's
+panic message printed for the error type.
 
 ### Phase 3 — the foreign bridge (W3)
 Generic forwarding for `ShimForeignObject`: attribute load through
@@ -241,13 +318,15 @@ decide whether CI installs it or those tests skip without it.
 
 ## Resume here
 
-1. `source .setenv` — it now points at the **4.0.0.a4** product
-   (`~/Documents/GemStone/GemStone64Bit4.0.0.a4-arm64.Darwin`) with
-   `GEMSTONE_GLOBAL_DIR=~/Documents/GemStone` and
-   `GEMSTONE_NRS_ALL=#netldi:ldi40`, which is how the current `gs40`/`ldi40`
-   were started. (`.setenv` is a symlink to the shared `../.setenv`.) On this
-   build `./install.sh` succeeds **with IR on**, including the gemdb deploy —
-   the `GsComMethNode>>envId` defect CLAUDE.md describes is absent.
+1. `source .setenv`. The environment has moved more than once, so check it
+   rather than trusting this line: on 2026-09-30 `.setenv` was a plain file
+   pointing at a dev build (`../gemstone/fast/gs/product`, `gslist` reports
+   4.0.0.a4), `gs40` was running from it with locks in `/opt/gemstone/locks`,
+   there was no `./.topazini` (topaz logs in through `~/.topazini` as
+   `DataCurator`), and `GRAIL_NETLDI` was unset, so `run_tests.sh` skips
+   `concurrent-import`. On that build `./install.sh` succeeds **with IR on**,
+   including the gemdb deploy — the `GsComMethNode>>envId` defect CLAUDE.md
+   describes is absent.
 2. Recreate the probe venv (the 2026-09-29 one was in a session scratchpad):
    ```bash
    python3.14 -m venv /tmp/pydantic_probe

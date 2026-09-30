@@ -131,6 +131,18 @@ PyTypeObject PyTuple_Type;
 PyTypeObject PyBaseObject_Type;
 PyTypeObject _PyNone_Type;
 
+/* Types a prebuilt wheel references by ADDRESS but whose instances the shim
+   never hands out: PyO3 links PyByteArray_Type / PyFunction_Type /
+   PyModule_Type for its PyByteArray_Check / PyFunction_Check /
+   PyModule_Check, and a missing data symbol fails dlopen outright
+   (docs/Support_Pydantic.md, Phase 1).  NOT registered with
+   register_shim_type: no Grail wrapper carries one as its ob_type
+   (typeAddrFor: never answers them), so registering would only make a
+   wheel's own object of that type look like a wrapper. */
+PyTypeObject PyByteArray_Type;
+PyTypeObject PyFunction_Type;
+PyTypeObject PyModule_Type;
+
 /* Helper to initialize a type object with common fields */
 static void init_type(PyTypeObject *type, const char *name,
                       PyTypeObject *base, unsigned long flags) {
@@ -142,6 +154,20 @@ static void init_type(PyTypeObject *type, const char *name,
     type->tp_flags = flags | Py_TPFLAGS_READY;
 }
 
+static void init_exception_types(void);   /* below, with the exception objects */
+
+/* object.__new__ for a wheel's own subtype: allocate subtype->tp_basicsize
+   through the subtype's allocator.  PyO3 creates EVERY pyclass instance whose
+   base is object by calling PyBaseObject_Type's tp_new with the subtype, and
+   with it NULL answered ``TypeError: base type without tp_new'' for the first
+   instance pydantic_core makes at import. */
+extern "C" PyObject *PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems);
+static PyObject *object_tp_new(PyTypeObject *subtype, PyObject *args, PyObject *kwds) {
+    (void)args; (void)kwds;
+    allocfunc alloc = subtype->tp_alloc ? subtype->tp_alloc : PyType_GenericAlloc;
+    return alloc(subtype, 0);
+}
+
 static void init_types(void) {
     init_type(&PyType_Type, "type", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_TYPE_SUBCLASS);
@@ -150,6 +176,9 @@ static void init_types(void) {
 
     init_type(&PyBaseObject_Type, "object", NULL,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
+    PyBaseObject_Type.tp_basicsize = sizeof(PyObject);
+    PyBaseObject_Type.tp_new = object_tp_new;
+    PyBaseObject_Type.tp_alloc = PyType_GenericAlloc;
 
     init_type(&PyFloat_Type, "float", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
@@ -181,6 +210,13 @@ static void init_types(void) {
     init_type(&_PyNone_Type, "NoneType", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT);
 
+    init_type(&PyByteArray_Type, "bytearray", &PyBaseObject_Type,
+              Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_SEQUENCE);
+    init_type(&PyFunction_Type, "function", &PyBaseObject_Type,
+              Py_TPFLAGS_DEFAULT);
+    init_type(&PyModule_Type, "module", &PyBaseObject_Type,
+              Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
+
     /* Record every static shim type so is_foreign() can tell a Grail-backed
        wrapper (ob_type is one of these) from a wheel's own object. */
     register_shim_type(&PyType_Type);
@@ -194,85 +230,104 @@ static void init_types(void) {
     register_shim_type(&PyDict_Type);
     register_shim_type(&PyTuple_Type);
     register_shim_type(&_PyNone_Type);
+
+    init_exception_types();
 }
 
 /* ====================================================================
  * Exception type objects — PyObject* variables matching CPython's ABI
  *
- * Used only for identity comparison (pointer equality) in PyErr_SetString.
- * Each points to a static sentinel; the identity is what matters, not
- * the content.
+ * The shim's error state compares them by IDENTITY (get_error_type,
+ * PyErr_GivenExceptionMatches), which is all a hand-written C module needs.
+ * They used to be 16-byte sentinels, { 1, NULL }, and that was enough.
+ *
+ * A PyO3 wheel needs more: its error path runs PyExceptionClass_Check(t),
+ * which pyo3-ffi INLINES as Py_TYPE(t)->tp_flags & Py_TPFLAGS_TYPE_SUBCLASS
+ * and then t->tp_flags & Py_TPFLAGS_BASE_EXC_SUBCLASS -- a NULL ob_type is a
+ * segfault on the first error it raises (docs/Support_Pydantic.md, W2).  So
+ * each is a real, zeroed PyTypeObject whose metatype is type, named, with
+ * tp_base following exc_parent_table below (init_exception_types).  Identity
+ * is unchanged, so nothing that compared pointers can tell the difference.
+ *
+ * Each also has a tp_new (exc_tp_new) that allocates a
+ * PyBaseExceptionObject-layout body, because a wheel's pyclass that EXTENDS
+ * one gets its storage from the base's tp_new.  What that body is NOT yet is
+ * a Grail exception: raising one into Grail is Phase 3 of the plan.
  * ==================================================================== */
 
-static struct _object _exc_ValueError        = { 1, NULL };
-static struct _object _exc_TypeError         = { 1, NULL };
-static struct _object _exc_AttributeError    = { 1, NULL };
-static struct _object _exc_KeyError          = { 1, NULL };
-static struct _object _exc_IndexError        = { 1, NULL };
-static struct _object _exc_OverflowError     = { 1, NULL };
-static struct _object _exc_ZeroDivisionError = { 1, NULL };
-static struct _object _exc_RuntimeError      = { 1, NULL };
-static struct _object _exc_DeprecationWarning = { 1, NULL };
-static struct _object _exc_FutureWarning     = { 1, NULL };
-static struct _object _exc_MemoryError       = { 1, NULL };
-static struct _object _exc_StopIteration     = { 1, NULL };
-static struct _object _exc_SystemError       = { 1, NULL };
-static struct _object _exc_RecursionError    = { 1, NULL };
-static struct _object _exc_BaseException     = { 1, NULL };
-static struct _object _exc_Exception         = { 1, NULL };
-static struct _object _exc_LookupError       = { 1, NULL };
-static struct _object _exc_ArithmeticError   = { 1, NULL };
-static struct _object _exc_NotImplementedError = { 1, NULL };
-static struct _object _exc_OSError           = { 1, NULL };
-static struct _object _exc_ImportError       = { 1, NULL };
-static struct _object _exc_NameError         = { 1, NULL };
-static struct _object _exc_StopAsyncIteration = { 1, NULL };
-static struct _object _exc_BufferError       = { 1, NULL };
-static struct _object _exc_EOFError          = { 1, NULL };
-static struct _object _exc_KeyboardInterrupt = { 1, NULL };
-static struct _object _exc_UnicodeError      = { 1, NULL };
-static struct _object _exc_UnicodeDecodeError = { 1, NULL };
-static struct _object _exc_UnicodeEncodeError = { 1, NULL };
-static struct _object _exc_RuntimeWarning    = { 1, NULL };
-static struct _object _exc_UserWarning       = { 1, NULL };
+static PyTypeObject _exc_ValueError;
+static PyTypeObject _exc_TypeError;
+static PyTypeObject _exc_AttributeError;
+static PyTypeObject _exc_KeyError;
+static PyTypeObject _exc_IndexError;
+static PyTypeObject _exc_OverflowError;
+static PyTypeObject _exc_ZeroDivisionError;
+static PyTypeObject _exc_RuntimeError;
+static PyTypeObject _exc_DeprecationWarning;
+static PyTypeObject _exc_FutureWarning;
+static PyTypeObject _exc_MemoryError;
+static PyTypeObject _exc_StopIteration;
+static PyTypeObject _exc_SystemError;
+static PyTypeObject _exc_RecursionError;
+static PyTypeObject _exc_BaseException;
+static PyTypeObject _exc_Exception;
+static PyTypeObject _exc_LookupError;
+static PyTypeObject _exc_ArithmeticError;
+static PyTypeObject _exc_NotImplementedError;
+static PyTypeObject _exc_OSError;
+static PyTypeObject _exc_ImportError;
+static PyTypeObject _exc_NameError;
+static PyTypeObject _exc_StopAsyncIteration;
+static PyTypeObject _exc_BufferError;
+static PyTypeObject _exc_EOFError;
+static PyTypeObject _exc_KeyboardInterrupt;
+static PyTypeObject _exc_UnicodeError;
+static PyTypeObject _exc_UnicodeDecodeError;
+static PyTypeObject _exc_UnicodeEncodeError;
+static PyTypeObject _exc_RuntimeWarning;
+static PyTypeObject _exc_UserWarning;
+static PyTypeObject _exc_AssertionError;
+static PyTypeObject _exc_BaseExceptionGroup;
 
-PyObject *PyExc_ValueError        = &_exc_ValueError;
-PyObject *PyExc_TypeError         = &_exc_TypeError;
-PyObject *PyExc_AttributeError    = &_exc_AttributeError;
-PyObject *PyExc_KeyError          = &_exc_KeyError;
-PyObject *PyExc_IndexError        = &_exc_IndexError;
-PyObject *PyExc_OverflowError     = &_exc_OverflowError;
-PyObject *PyExc_ZeroDivisionError = &_exc_ZeroDivisionError;
-PyObject *PyExc_RuntimeError      = &_exc_RuntimeError;
-PyObject *PyExc_DeprecationWarning = &_exc_DeprecationWarning;
-PyObject *PyExc_FutureWarning     = &_exc_FutureWarning;
-PyObject *PyExc_MemoryError       = &_exc_MemoryError;
-PyObject *PyExc_StopIteration     = &_exc_StopIteration;
-PyObject *PyExc_SystemError       = &_exc_SystemError;
-PyObject *PyExc_RecursionError    = &_exc_RecursionError;
-PyObject *PyExc_BaseException     = &_exc_BaseException;
-PyObject *PyExc_Exception         = &_exc_Exception;
-PyObject *PyExc_LookupError       = &_exc_LookupError;
-PyObject *PyExc_ArithmeticError   = &_exc_ArithmeticError;
-PyObject *PyExc_NotImplementedError = &_exc_NotImplementedError;
-PyObject *PyExc_OSError           = &_exc_OSError;
-PyObject *PyExc_IOError           = &_exc_OSError;  /* alias, as in CPython */
-PyObject *PyExc_ImportError       = &_exc_ImportError;
-PyObject *PyExc_NameError         = &_exc_NameError;
-PyObject *PyExc_StopAsyncIteration = &_exc_StopAsyncIteration;
-PyObject *PyExc_BufferError       = &_exc_BufferError;
-PyObject *PyExc_EOFError          = &_exc_EOFError;
-PyObject *PyExc_KeyboardInterrupt = &_exc_KeyboardInterrupt;
-PyObject *PyExc_UnicodeError      = &_exc_UnicodeError;
-PyObject *PyExc_UnicodeDecodeError = &_exc_UnicodeDecodeError;
-PyObject *PyExc_UnicodeEncodeError = &_exc_UnicodeEncodeError;
-PyObject *PyExc_RuntimeWarning    = &_exc_RuntimeWarning;
-PyObject *PyExc_UserWarning       = &_exc_UserWarning;
+PyObject *PyExc_ValueError        = (PyObject *)&_exc_ValueError;
+PyObject *PyExc_TypeError         = (PyObject *)&_exc_TypeError;
+PyObject *PyExc_AttributeError    = (PyObject *)&_exc_AttributeError;
+PyObject *PyExc_KeyError          = (PyObject *)&_exc_KeyError;
+PyObject *PyExc_IndexError        = (PyObject *)&_exc_IndexError;
+PyObject *PyExc_OverflowError     = (PyObject *)&_exc_OverflowError;
+PyObject *PyExc_ZeroDivisionError = (PyObject *)&_exc_ZeroDivisionError;
+PyObject *PyExc_RuntimeError      = (PyObject *)&_exc_RuntimeError;
+PyObject *PyExc_DeprecationWarning = (PyObject *)&_exc_DeprecationWarning;
+PyObject *PyExc_FutureWarning     = (PyObject *)&_exc_FutureWarning;
+PyObject *PyExc_MemoryError       = (PyObject *)&_exc_MemoryError;
+PyObject *PyExc_StopIteration     = (PyObject *)&_exc_StopIteration;
+PyObject *PyExc_SystemError       = (PyObject *)&_exc_SystemError;
+PyObject *PyExc_RecursionError    = (PyObject *)&_exc_RecursionError;
+PyObject *PyExc_BaseException     = (PyObject *)&_exc_BaseException;
+PyObject *PyExc_Exception         = (PyObject *)&_exc_Exception;
+PyObject *PyExc_LookupError       = (PyObject *)&_exc_LookupError;
+PyObject *PyExc_ArithmeticError   = (PyObject *)&_exc_ArithmeticError;
+PyObject *PyExc_NotImplementedError = (PyObject *)&_exc_NotImplementedError;
+PyObject *PyExc_OSError           = (PyObject *)&_exc_OSError;
+PyObject *PyExc_IOError           = (PyObject *)&_exc_OSError;  /* alias, as in CPython */
+PyObject *PyExc_ImportError       = (PyObject *)&_exc_ImportError;
+PyObject *PyExc_NameError         = (PyObject *)&_exc_NameError;
+PyObject *PyExc_StopAsyncIteration = (PyObject *)&_exc_StopAsyncIteration;
+PyObject *PyExc_BufferError       = (PyObject *)&_exc_BufferError;
+PyObject *PyExc_EOFError          = (PyObject *)&_exc_EOFError;
+PyObject *PyExc_KeyboardInterrupt = (PyObject *)&_exc_KeyboardInterrupt;
+PyObject *PyExc_UnicodeError      = (PyObject *)&_exc_UnicodeError;
+PyObject *PyExc_UnicodeDecodeError = (PyObject *)&_exc_UnicodeDecodeError;
+PyObject *PyExc_UnicodeEncodeError = (PyObject *)&_exc_UnicodeEncodeError;
+PyObject *PyExc_RuntimeWarning    = (PyObject *)&_exc_RuntimeWarning;
+PyObject *PyExc_UserWarning       = (PyObject *)&_exc_UserWarning;
+PyObject *PyExc_AssertionError    = (PyObject *)&_exc_AssertionError;
+PyObject *PyExc_BaseExceptionGroup = (PyObject *)&_exc_BaseExceptionGroup;
 
 /* Exception hierarchy for PyErr_(Given)ExceptionMatches. Each row is
    { child, parent }; matching walks child→parent until NULL. Only the
    relationships extensions actually test for are modeled. */
-static PyObject *const exc_parent_table[][2] = {
+static PyTypeObject *const exc_parent_table[][2] = {
     { &_exc_KeyError,           &_exc_LookupError },
     { &_exc_IndexError,         &_exc_LookupError },
     { &_exc_OverflowError,      &_exc_ArithmeticError },
@@ -297,6 +352,8 @@ static PyObject *const exc_parent_table[][2] = {
     { &_exc_ImportError,        &_exc_Exception },
     { &_exc_NameError,          &_exc_Exception },
     { &_exc_BufferError,        &_exc_Exception },
+    { &_exc_AssertionError,     &_exc_Exception },
+    { &_exc_BaseExceptionGroup, &_exc_BaseException },
     { &_exc_Exception,          &_exc_BaseException },
     { &_exc_KeyboardInterrupt,  &_exc_BaseException },
     { NULL, NULL }
@@ -304,9 +361,134 @@ static PyObject *const exc_parent_table[][2] = {
 
 static PyObject *exc_parent_of(PyObject *exc) {
     for (int i = 0; exc_parent_table[i][0]; i++) {
-        if (exc_parent_table[i][0] == exc) return exc_parent_table[i][1];
+        if ((PyObject *)exc_parent_table[i][0] == exc)
+            return (PyObject *)exc_parent_table[i][1];
     }
     return NULL;
+}
+
+/* Give every static exception its type-object identity: named, metatype
+   type, BASE_EXC_SUBCLASS, and tp_base from exc_parent_table (Exception is
+   the default parent, BaseException's is object).  Called from
+   init_types(), before any module loads. */
+/* CPython 3.14's PyBaseExceptionObject, which a wheel's exception pyclass
+   (ValidationError extends ValueError) is laid out AFTER: PyO3 sizes the
+   pyclass as this plus its own fields, and calls the base's tp_new to get
+   the storage. */
+typedef struct {
+    Py_ssize_t    ob_refcnt;
+    PyTypeObject *ob_type;
+    PyObject     *dict;
+    PyObject     *args;
+    PyObject     *notes;
+    PyObject     *traceback;
+    PyObject     *context;
+    PyObject     *cause;
+    char          suppress_context;
+} ShimBaseExceptionObject;
+
+static PyObject *exc_tp_new(PyTypeObject *subtype, PyObject *args, PyObject *kwds) {
+    (void)kwds;
+    allocfunc alloc = subtype->tp_alloc ? subtype->tp_alloc : PyType_GenericAlloc;
+    if (subtype->tp_basicsize < (Py_ssize_t)sizeof(ShimBaseExceptionObject)) {
+        PyErr_Format(PyExc_SystemError, "exception type '%s' is smaller than BaseException",
+                     subtype->tp_name ? subtype->tp_name : "?");
+        return NULL;
+    }
+    ShimBaseExceptionObject *e = (ShimBaseExceptionObject *)alloc(subtype, 0);
+    if (e == NULL) return NULL;
+    Py_XINCREF(args);
+    e->args = args;
+    return (PyObject *)e;
+}
+
+static void init_exc_type(PyTypeObject *t, const char *name) {
+    memset(t, 0, sizeof(PyTypeObject));
+    t->ob_base.ob_base.ob_refcnt = 1;
+    t->ob_base.ob_base.ob_type = &PyType_Type;
+    t->tp_name = name;
+    t->tp_basicsize = sizeof(ShimBaseExceptionObject);
+    t->tp_new = exc_tp_new;
+    t->tp_alloc = PyType_GenericAlloc;
+    t->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
+                | Py_TPFLAGS_BASE_EXC_SUBCLASS | Py_TPFLAGS_READY;
+}
+
+static void init_exception_types(void) {
+    init_exc_type(&_exc_ValueError, "ValueError");
+    init_exc_type(&_exc_TypeError, "TypeError");
+    init_exc_type(&_exc_AttributeError, "AttributeError");
+    init_exc_type(&_exc_KeyError, "KeyError");
+    init_exc_type(&_exc_IndexError, "IndexError");
+    init_exc_type(&_exc_OverflowError, "OverflowError");
+    init_exc_type(&_exc_ZeroDivisionError, "ZeroDivisionError");
+    init_exc_type(&_exc_RuntimeError, "RuntimeError");
+    init_exc_type(&_exc_DeprecationWarning, "DeprecationWarning");
+    init_exc_type(&_exc_FutureWarning, "FutureWarning");
+    init_exc_type(&_exc_MemoryError, "MemoryError");
+    init_exc_type(&_exc_StopIteration, "StopIteration");
+    init_exc_type(&_exc_SystemError, "SystemError");
+    init_exc_type(&_exc_RecursionError, "RecursionError");
+    init_exc_type(&_exc_BaseException, "BaseException");
+    init_exc_type(&_exc_Exception, "Exception");
+    init_exc_type(&_exc_LookupError, "LookupError");
+    init_exc_type(&_exc_ArithmeticError, "ArithmeticError");
+    init_exc_type(&_exc_NotImplementedError, "NotImplementedError");
+    init_exc_type(&_exc_OSError, "OSError");
+    init_exc_type(&_exc_ImportError, "ImportError");
+    init_exc_type(&_exc_NameError, "NameError");
+    init_exc_type(&_exc_StopAsyncIteration, "StopAsyncIteration");
+    init_exc_type(&_exc_BufferError, "BufferError");
+    init_exc_type(&_exc_EOFError, "EOFError");
+    init_exc_type(&_exc_KeyboardInterrupt, "KeyboardInterrupt");
+    init_exc_type(&_exc_UnicodeError, "UnicodeError");
+    init_exc_type(&_exc_UnicodeDecodeError, "UnicodeDecodeError");
+    init_exc_type(&_exc_UnicodeEncodeError, "UnicodeEncodeError");
+    init_exc_type(&_exc_RuntimeWarning, "RuntimeWarning");
+    init_exc_type(&_exc_UserWarning, "UserWarning");
+    init_exc_type(&_exc_AssertionError, "AssertionError");
+    init_exc_type(&_exc_BaseExceptionGroup, "BaseExceptionGroup");
+    for (int i = 0; exc_parent_table[i][0]; i++)
+        exc_parent_table[i][0]->tp_base = exc_parent_table[i][1];
+    PyTypeObject *const unparented[] = {
+        &_exc_ValueError,
+        &_exc_TypeError,
+        &_exc_AttributeError,
+        &_exc_KeyError,
+        &_exc_IndexError,
+        &_exc_OverflowError,
+        &_exc_ZeroDivisionError,
+        &_exc_RuntimeError,
+        &_exc_DeprecationWarning,
+        &_exc_FutureWarning,
+        &_exc_MemoryError,
+        &_exc_StopIteration,
+        &_exc_SystemError,
+        &_exc_RecursionError,
+        &_exc_BaseException,
+        &_exc_Exception,
+        &_exc_LookupError,
+        &_exc_ArithmeticError,
+        &_exc_NotImplementedError,
+        &_exc_OSError,
+        &_exc_ImportError,
+        &_exc_NameError,
+        &_exc_StopAsyncIteration,
+        &_exc_BufferError,
+        &_exc_EOFError,
+        &_exc_KeyboardInterrupt,
+        &_exc_UnicodeError,
+        &_exc_UnicodeDecodeError,
+        &_exc_UnicodeEncodeError,
+        &_exc_RuntimeWarning,
+        &_exc_UserWarning,
+        &_exc_AssertionError,
+        &_exc_BaseExceptionGroup,
+    };
+    for (size_t i = 0; i < sizeof(unparented) / sizeof(unparented[0]); i++)
+        if (unparented[i]->tp_base == NULL)
+            unparented[i]->tp_base = (unparented[i] == &_exc_BaseException)
+                ? &PyBaseObject_Type : &_exc_Exception;
 }
 
 /* Dynamically created exception types (PyErr_NewException). Each is a
@@ -315,7 +497,7 @@ static PyObject *exc_parent_of(PyObject *exc) {
 #define MAX_DYN_EXCEPTIONS 32
 
 static struct {
-    struct _object obj;
+    PyTypeObject   obj;       /* a real type object; see init_exc_type */
     char           name[128];
     PyObject      *base;
 } dyn_exceptions[MAX_DYN_EXCEPTIONS];
@@ -468,6 +650,8 @@ static const char *get_error_type(void) {
     if (current_error_type == PyExc_UnicodeError)      return "UnicodeError";
     if (current_error_type == PyExc_UnicodeDecodeError) return "UnicodeDecodeError";
     if (current_error_type == PyExc_UnicodeEncodeError) return "UnicodeEncodeError";
+    if (current_error_type == PyExc_AssertionError)    return "AssertionError";
+    if (current_error_type == PyExc_BaseExceptionGroup) return "BaseExceptionGroup";
     /* Dynamically created exception types: report the name after the
        last dot ("spam.error" → "error"). */
     for (int i = 0; i < dyn_exception_count; i++) {
@@ -490,12 +674,24 @@ static const char *get_error_message(void) {
  * ==================================================================== */
 
 extern "C" PyObject *PyModuleDef_Init(PyModuleDef *def) {
+    /* The shim never builds a separate module object: the def IS the module
+       its exec slots receive.  CPython's PyModuleDef_Init gives the def a type
+       (PyModuleDef_HEAD_INIT leaves ob_type NULL), and a PyO3 exec slot's
+       first act is PyModule_Check(module) -- an inlined read of
+       Py_TYPE(module)->tp_flags, which segfaulted on the NULL.  So stamp it
+       as a module.  PyModule_Type is deliberately not a registered shim type,
+       so the def still crosses into Grail as a foreign object, as before. */
+    if (def->m_base.ob_base.ob_type == NULL)
+        def->m_base.ob_base.ob_type = &PyModule_Type;
     return (PyObject *)def;
 }
 
 static int find_method(PyObject *module_ptr, const char *name) {
     PyModuleDef *def = (PyModuleDef *)module_ptr;
     PyMethodDef *methods = def->m_methods;
+    /* A multi-phase module may have NO method table: PyO3 leaves m_methods
+       NULL and adds its functions as attributes from the exec slot. */
+    if (methods == NULL) return -1;
     for (int i = 0; methods[i].ml_name != NULL; i++) {
         if (strcmp(methods[i].ml_name, name) == 0) {
             return i;
@@ -1810,9 +2006,51 @@ extern "C" PyObject *PyContextVar_Set(PyObject *var, PyObject *value) {
 }
 
 
+static PyObject *shim_module_getattr(PyObject *module, const char *name);
+static int is_shim_module(PyObject *obj);
+extern "C" PyObject *PyObject_GenericGetAttr(PyObject *, PyObject *);  /* shim_numpy.cc */
+
+/* A TYPE object built by a wheel (PyType_FromSpec, or a static type of its
+   own) and the metatype test for it.  Such a type has no OOP, so it crosses
+   into Grail as a ShimForeignObject -- which holds no attributes.  PyO3 sets
+   class attributes on its pyclasses at init (``__match_args__'', and
+   whatever #[classattr]s a class declares), so they are kept where CPython
+   keeps them, in tp_dict, and read back from the tp_dict chain before the
+   Grail-side proxy is consulted. */
+static int is_foreign_type(PyObject *obj) {
+    if (!is_foreign(obj)) return 0;
+    PyTypeObject *mt = obj->ob_type;
+    return mt != NULL && (mt == &PyType_Type || PyType_IsSubtype(mt, &PyType_Type));
+}
+
+static PyObject *foreign_type_dict_lookup(PyTypeObject *t, const char *name) {
+    for (; t != NULL; t = t->tp_base) {
+        if (t->tp_dict == NULL) continue;
+        PyObject *v = PyDict_GetItemString(t->tp_dict, name);
+        if (v != NULL) { Py_INCREF(v); return v; }
+    }
+    return NULL;
+}
+
 extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
     CHECK_pyObj(obj, "PyObject_GetAttrString obj");
     diag_tick(&g_diag_getattr);
+    if (is_shim_module(obj)) return shim_module_getattr(obj, name);
+    if (is_foreign_type(obj)) {
+        PyObject *v = foreign_type_dict_lookup((PyTypeObject *)obj, name);
+        if (v != NULL) return v;
+    }
+    /* A wheel's own object whose type defines tp_getattro answers for itself
+       -- the shim's builtin functions (shim_pyo3.cc), a pyclass with
+       __getattr__.  Not PyObject_GenericGetAttr, which is still a
+       shim_numpy.cc stub that answers NULL with no error set. */
+    if (is_foreign(obj) && !is_foreign_type(obj) && obj->ob_type != NULL
+            && obj->ob_type->tp_getattro != NULL
+            && obj->ob_type->tp_getattro != PyObject_GenericGetAttr) {
+        PyObject *n = PyUnicode_FromString(name);
+        if (n == NULL) return NULL;
+        return obj->ob_type->tp_getattro(obj, n);
+    }
     OopType args[2] = { pyobj_oop(obj), GciNewString(name) };
     OopType addrOop = GciPerform(server, "PyObject_GetAttrString:name:", args, 2);
     if (check_gci_error()) return NULL;
@@ -1821,6 +2059,11 @@ extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
 
 extern "C" int PyObject_HasAttrString(PyObject *obj, const char *name) {
     CHECK_pyObj(obj, "PyObject_HasAttrString obj");
+    if (is_shim_module(obj)) {
+        PyObject *v = shim_module_getattr(obj, name);
+        if (v == NULL) { PyErr_Clear(); return 0; }
+        return 1;
+    }
     OopType args[2] = { pyobj_oop(obj), GciNewString(name) };
     OopType result = GciPerform(server, "PyObject_HasAttrString:name:", args, 2);
     if (check_gci_error()) return 0;
@@ -1957,7 +2200,9 @@ extern "C" int PyArg_UnpackTuple(PyObject *args, const char *name,
 
 /* Module attribute storage — for PyModule_AddIntConstant etc.
    Each module can store up to MAX_MODULE_ATTRS named values. */
-#define MAX_MODULE_ATTRS 32
+/* 256, not 32: a PyO3 module (pydantic_core) sets every class, function and
+   constant it exports as an attribute from its exec slot -- ~60 of them. */
+#define MAX_MODULE_ATTRS 256
 
 struct ModuleAttr {
     const char *name;
@@ -2042,6 +2287,66 @@ extern "C" int PyModule_AddStringConstant(PyObject *module, const char *name,
     module_attrs[idx].attrs[ai].str_val = strdup(value);
     module_attrs[idx].attr_count++;
     return 0;
+}
+
+/* Attribute access ON a module the shim loaded.
+
+   The shim never builds a module object: the PyModuleDef is the module
+   (PyModuleDef_Init stamps it PyModule_Type), and its attributes live in
+   module_attrs above until shimModuleAttrs exports them to Grail.  A
+   hand-written C module only ever ADDS to that table.  A PyO3 module READS
+   and WRITES it from its exec slot through the generic protocol --
+   ``getattr(m, "__all__")'' (expecting AttributeError the first time), then
+   ``setattr(m, name, value)'' per export.  Sent to Grail, those reached the
+   def as a foreign proxy, which has no attributes to give and none to take.
+   So a module is answered here, from the same table. */
+static int is_shim_module(PyObject *obj) {
+    return obj != NULL && obj->ob_type == &PyModule_Type;
+}
+
+static PyObject *shim_module_getattr(PyObject *module, const char *name) {
+    PyModuleDef *def = (PyModuleDef *)module;
+    if (strcmp(name, "__name__") == 0)
+        return PyUnicode_FromString(def->m_name ? def->m_name : "?");
+    if (strcmp(name, "__dict__") == 0)
+        return PyModule_GetDict(module);
+    int idx = find_or_create_module_attrs(module);
+    if (idx >= 0) {
+        /* Latest binding wins, as for a rebinding in a real namespace. */
+        for (int i = module_attrs[idx].attr_count - 1; i >= 0; i--) {
+            ModuleAttr *a = &module_attrs[idx].attrs[i];
+            if (strcmp(a->name, name) != 0) continue;
+            switch (a->type) {
+            case ModuleAttr::ATTR_INT:    return PyLong_FromLong(a->int_val);
+            case ModuleAttr::ATTR_STRING: return PyUnicode_FromString(a->str_val);
+            case ModuleAttr::ATTR_OBJECT: Py_XINCREF(a->obj_val); return a->obj_val;
+            }
+        }
+    }
+    PyErr_Format(PyExc_AttributeError, "module '%s' has no attribute '%s'",
+                 def->m_name ? def->m_name : "?", name);
+    return NULL;
+}
+
+static int shim_module_setattr(PyObject *module, const char *name, PyObject *value) {
+    int idx = find_or_create_module_attrs(module);
+    if (idx < 0) return -1;
+    for (int i = 0; i < module_attrs[idx].attr_count; i++) {
+        ModuleAttr *a = &module_attrs[idx].attrs[i];
+        if (strcmp(a->name, name) == 0) {
+            a->type = ModuleAttr::ATTR_OBJECT;
+            a->obj_val = value;
+            return 0;
+        }
+    }
+    if (module_attrs[idx].attr_count >= MAX_MODULE_ATTRS) {
+        PyErr_Format(PyExc_SystemError, "module '%s': more than %d attributes",
+                     ((PyModuleDef *)module)->m_name, MAX_MODULE_ATTRS);
+        return -1;
+    }
+    /* The caller's name is typically a transient UTF-8 buffer (PyO3 passes
+       PyUnicode_AsUTF8 of its own str), so the table keeps a copy. */
+    return PyModule_AddObjectRef(module, strdup(name), value);
 }
 
 /* ====================================================================
@@ -2441,6 +2746,12 @@ extern "C" int PyObject_SetAttrString(PyObject *obj, const char *name,
                                        PyObject *value) {
     if (obj == NULL || value == NULL) {
       return -1;
+    }
+    if (is_shim_module(obj)) return shim_module_setattr(obj, name, value);
+    if (is_foreign_type(obj)) {
+        PyTypeObject *t = (PyTypeObject *)obj;
+        if (t->tp_dict == NULL && (t->tp_dict = PyDict_New()) == NULL) return -1;
+        return PyDict_SetItemString(t->tp_dict, name, value);
     }
     OopType args[3] = { pyobj_oop(obj), GciNewString(name), pyobj_oop(value) };
     GciPerform(server, "PyObject_SetAttrString:name:value:", args, 3);
@@ -3240,6 +3551,11 @@ static int run_module_exec_slots(PyObject *mod) {
     if (def->m_size > 0) {
         allocate_module_state(def);
     }
+    if (getenv("GRAIL_SHIM_DIAG")) {
+        fprintf(stderr, "SHIM-DIAG: running Py_mod_exec slots of %s, module ptr %p\n",
+                def->m_name ? def->m_name : "?", (void *)mod);
+        fflush(stderr);
+    }
     for (PyModuleDef_Slot *slot = def->m_slots; slot->slot; slot++) {
         if (slot->slot == Py_mod_exec) {
             typedef int (*ExecFunc)(PyObject *);
@@ -4003,7 +4319,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
             PyModuleDef *def = (PyModuleDef *)module_cache[i];
             PyMethodDef *methods = def->m_methods;
             int count = 0;
-            while (methods[count].ml_name) count++;
+            while (methods && methods[count].ml_name) count++;
             OopType sizeOop = GciI64ToOop(count);
             OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
             for (int j = 0; j < count; j++) {
@@ -4074,7 +4390,8 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     PyModuleDef *def = (PyModuleDef *)mod;
     PyMethodDef *methods = def->m_methods;
     int count = 0;
-    while (methods[count].ml_name) count++;
+    /* NULL for a PyO3 module, which has no method table -- see find_method. */
+    while (methods && methods[count].ml_name) count++;
 
     OopType sizeOop = GciI64ToOop(count);
     OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
@@ -4094,18 +4411,18 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
  * them as a flat Array { name1. value1. name2. value2. ... } so the
  * Smalltalk module wrapper can expose them as Python attributes.
  *
- * Object attrs are exported only when they wrap a Smalltalk value
- * (int/float/str/bytes/list/dict/tuple/bool/None) — C-only objects
- * (heap types, capsules) have no OOP at offset 16 and are skipped.
+ * Every object attr is exported, through pyobj_oop: a Grail-backed wrapper
+ * as its value, a real-layout tuple/list as a bridged copy, and a C-ONLY
+ * object -- a heap type, a builtin function, a capsule, an instance of the
+ * wheel's own class -- as its ShimForeignObject proxy.  Only the Grail value
+ * types used to be exported and C-only objects were skipped ("no OOP at
+ * offset 16"), which predates the foreign proxy.  PyO3 exports its classes
+ * and functions this way, so ``from pydantic_core._pydantic_core import
+ * SchemaValidator'' found nothing (docs/Support_Pydantic.md, W3a).
  * ==================================================================== */
 
-static int is_value_pyobj(PyObject *obj) {
-    if (obj == NULL) return 0;
-    if (obj == Py_None || obj == Py_True || obj == Py_False) return 1;
-    PyTypeObject *t = Py_TYPE(obj);
-    return t == &PyLong_Type || t == &PyFloat_Type || t == &PyBool_Type ||
-           t == &PyUnicode_Type || t == &PyBytes_Type || t == &PyList_Type ||
-           t == &PyDict_Type || t == &PyTuple_Type;
+static int is_exportable_pyobj(PyObject *obj) {
+    return obj != NULL && plausible_pyobj(obj);
 }
 
 static OopType shimModuleAttrs(OopType modOop)
@@ -4131,7 +4448,7 @@ static OopType shimModuleAttrs(OopType modOop)
     int total = (idx < 0) ? 0 : module_attrs[idx].attr_count;
     for (int i = 0; i < total; i++) {
         ModuleAttr *a = &module_attrs[idx].attrs[i];
-        if (a->type == ModuleAttr::ATTR_OBJECT && !is_value_pyobj(a->obj_val))
+        if (a->type == ModuleAttr::ATTR_OBJECT && !is_exportable_pyobj(a->obj_val))
             continue;
         exportable++;
     }
@@ -4150,7 +4467,7 @@ static OopType shimModuleAttrs(OopType modOop)
                 valOop = GciNewString(a->str_val);
                 break;
             case ModuleAttr::ATTR_OBJECT:
-                if (!is_value_pyobj(a->obj_val)) continue;
+                if (!is_exportable_pyobj(a->obj_val)) continue;
                 valOop = pyobj_oop(a->obj_val);
                 break;
             default:
@@ -4434,10 +4751,15 @@ PyObject *PyErr_NewException(const char *name, PyObject *base, PyObject *dict) {
         return PyExc_RuntimeError;
     }
     int idx = dyn_exception_count++;
-    dyn_exceptions[idx].obj.ob_refcnt = 1;
-    dyn_exceptions[idx].obj.ob_type = NULL;
     snprintf(dyn_exceptions[idx].name, sizeof(dyn_exceptions[idx].name),
              "%s", name);
+    init_exc_type(&dyn_exceptions[idx].obj, dyn_exceptions[idx].name);
+    /* tp_base only when the declared base is itself one of our exception
+       types; a tuple of bases, or anything else, keeps Exception, which is
+       also what PyErr_GivenExceptionMatches below assumes for a NULL base. */
+    dyn_exceptions[idx].obj.tp_base =
+        (base != NULL && base->ob_type == &PyType_Type)
+            ? (PyTypeObject *)base : &_exc_Exception;
     dyn_exceptions[idx].base = base;
     return (PyObject *)&dyn_exceptions[idx].obj;
 }
@@ -4474,7 +4796,6 @@ void PyErr_BadInternalCall(void) {
 
 PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
                                size_t nargsf, PyObject *kwnames) {
-    (void)kwnames;
     Py_ssize_t nargs = (Py_ssize_t)(nargsf & ~(1ULL << 63));
     PyObject *tuple = PyTuple_New(nargs);
     if (!tuple) return NULL;
@@ -4482,7 +4803,21 @@ PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
         Py_INCREF(args[i]);
         PyTuple_SetItem(tuple, i, args[i]);
     }
-    PyObject *result = PyObject_Call(callable, tuple, NULL);
+    /* The keyword VALUES follow the positionals in args, one per name in
+       kwnames.  They used to be dropped -- kwnames was ignored outright -- so
+       ``f(x, key=v)'' through vectorcall ran as ``f(x)'' with no error.
+       PyO3 makes every keyword call this way. */
+    PyObject *kwargs = NULL;
+    Py_ssize_t nkw = kwnames ? PyTuple_Size(kwnames) : 0;
+    if (nkw > 0) {
+        kwargs = PyDict_New();
+        if (!kwargs) return NULL;
+        for (Py_ssize_t i = 0; i < nkw; i++) {
+            if (PyDict_SetItem(kwargs, PyTuple_GetItem(kwnames, i), args[nargs + i]) < 0)
+                return NULL;
+        }
+    }
+    PyObject *result = PyObject_Call(callable, tuple, kwargs);
     Py_DECREF(tuple);
     return result;
 }

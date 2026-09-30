@@ -2532,14 +2532,24 @@ category: 'Grail-Tests - Module Attrs'
 method: CPythonShimTestCase
 testModuleAttrsExport
 	"shimModuleAttrs exports PyModule_AddIntConstant / AddStringConstant /
-	AddObjectRef values; C-only objects (capsules) are skipped."
+	AddObjectRef values -- and a C-ONLY object (here a capsule) as its
+	foreign proxy.
+
+	The capsule used to be SKIPPED, which is what the fixture's name still
+	says: only Grail value types were exported.  CPython exposes a capsule as
+	an ordinary module attribute (datetime.datetime_CAPI), and a PyO3 module
+	exports every class and function this way, so skipping left
+	``from pydantic_core._pydantic_core import SchemaValidator'' with nothing
+	to find (docs/Support_Pydantic.md, Phase 2 wall 6)."
 
 	| attrs |
 	attrs := CPythonShim current moduleAttrs: '_shimtest'.
 	self assert: (attrs at: #MAGIC_INT) equals: 42.
 	self assert: (attrs at: #MAGIC_STR) equals: 'grail'.
 	self assert: (attrs at: #MAGIC_FLOAT) equals: 2.5.
-	self deny: (attrs includesKey: #SKIPPED_CAPSULE).
+	self assert: ((attrs at: #SKIPPED_CAPSULE ifAbsent: [nil]) isKindOf: ShimForeignObject)
+		description: 'the capsule should cross as a foreign proxy: '
+			, (attrs at: #SKIPPED_CAPSULE ifAbsent: [nil]) printString.
 %
 
 category: 'Grail-Tests - Module Attrs'

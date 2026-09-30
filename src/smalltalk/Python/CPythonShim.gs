@@ -1608,9 +1608,17 @@ loadDynamicModule: moduleName fromPath: pathString
 	could reap in-flight wrappers (see wrap:)."
 	methodNames := self current ___duringCallDo: [
 		System userAction: #shimDynLoad withArgs: { pathString . moduleName }].
-	"Create a module subclass for this C extension"
+	"Create a module subclass for this C extension.  Named by a legal
+	IDENTIFIER derived from the module name, not by the name itself: an
+	in-package extension arrives dotted (pydantic_core._pydantic_core,
+	numpy._core._multiarray_umath), and GemStone 4.0 refuses that as a class
+	name with ArgumentError 2149 -- which is not a GrailShimError, so the
+	importer's handler could not turn it into an ImportError and the session
+	ended with no traceback at all.  Nothing looks this class up by name: the
+	C side is keyed by moduleName, and __name__ comes from the spec below."
 	moduleClass := module
-		subclass: moduleName
+		subclass: (moduleName collect: [:c |
+			(c isLetter or: [c isDigit or: [c = $_]]) ifTrue: [c] ifFalse: [$_]])
 		instVarNames: #()
 		classVars: #()
 		classInstVars: #()
