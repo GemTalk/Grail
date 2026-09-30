@@ -120,7 +120,9 @@ ___keys___
 	    'an_empty_source'
 	    'it_is_an_async_generator'
 	    'async_comp_over_a_plain_list'
-	    'async_genexp_over_a_plain_list')
+	    'async_genexp_over_a_plain_list'
+	    'awaits_in_a_genexp_from_a_plain_def'
+	    'awaits_in_a_genexp_from_an_async_def')
 %
 
 category: 'Grail-Private'
@@ -145,7 +147,7 @@ ___disagreeingKeys___
 category: 'Grail-Tests - async generator expressions'
 method: AsyncGenExpTestCase
 testEveryShapeAgreesWithCPythonUnderIR
-	"All twelve shapes with the seam forced on.
+	"All fourteen shapes with the seam forced on.
 
 	``a_one_shot_source_is_not_restarted'' is the one that fails if the
 	outermost clause acquires the iterator twice: its hand-written iterator
@@ -173,7 +175,7 @@ testAsyncComprehensionOverAPlainListStillRaises
 	instead, while every genexp assertion above still passes.
 
 	Asserted separately from the sweep above so a failure names the shape
-	rather than appearing as one entry in a list of twelve."
+	rather than appearing as one entry in a list of fourteen."
 
 	| mod got |
 	mod := self ___irModule___.
