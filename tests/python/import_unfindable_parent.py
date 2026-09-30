@@ -164,4 +164,4 @@ CHECKS = (
 
 if __name__ == '__main__':
     for check in CHECKS:
-        print('%-60s %s' % (check.__name__, check()))
+        print('%-4s %s' % ('OK' if check() is True else 'FAIL', check.__name__))
