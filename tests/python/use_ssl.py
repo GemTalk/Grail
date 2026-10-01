@@ -94,6 +94,73 @@ def client_read_to_eof(port):
     return [data, after]
 
 
+def serve_through_a_failed_handshake(lsock):
+    """A SERVER survives a client that fails the handshake (#1224).
+
+    The first client connects over TCP and closes without a ClientHello -- a
+    port scanner, a health check.  That accept must raise a CATCHABLE SSLError
+    (SSLEOFError, here), and the same listener must then accept a good client.
+    Under Grail's old GsSecureSocket path the failed handshake escaped as a raw
+    Smalltalk Error that no except clause saw, and the server ended.  Answer
+    ``[error class name, is an SSLError, echoed payload]''."""
+    failure = None
+    try:
+        conn, addr = lsock.accept()
+        conn.close()
+    except BaseException as exc:
+        failure = exc
+    conn, addr = lsock.accept()
+    data = conn.recv(4096)
+    conn.sendall(b"echo:" + data)
+    conn.close()
+    lsock.close()
+    return [type(failure).__name__, isinstance(failure, ssl.SSLError), data]
+
+
+def client_probe_then_roundtrip(port, payload):
+    """Connect and close without a handshake, then do a real round trip."""
+    probe = socket.create_connection(("127.0.0.1", port))
+    probe.close()
+    return client_roundtrip(port, payload)
+
+
+def serve_and_read_past_a_ragged_eof(lsock):
+    """A SERVER reading after the client closes without close_notify (#1224).
+
+    Dart's HttpClient and CPython's own SSLSocket.close() without unwrap() both
+    do this.  Under suppress_ragged_eofs (the default) every read after it is
+    b'' -- recv twice and recv_into -- where Grail's old path answered b'' once
+    and ended the process on the second read, so a buffered reader (which reads
+    twice at EOF) took http.server and Werkzeug down with it.  Answer
+    ``[data, [after1, after2], recv_into count]''."""
+    conn, addr = lsock.accept()
+    data = conn.recv(4096)
+    conn.sendall(b"ack")
+    after = [conn.recv(4096), conn.recv(4096)]
+    filled = conn.recv_into(bytearray(16))
+    conn.close()
+    lsock.close()
+    return [data, after, filled]
+
+
+def client_send_then_drop(port, payload):
+    """Send ``payload`` over TLS, read the server's reply, and close WITHOUT
+    unwrap(): a ragged EOF.
+
+    The reply is read first on purpose.  Closing with unread data -- TLS 1.3's
+    NewSessionTicket arrives right after the handshake -- makes the OS send a
+    RST, which the server sees as a connection RESET, not an EOF; that is a
+    different path from the one this pair exists to guard.  The clients #1224
+    names close after reading their response."""
+    ctx = ssl._create_unverified_context()
+    raw = socket.create_connection(("127.0.0.1", port))
+    tls = ctx.wrap_socket(raw)
+    tls.sendall(payload)
+    reply = tls.recv(4096)
+    tls.close()
+    return reply
+
+
 def trust_store_defaults():
     """The default-context trust store, resolved without touching the net.
 
