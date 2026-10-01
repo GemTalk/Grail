@@ -364,6 +364,81 @@ foreignProxyForPointer: ptrInt typeName: nameStr
 
 category: 'Grail-Wrapping'
 method: CPythonShim
+foreignExceptionTypeForPointer: ptrInt typeName: nameStr baseName: baseName isShimType: isShim
+	"The Grail class an exception TYPE of the C side is seen as, called from
+	the shim's foreign_proxy_oop in place of foreignProxyForPointer:.
+
+	One of the shim's own exception types (PyExc_ValueError, ...) IS the Grail
+	class of that name.  A wheel's pyclass exception -- pydantic_core's
+	ValidationError, which extends ValueError -- is a Grail SUBCLASS of its
+	nearest such ancestor, built once per C type with type(name, (base,), ns),
+	so ``except ValueError'' and ``except pydantic_core.ValidationError'' both
+	catch what the wheel raises, and ``type(e).__name__'' is the wheel's name.
+	Its instances carry the C exception object (___noteForeignException:...)
+	and forward every attribute they lack to it through the namespace's
+	__getattr__ -- which is how ``e.errors()'' reaches Rust.
+
+	No ^ inside the blocks: this runs inside a user action (see typeAddrFor:)."
+
+	| exc base cache cls |
+	exc := Python at: #BaseException.
+	base := Python at: baseName asSymbol otherwise: nil.
+	(base notNil and: [base isBehavior and: [base == exc or: [base inheritsFrom: exc]]])
+		ifFalse: [base := Python at: #Exception].
+	isShim == true ifTrue: [^ base].
+	cache := SessionTemps current
+		at: #'GrailShimForeignExceptionClasses'
+		ifAbsentPut: [ IntegerKeyValueDictionary new ].
+	cls := cache at: ptrInt ifAbsent: [nil].
+	cls isNil ifTrue: [
+		cls := self ___buildForeignExceptionClass: nameStr base: base.
+		cache at: ptrInt put: cls].
+	^ cls
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___buildForeignExceptionClass: nameStr base: base
+	"type(<tail of nameStr>, (base,), ns): __module__ / __qualname__ split from
+	the C tp_name the way CPython reports a type's, and a __getattr__ that
+	forwards to the C instance each Grail instance carries (a Smalltalk block
+	is an acceptable namespace function: it receives { self. name })."
+
+	| dot tail modName ns |
+	dot := 0.
+	nameStr size to: 1 by: -1 do: [:i | (dot = 0 and: [(nameStr at: i) == $.]) ifTrue: [dot := i]].
+	tail := dot = 0 ifTrue: [nameStr] ifFalse: [nameStr copyFrom: dot + 1 to: nameStr size].
+	modName := dot = 0 ifTrue: ['builtins'] ifFalse: [nameStr copyFrom: 1 to: dot - 1].
+	ns := (Python at: #dict) new.
+	ns @env1:__setitem__: '__module__' _: modName.
+	ns @env1:__setitem__: '__qualname__' _: tail.
+	ns @env1:__setitem__: '__getattr__' _: [:positional :kw | | fo |
+		fo := (positional at: 1) dynamicInstVarAt: #'___grailForeign___'.
+		fo isNil
+			ifTrue: [(Python at: #AttributeError) @env1:___signal___:
+				'''' , tail , ''' object has no attribute ''' , (positional at: 2) asString , '''']
+			ifFalse: [fo @env1:___pyAttrLoad___: (positional at: 2) asString asSymbol]].
+	^ (Python at: #type) @env1:value: {
+		tail.
+		(Python at: #tuple) @env0:with: base.
+		ns } value: nil
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___noteForeignException: instPtr type: typePtr typeName: nameStr
+	"Called by the shim's check_and_raise_error just before it raises the text
+	of an error whose indicator holds a wheel's exception INSTANCE: remember it,
+	so ___translateShimError: raises a Grail exception built around it rather
+	than a bare one of the base class the text names.  Session state, consumed
+	by the very next translation."
+
+	SessionTemps current at: #'GrailShimPendingForeignException'
+		put: { instPtr. typePtr. nameStr }
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
 typeAddrFor: aValue
 	"Return the C type address for a Smalltalk value.  Returns 0 if type
 	addresses are not yet initialized or the type is unregistered.
@@ -380,7 +455,17 @@ typeAddrFor: aValue
 		ifFalse: [(aValue isKindOf: Integer) ifTrue: [t := typeAddresses at: #int ifAbsent: [0]]
 		ifFalse: [(aValue isKindOf: Float) ifTrue: [t := typeAddresses at: #float ifAbsent: [0]]
 		ifFalse: [(aValue isKindOf: ByteArray) ifTrue: [t := typeAddresses at: #bytes ifAbsent: [0]]
-		ifFalse: [t := typeAddresses at: Object ifAbsent: [0]]]]]].
+		"A Python dict is a PyDict, a SUBCLASS of the KeyValueDictionary that
+		initTypeAddresses maps, so it fell through to object -- and a prebuilt
+		wheel's PyDict_Check is an inline read of that type's tp_flags, so
+		PyO3 refused SchemaValidator({'type': 'int'}) with ''object'' object is
+		not an instance of ''dict''.  The shim's own C modules never saw it:
+		their PyDict_Check asks the server.  Same for a list subclass.  Tested
+		here rather than precomputed, so a class defined at run time
+		(class D(dict)) is covered too."
+		ifFalse: [(aValue isKindOf: KeyValueDictionary) ifTrue: [t := typeAddresses at: #dict ifAbsent: [0]]
+		ifFalse: [(aValue isKindOf: OrderedCollection) ifTrue: [t := typeAddresses at: #list ifAbsent: [0]]
+		ifFalse: [t := typeAddresses at: Object ifAbsent: [0]]]]]]]].
 		t]
 %
 
@@ -675,6 +760,41 @@ callModule: moduleName method: methodName args: posArray kwargs: kwDictOrNil
 
 category: 'Grail-Calling'
 method: CPythonShim
+callForeign: cPtr args: posArray kwargs: kwDictOrNil
+	"Call a wheel's own C object -- a ShimForeignObject's pointer -- with
+	positional args and a keyword dict (or nil), through the shimCallObject
+	user action (C PyObject_Call, so a type is instantiated through its
+	tp_new/tp_init and a builtin function through its METH_* convention).
+	Arguments travel as wrap: addresses, as callModule:method:args:kwargs:'s
+	do.  docs/Support_Pydantic.md, Phase 3."
+
+	| posAddrs names vals |
+	posAddrs := Array new: posArray size.
+	1 to: posArray size do: [:i |
+		posAddrs at: i put: (self wrap: (posArray at: i)) memoryAddress].
+	names := OrderedCollection new.
+	vals := OrderedCollection new.
+	kwDictOrNil ifNotNil: [
+		kwDictOrNil keysAndValuesDo: [:k :v |
+			names addLast: k asString.
+			vals addLast: (self wrap: v) memoryAddress]].
+	^ self ___shimUserAction: #shimCallObject withArgs: {
+		cPtr . posAddrs . names asArray . vals asArray }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+foreignGetAttr: cPtr name: aString
+	"Read an attribute of a wheel's own C object in C: its type's dict,
+	tp_getattro, method table (answering a bound builtin function) and
+	getset table.  A miss raises AttributeError, translated like any shim
+	error."
+
+	^ self ___shimUserAction: #shimForeignGetAttr withArgs: { cPtr . aString }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 callModuleReturnCPtr: moduleName method: methodName
 	"Call a no-arg module method that returns a raw C pointer
 	(SmallInteger address) instead of a Smalltalk value."
@@ -958,7 +1078,27 @@ ___translateShimError: ex
 	Python namespace and verified to be a BaseException subclass).  If the
 	text has no recognizable exception-name prefix, re-raise unchanged."
 
-	| text idx name cls baseExc msg |
+	| text idx name cls baseExc msg pending |
+	"A wheel's own exception object behind the error (noted by the shim just
+	before it raised): raise the Grail exception built around it -- the class
+	foreignExceptionTypeForPointer: gives its C type, carrying the C instance
+	for __getattr__ to forward to."
+	pending := SessionTemps current at: #'GrailShimPendingForeignException' otherwise: nil.
+	pending notNil ifTrue: [
+		| fcls e ftext fidx |
+		SessionTemps current removeKey: #'GrailShimPendingForeignException'.
+		ftext := ex messageText ifNil: [''].
+		fidx := ftext indexOf: $:.
+		msg := fidx = 0 ifTrue: [ftext] ifFalse: [ftext copyFrom: fidx + 1 to: ftext size].
+		(msg size > 0 and: [msg first == $ ]) ifTrue: [msg := msg copyFrom: 2 to: msg size].
+		fcls := self foreignExceptionTypeForPointer: (pending at: 2)
+			typeName: (pending at: 3)
+			baseName: (fidx = 0 ifTrue: ['Exception'] ifFalse: [ftext copyFrom: 1 to: fidx - 1])
+			isShimType: false.
+		e := fcls @env1:value: { msg } value: nil.
+		e dynamicInstVarAt: #'___grailForeign___'
+			put: (self foreignProxyForPointer: (pending at: 1) typeName: (pending at: 3)).
+		^ BaseException @env1:___pyRaise___: e].
 	text := ex messageText.
 	text isNil ifTrue: [^ ex pass].
 	idx := text indexOf: $:.
@@ -1732,6 +1872,19 @@ PyObject_Call: callable args: argsArray
 	args := argsArray ifNil: [ Array new ].
 	(args class == Array) ifFalse: [ args := Array withAll: args ].
 	result := callable perform: #'___pyCallValue___:kw:' env: 1 withArguments: { args . nil }.
+	^ (self wrap: result) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_Call: callable args: argsArray kwargs: kwDict
+	"PyObject_Call:args: with keywords.  C used to drop them for a
+	Grail-backed callable -- f(x, key=v) from C ran as f(x)."
+
+	| args result |
+	args := argsArray ifNil: [ Array new ].
+	(args class == Array) ifFalse: [ args := Array withAll: args ].
+	result := callable perform: #'___pyCallValue___:kw:' env: 1 withArguments: { args . kwDict }.
 	^ (self wrap: result) memoryAddress
 %
 

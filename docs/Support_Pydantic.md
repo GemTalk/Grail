@@ -1,8 +1,10 @@
 # Supporting pydantic v2 — loading `_pydantic_core` through the CPython shim
 
-Status: **Phases 0–1 done, Phase 2 half done — `import pydantic_core` works;
-Phase 3 (calling into it) is next** (plan recorded 2026-09-29, work
-2026-09-30). Branch `jmason/pydantic`.
+Status: **Phases 0–3 done for int schemas — `SchemaValidator` validates and
+raises a catchable `ValidationError`; Phase 4 (inline str/float layout) is
+the next wall and a decision point** (plan recorded 2026-09-29, work
+2026-09-30). Phases 0–2 are PR #1277 (`jmason/pydantic`); Phase 3 is on
+`jmason/pydantic1`.
 
 ## The decision
 
@@ -270,6 +272,55 @@ inherits the right Grail base (`ValueError`) and carries the pointer.
 Exit: `SchemaValidator({'type': 'int'}).validate_python('1') == 1`, and
 `validate_python('x')` raises a `ValidationError` caught by `except ValueError`
 with a correct `.errors()`.
+
+**Result (2026-09-30, branch `jmason/pydantic1`): exit met for int schemas.**
+
+```python
+v = SchemaValidator({'type': 'int'})
+v.validate_python('1') == 1                          # True
+try: v.validate_python('x')
+except ValueError as e:                              # caught
+    type(e)       # <class 'pydantic_core._pydantic_core.ValidationError'>, same object pydantic_core exports
+    e.errors()    # [{'type': 'int_parsing', 'loc': (), 'msg': ..., 'input': 'x', ...}]  -- from Rust
+    e.error_count(), e.title                         # 1, 'int'
+```
+
+What made it work:
+
+| piece | where |
+| --- | --- |
+| **calling** a foreign object: `ShimForeignObject>>value:value:` → `CPythonShim>>callForeign:args:kwargs:` → user action `shimCallObject` → C `PyObject_Call` (a type is instantiated through `tp_new`/`tp_init`, a builtin function through its `METH_*` convention) | `ShimForeignObject.gs`, `CPythonShim.gs`, `cpython.cc` |
+| **attributes** of a foreign object asked of C first (`shimForeignGetAttr`): the type's `tp_dict`, its own `tp_getattro`, then `tp_methods` (answering a bound builtin function; `METH_CLASS`/`METH_STATIC` bind to the type / nothing) and `tp_getset` (call the getter) along the `tp_base` chain — `foreign_generic_getattr`, shared with C callers | `cpython.cc` |
+| a **Grail dict** reached C typed `object` — `PyDict` is a *subclass* of the `KeyValueDictionary` `typeAddrFor:` mapped, and pyo3-ffi's `PyDict_Check` is an inline `tp_flags` read. `typeAddrFor:` now tests `isKindOf:` for dict and list, which also covers classes defined at run time | `CPythonShim.gs` |
+| **exception types** cross into Grail as Grail classes, not proxies: a shim type as the Grail class of its name, a wheel's pyclass as `type(name, (nearest base,), ns)` built once per C type, whose `__getattr__` (a Smalltalk block) forwards to the C instance each Grail instance carries | `foreign_proxy_oop`, `CPythonShim>>foreignExceptionTypeForPointer:…` |
+| **exception instances**: the error indicator also holds the wheel's instance (`SetRaisedException`, `SetObject`, `Restore`; `Fetch`/`GetRaisedException` hand it back), `get_error_type` reports a pyclass by its nearest known ancestor, and `check_and_raise_error` notes the instance with the server so `___translateShimError:` raises the Grail exception built around it | `cpython.cc`, `shim_pyo3.cc`, `CPythonShim.gs` |
+| `PyObject_Call` dropped keywords for a **Grail** callable called from C ("not yet wired") | `cpython.cc`, `CPythonShim>>PyObject_Call:args:kwargs:` |
+| `PyType_FromSpec` stored `tp_name` (and `tp_doc`) **by pointer**; PyO3 frees its spec strings after the call, so every pyclass's name was garbage. Copied, as CPython does | `cpython.cc` |
+
+**Next wall: W5, exactly as predicted.** `SchemaValidator({'type': 'str'}).validate_python('hi')`
+segfaults with `si_addr = 0x475241494c575031` — the ASCII bytes `GRAILWP1`,
+the magic word at offset 24 of every Grail wrapper — inside pydantic_core:
+the wheel reads a Grail str by inline struct access and follows the magic as
+a pointer. int survived because it goes through API functions. That is the
+Phase 4 decision point.
+
+Also seen: making `PyImport_Import` real (on `PyImport_ImportModule`) turned
+the error path into a failure — the module-name str PyO3 passes reads back
+as garbage through `PyUnicode_AsUTF8`, the same str-layout question. Left a
+stub (NULL, no error), which the int path tolerates; revisit with Phase 4.
+
+Validated (local, Darwin arm64): SUnit 7644/7644, all 8 shards, and the
+concurrent-import test against a NetLDI. The first run lost shard 6 to a
+segfault in `shimForeignGetAttr`: `ShimForeignObjectTestCase` builds proxies
+around synthetic pointers (`16r1000`) to test the captured-name answers, and
+asking C first dereferenced them. Both new user actions now refuse a pointer
+`plausible_pyobj` rejects (as a miss / a TypeError) instead.
+
+Not yet done for Phase 3: constructing a wheel exception FROM Grail
+(`raise PydanticCustomError(...)` in a validator, which PyO3 must recognise
+as its own), class-level forwarding on the Grail exception class
+(`ValidationError.from_exception_data`), `repr`/`str` of non-exception
+foreign objects, and SUnit tests that need no wheel (`_shimtestmodule.c`).
 
 ### Phase 4 — inline layout (W5, W6) — **decision point**
 Write the guard test first: `SchemaValidator({'type': 'float'}).validate_python(1.5) == 1.5`

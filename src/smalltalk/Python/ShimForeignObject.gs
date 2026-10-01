@@ -133,12 +133,22 @@ set compile_env: 1
 category: 'Grail-Python Protocol'
 method: ShimForeignObject
 ___pyAttrLoad___: aSym
-	"Python ``proxy.attr`` load.  Forwards the names a foreign object is
-	asked for during numpy init.  ``__name__'' is the unqualified tail of
-	the captured C tp_name (CPython's type.__name__ drops the module
-	prefix).  Unknown attributes raise AttributeError — richer forwarding
-	back to C is future work."
+	"Python ``proxy.attr`` load.  Asked of C FIRST (CPythonShim>>
+	foreignGetAttr:name:), which knows the object: its type's dict, its own
+	tp_getattro, its method table and its getset table.  That is how a
+	validator's ``validate_python'' is found at all -- this used to answer only
+	the names below and raise for everything else.
 
+	Only when C has nothing do the captured-name answers apply: ``__name__''
+	as the unqualified tail of the C tp_name (CPython's type.__name__ drops
+	the module prefix) and ``__module__'' as the rest, which is what numpy's
+	init reads off its DType types."
+
+	| found value |
+	found := true.
+	value := [(CPythonShim @env0:current) @env0:foreignGetAttr: cPtr name: aSym @env0:asString]
+		@env0:on: AttributeError do: [:ex | found := false. ex @env0:return: nil].
+	found ifTrue: [^ value].
 	(aSym == #'__name__' or: [aSym == #'__qualname__'])
 		ifTrue: [^ self @env0:unqualifiedName].
 	aSym == #'__module__' ifTrue: [^ self @env0:moduleName].
@@ -148,6 +158,20 @@ ___pyAttrLoad___: aSym
 	(PyO3 asking a module for __all__) into an unwind across the user action."
 	^ AttributeError ___signal___:
 		(('foreign object has no attribute ''' @env0:, aSym @env0:asString) @env0:, '''')
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+value: positional value: kwargs
+	"Calling a wheel's own object -- a type (SchemaValidator(schema)), a
+	builtin function, a bound method answered by ___pyAttrLoad___: -- goes
+	back to C: CPythonShim>>callForeign:args:kwargs:.  This used to fall
+	through to object's, which raised ``'ShimForeignObject' object is not
+	callable''."
+
+	^ (CPythonShim @env0:current) @env0:callForeign: cPtr
+		args: (positional ifNil: [#()])
+		kwargs: kwargs
 %
 
 set compile_env: 0
