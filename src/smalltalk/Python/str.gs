@@ -896,7 +896,15 @@ __mod__: args
 						caller can handle."
 						isMap ifFalse: [
 							TypeError ___signal___: 'format requires a mapping'].
-						value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
+						"The key is read with PYTHON's item protocol, as bytes'
+						__mod__: does.  A Smalltalk at: on a missing key raised an
+						UNCATCHABLE LookupError (error 2021) that no except clause
+						could see, so ``'%(x)s' % {}'' ended the program where CPython
+						raises KeyError -- and so did every logging Formatter whose
+						format named a field the record lacked, which is how any
+						Flask view that raised took the server down (#1220, #1221).
+						__getitem__ also honours __missing__ and defaultdict."
+						value := args @env1:__getitem__: key]
 					ifFalse: [value := nextArg @env0:value].
 				stream @env0:nextPutAll: (bi ___printfConvert___: value conv: conv
 					flags: flags width: width precision: precision)

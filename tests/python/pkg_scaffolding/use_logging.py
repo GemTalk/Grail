@@ -47,19 +47,19 @@ def null_handler_silences():
 
 
 def format_record():
-    rec = logging.LogRecord('app', logging.INFO, 'hello %s', ('world',))
+    rec = logging.LogRecord('app', logging.INFO, __file__, 1, 'hello %s', ('world',), None)
     return rec.getMessage()
 
 
 def formatter_default():
     fmt = logging.Formatter()
-    rec = logging.LogRecord('app', logging.INFO, 'msg', ())
+    rec = logging.LogRecord('app', logging.INFO, __file__, 1, 'msg', (), None)
     return fmt.format(rec)
 
 
 def formatter_custom():
     fmt = logging.Formatter('%(name)s|%(levelname)s|%(message)s')
-    rec = logging.LogRecord('a.b', logging.ERROR, 'oops', ())
+    rec = logging.LogRecord('a.b', logging.ERROR, __file__, 1, 'oops', (), None)
     return fmt.format(rec)
 
 
@@ -84,7 +84,17 @@ def _reset_captured():
 
 
 class CapturingHandler(logging.Handler):
-    """Append each emit's formatted message to _CAPTURED."""
+    """Append each emit's formatted message to _CAPTURED.
+
+    The formatter is BASIC_FORMAT, set explicitly.  These checks are about
+    routing -- levels, propagation, exc_info -- and a handler with no formatter
+    of its own uses Formatter(), which is '%(message)s' in CPython.  Grail's old
+    default was LEVEL:NAME:MESSAGE, which is basicConfig's format, not a
+    handler's, so the expected strings below only ever held for Grail."""
+
+    def __init__(self):
+        logging.Handler.__init__(self)
+        self.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
 
     def emit(self, record):
         _CAPTURED.append(self.format(record))
@@ -168,15 +178,24 @@ def logger_exception_logs_at_error():
 
 def root_propagation_to_root_handler():
     root = logging.getLogger()
+    # Restored afterwards, as the basicConfig checks above do.  Leaving the
+    # capturing handler on ROOT made it the destination of every record any
+    # later test logged in the session -- and, now that every logger's chain
+    # reaches root as CPython's does, it made Flask find a root handler and
+    # skip installing its own for an app created later (FlaskViewRaisingTestCase).
+    saved_handlers = list(root.handlers)
     root.handlers = []
-    _reset_captured()
-    root.addHandler(CapturingHandler())
-    child = logging.getLogger('emit.prop.child')
-    child.handlers = []
-    child.propagate = True
-    child.setLevel(logging.DEBUG)
-    child.info('from child')
-    return list(_CAPTURED)
+    try:
+        _reset_captured()
+        root.addHandler(CapturingHandler())
+        child = logging.getLogger('emit.prop.child')
+        child.handlers = []
+        child.propagate = True
+        child.setLevel(logging.DEBUG)
+        child.info('from child')
+        return list(_CAPTURED)
+    finally:
+        root.handlers = saved_handlers
 
 
 def remove_handler_stops_emit():
@@ -221,15 +240,15 @@ def formatter_asctime_shape():
     # the test doesn't depend on the live clock.
     import re
     fmt = logging.Formatter('%(asctime)s|%(name)s|%(message)s')
-    rec = logging.LogRecord('app', logging.INFO, 'hi', ())
+    rec = logging.LogRecord('app', logging.INFO, __file__, 1, 'hi', (), None)
     line = fmt.format(rec)
-    m = re.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\|app\|hi$', line)
+    m = re.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}\|app\|hi$', line)
     return m is not None
 
 
 def log_record_args_tuple():
     # %-formatting with a multi-element args tuple.
-    rec = logging.LogRecord('app', logging.INFO, '%s and %d', ('hi', 7))
+    rec = logging.LogRecord('app', logging.INFO, __file__, 1, '%s and %d', ('hi', 7), None)
     return rec.getMessage()
 
 

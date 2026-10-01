@@ -2,19 +2,24 @@
 # itsdangerous touch at import + common code paths.
 #
 # Provided:
-#   getLogger(name)                 - returns a Logger
+#   getLogger(name)                 - a Logger in a parent chain ending at root
 #   basicConfig(level=, format=)    - root handler/level config
 #   debug / info / warning / error / critical / log - module helpers
 #   exception(msg, *args)           - logs the active exception
 #   NullHandler                     - silent handler for library use
-#   Handler / StreamHandler         - minimal subset
-#   Formatter                       - %-style formatting
-#   Logger / LogRecord              - core types
+#   Handler / StreamHandler         - with filters and handleError
+#   Formatter                       - '%', '{' and '$' styles over the record
+#   Logger / LogRecord              - CPython's attributes and signatures,
+#                                     ``extra'', ``stack_info'', ``stacklevel''
 #   level constants: DEBUG INFO WARNING ERROR CRITICAL NOTSET
 #
-# Not provided: configuration file loaders, filter machinery,
-# multiprocessing-safe handlers, anything around `logger.handlers`
-# semantics beyond append/remove.
+# Not provided: configuration file loaders, multiprocessing-safe handlers,
+# the lastResort handler, and thread locks (there is one gem per session).
+#
+# Deliberately NOT vendored from CPython: its module holds a module-level
+# RLock, a WeakValueDictionary of handlers and atexit hooks, and in a DEPLOYED
+# module every one of those is committed state.  This module keeps the objects
+# a framework actually reads and nothing else.
 
 import sys
 
@@ -41,32 +46,89 @@ def getLevelName(level):
     return _levelToName.get(level, 'Level ' + str(level))
 
 
-class LogRecord:
-    """Plain record of a logging event - what Formatter formats."""
+def _start_time():
+    import time
+    return time.time()
 
-    def __init__(self, name, lvl, msg, args, exc_info=None):
+
+_start_time_box = [_start_time()]
+
+
+class LogRecord:
+    """A logging event, with CPython's attribute set.
+
+    Every attribute a ``%(field)s`` format can name is filled here, because a
+    format naming one the record lacks used to END THE PROCESS: Flask's
+    default handler formats ``%(module)s``, the record had five fields, and the
+    missing-key lookup was an uncatchable LookupError (#1221, #1220).  So any
+    Flask view that raised took the whole server down instead of answering 500.
+    """
+
+    def __init__(self, name, lvl, pathname, lineno, msg, args, exc_info,
+                 func=None, sinfo=None, **kwargs):
         import time
+        ct = time.time()
         self.name = name
-        self.levelno = lvl
-        self.levelname = getLevelName(lvl)
         self.msg = msg
+        # ``log.info('%(a)s', {'a': 1})'': a lone non-empty mapping is the
+        # mapping the message is formatted against, as in CPython.
+        if (args and len(args) == 1 and isinstance(args[0], dict)
+                and args[0]):
+            args = args[0]
         self.args = args
-        self.created = time.time()
-        # CPython keeps the (type, value, traceback) triple here and lets the
-        # Formatter render it. We keep the triple for compatibility and render
-        # eagerly, because the traceback is the whole reason a caller passed
-        # exc_info and losing it is worse than formatting it early.
+        self.levelname = getLevelName(lvl)
+        self.levelno = lvl
+        self.pathname = pathname
+        try:
+            base = pathname.replace('\\', '/').rsplit('/', 1)[-1]
+            self.filename = base
+            self.module = base.rsplit('.', 1)[0] if '.' in base else base
+        except (TypeError, ValueError, AttributeError):
+            self.filename = pathname
+            self.module = 'Unknown module'
         self.exc_info = exc_info
+        # CPython leaves exc_text for the Formatter.  Rendering it here is a
+        # Grail choice kept from before: the traceback is the reason a caller
+        # passed exc_info, and it has to be taken while the exception is live.
         self.exc_text = _format_exc_info(exc_info)
+        self.stack_info = sinfo
+        self.lineno = lineno
+        self.funcName = func
+        self.created = ct
+        self.msecs = float(int((ct - int(ct)) * 1000))
+        self.relativeCreated = (ct - _start_time_box[0]) * 1000
+        try:
+            import threading
+            self.thread = threading.get_ident()
+            self.threadName = threading.current_thread().name
+        except Exception:
+            self.thread = None
+            self.threadName = None
+        self.processName = 'MainProcess'
+        try:
+            import os
+            self.process = os.getpid()
+        except Exception:
+            self.process = None
+        self.taskName = None
+
+    def __repr__(self):
+        return '<LogRecord: %s, %s, %s, %s, "%s">' % (
+            self.name, self.levelno, self.pathname, self.lineno, self.msg)
 
     def getMessage(self):
-        if not self.args:
-            return str(self.msg)
-        # %-formatting if args present.  Tuple-of-one is a CPython
-        # convention - allow either bare or 1-tuple.
-        if isinstance(self.args, tuple) and len(self.args) == 1:
-            return str(self.msg) % self.args[0]
-        return str(self.msg) % self.args
+        msg = str(self.msg)
+        if self.args:
+            msg = msg % self.args
+        return msg
+
+
+def makeLogRecord(dict):
+    """A LogRecord whose attributes are taken from ``dict''."""
+    rv = LogRecord(None, None, '', 0, '', (), None, None)
+    for key in dict:
+        setattr(rv, key, dict[key])
+    return rv
 
 
 def _format_exc_info(exc_info):
@@ -100,65 +162,177 @@ def _format_exc_info(exc_info):
     return None
 
 
+class PercentStyle:
+    default_format = '%(message)s'
+    asctime_format = '%(asctime)s'
+    asctime_search = '%(asctime)'
+
+    def __init__(self, fmt, *, defaults=None):
+        self._fmt = fmt or self.default_format
+        self._defaults = defaults
+
+    def usesTime(self):
+        return self._fmt.find(self.asctime_search) >= 0
+
+    def validate(self):
+        pass
+
+    def _values(self, record):
+        values = dict(self._defaults) if self._defaults else {}
+        values.update(vars(record))
+        return values
+
+    def _format(self, record):
+        return self._fmt % self._values(record)
+
+    def format(self, record):
+        try:
+            return self._format(record)
+        except KeyError as e:
+            raise ValueError('Formatting field not found in record: %s' % e)
+
+
+class StrFormatStyle(PercentStyle):
+    default_format = '{message}'
+    asctime_format = '{asctime}'
+    asctime_search = '{asctime'
+
+    def _format(self, record):
+        return self._fmt.format(**self._values(record))
+
+
+class StringTemplateStyle(PercentStyle):
+    default_format = '${message}'
+    asctime_format = '${asctime}'
+    asctime_search = '${asctime}'
+
+    def usesTime(self):
+        return ('$asctime' in self._fmt) or (self.asctime_search in self._fmt)
+
+    def _format(self, record):
+        # string.Template.substitute semantics, done here because Grail's
+        # string module is native and its Template is still a None stub
+        # (src/smalltalk/Python/string.gs).  $$ is a literal $, $name and
+        # ${name} are substituted, and an unknown name is a KeyError --
+        # which PercentStyle.format turns into the ValueError CPython raises.
+        import re
+        values = self._values(record)
+
+        def substitute(match):
+            if match.group(1) is not None:
+                return '$'
+            return str(values[match.group(2) or match.group(3)])
+
+        return re.sub(r'\$(?:(\$)|([_a-zA-Z][_a-zA-Z0-9]*)|\{([_a-zA-Z][_a-zA-Z0-9]*)\})',
+                      substitute, self._fmt)
+
+
+BASIC_FORMAT = '%(levelname)s:%(name)s:%(message)s'
+
+_STYLES = {
+    '%': (PercentStyle, BASIC_FORMAT),
+    '{': (StrFormatStyle, '{levelname}:{name}:{message}'),
+    '$': (StringTemplateStyle, '${levelname}:${name}:${message}'),
+}
+
+
 class Formatter:
-    """Minimal %-style Formatter.  Supported fields: %(name)s,
-    %(levelname)s, %(levelno)d, %(message)s, %(asctime)s (rendered
-    via ``time.strftime'' from the record's ``created'' field when
-    present).  ``datefmt'' controls asctime formatting; default is
-    ISO-like ``%Y-%m-%d %H:%M:%S,SSS''."""
+    """CPython's Formatter: the format is applied to the record's own
+    attributes, so every LogRecord field and every ``extra'' key is
+    available, in '%', '{' or '$' style."""
 
-    _default_datefmt = '%Y-%m-%d %H:%M:%S'
+    default_time_format = '%Y-%m-%d %H:%M:%S'
+    default_msec_format = '%s,%03d'
 
-    def __init__(self, fmt=None, datefmt=None):
-        self._fmt = fmt if fmt is not None else '%(levelname)s:%(name)s:%(message)s'
+    def __init__(self, fmt=None, datefmt=None, style='%', validate=True, *,
+                 defaults=None):
+        if style not in _STYLES:
+            raise ValueError('Style must be one of: %s' % ','.join(_STYLES.keys()))
+        self._style = _STYLES[style][0](fmt, defaults=defaults)
+        self._fmt = self._style._fmt
         self.datefmt = datefmt
+
+    def usesTime(self):
+        return self._style.usesTime()
 
     def formatTime(self, record, datefmt=None):
         import time
-        ct = getattr(record, 'created', None)
-        if ct is None:
-            ct = time.time()
-        local = time.localtime(ct)
-        if datefmt is None:
-            datefmt = self.datefmt if self.datefmt is not None else self._default_datefmt
-        return time.strftime(datefmt, local)
+        ct = time.localtime(record.created)
+        if datefmt:
+            return time.strftime(datefmt, ct)
+        s = time.strftime(self.default_time_format, ct)
+        if self.default_msec_format:
+            s = self.default_msec_format % (s, record.msecs)
+        return s
+
+    def formatException(self, ei):
+        return _format_exc_info(ei) or ''
+
+    def formatStack(self, stack_info):
+        return stack_info
+
+    def formatMessage(self, record):
+        return self._style.format(record)
 
     def format(self, record):
-        fields = {
-            'name': record.name,
-            'levelname': record.levelname,
-            'levelno': record.levelno,
-            'message': record.getMessage(),
-            'asctime': self.formatTime(record),
-        }
-        line = self._fmt % fields
-        # CPython appends the traceback after the formatted line, separated by
-        # a newline, and so does this. Without it a caller can pass exc_info
-        # and still see nothing, which is the failure this exists to prevent.
-        exc_text = getattr(record, 'exc_text', None)
-        if exc_text:
-            if not line.endswith('\n'):
-                line = line + '\n'
-            line = line + exc_text
-        return line
+        record.message = record.getMessage()
+        if self.usesTime():
+            record.asctime = self.formatTime(record, self.datefmt)
+        s = self.formatMessage(record)
+        if record.exc_info and not record.exc_text:
+            record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            if s[-1:] != '\n':
+                s = s + '\n'
+            s = s + record.exc_text
+        if record.stack_info:
+            if s[-1:] != '\n':
+                s = s + '\n'
+            s = s + self.formatStack(record.stack_info)
+        return s
 
 
 _default_formatter = Formatter()
 
 
-class Handler:
-    """Base handler.  Subclasses override emit(record).  Filters /
-    formatters tracked but only the formatter is consulted by emit."""
+raiseExceptions = True
+
+
+class Filterer:
+    """The filter list Handler and Logger share."""
+
+    def __init__(self):
+        self.filters = []
+
+    def addFilter(self, filter):
+        if filter not in self.filters:
+            self.filters.append(filter)
+
+    def removeFilter(self, filter):
+        if filter in self.filters:
+            self.filters.remove(filter)
+
+    def filter(self, record):
+        for f in self.filters:
+            result = f.filter(record) if hasattr(f, 'filter') else f(record)
+            if not result:
+                return False
+        return True
+
+
+class Handler(Filterer):
+    """Base handler.  Subclasses override emit(record)."""
 
     def __init__(self, lvl=NOTSET):
+        # Param named `lvl` (not `level`): in Grail a parameter and an instVar
+        # of the same name share a slot, so `self.level = level` would be a
+        # self-assignment.
+        Filterer.__init__(self)
         self.level = lvl
         self.formatter = None
+        self.name = None
 
     def setLevel(self, value):
-        # Param named `value` (not `level`) so it doesn't shadow the
-        # `level` instVar - Grail's class-method codegen treats
-        # `self.level = level` as a local self-assignment when the
-        # parameter shadows the instVar name.
         self.level = value
 
     def setFormatter(self, fmt):
@@ -169,12 +343,38 @@ class Handler:
         return fmt.format(record)
 
     def handle(self, record):
-        if record.levelno >= self.level:
+        rv = self.filter(record)
+        if rv:
             self.emit(record)
+        return rv
 
     def emit(self, record):
-        # Override in subclasses.
-        pass
+        raise NotImplementedError('emit must be implemented by Handler subclasses')
+
+    def handleError(self, record):
+        """CPython's: report a failure INSIDE logging on stderr and carry on.
+
+        A logging call must not take its caller down.  Without this a handler
+        that could not format its record propagated the error out of the
+        logging call -- out of Flask's own error report, in #1221."""
+        import sys
+        if not (raiseExceptions and sys.stderr):
+            return
+        try:
+            import traceback
+            sys.stderr.write('--- Logging error ---\n')
+            sys.stderr.write(traceback.format_exc())
+            try:
+                sys.stderr.write('Message: %r\nArguments: %s\n'
+                                 % (record.msg, record.args))
+            except RecursionError:
+                raise
+            except Exception:
+                sys.stderr.write('Unable to print the message and arguments'
+                                 ' - possible formatting error.\nUse the'
+                                 ' traceback above to help find the error.\n')
+        except OSError:
+            pass
 
     def close(self):
         pass
@@ -195,78 +395,62 @@ class NullHandler(Handler):
 
 
 class StreamHandler(Handler):
-    """Writes formatted records to a stream (default: print to the
-    Grail Transcript via builtin print).  CPython's StreamHandler
-    defaults to sys.stderr; Grail's sys doesn't surface a writable
-    stderr yet, so we fall back to print()."""
+    """Writes formatted records to a stream.  With no stream, to print()."""
     __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+
+    terminator = '\n'
 
     def __init__(self, stream=None):
         super().__init__()
         self.stream = stream
 
+    def flush(self):
+        if self.stream is not None and hasattr(self.stream, 'flush'):
+            self.stream.flush()
+
     def emit(self, record):
-        msg = self.format(record)
-        if self.stream is None:
-            print(msg)
-            return
         try:
-            self.stream.write(msg)
-            self.stream.write('\n')
+            msg = self.format(record)
+            if self.stream is None:
+                print(msg)
+                return
+            self.stream.write(msg + self.terminator)
+            self.flush()
+        except RecursionError:
+            raise
         except Exception:
-            # CPython swallows handler errors so logging never breaks
-            # the calling code.
-            pass
+            self.handleError(record)
 
 
-# Registry of named loggers - same as CPython's `logging.Logger.manager.loggerDict`
-# in spirit, simpler in shape.
-_loggers = {}
-_root_handlers = []
-# Wrap the root level in a single-element list so module-level
-# functions can mutate it without the `global` keyword (Grail's
-# codegen doesn't honor `global` yet).
-_root_level_box = [WARNING]
-
-
-def _get_root_level():
-    return _root_level_box[0]
-
-
-def _set_root_level(level):
-    _root_level_box[0] = level
-
-
-class Logger:
-    """Logger - the user-facing object.  Each call resolves an
-    effective level walking up the parent chain; messages at or above
-    that level fan out to the logger's handlers (and the root's if
-    `propagate=True`)."""
+class Logger(Filterer):
+    """Logger - the user-facing object, in a parent chain that ends at the
+    root logger, as in CPython.  Flask decides whether to install its own
+    handler by walking ``.parent'' looking for one, and the chain used to stop
+    at None, so it always did -- even after basicConfig."""
 
     def __init__(self, name, lvl=NOTSET):
-        # Param renamed (not `level`) so it doesn't collide with the
-        # `level` instVar - in Grail, instVars and method parameters
-        # share the same slot when they have the same name, so
-        # `self.level = level` would corrupt the instVar.
+        # Param named `lvl`, not `level` -- see Handler.__init__.
+        Filterer.__init__(self)
         self.name = name
         self.level = lvl
         self.handlers = []
         self.propagate = True
-        # Parent resolution is name-based ('a.b' -> 'a' -> root).
+        self.disabled = False
         self.parent = None
 
     def setLevel(self, value):
         self.level = value
 
     def getEffectiveLevel(self):
-        if self.level != NOTSET:
-            return self.level
-        if self.parent is not None:
-            return self.parent.getEffectiveLevel()
+        logger = self
+        while logger is not None:
+            if logger.level != NOTSET:
+                return logger.level
+            logger = logger.parent
         return _get_root_level()
 
     def isEnabledFor(self, lvl):
-        return lvl >= self.getEffectiveLevel()
+        return lvl >= self.getEffectiveLevel() and lvl > _disable_box[0]
 
     def addHandler(self, handler):
         if handler not in self.handlers:
@@ -277,9 +461,7 @@ class Logger:
             self.handlers.remove(handler)
 
     def hasHandlers(self):
-        """True if this logger or any propagated ancestor has at least
-        one handler.  CPython framework code consults this before
-        falling back to the lastResort handler."""
+        """True if this logger or any propagated ancestor has a handler."""
         logger = self
         while logger is not None:
             if logger.handlers:
@@ -289,72 +471,129 @@ class Logger:
             logger = logger.parent
         return False
 
-    def _log(self, lvl, msg, args, exc_info=None):
-        if not self.isEnabledFor(lvl):
+    def getChild(self, suffix):
+        if self.parent is None:
+            return getLogger(suffix)
+        return getLogger(self.name + '.' + suffix)
+
+    def findCaller(self, stack_info=False, stacklevel=1):
+        """(filename, lineno, funcName, stack text) of the frame that called
+        into logging, skipping this module's own frames."""
+        import sys
+        try:
+            f = sys._getframe(0)
+            own = f.f_code.co_filename
+            while f is not None and f.f_code.co_filename == own:
+                f = f.f_back
+            while f is not None and stacklevel > 1:
+                f = f.f_back
+                stacklevel -= 1
+            if f is None:
+                return '(unknown file)', 0, '(unknown function)', None
+            sinfo = None
+            if stack_info:
+                import traceback
+                sinfo = ('Stack (most recent call last):\n'
+                         + ''.join(traceback.format_stack(f)).rstrip('\n'))
+            return f.f_code.co_filename, f.f_lineno, f.f_code.co_name, sinfo
+        except Exception:
+            return '(unknown file)', 0, '(unknown function)', None
+
+    def makeRecord(self, name, lvl, fn, lno, msg, args, exc_info,
+                   func=None, extra=None, sinfo=None):
+        rv = LogRecord(name, lvl, fn, lno, msg, args, exc_info, func, sinfo)
+        if extra is not None:
+            existing = vars(rv)
+            for key in extra:
+                if key in ('message', 'asctime') or key in existing:
+                    raise KeyError('Attempt to overwrite %r in LogRecord' % key)
+                setattr(rv, key, extra[key])
+        return rv
+
+    def _log(self, lvl, msg, args, exc_info=None, extra=None,
+             stack_info=False, stacklevel=1):
+        fn, lno, func, sinfo = self.findCaller(stack_info, stacklevel)
+        record = self.makeRecord(self.name, lvl, fn, lno, msg, args,
+                                 exc_info, func, extra, sinfo)
+        self.handle(record)
+
+    def handle(self, record):
+        if self.disabled or not self.filter(record):
             return
-        record = LogRecord(self.name, lvl, msg, args, exc_info)
-        # Walk own handlers, then propagate up the chain.
+        self.callHandlers(record)
+
+    def callHandlers(self, record):
         logger = self
         while logger is not None:
             for h in logger.handlers:
-                h.handle(record)
+                if record.levelno >= h.level:
+                    h.handle(record)
             if not logger.propagate:
                 return
             logger = logger.parent
-        # Reached root - fall back to root handlers.
-        for h in _root_handlers:
-            h.handle(record)
-
-    # Every level method accepts CPython's keyword arguments. Taking only
-    # ``*args`` was not merely incomplete -- it raised TypeError, and the
-    # commonest caller is a framework reporting somebody else's exception.
-    # Flask's error handler calls ``logger.error(msg, exc_info=...)``, so an
-    # unhandled exception in a view came back as
-    # ``TypeError: Logger.error() got an unexpected keyword argument
-    # 'exc_info'`` with the real traceback nowhere in sight.
-    #
-    # ``exc_info`` is honoured. ``stack_info``, ``stacklevel`` and ``extra``
-    # are accepted and ignored: there is no call-stack introspection here to
-    # implement them with, and refusing them would reintroduce the same class
-    # of failure for the sake of a field nobody would have seen anyway.
 
     def debug(self, msg, *args, **kwargs):
-        self._log(DEBUG, msg, args, kwargs.get('exc_info'))
+        if self.isEnabledFor(DEBUG):
+            self._log(DEBUG, msg, args, **kwargs)
 
     def info(self, msg, *args, **kwargs):
-        self._log(INFO, msg, args, kwargs.get('exc_info'))
+        if self.isEnabledFor(INFO):
+            self._log(INFO, msg, args, **kwargs)
 
     def warning(self, msg, *args, **kwargs):
-        self._log(WARNING, msg, args, kwargs.get('exc_info'))
+        if self.isEnabledFor(WARNING):
+            self._log(WARNING, msg, args, **kwargs)
 
     def warn(self, msg, *args, **kwargs):
-        self._log(WARNING, msg, args, kwargs.get('exc_info'))
+        self.warning(msg, *args, **kwargs)
 
     def error(self, msg, *args, **kwargs):
-        self._log(ERROR, msg, args, kwargs.get('exc_info'))
+        if self.isEnabledFor(ERROR):
+            self._log(ERROR, msg, args, **kwargs)
 
     def critical(self, msg, *args, **kwargs):
-        self._log(CRITICAL, msg, args, kwargs.get('exc_info'))
+        if self.isEnabledFor(CRITICAL):
+            self._log(CRITICAL, msg, args, **kwargs)
 
-    def fatal(self, msg, *args, **kwargs):
-        self._log(CRITICAL, msg, args, kwargs.get('exc_info'))
+    fatal = critical
 
-    def exception(self, msg, *args, **kwargs):
-        # CPython's exception() is error() with exc_info defaulting to True.
-        if 'exc_info' not in kwargs:
-            kwargs['exc_info'] = True
-        self._log(ERROR, msg, args, kwargs.get('exc_info'))
+    def exception(self, msg, *args, exc_info=True, **kwargs):
+        self.error(msg, *args, exc_info=exc_info, **kwargs)
 
     def log(self, lvl, msg, *args, **kwargs):
-        self._log(lvl, msg, args, kwargs.get('exc_info'))
+        if self.isEnabledFor(lvl):
+            self._log(lvl, msg, args, **kwargs)
+
+
+class RootLogger(Logger):
+    def __init__(self, lvl):
+        Logger.__init__(self, 'root', lvl)
+
+
+# Registry of named loggers - CPython's Logger.manager.loggerDict in spirit.
+_loggers = {}
+# Wrap mutable module state in single-element lists so module-level functions
+# can change it without the `global` keyword.
+_root_level_box = [WARNING]
+_disable_box = [NOTSET]
+
+
+def _get_root_level():
+    return _root_level_box[0]
+
+
+def _set_root_level(level):
+    _root_level_box[0] = level
+
+
+# The root logger EXISTS from import, so every logger's chain ends at it, and
+# basicConfig installs into its own handlers.
+root = RootLogger(WARNING)
+_loggers[''] = root
 
 
 def _resolve_parent(name):
-    """Find the closest existing ancestor logger by name.  'a.b.c' ->
-    'a.b' if present, else 'a', else root."""
-
-    if '.' not in name:
-        return _loggers.get('') if '' in _loggers else None
+    """The closest existing ancestor: 'a.b.c' -> 'a.b', else 'a', else root."""
     parts = name.split('.')
     parts.pop()
     while parts:
@@ -362,91 +601,98 @@ def _resolve_parent(name):
         if candidate in _loggers:
             return _loggers[candidate]
         parts.pop()
-    return _loggers.get('') if '' in _loggers else None
+    return root
 
 
 def getLogger(name=None):
-    """Return the Logger for `name`, creating it on first request.
-    name=None / '' returns the root logger."""
+    """The Logger for `name`, created on first request; None / '' is root.
 
-    if name is None or name == '':
-        if '' not in _loggers:
-            _loggers[''] = Logger('root', _get_root_level())
-        return _loggers['']
+    A logger made after its descendants becomes their parent, as CPython's
+    placeholder fix-up does: getLogger('a.b') then getLogger('a') leaves 'a.b'
+    under 'a', not under root."""
+    if name is None or name == '' or name == 'root':
+        return root
     if name in _loggers:
         return _loggers[name]
     logger = Logger(name)
     logger.parent = _resolve_parent(name)
+    # A descendant made earlier hung from a shorter ancestor (or root); this
+    # logger now sits between them.
+    prefix = name + '.'
+    for other in list(_loggers.values()):
+        parent = other.parent
+        if (parent is not None and other.name.startswith(prefix)
+                and (parent is root or not parent.name.startswith(prefix))):
+            other.parent = logger
     _loggers[name] = logger
     return logger
 
 
 def basicConfig(**kwargs):
-    """basicConfig(level=, format=) - install a StreamHandler on the
-    root logger if it has no handlers yet."""
-
+    """basicConfig(level=, format=, datefmt=, style=, stream=, force=) -
+    install a StreamHandler on the root logger if it has none yet."""
+    if kwargs.get('force'):
+        del root.handlers[:]
     if 'level' in kwargs:
         _set_root_level(kwargs['level'])
-        root = getLogger()
         root.level = kwargs['level']
-    if not _root_handlers:
-        handler = StreamHandler()
-        if 'format' in kwargs:
-            handler.setFormatter(Formatter(kwargs['format']))
-        _root_handlers.append(handler)
+    if not root.handlers:
+        handler = StreamHandler(kwargs.get('stream'))
+        style = kwargs.get('style', '%')
+        fmt = kwargs.get('format', _STYLES.get(style, _STYLES['%'])[1])
+        handler.setFormatter(Formatter(fmt, kwargs.get('datefmt'), style))
+        root.addHandler(handler)
 
 
 # Module-level convenience wrappers (CPython parity).
 
-def debug(msg, *args):
-    getLogger()._log(DEBUG, msg, args)
+def debug(msg, *args, **kwargs):
+    root.debug(msg, *args, **kwargs)
 
 
 def info(msg, *args, **kwargs):
-    getLogger()._log(INFO, msg, args, kwargs.get('exc_info'))
+    root.info(msg, *args, **kwargs)
 
 
 def warning(msg, *args, **kwargs):
-    getLogger()._log(WARNING, msg, args, kwargs.get('exc_info'))
+    root.warning(msg, *args, **kwargs)
 
 
 def warn(msg, *args, **kwargs):
-    getLogger()._log(WARNING, msg, args, kwargs.get('exc_info'))
+    root.warning(msg, *args, **kwargs)
 
 
 def error(msg, *args, **kwargs):
-    getLogger()._log(ERROR, msg, args, kwargs.get('exc_info'))
+    root.error(msg, *args, **kwargs)
 
 
 def critical(msg, *args, **kwargs):
-    getLogger()._log(CRITICAL, msg, args, kwargs.get('exc_info'))
+    root.critical(msg, *args, **kwargs)
 
 
 def fatal(msg, *args, **kwargs):
-    getLogger()._log(CRITICAL, msg, args, kwargs.get('exc_info'))
+    root.critical(msg, *args, **kwargs)
 
 
-def exception(msg, *args, **kwargs):
-    if 'exc_info' not in kwargs:
-        kwargs['exc_info'] = True
-    getLogger()._log(ERROR, msg, args, kwargs.get('exc_info'))
+def exception(msg, *args, exc_info=True, **kwargs):
+    root.error(msg, *args, exc_info=exc_info, **kwargs)
 
 
 def log(level, msg, *args, **kwargs):
-    getLogger()._log(level, msg, args, kwargs.get('exc_info'))
+    root.log(level, msg, *args, **kwargs)
 
 
 def disable(level=CRITICAL):
-    # Disable all logging up to the given level (CPython sets a
-    # module-level threshold).  Simplified: bump the root level.
-    if level > _get_root_level():
-        _set_root_level(level)
+    """Suppress every record at or below ``level'', on every logger."""
+    _disable_box[0] = level
 
 
 __all__ = [
     'NOTSET', 'DEBUG', 'INFO', 'WARNING', 'WARN', 'ERROR', 'CRITICAL', 'FATAL',
     'LogRecord', 'Logger', 'Handler', 'NullHandler', 'StreamHandler',
-    'Formatter',
+    'Formatter', 'Filter', 'Filterer', 'FileHandler', 'LoggerAdapter',
+    'BASIC_FORMAT', 'PercentStyle', 'StrFormatStyle', 'StringTemplateStyle',
+    'makeLogRecord', 'root', 'raiseExceptions',
     'getLogger', 'getLevelName', 'basicConfig', 'disable',
     'debug', 'info', 'warning', 'warn', 'error', 'critical', 'fatal',
     'exception', 'log',
@@ -459,9 +705,12 @@ class Filter:
 
     def __init__(self, name=""):
         self.name = name
+        self.nlen = len(name)
 
     def filter(self, record):
-        return True
+        if self.nlen == 0 or self.name == record.name:
+            return True
+        return record.name.startswith(self.name) and record.name[self.nlen] == '.'
 
 
 class FileHandler(StreamHandler):
@@ -490,8 +739,8 @@ class LoggerAdapter:
     def error(self, msg, *args, **kwargs):
         self.logger.error(msg, *args, **kwargs)
 
-    def exception(self, msg, *args, **kwargs):
-        self.logger.error(msg, *args, **kwargs)
+    def exception(self, msg, *args, exc_info=True, **kwargs):
+        self.logger.error(msg, *args, exc_info=exc_info, **kwargs)
 
     def critical(self, msg, *args, **kwargs):
         self.logger.critical(msg, *args, **kwargs)
