@@ -8547,9 +8547,13 @@ ___import__: positional kw: kwargs
 
 	"A module body importing: part of its dependency record."
 	self @env0:class @env0:___noteImport___: absoluteName @env0:asString fromlist: fromlist.
-	"Return the correct module per CPython semantics"
+	"Return the correct module per CPython semantics.  With no fromlist that is
+	the top package, imported -- not looked up, which answered nil when only the
+	leaf could be found."
 	^ (isDotted and: [fromlist __len__ == 0])
-		ifTrue: [self @env0:class lookupModule: (nameParts @env0:at: 1)]
+		ifTrue: [
+			(self @env0:class lookupModule: (nameParts @env0:at: 1))
+				ifNil: [self ___import__: { nameParts @env0:at: 1 } kw: nil]]
 		ifFalse: [result]
 %
 

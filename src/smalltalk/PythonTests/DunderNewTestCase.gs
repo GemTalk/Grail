@@ -1279,7 +1279,16 @@ testCanonicalClassAttrOverlay
 	session + in-transaction registry keys this test dirties, so the rest of
 	the suite is unaffected."
 
-	| mod holder inst |
+	| mod holder inst snapshot |
+	"Snapshot the canonical registries BEFORE freshFixture dirties them, so the
+	ensure: can remove EXACTLY this test's additions and leave everything the
+	shared fixture registered earlier -- most consequentially abc /
+	collections.abc -- still canonical.  A wholesale wipe of GrailCanonicalClassSet
+	de-canonicalised those for the rest of the session, and since a warm-bound
+	module's body never re-runs they were never re-registered; a later re-import
+	of the shared fixture then computed its ABC results against half-committed,
+	half-overlay caches (testRecognizingAbcs read register=(False,False,True))."
+	snapshot := importlib ___canonicalRegistrySnapshot___.
 	[
 	"freshFixture, NOT fixture: this test MUTATES the module (it stores z and
 	``fresh'' on _AnnHolder), and >>fixture's copy is shared by ~60 tests for
@@ -1299,11 +1308,23 @@ testCanonicalClassAttrOverlay
 	holder @env1:__delattr__: 'z'.
 	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 10.
 	] ensure: [
-		SessionTemps current removeKey: #'GrailClassAttrOverlay' ifAbsent: [].
+		"Restore, do not wipe.  ___canonicalRegistryRestore___ removes only the
+		entries freshFixture added since the snapshot, so abc / collections.abc
+		and every other module the shared fixture registered stay canonical.
+
+		The OVERLAY is not wiped either, only this test's own entry.  Runtime
+		class-attribute stores on canonical classes live there for the whole
+		session -- abc's ABCMeta._abc_invalidation_counter among them -- and
+		dropping it mid-session made that counter fall back to its committed
+		value, BELOW the negative-cache versions other ABCs had already recorded:
+		the counter ran backwards and a later register() went unseen
+		(testRecognizingAbcs read register=(False,False,True)).  No real session
+		ever discards its overlay while running; only this teardown did."
+		importlib ___canonicalRegistryRestore___: snapshot.
+		holder ifNotNil: [
+			(SessionTemps current at: #'GrailClassAttrOverlay' otherwise: nil)
+				ifNotNil: [:overlay | overlay removeKey: holder ifAbsent: []]].
 		SessionTemps current removeKey: #'GrailModuleHashState' ifAbsent: [].
-		UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
-		UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
-		UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
 		(importlib @env1:modules) removeKey: #'test.grail_dunder_check' ifAbsent: []]
 %
 
