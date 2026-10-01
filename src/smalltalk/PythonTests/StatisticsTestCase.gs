@@ -157,6 +157,42 @@ testMean
 
 category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
+testMeanAndMedianAnswerInTheDatasType
+	"statistics.mean and the medians answer in the data's own type, and over
+	Decimals and Fractions answer at all.
+
+	They added and compared with env-0 sends.  Over a Decimal or a Fraction
+	the add reached GemStone's Number generality coercion and the sort reached
+	env-0 #<=, and either miss was a MessageNotUnderstood that ended the
+	session; over ints, mean([1, 2]) answered a Smalltalk Fraction where
+	CPython answers 1.5.  The last four checks are the guard: ints and floats
+	otherwise matched CPython and must go on doing so.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/statistics_in_the_datas_type.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'statistics_in_the_datas_type' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/statistics_in_the_datas_type.py')
+		name: 'statistics_in_the_datas_type'.
+	#( 'the_mean_of_decimals_is_a_decimal'
+	   'the_mean_of_decimals_that_do_not_divide_is_to_context_precision'
+	   'the_mean_of_fractions_is_a_fraction'
+	   'the_median_of_an_odd_count_of_decimals_is_the_middle_one'
+	   'the_median_of_an_even_count_of_decimals_is_a_decimal'
+	   'the_median_of_fractions_is_a_fraction'
+	   'median_low_and_high_of_decimals_are_the_decimals'
+	   'the_mean_of_ints_that_do_not_divide_is_a_float'
+	   'the_mean_of_ints_that_divide_is_an_int'
+	   'the_mean_of_floats_is_a_float'
+	   'the_median_of_ints_is_an_int_or_a_float' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'statistics type check failed: ' , k].
+%
+
+category: 'Grail-Tests - Mean'
+method: StatisticsTestCase
 testMeanEmpty
 	"Test statistics.mean() raises error for empty data"
 

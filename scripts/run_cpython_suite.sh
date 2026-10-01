@@ -60,7 +60,25 @@ export GRAIL_DIR="$PROJECT_ROOT"
 #   * both stay fixed together at 74000/1000000.
 # The window is real in both directions: 68000 fixed test_copy but broke
 # TracebackTestCase>>testRecursionContextChain, which needs the depth.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=1000000;GEM_MAX_SMALLTALK_STACK_DEPTH=74000;"
+# ONE NUMBER CANNOT SERVE BOTH ARMS, which is what the paragraph above implies
+# but the hardcoded 74000 did not act on.  The budget is a BYTE budget, so the
+# same figure holds FEWER Python frames on the text path (6 Smalltalk frames per
+# Python call against IR's 5).  Measured on a product that cannot build IR, so
+# every local run is text: test_copy's test_deepcopy_reflexive_dict wants more
+# depth than 74000 buys it there and errors with a RecursionError, while the
+# IR-measured board records the module OK -- so a local gate reported a
+# regression on a row nobody had touched (#1272).  At 88000, which is
+# 74000 * 6/5, the row is OK and the rest of the corpus is unchanged.
+#
+# The IR default is untouched at 74000, so CI and the nightly measure exactly
+# what they measured before; only GRAIL_IR_CODEGEN=0 selects the wider budget.
+# GRAIL_STACK_DEPTH overrides either, which is what the window below wants when
+# it is next re-measured.
+case "${GRAIL_IR_CODEGEN:-1}" in
+    0) STACK_DEPTH=${GRAIL_STACK_DEPTH:-88000} ;;
+    *) STACK_DEPTH=${GRAIL_STACK_DEPTH:-74000} ;;
+esac
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=1000000;GEM_MAX_SMALLTALK_STACK_DEPTH=${STACK_DEPTH};"
 
 # Per-module wall-clock cap, enforced by a portable poll-and-kill watchdog
 # (no coreutils `timeout` dependency -- `topaz -l` is a linked gem, so

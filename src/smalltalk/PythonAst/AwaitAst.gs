@@ -95,9 +95,10 @@ ___emitSmalltalkOn___: aStream
 	runtime decides that, not this method."
 
 	| fn |
-	fn := CallAst functionBeingCompiled.
-	(fn notNil
-		and: [(fn respondsTo: #'___wrapsBody___') and: [fn ___wrapsBody___]])
+	(self ___isInsideAsyncGenexpBody___
+		or: [fn := CallAst functionBeingCompiled.
+			fn notNil
+				and: [(fn respondsTo: #'___wrapsBody___') and: [fn ___wrapsBody___]]])
 		ifTrue: [
 			aStream nextPutAll: '(___gen___ @env1:___grailAwait___: ('.
 			value printSmalltalkOn: aStream.
@@ -106,6 +107,42 @@ ___emitSmalltalkOn___: aStream
 	aStream nextPutAll: '(PythonCoroutine @env0:___grailAwait___: ('.
 	value printSmalltalkOn: aStream.
 	aStream nextPutAll: '))'
+%
+
+category: 'Grail-code generation'
+method: AwaitAst
+___isInsideAsyncGenexpBody___
+	"An ASYNC generator expression binds ``___gen___'' in its own wrapper --
+	GeneratorExpAst emits ``PythonAsyncGenerator withBlock: [:___gen___ | ...]''
+	-- so an await inside it has a coroutine to suspend even when the ENCLOSING
+	def is an ordinary one.  The enclosing-function test alone missed that, and
+	silently answered the class-side form, which runs the awaited object inline
+	and cannot suspend:
+
+	    def make(n):
+	        return (await sleeper(i) for i in range(n))     -> [None, None, ...]
+	        return (i for i in range(n) if await sleeper(i)) -> []
+
+	The None is the class-side form's answer for a coroutine that DID suspend,
+	and in a filter it is falsy, so every element was dropped.  Declaring the
+	same genexp inside an ``async def'' worked, which is what localised it.
+	test_asyncgen's test_async_gen_expression_02 is the filter case (#1272).
+
+	The walk stops at a def or lambda because those open a scope that rebinds
+	``___gen___'' (or leaves it unbound), and it needs no async test on the
+	genexp it finds: a genexp lexically containing this await IS async by PEP
+	530, since ___isAsyncGenexp___ answers true for any AwaitAst in its own
+	scope, and that walk stops at the same boundaries this one does."
+
+	| node |
+
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ false].
+		(node isKindOf: GeneratorExpAst) ifTrue: [^ true].
+		node := node parent].
+	^ false
 %
 method: AwaitAst
 value

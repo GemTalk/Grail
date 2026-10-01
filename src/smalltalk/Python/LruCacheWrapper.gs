@@ -116,6 +116,118 @@ method: LruCacheKey
 	^ true
 %
 
+! ------- LruCacheState: one session's cache for one wrapper
+expectvalue /Class
+doit
+Object subclass: 'LruCacheState'
+  instVarNames: #( results recency hits misses )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+LruCacheState comment:
+'What one lru_cache wrapper has remembered IN THIS SESSION: the results by
+key, the keys from least to most recently used, and the hit / miss counts.
+
+It lives in SessionTemps, keyed by the wrapper (LruCacheWrapper >>
+___sessionState___), never in the wrapper itself.  CPython''s lru_cache is
+process memory; a wrapper made at module level in a DEPLOYED module is a
+committed object, and holding the cache in it made every hit a write to a
+shared object (two gems serving one app conflicted over typing''s _tp_cache)
+and every miss a way for the caller''s arguments and results to reach the
+repository with the next commit (#1229).'
+%
+
+expectvalue /Class
+doit
+LruCacheState category: 'Grail-Modules'
+%
+
+removeallmethods LruCacheState
+removeallclassmethods LruCacheState
+
+set compile_env: 0
+
+category: 'Instance Creation'
+classmethod: LruCacheState
+empty
+
+	^ self new initializeEmpty
+%
+
+category: 'Initialization'
+method: LruCacheState
+initializeEmpty
+
+	results := KeyValueDictionary new.
+	recency := OrderedCollection new.
+	hits := 0.
+	misses := 0
+%
+
+category: 'Accessing'
+method: LruCacheState
+hits
+
+	^ hits
+%
+
+category: 'Accessing'
+method: LruCacheState
+misses
+
+	^ misses
+%
+
+category: 'Accessing'
+method: LruCacheState
+size
+
+	^ results size
+%
+
+category: 'Accessing'
+method: LruCacheState
+resultAt: aKey ifAbsent: aBlock
+
+	^ results at: aKey ifAbsent: aBlock
+%
+
+category: 'Recording'
+method: LruCacheState
+recordHitFor: aKey
+
+	hits := hits + 1.
+	recency remove: aKey ifAbsent: [].
+	recency add: aKey
+%
+
+category: 'Recording'
+method: LruCacheState
+recordMiss
+
+	misses := misses + 1
+%
+
+category: 'Recording'
+method: LruCacheState
+at: aKey put: aResult keepingAtMost: aMaxsize
+	"The wrapped call may have re-entered and cached this very key -- a
+	recursive memoized function does exactly that -- so the key joins the
+	recency list only when it is genuinely new.  aMaxsize None is unbounded."
+
+	(results includesKey: aKey) ifFalse: [recency add: aKey].
+	results at: aKey put: aResult.
+	aMaxsize == None ifTrue: [^ self].
+	[results size > aMaxsize] whileTrue: [
+		results removeKey: recency removeFirst ifAbsent: []]
+%
+
 ! ------- LruCacheWrapper class definition
 expectvalue /Class
 doit
@@ -227,43 +339,25 @@ ___wrap___: aFunction maxsize: aMaxsize typed: aTyped
 category: 'Grail-Calling'
 method: LruCacheWrapper
 value: positional value: kwargs
-	"Memoizing call: intern the result keyed by positional args +
-	sorted keyword pairs.  Python values never surface as Smalltalk
-	nil (None is a singleton), so nil-as-absent is a safe cache miss
-	marker."
+	"Memoizing call.  Python values never surface as Smalltalk nil (None is a
+	singleton), so nil-as-absent is a safe miss marker.  The cache is THIS
+	SESSION'S -- see ___sessionState___."
 
-	| key result |
-	"maxsize 0 disables caching entirely -- every call misses and
-	nothing is retained (test_lru_cache_size_zero / negative maxsize)."
+	| state key result |
+	state := self @env0:___sessionState___.
+	"maxsize 0 disables caching entirely -- every call misses and nothing is
+	retained (test_lru_cache_size_zero / negative maxsize)."
 	maxsize == 0 ifTrue: [
-		misses := (misses == nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
+		state @env0:recordMiss.
 		^ wrapped value: positional value: kwargs].
 	key := self ___cacheKeyFor___: positional kw: kwargs.
-	cache == nil ifTrue: [
-		cache := KeyValueDictionary @env0:new.
-		order := OrderedCollection @env0:new].
-	result := cache @env0:at: key ifAbsent: [nil].
+	result := state @env0:resultAt: key ifAbsent: [nil].
 	result == nil ifFalse: [
-		hits := (hits == nil ifTrue: [0] ifFalse: [hits]) @env0:+ 1.
-		"Touch: this key is now the most recently used."
-		order @env0:remove: key ifAbsent: [].
-		order @env0:add: key.
+		state @env0:recordHitFor: key.
 		^ result].
 	result := wrapped value: positional value: kwargs.
-	misses := (misses == nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
-	"The wrapped call may have re-entered and cached this very key (a
-	recursive memoized function does exactly that), so only extend the
-	recency list when the key is genuinely new."
-	(cache @env0:includesKey: key) ifFalse: [order @env0:add: key].
-	cache @env0:at: key put: result.
-	"Evict least-recently-used past the bound.  A while loop, not a single
-	removal: maxsize can shrink relative to an existing cache only via
-	re-decoration, but a loop is correct either way."
-	maxsize == None ifFalse: [
-		[cache @env0:size @env0:> maxsize] @env0:whileTrue: [
-			| oldest |
-			oldest := order @env0:removeFirst.
-			cache @env0:removeKey: oldest ifAbsent: []]].
+	state @env0:recordMiss.
+	state @env0:at: key put: result keepingAtMost: maxsize.
 	^ result
 %
 
@@ -337,12 +431,11 @@ ___pyCallValue___: positional kw: kwargs
 category: 'Grail-Attributes'
 method: LruCacheWrapper
 cache_clear
-	"``functools.lru_cache``: drop every interned result."
+	"``functools.lru_cache``: forget this session's results and counts --
+	CPython's cache_clear clears the calling process's cache, and this is that
+	process."
 
-	cache := nil.
-	order := nil.
-	hits := nil.
-	misses := nil.
+	self @env0:___forgetSessionState___.
 	^ None
 %
 
@@ -369,11 +462,13 @@ cache_info
 	requested bound (None = unbounded); currsize is the live entry
 	count."
 
+	| state |
+	state := self @env0:___sessionState___.
 	^ functools_CacheInfo
-		hits: (hits == nil ifTrue: [0] ifFalse: [hits])
-		misses: (misses == nil ifTrue: [0] ifFalse: [misses])
+		hits: state @env0:hits
+		misses: state @env0:misses
 		maxsize: (maxsize == nil ifTrue: [None] ifFalse: [maxsize])
-		currsize: (cache == nil ifTrue: [0] ifFalse: [cache @env0:size])
+		currsize: state @env0:size
 %
 
 category: 'Grail-Attributes'
@@ -486,6 +581,39 @@ __deepcopy__: memo
 	"See __copy__: function-like, so a deep copy is the wrapper itself."
 
 	^ self
+%
+
+set compile_env: 0
+
+category: 'Grail-Private'
+method: LruCacheWrapper
+___sessionState___
+	"This wrapper's cache in THIS session, made empty on first use.
+
+	Held in SessionTemps, keyed by the wrapper, and never in the wrapper's own
+	slots, as #1176 did for decimal's context and GrailSrePatternPointers for
+	compiled patterns.  A module-level @lru_cache in a DEPLOYED module is a
+	committed object, so a cache kept in it made every hit a write to a shared
+	object -- two gems serving one Flask app conflicted Write-Write over
+	typing's _tp_cache -- and every miss left the caller's arguments and
+	results hanging off a committed object for the next commit to store (#1229).
+
+	The cache / order / hits / misses slots are still DECLARED, so the class
+	keeps its shape and the wrappers already committed in deployed modules stay
+	instances of it; nothing reads or writes them any more."
+
+	^ (SessionTemps current at: #'GrailLruCacheStates'
+		ifAbsentPut: [IdentityKeyValueDictionary new])
+			at: self
+			ifAbsentPut: [LruCacheState empty]
+%
+
+category: 'Grail-Private'
+method: LruCacheWrapper
+___forgetSessionState___
+
+	(SessionTemps current at: #'GrailLruCacheStates' otherwise: nil)
+		ifNotNil: [:states | states removeKey: self ifAbsent: []]
 %
 
 set compile_env: 0
