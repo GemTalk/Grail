@@ -432,6 +432,16 @@ timed "class-attr-session-local" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests
 # object, and every miss's argument reached the repository with the next commit.
 timed "lru-cache-session-local" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runLruCacheSessionLocalTest.gs < /dev/null || EXIT=$?
 
+# A WeakSet that has been COMMITTED does not grow with dead references (#1229):
+# a committed weak reference reads back dead in every later session with no
+# callback to remove it, so add() has to drop dead entries itself.
+timed "committed-weakset" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCommittedWeakSetTest.gs < /dev/null || EXIT=$?
+
+# A module-level store to the module's own class survives deployment (#1242):
+# a fresh session warm-binds the module without running its body, so the store
+# has to be replayed.  Jinja2's Environment.template_class depends on it.
+timed "module-body-store-replay" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBodyStoreReplayTest.gs < /dev/null || EXIT=$?
+
 # Phase-5 module-bind acceptance (docs/Persistent_Modules_and_Classes.md
 # par.10.6). Session A (flag on) imports a fixture exercising @dataclass,
 # @enum.global_enum, and a decorator registry, then commits; session B must

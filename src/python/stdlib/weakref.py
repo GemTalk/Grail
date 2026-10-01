@@ -499,9 +499,27 @@ class WeakSet:
         return remove, holder
 
     def add(self, obj):
+        # Prune dead references in the same pass.  In CPython a dead
+        # reference's callback removes it, and in-session Grail does the same.
+        # But a COMMITTED weak reference reads back dead in every later session
+        # without its callback ever running -- its holder is dbTransient, see
+        # src/weakref/WeakReference.gs -- so a committed WeakSet kept every
+        # dead entry, failed to recognise a member it already held, and
+        # appended a fresh reference each time: Mapping._abc_cache grew from 4
+        # entries to 76 over 200 committed requests (#1229).
+        live = []
+        found = False
         for r in self._refs:
-            if r() is obj:
-                return
+            v = r()
+            if v is None:
+                continue
+            live.append(r)
+            if v is obj:
+                found = True
+        if len(live) != len(self._refs):
+            self._refs[:] = live
+        if found:
+            return
         remove, holder = self._make_remover()
         r = ref(obj, remove)
         holder[0] = r
