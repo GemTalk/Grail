@@ -243,7 +243,8 @@ ___irDunderClassLoadKind___
 	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
 	CallAst classBeingCompiled isNil ifTrue: [^ nil].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
-	CallAst inClassBodyValueEmit == true ifTrue: [^ nil].
+	(CallAst inClassBodyValueEmit == true
+		and: [CallAst classBodyValueDefNode isNil]) ifTrue: [^ nil].
 	"Widened with printSmalltalkOn:'s twin: a method DECLARING the name
 	``nonlocal'' shares the class's cell rather than owning a temp, so its read
 	goes through the cell too.  A ``global __class__'' declaration still stands
@@ -798,12 +799,18 @@ ___emitSmalltalkOn___: aStream
 	declared for the whole file and stood this branch down in every unrelated
 	method, leaving them all on the BoundMethod fallback.  A module-level
 	binding of ``__class__'' is not what a method's implicit cell reads
-	anyway."
+	anyway.
+
+	A def inside a class-body ``if'' / ``for'' / ``try'' / ``with'' is emitted
+	as a VALUE while inClassBodyValueEmit is still on, so that flag alone read
+	its body as class-body code and raised ``name '__class__' is not defined''.
+	classBodyValueDefNode marks that window: inside it the read is a method's."
 	((ctx isKindOf: LoadAst)
 		and: [id asSymbol == #'__class__'
 		and: [CallAst classBeingCompiled notNil
 		and: [CallAst moduleClassBeingCompiled notNil
-		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [(CallAst inClassBodyValueEmit ~~ true
+			or: [CallAst classBodyValueDefNode notNil])
 		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
 			or: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']]]]]])
 		ifTrue: [
@@ -837,8 +844,9 @@ ___emitSmalltalkOn___: aStream
 	((ctx isKindOf: LoadAst)
 		and: [id asSymbol == #'__class__'
 		and: [CallAst inClassBodyValueEmit == true
+		and: [CallAst classBodyValueDefNode isNil
 		and: [CallAst moduleClassBeingCompiled notNil
-		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not]]]])
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not]]]]])
 		ifTrue: [
 			(CallAst printEnclosingClassOn: aStream) ifTrue: [^ self].
 			aStream nextPutAll:

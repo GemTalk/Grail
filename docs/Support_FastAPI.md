@@ -685,6 +685,9 @@ Three ways out, in ascending order of what they ask of the runtime.
 
 ### Route A — load the real `_pydantic_core.so` through the shim
 
+> **Chosen (2026-09-29).** The measured symbol floor, the ranked walls and the
+> phased plan are in [Support_Pydantic.md](Support_Pydantic.md).
+
 Grail already loads real CPython C extensions through a hand-written shim
 (`_sre`, `_bisect`, `_crc32c`, `_statistics`), and
 [Shim_NumPy.md](Shim_NumPy.md) records a serious attempt at the same trick

@@ -142,8 +142,12 @@ ___pyAttrLoad___: aSym
 	(aSym == #'__name__' or: [aSym == #'__qualname__'])
 		ifTrue: [^ self @env0:unqualifiedName].
 	aSym == #'__module__' ifTrue: [^ self @env0:moduleName].
+	"@env0:, -- this method compiles in env 1, where a String has no #, and
+	the miss raised MessageNotUnderstood instead of the AttributeError.
+	Inside a C extension's init that turned an ordinary hasattr-style probe
+	(PyO3 asking a module for __all__) into an unwind across the user action."
 	^ AttributeError ___signal___:
-		'foreign object has no attribute ''', aSym @env0:asString, ''''
+		(('foreign object has no attribute ''' @env0:, aSym @env0:asString) @env0:, '''')
 %
 
 set compile_env: 0
