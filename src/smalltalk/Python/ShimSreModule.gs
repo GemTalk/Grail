@@ -867,6 +867,23 @@ ___isLiteralRepl___: repl
 %
 
 category: 'Grail-Methods - Private'
+classmethod: SrePattern
+___reParser___
+	"The re._parser module, IMPORTED -- registered in this session if it was
+	not, and answered either way.
+
+	It used to be looked up by name in the session's sys.modules, with no
+	fallback.  Python code in re reaches _parser through the committed module's
+	own binding, so it works in any session; only that by-name lookup needed
+	the submodule REGISTERED here, which a session that merely warm-binds a
+	deployed module never does.  There the lookup was an uncatchable
+	LookupError and the process ended -- unless something earlier had
+	compiled a regex, which is why it looked intermittent (#1253)."
+
+	^ (importlib @env0:___instance___) @env1:import_module: 're._parser'
+%
+
+category: 'Grail-Methods - Private'
 method: SrePattern
 ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	"Walk every match in aString (or the first `count` if count > 0)
@@ -878,8 +895,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	support.  Returns a String when ``returnTuple`` is false, or a
 	(String, count) tuple when true (the subn return shape)."
 
-	| parser template parts pos m mEnd mStart expanded numSubs emptySep mustAdvance |
-	parser := importlib modules @env0:at: #'re._parser'.
+	| template parts pos m mEnd mStart expanded numSubs emptySep mustAdvance |
 	"A bytes pattern substituting over a bytes subject must return
 	bytes (CPython semantics) — join with an empty ByteArray so the
 	result class follows the subject.  The old unconditional '' join
@@ -889,13 +905,18 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	emptySep := (aString isKindOf: ByteArray)
 		ifTrue: [ByteArray @env0:new]
 		ifFalse: [''].
-	"For callable repl we use template=nil as the marker; otherwise
-	parse the replacement string once."
-	((repl isKindOf: BoundMethod)
-		or: [(repl isKindOf: ExecBlock)
-			or: [repl isKindOf: GsNMethod]])
+	"A callable repl is marked by template=nil; anything else is parsed once.
+
+	CALLABILITY IS PYTHON'S callable(), not a class test.  This asked whether
+	repl was a BoundMethod, a block or a method, so a callable instance,
+	functools.partial, operator.itemgetter or a class fell through to
+	parse_template and had its repr spliced into the result as text (#1253).
+
+	The parser is fetched only when there is a template to parse, and IMPORTED
+	rather than looked up by name -- see SrePattern class >> ___reParser___."
+	(builtins instance callable: repl)
 		ifTrue: [template := nil]
-		ifFalse: [template := parser parse_template: repl _: self].
+		ifFalse: [template := SrePattern ___reParser___ parse_template: repl _: self].
 	parts := OrderedCollection @env0:new.
 	pos := 0.
 	numSubs := 0.
@@ -944,7 +965,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 						repl @env0:numArgs @env0:= 2
 							ifTrue: [repl @env0:value: { m } value: nil]
 							ifFalse: [repl @env0:value: m]]
-					ifFalse: [repl value: { m } value: nil]
+					ifFalse: [repl @env1:___pyCallValue___: { m } kw: nil]
 			]
 			ifFalse: [
 				expanded := self ___expandTemplate___: template withMatch: m
@@ -1562,10 +1583,9 @@ expand: template
 	could not unwind across the user-action frame, degenerating into an
 	UncontinuableError storm."
 
-	| pat parser parsed |
+	| pat parsed |
 	pat := self re.
-	parser := importlib modules @env0:at: #'re._parser'.
-	parsed := parser parse_template: template _: pat.
+	parsed := SrePattern ___reParser___ parse_template: template _: pat.
 	^ pat ___expandTemplate___: parsed withMatch: self
 %
 

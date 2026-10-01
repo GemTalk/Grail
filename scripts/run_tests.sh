@@ -442,6 +442,13 @@ timed "committed-weakset" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/script
 # has to be replayed.  Jinja2's Environment.template_class depends on it.
 timed "module-body-store-replay" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBodyStoreReplayTest.gs < /dev/null || EXIT=$?
 
+# re.sub / subn / Match.expand with a callable or a template, on a pattern from
+# a DEPLOYED module (#1253).  A fresh session that warm-binds such a module has
+# never registered re._parser, and the substitution path looked it up by name:
+# an uncatchable LookupError that ended the process.  Also guards callability
+# being decided by Python's callable(), not by class.
+timed "re-sub-on-deployed-pattern" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runReSubOnDeployedPatternTest.gs < /dev/null || EXIT=$?
+
 # Phase-5 module-bind acceptance (docs/Persistent_Modules_and_Classes.md
 # par.10.6). Session A (flag on) imports a fixture exercising @dataclass,
 # @enum.global_enum, and a decorator registry, then commits; session B must
