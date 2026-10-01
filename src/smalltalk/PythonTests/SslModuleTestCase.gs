@@ -74,6 +74,62 @@ serverKeyPassword
 
 category: 'Grail-Tests-Ssl'
 method: SslModuleTestCase
+testAServerSurvivesAClientThatFailsTheHandshake
+	"#1224: a client that connects and closes with no ClientHello -- a port
+	scanner -- must cost the server a catchable SSLError on that accept, not
+	the process, and the same listener must go on to serve a good client."
+
+	| fixture listener port done holder clientResult serverResult |
+	fixture := self loadFixture.
+	listener := fixture @env1:make_https_listener: self serverCertFile
+		_: self serverKeyFile _: self serverKeyPassword.
+	port := listener at: 2.
+	done := Semaphore new.
+	holder := Array new: 1.
+	[
+		[holder at: 1 put: (fixture @env1:client_probe_then_roundtrip: port _: 'ping' asByteArray)]
+			on: Error do: [:error | holder at: 1 put: error].
+		done signal
+	] fork.
+	serverResult := fixture @env1:serve_through_a_failed_handshake: (listener at: 1).
+	done wait.
+	clientResult := holder at: 1.
+	self assert: (clientResult isKindOf: OrderedCollection)
+		description: 'client raised: ', clientResult printString.
+	self assert: (serverResult at: 2)
+		description: 'the failed handshake raised ', (serverResult at: 1) printString, ', not an SSLError'.
+	self assert: (serverResult at: 3) equals: 'ping' asByteArray
+%
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
+testAServerReadsPastARaggedEofAsEmptyEveryTime
+	"#1224: the client closes without close_notify.  Every server read after
+	that is b'' -- the second one used to end the process."
+
+	| fixture listener port done holder clientResult serverResult |
+	fixture := self loadFixture.
+	listener := fixture @env1:make_https_listener: self serverCertFile
+		_: self serverKeyFile _: self serverKeyPassword.
+	port := listener at: 2.
+	done := Semaphore new.
+	holder := Array new: 1.
+	[
+		[holder at: 1 put: (fixture @env1:client_send_then_drop: port _: 'hello' asByteArray)]
+			on: Error do: [:error | holder at: 1 put: error].
+		done signal
+	] fork.
+	serverResult := fixture @env1:serve_and_read_past_a_ragged_eof: (listener at: 1).
+	done wait.
+	clientResult := holder at: 1.
+	self assert: clientResult equals: 'ack' asByteArray.
+	self assert: (serverResult at: 1) equals: 'hello' asByteArray.
+	self assert: ((serverResult at: 2) collect: [:each | each size]) asArray equals: #(0 0).
+	self assert: (serverResult at: 3) equals: 0
+%
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
 testTlsRoundtrip
 	"A full TLS client<->server exchange: the server wraps a listener with a
 	certificate and accepts (server handshake); a forked client connects,
