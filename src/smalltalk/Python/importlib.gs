@@ -8563,7 +8563,7 @@ _import_module: positional kw: kwargs
 	"import_module(name, package=None) -> module.
 	Delegates to ___import__:kw:."
 
-	| name package absoluteName |
+	| name package absoluteName topLevel |
 	name := positional @env0:at: 1.
 	package := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
@@ -8578,7 +8578,15 @@ _import_module: positional kw: kwargs
 		]
 		ifFalse: [name].
 
-	^ self ___import__: {absoluteName} kw: nil
+	"Answer the module NAMED -- CPython's import_module does -- not the
+	top-level package ``__import__'' answers for a dotted name.  This used to
+	return ___import__'s result directly, so import_module('re._parser')
+	answered re, and C's _PyImport_GetModuleAttrString (CPythonShim >>
+	importGetAttr:name:) read a dotted module's attribute off its top-level
+	package instead.  Every caller until #1253 passed a top-level name, where
+	the two are the same object."
+	topLevel := self ___import__: {absoluteName} kw: nil.
+	^ importlib modules @env0:at: absoluteName @env0:asSymbol ifAbsent: [topLevel]
 %
 
 category: 'Grail-Built-in Functions'
