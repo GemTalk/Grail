@@ -16,17 +16,39 @@
 import os as _os
 
 
+def _resolve_name(name, package, level):
+    """CPython's ``importlib._bootstrap._resolve_name``: a relative name's
+    absolute form, ``level`` dots up from ``package``."""
+    bits = package.rsplit('.', level - 1)
+    if len(bits) < level:
+        raise ImportError('attempted relative import beyond top-level package')
+    base = bits[0]
+    return f'{base}.{name}' if name else base
+
+
 def import_module(name, package=None):
     """Import a module by dotted name and return the module object.
 
     GRAIL: delegates back through Python's ``__import__`` builtin,
     which in turn routes through the Smalltalk loader.  The
     ``fromlist`` workaround in CPython is reproduced here so the
-    leaf module is returned for dotted names."""
-    # Strip leading dots — relative imports require a package and
-    # we don't support that case yet.
-    while name and name.startswith('.'):
-        name = name[1:]
+    leaf module is returned for dotted names.
+
+    A RELATIVE name is resolved against ``package`` exactly as CPython
+    does.  It used to have its dots stripped and ``package`` ignored, so
+    ``import_module('.warnings', package='pydantic')`` -- how pydantic's
+    lazy ``__getattr__`` loads its own modules -- answered the STDLIB
+    warnings module, and ``from pydantic import BaseModel`` failed."""
+    if name.startswith('.'):
+        if not package:
+            raise TypeError("the 'package' argument is required to perform a "
+                            f"relative import for {name!r}")
+        level = 0
+        for character in name:
+            if character != '.':
+                break
+            level += 1
+        name = _resolve_name(name[level:], package, level)
     parts = name.split('.')
     # __import__ ignores the globals/locals args for an absolute import, and
     # Grail has no locals() builtin, so pass None rather than globals()/locals().
