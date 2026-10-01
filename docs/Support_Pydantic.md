@@ -1,10 +1,10 @@
 # Supporting pydantic v2 — loading `_pydantic_core` through the CPython shim
 
-Status: **Phases 0–3 done for int schemas — `SchemaValidator` validates and
-raises a catchable `ValidationError`; Phase 4 (inline str/float layout) is
-the next wall and a decision point** (plan recorded 2026-09-29, work
-2026-09-30). Phases 0–2 are PR #1277 (`jmason/pydantic`); Phase 3 is on
-`jmason/pydantic1`.
+Status: **Phases 0–3 done; Phase 4's abi3 trial succeeded** — the
+source-built abi3 `pydantic_core` validates int/str/bool/float/list/dict
+schemas like CPython, and pydantic gets as far as building `BaseModel`'s
+schema, where it meets W1 (Phase 5). Phases 0–2 merged as #1277; Phase 3 is
+#1282 (`jmason/pydantic1`); the trial is on `jmason/pydantic2`.
 
 ## The decision
 
@@ -322,7 +322,7 @@ as its own), class-level forwarding on the Grail exception class
 (`ValidationError.from_exception_data`), `repr`/`str` of non-exception
 foreign objects, and SUnit tests that need no wheel (`_shimtestmodule.c`).
 
-### Phase 4 — inline layout (W5, W6) — **decision point**
+### Phase 4 — inline layout (W5, W6) — **decided 2026-10-01: (b) abi3; (a) deferred**
 Write the guard test first: `SchemaValidator({'type': 'float'}).validate_python(1.5) == 1.5`
 (fails silently today by construction). Then choose:
 * **(a) give Grail's immutable scalars a real CPython layout** — float
@@ -343,6 +343,108 @@ wheels, i.e. two non-CPython runtimes already run it through C-API
 emulation. That is the evidence the route is sound, and a hint at the cost:
 both keep a native mirror of their managed objects, which is option (a).
 Exit: str/bytes/float/int/list/dict/datetime schemas validate correctly.
+
+**Trial of (b), 2026-10-01 (branch `jmason/pydantic2`): the abi3 build
+completes, runs, and fixes W5 outright.**
+
+* **The complete set is 9, not 7.** After the 7 above, `cargo check` found two
+  more: direct reads of `tp_base` (`serializers/ob_type.rs`) and `tp_new`
+  (`validators/model.rs`, the W1 site), replaced by `PyType_GetSlot`. All nine
+  are fixed by `scripts/pydantic/pydantic_core-2.46.5-abi3.patch` (7 files,
+  +117/−7, every change `cfg`-gated so the tree still builds non-abi3):
+  a `datetime_access` module that provides the three accessor traits by
+  attribute reads; `PyFunction` by type name; `TzInfo` without
+  `extends = PyTzInfo`, a parsed offset becoming `PyTzInfo::fixed_offset`
+  (a `datetime.timezone` — same offset, different `repr`; this is also how
+  W6 is resolved under (b)); the two slot reads.
+* **Building it:** `scripts/pydantic/build_pydantic_core_abi3.sh <venv>` —
+  sdist, patch, `cargo rustc` (~1 minute), install as `_pydantic_core.abi3.so`.
+  `PYO3_BUILD_EXTENSION_MODULE=1` is required: without it PyO3 links
+  Homebrew's libpython, whose symbols would compete with the shim's.
+* **Shim floor for the abi3 build:** 161 needed; 5 missing, all now real in
+  `shim_pyo3.cc` — `_Py_IncRef`/`_Py_DecRef`, `Py_GetConstantBorrowed`,
+  `PyLong_AsUnsignedLongLongMask`, `PyObject_GetTypeData`. abi3 PyO3 declares
+  every pyclass with a **negative `basicsize`** ("the base plus this much"),
+  which `type_from_spec_impl` now resolves. `PyImport_Import` had to become
+  real (on `PyImport_ImportModule`) — abi3 PyO3 reaches it for
+  `py.import("decimal")` while building serializer tables.
+
+| schema | stock wheel | abi3 build | CPython |
+| --- | --- | --- | --- |
+| int `'1'` / `'x'` | `1` / `ValidationError` | same | same |
+| **str** `'hi'` | **segfault** | `'hi'` | `'hi'` |
+| bool `'yes'` | — | `True` | `True` |
+| list[int] `['1', 2]` | — | `[1, 2]` | `[1, 2]` |
+| **float** `1.5` / `'2.25'` | (inline `ob_fval` read) | `1.5` / `2.25` | same |
+| dict[str,int] `{'a': '3'}` | — | `{'a': 3}` | `{'a': 3}` |
+
+Remaining difference seen: the key ORDER of each dict in `e.errors()`
+(`msg, type, loc, …` vs CPython's `type, loc, msg, …`), which points at a dict
+built from C not preserving insertion order — not yet investigated.
+
+**And it carried pydantic itself to `BaseModel`'s schema build**, through four
+Python-side walls, all general Grail bugs, fixed:
+
+| wall | fix |
+| --- | --- |
+| `from pydantic import BaseModel` → stdlib `warnings` instead of `pydantic.warnings` | Grail's `importlib.import_module` stripped the dots of a relative name and ignored `package`; it now resolves it as CPython's `_resolve_name` does |
+| `Decorator[X]`: "parameters must all be type variables" — a class whose `__eq__` was *assigned* (every dataclass) compared equal to other classes | `object>>___dynamicInstanceDunder___:` — the setattr-`__eq__`/`__ne__`/`__hash__` probes skip a CLASS receiver (`C == x` is `type(C).__eq__`), and `___reflectedFirst___` no longer applies the instance subclass-priority rule to two classes (Smalltalk's metaclass hierarchy said `D class inheritsFrom: Generic class`) |
+| `ModelMetaclass` took `BaseModel` for a subclass of itself | a metaclass was called with `bases == (object,)` for `class A(metaclass=M)`; CPython passes `()`. The written-empty case is recorded by `___grailPrepareNamespace___:bases:keywords:` and answered by `___grailHeaderBases___` (non-empty headers keep `__bases__`, the `__mro_entries__`-resolved tuple — `class C(TypedDict)` needs that) |
+| serializer setup: `py.import("decimal")` → SystemError | `PyImport_Import` real (above) |
+
+The three Grail fixes are guarded by
+`tests/python/class_identity_and_relative_import.py` (13 checks, agrees with
+CPython 3.14) and `ClassIdentityAndRelativeImportTestCase` (default path,
+forced IR). Validated locally: SUnit 7644/7644 (all 8 shards, concurrent-import
+passing); CPython gate 1 regression, `test_pickle` OK → TIMEOUT, which is load
+at the 600 s limit — alone it is OK in 528 s, against 518 s before this change.
+
+**Where it stops: W1.** Building the serializer's type table, abi3 PyO3 takes
+`datetime.datetime` with `py.import(...).getattr(...)` and checks it with
+`PyType_Check` — and a Grail class reaches C as a wrapper whose type is
+`object`. That is Phase 5 exactly as planned (type-object mirrors for Grail
+classes), now on the path of `class M(BaseModel)`.
+
+**Decision (2026-10-01, user): proceed with (b), the abi3 build; keep (a) on
+file to revisit.** (b) is established and cheap — the patch is small,
+mechanical and `cfg`-gated, the build is a minute, and it removes W5 (and the
+float misread) without touching Grail's object model. What it gives up is the
+`pip install pydantic` story: the stock PyPI wheel still does not work, and a
+Grail deployment of pydantic means building `pydantic_core` with
+`scripts/pydantic/build_pydantic_core_abi3.sh` and carrying the patch forward
+with each pydantic_core release.
+
+**Option (a), deferred — what revisiting it means.** Give Grail's immutable
+values a real CPython memory layout so a STOCK wheel's inlined struct reads
+are right: `float` (`ob_fval` at offset 16), `bytes` (`ob_sval` at 32), `str`
+(the compact-ASCII / UCS-1/2/4 body and its `state` bits), and later `datetime`
+(the `PyDateTime_*` data bytes and a real datetime C-API capsule).
+
+* *Why it matters beyond pydantic:* every prebuilt wheel compiled against the
+  full (non-limited) API inlines these reads; NumPy already lives with them.
+  (a) is the route by which `pip install <wheel>` works unmodified, for any
+  wheel, without a per-package source build and patch.
+* *The design on file:* the "prefix OOP" header of
+  [Shim_Object_Model.md](Shim_Object_Model.md) §2 — the GemStone OOP moves
+  out of offset 16 (where a float's value, a str's length and a tuple's size
+  live) into a header BEFORE the object, so the bytes from the `PyObject*`
+  onward are CPython's own layout. §4 of that doc named this very trigger: an
+  extension forcing inline access to the immutable scalars.
+* *A cheaper intermediate noted during Phase 3:* since these values are
+  immutable, a real-layout COPY is semantically safe — the shim already hands
+  C real-layout copies of tuples and lists (`to_real_tuple`, `ShimTupleObject`).
+  The catch is coverage: every path by which a str/float/bytes reaches C
+  (arguments, dict items, attribute values, return values of callbacks) would
+  have to produce the copy, not only direct call arguments.
+* *Prototype order:* `float` first (one 8-byte field, and the stock wheel's
+  silent misread makes a perfect guard test:
+  `SchemaValidator({'type': 'float'}).validate_python(1.5) == 1.5`), then
+  `bytes`, then `str`, whose writable form (`PyUnicode_New` +
+  `PyUnicode_DATA`, used by jiter) also needs the buffer to be real.
+* *What to measure when revisiting:* the stock-wheel probe set in the table
+  above (str/float/bytes rows), NumPy's existing suite (it shares the layout
+  questions), and the per-crossing cost — (a) moves work from every shim call
+  into object creation.
 
 ### Phase 5 — Grail classes as types (W1)
 Type-object mirrors for Grail classes; real `PyObject_GenericSetAttr` /
@@ -384,6 +486,12 @@ decide whether CI installs it or those tests skip without it.
    /tmp/pydantic_probe/bin/pip install pydantic==2.13.5 pydantic_core==2.46.5 pyyaml
    SO=/tmp/pydantic_probe/lib/python3.14/site-packages/pydantic_core/_pydantic_core.cpython-314-darwin.so
    make -C src/c/shim && ./scripts/shim_symbol_floor.sh $SO --list
+   ```
+   For the abi3 variant (Phase 4 option (b)), copy that venv and rebuild the
+   extension in it:
+   ```bash
+   cp -R /tmp/pydantic_probe /tmp/pydantic_abi3
+   ./scripts/pydantic/build_pydantic_core_abi3.sh /tmp/pydantic_abi3
    ```
 3. Probe an import the way the census does (fresh process, venv via
    `VIRTUAL_ENV`, nothing else on the path):

@@ -170,10 +170,7 @@ extern "C" PyGILState_STATE PyGILState_Ensure(void) {
 extern "C" void PyGILState_Release(PyGILState_STATE) {
     (void)0;
 }
-extern "C" PyObject * PyImport_Import(PyObject *name) {
-    STUBLOG("PyImport_Import");
-    return 0;
-}
+/* PyImport_Import lives in cpython.cc (it needs is_foreign). */
 extern "C" PyInterpreterState * PyInterpreterState_Main(void) {
     STUBLOG("PyInterpreterState_Main");
     return 0;
