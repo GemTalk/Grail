@@ -44,10 +44,25 @@ _len: data
 category: 'Grail-Private'
 method: statistics
 _sum: data
+	"Python addition, as builtins.sum adds: an env-0 #+ hands a Decimal or a
+	Fraction to GemStone's Number generality coercion, which sends it env-0
+	#_generality, and the miss is a MessageNotUnderstood that ends the session
+	rather than anything Python can catch."
+
 	| total |
 	total := 0.
-	data @env0:do: [:each | total := total @env0:+ each].
+	data @env0:do: [:each | total := total __add__: each].
 	^ total
+%
+
+category: 'Grail-Private'
+method: statistics
+_sorted: data
+	"Sorted by Python comparison, stably, as CPython's statistics sorts: env-0
+	#asSortedCollection compares with env-0 #<=, which a Decimal or a Fraction
+	does not answer."
+
+	^ (builtins instance) sorted: data
 %
 
 category: 'Grail-Private'
@@ -76,11 +91,18 @@ initialize
 category: 'Grail-Built-in Functions'
 method: statistics
 mean: data
-	| d n |
+	| d n total |
 	d := self _toList: data.
 	n := d @env0:size.
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'mean requires at least one data point'].
-	^ (self _sum: d) @env0:/ n
+	total := self _sum: d.
+	"The mean in the data's own type, as CPython answers it: a Decimal for
+	Decimals, a Fraction for Fractions, and for ints an int when it is whole
+	and a float when it is not.  An env-0 #/ answered a Smalltalk Fraction
+	for mean([1, 2])."
+	((total @env0:isKindOf: Integer) and: [(total @env0:\\ n) @env0:= 0])
+		ifTrue: [^ total @env0:// n].
+	^ total __truediv__: n
 %
 
 category: 'Grail-Built-in Functions'
@@ -90,11 +112,13 @@ median: data
 	d := self _toList: data.
 	n := d @env0:size.
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'median requires at least one data point'].
-	sorted := d @env0:asSortedCollection.
+	sorted := self _sorted: d.
 	mid := (n @env0:+ 1) @env0:// 2.
+	"Halved in the data's own type, as CPython does: a Decimal stays a
+	Decimal, where dividing by 2.0 would have made it a float."
 	^ ((n @env0:\\ 2) == 1)
 		ifTrue: [sorted @env0:at: mid]
-		ifFalse: [((sorted @env0:at: mid) @env0:+ (sorted @env0:at: (mid @env0:+ 1))) @env0:/ 2.0]
+		ifFalse: [((sorted @env0:at: mid) __add__: (sorted @env0:at: (mid @env0:+ 1))) __truediv__: 2]
 %
 
 category: 'Grail-Built-in Functions'
@@ -104,7 +128,7 @@ median_low: data
 	d := self _toList: data.
 	n := d @env0:size.
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'median_low requires at least one data point'].
-	sorted := d @env0:asSortedCollection.
+	sorted := self _sorted: d.
 	mid := (n @env0:+ 1) @env0:// 2.
 	^ sorted @env0:at: mid
 %
@@ -116,7 +140,7 @@ median_high: data
 	d := self _toList: data.
 	n := d @env0:size.
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'median_high requires at least one data point'].
-	sorted := d @env0:asSortedCollection.
+	sorted := self _sorted: d.
 	^ ((n @env0:\\ 2) == 1)
 		ifTrue: [sorted @env0:at: ((n @env0:+ 1) @env0:// 2)]
 		ifFalse: [sorted @env0:at: ((n @env0:// 2) @env0:+ 1)]
