@@ -434,6 +434,7 @@ static inline PyObject *Py_XNewRef(void *obj) {
 #define METH_NOARGS     0x0004
 #define METH_O          0x0008
 #define METH_CLASS      0x0010
+#define METH_STATIC     0x0020
 #define METH_FASTCALL   0x0080
 #define METH_METHOD     0x0200
 

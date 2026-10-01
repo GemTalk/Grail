@@ -384,9 +384,23 @@ static GrailRaisedException *as_raised(PyObject *o) {
     return (o != NULL && r->magic == GRAIL_RAISED_MAGIC) ? r : NULL;
 }
 
+/* cpython.cc's error indicator: the wheel's own exception instance behind
+   it (NULL when there is none), and str() of such an instance. */
+void _grail_err_set_instance(PyObject *exc);
+PyObject *_grail_err_instance(void);
+void _grail_foreign_exc_text(PyObject *v, char *buf, size_t cap);
+
 PyObject *PyErr_GetRaisedException(void) {
     PyObject *type = PyErr_Occurred();
     if (type == NULL) return NULL;
+    /* A real instance behind the indicator (a pyclass exception the wheel
+       raised, now being taken back by PyO3) goes back as itself. */
+    PyObject *inst = _grail_err_instance();
+    if (inst != NULL) {
+        Py_INCREF(inst);
+        PyErr_Clear();
+        return inst;
+    }
     PyObject *ptype = NULL, *pvalue = NULL, *ptb = NULL;
     PyErr_Fetch(&ptype, &pvalue, &ptb);
     /* A value that already IS a raised exception (Set -> Fetch round trip)
@@ -414,12 +428,12 @@ void PyErr_SetRaisedException(PyObject *exc) {
         PyErr_SetString((PyObject *)r->ob_type, r->msg);
         return;
     }
-    /* Something the wheel built itself (an instance of one of its own
-       exception classes).  Keep its type; the message is its str(). */
-    STUBLOG("PyErr_SetRaisedException(foreign instance)");
-    PyObject *s = PyObject_Str(exc);
-    const char *m = s ? PyUnicode_AsUTF8(s) : NULL;
-    PyErr_SetString((PyObject *)exc->ob_type, m ? m : "");
+    /* An instance of one of the wheel's own exception classes: keep the
+       OBJECT, with its type and str() as the indicator's pair. */
+    char text[1024];
+    _grail_foreign_exc_text(exc, text, sizeof(text));
+    PyErr_SetString((PyObject *)exc->ob_type, text);
+    _grail_err_set_instance(exc);
 }
 
 PyObject *PyException_GetCause(PyObject *exc) {
