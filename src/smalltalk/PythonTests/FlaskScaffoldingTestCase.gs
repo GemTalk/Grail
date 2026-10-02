@@ -5593,9 +5593,12 @@ testFlaskServeHttps
 	port := res at: 2.
 	sem := Semaphore new.
 	holder := Array new: 1.
+	"AbstractException, not Error, in the forked clients here: a Python
+	exception is not an Error, and one escaping a forked process stops the whole
+	run.  See SslModuleTestCase>>testAServerSurvivesAClientThatFailsTheHandshake."
 	[
 		[holder at: 1 put: (mod @env1:https_get: port _: '/')]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	mod @env1:serve_one: server.
@@ -5616,7 +5619,7 @@ testFlaskServeHttps
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:https_get: port _: '/scheme')]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	mod @env1:serve_one: server.
@@ -5647,7 +5650,7 @@ testFlaskServeThreaded
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:plain_get: port _: '/')]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	mod @env1:serve_one: server.

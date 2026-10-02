@@ -86,9 +86,13 @@ testAServerSurvivesAClientThatFailsTheHandshake
 	port := listener at: 2.
 	done := Semaphore new.
 	holder := Array new: 1.
+	"AbstractException, not Error, in every forked client in this class: a
+	Python exception is not an Error, so a client that raised one -- a refused
+	connect, say -- went unhandled in its forked process, which stopped the
+	whole topaz run and with it the shard, and never signalled the semaphore."
 	[
 		[holder at: 1 put: (fixture @env1:client_probe_then_roundtrip: port _: 'ping' asByteArray)]
-			on: Error do: [:error | holder at: 1 put: error].
+			on: AbstractException do: [:error | holder at: 1 put: error].
 		done signal
 	] fork.
 	serverResult := fixture @env1:serve_through_a_failed_handshake: (listener at: 1).
@@ -116,7 +120,7 @@ testAServerReadsPastARaggedEofAsEmptyEveryTime
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (fixture @env1:client_send_then_drop: port _: 'hello' asByteArray)]
-			on: Error do: [:error | holder at: 1 put: error].
+			on: AbstractException do: [:error | holder at: 1 put: error].
 		done signal
 	] fork.
 	serverResult := fixture @env1:serve_and_read_past_a_ragged_eof: (listener at: 1).
@@ -146,7 +150,7 @@ testTlsRoundtrip
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:client_roundtrip: port _: 'ping' asByteArray)]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	mod @env1:serve_one_echo: lsock.
@@ -187,7 +191,7 @@ testUpgradedAcceptRaggedEofAndSni
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:client_read_to_eof: port)]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	seen := mod @env1:serve_upgraded_then_drop: raw _: self serverCertFile
