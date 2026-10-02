@@ -18,11 +18,7 @@ def make_https_listener(certfile, keyfile, password):
     ctx.load_cert_chain(certfile, keyfile, password)
     raw = socket.socket()
     raw.bind(("127.0.0.1", 0))
-    # A backlog of more than one: client_probe_then_roundtrip connects twice,
-    # and with room for only one, the second connect is refused whenever the
-    # server has not yet accepted the probe -- which under a loaded machine
-    # (eight test shards at once) it sometimes has not.
-    raw.listen(5)
+    raw.listen(1)
     port = raw.getsockname()[1]
     lsock = ctx.wrap_socket(raw, server_side=True)
     return [lsock, port]
