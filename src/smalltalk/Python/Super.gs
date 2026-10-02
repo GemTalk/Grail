@@ -100,9 +100,8 @@ _lookupMethod: aSym
 	| walker |
 	walker := cls superClass.
 	[walker notNil] whileTrue: [
-		| md |
-		md := walker methodDictForEnv: 1.
-		(md includesKey: aSym) ifTrue: [^ md at: aSym].
+		(walker compiledMethodAt: aSym environmentId: 1 otherwise: nil)
+			ifNotNil: [:m | ^ m].
 		walker := walker superClass].
 	^ nil
 %
@@ -184,6 +183,12 @@ _lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
 	(twilio.twiml: MessagingResponse() left TwiML.__init__ unrun,
 	so ``verbs`` / ``attrs`` never materialized)."
 
+	"Each class is asked for each selector (compiledMethodAt:environmentId:
+	otherwise:, which looks in the session-method dictionary and then the
+	persistent one) rather than through ``methodDictForEnv: 1'', which builds a
+	fresh merged copy of both per call: that copy was half the time of every
+	``super().__new__(cls, x)'' -- markupsafe.Markup, once per escaped value."
+
 	"ANSWERS A PAIR: { method. cameFromTheClassSide }.  The side is what the
 	caller needs to bind the right receiver, and this is the only place that
 	knows it -- re-deriving it afterwards from the method object was tried
@@ -259,38 +264,33 @@ _lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
 					| hook |
 					hook := self _assignedInitSubclassOn: (mro at: i).
 					hook == nil ifFalse: [^ { hook. #assigned }]].
-				md := (mro at: i) methodDictForEnv: 1.
-				mdMeta := alsoMeta
-					ifTrue: [(mro at: i) class methodDictForEnv: 1]
-					ifFalse: [nil].
 				1 to: selectors size do: [:k |
 					| sel metaSel |
 					sel := selectors at: k.
 					metaSel := metaSelectors at: k.
 					sel ifNotNil: [
-						(md includesKey: sel) ifTrue: [^ { md at: sel. false }]].
-					metaSel ifNotNil: [
-						(mdMeta ~~ nil and: [(mdMeta includesKey: metaSel)
-							and: [self _isPythonClassMethod: metaSel on: (mro at: i)]])
-							ifTrue: [^ { mdMeta at: metaSel. true }]]]].
+						((mro at: i) compiledMethodAt: sel environmentId: 1 otherwise: nil)
+							ifNotNil: [:m | ^ { m. false }]].
+					(metaSel notNil and: [alsoMeta]) ifTrue: [
+						((mro at: i) class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
+							ifNotNil: [:m |
+								(self _isPythonClassMethod: metaSel on: (mro at: i))
+									ifTrue: [^ { m. true }]]]]].
 			^ nil]].
 	walker := cls superClass.
 	[walker notNil] whileTrue: [
-		| md mdMeta |
-		md := walker methodDictForEnv: 1.
-		mdMeta := alsoMeta
-			ifTrue: [walker class methodDictForEnv: 1]
-			ifFalse: [nil].
 		1 to: selectors size do: [:k |
 			| sel metaSel |
 			sel := selectors at: k.
 			metaSel := metaSelectors at: k.
 			sel ifNotNil: [
-				(md includesKey: sel) ifTrue: [^ { md at: sel. false }]].
-			metaSel ifNotNil: [
-				(mdMeta ~~ nil and: [(mdMeta includesKey: metaSel)
-					and: [self _isPythonClassMethod: metaSel on: walker]])
-					ifTrue: [^ { mdMeta at: metaSel. true }]]].
+				(walker compiledMethodAt: sel environmentId: 1 otherwise: nil)
+					ifNotNil: [:m | ^ { m. false }]].
+			(metaSel notNil and: [alsoMeta]) ifTrue: [
+				(walker class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
+					ifNotNil: [:m |
+						(self _isPythonClassMethod: metaSel on: walker)
+							ifTrue: [^ { m. true }]]]].
 		walker := walker superClass].
 	^ nil
 %

@@ -8277,6 +8277,29 @@ ___isDescriptorCallable___: aValue
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___class___: aClass owns: aSym family: family
+	"True when aClass itself defines the unary aSym or any of the 7 selectors in
+	family, in env 1 -- session methods included.
+
+	Asked of the class rather than of ``methodDictForEnv: 1'': that builds a
+	fresh merged copy of the persistent and transient dictionaries on every
+	call (_copyDictForQuery:, then addAll:, a privilege check per entry), and
+	the two chain walks below ran it for every class in the chain on every
+	attribute load that reached them -- 89% of the time of ``str.__new__'',
+	which cost ~140 us to look up.  includesSelector:environmentId: looks in
+	the transient dictionary and then the persistent one, which is the same
+	membership the merged copy answers for env 1."
+
+	(aClass @env0:includesSelector: aSym environmentId: 1) ifTrue: [^ true].
+	1 to: 7 do: [:i | | sel |
+		sel := family @env0:at: i.
+		sel == nil ifFalse: [
+			(aClass @env0:includesSelector: sel environmentId: 1) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___chainOwnsAnyOf___: family orUnary: aSym from: aClass
 	"True when any class in aClass's chain defines the unary aSym or any
 	selector in family, in env 1.
@@ -8287,14 +8310,10 @@ ___chainOwnsAnyOf___: family orUnary: aSym from: aClass
 	-- which on this build is a merge of the persistent and the transient
 	(session method) dicts, i.e. the expensive part, done eightfold."
 
-	| walker dict |
+	| walker |
 	walker := aClass.
 	[walker == nil] whileFalse: [
-		dict := walker @env0:methodDictForEnv: 1.
-		dict == nil ifFalse: [
-			(dict @env0:includesKey: aSym) ifTrue: [^ true].
-			1 to: 7 do: [:i |
-				(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]].
+		(self ___class___: walker owns: aSym family: family) ifTrue: [^ true].
 		walker := walker @env0:superClass].
 	^ false
 %
@@ -8328,14 +8347,10 @@ ___ownChainOwnsAnyOf___: family orUnary: aSym from: aClass
 	where they live, and importlib's MI merge already draws the line the same
 	way (``walker ~~ PythonInstance and: [walker ~~ Object]'')."
 
-	| walker dict |
+	| walker |
 	walker := aClass.
 	[(walker == nil) or: [(walker == PythonInstance) or: [walker == Object]]] whileFalse: [
-		dict := walker @env0:methodDictForEnv: 1.
-		dict == nil ifFalse: [
-			(dict @env0:includesKey: aSym) ifTrue: [^ true].
-			1 to: 7 do: [:i |
-				(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]].
+		(self ___class___: walker owns: aSym family: family) ifTrue: [^ true].
 		walker := walker @env0:superClass].
 	^ false
 %
