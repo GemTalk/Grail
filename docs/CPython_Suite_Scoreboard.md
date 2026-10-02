@@ -133,7 +133,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_taskgroups | OK | 96 | 0 | 0 | 12 |  |
-| test.test_statistics | ERROR | 371 | 36 | 201 | 6 |  |
+| test.test_statistics | ERROR | 371 | 39 | 164 | 6 |  |
 | test.test_abc | ERROR | 72 | 0 | 64 | 0 |  |
 | test.test_userstring | ERROR | 71 | 1 | 59 | 2 |  |
 | test.test_exception_group | ERROR | 52 | 23 | 1 | 0 |  |
