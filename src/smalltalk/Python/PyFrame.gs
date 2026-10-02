@@ -1379,6 +1379,30 @@ ___receiverNameForMethod___: aMethod
 	guarded: this runs inside a raise, and a class whose accessor refuses must
 	cost the frame its receiver name and nothing more."
 
+	| cache hit |
+	aMethod isNil ifTrue: [^ nil].
+	"MEMOISED PER METHOD.  The answer depends only on aMethod -- a recompiled def
+	is a new method object -- and finding it rebuilds the class's receiver table
+	(a fresh Dictionary per call) for every frame snapshot, which is to say on
+	every raise: 15% of a Jinja render, which raises AttributeError for every
+	``{{ row.field }}'' on a dict row.  Kept in SessionTemps, like the session's
+	other runtime state."
+	cache := SessionTemps current at: #'___GrailReceiverNameCache___' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'___GrailReceiverNameCache___' put: cache].
+	hit := cache at: aMethod otherwise: #'___unset___'.
+	hit == #'___unset___' ifFalse: [^ hit].
+	hit := self ___uncachedReceiverNameForMethod___: aMethod.
+	cache at: aMethod put: hit.
+	^ hit
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___uncachedReceiverNameForMethod___: aMethod
+	"___receiverNameForMethod___:'s answer, worked out.  See that method."
+
 	| pyName cls chain |
 	aMethod isNil ifTrue: [^ nil].
 	pyName := [BaseException ___pythonFrameNameFor___: aMethod selector]
@@ -1435,10 +1459,21 @@ ___namesIncludeCodegenMarker___: names
 	the temp, and ``___grailPython___'' holds no position -- an IR frame's line
 	comes from the position map."
 
+	"Cheap tests first.  This runs for every frame of every raise's snapshot
+	walk, and it copied each name (``asString'') and compared characters, every
+	time: by identity for a Symbol, and for anything else by value only when the
+	length could match."
 	1 to: names size do: [:i |
 		| nm |
-		nm := (names at: i) asString.
-		((nm = '___curPos___') or: [nm = '___grailPython___']) ifTrue: [^ true]].
+		nm := names at: i.
+		((nm == #'___curPos___') or: [nm == #'___grailPython___']) ifTrue: [^ true].
+		"Lengths first, which every other name fails: the markers are 12 and 17
+		characters, and comparing characters is most of what this cost."
+		(nm isSymbol not and: [
+			| str |
+			str := nm asString.
+			((str size == 12) and: [str = '___curPos___'])
+				or: [(str size == 17) and: [str = '___grailPython___']]]) ifTrue: [^ true]].
 	^ false
 %
 
