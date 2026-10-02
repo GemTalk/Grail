@@ -81,6 +81,31 @@ static inline int plausible_pyobj(const void *p);  /* could this be a PyObject*?
 static void report_bad_pyobj(const char *where, const void *p);
 extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
 
+/* A TYPE MIRROR: the C-side face of a Grail CLASS (docs/Support_Pydantic.md,
+   Phase 5 / W1).  A wrapper cannot be a type -- it is 32 bytes with the OOP at
+   offset 16 and GRAIL_WRAP_MAGIC at 24, where a PyTypeObject has ob_size and
+   tp_name -- so a class crosses as a full-size PyTypeObject built Smalltalk-side
+   (CPythonShim>>typeMirrorFor:): real tp_name / tp_flags / tp_basicsize and a
+   tp_base chain, so PyType_Check, PyType_IsSubtype and the PyType_Get* calls
+   answer from the struct.  The class's OOP rides in tp_weaklist and this magic
+   in tp_cache, two fields nothing in the shim or the limited API reads.
+   Offsets are handed to Smalltalk by shimTypeMirrorLayout, never restated. */
+#define GRAIL_MIRROR_MAGIC 0x524f5252494d4c47ULL   /* "GLMIRROR" */
+#define GRAIL_WRAP_MAGIC 0x475241494C575031ULL    /* "GRAILWP1" -- see is_foreign() */
+static inline int is_type_mirror(PyObject *obj) {
+    /* A wrapper is excluded FIRST: it is only 32 bytes, and an instance of a
+       mirrored class carries the mirror as its ob_type. */
+    if (*(uint64_t *)((char *)obj + 24) == GRAIL_WRAP_MAGIC) return 0;
+    PyTypeObject *mt = obj->ob_type;
+    if (mt == NULL || !plausible_pyobj(mt)) return 0;
+    /* Its metatype is type, or itself a mirror (a Grail metaclass). */
+    if (mt != &PyType_Type
+            && !(mt->ob_base.ob_base.ob_type == &PyType_Type
+                 && (uint64_t)(uintptr_t)mt->tp_cache == GRAIL_MIRROR_MAGIC))
+        return 0;
+    return (uint64_t)(uintptr_t)((PyTypeObject *)obj)->tp_cache == GRAIL_MIRROR_MAGIC;
+}
+
 static inline OopType pyobj_oop(PyObject *obj) {
     if (obj == NULL)     return none_oop;
     if (obj == Py_None)  return none_oop;
@@ -95,6 +120,7 @@ static inline OopType pyobj_oop(PyObject *obj) {
        boundary, where there is a return path. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("pyobj_oop", obj); return none_oop; }
     if (is_real_layout(obj)) return real_obj_to_oop(obj);
+    if (is_type_mirror(obj)) return (OopType)(uintptr_t)((PyTypeObject *)obj)->tp_weaklist;
     if (is_foreign(obj)) return foreign_proxy_oop(obj);
     return *(OopType *)((char *)obj + 16);
 }
@@ -566,11 +592,31 @@ static int  have_saved_gs_error = 0;
    forget_saved_gs_error(). */
 static PyObject *current_error_instance = NULL;
 
+/* A PYTHON EXCEPTION RAISED IN A CALLBACK -- Grail code C called (a
+   validator function, a __getattr__, a property) -- must become C's pending
+   error, not search Grail's handlers.  An outer Python ``except'' that
+   matches it lies BELOW the user-action frame; Smalltalk runs that handler on
+   top of the live C frames, the unwind is refused, and it re-signals until
+   the session dies -- or, with no such handler, the exception escapes the
+   extension altogether (pydantic_core never saw a validator's ValueError, so
+   it never became a ValidationError).  So CPythonShim>>___guardCallback:
+   catches it INSIDE the callback, records it, and sets this flag through a
+   CByteArray view of it; check_gci_error() -- already run after every
+   GciPerform -- takes it as the pending error (take_callback_error).
+   current_error_from_grail marks such an error, so if C hands it back to
+   Grail unhandled the ORIGINAL exception object is what is raised. */
+static int32_t g_cb_error_flag = 0;
+static int current_error_from_grail = 0;
+
 static void forget_saved_gs_error(void) {
     have_saved_gs_error = 0;
     saved_gs_error_text[0] = '\0';
     current_error_instance = NULL;
+    current_error_from_grail = 0;
 }
+
+extern "C" int  _grail_err_from_grail(void) { return current_error_from_grail; }
+extern "C" void _grail_err_set_from_grail(int v) { current_error_from_grail = v; }
 
 extern "C" void _grail_err_set_instance(PyObject *exc) { current_error_instance = exc; }
 extern "C" PyObject *_grail_err_instance(void) { return current_error_instance; }
@@ -1029,8 +1075,44 @@ static int refuse_unusable_oop(OopType oop, const char *where,
     return 1;
 }
 
+static int64 fetch_string(OopType oop, char *buf, int bufSize);   /* below */
+static PyObject *static_exc_named(const char *name);              /* below */
+
+/* The Python exception a guarded callback recorded, as C's pending error:
+   { Python name of its nearest shim exception type. message. C instance of a
+   wheel's own exception it carries, or 0 } -- see g_cb_error_flag. */
+static void take_callback_error(void) {
+    OopType arr = GciPerform(server, "___takeCallbackError", NULL, 0);
+    GciErrSType e;
+    if (GciErr(&e) || arr == OOP_NIL || arr == OOP_ILLEGAL) {
+        PyErr_SetString(PyExc_RuntimeError, "a Grail callback raised");
+        return;
+    }
+    char base[128], msg[1024];
+    OopType i1 = GciI64ToOop(1), i2 = GciI64ToOop(2), i3 = GciI64ToOop(3);
+    fetch_string(GciPerform(arr, "at:", &i1, 1), base, sizeof(base));
+    fetch_string(GciPerform(arr, "at:", &i2, 1), msg, sizeof(msg));
+    int64 ptr = GciOopToI64(GciPerform(arr, "at:", &i3, 1));
+    GciErr(&e);
+    PyObject *inst = (PyObject *)(intptr_t)ptr;
+    if (ptr != 0 && plausible_pyobj(inst) && plausible_pyobj(inst->ob_type)) {
+        PyErr_SetString((PyObject *)inst->ob_type, msg);
+        current_error_instance = inst;
+    } else {
+        PyObject *t = static_exc_named(base);
+        PyErr_SetString(t ? t : PyExc_Exception, msg);
+    }
+    current_error_from_grail = 1;
+}
+
 static int check_gci_error(void) {
     GciErrSType errInfo;
+    if (g_cb_error_flag) {
+        g_cb_error_flag = 0;
+        GciErr(&errInfo);               /* nothing should be pending; drop it */
+        take_callback_error();
+        return 1;
+    }
     if (GciErr(&errInfo)) {
         const char *msg = errInfo.message[0] ? errInfo.message
                         : (errInfo.reason[0] ? errInfo.reason : "");
@@ -1272,39 +1354,34 @@ extern "C" PyObject *PyUnicode_FromString(const char *str) {
     return addr_to_pyobj(GciPerform(server, "PyUnicode_FromString:", &arg, 1));
 }
 
-extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
+/* A Grail str's UTF-8 bytes and their length, from a buffer that lives as
+   long as the str's WRAPPER (CPythonShim>>PyUnicode_UTF8Buffer:).  CPython
+   keeps a str's UTF-8 form in the object, and PyO3's PyBackedStr keeps the
+   pointer while it holds the str; the per-call buffer cache this used to
+   answer from was freed at the end of the call, so a wheel's stored field
+   names dangled (pydantic_core's model_dump() found no fields).
+
+   Encoded through GemStone's encodeAsUTF8 (server side), not the raw
+   object bytes: String / ISOLatin store latin-1 code points and Unicode16
+   UTF-16 units, whose 0x00 high bytes truncated every strlen() consumer at
+   the first wide character (re.sub on 'ab\u0800c' answered 'a'). */
+static const char *grail_utf8(PyObject *obj, Py_ssize_t *size) {
+    if (size) *size = 0;
     if (obj == NULL) return NULL;
     OopType oop = pyobj_oop(obj);
     if (refuse_unusable_oop(oop, "PyUnicode_AsUTF8", obj)) return NULL;
-    char *cached = buffer_cache_get(oop);
-    if (cached) return cached;
+    OopType arr = GciPerform(server, "PyUnicode_UTF8Buffer:", &oop, 1);
+    if (check_gci_error()) return NULL;
+    OopType one = GciI64ToOop(1), two = GciI64ToOop(2);
+    OopType addrOop = GciPerform(arr, "at:", &one, 1);
+    OopType sizeOop = GciPerform(arr, "at:", &two, 1);
+    if (check_gci_error()) return NULL;
+    if (size) *size = (Py_ssize_t)GciOopToI64(sizeOop);
+    return (const char *)(intptr_t)GciOopToI64(addrOop);
+}
 
-    /* Encode through GemStone's own encoder rather than handing back the
-       raw object bytes.  Those are only UTF-8-compatible for 7-bit
-       content: String / ISOLatin store latin-1 code points, and
-       DoubleByteString / Unicode16 store UTF-16 code units, whose 0x00
-       high bytes masquerade as NUL terminators.  Every strlen()-based
-       consumer therefore TRUNCATED a wide string at its first character
-       -- most visibly re.sub, whose result is assembled by
-       PyUnicode_Join(): re.sub('zzz', 'Q', 'abࠀc') answered 'a'
-       even though nothing matched, and re.sub on any non-ASCII subject
-       silently lost everything from the first character onward.  (The
-       SRE MATCHING path already went through encodeAsUTF8, via
-       get_ucs4_for_string, which is why matching, spans and split were
-       correct while sub/subn were not.)
-
-       A 7-bit string encodes to identical bytes, so this only changes
-       behaviour where the old result was already wrong; the per-shimCall
-       buffer cache keeps it to one extra send per distinct string.
-       Falls back to the raw bytes if the receiver has no encodeAsUTF8 --
-       e.g. a ByteArray reaching here defensively. */
-    GciErrSType encErr; GciErr(&encErr);   /* drop any stale error first */
-    OopType srcOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
-    if (probe_failed_for_real("encodeAsUTF8")) return NULL;
-    if (srcOop == OOP_NIL || srcOop == OOP_ILLEGAL)
-        srcOop = oop;
-    int64 size = GciFetchSize_(srcOop);
-    return buffer_cache_add_from(oop, srcOop, size);
+extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
+    return grail_utf8(obj, NULL);
 }
 
 extern "C" int PyUnicode_Check(PyObject *obj) {
@@ -1443,8 +1520,8 @@ static int is_shim_type(PyTypeObject *t) {
    wheel's own type objects (numpy's DTypes) carry the same shim PyType_Type
    the shim readied them under — so the sentinel is the reliable positive ID.
    Value spells "GRAILWP1" and is < 2^63 so it round-trips through
-   Smalltalk int64At:put: (which requires a signed value). */
-#define GRAIL_WRAP_MAGIC 0x475241494C575031ULL
+   Smalltalk int64At:put: (which requires a signed value).  (#defined above
+   pyobj_oop, which needs it first.) */
 
 /* Could p be a PyObject* at all?  Every PyObject the shim can see is either
    malloc/calloc'd by _PyObject_New, gcMalloc'd by CPythonShim>>wrap:, or a
@@ -1509,6 +1586,7 @@ static int is_foreign(PyObject *obj) {
        caller gets a reportable error rather than a proxy for garbage. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
     if (is_real_layout(obj)) return 0;
+    if (is_type_mirror(obj)) return 0;     /* a Grail class's type mirror */
     return *(uint64_t *)((char *)obj + 24) != GRAIL_WRAP_MAGIC;
 }
 
@@ -1548,6 +1626,22 @@ static OopType foreign_proxy_oop(PyObject *obj) {
         return OOP_NIL;
     }
     const char *nm = (t && t->tp_name) ? t->tp_name : "";
+    /* One of the shim's static BUILTIN types (int, str, dict, object, type,
+       ...) is the Grail class of that name: typeObjectFor: hands these out for
+       the builtin classes, so a class that went into C comes back as itself
+       -- getattr(42, '__class__') from C answers Integer, not a proxy.
+       Compared against the list, not is_shim_type: PyType_FromSpec heap types
+       are registered shim types too. */
+    {
+        PyTypeObject *const statics[] = { &PyType_Type, &PyBaseObject_Type, &PyFloat_Type,
+            &PyLong_Type, &PyBool_Type, &PyUnicode_Type, &PyBytes_Type, &PyList_Type,
+            &PyDict_Type, &PyTuple_Type, &_PyNone_Type };
+        for (size_t i = 0; i < sizeof(statics) / sizeof(statics[0]); i++)
+            if ((PyTypeObject *)obj == statics[i]) {
+                OopType nameOop = GciNewString(statics[i]->tp_name);
+                return GciPerform(server, "classForStaticTypeNamed:", &nameOop, 1);
+            }
+    }
     /* An EXCEPTION TYPE crosses as a Grail exception class, not a proxy, so
        ``except pydantic_core.ValidationError'' and ``except ValueError'' both
        catch what the wheel raises.  One of the shim's own static types (and a
@@ -2174,13 +2268,37 @@ extern "C" int PyObject_HasAttrString(PyObject *obj, const char *name) {
 /* A foreign object (numpy scalar/dtype) stringifies through its own C
    tp_str/tp_repr slot (which builds a Grail-backed str via our PyUnicode
    ctors), not through the reverse proxy's absent Python dunders. */
+extern "C" const char *_grail_raised_message(PyObject *o);   /* shim_pyo3.cc */
+static void foreign_exc_text(PyObject *v, char *buf, size_t cap);
+
 static PyObject *foreign_str(PyObject *obj, int want_repr) {
     PyTypeObject *t = obj->ob_type;
     if (t == NULL) return NULL;
-    if (want_repr) { if (t->tp_repr) return t->tp_repr(obj);
-                     if (t->tp_str)  return t->tp_str(obj); }
-    else          { if (t->tp_str)  return t->tp_str(obj);
-                     if (t->tp_repr) return t->tp_repr(obj); }
+    /* The shim's own raised-exception token (PyErr_GetRaisedException):
+       its text is the message, as str() of the exception it stands for.
+       pydantic_core formats a validator's error with str(exc), and the token
+       otherwise reached Grail as a bare foreign proxy. */
+    const char *raised = _grail_raised_message(obj);
+    if (raised) {
+        if (!want_repr) return PyUnicode_FromString(raised);
+        const char *tn = t->tp_name ? t->tp_name : "Exception";
+        const char *dot = strrchr(tn, '.');
+        return PyUnicode_FromFormat("%s('%s')", dot ? dot + 1 : tn, raised);
+    }
+    /* Along the base chain: the shim's PyType_FromSpec does no slot
+       inheritance, so a pyclass's tp_str may live on its base. */
+    for (PyTypeObject *b = t; b != NULL; b = b->tp_base) {
+        if (want_repr) { if (b->tp_repr) return b->tp_repr(obj);
+                         if (b->tp_str)  return b->tp_str(obj); }
+        else           { if (b->tp_str)  return b->tp_str(obj);
+                         if (b->tp_repr) return b->tp_repr(obj); }
+    }
+    /* An exception instance with no slot at all: str() is args[0]. */
+    if (t->tp_flags & Py_TPFLAGS_BASE_EXC_SUBCLASS) {
+        char buf[1024];
+        foreign_exc_text(obj, buf, sizeof(buf));
+        return PyUnicode_FromString(buf);
+    }
     return NULL;
 }
 
@@ -3833,7 +3951,12 @@ static void check_and_raise_error(void) {
            instance and its type to the server first; ___translateShimError:
            raises a Grail exception built around them instead of a bare
            ValueError.  GCI state is drained above, so this perform is safe. */
-        if (current_error_instance != NULL) {
+        if (current_error_from_grail) {
+            /* It came FROM Grail and C did not handle it: raise the original
+               exception object again, not a reconstruction. */
+            GciPerform(server, "___noteReraiseCallbackException", NULL, 0);
+            GciErrSType tmp; GciErr(&tmp);
+        } else if (current_error_instance != NULL) {
             PyObject *inst = current_error_instance;
             PyTypeObject *it = inst->ob_type;
             OopType args[3] = { GciI64ToOop((int64)(intptr_t)inst),
@@ -4067,10 +4190,19 @@ static OopType shimInit(OopType serverOop, OopType noneAddr,
     server = serverOop;
 
     /* Extract OOPs from the Smalltalk-allocated CByteArray wrappers
-       (which have the GemStone OOP at offset 16). */
-    none_oop  = *(OopType *)((char *)(intptr_t)GciOopToI64(noneAddr) + 16);
-    true_oop  = *(OopType *)((char *)(intptr_t)GciOopToI64(trueAddr) + 16);
-    false_oop = *(OopType *)((char *)(intptr_t)GciOopToI64(falseAddr) + 16);
+       (which have the GemStone OOP at offset 16) -- the FIRST time.  Once
+       CPythonShim>>initTypeAddresses has switched None / True / False to
+       crossing as the shim's own static singletons, a re-init (ensureLoaded:
+       runs shimInit again for an instance it already set up) is handed THOSE,
+       which are 16 bytes: offset 16 is the next singleton's refcount, and
+       reading it made None an OOP that does not exist.  The OOPs recorded
+       the first time stand. */
+    PyObject *na = (PyObject *)(intptr_t)GciOopToI64(noneAddr);
+    PyObject *ta = (PyObject *)(intptr_t)GciOopToI64(trueAddr);
+    PyObject *fa = (PyObject *)(intptr_t)GciOopToI64(falseAddr);
+    if (na != Py_None)  none_oop  = *(OopType *)((char *)na + 16);
+    if (ta != Py_True)  true_oop  = *(OopType *)((char *)ta + 16);
+    if (fa != Py_False) false_oop = *(OopType *)((char *)fa + 16);
 
     /* Set type pointers on the static singletons. */
     _Py_TrueStruct.ob_type  = &PyBool_Type;
@@ -4085,6 +4217,26 @@ static OopType shimInit(OopType serverOop, OopType noneAddr,
  *
  * Called from Smalltalk to populate the type address dictionary.
  * ==================================================================== */
+
+/* One of the shim's static exception types, by its Python name, or NULL. */
+static PyObject *static_exc_named(const char *name) {
+    PyObject *const excs[] = {
+        PyExc_BaseException, PyExc_Exception, PyExc_ValueError, PyExc_TypeError,
+        PyExc_AttributeError, PyExc_KeyError, PyExc_IndexError, PyExc_LookupError,
+        PyExc_OverflowError, PyExc_ZeroDivisionError, PyExc_ArithmeticError,
+        PyExc_RuntimeError, PyExc_RecursionError, PyExc_NotImplementedError,
+        PyExc_MemoryError, PyExc_StopIteration, PyExc_StopAsyncIteration,
+        PyExc_SystemError, PyExc_OSError, PyExc_ImportError, PyExc_NameError,
+        PyExc_BufferError, PyExc_EOFError, PyExc_KeyboardInterrupt,
+        PyExc_UnicodeError, PyExc_UnicodeDecodeError, PyExc_UnicodeEncodeError,
+        PyExc_AssertionError, PyExc_BaseExceptionGroup, PyExc_DeprecationWarning,
+        PyExc_FutureWarning, PyExc_RuntimeWarning, PyExc_UserWarning };
+    for (size_t i = 0; i < sizeof(excs) / sizeof(excs[0]); i++) {
+        const char *n = name_for_exc_type(excs[i]);
+        if (n && strcmp(n, name) == 0) return excs[i];
+    }
+    return NULL;
+}
 
 static OopType shimTypeAddr(OopType nameOop)
 {
@@ -4103,6 +4255,16 @@ static OopType shimTypeAddr(OopType nameOop)
     else if (strcmp(name, "object") == 0) type = &PyBaseObject_Type;
     else if (strcmp(name, "type")   == 0) type = &PyType_Type;
     else if (strcmp(name, "NoneType") == 0) type = &_PyNone_Type;
+    /* Not types: the three singletons, so Grail can hand C THESE pointers
+       for None / True / False (CPythonShim>>initTypeAddresses). */
+    else if (strcmp(name, "None")  == 0) type = (PyTypeObject *)&_Py_NoneStruct;
+    else if (strcmp(name, "True")  == 0) type = (PyTypeObject *)&_Py_TrueStruct;
+    else if (strcmp(name, "False") == 0) type = (PyTypeObject *)&_Py_FalseStruct;
+    /* The shim's static exception types, by name, so a Grail exception
+       class mirrors onto the very type C compares against. */
+    if (!type) type = (PyTypeObject *)static_exc_named(name);
+    /* The callback-error flag, for CPythonShim>>___guardCallback:. */
+    if (!type && strcmp(name, "___cbErrorFlag") == 0) type = (PyTypeObject *)&g_cb_error_flag;
 
     check_and_raise_error();
     if (!type) return OOP_Zero;
@@ -4760,6 +4922,101 @@ static OopType shimForeignGetAttr(OopType ptrOop, OopType nameOop)
     OopType res = pyobj_oop(v);
     check_and_raise_error();
     return res;
+}
+
+/* tp_new of a Grail class's type mirror: ``cls.__new__(cls)'' in Grail
+   (CPythonShim>>PyType_GenericNew:).  pydantic_core builds a model
+   instance this way when the model has no custom __init__ -- it reads the
+   class's tp_new slot and calls it, then sets __dict__ through the generic
+   setattr -- and a mirror without one answered ``base type without
+   tp_new'' (W1, the half of it a type check does not cover). */
+static PyObject *grail_mirror_tp_new(PyTypeObject *subtype, PyObject *args, PyObject *kwds) {
+    (void)args; (void)kwds;
+    OopType cls = pyobj_oop((PyObject *)subtype);
+    OopType r = GciPerform(server, "PyType_GenericNew:", &cls, 1);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
+}
+
+/* The PyTypeObject geometry CPythonShim>>typeMirrorFor: builds a mirror
+   with: { size. tp_name. tp_basicsize. tp_flags. tp_base. tp_cache.
+   tp_weaklist. tp_doc. tp_new }, as offsets from the struct start, then the
+   address of grail_mirror_tp_new.  (The magic,
+   GRAIL_MIRROR_MAGIC, is a literal on the Smalltalk side: it is wider than a
+   SmallInteger.) */
+static OopType shimTypeMirrorLayout(OopType ignored)
+{
+    (void)ignored;
+    const int64 vals[] = {
+        (int64)sizeof(PyTypeObject),
+        (int64)offsetof(PyTypeObject, tp_name),
+        (int64)offsetof(PyTypeObject, tp_basicsize),
+        (int64)offsetof(PyTypeObject, tp_flags),
+        (int64)offsetof(PyTypeObject, tp_base),
+        (int64)offsetof(PyTypeObject, tp_cache),
+        (int64)offsetof(PyTypeObject, tp_weaklist),
+        (int64)offsetof(PyTypeObject, tp_doc),
+        (int64)offsetof(PyTypeObject, tp_new),
+        (int64)(intptr_t)grail_mirror_tp_new,
+    };
+    int n = (int)(sizeof(vals) / sizeof(vals[0]));
+    OopType sizeOop = GciI64ToOop(n);
+    OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
+    for (int i = 0; i < n; i++) GciStoreOop(arr, i + 1, GciI64ToOop(vals[i]));
+    check_and_raise_error();
+    return arr;
+}
+
+/* object.__setattr__ / object.__dict__ as C sees them -- the generic slots a
+   pyclass inherits, and what pydantic_core calls DIRECTLY (force_setattr) to
+   give a validated model its __dict__ and __pydantic_fields_set__ without
+   running BaseModel.__setattr__.  They were shim_numpy.cc stubs answering
+   success and doing nothing, so every model came out with no fields.  On a
+   Grail object they run object's own __setattr__:_: / __delattr__:
+   NON-virtually (CPythonShim>>PyObject_GenericSetAttr:name:value:); a NULL
+   value is a delete, as in CPython. */
+extern "C" int PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *value) {
+    if (obj == NULL || name == NULL) return -1;
+    if (is_foreign(obj)) {
+        PyErr_SetString(PyExc_TypeError,
+            "PyObject_GenericSetAttr on a C extension's own object is not supported by the Grail shim");
+        return -1;
+    }
+    OopType args[3] = { pyobj_oop(obj), pyobj_oop(name), value ? pyobj_oop(value) : OOP_NIL };
+    GciPerform(server, "PyObject_GenericSetAttr:name:value:", args, 3);
+    if (check_gci_error()) return -1;
+    return 0;
+}
+
+extern "C" PyObject *PyObject_GenericGetDict(PyObject *obj, void *context) {
+    (void)context;
+    return PyObject_GetAttrString(obj, "__dict__");
+}
+
+/* isinstance / issubclass, the protocol PyO3 uses for every downcast it
+   cannot settle by type identity.  They were shim_numpy.cc stubs answering
+   0.  Between C types (a wheel's own, the shim's statics, Grail-class
+   mirrors) the tp_base chain answers; otherwise the server's builtins do. */
+extern "C" int PyObject_IsInstance(PyObject *obj, PyObject *cls) {
+    if (obj == NULL || cls == NULL) return -1;
+    if (cls->ob_type == &PyType_Type && (is_foreign(cls) || is_type_mirror(cls))
+            && obj->ob_type != NULL && PyType_IsSubtype(obj->ob_type, (PyTypeObject *)cls))
+        return 1;
+    OopType args[2] = { pyobj_oop(obj), pyobj_oop(cls) };
+    OopType r = GciPerform(server, "PyObject_IsInstance:cls:", args, 2);
+    if (check_gci_error()) return -1;
+    return r == OOP_TRUE ? 1 : 0;
+}
+
+extern "C" int PyObject_IsSubclass(PyObject *derived, PyObject *cls) {
+    if (derived == NULL || cls == NULL) return -1;
+    if (derived->ob_type == &PyType_Type && cls->ob_type == &PyType_Type
+            && PyType_IsSubtype((PyTypeObject *)derived, (PyTypeObject *)cls))
+        return 1;
+    OopType args[2] = { pyobj_oop(derived), pyobj_oop(cls) };
+    OopType r = GciPerform(server, "PyObject_IsSubclass:cls:", args, 2);
+    if (check_gci_error()) return -1;
+    return r == OOP_TRUE ? 1 : 0;
 }
 
 static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
@@ -5788,20 +6045,8 @@ extern "C" int PyModule_AddType(PyObject *module, PyTypeObject *type) {
 
 extern "C" const char *PyUnicode_AsUTF8AndSize(PyObject *unicode,
                                                Py_ssize_t *size) {
-    const char *s = PyUnicode_AsUTF8(unicode);
-    if (!s) {
-        if (size) *size = 0;
-        return NULL;
-    }
-    if (size) {
-        /* The UTF-8 ENCODED length, which is what `s' actually holds --
-           GciFetchSize_ on the original object answers its raw storage
-           size (UTF-16 code units for a wide string), disagreeing with
-           `s' for exactly the non-ASCII strings this matters for. */
-        int64 cached = buffer_cache_get_size(pyobj_oop(unicode));
-        *size = (Py_ssize_t)(cached >= 0 ? cached : (int64)strlen(s));
-    }
-    return s;
+    /* The UTF-8 ENCODED length, which is what the buffer holds. */
+    return grail_utf8(unicode, size);
 }
 
 extern "C" PyObject *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size,
@@ -6229,6 +6474,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimModuleAttrs", shimModuleAttrs, 1);
     GCI_DECLARE_ACTION("shimCallKw", shimCallKw, 5);
     GCI_DECLARE_ACTION("shimCallObject", shimCallObject, 4);
+    GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
 }
 

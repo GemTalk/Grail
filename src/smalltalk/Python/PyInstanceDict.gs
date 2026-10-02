@@ -607,6 +607,28 @@ values
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
+copy
+	"``obj.__dict__.copy()'' -- a plain dict of the instance's attributes, as
+	CPython answers (its __dict__ IS a dict).  Missing, so copy.copy() of a
+	__dict__ fell back to reduce-and-rebuild and failed storing on nil -- which
+	is how pydantic's model_copy() died (docs/Support_Pydantic.md, Phase 5)."
+
+	| d |
+	d := (Python @env0:at: #dict) @env0:new.
+	self @env0:keysAndValuesDo: [:k :v | d @env1:__setitem__: (self @env0:___pythonKeyFor___: k) _: v].
+	^ d
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+__copy__
+	"copy.copy() of a __dict__: the same plain dict as copy()."
+
+	^ self copy
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
 items
 	"A live dict_items view -- see ``keys''."
 

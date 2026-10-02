@@ -376,6 +376,7 @@ typedef struct {
     uint64_t      pad;               /* keeps offset 24 off GRAIL_WRAP_MAGIC */
     uint64_t      magic;             /* GRAIL_RAISED_MAGIC */
     PyObject     *cause;
+    int           from_grail;        /* raised by a Grail callback */
     char          msg[1024];
 } GrailRaisedException;
 
@@ -389,6 +390,8 @@ static GrailRaisedException *as_raised(PyObject *o) {
 void _grail_err_set_instance(PyObject *exc);
 PyObject *_grail_err_instance(void);
 void _grail_foreign_exc_text(PyObject *v, char *buf, size_t cap);
+int  _grail_err_from_grail(void);
+void _grail_err_set_from_grail(int v);
 
 PyObject *PyErr_GetRaisedException(void) {
     PyObject *type = PyErr_Occurred();
@@ -401,6 +404,7 @@ PyObject *PyErr_GetRaisedException(void) {
         PyErr_Clear();
         return inst;
     }
+    int from_grail = _grail_err_from_grail();
     PyObject *ptype = NULL, *pvalue = NULL, *ptb = NULL;
     PyErr_Fetch(&ptype, &pvalue, &ptb);
     /* A value that already IS a raised exception (Set -> Fetch round trip)
@@ -411,6 +415,7 @@ PyObject *PyErr_GetRaisedException(void) {
     r->ob_refcnt = 1;
     r->ob_type = (PyTypeObject *)ptype;
     r->magic = GRAIL_RAISED_MAGIC;
+    r->from_grail = from_grail;
     const char *m = pvalue ? PyUnicode_AsUTF8(pvalue) : NULL;
     if (m) snprintf(r->msg, sizeof(r->msg), "%s", m);
     if (getenv("GRAIL_SHIM_DIAG")) {
@@ -426,6 +431,7 @@ void PyErr_SetRaisedException(PyObject *exc) {
     GrailRaisedException *r = as_raised(exc);
     if (r) {
         PyErr_SetString((PyObject *)r->ob_type, r->msg);
+        if (r->from_grail) _grail_err_set_from_grail(1);
         return;
     }
     /* An instance of one of the wheel's own exception classes: keep the
@@ -434,6 +440,13 @@ void PyErr_SetRaisedException(PyObject *exc) {
     _grail_foreign_exc_text(exc, text, sizeof(text));
     PyErr_SetString((PyObject *)exc->ob_type, text);
     _grail_err_set_instance(exc);
+}
+
+/* The message of one of the tokens above, or NULL for anything else --
+   cpython.cc's foreign_str answers str()/repr() of a token with it. */
+const char *_grail_raised_message(PyObject *o) {
+    GrailRaisedException *r = as_raised(o);
+    return r ? r->msg : NULL;
 }
 
 PyObject *PyException_GetCause(PyObject *exc) {

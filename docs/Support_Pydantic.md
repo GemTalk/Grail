@@ -1,10 +1,11 @@
 # Supporting pydantic v2 — loading `_pydantic_core` through the CPython shim
 
-Status: **Phases 0–3 done; Phase 4's abi3 trial succeeded** — the
-source-built abi3 `pydantic_core` validates int/str/bool/float/list/dict
-schemas like CPython, and pydantic gets as far as building `BaseModel`'s
-schema, where it meets W1 (Phase 5). Phases 0–2 merged as #1277; Phase 3 is
-#1282 (`jmason/pydantic1`); the trial is on `jmason/pydantic2`.
+Status: **Phases 0–5 done — `pydantic.BaseModel` works in Grail** (on the
+abi3 build of `pydantic_core`): validation, nested models, constraints,
+validators, `model_dump` / `_json`, `model_copy`, JSON schema, all matching
+CPython on the probe set. Phase 6 (breadth and measurement) is next. Phases
+0–2 merged as #1277; Phase 3 is #1282 (`jmason/pydantic1`); Phase 4 (b) is
+#1286 (`jmason/pydantic2`); Phase 5 is on `jmason/pydantic3`.
 
 ## The decision
 
@@ -457,6 +458,58 @@ class M(BaseModel):
     y: str = "d"
 assert M(x="1").x == 1 and M.model_validate({"x": 2}).model_dump() == {"x": 2, "y": "d"}
 ```
+
+**Result (2026-10-01, branch `jmason/pydantic3`, on the abi3 build): exit
+met.** The assertion above passes, and a broader probe — nested models (dump,
+JSON, and a nested error's location `('inner', 'a')`), `Field(ge=0)`
+constraints, a missing field, `model_validate_json`, `model_copy(update=)`,
+model `==` and `model_json_schema()` — prints exactly what CPython prints,
+line for line. So does a Python `after_validator` that raises `ValueError`:
+one `value_error` line error, `'Value error, must be non-negative'`.
+
+Walls, in the order they fell (C = shim, S = Grail Smalltalk, P = Grail's
+Python semantics):
+
+| # | wall | fix |
+| --- | --- | --- |
+| 1 | C `PyType_Check(datetime.datetime)` false — a Grail class crossed as a 32-byte wrapper typed `object` (W1) | **type mirrors**: a class crosses as a full-size `PyTypeObject` built Smalltalk-side (`CPythonShim>>typeObjectFor:`) — real `tp_name` / `tp_flags` (subclass bits from the MRO) / `tp_basicsize` / `tp_base` chain, the class OOP in `tp_weaklist` and a magic in `tp_cache`, recognised by `is_type_mirror` in `pyobj_oop` / `is_foreign`; geometry from the `shimTypeMirrorLayout` user action. A **builtin** class crosses as the shim's own static type (`PyLong_Type`, `PyExc_ValueError`, …) and comes back as itself (`classForStaticTypeNamed:`). Instances of Python classes carry their class's mirror as `ob_type` |
+| 2 | `PyObject_IsInstance` / `IsSubclass` were stubs answering 0 | real: the `tp_base` chain between C types, else the server's builtins |
+| 3 | every model came out empty: `PyObject_GenericSetAttr` (pydantic_core's `force_setattr` of `__dict__`) was a stub | C `PyObject_GenericSetAttr` / `GenericGetDict` run `object`'s own `__setattr__:_:` / `__delattr__:` **non-virtually**; and **P** `obj.__dict__ = d` replaces the instance's attributes (it stored an attribute *named* `__dict__`) |
+| 4 | `strict=None` refused as "not a bool" — a Grail `None` reached C as a wrapper, not `Py_None` | **None / True / False cross as the shim's static singletons** (`_Py_NoneStruct` …); `shimInit` keeps the OOPs it first read when re-initialised with the statics |
+| 5 | `model_dump()` → `'object' object is not an instance of 'dict'` | the instance-dict view (`PyInstanceDict`) is typed `dict` in `typeAddrFor:` |
+| 6 | `import pydantic_core` from Rust (its MISSING sentinel) **re-ran** `pydantic_core/__init__` mid-validation → recursion | `CPythonShim>>PyImport_ImportModule:` answers an already-imported module from `sys.modules` first |
+| 7 | `model_dump()` → `{}` — `PyBackedStr` field names dangled: the shim's UTF-8 buffers lived in a per-call cache | `PyUnicode_AsUTF8[AndSize]` answer a buffer owned by the **string's wrapper** (`PyUnicode_UTF8Buffer:`), dropped by `sweep` with the wrapper; also `PyDict_New` makes a Python `dict` (insertion-ordered — `e.errors()` rows were in hash order) and `PyDict_Next` iterates in insertion order |
+| 8 | **P** `@overload` stubs in a class body beat the implementation (`NotImplementedError` from `_overload_dummy`) | `isOverloadStub` recognises a BARE `@overload` (the parser's Symbol form); a decorated def's result is not stored when a later statement rebinds the name (`___isRebindLaterInBody___:`) |
+| 9 | a Python validator's `ValueError` escaped past pydantic_core (`UncontinuableError`), and a matching outer `except` re-ran forever | **guarded callbacks**: 16 server methods that run Python code for C (`PyObject_Call*`, `GetAttr`/`SetAttr`, `GetItem`/`SetItem`, `RichCompare*`, `Str`/`Repr`, `GetIter`/`Iter_Next`, `IsInstance`/`IsSubclass`, `GenericSetAttr`, `Length`) catch a Python exception INSIDE the callback (`___guardCallback:`), record it and set a C flag through a `CByteArray` view; `check_gci_error()` takes it as C's pending error (a wheel's own exception as its C instance); if C hands it back unhandled, the ORIGINAL exception object is re-raised. `str()` / `repr()` of the shim's raised-exception token answer its message |
+| 10 | nested error location `('a',)` not `('inner', 'a')` — every model looked like it had a custom `__init__` | **P** `f.attr = value` on a sibling def in a class body was dropped; BaseModel marks its `__init__` that way (`___methodAttributeAssigns___`) |
+| 11 | `base type without tp_new` once models were built by pydantic_core itself | a mirror's `tp_new` is a C trampoline into `cls.__new__(cls)` (`PyType_GenericNew:`, guarded) |
+| 12 | **P** `model_copy()` → store on nil — `obj.__dict__.copy()` / `copy.copy(obj.__dict__)` did not exist | `PyInstanceDict >> copy` / `__copy__` answer a plain dict |
+
+Validated (local, Darwin arm64): SUnit 7650/7650, all 8 shards, concurrent-
+import passing; fixture gate 509/509; CPython gate 0 regressions (1
+improvement, `test_ssl`, as in every local run). The first SUnit run caught
+one regression of this phase's own making — wall 3's `__dict__` replacement
+also applied to FUNCTIONS, whose `__dict__` has its own handling
+(`FunctionAttrWriteTestCase`); it is now limited to instances of Python
+classes.
+
+The P-rows are general Grail bugs, guarded by
+`tests/python/class_body_rebinding_and_instance_dict.py` (15 checks, agrees
+with CPython 3.14) and `ClassBodyRebindingAndInstanceDictTestCase`.
+`CPythonShimTestCase>>testNoneWrapperEmbedsSingletonOop` now pins the new
+contract (None / True / False ARE the shim's statics).
+
+Seen and not yet addressed:
+* pydantic_core's `py.import("pydantic")` for the version in docs URLs
+  (`.ok()`, tolerated) hits `RecursionError` when it first runs inside a
+  validator callback — the URL then says `latest`.
+* Grail emits `PydanticDeprecatedSince20` / `PydanticDeprecatedSince211`
+  warnings CPython does not, while building `BaseModel` (Grail's eager
+  attribute introspection touching deprecated members).
+* `PyBytes_AsString` still answers from the per-call cache — the same
+  lifetime bug as wall 7, for `PyBackedBytes`.
+* a Python class's mirror always has metatype `type`, even under a custom
+  metaclass (`ModelMetaclass`); nothing has needed better yet.
 
 ### Phase 6 — end to end, and measure
 `import pydantic` clean; a slice of pydantic's own test suite; wall-clock per

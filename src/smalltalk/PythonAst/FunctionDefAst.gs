@@ -85,9 +85,16 @@ isOverloadStub
 
 	decorator_list isNil ifTrue: [^ false].
 	^ decorator_list anySatisfy: [:deco |
-		((deco isKindOf: NameAst) and: [deco id asString = 'overload'])
+		"A bare decorator NAME reaches here as a Symbol -- the parser's form for
+		``@name'' (see ___wrapsPropertyAccessor___) -- not a NameAst, so bare
+		``@overload'' (``from typing import overload'') was never recognised and
+		only ``@typing.overload'' was.  pydantic spells it bare, and its
+		GenerateSchema._get_args_resolving_forward_refs answered the stub's
+		None (docs/Support_Pydantic.md, Phase 5)."
+		((deco isKindOf: Symbol) and: [deco asString = 'overload'])
+			or: [((deco isKindOf: NameAst) and: [deco id asString = 'overload'])
 			or: [(deco isKindOf: AttributeAst)
-				and: [deco attr asString = 'overload']]
+				and: [deco attr asString = 'overload']]]
 	]
 %
 

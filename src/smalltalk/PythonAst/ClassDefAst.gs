@@ -2388,7 +2388,8 @@ printSmalltalkRuntimeOn: aStream
 		| decos |
 		decos := def applicableMethodDecorators.
 		(decos isEmpty not
-			and: [(decoratedProps includes: def name asSymbol) not]) ifTrue: [
+			and: [(decoratedProps includes: def name asSymbol) not
+			and: [(self ___isRebindLaterInBody___: def) not]]) ifTrue: [
 			def
 				printMethodDecoratorsOn: aStream
 				decorators: decos
@@ -2398,6 +2399,34 @@ printSmalltalkRuntimeOn: aStream
 	they are ONE property object -- see ___decoratedPropertyNames___."
 	decoratedProps do: [:n |
 		self ___printDecoratedProperty___: n on: aStream siblingNames: decoratorScope].
+
+	"``f.attr = value'' on a sibling DEF in the class body -- an attribute of the
+	FUNCTION, which CPython sets while the body runs.  Such statements were
+	dropped (see ___isClassBodyAttributeAssign___), so ``C.f.attr'' was
+	missing.  pydantic marks its own initializer that way --
+	``__init__.__pydantic_base_init__ = True'' in BaseModel's body -- and,
+	finding no mark, took EVERY model for one with a custom __init__, so a
+	nested model was validated through a Python call and its errors lost the
+	outer field's location (docs/Support_Pydantic.md, Phase 5).  Emitted here,
+	once the methods exist, onto the same UnboundMethod a later ``C.f.attr =
+	v'' stores through, in source order, under the class-body runtime class so
+	the value expression reads the body's names."
+	self ___methodAttributeAssigns___ do: [:stmt |
+		| tgt savedRuntimeClass |
+		tgt := stmt targets first.
+		aStream
+			nextPutAll: '(UnboundMethod definingClass: ';
+			nextPutAll: self ___stVarName___;
+			nextPutAll: ' selector: #''';
+			nextPutAll: tgt value id asString;
+			nextPutAll: ''') @env1:__setattr__: ''';
+			nextPutAll: tgt attr asString;
+			nextPutAll: ''' _: ('.
+		savedRuntimeClass := CallAst classBodyRuntimeClass.
+		CallAst classBodyRuntimeClass: name.
+		[stmt value printSmalltalkOn: aStream]
+			ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
+		aStream nextPutAll: ').'; lf].
 
 	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
 	guarantees it by applying a decorator at the def statement, so by the time
@@ -4405,6 +4434,30 @@ ___propertyNamesForSlots___
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___methodAttributeAssigns___
+	"The class-body statements ``f.attr = value'' whose ``f'' is a plain
+	(undecorated, non-overload) instance DEF defined EARLIER in the body -- an
+	attribute of that function.  See the emit after the method decorators."
+
+	| seen result |
+	result := OrderedCollection new.
+	body isNil ifTrue: [^ result].
+	seen := IdentitySet new.
+	body body do: [:st |
+		((st isKindOf: InstanceFunctionDefAst)
+				and: [st applicableMethodDecorators isEmpty and: [st isOverloadStub not]])
+			ifTrue: [seen add: st name asSymbol].
+		((st isKindOf: AssignAst)
+				and: [st targets size = 1
+				and: [(st targets first isKindOf: AttributeAst)
+				and: [(st targets first value isKindOf: NameAst)
+				and: [seen includes: st targets first value id asSymbol]]]])
+			ifTrue: [result add: st]].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 ___isClassBodyAttributeAssign___: stmt
 	"True for a class-body assignment ``<NestedClass>.attr = value'' -- a runtime
 	mutation of a NESTED CLASS that CPython performs at class-definition time and
@@ -4521,6 +4574,40 @@ ___classBodyOrderedRuntimeStatements___
 			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]]])
 				ifTrue: [result add: pos -> stmt]].
 	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___isRebindLaterInBody___: aDef
+	"Does a LATER statement of this class body bind aDef's name again -- another
+	def, or a plain ``name = ...''?  Then aDef's decorator must not store over
+	the class: CPython runs the body in order, so the LAST binding is what the
+	class holds.
+
+	Grail compiles every def to a method (the last compile wins, which is
+	already source order) but applies method decorators AFTER all of them, and
+	a decorator's store shadows the compiled method.  So ``@overload def m'' x2
+	followed by the implementation ``def m'' left m bound to typing's
+	_overload_dummy, and calling it raised NotImplementedError -- pydantic's
+	GenerateSchema._get_args_resolving_forward_refs, for every generic field
+	type (docs/Support_Pydantic.md, Phase 5).  Only top-level statements are
+	considered; a def inside a compound statement has its own emit."
+
+	| stmts idx nm |
+	body isNil ifTrue: [^ false].
+	stmts := body body.
+	idx := stmts indexOf: aDef.
+	idx = 0 ifTrue: [^ false].
+	nm := aDef name asSymbol.
+	idx + 1 to: stmts size do: [:i | | st |
+		st := stmts at: i.
+		(((st isKindOf: FunctionDefAst) or: [st isKindOf: AsyncFunctionDefAst])
+				and: [st name asSymbol == nm])
+			ifTrue: [^ true].
+		((st isKindOf: AssignAst)
+				and: [st targets anySatisfy: [:t | (t isKindOf: NameAst) and: [t id asSymbol == nm]]])
+			ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Class Compilation'
