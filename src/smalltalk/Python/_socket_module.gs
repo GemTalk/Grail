@@ -955,9 +955,35 @@ connect: address
 	ok == true ifFalse: [
 		(ms @env0:notNil @env0:and: [ok @env0:isNil]) ifTrue: [
 			^ TimeoutError ___signal___: 'timed out'].
-		^ self @env0:___fail: 'connect failed'].
+		"Raised as the errno connect_ex answers for the same failure, so the two
+		cannot disagree: a refused connect is ConnectionRefusedError [Errno 61],
+		as in CPython.  It was a bare ``OSError: connect failed: getpeername(15)
+		failed with Invalid argument'', GemStone's own wording for how it found
+		out -- which no ``except ConnectionRefusedError'' could catch."
+		^ self ___raiseConnectCode___:
+			(self ___resolvedConnectCode___: sock on: host port: port timeoutMs: ms)].
 	hadPeer := true.
 	^ None
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___resolvedConnectCode___: sock on: host port: port timeoutMs: ms
+	"CPython's errno for a blocking connect that was WAITED for and did not
+	succeed.  Shared by connect, which raises it, and connect_ex, which answers it.
+
+	The fallback's EINPROGRESS cannot stand here: this connect was waited for.
+	With a TIMEOUT that expired it is CPython's SOCK_TIMEOUT_ERR, EWOULDBLOCK
+	(test_ssl test_timeout_connect_ex; 35 is Grail's errno.EWOULDBLOCK, as for
+	___notReadyNow___).  With no timeout the wait ran until the connect
+	resolved, so it FAILED: Linux reports a refused socket writable, which the
+	fallback reads as still going (test_ssl test_connect_ex_error)."
+
+	| code |
+	code := self ___connectCodeFallback___: sock on: host port: port.
+	^ code @env0:= 36
+		ifTrue: [ms @env0:notNil ifTrue: [35] ifFalse: [61]]
+		ifFalse: [code]
 %
 
 category: 'Grail-Socket Protocol'
@@ -997,18 +1023,7 @@ connect_ex: address
 			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
 		ok == true
 			ifTrue: [hadPeer := true. 0]
-			ifFalse: [ | code |
-				code := self ___connectCodeFallback___: sock on: host port: port.
-				"The fallback's EINPROGRESS cannot stand here: this connect was
-				WAITED for.  With a TIMEOUT that expired it is CPython's
-				SOCK_TIMEOUT_ERR, EWOULDBLOCK (test_ssl test_timeout_connect_ex;
-				35 is Grail's errno.EWOULDBLOCK, as for ___notReadyNow___).  With
-				no timeout the wait ran until the connect resolved, so it FAILED:
-				Linux reports a refused socket writable, which the fallback reads
-				as still going (test_ssl test_connect_ex_error)."
-				code @env0:= 36
-					ifTrue: [ms @env0:notNil ifTrue: [35] ifFalse: [61]]
-					ifFalse: [code]] ]
+			ifFalse: [self ___resolvedConnectCode___: sock on: host port: port timeoutMs: ms] ]
 		@env0:on: Error
 		do: [:e | | code |
 			code := [gsSocket @env0:isNil ifTrue: [nil] ifFalse: [gsSocket @env0:lastErrorCode]]

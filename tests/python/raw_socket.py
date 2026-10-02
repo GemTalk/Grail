@@ -195,6 +195,35 @@ def closed_socket_raises():
         return 'OSError'
 
 
+def refused_connect_raises():
+    """A blocking connect nothing listens for raises ConnectionRefusedError,
+    with the errno connect_ex answers for the same address.
+
+    Grail raised a bare ``OSError: connect failed: getpeername(15) failed with
+    Invalid argument'' -- GemStone's wording for how it found out -- so no
+    ``except ConnectionRefusedError'' could catch it, and connect and
+    connect_ex disagreed about the same failure."""
+    probe = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    probe.bind(('127.0.0.1', 0))
+    addr = probe.getsockname()
+    probe.close()                       # bound and closed: nothing listens
+    s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    try:
+        s.connect(addr)
+        return ['no error', None]
+    except OSError as e:
+        raised = type(e).__name__
+        code = e.errno
+    finally:
+        s.close()
+    s2 = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    try:
+        answered = s2.connect_ex(addr)
+    finally:
+        s2.close()
+    return [raised, code == answered]
+
+
 def bad_host_raises_gaierror():
     try:
         _socket.gethostbyname('no-such-host.invalid.example')
@@ -242,6 +271,7 @@ r = {
     'sockopt_roundtrip': sockopt_roundtrip(),
     'identity_attributes': identity_attributes(),
     'closed_socket_raises': closed_socket_raises(),
+    'refused_connect_raises': refused_connect_raises(),
     'bad_host_raises_gaierror': bad_host_raises_gaierror(),
     'exception_hierarchy': exception_hierarchy(),
     'localhost_resolves': localhost_resolves(),
@@ -262,6 +292,7 @@ EXPECTED = {
     'sockopt_roundtrip': True,
     'identity_attributes': [True, True, True, True, -1],
     'closed_socket_raises': 'OSError',
+    'refused_connect_raises': ['ConnectionRefusedError', True],
     'bad_host_raises_gaierror': 'gaierror',
     'exception_hierarchy': [True, True, True, True],
     'localhost_resolves': '127.0.0.1',
