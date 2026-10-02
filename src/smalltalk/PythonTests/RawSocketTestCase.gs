@@ -256,6 +256,19 @@ testOperationOnAClosedSocketRaisesOSError
 
 category: 'Grail-Tests'
 method: RawSocketTestCase
+testARefusedConnectRaisesConnectionRefusedError
+	"A blocking connect to a port nothing listens on is ConnectionRefusedError,
+	carrying the errno connect_ex answers for the same address.  It was a bare
+	``OSError: connect failed: getpeername(15) failed with Invalid argument'',
+	which ``except ConnectionRefusedError'' could not catch -- and which, raised
+	in a forked test client, stopped a whole test shard."
+
+	self assert: (self reprAt: 'refused_connect_raises')
+		equals: '[''ConnectionRefusedError'', True]'.
+%
+
+category: 'Grail-Tests'
+method: RawSocketTestCase
 testUnresolvableHostRaisesGaierror
 	"gaierror is a distinct OSError subclass, so ``except socket.gaierror''
 	means ''the name would not resolve'' rather than ''some socket call
