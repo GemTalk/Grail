@@ -102,6 +102,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_annotationlib | OK | 117 | 0 | 0 | 8 |  |
 | test.test_bufio | OK | 4 | 0 | 0 | 0 |  |
 | test.test_codecs | OK | 287 | 0 | 0 | 22 |  |
+| test.test_contextlib | ERROR | 91 | 2 | 7 | 0 |  |
 | test.test_contextlib_async | OK | 58 | 0 | 0 | 0 |  |
 | test.test_asyncgen | OK | 85 | 0 | 0 | 0 |  |
 | test.test_coroutines | OK | 99 | 0 | 0 | 4 |  |
@@ -121,7 +122,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
 | test.test_sax | OK | 186 | 0 | 0 | 0 |  |
-| test.test_ssl | FAIL | 196 | 5 | 0 | 24 |  |
+| test.test_ssl | FAIL | 196 | 5 | 0 | 23 |  |
 | test.test_urllib2_localnet | OK | 21 | 0 | 0 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_xml_etree | OK | 226 | 0 | 0 | 6 |  |
@@ -132,7 +133,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_taskgroups | OK | 96 | 0 | 0 | 12 |  |
-| test.test_statistics | ERROR | 371 | 37 | 201 | 6 |  |
+| test.test_statistics | ERROR | 371 | 39 | 164 | 6 |  |
 | test.test_abc | ERROR | 72 | 0 | 64 | 0 |  |
 | test.test_userstring | ERROR | 71 | 1 | 59 | 2 |  |
 | test.test_exception_group | ERROR | 52 | 23 | 1 | 0 |  |

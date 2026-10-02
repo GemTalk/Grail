@@ -987,6 +987,7 @@ run
 	at: #'FlagMemberLengthTestCase' put: nil;
 	at: #'FlagNumericReprTestCase' put: nil;
 	at: #'FlaskScaffoldingTestCase' put: nil;
+	at: #'FlaskViewRaisingTestCase' put: nil;
 	at: #'FloatTestCase' put: nil;
 	at: #'FloatingPointErrorTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
@@ -1111,6 +1112,7 @@ run
 	at: #'LiveDictTestCase' put: nil;
 	at: #'LiveFrameProbeResilienceTestCase' put: nil;
 	at: #'LocalsTestCase' put: nil;
+	at: #'LoggingRecordsTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'MakecodesPatternTestCase' put: nil;
@@ -2434,6 +2436,7 @@ input src/smalltalk/PythonTests/FlagCrossClassReprTestCase.gs
 input src/smalltalk/PythonTests/FlagMemberLengthTestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
 input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
+input src/smalltalk/PythonTests/FlaskViewRaisingTestCase.gs
 input src/smalltalk/PythonTests/FloatingPointErrorTestCase.gs
 input src/smalltalk/PythonTests/FloatTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
@@ -2560,6 +2563,7 @@ input src/smalltalk/PythonTests/LiveDictTestCase.gs
 input src/smalltalk/PythonTests/LiveFrameLocalsTestCase.gs
 input src/smalltalk/PythonTests/LiveFrameProbeResilienceTestCase.gs
 input src/smalltalk/PythonTests/LocalsTestCase.gs
+input src/smalltalk/PythonTests/LoggingRecordsTestCase.gs
 input src/smalltalk/PythonTests/LookupErrorTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs

@@ -310,7 +310,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_colorsys` | colorsys — pure color-space math. |
 |  | `test_configparser` | configparser (INI) — pure Python. |
 |  | `test_context` | contextvars — pure-Python context state. |
-|  | `test_contextlib` | contextlib — pure Python. |
+| ❗ | `test_contextlib` | contextlib — pure Python. |
 | ✅ | `test_contextlib_async` | async contextlib — pure Python. |
 | ❗ | `test_copyreg` | copyreg — pickle/copy registry. |
 |  | `test_csv` | csv — reader/writer (pure semantics). |
@@ -737,21 +737,29 @@ re-tier. Grouped by the call to make:
 ## Where the harness stands
 
 The manifest grew 19 → 32 → 50 modules in phases 1–4, then to 105 entries by
-2026-09-27 and 114 with the tracked baselines below. Live per-module rows are
+2026-09-27, 114 with the tracked baselines below, and 115 with
+`test_contextlib`. Live per-module rows are
 in [CPython_Suite_Scoreboard.md](CPython_Suite_Scoreboard.md). This section
 records only what changes slowly: what is still open, and why.
 
-**Every module scored on the committed board is OK except three:**
+**Eleven of the 114 rows on the committed board are not OK.** Re-read from
+the board after the 2026-09-29 refresh (41bda4e4), which retired the `test_zipapp` row this
+list used to carry and landed the nine tranche modules below with real counts:
 
-- `test_ssl`, ERROR 196t 6F/9E. The remaining ssl gaps.
-- `test_zipapp`, ERROR 35t 0F/9E.
+- `test_ssl`, FAIL 196t 5F/0E. The remaining ssl gaps.
 - `test_codecmaps_tw`, SKIP. All 6 tests skip.
+- the nine wired on 2026-09-28: `test_statistics` ERROR 371t 37F/201E,
+  `test_abc` ERROR 72t 0F/64E, `test_userstring` ERROR 71t 1F/59E,
+  `test_exception_group` ERROR 52t 23F/1E, `test_except_star` ERROR 60t 10F/11E,
+  `test_generators` ERROR 50t 10F/10E, `test_long` ERROR 47t 6F/8E,
+  `test_exception_hierarchy` ERROR 16t 2F/3E, `test_copyreg` FAIL 6t 2F/0E.
+
+`test_contextlib`, wired below, joins them as a twelfth at the next nightly.
 
 Every phase-4 module is green, including the eight this section used to list
 as not yet green (`test_datetime`, `test_enum`, `test_copy`, `test_listcomps`,
-`test_property`, `test_scope`, `test_functools`, `test_traceback`). The nine
-modules wired on 2026-09-28 enter the board at the next nightly. Until then
-their rows read ❗ with no counts.
+`test_property`, `test_scope`, `test_functools`, `test_traceback`). The nine modules
+wired on 2026-09-28 are on the board with the counts listed above.
 
 Two per-test entries in `scripts/cpython_suite_skips.txt` are worth knowing:
 
@@ -762,6 +770,25 @@ Two per-test entries in `scripts/cpython_suite_skips.txt` are worth knowing:
   string. That exceeds GemStone's LargeInteger ceiling (~39000 decimal
   digits), so Grail raises `OverflowError`. The skip records a VM limit, not
   a missing fix.
+
+## test_contextlib (tracked baseline, wired 2026-09-30)
+
+Not part of the 26-candidate trial above — neither wired nor deferred there, so
+it had simply never been considered. It meets that trial's rule (it RUNS today:
+no IMPORTERROR, CRASH or TIMEOUT) and 81 of its 91 tests pass. The score below
+was measured on the TEXT arm; the nightly measures IR, so the counts its first
+run commits may differ.
+
+| Module | Trial score | Main causes |
+|--------|-------------|-------------|
+| `test_contextlib` | 91t, 3F 7E (text arm) | `contextlib.chdir` is deliberately unsupported (3). `_GeneratorContextManager` is not callable, so a context manager cannot be used as a decorator (2). `Condition` and `RLock` lack `_is_owned` (2). One each: the `with`/`__exit__` frame position (#1272), a weakref not cleared in `test_nokeepref`, and an ExceptionGroup. |
+
+**Why it is worth tracking.** Its async sibling `test_contextlib_async` has been
+wired all along, and the two share `TestBaseExitStack`. So a defect in ordinary
+`with` handling was being reported only through the async module: the frame
+position bug on #1272 is IDENTICAL for the sync `ExitStack` — measured, same
+`('measure', '1/0')` — and nothing on the board said so. Wiring the sync module
+is what stops that class of bug hiding behind its async twin.
 
 ## Next tranche (tracked baselines, wired 2026-09-28)
 

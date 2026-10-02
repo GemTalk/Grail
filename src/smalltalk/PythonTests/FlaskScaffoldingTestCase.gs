@@ -1779,11 +1779,14 @@ testLoggingRecordMessage
 category: 'Grail-Tests - logging'
 method: FlaskScaffoldingTestCase
 testLoggingFormatterDefault
-	"Default formatter is 'LEVEL:NAME:MESSAGE'."
+	"A Formatter() with no format formats the message alone -- CPython's
+	'%(message)s'.  This used to pin 'LEVEL:NAME:MESSAGE', which is
+	logging.BASIC_FORMAT: what basicConfig installs, not what Formatter()
+	means, so it only ever held for Grail."
 
 	| mod |
 	mod := self loadFixture: 'use_logging'.
-	self assert: mod @env1:formatter_default equals: 'INFO:app:msg'
+	self assert: mod @env1:formatter_default equals: 'msg'
 %
 
 category: 'Grail-Tests - logging'

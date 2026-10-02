@@ -417,6 +417,38 @@ timed "persistent-state" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts
 # (a class-stored function binds self). No commit.
 timed "overlay-reuse" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /dev/null || EXIT=$?
 
+# A runtime store on a DEPLOYED class is session-local whichever name it uses
+# (docs/Persistent_Modules_and_Classes.md D3).  Needs its own script rather than
+# a SUnit case because "session-local" is only observable across a commit +
+# logout + login boundary, and the suite must not commit.  Guards #1240: a name
+# the class body declared leaves an accessor pair behind, __setattr__ dispatched
+# to it before the overlay, and the store reached the COMMITTED holder -- so two
+# gems configuring one framework class conflicted on commit.
+timed "class-attr-session-local" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runClassAttrSessionLocalTest.gs < /dev/null || EXIT=$?
+# An lru_cache in a DEPLOYED module is per-session, as CPython's is
+# per-process (#1229).  Its own script because the wrapper under test has to be
+# COMMITTED, and the suite must not commit.  Guards the leak where a module-level
+# cache kept its entries in the committed wrapper: every hit wrote a shared
+# object, and every miss's argument reached the repository with the next commit.
+timed "lru-cache-session-local" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runLruCacheSessionLocalTest.gs < /dev/null || EXIT=$?
+
+# A WeakSet that has been COMMITTED does not grow with dead references (#1229):
+# a committed weak reference reads back dead in every later session with no
+# callback to remove it, so add() has to drop dead entries itself.
+timed "committed-weakset" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCommittedWeakSetTest.gs < /dev/null || EXIT=$?
+
+# A module-level store to the module's own class survives deployment (#1242):
+# a fresh session warm-binds the module without running its body, so the store
+# has to be replayed.  Jinja2's Environment.template_class depends on it.
+timed "module-body-store-replay" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBodyStoreReplayTest.gs < /dev/null || EXIT=$?
+
+# re.sub / subn / Match.expand with a callable or a template, on a pattern from
+# a DEPLOYED module (#1253).  A fresh session that warm-binds such a module has
+# never registered re._parser, and the substitution path looked it up by name:
+# an uncatchable LookupError that ended the process.  Also guards callability
+# being decided by Python's callable(), not by class.
+timed "re-sub-on-deployed-pattern" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runReSubOnDeployedPatternTest.gs < /dev/null || EXIT=$?
+
 # Phase-5 module-bind acceptance (docs/Persistent_Modules_and_Classes.md
 # par.10.6). Session A (flag on) imports a fixture exercising @dataclass,
 # @enum.global_enum, and a decorator registry, then commits; session B must

@@ -170,6 +170,70 @@ async def more_shapes():
 asyncio.run(more_shapes())
 
 
+# --------------------------------------------------------------------------
+# AN AWAIT INSIDE THE GENEXP, WHERE THE GENEXP IS DECLARED IN A PLAIN def.
+#
+# The genexp's own wrapper binds ``___gen___'', so an await inside it has a
+# coroutine to suspend whatever the enclosing function is.  AwaitAst used to
+# decide by asking about the ENCLOSING FUNCTION only, so inside an ordinary def
+# it emitted the class-side form, which runs the awaited object inline and
+# cannot suspend.  A coroutine that DID suspend then answered None:
+#
+#     def make(n):
+#         return (await sleeper(i) for i in range(n))       -> [None, None, ...]
+#         return (i for i in range(n) if await sleeper(i))  -> []
+#
+# In a filter None is falsy, so every element was dropped and the genexp yielded
+# nothing.  Declaring the SAME genexp inside an ``async def'' always worked,
+# which is what localised it.
+#
+# ONLY THE SUSPENDING CASE IS AFFECTED.  Awaiting a coroutine that returns
+# without suspending gave the right answer throughout, so `sleeper' must really
+# sleep -- ``the_element_may_await'' above awaits a plain coroutine from an
+# ``async def'' and passes either way, which is why this went unnoticed.
+#
+# test_asyncgen's test_async_gen_expression_02 is the filter case (#1272).
+# --------------------------------------------------------------------------
+
+
+async def sleeper(n):
+    """Suspends, unlike a coroutine that merely returns."""
+    await asyncio.sleep(0.01)
+    return n
+
+
+def genexp_awaiting_in_its_element(n):
+    return (await sleeper(i * 2) for i in range(n))
+
+
+def genexp_awaiting_in_its_filter(n):
+    return (i * 2 for i in range(n) if await sleeper(i))
+
+
+async def awaits_in_a_genexp_from_a_plain_def():
+    return (await drain(genexp_awaiting_in_its_element(4)),
+            await drain(genexp_awaiting_in_its_filter(5)))
+
+
+async def awaits_in_a_genexp_from_an_async_def():
+    """The spelling that always worked, asserted so a repair that traded one
+    position for the other could not pass."""
+    element = (await sleeper(i * 2) for i in range(4))
+    got_element = await drain(element)
+    filtered = (i * 2 for i in range(5) if await sleeper(i))
+    return got_element, await drain(filtered)
+
+
+async def plain_def_shapes():
+    r['awaits_in_a_genexp_from_a_plain_def'] = \
+        await awaits_in_a_genexp_from_a_plain_def()
+    r['awaits_in_a_genexp_from_an_async_def'] = \
+        await awaits_in_a_genexp_from_an_async_def()
+
+
+asyncio.run(plain_def_shapes())
+
+
 EXPECTED = {
     'a_plain_async_genexp': [0, 2, 4],
     'a_filtered_async_genexp': [0, 2, 4],
@@ -186,6 +250,11 @@ EXPECTED = {
     # no __aiter__.
     'async_comp_over_a_plain_list': 'TypeError: True',
     'async_genexp_over_a_plain_list': 'TypeError: True',
+    # An await inside the genexp, the genexp declared in a PLAIN def.  Both
+    # entries are the same pair on purpose: where the genexp is written must
+    # make no difference.
+    'awaits_in_a_genexp_from_a_plain_def': ([0, 2, 4, 6], [2, 4, 6, 8]),
+    'awaits_in_a_genexp_from_an_async_def': ([0, 2, 4, 6], [2, 4, 6, 8]),
 }
 
 

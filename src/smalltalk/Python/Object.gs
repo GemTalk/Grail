@@ -4645,17 +4645,31 @@ ___grailPropertyShadowSourceFor___: aName
 	shadowing a method, where the unary selector means ``call me'', and
 	shadowing a property, where it means ``read me''.
 
-	It reads the holder DIRECTLY rather than through ___pyAttrLoad___: that
-	load resolves an instance read by performing this very selector, so going
-	back through it would recurse.  ___descriptorGet___: is the step the
-	ordinary class-attribute branch of the load applies, so a function stored
-	as the attribute still reads as a bound method."
+	It must not read through ___pyAttrLoad___: that load resolves an instance
+	read by performing this very selector, so going back through it would
+	recurse.  ___descriptorGet___: is the step the ordinary class-attribute
+	branch of the load applies, so a function stored as the attribute still
+	reads as a bound method.
+
+	IT READS THROUGH ___dynamicClassAttr___, NOT THE RAW HOLDER.  This used
+	to emit ___classAttrOwnOrInherited___ -- the raw committed reader, which
+	is right for the class-attribute GETTER PAIR (DunderNewTestCase pins that
+	the pair answers the committed value while ___pyAttrLoad___ answers the
+	overlay) and wrong HERE, because this method's whole purpose is to answer
+	what the INSTANCE sees, and CPython is last-setattr-wins.  A runtime store
+	on a canonical class lands in the session overlay, so with the raw read a
+	``setattr(Rebound, 'kind', 'rebound')'' was seen through ``Rebound.kind''
+	and not through ``Rebound().kind'', which still answered the body's
+	'first' (class_attr_shadows_inherited, and the last residue of #1240).
+	___dynamicClassAttr___ is overlay-first, then this same holder walk,
+	takes an instance receiver, and never enters ___pyAttrLoad___ -- so it
+	meets the recursion constraint above unchanged."
 
 	| lf |
 
 	lf := Character @env0:lf @env0:asString.
 	^ aName @env0:, lf
-		@env0:, '	^ self ___descriptorGet___: (self @env0:class ___classAttrOwnOrInherited___: #'''
+		@env0:, '	^ self ___descriptorGet___: (self ___dynamicClassAttr___: #'''
 		@env0:, aName @env0:, ''')'
 %
 
@@ -7000,6 +7014,32 @@ ___definesPythonMethod___: aClass name: aSym
 
 category: 'Grail-Class Attr Overlay'
 method: object
+___classAttrOverlayApplies___: aClass
+	"Would a runtime store on aClass go to the session-local overlay: is it
+	registered canonically, and not inside its own class statement's build?
+	Side-effect free, so __setattr__ can ask it to decide a route without
+	storing; ___classAttrOverlayStore___ asks the same question, so the two
+	cannot disagree.
+
+	UserGlobals is PER-USER and this file compiles as SystemUser (shared
+	classes), while the canonical set is registered under the session user's
+	UserGlobals (importlib compiles as the install user) -- a static reference
+	here would silently probe the wrong dictionary.  Resolve the SESSION
+	user's binding at runtime."
+
+	| userGlobals canonicalClasses |
+
+	userGlobals := System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #'UserGlobals'.
+	userGlobals == nil ifTrue: [^ false].
+	canonicalClasses := userGlobals @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
+	canonicalClasses == nil ifTrue: [^ false].
+	(canonicalClasses @env0:includes: aClass) ifFalse: [^ false].
+	^ (self ___grailClassIsBuilding___: aClass) @env0:not
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
 ___classAttrOverlayStore___: aClass name: aSym value: aValue
 	"Route a runtime class-attribute STORE on a canonical class into the
 	session-local overlay instead of the committed class.  Returns true
@@ -7013,18 +7053,9 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 	the class to the canonical set, so definitional defaults still land on
 	(and commit with) the class."
 
-	| st set ov inner ug |
+	| st ov inner |
+	(self ___classAttrOverlayApplies___: aClass) ifFalse: [^ false].
 	st := SessionTemps @env0:current.
-	"UserGlobals is PER-USER and this file compiles as SystemUser (shared
-	classes), while the canonical set is registered under the session
-	user's UserGlobals (importlib compiles as the install user) -- a static
-	reference here would silently probe the wrong dictionary.  Resolve the
-	SESSION user's binding at runtime."
-	ug := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'UserGlobals'.
-	ug == nil ifTrue: [^ false].
-	set := ug @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
-	set == nil ifTrue: [^ false].
-	(set @env0:includes: aClass) ifFalse: [^ false].
 	"...UNLESS the class is being (re)built RIGHT NOW.  The paragraph above
 	states the invariant this restores: a definitional store is safe because it
 	happens before ___canonicalClassRegister___ puts the class in the set.  That
@@ -7039,7 +7070,6 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 	which is why an edited default silently did not take: the class still had
 	__dataclass_fields__ and a working __init__, both stale.
 	object >> ___classHolderAttrStore___ already warns about exactly this shape."
-	(self ___grailClassIsBuilding___: aClass) ifTrue: [^ false].
 	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
 	ov == nil ifTrue: [
 		ov := IdentityKeyValueDictionary @env0:new.
@@ -13750,10 +13780,38 @@ __setattr__: name _: value
 	``f.__dict__ = {...}'' on a function)."
 	(sym == #'__dict__' and: [self isKindOf: PythonInstance]) ifTrue: [
 		^ self ___grailReplaceInstanceDict___: value].
+	"A CANONICAL CLASS IS NOT SHORT-CIRCUITED to its accessor setter.  Every
+	name a class body declares leaves behind the 'Grail-Class Attrs'
+	getter/setter pair the test below looks for, so ``Cls.x = v'' dispatched
+	straight to that setter and wrote the COMMITTED holder: two gems
+	configuring one framework class conflicted Write-Write on commit, and the
+	winner's value became the class's value for every session and every stored
+	instance that had never set it (#1240).  A name the body did NOT declare
+	has no pair, fell through to ___pyAttrStore___, and was session-local all
+	along -- which made this look like a rule about new names.
+
+	IT FALLS THROUGH; IT DOES NOT STORE.  An earlier shape of this fix put the
+	overlay store right here, and that bypassed everything ___pyAttrStore___
+	does BEFORE its own overlay check: a metaclass __setattr__ (typing's
+	_ImmutableType stopped raising, test_no_attributes), the self-send
+	dispatchers a patched method needs (mock.patch.object(HTMLParser, 'reset')
+	was never seen by self.reset(), test_base_class_methods_called), and the
+	identity slots.  ___pyAttrStore___ is the one that knows that order, so a
+	canonical class is handed to it.
+
+	DUNDERS KEEP THE SHORTCUT.  They are protocol slots reached by Smalltalk
+	dispatch or by a slot of their own, not holder entries the overlay could
+	stand in for -- __init__ read by instantiation, __name__ owning
+	___name___ -- so for them the committed path stays what it was.  A
+	non-canonical class keeps it too: the predicate is the same one the
+	overlay store uses, so the two cannot drift."
 	setterSym := (name @env0:asString @env0:, ':') @env0:asSymbol.
-	((self ___mayDispatchToSetter___: sym)
+	(((self isKindOf: Behavior)
+			and: [(self ___grailIsDunderName___: sym) @env0:not
+			and: [self ___classAttrOverlayApplies___: self]]) @env0:not
+		and: [(self ___mayDispatchToSetter___: sym)
 		and: [(self ___respondsTo___: sym)
-		and: [self ___respondsTo___: setterSym]])
+		and: [self ___respondsTo___: setterSym]]])
 		ifTrue: ["Through the marked helper: on a CLASS receiver the setter is a
 			'Grail-Class Attrs' accessor that, under GRAIL_DIRECT_CALLS, reads an
 			unmarked send as a Python call (___grailClassAttrSetterDiverts___)."

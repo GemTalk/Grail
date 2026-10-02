@@ -31,7 +31,20 @@ class HTTPException(Exception):
     description = ''
     response = None
 
+    def __init__(self, description=None, response=None):
+        # Upstream's signature.  Without it every keyword construction reached
+        # Exception.__init__ and raised TypeError -- including Flask's own
+        # ``InternalServerError(original_exception=e)'' in handle_exception,
+        # so a view that raised produced a second, unrelated error in place
+        # of its 500 (#1221).
+        super().__init__()
+        if description is not None:
+            self.description = description
+        self.response = response
+
     def get_response(self, environ=None):
+        if self.response is not None:
+            return self.response
         from werkzeug.wrappers import Response
         body = str(self.code) + ' ' + self.name + ': ' + self.description
         headers = [('Content-Type', 'text/plain; charset=utf-8')]
@@ -160,6 +173,12 @@ class InternalServerError(HTTPException):
     description = (
         'The server encountered an internal error and was unable to '
         'complete your request.')
+
+    def __init__(self, description=None, response=None,
+                 original_exception=None):
+        # The unhandled exception Flask's handle_exception is reporting.
+        self.original_exception = original_exception
+        super().__init__(description=description, response=response)
 
 
 # Default-exceptions mapping — code → exception class — provided
