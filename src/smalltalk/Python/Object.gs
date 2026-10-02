@@ -13736,6 +13736,20 @@ __setattr__: name _: value
 			ifTrue: [
 				^ AttributeError ___signal___:
 					'cannot reassign member ''' @env0:, name @env0:asString @env0:, '''']].
+	"ASSIGNING __dict__ on an INSTANCE replaces its attributes: CPython swaps
+	the instance's dict for the one given.  Grail keeps an instance's
+	attributes in its own store and answers __dict__ as a view of it, and the
+	assignment fell through to an ordinary store of an attribute NAMED
+	__dict__ -- ``object.__setattr__(c, '__dict__', {'x': 1})'' left c.x
+	undefined.  pydantic_core does exactly that to give a validated model its
+	fields (force_setattr), so every BaseModel instance came out empty
+	(docs/Support_Pydantic.md, Phase 5).  The copy is the approximation: a
+	later write to the ORIGINAL dict is not seen through the instance."
+	"Instances of Python classes only: a function, a module and the builtins
+	have __dict__ handling of their own (function_attr_writes.py pins
+	``f.__dict__ = {...}'' on a function)."
+	(sym == #'__dict__' and: [self isKindOf: PythonInstance]) ifTrue: [
+		^ self ___grailReplaceInstanceDict___: value].
 	setterSym := (name @env0:asString @env0:, ':') @env0:asSymbol.
 	((self ___mayDispatchToSetter___: sym)
 		and: [(self ___respondsTo___: sym)
@@ -13745,6 +13759,24 @@ __setattr__: name _: value
 			unmarked send as a Python call (___grailClassAttrSetterDiverts___)."
 			^ object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: value].
 	^ self ___pyAttrStore___: name put: value
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailReplaceInstanceDict___: aDict
+	"``obj.__dict__ = aDict'' for an instance: CPython's TypeError for a
+	non-dict, then every current attribute removed and each item of aDict
+	stored -- see __setattr__:_:."
+
+	| old |
+	(aDict @env0:isKindOf: KeyValueDictionary) ifFalse: [
+		^ TypeError ___signal___: ('__dict__ must be set to a dictionary, not a '''
+			@env0:, aDict ___pyTypeNameForError___ @env0:, '''')].
+	old := (self ___pyAttrLoad___: #'__dict__') @env1:keys.
+	(Array @env0:withAll: old) @env0:do: [:k |
+		[self ___pyAttrDelete___: k] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	aDict @env0:keysAndValuesDo: [:k :v | self ___pyAttrStore___: k put: v].
+	^ None
 %
 
 category: 'Grail-Attribute Access'
@@ -15353,6 +15385,15 @@ ___pyAttrStore___: aName put: aValue
 	Returns aValue so the codegen can use this as an expression
 	(e.g. inside a tuple unpack or chained assignment)."
 
+	"``obj.__dict__ = d'' on an INSTANCE replaces its attributes -- see
+	___grailReplaceInstanceDict___:.  Here as well as in __setattr__:_: because
+	the class-side ``object.__setattr__(inst, name, value)'' forms come
+	straight to this store.  Instances of Python classes only -- see
+	__setattr__:_:.  The size test keeps the hot path one compare."
+	((aName @env0:size == 8 and: [aName @env0:asString @env0:= '__dict__'])
+			and: [self isKindOf: PythonInstance]) ifTrue: [
+		self ___grailReplaceInstanceDict___: aValue.
+		^ aValue].
 	(self isKindOf: Behavior) ifTrue: [
 		| setterSym getterSym |
 		"``Cls.x = v'' is type(Cls).__setattr__(Cls, 'x', v): a METACLASS that
