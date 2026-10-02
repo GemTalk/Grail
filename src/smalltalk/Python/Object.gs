@@ -3294,6 +3294,12 @@ ___grailPrepareNamespace___: aMetaclass bases: basesArray keywords: kwargs
 	by class handles a nested class statement without a stack."
 
 	| prep ns tbl |
+	"The bases the class statement WROTE, for the metaclass call
+	(___grailDispatchMetaclass___ reads them back through ___grailHeaderBases___)."
+	(SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassBases'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+			@env0:at: self put: basesArray.
 	"DUPLICATE BASES are type.__new__'s refusal.  With no metaclass that takes
 	part in construction, nothing stands between this statement and type, so
 	refuse them now; a constructing one may discard them (a TypedDict's), and
@@ -4090,6 +4096,37 @@ ___grailMetaclassPropertyObject___: aSym
 	^ prop
 %
 
+category: 'Grail-Class Construction'
+method: object
+___grailHeaderBases___
+	"The bases this class's STATEMENT wrote, as a tuple, consumed once -- or nil
+	when none were recorded.
+
+	CPython calls the metaclass with exactly those: ``class A(metaclass=M)''
+	is ``M('A', (), ns)'', even though ``A.__bases__'' then reads (object,).
+	The dispatch read __bases__ and so handed every such metaclass (object,),
+	and pydantic's ModelMetaclass, which recognises the creation of BaseModel
+	ITSELF by ``if bases:'' being false, took BaseModel for a subclass of
+	itself and asked for BaseModel while building it
+	(docs/Support_Pydantic.md, Phase 4).
+
+	ONLY the empty case is answered.  Written bases are not what the metaclass
+	gets either: CPython resolves __mro_entries__ first (PEP 560), so
+	``class C(TypedDict)'' calls the metaclass with (_TypedDict,) -- and that
+	resolved tuple is exactly what __bases__ already holds.  So a recorded
+	non-empty header defers to __bases__ (nil), and only ``no bases written'',
+	the one case __bases__ reports as (object,), is answered here."
+
+	| tbl arr |
+	tbl := SessionTemps @env0:current @env0:at: #'GrailPendingClassBases' otherwise: nil.
+	tbl == nil ifTrue: [^ nil].
+	arr := tbl @env0:at: self otherwise: nil.
+	arr == nil ifTrue: [^ nil].
+	tbl @env0:removeKey: self ifAbsent: [nil].
+	arr @env0:isEmpty ifFalse: [^ nil].
+	^ tuple @env0:withAll: arr
+%
+
 category: 'Grail-Class Namespace'
 classmethod: object
 ___grailDispatchMetaclass___
@@ -4147,8 +4184,10 @@ ___grailDispatchMetaclass___
 	ns := self ___grailPendingNamespace___.
 	ns == nil ifTrue: [^ self].
 	clsName := self ___pyNameOrEmpty___.
-	clsBases := [self ___pyAttrLoad___: #'__bases__']
-		@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	clsBases := self ___grailHeaderBases___.
+	clsBases == nil ifTrue: [
+		clsBases := [self ___pyAttrLoad___: #'__bases__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: #()]].
 	"The class header's keywords, stashed by ___grailInitSubclass___:.
 	CPython evaluates ``class Foo(metaclass=M, cls='haha')'' as
 	M('Foo', bases, ns, cls='haha') -- the keywords are the METACLASS's to
@@ -11118,9 +11157,31 @@ __eq__: other
 	test_comp_classes_different)."
 
 	| fn |
-	fn := self ___dynamicClassAttr___: #'__eq__'.
+	fn := self ___dynamicInstanceDunder___: #'__eq__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
 	^ self ___grailObjectEq___: other
+%
+
+category: 'Grail-Comparison'
+method: object
+___dynamicInstanceDunder___: aSym
+	"A setattr-installed dunder that governs THIS receiver's operators, or nil.
+
+	For an instance that is ___dynamicClassAttr___:'s answer -- the dunder its
+	class (or a base) had assigned after creation, as dataclasses assign
+	__eq__.  For a CLASS it is nil, always: ``C == x'' is
+	``type(C).__eq__(C, x)'', and what ``C.__eq__ = fn'' installed is the
+	method of C's INSTANCES.  ___dynamicClassAttr___: deliberately starts its
+	walk at a class receiver (instantiation wants ``Cls.__init__''), so
+	without this a dataclass compared EQUAL to anything: the synthesized
+	__eq__ ran with the class as self.  pydantic's ``@dataclass(slots=True)
+	class Decorator(Generic[T])'' then satisfied ``cls in (Generic,
+	Protocol)'' inside typing, and ``Decorator[X]'' raised that its
+	parameters must be type variables (docs/Support_Pydantic.md, Phase 4).
+	The metaclass's own __eq__ is ___grailObjectEq___:'s to find."
+
+	(self @env0:isKindOf: Behavior) ifTrue: [^ nil].
+	^ self ___dynamicClassAttr___: aSym
 %
 
 category: 'Grail-Python Protocol'
@@ -12145,7 +12206,7 @@ __hash__
 	that does pays for the walk."
 	(SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' otherwise: false)
 		ifTrue: [
-			dyn := self ___dynamicClassAttr___: #'__hash__'.
+			dyn := self ___dynamicInstanceDunder___: #'__hash__'.
 			dyn == nil ifFalse: [
 				^ dyn @env1:___pyCallValue___: { self } kw: nil]].
 	^ self @env0:hash
@@ -12633,6 +12694,18 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	then NOT try that same reflected method again."
 
 	| myClass otherClass owner refBase varargsResult attrDunder |
+	"Two CLASSES are compared by their Python metaclass, which is not what
+	``@env0:class'' answers for them: Smalltalk metaclasses mirror the class
+	hierarchy, so ``D class inheritsFrom: Generic class'' holds for every
+	subclass D of Generic, while Python's type(D) is plain ``type''.  Applying
+	the rule anyway reached the class-dict probe below and ran D's own
+	dataclass __eq__ with D as self -- ``Generic == D'' answered True, and
+	typing's ``cls in (Generic, Protocol)'' rejected ``D[int]'' for a
+	@dataclass Generic subclass (pydantic's Decorator; docs/Support_Pydantic.md).
+	___cmpEq___ / ___cmpNe___ consult a metaclass that really defines the
+	dunder before they get here."
+	((self @env0:isKindOf: Behavior) and: [other @env0:isKindOf: Behavior])
+		ifTrue: [^ nil].
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 	(otherClass @env0:== myClass) ifTrue: [^ nil].
@@ -13383,12 +13456,12 @@ __ne__: other
 	class beyond object defines __eq__ at all."
 
 	| fn eqOwner eqr |
-	fn := self ___dynamicClassAttr___: #'__ne__'.
+	fn := self ___dynamicInstanceDunder___: #'__ne__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
 	"``def __ne__(*args)'' compiles to ___ne__:kw: with no __ne__: alias."
 	eqr := self ___varargsDunder___: #'___ne__:kw:' with: other.
 	eqr == nil ifFalse: [^ eqr].
-	fn := self ___dynamicClassAttr___: #'__eq__'.
+	fn := self ___dynamicInstanceDunder___: #'__eq__'.
 	fn == nil ifFalse: [
 		"A NotImplemented __eq__ must NOT be negated (``NI not'' is an
 		uncatchable Symbol DNU); return it so ___cmpNe___ / the caller runs

@@ -4356,6 +4356,19 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
         }
     }
 
+    /* A NEGATIVE basicsize (3.12) means "the base's size plus this much":
+       the class's own data follows the base's, aligned, and is found with
+       PyObject_GetTypeData.  abi3 PyO3 declares every pyclass this way.
+       Resolved here, after the slots, because the base may come from one. */
+    if (spec->basicsize < 0) {
+        Py_ssize_t b = type->tp_base ? type->tp_base->tp_basicsize : (Py_ssize_t)sizeof(PyObject);
+        b = (b + 15) & ~(Py_ssize_t)15;
+        type->tp_basicsize = b + (-spec->basicsize);
+    } else if (spec->basicsize == 0 && type->tp_base) {
+        /* 0 means "same as the base", as in CPython. */
+        type->tp_basicsize = type->tp_base->tp_basicsize;
+    }
+
     /* Inherit subclass-identity flag bits (and buffer procs) from the
        base so PyXxx_Check and PyObject_GetBuffer see through heap-type
        subclassing. */
@@ -4648,6 +4661,25 @@ static void foreign_exc_text(PyObject *v, char *buf, size_t cap) {
 }
 extern "C" void _grail_foreign_exc_text(PyObject *v, char *buf, size_t cap) {
     foreign_exc_text(v, buf, cap);
+}
+
+/* The import PyO3 uses for EVERY module it touches -- py.import("decimal")
+   while building pydantic_core's serializer tables, among others.  It was a
+   shim_numpy.cc stub answering NULL with no error set, which PyO3 reports as
+   "attempted to fetch exception but none was set" and then panics on.
+
+   Only a Grail-backed name is read: the stock (non-abi3) wheel can hand over
+   a str whose layout the shim cannot read yet (W5), and reading that one
+   produced a garbage module name and an unwinding import.  Anything else
+   raises ImportError, which is at least an error a caller can see. */
+extern "C" PyObject *PyImport_Import(PyObject *name) {
+    if (name == NULL || is_foreign(name) || is_real_layout(name) || !PyUnicode_Check(name)) {
+        PyErr_SetString(PyExc_ImportError, "PyImport_Import: module name is not a str the Grail shim can read");
+        return NULL;
+    }
+    const char *n = PyUnicode_AsUTF8(name);
+    if (n == NULL) return NULL;
+    return PyImport_ImportModule(n);
 }
 
 /* ====================================================================

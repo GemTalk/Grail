@@ -701,4 +701,59 @@ int PyUnicodeWriter_WriteChar(void *writer, Py_UCS4 ch) {
     return PyUnicodeWriter_WriteUTF8(writer, b, n);
 }
 
+/* ====================================================================
+ * The limited API (abi3) -- a pydantic_core built with pyo3/abi3-py314
+ * (docs/Support_Pydantic.md, Phase 4 option (b)) imports these five in place
+ * of the struct access the stock wheel inlines.
+ * ==================================================================== */
+
+/* Refcounting as calls: the shim's lifetimes are GemStone's, so these do
+   what the inline forms do -- adjust the count -- and never deallocate. */
+void _Py_IncRef(PyObject *o) { if (o) o->ob_refcnt++; }
+void _Py_DecRef(PyObject *o) { if (o) o->ob_refcnt--; }
+
+unsigned long long PyLong_AsUnsignedLongLongMask(PyObject *o) {
+    return (unsigned long long)PyLong_AsLongLong(o);
+}
+
+/* 3.13: the interpreter's constants by number (Include/object.h
+   Py_CONSTANT_*).  Borrowed and immortal, so the numbers and empty
+   containers are made once and pinned with a large refcount. */
+extern PyObject *_Py_EllipsisObject;          /* shim_numpy.cc */
+PyObject *Py_GetConstantBorrowed(unsigned int id) {
+    static PyObject *cache[10];
+    if (id >= 10) {
+        PyErr_Format(PyExc_SystemError, "Py_GetConstantBorrowed: invalid constant %u", id);
+        return NULL;
+    }
+    if (cache[id]) return cache[id];
+    PyObject *v = NULL;
+    switch (id) {
+    case 0: v = Py_None; break;
+    case 1: v = Py_False; break;
+    case 2: v = Py_True; break;
+    case 3: v = _Py_EllipsisObject; break;
+    case 4: v = Py_NotImplemented; break;
+    case 5: v = PyLong_FromLong(0); break;
+    case 6: v = PyLong_FromLong(1); break;
+    case 7: v = PyUnicode_FromStringAndSize("", 0); break;
+    case 8: v = PyBytes_FromStringAndSize("", 0); break;
+    case 9: v = PyTuple_New(0); break;
+    }
+    if (v == NULL) return NULL;
+    v->ob_refcnt += 1 << 20;   /* never swept */
+    cache[id] = v;
+    return v;
+}
+
+/* 3.12: where a class's OWN data starts inside an instance -- after the
+   base's storage, aligned.  abi3 PyO3 declares each pyclass with a NEGATIVE
+   basicsize ("the base plus this much"), which type_from_spec_impl resolves,
+   and finds its Rust struct with this. */
+void *PyObject_GetTypeData(PyObject *obj, PyTypeObject *cls) {
+    Py_ssize_t base = (cls && cls->tp_base) ? cls->tp_base->tp_basicsize : (Py_ssize_t)sizeof(PyObject);
+    base = (base + 15) & ~(Py_ssize_t)15;
+    return (char *)obj + base;
+}
+
 } /* extern "C" */

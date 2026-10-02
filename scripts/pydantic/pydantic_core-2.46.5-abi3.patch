@@ -1,0 +1,244 @@
+From 93b357b6004fd36637803d2cea9e9a255831aea3 Mon Sep 17 00:00:00 2001
+From: x <x@x>
+Date: Thu, 1 Oct 2026 10:26:57 -0700
+Subject: [PATCH] abi3
+
+---
+ src/input/datetime.rs        | 17 ++++++--
+ src/input/datetime_access.rs | 75 ++++++++++++++++++++++++++++++++++++
+ src/input/mod.rs             |  1 +
+ src/input/return_enums.rs    | 15 +++++++-
+ src/serializers/ob_type.rs   |  6 +++
+ src/validators/model.rs      |  7 +++-
+ src/validators/timedelta.rs  |  3 +-
+ 7 files changed, 117 insertions(+), 7 deletions(-)
+ create mode 100644 src/input/datetime_access.rs
+
+diff --git a/src/input/datetime.rs b/src/input/datetime.rs
+index afd44b2..6db7cce 100644
+--- a/src/input/datetime.rs
++++ b/src/input/datetime.rs
+@@ -4,11 +4,10 @@ use pyo3::prelude::*;
+ use pyo3::IntoPyObjectExt;
+ use pyo3::exceptions::PyValueError;
+ use pyo3::pyclass::CompareOp;
+-use pyo3::types::PyDateAccess;
+-use pyo3::types::PyTimeAccess;
++use crate::input::datetime_access::{PyDateAccess, PyDeltaAccess, PyTimeAccess};
+ use pyo3::types::PyTuple;
+ use pyo3::types::PyTzInfoAccess;
+-use pyo3::types::{PyDate, PyDateTime, PyDelta, PyDeltaAccess, PyDict, PyTime, PyTzInfo};
++use pyo3::types::{PyDate, PyDateTime, PyDelta, PyDict, PyTime, PyTzInfo};
+ use speedate::DateConfig;
+ use speedate::{
+     Date, DateTime, DateTimeConfig, Duration, MicrosecondsPrecisionOverflowBehavior, ParseError, Time, TimeConfig,
+@@ -401,10 +400,19 @@ impl EitherTime<'_> {
+ 
+ fn time_as_tzinfo<'py>(py: Python<'py>, time: &Time) -> PyResult<Option<Bound<'py, PyTzInfo>>> {
+     match time.tz_offset {
++        #[cfg(not(Py_LIMITED_API))]
+         Some(offset) => {
+             let tz_info: TzInfo = offset.try_into()?;
+             Ok(Some(Bound::new(py, tz_info)?.into_any().cast_into()?))
+         }
++        // A limited-API pyclass cannot extend tzinfo, so a parsed offset is a
++        // datetime.timezone instead of a TzInfo (same offset, different repr).
++        #[cfg(Py_LIMITED_API)]
++        Some(offset) => {
++            let _: TzInfo = offset.try_into()?; // same range check
++            let delta = PyDelta::new(py, 0, offset, 0, true)?;
++            Ok(Some(PyTzInfo::fixed_offset(py, delta)?))
++        }
+         None => Ok(None),
+     }
+ }
+@@ -726,7 +734,8 @@ pub fn float_as_duration(input: impl ToErrorValue, total_seconds: f64) -> ValRes
+         .map_err(|err| map_timedelta_err(input, err))
+ }
+ 
+-#[pyclass(module = "pydantic_core._pydantic_core", extends = PyTzInfo, frozen, skip_from_py_object)]
++#[cfg_attr(not(Py_LIMITED_API), pyclass(module = "pydantic_core._pydantic_core", extends = PyTzInfo, frozen, skip_from_py_object))]
++#[cfg_attr(Py_LIMITED_API, pyclass(module = "pydantic_core._pydantic_core", frozen, skip_from_py_object))]
+ #[derive(Clone)]
+ #[cfg_attr(debug_assertions, derive(Debug))]
+ pub struct TzInfo {
+diff --git a/src/input/datetime_access.rs b/src/input/datetime_access.rs
+new file mode 100644
+index 0000000..ec3e875
+--- /dev/null
++++ b/src/input/datetime_access.rs
+@@ -0,0 +1,75 @@
++//! The datetime field accessors pydantic_core uses, under either ABI.
++//!
++//! PyO3 provides `PyDateAccess` / `PyTimeAccess` / `PyDeltaAccess` only off the
++//! limited API, where they read the CPython structs directly.  Under `abi3`
++//! the same names are provided here, reading the Python attributes instead --
++//! slower, but the only route that touches no object layout.  Call sites are
++//! unchanged.  (Grail: docs/Support_Pydantic.md, Phase 4 option (b).)
++
++#[cfg(not(Py_LIMITED_API))]
++pub use pyo3::types::{PyDateAccess, PyDeltaAccess, PyTimeAccess};
++
++#[cfg(Py_LIMITED_API)]
++mod limited {
++    use pyo3::intern;
++    use pyo3::prelude::*;
++    use pyo3::types::{PyDate, PyDateTime, PyDelta, PyTime};
++
++    fn field<'py, T: for<'a> FromPyObject<'a, 'py>>(obj: &Bound<'py, PyAny>, name: &Bound<'py, pyo3::types::PyString>) -> T {
++        obj.getattr(name)
++            .and_then(|v| v.extract::<T>().map_err(Into::into))
++            .expect("datetime field")
++    }
++
++    pub trait PyDateAccess {
++        fn get_year(&self) -> i32;
++        fn get_month(&self) -> u8;
++        fn get_day(&self) -> u8;
++    }
++    pub trait PyTimeAccess {
++        fn get_hour(&self) -> u8;
++        fn get_minute(&self) -> u8;
++        fn get_second(&self) -> u8;
++        fn get_microsecond(&self) -> u32;
++        fn get_fold(&self) -> bool;
++    }
++    pub trait PyDeltaAccess {
++        fn get_days(&self) -> i32;
++        fn get_seconds(&self) -> i32;
++        fn get_microseconds(&self) -> i32;
++    }
++
++    macro_rules! date_access {
++        ($t:ty) => {
++            impl PyDateAccess for Bound<'_, $t> {
++                fn get_year(&self) -> i32 { field(self.as_any(), intern!(self.py(), "year")) }
++                fn get_month(&self) -> u8 { field(self.as_any(), intern!(self.py(), "month")) }
++                fn get_day(&self) -> u8 { field(self.as_any(), intern!(self.py(), "day")) }
++            }
++        };
++    }
++    macro_rules! time_access {
++        ($t:ty) => {
++            impl PyTimeAccess for Bound<'_, $t> {
++                fn get_hour(&self) -> u8 { field(self.as_any(), intern!(self.py(), "hour")) }
++                fn get_minute(&self) -> u8 { field(self.as_any(), intern!(self.py(), "minute")) }
++                fn get_second(&self) -> u8 { field(self.as_any(), intern!(self.py(), "second")) }
++                fn get_microsecond(&self) -> u32 { field(self.as_any(), intern!(self.py(), "microsecond")) }
++                fn get_fold(&self) -> bool { field(self.as_any(), intern!(self.py(), "fold")) }
++            }
++        };
++    }
++    date_access!(PyDate);
++    date_access!(PyDateTime);
++    time_access!(PyTime);
++    time_access!(PyDateTime);
++
++    impl PyDeltaAccess for Bound<'_, PyDelta> {
++        fn get_days(&self) -> i32 { field(self.as_any(), intern!(self.py(), "days")) }
++        fn get_seconds(&self) -> i32 { field(self.as_any(), intern!(self.py(), "seconds")) }
++        fn get_microseconds(&self) -> i32 { field(self.as_any(), intern!(self.py(), "microseconds")) }
++    }
++}
++
++#[cfg(Py_LIMITED_API)]
++pub use limited::{PyDateAccess, PyDeltaAccess, PyTimeAccess};
+diff --git a/src/input/mod.rs b/src/input/mod.rs
+index db57d25..71fddaa 100644
+--- a/src/input/mod.rs
++++ b/src/input/mod.rs
+@@ -3,6 +3,7 @@ use std::os::raw::c_int;
+ use pyo3::prelude::*;
+ 
+ mod datetime;
++pub(crate) mod datetime_access;
+ mod input_abstract;
+ mod input_json;
+ mod input_python;
+diff --git a/src/input/return_enums.rs b/src/input/return_enums.rs
+index c22d578..d58f967 100644
+--- a/src/input/return_enums.rs
++++ b/src/input/return_enums.rs
+@@ -11,6 +11,7 @@ use pyo3::exceptions::PyTypeError;
+ use pyo3::ffi;
+ use pyo3::intern;
+ use pyo3::prelude::*;
++#[cfg(not(Py_LIMITED_API))]
+ use pyo3::types::PyFunction;
+ use pyo3::types::{PyBytes, PyComplex, PyFloat, PyFrozenSet, PyIterator, PyMapping, PySet, PyString};
+ 
+@@ -344,7 +345,7 @@ pub(crate) fn iterate_attributes<'a, 'py>(
+                 // the PyFunction::is_type_of(attr) catches `staticmethod`, but also any other function,
+                 // I think that's better than including static methods in the yielded attributes,
+                 // if someone really wants fields, they can use an explicit field, or a function to modify input
+-                && !attr.is_instance_of::<PyFunction>()
++                && !is_py_function(&attr)
+         {
+             return Some(Ok((name.into_any(), attr)));
+         }
+@@ -736,3 +737,15 @@ impl<'py> IntoPyObject<'py> for EitherComplex<'py> {
+         }
+     }
+ }
++
++/// `isinstance(attr, types.FunctionType)`.  `PyFunction` is not available
++/// under the limited API, so there it is answered by the type's name.
++#[cfg(not(Py_LIMITED_API))]
++fn is_py_function(attr: &Bound<'_, PyAny>) -> bool {
++    attr.is_instance_of::<PyFunction>()
++}
++
++#[cfg(Py_LIMITED_API)]
++fn is_py_function(attr: &Bound<'_, PyAny>) -> bool {
++    attr.get_type().name().map(|n| n.to_string_lossy() == "function").unwrap_or(false)
++}
+diff --git a/src/serializers/ob_type.rs b/src/serializers/ob_type.rs
+index f9985e9..4c53b7e 100644
+--- a/src/serializers/ob_type.rs
++++ b/src/serializers/ob_type.rs
+@@ -474,7 +474,13 @@ impl PartialEq for ObType {
+ }
+ 
+ fn get_base_type<'py>(py_type: &Bound<'py, PyType>) -> Option<Bound<'py, PyType>> {
++    // Off the limited API the field is read directly; on it, through
++    // PyType_GetSlot (valid for static types from 3.10).
++    #[cfg(not(Py_LIMITED_API))]
+     let base_type_ptr = unsafe { (*py_type.as_type_ptr()).tp_base };
++    #[cfg(Py_LIMITED_API)]
++    let base_type_ptr =
++        unsafe { pyo3::ffi::PyType_GetSlot(py_type.as_type_ptr(), pyo3::ffi::Py_tp_base) } as *mut pyo3::ffi::PyTypeObject;
+     // Safety: `base_type_ptr` must be a valid pointer to a Python type object, or null.
+     if base_type_ptr.is_null() {
+         None
+diff --git a/src/validators/model.rs b/src/validators/model.rs
+index a3fdcb6..7a1061c 100644
+--- a/src/validators/model.rs
++++ b/src/validators/model.rs
+@@ -351,7 +351,12 @@ pub(super) fn create_class<'py>(class: &Bound<'py, PyType>) -> PyResult<Bound<'p
+     let raw_type = class.as_type_ptr();
+     unsafe {
+         // Safety: raw_type is known to be a non-null type object pointer
+-        match (*raw_type).tp_new {
++        #[cfg(not(Py_LIMITED_API))]
++        let tp_new = (*raw_type).tp_new;
++        #[cfg(Py_LIMITED_API)]
++        let tp_new: Option<pyo3::ffi::newfunc> =
++            std::mem::transmute(pyo3::ffi::PyType_GetSlot(raw_type, pyo3::ffi::Py_tp_new));
++        match tp_new {
+             // Safety: the result of new_func is guaranteed to be either an owned pointer or null on error returns.
+             Some(new_func) => Bound::from_owned_ptr_or_err(
+                 py,
+diff --git a/src/validators/timedelta.rs b/src/validators/timedelta.rs
+index c607af8..bb5cad4 100644
+--- a/src/validators/timedelta.rs
++++ b/src/validators/timedelta.rs
+@@ -3,7 +3,8 @@ use std::sync::Arc;
+ use pyo3::exceptions::PyValueError;
+ use pyo3::intern;
+ use pyo3::prelude::*;
+-use pyo3::types::{PyDelta, PyDeltaAccess, PyDict, PyString};
++use crate::input::datetime_access::PyDeltaAccess;
++use pyo3::types::{PyDelta, PyDict, PyString};
+ use speedate::{Duration, MicrosecondsPrecisionOverflowBehavior};
+ 
+ use crate::build_tools::is_strict;
