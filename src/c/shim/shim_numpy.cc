@@ -361,14 +361,8 @@ extern "C" PyObject * PyObject_GenericGetAttr(PyObject *, PyObject *) {
     STUBLOG("PyObject_GenericGetAttr");
     return 0;
 }
-extern "C" PyObject * PyObject_GenericGetDict(PyObject *, void *) {
-    STUBLOG("PyObject_GenericGetDict");
-    return 0;
-}
-extern "C" int PyObject_GenericSetAttr(PyObject *, PyObject *, PyObject *) {
-    STUBLOG("PyObject_GenericSetAttr");
-    return 0;
-}
+/* PyObject_GenericGetDict lives in cpython.cc. */
+/* PyObject_GenericSetAttr lives in cpython.cc. */
 extern "C" int PyObject_GetOptionalAttr(PyObject *, PyObject *, PyObject **) {
     STUBLOG("PyObject_GetOptionalAttr");
     return 0;
@@ -384,14 +378,7 @@ extern "C" PyVarObject * PyObject_InitVar(PyVarObject *, PyTypeObject *, Py_ssiz
     STUBLOG("PyObject_InitVar");
     return 0;
 }
-extern "C" int PyObject_IsInstance(PyObject *object, PyObject *typeorclass) {
-    STUBLOG("PyObject_IsInstance");
-    return 0;
-}
-extern "C" int PyObject_IsSubclass(PyObject *object, PyObject *typeorclass) {
-    STUBLOG("PyObject_IsSubclass");
-    return 0;
-}
+/* PyObject_IsInstance / PyObject_IsSubclass live in cpython.cc. */
 extern "C" Py_ssize_t PyObject_LengthHint(PyObject *o, Py_ssize_t) {
     STUBLOG("PyObject_LengthHint");
     return 0;

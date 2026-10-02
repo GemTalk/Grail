@@ -1868,16 +1868,22 @@ testWrapNilAliasesNone
 category: 'Grail-Tests - Py_None Wrapping'
 method: CPythonShimTestCase
 testNoneWrapperEmbedsSingletonOop
-	"The OOP stored at offset 16 of Py_None is the NoneType singleton's OOP,
-	so a C round-trip (e.g. test_none) yields None, not nil."
+	"None crosses into C as the shim's own static Py_None (_Py_NoneStruct),
+	not as a wrapper: an extension tests ``x == Py_None'' by pointer, and a
+	wrapper is another address (abi3 PyO3 took Grail's None for not-None --
+	docs/Support_Pydantic.md, Phase 5).  It used to be a wrapper carrying the
+	None OOP at offset 16; the static is 16 bytes and has no such field, and
+	the shim answers the None OOP for it instead.  So: the pointer is the
+	shim's, and a C round trip still yields None, not nil."
 
-	| wrapper signedOop oop |
-	wrapper := CPythonShim current wrap: None.
-	signedOop := wrapper int64At: 16.
-	oop := signedOop < 0
-		ifTrue: [signedOop + 16r10000000000000000]
-		ifFalse: [signedOop].
-	self assert: oop equals: None asOop.
+	| addr |
+	addr := (CPythonShim current wrap: None) memoryAddress.
+	self assert: addr equals: (System userAction: #shimTypeAddr with: 'None').
+	self assert: (CPythonShim current wrap: true) memoryAddress
+		equals: (System userAction: #shimTypeAddr with: 'True').
+	self assert: (CPythonShim current wrap: false) memoryAddress
+		equals: (System userAction: #shimTypeAddr with: 'False').
+	self assert: (CPythonShim current callModule: '_shimtest' method: 'test_bool_not' with: false) == true.
 %
 
 category: 'Grail-Tests - Session-Local State'
