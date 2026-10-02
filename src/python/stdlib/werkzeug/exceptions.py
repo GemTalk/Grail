@@ -91,7 +91,8 @@ class MethodNotAllowed(HTTPException):
     name = 'Method Not Allowed'
     description = 'The method is not allowed for the requested URL.'
 
-    def __init__(self, valid_methods=None):
+    def __init__(self, valid_methods=None, description=None, response=None):
+        super().__init__(description=description, response=response)
         self.valid_methods = valid_methods or []
 
 
@@ -196,25 +197,14 @@ default_exceptions = {
 }
 
 
-def abort(status, *args, **kwargs):
-    """Raise an HTTPException for the given status code.  ``status''
-    can be an int (looked up in ``default_exceptions'') or a Response
-    instance (raised wrapped in an HTTPException).
-
-    Stub: only the int form is implemented; the optional description /
-    response payload args / kwargs are ignored."""
-    if isinstance(status, int):
-        cls = default_exceptions.get(status)
-        if cls is None:
-            raise LookupError('no exception for status ' + str(status))
-        raise cls()
-    raise TypeError('abort(status) expects an int; Response form not supported')
-
-
 class Aborter:
-    """Stub ``werkzeug.exceptions.Aborter'' — callable equivalent of
-    the module-level ``abort'' function.  Used by Flask's
-    ``app.aborter''."""
+    """``werkzeug.exceptions.Aborter'' -- what ``abort'' and Flask's
+    ``app.aborter'' call.  As upstream: an int status raises the mapped
+    exception constructed with the remaining arguments, so
+    ``abort(400, "age must be a whole number")'' carries its description
+    (and ``response='' its response); a Response alone is raised wrapped
+    in an HTTPException.  Both forms used to raise ``cls()'' and drop
+    every argument, so every refusal answered the generic text."""
 
     def __init__(self, mapping=None, extra=None):
         self.mapping = dict(default_exceptions if mapping is None else mapping)
@@ -223,9 +213,17 @@ class Aborter:
                 self.mapping[code] = cls
 
     def __call__(self, code, *args, **kwargs):
-        if isinstance(code, int):
-            cls = self.mapping.get(code)
-            if cls is None:
-                raise LookupError('no exception for status ' + str(code))
-            raise cls()
-        raise TypeError('Aborter(status) expects an int')
+        if not args and not kwargs and not isinstance(code, int):
+            raise HTTPException(response=code)
+        if code not in self.mapping:
+            raise LookupError('no exception for %r' % (code,))
+        raise self.mapping[code](*args, **kwargs)
+
+
+def abort(status, *args, **kwargs):
+    """Raise the HTTPException for ``status'', constructed with the rest of
+    the arguments, or wrap ``status'' when it is a Response.  See Aborter."""
+    _aborter(status, *args, **kwargs)
+
+
+_aborter = Aborter()
