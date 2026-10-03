@@ -819,3 +819,91 @@ class B(A):
 	self assert: (self layoutOf: b) equals: #(#x #b) description: 'nothing changed'.
 	self assert: (self layoutOf: a) equals: #(#x)
 %
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testUnseenSubclassDoesNotInheritTheParentsPosition
+	"A subclass the parent's rebuild cannot reach keeps its old layout, so the
+	parent's NEW name may sit, in the parent, at a position the subclass gave
+	to one of its own.  A (x) and B(A) (x y); A rebuilt as (x z): z is A's
+	position 2 and B's y.  B here is defined in a FUNCTION BODY, so the module
+	re-run drops its subclass registration and nothing rebuilds the instance's
+	class -- the same position a __main__ class from an earlier session is in.
+	A's methods run on the old B instance must not read or overwrite y: before
+	the owner guard, ``getz()'' answered 'Y' and ``setz()'' replaced it."
+	| mod bInst bClass mod2 |
+	mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+
+def make():
+    class B(A):
+        def __init__(self):
+            super().__init__()
+            self.y = ''Y''
+    return B
+
+b = make()()
+'.
+	bInst := mod @env1:b.
+	bClass := bInst class.
+	self assert: (self layoutOf: bClass) equals: #(#x #y).
+	mod2 := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+        self.z = ''Z''
+
+    def getz(self):
+        return self.z
+
+    def setz(self, v):
+        self.z = v
+
+def make():
+    class B(A):
+        def __init__(self):
+            super().__init__()
+            self.y = ''Y''
+    return B
+'.
+	self assert: (self layoutOf: (mod2 @env1:A)) equals: #(#x #z).
+	self assert: (self layoutOf: bClass) equals: #(#x #y)
+		description: 'the unseen subclass was not rebuilt -- the case under test'.
+	self should: [bInst @env1:getz] raise: AttributeError.
+	bInst @env1:setz: 'ZZ'.
+	self assert: (bInst @env1:___pyAttrLoad___: #y) equals: 'Y' description: 'y was not overwritten'.
+	self assert: (bInst @env1:getz) equals: 'ZZ'.
+	self assert: (bInst @env1:___pyAttrLoad___: #x) equals: 'X'
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testSubclassAssigningNothingOwnsItsPairs
+	"A subclass whose body assigns nothing of its own still takes a copy of the
+	parent's layout and compiles its own pair for every name in it, so its
+	instances stay on the fast path past the parent pair's owner guard."
+	| mod a b inst |
+	mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = 1
+
+    def bump(self):
+        self.x += 1
+        return self.x
+
+class B(A):
+    def hello(self):
+        return self.x
+'.
+	a := mod @env1:A.
+	b := mod @env1:B.
+	self assert: (self layoutOf: b) equals: #(#x).
+	self assert: (b whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == b.
+	self assert: (b whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == b.
+	self assert: (a whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == a.
+	inst := b @env1:___pyCallValue___: { } kw: nil.
+	self assert: (inst @env1:hello) equals: 1.
+	self assert: (inst @env1:bump) equals: 2.
+	self assert: (inst at: 1) equals: 2 description: 'stored at the position, not per object'.
+	self assert: (inst dynamicInstVarAt: #x) isNil
+%

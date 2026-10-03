@@ -839,11 +839,7 @@ ___grailRenameSlot___: old to: new tree: tree instances: byClassOrNil ignoringAs
 			___grailRemoveOwnIndexedPair___ applies, so the pair that is about
 			to be removed is the one replaced -- a @property or hook forwarder
 			of the same spelling is neither removed nor replaced."
-			ownsPair := (c @env0:includesSelector: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol environmentId: 1)
-				@env0:and: [((c @env0:categoryOfSelector: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol environmentId: 1)
-						@env0:asString @env0:= 'Grail-Inferred Slots')
-					@env0:and: [(c @env0:compiledMethodAt: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol environmentId: 1)
-						@env0:sourceString @env0:includesString: '_basicSize']].
+			ownsPair := c ___grailIsIndexedPair___: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol.
 			(c @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [ | layout src |
 				layout := OrderedCollection @env0:withAll: (c @env0:perform: #'___pySlotLayout___' env: 1).
 				layout @env0:at: po put: (byClassOrNil == nil ifTrue: [new] ifFalse: [('~' @env0:, old @env0:asString) @env0:asSymbol]).
@@ -1062,16 +1058,10 @@ ___grailRemoveOwnIndexedPair___: aName
 	| getter setter |
 	getter := ('___pyattr_' @env0:, aName @env0:asString @env0:, '___') @env0:asSymbol.
 	setter := (getter @env0:asString @env0:, ':') @env0:asSymbol.
-	(self @env0:includesSelector: getter environmentId: 1) ifTrue: [
-		(((self @env0:categoryOfSelector: getter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
-			@env0:and: [(self @env0:compiledMethodAt: getter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
-			ifTrue: [
-				[self @env1:___removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
-	(self @env0:includesSelector: setter environmentId: 1) ifTrue: [
-		(((self @env0:categoryOfSelector: setter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
-			@env0:and: [(self @env0:compiledMethodAt: setter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
-			ifTrue: [
-				[self @env1:___removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+	(self ___grailIsIndexedPair___: getter) ifTrue: [
+		[self @env1:___removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(self ___grailIsIndexedPair___: setter) ifTrue: [
+		[self @env1:___removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	^ self
 %
 
@@ -1099,28 +1089,64 @@ ___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter 
 	forwardSetter: likewise a Python __setattr__ in the chain must see every
 	store, so the setter half forwards to ``self __setattr__: 'x' _: v'' --
 	whose default tail writes the position by index, not through this pair.
-	Guarded compiles, category ``Grail-Inferred Slots'', like the rest."
+	Guarded compiles, category ``Grail-Inferred Slots'', like the rest.
 
-	| lf n p getter |
+	THE OWNER GUARD.  The position literal is right for THIS class's layout
+	only, and a subclass's layout can put another name there: B(A) holding
+	(x y) while A, rebuilt, holds (x z).  The installer gives every subclass
+	it can SEE its own pair, but one it cannot see -- a class built in an
+	earlier session's __main__, or in a module this session never imported
+	-- inherits this one, and reading A's position 2 on a B instance answers
+	B's y for z, and storing there overwrites it.  So the storage halves
+	answer only for an instance of exactly this class, and any other receiver
+	falls to the generic load / store, which ask the receiver's OWN class's
+	slot-index table: z is absent there (AttributeError, or a per-object
+	store) and y is never touched.  The class is reached through
+	``___grailSlotPairOwner___'', a literal variable bound in a scope
+	dictionary for this compile only, since a Python class is built
+	inDictionary: nil and has no name to compile against.  The forwarding
+	halves need no guard: they never read a position."
+
+	| lf n p getter scope guard |
 	lf := Character @env0:lf @env0:asString.
 	n := aName @env0:asString.
 	p := pos @env0:printString.
 	getter := '___pyattr_' @env0:, n @env0:, '___'.
+	scope := SymbolDictionary @env0:new.
+	scope @env0:at: #'___grailSlotPairOwner___' put: self.
+	guard := '	self @env0:class == ___grailSlotPairOwner___ ifFalse: ['.
 	[self ___compileMethod: (forwardGetter
 			ifTrue: [getter @env0:, lf @env0:, '	^ self ___pyAttrLoad___: #''' @env0:, n @env0:, '''']
 			ifFalse: [getter @env0:, lf @env0:,
+				guard @env0:, '^ self ___pyAttrLoad___: #''' @env0:, n @env0:, '''].' @env0:, lf @env0:,
 				'	^ (' @env0:, p @env0:, ' @env0:<= self @env0:_basicSize ifTrue: [self @env0:at: ' @env0:, p
 				@env0:, '] ifFalse: [nil]) ifNil: [self ___pyAttrLoad___: #''' @env0:, n @env0:, ''']'])
-		category: 'Grail-Inferred Slots']
+		category: 'Grail-Inferred Slots'
+		scope: scope]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	[self ___compileMethod: (forwardSetter
 			ifTrue: [getter @env0:, ': ___1' @env0:, lf @env0:, '	self __setattr__: ''' @env0:, n @env0:, ''' _: ___1']
 			ifFalse: [getter @env0:, ': ___1' @env0:, lf @env0:,
+			guard @env0:, 'self ___pyAttrStore___: #''' @env0:, n @env0:, ''' put: ___1.  ^ self].' @env0:, lf @env0:,
 			'	' @env0:, p @env0:, ' @env0:> self @env0:_basicSize ifTrue: [self @env0:size: ' @env0:, p @env0:, '].' @env0:, lf @env0:,
 			'	self @env0:at: ' @env0:, p @env0:, ' put: ___1'])
-		category: 'Grail-Inferred Slots']
+		category: 'Grail-Inferred Slots'
+		scope: scope]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ self
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailIsIndexedPair___: aSelector
+	"Whether THIS class's own method aSelector is an indexed-slot pair half --
+	category ``Grail-Inferred Slots'' and reading the indexed part -- as
+	opposed to a @property or hook forwarder of the same spelling, which reads
+	no position and so is as right on a subclass as here."
+
+	^ (self @env0:includesSelector: aSelector environmentId: 1)
+		@env0:and: [((self @env0:categoryOfSelector: aSelector environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
+		@env0:and: [(self @env0:compiledMethodAt: aSelector environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize']]
 %
 
 category: 'Grail-Slots'
@@ -1199,6 +1225,24 @@ ___grailPropagateSlotLayoutToSubclasses___
 
 category: 'Grail-Slots'
 classmethod: object
+___grailAdoptInheritedSlotLayout___
+	"Emitted by ClassDefAst, in place of the installer, for a class body that
+	assigns, declares and forwards nothing of its own.  When the parent has a
+	slot layout, take a copy of it and compile this class's own pair for every
+	name in it: the parent's indexed pairs answer only for the parent's own
+	instances (the owner guard, ___grailCompileIndexedPair___:), so without its
+	own pairs every attribute of such a class would take the generic path.  A
+	parent without a layout -- every stdlib class, and every class with the
+	positions off -- leaves nothing to do."
+
+	((self @env0:inheritsFrom: PythonInstance)
+		@env0:and: [(self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil])
+			ifFalse: [^ self].
+	^ self ___grailInstallInferredSlots___: #() declared: #() properties: #() indexed: true
+%
+
+category: 'Grail-Slots'
+classmethod: object
 ___grailInstallInferredSlots___: inferredNames declared: declaredNames properties: propertyNames indexed: wantIndexed
 	"Compile the accessor pairs for this class's slots: the DECLARED __slots__
 	names (always) and the INFERRED ones (GRAIL_INFERRED_SLOTS; see ClassDefAst
@@ -1223,7 +1267,11 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	For each name x, in order:
 
 	  1. An ANCESTOR already implements ``___pyattr_x___'' at the SAME position
-	     -> compile nothing: the parent's pair reads and writes the same slot.
+	     as a FORWARDER -> compile nothing: it reads no position.  An ancestor's
+	     INDEXED pair never serves this class, even at the same position: its
+	     owner guard answers only for that ancestor's own instances
+	     (___grailCompileIndexedPair___:), so every class with a layout compiles
+	     its own indexed pair for every live name in it.
 	     For an INFERRED name a parent pair over a name the parent's layout
 	     lacks -- a @property forwarder (step 3 below, run when the parent was
 	     built) -- wins as well: CPython's data descriptor over the instance
@@ -1320,7 +1368,12 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	declaredNames @env0:do: [:n | layoutNames @env0:add: n @env0:asSymbol].
 	wantIndexed ifTrue: [
 		inferredNames @env0:do: [:n | (layoutNames @env0:includes: n @env0:asSymbol) ifFalse: [layoutNames @env0:add: n @env0:asSymbol]]].
-	layout := ((wantIndexed @env0:or: [declaredNames @env0:isEmpty @env0:not])
+	"A parent with a layout counts too, whatever this body infers: the owner
+	guard (___grailCompileIndexedPair___:) refuses an inherited pair's fast
+	path, so a subclass that assigns nothing of its own still needs its own
+	copy of the layout and its own pairs to stay on it."
+	layout := ((wantIndexed @env0:or: [declaredNames @env0:isEmpty @env0:not
+			@env0:or: [(self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil]])
 			@env0:and: [self @env0:inheritsFrom: PythonInstance])
 		ifTrue: [self ___grailMergedSlotLayout___: layoutNames]
 		ifFalse: [#()].
@@ -1338,15 +1391,22 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 			@env0:and: [(self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil])
 		ifTrue: [self @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1]
 		ifFalse: [#()].
-	"An INHERITED name this class does not infer but holds at a DIFFERENT
-	position than the parent (the parent appended it after this class had
-	handed that position to a name of its own) needs this class's own pair, or
-	the parent's pair would read and write the wrong slot on these instances."
-	layout @env0:doWithIndex: [:n :pos |
+	"An INHERITED name this class does not infer gets this class's own pair:
+	always when the parent holds it at a DIFFERENT position (the parent
+	appended it after this class had handed that position to a name of its
+	own), and otherwise whenever the pair it would inherit is an indexed one,
+	whose owner guard answers only for the parent's own instances.  An
+	inherited @property / hook forwarder at the same position keeps winning:
+	it reads no position."
+	layout @env0:doWithIndex: [:n :pos | | inheritedOwner |
 		((layoutNames @env0:includes: n) @env0:not
-			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not
-			@env0:and: [(parentLayout @env0:indexOf: n) @env0:~= pos]]) ifTrue: [
-				self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain forwardSetter: setattrHookInChain]].
+			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not]) ifTrue: [
+				inheritedOwner := ownerOf @env0:value: ('___pyattr_' @env0:, n @env0:asString @env0:, '___') @env0:asSymbol.
+				((parentLayout @env0:indexOf: n) @env0:~= pos
+					@env0:or: [inheritedOwner @env0:isNil
+					@env0:or: [inheritedOwner ___grailIsIndexedPair___: ('___pyattr_' @env0:, n @env0:asString @env0:, '___') @env0:asSymbol]])
+						ifTrue: [
+							self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain forwardSetter: setattrHookInChain]]].
 	"A name the new body no longer assigns SURVIVES with its pair
 	(docs/Schema_Evolution_Design.md): nothing is removed on a rebuild.  A hole
 	(``~name'', left by an explicit drop) has no pair and no index entry."
@@ -1374,9 +1434,13 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 		then this class needs its own pair.  A parent pair over a name the parent's
 		LAYOUT lacks is a @property forwarder, which keeps winning for an INFERRED
 		name and loses to a DECLARED one (step 1 above)."
+		"...and never an INDEXED parent pair, even at the same position: its owner
+		guard answers only for the parent's own instances (see
+		___grailCompileIndexedPair___:), so this class compiles its own."
 		inherited := (owner @env0:notNil @env0:and: [owner @env0:~~ self])
 			@env0:and: [(parentLayout @env0:includes: each @env0:asSymbol)
-				ifTrue: [(parentLayout @env0:indexOf: each @env0:asSymbol) @env0:= (layout @env0:indexOf: each @env0:asSymbol)]
+				ifTrue: [(parentLayout @env0:indexOf: each @env0:asSymbol) @env0:= (layout @env0:indexOf: each @env0:asSymbol)
+					@env0:and: [(owner ___grailIsIndexedPair___: getter @env0:asSymbol) @env0:not]]
 				ifFalse: [(declaredNames @env0:includes: each) @env0:not]].
 		inherited ifFalse: [
 			hookInChain ifTrue: [

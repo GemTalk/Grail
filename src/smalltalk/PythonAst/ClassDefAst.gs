@@ -2231,7 +2231,19 @@ printSmalltalkRuntimeOn: aStream
 		renamedPairsOrdered isEmpty ifFalse: [
 			aStream nextPutAll: ' renamed: '.
 			self printSymbolPairArray: renamedPairsOrdered on: aStream].
-		aStream nextPutAll: '.'; lf].
+		aStream nextPutAll: '.'; lf]
+	ifFalse: [
+		"A body that assigns nothing of its own (``class Dog(Animal): def
+		speak(self): ...'') still has its parent's positions, and the parent's
+		indexed pairs answer only for the parent's own instances (the owner
+		guard, object class >> ___grailCompileIndexedPair___:).  So such a class
+		takes its own copy of the layout and its own pairs -- at run time, since
+		whether the parent HAS a layout is not known here.  A separate selector,
+		so every body that already emitted the installer generates the same
+		source as before."
+		(importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath) ifTrue: [
+			aStream nextPutAll: self ___stVarName___;
+				nextPutAll: ' ___grailAdoptInheritedSlotLayout___.'; lf]].
 
 	"Read accessors for the class's METHODS and class-body DATA attributes
 	(GRAIL_ATTR_ACCESSORS, stage 3): ``c.foo'' / ``c.MAX'' from anywhere
