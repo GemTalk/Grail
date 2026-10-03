@@ -1008,9 +1008,12 @@ ___grailCompactSlots___: tree instances: byClass
 							c ___grailCompileIndexedPair___: n position: p
 								forwardGetter: (gsrc @env0:includesString: '_basicSize') @env0:not]]
 					ifFalse: [
-						"An ancestor's pair serves only while it reads this position."
+						"An ancestor's FORWARDER serves only while it reads this
+						position; an ancestor's INDEXED pair never does -- its owner
+						guard answers only for that ancestor's instances."
 						(owner @env0:isNil
-							@env0:or: [((owner @env0:perform: #'___pySlotLayout___' env: 1) @env0:indexOf: n) @env0:~= p]) ifTrue: [
+							@env0:or: [((owner @env0:perform: #'___pySlotLayout___' env: 1) @env0:indexOf: n) @env0:~= p
+							@env0:or: [owner ___grailIsIndexedPair___: getter]]) ifTrue: [
 								c ___grailCompileIndexedPair___: n position: p forwardGetter: hookInChain]]]]].
 	^ { classesDone. instancesDone }
 %
@@ -1397,10 +1400,13 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	own), and otherwise whenever the pair it would inherit is an indexed one,
 	whose owner guard answers only for the parent's own instances.  An
 	inherited @property / hook forwarder at the same position keeps winning:
-	it reads no position."
+	it reads no position.  Nor does this body's OWN @property of that name,
+	which step 3 below turns into the forwarder; a pair compiled here first
+	would make step 3 see this class as the owner and skip it."
 	layout @env0:doWithIndex: [:n :pos | | inheritedOwner |
 		((layoutNames @env0:includes: n) @env0:not
-			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not]) ifTrue: [
+			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not
+			@env0:and: [(propertyNames @env0:anySatisfy: [:p | p @env0:asSymbol == n]) @env0:not]]) ifTrue: [
 				inheritedOwner := ownerOf @env0:value: ('___pyattr_' @env0:, n @env0:asString @env0:, '___') @env0:asSymbol.
 				((parentLayout @env0:indexOf: n) @env0:~= pos
 					@env0:or: [inheritedOwner @env0:isNil

@@ -284,12 +284,14 @@ class B(A):
 	self assert: (bInst @env1:___pyAttrLoad___: #y) equals: 2.
 	self assert: (bInst @env1:___pyAttrLoad___: #b1) equals: 7.
 	self should: [aInst @env1:___pyAttrLoad___: #x] raise: AttributeError.
-	"The pairs read the new positions: A's y pair, and B's own b1 pair."
+	"The pairs read the new positions: B's own b1 pair, and B's own y pair
+	(A's indexed pair answers only for A's own instances -- the owner guard)."
 	bInst @env1:set_b1: 8.
 	self assert: (bInst @env1:___pyAttrLoad___: #b1) equals: 8.
 	self assert: (bInst at: 3) equals: 8.
 	self assert: (b2 whichClassIncludesSelector: #'___pyattr_b1___' environmentId: 1) == b2.
-	self assert: (b2 whichClassIncludesSelector: #'___pyattr_y___' environmentId: 1) == a2.
+	self assert: (b2 whichClassIncludesSelector: #'___pyattr_y___' environmentId: 1) == b2.
+	self assert: (bInst @env1:___pyattr_y___) equals: 2 description: 'B''s own y pair reads the compacted position'.
 	"A fresh instance is built to the compact layout."
 	bInst := b2 @env1:___pyCallValue___: { } kw: nil.
 	self assert: bInst _basicSize equals: 3.
@@ -361,8 +363,8 @@ category: 'Grail-Tests'
 method: IndexedSlotRebuildTestCase
 testParentStopsAssigningUnderSubclasses
 	"A stops assigning a1 while B(A) merely inherited it and D(A) assigns it
-	itself.  Nothing changes in any layout: a1 survives everywhere, A's pair
-	keeps serving it, and every instance reads what it held.  Both subclasses
+	itself.  Nothing changes in any layout: a1 survives everywhere, each class's
+	own pair keeps serving it, and every instance reads what it held.  Both subclasses
 	are rebuilt in the same module load, so this is the merge path
 	(___grailMergedSlotLayout___:), not the registry walk."
 	| mod a b d bInst dInst mod2 a2 b2 d2 |
@@ -386,7 +388,7 @@ class D(A):
 	dInst := d @env1:___pyCallValue___: { } kw: nil.
 	self assert: (self layoutOf: b) equals: #(#a1 #a2 #b1).
 	self assert: (self layoutOf: d) equals: #(#a1 #a2).
-	self assert: (d whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a.
+	self assert: (d whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == d.
 	mod2 := self loadRevision: 'class A:
     def __init__(self):
         self.a2 = 2
@@ -407,7 +409,7 @@ class D(A):
 	self assert: (self layoutOf: b2) equals: #(#a1 #a2 #b1).
 	self assert: (self layoutOf: d2) equals: #(#a1 #a2).
 	self assert: (a2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a2.
-	self assert: (d2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a2.
+	self assert: (d2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == d2.
 	self assert: (bInst @env1:___pyAttrLoad___: #a1) equals: 1.
 	self assert: (bInst @env1:___pyAttrLoad___: #b1) equals: 7.
 	self assert: (dInst @env1:___pyAttrLoad___: #a1) equals: 5.
