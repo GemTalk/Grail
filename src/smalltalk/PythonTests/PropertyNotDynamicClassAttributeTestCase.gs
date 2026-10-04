@@ -207,21 +207,23 @@ testTheSharedDescriptorBehaviourStillReachesBothClasses
 category: 'Grail-Tests - Recorded Gaps'
 method: PropertyNotDynamicClassAttributeTestCase
 testRecordedGapsStillHold
-	"Both are long-standing and orthogonal to this change; asserted so they are
-	noticed when they close rather than drifting unnoticed.
+	"The first is long-standing; asserted so it is noticed when it closes rather
+	than drifting unnoticed.  The second has closed.
 
 	(1) Upstream these are TWO classes -- enum.property derives from
 	types.DynamicClassAttribute.  Grail's types.py aliases one to the other, so
 	they are one object.  Nothing in test_enum reads the difference; what it does
 	read -- that neither is a ``property'' -- is asserted above.
 
-	(2) The DECORATOR form ``@property def q'' compiles to a getter METHOD.  A
-	read off the class now answers a property built from it, so pydoc agrees
-	with CPython ('readonly property', asserted with the rest); inspect reads the
-	class __dict__, which still holds the getter function, and answers 'data'
-	where CPython answers 'property'."
+	(2) The DECORATOR form ``@property def q'' compiles to a getter METHOD.  It is
+	no longer a gap: a read off the class answers a property built from it and
+	the class __dict__ holds the same property, so pydoc and inspect both agree
+	with CPython.  Asserted here, where the gap was recorded, so a regression
+	returns to the same place."
 
 	self assert: (self resultAt: 'dca_is_enum_property') asString equals: 'True'.
 	self assert: (self resultAt: 'decorated_pydoc_kind') asString equals: '''readonly property'''.
-	self assert: (self resultAt: 'decorated_inspect_kind') asString equals: '''data'''.
+	self assert: (self resultAt: 'decorated_inspect_kind') asString equals: '''property'''.
+	"Only the BUILTIN property is entered (___grailBuiltinPropertyNames___)."
+	self assert: (self resultAt: 'enum_property_dict_entry_is_not_a_property') asString equals: 'False'.
 %

@@ -87,12 +87,12 @@ class Caller:
 
 
 class HolderOfFn:
-    # A function stored as a class attribute must pass through instance
-    # attribute reads UNBOUND (___descriptorGet___ excludes BoundMethod)
-    # -- the itsdangerous `digest_method = staticmethod(hashlib.sha1)`
-    # pattern.  If the implicit descriptor path rebound it to the holder,
-    # the call would dispatch #helper at the HolderOfFn instance and DNU.
-    dm = helper
+    # The itsdangerous `digest_method = staticmethod(hashlib.sha1)` shape: a
+    # function wrapped in staticmethod and stored as a class attribute is read
+    # through an instance UNBOUND.  (This used to store the bare function and
+    # expect it unbound, which CPython does not do -- a module-level def in a
+    # class body binds like any other function.)
+    dm = staticmethod(helper)
 
 
 def _get_rebind():

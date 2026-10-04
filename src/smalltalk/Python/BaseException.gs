@@ -288,6 +288,27 @@ __new__: arg1 _: arg2 _: arg3 _: arg4 _: arg5
 	^ instance
 %
 
+category: 'Grail-Generics'
+classmethod: BaseException
+__getitem__: item
+	"``Exception[OSError]'' -- CPython's TypeError: an exception class is not
+	generic.  Grail's default collapses a class subscript to the class itself
+	(Metaclass3), so this answered Exception and the test that it refuses
+	(test_exception_group test_exception_is_not_generic_type) saw no error.
+	The group classes, which ARE generic, override this (BaseExceptionGroup
+	class >> __getitem__:), and so does any subclass defining its own
+	__class_getitem__ -- a user exception mixing in typing.Generic keeps
+	working."
+
+	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
+			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
+			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
+	^ TypeError ___signal___: 'type ''' @env0:, self @env0:name @env0:asString
+		@env0:, ''' is not subscriptable'
+%
+
 category: 'Grail-Initialization'
 classmethod: BaseException
 ___signal___: message

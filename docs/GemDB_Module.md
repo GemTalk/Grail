@@ -30,6 +30,7 @@ gemdb.app()                 # the current app's name, or None
 gemdb.GemDBError            # base exception
 gemdb.ConflictError         # a commit lost the race; carries the live objects
 gemdb.PendingChangesError   # a block/refresh refused to run over pending work
+gemdb.SessionStateError     # GemStone refused a commit: it reaches a session-bound object
 
 gemdb.admin                 # repository administration, apps -- see below
 gemdb.sessions              # who is connected -- see below
@@ -139,6 +140,29 @@ letting it propagate. Passing `retries=` to the `with` form raises a
 `TypeError` explaining the decorator form. (PyMongo made the same split
 for the same reason: `start_transaction()` is a plain context manager,
 retry lives in `with_transaction(callback)`.)
+
+### A refused commit
+
+GemStone refuses a commit outright, rather than losing a race, when it
+reaches an object that cannot outlive the session. Today that is a
+generator, or anything holding one (its GsProcess waits on a Semaphore,
+which GemStone never commits). `commit()` and the block raise
+`SessionStateError`, a `TypeError` too, as CPython's `pickle` raises for
+such objects. It is never retried: replaying the function would store the
+same object again.
+
+Unlike a conflict, the refused transaction cannot be committed even after
+removing the object: GemStone allows no further commit until an abort. So
+the block aborts before raising (`aborted=True`), and after an explicit
+`commit()` (`aborted=False`) the next `commit()` raises `GemDBError` until
+`gemdb.abort()` discards the transaction.
+
+Sockets and open files are not refused yet: they commit, and fail in the
+next session. Keep them out of the commit (`__transient__` for a module
+global). Asking GemStone to refuse them too, and to let a refused
+transaction be fixed and retried, is
+[GemStone_Feature_Requests.md §1.8](GemStone_Feature_Requests.md); the
+decision is in [App_Namespaces_Design.md §6.2](App_Namespaces_Design.md).
 
 ### Imports belong inside the transaction that commits them
 
@@ -600,7 +624,9 @@ is now `gemdb.schema`, above.
 
 * `tests/scripts/runGemdbTest.gs` (wired into `run_tests.sh` as
   `gemdb`) — the single-session surface plus the fresh-session
-  properties, two logins, leaves the repository clean. Commits and
+  properties, two logins, leaves the repository clean. Includes a refused
+  commit (a stored generator) through `commit()`, the block and the
+  retrying decorator: `SessionStateError`, the abort it needs, no retry. Commits and
   aborts, so it cannot be an SUnit test.
 * `tests/scripts/runSchemaTest.gs` (wired in as `gemdb-schema`) — the
   `gemdb.schema` surface over a two-class fixture: the three layout

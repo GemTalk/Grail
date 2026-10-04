@@ -4371,9 +4371,13 @@ ___grailSimpleEnum: cls type: etype kw: kwargs
 	Built on the functional API, which keeps member order and already turns a
 	callable under a dunder name into a method override.  Every other
 	underscore name, and every non-member callable, is stored on the new class
-	afterwards.  A @property arrives from ___classDict___ as its getter FUNCTION
-	(Grail compiles a property to an accessor pair, not an object), so the
-	class-side ___grailOwnPropertyNames___ list is what re-wraps it."
+	afterwards.  A builtin @property arrives from ___classDict___ as the property
+	object, as in CPython; one declared another way -- ``@enum.property'' --
+	still arrives as its getter FUNCTION (Grail compiles both to an accessor
+	pair), so the class-side ___grailOwnPropertyNames___ list is what wraps it,
+	and only when it is not a descriptor already.  Wrapping the property object
+	again made a property whose fget was a property: ``'property' object is not
+	callable'' on the first member read."
 
 	| ns propNames pairs later keywords doc newEnum |
 	ns := cls ___classDict___.
@@ -4391,7 +4395,10 @@ ___grailSimpleEnum: cls type: etype kw: kwargs
 		nm @env0:= '__qualname__' ifTrue: [keywords @env0:at: 'qualname' put: v].
 		(#('__doc__' '__module__' '__qualname__' '__dict__' '__weakref__') @env0:includes: nm) ifFalse: [
 			(propNames @env0:includes: nm @env0:asSymbol)
-				ifTrue: [later @env0:add: (Array @env0:with: nm with: (PropertyDescriptor __new__: v))]
+				ifTrue: [later @env0:add: (Array @env0:with: nm with:
+					((v isKindOf: AbstractPropertyDescriptor)
+						ifTrue: [v]
+						ifFalse: [PropertyDescriptor __new__: v]))]
 				ifFalse: [
 					((nm @env0:size @env0:> 0) and: [(nm @env0:at: 1) @env0:= $_])
 						ifTrue: [

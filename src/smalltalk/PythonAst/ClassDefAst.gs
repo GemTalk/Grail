@@ -2609,6 +2609,30 @@ printSmalltalkRuntimeOn: aStream
 				nextPutAll: '''.';
 				lf]]] value: OrderedCollection new.
 
+	"The subset declared with the BUILTIN property (FunctionDefAst >>
+	___isBuiltinPropertyDef___).  object >> ___classDict___ enters a property
+	object for these alone: an ``@enum.property'' def compiles to the same
+	accessor pair, but its __dict__ entry in CPython is no ``property''."
+	[:builtinNames |
+	self instanceMethodDefs do: [:def |
+		(def ___isBuiltinPropertyDef___ and: [(builtinNames includes: def name asSymbol) not])
+			ifTrue: [builtinNames add: def name asSymbol]].
+	builtinNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___grailBuiltinPropertyNames___'; lf.
+		src nextPutAll: '	^ #('.
+		builtinNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
+
 	"Names the body binds MORE THAN ONCE, counting defs and assignments alike.
 
 	CPython tracks this in _EnumDict.__setitem__ -- an enum class body may not

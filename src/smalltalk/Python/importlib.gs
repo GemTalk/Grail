@@ -6130,7 +6130,7 @@ ___selectStorageBase___: rawBases
 	An EMPTY resolution means every base removed itself; that is
 	``class C:'' , which is rooted at PythonInstance."
 
-	| bases |
+	| bases layoutBase |
 	bases := self ___resolveMroEntries___: rawBases.
 	bases isEmpty ifTrue: [^ PythonInstance].
 	bases do: [:b |
@@ -6148,6 +6148,17 @@ ___selectStorageBase___: rawBases
 	AttributeError on its own __init__."
 	bases do: [:b |
 		(self ___carriesSlots___: b) ifTrue: [^ b]].
+	"An EXCEPTION base with fields of its own is CPython's solid base for the
+	same reason.  ``class MyEG(BaseExceptionGroup, ValueError)'' must extend
+	BaseExceptionGroup's layout (message, exceptions) -- CPython picks it as the
+	best base -- but ValueError's chain is one class deeper, so the depth rule
+	below chose ValueError, BaseExceptionGroup was merged as a mixin without its
+	instVars, and the class answered neither ``exceptions'' nor the group's
+	construction checks (test_exception_group
+	test_BEG_and_E_subclass_does_not_wrap_base_exceptions).  See
+	___exceptionLayoutBase___:."
+	layoutBase := self ___exceptionLayoutBase___: bases.
+	layoutBase == nil ifFalse: [^ layoutBase].
 	"No built-in storage base.  Prefer the base with the DEEPEST
 	superclass chain: the ``class DateField(DateTimeCheckMixin, Field)''
 	idiom (and Django's exception / descriptor hierarchies) puts a
@@ -6174,6 +6185,39 @@ ___selectStorageBase___: rawBases
 		]
 	].
 	self ___widenStrBase___: best ] value
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___exceptionLayoutBase___: bases
+	"The exception base whose instance layout the new class has to extend, or
+	nil when the bases do not decide it.
+
+	Only when EVERY class among the bases is a Python exception, and exactly
+	ONE of them has the largest instance size (named instVars, i.e. fields such
+	as a group's message and exceptions or OSError's errno).  Equal layouts --
+	the common ``class DivisionByZero(DecimalException, ZeroDivisionError)''
+	shape -- answer nil and leave the choice to chain depth, unchanged.  CPython
+	refuses two bases with DIFFERENT extended layouts outright (instance
+	lay-out conflict); a tie at the maximum is left to the depth rule rather
+	than refused here."
+
+	| be classes best bestSize tied |
+	be := Python at: #BaseException otherwise: nil.
+	be == nil ifTrue: [^ nil].
+	classes := bases select: [:b | b isKindOf: Behavior].
+	classes size < 2 ifTrue: [^ nil].
+	(classes detect: [:b | (b == be or: [b inheritsFrom: be]) not] ifNone: [nil]) == nil
+		ifFalse: [^ nil].
+	best := nil.
+	bestSize := -1.
+	tied := false.
+	classes do: [:b |
+		b instSize > bestSize
+			ifTrue: [best := b. bestSize := b instSize. tied := false]
+			ifFalse: [b instSize = bestSize ifTrue: [tied := true]]].
+	tied ifTrue: [^ nil].
+	^ best
 %
 
 category: 'Grail-Module Loading'
