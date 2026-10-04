@@ -40,7 +40,11 @@ test_creation
 	"Test creating a BaseExceptionGroup instance."
 	
 	| exc |
-	exc := BaseExceptionGroup ___new___:  BaseExceptionGroup .
+	"A group needs CPython's two arguments -- a message and a non-empty
+	sequence of exceptions, here holding a KeyboardInterrupt, so it stays a BaseExceptionGroup.  The
+	one-argument ``BaseExceptionGroup ___new___: BaseExceptionGroup'' this used is the
+	TypeError CPython raises (``takes exactly 2 arguments'')."
+	exc := BaseExceptionGroup ___new___: 'eg' _: (Array with: (KeyboardInterrupt ___new___: 'x')).
 	self assert: exc notNil.
 %
 
@@ -50,7 +54,11 @@ test_inheritance
 	"Test that BaseExceptionGroup inherits from BaseException."
 	
 	| exc |
-	exc := BaseExceptionGroup ___new___:  BaseExceptionGroup .
+	"A group needs CPython's two arguments -- a message and a non-empty
+	sequence of exceptions, here holding a KeyboardInterrupt, so it stays a BaseExceptionGroup.  The
+	one-argument ``BaseExceptionGroup ___new___: BaseExceptionGroup'' this used is the
+	TypeError CPython raises (``takes exactly 2 arguments'')."
+	exc := BaseExceptionGroup ___new___: 'eg' _: (Array with: (KeyboardInterrupt ___new___: 'x')).
 	self assert: (exc isKindOf: BaseException).
 %
 
