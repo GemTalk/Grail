@@ -374,6 +374,83 @@ ___lastPathComponentOf___: aPath
 	^ p copyFrom: i + 1 to: p size
 %
 
+category: 'Grail-Transient Globals'
+classmethod: importlib
+___transientNamesIn___: moduleAst
+	"The names a module's body declares session-only with a top-level
+	``__transient__ = [...]'' (or a tuple) of string literals -- plus
+	``__transient__'' itself, so the declaration is not a write either.  An
+	empty collection when there is no such declaration, or it is not literal:
+	the names have to be known when the class is built, since they decide
+	where its globals live."
+
+	| names |
+	names := OrderedCollection new.
+	moduleAst body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [stmt targets size = 1
+			and: [(stmt targets first isKindOf: NameAst)
+			and: [stmt targets first id asString = '__transient__'
+			and: [(stmt value isKindOf: ListAst) or: [stmt value isKindOf: TupleAst]]]]]) ifTrue: [
+				names := OrderedCollection with: #'__transient__'.
+				stmt value elts do: [:e |
+					((e isKindOf: ConstantAst)
+						and: [(e value isKindOf: CharacterCollection)
+						and: [e value notEmpty
+						and: [e value allSatisfy: [:c | c isAlphaNumeric or: [c = $_]]]]])
+							ifTrue: [names add: e value asString asSymbol]]]].
+	^ names asArray
+%
+
+category: 'Grail-Transient Globals'
+classmethod: importlib
+___installTransientGlobals___: aNames on: aModuleClass
+	"Keep the globals aNames names in SESSION storage for aModuleClass's
+	instance (docs/App_Namespaces_Design.md §5.3): never committed, untouched
+	by an abort, and unbound in each new session, so the module's own
+	assignment rebinds them -- the socket reopened, the loop variable reset.
+	In an app, where ``__main__'''s globals are the persistent database, this
+	is how a top file says which of them are not.
+
+	Done by overriding the three dynamic-instVar accessors every module-global
+	read, store, delete and listing goes through, ON THIS CLASS ONLY, with the
+	names inlined: a module that declares nothing pays nothing.  A rebuild that
+	no longer declares any removes them."
+
+	| lit |
+	#(#'dynamicInstVarAt:' #'dynamicInstVarAt:put:' #'dynamicInstanceVariables') do: [:sel |
+		(aModuleClass includesSelector: sel environmentId: 0)
+			ifTrue: [aModuleClass removeSelector: sel environmentId: 0]].
+	aNames isEmpty ifTrue: [^ self].
+	lit := String new.
+	aNames do: [:n | lit := lit , ' #''' , n asString , ''''].
+	lit := '#(' , lit , ' )'.
+	aModuleClass
+		compileMethod: 'dynamicInstVarAt: aSymbol
+	(' , lit , ' includesIdentical: aSymbol) ifTrue: [^ self ___transientGlobals___ at: aSymbol otherwise: nil].
+	^ super dynamicInstVarAt: aSymbol'
+			dictionaries: System myUserProfile symbolList
+			category: 'Grail-Transient Globals'
+			environmentId: 0.
+	aModuleClass
+		compileMethod: 'dynamicInstVarAt: aSymbol put: aValue
+	(' , lit , ' includesIdentical: aSymbol) ifTrue: [
+		(aValue == nil or: [aValue == _remoteNil])
+			ifTrue: [self ___transientGlobals___ removeKey: aSymbol ifAbsent: []]
+			ifFalse: [self ___transientGlobals___ at: aSymbol put: aValue].
+		^ aValue].
+	^ super dynamicInstVarAt: aSymbol put: aValue'
+			dictionaries: System myUserProfile symbolList
+			category: 'Grail-Transient Globals'
+			environmentId: 0.
+	aModuleClass
+		compileMethod: 'dynamicInstanceVariables
+	^ super dynamicInstanceVariables , self ___transientGlobals___ keys asArray'
+			dictionaries: System myUserProfile symbolList
+			category: 'Grail-Transient Globals'
+			environmentId: 0
+%
+
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___moduleNotFoundMessage___: aName
@@ -600,6 +677,8 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			ifTrue: [self ___sessionModuleClasses___]
 			ifFalse: [self ___grailModuleClassesIn___: self ___grailNamespace___ create: true])
 		options: #().
+	"``__transient__'' names: kept per session, never committed (§5.3)."
+	self ___installTransientGlobals___: (self ___transientNamesIn___: moduleAst) on: moduleClass.
 
 	"Compile top-level `def` statements as real methods on the
 	module class. Scan for FunctionDefAst nodes, pre-register stubs so
@@ -1743,7 +1822,12 @@ ___isSessionLocalModule___: aModuleName
 	the session; a session-local one is recorded nowhere, and built cold, which
 	is what ``fresh'' means."
 
-	aModuleName asString = '__main__' ifTrue: [^ true].
+	"...except in an APP (docs/App_Namespaces_Design.md §5): there ``__main__''
+	is the app's one top file, a canonical module like any other, and its
+	committed instance is the app's persistent globals.  The collision #851
+	removed cannot recur, since the key is the app's own."
+	aModuleName asString = '__main__' ifTrue: [
+		^ (SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil].
 	^ ((SessionTemps current at: #'GrailFreshImports' otherwise: nil)
 		ifNil: [^ false]) includes: aModuleName asString
 %
@@ -2287,6 +2371,28 @@ ___grailNeedsNamespaceOfClassKey___: aKey
 
 	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil ifTrue: [^ false].
 	^ self ___grailNamespace___ ~~ (self ___grailNamespaceOfClassKey___: aKey)
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailAppGlobals___
+	"The current app's globals -- its ``__main__'' module instance -- or nil
+	outside an app or before the app's top file has run
+	(docs/App_Namespaces_Design.md §5.2).  gemdb.root in an app is a view of
+	these.  This session's own ``__main__'' when it is the app's (its class is
+	filed in the app), else the committed instance, so a session that joins
+	the app without running its top file -- a worker, a shell -- reads and
+	writes the same globals."
+
+	| app classes main reg |
+	app := SessionTemps current at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifTrue: [^ nil].
+	classes := app at: #'GrailModuleClasses' otherwise: nil.
+	main := (self @env1:modules) at: #'__main__' otherwise: nil.
+	(main notNil and: [classes notNil and: [(classes at: #'__main__' otherwise: nil) == main class]])
+		ifTrue: [^ main].
+	reg := app at: #'GrailCanonicalModules' otherwise: nil.
+	^ reg isNil ifTrue: [nil] ifFalse: [reg at: '__main__' otherwise: nil]
 %
 
 category: 'Grail-App Namespaces'
@@ -3924,7 +4030,7 @@ ___loadModuleFromPath___: pathString name: moduleName
 	new instances when the cache is missed."
 
 	| moduleAst moduleClass moduleInstance
-	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local |
+	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local rerun |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
@@ -3982,9 +4088,33 @@ ___loadModuleFromPath___: pathString name: moduleName
 	session, flag-on either matches CPython or raises).  A failed cold
 	import never recorded a hash-state entry or a registry instance, so
 	CPython's delete-then-retry recovery path stays cold and guard-free."
+	rerun := false.
 	hashState == #'match' ifTrue: [
 		| committedInstance |
 		committedInstance := self ___canonicalModules___ at: moduleName otherwise: nil.
+		"An app's ``__main__'' (docs/App_Namespaces_Design.md §5.2): the top file
+		RUNS every time -- that is what running a program means -- but over its
+		committed instance, whose globals are the app's persistent state, and,
+		the source being unchanged, with its committed class: no parse, no
+		compile, and the class statements' probes HIT, so an unchanged re-run
+		rebuilds nothing.  With identical stores skipped (module >>
+		dynamicInstVarAt:put:) it writes nothing at all.  The body re-runs over
+		globals that hold everything the last run's body produced, so reusing
+		its classes is coherent here, unlike the reuse-code + re-run-body hybrid
+		par.10.1 rules out for a module whose state is per session."
+		((moduleName = '__main__') and: [committedInstance notNil and: [committedInstance isCommitted]]) ifTrue: [
+			rerun := true.
+			stateMap at: moduleName asSymbol put: #'match'.
+			moduleClass := committedInstance class.
+			moduleInstance := committedInstance.
+			moduleClass ___adoptInstance___: moduleInstance.
+			self registerModule: moduleName with: moduleInstance.
+			self ___restoreCanonicalMetaclasses___: moduleName.
+			self ___restoreCanonicalClassStructure___: moduleName.
+			self ___restoreCanonicalMiRecords___.
+			self ___restoreAllCanonicalMetaclasses___.
+			self ___restoreAllBodyClassAttrs___.
+			committedInstance := nil].
 		"isCommitted is what makes ''deployed'' precise: a registry entry
 		this session recorded in-transaction (and never committed) is NOT
 		deployed -- a non-committing session keeps today's cold-ish
@@ -4047,7 +4177,7 @@ ___loadModuleFromPath___: pathString name: moduleName
 	(the codegen-trace debug dumps, freshly compiled module-level defs)
 	re-import is entitled to.  The compile savings live in the
 	warm-bind path, where NOTHING re-runs."
-	stateMap at: moduleName asSymbol put: #'stale'.
+	rerun ifFalse: [stateMap at: moduleName asSymbol put: #'stale'].
 
 	moduleClass isNil ifTrue: [
 		moduleAst := (ModuleAst parseSource: srcString) path: pathString; yourself.
@@ -4086,9 +4216,10 @@ ___loadModuleFromPath___: pathString name: moduleName
 	longer defines survives, again as reload() leaves it."
 	"Never for a session-local module: an older extent may hold a committed
 	``__main__'' from before #851, and rebuilding into it would write it."
+	rerun ifFalse: [
 	moduleInstance := local
 		ifTrue: [nil]
-		ifFalse: [self ___committedInstanceToRebuild___: moduleName class: moduleClass].
+		ifFalse: [self ___committedInstanceToRebuild___: moduleName class: moduleClass]].
 	rebuiltInPlace := moduleInstance notNil.
 	rebuiltInPlace ifFalse: [moduleInstance := moduleClass new].
 	"Adopt as the class's singleton BEFORE running initialize.  Module
@@ -4120,6 +4251,8 @@ ___loadModuleFromPath___: pathString name: moduleName
 	(get_source), which is how CPython shows source for a frame whose
 	co_filename does not name a readable file.  With no __loader__ that lookup
 	silently answered []."
+	"A re-run keeps the spec it was committed with: same file, same source."
+	rerun ifFalse: [
 	moduleInstance @env0:dynamicInstVarAt: #'__spec__' put: nil.
 	self
 		___initModuleAttrsFrom___: (self
@@ -4131,7 +4264,7 @@ ___loadModuleFromPath___: pathString name: moduleName
 				ifFalse: [nil]))
 		on: moduleInstance.
 	"Register BEFORE execution so circular imports resolve"
-	self registerModule: moduleName with: moduleInstance.
+	self registerModule: moduleName with: moduleInstance].
 	"Execute the module body.  Registration happens BEFORE the body runs (so
 	circular imports see a module object), which means a body that raises
 	would otherwise leave a half-built module stuck in sys.modules — its
@@ -4176,7 +4309,7 @@ ___loadModuleFromPath___: pathString name: moduleName
 			(in this transaction only).  Put the old hash back so the next
 			import sees the module as stale and retries, instead of finding a
 			matching hash and binding the half-built instance."
-			rebuiltInPlace ifTrue: [
+			(rebuiltInPlace and: [rerun not]) ifTrue: [
 				previousHash isNil
 					ifTrue: [hashes removeKey: moduleName ifAbsent: []]
 					ifFalse: [hashes at: moduleName put: previousHash]].
@@ -4204,6 +4337,8 @@ ___loadModuleFromPath___: pathString name: moduleName
 	"A session-local module is recorded in no canonical registry -- neither as
 	a dependency record here nor as the deployed instance below."
 	local ifTrue: [^ moduleInstance].
+	"A re-run of unchanged source has the record it was committed with."
+	rerun ifTrue: [^ moduleInstance].
 	self ___recordDepsOf___: moduleName srcHash: srcHash names: imported changed: buildChanged.
 	"Phase-5 (doc par.10): record this cold import's instance in the
 	canonical-module registry, IN-TRANSACTION (import never commits).  It

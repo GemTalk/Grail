@@ -367,6 +367,9 @@ timed "module-source-path" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scrip
 # Two apps each deploy a module of the same name from their own file and keep
 # their own code (docs/App_Namespaces_Design.md, cut 2). Commits, so not SUnit.
 timed "app-namespaces" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runAppNamespaceTest.gs < /dev/null || EXIT=$?
+# __main__ in an app: persistent globals, a re-run that writes nothing,
+# __transient__, gemdb.root as the alias, abort (cut 3). Commits.
+timed "app-main" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runAppMainTest.gs < /dev/null || EXIT=$?
 
 # An abort rolls the repository back but not the session: sys.modules keeps
 # every module imported before it, while the generated class, the registry

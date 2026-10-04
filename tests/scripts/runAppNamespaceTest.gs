@@ -61,9 +61,6 @@ next run would warm-bind the stale fixtures.  Dropping an app drops
 everything deployed in it."
 apps := UserGlobals at: #'GrailApps' otherwise: nil.
 apps ifNotNil: [apps removeKey: appA ifAbsent: []. apps removeKey: appB ifAbsent: []].
-evalPython value: 'import gemdb
-for k in ("' , modName , '_a", "' , modName , '_b"):
-    gemdb.root.pop(k, None)'.
 System commitTransaction ifFalse: [self error: 'the self-heal commit failed'].
 #('' '/a' '/b') do: [:sub |
   [GsFile createServerDirectory: root , sub] on: Error do: [:e | e return: nil]].
@@ -112,8 +109,11 @@ check value: 'its hash is recorded in the app, not the shared base'
 check value: 'the stdlib module it imported stays in the shared base'
   value: ((importlib ___grailNamespaceOf___: 'graphlib') == UserGlobals
     and: [((nsA at: #'GrailCanonicalModuleHashes') includesKey: 'graphlib') not]).
+"The stored instance is a global of the deployed module itself, which is
+persistent: in an app, gemdb.root is the app's top-file globals, and this app
+has no top file (runAppMainTest.gs covers that)."
 evalPython value: 'import gemdb, ' , modName , ' as m
-gemdb.root["' , modName , '_a"] = m.User("ann")
+m.saved = m.User("ann")
 gemdb.commit()'.
 check value: 'the app and its deployment commit' value: System needsCommit not.
 
@@ -168,10 +168,10 @@ check value: 'a second app imports its own file under the same name, unrefused' 
 check value: 'each app has its own User class'
   value: (((nsB at: #'GrailCanonicalClasses') at: modName , '.User')
     ~~ ((nsA at: #'GrailCanonicalClasses') at: modName , '.User')).
-r := evalPython value: 'import gemdb, ' , modName , ' as m
-gemdb.root["' , modName , '_b"] = m.User("bob", "bob@example.com")
-gemdb.commit()
-gemdb.root["' , modName , '_a"].hello()'.
+evalPython value: 'import gemdb, ' , modName , ' as m
+m.saved = m.User("bob", "bob@example.com")
+gemdb.commit()'.
+r := (((nsA at: #'GrailCanonicalModules') at: modName) dynamicInstVarAt: #'saved') @env1:hello.
 check value: 'app A''s stored instance still runs app A''s code in app B' value: r = 'A ann'.
 
 failures isEmpty ifFalse: [
@@ -196,7 +196,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out evalPython failures check root modName appA appB r |
+| out evalPython failures check root modName appA appB r bSaved |
 out := GsFile stdout.
 failures := OrderedCollection new.
 check := [:label :ok |
@@ -221,14 +221,14 @@ gemdb.set_app("' , appA , '")'.
 importlib loadModuleFromPath: root , '/a/' , modName , '.py' name: modName.
 check value: 'rejoining app A warm-binds its module and writes nothing' value: System needsCommit not.
 r := evalPython value: 'import gemdb, ' , modName , ' as m
-__a = gemdb.root["' , modName , '_a"]
-__b = gemdb.root["' , modName , '_b"]
-(type(__a) is m.User, __a.hello(), type(__b) is m.User, __b.hello(), __b.email)'.
+(type(m.saved) is m.User, m.saved.hello())'.
 check value: 'app A''s stored instance has app A''s class and runs its code'
   value: ((r @env1:__getitem__: 0) == true and: [(r @env1:__getitem__: 1) = 'A ann']).
+bSaved := (((importlib ___grailAppNamed___: appB create: false) at: #'GrailCanonicalModules') at: modName)
+  dynamicInstVarAt: #'saved'.
 check value: 'app B''s stored instance keeps app B''s class and code'
-  value: ((r @env1:__getitem__: 2) == false
-    and: [(r @env1:__getitem__: 3) = 'B bob' and: [(r @env1:__getitem__: 4) = 'bob@example.com']]).
+  value: (bSaved class ~~ ((importlib @env1:lookupModule: modName) @env1:User)
+    and: [(bSaved @env1:hello) = 'B bob']).
 r := [importlib loadModuleFromPath: root , '/b/' , modName , '.py' name: modName. nil]
   on: ImportError do: [:e | e return: e messageText asString].
 check value: 'within app A, b/ is the foreign file D10 refuses' value: r notNil.
@@ -296,9 +296,6 @@ appB := UserGlobals at: #'Grail_appns_b'.
   System gemEnvironmentVariable: 'GEMDB_APP' put: ''.
   System abortTransaction.
   importlib ___grailUseApp___: nil.
-  evalPython value: 'import gemdb
-for k in ("' , modName , '_a", "' , modName , '_b"):
-    gemdb.root.pop(k, None)'.
   apps := UserGlobals at: #'GrailApps' otherwise: nil.
   apps ifNotNil: [apps removeKey: appA ifAbsent: []. apps removeKey: appB ifAbsent: []].
   #('/a/' '/b/') do: [:sub |

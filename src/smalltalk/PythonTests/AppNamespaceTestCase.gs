@@ -244,6 +244,88 @@ testTheCompileListPutsTheAppFirst
 			description: 'a shared module compiles without the app''s classes']
 %
 
+category: 'Grail-Tests'
+method: AppNamespaceTestCase
+testMainIsCanonicalOnlyInAnApp
+	"Outside an app __main__ is session-local (#851); in an app it is the app's
+	canonical top file, whose committed instance is the app's globals."
+	self assert: (importlib ___isSessionLocalModule___: '__main__').
+	importlib ___grailUseApp___: appName.
+	self deny: (importlib ___isSessionLocalModule___: '__main__').
+	importlib ___grailUseApp___: nil.
+	self assert: (importlib ___isSessionLocalModule___: '__main__')
+%
+
+category: 'Grail-Tests'
+method: AppNamespaceTestCase
+testATransientGlobalLivesInTheSession
+	"``__transient__'' names are kept per session, beside -- not in -- the
+	module's own storage, and read, write, list and delete like any global."
+	| f mod |
+	f := GsFile openWriteOnServer: path.
+	f nextPutAll: '__transient__ = ["sock"]
+sock = 1
+kept = 2
+
+def get():
+    return sock
+
+def drop():
+    global sock
+    del sock
+'.
+	f close.
+	mod := importlib loadModuleFromPath: path name: 'grail_app_namespace'.
+	self assert: (mod class includesSelector: #'dynamicInstVarAt:put:' environmentId: 0).
+	self assert: (mod ___transientGlobals___ at: #'sock' otherwise: nil) = 1
+		description: 'the value is in the session store'.
+	self deny: ((mod _instvarNamesAfter: mod namedSize) includes: #'sock')
+		description: 'and not in the module''s own storage'.
+	self assert: ((mod _instvarNamesAfter: mod namedSize) includes: #'kept').
+	self deny: ((mod _instvarNamesAfter: mod namedSize) includes: #'__transient__')
+		description: 'the declaration is session state too'.
+	self assert: (mod @env1:get) = 1 description: 'a function reads it'.
+	self assert: (mod dynamicInstanceVariables includes: #'sock') description: 'globals() lists it'.
+	mod @env1:drop.
+	self assert: (mod ___transientGlobals___ at: #'sock' otherwise: nil) isNil
+		description: 'del removes it'
+%
+
+category: 'Grail-Tests'
+method: AppNamespaceTestCase
+testAModuleWithoutTransientsKeepsTheKernelAccessors
+	"Only a module that declares __transient__ pays for it."
+	| f mod |
+	f := GsFile openWriteOnServer: path.
+	f nextPutAll: 'kept = 2
+'.
+	f close.
+	mod := importlib loadModuleFromPath: path name: 'grail_app_namespace'.
+	self deny: (mod class includesSelector: #'dynamicInstVarAt:' environmentId: 0).
+	self deny: (mod class includesSelector: #'dynamicInstVarAt:put:' environmentId: 0)
+%
+
+category: 'Grail-Tests'
+method: AppNamespaceTestCase
+testOnlyEqualImmutableValuesStandForEachOther
+	"A module-global store is skipped when the global already holds the same
+	object or an equal immutable value Python cannot tell from it (module >>
+	dynamicInstVarAt:put:)."
+	| m tup |
+	m := module @env0:new.
+	tup := (Python at: #tuple) withAll: #(1 2).
+	self assert: (m ___isSameImmutable___: 'abc' copy as: 'abc' copy).
+	self assert: (m ___isSameImmutable___: tup as: ((Python at: #tuple) withAll: #(1 2))).
+	self assert: (m ___isSameImmutable___: (2 raisedTo: 100) as: (2 raisedTo: 100)).
+	self deny: (m ___isSameImmutable___: tup as: ((Python at: #tuple) withAll: #(1 3))).
+	self deny: (m ___isSameImmutable___: 1 as: 1.0) description: 'equal is not the same value'.
+	self deny: (m ___isSameImmutable___: 0.0 as: -0.0) description: 'floats only by identity'.
+	self deny: (m ___isSameImmutable___: (OrderedCollection with: 1) as: (OrderedCollection with: 1))
+		description: 'a list is mutable'.
+	self deny: (m ___isSameImmutable___: #(1 2) copy as: #(1 2) copy)
+		description: 'an Array that is not a tuple'
+%
+
 category: 'Grail-Support'
 method: AppNamespaceTestCase
 ___writeWho: aString to: aPath
