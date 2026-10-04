@@ -1,11 +1,13 @@
 output pushnew runAppMainTest.out
 ! file tests/scripts/runAppMainTest.gs
 !
-! Functional test for app namespaces, cut 3 (docs/App_Namespaces_Design.md
+! Functional test for app namespaces, cuts 3 and 4 (docs/App_Namespaces_Design.md
 ! §5): ``__main__'' in an app.  Its globals are the app's persistent
 ! dictionary, with GemStone semantics; an unchanged re-run writes nothing;
 ! ``__transient__'' names stay per session; gemdb.root is an alias for the
-! globals; the top file's classes keep their identity across runs.
+! globals; the top file's classes keep their identity across runs.  And cut 4
+! (§5.4): a module-level ``Final'' the committed globals hold keeps its value
+! without evaluating its initializer.
 !
 ! Not an SUnit test: every property here is about what a COMMIT keeps and what
 ! a FRESH session finds.
@@ -57,10 +59,19 @@ write := [:path :src | | f | f := GsFile openWriteOnServer: path. f nextPutAll: 
 write value: root , '/main.py' value: 'import gemdb
 from os import path as osp
 
-__transient__ = ["scratch"]
+from typing import Final
+
+__transient__ = ["scratch", "evaluated"]
 scratch = "session"
+evaluated = []
 greeting = "hello"
 pair = (1, 2)
+
+def make_started():
+    evaluated.append("started")
+    return object()
+
+started: Final = make_started()
 
 class A:
     def __init__(self):
@@ -78,10 +89,19 @@ if "rabbits" not in globals():
 write value: root , '/main_v2.py' value: 'import gemdb
 from os import path as osp
 
-__transient__ = ["scratch"]
+from typing import Final
+
+__transient__ = ["scratch", "evaluated"]
 scratch = "session"
+evaluated = []
 greeting = "hello"
 pair = (1, 2)
+
+def make_started():
+    evaluated.append("started")
+    return object()
+
+started: Final = make_started()
 
 class A:
     def __init__(self):
@@ -109,6 +129,8 @@ check value: 'the top file runs as the app''s canonical __main__'
   value: (((importlib ___grailNamespace___ at: #'GrailCanonicalModules') at: '__main__' otherwise: nil) == main).
 check value: 'a transient global reads in the session that set it'
   value: (main dynamicInstVarAt: #'scratch') = 'session'.
+check value: 'a Final initializer runs on the first run'
+  value: (main dynamicInstVarAt: #'evaluated') size = 1.
 check value: 'the first run commits' value: System commitTransaction.
 
 failures isEmpty ifFalse: [
@@ -132,7 +154,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out evalPython failures check root app ns committed b1 main r |
+| out evalPython failures check root app ns committed b1 started main r |
 out := GsFile stdout.
 failures := OrderedCollection new.
 check := [:label :ok |
@@ -158,6 +180,7 @@ check value: 'a transient global was never committed'
 check value: 'the other globals were'
   value: ((committed _instvarNamesAfter: committed namedSize) includes: #'rabbits').
 b1 := committed dynamicInstVarAt: #'b1'.
+started := committed dynamicInstVarAt: #'started'.
 
 System gemEnvironmentVariable: 'GEMDB_APP' put: app.
 main := importlib runPath: root , '/main.py'.
@@ -166,6 +189,10 @@ check value: 'an unchanged re-run writes nothing' value: System needsCommit not.
 check value: 'its stored object is the same object' value: (main dynamicInstVarAt: #'b1') == b1.
 check value: 'the transient global was rebound by this run'
   value: (main dynamicInstVarAt: #'scratch') = 'session'.
+check value: 'a Final the committed globals hold keeps its value'
+  value: (main dynamicInstVarAt: #'started') == started.
+check value: 'and its initializer does not run'
+  value: (main dynamicInstVarAt: #'evaluated') isEmpty.
 
 "gemdb.root in an app is the globals.  The rabbits double."
 r := evalPython value: 'import gemdb
@@ -215,7 +242,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out evalPython failures check root app ns committed oldB main r apps |
+| out evalPython failures check root app ns committed oldB oldStarted main r apps |
 out := GsFile stdout.
 failures := OrderedCollection new.
 check := [:label :ok |
@@ -237,6 +264,7 @@ app := UserGlobals at: #'Grail_appmain_app'.
   ns := importlib ___grailAppNamed___: app create: false.
   committed := (ns at: #'GrailCanonicalModules') at: '__main__'.
   oldB := (committed dynamicInstVarAt: #'b1') class.
+  oldStarted := committed dynamicInstVarAt: #'started'.
   "The edited file replaces main.py: an app has one top file."
   (GsFile openWriteOnServer: root , '/main.py')
     nextPutAll: (GsFile openReadOnServer: root , '/main_v2.py') contents;
@@ -255,6 +283,9 @@ __b2 = gemdb.root["b2"]
   check value: 'the stored instance runs it too' value: (r @env1:__getitem__: 2) = 'none'.
   check value: 'the globals the edit did not touch kept their committed values'
     value: (r @env1:__getitem__: 3) = 4.
+  check value: 'an edit keeps a Final''s committed value too'
+    value: ((main dynamicInstVarAt: #'started') == oldStarted
+      and: [(main dynamicInstVarAt: #'evaluated') isEmpty]).
   check value: 'the edited run commits' value: System commitTransaction.
   r := [importlib runPath: root , '/other.py'. nil]
     on: ImportError do: [:e | e return: e messageText asString].

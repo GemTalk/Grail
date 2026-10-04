@@ -535,9 +535,17 @@ gemdb.commit()
   as empty and refuses writes.
 - **An app has one top file.** A different file run as `__main__` in the same
   app is refused, as D10 refuses any module.
+- **`Final` initializes once.** A module-level `app: Final = Flask(__name__)`
+  (or `Final[T]`, or `typing.Final`) that finds its name already bound in
+  persistent globals keeps the committed value and **does not evaluate the
+  right-hand side**, like Clojure's `defonce`. So re-runs write nothing for it,
+  and several sessions starting the app cannot conflict on it. Where the
+  globals start empty (a first run, a session-local `__main__` outside an app,
+  every CPython run) the statement runs as written. This is the one departure
+  from CPython: the initializer is skipped on a re-run, which is the point.
 
-Not yet: `Final` as initialize-once (the design's cut 4), the commit-time
-error for session-bound objects (cut 5), and listing or dropping apps (cut 6).
+Not yet: the commit-time error for session-bound objects (the design's cut 5),
+and listing or dropping apps (cut 6).
 
 ### `gemdb.sessions` — who is connected
 
@@ -597,7 +605,9 @@ is now `gemdb.schema`, above.
   the globals (the rabbits double through it). An abort reloads a rebound
   global, unbinds a new one and leaves a transient alone. After an edit, the
   stored instance and a new one share the rebuilt class. A different top file
-  in the app is refused.
+  in the app is refused. A module-level `Final` evaluates on the first run and
+  keeps its committed value, without evaluating, on the re-run and after the
+  edit.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
   — the class-level half over a fixture module with a committed instance:
   the refusals for a changed base, a removed class and a renamed one, and

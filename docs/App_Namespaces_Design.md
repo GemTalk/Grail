@@ -1,10 +1,11 @@
 # App namespaces: one set of globals per application (design)
 
-**Status:** design agreed 2026-10-04. Cuts 1–3 (§9) are implemented:
+**Status:** design agreed 2026-10-04. Cuts 1–4 (§9) are implemented:
 the name-keyed registries live in a namespace; imports resolve per namespace,
 with `gemdb.set_app`, `gemdb.app()`, `./grail --app` and `GEMDB_APP`; and
 `__main__` in an app is canonical, with persistent globals, `__transient__` and
-`gemdb.root` as their alias. Cuts 4–6 are not. It follows
+`gemdb.root` as their alias; and a module-level `Final` initializes once.
+Cuts 5 and 6 are not. It follows
 from PRs #1295 (the slot-pair owner guard), #1296 (layout propagation through
 the persistent class registry) and #1297 (refusing a different file under a
 deployed module name, `gemdb.modules`), and from the discussion that led to
@@ -437,6 +438,22 @@ exists.
      own `__main__` when it is the app's, else the committed one, and
      `gemdb.root` wraps `vars()` of it.
 4. **`Final` as initialize-once.**
+
+   *As built.* `AnnAssignAst` wraps a module-level `name: Final = v` store in
+   `(self ___finalIsBound___: #name) ifFalse: [...]`. The check is
+   `module >> ___finalIsBound___:`, which answers true when the module
+   instance is committed and the name is bound. An uncommitted instance (a
+   session-local `__main__`, a first run) always evaluates. Annotations
+   recognised: `Final`, `Final[T]`, and `typing.Final` / `t.Final`. Not inside
+   a def, a lambda or a class body. Module-scope annotated stores never take
+   the IR path, so the text emitter is the only one.
+
+   Measuring it showed the store skip's one gap. A module with an annotated
+   assignment stores a PEP 649 `__annotate__` closure on every run, which is
+   a write on a re-run. `module >> ___storeAnnotate___:` keeps the current
+   closure when it is the same compiled block over the same module. The
+   emitted block captures nothing else, so the two are equivalent. After an
+   edit the body recompiles and the block differs.
 5. **Session-bound objects refused at commit** (§6), with the walk's cost
    measured on a realistic app before it is on by default, and class-level
    `__transient__` (§6.1) in the same cut, since the error message points to it.

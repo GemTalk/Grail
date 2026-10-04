@@ -1120,7 +1120,10 @@ ___emitModuleAnnotationsOn___: aStream
 			aStream nextPut: $;].
 		aStream nextPutAll: ' @env0:yourself).'; lf.
 		^ self].
-	aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''__annotate__'' put: [:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
+	"Through ___storeAnnotate___: rather than a plain store: the block is a new
+	closure on every run, and a re-run of an app's top file over its committed
+	globals must not write a new one in place of the same code."
+	aStream nextPutAll: 'self @env0:___storeAnnotate___: [:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
 	stmts do: [:stmt |
 		aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
 		aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
