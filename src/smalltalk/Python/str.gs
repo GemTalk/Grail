@@ -804,22 +804,11 @@ __mod__: args
 				ValueError ___signal___: 'incomplete format'
 			].
 			key := nil.
-			"Optional mapping key '(name)'.  Parentheses inside it NEST, as in
-			CPython: ``'%((foo))s' % {'(foo)': 'bar'}'' reads the key '(foo)'.
-			Stopping at the first ')' read the key '(foo' and then choked on
-			the stray ')' as a conversion character."
+			"Optional mapping key '(name)' -- see ___printfKeyEnd___:from:."
 			(src @env0:at: i) @env0:= $( ifTrue: [
-				| keyStart keyEnd depth |
+				| keyStart keyEnd |
 				keyStart := i @env0:+ 1.
-				keyEnd := keyStart.
-				depth := 1.
-				[keyEnd @env0:<= n @env0:and: [
-					(src @env0:at: keyEnd) @env0:= $( ifTrue: [depth := depth @env0:+ 1].
-					(src @env0:at: keyEnd) @env0:= $) ifTrue: [depth := depth @env0:- 1].
-					depth @env0:> 0]]
-					@env0:whileTrue: [keyEnd := keyEnd @env0:+ 1].
-				depth @env0:> 0 ifTrue: [
-					ValueError ___signal___: 'incomplete format key'].
+				keyEnd := self ___printfKeyEnd___: src from: keyStart.
 				key := src @env0:copyFrom: keyStart to: keyEnd @env0:- 1.
 				i := keyEnd @env0:+ 1
 			].
@@ -942,6 +931,36 @@ __mod__: args
 		TypeError ___signal___:
 			'not all arguments converted during string formatting'].
 	^ stream @env0:contents
+%
+
+category: 'Grail-String Operations'
+method: CharacterCollection
+___printfKeyEnd___: src from: keyStart
+	"The index of the ')' closing a %-format mapping key that starts at
+	``keyStart''.  Parentheses inside the key NEST, as in CPython:
+	``'%((foo))s' % {'(foo)': 'bar'}'' reads the key '(foo)'.  Stopping at
+	the first ')' read the key '(foo' and then choked on the stray ')' as a
+	conversion character.  An unclosed key is ValueError.
+
+	A separate method rather than inline in __mod__: on purpose.  Every level
+	of a recursive repr (``e.tag = e; repr(e)'') holds a __mod__ activation,
+	and growing that frame moved test_xml_etree's test_recursive_repr onto a
+	stack alignment where the VM re-trips while resignalling the
+	RecursionError (see ___recursionGuard___), so the error escaped its
+	``except''.  Keeping the scan out of __mod__ keeps its frame as it was."
+
+	| n keyEnd depth |
+	n := src @env0:size.
+	keyEnd := keyStart.
+	depth := 1.
+	[keyEnd @env0:<= n and: [
+		(src @env0:at: keyEnd) @env0:= $( ifTrue: [depth := depth @env0:+ 1].
+		(src @env0:at: keyEnd) @env0:= $) ifTrue: [depth := depth @env0:- 1].
+		depth @env0:> 0]]
+		whileTrue: [keyEnd := keyEnd @env0:+ 1].
+	depth @env0:> 0 ifTrue: [
+		^ ValueError ___signal___: 'incomplete format key'].
+	^ keyEnd
 %
 
 category: 'Grail-String Operations'
