@@ -296,10 +296,31 @@ ___pyAttrLoad___: aSym
 	^ [super ___pyAttrLoad___: aSym]
 		@env0:on: AttributeError
 		do: [:ex |
-			((self @env0:value @env0:class
-				@env0:whichClassIncludesSelector: aSym environmentId: 1) @env0:notNil)
+			(self ___grailValueImplements___: aSym)
 				ifTrue: [ex @env0:return: (BoundMethod receiver: self @env0:value selector: aSym)]
 				ifFalse: [ex @env0:pass]]
+%
+
+category: 'Grail-Attributes'
+method: AbstractPyFloat
+___grailValueImplements___: aSym
+	"Whether the wrapped value's class implements aSym at ANY arity -- the
+	probe AbstractPyInt >> ___grailValueImplements___: makes, for the reason it
+	gives.  This one asked for the UNARY selector only, so every float method
+	that takes an argument (``__truediv__'' is ``__truediv__:'') was missing
+	from a float subclass, and from super() inside one (Super >>
+	___superValueMethodFor___:)."
+
+	| cls nm |
+	cls := self @env0:value @env0:class.
+	nm := aSym @env0:asString.
+	(cls @env0:whichClassIncludesSelector: aSym environmentId: 1) @env0:notNil
+		ifTrue: [^ true].
+	#(':' ':_:' ':_:_:' ':_:_:_:') @env0:do: [:suffix |
+		(cls @env0:whichClassIncludesSelector: (nm @env0:, suffix) @env0:asSymbol
+			environmentId: 1) @env0:notNil ifTrue: [^ true]].
+	^ (cls @env0:whichClassIncludesSelector: ('_' @env0:, nm @env0:, ':kw:') @env0:asSymbol
+		environmentId: 1) @env0:notNil
 %
 
 

@@ -5513,7 +5513,7 @@ ___pythonBuiltinExceptionNames___
 	in CPython's builtins module (``ValueError.__module__ == 'builtins'``).  The
 	authoritative inclusion list, matching CPython 3.14's builtins exactly, so
 	the Python compile dictionary's OTHER exception subclasses are excluded:
-	module exceptions (StatisticsError->statistics, UnsupportedOperation->io,
+	module exceptions (JSONDecodeError->json.decoder, UnsupportedOperation->io,
 	ZlibError->zlib) and Grail control-flow internals (PythonBreak / PythonContinue
 	/ PythonReturn) must NOT be tagged 'builtins' nor exposed in builtins.
 
@@ -5566,7 +5566,7 @@ ___pythonBuiltinTypeModule___
 	    same shape as the Grail-defined types — class-named and bound in the
 	    Python dict — and are matched the same identity-confirmed way, so
 	    ``ValueError.__module__`` / ``OSError.__module__`` report 'builtins'
-	    while a module exception (StatisticsError) or a user ``class E(ValueError)``
+	    while a module exception (JSONDecodeError) or a user ``class E(ValueError)``
 	    (name not in the list) is not.
 
 	Everything else answers nil and MUST keep its own __module__ (user classes,
@@ -12644,6 +12644,59 @@ ___rbinOpFallback___: other op: opString
 	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
 		@env0:, ': ''' @env0:, (other ___pyTypeNameForError___)
 		@env0:, ''' and ''' @env0:, (self ___pyTypeNameForError___) @env0:, '''')
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___numericReflectedFirst___: other selector: refSelector
+	"The answer of ``other''s REFLECTED method (__radd__ & co.) when CPython
+	would call it BEFORE the receiver's forward one, else nil.  The receiver is
+	a built-in number (int, bool, float); ``other'' matters only when it is an
+	instance of a Python subclass of int or float.
+
+	CPython asks the right operand first in two such cases:
+	  * SUBCLASS PRIORITY -- type(other) is a proper subclass of type(self)
+	    that overrides the reflected method: ``1 + MyInt(2)'', ``1.0 /
+	    MyFloat(2.0)'';
+	  * A NARROWER RECEIVER -- int's methods answer NotImplemented for a float,
+	    so ``1 / MyFloat(2.0)'' reaches MyFloat.__rtruediv__ too.
+	Neither holds for ``1.0 + MyInt(2)'' (float handles an int itself) nor for
+	``True + MyInt(2)'' (MyInt is no subclass of bool, and the int method bool
+	inherits handles it).  Grail's numeric dunders saw neither case: such an
+	instance is an AbstractPyInt / AbstractPyFloat wrapper, a Number, and the
+	kernel's coercion turned it straight back into a plain number.
+
+	Only an OVERRIDE counts.  The inherited reflected method computes what the
+	forward one does, so ignoring it changes no result and keeps the plain path.
+
+	A reflected method answering NotImplemented has declined, and the forward
+	computation runs -- CPython's order under subclass priority.  For a
+	narrower receiver CPython would raise TypeError instead; that difference is
+	left alone.  test_statistics TestHarmonicMean.test_types_conserved:
+	harmonic_mean of float-subclass data computes ``1 / x''."
+
+	| root owner refBase fn result |
+	(other @env0:isKindOf: AbstractPyFloat)
+		ifTrue: [root := AbstractPyFloat]
+		ifFalse: [
+			((other @env0:isKindOf: AbstractPyInt)
+				and: [self @env0:isKindOf: Integer]) ifFalse: [^ nil].
+			root := AbstractPyInt].
+	owner := other @env0:class
+		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+	(owner @env0:notNil and: [owner @env0:inheritsFrom: root])
+		ifTrue: [result := other @env0:perform: refSelector env: 1 withArguments: { self }]
+		ifFalse: [
+			"A class-body alias -- ``__radd__ = __add__'' -- is a class
+			attribute, not a compiled method; ___binOpFallback___ asks the
+			same way."
+			refBase := (refSelector @env0:asString @env0:copyFrom: 1
+				to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
+			fn := other ___classAttrDunder___: refBase.
+			fn == nil ifTrue: [^ nil].
+			result := fn ___pyCallValue___: { other. self } kw: nil].
+	result == NotImplemented ifTrue: [^ nil].
+	^ result
 %
 
 ! ------------------- Comparison NotImplemented protocol

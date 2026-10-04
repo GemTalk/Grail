@@ -617,6 +617,11 @@ method: float
 __add__: other
 	"Add two floats or float and other number."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__radd__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ self @env0:+ (self ___checkedOperand___: other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
@@ -659,6 +664,11 @@ __divmod__: other
 	RAISING and names ``//'' -- a divmod() call must report divmod()."
 
 	| d |
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rdivmod__:'.
+		pri == nil ifFalse: [^ pri]].
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := other]
 	ifFalse: [
@@ -843,6 +853,11 @@ __floordiv__: other
 	ZeroDivisionError."
 
 	| d |
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rfloordiv__:'.
+		pri == nil ifFalse: [^ pri]].
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := self ___checkedOperand___: other]
 	ifFalse: [
@@ -932,6 +947,11 @@ __mod__: other
 	ZeroDivisionError."
 
 	| d |
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rmod__:'.
+		pri == nil ifFalse: [^ pri]].
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := self ___checkedOperand___: other]
 	ifFalse: [
@@ -949,6 +969,11 @@ method: float
 __mul__: other
 	"Multiply two floats or float and other number."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rmul__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ self @env0:* (self ___checkedOperand___: other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
@@ -1005,6 +1030,11 @@ __pow__: other
 	cases; test_float.py's test_float_pow: isnan(pow(-INF, NAN)) calls
 	math.isnan() on the result, which raises TypeError on a complex)."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rpow__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [
 		"(+-0)**y is a ZeroDivisionError for y finite and negative
 		(whatever its parity/integerness) -- GemStone's raisedTo:
@@ -1187,10 +1217,132 @@ method: float
 __sub__: other
 	"Subtract other from self."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rsub__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ self @env0:- (self ___checkedOperand___: other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+___reflectedOperand___: other
+	"``other'' as the float a REFLECTED operator computes with, or nil.
+
+	CPython's float methods take an int or a float on either side and answer
+	NotImplemented for anything else, so these do too -- which also lets
+	___binOpFallback___, which now finds them, go on to its own TypeError.
+
+	Grail's float had no reflected methods at all, so ``super().__rtruediv__(x)''
+	in a float subclass raised AttributeError ('super' object has no attribute
+	'__rtruediv__').  test_statistics' MyFloat is written exactly that way."
+
+	(other @env0:isKindOf: Float) ifTrue: [^ other].
+	(other @env0:isKindOf: Integer) ifTrue: [^ float ___intToFloatChecked___: other].
+	(other @env0:isKindOf: Boolean) ifTrue: [^ other ifTrue: [1.0] ifFalse: [0.0]].
+	((other @env0:isKindOf: AbstractPyFloat) or: [other @env0:isKindOf: AbstractPyInt])
+		ifTrue: [^ other @env0:asFloat].
+	^ nil
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__radd__: other
+	"Reverse + (other + self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __add__: self
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__rsub__: other
+	"Reverse - (other - self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __sub__: self
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__rmul__: other
+	"Reverse * (other * self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __mul__: self
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__rtruediv__: other
+	"Reverse / (other / self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __truediv__: self
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__rfloordiv__: other
+	"Reverse // (other // self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __floordiv__: self
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__rmod__: other
+	"Reverse % (other % self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __mod__: self
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__rdivmod__: other
+	"Reverse divmod: divmod(other, self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __divmod__: self
+%
+
+category: 'Grail-Arithmetic - Reverse'
+method: float
+__rpow__: other
+	"Reverse ** (other ** self) -- see
+	___reflectedOperand___:."
+
+	| x |
+	x := self ___reflectedOperand___: other.
+	x == nil ifTrue: [^ NotImplemented].
+	^ x __pow__: self
 %
 
 category: 'Grail-Arithmetic'
@@ -1202,6 +1354,11 @@ __truediv__: other
 	``inf'' for ``1.0 / 0'' where Python raises.  Python's ``/'' is not IEEE
 	division: it checks the divisor first, whatever the operand types."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rtruediv__:'.
+		pri == nil ifFalse: [^ pri]].
 	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 		ZeroDivisionError ___signal___: 'division by zero'].
 	(other isKindOf: Number) ifTrue: [^ self @env0:/ (self ___checkedOperand___: other)].

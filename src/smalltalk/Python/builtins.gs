@@ -96,7 +96,7 @@ initialize
 	staticmethod/classmethod) is simply absent from the dict and skipped -- the
 	method path answers getattr for those.  Only CURATED name lists are consulted,
 	never the whole Python dict: the dict is Grail's global namespace (vendored
-	modules, iterators, PyCode, and non-builtin exceptions like StatisticsError)
+	modules, iterators, PyCode, and non-builtin exceptions like JSONDecodeError)
 	and is NOT builtins.  The exception list is shared with
 	object>>___pythonBuiltinExceptionNames___ so getattr and __module__ agree.
 
@@ -4523,6 +4523,14 @@ vars: anObject
 	a callable for the ones that have no view.  test_builtin test_vars."
 	((anObject @env0:class @env1:___dynamicClassAttr___: #'__dict__') @env0:notNil)
 		ifTrue: [^ anObject ___pyAttrLoad___: #'__dict__'].
+	"An instance of a STRICT-slots class has no __dict__ at all, so vars()
+	refuses it as CPython does; the walk below answered {} -- or the slot
+	values -- instead.  Strict, not merely slotted: a slotted class under a
+	plain base still has a __dict__ (cached_property asks the same thing).
+	test_statistics test_slots: ``vars(NormalDist(300, 23))''."
+	(anObject ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
+		anObject ___pySlotsStrict___ ifTrue: [
+			^ TypeError ___signal___: 'vars() argument must have __dict__ attribute']].
 	"An EXCEPTION is a kernel object whose named instVars are GemStone's own
 	(gsNumber, gsResumable, gsStack, ...): the walk below listed them all,
 	stack included, where CPython answers only what Python code stored.
