@@ -800,7 +800,7 @@ should trace to one or two causes.
 
 | Module | Trial score | Main cause |
 |--------|-------------|------------|
-| `test_statistics` | 371t, 37F 201E | `statistics` lacks `NormalDist` (36) and `StatisticsError` (22). `Decimal` does not understand `_generality` (19). |
+| `test_statistics` | 371t, 37F 201E | `statistics` lacks `NormalDist` (36) and `StatisticsError` (22). `Decimal` does not understand `_generality` (19). **Since replaced by CPython's own `statistics.py`; 0F 2E remain, both `random.Random`.** |
 | `test_abc` | 72t, 0F 64E | 62 are ONE "could not compile this method (codegen gap)", in `test_factory`'s nested classes. |
 | `test_userstring` | 71t, 1F 59E | `UserString` lacks str methods (`find`, `strip`, ...), and `str + UserString` is unsupported. |
 | `test_exception_group` | 52t, 23F 1E | Mostly "TypeError not raised" (10); a traceback kept that should be None (3). |

@@ -1,9 +1,10 @@
 # GRAIL: trimmed test.support.import_helper.
 #
-# Grail has no fresh-import isolation and no per-module C-accelerator
-# blocking, so import_fresh_module degrades to "import it normally and
-# hand back the module object".  import_module maps a failed import to a
-# clean SkipTest (CPython behavior) instead of an opaque error.
+# import_fresh_module builds a genuinely fresh module only where Grail can
+# and the caller needs it (see its comments); otherwise it degrades to
+# "import it normally and hand back the module object".  import_module maps
+# a failed import to a clean SkipTest (CPython behavior) instead of an opaque
+# error.
 
 import importlib
 # CPython's import_helper imports these two at its top, and test files lean on
@@ -43,13 +44,20 @@ def import_fresh_module(name, fresh=(), blocked=(), *, deprecated=False,
     # branches fired in both.  Answer None instead: the C-only classes skip,
     # and the py-variant comparisons come out False as they should.
     #
-    # `blocked=` stays ignored: it asks for the module WITHOUT its accelerator,
-    # which is what Grail's pure-Python implementation already is.
+    # `blocked=` asks for the module WITHOUT its accelerator, which is what
+    # Grail's pure-Python implementation usually already is -- bisect.py and
+    # heapq.py deliberately leave their _bisect/_heapq shims unwired -- so it
+    # is ignored unless blocking would change something (see
+    # _import_without_accelerators below).
     for required in fresh:
         try:
             __import__(required)
         except ImportError:
             return None
+    if blocked and not fresh:
+        copy = _import_without_accelerators(name, blocked)
+        if copy is not None:
+            return copy
     # A module NOT yet imported CAN be imported fresh, and is: grail marks the
     # import session-local, so the module is built cold and recorded in no
     # canonical registry, and _end_fresh_import then drops it from sys.modules
@@ -92,6 +100,48 @@ def import_fresh_module(name, fresh=(), blocked=(), *, deprecated=False,
         if copy is not None:
             return copy
     return sys.modules.get(name)
+
+
+def _import_without_accelerators(name, blocked):
+    """A session-local copy of ``name`` imported with every ``blocked`` module
+    reading None in sys.modules, as CPython's helper builds it -- or None when
+    the ordinary module holds nothing from a blocked module, so a copy would
+    differ from it in nothing but identity.
+
+    Grail does ship some accelerators: statistics.py ends ``from _statistics
+    import _normal_dist_inv_cdf'', and the C shim answers.  Handing back the
+    ordinary module for py_statistics then gave test_statistics a "pure
+    Python" variant whose _normal_dist_inv_cdf was the C one.  Building the
+    copy only when that is the case keeps every other caller -- the
+    xml.etree.ElementTree one above most of all -- on the ordinary module."""
+    try:
+        __import__(name)
+    except ImportError:
+        return None
+    module = sys.modules[name]
+    if not any(getattr(getattr(module, key, None), '__module__', None) in blocked
+               for key in dir(module)):
+        return None
+    import grail
+    missing = object()
+    saved = {each: sys.modules.get(each, missing) for each in (name, *blocked)}
+    del sys.modules[name]
+    for each in blocked:
+        sys.modules[each] = None
+    grail._begin_fresh_import(name)
+    try:
+        try:
+            __import__(name)
+        except ImportError:
+            return None
+        return sys.modules.get(name)
+    finally:
+        grail._end_fresh_import_kept(name)
+        for each, value in saved.items():
+            if value is missing:
+                sys.modules.pop(each, None)
+            else:
+                sys.modules[each] = value
 
 
 def ensure_lazy_imports(module, names):

@@ -543,6 +543,28 @@ ___superTypeMethodFor___: aSym
 
 category: 'Grail-Attribute'
 method: Super
+___superValueMethodFor___: aSym
+	"int's or float's own method, bound to the WRAPPED VALUE, for a ``super()''
+	inside a subclass of int or float -- or nil when this is not that case.
+
+	``class MyFloat(float)'' is an AbstractPyFloat wrapper (the kernel Float is
+	sealed), so the parent chain the walk above follows is AbstractPyFloat,
+	Number, Object, and float's methods are not on it.  ``super().__truediv__(o)''
+	-- the ordinary way to write an operator override that defers to float --
+	raised AttributeError (test_statistics' MyFloat).  An attribute LOAD on the
+	wrapper already forwards to the value (AbstractPyFloat / AbstractPyInt >>
+	___pyAttrLoad___:); this is the same step for super(), and like the type
+	bridge above it is reached only once the ordinary walk has missed, so an
+	override between here and the built-in still wins."
+
+	((obj @env0:isKindOf: AbstractPyFloat) or: [obj @env0:isKindOf: AbstractPyInt])
+		ifFalse: [^ nil].
+	(obj ___grailValueImplements___: aSym) ifFalse: [^ nil].
+	^ BoundMethod @env1:receiver: obj @env0:value selector: aSym
+%
+
+category: 'Grail-Attribute'
+method: Super
 ___pyAttrLoad___: aSym
 	"super().<aSym> — return a BoundMethod-equivalent that, when
 	invoked, executes the parent class''s method with obj as the
@@ -700,6 +722,8 @@ ___pyAttrLoad___: aSym
 	(self @env0:_superDefinesAnyFormOf: s) ifFalse: [
 		| bridged |
 		bridged := self ___superTypeMethodFor___: aSym.
+		bridged == nil ifFalse: [^ bridged].
+		bridged := self ___superValueMethodFor___: aSym.
 		bridged == nil ifFalse: [^ bridged].
 		^ AttributeError ___signal___:
 			('''super'' object has no attribute ''' @env0:, s @env0:, '''')].
