@@ -2160,6 +2160,18 @@ parseFunctionDefWithDecorators: decorators
 				ifTrue: [funcNode changeClassTo: ClassFunctionDefAst]
 				ifFalse: [funcNode changeClassTo: InstanceFunctionDefAst]].
 	].
+	"Normalising above makes ``@enum.property'' and ``@DynamicClassAttribute''
+	read #property, exactly like the builtin -- right for the accessor pair all
+	three compile to, but the class __dict__ holds a real ``property'' for the
+	builtin alone.  Record which this was while the nodes still say
+	(FunctionDefAst >> ___isBuiltinPropertyDef___)."
+	(decorators anySatisfy: [:each |
+		((each isKindOf: NameAst) and: [each id asString = 'property'])
+			or: [(each isKindOf: AttributeAst)
+				and: [each attr asString = 'property'
+				and: [(each value isKindOf: NameAst)
+				and: [#('builtins' 'bltns') includes: each value id asString]]]]])
+		ifTrue: [funcNode dynamicInstVarAt: #builtinProperty put: true].
 	^funcNode
 %
 

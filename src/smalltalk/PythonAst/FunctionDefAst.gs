@@ -1432,6 +1432,21 @@ ___isPropertyDef___
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___isBuiltinPropertyDef___
+	"Whether this def is decorated with the BUILTIN property -- bare
+	``@property'' or ``@builtins.property'' -- as opposed to ``@enum.property''
+	or ``@DynamicClassAttribute''.  The parser normalises all of them to
+	#property, which is right for the accessor pair they compile to, and so
+	records the difference itself (PythonParser, at the def).  The class
+	__dict__ needs it: CPython holds a ``property'' for the builtin and an
+	enum.property, which is no property subclass, for the others, and
+	Enum.__dir__ treats the two differently."
+
+	^ (self dynamicInstVarAt: #builtinProperty) == true
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 ___hasWrappingDecorator___
 	"True when this def carries a decorator that REPLACES the function with
 	something else at runtime -- @contextlib.contextmanager, @functools.wraps,

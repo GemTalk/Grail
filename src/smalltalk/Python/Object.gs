@@ -7690,8 +7690,24 @@ ___classDict___
 			and: [nm @env0:~= '___dynInstVars___'
 			and: [(d @env0:includesKey: nm) @env0:not
 			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]) ifTrue: [
-			d @env0:at: nm put:
-				(UnboundMethod definingClass: defCls selector: nm @env0:asSymbol)]].
+			| um |
+			um := UnboundMethod definingClass: defCls selector: nm @env0:asSymbol.
+			"A declarative @property's getter is entered as the PROPERTY, the
+			same cached object a read off the class answers, so
+			``C.__dict__['p'] is C.p'' as in CPython.  It held the getter
+			function, and inspect.classify_class_attrs -- which takes its kind
+			from this mapping -- called every @property 'data'.
+
+			The BUILTIN property only (___grailBuiltinPropertyNames___): an
+			``@enum.property'' def has the same accessors, but CPython's
+			__dict__ holds an enum.property there, which is no ``property'' --
+			and Enum.__dir__ drops a member-shadowed ``property'' that it keeps
+			otherwise, so entering one put ``first'' in dir(MainEnum.second)."
+			((defCls @env0:class @env0:includesSelector: #'___grailBuiltinPropertyNames___'
+					environmentId: 1)
+				and: [(defCls ___grailBuiltinPropertyNames___) @env0:includes: nm @env0:asSymbol])
+				ifTrue: [um := um ___grailPropertyOrSelf___].
+			d @env0:at: nm put: um]].
 	"(c) own instance-side methods."
 	imd := [self @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 	imd == nil ifFalse: [
