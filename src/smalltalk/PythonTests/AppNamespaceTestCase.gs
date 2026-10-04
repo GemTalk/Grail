@@ -28,7 +28,7 @@ AppNamespaceTestCase category: 'Grail-SUnit'
 ! registry accessor reads importlib class >> ___grailNamespace___, which is
 ! UserGlobals -- the default namespace, where the registries always lived --
 ! until an app is made current (___grailUseApp___:, the unchecked switch;
-! ___grailSetApp___: is gemdb.set_app's checked one).  With no app set nothing
+! ___grailSetApp___: is gemdb.use_namespace's checked one).  With no app set nothing
 ! changes.  With one set, a load chooses shared or app by its FILE: an app
 ! module's instance, hashes, classes and backing class go to the app, Grail's
 ! own sources to the shared base, and the app's module classes come first in
@@ -203,8 +203,8 @@ testTwoAppsEachKeepTheirOwnModule
 
 category: 'Grail-Tests'
 method: AppNamespaceTestCase
-testSetAppIsChosenOncePerSession
-	"gemdb.set_app refuses a second, different app, and refuses once a module
+testUseNamespaceIsChosenOncePerSession
+	"gemdb.use_namespace refuses a second, different app, and refuses once a module
 	that would belong to an app is already imported -- naming it -- since that
 	module was loaded outside the app.  Setting the current app again is
 	allowed."

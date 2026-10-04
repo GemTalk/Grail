@@ -7,15 +7,15 @@ output pushnew runAppNamespaceTest.out
 ! Not an SUnit test: the point is two DEPLOYED modules of one name, so the
 ! fixtures are committed and read back by fresh sessions.
 !
-! Session 1 joins app A with gemdb.set_app, deploys module <mod> from a/ and
+! Session 1 joins app A with gemdb.use_namespace, deploys module <mod> from a/ and
 ! stores an instance of its class.  Session 2 joins app B and deploys a
 ! DIFFERENT <mod> from b/ under the same name -- which, without apps, D10
 ! refuses -- and stores one of its instances.  Session 3 rejoins app A: the
 ! import warm-binds A's module and writes nothing, A's stored instance has A's
 ! class and runs A's code, B's still runs B's, b/ is now the foreign file IN
-! APP A, and set_app refuses a second app.  Session 4 chooses app B through
-! GEMDB_APP and runs a script with runPath:, the launcher's path, then
-! exercises gemdb.admin.apps() and drop_app() (cut 6): app A, whose module holds
+! APP A, and use_namespace refuses a second app.  Session 4 chooses app B through
+! GEMDB_NAMESPACE and runs a script with runPath:, the launcher's path, then
+! exercises gemdb.admin.namespaces() and drop_namespace() (cut 6): app A, whose module holds
 ! a stored instance, is refused; app C, with a class and no instances, is
 ! dropped.  Session 4 also cleans up: the apps, the stored instances, the files.
 iferr 1 where
@@ -90,15 +90,15 @@ write value: root , '/b/' , modName , '.py' value: 'class User:
         return "B " + self.name
 '.
 write value: root , '/b/main.py' value: 'import gemdb
-app = gemdb.app()
+app = gemdb.namespace()
 import ' , modName , '
 hello = ' , modName , '.User("cy").hello()
 '.
 
 r := evalPython value: 'import gemdb
-gemdb.set_app("' , appA , '")
-gemdb.app()'.
-check value: 'gemdb.set_app joins the app and gemdb.app() names it' value: r = appA.
+gemdb.use_namespace("' , appA , '")
+gemdb.namespace()'.
+check value: 'gemdb.use_namespace joins the app and gemdb.namespace() names it' value: r = appA.
 nsA := importlib ___grailNamespace___.
 importlib loadModuleFromPath: root , '/a/' , modName , '.py' name: modName.
 cls := (importlib @env1:lookupModule: modName) class.
@@ -162,7 +162,7 @@ modName := UserGlobals at: #'Grail_appns_mod'.
 appA := UserGlobals at: #'Grail_appns_a'.
 appB := UserGlobals at: #'Grail_appns_b'.
 evalPython value: 'import gemdb
-gemdb.set_app("' , appB , '")'.
+gemdb.use_namespace("' , appB , '")'.
 nsB := importlib ___grailNamespace___.
 nsA := importlib ___grailAppNamed___: appA create: false.
 r := [importlib loadModuleFromPath: root , '/b/' , modName , '.py' name: modName. nil]
@@ -220,7 +220,7 @@ modName := UserGlobals at: #'Grail_appns_mod'.
 appA := UserGlobals at: #'Grail_appns_a'.
 appB := UserGlobals at: #'Grail_appns_b'.
 evalPython value: 'import gemdb
-gemdb.set_app("' , appA , '")'.
+gemdb.use_namespace("' , appA , '")'.
 importlib loadModuleFromPath: root , '/a/' , modName , '.py' name: modName.
 check value: 'rejoining app A warm-binds its module and writes nothing' value: System needsCommit not.
 r := evalPython value: 'import gemdb, ' , modName , ' as m
@@ -238,12 +238,12 @@ check value: 'within app A, b/ is the foreign file D10 refuses' value: r notNil.
 System abortTransaction.
 r := evalPython value: 'import gemdb
 try:
-    gemdb.set_app("' , appB , '")
+    gemdb.use_namespace("' , appB , '")
     __r = "switched"
 except RuntimeError:
     __r = "refused"
 __r'.
-check value: 'set_app refuses a second app in one session' value: r = 'refused'.
+check value: 'use_namespace refuses a second app in one session' value: r = 'refused'.
 
 failures isEmpty ifFalse: [
   out nextPutAll: 'Session 3 failures:'; cr.
@@ -256,7 +256,7 @@ System commit
 logout
 
 ! ===========================================================================
-! Session 4 -- GEMDB_APP chooses app B for a script; then clean up.
+! Session 4 -- GEMDB_NAMESPACE chooses app B for a script; then clean up.
 ! ===========================================================================
 login
 run
@@ -289,17 +289,17 @@ modName := UserGlobals at: #'Grail_appns_mod'.
 appA := UserGlobals at: #'Grail_appns_a'.
 appB := UserGlobals at: #'Grail_appns_b'.
 [
-  System gemEnvironmentVariable: 'GEMDB_APP' put: appB.
+  System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: appB.
   main := importlib runPath: root , '/b/main.py'.
-  check value: 'GEMDB_APP sets the app before the script runs'
+  check value: 'GEMDB_NAMESPACE sets the app before the script runs'
     value: (main @env0:dynamicInstVarAt: #'app') = appB.
   check value: 'and the script imports app B''s module'
     value: (main @env0:dynamicInstVarAt: #'hello') = 'B cy'.
-  System gemEnvironmentVariable: 'GEMDB_APP' put: ''.
+  System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: ''.
   System abortTransaction.
   importlib ___grailUseApp___: nil.
 
-  "gemdb.admin.apps() and drop_app() (cut 6).  App C deploys a class and
+  "gemdb.admin.namespaces() and drop_namespace() (cut 6).  App C deploys a class and
   stores no instance of it, so it can be dropped; app A's module holds one."
   appC := appA , '_c'.
   [GsFile createServerDirectory: root , '/c'] on: Error do: [:e | e return: nil].
@@ -312,44 +312,44 @@ appB := UserGlobals at: #'Grail_appns_b'.
   System commitTransaction ifFalse: [self error: 'the app C commit failed'].
   importlib ___grailUseApp___: nil.
   r := evalPython value: 'import gemdb.admin
-gemdb.admin.apps()'.
-  check value: 'gemdb.admin.apps() lists the apps'
+gemdb.admin.namespaces()'.
+  check value: 'gemdb.admin.namespaces() lists the apps'
     value: ((r includes: appA) and: [(r includes: appB) and: [r includes: appC]]).
   r := evalPython value: 'import gemdb.admin
 try:
-    gemdb.admin.drop_app("' , appA , '")
+    gemdb.admin.drop_namespace("' , appA , '")
     __r = "dropped"
 except ValueError as e:
     __r = str(e)
 __r'.
-  check value: 'drop_app refuses an app whose classes have instances, and says how many'
+  check value: 'drop_namespace refuses an app whose classes have instances, and says how many'
     value: ((r isKindOf: CharacterCollection) and: [r includesString: 'still has 1 instance']).
   r := evalPython value: 'import gemdb.admin
-(gemdb.admin.drop_app("' , appC , '"), "' , appC , '" in gemdb.admin.apps())'.
-  check value: 'drop_app removes an app with no instances, answering its class count'
+(gemdb.admin.drop_namespace("' , appC , '"), "' , appC , '" in gemdb.admin.namespaces())'.
+  check value: 'drop_namespace removes an app with no instances, answering its class count'
     value: ((r @env1:__getitem__: 0) = 1 and: [(r @env1:__getitem__: 1) == false]).
   check value: 'and commits' value: System needsCommit not.
   importlib ___grailUseApp___: appB.
   r := evalPython value: 'import gemdb.admin
 try:
-    gemdb.admin.drop_app("' , appB , '")
+    gemdb.admin.drop_namespace("' , appB , '")
     __r = "dropped"
 except ValueError as e:
     __r = str(e)
 __r'.
-  check value: 'drop_app refuses the app this session is in'
+  check value: 'drop_namespace refuses the app this session is in'
     value: ((r isKindOf: CharacterCollection) and: [r includesString: 'this session is in']).
   importlib ___grailUseApp___: nil.
   r := evalPython value: 'import gemdb.admin
 try:
-    gemdb.admin.drop_app("grail_no_such_app")
+    gemdb.admin.drop_namespace("grail_no_such_app")
     __r = "dropped"
 except ValueError:
     __r = "refused"
 __r'.
-  check value: 'drop_app refuses an app that does not exist' value: r = 'refused'.
+  check value: 'drop_namespace refuses an app that does not exist' value: r = 'refused'.
 ] ensure: [
-  System gemEnvironmentVariable: 'GEMDB_APP' put: ''.
+  System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: ''.
   System abortTransaction.
   importlib ___grailUseApp___: nil.
   apps := UserGlobals at: #'GrailApps' otherwise: nil.

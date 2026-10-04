@@ -49,9 +49,9 @@ Python never meets it:
 * :mod:`gemdb.admin` -- repository administration: ``size()``,
   ``backup(path)``, ``garbage_collect()``.
 * :mod:`gemdb.sessions` -- who is connected: ``current()``, ``all()``.
-* ``gemdb.set_app(name)`` -- give a program's own modules a namespace of
-  their own, so two programs that each have a ``models.py`` can both be
-  deployed in one repository.
+* ``gemdb.use_namespace(name)`` -- give a program a namespace of its own:
+  its globals persist across runs, and two programs that each have a
+  ``models.py`` can both be deployed in one repository.
 * ``gemdb.stats`` and ``gemdb.locks`` are reserved for cache statistics
   and object locking, and do not exist yet.
 
@@ -183,30 +183,33 @@ def _commit_or_raise(aborted_on_failure):
                                   else "; gemdb.abort() discards the transaction"))
 
 
-def set_app(name):
-    """Run the rest of this session as app ``name``, creating it if it is new.
+def use_namespace(name):
+    """Run the rest of this session in namespace ``name``, creating it if new.
 
-    An app is a namespace of its own for the modules it imports: its
-    ``models`` and another app's ``models`` are two deployed modules, each
-    with its own classes, where without apps the second would be refused
-    (docs/App_Namespaces_Design.md).  Modules that ship with Grail -- the
-    standard library, gemdb itself -- stay shared by every app; anything
-    else, a venv's packages included, belongs to the app.
+    In a named namespace the top file's globals are the database: each run
+    starts with the globals of the last commit, and ``gemdb.root`` is a view
+    of them.  The namespace also holds the modules the program imports: its
+    ``models`` and another namespace's ``models`` are two deployed modules,
+    each with its own classes, where without namespaces the second would be
+    refused (docs/App_Namespaces_Design.md).  Modules that ship with Grail
+    -- the standard library, gemdb itself -- stay shared by every namespace;
+    anything else, a venv's packages included, belongs to the namespace.
 
-    Call it first, before the app's own imports: it raises ``RuntimeError``
-    once a module that would belong to the app has been imported, or when
-    the session is already in a different app.  ``import gemdb`` does not
-    count, being shared.  Calling it again with the same name does nothing.
-    A new app is created in the current transaction and kept by the next
-    commit, as an import is.  ``./grail --app NAME`` and the ``GEMDB_APP``
-    environment variable do the same before the script runs.
+    Call it first, before the program's own imports: it raises
+    ``RuntimeError`` once a module that would belong to the namespace has
+    been imported, or when the session is already in a different namespace.
+    ``import gemdb`` does not count, being shared.  Calling it again with the
+    same name does nothing.  A new namespace is created in the current
+    transaction and kept by the next commit, as an import is.
+    ``./grail --namespace NAME`` and the ``GEMDB_NAMESPACE`` environment
+    variable do the same before the script runs.
     """
-    _gemstone.repository.apps_set(str(name))
+    _gemstone.repository.namespaces_use(str(name))
 
 
-def app():
-    """The name of this session's app, or None when no app is set."""
-    return _gemstone.repository.apps_current()
+def namespace():
+    """The name of this session's namespace, or None when none is named."""
+    return _gemstone.repository.namespaces_current()
 
 
 def needs_commit():
@@ -385,8 +388,8 @@ def transaction(func=None, *, retries=0):
     return _Transaction(retries=retries)
 
 
-class _AppGlobals:
-    """``gemdb.root`` in an app: a view of the app's globals, its top file's
+class _NamespaceGlobals:
+    """``gemdb.root`` in a named namespace: a view of its globals, its top file's
     ``__main__`` namespace (docs/App_Namespaces_Design.md §5.2).
     ``gemdb.root["hat"]`` IS the global ``hat``.  Dunder names (``__name__``,
     ``__builtins__``, ...) are reachable by key but left out of iteration, so
@@ -453,37 +456,38 @@ class _Root:
     first WRITE -- never on a read, so browsing an empty database leaves
     nothing to commit.
 
-    In an app (``gemdb.set_app``) the root is instead the app's own
-    globals -- its top file's ``__main__`` namespace, which in an app is
+    In a named namespace (``gemdb.use_namespace``) the root is instead its
+    globals -- its top file's ``__main__`` namespace, which there is
     persistent -- so ``gemdb.root["hat"]`` is the global ``hat``.
     """
 
-    def _app(self):
-        # In an app, the root IS the app's globals: a view of them, or
-        # None before the app's top file has first run.  _NO_APP outside one.
-        if _gemstone.repository.apps_current() is None:
-            return _NO_APP
-        namespace = _gemstone.repository.apps_globals()
-        return None if namespace is None else _AppGlobals(vars(namespace))
+    def _named(self):
+        # In a named namespace, the root IS its globals: a view of them, or
+        # None before its top file has first run.  _UNNAMED outside one.
+        if _gemstone.repository.namespaces_current() is None:
+            return _UNNAMED
+        main = _gemstone.repository.namespaces_globals()
+        return None if main is None else _NamespaceGlobals(vars(main))
 
     def _peek(self):
         # The committed backing dict, or None before the first write.
-        app = self._app()
-        if app is not _NO_APP:
-            return app
+        named = self._named()
+        if named is not _UNNAMED:
+            return named
         try:
             return _gemstone[_ROOT_KEY]
         except KeyError:
             return None
 
     def _ensure(self):
-        app = self._app()
-        if app is not _NO_APP:
-            if app is None:
+        named = self._named()
+        if named is not _UNNAMED:
+            if named is None:
                 raise RuntimeError(
-                    "gemdb.root in app " + repr(_gemstone.repository.apps_current())
+                    "gemdb.root in namespace "
+                    + repr(_gemstone.repository.namespaces_current())
                     + " is its top file's globals, and no top file has run in it yet")
-            return app
+            return named
         gs = _gemstone
         try:
             return gs[_ROOT_KEY]
@@ -554,11 +558,11 @@ class _Root:
         return "gemdb.root(" + repr(sorted(self.keys(), key=str)) + ")"
 
 
-_NO_APP = object()
+_UNNAMED = object()
 root = _Root()
 
 __all__ = ["root", "transaction", "commit", "abort", "refresh",
-           "needs_commit", "set_app", "app", "GemDBError", "ConflictError",
+           "needs_commit", "use_namespace", "namespace", "GemDBError", "ConflictError",
            "PendingChangesError", "SessionStateError", "admin", "sessions"]
 
 # Warm the function-attribute caches, here in the module body.  The
@@ -576,7 +580,7 @@ import sys as _sys
 
 _self = _sys.modules["gemdb"]
 for _name in ("transaction", "commit", "abort", "refresh", "needs_commit",
-              "set_app", "app", "_state", "root", "_pending_imports", "_naming",
+              "use_namespace", "namespace", "_state", "root", "_pending_imports", "_naming",
               "_commit_or_raise"):
     getattr(_self, _name)
 _precached = _gemstone.sessionDict
