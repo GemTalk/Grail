@@ -479,17 +479,12 @@ _named_flags: cls
 	values of 0x%x'' when it is several.
 
 	ORDER.  CPython walks _member_map_, which is a dict in declaration order, so
-	its message lists aliases as they were written.  Grail's _member_map_ is
-	hash-ordered (as ``unique'' above also has to work around), so declaration
-	order is taken from the record's definition-order roll -- which holds every
-	multi-bit and zero member, i.e. exactly the aliases this check is about.  A
-	same-VALUE alias (``dupe = 6'' beside ``d = 6'') builds no member of its own
-	and so is not in that roll; those are gathered afterwards, which can order
-	them differently from CPython when both kinds are present in one class.
-	Nothing reachable pins that combination, and the bits reported are the same
-	either way."
+	its message lists aliases as they were written; Grail's is a PyDict in the
+	same order, so this walks it too.  An alias is any name that is not a
+	canonical member's -- a multi-bit or zero member as much as a same-value
+	``dupe = 6''."
 
-	| enumClass named namedValues offenders missingValue msg aliasPart valuePart |
+	| enumClass named namedNames namedValues offenders missingValue msg aliasPart valuePart |
 	enumClass := Python @env0:at: #Enum.
 	(enumClass ___grailIsFlagClass: cls) ifFalse: [^ cls].
 	named := enumClass ___grailMembers: cls.
@@ -497,18 +492,9 @@ _named_flags: cls
 	named @env0:do: [:m | namedValues @env0:add: (m @env0:dynamicInstVarAt: #value)].
 	offenders := OrderedCollection @env0:new.
 	missingValue := 0.
-	"Definition order first: every built member that is NOT canonical."
-	(enumClass ___grailAllNamedMembers: cls) @env0:do: [:m |
-		(named @env0:includes: m) ifFalse: [
-			| missed |
-			missed := self ___grailMissingBitsOf: m against: namedValues.
-			missed @env0:= 0 ifFalse: [
-				offenders @env0:add: (m @env0:dynamicInstVarAt: #name) @env0:asString.
-				missingValue := missingValue @env0:bitOr: missed]]].
-	"Then any same-value alias -- a NAME bound to a member that carries another."
-	cls @env1:_member_map_ @env0:keysAndValuesDo: [:nm :m | | own |
-		own := (m @env0:dynamicInstVarAt: #name).
-		(own @env0:notNil and: [(nm @env0:asString @env0:= own @env0:asString) not]) ifTrue: [
+	namedNames := named @env0:collect: [:m | (m @env0:dynamicInstVarAt: #name) @env0:asString].
+	cls @env1:_member_map_ @env0:keysAndValuesDo: [:nm :m |
+		(namedNames @env0:includes: nm @env0:asString) ifFalse: [
 			| missed |
 			missed := self ___grailMissingBitsOf: m against: namedValues.
 			missed @env0:= 0 ifFalse: [
@@ -566,19 +552,12 @@ unique: cls
 	(test_enum test_unique_dirty).  __members__ preserves declaration order, so
 	the alias list matches CPython's message ordering."
 
-	| dups msg byName |
-	byName := cls @env1:_member_map_.
+	| dups msg |
 	dups := OrderedCollection @env0:new.
-	"CPython lists aliases in DECLARATION order; _member_map_ is hash-ordered, so
-	walk the CANONICAL members in definition order and gather each one's aliases
-	(other __members__ names bound to the same member object).  Reproduces the
-	usual alias-follows-canonical layout the tests assert."
-	((Python @env0:at: #Enum) ___grailMembers: cls) @env0:do: [:member |
-		| canonical |
+	cls @env1:_member_map_ @env0:keysAndValuesDo: [:name :member | | canonical |
 		canonical := (member @env0:dynamicInstVarAt: #name) @env0:asString.
-		byName @env0:keysAndValuesDo: [:name :m |
-			(m == member and: [(name @env0:asString @env0:= canonical) @env0:not]) ifTrue: [
-				dups @env0:add: (name @env0:asString @env0:, ' -> ' @env0:, canonical)]]].
+		(name @env0:asString @env0:= canonical) ifFalse: [
+			dups @env0:add: (name @env0:asString @env0:, ' -> ' @env0:, canonical)]].
 	dups @env0:isEmpty ifTrue: [^ cls].
 	msg := WriteStream @env0:on: String @env0:new.
 	dups @env0:doWithIndex: [:d :i |
