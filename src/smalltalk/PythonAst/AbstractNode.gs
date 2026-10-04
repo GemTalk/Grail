@@ -755,6 +755,63 @@ ___importScanInto___: aSet value: v
 	^ self
 %
 
+category: 'Grail-Naming'
+method: AbstractNode
+___bindsSmalltalkTempNamed___: aSymbol
+	"Does any def, lambda or comprehension at or below this node bind aSymbol
+	as a SMALLTALK TEMP -- a parameter, a body local (the block's declared
+	variables or its Python ``writes''), or a comprehension target?  Text
+	codegen spells every Python local as a temp of the same name, and it spells
+	the module singleton by its backing class's BARE name
+	(``random @env0:___instance___''), so such a temp captures every module
+	reference in that scope.  importlib>>___moduleDefinesItsOwnName___:as:
+	asks this of the whole module.  Reflective over the instVars, skipping the
+	``parent'' back-pointer, like ___importBoundNamesInto___:."
+
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: LambdaAst]) ifTrue: [
+		((self ___functionDeclaresLocal___: self named: aSymbol)
+			or: [self ___functionBindsPythonLocal___: self named: aSymbol])
+				ifTrue: [^ true]].
+	(self isKindOf: ComprehensionAst) ifTrue: [
+		(self ___nameNodesIn___: self target anySatisfy: [:n | n id asSymbol == aSymbol])
+			ifTrue: [^ true]].
+	2 to: self class instSize do: [:i |
+		| v |
+		v := self instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(v ___bindsSmalltalkTempNamed___: aSymbol) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						((each isKindOf: AbstractNode)
+							and: [each ___bindsSmalltalkTempNamed___: aSymbol])
+								ifTrue: [^ true]]]]].
+	^ false
+%
+
+category: 'Grail-Naming'
+method: AbstractNode
+___nameNodesIn___: aNode anySatisfy: aBlock
+	"Is there a NameAst at or below aNode (a comprehension target: a name, or a
+	tuple / list / starred nesting of them) for which aBlock answers true?"
+
+	(aNode isKindOf: NameAst) ifTrue: [^ aBlock value: aNode].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ false].
+	2 to: aNode class instSize do: [:i |
+		| v |
+		v := aNode instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(self ___nameNodesIn___: v anySatisfy: aBlock) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						(self ___nameNodesIn___: each anySatisfy: aBlock)
+							ifTrue: [^ true]]]]].
+	^ false
+%
+
 category: 'Grail-code generation'
 method: AbstractNode
 ___storesModuleSlot___: aSymbol

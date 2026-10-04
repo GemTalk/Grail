@@ -152,7 +152,17 @@ ___moduleDefinesItsOwnName___: moduleAst as: aName
 
 	Classes are checked as well as functions because topLevelDefs (the list
 	this method deliberately does NOT reuse) selects FunctionDefAst only, and
-	the shape that actually bites is a CLASS."
+	the shape that actually bites is a CLASS.
+
+	A LOCAL of the module's own name is the third way, and only the text arm
+	sees it: every Python local is a Smalltalk temp of the same name, so in
+	CPython's random.py -- ``random = self.random'' in _gauss, _choices and
+	_randbelow_without_getrandbits -- every module-global read in that method
+	sent ``___instance___'' to the BoundMethod in the temp.  The IR arm binds
+	the class by association and was never affected, which is why only CI's
+	text shards failed.  locale.py (``setlocale(category, locale=None)'') has
+	the same shape.  AbstractNode>>___bindsSmalltalkTempNamed___: finds
+	parameters, body locals and comprehension targets anywhere in the module."
 
 	^ (moduleAst body body
 		detect: [:stmt |
@@ -160,6 +170,7 @@ ___moduleDefinesItsOwnName___: moduleAst as: aName
 				and: [(stmt respondsTo: #name)
 					and: [stmt name notNil and: [stmt name asSymbol == aName]]])]
 		ifNone: [nil]) notNil
+		or: [moduleAst ___bindsSmalltalkTempNamed___: aName asSymbol]
 %
 
 category: 'Grail-Naming'
