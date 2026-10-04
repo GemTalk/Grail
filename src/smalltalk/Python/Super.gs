@@ -543,6 +543,34 @@ ___superTypeMethodFor___: aSym
 
 category: 'Grail-Attribute'
 method: Super
+___bindHolderValue___: v
+	"Bind a value found in a parent's class-attribute holder, as CPython's
+	super does: a DESCRIPTOR is asked for its own binding,
+	``v.__get__(None if obj is a class else obj, owner)''.
+
+	Binding everything as a method of obj was right for the decorated
+	functions the holder mostly carries, and wrong for the three descriptors
+	that land there whenever a decorator is not one the class build knows to
+	compile -- ``@classmethod @abstractmethod'', a classmethod or property
+	SUBCLASS such as abc's abstractclassmethod / abstractproperty.
+	``super().foo()'' from a classmethod then called the classmethod OBJECT
+	(``'classmethod' object is not callable''), and ``super().foo'' from a
+	property answered a bound method instead of the parent's value
+	(test_abc's abstract* tests)."
+
+	| inst owner |
+	((v @env0:isKindOf: PyClassMethod)
+		or: [(v @env0:isKindOf: PyStaticMethod)
+		or: [v @env0:isKindOf: PropertyDescriptor]])
+			ifFalse: [^ MethodBinding instance: obj callable: v].
+	(obj @env0:isKindOf: Behavior)
+		ifTrue: [inst := None. owner := obj]
+		ifFalse: [inst := obj. owner := obj @env0:class].
+	^ v __get__: inst _: owner
+%
+
+category: 'Grail-Attribute'
+method: Super
 ___pyAttrLoad___: aSym
 	"super().<aSym> — return a BoundMethod-equivalent that, when
 	invoked, executes the parent class''s method with obj as the
@@ -616,7 +644,7 @@ ___pyAttrLoad___: aSym
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				v := holder @env0:dynamicInstVarAt: aSym.
-				v == nil ifFalse: [^ MethodBinding instance: obj callable: v]
+				v == nil ifFalse: [^ self ___bindHolderValue___: v]
 			]
 		].
 		walker := walker @env0:superClass

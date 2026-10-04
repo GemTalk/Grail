@@ -1548,6 +1548,71 @@ ___enclosingFunctionLocalBeyondClass___: aSymbol
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___is: aChild inBodyOf: aDef
+	"Whether aChild, met on the way up from a node, is aDef's BODY -- the
+	suite itself or one of its statements, whichever the parent links name --
+	rather than part of its header (bases, keywords, decorators, defaults)."
+
+	| suite |
+	suite := aDef body.
+	suite isNil ifTrue: [^ false].
+	aChild == suite ifTrue: [^ true].
+	(suite isKindOf: SuiteAst)
+		ifTrue: [^ suite body notNil and: [suite body includesIdentical: aChild]].
+	^ (suite isKindOf: Collection) and: [suite includesIdentical: aChild]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___headerLocalBeyondClass___: aSymbol
+	"As ___enclosingFunctionLocalBeyondClass___, for a node in an expression
+	that is evaluated INLINE in the enclosing scope -- a class's bases and
+	keywords, or a class's or function's decorators.
+
+	Only a METHOD BODY is compiled apart from its surroundings (it
+	string-compiles onto its class with no lexical link to the enclosing
+	temps), so a class is crossed only when the walk comes up out of the body
+	of one of its methods.  A header is evaluated where the class statement
+	stands, so the plain walk -- which counts the header's own class as soon as
+	it reaches it -- answered true for every header name, and the callers
+	stood down from the cell read altogether.  That was right for a local of
+	the method the class statement sits in, and wrong for a name from beyond
+	that method's class:
+
+	    def test_factory(abc_ABCMeta):
+	        class TestABC(unittest.TestCase):
+	            def test_x(self):
+	                class A(metaclass=abc_ABCMeta): ...
+
+	``abc_ABCMeta'' is no temp of test_x, so emitting it bare failed to
+	compile (undefined symbol) and test_x became a codegen-gap stub -- 62 of
+	test.test_abc's 64 errors.  Here it is beyond TestABC, and reads
+	TestABC's cell like any other free name in test_x."
+
+	| prev node passedClass fromFunctionBody |
+	prev := self.
+	node := parent.
+	passedClass := false.
+	fromFunctionBody := false.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [
+			(fromFunctionBody and: [self ___is: prev inBodyOf: node])
+				ifTrue: [passedClass := true].
+			fromFunctionBody := false].
+		(node isKindOf: FunctionDefAst) ifTrue: [
+			fromFunctionBody := self ___is: prev inBodyOf: node.
+			(fromFunctionBody and: [self ___functionBindsPythonLocal___: node named: aSymbol])
+				ifTrue: [^ passedClass]].
+		(node isKindOf: LambdaAst) ifTrue: [
+			(self ___functionBindsPythonLocal___: node named: aSymbol)
+				ifTrue: [^ passedClass]].
+		prev := node.
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___manglingClassName___
 	"The class whose name mangles a private identifier written at this node --
 	CPython's ``the innermost enclosing class scope''.

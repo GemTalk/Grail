@@ -1539,6 +1539,14 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
 		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
+		lf.
+	"The namespace a metaclass is handed must hold the DECORATED object; see
+	object class >> ___grailNsRebind___:."
+	aStream
+		nextPutAll: aClassName;
+		nextPutAll: ' @env1:___grailNsRebind___: ''';
+		nextPutAll: name;
+		nextPutAll: '''.';
 		lf
 %
 
@@ -1854,8 +1862,22 @@ ___printDecoratorNameOn___: aStream name: aSymbol
 
 	___resolveBuiltinOrSignal___: is the same emit NameAst's own free-name
 	fallback uses, so the two agree: it resolves a name injected into builtins
-	at run time and raises the identical NameError on a miss."
+	at run time and raises the identical NameError on a miss.
 
+	A name from BEYOND the class whose method this decorator is evaluated in
+	(``def f(deco): class T: def m(self): class A: @deco def g...'') is no temp
+	of that method, so it reads the class's closure cell, exactly as NameAst
+	does for a non-bare decorator expression -- see
+	___headerLocalBeyondClass___."
+
+	(CallAst classBeingCompiled notNil
+		and: [self ___headerLocalBeyondClass___: aSymbol]) ifTrue: [
+			CallAst addCapturedClassName: aSymbol.
+			aStream
+				nextPutAll: '(self @env1:___classCell___: #''___cell_';
+				nextPutAll: aSymbol asString;
+				nextPutAll: '___'')'.
+			^ self].
 	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol)
 		ifFalse: [
 			aStream nextPutAll: aSymbol asString.
