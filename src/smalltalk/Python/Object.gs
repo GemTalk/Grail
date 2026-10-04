@@ -7963,7 +7963,47 @@ ___classDict___
 			@env0:on: AbstractException do: [:ex |
 				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 				ex @env0:return: nil]].
+	"SOURCE ORDER for a class a class statement built.  The sections above
+	read the holder, then the instance-side method dictionary, then the
+	metaclass's -- two of them hash-ordered -- so ``z = 1; def b; a = 2''
+	listed z, a, then b.  ClassDefAst records the body's order
+	(___classBodyOrder___); a type() class has none, and its holder is already
+	in insertion order."
+	(self @env0:class @env0:includesSelector: #'___classBodyOrder___' environmentId: 1)
+		ifTrue: [d := self ___grailInBodyOrder___: d].
 	^ d
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailInBodyOrder___: aDict
+	"aDict, a class's __dict__ snapshot, re-keyed in CPython's order:
+
+	  * the header type.__new__'s namespace starts with -- __module__,
+	    __qualname__, __firstlineno__ -- and a DOCSTRING's __doc__, which is
+	    the body's first statement;
+	  * the body's names, as ClassDefAst recorded them;
+	  * what type.__new__ adds after the body: each declared slot's member
+	    descriptor, then __doc__ when the class has no docstring (None);
+	  * anything else -- a ``Cls.x = v'' after the class existed -- in the
+	    order already there."
+
+	| order out add doc |
+	order := self ___classBodyOrder___.
+	out := (Python @env0:at: #PyDict) @env0:new.
+	add := [:k | | ks |
+		ks := k @env0:asString.
+		((aDict @env0:includesKey: ks) and: [(out @env0:includesKey: ks) @env0:not])
+			ifTrue: [out @env0:at: ks put: (aDict @env0:at: ks)]].
+	#('__module__' '__qualname__' '__firstlineno__') @env0:do: add.
+	doc := aDict @env0:at: '__doc__' otherwise: nil.
+	(doc ~~ nil and: [doc ~~ None]) ifTrue: [add @env0:value: '__doc__'].
+	order @env0:do: add.
+	(self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+		ifTrue: [self ___pyDeclaredSlotNames___ @env0:do: add].
+	add @env0:value: '__doc__'.
+	aDict @env0:keysDo: add.
+	^ out
 %
 
 category: 'Grail-Convenience Methods - Attribute'
