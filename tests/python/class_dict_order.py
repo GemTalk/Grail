@@ -5,9 +5,9 @@ instance-side method dictionary and the metaclass's -- and two of those are
 hash-ordered, so ``z = 1; def b; a = 2`` listed z, a, then b.  It now follows
 the order ClassDefAst records for the body.
 
-Compared on the names Grail has: CPython also lists __firstlineno__,
-__static_attributes__, __dict__ and __weakref__, which Grail's class __dict__
-does not carry (a separate gap), and those are filtered out of both sides.
+The entries type.__new__ and the compiler add -- __firstlineno__,
+__static_attributes__, __dict__, __weakref__ -- are compared in place
+(tests/python/class_dict_entries.py checks their values).
 
 Every expectation was measured against CPython 3.14.6.
 """
@@ -16,15 +16,12 @@ import functools
 
 RESULTS = {}
 
-_NOT_IN_GRAIL = {'__firstlineno__', '__static_attributes__', '__dict__', '__weakref__'}
-
-
 def check(name, got, want):
     RESULTS[name] = (got == want) or ('got: ' + repr(got)[:300])
 
 
 def keys(cls):
-    return [k for k in cls.__dict__ if k not in _NOT_IN_GRAIL]
+    return list(cls.__dict__)
 
 
 class Mixed:
@@ -88,12 +85,18 @@ class Late:
 Late.added = 2
 
 check('body_names_in_source_order', keys(Mixed),
-      ['__module__', '__doc__', 'z', 'b', 'a', 'p', 's', 'c', '__init__', 'y', 'cp'])
-check('no_docstring_puts_doc_last', keys(Sub), ['__module__', 'w', '__repr__', 'v', '__doc__'])
-check('empty_class', keys(Empty), ['__module__', '__doc__'])
-check('slots_in_source_order', keys(Slotted), ['__module__', 'm', '__slots__', '__doc__'])
+      ['__module__', '__firstlineno__', '__doc__', 'z', 'b', 'a', 'p', 's', 'c', '__init__',
+       'y', 'cp', '__static_attributes__', '__dict__', '__weakref__'])
+check('no_docstring_puts_doc_last', keys(Sub),
+      ['__module__', '__firstlineno__', 'w', '__repr__', 'v', '__static_attributes__', '__doc__'])
+check('empty_class', keys(Empty),
+      ['__module__', '__firstlineno__', '__static_attributes__', '__dict__', '__weakref__',
+       '__doc__'])
+check('slots_in_source_order', keys(Slotted),
+      ['__module__', '__firstlineno__', 'm', '__slots__', '__static_attributes__', '__doc__'])
 check('attribute_set_later_follows_the_body', keys(Late),
-      ['__module__', 'm', 'x', '__doc__', 'added'])
+      ['__module__', '__firstlineno__', 'm', 'x', '__static_attributes__', '__dict__',
+       '__weakref__', '__doc__', 'added'])
 
 
 class SlotNames:
@@ -105,7 +108,13 @@ class SlotNames:
 
 SlotNames.later = 1
 check('slot_descriptors_follow_the_body', keys(SlotNames),
-      ['__module__', '__slots__', 'm', 'x', 'y', '__doc__', 'later'])
+      ['__module__', '__firstlineno__', '__slots__', 'm', '__static_attributes__', 'x', 'y',
+       '__doc__', 'later'])
+check('type_keeps_the_namespace_order',
+      list(type('T', (), {'b': 1, 'a': 2, '__doc__': 'd'}).__dict__),
+      ['b', 'a', '__doc__', '__module__', '__dict__', '__weakref__'])
+check('type_appends_module_and_doc', list(type('V', (), {'b': 1}).__dict__),
+      ['b', '__module__', '__dict__', '__weakref__', '__doc__'])
 check('vars_agrees', list(vars(Mixed)) == list(Mixed.__dict__), True)
 
 if __name__ == '__main__':

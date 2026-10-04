@@ -769,6 +769,7 @@ run
 	at: #'AbcClassBuildTestCase' put: nil;
 	at: #'EnumBodyCallablesTestCase' put: nil;
 	at: #'ClassDictOrderTestCase' put: nil;
+	at: #'ClassDictEntriesTestCase' put: nil;
 	at: #'ClassBodyCallableBindsTestCase' put: nil;
 	at: #'MetaclassProtocolsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
@@ -2220,6 +2221,7 @@ input src/smalltalk/PythonTests/AbcMachineryTestCase.gs
 input src/smalltalk/PythonTests/AbcClassBuildTestCase.gs
 input src/smalltalk/PythonTests/EnumBodyCallablesTestCase.gs
 input src/smalltalk/PythonTests/ClassDictOrderTestCase.gs
+input src/smalltalk/PythonTests/ClassDictEntriesTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyCallableBindsTestCase.gs
 input src/smalltalk/PythonTests/MetaclassProtocolsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs

@@ -76,5 +76,6 @@ testWhatTypeNewAddsFollowsTheBody
 	"Slot descriptors, then a None __doc__, then attributes set later."
 
 	self assertAll: #('no_docstring_puts_doc_last' 'empty_class'
-		'slot_descriptors_follow_the_body' 'attribute_set_later_follows_the_body')
+		'slot_descriptors_follow_the_body' 'attribute_set_later_follows_the_body'
+		'type_keeps_the_namespace_order' 'type_appends_module_and_doc')
 %

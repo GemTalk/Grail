@@ -1575,6 +1575,33 @@ printSmalltalkRuntimeOn: aStream
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"__firstlineno__ and __static_attributes__, the two entries CPython 3.13's
+	compiler adds to every class statement's namespace: the first line of the
+	definition (its first DECORATOR's, when it has one) and the sorted names of
+	``self.X'' stores in the body's functions (___staticAttributeNames___).
+	Stored as the class's own attributes, which is what makes them readable,
+	inheritable through the class chain and listed in __dict__; a type() class
+	gets neither, as in CPython."
+	[ | firstLine attrs |
+	firstLine := self beginLine.
+	decorator_list isNil ifFalse: [
+		decorator_list do: [:deco |
+			((deco isKindOf: AbstractLocationNode) and: [deco beginLine notNil])
+				ifTrue: [firstLine := firstLine min: deco beginLine]]].
+	aStream nextPutAll: self ___stVarName___;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''__firstlineno__'' put: ';
+		nextPutAll: firstLine printString; nextPutAll: '.'; lf.
+	attrs := self ___staticAttributeNames___.
+	aStream nextPutAll: self ___stVarName___;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''__static_attributes__'' put: '.
+	attrs isEmpty
+		ifTrue: [aStream nextPutAll: '(___tuple___ perform: #new env: 0)']
+		ifFalse: [
+			aStream nextPutAll: '(___tuple___ perform: #withAll: env: 0 withArguments: {{'.
+			attrs do: [:nm | self printQuotedString: nm on: aStream]
+				separatedBy: [aStream nextPutAll: '. '].
+			aStream nextPutAll: '}})'].
+	aStream nextPutAll: '.'; lf] value.
 	"__prepare__(name, bases, **kwds) is handed the header: the RESOLVED bases
 	when there are several (the list the storage-base choice saw), the sole base
 	as written (its substitution happens in ___subclass___, and the runtime
@@ -4440,6 +4467,56 @@ ___inferredSlotNames___
 		(props includes: n)
 			or: [(str size > 2
 				and: [str first = $_ and: [str last = $_]])]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___staticAttributeNames___
+	"CPython 3.13's __static_attributes__, as sorted Strings: every X in a
+	``self.X'' STORE -- assignment, augmented, annotated, a tuple element, a
+	for or with target -- in any function of the class body, nested functions
+	and lambdas included.  Purely syntactic, as CPython's compiler makes it:
+	the receiver must be spelled ``self'' whatever the first parameter is
+	called, ``del self.X'' does not count, names are not mangled, and a nested
+	CLASS's functions count for that class instead.
+
+	Not ___inferredSlotNames___'s walk, which answers a different question (what
+	storage do the instances need?) and so stops at nested defs, takes Del, and
+	drops dunders and properties."
+
+	| names |
+	names := Set new.
+	self ___collectStaticAttributes___: body body inFunction: false into: names.
+	^ names asSortedCollection asArray
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___collectStaticAttributes___: aValue inFunction: inFunction into: names
+	"___staticAttributeNames___'s walk -- the reflective descent
+	___collectSelfAttrWrites___:self:into: uses, skipping ``parent''."
+
+	aValue isNil ifTrue: [^ self].
+	aValue isString ifTrue: [^ self].
+	(aValue isKindOf: ClassDefAst) ifTrue: [^ self].
+	((aValue isKindOf: FunctionDefAst) or: [aValue isKindOf: LambdaAst]) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				self ___collectStaticAttributes___: (aValue instVarAt: i) inFunction: true into: names]].
+		^ self].
+	(inFunction and: [(aValue isKindOf: AttributeAst)
+		and: [(aValue ctx isKindOf: StoreAst)
+		and: [(aValue value isKindOf: NameAst)
+		and: [aValue value id asString = 'self']]]])
+			ifTrue: [names add: aValue attr asString].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				self ___collectStaticAttributes___: (aValue instVarAt: i) inFunction: inFunction into: names]].
+		^ self].
+	(aValue isKindOf: Collection) ifTrue: [
+		aValue do: [:each | self ___collectStaticAttributes___: each inFunction: inFunction into: names]].
+	^ self
 %
 
 category: 'Grail-Class Compilation'
