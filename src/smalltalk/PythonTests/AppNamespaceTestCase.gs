@@ -326,6 +326,37 @@ testOnlyEqualImmutableValuesStandForEachOther
 		description: 'an Array that is not a tuple'
 %
 
+category: 'Grail-Tests'
+method: AppNamespaceTestCase
+testAFinalRunsAsWrittenWhereGlobalsStartEmpty
+	"``x: Final = init()'' skips its initializer only where the globals are
+	persistent and already hold x (§5.4).  A module whose instance is not
+	committed -- as here, and every session-local __main__ -- evaluates it on
+	every load, as CPython does."
+	| f mod |
+	f := GsFile openWriteOnServer: path.
+	f nextPutAll: 'from typing import Final
+calls = []
+
+def make():
+    calls.append(1)
+    return 7
+
+x: Final = make()
+y: Final[int] = 8
+'.
+	f close.
+	mod := importlib loadModuleFromPath: path name: 'grail_app_namespace'.
+	self assert: (mod dynamicInstVarAt: #'x') = 7.
+	self assert: (mod dynamicInstVarAt: #'y') = 8 description: 'Final[T] is Final'.
+	self assert: (mod dynamicInstVarAt: #'calls') size = 1.
+	self deny: (mod ___finalIsBound___: #'x') description: 'an uncommitted module holds nothing persistent'.
+	(importlib @env1:modules) removeKey: #'grail_app_namespace' ifAbsent: [].
+	mod := importlib loadModuleFromPath: path name: 'grail_app_namespace'.
+	self assert: (mod dynamicInstVarAt: #'calls') size = 1
+		description: 'the reload evaluated it again'
+%
+
 category: 'Grail-Support'
 method: AppNamespaceTestCase
 ___writeWho: aString to: aPath

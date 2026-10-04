@@ -122,6 +122,40 @@ ___adoptInstance___: anInstance
 	self ___sessionInstances___ at: self put: anInstance
 %
 
+category: 'Grail-Phase A Dynamic InstVars'
+method: module
+___storeAnnotate___: aBlock
+	"Store the module's PEP 649 ``__annotate__'' (ModuleAst >>
+	___emitModuleAnnotationsOn___:) -- unless it already holds a closure of
+	the SAME compiled block over the same module.  The emitted block captures
+	nothing but the module and takes its arguments, so two such closures
+	compute the same annotations; but each run makes a new one, which on an
+	app's re-run over committed globals is a write that changes nothing
+	(docs/App_Namespaces_Design.md §5.2).  After an edit the module body is
+	recompiled, the block's method differs, and the store goes through."
+
+	| current |
+	current := super dynamicInstVarAt: #'__annotate__'.
+	((current isKindOf: ExecBlock)
+		and: [current method == aBlock method
+		and: [current selfValue == aBlock selfValue]]) ifTrue: [^ current].
+	^ self dynamicInstVarAt: #'__annotate__' put: aBlock
+%
+
+category: 'Grail-Phase A Dynamic InstVars'
+method: module
+___finalIsBound___: aSymbol
+	"Does a module-level ``name: Final = ...'' find its name already bound in
+	PERSISTENT globals, so that it keeps that value and skips its initializer
+	(AnnAssignAst >> printSmalltalkOn:, docs/App_Namespaces_Design.md §5.4)?
+	Only when this module instance is committed -- an app's top file, a
+	deployed module rebuilt in place -- since only then do the globals outlive
+	the run.  A session-local __main__ starts empty every run, as CPython's
+	does, and evaluates every Final as written."
+
+	^ self isCommitted and: [(self dynamicInstVarAt: aSymbol) notNil]
+%
+
 category: 'Grail-Transient Globals'
 method: module
 ___transientGlobals___

@@ -126,14 +126,29 @@ printSmalltalkOn: aStream
 	"Phase A: module-scope plain NameAst target writes through the
 	module instance's dynamic-instVar storage rather than a bare
 	assignment (no static instVar slot exists for the name)."
+	"``app: Final = Flask(__name__)'' at module level is initialized ONCE
+	(docs/App_Namespaces_Design.md §5.4): when the module's globals are
+	persistent and already hold the name, the committed value stays and the
+	right-hand side is not evaluated -- Clojure's defonce.  So a re-run of an
+	app's top file writes nothing for it, and several sessions starting the
+	app cannot conflict on it.  Where the globals start empty, as every
+	CPython run's do, the statement runs as written."
 	((target isKindOf: NameAst) and: [self isModuleScopeAnnTarget: target])
 		ifTrue: [
+			self ___isModuleLevelFinal___ ifTrue: [
+				aStream
+					nextPutAll: '(';
+					nextPutAll: self ___moduleStoreReceiverExpr___;
+					nextPutAll: ' @env0:___finalIsBound___: #''';
+					nextPutAll: target id;
+					nextPutAll: ''') ifFalse: ['].
 			aStream
 				nextPutAll: self ___moduleStoreReceiverExpr___;
 				nextPutAll: ' @env0:dynamicInstVarAt: #''';
 				nextPutAll: target id;
 				nextPutAll: ''' put: '.
 			value printSmalltalkWithParenthesisOn: aStream.
+			self ___isModuleLevelFinal___ ifTrue: [aStream nextPut: $]].
 			aStream nextPut: $..
 			^ self
 		].
@@ -141,6 +156,30 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: ' := '.
 	value printSmalltalkOn: aStream.
 	aStream nextPut: $..
+%
+
+category: 'Grail-other'
+method: AnnAssignAst
+___isModuleLevelFinal___
+	"Is this ``name: Final = value'' (or ``Final[T]'', ``typing.Final'')
+	directly at module level -- not in a def, a lambda or a class body?
+	Those are the bindings GemDB initializes ONCE
+	(docs/App_Namespaces_Design.md §5.4): see printSmalltalkOn:."
+
+	| ann node |
+	value isNil ifTrue: [^ false].
+	(target isKindOf: NameAst) ifFalse: [^ false].
+	ann := annotation.
+	(ann isKindOf: SubscriptAst) ifTrue: [ann := ann value].
+	(((ann isKindOf: NameAst) and: [ann id asString = 'Final'])
+		or: [(ann isKindOf: AttributeAst) and: [ann attr asString = 'Final']])
+			ifFalse: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [(node isKindOf: LambdaAst)
+			or: [node isKindOf: ClassDefAst]]) ifTrue: [^ false].
+		node := node parent].
+	^ true
 %
 
 category: 'Grail-other'
