@@ -604,6 +604,52 @@ commits it.
 
 ---
 
+### D10. A deployed module name stands for one source file
+
+The import cache is persistent and shared by every program a user runs, so a
+dotted name means one module across all of them, not one per process as in
+CPython. Two programs that each have their own `models.py` used to take turns
+rebuilding ONE set of classes in place. This was measured: app B importing its
+own `models` reused app A's `User` (same `id`), and app A's committed user then
+answered app B's `hello()` without app A changing anything.
+
+So an import that finds a **different file with different source** under a
+**deployed** name raises `ImportError` before building anything
+(`importlib class >> ___refuseForeignSourcePath___:for:`). The deployed file is
+the committed module's `__spec__.origin`. Paths are compared after `realpath`
+on the gem's host, so symlinks, `/tmp` against `/private/tmp`, and relative
+`sys.path` entries are not differences. What is *not* refused:
+
+- an edit at the same path: rebuilt in place, as always;
+- the same source at another path, such as another checkout or another host.
+  It is the same module, so it binds or rebuilds as usual;
+- a module stale only because a dependency changed (its own hash is unchanged);
+- `__main__`, which is never deployed (#851).
+
+No hostname is recorded. A client session's gem may run on any host, and the
+same application installed at the same path on several application servers is
+the normal deployment. A recorded file that does not exist where this gem
+runs is therefore never read as "moved"; it compares as written.
+
+The two ways past the refusal are commands, in `gemdb.modules`:
+
+- `relocate(name)`: the module moved and is the same module. It lifts the
+  refusal for the next import of `name` in this session, which rebuilds it in
+  place (classes keep their identity, stored instances keep working) and
+  records the new file at commit. The allowance is consumed by that import,
+  so the old file is foreign afterwards.
+- `forget(name)`: a different module that shares the name. It un-deploys
+  `name` and its submodules so the next import builds afresh. Like
+  `gemdb.schema.drop_class`, it refuses while any instance of their classes
+  (or subclasses) exists, needs a clean transaction, and commits itself.
+
+`del models` is not an override: it unbinds a name, and the cache entry it
+does not touch is `sys.modules['models']`, whose deletion D6 already makes a
+raise. Giving each application its own namespace (a planned
+`gemdb.set_app(name)`) is the general answer to two applications sharing a
+module name; this rule is what keeps the default namespace safe meanwhile.
+Test: `tests/scripts/runModulePathTest.gs` (`module-source-path`).
+
 ## 6. Lifecycle
 
 ### 6.1 A module

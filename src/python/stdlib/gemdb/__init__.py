@@ -421,4 +421,4 @@ del _self, _name, _sys
 # gemdb ships them warmed too: a lazy first ``import gemdb.admin`` in
 # some later session would be a cold import, and its writes would trip
 # the very entry check the warming above protects.
-from . import admin, schema, sessions
+from . import admin, modules, schema, sessions
