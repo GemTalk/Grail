@@ -319,15 +319,23 @@ for four concurrent suites and retires that failure entirely. `run_tests.sh`
 prints what it found before it launches (`stone sessions: max=… in-use=…
 free-for-shards=… (need …)`), so the number is in every run's output.
 
-Serializing still pays, but for WALL-CLOCK rather than correctness once the
-budget is generous — one suite already saturates the performance cores, so a
-second concurrent suite competes rather than scaling:
+**Do not use `scripts/with_stone_lock.sh` on this machine.** With 40 sessions
+there is room for several suites at once, and queueing behind another
+worktree's run only costs wall-clock. Run installs and suites directly, and
+run SUnit and the CPython suite concurrently (they write different `out/`
+files):
 
 ```bash
-./scripts/with_stone_lock.sh ./scripts/run_tests.sh
-GRAIL_TEST_COLD=1 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
-./scripts/with_stone_lock.sh ./scripts/run_cpython_suite.sh
+./scripts/run_tests.sh
+GRAIL_TEST_COLD=1 ./scripts/run_tests.sh
+./scripts/run_cpython_suite.sh
 ```
+
+The lock remains for a stone whose key caps it near eight usable sessions,
+where a stray login can cost a shard its login. Concurrent suites do compete
+for CPU (one suite already saturates the performance cores), so a TIMEOUT in
+the gate on a module the change cannot reach is usually contention: re-run
+just that module on its own rather than reading it as a regression.
 
 **`GRAIL_IR_CODEGEN` is ON by default since PR #1087, and the variable now
 DISABLES the IR path.** The text path is `GRAIL_IR_CODEGEN=0`; setting it to
@@ -335,13 +343,10 @@ DISABLES the IR path.** The text path is `GRAIL_IR_CODEGEN=0`; setting it to
 to spell the OFF arm explicitly, and one that forgets measures IR twice and
 reports two arms that agree.
 
-**Wrap the CPython suite too, not just `run_tests.sh`.** It opens
-`GRAIL_CPYTHON_WORKERS` sessions of its own (four by default), so on a tight
-budget an unlocked four alongside a locked eight exceeds the limit — and the
-lock then supplies false confidence rather than exclusion.
-
-The lock is keyed on `GEMSTONE_NAME`. Every worktree is on `gs40` now, so in
-practice it serializes all of them; it is opt-in and CI never calls it. Whether or not you use it,
+On a tight budget the lock has to wrap the CPython suite too, not just
+`run_tests.sh`: it opens `GRAIL_CPYTHON_WORKERS` sessions of its own (four by
+default). The lock is keyed on `GEMSTONE_NAME`; it is opt-in and CI never calls
+it. Whether or not a lock is in use,
 **a suite line is only a gate result once the run accounts for every shard**:
 
 ```bash
@@ -358,7 +363,7 @@ run wants, so an editor's Jasper/MCP session, an `install.sh`, a stray `topaz`
 probe or another worktree's framework deploy each cost a SHARD its login. On a
 40-session stone the same arithmetic leaves 38 and the problem does not arise.
 
-So the lock is necessary and not sufficient. `run_tests.sh` asks the stone for
+On a tight budget the lock is necessary and not sufficient. `run_tests.sh` asks the stone for
 its free-slot count immediately before launching shards
 (`tests/scripts/checkSessionBudget.gs`) and refuses rather than launching a run
 it cannot finish; `GRAIL_ALLOW_TIGHT_SESSIONS=1` overrides, and a run made that
