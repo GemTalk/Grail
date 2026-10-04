@@ -580,7 +580,6 @@ for _name in ("transaction", "commit", "abort", "refresh", "needs_commit",
               "_commit_or_raise"):
     getattr(_self, _name)
 _precached = _gemstone.sessionDict
-_precached = _gemstone.___commitOrRefusal___
 del _self, _name, _sys
 
 # The submodules import here so one ``import gemdb`` reaches all of the

@@ -391,7 +391,7 @@ ___tryCommit___
 		ifFalse: [outcome]
 %
 
-category: 'Grail-Continuations'
+category: 'Grail-Built-in Functions'
 method: gemstone
 ___commitOrRefusal___
 	"Commit, answering True; False on a conflict; or, when GemStone REFUSED
@@ -402,7 +402,14 @@ ___commitOrRefusal___
 	a refusal without the abort it needs.  gemdb.commit() and
 	gemdb.transaction() use this (docs/App_Namespaces_Design.md §6.2).
 	System commit here is the env-1 one (System.gs): the D4 flush, then
-	commitTransaction."
+	commitTransaction.
+
+	Filed under a FUNCTION category on purpose.  An attribute read of a
+	unary module method PERFORMS it unless its category is one of those
+	(Object >> the unary branch of the module attribute read), and only
+	the literal ``gemstone.f()'' compiles to a direct send.  gemdb calls
+	this through its ``_gemstone'' alias, where a perform-on-read would
+	commit at the read and then call the Boolean."
 
 	^ [ System commit ]
 		@env0:on: TransactionError
