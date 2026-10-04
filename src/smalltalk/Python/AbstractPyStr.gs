@@ -87,6 +87,14 @@ ___isPyStr___
 	^ true
 %
 
+category: 'Grail-Testing'
+method: AbstractPyStr
+___reprResult___
+	"A str subclass is a valid __repr__ result -- see object >> ___reprResult___."
+
+	^ self
+%
+
 category: 'Grail-Accessors'
 method: AbstractPyStr
 ___pyCodePoints___

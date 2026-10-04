@@ -753,9 +753,9 @@ __repr__
 		"NO cascade here: a cascade continuation after an @env0: send is
 		compiled in the METHOD's environment (env-1) and MNUs on the
 		kernel WriteStream."
-		stream @env0:nextPutAll: (k __repr__) @env0:asString.
+		stream @env0:nextPutAll: (k __repr__ @env0:___reprResult___) @env0:asString.
 		stream @env0:nextPutAll: ': '.
-		stream @env0:nextPutAll: (v __repr__) @env0:asString
+		stream @env0:nextPutAll: (v __repr__ @env0:___reprResult___) @env0:asString
 	].
 	stream @env0:nextPutAll: '}'.
 	^ stream @env0:contents
