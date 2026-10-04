@@ -678,6 +678,90 @@ cannot be caught from Python.
 **Ask.** A compiler mode where an undefined symbol compiles to a runtime-raising
 send instead of failing the whole compilation unit.
 
+### 1.8 Refuse session-bound objects at commit, and let the session retry — Small to Medium
+
+GsSocket, GsFile, CPointer and CByteArray are ordinary persistent classes, but
+their C-side state does not survive the session. So a commit that reaches one
+**succeeds**, and the failure arrives in the next session, as an error Python
+cannot catch. Measured on 4.0 (2026-10-04) by storing each object in a
+persistent root, committing, and using it from a fresh session:
+
+* `socket.socket()` (fresh, listening or connected) and `open(path)` (read or
+  write): any use raises ImproperOperation 2364, *"… has lost that transient
+  state"*.
+* `ssl.SSLContext`: *"arg 1 has NULL CData"*.
+* Each ended the Python program; even `except BaseException` did not catch
+  it. Full table: `docs/App_Namespaces_Design.md` §6.0.
+
+GemDB's goal is that an application's globals simply persist, so storing a
+connection object in one is an ordinary mistake, and today the program pays
+for it in a later session, far from the line that caused it.
+
+**The kernel already has the mechanism.** `Behavior >> instancesNonPersistent`
+reads format bit `16r800`; `Class >> _makeInstancesNonPersistent` sets it
+(`KERNEL: Filein1A/Class.extension.st`); `image/GciLibraryA.gs` marks the
+generated GciLibrary class through `ClassOrganizer >> makeInstancesNonPersistent:`.
+Semaphore carries the bit, which is why a commit that reaches a Python
+generator (a GsProcess parked on a Semaphore) is refused:
+
+* TransactionError 2407 (`#rtErrObjIsNp`), resumable and trappable in
+  Smalltalk;
+* `gsArgs` is `{ theObject. 'cannot be committed, instances of its class are
+  non-persistent' }`, and arg 1 is the offending object itself
+  (`KERNEL: Filein1A/TransactionError.extension.st >> asString`; identity
+  checked);
+* the commit already visits every new object to promote it, so the check costs
+  a commit that succeeds nothing.
+
+Grail could check in Python instead, walking from `System _writtenObjects` into
+the objects a commit would make persistent. Measured at about 0.75 µs per new
+object (1.25M new objects: 0.92 s), on every commit, to repeat a walk the
+kernel already does. A cheaper per-transaction flag ("did this transaction
+create a socket?") does not work: the store does the damage, not the creation,
+and a server's listening socket and log file live across every commit it makes.
+
+**Census.** `listInstances:` plus `findReferencePathToObject:` on gs40, a
+development extent several users install Grail into: the only **reachable**
+committed instances of these four classes are 179 CPointers, **every one held
+by an SrePattern**. (The rest, 3 GsSocket, 3 GsFile, 1 CByteArray and 8
+CPointer, were unreachable leftovers of the measurement above, awaiting
+collection.) So marking GsSocket and GsFile would refuse nothing Grail commits
+today; marking CPointer would refuse every committed regex.
+
+**Ask (a) — Small.** Mark **GsSocket and GsFile** (and their subclasses:
+GsSecureSocket, …) `instancesNonPersistent`. That is a kernel decision rather
+than one an application should take: the bit is extent-wide, needs privilege
+on kernel classes, and changes behavior for every user of the repository.
+
+**Ask (b) — Medium.** The same for **CPointer and CByteArray**, with a way for
+a holder that can rebuild its pointer to keep one. SrePattern keeps its
+`compileArgs` and recompiles on first use, so it needs its pointer **not
+committed**, rather than refused: a slot that commits as nil, or a pointer
+class that does the same. Grail's deploy audit special-cases it by name today
+(`importlib >> ___deployCheck___:`).
+
+**Ask (c) — Medium, and the one that matters most to an application.** Let the
+session **fix and retry** after a 2407. Today a refused commit cannot be
+repeated even once the offending object is removed. Measured on 4.0: 2407,
+then remove the Semaphore, then `System commitTransaction` gives **2403
+`#rtErrOmFlushFailed`**; Grail's `gemstone >> ___tryCommit___` records **2424
+`#rtErrCommitDisallowedUntilAbort`** through `System commit`
+(`src/smalltalk/Python/gemstone.gs:377`). Only an abort clears it, and the
+abort discards the whole transaction. The refusal is detected partway through
+the flush. Detecting non-persistent objects **before** anything is flushed
+would leave the transaction committable, so the program could drop the
+socket, or declare it transient, and commit the rest of its work.
+
+**Ask (d) — Small.** Report the **referrer** too, the committed or new object
+whose slot holds the refused one. Arg 1 names *what* cannot be committed;
+naming *where* it is held today needs a heap walk after the refusal. One
+referrer is enough for Grail to name the path in Python terms (keys,
+attribute names), which is what the error message should say.
+
+With (a) and (c), Grail needs no commit-time walk at all: `gemdb.commit()`
+catches the 2407 (it goes through `___tryCommit___`) and raises a Python
+exception the program can handle.
+
 ---
 
 ## 2. Representation ceilings
