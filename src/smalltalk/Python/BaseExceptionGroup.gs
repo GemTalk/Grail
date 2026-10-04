@@ -101,23 +101,31 @@ __str__
 category: 'Grail-Exception Groups'
 method: BaseExceptionGroup
 derive: anExceptionSeq
-	"``eg.derive(excs)'' -- PEP 654: a NEW group of the same kind holding
-	excs, keeping this group's message.
+	"``eg.derive(excs)'' -- PEP 654: a NEW group holding excs, keeping this
+	group's message.
 
-	The hook subclasses override to carry their own extra state across a
-	split.  split/subgroup go through it rather than constructing
-	directly, so a subclass survives the operation as its own type."
+	The hook subclasses override to carry their own type and state across a
+	split; split/subgroup go through it rather than constructing directly.
+	The DEFAULT is CPython's ``BaseExceptionGroup(self.message, excs)'' --
+	not ``type(self)(...)'' -- so it narrows like the constructor: splitting
+	the KeyboardInterrupt-like leaves out of a BaseExceptionGroup leaves an
+	ExceptionGroup, which ``except ExceptionGroup'' (and test_contextlib's
+	suppress) must catch.  Building ``self class'' kept it a
+	BaseExceptionGroup, which escaped every such handler.  The same rule
+	means a subclass that does not override derive comes back as a plain
+	(Base)ExceptionGroup, as CPython documents."
 
 	"___new___ then ___args___:, the same two steps every raise path uses --
 	there is no one-shot constructor taking the args tuple."
-	| inst |
-	inst := self @env0:class ___new___.
+	| groupArgs inst |
 	"A LIST, not a tuple: CPython keeps args[1] as whatever was passed, and
 	a group is written ``ExceptionGroup('eg', [exc])'', so repr() shows
 	brackets.  ``exceptions'' converts to a tuple on read, which is the
 	other half of the same CPython asymmetry."
-	inst ___args___: (Array @env0:with: self message
-		with: (list @env0:withAll: anExceptionSeq @env0:asArray)).
+	groupArgs := Array @env0:with: self message
+		with: (list @env0:withAll: anExceptionSeq @env0:asArray).
+	inst := (BaseExceptionGroup ___classForArgs___: groupArgs) ___new___.
+	inst ___args___: groupArgs.
 	^ inst
 %
 
