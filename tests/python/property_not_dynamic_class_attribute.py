@@ -151,6 +151,18 @@ r['dca_is_enum_property'] = repr(types.DynamicClassAttribute is _enum.property)
 r['decorated_pydoc_kind'] = repr(_kind(pydoc.classify_class_attrs, HasDecoratedProp, 'q'))
 r['decorated_inspect_kind'] = repr(_kind(inspect.classify_class_attrs, HasDecoratedProp, 'q'))
 
+# ...but only the BUILTIN property.  ``@enum.property def e'' compiles to the same
+# accessors, and CPython's __dict__ holds an enum.property there, which is not a
+# ``property'' -- Enum.__dir__ keeps or drops a name on exactly that test.
+class HasEnumProp:
+    @_enum.property
+    def e(self):
+        return 1
+
+
+r['enum_property_dict_entry_is_not_a_property'] = repr(
+    isinstance(HasEnumProp.__dict__['e'], property))
+
 
 EXPECTED = {
     'dca_is_property': repr(False),
@@ -180,6 +192,7 @@ EXPECTED = {
     'class_access': repr('AttributeError'),
     'decorated_pydoc_kind': repr('readonly property'),
     'decorated_inspect_kind': repr('property'),
+    'enum_property_dict_entry_is_not_a_property': repr(False),
 }
 
 GRAIL_ONLY = {

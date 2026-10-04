@@ -224,4 +224,6 @@ testRecordedGapsStillHold
 	self assert: (self resultAt: 'dca_is_enum_property') asString equals: 'True'.
 	self assert: (self resultAt: 'decorated_pydoc_kind') asString equals: '''readonly property'''.
 	self assert: (self resultAt: 'decorated_inspect_kind') asString equals: '''property'''.
+	"Only the BUILTIN property is entered (___grailBuiltinPropertyNames___)."
+	self assert: (self resultAt: 'enum_property_dict_entry_is_not_a_property') asString equals: 'False'.
 %
