@@ -6391,11 +6391,47 @@ ___instanceClassAttrGet___: aValue
 	predicate already leaves a builtin's function (no __file__) and a bound
 	method unbound, as CPython does.  Meanwhile ``class C: f = lambda self: 1''
 	made ``C().f()'' a missing-argument TypeError, and ``g = outer'' passed the
-	first ARGUMENT as self."
+	first ARGUMENT as self.
 
+	EXCEPT a function of Grail's OWN stdlib (___grailMayStandInForABuiltin___:).
+	``__file__'' is how the predicate tells CPython's builtins from Python
+	functions, and Grail implements in Python much that CPython implements in
+	C: operator.add, threading.Lock.  Stored in a class body they must not bind
+	-- glob's ``concat_path = operator.add'', Flask's lock attributes -- so that
+	case keeps the unbound read it always had."
+
+	(self ___grailMayStandInForABuiltin___: aValue)
+		ifTrue: [^ self ___descriptorGet___: aValue].
 	(self ___isDescriptorCallable___: aValue)
 		ifTrue: [^ MethodBinding instance: self callable: aValue].
 	^ self ___descriptorGet___: aValue
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailMayStandInForABuiltin___: aValue
+	"Whether aValue is a top-level function of a module in Grail's ported stdlib
+	-- one that may be Grail's Python implementation of what CPython provides as
+	a C builtin, which is no descriptor.  operator.add is a function here and a
+	builtin_function_or_method there; so are threading.Lock and many more.
+
+	Grail cannot tell which of its stdlib functions are builtins in CPython, so
+	all of them answer true; the cost is that a stdlib function CPython writes
+	in Python (textwrap.dedent) does not bind when assigned in a class body,
+	which nothing does on purpose.  CPython's own TEST modules are excepted:
+	they are pure Python there too.  Matched on the path segment, so it holds
+	wherever the checkout lives."
+
+	| rcvr file |
+	(aValue isKindOf: BoundMethod) ifFalse: [^ false].
+	rcvr := aValue @env0:receiver.
+	(rcvr isKindOf: module) ifFalse: [^ false].
+	file := rcvr @env0:dynamicInstVarAt: #'__file__'.
+	(file isKindOf: CharacterCollection) ifFalse: [^ false].
+	file := file @env0:asString.
+	((file @env0:indexOfSubCollection: '/src/python/stdlib/') @env0:= 0)
+		ifTrue: [^ false].
+	^ (file @env0:indexOfSubCollection: '/src/python/stdlib/test/') @env0:= 0
 %
 
 category: 'Grail-Convenience Methods - Attribute'

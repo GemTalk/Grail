@@ -78,9 +78,12 @@ category: 'Grail-Tests'
 method: ClassBodyCallableBindsTestCase
 testWhatCPythonLeavesUnboundStaysUnbound
 	"A staticmethod, a builtin function and a bound method are not function
-	descriptors; ElementTree's iterparse stores a generator's bound __next__."
+	descriptors; ElementTree's iterparse stores a generator's bound __next__.
+	A Grail stdlib function may stand in for a C builtin
+	(object >> ___grailMayStandInForABuiltin___:)."
 
 	self assertAll: #('staticmethod_does_not_bind' 'builtin_does_not_bind'
+		'stdlib_builtin_does_not_bind'
 		'bound_method_does_not_rebind' 'data_is_data'
 		'bound_dunder_next_does_not_rebind')
 %
