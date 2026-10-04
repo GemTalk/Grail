@@ -76,6 +76,10 @@ class RLock:
             self._owner = None
             self._block.release()
 
+    def _is_owned(self):
+        # CPython's private predicate; Condition and test_contextlib use it.
+        return self._owner == get_ident()
+
     def __enter__(self):
         self.acquire()
         return self
@@ -391,6 +395,17 @@ class Condition:
 
     def release(self):
         self._lock.release()
+
+    def _is_owned(self):
+        # As CPython: ask the lock when it can say (RLock), otherwise probe
+        # it -- a lock we can take without blocking is not held by anyone.
+        is_owned = getattr(self._lock, "_is_owned", None)
+        if is_owned is not None:
+            return is_owned()
+        if self._lock.acquire(False):
+            self._lock.release()
+            return False
+        return True
 
     def __enter__(self):
         self.acquire()

@@ -1,0 +1,6 @@
+In CPython this directory holds the zip/tar fixtures for test_zipfile,
+test_tarfile and friends.  None of those is vendored here yet, so Grail's
+copy carries only this README: test_contextlib's TestChdir needs the
+directory to exist (it chdir()s into it and back), and git does not track
+an empty one.  Vendor the archives from CPython's Lib/test/archivetestdata
+alongside whichever archive test first needs them.

@@ -57,71 +57,6 @@ class _GeneratorContextManagerBase:
         return self.__class__(self.func, self.args, self.kwds)
 
 
-class _GeneratorContextManager(_GeneratorContextManagerBase):
-    """Wraps a generator that has yielded exactly once.  __enter__
-    advances to the yield and returns the yielded value; __exit__
-    advances past the yield (or throws an exception in) to run any
-    cleanup code.
-
-    The name is CPython's, and so is the (func, args, kwds) constructor:
-    code that subclasses this — test_with's MockContextManager does, and
-    calls the unbound __enter__/__exit__ on itself — needs both.  Grail
-    called it _GeneratorCM and took an already-built generator, which was
-    private-in-practice but not importable under the documented name."""
-
-    def __enter__(self):
-        # CPython also deletes self.args/kwds/func here to drop references
-        # to the arguments; keeping them is strictly more permissive and
-        # leaves _recreate_cm usable after a first entry.
-        try:
-            return next(self.gen)
-        except StopIteration:
-            raise RuntimeError("generator didn't yield") from None
-
-    def __exit__(self, typ, value, traceback):
-        if typ is None:
-            try:
-                next(self.gen)
-            except StopIteration:
-                return False
-            else:
-                raise RuntimeError("generator didn't stop")
-        else:
-            if value is None:
-                # Only the exception type was supplied; the generator has
-                # to be thrown an instance.
-                value = typ()
-            try:
-                self.gen.throw(value)
-            except StopIteration as exc:
-                # Suppress StopIteration *unless* it is the exception we
-                # threw in: __exit__() must not swallow that one.
-                return exc is not value
-            except RuntimeError as exc:
-                # Don't re-raise the passed-in exception.
-                if exc is value:
-                    return False
-                # Avoid suppressing if a StopIteration exception was passed
-                # to throw() and later wrapped into a RuntimeError (see
-                # PEP 479 / bpo-27122).
-                if isinstance(value, StopIteration) and exc.__cause__ is value:
-                    return False
-                raise
-            except BaseException as exc:
-                # Only re-raise if it's *not* the exception that was passed
-                # to throw(): the generator re-raising it means it did not
-                # handle it, so __exit__ must not suppress.
-                if exc is not value:
-                    raise
-                return False
-            raise RuntimeError("generator didn't stop after throw()")
-
-
-# Grail's former private name for the above, kept so any in-tree caller
-# that predates the rename keeps working.
-_GeneratorCM = _GeneratorContextManager
-
-
 def contextmanager(func):
     """Decorator: turn a single-yield generator function into a
     context-manager factory."""
@@ -199,6 +134,13 @@ class suppress:
             # (and Grail doesn't expose issubclass as a builtin yet).
             if isinstance(exc, et):
                 return True
+        # As CPython 3.12+: from a group, suppress just the matching leaves
+        # and re-raise what is left, or everything if nothing is.
+        if isinstance(exc, BaseExceptionGroup):
+            match, rest = exc.split(self.exceptions)
+            if rest is None:
+                return True
+            raise rest
         return False
 
 
@@ -672,6 +614,83 @@ class AsyncExitStack(_BaseExitStack, AbstractAsyncContextManager):
         return received_exc and suppressed_exc
 
 
+class _GeneratorContextManager(
+    _GeneratorContextManagerBase,
+    AbstractContextManager,
+    ContextDecorator,
+):
+    """Wraps a generator that has yielded exactly once.  __enter__
+    advances to the yield and returns the yielded value; __exit__
+    advances past the yield (or throws an exception in) to run any
+    cleanup code.
+
+    The name is CPython's, and so is the (func, args, kwds) constructor:
+    code that subclasses this — test_with's MockContextManager does, and
+    calls the unbound __enter__/__exit__ on itself — needs both.  Grail
+    called it _GeneratorCM and took an already-built generator, which was
+    private-in-practice but not importable under the documented name.
+
+    The bases are CPython's too, which is why this class sits below the
+    ABCs rather than beside @contextmanager.  Without ContextDecorator a
+    ``@woohoo()``-decorated function met "'_GeneratorContextManager' object
+    is not callable"; the async twin already had its three bases."""
+
+    def __enter__(self):
+        # As CPython: drop the references to the arguments.  Only the
+        # never-entered instance a decorator holds needs them, to rebuild
+        # itself in _recreate_cm; an entered one is single-use, and keeping
+        # them pinned the call's arguments for the life of the block
+        # (test_nokeepref).
+        del self.args, self.kwds, self.func
+        try:
+            return next(self.gen)
+        except StopIteration:
+            raise RuntimeError("generator didn't yield") from None
+
+    def __exit__(self, typ, value, traceback):
+        if typ is None:
+            try:
+                next(self.gen)
+            except StopIteration:
+                return False
+            else:
+                raise RuntimeError("generator didn't stop")
+        else:
+            if value is None:
+                # Only the exception type was supplied; the generator has
+                # to be thrown an instance.
+                value = typ()
+            try:
+                self.gen.throw(value)
+            except StopIteration as exc:
+                # Suppress StopIteration *unless* it is the exception we
+                # threw in: __exit__() must not swallow that one.
+                return exc is not value
+            except RuntimeError as exc:
+                # Don't re-raise the passed-in exception.
+                if exc is value:
+                    return False
+                # Avoid suppressing if a StopIteration exception was passed
+                # to throw() and later wrapped into a RuntimeError (see
+                # PEP 479 / bpo-27122).
+                if isinstance(value, StopIteration) and exc.__cause__ is value:
+                    return False
+                raise
+            except BaseException as exc:
+                # Only re-raise if it's *not* the exception that was passed
+                # to throw(): the generator re-raising it means it did not
+                # handle it, so __exit__ must not suppress.
+                if exc is not value:
+                    raise
+                return False
+            raise RuntimeError("generator didn't stop after throw()")
+
+
+# Grail's former private name for the above, kept so any in-tree caller
+# that predates the rename keeps working.
+_GeneratorCM = _GeneratorContextManager
+
+
 class _AsyncGeneratorContextManager(
     _GeneratorContextManagerBase,
     AbstractAsyncContextManager,
@@ -680,10 +699,9 @@ class _AsyncGeneratorContextManager(
     """Helper for the @asynccontextmanager decorator."""
 
     async def __aenter__(self):
-        # CPython deletes self.args/kwds/func here.  Grail's synchronous
-        # __enter__ keeps them on purpose -- strictly more permissive, and
-        # it leaves _recreate_cm usable after a first entry -- so this
-        # keeps them too rather than having the two halves disagree.
+        # Drop the argument references, as CPython and the synchronous
+        # __enter__ do: an entered instance cannot be recreated anyway.
+        del self.args, self.kwds, self.func
         try:
             return await anext(self.gen)
         except StopAsyncIteration:
@@ -761,8 +779,26 @@ class _AsyncClosingContext:
         return False
 
 
-def chdir(path):
-    raise NotImplementedError("contextlib.chdir is not supported in Grail")
+class chdir(AbstractContextManager):
+    """Non thread-safe context manager to change the current working directory.
+
+    CPython's.  It raised NotImplementedError, but os.chdir/os.getcwd are
+    native in Grail, so there was nothing missing beneath it.  ``os`` is
+    imported in the methods, for the deploy-time reason in the NOTE at the
+    top of this file."""
+
+    def __init__(self, path):
+        self.path = path
+        self._old_cwd = []
+
+    def __enter__(self):
+        import os
+        self._old_cwd.append(os.getcwd())
+        os.chdir(self.path)
+
+    def __exit__(self, *excinfo):
+        import os
+        os.chdir(self._old_cwd.pop())
 
 
 class _RedirectStream:
