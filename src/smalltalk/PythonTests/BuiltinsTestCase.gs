@@ -1572,7 +1572,7 @@ testBuiltinExceptionsInBuiltinsNamespace
 	name), shows up in vars()/dir(builtins), preserves the subclass hierarchy, and
 	reports __module__ == 'builtins'.  builtins>>initialize populates them from the
 	curated object>>___pythonBuiltinExceptionNames___ list; non-builtin exceptions
-	that share the Python compile dict (StatisticsError->statistics etc.) are
+	that share the Python compile dict (JSONDecodeError->json.decoder etc.) are
 	excluded."
 	self assert: (self eval: '__import__("builtins").ValueError is ValueError')
 		equals: true.
@@ -1597,8 +1597,10 @@ testBuiltinExceptionsInBuiltinsNamespace
 
 	"A non-builtin exception that lives in the Python dict is NOT exposed in
 	builtins and is NOT tagged 'builtins'."
-	self assert: (self eval: '"StatisticsError" in dir(__import__("builtins"))')
+	self assert: (self eval: '"JSONDecodeError" in dir(__import__("builtins"))')
 		equals: false.
+	self assert: (self eval: '__import__("json").JSONDecodeError.__module__ != "builtins"')
+		equals: true.
 
 	"A user exception subclass keeps its own module, never 'builtins'."
 	self assert: (self eval:

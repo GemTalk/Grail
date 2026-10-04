@@ -340,7 +340,6 @@ run
 	at: #'RuntimeWarning' put: nil;
 	at: #'JSONDecodeError' put: nil;
 	at: #'json_decoder' put: nil;
-	at: #'StatisticsError' put: nil;
 	at: #'StopAsyncIteration' put: nil;
 	at: #'PythonBreak' put: nil;
 	at: #'PythonContinue' put: nil;
@@ -502,7 +501,6 @@ run
 	at: #'set' put: nil;
 	at: #'set_iterator' put: nil;
 	at: #'slice' put: nil;
-	at: #'statistics' put: nil;
 	at: #'str_iterator' put: nil;
 	at: #'string' put: nil;
 	at: #'string_formatter' put: nil;
@@ -1211,6 +1209,7 @@ run
 	at: #'NotImplementedErrorTestCase' put: nil;
 	at: #'NotImplementedSingletonTestCase' put: nil;
 	at: #'NumbersTestCase' put: nil;
+	at: #'NumericSubclassOperandsTestCase' put: nil;
 	at: #'OSErrorTestCase' put: nil;
 	at: #'ObjectNewArgsAndSurrogateWarningsTestCase' put: nil;
 	at: #'ObjectTestCase' put: nil;
@@ -1731,7 +1730,6 @@ input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
 input src/smalltalk/Python/os_path.gs
 input src/smalltalk/Python/random.gs
-input src/smalltalk/Python/statistics.gs
 input src/smalltalk/Python/string.gs
 input src/smalltalk/Python/html_entities.gs
 input src/smalltalk/Python/unicode_names.gs
@@ -1801,7 +1799,6 @@ input src/smalltalk/Python/PythonFinalizationError.gs
 input src/smalltalk/Python/IndentationError.gs
 input src/smalltalk/Python/IncompleteInputError.gs
 input src/smalltalk/Python/JSONDecodeError.gs
-input src/smalltalk/Python/StatisticsError.gs
 input src/smalltalk/Python/UnicodeError.gs
 input src/smalltalk/Python/BytesWarning.gs
 input src/smalltalk/Python/DeprecationWarning.gs
@@ -2667,6 +2664,7 @@ input src/smalltalk/PythonTests/NotADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedErrorTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
+input src/smalltalk/PythonTests/NumericSubclassOperandsTestCase.gs
 input src/smalltalk/PythonTests/ObjectNewArgsAndSurrogateWarningsTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OpenCodecsAndDescriptorsTestCase.gs
