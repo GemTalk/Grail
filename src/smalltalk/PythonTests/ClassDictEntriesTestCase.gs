@@ -91,5 +91,7 @@ testTheGetsetDescriptor
 
 	self assertAll: #('getset_type' 'getset_repr' 'getset_attrs' 'getset_reads_vars'
 		'getset_on_the_class_is_itself' 'weakref_reads_none_without_references'
-		'the_same_object_each_time' 'is_a_data_descriptor')
+		'the_same_object_each_time' 'is_a_data_descriptor'
+		'weakref_read_off_the_class' 'weakref_read_off_an_instance'
+		'every_name_dir_lists_is_gettable')
 %

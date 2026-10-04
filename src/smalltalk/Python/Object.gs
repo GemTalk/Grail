@@ -8146,6 +8146,29 @@ ___grailProvidesInstanceSlot___: aName
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___grailWeakrefAttribute___
+	"What ``x.__weakref__'' answers, or nil to let the ordinary read decide:
+	the introducing class's getset_descriptor when the receiver is a class,
+	None when it is an instance of one; nil when nothing in the MRO introduces
+	the storage."
+
+	| cls mro |
+	cls := (self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class].
+	mro := [cls ___pyAttrLoad___: #'__mro__']
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: #()].
+	mro @env0:do: [:c |
+		(c ___grailIsPythonClass___
+			and: [c ___grailIntroducesInstanceSlot___: '__weakref__']) ifTrue: [
+				^ (self @env0:isKindOf: Behavior)
+					ifTrue: [c ___grailGetSetDescriptor___: '__weakref__']
+					ifFalse: [None]]].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___grailGetSetDescriptor___: aName
 	"The ``getset_descriptor'' this class's __dict__ lists under aName, built
 	once per class and session so ``C.__dict__['__dict__'] is
@@ -9720,6 +9743,20 @@ ___pyAttrLoad___: aSym
 					@env0:, ''' has no attribute ''''']
 				ifFalse: ['''' @env0:, self ___pyTypeNameForError___ @env0:asString
 					@env0:, ''' object has no attribute ''''']])].
+	"``__weakref__'': CPython's getset_descriptor, which a class's __dict__ now
+	lists (___grailGetSetDescriptor___:) and dir() therefore reports.  Read
+	off a class it answers that descriptor, inherited from the class that
+	introduced the storage; read off an instance it answers None, the value
+	of an object no weak reference points at -- Grail keeps no per-instance
+	list to answer the first one from.  Without this, dir() listed a name
+	every getattr of refused, and typing's NamedTuple walk -- getattr over
+	dir() -- failed to import (``type object 'NTC' has no attribute
+	'__weakref__'''); __dict__ needs nothing, the read was always answered.
+	Tested by SIZE first so the common read pays one comparison."
+	((aSym @env0:size) @env0:= 11 and: [aSym @env0:asString @env0:= '__weakref__']) ifTrue: [
+		| w |
+		w := self ___grailWeakrefAttribute___.
+		w == nil ifFalse: [^ w]].
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any

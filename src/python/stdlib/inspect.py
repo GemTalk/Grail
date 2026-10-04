@@ -1176,8 +1176,13 @@ def _check_class(klass, attr, cache):
 
 def _shadowed_dict(klass, cache):
     # A class body that binds ``__dict__`` itself (a property, say) hides the
-    # instance dict; CPython's check also excludes the ordinary getset
-    # descriptor, which Grail's class dict never lists.
+    # instance dict.  The ordinary getset descriptor a class's own __dict__
+    # lists for the storage it introduces does not, and CPython's check
+    # excludes it exactly so: its type, its name, its own class.  Grail's class
+    # dict lists that descriptor now; without the exclusion every such class
+    # read as shadowed, getattr_static never consulted an instance dict, and
+    # every runtime-checkable Protocol with a data member refused an instance
+    # that had it.
     for entry in _static_getmro(klass):
         # ``type`` and ``object`` list their own ``__dict__`` -- the getset
         # descriptor CPython's check excludes by type -- so an entry on one
@@ -1188,7 +1193,11 @@ def _shadowed_dict(klass, cache):
             continue
         d = _getattr_static_class_dict(entry, cache)
         if '__dict__' in d:
-            return d['__dict__']
+            class_dict = d['__dict__']
+            if not (type(class_dict) is _types.GetSetDescriptorType
+                    and class_dict.__name__ == '__dict__'
+                    and class_dict.__objclass__ is entry):
+                return class_dict
     return _sentinel
 
 

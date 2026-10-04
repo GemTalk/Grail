@@ -156,6 +156,11 @@ check('getset_reads_vars', _d.__get__(_obj, Plain), {'b': 1, 'a': 2, 'z': 3})
 check('getset_on_the_class_is_itself', _d.__get__(None, Plain) is _d, True)
 check('weakref_reads_none_without_references', _w.__get__(_obj, Plain), None)
 check('the_same_object_each_time', Plain.__dict__['__dict__'] is Plain.__dict__['__dict__'], True)
+check('weakref_read_off_the_class', [Plain.__weakref__ is _w, Sub.__weakref__ is _w], [True, True])
+check('weakref_read_off_an_instance', [_obj.__weakref__, Sub().__weakref__], [None, None])
+check('every_name_dir_lists_is_gettable',
+      [n for n in dir(Plain) if not hasattr(Plain, n)] + [n for n in dir(_obj) if not hasattr(_obj, n)],
+      [])
 check('is_a_data_descriptor', [hasattr(type(_d), '__set__'), hasattr(type(_d), '__delete__')],
       [True, True])
 
