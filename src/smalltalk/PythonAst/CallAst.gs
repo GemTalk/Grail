@@ -921,7 +921,7 @@ attributeCallFastPathSelector
 	``m.f'' emits -- so the two collapse, and whether that is right depends
 	entirely on what the Smalltalk method DOES:
 
-	  * a FUNCTION (os.getcwd, hashlib.md5, random.random) performs the work
+	  * a FUNCTION (os.getcwd, hashlib.md5, time.time) performs the work
 	    and answers the result, so performing it IS calling it.  The collapse
 	    is harmless and this path stays;
 	  * a VALUE ACCESSOR answers something the caller then means to call, and

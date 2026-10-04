@@ -496,7 +496,8 @@ run
 	at: #'os' put: nil;
 	at: #'os_path' put: nil;
 	at: #'os_PathLike' put: nil;
-	at: #'random' put: nil;
+	at: #'_random' put: nil;
+	at: #'PyMersenneTwister' put: nil;
 	at: #'range_iterator' put: nil;
 	at: #'set' put: nil;
 	at: #'set_iterator' put: nil;
@@ -1729,7 +1730,7 @@ input src/smalltalk/Python/math.gs
 input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
 input src/smalltalk/Python/os_path.gs
-input src/smalltalk/Python/random.gs
+input src/smalltalk/Python/_random_module.gs
 input src/smalltalk/Python/string.gs
 input src/smalltalk/Python/html_entities.gs
 input src/smalltalk/Python/unicode_names.gs

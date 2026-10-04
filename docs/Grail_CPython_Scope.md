@@ -280,7 +280,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 |  | `test_numeric_tower` | Numeric coercion tower (language/numbers). |
 | ✅ | `test_operator` | operator — core (in harness). |
 |  | `test_ordered_dict` | OrderedDict. |
-|  | `test_random` | random — Mersenne Twister PRNG. |
+| ❗ | `test_random` | random — Mersenne Twister PRNG. CPython's random.py over a native `_random`; wired 2026-10-04 at 114t 0F/15E. |
 | ✅ | `test_re` | re — core (in harness). |
 | ❗ | `test_statistics` | statistics — pure Python. |
 |  | `test_string` | string module (vendored) — Formatter/Template (pure). |
@@ -834,7 +834,6 @@ tranche:
 | `test_array` | 890 | `array._array_reconstructor` is missing. |
 | `test_ordered_dict` | 295 | The pure-Python `OrderedDict` import answers `None` (`'NoneType' object has no attribute 'OrderedDict'`). |
 | `test_types` | 129 | `test.support.no_rerun`. |
-| `test_random` | 114 | `random.SystemRandom`. |
 | `test_exceptions` | 107 | `test.support.SuppressCrashReport`. |
 | `test_str` | 138 | No `_string` module. |
 
