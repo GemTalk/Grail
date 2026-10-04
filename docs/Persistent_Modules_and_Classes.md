@@ -624,8 +624,8 @@ on the gem's host, so symlinks, `/tmp` against `/private/tmp`, and relative
 - the same source at another path, such as another checkout or another host.
   It is the same module, so it binds or rebuilds as usual;
 - a module stale only because a dependency changed (its own hash is unchanged);
-- `__main__` outside an app, which is never deployed (#851). In an app it is
-  deployed, and a different top file is refused like any module (D11).
+- `__main__` outside a named namespace, which is never deployed (#851). In
+  one it is deployed, and a different top file is refused like any module (D11).
 
 No hostname is recorded. A client session's gem may run on any host, and the
 same application installed at the same path on several application servers is
@@ -646,26 +646,28 @@ The two ways past the refusal are commands, in `gemdb.modules`:
 
 `del models` is not an override: it unbinds a name, and the cache entry it
 does not touch is `sys.modules['models']`, whose deletion D6 already makes a
-raise. Giving each application its own namespace (`gemdb.set_app(name)`, D11)
+raise. Giving each application its own namespace (`gemdb.use_namespace(name)`, D11)
 is the general answer to two applications sharing a module name; this rule is
-what keeps the default namespace safe, and each app's.
+what keeps the default namespace safe, and each named one.
 Test: `tests/scripts/runModulePathTest.gs` (`module-source-path`).
 
-### D11. An app is a namespace of its own, and its `__main__` is persistent
+### D11. A named namespace holds a program's modules, and its `__main__` is persistent
 
-`gemdb.set_app(name)` (or `./grail --app NAME`, or `GEMDB_APP`) gives a program
-its own copy of every name-keyed registry, its own module-class dictionary, and
-a canonical `__main__` ([App_Namespaces_Design.md](App_Namespaces_Design.md)).
-Two departures follow, both only inside an app:
+`gemdb.use_namespace(name)` (or `./grail --namespace NAME`, or
+`GEMDB_NAMESPACE`) gives a program its own copy of every name-keyed registry,
+its own module-class dictionary, and a canonical `__main__`
+([App_Namespaces_Design.md](App_Namespaces_Design.md), which calls it an *app
+namespace*). Two departures follow, both only inside a named namespace:
 
 - **Where a module goes is decided by its file, not its name.** Grail's own
   sources (`src/python/`: the stdlib, vendored frameworks, `gemdb`) are deployed
   once in the shared base. Everything else, a venv's packages included, is
-  deployed in the app. So two apps can each deploy their own `models`, and D10
-  refuses a foreign file *within* an app rather than across all of them.
+  deployed in the namespace. So two namespaces can each deploy their own
+  `models`, and D10 refuses a foreign file *within* a namespace rather than
+  across all of them.
 - **`__main__` is a canonical module, and its globals are persistent.** This
   is the departure from #851, which keeps `__main__` session-local, and
-  outside an app it still is. In an app the top file runs every time, but over
+  outside a named namespace it still is. In one the top file runs every time, but over
   its committed instance: each run starts with the globals of the last
   commit, an assignment is a write, a failed commit keeps the session's
   changes, and an abort reloads the committed values. The top file's classes
@@ -680,16 +682,16 @@ Two departures follow, both only inside an app:
   - a module's PEP 649 `__annotate__` closure is kept when it is the same
     compiled block (`module >> ___storeAnnotate___:`).
 
-  `gemdb.root` in an app is a view of these globals.
+  `gemdb.root` in a named namespace is a view of these globals.
 
-`gemdb.admin.apps()` lists apps. `gemdb.admin.drop_app(name)` removes one
+`gemdb.admin.namespaces()` lists them. `gemdb.admin.drop_namespace(name)` removes one
 with everything deployed in it. It refuses, like `forget`, while instances of
 its classes remain. Tests: `tests/scripts/runAppNamespaceTest.gs`
 (`app-namespaces`) and `runAppMainTest.gs` (`app-main`).
 
 ### D12. `__transient__` keeps named module globals per session
 
-The mirror of D4. Where a module's globals are persistent (an app's top file,
+The mirror of D4. Where a module's globals are persistent (a named namespace's top file,
 a deployed module), `__transient__ = ["conn", "line"]` names the ones that are
 session state. They are:
 - never committed;

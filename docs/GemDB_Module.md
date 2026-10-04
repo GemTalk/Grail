@@ -25,14 +25,14 @@ gemdb.commit()              # explicit commit (interactive work)
 gemdb.abort()               # discard uncommitted changes, refresh the view
 gemdb.refresh()             # see others' commits; refuses if you have changes
 gemdb.needs_commit()        # does the session hold uncommitted changes?
-gemdb.set_app(name)         # run as an app: its modules get their own namespace
-gemdb.app()                 # the current app's name, or None
+gemdb.use_namespace(name)   # persistent globals; modules deployed apart from others'
+gemdb.namespace()           # the current namespace's name, or None
 gemdb.GemDBError            # base exception
 gemdb.ConflictError         # a commit lost the race; carries the live objects
 gemdb.PendingChangesError   # a block/refresh refused to run over pending work
 gemdb.SessionStateError     # GemStone refused a commit: it reaches a session-bound object
 
-gemdb.admin                 # repository administration, apps -- see below
+gemdb.admin                 # repository administration, namespaces -- see below
 gemdb.sessions              # who is connected -- see below
 ```
 
@@ -237,9 +237,9 @@ deliberate behaviors:
   first *write*; reads on an empty database answer emptiness without
   leaving anything to commit (which would otherwise trip the very entry
   check the transaction design depends on).
-* **In an app it is the app's globals.** With `gemdb.set_app`, the root is a
-  view of the app's top-file globals rather than `GemDBRoot`; see
-  `gemdb.set_app` below.
+* **In a named namespace it is that namespace's globals.** With
+  `gemdb.use_namespace`, the root is a view of the top file's globals rather
+  than `GemDBRoot`; see `gemdb.use_namespace` below.
 * **`repr` answers the first question.** `repr(gemdb.root)` prints the
   key names, not the contents — "what is in this database?" is the first
   thing everyone asks at the shell.
@@ -368,16 +368,17 @@ import gemdb.admin
 gemdb.admin.size()                     # {"bytes": ..., "free_bytes": ...}
 gemdb.admin.backup("/backups/mon.gz")  # .gz -> compressed, else plain
 gemdb.admin.garbage_collect()          # mark-for-collection; returns its report
-gemdb.admin.apps()                     # ["blog", "shop"] -- see gemdb.set_app
-gemdb.admin.drop_app("blog")           # remove an app and everything deployed in it
+gemdb.admin.namespaces()               # ["blog", "shop"] -- see gemdb.use_namespace
+gemdb.admin.drop_namespace("blog")     # remove a namespace and everything deployed in it
 ```
 
-`drop_app` refuses (`ValueError`, saying how many) while the repository holds
-instances of the app's classes, as `gemdb.modules.forget` does. That count
-includes what the app's own globals hold, which would go with it. So to retire
-an app: join it, unbind what its globals keep, commit, `garbage_collect()`,
-then `drop_app` from a session not in it. It also refuses the app the session
-is in, needs a clean transaction, and commits itself.
+`drop_namespace` refuses (`ValueError`, saying how many) while the repository
+holds instances of the namespace's classes, as `gemdb.modules.forget` does.
+That count includes what the namespace's own globals hold, which would go with
+it. So to retire a namespace: join it, unbind what its globals keep, commit,
+`garbage_collect()`, then `drop_namespace` from a session not in it. It also
+refuses the namespace the session is in, needs a clean transaction, and
+commits itself.
 
 `backup` and `garbage_collect` refuse (`PendingChangesError`) while the
 session has uncommitted changes — a backup covers only committed state,
@@ -505,38 +506,44 @@ scans the repository like `gemdb.schema.drop_class`, so it refuses on a dirty
 session, refuses (`ValueError`) while instances of the module's classes exist,
 and commits itself.
 
-### `gemdb.set_app` — one namespace per application
+### `gemdb.use_namespace` — your globals are the database
 
 ```python
 import gemdb
-gemdb.set_app("shop")    # first, before the app's own imports
-import models            # shop's models, whatever other apps call theirs
+gemdb.use_namespace("shop")   # first, before the program's own imports
+import models                 # shop's models, whatever other namespaces call theirs
 ```
 
-An app is a namespace of its own for the modules a program imports
-([App_Namespaces_Design.md](App_Namespaces_Design.md)). Two programs that each
-have a `models.py` can both be deployed, each with its own classes, where
-without apps the second import is refused (D10 above). **The file decides
-where a module goes, not its name:** the modules that ship with Grail (the
-standard library, the vendored frameworks, `gemdb` itself, all under
-`src/python/`) stay in the shared base every app uses, and anything else,
-a venv's packages included, belongs to the app. So an app's own `json.py` and
-the stdlib's `json` can both be deployed.
+A named namespace gives a program two things
+([App_Namespaces_Design.md](App_Namespaces_Design.md)): its top file's globals
+persist from run to run (below), and the modules it imports are deployed apart
+from every other program's. Two programs that each have a `models.py` can both
+be deployed, each with its own classes, where without namespaces the second
+import is refused (D10 above). **The file decides where a module goes, not its
+name:** the modules that ship with Grail (the standard library, the vendored
+frameworks, `gemdb` itself, all under `src/python/`) stay in the shared base
+every namespace uses, and anything else, a venv's packages included, belongs to
+the namespace. So a program's own `json.py` and the stdlib's `json` can both be
+deployed.
 
-`set_app` comes before the app's own imports. It raises `RuntimeError` once a
-module that would belong to the app is already imported (naming it), or when
-the session is already in a different app; the same name again does nothing.
-A new app is created in the current transaction and kept by the next commit,
-as an import is. `gemdb.app()` answers the current app's name, or `None`.
-`./grail --app shop app.py` and `GEMDB_APP=shop` choose the app before the
-script's first line.
+`use_namespace` comes before the program's own imports. It raises
+`RuntimeError` once a module that would belong to the namespace is already
+imported (naming it), or when the session is already in a different
+namespace; the same name again does nothing. A new namespace is created in the
+current transaction and kept by the next commit, as an import is.
+`gemdb.namespace()` answers the current namespace's name, or `None`.
+`./grail --namespace shop shop.py` and `GEMDB_NAMESPACE=shop` choose the
+namespace before the script's first line.
 
-**In an app, the top file's globals are the database.** The script an app runs
-as `__main__` is the app's canonical top file, and its globals are persistent,
-with GemStone's semantics:
+The name is deliberately not "app": Django, which Grail vendors, already has
+apps, and one GemDB namespace would hold several of them.
+
+**In a named namespace, the top file's globals are the database.** The script
+run as `__main__` is the namespace's canonical top file, and its globals are
+persistent, with GemStone's semantics:
 
 ```python
-import gemdb                        # run with ./grail --app shop shop.py
+import gemdb                        # run with ./grail --namespace shop shop.py
 __transient__ = ["conn"]            # session state: never committed
 
 conn = open_connection()            # rebound by every run
@@ -559,36 +566,37 @@ gemdb.commit()
 - **`__transient__` names the exceptions**: those globals are kept per
   session, never committed, left alone by an abort, and unbound in each new
   session, so the top file's own assignment rebinds them. It works in any
-  module, not only in an app. Outside an app, a module's globals stay
+  module, not only in a named namespace. Outside one, a module's globals stay
   per-session unless D4's `__persistent__` names them.
-- **`gemdb.root` in an app is a view of these globals**: `gemdb.root["orders"]`
-  is the global `orders`. Dunder names are left out of iteration. A session
-  that joins the app without running the top file (a worker, a shell) sees
-  the committed globals. Before the app's top file has run, the root reads
-  as empty and refuses writes.
-- **An app has one top file.** A different file run as `__main__` in the same
-  app is refused, as D10 refuses any module.
+- **`gemdb.root` in a named namespace is a view of these globals**:
+  `gemdb.root["orders"]` is the global `orders`. Dunder names are left out of
+  iteration. A session that joins the namespace without running the top file
+  (a worker, a shell) sees the committed globals. Before the top file has run,
+  the root reads as empty and refuses writes.
+- **A namespace has one top file.** A different file run as `__main__` in the
+  same namespace is refused, as D10 refuses any module.
 - **`Final` initializes once.** A module-level `app: Final = Flask(__name__)`
   (or `Final[T]`, or `typing.Final`) that finds its name already bound in
   persistent globals keeps the committed value and **does not evaluate the
   right-hand side**, like Clojure's `defonce`. So re-runs write nothing for it,
-  and several sessions starting the app cannot conflict on it. Where the
-  globals start empty (a first run, a session-local `__main__` outside an app,
-  every CPython run) the statement runs as written. This is the one departure
-  from CPython: the initializer is skipped on a re-run, which is the point.
+  and several sessions starting the program cannot conflict on it. Where the
+  globals start empty (a first run, a session-local `__main__` outside a named
+  namespace, every CPython run) the statement runs as written. This is the one
+  departure from CPython: the initializer is skipped on a re-run, which is the
+  point.
 
-**A first app, start to finish:**
+**A first namespace, start to finish:**
 
 ```bash
-./grail --app shop shop.py      # first run: classes built, globals committed
-./grail --app shop shop.py      # re-run: same objects, nothing rebuilt
-$EDITOR shop.py                 # add a field to Order
-./grail --app shop shop.py      # Order rebuilt in place; stored orders keep working
+./grail --namespace shop shop.py    # first run: classes built, globals committed
+./grail --namespace shop shop.py    # re-run: same objects, nothing rebuilt
+$EDITOR shop.py                     # add a field to Order
+./grail --namespace shop shop.py    # Order rebuilt in place; stored orders keep working
 ```
 
-and from any session, `gemdb.set_app("shop"); gemdb.root["orders"]` reads the
-same list. `gemdb.admin.apps()` lists the apps, and `gemdb.admin.drop_app`
-removes one.
+and from any session, `gemdb.use_namespace("shop"); gemdb.root["orders"]` reads
+the same list. `gemdb.admin.namespaces()` lists the namespaces, and
+`gemdb.admin.drop_namespace` removes one.
 
 Not yet: the commit-time error for session-bound objects (the design's cut 5).
 Today a socket, a lock or an open file in a committed global commits without
@@ -641,23 +649,25 @@ is now `gemdb.schema`, above.
   none, then in a fresh session `relocate` rebuilding a moved, edited file in
   place under the stored instance, and the old file refused afterwards.
 * `tests/scripts/runAppNamespaceTest.gs` (wired in as `app-namespaces`) — two
-  apps each deploy a module of one name from their own file, unrefused, and
-  store an instance; a fresh session rejoining the first app warm-binds its
-  module without writing, both stored instances keep their own app's class and
-  code, the other app's file is the foreign one within the app, a second
-  `set_app` is refused, and `GEMDB_APP` chooses the app for a `runPath:`
-  script. Then `gemdb.admin.apps()` lists them, `drop_app` refuses an app whose
-  module holds a stored instance, the session's own app and an unknown name,
-  and drops an app with a class and no instances. `AppNamespaceTestCase` covers the in-session half, and
-  `test_grail_launcher.sh` the `--app` option.
-* `tests/scripts/runAppMainTest.gs` (wired in as `app-main`) — `__main__` in an
-  app over three sessions. The first run commits; a transient global is never
+  namespaces each deploy a module of one name from their own file, unrefused,
+  and store an instance; a fresh session rejoining the first namespace
+  warm-binds its module without writing, both stored instances keep their own
+  namespace's class and code, the other namespace's file is the foreign one
+  within the first, a second `use_namespace` is refused, and `GEMDB_NAMESPACE`
+  chooses the namespace for a `runPath:` script. Then
+  `gemdb.admin.namespaces()` lists them, `drop_namespace` refuses a namespace
+  whose module holds a stored instance, the session's own namespace and an
+  unknown name, and drops a namespace with a class and no instances.
+  `AppNamespaceTestCase` covers the in-session half, and
+  `test_grail_launcher.sh` the `--namespace` option.
+* `tests/scripts/runAppMainTest.gs` (wired in as `app-main`) — `__main__` in a
+  named namespace over three sessions. The first run commits; a transient global is never
   committed. An unchanged re-run runs over the committed globals, writes
   nothing, keeps its stored object and rebinds the transient. `gemdb.root` is
   the globals (the rabbits double through it). An abort reloads a rebound
   global, unbinds a new one and leaves a transient alone. After an edit, the
   stored instance and a new one share the rebuilt class. A different top file
-  in the app is refused. A module-level `Final` evaluates on the first run and
+  in the namespace is refused. A module-level `Final` evaluates on the first run and
   keeps its committed value, without evaluating, on the re-run and after the
   edit.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
