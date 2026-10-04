@@ -283,32 +283,105 @@ documented as a departure next to D4.
 ## 6. Session-bound objects are refused at commit
 
 A global can be committable while something it reaches is not: an object
-holding a socket, a client holding a lock. What happens today depends on the
-object, and only part of it is loud:
+holding a socket, a client holding a lock.
 
-- A `Semaphore` or a `GsProcess` makes the whole commit fail with
-  TransactionError 2407. Grail hands that to Python as data rather than a
-  Smalltalk error (`gemstone >> ___tryCommit___`).
-- A `GsSocket` or `GsFile` commits **without complaint** and comes back dead in
-  the next session. The same goes for a `CPointer` (NULL after logout) and a
-  `WeakReference` (faults in dead).
+### 6.0 What happens today (measured 2026-10-04, gs40, `./grail`)
 
-A warning is easy to miss, so in an app this becomes an **error, at commit,
-that names the path**:
+Each object was stored in `gemdb.root` and committed with `gemdb.commit()`.
+Then a fresh session read it back and used it:
 
-```
-gemdb.TransientReferenceError: cannot commit hat.connection._sock:
-GsSocket (open socket -- dead after commit/logout). Declare the global in
-__transient__, or the attribute in its class's __transient__.
-```
+| object | at commit | in the next session |
+| --- | --- | --- |
+| `threading.Lock` / `RLock` / `Semaphore` / `Condition` / `Event`, `queue.Queue` | commits | works. A lock committed while held comes back unlocked: lock state is per session. |
+| `threading.Thread` (unstarted or finished), `asyncio` event loop, `io.StringIO` | commits | works |
+| `socket.socket()`: fresh, listening, connected | commits | **any use raises ImproperOperation 2364** ("aGsSocket … has lost that transient state") |
+| `open(path)`: read or write | commits | **any use raises 2364** (aGsFile) |
+| `ssl.SSLContext` | commits | **raises "arg 1 has NULL CData"** |
+| a generator, fresh or started | **TransactionError 2407** (its Semaphore: `instancesNonPersistent`) | n/a |
 
-The detector already exists. The deploy audit classifies session-bound
-objects (`importlib class >> ___deployDescribe___:`) and reports the reference
-path to each. At commit it walks the objects **this transaction wrote** that are
-reachable from the app's globals, not the whole graph, so its cost follows the
-size of the change. Measuring that cost is the first job of the cut (§9).
+**None of the four failures can be caught from Python.** A Smalltalk error
+crossing into Python is not a Python exception, so even `except BaseException`
+did not catch them, and each ended the program.
 
-### 6.1 Class-level `__transient__`
+`gemstone >> ___tryCommit___` does turn a 2407 into data, but only the
+continuation path calls it. `gemdb.commit()` calls `gemstone.system.commit()`,
+so the generator case escapes `gemdb.commit()`. The earlier text of this
+section said otherwise.
+
+Walking what each committed object reaches separates the two groups exactly:
+- everything that broke reaches a **GsSocket**, a **GsFile** or a
+  **CPointer / CByteArray**;
+- the generator reaches a **Semaphore**;
+- nothing that worked reaches any of these.
+
+The kernel's own flags say why. Semaphore is `instancesNonPersistent`, so
+the kernel refuses any commit that reaches one. GsSocket, GsFile, CPointer
+and CByteArray are ordinary persistent classes whose C-side state does not
+survive the session.
+
+### 6.1 Proposal: what "session-bound" means
+
+Define it by the kernel object reached, not by Python type. An object that
+**this commit would make persistent** is session-bound if:
+
+1. its class is `instancesNonPersistent` (Semaphore; so a generator, and
+   anything holding one). The kernel refuses these today. The check names
+   the path, and the error becomes catchable.
+2. it is a **GsSocket** or **GsFile**.
+3. it is a **CPointer** or **CByteArray**, unless its holder rebuilds it.
+   One holder already does: an `SrePattern` that kept its `compileArgs`
+   recompiles on first use (the deploy audit already makes this exception,
+   and the `issue2-sre-ptr` regression covers it). Measured on a cold import
+   of five stdlib modules: all 7 CPointers found were such compiled regexes.
+   So the exception is required, not optional. The proposal is a class-side
+   marker for "rebuilds its C state", set on `SrePattern`, rather than a name
+   test.
+
+Not session-bound:
+- a `GsProcess` that is a continuation. Durable execution commits those on
+  purpose (`gemstone >> ___isContinuation___:`).
+- `WeakReference`. The deploy audit flags it, but it is a semantics question
+  (it faults in dead) rather than a crash. Leave it to the audit.
+
+### 6.2 Proposal: where and how
+
+- **Where:** in `gemstone.system.commit()`, beside the D4 flush
+  (`___flushPersistentState___`), before the kernel commit. `gemdb.commit()`
+  and `gemdb.transaction()` both go through it. A bare Smalltalk
+  `System commit` does not, as with D4.
+- **Walk:** from `System _writtenObjects`, the VM's dirty set, into objects
+  **not yet committed** only, skipping classes, methods and DbTransient
+  objects. Starting from the dirty set also fixes the deploy audit's
+  documented v1 limitation (a new resource held through an already-committed
+  object). The audit and the commit check should share one walker and one
+  classifier.
+- **Cost (measured):** linear, about 0.75 µs per new object.
+  - 125k new objects: 91 ms.
+  - 1.25M new objects: 0.92 s.
+  - A cold import of five stdlib modules: 3,035 objects in 5 ms.
+  - An unchanged app re-run writes nothing, so it walks nothing.
+
+  The walk must index into its queue: with `removeFirst`, as the deploy audit
+  has it, 1.25M objects took 74 s.
+- **Error:** a Python exception raised **before** the kernel commit, so it is
+  catchable, and the session keeps its changes (decision 3: a failed commit
+  keeps them). It names the path in Python terms (keys, attribute names,
+  indexes) and the remedy:
+
+  ```
+  gemdb.SessionStateError: cannot commit gemdb.root["conn"]._sock: a socket
+  (GsSocket) does not survive the session. Name the global in __transient__,
+  or the attribute in its class's __transient__ (§6.3).
+  ```
+
+  The proposed class is `gemdb.SessionStateError(GemDBError, TypeError)`.
+  Raised from the gemstone layer, it should be `gemstone`'s own class,
+  re-exported by gemdb as `ConflictError` is.
+
+Independently of the check, `gemdb.commit()` should go through
+`___tryCommit___`, so a 2407 the check does not foresee is still catchable.
+
+### 6.3 Class-level `__transient__`
 
 The fix for an otherwise committable object that holds a session-bound one is
 a class-scope declaration (Persistent Modules §8.2 already lists it as wanted):
@@ -457,14 +530,16 @@ exists.
    edit the body recompiles and the block differs.
 5. **Session-bound objects refused at commit** (§6), with the walk's cost
    measured on a realistic app before it is on by default, and class-level
-   `__transient__` (§6.1) in the same cut, since the error message points to it.
+   `__transient__` (§6.3) in the same cut, since the error message points to it.
 
-   *Premise to revisit (measured 2026-10-04).* A Grail `threading.Lock`,
-   `Semaphore`, `Condition` and `Event`, a `socket.socket()` and an open
-   file all **commit without error**. So there is no commit refusal for this
-   cut to name a path in. It has to decide for itself which Python objects are
-   session-bound, and find them in what a commit writes. First measure what
-   each of those becomes in the next session.
+   *Measured 2026-10-04 (§6.0).* The premise needed revisiting. Most
+   session-bound objects commit without error and fail uncatchably in the
+   next session, and a generator's refusal escapes `gemdb.commit()`
+   uncaught. §6.1–6.2 propose the definition (by kernel object reached:
+   non-persistent classes, GsSocket, GsFile, and C pointers whose holder
+   cannot rebuild them), the walk from the VM dirty set, its measured cost,
+   and the error.
+
 6. **`gemdb.admin.apps()` / `drop_app()`**, and the docs: GemDB_Module.md,
    Persistent Modules (new departures next to D4 for persistent app globals,
    `__transient__` and `Final`), and the getting-started story.
