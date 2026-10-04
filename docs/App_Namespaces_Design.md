@@ -6,7 +6,8 @@ with `gemdb.set_app`, `gemdb.app()`, `./grail --app` and `GEMDB_APP`; and
 `__main__` in an app is canonical, with persistent globals, `__transient__` and
 `gemdb.root` as their alias; a module-level `Final` initializes once; and
 `gemdb.admin.apps()` / `drop_app()`, with the Persistent Modules departures
-D11–D13. Cut 5 is not: a measurement changed its premise (see §9). It follows
+D11–D13. Cut 5 changed course after measurement: the commit-time check is
+asked of the kernel instead (§6.2), and Grail makes its refusal catchable. It follows
 from PRs #1295 (the slot-pair owner guard), #1296 (layout propagation through
 the persistent class registry) and #1297 (refusing a different file under a
 deployed module name, `gemdb.modules`), and from the discussion that led to
@@ -319,23 +320,23 @@ the kernel refuses any commit that reaches one. GsSocket, GsFile, CPointer
 and CByteArray are ordinary persistent classes whose C-side state does not
 survive the session.
 
-### 6.1 Proposal: what "session-bound" means
+### 6.1 What "session-bound" means
 
-Define it by the kernel object reached, not by Python type. An object that
-**this commit would make persistent** is session-bound if:
+Defined by the kernel object reached, not by Python type. An object that
+**a commit would make persistent** is session-bound if:
 
 1. its class is `instancesNonPersistent` (Semaphore; so a generator, and
-   anything holding one). The kernel refuses these today. The check names
-   the path, and the error becomes catchable.
+   anything holding one). The kernel refuses these today, with TransactionError
+   2407 naming the object.
 2. it is a **GsSocket** or **GsFile**.
 3. it is a **CPointer** or **CByteArray**, unless its holder rebuilds it.
    One holder already does: an `SrePattern` that kept its `compileArgs`
    recompiles on first use (the deploy audit already makes this exception,
    and the `issue2-sre-ptr` regression covers it). Measured on a cold import
-   of five stdlib modules: all 7 CPointers found were such compiled regexes.
-   So the exception is required, not optional. The proposal is a class-side
-   marker for "rebuilds its C state", set on `SrePattern`, rather than a name
-   test.
+   of five stdlib modules, all 7 CPointers found were such compiled regexes;
+   and on the whole gs40 extent, every one of the 179 reachable committed
+   CPointers is held by an SrePattern. So the exception is required, not
+   optional.
 
 Not session-bound:
 - a `GsProcess` that is a continuation. Durable execution commits those on
@@ -343,43 +344,65 @@ Not session-bound:
 - `WeakReference`. The deploy audit flags it, but it is a semantics question
   (it faults in dead) rather than a crash. Leave it to the audit.
 
-### 6.2 Proposal: where and how
+### 6.2 Decision: the kernel refuses; Grail makes the refusal catchable
 
-- **Where:** in `gemstone.system.commit()`, beside the D4 flush
-  (`___flushPersistentState___`), before the kernel commit. `gemdb.commit()`
-  and `gemdb.transaction()` both go through it. A bare Smalltalk
-  `System commit` does not, as with D4.
-- **Walk:** from `System _writtenObjects`, the VM's dirty set, into objects
-  **not yet committed** only, skipping classes, methods and DbTransient
-  objects. Starting from the dirty set also fixes the deploy audit's
-  documented v1 limitation (a new resource held through an already-committed
-  object). The audit and the commit check should share one walker and one
-  classifier.
-- **Cost (measured):** linear, about 0.75 µs per new object.
-  - 125k new objects: 91 ms.
-  - 1.25M new objects: 0.92 s.
-  - A cold import of five stdlib modules: 3,035 objects in 5 ms.
-  - An unchanged app re-run writes nothing, so it walks nothing.
+*Decided 2026-10-04, after the measurements below.* Grail does **not** walk
+the commit set in Python on every commit. Rules 2 and 3 above are asked of the
+kernel instead, as `instancesNonPersistent` on GsSocket and GsFile (and, with
+a way for SrePattern to keep its pointer, on the C pointer classes):
+[GemStone_Feature_Requests.md §1.8](GemStone_Feature_Requests.md#18-refuse-session-bound-objects-at-commit-and-let-the-session-retry--small-to-medium).
 
-  The walk must index into its queue: with `removeFirst`, as the deploy audit
-  has it, 1.25M objects took 74 s.
-- **Error:** a Python exception raised **before** the kernel commit, so it is
-  catchable, and the session keeps its changes (decision 3: a failed commit
-  keeps them). It names the path in Python terms (keys, attribute names,
-  indexes) and the remedy:
+Why not check in Python:
 
-  ```
-  gemdb.SessionStateError: cannot commit gemdb.root["conn"]._sock: a socket
-  (GsSocket) does not survive the session. Name the global in __transient__,
-  or the attribute in its class's __transient__ (§6.3).
-  ```
+- **The kernel already walks what a commit makes persistent**, to promote it,
+  and refuses an `instancesNonPersistent` object on the way. That costs a
+  commit that succeeds nothing. A Python walk repeats it on every commit.
+- **The Python walk is linear in new objects**, about 0.75 µs each. Measured
+  from `System _writtenObjects` (the committed objects this transaction wrote;
+  new objects are not in it, so the walk descends from those into objects not
+  yet committed, skipping classes, methods and DbTransient objects):
+  - 125k new objects: 91 ms; 1.25M: 0.92 s;
+  - a cold import of five stdlib modules: 3,035 objects in 5 ms;
+  - an unchanged app re-run writes nothing, so it walks nothing.
 
-  The proposed class is `gemdb.SessionStateError(GemDBError, TypeError)`.
-  Raised from the gemstone layer, it should be `gemstone`'s own class,
-  re-exported by gemdb as `ConflictError` is.
+  The time of the commit itself was not measured, so how large a share of a
+  commit this is remains open.
+- **A per-transaction flag cannot stand in for the walk.** Storing a socket
+  does the damage, not creating one, and the two are usually in different
+  transactions. A per-session flag ("a socket exists") is always set in a
+  server, whose listening socket and log file outlive every commit. And Grail
+  could only set it for objects created through Python.
 
-Independently of the check, `gemdb.commit()` should go through
-`___tryCommit___`, so a 2407 the check does not foresee is still catchable.
+What Grail does meanwhile:
+
+- **`gemdb.commit()` and `gemdb.transaction()` go through
+  `gemstone >> ___tryCommit___`**, so a 2407 raises a Python exception,
+  `gemdb.SessionStateError(GemDBError, TypeError)`, instead of ending the
+  program. Today that covers rule 1 (a generator); once the kernel marks the
+  classes in rules 2 and 3, it covers those with no change in Grail.
+- **A refused commit cannot be retried.** After a 2407, the same transaction
+  will not commit even once the offending object is removed (measured: 2403
+  `rtErrOmFlushFailed` through `System commitTransaction`; `___tryCommit___`'s
+  comment records 2424 `rtErrCommitDisallowedUntilAbort` through
+  `System commit`). The session must abort, which discards the transaction.
+  So decision 3's "a failed commit keeps the session's changes" holds for a
+  conflict, not for a refusal; the exception says so. Refusing before
+  anything is flushed is ask (c) of the feature request.
+- **Naming the path is for later, and only on the failing path.** After a
+  refusal the session's state is still readable (measured: `needsCommit` is
+  true and the stored value is still there), so a walk from
+  `System _writtenObjects` to the refused object can name it in Python terms
+  before the program aborts. A successful commit never pays for it. Ask (d)
+  would make even that walk unnecessary.
+- **`gemstone.deploy_check()` stays the deliberate audit.** Its walk needs an
+  indexed queue (with `removeFirst`, 1.25M objects took 74 s rather than
+  0.92 s) and its classifier misses CByteArray.
+
+Until the kernel marks GsSocket and GsFile, a socket or file in a committed
+global still commits and fails in the next session, as §6.0 measured.
+Naming the global in `__transient__` keeps it out of the commit today;
+class-level `__transient__` (§6.3, not built yet) will do the same for an
+attribute.
 
 ### 6.3 Class-level `__transient__`
 
@@ -535,10 +558,18 @@ exists.
    *Measured 2026-10-04 (§6.0).* The premise needed revisiting. Most
    session-bound objects commit without error and fail uncatchably in the
    next session, and a generator's refusal escapes `gemdb.commit()`
-   uncaught. §6.1–6.2 propose the definition (by kernel object reached:
-   non-persistent classes, GsSocket, GsFile, and C pointers whose holder
-   cannot rebuild them), the walk from the VM dirty set, its measured cost,
-   and the error.
+   uncaught. §6.1 defines session-bound by the kernel object reached
+   (non-persistent classes, GsSocket, GsFile, and C pointers whose holder
+   cannot rebuild them).
+
+   *Decided the same day (§6.2):* no Python walk on every commit. The kernel
+   already refuses non-persistent objects at no cost to a successful commit,
+   so the rest of the definition is a feature request
+   ([GemStone_Feature_Requests.md §1.8](GemStone_Feature_Requests.md)). Grail
+   routes `gemdb.commit()` and `gemdb.transaction()` through `___tryCommit___`,
+   so a refusal is a catchable `gemdb.SessionStateError`. Naming the path on a
+   refusal, the deploy audit's walker, and class-level `__transient__` (§6.3)
+   remain to do.
 
 6. **`gemdb.admin.apps()` / `drop_app()`**, and the docs: GemDB_Module.md,
    Persistent Modules (new departures next to D4 for persistent app globals,
@@ -571,6 +602,9 @@ Cross-user apps (§8) come after these.
 4. **A session-bound object reachable from what a commit writes is an error,
    naming the path**, not a warning (§6). Class-level `__transient__` is the
    per-attribute fix, kept in `SessionTemps` rather than GemStone's DbTransient.
+   *Revised the same day:* the kernel raises the error (a feature request for
+   sockets, files and C pointers; it already does for non-persistent classes),
+   and Grail makes it catchable rather than walking every commit (§6.2).
 5. **`Final` is the initialize-once marker** (§5.4).
 6. **The API is `gemdb.set_app(name)`**, plus `--app` and `GEMDB_APP` from the
    launcher.
