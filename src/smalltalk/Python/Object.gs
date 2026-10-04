@@ -1040,12 +1040,19 @@ ___grailSlotSubtree___
 	(importlib @env0:___canonicalClassRegistry___) @env0:keysAndValuesDo: [:k :v |
 		(v @env0:isKindOf: Behavior) ifTrue: [
 			(byParent @env0:at: v @env0:superclass ifAbsentPut: [OrderedCollection @env0:new]) @env0:add: v]].
-	[queue @env0:isEmpty] @env0:whileFalse: [ | c subs |
+	[queue @env0:isEmpty] @env0:whileFalse: [ | c subs sessionSubs |
 		c := queue @env0:removeFirst.
 		subs := OrderedCollection @env0:new.
 		(byParent @env0:at: c otherwise: #()) @env0:do: [:v |
 			(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]].
-		([c __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()]) @env0:do: [:v |
+		"__subclasses__ is a LIST for an ordinary class; on a class rooted at
+		``type'' it is type's descriptor (an UnboundMethod), which is not a
+		collection of anything.  Layout propagation reaches this walk from a
+		metaclass's rebuild (UnboundCallArityTestCase), where the old
+		__subclasses__ walk had the same guard."
+		sessionSubs := [c __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+		(sessionSubs @env0:isKindOf: Collection) ifFalse: [sessionSubs := #()].
+		sessionSubs @env0:do: [:v |
 			((v @env0:isKindOf: Behavior) @env0:and: [v @env0:superclass == c]) ifTrue: [
 				(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]]].
 		subs @env0:do: [:s |
