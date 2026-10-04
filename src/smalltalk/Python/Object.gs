@@ -9635,10 +9635,10 @@ ___pyAttrLoad___: aSym
 		owner notNil ifTrue: [
 			"A 0-arg selector is either a data accessor (``__name__'',
 			``Grail-Constants'') that must be PERFORMED to yield its value,
-			or a native module FUNCTION (random.random, time.time — 0-arg
+			or a native module FUNCTION (time.time, os.getcwd — 0-arg
 			functions compiled to a unary Smalltalk selector) that must read
-			as a first-class BoundMethod, NOT be auto-invoked: ``from random
-			import random'' would otherwise bind the float random() returns.
+			as a first-class BoundMethod, NOT be auto-invoked: ``from time
+			import time'' would otherwise bind the float time() returns.
 			Discriminate by category.  Only the FUNCTION categories below
 			(plus Python defs in ``Grail-Methods'') wrap; the DEFAULT stays
 			perform, so an unlisted category behaves exactly as before — a

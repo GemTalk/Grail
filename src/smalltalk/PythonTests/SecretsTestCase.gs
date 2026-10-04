@@ -77,9 +77,9 @@ testIndependentOfRandomSeed
 
 	| s t1 t2 |
 	s := secrets ___instance___.
-	random ___instance___ @env1:seed: 42.
+	self eval: 'import random; random.seed(42)'.
 	t1 := s @env1:token_bytes: 16.
-	random ___instance___ @env1:seed: 42.
+	self eval: 'import random; random.seed(42)'.
 	t2 := s @env1:token_bytes: 16.
 	self deny: t1 = t2.
 %

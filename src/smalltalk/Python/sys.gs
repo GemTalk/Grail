@@ -376,7 +376,9 @@ initializeBuiltinModules
 		@env0:at: #gemstone 	put: gemstone 	instance;
 		@env0:at: #html 		put: html 		instance;
 		@env0:at: #cmath 		put: cmath 		instance;
-		@env0:at: #random 		put: random 	instance;
+		"random deliberately NOT seeded, as fractions and ipaddress are not:
+		``import random'' resolves to the vendored CPython random.py, over the
+		native _random (MT19937) -- see _random_module.gs."
 		@env0:at: #os 			put: os 		instance;
 		@env0:at: #string 		put: string 	instance;
 		@env0:at: #sys 			put: sys 		instance;
