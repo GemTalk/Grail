@@ -2117,6 +2117,103 @@ ___stackErrorFlavour___
 	^ SessionTemps @env0:current @env0:at: #'GrailStackErrorFlavour' otherwise: nil
 %
 
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailNamespace___
+	"The dictionary the NAME-KEYED canonical registries live in for this
+	session (docs/App_Namespaces_Design.md §3.1): the current app's namespace
+	once one is set, else UserGlobals.  UserGlobals is the DEFAULT namespace,
+	exactly where every registry lived before apps existed, so a session that
+	sets no app reads and writes the same objects as before.
+
+	Every name-keyed registry accessor goes through here -- the module
+	instances, source hashes, dependency records, canonical classes, metaclass,
+	class-structure and body class-attribute records, and D4's
+	__persistent__ state.  The IDENTITY-keyed records (GrailCanonicalClassSet,
+	GrailCommittedSelfSendOverrides) and the runtime/deploy generations stay in
+	UserGlobals: a class object is the same object whichever app named it."
+
+	^ (SessionTemps current at: #'GrailCurrentApp' otherwise: nil) ifNil: [UserGlobals]
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailApps___
+	"The user's apps, name -> namespace (a SymbolDictionary), or nil before
+	the first one exists.  Reads never create, as for the registries."
+
+	^ UserGlobals at: #'GrailApps' otherwise: nil
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailAppNamed___: aName create: aBoolean
+	"The namespace of app aName, or nil.  With aBoolean, an app that does not
+	exist is created in the CURRENT transaction -- it persists at the next
+	commit, like a cold import.  Reduced-conflict, so two sessions creating
+	DIFFERENT apps do not conflict."
+
+	| apps ns |
+	apps := self ___grailApps___.
+	ns := apps isNil ifTrue: [nil] ifFalse: [apps at: aName asString otherwise: nil].
+	(ns isNil and: [aBoolean]) ifTrue: [
+		apps isNil ifTrue: [
+			apps := RcKeyValueDictionary new.
+			UserGlobals at: #'GrailApps' put: apps].
+		ns := SymbolDictionary new.
+		ns name: ('GrailApp_' , aName asString) asSymbol.
+		apps at: aName asString put: ns].
+	^ ns
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailUseApp___: aNameOrNil
+	"Make app aNameOrNil's namespace current for this session -- nil returns to
+	the default, UserGlobals -- creating the app if it does not exist.  Answers
+	the namespace.
+
+	This is the INTERNAL half of gemdb.set_app: it switches where the
+	name-keyed registries are read and written, and nothing else
+	(docs/App_Namespaces_Design.md §9, cut 1).  Cut 2 adds the rest: per-app
+	module classes in the compile symbol list, file location choosing shared or
+	app, and refusing a switch once an app module has been imported this
+	session -- which is why nothing here resets a session-level cache."
+
+	| ns |
+	aNameOrNil isNil ifTrue: [
+		SessionTemps current removeKey: #'GrailCurrentApp' ifAbsent: [].
+		^ UserGlobals].
+	ns := self ___grailAppNamed___: aNameOrNil create: true.
+	SessionTemps current at: #'GrailCurrentApp' put: ns.
+	^ ns
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailCurrentAppName___
+	"The current app's name, or nil in the default namespace."
+
+	| ns apps |
+	ns := SessionTemps current at: #'GrailCurrentApp' otherwise: nil.
+	ns isNil ifTrue: [^ nil].
+	apps := self ___grailApps___.
+	apps isNil ifTrue: [^ nil].
+	apps keysAndValuesDo: [:k :v | v == ns ifTrue: [^ k]].
+	^ nil
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailAllNamespacesDo___: aBlock
+	"Evaluate aBlock with the default namespace (UserGlobals) and then every
+	app's -- for what has to reach all of them, such as the generation reset
+	an install triggers."
+
+	aBlock value: UserGlobals.
+	(self ___grailApps___ ifNil: [#()]) do: [:ns | aBlock value: ns]
+%
+
 category: 'Grail-Canonical Classes'
 classmethod: importlib
 ___canonicalGenerationCheck___
@@ -2150,12 +2247,17 @@ ___canonicalGenerationCheck___
 	deployGen == runtimeGen ifTrue: [
 		object ___grailInstallRecordedSelfSendOverrides___.
 		^ self].
-	"Stale (or first-ever) deployment: drop every canonical registry."
-	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
-	   #'GrailCommittedSelfSendOverrides'
-	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
-	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure'
-	   #'GrailCanonicalDirectMetaclasses' ) do: [:k |
+	"Stale (or first-ever) deployment: drop every canonical registry -- the
+	name-keyed ones in EVERY namespace, since an install invalidates every
+	app's deployment as much as the default's, and the identity-keyed ones,
+	which only UserGlobals holds."
+	self ___grailAllNamespacesDo___: [:ns |
+		#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
+		   #'GrailCanonicalClasses'
+		   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure'
+		   #'GrailCanonicalDirectMetaclasses' ) do: [:k |
+			ns removeKey: k ifAbsent: []]].
+	#( #'GrailCommittedSelfSendOverrides' #'GrailCanonicalClassSet' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
 	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
 	^ self
@@ -2245,12 +2347,12 @@ ___canonicalModuleHashes___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals at: #'GrailCanonicalModuleHashes' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalModuleHashes' otherwise: nil.
 	reg isNil ifTrue: [
 		"Reduced-conflict (doc par.10.7 phase 8): non-overlapping module
 		keys from concurrent first importers merge instead of conflicting."
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalModuleHashes' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalModuleHashes' put: reg].
 	^ reg
 %
 
@@ -2284,7 +2386,7 @@ ___canonicalModuleDeps___
 	why that matters).  ___canonicalModuleDepsForWrite___ creates it."
 
 	self ___canonicalGenerationCheck___.
-	^ UserGlobals at: #'GrailCanonicalModuleDeps' otherwise: nil
+	^ self ___grailNamespace___ at: #'GrailCanonicalModuleDeps' otherwise: nil
 %
 
 category: 'Grail-Canonical Classes'
@@ -2296,7 +2398,7 @@ ___canonicalModuleDepsForWrite___
 		"Reduced-conflict, like the hash registry: concurrent first importers
 		of different modules merge."
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalModuleDeps' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalModuleDeps' put: reg].
 	^ reg
 %
 
@@ -2533,10 +2635,10 @@ ___persistentModuleState___
 	shared value that conflicts is the signal to choose a conflict-safe one."
 
 	| store |
-	store := UserGlobals at: #'GrailPersistentModuleState' otherwise: nil.
+	store := self ___grailNamespace___ at: #'GrailPersistentModuleState' otherwise: nil.
 	store isNil ifTrue: [
 		store := KeyValueDictionary new.
-		UserGlobals at: #'GrailPersistentModuleState' put: store].
+		self ___grailNamespace___ at: #'GrailPersistentModuleState' put: store].
 	^ store
 %
 
@@ -2673,10 +2775,10 @@ ___canonicalClassRegistry___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil.
 	reg isNil ifTrue: [
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalClasses' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalClasses' put: reg].
 	^ reg
 %
 
@@ -2704,10 +2806,10 @@ ___canonicalMetaclasses___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalMetaclasses' otherwise: nil.
 	reg isNil ifTrue: [
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalMetaclasses' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalMetaclasses' put: reg].
 	^ reg
 %
 
@@ -2742,10 +2844,10 @@ ___canonicalClassStructure___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalClassStructure' otherwise: nil.
 	reg isNil ifTrue: [
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalClassStructure' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalClassStructure' put: reg].
 	^ reg
 %
 
@@ -2774,10 +2876,10 @@ ___restoreCanonicalClassStructure___: aModuleName
 	The generation check has already run by the time a bind reaches here."
 
 	| classes prefix inner |
-	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes := self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil.
 	classes isNil ifTrue: [^ self].
 	prefix := aModuleName asString , '.'.
-	inner := (UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil)
+	inner := (self ___grailNamespace___ at: #'GrailCanonicalClassStructure' otherwise: nil)
 		ifNil: [nil]
 		ifNotNil: [:reg | reg at: aModuleName asString otherwise: nil].
 	classes keysAndValuesDo: [:key :cls |
@@ -2852,9 +2954,9 @@ ___restoreCanonicalMiRecords___
 	early."
 
 	| structure classes reg |
-	structure := UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil.
+	structure := self ___grailNamespace___ at: #'GrailCanonicalClassStructure' otherwise: nil.
 	structure isNil ifTrue: [^ self].
-	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes := self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil.
 	classes isNil ifTrue: [^ self].
 	reg := self ___miRegistry___.
 	structure keysAndValuesDo: [:modName :inner |
@@ -2896,10 +2998,10 @@ ___recordDirectMetaclass___: aClass meta: aMetaclass
 	origin := self ___initializingModuleName___.
 	origin isNil ifTrue: [^ self].
 	((aClass isKindOf: Behavior) and: [aMetaclass isKindOf: Behavior]) ifFalse: [^ self].
-	reg := UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
 	reg isNil ifTrue: [
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalDirectMetaclasses' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' put: reg].
 	inner := reg at: origin asString otherwise: nil.
 	inner isNil ifTrue: [
 		inner := IdentityKeyValueDictionary new.
@@ -2915,7 +3017,7 @@ ___forgetDirectMetaclassesOf___: aModuleName
 	recorded none leaves nothing to write."
 
 	| reg |
-	reg := UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
 	reg isNil ifTrue: [^ self].
 	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
 %
@@ -2965,10 +3067,10 @@ ___recordBodyClassAttr___: aClass name: aSym value: aValue
 	cache this session never built."
 	((aSym asString size >= 5) and: [(aSym asString copyFrom: 1 to: 5) = '_abc_'])
 		ifTrue: [^ self].
-	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
 	reg isNil ifTrue: [
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalBodyClassAttrs' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' put: reg].
 	inner := reg at: origin asString otherwise: nil.
 	inner isNil ifTrue: [
 		inner := IdentityKeyValueDictionary new.
@@ -3006,7 +3108,7 @@ ___forgetBodyClassAttrsOf___: aModuleName
 	see ___recordBodyClassAttr___:name:value:.  PEEKS the registry."
 
 	| reg |
-	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
 	reg isNil ifTrue: [^ self].
 	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
 %
@@ -3044,7 +3146,7 @@ ___restoreAllBodyClassAttrs___
 	overlay, first hand.  PEEKS the registry, since this is a read path."
 
 	| reg st done ov |
-	reg := UserGlobals at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
 	reg isNil ifTrue: [^ self].
 	st := SessionTemps current.
 	done := st at: #'GrailBodyClassAttrsReplayed' otherwise: nil.
@@ -3099,8 +3201,8 @@ ___restoreAllCanonicalMetaclasses___
 	modules on a deployed gs40."
 
 	| reg classes |
-	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
-	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	classes := self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil.
 	(reg isNil or: [classes isNil]) ifFalse: [reg keysAndValuesDo: [:modName :inner |
 		inner isNil ifFalse: [
 			inner keysAndValuesDo: [:aClassName :meta |
@@ -3114,7 +3216,7 @@ ___restoreAllCanonicalMetaclasses___
 	"And the classes a module body minted by calling a metaclass directly --
 	see ___recordDirectMetaclass___:meta:.  Keyed by the class itself, since
 	such a class has no registry name."
-	(UserGlobals at: #'GrailCanonicalDirectMetaclasses' otherwise: nil) ifNotNil: [:direct |
+	(self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' otherwise: nil) ifNotNil: [:direct |
 		direct keysAndValuesDo: [:modName :inner |
 			inner keysAndValuesDo: [:cls :meta |
 				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
@@ -3151,11 +3253,11 @@ ___restoreCanonicalMetaclasses___: aModuleName
 	bind reaches here (___canonicalModules___ runs it), and an absent
 	registry means the same thing a missing inner entry does: nothing
 	to restore."
-	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalMetaclasses' otherwise: nil.
 	reg isNil ifTrue: [^ self].
 	inner := reg at: aModuleName asString otherwise: nil.
 	inner isNil ifTrue: [^ self].
-	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes := self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil.
 	classes isNil ifTrue: [^ self].
 	inner keysAndValuesDo: [:aClassName :meta |
 		| cls |
@@ -3185,11 +3287,11 @@ ___canonicalModules___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals at: #'GrailCanonicalModules' otherwise: nil.
+	reg := self ___grailNamespace___ at: #'GrailCanonicalModules' otherwise: nil.
 	reg isNil ifTrue: [
 		"Reduced-conflict, same rationale as ___canonicalClassRegistry___."
 		reg := RcKeyValueDictionary new.
-		UserGlobals at: #'GrailCanonicalModules' put: reg].
+		self ___grailNamespace___ at: #'GrailCanonicalModules' put: reg].
 	^ reg
 %
 
@@ -9883,7 +9985,7 @@ pythonClassCensus
 	out at: #fromCanonicalClasses put: seen size.
 	out
 		at: #canonicalRegistryPresent
-		put: (UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) notNil.
+		put: (self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil) notNil.
 	out at: #total put: self pythonClasses size.
 	^ out
 %
@@ -9927,7 +10029,7 @@ ___committedCanonicalClassesDo: aBlock
 	over from a previous runtime is dropped rather than over-reported."
 
 	self ___canonicalGenerationCheck___.
-	(UserGlobals at: #'GrailCanonicalClasses' otherwise: nil) ifNotNil: [:registry |
+	(self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil) ifNotNil: [:registry |
 		registry keysAndValuesDo: [:key :value |
 			(value isKindOf: Behavior) ifTrue: [aBlock value: value]]]
 %
