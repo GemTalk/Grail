@@ -1,6 +1,9 @@
 # App namespaces: one set of globals per application (design)
 
-**Status:** design agreed 2026-10-04; nothing is implemented yet. It follows
+**Status:** design agreed 2026-10-04. Cuts 1 and 2 (§9) are implemented:
+the name-keyed registries live in a namespace, and imports resolve per
+namespace, with `gemdb.set_app`, `gemdb.app()`, `./grail --app` and
+`GEMDB_APP`. Cuts 3–6 are not. It follows
 from PRs #1295 (the slot-pair owner guard), #1296 (layout propagation through
 the persistent class registry) and #1297 (refusing a different file under a
 deployed module name, `gemdb.modules`), and from the discussion that led to
@@ -384,6 +387,25 @@ exists.
    goes into the compile symbol list; `set_app` and the launcher option. Test:
    two apps each with their own `models.py`, both deployed, no refusal, and
    each app's objects keep their own code (the §2.2 scenario inverted).
+
+   *As built (cuts 1–2).* A namespace is a SymbolDictionary in
+   `UserGlobals #GrailApps` (an RcKeyValueDictionary, name → namespace); its
+   module classes are in its own `#GrailModuleClasses`. Which namespace a
+   registry read means is decided three ways:
+   - **During a load**, by the file. `loadModuleFromPath:name:` chooses shared
+     or app from the path and runs the whole load bound to that choice (a
+     stack in SessionTemps, since a load imports others). The load also
+     records the choice for the session.
+   - **Outside a load**, by the module name. The entry points handed a module
+     name (dependency checks, class probes, reload, forget, relocate, the
+     schema commands) re-run themselves in that module's namespace: the
+     recorded one, else whichever registry knows the name.
+   - **Walks over every deployed class** (metaclass and MI restores, the class
+     census, the schema report, the subclass walk) visit the shared base and
+     then the app.
+
+   With no app set, each of these is one SessionTemps probe that answers
+   `UserGlobals`, so nothing changes.
 3. **`__main__` in an app.** A canonical `__main__` whose globals are the app's
    persistent dictionary; the identical-store skip; `__transient__`;
    `gemdb.root` as the alias. Tests: §2.1 with `type(b1) is type(b2)` True; the

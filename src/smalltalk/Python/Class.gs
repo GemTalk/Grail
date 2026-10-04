@@ -776,9 +776,22 @@ ___grailRuntimeCompileDictionaries___: aScopeOrNil
 	not through importlib: Class.gs files in before importlib exists.  Only when
 	present -- composing a list must not create it."
 
-	| dicts |
+	| dicts temps ns stack |
 	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
-	(SessionTemps @env0:current @env0:at: #'GrailSessionModuleClasses' otherwise: nil)
+	"An app's module classes (docs/App_Namespaces_Design.md §3.3), for the
+	same reason: the profile list holds PythonModules, not an app's
+	dictionary.  The namespace is the one importlib >> ___grailNamespace___
+	answers -- the module being loaded, else the session's app -- read the
+	same way, straight from SessionTemps."
+	temps := SessionTemps @env0:current.
+	ns := temps @env0:at: #'GrailCurrentApp' otherwise: nil.
+	ns == nil ifFalse: [
+		stack := temps @env0:at: #'GrailNamespaceStack' otherwise: nil.
+		(stack == nil or: [stack @env0:isEmpty]) ifFalse: [ns := stack @env0:last].
+		ns == UserGlobals ifFalse: [
+			(ns @env0:at: #'GrailModuleClasses' otherwise: nil)
+				@env0:ifNotNil: [:d | dicts @env0:insertObject: d at: 1]]].
+	(temps @env0:at: #'GrailSessionModuleClasses' otherwise: nil)
 		@env0:ifNotNil: [:d | dicts @env0:insertObject: d at: 1].
 	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
 	^ dicts

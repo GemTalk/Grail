@@ -364,6 +364,9 @@ timed "gemdb-class-schema" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scrip
 # a different file with different source under it is refused, and
 # gemdb.modules.relocate / forget are the two ways past. Commits, so not SUnit.
 timed "module-source-path" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModulePathTest.gs < /dev/null || EXIT=$?
+# Two apps each deploy a module of the same name from their own file and keep
+# their own code (docs/App_Namespaces_Design.md, cut 2). Commits, so not SUnit.
+timed "app-namespaces" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runAppNamespaceTest.gs < /dev/null || EXIT=$?
 
 # An abort rolls the repository back but not the session: sys.modules keeps
 # every module imported before it, while the generated class, the registry
