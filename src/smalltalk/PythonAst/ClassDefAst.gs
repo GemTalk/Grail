@@ -2397,16 +2397,35 @@ printSmalltalkRuntimeOn: aStream
 	plain @classmethod / @staticmethod / @property def emits nothing here
 	exactly as before."
 	self ___allFunctionDefs___ do: [:def |
-		| decos |
+		| decos kind marking |
 		decos := def applicableMethodDecorators.
+		"A property accessor whose remaining decorators only MARK it
+		(___wrapsPropertyAccessor___ false) is served by the compiled
+		accessor; its decorators run, but nothing is stored over the property
+		-- see FunctionDefAst >> printMarkingDecoratorsOn:.  Storing nothing,
+		it is exempt from the rebind-later rule, which exists so an earlier
+		def's STORE cannot land over a later one: a getter and its @x.setter
+		share the name, and skipping the getter left its @abstractmethod
+		unapplied (test_abc test_descriptors_with_abstractmethod)."
+		kind := decos isEmpty ifTrue: [nil] ifFalse: [def ___propertyAccessorKind___].
+		marking := (kind == #getter or: [kind == #setter or: [kind == #deleter]])
+			and: [def ___wrapsPropertyAccessor___ not].
 		(decos isEmpty not
 			and: [(decoratedProps includes: def name asSymbol) not
-			and: [(self ___isRebindLaterInBody___: def) not]]) ifTrue: [
-			def
-				printMethodDecoratorsOn: aStream
-				decorators: decos
-				className: self ___stVarName___
-				siblingNames: decoratorScope]].
+			and: [marking or: [(self ___isRebindLaterInBody___: def) not]]]) ifTrue: [
+			marking
+				ifTrue: [
+					def
+						printMarkingDecoratorsOn: aStream
+						decorators: decos
+						className: self ___stVarName___
+						siblingNames: decoratorScope]
+				ifFalse: [
+					def
+						printMethodDecoratorsOn: aStream
+						decorators: decos
+						className: self ___stVarName___
+						siblingNames: decoratorScope]]].
 	"A DECORATED property's accessors are not rebound one by one: together
 	they are ONE property object -- see ___decoratedPropertyNames___."
 	decoratedProps do: [:n |
@@ -2577,7 +2596,18 @@ printSmalltalkRuntimeOn: aStream
 			category: 'Grail-Class Attrs'
 			env: 1
 			classSide: true
-			onStream: aStream]] value: OrderedCollection new.
+			onStream: aStream.
+		"Now that the class can say these are properties, re-read each into a
+		metaclass's namespace: the read answers the property object, which is
+		what CPython's namespace holds, where the bind after the body could
+		only see the getter (UnboundMethod >> ___grailPropertyOrSelf___)."
+		propNames do: [:nm |
+			aStream
+				nextPutAll: self ___stVarName___;
+				nextPutAll: ' @env1:___grailNsRebindProperty___: ''';
+				nextPutAll: nm asString;
+				nextPutAll: '''.';
+				lf]]] value: OrderedCollection new.
 
 	"Names the body binds MORE THAN ONCE, counting defs and assignments alike.
 
@@ -4613,8 +4643,12 @@ ___isRebindLaterInBody___: aDef
 	nm := aDef name asSymbol.
 	idx + 1 to: stmts size do: [:i | | st |
 		st := stmts at: i.
+		"A later def whose decorator READS this binding -- ``@foo.setter'' over
+		a non-property ``foo'' -- consumes aDef's store rather than replacing
+		it, so the store must run first; keep looking for a real rebind."
 		(((st isKindOf: FunctionDefAst) or: [st isKindOf: AsyncFunctionDefAst])
-				and: [st name asSymbol == nm])
+				and: [st name asSymbol == nm
+				and: [(st ___readsEarlierBindingOf___: nm) not]])
 			ifTrue: [^ true].
 		((st isKindOf: AssignAst)
 				and: [st targets anySatisfy: [:t | (t isKindOf: NameAst) and: [t id asSymbol == nm]]])

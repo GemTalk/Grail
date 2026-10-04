@@ -131,3 +131,45 @@ testDelAndIsabstract
 		'isabstract_false_for_a_concrete_class'
 		'isabstract_false_for_a_non_class')
 %
+
+category: 'Grail-Tests'
+method: AbcClassBuildTestCase
+testAPropertyReadOffTheClassIsAProperty
+	"UnboundMethod class >> ___forClassRead___:family:selector: answers the
+	property a declarative @property compiled to."
+
+	self assertAll: #('class_read_answers_a_property'
+		'class_read_property_is_one_object'
+		'class_read_property_keeps_the_doc'
+		'class_read_property_has_its_halves')
+%
+
+category: 'Grail-Tests'
+method: AbcClassBuildTestCase
+testMarkedAndOverriddenPropertyAccessors
+	"FunctionDefAst >> printMarkingDecoratorsOn:..., and the accessor chain
+	over a base's property (___declaresPropertyBinding___)."
+
+	self assertAll: #('marked_property_is_abstract'
+		'getter_over_an_abstract_setter_stays_abstract'
+		'both_halves_overridden_is_concrete'
+		'accessor_chain_over_a_base_property')
+%
+
+category: 'Grail-Tests'
+method: AbcClassBuildTestCase
+testAnAccessorFormOverANonPropertyIsADecorator
+	"FunctionDefAst >> ___isForeignAccessorDecorator___:."
+
+	self assertAll: #('foreign_setter_is_an_ordinary_decorator')
+%
+
+category: 'Grail-Tests'
+method: AbcClassBuildTestCase
+testInlineClassBodyNamesReadTheRightScope
+	"NameAst >> ___readsThroughClassCell___ for attribute values and the
+	sibling-def ``f.attr = v''."
+
+	self assertAll: #('body_value_beyond_the_class'
+		'def_attribute_reads_a_method_local')
+%

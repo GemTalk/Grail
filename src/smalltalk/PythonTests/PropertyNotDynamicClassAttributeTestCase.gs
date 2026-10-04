@@ -215,12 +215,13 @@ testRecordedGapsStillHold
 	they are one object.  Nothing in test_enum reads the difference; what it does
 	read -- that neither is a ``property'' -- is asserted above.
 
-	(2) The DECORATOR form ``@property def q'' is compiled by ClassDefAst into a
-	plain getter METHOD, so no descriptor is stored and both classifiers answer
-	'method' where CPython answers 'readonly property' / 'property'.  The CALL
-	form, which does store one, is what the classification tests above use."
+	(2) The DECORATOR form ``@property def q'' compiles to a getter METHOD.  A
+	read off the class now answers a property built from it, so pydoc agrees
+	with CPython ('readonly property', asserted with the rest); inspect reads the
+	class __dict__, which still holds the getter function, and answers 'data'
+	where CPython answers 'property'."
 
 	self assert: (self resultAt: 'dca_is_enum_property') asString equals: 'True'.
-	self assert: (self resultAt: 'decorated_pydoc_kind') asString equals: '''method'''.
-	self assert: (self resultAt: 'decorated_inspect_kind') asString equals: '''method'''.
+	self assert: (self resultAt: 'decorated_pydoc_kind') asString equals: '''readonly property'''.
+	self assert: (self resultAt: 'decorated_inspect_kind') asString equals: '''data'''.
 %

@@ -4621,6 +4621,24 @@ ___grailReplaceBinding___: key _: value
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___grailNsRebindProperty___: aName
+	"After ___grailOwnPropertyNames___ exists: put the PROPERTY a class read now
+	answers for aName into the namespace, where the bind at the def's position
+	could only see the getter.  Only when it really is a property -- an
+	enum.property and the like are already in the namespace as what they are."
+
+	| ns v |
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifTrue: [^ self].
+	v := [self ___pyAttrLoad___: aName @env0:asSymbol]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(v @env0:isKindOf: AbstractPropertyDescriptor) ifFalse: [^ self].
+	ns ___grailReplaceBinding___: aName @env0:asString _: v.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailNsRebind___: aName
 	"A class-body def's DECORATOR has just stored its result over the compiled
 	method: put that result in the namespace too, under the key

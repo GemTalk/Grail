@@ -1295,6 +1295,100 @@ isCachedPropertyDecorator: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___isForeignAccessorDecorator___: deco
+	"``@x.setter'' / ``@x.getter'' / ``@x.deleter'' where ``x'' is NOT a
+	@property this class body declared -- a user descriptor, say -- so the
+	decorator is an ordinary call on whatever ``x'' is, and must run.
+
+	The accessor forms used to be read SYNTACTICALLY: any ``@x.setter'' on a
+	def named x became the setter half of a declarative property, so with
+
+	    @Descriptor
+	    def foo(self): ...
+	    @foo.setter
+	    def foo(self, val): ...
+
+	no Descriptor was ever built and C.foo stayed the bare getter
+	(test_abc test_customdescriptors_with_abstractmethod)."
+
+	| a |
+	(deco isKindOf: AttributeAst) ifFalse: [^ false].
+	(deco value isKindOf: NameAst) ifFalse: [^ false].
+	a := deco attr asString.
+	(a = 'setter' or: [a = 'getter' or: [a = 'deleter']]) ifFalse: [^ false].
+	^ (self ___classBodyNamesAProperty___: deco value id asSymbol) not
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___classBodyNamesAProperty___: aSymbol
+	"Whether the binding of aSymbol that this def's decorators see -- the last
+	EARLIER top-level binding in the enclosing class body -- is one Grail
+	compiles as a declarative property.  True whenever that cannot be told (no
+	enclosing class, not a top-level def, no earlier binding, or an assignment
+	such as ``x = property(f)''), which keeps the long-standing reading."
+
+	| cls stmts idx prior |
+	cls := parent.
+	[cls notNil and: [(cls isKindOf: ClassDefAst) not]] whileTrue: [cls := cls parent].
+	cls isNil ifTrue: [^ true].
+	cls body isNil ifTrue: [^ true].
+	stmts := cls body body.
+	stmts isNil ifTrue: [^ true].
+	idx := (1 to: stmts size) detect: [:i | (stmts at: i) == self] ifNone: [0].
+	idx = 0 ifTrue: [^ true].
+	prior := nil.
+	1 to: idx - 1 do: [:i | | st |
+		st := stmts at: i.
+		((st isKindOf: FunctionDefAst) and: [st name asSymbol == aSymbol])
+			ifTrue: [prior := st].
+		((st isKindOf: AssignAst)
+				and: [st targets anySatisfy: [:t | (t isKindOf: NameAst) and: [t id asSymbol == aSymbol]]])
+			ifTrue: [prior := #assigned]].
+	(prior isNil or: [prior == #assigned]) ifTrue: [^ true].
+	^ prior ___declaresPropertyBinding___
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___declaresPropertyBinding___
+	"Whether this def, as decorated, leaves a declarative property bound to its
+	name: @property / @cached_property outermost, or an accessor of a property
+	declared earlier (which recurses to that earlier def)."
+
+	| first |
+	decorator_list isNil ifTrue: [^ false].
+	decorator_list isEmpty ifTrue: [^ false].
+	first := decorator_list at: 1.
+	(first isKindOf: Symbol)
+		ifTrue: [^ #(#'property' #'cached_property') includes: first asSymbol].
+	"``@Base.spam.getter'' -- an accessor form over an EXPRESSION -- leaves a
+	property bound too, and the @spam.setter / @spam.deleter after it are its
+	halves (test_property test_property_decorator_subclass).  Reading those as
+	foreign compiled the deleter as a plain unary ``spam'' over the getter."
+	((first isKindOf: AttributeAst)
+		and: [(first value isKindOf: NameAst) not
+		and: [#('getter' 'setter' 'deleter') includes: first attr asString]])
+			ifTrue: [^ true].
+	^ self isPropertyAccessorDecorator: first
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___readsEarlierBindingOf___: aSymbol
+	"Whether one of this def's decorators is a foreign accessor on aSymbol --
+	``@foo.setter'' over a non-property ``foo'' -- and so READS the earlier
+	binding rather than simply replacing it.  See ClassDefAst >>
+	___isRebindLaterInBody___:."
+
+	decorator_list isNil ifTrue: [^ false].
+	^ decorator_list anySatisfy: [:deco |
+		(self ___isForeignAccessorDecorator___: deco)
+			and: [deco value id asSymbol == aSymbol]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 isPropertyAccessorDecorator: deco
 	"``@x.setter'' / ``@x.getter'' / ``@x.deleter'' -- an AttributeAst whose
 	value is a plain name.  The decorated def IS the accessor and compiles to
@@ -1305,7 +1399,10 @@ isPropertyAccessorDecorator: deco
 	(deco isKindOf: AttributeAst) ifFalse: [^ false].
 	(deco value isKindOf: NameAst) ifFalse: [^ false].
 	a := deco attr asString.
-	^ a = 'setter' or: [a = 'getter' or: [a = 'deleter']]
+	(a = 'setter' or: [a = 'getter' or: [a = 'deleter']]) ifFalse: [^ false].
+	"Only over a property this class declared; over anything else it is an
+	ordinary decorator call (___isForeignAccessorDecorator___:)."
+	^ (self ___classBodyNamesAProperty___: deco value id asSymbol)
 %
 
 category: 'Grail-Decorators'
@@ -1324,6 +1421,10 @@ ___isPropertyDef___
 
 	decorators := self decoratorList.
 	decorators isNil ifTrue: [^ false].
+	"An accessor form over a NON-property is no property def at all."
+	(decorator_list notNil
+		and: [decorator_list anySatisfy: [:d | self ___isForeignAccessorDecorator___: d]])
+			ifTrue: [^ false].
 	^ decorators anySatisfy: [:each |
 		#(#'property' #'cached_property' #'setter' #'getter' #'deleter')
 			includes: each]
@@ -1376,7 +1477,8 @@ isDeleterDecorated
 	^ (decorator_list detect: [:deco |
 		(deco isKindOf: AttributeAst)
 			and: [(deco value isKindOf: NameAst)
-			and: [deco attr asString = 'deleter']]] ifNone: [nil]) notNil
+			and: [deco attr asString = 'deleter'
+			and: [(self ___isForeignAccessorDecorator___: deco) not]]]] ifNone: [nil]) notNil
 %
 
 category: 'Grail-code generation'
@@ -1453,6 +1555,51 @@ printPropertyAccessorOn: aStream className: aClassName siblingNames: siblingName
 			ensure: [
 				CallAst classBodyDecoratorScope: nil.
 				CallAst inDecoratorEmit: savedDecoEmit]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
+	"Run a PROPERTY ACCESSOR's marking decorators -- @abstractmethod and the
+	like, which mark the function and hand the same one back -- for their
+	effect, WITHOUT the class-attribute store printMethodDecoratorsOn: makes.
+
+	That store put the marked accessor under the property's NAME, where it
+	shadowed the property at every class read: ``C.foo'' for ``@property
+	@abc.abstractmethod def foo'' answered a function, and a ``@foo.setter
+	@abstractmethod'' def stored its SETTER there.  With no store the class
+	read answers the property (UnboundMethod >> ___grailPropertyOrSelf___),
+	built from the very handles marked here: the chain's base is this
+	accessor's OWN selector -- ``name:'' for a setter, ``___propDeleter_name''
+	for a deleter -- so an abstract setter marks the property's fset, as
+	CPython's property(fget, fset).__isabstractmethod__ requires.  (A
+	metaclass's namespace gets the property from ClassDefAst's re-read after
+	___grailOwnPropertyNames___ is compiled.)"
+
+	| saved kind base |
+	kind := self ___propertyAccessorKind___.
+	base := kind == #setter
+		ifTrue: [name asString , ':']
+		ifFalse: [kind == #deleter
+			ifTrue: ['___propDeleter_' , name asString]
+			ifFalse: [name asString]].
+	aStream nextPutAll: '['.
+	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
+	saved := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
+	[self
+		printMethodDecoratorChainOn: aStream
+		decorators: decoList
+		index: 1
+		className: aClassName
+		baseName: base]
+			ensure: [
+				CallAst classBodyDecoratorScope: nil.
+				CallAst inDecoratorEmit: saved].
+	aStream
+		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
+		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
+		lf
 %
 
 category: 'Grail-code generation'

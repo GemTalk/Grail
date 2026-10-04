@@ -101,12 +101,11 @@ r['userdict_has_every_dict_name'] = repr(sorted(set(dir(dict)) - set(dir(UserDic
 # About what a class __dict__ HOLDS, not about dir(), and its own piece of work.
 # CPython is expected to DISAGREE with the value below.
 #
-# A property reached through the class is not the property object -- ``C.prop''
-#    answers the getter as a plain function ('UnboundMethod' until the
-#    type-name correction; the leak changed spelling, not substance), so
-#    classify_class_attrs calls it a method where CPython calls it a property.
-#    (It works correctly on an INSTANCE: C().prop is 1, asserted here so the
-#    gap stays narrow.)
+# A property reached through the class IS now the property object (``C.prop''
+#    used to answer the getter function), but the class __dict__ still holds
+#    the getter, and classify_class_attrs reads its kind from there: 'data'
+#    where CPython says 'property'.  (It works correctly on an INSTANCE:
+#    C().prop is 1, asserted here so the gap stays narrow.)
 r['property_on_a_class_is_a_known_gap'] = repr(
     [type(C.prop).__name__, _c['prop'].kind, C().prop])
 
@@ -131,7 +130,7 @@ EXPECTED = {
 }
 
 GRAIL_ONLY = {
-    'property_on_a_class_is_a_known_gap': "['function', 'method', 1]",
+    'property_on_a_class_is_a_known_gap': "['property', 'data', 1]",
 }
 
 
