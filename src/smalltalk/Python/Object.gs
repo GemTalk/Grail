@@ -8832,23 +8832,34 @@ ___grailDerivedDataDescriptorFor: aSym
 
 	DATA descriptors only.  A plain class value or a method in the holder must
 	not outrank an INSTANCE slot behind the same accessor pair, which CPython's
-	instance __dict__ wins over too."
+	instance __dict__ wins over too.
 
-	| owner walker holder v |
+	Each class's SESSION OVERLAY is asked before its holder: a runtime
+	``Cls.p = v'' on a canonical class lands there instead (see
+	___classAttrOverlayLookup___:name:), which is every class of a module the
+	test harness loads."
+
+	| owner walker holder v isData ov inner |
 	owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 	owner == nil ifTrue: [^ nil].
+	isData := [:x | x ~~ nil and: [(x isKindOf: AbstractPropertyDescriptor)
+		or: [(x isKindOf: PythonInstance)
+			and: [(x ___respondsTo___: #'__set__:_:')
+			or: [(x ___respondsTo___: #'___set__:kw:')
+			or: [x ___respondsTo___: #'__delete__:']]]]]].
+	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
 	walker := self @env0:class.
 	[walker == nil] whileFalse: [
+		ov == nil ifFalse: [
+			inner := ov @env0:at: walker otherwise: nil.
+			inner == nil ifFalse: [
+				v := inner @env0:at: aSym otherwise: nil.
+				(isData @env0:value: v) ifTrue: [^ v]]].
 		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				v := holder @env0:dynamicInstVarAt: aSym.
-				(v ~~ nil and: [(v isKindOf: AbstractPropertyDescriptor)
-					or: [(v isKindOf: PythonInstance)
-						and: [(v ___respondsTo___: #'__set__:_:')
-						or: [(v ___respondsTo___: #'___set__:kw:')
-						or: [v ___respondsTo___: #'__delete__:']]]]])
-					ifTrue: [^ v]]].
+				(isData @env0:value: v) ifTrue: [^ v]]].
 		walker == owner ifTrue: [^ nil].
 		walker := walker @env0:superClass].
 	^ nil
