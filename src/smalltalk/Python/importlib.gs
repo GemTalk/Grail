@@ -2378,8 +2378,8 @@ classmethod: importlib
 ___grailAppGlobals___
 	"The current app's globals -- its ``__main__'' module instance -- or nil
 	outside an app or before the app's top file has run
-	(docs/App_Namespaces_Design.md §5.2).  gemdb.root in an app is a view of
-	these.  This session's own ``__main__'' when it is the app's (its class is
+	(docs/App_Namespaces_Design.md §5.2).  gemdb.root in a named namespace
+	is a view of these.  This session's own ``__main__'' when it is the app's (its class is
 	filed in the app), else the committed instance, so a session that joins
 	the app without running its top file -- a worker, a shell -- reads and
 	writes the same globals."
@@ -2398,7 +2398,7 @@ ___grailAppGlobals___
 category: 'Grail-App Namespaces'
 classmethod: importlib
 ___grailAppNames___
-	"The names of this user's apps, sorted.  gemdb.admin.apps()."
+	"The names of this user's apps, sorted.  gemdb.admin.namespaces()."
 
 	^ (self ___grailApps___ ifNil: [#()] ifNotNil: [:apps | apps keys])
 		asSortedCollection asArray
@@ -2409,7 +2409,7 @@ classmethod: importlib
 ___grailDropApp___: aName
 	"Remove app aName: its namespace, and with it every module, class and
 	global deployed in it (docs/App_Namespaces_Design.md §4).  Answers the
-	number of classes it held.  gemdb.admin.drop_app() wraps it, owning the
+	number of classes it held.  gemdb.admin.drop_namespace() wraps it, owning the
 	clean-transaction check and the commit.
 
 	REFUSES, as gemdb.modules.forget does, while the repository holds any
@@ -2423,9 +2423,9 @@ ___grailDropApp___: aName
 	| appName ns classes tree byClass found reg |
 	appName := aName asString.
 	ns := self ___grailAppNamed___: appName create: false.
-	ns isNil ifTrue: [^ ValueError @env1:___signal___: 'no app named ''' , appName , ''''].
+	ns isNil ifTrue: [^ ValueError @env1:___signal___: 'no namespace named ''' , appName , ''''].
 	self ___grailCurrentAppName___ = appName ifTrue: [
-		^ ValueError @env1:___signal___: 'this session is in app ''' , appName ,
+		^ ValueError @env1:___signal___: 'this session is in namespace ''' , appName ,
 			'''; drop it from a session that is not'].
 	classes := IdentitySet new.
 	reg := ns at: #'GrailCanonicalClasses' otherwise: nil.
@@ -2439,9 +2439,9 @@ ___grailDropApp___: aName
 		tree do: [:c | found := found + (byClass at: c otherwise: #()) size]].
 	found > 0 ifTrue: [
 		^ ValueError @env1:___signal___:
-			'app ''' , appName , ''' still has ' , found printString ,
+			'namespace ''' , appName , ''' still has ' , found printString ,
 			' instance(s) of its classes in the repository, so it cannot be dropped: ' ,
-			'in the app, unbind what its globals and gemdb.root keep, commit, then run ' ,
+			'in the namespace, unbind what its globals and gemdb.root keep, commit, then run ' ,
 			'gemdb.admin.garbage_collect() -- this counts what the repository HOLDS, and ' ,
 			'an unlinked object stays there until it is collected'].
 	"The identity-keyed records outlive any one namespace: let the app's
@@ -2457,15 +2457,15 @@ ___grailDropApp___: aName
 category: 'Grail-App Namespaces'
 classmethod: importlib
 ___grailAppFromEnvironment___
-	"The launcher's half of gemdb.set_app (docs/App_Namespaces_Design.md §4):
-	when GEMDB_APP names an app, make it current before the script runs, so a
-	deployment chooses the app without editing the top file.  ``./grail --app
-	NAME'' sets it.  Read by runPath: and runModule:, so any launcher that runs
+	"The launcher's half of gemdb.use_namespace (docs/App_Namespaces_Design.md
+	§4): when GEMDB_NAMESPACE names an app, make it current before the script
+	runs, so a deployment chooses the app without editing the top file.
+	``./grail --namespace NAME'' sets it.  Read by runPath: and runModule:, so any launcher that runs
 	a script through them -- GemDB's fork of grail.tpz included -- honours it.
 	Unset or empty: nothing changes."
 
 	| appName |
-	appName := System gemEnvironmentVariable: 'GEMDB_APP'.
+	appName := System gemEnvironmentVariable: 'GEMDB_NAMESPACE'.
 	(appName isNil or: [appName isEmpty]) ifTrue: [^ self].
 	self ___grailSetApp___: appName
 %
@@ -2621,7 +2621,7 @@ ___grailUseApp___: aNameOrNil
 	the namespace.
 
 	The UNCHECKED switch: tests use it to move between namespaces in one
-	session.  gemdb.set_app goes through ___grailSetApp___:, which refuses a
+	session.  gemdb.use_namespace goes through ___grailSetApp___:, which refuses a
 	switch the session can no longer make coherently.  Either way the
 	session's record of which namespace each loaded module went to is
 	dropped, since it described the previous app."
@@ -2641,8 +2641,9 @@ ___grailUseApp___: aNameOrNil
 category: 'Grail-App Namespaces'
 classmethod: importlib
 ___grailSetApp___: aName
-	"gemdb.set_app(name), and the launcher's --app / GEMDB_APP: make app aName
-	current for the rest of the session (docs/App_Namespaces_Design.md §4).
+	"gemdb.use_namespace(name), and the launcher's --namespace /
+	GEMDB_NAMESPACE: make app aName current for the rest of the session
+	(docs/App_Namespaces_Design.md §4).
 
 	Refused once it can no longer hold for the whole session: when a DIFFERENT
 	app is already set, or when a module that would belong to an app -- one not
@@ -2654,12 +2655,12 @@ ___grailSetApp___: aName
 
 	| appName current offenders |
 	appName := aName asString.
-	appName isEmpty ifTrue: [^ ValueError @env1:___signal___: 'an app name must not be empty'].
+	appName isEmpty ifTrue: [^ ValueError @env1:___signal___: 'a namespace name must not be empty'].
 	current := self ___grailCurrentAppName___.
 	current = appName ifTrue: [^ self ___grailNamespace___].
 	current isNil ifFalse: [
-		^ RuntimeError @env1:___signal___: 'this session is already in app ''' , current ,
-			'''; an app is chosen once per session, before its modules are imported'].
+		^ RuntimeError @env1:___signal___: 'this session is already in namespace ''' , current ,
+			'''; a namespace is chosen once per session, before its modules are imported'].
 	offenders := SortedCollection new.
 	(self @env1:modules) keysAndValuesDo: [:k :m |
 		| file |
@@ -2669,8 +2670,8 @@ ___grailSetApp___: aName
 			and: [(self ___grailSharedSource___: file) not]])
 				ifTrue: [offenders add: k asString]].
 	offenders isEmpty ifFalse: [
-		^ RuntimeError @env1:___signal___: 'set_app(''' , appName ,
-			''') must come before the app''s modules are imported; already imported: ' ,
+		^ RuntimeError @env1:___signal___: 'use_namespace(''' , appName ,
+			''') must come before the program''s modules are imported; already imported: ' ,
 			(offenders asArray inject: '' into: [:acc :each |
 				acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]])].
 	^ self ___grailUseApp___: appName

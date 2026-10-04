@@ -2,10 +2,12 @@
 
 **Status:** design agreed 2026-10-04. Cuts 1–4 and 6 (§9) are implemented:
 the name-keyed registries live in a namespace; imports resolve per namespace,
-with `gemdb.set_app`, `gemdb.app()`, `./grail --app` and `GEMDB_APP`; and
+with `gemdb.use_namespace`, `gemdb.namespace()`, `./grail --namespace` and
+`GEMDB_NAMESPACE` (named `set_app` / `app()` / `--app` / `GEMDB_APP` until the
+§4 rename); and
 `__main__` in an app is canonical, with persistent globals, `__transient__` and
 `gemdb.root` as their alias; a module-level `Final` initializes once; and
-`gemdb.admin.apps()` / `drop_app()`, with the Persistent Modules departures
+`gemdb.admin.namespaces()` / `drop_namespace()`, with the Persistent Modules departures
 D11–D13. Cut 5 changed course after measurement: the commit-time check is
 asked of the kernel instead (§6.2), and Grail makes its refusal catchable. It follows
 from PRs #1295 (the slot-pair owner guard), #1296 (layout propagation through
@@ -39,7 +41,7 @@ objects".
 
 "An application" has to be a named thing. A user runs many programs, and
 §2.2 shows what happens when two of them share a namespace by accident. So
-the namespace is chosen explicitly, with `gemdb.set_app(name)` or a launcher
+the namespace is chosen explicitly, with `gemdb.use_namespace(name)` or a launcher
 option. A run that names no app keeps today's behaviour.
 
 ## 2. What goes wrong without it
@@ -154,26 +156,37 @@ because the shared base is deployed once and run by every app.
 
 ```python
 import gemdb
-gemdb.set_app("shop")      # before the app's first import
+gemdb.use_namespace("shop")   # before the app's first import
 import shop.models
 ```
 
 - **Before any app module is imported.** The namespace decides where every
-  later import resolves, so `set_app` raises if a non-shared module has
+  later import resolves, so `use_namespace` raises if a non-shared module has
   already been imported this session, and also if a different app is already
   set. `import gemdb` itself is shared, so it is always allowed first.
-- **Also from the launcher.** `gemdb --app shop app.py` (and `./grail --app`),
-  or a `GEMDB_APP` environment variable, so a deployment can choose the app
+- **Also from the launcher.** `./grail --namespace shop app.py`, or a
+  `GEMDB_NAMESPACE` environment variable, so a deployment can choose the app
   without editing the top file. The launcher sets it before running anything.
-  GemDB's launcher is a fork of `scripts/grail.tpz` (`~/code/GemDB_Code`), so
-  the option lands in both.
-- **Creating vs. joining.** The first `set_app("shop")` in a repository
+  `importlib` reads the variable in `runPath:` / `runModule:`, so GemDB's
+  launcher, a fork of `scripts/grail.tpz` (`~/code/GemDB_Code`), honours the
+  variable already and needs only the option.
+- **Creating vs. joining.** The first `use_namespace("shop")` in a repository
   creates the namespace in the current transaction, and it persists at the
   next commit. Later sessions join it. Listing and deleting apps belong in
-  `gemdb.admin` (`apps()`, `drop_app(name)`; the latter refuses while the
+  `gemdb.admin` (`namespaces()`, `drop_namespace(name)`; the latter refuses while the
   app's classes have instances, like `gemdb.modules.forget`).
-- **Name.** `set_app`, not `setApp`, to match the rest of `gemdb`
-  (`rename_class`, `drop_class`, `needs_commit`).
+- **Name.** `use_namespace`, snake_case to match the rest of `gemdb`
+  (`rename_class`, `drop_class`, `needs_commit`). It was first built as
+  `set_app` and renamed before any release, for three reasons. "set_" read as a
+  setter callable at any time, where the call is a once-per-session choice
+  that must precede the program's imports. "App" collides with Django, which
+  Grail vendors: a Django project already has apps, and one GemDB namespace
+  would hold several of them. And neither word said what the call buys,
+  persistent globals and a module cache of the program's own. The name keeps
+  its argument: which namespace is the whole point, since two programs
+  sharing one is the §2.2 problem. "App namespace" stays the term in this
+  design and in the `importlib` internals (`___grailSetApp___:`,
+  `UserGlobals #GrailApps`), which were not renamed.
 
 ## 5. `__main__` in an app
 
@@ -483,7 +496,7 @@ exists.
    accessors are the only access path.
 2. **Imports resolve per namespace.** File location chooses shared or app,
    with third-party packages in the app; the per-app module-class dictionary
-   goes into the compile symbol list; `set_app` and the launcher option. Test:
+   goes into the compile symbol list; `use_namespace` and the launcher option. Test:
    two apps each with their own `models.py`, both deployed, no refusal, and
    each app's objects keep their own code (the §2.2 scenario inverted).
 
@@ -571,11 +584,11 @@ exists.
    refusal, the deploy audit's walker, and class-level `__transient__` (§6.3)
    remain to do.
 
-6. **`gemdb.admin.apps()` / `drop_app()`**, and the docs: GemDB_Module.md,
+6. **`gemdb.admin.namespaces()` / `drop_namespace()`**, and the docs: GemDB_Module.md,
    Persistent Modules (new departures next to D4 for persistent app globals,
    `__transient__` and `Final`), and the getting-started story.
 
-   *As built.* `apps()` lists `UserGlobals #GrailApps`. `drop_app(name)`
+   *As built.* `namespaces()` lists `UserGlobals #GrailApps`. `drop_namespace(name)`
    removes the namespace after counting the instances of its classes'
    subtrees, the scan `forget` uses, and refusing if there are any. It also
    releases the app's classes from the identity-keyed class set and
@@ -606,5 +619,7 @@ Cross-user apps (§8) come after these.
    sockets, files and C pointers; it already does for non-persistent classes),
    and Grail makes it catchable rather than walking every commit (§6.2).
 5. **`Final` is the initialize-once marker** (§5.4).
-6. **The API is `gemdb.set_app(name)`**, plus `--app` and `GEMDB_APP` from the
-   launcher.
+6. **The API is `gemdb.use_namespace(name)`**, plus `--namespace` and
+   `GEMDB_NAMESPACE` from the launcher, `gemdb.namespace()`, and
+   `gemdb.admin.namespaces()` / `drop_namespace()`. First agreed as
+   `set_app`; renamed for the reasons in §4.

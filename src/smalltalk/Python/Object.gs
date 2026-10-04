@@ -8892,6 +8892,61 @@ ___unaryGetterShadowedBySetter___: getterSym setter: setterSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___grailDerivedDataDescriptorFor: aSym
+	"A data descriptor (a property, or an object with __set__ / __delete__)
+	that a class between the receiver's class and the owner of the unary
+	getter ``aSym'' -- both included -- holds in its attribute holder, or nil.
+
+	The pair read performs the getter it finds, and that getter can belong to
+	an ANCESTOR's property while a nearer class has rebound the name.  CPython
+	takes the first class in the MRO that has the name, and a data descriptor
+	there wins outright.  Three shapes reached the ancestor's getter instead:
+
+	    class Sub(Base): pass;  Sub.p = property(...)     -- answered Base's p
+	    class Sub(Base): @Base.p.deleter def p(self)       -- ran the DELETER
+	    class Sub(Base): @to_property def p(self)          -- ran the raw body
+
+	the second and third because the decorated def is compiled under its own
+	name and its decorated result goes to the holder.  The owner itself is
+	included for exactly that: its holder entry IS the decorator's result.
+
+	DATA descriptors only.  A plain class value or a method in the holder must
+	not outrank an INSTANCE slot behind the same accessor pair, which CPython's
+	instance __dict__ wins over too.
+
+	Each class's SESSION OVERLAY is asked before its holder: a runtime
+	``Cls.p = v'' on a canonical class lands there instead (see
+	___classAttrOverlayLookup___:name:), which is every class of a module the
+	test harness loads."
+
+	| owner walker holder v isData ov inner |
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [^ nil].
+	isData := [:x | x ~~ nil and: [(x isKindOf: AbstractPropertyDescriptor)
+		or: [(x isKindOf: PythonInstance)
+			and: [(x ___respondsTo___: #'__set__:_:')
+			or: [(x ___respondsTo___: #'___set__:kw:')
+			or: [x ___respondsTo___: #'__delete__:']]]]]].
+	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	walker := self @env0:class.
+	[walker == nil] whileFalse: [
+		ov == nil ifFalse: [
+			inner := ov @env0:at: walker otherwise: nil.
+			inner == nil ifFalse: [
+				v := inner @env0:at: aSym otherwise: nil.
+				(isData @env0:value: v) ifTrue: [^ v]]].
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				(isData @env0:value: v) ifTrue: [^ v]]].
+		walker == owner ifTrue: [^ nil].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___grailPyDefinedAccessorPair___: getterSym setter: setterSym
 	"True when the ``name''/``name:'' pair is one a PYTHON CLASS BODY declared
 	on ONE class -- a @property (getter plus the synthesized read-only setter,
@@ -10466,7 +10521,12 @@ ___pyAttrLoad___: aSym
 								___setterCat @env0:~= 'Grail-Fixed Arity Forwarders'
 									and: [___setterCat @env0:~= 'Grail-Class Side Forwarders']]]]]])
 		ifTrue: [
-			| instVal metaclass |
+			| instVal metaclass derived |
+			"A DATA DESCRIPTOR stored on a class at least as derived as the
+			pair's getter wins, as CPython's MRO walk has it -- see
+			___grailDerivedDataDescriptorFor:."
+			derived := self ___grailDerivedDataDescriptorFor: aSym.
+			derived == nil ifFalse: [^ self ___descriptorGet___: derived].
 			instVal := self @env0:perform: aSym env: 1.
 			"If the per-instance slot is still nil, fall back to the
 			class-side accessor for the class-level default — matches
@@ -15052,6 +15112,30 @@ ___grailCompiledSelectorsForPythonName___: aSymbol
 
 category: 'Grail-Self-Send Overrides'
 classmethod: object
+___grailStoredValueIsAProperty___: aValue
+	"Is aValue a ``property'' (or enum.property)?  Storing one on a class never
+	installs self-send dispatchers.
+
+	A property lives on ACCESSOR selectors -- its getter ``p'' and setter
+	``p:'', its own or inherited from a base's property -- and the attribute
+	protocol PERFORMS those selectors for every read and store of the
+	attribute.  A dispatcher over them took each read and store for a CALL of
+	the bound value: under GRAIL_DIRECT_CALLS ``ctx.maximum_version = v'' in
+	ssl.py (SSLContext's property over _SSLContext's) raised 'TLSVersion'
+	object is not callable and test_ssl could not import, and reading an
+	``@typing.override @property'' raised 'str' object is not callable.
+
+	Reads and stores resolve the right property without a dispatcher -- they
+	always have with the flag off.  What a dispatcher would add is only a
+	direct CALL of the property's value (``obj.p(x)''), which CallAst keeps on
+	load-then-call for the class's own properties (___directCallSelector___,
+	exclusion 10)."
+
+	^ aValue @env0:isKindOf: AbstractPropertyDescriptor
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
 ___grailClassBodyStoreShadows___: aValue name: aName
 	"GRAIL_DIRECT_CALLS: does a class-body store of aValue under aName shadow a
 	compiled method -- i.e. is it worth installing self-send dispatchers for?
@@ -15095,6 +15179,7 @@ ___grailClassBodyStoreShadows___: aValue name: aName
 		and: [(aName @env0:asString @env0:at: 1) == $_
 		and: [(aName @env0:asString @env0:at: 2) ~~ $_
 		and: [(aName @env0:asString @env0:last) == $_]]])) ifTrue: [^ false].
+	(self ___grailStoredValueIsAProperty___: aValue) ifTrue: [^ false].
 	"Descriptors stored by a class body (functools.singledispatchmethod, a
 	user __get__ class) shadow the compiled method too -- ___grailCallOverride___
 	binds them through __get__."
@@ -16028,9 +16113,11 @@ ___pyAttrStore___: aName put: aValue
 		defined in a deployed module takes -- and a hook after them fires for
 		some classes and not others.  Order does not matter: the dispatcher reads
 		the stored value when it is CALLED, not when it is installed."
-		(object @env0:___grailIsPatchableCallable___: aValue) ifTrue: [
-			[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		((object @env0:___grailIsPatchableCallable___: aValue)
+			and: [(object @env0:___grailStoredValueIsAProperty___: aValue) not])
+				ifTrue: [
+					[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 		"Canonical-class overlay: runtime stores on a shared canonical
 		class stay session-local (docs/Persistent_Modules_and_Classes.md
 		par.7).  False (the default -- the class is not canonical) falls

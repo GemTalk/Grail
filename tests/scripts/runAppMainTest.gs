@@ -123,7 +123,7 @@ b2 = B()
 write value: root , '/other.py' value: 'print("a different top file")
 '.
 
-System gemEnvironmentVariable: 'GEMDB_APP' put: app.
+System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app.
 main := importlib runPath: root , '/main.py'.
 check value: 'the top file runs as the app''s canonical __main__'
   value: (((importlib ___grailNamespace___ at: #'GrailCanonicalModules') at: '__main__' otherwise: nil) == main).
@@ -182,7 +182,7 @@ check value: 'the other globals were'
 b1 := committed dynamicInstVarAt: #'b1'.
 started := committed dynamicInstVarAt: #'started'.
 
-System gemEnvironmentVariable: 'GEMDB_APP' put: app.
+System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app.
 main := importlib runPath: root , '/main.py'.
 check value: 'a re-run runs over the committed globals' value: main == committed.
 check value: 'an unchanged re-run writes nothing' value: System needsCommit not.
@@ -197,7 +197,7 @@ check value: 'and its initializer does not run'
 "gemdb.root in an app is the globals.  The rabbits double."
 r := evalPython value: 'import gemdb
 gemdb.root["rabbits"] = gemdb.root["rabbits"] * 2
-(gemdb.app(), "b1" in gemdb.root, "__name__" in list(gemdb.root))'.
+(gemdb.namespace(), "b1" in gemdb.root, "__name__" in list(gemdb.root))'.
 check value: 'gemdb.root names the app''s globals, without the dunders'
   value: ((r @env1:__getitem__: 0) = app and: [(r @env1:__getitem__: 1) == true
     and: [(r @env1:__getitem__: 2) == false]]).
@@ -269,7 +269,7 @@ app := UserGlobals at: #'Grail_appmain_app'.
   (GsFile openWriteOnServer: root , '/main.py')
     nextPutAll: (GsFile openReadOnServer: root , '/main_v2.py') contents;
     close.
-  System gemEnvironmentVariable: 'GEMDB_APP' put: app.
+  System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app.
   main := importlib runPath: root , '/main.py'.
   r := evalPython value: 'import gemdb
 __b1 = gemdb.root["b1"]
@@ -291,7 +291,7 @@ __b2 = gemdb.root["b2"]
     on: ImportError do: [:e | e return: e messageText asString].
   check value: 'a different top file in the same app is refused (D10)' value: r notNil.
 ] ensure: [
-  System gemEnvironmentVariable: 'GEMDB_APP' put: ''.
+  System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: ''.
   System abortTransaction.
   importlib ___grailUseApp___: nil.
   apps := UserGlobals at: #'GrailApps' otherwise: nil.
