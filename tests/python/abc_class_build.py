@@ -200,6 +200,34 @@ class _NsProbe(metaclass=_ShowNs):
 check('namespace_holds_the_decorated_object', _seen, {'a': True, 'b': False})
 
 
+# The namespace rebind above must not count as a SECOND binding: an enum's
+# namespace refuses one, so a decorated method in an enum body raised
+# "'describe' already defined" and the enum could not be built.
+def _build_enum_with_a_decorated_method():
+    import enum
+
+    def logged(f):
+        def w(*a, **k):
+            return f(*a, **k)
+        return w
+
+    class Color(enum.Enum):
+        RED = 1
+        GREEN = 2
+
+        @logged
+        def describe(self):
+            return self.name
+
+    return [m.name for m in Color]
+
+
+# Only that the class BUILDS: which names become members is a separate,
+# pre-existing defect (the decorated method is also made a member, on main too).
+check('enum_body_takes_a_decorated_method',
+      attempt(_build_enum_with_a_decorated_method)[0], 'ok')
+
+
 # ------------------------------------------- class keywords through a metaclass
 
 _kwargs_seen = {}

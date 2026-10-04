@@ -95,7 +95,8 @@ testAbstractPropertyIsAbstract
 	self assertAll: #('subclass_attr_shadows_a_value_attr'
 		'abstractproperty_makes_a_class_abstract'
 		'abstractproperty_refuses_instantiation'
-		'namespace_holds_the_decorated_object')
+		'namespace_holds_the_decorated_object'
+		'enum_body_takes_a_decorated_method')
 %
 
 category: 'Grail-Tests'
