@@ -1,11 +1,12 @@
 # App namespaces: one set of globals per application (design)
 
-**Status:** design agreed 2026-10-04. Cuts 1–4 (§9) are implemented:
+**Status:** design agreed 2026-10-04. Cuts 1–4 and 6 (§9) are implemented:
 the name-keyed registries live in a namespace; imports resolve per namespace,
 with `gemdb.set_app`, `gemdb.app()`, `./grail --app` and `GEMDB_APP`; and
 `__main__` in an app is canonical, with persistent globals, `__transient__` and
-`gemdb.root` as their alias; and a module-level `Final` initializes once.
-Cuts 5 and 6 are not. It follows
+`gemdb.root` as their alias; a module-level `Final` initializes once; and
+`gemdb.admin.apps()` / `drop_app()`, with the Persistent Modules departures
+D11–D13. Cut 5 is not: a measurement changed its premise (see §9). It follows
 from PRs #1295 (the slot-pair owner guard), #1296 (layout propagation through
 the persistent class registry) and #1297 (refusing a different file under a
 deployed module name, `gemdb.modules`), and from the discussion that led to
@@ -457,9 +458,25 @@ exists.
 5. **Session-bound objects refused at commit** (§6), with the walk's cost
    measured on a realistic app before it is on by default, and class-level
    `__transient__` (§6.1) in the same cut, since the error message points to it.
+
+   *Premise to revisit (measured 2026-10-04).* A Grail `threading.Lock`,
+   `Semaphore`, `Condition` and `Event`, a `socket.socket()` and an open
+   file all **commit without error**. So there is no commit refusal for this
+   cut to name a path in. It has to decide for itself which Python objects are
+   session-bound, and find them in what a commit writes. First measure what
+   each of those becomes in the next session.
 6. **`gemdb.admin.apps()` / `drop_app()`**, and the docs: GemDB_Module.md,
    Persistent Modules (new departures next to D4 for persistent app globals,
    `__transient__` and `Final`), and the getting-started story.
+
+   *As built.* `apps()` lists `UserGlobals #GrailApps`. `drop_app(name)`
+   removes the namespace after counting the instances of its classes'
+   subtrees, the scan `forget` uses, and refusing if there are any. It also
+   releases the app's classes from the identity-keyed class set and
+   self-send records. The departures are D11 (the app, its `__main__`), D12
+   (`__transient__`) and D13 (`Final`). The getting-started story is the
+   first-app walkthrough in GemDB_Module.md; GemDB's own guide is in its
+   repository.
 
 Cross-user apps (§8) come after these.
 

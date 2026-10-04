@@ -227,6 +227,25 @@ apps_globals
 
 category: 'Grail-Repository Administration'
 method: Repository
+apps_list
+	"Python repository.apps_list() -- this user's app names, sorted
+	(importlib class >> ___grailAppNames___).  gemdb.admin.apps() wraps it."
+
+	^ importlib @env0:___grailAppNames___
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+apps_drop: aName
+	"Python repository.apps_drop('shop') -- remove an app and everything
+	deployed in it, once nothing is stored against its classes (importlib
+	class >> ___grailDropApp___:).  gemdb.admin.drop_app() wraps it."
+
+	^ importlib @env0:___grailDropApp___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
 schema_rename_class: aName _: newName
 	"Python repository.schema_rename_class('module.Old', 'New') -- move a
 	renamed class's instances onto the class the new source defines

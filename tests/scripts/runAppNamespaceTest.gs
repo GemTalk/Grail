@@ -14,8 +14,10 @@ output pushnew runAppNamespaceTest.out
 ! import warm-binds A's module and writes nothing, A's stored instance has A's
 ! class and runs A's code, B's still runs B's, b/ is now the foreign file IN
 ! APP A, and set_app refuses a second app.  Session 4 chooses app B through
-! GEMDB_APP and runs a script with runPath:, the launcher's path.  Session 4
-! also cleans up: the apps, the stored instances and the files.
+! GEMDB_APP and runs a script with runPath:, the launcher's path, then
+! exercises gemdb.admin.apps() and drop_app() (cut 6): app A, whose module holds
+! a stored instance, is refused; app C, with a class and no instances, is
+! dropped.  Session 4 also cleans up: the apps, the stored instances, the files.
 iferr 1 where
 iferr 2 output pop
 iferr 3 where
@@ -60,7 +62,8 @@ root := '/tmp/' , modName.
 next run would warm-bind the stale fixtures.  Dropping an app drops
 everything deployed in it."
 apps := UserGlobals at: #'GrailApps' otherwise: nil.
-apps ifNotNil: [apps removeKey: appA ifAbsent: []. apps removeKey: appB ifAbsent: []].
+apps ifNotNil: [apps removeKey: appA ifAbsent: []. apps removeKey: appB ifAbsent: [].
+  apps removeKey: appA , '_c' ifAbsent: []].
 System commitTransaction ifFalse: [self error: 'the self-heal commit failed'].
 #('' '/a' '/b') do: [:sub |
   [GsFile createServerDirectory: root , sub] on: Error do: [:e | e return: nil]].
@@ -265,7 +268,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out evalPython failures check root modName appA appB main apps |
+| out evalPython failures check root modName appA appB appC main apps r |
 out := GsFile stdout.
 failures := OrderedCollection new.
 check := [:label :ok |
@@ -292,16 +295,70 @@ appB := UserGlobals at: #'Grail_appns_b'.
     value: (main @env0:dynamicInstVarAt: #'app') = appB.
   check value: 'and the script imports app B''s module'
     value: (main @env0:dynamicInstVarAt: #'hello') = 'B cy'.
+  System gemEnvironmentVariable: 'GEMDB_APP' put: ''.
+  System abortTransaction.
+  importlib ___grailUseApp___: nil.
+
+  "gemdb.admin.apps() and drop_app() (cut 6).  App C deploys a class and
+  stores no instance of it, so it can be dropped; app A's module holds one."
+  appC := appA , '_c'.
+  [GsFile createServerDirectory: root , '/c'] on: Error do: [:e | e return: nil].
+  (GsFile openWriteOnServer: root , '/c/' , modName , '.py')
+    nextPutAll: 'class Unused:
+    pass
+'; close.
+  importlib ___grailUseApp___: appC.
+  importlib loadModuleFromPath: root , '/c/' , modName , '.py' name: modName.
+  System commitTransaction ifFalse: [self error: 'the app C commit failed'].
+  importlib ___grailUseApp___: nil.
+  r := evalPython value: 'import gemdb.admin
+gemdb.admin.apps()'.
+  check value: 'gemdb.admin.apps() lists the apps'
+    value: ((r includes: appA) and: [(r includes: appB) and: [r includes: appC]]).
+  r := evalPython value: 'import gemdb.admin
+try:
+    gemdb.admin.drop_app("' , appA , '")
+    __r = "dropped"
+except ValueError as e:
+    __r = str(e)
+__r'.
+  check value: 'drop_app refuses an app whose classes have instances, and says how many'
+    value: ((r isKindOf: CharacterCollection) and: [r includesString: 'still has 1 instance']).
+  r := evalPython value: 'import gemdb.admin
+(gemdb.admin.drop_app("' , appC , '"), "' , appC , '" in gemdb.admin.apps())'.
+  check value: 'drop_app removes an app with no instances, answering its class count'
+    value: ((r @env1:__getitem__: 0) = 1 and: [(r @env1:__getitem__: 1) == false]).
+  check value: 'and commits' value: System needsCommit not.
+  importlib ___grailUseApp___: appB.
+  r := evalPython value: 'import gemdb.admin
+try:
+    gemdb.admin.drop_app("' , appB , '")
+    __r = "dropped"
+except ValueError as e:
+    __r = str(e)
+__r'.
+  check value: 'drop_app refuses the app this session is in'
+    value: ((r isKindOf: CharacterCollection) and: [r includesString: 'this session is in']).
+  importlib ___grailUseApp___: nil.
+  r := evalPython value: 'import gemdb.admin
+try:
+    gemdb.admin.drop_app("grail_no_such_app")
+    __r = "dropped"
+except ValueError:
+    __r = "refused"
+__r'.
+  check value: 'drop_app refuses an app that does not exist' value: r = 'refused'.
 ] ensure: [
   System gemEnvironmentVariable: 'GEMDB_APP' put: ''.
   System abortTransaction.
   importlib ___grailUseApp___: nil.
   apps := UserGlobals at: #'GrailApps' otherwise: nil.
-  apps ifNotNil: [apps removeKey: appA ifAbsent: []. apps removeKey: appB ifAbsent: []].
-  #('/a/' '/b/') do: [:sub |
+  apps ifNotNil: [apps removeKey: appA ifAbsent: []. apps removeKey: appB ifAbsent: [].
+    apps removeKey: appA , '_c' ifAbsent: []].
+  #('/a/' '/b/' '/c/') do: [:sub |
     [GsFile removeServerFile: root , sub , modName , '.py'] on: Error do: [:e | e return: nil]].
   [GsFile removeServerFile: root , '/b/main.py'] on: Error do: [:e | e return: nil].
-  #('/a' '/b' '') do: [:sub |
+  #('/a' '/b' '/c' '') do: [:sub |
     [GsFile removeServerDirectory: root , sub] on: Error do: [:e | e return: nil]].
   failures addAll: ((1 to: (UserGlobals at: #'Grail_appns_failures' otherwise: 1)) collect: [:i | 'an earlier session''s check']).
   #(#'Grail_appns_root' #'Grail_appns_mod' #'Grail_appns_a' #'Grail_appns_b' #'Grail_appns_failures')

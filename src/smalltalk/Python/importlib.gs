@@ -2397,6 +2397,65 @@ ___grailAppGlobals___
 
 category: 'Grail-App Namespaces'
 classmethod: importlib
+___grailAppNames___
+	"The names of this user's apps, sorted.  gemdb.admin.apps()."
+
+	^ (self ___grailApps___ ifNil: [#()] ifNotNil: [:apps | apps keys])
+		asSortedCollection asArray
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailDropApp___: aName
+	"Remove app aName: its namespace, and with it every module, class and
+	global deployed in it (docs/App_Namespaces_Design.md §4).  Answers the
+	number of classes it held.  gemdb.admin.drop_app() wraps it, owning the
+	clean-transaction check and the commit.
+
+	REFUSES, as gemdb.modules.forget does, while the repository holds any
+	instance of the app's classes or of their subclasses, and says how many:
+	dropping the app would leave them on classes nothing can name.  That
+	count includes objects the app's OWN globals hold, which go with it --
+	so the order is: join the app, unbind what its globals keep, commit,
+	gemdb.admin.garbage_collect(), then drop it from a session not in it.
+	Refuses the app this session is in, since the session is running it."
+
+	| appName ns classes tree byClass found reg |
+	appName := aName asString.
+	ns := self ___grailAppNamed___: appName create: false.
+	ns isNil ifTrue: [^ ValueError @env1:___signal___: 'no app named ''' , appName , ''''].
+	self ___grailCurrentAppName___ = appName ifTrue: [
+		^ ValueError @env1:___signal___: 'this session is in app ''' , appName ,
+			'''; drop it from a session that is not'].
+	classes := IdentitySet new.
+	reg := ns at: #'GrailCanonicalClasses' otherwise: nil.
+	reg ifNotNil: [reg do: [:v | (v isKindOf: Behavior) ifTrue: [classes add: v]]].
+	tree := IdentitySet new.
+	classes do: [:c | tree addAll: (c @env1:___grailSlotSubtree___)].
+	found := 0.
+	tree isEmpty ifFalse: [ | treeArray |
+		treeArray := tree asArray.
+		byClass := treeArray first @env1:___grailInstancesOf___: treeArray inMemoryOnly: false.
+		tree do: [:c | found := found + (byClass at: c otherwise: #()) size]].
+	found > 0 ifTrue: [
+		^ ValueError @env1:___signal___:
+			'app ''' , appName , ''' still has ' , found printString ,
+			' instance(s) of its classes in the repository, so it cannot be dropped: ' ,
+			'in the app, unbind what its globals and gemdb.root keep, commit, then run ' ,
+			'gemdb.admin.garbage_collect() -- this counts what the repository HOLDS, and ' ,
+			'an unlinked object stays there until it is collected'].
+	"The identity-keyed records outlive any one namespace: let the app's
+	classes go from them too, or they pin the classes."
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		classes do: [:cls | [bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
+	(UserGlobals at: #'GrailCommittedSelfSendOverrides' otherwise: nil) ifNotNil: [:d |
+		classes do: [:cls | d removeKey: cls ifAbsent: []]].
+	self ___grailApps___ removeKey: appName.
+	^ classes size
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
 ___grailAppFromEnvironment___
 	"The launcher's half of gemdb.set_app (docs/App_Namespaces_Design.md §4):
 	when GEMDB_APP names an app, make it current before the script runs, so a
@@ -3881,10 +3940,10 @@ ___forgetCanonicalModule___: aModuleName
 			[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
 	"This session's hash-state verdict -- the other half of the doc §5 D6 guard."
 	self _stateMap removeKey: modName asSymbol ifAbsent: [].
-	"And the generated module class."
-	PythonModules
-		removeKey: (self ___asSmalltalkModuleName___: modName) asSymbol
-		ifAbsent: []
+	"And the generated module class, from the dictionary of the namespace it
+	was filed in (an app's own, or PythonModules)."
+	(self ___grailModuleClassesIn___: self ___grailNamespace___ create: false) ifNotNil: [:d |
+		d removeKey: (self ___asSmalltalkModuleName___: modName) asSymbol ifAbsent: []]
 %
 
 category: 'Grail-Module Loading'
