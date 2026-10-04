@@ -3435,7 +3435,11 @@ ___pyRSplit___: sep max: maxsplit
 	right to left, so ``'abbbc'.rsplit('bb')'' is ``['ab', 'c']'' where a
 	left-to-right split gives ``['a', 'bc']'', and the unsplit HEAD keeps its
 	leading whitespace.  The earlier implementation took a left split and
-	re-joined its head, so it got both wrong."
+	re-joined its head, so it got both wrong.
+
+	Pieces are collected right to left with add: and reversed ONCE on the
+	way out (___pyReversed___:): addFirst: shifts the collection, which made
+	``text.rsplit()'' quadratic -- 3.6s for a 1 MB string."
 
 	| n max result i j p m idx |
 	self @env0:___isExactPyStr___ ifFalse: [
@@ -3447,15 +3451,15 @@ ___pyRSplit___: sep max: maxsplit
 		i := n.
 		[max @env0:> 0] whileTrue: [
 			[i @env0:>= 1 and: [self ___isPySpaceAt___: i]] whileTrue: [i := i @env0:- 1].
-			i @env0:< 1 ifTrue: [^ result].
+			i @env0:< 1 ifTrue: [^ self ___pyReversed___: result].
 			j := i.
 			[i @env0:>= 1 and: [(self ___isPySpaceAt___: i) @env0:not]]
 				whileTrue: [i := i @env0:- 1].
-			result @env0:addFirst: (self @env0:copyFrom: i @env0:+ 1 to: j).
+			result @env0:add: (self @env0:copyFrom: i @env0:+ 1 to: j).
 			max := max @env0:- 1].
 		[i @env0:>= 1 and: [self ___isPySpaceAt___: i]] whileTrue: [i := i @env0:- 1].
-		i @env0:>= 1 ifTrue: [result @env0:addFirst: (self @env0:copyFrom: 1 to: i)].
-		^ result].
+		i @env0:>= 1 ifTrue: [result @env0:add: (self @env0:copyFrom: 1 to: i)].
+		^ self ___pyReversed___: result].
 	p := self ___pySplitSeparator___: sep.
 	max := self ___pySplitLimit___: maxsplit.
 	p @env0:== nil ifTrue: [result @env0:add: self. ^ result].
@@ -3465,11 +3469,23 @@ ___pyRSplit___: sep max: maxsplit
 		and: [j @env0:>= m
 		and: [(idx := self @env0:findLastSubString: p startingAt: j @env0:- m @env0:+ 1) @env0:> 0]]]
 		whileTrue: [
-			result @env0:addFirst: (self @env0:copyFrom: idx @env0:+ m to: j).
+			result @env0:add: (self @env0:copyFrom: idx @env0:+ m to: j).
 			j := idx @env0:- 1.
 			max := max @env0:- 1].
-	result @env0:addFirst: (self @env0:copyFrom: 1 to: j).
-	^ result
+	result @env0:add: (self @env0:copyFrom: 1 to: j).
+	^ self ___pyReversed___: result
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyReversed___: anOrderedCollection
+	"A new OrderedCollection (a Python list) holding anOrderedCollection's
+	elements last to first."
+
+	| out |
+	out := OrderedCollection @env0:new: anOrderedCollection @env0:size.
+	anOrderedCollection @env0:reverseDo: [:each | out @env0:add: each].
+	^ out
 %
 
 category: 'Grail-String Methods'
