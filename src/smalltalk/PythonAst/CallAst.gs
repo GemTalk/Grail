@@ -1196,6 +1196,19 @@ ___directCallSelector___
 		and: [(recv function isKindOf: NameAst)
 		and: [recv function id = #'super']]) ifTrue: [^ nil].
 	attrSym := attrName asSymbol.
+	"10. ``self.p(args)'' where p is one of this class's OWN @property or
+	decorated defs -- the exclusions classSelfSendSelector makes, for the same
+	reasons.  A property's getter is the unary ``p'' and its setter ``p:'', so
+	``self.factory()'' read the property instead of calling its value and
+	``self.p(x)'' would store x; a decorated def's selector is the RAW
+	function, and the class-body store of a property over its own def installs
+	no dispatcher to redirect it (object class >>
+	___grailClassBodyStore___:name:shadowsIn:)."
+	((recv isKindOf: NameAst) and: [self class isSelfReference: recv id]) ifTrue: [
+		(self class classPropertyNames notNil
+			and: [self class classPropertyNames includes: attrSym]) ifTrue: [^ nil].
+		(self class classDecoratedFunctionNames notNil
+			and: [self class classDecoratedFunctionNames includes: attrSym]) ifTrue: [^ nil]].
 	^ self class fastPathSelectorForAttr: attrSym arity: arguments size
 %
 

@@ -14956,6 +14956,30 @@ ___grailCompiledSelectorsForPythonName___: aSymbol
 
 category: 'Grail-Self-Send Overrides'
 classmethod: object
+___grailStoredValueIsAProperty___: aValue
+	"Is aValue a ``property'' (or enum.property)?  Storing one on a class never
+	installs self-send dispatchers.
+
+	A property lives on ACCESSOR selectors -- its getter ``p'' and setter
+	``p:'', its own or inherited from a base's property -- and the attribute
+	protocol PERFORMS those selectors for every read and store of the
+	attribute.  A dispatcher over them took each read and store for a CALL of
+	the bound value: under GRAIL_DIRECT_CALLS ``ctx.maximum_version = v'' in
+	ssl.py (SSLContext's property over _SSLContext's) raised 'TLSVersion'
+	object is not callable and test_ssl could not import, and reading an
+	``@typing.override @property'' raised 'str' object is not callable.
+
+	Reads and stores resolve the right property without a dispatcher -- they
+	always have with the flag off.  What a dispatcher would add is only a
+	direct CALL of the property's value (``obj.p(x)''), which CallAst keeps on
+	load-then-call for the class's own properties (___directCallSelector___,
+	exclusion 10)."
+
+	^ aValue @env0:isKindOf: AbstractPropertyDescriptor
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
 ___grailClassBodyStoreShadows___: aValue name: aName
 	"GRAIL_DIRECT_CALLS: does a class-body store of aValue under aName shadow a
 	compiled method -- i.e. is it worth installing self-send dispatchers for?
@@ -14999,6 +15023,7 @@ ___grailClassBodyStoreShadows___: aValue name: aName
 		and: [(aName @env0:asString @env0:at: 1) == $_
 		and: [(aName @env0:asString @env0:at: 2) ~~ $_
 		and: [(aName @env0:asString @env0:last) == $_]]])) ifTrue: [^ false].
+	(self ___grailStoredValueIsAProperty___: aValue) ifTrue: [^ false].
 	"Descriptors stored by a class body (functools.singledispatchmethod, a
 	user __get__ class) shadow the compiled method too -- ___grailCallOverride___
 	binds them through __get__."
@@ -15932,9 +15957,11 @@ ___pyAttrStore___: aName put: aValue
 		defined in a deployed module takes -- and a hook after them fires for
 		some classes and not others.  Order does not matter: the dispatcher reads
 		the stored value when it is CALLED, not when it is installed."
-		(object @env0:___grailIsPatchableCallable___: aValue) ifTrue: [
-			[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		((object @env0:___grailIsPatchableCallable___: aValue)
+			and: [(object @env0:___grailStoredValueIsAProperty___: aValue) not])
+				ifTrue: [
+					[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 		"Canonical-class overlay: runtime stores on a shared canonical
 		class stay session-local (docs/Persistent_Modules_and_Classes.md
 		par.7).  False (the default -- the class is not canonical) falls
