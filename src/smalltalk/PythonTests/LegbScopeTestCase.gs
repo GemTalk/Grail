@@ -130,9 +130,10 @@ testShadowingIsPerScope
 category: 'Grail-Tests - Descriptor protocol'
 method: LegbScopeTestCase
 testClassAttributeFunctionDoesNotRebind
-	"A function stored as a class attribute passes through instance
-	attribute reads unbound (___descriptorGet___: excludes BoundMethod)
-	— the itsdangerous digest_method pattern."
+	"A staticmethod-wrapped function stored as a class attribute passes
+	through instance attribute reads unbound -- the itsdangerous
+	digest_method pattern.  A BARE module function there binds, as in
+	CPython (ClassBodyCallableBindsTestCase)."
 
 	self assert: (self resultAt: 'class_attr_fn_call') equals: 'HELPER'
 %
