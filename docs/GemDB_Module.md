@@ -31,7 +31,7 @@ gemdb.GemDBError            # base exception
 gemdb.ConflictError         # a commit lost the race; carries the live objects
 gemdb.PendingChangesError   # a block/refresh refused to run over pending work
 
-gemdb.admin                 # repository administration -- see below
+gemdb.admin                 # repository administration, apps -- see below
 gemdb.sessions              # who is connected -- see below
 ```
 
@@ -344,7 +344,16 @@ import gemdb.admin
 gemdb.admin.size()                     # {"bytes": ..., "free_bytes": ...}
 gemdb.admin.backup("/backups/mon.gz")  # .gz -> compressed, else plain
 gemdb.admin.garbage_collect()          # mark-for-collection; returns its report
+gemdb.admin.apps()                     # ["blog", "shop"] -- see gemdb.set_app
+gemdb.admin.drop_app("blog")           # remove an app and everything deployed in it
 ```
+
+`drop_app` refuses (`ValueError`, saying how many) while the repository holds
+instances of the app's classes, as `gemdb.modules.forget` does. That count
+includes what the app's own globals hold, which would go with it. So to retire
+an app: join it, unbind what its globals keep, commit, `garbage_collect()`,
+then `drop_app` from a session not in it. It also refuses the app the session
+is in, needs a clean transaction, and commits itself.
 
 `backup` and `garbage_collect` refuse (`PendingChangesError`) while the
 session has uncommitted changes — a backup covers only committed state,
@@ -544,8 +553,23 @@ gemdb.commit()
   every CPython run) the statement runs as written. This is the one departure
   from CPython: the initializer is skipped on a re-run, which is the point.
 
-Not yet: the commit-time error for session-bound objects (the design's cut 5),
-and listing or dropping apps (cut 6).
+**A first app, start to finish:**
+
+```bash
+./grail --app shop shop.py      # first run: classes built, globals committed
+./grail --app shop shop.py      # re-run: same objects, nothing rebuilt
+$EDITOR shop.py                 # add a field to Order
+./grail --app shop shop.py      # Order rebuilt in place; stored orders keep working
+```
+
+and from any session, `gemdb.set_app("shop"); gemdb.root["orders"]` reads the
+same list. `gemdb.admin.apps()` lists the apps, and `gemdb.admin.drop_app`
+removes one.
+
+Not yet: the commit-time error for session-bound objects (the design's cut 5).
+Today a socket, a lock or an open file in a committed global commits without
+complaint and is useless in the next session, so name such globals in
+`__transient__`.
 
 ### `gemdb.sessions` — who is connected
 
@@ -596,7 +620,9 @@ is now `gemdb.schema`, above.
   module without writing, both stored instances keep their own app's class and
   code, the other app's file is the foreign one within the app, a second
   `set_app` is refused, and `GEMDB_APP` chooses the app for a `runPath:`
-  script. `AppNamespaceTestCase` covers the in-session half, and
+  script. Then `gemdb.admin.apps()` lists them, `drop_app` refuses an app whose
+  module holds a stored instance, the session's own app and an unknown name,
+  and drops an app with a class and no instances. `AppNamespaceTestCase` covers the in-session half, and
   `test_grail_launcher.sh` the `--app` option.
 * `tests/scripts/runAppMainTest.gs` (wired in as `app-main`) — `__main__` in an
   app over three sessions. The first run commits; a transient global is never

@@ -1,4 +1,4 @@
-"""Repository administration: size, backups, garbage collection.
+"""Repository administration: size, backups, garbage collection, apps.
 
 Separate from the gemdb top level on purpose: a developer who only
 writes Python never needs any of this, and should never see it.  The
@@ -11,6 +11,8 @@ operations wrap env-1 methods on the kernel Repository class
     gemdb.admin.size()                       # {"bytes": ..., "free_bytes": ...}
     gemdb.admin.backup("/backups/mon.gz")    # .gz -> compressed, else plain
     gemdb.admin.garbage_collect()            # mark-for-collection; returns its report
+    gemdb.admin.apps()                       # ["blog", "shop"]
+    gemdb.admin.drop_app("blog")             # remove an app and all it deployed
 
 ``backup`` and ``garbage_collect`` refuse (:class:`gemdb.PendingChangesError`)
 while the session holds uncommitted changes: a backup writes only
@@ -76,7 +78,37 @@ def garbage_collect():
     return _gemstone.repository.mark_for_collection()
 
 
-__all__ = ["size", "backup", "garbage_collect"]
+def apps():
+    """The names of the apps in this repository, sorted (see ``gemdb.set_app``)."""
+    return list(_gemstone.repository.apps_list())
+
+
+def drop_app(name):
+    """Remove app ``name``: its modules, classes and globals, all at once.
+
+    REFUSES, with ``ValueError``, while the repository holds any instance of
+    the app's classes, and says how many -- dropping it would leave those
+    objects on classes nothing can name.  That includes what the app's own
+    globals hold, which would go with it, so: join the app, unbind what its
+    globals (``gemdb.root``) keep, commit, ``garbage_collect()``, then drop
+    it from a session that is not in it.  Also refuses the app this session
+    is in, and an app that does not exist.
+
+    Scans the repository, so it refuses (``gemdb.PendingChangesError``)
+    while the session has uncommitted changes, and commits itself.  Returns
+    the number of classes the app held.
+    """
+    if _gemdb.needs_commit():
+        raise _gemdb.PendingChangesError(
+            "drop_app() scans the repository for instances of the app's classes, "
+            "and a scan discards uncommitted work; this session has changes. "
+            "gemdb.commit() to keep them or gemdb.abort() to discard them first")
+    n = _gemstone.repository.apps_drop(str(name))
+    _gemdb.commit()
+    return n
+
+
+__all__ = ["size", "backup", "garbage_collect", "apps", "drop_app"]
 
 # Warm the function-attribute caches during the cold import, so they are
 # committed with the module -- same mechanism and reasoning as the block
@@ -84,7 +116,7 @@ __all__ = ["size", "backup", "garbage_collect"]
 import sys as _sys
 
 _self = _sys.modules["gemdb.admin"]
-for _name in ("size", "backup", "garbage_collect"):
+for _name in ("size", "backup", "garbage_collect", "apps", "drop_app"):
     getattr(_self, _name)
 del _self, _name, _sys
 
@@ -100,6 +132,6 @@ del _self, _name, _sys
 import sys as _sys
 
 _self = _sys.modules[__name__]
-for _name in ("size", "backup", "garbage_collect"):
+for _name in ("size", "backup", "garbage_collect", "apps", "drop_app"):
     getattr(_self, _name)
 del _self, _name, _sys

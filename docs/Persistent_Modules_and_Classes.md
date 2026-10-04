@@ -624,7 +624,8 @@ on the gem's host, so symlinks, `/tmp` against `/private/tmp`, and relative
 - the same source at another path, such as another checkout or another host.
   It is the same module, so it binds or rebuilds as usual;
 - a module stale only because a dependency changed (its own hash is unchanged);
-- `__main__`, which is never deployed (#851).
+- `__main__` outside an app, which is never deployed (#851). In an app it is
+  deployed, and a different top file is refused like any module (D11).
 
 No hostname is recorded. A client session's gem may run on any host, and the
 same application installed at the same path on several application servers is
@@ -645,10 +646,81 @@ The two ways past the refusal are commands, in `gemdb.modules`:
 
 `del models` is not an override: it unbinds a name, and the cache entry it
 does not touch is `sys.modules['models']`, whose deletion D6 already makes a
-raise. Giving each application its own namespace (a planned
-`gemdb.set_app(name)`) is the general answer to two applications sharing a
-module name; this rule is what keeps the default namespace safe meanwhile.
+raise. Giving each application its own namespace (`gemdb.set_app(name)`, D11)
+is the general answer to two applications sharing a module name; this rule is
+what keeps the default namespace safe, and each app's.
 Test: `tests/scripts/runModulePathTest.gs` (`module-source-path`).
+
+### D11. An app is a namespace of its own, and its `__main__` is persistent
+
+`gemdb.set_app(name)` (or `./grail --app NAME`, or `GEMDB_APP`) gives a program
+its own copy of every name-keyed registry, its own module-class dictionary, and
+a canonical `__main__` ([App_Namespaces_Design.md](App_Namespaces_Design.md)).
+Two departures follow, both only inside an app:
+
+- **Where a module goes is decided by its file, not its name.** Grail's own
+  sources (`src/python/`: the stdlib, vendored frameworks, `gemdb`) are deployed
+  once in the shared base. Everything else, a venv's packages included, is
+  deployed in the app. So two apps can each deploy their own `models`, and D10
+  refuses a foreign file *within* an app rather than across all of them.
+- **`__main__` is a canonical module, and its globals are persistent.** This
+  is the departure from #851, which keeps `__main__` session-local, and
+  outside an app it still is. In an app the top file runs every time, but over
+  its committed instance: each run starts with the globals of the last
+  commit, an assignment is a write, a failed commit keeps the session's
+  changes, and an abort reloads the committed values. The top file's classes
+  keep their identity across runs and edits.
+
+  #851's first objection was "the session is dirty before the first line".
+  The answer is that **an unchanged re-run writes nothing**:
+  - the committed class is reused, so nothing is parsed or compiled, and the
+    class statements' probes hit;
+  - `module >> dynamicInstVarAt:put:` skips a store of the object a global
+    already holds, or of an equal `str`, `int` or tuple of them;
+  - a module's PEP 649 `__annotate__` closure is kept when it is the same
+    compiled block (`module >> ___storeAnnotate___:`).
+
+  `gemdb.root` in an app is a view of these globals.
+
+`gemdb.admin.apps()` lists apps. `gemdb.admin.drop_app(name)` removes one
+with everything deployed in it. It refuses, like `forget`, while instances of
+its classes remain. Tests: `tests/scripts/runAppNamespaceTest.gs`
+(`app-namespaces`) and `runAppMainTest.gs` (`app-main`).
+
+### D12. `__transient__` keeps named module globals per session
+
+The mirror of D4. Where a module's globals are persistent (an app's top file,
+a deployed module), `__transient__ = ["conn", "line"]` names the ones that are
+session state. They are:
+- never committed;
+- left alone by an abort;
+- unbound in each new session, so the module's own assignment rebinds them
+  (the connection reopened, the loop variable reset).
+
+The names have to be a literal list or tuple of strings in the module body,
+known when the class is built. That module's class, and only it, gets
+overrides of the three dynamic-instVar accessors, with the names inlined and
+the values kept in SessionTemps. A module that declares nothing pays nothing.
+The declaration is itself transient, so it is not a write either. The
+class-scope `__transient__` of §8.2 is a separate, still-open item.
+
+### D13. A module-level `Final` initializes once
+
+`app: Final = Flask(__name__)` re-executes on every run of a top file. In
+persistent globals the new binding is a write, and several sessions starting
+the app would conflict on it. So a module-level `name: Final = v` (also
+`Final[T]`, `typing.Final`) that finds `name` already bound in a **committed**
+module instance keeps the committed value and **does not evaluate `v`**:
+Clojure's `defonce`.
+
+Where the globals start empty, as in every CPython run, a first run or a
+session-local `__main__`, the statement runs as written. So the only
+observable departure is a skipped initializer on a re-run, which is the
+point. A type checker already enforces `Final` as single assignment, so no
+correct program depends on the re-evaluation.
+
+`AnnAssignAst` wraps the store in `(self ___finalIsBound___: #name) ifFalse:
+[...]`. Module-scope annotated stores never take the IR path.
 
 ## 6. Lifecycle
 
@@ -872,8 +944,8 @@ cross-user conflicts. Same shape at module scope for anything not listed in
 `__persistent__`.
 
 Wanted: a class-scope `__transient__ = [...]` (SessionDict-backed, the mirror of
-D4), and a `deploy_check` predicate that flags mutable class-body containers the
-way it already flags sockets and locks.
+D4; the module-scope one is D12), and a `deploy_check` predicate that flags
+mutable class-body containers the way it already flags sockets and locks.
 
 ### 8.3 Instance migration for a changed class shape
 
