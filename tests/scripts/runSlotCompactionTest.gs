@@ -180,9 +180,13 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
     value: ([aInst @env1:___pyAttrLoad___: #x. false] on: AbstractException do: [:e | e return: true]).
   check value: 'B''s own b1 pair was recompiled at 3 (a store through the method lands there)'
     value: ([bInst @env1:set_b1: 8. (bInst at: 3) = 8] on: AbstractException do: [:e | e return: false]).
-  check value: 'the pairs live where expected: b1 on B, y on A'
+  "Every class with a layout owns a pair for every name in it: A's indexed
+  pair answers only for A's own instances (the owner guard, object class >>
+  ___grailCompileIndexedPair___:), so B has its own y pair as well."
+  check value: 'the pairs live where expected: b1 on B, y on both A and B'
     value: ((b whichClassIncludesSelector: #'___pyattr_b1___' environmentId: 1) == b
-      and: [(b whichClassIncludesSelector: #'___pyattr_y___' environmentId: 1) == a]).
+      and: [(b whichClassIncludesSelector: #'___pyattr_y___' environmentId: 1) == b
+      and: [(a whichClassIncludesSelector: #'___pyattr_y___' environmentId: 1) == a]]).
 ] ensure: [
   importlib ___canonicalRegistryRestore___:
     (UserGlobals at: #'Grail_compact_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
