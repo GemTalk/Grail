@@ -587,7 +587,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		poolDictionaries: #()
 		inDictionary: ((self ___isSessionLocalModule___: moduleName)
 			ifTrue: [self ___sessionModuleClasses___]
-			ifFalse: [PythonModules])
+			ifFalse: [self ___grailModuleClassesIn___: self ___grailNamespace___ create: true])
 		options: #().
 
 	"Compile top-level `def` statements as real methods on the
@@ -989,6 +989,8 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	    (docs/Class_Attribute_Single_Home.md)."
 
 	| key reg existing minted supersedesLive |
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames]].
 	"A session-local module's class (``__main__'') mints fresh every run, as
 	CPython's does, and is neither reused from nor recorded in the registry:
 	its key is the same in every session's script, so reuse would hand one
@@ -1112,6 +1114,8 @@ ___deployedSourcePathOf___: aModuleName
 	session's open transaction) or it records no location."
 
 	| inst spec origin none |
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___deployedSourcePathOf___: aModuleName]].
 	inst := self ___canonicalModules___ at: aModuleName asString otherwise: nil.
 	(inst isNil or: [inst isCommitted not]) ifTrue: [^ nil].
 	spec := [inst dynamicInstVarAt: #'__spec__'] on: Error do: [:e | e return: nil].
@@ -1167,6 +1171,8 @@ ___grailRelocateModule___: aModuleName
 	deployed, which is almost certainly a typo."
 
 	| st allowed |
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___grailRelocateModule___: aModuleName]].
 	(self ___deployedSourcePathOf___: aModuleName) isNil ifTrue: [
 		^ ValueError @env1:___signal___:
 			'no module named ' , aModuleName asString , ' is deployed from a file in this repository, so there is nothing to relocate'].
@@ -1223,6 +1229,8 @@ ___grailForgetModule___: aModuleName
 	different class.  The count is what the repository HOLDS, from a scan."
 
 	| modName prefix names classes tree byClass found |
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___grailForgetModule___: aModuleName]].
 	modName := aModuleName asString.
 	prefix := modName , '.'.
 	names := (self ___canonicalModules___ keys collect: [:k | k asString]) select: [:k |
@@ -1299,6 +1307,8 @@ ___grailRebaseClass___: aKey
 	in its turn with its own key."
 
 	| reg oldCls modName captured |
+	(self ___grailNeedsNamespaceOfClassKey___: aKey) ifTrue: [
+		^ self ___grailInNamespaceOfClassKey___: aKey do: [self ___grailRebaseClass___: aKey]].
 	reg := self ___canonicalClassRegistry___.
 	oldCls := reg at: aKey asString otherwise: nil.
 	(oldCls isKindOf: Behavior) ifFalse: [
@@ -1336,6 +1346,8 @@ ___grailRenameCanonicalClass___: aKey to: newName
 	what becomes of its data."
 
 	| reg oldCls modName newKey captured result |
+	(self ___grailNeedsNamespaceOfClassKey___: aKey) ifTrue: [
+		^ self ___grailInNamespaceOfClassKey___: aKey do: [self ___grailRenameCanonicalClass___: aKey to: newName]].
 	reg := self ___canonicalClassRegistry___.
 	oldCls := reg at: aKey asString otherwise: nil.
 	(oldCls isKindOf: Behavior) ifFalse: [
@@ -1386,6 +1398,8 @@ ___grailDropCanonicalClass___: aKey
 	can answer more cheaply than by collecting."
 
 	| reg cls tree byClass found |
+	(self ___grailNeedsNamespaceOfClassKey___: aKey) ifTrue: [
+		^ self ___grailInNamespaceOfClassKey___: aKey do: [self ___grailDropCanonicalClass___: aKey]].
 	reg := self ___canonicalClassRegistry___.
 	cls := reg at: aKey asString otherwise: nil.
 	(cls isKindOf: Behavior) ifFalse: [
@@ -1431,6 +1445,8 @@ ___grailReloadModule___: modName
 	re-execution path."
 
 	| mod |
+	(self ___grailNeedsNamespaceOf___: modName) ifTrue: [
+		^ self ___grailInNamespaceOf___: modName do: [self ___grailReloadModule___: modName]].
 	mod := self ___canonicalModules___ at: modName otherwise: nil.
 	mod isNil ifTrue: [mod := (self @env1:modules) at: modName asSymbol otherwise: nil].
 	mod isNil ifTrue: [
@@ -1756,6 +1772,8 @@ ___canonicalClassProbe___: aModuleName name: aClassName
 	importers, and nothing new for the developer's next commit to sweep up."
 
 	| state |
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___canonicalClassProbe___: aModuleName name: aClassName]].
 	"A session-local module (``__main__'') is never deployed, so there is
 	nothing committed to reuse -- see ___isSessionLocalModule___:."
 	(self ___isSessionLocalModule___: aModuleName) ifTrue: [^ nil].
@@ -1777,6 +1795,8 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	class-build guard, so the probe hands back exactly what the original
 	build produced.  Never commits."
 
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___canonicalClassRegister___: aModuleName name: aClassName value: anObject]].
 	"Nothing of a session-local module (``__main__'') is recorded: the
 	registry key would be the same in every session, which is the write #851
 	removes.  See ___isSessionLocalModule___:."
@@ -2120,11 +2140,17 @@ ___stackErrorFlavour___
 category: 'Grail-App Namespaces'
 classmethod: importlib
 ___grailNamespace___
-	"The dictionary the NAME-KEYED canonical registries live in for this
-	session (docs/App_Namespaces_Design.md §3.1): the current app's namespace
-	once one is set, else UserGlobals.  UserGlobals is the DEFAULT namespace,
-	exactly where every registry lived before apps existed, so a session that
-	sets no app reads and writes the same objects as before.
+	"The dictionary the NAME-KEYED canonical registries are read and written in
+	right now (docs/App_Namespaces_Design.md §3.1).  With no app set that is
+	UserGlobals, the DEFAULT namespace, exactly where every registry lived
+	before apps existed -- so a session that sets no app reads and writes the
+	same objects as before, and this is one SessionTemps probe.
+
+	With an app set, it is the namespace of the module being LOADED, if a load
+	is under way (___grailInNamespace___:do:, pushed by loadModuleFromPath:name:
+	once the file's location has chosen shared or app), else the app's.  A
+	stdlib module imported from app code therefore deploys into the shared base,
+	and the app's own modules into the app.
 
 	Every name-keyed registry accessor goes through here -- the module
 	instances, source hashes, dependency records, canonical classes, metaclass,
@@ -2133,7 +2159,252 @@ ___grailNamespace___
 	GrailCommittedSelfSendOverrides) and the runtime/deploy generations stay in
 	UserGlobals: a class object is the same object whichever app named it."
 
-	^ (SessionTemps current at: #'GrailCurrentApp' otherwise: nil) ifNil: [UserGlobals]
+	| temps app stack |
+	temps := SessionTemps current.
+	app := temps at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifTrue: [^ UserGlobals].
+	stack := temps at: #'GrailNamespaceStack' otherwise: nil.
+	(stack isNil or: [stack isEmpty]) ifTrue: [^ app].
+	^ stack last
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailInNamespace___: aNamespace do: aBlock
+	"Evaluate aBlock with aNamespace as the one ___grailNamespace___ answers.
+	A stack, because a load imports other modules and the innermost one is the
+	answer; ensure:, so a load that raises still pops.  With no app set there
+	is only one namespace, so nothing is pushed."
+
+	| stack |
+	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil
+		ifTrue: [^ aBlock value].
+	stack := SessionTemps current at: #'GrailNamespaceStack' otherwise: nil.
+	stack isNil ifTrue: [
+		stack := OrderedCollection new.
+		SessionTemps current at: #'GrailNamespaceStack' put: stack].
+	stack addLast: aNamespace.
+	^ aBlock ensure: [stack removeLast]
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailInNamespaceOf___: aModuleName do: aBlock
+	"Evaluate aBlock in the namespace module aModuleName belongs to this
+	session (___grailNamespaceOf___:) -- for the entry points that are handed a
+	module NAME and may run outside that module's load: dependency checks, class
+	probes and registrations, forget, relocate, reload, the schema commands."
+
+	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil
+		ifTrue: [^ aBlock value].
+	^ self ___grailInNamespace___: (self ___grailNamespaceOf___: aModuleName) do: aBlock
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailNamespaceOf___: aModuleName
+	"The namespace module aModuleName's registries live in, for this session.
+
+	Decided by the module's LOAD when this session loaded it: the load records
+	what the file's location chose (___grailRecordNamespace___:of:).  A module
+	this session has not loaded is the app's when the app's registries know it
+	-- deployed there, or built there in this transaction -- and the shared
+	base's when the base's registries know it.  That is the case a dependency
+	check meets: an app module's record names the stdlib modules it imported,
+	which this session may not have imported yet, and their hashes are in the
+	base.  A name neither knows belongs to the namespace in effect."
+
+	| temps app map ns modName hashes |
+	temps := SessionTemps current.
+	app := temps at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifTrue: [^ UserGlobals].
+	modName := aModuleName asString.
+	map := temps at: #'GrailModuleNamespaces' otherwise: nil.
+	map isNil ifFalse: [
+		ns := map at: modName otherwise: nil.
+		ns isNil ifFalse: [^ ns]].
+	hashes := app at: #'GrailCanonicalModuleHashes' otherwise: nil.
+	(hashes notNil and: [hashes includesKey: modName]) ifTrue: [^ app].
+	hashes := UserGlobals at: #'GrailCanonicalModuleHashes' otherwise: nil.
+	(hashes notNil and: [hashes includesKey: modName]) ifTrue: [^ UserGlobals].
+	"Known nowhere -- a name no load recorded, such as a class an exec in a
+	module body builds: it belongs with whatever is running."
+	^ self ___grailNamespace___
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailNamespaceOfClassKey___: aKey
+	"The namespace whose class registry holds aKey (``module.qualname''): the
+	app's when it has the key, else the shared base.  The schema commands name a
+	class this way, and a dotted module name makes the module part of the key
+	ambiguous, so the registries are asked rather than the key parsed."
+
+	| app reg |
+	app := SessionTemps current at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifTrue: [^ UserGlobals].
+	reg := app at: #'GrailCanonicalClasses' otherwise: nil.
+	(reg notNil and: [reg includesKey: aKey asString]) ifTrue: [^ app].
+	^ UserGlobals
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailInNamespaceOfClassKey___: aKey do: aBlock
+	"Evaluate aBlock in the namespace whose class registry holds aKey."
+
+	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil
+		ifTrue: [^ aBlock value].
+	^ self ___grailInNamespace___: (self ___grailNamespaceOfClassKey___: aKey) do: aBlock
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailNeedsNamespaceOf___: aModuleName
+	"Does an entry point handed module aModuleName have to re-run in that
+	module's namespace?  Never with no app set -- one SessionTemps probe -- and
+	not once it is running there, which is what stops the re-send recursing."
+
+	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil ifTrue: [^ false].
+	^ self ___grailNamespace___ ~~ (self ___grailNamespaceOf___: aModuleName)
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailNeedsNamespaceOfClassKey___: aKey
+	"As ___grailNeedsNamespaceOf___:, for an entry point handed ``module.Class''."
+
+	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil ifTrue: [^ false].
+	^ self ___grailNamespace___ ~~ (self ___grailNamespaceOfClassKey___: aKey)
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailAppFromEnvironment___
+	"The launcher's half of gemdb.set_app (docs/App_Namespaces_Design.md §4):
+	when GEMDB_APP names an app, make it current before the script runs, so a
+	deployment chooses the app without editing the top file.  ``./grail --app
+	NAME'' sets it.  Read by runPath: and runModule:, so any launcher that runs
+	a script through them -- GemDB's fork of grail.tpz included -- honours it.
+	Unset or empty: nothing changes."
+
+	| appName |
+	appName := System gemEnvironmentVariable: 'GEMDB_APP'.
+	(appName isNil or: [appName isEmpty]) ifTrue: [^ self].
+	self ___grailSetApp___: appName
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailNamespaceForLoadOf___: aModuleName path: aPathOrNil
+	"Where a load of aModuleName from aPathOrNil belongs: the shared base for
+	one of Grail's own sources -- the stdlib, Grail's runtime modules, gemdb and
+	the frameworks vendored beside them, all under grailDir/src/python/ -- and
+	the current app for anything else, a venv's site-packages included
+	(§3.2, decision 1).  The FILE decides, not the name, so an app's own json.py
+	and the stdlib json can each be deployed, one in each."
+
+	| app |
+	app := SessionTemps current at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifTrue: [^ UserGlobals].
+	^ (self ___grailSharedSource___: aPathOrNil) ifTrue: [UserGlobals] ifFalse: [app]
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailSharedSource___: aPathOrNil
+	"Is aPathOrNil one of the sources that ship with Grail -- under
+	grailDir/src/python/ -- and so belongs to the shared base?  Unlike
+	___bundledRuntimeSource___:, the vendored CPython test corpus counts: it
+	ships with Grail too.  nil (an in-memory module) and an unknown grailDir
+	answer false."
+
+	| gd |
+	aPathOrNil isNil ifTrue: [^ false].
+	gd := self grailDir.
+	gd isNil ifTrue: [^ false].
+	^ aPathOrNil asString beginsWith: gd asString , '/src/python/'
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailRecordNamespace___: aNamespace of: aModuleName
+	"Remember, for this session, which namespace module aModuleName was loaded
+	into -- what ___grailNamespaceOf___: answers for it from now on."
+
+	| map |
+	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil ifTrue: [^ self].
+	map := SessionTemps current at: #'GrailModuleNamespaces' otherwise: nil.
+	map isNil ifTrue: [
+		map := KeyValueDictionary new.
+		SessionTemps current at: #'GrailModuleNamespaces' put: map].
+	map at: aModuleName asString put: aNamespace
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailSessionNamespacesDo___: aBlock
+	"Evaluate aBlock with each namespace this session reads from -- the shared
+	base (UserGlobals), then the current app's if one is set -- each bound as
+	the current namespace.  For the walks over EVERY deployed class or module
+	(restoring metaclass and MI records, the class census, the schema report,
+	the subclass walk), which have to see the stdlib's classes as well as the
+	app's.  With no app set this is one evaluation, in UserGlobals."
+
+	| app |
+	app := SessionTemps current at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifTrue: [^ aBlock value: UserGlobals].
+	self ___grailInNamespace___: UserGlobals do: [aBlock value: UserGlobals].
+	self ___grailInNamespace___: app do: [aBlock value: app]
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailModuleClassesIn___: aNamespace create: aBoolean
+	"The dictionary module backing classes are filed in for aNamespace:
+	PythonModules for the default namespace, as before apps, and the app's own
+	SymbolDictionary for an app (§3.3).  Generated code binds a module class BY
+	NAME, so this dictionary goes into the compile symbol list ahead of
+	PythonModules while the app's code compiles.  Created only when aBoolean --
+	a read must not write."
+
+	| d |
+	aNamespace == UserGlobals ifTrue: [^ PythonModules].
+	d := aNamespace at: #'GrailModuleClasses' otherwise: nil.
+	(d isNil and: [aBoolean]) ifTrue: [
+		d := SymbolDictionary new.
+		d name: #'GrailModuleClasses'.
+		aNamespace at: #'GrailModuleClasses' put: d].
+	^ d
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailModuleClassAt___: aKey
+	"The module backing class filed under aKey in any dictionary this session
+	reads -- the current app's, then PythonModules -- or nil."
+
+	| app d |
+	app := SessionTemps current at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifFalse: [
+		d := app at: #'GrailModuleClasses' otherwise: nil.
+		d isNil ifFalse: [(d at: aKey otherwise: nil) ifNotNil: [:c | ^ c]]].
+	^ PythonModules at: aKey otherwise: nil
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailFiledModuleClass___: aClass under: aKey
+	"Is aClass the module class filed under aKey, in the current app's
+	dictionary or in PythonModules?  Identity, so an app's ``json'' and the
+	stdlib's are told apart."
+
+	| app d |
+	(PythonModules at: aKey otherwise: nil) == aClass ifTrue: [^ true].
+	app := SessionTemps current at: #'GrailCurrentApp' otherwise: nil.
+	app isNil ifTrue: [^ false].
+	d := app at: #'GrailModuleClasses' otherwise: nil.
+	^ d notNil and: [(d at: aKey otherwise: nil) == aClass]
 %
 
 category: 'Grail-App Namespaces'
@@ -2173,20 +2444,60 @@ ___grailUseApp___: aNameOrNil
 	the default, UserGlobals -- creating the app if it does not exist.  Answers
 	the namespace.
 
-	This is the INTERNAL half of gemdb.set_app: it switches where the
-	name-keyed registries are read and written, and nothing else
-	(docs/App_Namespaces_Design.md §9, cut 1).  Cut 2 adds the rest: per-app
-	module classes in the compile symbol list, file location choosing shared or
-	app, and refusing a switch once an app module has been imported this
-	session -- which is why nothing here resets a session-level cache."
+	The UNCHECKED switch: tests use it to move between namespaces in one
+	session.  gemdb.set_app goes through ___grailSetApp___:, which refuses a
+	switch the session can no longer make coherently.  Either way the
+	session's record of which namespace each loaded module went to is
+	dropped, since it described the previous app."
 
-	| ns |
+	| ns temps |
+	temps := SessionTemps current.
+	temps removeKey: #'GrailModuleNamespaces' ifAbsent: [].
+	temps removeKey: #'GrailNamespaceStack' ifAbsent: [].
 	aNameOrNil isNil ifTrue: [
-		SessionTemps current removeKey: #'GrailCurrentApp' ifAbsent: [].
+		temps removeKey: #'GrailCurrentApp' ifAbsent: [].
 		^ UserGlobals].
 	ns := self ___grailAppNamed___: aNameOrNil create: true.
-	SessionTemps current at: #'GrailCurrentApp' put: ns.
+	temps at: #'GrailCurrentApp' put: ns.
 	^ ns
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___grailSetApp___: aName
+	"gemdb.set_app(name), and the launcher's --app / GEMDB_APP: make app aName
+	current for the rest of the session (docs/App_Namespaces_Design.md §4).
+
+	Refused once it can no longer hold for the whole session: when a DIFFERENT
+	app is already set, or when a module that would belong to an app -- one not
+	shipped with Grail -- is already in sys.modules.  That module was loaded
+	into the default namespace, so its classes would sit outside the app the
+	rest of the program runs in.  Grail's own modules (gemdb among them) are
+	shared and do not count, and neither does __main__, whose own first
+	statements are what call this.  Setting the current app again is a no-op."
+
+	| appName current offenders |
+	appName := aName asString.
+	appName isEmpty ifTrue: [^ ValueError @env1:___signal___: 'an app name must not be empty'].
+	current := self ___grailCurrentAppName___.
+	current = appName ifTrue: [^ self ___grailNamespace___].
+	current isNil ifFalse: [
+		^ RuntimeError @env1:___signal___: 'this session is already in app ''' , current ,
+			'''; an app is chosen once per session, before its modules are imported'].
+	offenders := SortedCollection new.
+	(self @env1:modules) keysAndValuesDo: [:k :m |
+		| file |
+		file := [m @env0:dynamicInstVarAt: #'__file__'] on: Error do: [:e | nil].
+		(k asString ~= '__main__'
+			and: [(file isKindOf: CharacterCollection)
+			and: [(self ___grailSharedSource___: file) not]])
+				ifTrue: [offenders add: k asString]].
+	offenders isEmpty ifFalse: [
+		^ RuntimeError @env1:___signal___: 'set_app(''' , appName ,
+			''') must come before the app''s modules are imported; already imported: ' ,
+			(offenders asArray inject: '' into: [:acc :each |
+				acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]])].
+	^ self ___grailUseApp___: appName
 %
 
 category: 'Grail-App Namespaces'
@@ -2475,6 +2786,8 @@ ___isTrackedModule___: aName
 	the suite can reset them) -- and treating that as a CHANGE would mark
 	every dependent stale in every session, so it is treated as unknown."
 
+	(self ___grailNeedsNamespaceOf___: aName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aName do: [self ___isTrackedModule___: aName]].
 	^ (self ___canonicalModuleHashes___ includesKey: aName asString)
 		and: [self ___canonicalModules___ includesKey: aName asString]
 %
@@ -2487,6 +2800,8 @@ ___recordedGenerationOf___: aName
 	existed) answers its source hash."
 
 	| rec |
+	(self ___grailNeedsNamespaceOf___: aName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aName do: [self ___recordedGenerationOf___: aName]].
 	(self ___isTrackedModule___: aName) ifFalse: [^ nil].
 	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
 	^ rec isNil
@@ -2562,6 +2877,8 @@ ___sourceHashNowOf___: aName
 	dependents ask), or nil when no source file can be found."
 
 	| inst path memo |
+	(self ___grailNeedsNamespaceOf___: aName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aName do: [self ___sourceHashNowOf___: aName]].
 	inst := self ___canonicalModules___ at: aName asString otherwise: nil.
 	path := inst isNil ifTrue: [nil] ifFalse: [inst dynamicInstVarAt: #'__file__'].
 	(path isNil or: [path == None]) ifTrue: [path := self @env1:___moduleNameToPath___: aName asString].
@@ -2584,6 +2901,8 @@ ___generationNowOf___: aName
 	when it is not tracked."
 
 	| now |
+	(self ___grailNeedsNamespaceOf___: aName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aName do: [self ___generationNowOf___: aName]].
 	(self ___isTrackedModule___: aName) ifFalse: [^ nil].
 	now := self ___sourceHashNowOf___: aName.
 	now = (self ___canonicalModuleHashes___ at: aName asString) ifFalse: [
@@ -2604,6 +2923,8 @@ ___isCurrentModule___: aName
 	session."
 
 	| rec memo checking verdict |
+	(self ___grailNeedsNamespaceOf___: aName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aName do: [self ___isCurrentModule___: aName]].
 	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
 	rec isNil ifTrue: [^ true].
 	memo := self ___currencyMemo___.
@@ -2693,22 +3014,25 @@ ___flushPersistentState___
 	persistent objects need no flush).  Direct Smalltalk ``System commit''
 	bypasses this; the Python-visible commit is the supported API."
 
-	| store |
-	store := self ___persistentModuleState___.
+	"Each module's state goes to the store of the namespace it was loaded into
+	-- an app's own, or the shared base's (docs/App_Namespaces_Design.md §3.1)."
 	(self @env1:modules) keysAndValuesDo: [:modKey :mod |
 		| names inner |
 		names := [mod dynamicInstVarAt: #'__persistent__']
 			on: Error do: [:ex | ex return: nil].
 		(names ~~ nil and: [names isKindOf: Collection]) ifTrue: [
-			inner := store at: modKey asString otherwise: nil.
-			inner isNil ifTrue: [
-				inner := KeyValueDictionary new.
-				store at: modKey asString put: inner].
-			names do: [:each |
-				| current |
-				current := mod dynamicInstVarAt: each asString asSymbol.
-				current == nil ifFalse: [
-					inner at: each asString put: current]]]].
+			self ___grailInNamespaceOf___: modKey do: [
+				| store |
+				store := self ___persistentModuleState___.
+				inner := store at: modKey asString otherwise: nil.
+				inner isNil ifTrue: [
+					inner := KeyValueDictionary new.
+					store at: modKey asString put: inner].
+				names do: [:each |
+					| current |
+					current := mod dynamicInstVarAt: each asString asSymbol.
+					current == nil ifFalse: [
+						inner at: each asString put: current]]]]].
 	^ self
 %
 
@@ -2953,21 +3277,24 @@ ___restoreCanonicalMiRecords___
 	issubclass, which describe the class itself and are wrong rather than merely
 	early."
 
-	| structure classes reg |
-	structure := self ___grailNamespace___ at: #'GrailCanonicalClassStructure' otherwise: nil.
-	structure isNil ifTrue: [^ self].
-	classes := self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil.
-	classes isNil ifTrue: [^ self].
+	"Every namespace the session reads: the shared base's classes are reachable
+	from an app's globals exactly as another module's are from a module's."
+	| reg |
 	reg := self ___miRegistry___.
-	structure keysAndValuesDo: [:modName :inner |
-		inner isNil ifFalse: [
-			inner keysAndValuesDo: [:shortName :rec |
-				| cls |
-				cls := classes
-					at: (modName asString , '.' , shortName asString)
-					otherwise: nil.
-				((cls isKindOf: Behavior) and: [(reg includesKey: cls) not])
-					ifTrue: [reg at: cls put: rec]]]].
+	self ___grailSessionNamespacesDo___: [:ns |
+		| structure classes |
+		structure := ns at: #'GrailCanonicalClassStructure' otherwise: nil.
+		classes := ns at: #'GrailCanonicalClasses' otherwise: nil.
+		(structure isNil or: [classes isNil]) ifFalse: [
+			structure keysAndValuesDo: [:modName :inner |
+				inner isNil ifFalse: [
+					inner keysAndValuesDo: [:shortName :rec |
+						| cls |
+						cls := classes
+							at: (modName asString , '.' , shortName asString)
+							otherwise: nil.
+						((cls isKindOf: Behavior) and: [(reg includesKey: cls) not])
+							ifTrue: [reg at: cls put: rec]]]]]].
 	^ self
 %
 
@@ -3145,8 +3472,17 @@ ___restoreAllBodyClassAttrs___
 	whose body ran in this session is marked too: its stores are already in the
 	overlay, first hand.  PEEKS the registry, since this is a read path."
 
+	self ___grailSessionNamespacesDo___: [:ns | self ___restoreAllBodyClassAttrsIn___: ns].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreAllBodyClassAttrsIn___: ns
+	"___restoreAllBodyClassAttrs___ for one namespace."
+
 	| reg st done ov |
-	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
+	reg := ns at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
 	reg isNil ifTrue: [^ self].
 	st := SessionTemps current.
 	done := st at: #'GrailBodyClassAttrsReplayed' otherwise: nil.
@@ -3200,9 +3536,19 @@ ___restoreAllCanonicalMetaclasses___
 	own cold build wrote, and re-running it is free: 65 entries across 16
 	modules on a deployed gs40."
 
+	"Every namespace the session reads, as ___restoreCanonicalMiRecords___ does."
+	self ___grailSessionNamespacesDo___: [:ns | self ___restoreAllCanonicalMetaclassesIn___: ns].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreAllCanonicalMetaclassesIn___: ns
+	"___restoreAllCanonicalMetaclasses___ for one namespace."
+
 	| reg classes |
-	reg := self ___grailNamespace___ at: #'GrailCanonicalMetaclasses' otherwise: nil.
-	classes := self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil.
+	reg := ns at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	classes := ns at: #'GrailCanonicalClasses' otherwise: nil.
 	(reg isNil or: [classes isNil]) ifFalse: [reg keysAndValuesDo: [:modName :inner |
 		inner isNil ifFalse: [
 			inner keysAndValuesDo: [:aClassName :meta |
@@ -3216,7 +3562,7 @@ ___restoreAllCanonicalMetaclasses___
 	"And the classes a module body minted by calling a metaclass directly --
 	see ___recordDirectMetaclass___:meta:.  Keyed by the class itself, since
 	such a class has no registry name."
-	(self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' otherwise: nil) ifNotNil: [:direct |
+	(ns at: #'GrailCanonicalDirectMetaclasses' otherwise: nil) ifNotNil: [:direct |
 		direct keysAndValuesDo: [:modName :inner |
 			inner keysAndValuesDo: [:cls :meta |
 				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
@@ -3391,6 +3737,8 @@ ___forgetCanonicalModule___: aModuleName
 	"``name'' would shadow a Class instance variable here -- this is a CLASS-side
 	method, so self is a Class and the compiler refuses the temp (error 1030)."
 	| modName prefix reg victims |
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___forgetCanonicalModule___: aModuleName]].
 	modName := aModuleName asString.
 	prefix := modName , '.'.
 	"Instance + source hash: together these are the warm-vs-cold decision."
@@ -3444,17 +3792,21 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 	referencing committed dependencies wants the instance it was
 	deployed with; staleness is the next explicit import's concern."
 
-	self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
-		((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
-			aModuleClass ___adoptInstance___: inst.
-			self registerModule: aName asString with: inst.
-			self ___restoreCanonicalMetaclasses___: aName asString.
-			self ___restoreCanonicalClassStructure___: aName asString.
-			self ___restoreCanonicalMiRecords___.
-			self ___restoreAllCanonicalMetaclasses___.
-			self ___restoreAllBodyClassAttrs___.
-			self ___runSessionInit___: inst.
-			^ inst]].
+	"In every namespace the session reads: the class may be the shared base's
+	or the app's (docs/App_Namespaces_Design.md §3.1)."
+	self ___grailSessionNamespacesDo___: [:ns |
+		self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
+			((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
+				aModuleClass ___adoptInstance___: inst.
+				self ___grailRecordNamespace___: ns of: aName.
+				self registerModule: aName asString with: inst.
+				self ___restoreCanonicalMetaclasses___: aName asString.
+				self ___restoreCanonicalClassStructure___: aName asString.
+				self ___restoreCanonicalMiRecords___.
+				self ___restoreAllCanonicalMetaclasses___.
+				self ___restoreAllBodyClassAttrs___.
+				self ___runSessionInit___: inst.
+				^ inst]]].
 	^ nil
 %
 
@@ -3523,6 +3875,28 @@ ___committedInstanceToRebuild___: moduleName class: moduleClass
 category: 'Grail-Module Loading'
 classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
+	"Load a module from a file path and register it.  Returns the module
+	instance -- see ___loadModuleFromPath___:name:, which does the work.
+
+	With an app set (docs/App_Namespaces_Design.md §3.2), the file's location
+	first chooses the namespace the module belongs to -- the shared base for
+	Grail's own sources, the app for the rest -- and the whole load runs bound
+	to it: its registries, its backing class's dictionary and the symbol list
+	its code compiles against.  Imports the body makes choose again, each for
+	itself.  With no app set there is one namespace and this adds nothing."
+
+	| ns |
+	(SessionTemps current at: #'GrailCurrentApp' otherwise: nil) isNil
+		ifTrue: [^ self ___loadModuleFromPath___: pathString name: moduleName].
+	ns := self ___grailNamespaceForLoadOf___: moduleName path: pathString.
+	self ___grailRecordNamespace___: ns of: moduleName.
+	^ self ___grailInNamespace___: ns
+		do: [self ___loadModuleFromPath___: pathString name: moduleName]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___loadModuleFromPath___: pathString name: moduleName
 	"Load a module from a file path and register it.
 	Returns the module instance.
 
@@ -3944,7 +4318,7 @@ ___moduleEntryIsLive___: aModule
 	cls := aModule class.
 	key := self ___moduleClassKeys___ at: cls otherwise: nil.
 	key isNil ifTrue: [^ true].
-	^ (PythonModules at: key otherwise: nil) == cls
+	^ self ___grailFiledModuleClass___: cls under: key
 %
 
 category: 'Grail-Module Registry'
@@ -4001,7 +4375,7 @@ ___uncommittedImportedModuleNames___
 		entry outlives it until the next lookup validates it -- so without this
 		clause the answer would go on naming a module the session no longer has
 		anything to commit for."
-		(key notNil and: [(PythonModules at: key otherwise: nil) == cls]) ifTrue: [
+		(key notNil and: [self ___grailFiledModuleClass___: cls under: key]) ifTrue: [
 			cls isCommitted
 				ifFalse: [names add: modKey asString]
 				ifTrue: [
@@ -4395,7 +4769,7 @@ registerModule: aName with: aModule
 	hand-assigned substitute fails this test here and is never checked again."
 	cls := aModule class.
 	key := cls name asSymbol.
-	(PythonModules at: key otherwise: nil) == cls
+	(self ___grailFiledModuleClass___: cls under: key)
 		ifTrue: [self ___moduleClassKeys___ at: cls put: key].
 	parts := $. split: aName.
 	parts size > 1 ifTrue: [
@@ -4464,7 +4838,7 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 	twilio's ``from twilio.base import values'' must see the ``values''
 	SUBMODULE, so binding there must proceed normally."
 	(((aParent class whichClassIncludesSelector: sym environmentId: 1) notNil)
-		and: [(PythonModules includesKey: aParent class name asSymbol) not])
+		and: [(self ___grailModuleClassAt___: aParent class name asSymbol) isNil])
 		ifTrue: [^ self].
 	"Idempotence: when both stores already hold this exact child there is
 	nothing to write -- and on a COMMITTED parent (a canonically deployed
@@ -4642,6 +5016,7 @@ runPath: pathString arguments: anArrayOrNil
 		sys @env1:___setArgv___:
 			(Array @env0:with: pathString @env0:asString) , anArrayOrNil].
 	self @env1:___installScriptDir___: pathString.
+	self ___grailAppFromEnvironment___.
 	^ self loadModuleFromPath: pathString name: '__main__'
 %
 
@@ -4707,6 +5082,7 @@ runModule: aName arguments: anArrayOrNil
 	anArrayOrNil == nil ifFalse: [
 		sys @env1:___setArgv___:
 			(Array @env0:with: path @env0:asString) , anArrayOrNil].
+	self ___grailAppFromEnvironment___.
 	^ self loadModuleFromPath: path name: '__main__'
 %
 
@@ -5342,7 +5718,7 @@ ___grailCompileSymbolList___
 	module scope insert it at position 1.  Composed fresh each call (the profile
 	is authoritative for the current dictionary object)."
 
-	| prof sl |
+	| prof sl ns |
 	prof := System myUserProfile symbolList.
 	sl := SymbolList new.
 	sl add: (prof objectNamed: #Python).
@@ -5351,6 +5727,14 @@ ___grailCompileSymbolList___
 	one exists: composing the list must not create it."
 	(SessionTemps current at: #'GrailSessionModuleClasses' otherwise: nil)
 		ifNotNil: [:d | sl add: d].
+	"An app's module classes, ahead of the shared ones, while code that
+	belongs to the app compiles -- so app code binds the app's ``models'' first
+	(docs/App_Namespaces_Design.md §3.3).  Shared code compiles with no app
+	dictionary in its list, so it can never bind one app's class: it is
+	deployed once and run by every app."
+	ns := self ___grailNamespace___.
+	ns == UserGlobals ifFalse: [
+		(self ___grailModuleClassesIn___: ns create: false) ifNotNil: [:d | sl add: d]].
 	sl add: (prof objectNamed: #PythonModules).
 	sl add: self ___grailKernelDict___.
 	^ sl
@@ -8899,6 +9283,11 @@ reload: aModule
 	path := aModule @env0:dynamicInstVarAt: #'__file__'.
 	path @env0:isNil ifTrue: [^ aModule].
 	name := (aModule __name__) @env0:asString.
+	"In the namespace the module belongs to, like its load
+	(docs/App_Namespaces_Design.md §3.2): its registries and the symbol list
+	its recompiled code binds against are that namespace's."
+	(importlib @env0:___grailNeedsNamespaceOf___: name) ifTrue: [
+		^ importlib @env0:___grailInNamespaceOf___: name do: [self reload: aModule]].
 	"Canonical modules (doc par.10.5): reload IS the explicit re-execution
 	path.  Force the emitted class-def probes COLD for the duration of the
 	body re-run (a #match verdict left over from import would bind the
@@ -10029,9 +10418,10 @@ ___committedCanonicalClassesDo: aBlock
 	over from a previous runtime is dropped rather than over-reported."
 
 	self ___canonicalGenerationCheck___.
-	(self ___grailNamespace___ at: #'GrailCanonicalClasses' otherwise: nil) ifNotNil: [:registry |
-		registry keysAndValuesDo: [:key :value |
-			(value isKindOf: Behavior) ifTrue: [aBlock value: value]]]
+	self ___grailSessionNamespacesDo___: [:ns |
+		(ns at: #'GrailCanonicalClasses' otherwise: nil) ifNotNil: [:registry |
+			registry keysAndValuesDo: [:key :value |
+				(value isKindOf: Behavior) ifTrue: [aBlock value: value]]]]
 %
 
 category: 'Grail-Class Enumeration'

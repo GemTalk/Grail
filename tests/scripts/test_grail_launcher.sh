@@ -359,6 +359,37 @@ if [ "$(cat "$TMP/raceA")" = "ok" ] && [ "$(cat "$TMP/raceB")" = "ok" ]; then ok
         "A: $(cat "$TMP/raceA")" "B: $(cat "$TMP/raceB")"
 fi
 
+# --- --app / GEMDB_APP: run as a GemDB app ----------------------------------
+# docs/App_Namespaces_Design.md §4: the launcher chooses the app before the
+# script's first line, so gemdb.app() already answers it.  The script never
+# commits, so the app it creates is gone when it exits.
+APP="grail_launcher_app_$$"
+printf 'import gemdb\nprint(gemdb.app())\n' > "$TMP/app.py"
+if run "--app NAME" 0 -- --app "$APP" "$TMP/app.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$APP" ]; then ok; else
+        bad "--app NAME sets the app" "want: $APP" "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+if run "--app=NAME" 0 -- "--app=$APP" "$TMP/app.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$APP" ]; then ok; else
+        bad "--app=NAME sets the app" "want: $APP" "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+GEMDB_APP="$APP" ./grail "$TMP/app.py" >"$OUT_FILE" 2>"$ERR_FILE"
+if [ "$(cat "$OUT_FILE")" = "$APP" ]; then ok; else
+    bad "GEMDB_APP sets the app" "want: $APP" "got:  $(cat "$OUT_FILE")" "stderr: $(cat "$ERR_FILE")"
+fi
+if run "no app" 0 -- "$TMP/app.py"; then
+    if [ "$(cat "$OUT_FILE")" = "None" ]; then ok; else
+        bad "without --app there is no app" "got: $(cat "$OUT_FILE")"
+    fi
+fi
+if run "--app without a name" 2 -- --app; then
+    if grep -q -- "--app requires an argument" "$ERR_FILE"; then ok; else
+        bad "--app without a name says so" "stderr: $(cat "$ERR_FILE")"
+    fi
+fi
+
 # --- report ----------------------------------------------------------------
 
 echo "grail launcher: $pass passed, $fail failed"

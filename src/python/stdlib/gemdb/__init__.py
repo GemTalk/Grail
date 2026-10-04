@@ -45,6 +45,9 @@ Python never meets it:
 * :mod:`gemdb.admin` -- repository administration: ``size()``,
   ``backup(path)``, ``garbage_collect()``.
 * :mod:`gemdb.sessions` -- who is connected: ``current()``, ``all()``.
+* ``gemdb.set_app(name)`` -- give a program's own modules a namespace of
+  their own, so two programs that each have a ``models.py`` can both be
+  deployed in one repository.
 * ``gemdb.stats`` and ``gemdb.locks`` are reserved for cache statistics
   and object locking, and do not exist yet.
 
@@ -122,6 +125,32 @@ class ConflictError(GemDBError):
         """The objects both sessions wrote, when that was the conflict."""
         objects = self.conflicts.get("Write-Write")
         return objects if isinstance(objects, list) else []
+
+
+def set_app(name):
+    """Run the rest of this session as app ``name``, creating it if it is new.
+
+    An app is a namespace of its own for the modules it imports: its
+    ``models`` and another app's ``models`` are two deployed modules, each
+    with its own classes, where without apps the second would be refused
+    (docs/App_Namespaces_Design.md).  Modules that ship with Grail -- the
+    standard library, gemdb itself -- stay shared by every app; anything
+    else, a venv's packages included, belongs to the app.
+
+    Call it first, before the app's own imports: it raises ``RuntimeError``
+    once a module that would belong to the app has been imported, or when
+    the session is already in a different app.  ``import gemdb`` does not
+    count, being shared.  Calling it again with the same name does nothing.
+    A new app is created in the current transaction and kept by the next
+    commit, as an import is.  ``./grail --app NAME`` and the ``GEMDB_APP``
+    environment variable do the same before the script runs.
+    """
+    _gemstone.repository.apps_set(str(name))
+
+
+def app():
+    """The name of this session's app, or None when no app is set."""
+    return _gemstone.repository.apps_current()
 
 
 def needs_commit():
@@ -393,7 +422,7 @@ class _Root:
 root = _Root()
 
 __all__ = ["root", "transaction", "commit", "abort", "refresh",
-           "needs_commit", "GemDBError", "ConflictError",
+           "needs_commit", "set_app", "app", "GemDBError", "ConflictError",
            "PendingChangesError", "admin", "sessions"]
 
 # Warm the function-attribute caches, here in the module body.  The
@@ -411,7 +440,7 @@ import sys as _sys
 
 _self = _sys.modules["gemdb"]
 for _name in ("transaction", "commit", "abort", "refresh", "needs_commit",
-              "_state", "root", "_pending_imports", "_naming"):
+              "set_app", "app", "_state", "root", "_pending_imports", "_naming"):
     getattr(_self, _name)
 _precached = _gemstone.sessionDict
 del _self, _name, _sys

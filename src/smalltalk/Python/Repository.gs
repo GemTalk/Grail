@@ -191,6 +191,29 @@ modules_relocate: aName
 
 category: 'Grail-Repository Administration'
 method: Repository
+apps_set: aName
+	"Python repository.apps_set('shop') -- make app 'shop' current for the rest
+	of the session, creating it if it does not exist (importlib class >>
+	___grailSetApp___:).  gemdb.set_app() wraps it."
+
+	importlib @env0:___grailSetApp___: aName.
+	^ None
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+apps_current
+	"Python repository.apps_current() -- the current app's name, or None in
+	the default namespace.  gemdb.app() wraps it."
+
+	| appName |
+	appName := importlib @env0:___grailCurrentAppName___.
+	appName == nil ifTrue: [^ None].
+	^ appName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
 schema_rename_class: aName _: newName
 	"Python repository.schema_rename_class('module.Old', 'New') -- move a
 	renamed class's instances onto the class the new source defines

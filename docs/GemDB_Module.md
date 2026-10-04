@@ -25,6 +25,8 @@ gemdb.commit()              # explicit commit (interactive work)
 gemdb.abort()               # discard uncommitted changes, refresh the view
 gemdb.refresh()             # see others' commits; refuses if you have changes
 gemdb.needs_commit()        # does the session hold uncommitted changes?
+gemdb.set_app(name)         # run as an app: its modules get their own namespace
+gemdb.app()                 # the current app's name, or None
 gemdb.GemDBError            # base exception
 gemdb.ConflictError         # a commit lost the race; carries the live objects
 gemdb.PendingChangesError   # a block/refresh refused to run over pending work
@@ -467,6 +469,35 @@ scans the repository like `gemdb.schema.drop_class`, so it refuses on a dirty
 session, refuses (`ValueError`) while instances of the module's classes exist,
 and commits itself.
 
+### `gemdb.set_app` — one namespace per application
+
+```python
+import gemdb
+gemdb.set_app("shop")    # first, before the app's own imports
+import models            # shop's models, whatever other apps call theirs
+```
+
+An app is a namespace of its own for the modules a program imports
+([App_Namespaces_Design.md](App_Namespaces_Design.md)). Two programs that each
+have a `models.py` can both be deployed, each with its own classes, where
+without apps the second import is refused (D10 above). **The file decides
+where a module goes, not its name:** the modules that ship with Grail (the
+standard library, the vendored frameworks, `gemdb` itself, all under
+`src/python/`) stay in the shared base every app uses, and anything else,
+a venv's packages included, belongs to the app. So an app's own `json.py` and
+the stdlib's `json` can both be deployed.
+
+`set_app` comes before the app's own imports. It raises `RuntimeError` once a
+module that would belong to the app is already imported (naming it), or when
+the session is already in a different app; the same name again does nothing.
+A new app is created in the current transaction and kept by the next commit,
+as an import is. `gemdb.app()` answers the current app's name, or `None`.
+`./grail --app shop app.py` and `GEMDB_APP=shop` choose the app before the
+script's first line.
+
+Not yet: `__main__`'s globals in an app (the design's cut 3), `gemdb.root` as
+the app's own root, and listing or dropping apps.
+
 ### `gemdb.sessions` — who is connected
 
 ```python
@@ -510,6 +541,14 @@ is now `gemdb.schema`, above.
   `forget` refused while the instance exists and succeeding on a module with
   none, then in a fresh session `relocate` rebuilding a moved, edited file in
   place under the stored instance, and the old file refused afterwards.
+* `tests/scripts/runAppNamespaceTest.gs` (wired in as `app-namespaces`) — two
+  apps each deploy a module of one name from their own file, unrefused, and
+  store an instance; a fresh session rejoining the first app warm-binds its
+  module without writing, both stored instances keep their own app's class and
+  code, the other app's file is the foreign one within the app, a second
+  `set_app` is refused, and `GEMDB_APP` chooses the app for a `runPath:`
+  script. `AppNamespaceTestCase` covers the in-session half, and
+  `test_grail_launcher.sh` the `--app` option.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
   — the class-level half over a fixture module with a committed instance:
   the refusals for a changed base, a removed class and a renamed one, and

@@ -616,14 +616,17 @@ ___grailSchemaReport___
 	System @env0:needsCommit ifTrue: [
 		^ ImproperOperation @env0:signal:
 			'the schema report scans the repository for instances, which needs a clean transaction: commit or abort first'].
-	reg := importlib @env0:___canonicalClassRegistry___.
 	classes := OrderedCollection @env0:new.
 	keys := OrderedCollection @env0:new.
-	reg @env0:keysAndValuesDo: [:k :v |
-		((v @env0:isKindOf: Behavior)
-			@env0:and: [(v @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1)
-			@env0:and: [(v ___grailSlotLayoutReport___) @env0:anySatisfy: [:r | (r @env0:at: 3) @env0:~= 'assigned']]]) ifTrue: [
-				classes @env0:add: v. keys @env0:add: k @env0:asString]].
+	"The shared base's classes and, in an app, the app's
+	(docs/App_Namespaces_Design.md §3.1)."
+	importlib @env0:___grailSessionNamespacesDo___: [:ns |
+		reg := importlib @env0:___canonicalClassRegistry___.
+		reg @env0:keysAndValuesDo: [:k :v |
+			((v @env0:isKindOf: Behavior)
+				@env0:and: [(v @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1)
+				@env0:and: [(v ___grailSlotLayoutReport___) @env0:anySatisfy: [:r | (r @env0:at: 3) @env0:~= 'assigned']]]) ifTrue: [
+					classes @env0:add: v. keys @env0:add: k @env0:asString]]].
 	classes @env0:isEmpty ifTrue: [^ #()].
 	lists := SystemRepository @env0:listInstances: classes @env0:asArray.
 	rows := Array @env0:new: classes @env0:size.
@@ -1037,9 +1040,12 @@ ___grailSlotSubtree___
 	result := OrderedCollection @env0:with: self.
 	queue := OrderedCollection @env0:with: self.
 	byParent := IdentityKeyValueDictionary @env0:new.
-	(importlib @env0:___canonicalClassRegistry___) @env0:keysAndValuesDo: [:k :v |
-		(v @env0:isKindOf: Behavior) ifTrue: [
-			(byParent @env0:at: v @env0:superclass ifAbsentPut: [OrderedCollection @env0:new]) @env0:add: v]].
+	"Every namespace the session reads: an app's class may subclass a shared
+	one (docs/App_Namespaces_Design.md §3.1)."
+	importlib @env0:___grailSessionNamespacesDo___: [:ns |
+		(importlib @env0:___canonicalClassRegistry___) @env0:keysAndValuesDo: [:k :v |
+			(v @env0:isKindOf: Behavior) ifTrue: [
+				(byParent @env0:at: v @env0:superclass ifAbsentPut: [OrderedCollection @env0:new]) @env0:add: v]]].
 	[queue @env0:isEmpty] @env0:whileFalse: [ | c subs sessionSubs |
 		c := queue @env0:removeFirst.
 		subs := OrderedCollection @env0:new.
