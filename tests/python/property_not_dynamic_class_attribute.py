@@ -144,10 +144,10 @@ import enum as _enum
 r['dca_is_enum_property'] = repr(types.DynamicClassAttribute is _enum.property)
 
 # The DECORATOR form ``@property def q'' is compiled by ClassDefAst into a
-# getter METHOD.  A read OFF THE CLASS now answers a property built from it
-# (UnboundMethod >> ___grailPropertyOrSelf___), so pydoc -- which reads through
-# getattr -- classifies it as CPython does.  inspect still answers 'data': it
-# reads the class __dict__, which holds the getter function, not the property.
+# getter METHOD.  A read OFF THE CLASS answers a property built from it
+# (UnboundMethod >> ___grailPropertyOrSelf___), and the class __dict__ holds that
+# same property, so pydoc -- which reads through getattr -- and inspect -- which
+# reads the __dict__ -- both classify it as CPython does.
 r['decorated_pydoc_kind'] = repr(_kind(pydoc.classify_class_attrs, HasDecoratedProp, 'q'))
 r['decorated_inspect_kind'] = repr(_kind(inspect.classify_class_attrs, HasDecoratedProp, 'q'))
 
@@ -179,11 +179,11 @@ EXPECTED = {
     'prop_set_name': repr('p'),
     'class_access': repr('AttributeError'),
     'decorated_pydoc_kind': repr('readonly property'),
+    'decorated_inspect_kind': repr('property'),
 }
 
 GRAIL_ONLY = {
     'dca_is_enum_property': repr(True),
-    'decorated_inspect_kind': repr('data'),
 }
 
 

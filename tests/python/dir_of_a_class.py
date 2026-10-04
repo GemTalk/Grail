@@ -97,16 +97,12 @@ except Exception as _e:
     r['reversed_userdict'] = '%s: %s' % (type(_e).__name__, _e)
 r['userdict_has_every_dict_name'] = repr(sorted(set(dir(dict)) - set(dir(UserDict))))
 
-# --- KNOWN GAP, recorded rather than endorsed --------------------------------------
-# About what a class __dict__ HOLDS, not about dir(), and its own piece of work.
-# CPython is expected to DISAGREE with the value below.
-#
-# A property reached through the class IS now the property object (``C.prop''
-#    used to answer the getter function), but the class __dict__ still holds
-#    the getter, and classify_class_attrs reads its kind from there: 'data'
-#    where CPython says 'property'.  (It works correctly on an INSTANCE:
-#    C().prop is 1, asserted here so the gap stays narrow.)
-r['property_on_a_class_is_a_known_gap'] = repr(
+# --- a property, reached through the class and through its __dict__ ----------------
+# The class __dict__ holds the PROPERTY a read off the class answers, so
+# classify_class_attrs -- which takes the kind from that mapping -- reports
+# 'property'.  This was a recorded gap: the __dict__ held the getter and the kind
+# came out 'data'.  The third value pins the instance read.
+r['a_property_reached_through_its_class'] = repr(
     [type(C.prop).__name__, _c['prop'].kind, C().prop])
 
 # A staticmethod and a classmethod are read off the stored object, which is
@@ -127,10 +123,10 @@ EXPECTED = {
     'reversed_userdict': "TypeError: 'UserDict' object is not reversible",
     'userdict_has_every_dict_name': '[]',
     'staticmethod_kind': "['static method', 'class method']",
+    'a_property_reached_through_its_class': "['property', 'property', 1]",
 }
 
 GRAIL_ONLY = {
-    'property_on_a_class_is_a_known_gap': "['property', 'data', 1]",
 }
 
 

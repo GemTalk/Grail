@@ -180,17 +180,17 @@ testAUserDictIsNotReversible
 		equals: '[]'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Kinds'
 method: DirOfAClassTestCase
-testAPropertyReachedThroughItsClassIsAKnownGap
-	"Recorded, NOT endorsed.  ``C.prop'' now answers the property OBJECT, as
-	CPython does, but the class __dict__ still holds the getter function, so
-	classify_class_attrs reports kind 'data' where CPython reports 'property'.
-	The third value pins that the INSTANCE path is correct, so the gap stays
-	narrow."
+testAPropertyReachedThroughItsClassIsAProperty
+	"``C.prop'' answers the property OBJECT, and the class __dict__ holds the
+	same one (object >> ___classDict___ asks ___grailPropertyOrSelf___), so
+	classify_class_attrs reports kind 'property' as CPython does.  It was a
+	recorded gap reading 'data' while the __dict__ held the getter.  The third
+	value pins the INSTANCE path."
 
-	self assert: (self resultAt: 'property_on_a_class_is_a_known_gap') asString
-		equals: '[''property'', ''data'', 1]'.
+	self assert: (self resultAt: 'a_property_reached_through_its_class') asString
+		equals: '[''property'', ''property'', 1]'.
 %
 
 category: 'Grail-Tests - Kinds'

@@ -7690,8 +7690,14 @@ ___classDict___
 			and: [nm @env0:~= '___dynInstVars___'
 			and: [(d @env0:includesKey: nm) @env0:not
 			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]) ifTrue: [
+			"A declarative @property's getter is entered as the PROPERTY, the
+			same cached object a read off the class answers, so
+			``C.__dict__['p'] is C.p'' as in CPython.  It held the getter
+			function, and inspect.classify_class_attrs -- which takes its kind
+			from this mapping -- called every @property 'data'."
 			d @env0:at: nm put:
-				(UnboundMethod definingClass: defCls selector: nm @env0:asSymbol)]].
+				(UnboundMethod definingClass: defCls selector: nm @env0:asSymbol)
+					___grailPropertyOrSelf___]].
 	"(c) own instance-side methods."
 	imd := [self @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 	imd == nil ifFalse: [
