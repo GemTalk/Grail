@@ -2007,9 +2007,18 @@ ___readsThroughClassCell___
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ false].
 	CallAst classBeingCompiled isNil ifTrue: [^ false].
-	CallAst inClassBodyValueEmit == true ifTrue: [^ false].
-	(CallAst inBasesEmit == true or: [CallAst inDecoratorEmit == true])
-		ifTrue: [^ self ___headerLocalBeyondClass___: id].
+	"Every INLINE class-body context asks the same header-aware question:
+	attribute values, the sibling-def ``f.attr = v'' and runtime statements
+	(classBodyRuntimeClass), bases, keywords and decorators.  A local of the
+	method the class statement sits in stays a temp; a name from beyond that
+	method's class is its cell -- where a bare name could never have compiled
+	(``class G: x = M'' or ``bar.tag = marker'' in a method's class, test_abc
+	test_descriptors_with_abstractmethod's NotBool)."
+	((CallAst inClassBodyValueEmit == true
+		or: [CallAst inBasesEmit == true
+		or: [CallAst inDecoratorEmit == true]])
+		or: [CallAst classBodyRuntimeClass notNil])
+			ifTrue: [^ self ___headerLocalBeyondClass___: id].
 	^ self ___enclosingFunctionLocalBeyondClass___: id
 %
 

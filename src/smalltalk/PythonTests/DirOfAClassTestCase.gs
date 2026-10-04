@@ -183,14 +183,14 @@ testAUserDictIsNotReversible
 category: 'Grail-Tests - Known gaps'
 method: DirOfAClassTestCase
 testAPropertyReachedThroughItsClassIsAKnownGap
-	"Recorded, NOT endorsed.  ``C.prop'' should answer the property OBJECT --
-	CPython does not invoke a descriptor reached through the class -- and Grail
-	answers an UnboundMethod, so it classifies as a method.  The third value
-	pins that the INSTANCE path is correct, so the gap stays narrow: this is
-	about what the class hands back, not about properties working."
+	"Recorded, NOT endorsed.  ``C.prop'' now answers the property OBJECT, as
+	CPython does, but the class __dict__ still holds the getter function, so
+	classify_class_attrs reports kind 'data' where CPython reports 'property'.
+	The third value pins that the INSTANCE path is correct, so the gap stays
+	narrow."
 
 	self assert: (self resultAt: 'property_on_a_class_is_a_known_gap') asString
-		equals: '[''function'', ''method'', 1]'.
+		equals: '[''property'', ''data'', 1]'.
 %
 
 category: 'Grail-Tests - Kinds'

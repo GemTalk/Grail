@@ -329,6 +329,161 @@ check('isabstract_false_for_a_concrete_class', inspect.isabstract(_Concrete), Fa
 check('isabstract_false_for_a_non_class', inspect.isabstract(_Concrete()), False)
 
 
+
+# ------------------------------------------- @property read off the class
+
+class _Props:
+    @property
+    def ro(self):
+        "ro doc"
+        return 1
+
+    @property
+    def rw(self):
+        return self._v
+
+    @rw.setter
+    def rw(self, v):
+        self._v = v
+
+    @rw.deleter
+    def rw(self):
+        del self._v
+
+
+check('class_read_answers_a_property', type(_Props.ro).__name__, 'property')
+check('class_read_property_is_one_object', _Props.ro is _Props.ro, True)
+check('class_read_property_keeps_the_doc', _Props.ro.__doc__, 'ro doc')
+check('class_read_property_has_its_halves',
+      (_Props.ro.fset is None, _Props.rw.fset is not None, _Props.rw.fdel is not None),
+      (True, True, True))
+
+
+class _AbstractProps(metaclass=abc.ABCMeta):
+    @property
+    @abc.abstractmethod
+    def foo(self):
+        return 3
+
+    @foo.setter
+    @abc.abstractmethod
+    def foo(self, val):
+        pass
+
+
+class _GetterOver(_AbstractProps):
+    @_AbstractProps.foo.getter
+    def foo(self):
+        return super().foo
+
+
+class _SetterOver(_GetterOver):
+    @_GetterOver.foo.setter
+    def foo(self, val):
+        pass
+
+
+check('marked_property_is_abstract', sorted(_AbstractProps.__abstractmethods__), ['foo'])
+check('getter_over_an_abstract_setter_stays_abstract',
+      sorted(_GetterOver.__abstractmethods__), ['foo'])
+check('both_halves_overridden_is_concrete', attempt(lambda: _SetterOver().foo), ('ok', 3))
+
+
+# ------------------------------------------- @x.setter over a non-property
+
+class _Descriptor:
+    def __init__(self, fget, fset=None):
+        self._fget = fget
+        self._fset = fset
+
+    def setter(self, callable):
+        return _Descriptor(self._fget, callable)
+
+
+class _UsesDescriptor:
+    @_Descriptor
+    def foo(self):
+        return 1
+
+    @foo.setter
+    def foo(self, val):
+        pass
+
+
+check('foreign_setter_is_an_ordinary_decorator',
+      (type(_UsesDescriptor.__dict__['foo']).__name__,
+       _UsesDescriptor.__dict__['foo']._fset is not None),
+      ('_Descriptor', True))
+
+
+class _PBase:
+    def __init__(self):
+        self._spam = 5
+
+    @property
+    def spam(self):
+        return self._spam
+
+    @spam.setter
+    def spam(self, value):
+        self._spam = value
+
+    @spam.deleter
+    def spam(self):
+        del self._spam
+
+
+class _PSub(_PBase):
+    @_PBase.spam.getter
+    def spam(self):
+        return 'sub get'
+
+    @spam.setter
+    def spam(self, value):
+        self._spam = ('sub set', value)
+
+    @spam.deleter
+    def spam(self):
+        self._spam = 'sub del'
+
+
+def _psub_round_trip():
+    s = _PSub()
+    got = s.spam
+    s.spam = 1
+    after_set = s._spam
+    del s.spam
+    return got, after_set, s._spam
+
+
+check('accessor_chain_over_a_base_property', attempt(_psub_round_trip),
+      ('ok', ('sub get', ('sub set', 1), 'sub del')))
+
+
+# ------------------------------------------- inline class-body names
+
+def _inline_factory(M):
+    class T:
+        def body_value(self):
+            class G:
+                x = M
+            return G.x
+
+        def def_attribute(self):
+            marker = 7
+
+            class G:
+                def bar(self):
+                    pass
+                bar.tag = marker
+            return G.bar.tag
+    return T
+
+
+_it = _inline_factory(42)()
+check('body_value_beyond_the_class', attempt(_it.body_value), ('ok', 42))
+check('def_attribute_reads_a_method_local', attempt(_it.def_attribute), ('ok', 7))
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

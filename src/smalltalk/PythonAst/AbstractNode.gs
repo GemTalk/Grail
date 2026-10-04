@@ -1589,18 +1589,27 @@ ___headerLocalBeyondClass___: aSymbol
 	test.test_abc's 64 errors.  Here it is beyond TestABC, and reads
 	TestABC's cell like any other free name in test_x."
 
-	| prev node passedClass fromFunctionBody |
+	| prev node passedClass fromFunctionBody lastDef |
 	prev := self.
 	node := parent.
 	passedClass := false.
 	fromFunctionBody := false.
+	lastDef := nil.
 	[node notNil] whileTrue: [
+		"Only a def that is a DIRECT statement of the class body is a method,
+		compiled apart.  A def nested in a compound statement of the body --
+		``if flag: def __init_subclass__'' -- is emitted INLINE, as a closure in
+		the enclosing scope, so its free names are real temps there
+		(init_subclass_class_body.py, a_star_args_hook_gets_the_class_positionally)."
 		(node isKindOf: ClassDefAst) ifTrue: [
-			(fromFunctionBody and: [self ___is: prev inBodyOf: node])
-				ifTrue: [passedClass := true].
+			(fromFunctionBody and: [lastDef notNil
+				and: [node body notNil and: [node body body notNil
+				and: [node body body includesIdentical: lastDef]]]])
+					ifTrue: [passedClass := true].
 			fromFunctionBody := false].
 		(node isKindOf: FunctionDefAst) ifTrue: [
 			fromFunctionBody := self ___is: prev inBodyOf: node.
+			lastDef := node.
 			(fromFunctionBody and: [self ___functionBindsPythonLocal___: node named: aSymbol])
 				ifTrue: [^ passedClass]].
 		(node isKindOf: LambdaAst) ifTrue: [
