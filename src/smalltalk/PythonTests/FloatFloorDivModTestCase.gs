@@ -90,7 +90,11 @@ testEveryFloatDivisionCheckAgreesWithCPython
 		loadModuleFromPath: (importlib grailDir , '/tests/python/float_floordiv_mod.py')
 		name: 'float_floordiv_mod'.
 	results := fixture @env1:___pyAttrLoad___: #RESULTS.
-	names := #('a_large_dividend_by_an_opposite_infinity'
+	names := #('a_bool_dividend_follows_int'
+	  'a_bool_floordiv_by_float_zero_raises'
+	  'a_bool_floordiv_by_zero_raises'
+	  'a_bool_mod_by_false_raises'
+	  'a_large_dividend_by_an_opposite_infinity'
 	  'a_nan_operand_is_nan'
 	  'a_negative_dividend_keeps_the_divisor_sign'
 	  'a_negative_zero_dividend_keeps_its_sign'
@@ -99,7 +103,19 @@ testEveryFloatDivisionCheckAgreesWithCPython
 	  'a_zero_remainder_stays_positive_for_a_positive_divisor'
 	  'a_zero_remainder_takes_the_divisor_sign'
 	  'an_infinite_dividend_is_nan'
+	  'an_int_dividend_by_infinity'
+	  'an_int_dividend_by_nan'
+	  'an_int_dividend_divmod_is_floats'
+	  'an_int_dividend_floordiv_is_a_float'
+	  'an_int_dividend_is_rounded_to_float_first'
+	  'an_int_dividend_mod_by_infinity'
 	  'an_int_divisor_still_yields_floats'
+	  'an_int_divmod_by_float_zero_raises'
+	  'an_int_floordiv_by_float_zero_raises'
+	  'an_int_mod_by_float_zero_raises'
+	  'an_int_too_large_for_a_float_divmod'
+	  'an_int_too_large_for_a_float_floordiv'
+	  'an_int_too_large_for_a_float_mod'
 	  'divmod_by_a_same_signed_infinity'
 	  'divmod_by_an_opposite_signed_infinity'
 	  'divmod_by_zero_raises'
@@ -123,7 +139,7 @@ testEveryFloatDivisionCheckAgreesWithCPython
 		self
 			assert: ((results @env1:__getitem__: name) = true)
 			description: name , ' -> ' , (results @env1:__getitem__: name) printString].
-	self assert: names size equals: 29
+	self assert: names size equals: 45
 %
 
 category: 'Grail-Tests - float floor division'

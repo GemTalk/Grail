@@ -796,6 +796,9 @@ __divmod__: other
 	(other @env0:isSpecial) ifFalse: [ | pri |
 		pri := self ___numericReflectedFirst___: other selector: #'__rdivmod__:'.
 		pri == nil ifFalse: [^ pri]].
+	"A FLOAT divisor runs float's divmod, as for // (see __floordiv__:)."
+	(other @env0:isKindOf: Float) ifTrue: [
+		^ (float ___intToFloatChecked___: self) __divmod__: other].
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := other]
 	ifFalse: [
@@ -898,6 +901,14 @@ __floordiv__: other
 	failed on the wrong exception.  Confining the guard to the branch that will
 	actually do the arithmetic gets the order right without duplicating the
 	dispatch."
+	"A FLOAT divisor: CPython's int // answers NotImplemented and float's
+	runs, so the quotient is a float -- ``7 // 2.0'' is 3.0, where the
+	kernel's integer // answered 3.  The int converts first, raising
+	OverflowError when it is too large for a float (int.__divmod__ and
+	int.__mod__ hand over the same way, so all three come from float's one
+	divmod routine)."
+	(other @env0:isKindOf: Float) ifTrue: [
+		^ (float ___intToFloatChecked___: self) __floordiv__: other].
 	(other isKindOf: Number) ifTrue: [
 		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 			ZeroDivisionError ___signal___: 'division by zero'].
@@ -1083,6 +1094,9 @@ __mod__: other
 	failed on the wrong exception.  Confining the guard to the branch that will
 	actually do the arithmetic gets the order right without duplicating the
 	dispatch."
+	"A FLOAT divisor runs float's %, as for // (see __floordiv__:)."
+	(other @env0:isKindOf: Float) ifTrue: [
+		^ (float ___intToFloatChecked___: self) __mod__: other].
 	(other isKindOf: Number) ifTrue: [
 		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 			ZeroDivisionError ___signal___: 'division by zero'].

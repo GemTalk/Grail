@@ -156,6 +156,57 @@ check('the_identity_holds', [a == b * (a // b) + a % b
       [True, True, True])
 
 
+# ------------------------------------- an int or bool dividend, float divisor
+#
+# int's own // answers NotImplemented for a float, so CPython converts the int
+# and runs float_divmod: the quotient is a FLOAT.  Grail's int // ran the
+# kernel's integer // instead and answered 3 for ``7 // 2.0''.  These compare
+# by repr, because 3 == 3.0.
+
+check_repr('an_int_dividend_floordiv_is_a_float',
+           (7 // 2.0, -7 // 2.0, 7 // -2.0, 7 // 2.5, 0 // 2.0),
+           (3.0, -4.0, -4.0, 2.0, 0.0))
+
+check_repr('an_int_dividend_by_infinity',
+           (7 // INF, -7 // INF, 7 // -INF), (0.0, -1.0, -1.0))
+
+check_repr('an_int_dividend_mod_by_infinity',
+           (7 % INF, -7 % INF, 0 % -2.0), (7.0, INF, -0.0))
+
+check_repr('an_int_dividend_divmod_is_floats',
+           (divmod(7, 2.0), divmod(-7, 2.0), divmod(7, INF), divmod(-7, INF)),
+           ((3.0, 1.0), (-4.0, 1.0), (0.0, 7.0), (-1.0, INF)))
+
+check_repr('a_bool_dividend_follows_int',
+           (True // 2.0, False // 2.0, True % 2.0, divmod(True, 2.0),
+            True // 2, True // True, True % 2, divmod(True, 2)),
+           (0.0, 0.0, 1.0, (0.0, 1.0), 0, 1, 1, (0, 1)))
+
+check_repr('an_int_dividend_is_rounded_to_float_first',
+           (2 ** 53 + 1) // 2.0, 4503599627370496.0)
+
+check_all_nan('an_int_dividend_by_nan', (7 // NAN, 7 % NAN))
+
+raises('an_int_too_large_for_a_float_floordiv', lambda: 10 ** 400 // 2.0,
+       OverflowError, 'int too large to convert to float')
+raises('an_int_too_large_for_a_float_mod', lambda: 10 ** 400 % 2.0,
+       OverflowError, 'int too large to convert to float')
+raises('an_int_too_large_for_a_float_divmod', lambda: divmod(10 ** 400, 2.0),
+       OverflowError, 'int too large to convert to float')
+raises('an_int_floordiv_by_float_zero_raises', lambda: 7 // 0.0,
+       ZeroDivisionError, 'division by zero')
+raises('an_int_mod_by_float_zero_raises', lambda: 7 % 0.0,
+       ZeroDivisionError, 'division by zero')
+raises('an_int_divmod_by_float_zero_raises', lambda: divmod(7, 0.0),
+       ZeroDivisionError, 'division by zero')
+raises('a_bool_floordiv_by_zero_raises', lambda: True // 0,
+       ZeroDivisionError, 'division by zero')
+raises('a_bool_mod_by_false_raises', lambda: True % False,
+       ZeroDivisionError, 'division by zero')
+raises('a_bool_floordiv_by_float_zero_raises', lambda: True // 0.0,
+       ZeroDivisionError, 'division by zero')
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]
