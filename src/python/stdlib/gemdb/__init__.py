@@ -331,6 +331,65 @@ def transaction(func=None, *, retries=0):
     return _Transaction(retries=retries)
 
 
+class _AppGlobals:
+    """``gemdb.root`` in an app: a view of the app's globals, its top file's
+    ``__main__`` namespace (docs/App_Namespaces_Design.md §5.2).
+    ``gemdb.root["hat"]`` IS the global ``hat``.  Dunder names (``__name__``,
+    ``__builtins__``, ...) are reachable by key but left out of iteration, so
+    listing the root lists the program's own state."""
+
+    def __init__(self, namespace):
+        self._d = namespace
+
+    def _names(self):
+        return [k for k in self._d
+                if not (k.startswith("__") and k.endswith("__"))]
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __setitem__(self, key, value):
+        self._d[key] = value
+
+    def __delitem__(self, key):
+        del self._d[key]
+
+    def __contains__(self, key):
+        return key in self._d
+
+    def __len__(self):
+        return len(self._names())
+
+    def __iter__(self):
+        return iter(self._names())
+
+    def get(self, key, default=None):
+        return self._d[key] if key in self._d else default
+
+    def setdefault(self, key, default=None):
+        if key not in self._d:
+            self._d[key] = default
+        return self._d[key]
+
+    def pop(self, key, *args):
+        if key in self._d:
+            value = self._d[key]
+            del self._d[key]
+            return value
+        if args:
+            return args[0]
+        raise KeyError(key)
+
+    def keys(self):
+        return self._names()
+
+    def values(self):
+        return [self._d[k] for k in self._names()]
+
+    def items(self):
+        return [(k, self._d[k]) for k in self._names()]
+
+
 class _Root:
     """The persistent namespace behind ``gemdb.root``.
 
@@ -339,16 +398,38 @@ class _Root:
     Smalltalk tools).  The backing dictionary is created lazily on the
     first WRITE -- never on a read, so browsing an empty database leaves
     nothing to commit.
+
+    In an app (``gemdb.set_app``) the root is instead the app's own
+    globals -- its top file's ``__main__`` namespace, which in an app is
+    persistent -- so ``gemdb.root["hat"]`` is the global ``hat``.
     """
+
+    def _app(self):
+        # In an app, the root IS the app's globals: a view of them, or
+        # None before the app's top file has first run.  _NO_APP outside one.
+        if _gemstone.repository.apps_current() is None:
+            return _NO_APP
+        namespace = _gemstone.repository.apps_globals()
+        return None if namespace is None else _AppGlobals(vars(namespace))
 
     def _peek(self):
         # The committed backing dict, or None before the first write.
+        app = self._app()
+        if app is not _NO_APP:
+            return app
         try:
             return _gemstone[_ROOT_KEY]
         except KeyError:
             return None
 
     def _ensure(self):
+        app = self._app()
+        if app is not _NO_APP:
+            if app is None:
+                raise RuntimeError(
+                    "gemdb.root in app " + repr(_gemstone.repository.apps_current())
+                    + " is its top file's globals, and no top file has run in it yet")
+            return app
         gs = _gemstone
         try:
             return gs[_ROOT_KEY]
@@ -419,6 +500,7 @@ class _Root:
         return "gemdb.root(" + repr(sorted(self.keys(), key=str)) + ")"
 
 
+_NO_APP = object()
 root = _Root()
 
 __all__ = ["root", "transaction", "commit", "abort", "refresh",

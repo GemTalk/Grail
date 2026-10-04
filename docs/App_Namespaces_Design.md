@@ -1,9 +1,10 @@
 # App namespaces: one set of globals per application (design)
 
-**Status:** design agreed 2026-10-04. Cuts 1 and 2 (§9) are implemented:
-the name-keyed registries live in a namespace, and imports resolve per
-namespace, with `gemdb.set_app`, `gemdb.app()`, `./grail --app` and
-`GEMDB_APP`. Cuts 3–6 are not. It follows
+**Status:** design agreed 2026-10-04. Cuts 1–3 (§9) are implemented:
+the name-keyed registries live in a namespace; imports resolve per namespace,
+with `gemdb.set_app`, `gemdb.app()`, `./grail --app` and `GEMDB_APP`; and
+`__main__` in an app is canonical, with persistent globals, `__transient__` and
+`gemdb.root` as their alias. Cuts 4–6 are not. It follows
 from PRs #1295 (the slot-pair owner guard), #1296 (layout propagation through
 the persistent class registry) and #1297 (refusing a different file under a
 deployed module name, `gemdb.modules`), and from the discussion that led to
@@ -412,6 +413,29 @@ exists.
    rabbit demo across two sessions; a re-run that changes nothing writes
    nothing; abort reloads a rebound global and unbinds a new one; a transient
    global is never committed and survives an abort.
+
+   *As built (cut 3).*
+   - **Canonical `__main__`.** `___isSessionLocalModule___: '__main__'` is false
+     in an app, so the top file goes through the registries like any module.
+     Its committed instance holds the globals.
+   - **The unchanged re-run.** When the source is unchanged, the load takes a
+     re-run path instead of the warm bind. It adopts the committed instance and
+     its class, sets the hash verdict to `match` (so class statements' probes
+     hit and nothing recompiles), and runs the body over the globals. It keeps
+     the committed spec and deps record.
+   - **The edited run.** An edit takes the cold path and rebuilds into the
+     committed instance, as a stale deployed module does.
+   - **The store skip.** It is one override, `module >> dynamicInstVarAt:put:`,
+     which every module-global store goes through. It skips the identical
+     object and equal values of `str`, `int` and `tuple` of them: CPython folds
+     a constant tuple into one code constant, and a fresh `(1, 2)` was the one
+     write left on a measured re-run.
+   - **`__transient__`.** A literal list or tuple in the body compiles three
+     accessor overrides onto that module's class only, with the names inlined,
+     keeping those globals in SessionTemps. It applies in any module.
+   - **`gemdb.root`.** `importlib ___grailAppGlobals___` answers the session's
+     own `__main__` when it is the app's, else the committed one, and
+     `gemdb.root` wraps `vars()` of it.
 4. **`Final` as initialize-once.**
 5. **Session-bound objects refused at commit** (§6), with the walk's cost
    measured on a realistic app before it is on by default, and class-level

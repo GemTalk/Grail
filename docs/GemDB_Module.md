@@ -213,6 +213,9 @@ deliberate behaviors:
   first *write*; reads on an empty database answer emptiness without
   leaving anything to commit (which would otherwise trip the very entry
   check the transaction design depends on).
+* **In an app it is the app's globals.** With `gemdb.set_app`, the root is a
+  view of the app's top-file globals rather than `GemDBRoot`; see
+  `gemdb.set_app` below.
 * **`repr` answers the first question.** `repr(gemdb.root)` prints the
   key names, not the contents — "what is in this database?" is the first
   thing everyone asks at the shell.
@@ -495,8 +498,46 @@ as an import is. `gemdb.app()` answers the current app's name, or `None`.
 `./grail --app shop app.py` and `GEMDB_APP=shop` choose the app before the
 script's first line.
 
-Not yet: `__main__`'s globals in an app (the design's cut 3), `gemdb.root` as
-the app's own root, and listing or dropping apps.
+**In an app, the top file's globals are the database.** The script an app runs
+as `__main__` is the app's canonical top file, and its globals are persistent,
+with GemStone's semantics:
+
+```python
+import gemdb                        # run with ./grail --app shop shop.py
+__transient__ = ["conn"]            # session state: never committed
+
+conn = open_connection()            # rebound by every run
+if "orders" not in globals():
+    orders = []                     # first run only; later runs find it
+orders.append(Order("widget", 3))
+gemdb.commit()
+```
+
+- **Each run starts with the globals of the last commit.** The top file's
+  classes keep their identity from run to run, so an object stored by one
+  run is an instance of the class the next run defines. After an edit, it
+  runs the edited methods.
+- **An assignment is a write**, visible at once in the session and to other
+  sessions after a commit. A store of the object a global already holds (or
+  of an equal string, int or tuple of them) is skipped, so a re-run of an
+  unchanged top file writes nothing.
+- **`gemdb.abort()` reloads the committed values.** A rebound global reads its
+  committed value again, and a global first bound since the commit is gone.
+- **`__transient__` names the exceptions**: those globals are kept per
+  session, never committed, left alone by an abort, and unbound in each new
+  session, so the top file's own assignment rebinds them. It works in any
+  module, not only in an app. Outside an app, a module's globals stay
+  per-session unless D4's `__persistent__` names them.
+- **`gemdb.root` in an app is a view of these globals**: `gemdb.root["orders"]`
+  is the global `orders`. Dunder names are left out of iteration. A session
+  that joins the app without running the top file (a worker, a shell) sees
+  the committed globals. Before the app's top file has run, the root reads
+  as empty and refuses writes.
+- **An app has one top file.** A different file run as `__main__` in the same
+  app is refused, as D10 refuses any module.
+
+Not yet: `Final` as initialize-once (the design's cut 4), the commit-time
+error for session-bound objects (cut 5), and listing or dropping apps (cut 6).
 
 ### `gemdb.sessions` — who is connected
 
@@ -549,6 +590,14 @@ is now `gemdb.schema`, above.
   `set_app` is refused, and `GEMDB_APP` chooses the app for a `runPath:`
   script. `AppNamespaceTestCase` covers the in-session half, and
   `test_grail_launcher.sh` the `--app` option.
+* `tests/scripts/runAppMainTest.gs` (wired in as `app-main`) — `__main__` in an
+  app over three sessions. The first run commits; a transient global is never
+  committed. An unchanged re-run runs over the committed globals, writes
+  nothing, keeps its stored object and rebinds the transient. `gemdb.root` is
+  the globals (the rabbits double through it). An abort reloads a rebound
+  global, unbinds a new one and leaves a transient alone. After an edit, the
+  stored instance and a new one share the rebuilt class. A different top file
+  in the app is refused.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
   — the class-level half over a fixture module with a committed instance:
   the refusals for a changed base, a removed class and a renamed one, and

@@ -214,6 +214,19 @@ apps_current
 
 category: 'Grail-Repository Administration'
 method: Repository
+apps_globals
+	"Python repository.apps_globals() -- the current app's globals, its
+	__main__ module, or None outside an app or before its top file has run.
+	gemdb.root in an app is a view of them."
+
+	| m |
+	m := importlib @env0:___grailAppGlobals___.
+	m == nil ifTrue: [^ None].
+	^ m
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
 schema_rename_class: aName _: newName
 	"Python repository.schema_rename_class('module.Old', 'New') -- move a
 	renamed class's instances onto the class the new source defines
