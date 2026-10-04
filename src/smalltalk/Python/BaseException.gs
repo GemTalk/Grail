@@ -2110,6 +2110,16 @@ ___pythonFrameNameFor___: aSelector
 	| s idx base |
 	aSelector isNil ifTrue: [^ nil].
 	s := aSelector @env0:asString.
+	"A self-send dispatcher's ``___grailOrig_'' SHADOW is the original def under
+	a new selector (object class >> ___grailInstallOneDispatcher___:definedIn:
+	name:).  A wrapper that calls the raw function -- a decorated test method
+	under GRAIL_DIRECT_CALLS, whose class-body store installs the dispatcher --
+	runs the shadow, and its frame must still carry the def's own name:
+	test_contextlib_async's traceback test read
+	'___grailOrig_test_contextmanager_traceback'."
+	((s @env0:size @env0:> 13)
+		and: [(s @env0:copyFrom: 1 to: 13) @env0:= '___grailOrig_'])
+			ifTrue: [s := s @env0:copyFrom: 14 to: s @env0:size].
 	idx := s @env0:indexOf: $:.
 	base := (idx @env0:= 0) ifTrue: [s] ifFalse: [s @env0:copyFrom: 1 to: idx @env0:- 1].
 	base @env0:isEmpty ifTrue: [^ nil].

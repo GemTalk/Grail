@@ -15573,7 +15573,8 @@ ___grailCompiledSelectorsForPythonName___: aSymbol
 					ifTrue: [
 						((self @env1:___isPythonSourceMethodCategory___:
 							(walker @env0:categoryOfSelector: sel environmentId: 1))
-							or: [object @env0:___grailKernelSelectorIsPatchable___: sel on: walker for: self])
+							or: [(object @env0:___grailModuleFunctionIsPatchable___: sel on: walker)
+							or: [object @env0:___grailKernelSelectorIsPatchable___: sel on: walker for: self]])
 							ifTrue: [
 								seen @env0:add: sel.
 								found @env0:add: { sel. walker }]]]].
@@ -15673,6 +15674,37 @@ ___grailClassBodyStoreShadows___: aValue name: aName
 			ifTrue: [base := base @env0:copyFrom: 2 to: base @env0:size].
 		base @env0:= aName @env0:asString ifTrue: [^ false]].
 	^ true
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailModuleFunctionIsPatchable___: aSelector on: ownerClass
+	"GRAIL_DIRECT_CALLS: is aSelector a top-level ``def'' of a .py MODULE, so
+	that a runtime store ``mod.f = g'' must shadow it?
+
+	With the flag on, ``x.f(a)'' on a receiver the compiler cannot see is a
+	module -- a module held in a global or an attribute: _py_warnings' ``_wm'',
+	test_warnings' ``self.module'' -- compiles to the direct send ``x f: a'', and
+	a module's top-level def IS a method of its class.  The send ran the
+	compiled def and ignored an attribute stored over it, where the
+	load-then-call found the store: catch_warnings(record=True) sets
+	``_showwarnmsg_impl = log.append'' on the module, _py_warnings then called
+	``_wm._showwarnmsg_impl(msg)'', and every warning was printed instead of
+	recorded (52 test_warnings failures).
+
+	Top-level defs are filed under 'Grail-Methods' (importlib), not a class-body
+	category, so the ordinary rule never saw them.  NativeModule classes stay
+	out: their methods are Smalltalk, and ``builtins.len = f'' over builtins>>len:
+	was the 217-RecursionError case that kept modules out of
+	___grailKernelSelectorIsPatchable___:on:for:.  A module's own cached
+	BoundMethod for f, read back by the dispatcher's override probe, is not an
+	override (___grailSelfSendOverrideFor___:)."
+
+	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib ___directCallsEnabled___]) == true
+		ifFalse: [^ false].
+	(ownerClass @env0:inheritsFrom: module) ifFalse: [^ false].
+	(ownerClass @env0:inheritsFrom: NativeModule) ifTrue: [^ false].
+	^ ((ownerClass @env0:categoryOfSelector: aSelector environmentId: 1) @env0:ifNil: ['']) @env0:asString @env0:= 'Grail-Methods'
 %
 
 category: 'Grail-Self-Send Overrides'
@@ -16136,6 +16168,17 @@ ___grailSelfSendOverrideFor___: aSymbol
 	| sym v cls ov |
 	sym := aSymbol @env0:asSymbol.
 	v := self @env0:dynamicInstVarAt: sym.
+	"The receiver's OWN bound method for this very def is not an override.  A
+	module caches one under each function's name (a bare ``f'' read hands it
+	out), and an instance can be given its own (``c.m = c.m'', or a patch
+	undone by restoring the captured attribute).  Calling it would re-send
+	the selector into this dispatcher; skipping it runs the compiled def,
+	which is what calling it means."
+	((v @env0:isKindOf: BoundMethod)
+		and: [(v @env0:receiver) == self
+		and: [v @env0:selector ~~ nil
+		and: [object @env0:___grailSelectorMatchesPythonName___: v @env0:selector name: sym]]])
+			ifTrue: [v := nil].
 	v == nil ifFalse: [^ { false. v }].
 	cls := self @env0:class.
 	"One overlay read for the whole chain -- see ___grailStoredClassAttrIn___."
@@ -17248,6 +17291,20 @@ ___directCallRecover___: aSelector args: anArray
 		k, v)'', ``tuple.__getitem__(self, i)'') is Python's explicit unbound
 		call and the UnboundMethod the loader answers is exactly right for it."
 		((self @env0:isKindOf: Behavior) and: [anArray @env0:size = 0])
+			ifTrue: [^ #'___noRecover___'].
+		"Ask the TYPE before loading.  A dunder that reaches this hook is never
+		a Python call -- CallAst keeps explicit dunder calls on load-then-call
+		(___directCallSelector___, exclusion 8) -- so it is one of Grail's soft
+		probes, and a probe that misses must stay cheap.  Loading raised and
+		caught an AttributeError per miss, and that raise captures the frame's
+		locals for ``Did you mean'' by walking out to the innermost Python
+		frame: under pure-Python pickle every ``if self.current_frame:'' on a
+		BytesIO paid it, and a dump ran 3.5x slower with the flag on (test_pickle
+		went past the suite budget).  CPython looks special methods up on the
+		type, not the instance, so a dunder the class carries neither as a
+		compiled method (else there would have been no miss) nor as a class
+		attribute is absent for this purpose."
+		(self @env1:___classAttrDunder___: (entry @env0:at: 1)) == nil
 			ifTrue: [^ #'___noRecover___'].
 		attr := [self @env1:___pyAttrLoad___: (entry @env0:at: 1)]
 			@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
