@@ -1631,7 +1631,37 @@ def ismethoddescriptor(obj):
     return False
 
 
-def isabstract(obj):
+def isabstract(object):
+    """Return true if the object is an abstract base class (ABC).
+
+    CPython's, with one respelling: Grail has no ``__flags__``, so the
+    TPFLAGS_IS_ABSTRACT bit -- which CPython's type sets exactly when
+    ``__abstractmethods__`` is assigned a non-empty set -- is read as that set
+    being non-empty.  It was a stub answering False for every class, which no
+    caller outside test_abc depends on."""
+    if not isinstance(object, type):
+        return False
+    try:
+        if object.__abstractmethods__:
+            return True
+    except AttributeError:
+        pass
+    import abc
+    if not issubclass(type(object), abc.ABCMeta):
+        return False
+    if hasattr(object, '__abstractmethods__'):
+        # ABCMeta.__new__ has finished running, so the set above was accurate.
+        return False
+    # ABCMeta.__new__ has not finished yet -- probably __init_subclass__ -- so
+    # look for abstract methods by hand.
+    for name, value in object.__dict__.items():
+        if getattr(value, "__isabstractmethod__", False):
+            return True
+    for base in object.__bases__:
+        for name in getattr(base, "__abstractmethods__", ()):
+            value = getattr(object, name, None)
+            if getattr(value, "__isabstractmethod__", False):
+                return True
     return False
 
 

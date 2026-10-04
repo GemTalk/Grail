@@ -2000,12 +2000,17 @@ ___readsThroughClassCell___
 	reserved-name transport rename that must stand down for exactly the same
 	reads.  They were written as separate copies once; the copies disagreed."
 
-	^ (ctx isKindOf: LoadAst)
-		and: [CallAst classBeingCompiled notNil
-		and: [CallAst inClassBodyValueEmit ~~ true
-		and: [CallAst inBasesEmit ~~ true
-		and: [CallAst inDecoratorEmit ~~ true
-		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]]]
+	"Bases, keywords and decorators are evaluated where the statement stands,
+	so they ask the header-aware question: a local of the enclosing method is
+	a temp, a name from beyond that method's class is that class's cell
+	(___headerLocalBeyondClass___ has the test_abc case)."
+
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	CallAst classBeingCompiled isNil ifTrue: [^ false].
+	CallAst inClassBodyValueEmit == true ifTrue: [^ false].
+	(CallAst inBasesEmit == true or: [CallAst inDecoratorEmit == true])
+		ifTrue: [^ self ___headerLocalBeyondClass___: id].
+	^ self ___enclosingFunctionLocalBeyondClass___: id
 %
 
 category: 'other'

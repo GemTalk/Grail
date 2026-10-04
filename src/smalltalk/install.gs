@@ -765,6 +765,7 @@ run
 	at: #'ClassTypeParamsTestCase' put: nil;
 	at: #'TypeParamScopesTestCase' put: nil;
 	at: #'AbcMachineryTestCase' put: nil;
+	at: #'AbcClassBuildTestCase' put: nil;
 	at: #'MetaclassProtocolsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'AnyAllShareTheTruthTestTestCase' put: nil;
@@ -2210,6 +2211,7 @@ input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
 input src/smalltalk/PythonTests/TypeParamScopesTestCase.gs
 input src/smalltalk/PythonTests/AbcMachineryTestCase.gs
+input src/smalltalk/PythonTests/AbcClassBuildTestCase.gs
 input src/smalltalk/PythonTests/MetaclassProtocolsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/AnyAllShareTheTruthTestTestCase.gs
