@@ -8812,6 +8812,50 @@ ___unaryGetterShadowedBySetter___: getterSym setter: setterSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___grailDerivedDataDescriptorFor: aSym
+	"A data descriptor (a property, or an object with __set__ / __delete__)
+	that a class between the receiver's class and the owner of the unary
+	getter ``aSym'' -- both included -- holds in its attribute holder, or nil.
+
+	The pair read performs the getter it finds, and that getter can belong to
+	an ANCESTOR's property while a nearer class has rebound the name.  CPython
+	takes the first class in the MRO that has the name, and a data descriptor
+	there wins outright.  Three shapes reached the ancestor's getter instead:
+
+	    class Sub(Base): pass;  Sub.p = property(...)     -- answered Base's p
+	    class Sub(Base): @Base.p.deleter def p(self)       -- ran the DELETER
+	    class Sub(Base): @to_property def p(self)          -- ran the raw body
+
+	the second and third because the decorated def is compiled under its own
+	name and its decorated result goes to the holder.  The owner itself is
+	included for exactly that: its holder entry IS the decorator's result.
+
+	DATA descriptors only.  A plain class value or a method in the holder must
+	not outrank an INSTANCE slot behind the same accessor pair, which CPython's
+	instance __dict__ wins over too."
+
+	| owner walker holder v |
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [^ nil].
+	walker := self @env0:class.
+	[walker == nil] whileFalse: [
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				(v ~~ nil and: [(v isKindOf: AbstractPropertyDescriptor)
+					or: [(v isKindOf: PythonInstance)
+						and: [(v ___respondsTo___: #'__set__:_:')
+						or: [(v ___respondsTo___: #'___set__:kw:')
+						or: [v ___respondsTo___: #'__delete__:']]]]])
+					ifTrue: [^ v]]].
+		walker == owner ifTrue: [^ nil].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___grailPyDefinedAccessorPair___: getterSym setter: setterSym
 	"True when the ``name''/``name:'' pair is one a PYTHON CLASS BODY declared
 	on ONE class -- a @property (getter plus the synthesized read-only setter,
@@ -10386,7 +10430,12 @@ ___pyAttrLoad___: aSym
 								___setterCat @env0:~= 'Grail-Fixed Arity Forwarders'
 									and: [___setterCat @env0:~= 'Grail-Class Side Forwarders']]]]]])
 		ifTrue: [
-			| instVal metaclass |
+			| instVal metaclass derived |
+			"A DATA DESCRIPTOR stored on a class at least as derived as the
+			pair's getter wins, as CPython's MRO walk has it -- see
+			___grailDerivedDataDescriptorFor:."
+			derived := self ___grailDerivedDataDescriptorFor: aSym.
+			derived == nil ifFalse: [^ self ___descriptorGet___: derived].
 			instVal := self @env0:perform: aSym env: 1.
 			"If the per-instance slot is still nil, fall back to the
 			class-side accessor for the class-level default — matches
