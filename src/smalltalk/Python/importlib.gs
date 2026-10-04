@@ -1105,6 +1105,159 @@ ___baseChangeAllowed___: aKey
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___deployedSourcePathOf___: aModuleName
+	"The source file the COMMITTED module aModuleName was built from -- its
+	__spec__ origin, the canonical record its __file__ mirrors -- or nil when
+	no committed instance exists (never deployed, or deployed only in this
+	session's open transaction) or it records no location."
+
+	| inst spec origin none |
+	inst := self ___canonicalModules___ at: aModuleName asString otherwise: nil.
+	(inst isNil or: [inst isCommitted not]) ifTrue: [^ nil].
+	spec := [inst dynamicInstVarAt: #'__spec__'] on: Error do: [:e | e return: nil].
+	spec isNil ifTrue: [^ nil].
+	origin := [self @env1:___specAttr___: spec named: #'origin']
+		on: AbstractException do: [:e | e return: nil].
+	none := System myUserProfile symbolList objectNamed: #'None'.
+	(origin isNil or: [origin == none]) ifTrue: [^ nil].
+	^ origin asString
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___sameSourcePath___: aPath as: otherPath
+	"Whether two source paths name the same file.  Each is canonicalised with
+	POSIX realpath (GsFile serverRealPath:, on the GEM's host, which is where
+	Grail reads source), so a symlink, /tmp against /private/tmp, or a relative
+	sys.path entry does not read as a different module.  A path that does not
+	resolve compares as written.  In particular a recorded file that no longer
+	exists is NOT taken to mean ``moved'': a client session may run on another
+	host, where the deploying session's path means nothing at all."
+
+	| canon |
+	canon := [:p | [(GsFile serverRealPath: p) asString] on: Error do: [:e | e return: p asString]].
+	^ (canon value: aPath) = (canon value: otherPath)
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___modulePathChangeAllowed___: aModuleName
+	"Whether gemdb.modules.relocate lifted the source-path refusal for
+	aModuleName -- and if so, CONSUME the allowance: it covers the one import
+	it was granted for, which records the new location, so a later import of
+	the old file in the same session is refused like any other foreign file."
+
+	| allowed |
+	allowed := SessionTemps current at: #'GrailModulePathChangeAllowed' otherwise: nil.
+	(allowed notNil and: [allowed includes: aModuleName asString]) ifFalse: [^ false].
+	allowed remove: aModuleName asString ifAbsent: [].
+	^ true
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailRelocateModule___: aModuleName
+	"gemdb.modules.relocate: the deployed module aModuleName now lives in a
+	different file, and is the SAME module.  Lifts the source-path refusal for
+	that name for the NEXT import that would be refused, which rebuilds it in
+	place -- its classes keep their identity and their instances -- and records
+	the new location; the caller's commit publishes it.  A session-local flag,
+	like the base-change allowance gemdb.schema.rebase uses, and writes
+	nothing, so it needs no clean transaction.  Refuses a name with nothing
+	deployed, which is almost certainly a typo."
+
+	| st allowed |
+	(self ___deployedSourcePathOf___: aModuleName) isNil ifTrue: [
+		^ ValueError @env1:___signal___:
+			'no module named ' , aModuleName asString , ' is deployed from a file in this repository, so there is nothing to relocate'].
+	st := SessionTemps current.
+	allowed := st at: #'GrailModulePathChangeAllowed' otherwise: nil.
+	allowed isNil ifTrue: [allowed := Set new. st at: #'GrailModulePathChangeAllowed' put: allowed].
+	allowed add: aModuleName asString.
+	^ true
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___refuseForeignSourcePath___: pathString for: moduleName
+	"Refuse an import that found a DIFFERENT FILE under a deployed module name,
+	with different source (docs/Persistent_Modules_and_Classes.md D10).
+
+	A module name is one module per repository namespace -- the import cache is
+	persistent and shared by every program the user runs -- so two programs
+	that each have their own ``models'' would otherwise take turns rebuilding
+	ONE set of classes in place: measured, app A's committed User answered app
+	B's methods after app B merely imported its own models.py.  The same name
+	at the same path is an edit (rebuilt in place, as always); the same SOURCE
+	at another path (another checkout, another host) is the same module and is
+	never refused.  What is refused is the one combination that silently
+	substitutes another program's code: a different file with different source.
+	The two ways forward are commands, named in the message."
+
+	| deployed |
+	(self ___modulePathChangeAllowed___: moduleName) ifTrue: [^ self].
+	deployed := self ___deployedSourcePathOf___: moduleName.
+	deployed isNil ifTrue: [^ self].
+	(self ___sameSourcePath___: pathString as: deployed) ifTrue: [^ self].
+	^ ImportError @env1:___signal___:
+		'module ''' , moduleName asString , ''' is deployed from ' , deployed ,
+		', and this import found a different file with different source, ' , pathString asString ,
+		'. A module name stands for one module in this repository, so importing it would replace the deployed module''s classes in place, under every object stored against them. If the module MOVED, run gemdb.modules.relocate(''' ,
+		moduleName asString , ''') and import it again in the same session, then commit. If it is a DIFFERENT module that shares the name, run gemdb.modules.forget(''' ,
+		moduleName asString , ''') under a clean transaction (it refuses while instances of its classes exist), or rename one of them.'
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___grailForgetModule___: aModuleName
+	"gemdb.modules.forget: un-deploy aModuleName and every submodule of it, so
+	the next import of the name is a cold build from whatever file it finds.
+	Answers { modules forgotten . classes forgotten }.  Runs in the caller's
+	transaction; gemdb.modules.forget owns the clean-transaction check and the
+	commit.
+
+	REFUSES while any instance of the modules' classes, or of their subtrees,
+	exists, and says how many -- the rule gemdb.schema.drop_class applies, for
+	the same reason: forgetting the names leaves those instances on classes
+	nothing can name, and a later build under the same name would be a
+	different class.  The count is what the repository HOLDS, from a scan."
+
+	| modName prefix names classes tree byClass found |
+	modName := aModuleName asString.
+	prefix := modName , '.'.
+	names := (self ___canonicalModules___ keys collect: [:k | k asString]) select: [:k |
+		k = modName or: [k size > prefix size and: [(k copyFrom: 1 to: prefix size) = prefix]]].
+	names isEmpty ifTrue: [
+		^ ValueError @env1:___signal___:
+			'no module named ' , modName , ' is deployed in this repository'].
+	classes := IdentitySet new.
+	self ___canonicalClassRegistry___ keysAndValuesDo: [:k :v | | ks |
+		ks := k asString.
+		((v isKindOf: Behavior)
+			and: [ks size > prefix size and: [(ks copyFrom: 1 to: prefix size) = prefix]])
+				ifTrue: [classes add: v]].
+	tree := IdentitySet new.
+	classes do: [:c | tree addAll: (c @env1:___grailSlotSubtree___)].
+	found := 0.
+	tree isEmpty ifFalse: [ | treeArray |
+		treeArray := tree asArray.
+		byClass := treeArray first @env1:___grailInstancesOf___: treeArray inMemoryOnly: false.
+		tree do: [:c | found := found + (byClass at: c otherwise: #()) size]].
+	found > 0 ifTrue: [
+		^ ValueError @env1:___signal___:
+			modName , ' still has ' , found printString ,
+			' instance(s) of its classes in the repository, so it cannot be forgotten: ' ,
+			'unlink them (gemdb.root, and whatever else holds them), and if you already ' ,
+			'have, run gemdb.admin.garbage_collect() -- this counts what the repository ' ,
+			'HOLDS, and an unlinked object stays there until it is collected'].
+	names do: [:n |
+		self ___forgetCanonicalModule___: n.
+		(self @env1:modules) removeKey: n asSymbol ifAbsent: []].
+	^ Array with: names size with: classes size
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___allowBaseChange___: aKey while: aBlock
 	"Run aBlock with the base-change refusal lifted for aKey."
 
@@ -3322,6 +3475,12 @@ loadModuleFromPath: pathString name: moduleName
 	"Whether a build from here on is caused by a change -- or is a re-run of a
 	module already current, which keeps its generation."
 	buildChanged := hashState == #'stale'.
+	"A DIFFERENT FILE with DIFFERENT SOURCE under a deployed name is refused
+	before anything is built (D10, ___refuseForeignSourcePath___:for:).  Only a
+	source change can trigger it -- a module stale merely because a dependency
+	changed has the hash it was deployed with, whatever path it was found at."
+	(local not and: [previousHash notNil and: [previousHash ~= srcHash]])
+		ifTrue: [self ___refuseForeignSourcePath___: pathString for: moduleName].
     stateMap := self _stateMap .
 	"Phase-5 warm BIND (doc par.10.2): a committed module INSTANCE with
 	matching source binds -- register in sys.modules, adopt as the class's

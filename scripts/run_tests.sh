@@ -360,6 +360,10 @@ timed "durable" tests/scripts/run_durable_test.sh || EXIT=$?
 # the same primitives over their session-only entry points.
 timed "gemdb-schema" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runSchemaTest.gs < /dev/null || EXIT=$?
 timed "gemdb-class-schema" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runClassSchemaTest.gs < /dev/null || EXIT=$?
+# A deployed module name stands for one source file (Persistent_Modules D10):
+# a different file with different source under it is refused, and
+# gemdb.modules.relocate / forget are the two ways past. Commits, so not SUnit.
+timed "module-source-path" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModulePathTest.gs < /dev/null || EXIT=$?
 
 # An abort rolls the repository back but not the session: sys.modules keeps
 # every module imported before it, while the generated class, the registry

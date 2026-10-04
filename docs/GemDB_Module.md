@@ -447,6 +447,26 @@ administration primitives are: a unary method on a *module* class is
 performed by a bare attribute read, so a module-level spelling would run
 a full repository scan from `inspect.getmembers(gemstone)`.
 
+### `gemdb.modules` — which file a module name stands for
+
+```python
+import gemdb.modules
+
+gemdb.modules.relocate("models")   # same module, it moved: then import it, then commit
+gemdb.modules.forget("models")     # a different module under the name: un-deploy it
+```
+
+A deployed module name stands for one source file in the repository
+([Persistent_Modules_and_Classes.md](Persistent_Modules_and_Classes.md) D10).
+An import that finds a *different file with different source* under that name
+raises `ImportError` and names both paths and both commands. Without that,
+two programs that each have a `models.py` would take turns rebuilding one set
+of classes under each other's stored objects. `relocate` writes nothing and
+lifts the refusal for the next import of the name in this session. `forget`
+scans the repository like `gemdb.schema.drop_class`, so it refuses on a dirty
+session, refuses (`ValueError`) while instances of the module's classes exist,
+and commits itself.
+
 ### `gemdb.sessions` — who is connected
 
 ```python
@@ -484,6 +504,12 @@ is now `gemdb.schema`, above.
   batched drop, a relabel-rename, a compaction and the declared
   `__renamed__` over a committed class, with its two import refusals.
   Commits, for the same reason.
+* `tests/scripts/runModulePathTest.gs` (wired in as `module-source-path`) —
+  the D10 rule over a deployed fixture with a committed instance: a different
+  file refused (and the session left clean), an identical copy accepted,
+  `forget` refused while the instance exists and succeeding on a module with
+  none, then in a fresh session `relocate` rebuilding a moved, edited file in
+  place under the stored instance, and the old file refused afterwards.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
   — the class-level half over a fixture module with a committed instance:
   the refusals for a changed base, a removed class and a renamed one, and

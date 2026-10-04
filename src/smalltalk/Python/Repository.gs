@@ -170,6 +170,27 @@ schema_drop_class: aName
 
 category: 'Grail-Repository Administration'
 method: Repository
+modules_forget: aName
+	"Python repository.modules_forget('models') -- un-deploy a module and its
+	submodules, once nothing is stored against their classes (importlib class
+	>> ___grailForgetModule___:).  gemdb.modules.forget() wraps it."
+
+	^ importlib @env0:___grailForgetModule___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+modules_relocate: aName
+	"Python repository.modules_relocate('models') -- the deployed module now
+	lives in another file and is the same module: lift the source-path refusal
+	for this session (importlib class >> ___grailRelocateModule___:).
+	gemdb.modules.relocate() wraps it."
+
+	^ importlib @env0:___grailRelocateModule___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
 schema_rename_class: aName _: newName
 	"Python repository.schema_rename_class('module.Old', 'New') -- move a
 	renamed class's instances onto the class the new source defines
