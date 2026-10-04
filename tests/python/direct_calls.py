@@ -312,6 +312,122 @@ def stored_callable_then_deleted():
     return p.foo(1) == ('foo', 1)
 
 
+# --- properties: reads, stores and self-calls of the value -------------------
+#
+# A property lives on accessor selectors (getter ``p'', setter ``p:''), which a
+# read or store PERFORMS.  The flag's self-send dispatchers once went onto those
+# selectors whenever a class stored a property object, and then took every read
+# and store for a call of the value: ssl.py's SSLContext.maximum_version (a
+# property over _SSLContext's, defined under a class-body ``if'') raised
+# 'TLSVersion' object is not callable on ``ctx.maximum_version = v''.
+
+class _VersionBase:
+    def __init__(self):
+        self._v = 1
+
+    @property
+    def version(self):
+        return self._v
+
+    @version.setter
+    def version(self, value):
+        self._v = value
+
+
+class _VersionWrapped(_VersionBase):
+    @property
+    def version(self):
+        return ('wrapped', super().version)
+
+    @version.setter
+    def version(self, value):
+        super(_VersionWrapped, _VersionWrapped).version.__set__(self, value * 10)
+
+
+def property_redeclared_over_an_inherited_property():
+    v = _VersionWrapped()
+    v.version = 4
+    return v.version == ('wrapped', 40)
+
+
+class _VersionStored(_VersionBase):
+    pass
+
+
+# STORED, not declared: the path a class-body ``if'' or a runtime assignment
+# takes.  Same accessors as the base, so the answer does not depend on which
+# property a read reaches -- only on a read and a store not becoming calls.
+_VersionStored.version = property(_VersionBase.version.fget,
+                                  _VersionBase.version.fset)
+
+
+def property_stored_over_inherited_accessors():
+    v = _VersionStored()
+    before = v.version
+    v.version = 4
+    return (before, v.version) == (1, 4)
+
+
+class _Overridden:
+    @property
+    def kind(self):
+        return 'base'
+
+
+class _Overriding(_Overridden):
+    def _identity(f):
+        return f
+
+    @_identity
+    @property
+    def kind(self):
+        return 'derived'
+
+
+def decorated_property_reads_its_value():
+    return _Overriding().kind == 'derived'
+
+
+class _Factory:
+    @property
+    def make(self):
+        return lambda *args: ('made',) + args
+
+    def zero(self):
+        return self.make()
+
+    def one(self):
+        return self.make(5)
+
+
+def own_property_value_called_through_self():
+    f = _Factory()
+    return (f.zero(), f.one()) == (('made',), ('made', 5))
+
+
+class _Settable:
+    def __init__(self):
+        self._x = 0
+
+    @property
+    def x(self):
+        return self._x
+
+    @x.setter
+    def x(self, value):
+        self._x = value
+
+    def bump(self):
+        self.x = self.x + 1
+        return self.x
+
+
+def setter_property_store_and_self_read():
+    s = _Settable()
+    s.x = 5
+    return (s.x, s.bump()) == (5, 6)
+
+
 CHECKS = [
     foreign_receiver_method,
     stored_callable_on_instance,
@@ -337,6 +453,11 @@ CHECKS = [
     dunder_call_explicit,
     call_on_expression_receivers,
     stored_callable_then_deleted,
+    property_redeclared_over_an_inherited_property,
+    property_stored_over_inherited_accessors,
+    decorated_property_reads_its_value,
+    own_property_value_called_through_self,
+    setter_property_store_and_self_read,
 ]
 
 
