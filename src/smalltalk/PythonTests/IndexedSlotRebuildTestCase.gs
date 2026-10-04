@@ -909,3 +909,65 @@ class B(A):
 	self assert: (inst at: 1) equals: 2 description: 'stored at the position, not per object'.
 	self assert: (inst dynamicInstVarAt: #x) isNil
 %
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testParentGrowthReachesASubclassInAnotherModule
+	"A subclass defined in ANOTHER module, which this session has not imported
+	-- simulated by dropping that module's session subclass registrations --
+	still takes the parent's new name when the parent is rebuilt: propagation
+	walks the persistent canonical class registry (___grailSlotSubtree___), not
+	only __subclasses__, which is per session.  B (x y) under A rebuilt as
+	(x z) becomes (x y z) with its own z pair at 3, so A's methods store z
+	into the B instance's position, not per object, and y is untouched."
+	| subPath subName mod bInst bClass mod2 |
+	subName := 'grail_indexed_slot_rebuild_sub'.
+	subPath := '/tmp/' , subName , '_' , System myUserProfile userId asString , '.py'.
+	self ___forgetCanonicalModule___: subName.
+	[mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+'.
+	(GsFile openWriteOnServer: subPath)
+		nextPutAll: 'from grail_indexed_slot_rebuild import A
+
+class B(A):
+    def __init__(self):
+        super().__init__()
+        self.y = ''Y''
+
+b = B()
+';
+		close.
+	bInst := (importlib loadModuleFromPath: subPath name: subName) @env1:b.
+	bClass := bInst class.
+	self assert: (self layoutOf: bClass) equals: #(#x #y).
+	"A session that never imported the subclass's module has no registration
+	for B under A."
+	importlib ___forgetSubclassesFromModule___: subName.
+	(importlib @env1:modules) removeKey: subName asSymbol ifAbsent: [].
+	mod2 := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+        self.z = ''Z''
+
+    def getz(self):
+        return self.z
+
+    def setz(self, v):
+        self.z = v
+'.
+	self assert: (self layoutOf: (mod2 @env1:A)) equals: #(#x #z).
+	self assert: (self layoutOf: bClass) equals: #(#x #y #z)
+		description: 'the unimported subclass appended z'.
+	self assert: (bClass whichClassIncludesSelector: #'___pyattr_z___' environmentId: 1) == bClass.
+	self should: [bInst @env1:getz] raise: AttributeError.
+	bInst @env1:setz: 'ZZ'.
+	self assert: (bInst at: 3) equals: 'ZZ' description: 'stored at B''s own position'.
+	self assert: (bInst dynamicInstVarAt: #z) isNil.
+	self assert: (bInst @env1:___pyAttrLoad___: #y) equals: 'Y'
+	] ensure: [
+		[GsFile removeServerFile: subPath] on: Error do: [:e | ].
+		(importlib @env1:modules) removeKey: subName asSymbol ifAbsent: [].
+		self ___forgetCanonicalModule___: subName]
+%

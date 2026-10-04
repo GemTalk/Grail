@@ -1027,18 +1027,24 @@ ___grailSlotSubtree___
 	(docs/Persistent_Modules_and_Classes.md: every module-level class, imported
 	in this session or not) unioned with the session's subclass registry
 	(__subclasses__), so a class defined in a not-yet-imported module and one
-	built by type() in this session are both found."
+	built by type() in this session are both found.
 
-	| result queue reg |
+	The registry is read ONCE, into a superclass -> subclasses index, rather
+	than once per class visited: layout propagation walks this on every
+	rebuild of a class with a layout."
+
+	| result queue byParent |
 	result := OrderedCollection @env0:with: self.
 	queue := OrderedCollection @env0:with: self.
-	reg := importlib @env0:___canonicalClassRegistry___.
+	byParent := IdentityKeyValueDictionary @env0:new.
+	(importlib @env0:___canonicalClassRegistry___) @env0:keysAndValuesDo: [:k :v |
+		(v @env0:isKindOf: Behavior) ifTrue: [
+			(byParent @env0:at: v @env0:superclass ifAbsentPut: [OrderedCollection @env0:new]) @env0:add: v]].
 	[queue @env0:isEmpty] @env0:whileFalse: [ | c subs |
 		c := queue @env0:removeFirst.
 		subs := OrderedCollection @env0:new.
-		reg @env0:keysAndValuesDo: [:k :v |
-			((v @env0:isKindOf: Behavior) @env0:and: [v @env0:superclass == c]) ifTrue: [
-				(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]]].
+		(byParent @env0:at: c otherwise: #()) @env0:do: [:v |
+			(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]].
 		([c __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()]) @env0:do: [:v |
 			((v @env0:isKindOf: Behavior) @env0:and: [v @env0:superclass == c]) ifTrue: [
 				(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]]].
@@ -1155,59 +1161,74 @@ ___grailIsIndexedPair___: aSelector
 category: 'Grail-Slots'
 classmethod: object
 ___grailPropagateSlotLayoutToSubclasses___
-	"After this class's layout GREW on a rebuild: every subclass that owns a
-	layout of its own APPENDS the names it lacks (its existing positions never
-	move -- its instances depend on them), recompiles its index table, and gets
-	its OWN pair for each appended name at its own position, so the parent's
-	pair -- compiled for the parent's position, which on the subclass may be
-	another name's slot -- is never the one that answers.  Recurses, because a
-	grandchild owns positions of its own too.  A subclass with NO own layout
-	inherits the parent's numbering unchanged and needs nothing, but its
-	subclasses are still visited.
+	"After this class's layout GREW on a rebuild: every class below it that
+	owns a layout APPENDS the names its parent has and it lacks (its existing
+	positions never move -- its instances depend on them), recompiles its index
+	table, and gets its OWN pair for each appended name at its own position.
+	A parent's indexed pair answers only for the parent's own instances (the
+	owner guard, ___grailCompileIndexedPair___:), so without this a subclass's
+	instances would read the new name through the generic path, and as absent.
 
 	James's example (docs/Instance_Attribute_Indexed_Slots.md par.2): A (a1),
 	B(A) (a1 b1); A redefined with (a1 a2) -> B becomes (a1 b1 a2), and B's
 	___pyattr_a2___ reads position 3 where A's reads 2.
 
-	The direct subclasses come from importlib's registry through __subclasses__
-	(a class built ``inDictionary: nil'' is invisible to the kernel's own walk).
+	THE SUBCLASSES ARE ___grailSlotSubtree___'s: the persistent canonical class
+	registry unioned with this session's __subclasses__, primary chain only,
+	parents before children.  __subclasses__ alone is per SESSION, so a subclass
+	defined in a module this session never imported was left on its old layout
+	-- its instances then read the parent's new name as absent, and before the
+	owner guard read ANOTHER attribute's slot for it.  Each class merges against
+	its OWN superclass's layout, which the walk order has already updated, so a
+	grandchild picks up what its parent just appended.  A class with no layout
+	of its own (one built before every subclass took a copy) is passed through:
+	its own subclasses are still reached, against its inherited layout.
 
-	Nothing is ever RETIRED here: a name this class stopped assigning survives
-	in every layout (docs/Schema_Evolution_Design.md), and a hole a drop left
-	is the drop's own business (___grailDropSlot___: walks the subtree).  A
-	name this class assigns that a subclass holds as a hole is revived there
-	in place."
+	A class from a module this session has not imported is WRITTEN here, like
+	the rebuilt class itself: the rebuild's transaction carries both, and an
+	abort discards both.  A session-local class (__main__, a function body) is
+	reached only through __subclasses__, i.e. only in the session that built
+	it; the owner guard is what keeps its instances safe elsewhere.
 
-	| mine lf subs tomb bare |
+	The pairs honour each subclass's own hooks: a Python __getattribute__ /
+	__setattr__ in ITS chain must see every read / store, as the installer
+	arranges for its own names.
+
+	Nothing is ever RETIRED here: a name a class stopped assigning survives in
+	every layout (docs/Schema_Evolution_Design.md), and a hole a drop left is
+	the drop's own business (___grailDropSlot___: walks the subtree).  A name
+	the parent assigns that a subclass holds as a hole is revived there in
+	place."
+
+	| lf tomb bare hookInChainOf setattrHookInChainOf |
 	"A class with no layout anywhere in its metaclass chain has nothing to hand
-	down: a MULTIPLE-INHERITANCE subclass reaches here through the registry of a
-	SECONDARY base (``class LabeledStorage(ReadOnlyMixin, Storage)'' is a
-	subclass of Storage but inherits its shape from ReadOnlyMixin), and the
-	secondary base's slot machinery is deliberately not copied onto it."
+	down."
 	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
 		ifTrue: [^ self].
-	mine := self @env0:perform: #'___pySlotLayout___' env: 1.
 	lf := Character @env0:lf @env0:asString.
 	tomb := [:n | ('~' @env0:, n @env0:asString) @env0:asSymbol].
 	bare := [:e | | s | s := e @env0:asString.
 		(s @env0:first == $~) ifTrue: [(s @env0:copyFrom: 2 to: s @env0:size) @env0:asSymbol] ifFalse: [e @env0:asSymbol]].
-	"__subclasses__ is a LIST for an ordinary class; on a class rooted at
-	``type'' it is type's descriptor (an UnboundMethod), which is not a
-	collection of anything -- a metaclass has no slot layout to propagate."
-	subs := [self __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
-	(subs @env0:isKindOf: Collection) ifFalse: [^ self].
-	subs @env0:do: [:sub |
-		(sub @env0:isKindOf: Behavior) ifTrue: [
-		(sub @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
-			| own changed needPair src |
+	hookInChainOf := [:c | | o |
+		o := c @env0:whichClassIncludesSelector: #'__getattribute__:' environmentId: 1.
+		o @env0:notNil @env0:and: [o @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]].
+	setattrHookInChainOf := [:c | | o |
+		o := c @env0:whichClassIncludesSelector: #'__setattr__:_:' environmentId: 1.
+		o @env0:notNil @env0:and: [o @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]].
+	self ___grailSlotSubtree___ @env0:do: [:sub |
+		(sub ~~ self
+			@env0:and: [(sub @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1)
+			@env0:and: [(sub @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil]])
+				ifTrue: [ | parent own changed needPair src |
+			parent := sub @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1.
 			own := OrderedCollection @env0:withAll: (sub @env0:perform: #'___pySlotLayout___' env: 1).
 			changed := false.
 			needPair := OrderedCollection @env0:new.
-			mine @env0:do: [:e | | n di |
+			parent @env0:do: [:e | | n di |
 				n := bare @env0:value: e.
-				"Live here and absent there: the subclass appends it, or revives
-				its hole in place; either way it gets its own pair at its own
-				position.  A hole here changes nothing there."
+				"Live in the parent and absent here: append it, or revive its hole
+				in place; either way it gets its own pair at its own position.  A
+				hole in the parent changes nothing here."
 				(e == n @env0:and: [(own @env0:includes: n) @env0:not]) ifTrue: [
 					di := own @env0:indexOf: (tomb @env0:value: n).
 					di @env0:= 0 ifTrue: [own @env0:add: n] ifFalse: [own @env0:at: di put: n].
@@ -1221,8 +1242,9 @@ ___grailPropagateSlotLayoutToSubclasses___
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				sub ___grailCompileSlotIndexTable___].
 			needPair @env0:do: [:n |
-				sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n) forwardGetter: false]].
-		sub ___grailPropagateSlotLayoutToSubclasses___]].
+				sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n)
+					forwardGetter: (hookInChainOf @env0:value: sub)
+					forwardSetter: (setattrHookInChainOf @env0:value: sub)]]].
 	^ self
 %
 
