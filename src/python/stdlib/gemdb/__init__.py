@@ -28,6 +28,10 @@ Two ways to commit, for two ways of working:
 pending changes of your own; it refuses (rather than silently discarding)
 when you do.
 
+A commit GemStone refuses outright -- it reaches a generator, which
+cannot outlive the session -- raises :class:`SessionStateError`; that
+transaction needs an abort before anything commits again.
+
 Conflicts carry the actual objects: ``ConflictError.conflicts`` maps the
 GemStone conflict categories (e.g. ``"Write-Write"``) to lists of the
 live objects fought over.  To retry automatically, use the decorator
@@ -127,6 +131,58 @@ class ConflictError(GemDBError):
         return objects if isinstance(objects, list) else []
 
 
+class SessionStateError(GemDBError, TypeError):
+    """GemStone refused a commit: it reaches an object that cannot outlive the session.
+
+    A generator, or anything holding one, is the case GemStone refuses
+    today; the message names the object GemStone found.  A ``TypeError``
+    too, as CPython's ``pickle`` raises for a socket or a lock.
+
+    Unlike a conflict, a refused transaction cannot be committed even once
+    the object is removed: GemStone allows no further commit until an
+    abort, and the abort discards the whole transaction.  ``aborted`` says
+    which: ``True`` when ``with gemdb.transaction():`` has already aborted
+    it; ``False`` after an explicit ``gemdb.commit()``, whose uncommitted
+    state stays readable until you call ``gemdb.abort()``.
+
+    Keep such an object out of the commit instead: name a module global
+    in ``__transient__``, or hold it somewhere a commit does not reach.
+    """
+
+    def __init__(self, message, aborted):
+        self.aborted = aborted
+        tail = ("; the transaction was aborted" if aborted
+                else "; this transaction can no longer be committed -- "
+                     "gemdb.abort() discards it, and commits work again after that")
+        super().__init__("commit refused: " + message + tail)
+
+
+def _commit_or_raise(aborted_on_failure):
+    """Commit; raise ConflictError or SessionStateError when it does not.
+
+    With ``aborted_on_failure`` (the ``with`` block), a failed transaction
+    is aborted before the exception is raised.
+    """
+    gs = _gemstone
+    outcome = gs.___commitOrRefusal___()
+    if outcome is True:
+        return
+    if outcome is False:
+        conflicts = gs.transaction_conflicts
+        if aborted_on_failure:
+            gs.system.abort()
+        raise ConflictError(conflicts, aborted=aborted_on_failure)
+    # GemStone refused the commit outright -- (error number, message).
+    if aborted_on_failure:
+        gs.system.abort()
+    number, message = outcome
+    if number == 2407:
+        raise SessionStateError(message, aborted=aborted_on_failure)
+    raise GemDBError("commit refused (GemStone error " + str(number) + "): "
+                     + message + ("; the transaction was aborted" if aborted_on_failure
+                                  else "; gemdb.abort() discards the transaction"))
+
+
 def set_app(name):
     """Run the rest of this session as app ``name``, creating it if it is new.
 
@@ -163,15 +219,16 @@ def commit():
 
     The failed transaction is NOT aborted: your changes stay in place so
     you can inspect ``ConflictError.conflicts`` and decide -- typically
-    ``gemdb.abort()`` and redo.  Inside a ``with gemdb.transaction():``
+    ``gemdb.abort()`` and redo.  Raises SessionStateError when GemStone
+    refuses the commit because it reaches an object that cannot outlive
+    the session (a generator); that transaction needs ``gemdb.abort()``
+    before anything commits again.  Inside a ``with gemdb.transaction():``
     block this raises instead: the block commits on exit.
     """
     if _state().get("in_transaction"):
         raise GemDBError("commit() inside a transaction block: "
                          "the block commits when it exits")
-    gs = _gemstone
-    if not gs.system.commit():
-        raise ConflictError(gs.transaction_conflicts, aborted=False)
+    _commit_or_raise(False)
 
 
 def abort():
@@ -283,10 +340,7 @@ class _Transaction:
         if exc_type is not None:
             gs.system.abort()
             return False
-        if not gs.system.commit():
-            conflicts = gs.transaction_conflicts
-            gs.system.abort()
-            raise ConflictError(conflicts, aborted=True)
+        _commit_or_raise(True)
         return False
 
     def __call__(self, func):
@@ -505,7 +559,7 @@ root = _Root()
 
 __all__ = ["root", "transaction", "commit", "abort", "refresh",
            "needs_commit", "set_app", "app", "GemDBError", "ConflictError",
-           "PendingChangesError", "admin", "sessions"]
+           "PendingChangesError", "SessionStateError", "admin", "sessions"]
 
 # Warm the function-attribute caches, here in the module body.  The
 # first ATTRIBUTE READ of a module function wraps it as a BoundMethod
@@ -522,9 +576,11 @@ import sys as _sys
 
 _self = _sys.modules["gemdb"]
 for _name in ("transaction", "commit", "abort", "refresh", "needs_commit",
-              "set_app", "app", "_state", "root", "_pending_imports", "_naming"):
+              "set_app", "app", "_state", "root", "_pending_imports", "_naming",
+              "_commit_or_raise"):
     getattr(_self, _name)
 _precached = _gemstone.sessionDict
+_precached = _gemstone.___commitOrRefusal___
 del _self, _name, _sys
 
 # The submodules import here so one ``import gemdb`` reaches all of the

@@ -384,9 +384,31 @@ ___tryCommit___
 	After a refusal the session must abort before it can commit again
 	(ImproperOperation 2424, measured on 4.0)."
 
+	| outcome |
+	outcome := self ___commitOrRefusal___.
+	^ (outcome @env0:isKindOf: tuple)
+		ifTrue: [outcome @env0:at: 2]
+		ifFalse: [outcome]
+%
+
+category: 'Grail-Continuations'
+method: gemstone
+___commitOrRefusal___
+	"Commit, answering True; False on a conflict; or, when GemStone REFUSED
+	the commit outright, a tuple (error number, message).  ___tryCommit___
+	with the number kept, so a caller can tell why: 2407 is a session-bound
+	object (an instancesNonPersistent instance -- a generator's Semaphore)
+	reachable from the commit set; 2403/2424 is a commit attempted after such
+	a refusal without the abort it needs.  gemdb.commit() and
+	gemdb.transaction() use this (docs/App_Namespaces_Design.md §6.2).
+	System commit here is the env-1 one (System.gs): the D4 flush, then
+	commitTransaction."
+
 	^ [ System commit ]
 		@env0:on: TransactionError
-		do: [:ex | ex @env0:return: (str @env0:withAll: (ex @env0:messageText))]
+		do: [:ex | ex @env0:return: (tuple
+			@env0:with: ex @env0:number
+			with: (str @env0:withAll: (ex @env0:messageText)))]
 %
 
 ! ===============================================================================

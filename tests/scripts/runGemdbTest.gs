@@ -257,6 +257,67 @@ import gemdb
 gemdb.root["gemdb_test"]["n"]
 ') = 5.
 
+"A COMMIT GEMSTONE REFUSES IS A PYTHON EXCEPTION (docs/App_Namespaces_Design.md
+§6.2).  A generator reaches a Semaphore, which is instancesNonPersistent, so the
+kernel refuses the commit with TransactionError 2407 -- and that Smalltalk error
+used to tear through gemdb.commit() uncaught, ending this statement.  Now it is
+gemdb.SessionStateError (a TypeError too).  The refused transaction cannot
+commit again even without the generator (the kernel wants an abort first), and
+says so as a GemDBError; the abort then restores commits."
+r := evalPython value: '
+import gemdb
+gemdb.root["gemdb_test"]["gen"] = (x for x in ())
+try:
+    gemdb.commit()
+    r = "committed"
+except gemdb.SessionStateError as e:
+    r = "refused:" + str(isinstance(e, TypeError)) + ":" + str(e.aborted)
+del gemdb.root["gemdb_test"]["gen"]
+try:
+    gemdb.commit()
+    r2 = "committed"
+except gemdb.SessionStateError:
+    r2 = "sessionstate"
+except gemdb.GemDBError:
+    r2 = "needs-abort"
+gemdb.abort()
+gemdb.root["gemdb_test"]["n"] = 5
+gemdb.commit()
+r + "/" + r2 + "/" + str("gen" in gemdb.root["gemdb_test"])
+'.
+check value: 'explicit commit of a generator: SessionStateError, then abort, then commits'
+  value: r = 'refused:True:False/needs-abort/False'.
+check value: 'refused commit recovered: session clean' value: System needsCommit not.
+
+"The block form aborts the refused transaction itself, and the retrying
+decorator does not replay a refusal (it is not a conflict)."
+r := evalPython value: '
+import gemdb
+try:
+    with gemdb.transaction():
+        gemdb.root["gemdb_test"]["gen"] = (x for x in ())
+    r = "committed"
+except gemdb.SessionStateError as e:
+    r = "refused:" + str(e.aborted)
+calls = []
+@gemdb.transaction(retries=2)
+def store():
+    calls.append(1)
+    gemdb.root["gemdb_test"]["gen"] = (x for x in ())
+try:
+    store()
+except gemdb.SessionStateError:
+    pass
+with gemdb.transaction():
+    gemdb.root["gemdb_test"]["m"] = 1
+del gemdb.root["gemdb_test"]["m"]
+gemdb.commit()
+r + "/" + str(len(calls)) + "/" + str("gen" in gemdb.root["gemdb_test"])
+'.
+check value: 'block refusal aborts; decorator does not retry it; next block commits'
+  value: r = 'refused:True/1/False'.
+check value: 'block refusal left session clean' value: System needsCommit not.
+
 "READING A FUNCTION OF A DEPLOYED MODULE IS NOT A WRITE (issue #851).  The
 first attribute read of a module function used to cache its BoundMethod in the
 module instance's dynamic-instVar slot -- and a deployed module instance is
