@@ -336,6 +336,12 @@ __new__: mcls _: aName _: bases _: ns
 		moment CPython populates ``__class__'', and the moment it raises if the
 		metaclass dropped the cell or replaced it with something else."
 		pending ___grailFillClassCell___: ns.
+		"PEP 487, where CPython runs it: the end of type.__new__, with the
+		keywords that reached it.  Only for a class whose hook was DEFERRED --
+		a metaclass __new__ ending in **kwargs; every other class ran its hook
+		from the class statement already."
+		pending ___grailRunDeferredInitSubclass___: (SessionTemps @env0:current
+			@env0:at: #'GrailTypeNewKwargs' otherwise: nil).
 		^ pending].
 	"NO class statement is running, so this is the DIRECT form:
 
@@ -397,8 +403,28 @@ ___new__: positional kw: kwargs
 	travel on to __init_subclass__, which is where the refusal belongs and
 	where it already happens."
 
-	| n |
-	n := positional == nil ifTrue: [0] ifFalse: [positional @env0:size].
+	| n args mcls recv |
+	args := positional == nil ifTrue: [#()] ifFalse: [positional].
+	n := args @env0:size.
+	mcls := self.
+	recv := self.
+	"``super().__new__(mcls, name, bases, ns, **kwargs)'' -- what abc.ABCMeta
+	and every metaclass forwarding class keywords writes -- arrives through
+	Super's varargs path with the metaclass STILL LEADING: a class-side varargs
+	hit is handed cls included (see Super >> ___pyAttrLoad___:).  It counted as
+	four and was refused, so no class with a Python metaclass could take a
+	class keyword (test_abc's TestABCWithInitSubclass).  A leading metaclass
+	is that cls, not an argument -- at any count, so a refusal reports what
+	CPython counts.  The keywords travel on to the class's __init_subclass__
+	chain below."
+	(n @env0:>= 1
+		and: [((args @env0:at: 1) @env0:isKindOf: Behavior)
+		and: [(args @env0:at: 1) == (Python @env0:at: #type)
+			or: [(args @env0:at: 1) @env0:inheritsFrom: (Python @env0:at: #type)]]]) ifTrue: [
+			mcls := args @env0:at: 1.
+			recv := Python @env0:at: #type.
+			args := args @env0:copyFrom: 2 to: n.
+			n := n @env0:- 1].
 	n @env0:= 3 ifFalse: [
 		^ TypeError @env1:___signal___:
 			('type.__new__() takes exactly 3 arguments (' @env0:,
@@ -406,10 +432,16 @@ ___new__: positional kw: kwargs
 	"Delegated to the fixed-arity form with the RECEIVER as mcls: by the
 	time a call reaches a varargs entry the first positional has already
 	become the receiver, so ``self'' is the cls the caller passed."
-	^ self @env0:__new__: self
-		_: (positional @env0:at: 1)
-		_: (positional @env0:at: 2)
-		_: (positional @env0:at: 3)
+	"The KEYWORDS ride along for the class under construction: they are what
+	this metaclass forwarded, which is what its deferred __init_subclass__
+	chain must receive (see object class >> ___grailInitSubclass___:)."
+	SessionTemps @env0:current @env0:at: #'GrailTypeNewKwargs' put: kwargs.
+	^ [recv __new__: mcls
+		_: (args @env0:at: 1)
+		_: (args @env0:at: 2)
+		_: (args @env0:at: 3)]
+			@env0:ensure: [SessionTemps @env0:current
+				@env0:removeKey: #'GrailTypeNewKwargs' ifAbsent: [nil]]
 %
 
 

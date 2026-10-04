@@ -2819,11 +2819,28 @@ ___grailInitSubclass___: kwargs
 	__new__ asking for its keyword got None, and the hook chain got the
 	keyword instead, upside down twice over."
 	kw := kwargs.
-	(kw @env0:notNil and: [kw @env0:isEmpty @env0:not]) ifTrue: [
+	((kw @env0:notNil and: [kw @env0:isEmpty @env0:not])
+		and: [(SessionTemps @env0:current
+			@env0:at: #'GrailInitSubclassExactKwargs' otherwise: nil) ~~ true]) ifTrue: [
 		(SessionTemps @env0:current
 			@env0:at: #'GrailPendingClassKwargs'
 			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
 				@env0:at: self put: kw.
+		"DEFERRED when the metaclass __new__ ends in a **kwargs catch-all.
+		Whether such a __new__ forwards the keywords is its own code, so any
+		guess from the signature is wrong for half the metaclasses: abc.ABCMeta
+		forwards every one (``super().__new__(mcls, name, bases, namespace,
+		**kwargs)'') and the guess handed the hook NONE (test_abc's
+		TestABCWithInitSubclass).  CPython runs the hook inside type.__new__,
+		with exactly what reached it, and so does this now: type >>
+		__new__:_:_:_: runs the deferred hook on the class under construction,
+		and ___grailDispatchMetaclass___ drops it if the metaclass never
+		delegates up -- in which case CPython would not have run it either."
+		self ___grailMetaclassNewHasCatchAll___ ifTrue: [
+			(SessionTemps @env0:current
+				@env0:at: #'GrailDeferredInitSubclass'
+				ifAbsentPut: [IdentitySet @env0:new]) @env0:add: self.
+			^ self].
 		kw := self ___grailKwargsAfterMetaclass___: kw].
 	"An ASSIGNED __init_subclass__, which is a different thing from a defined
 	one and was not looked for at all.  PEP 702's @deprecated works by
@@ -3240,25 +3257,43 @@ ___grailRunAssignedInitSubclass___: aHook kw: kwargs
 
 category: 'Grail-Initialization'
 classmethod: object
-___grailKwargsAfterMetaclass___: aKwargs
-	"The class-header keywords MINUS those the metaclass's own __new__
-	consumes by naming them.
+___grailRunDeferredInitSubclass___: kwargsOrNil
+	"Run the __init_subclass__ chain ___grailInitSubclass___: deferred, with
+	the keywords that actually reached type.__new__ -- once.  Answers false
+	when this class has nothing deferred.
 
-	Read from the __new__'s signature spec: entries beyond the standard four
-	(mcs, name, bases, namespace) that are plain named parameters.  A **kwargs
-	catch-all is a different kind in the spec and is left alone -- it forwards
-	rather than consumes.  No metaclass, a non-constructing one, or a __new__
-	with nothing beyond the four: the kwargs pass through untouched."
+	The keywords are used as they arrive: they ARE what the metaclass
+	forwarded, so the signature-based filter (and the deferral itself) must
+	stand down for this one call."
 
-	| tbl meta fn spec out consumed |
+	| deferred |
+	deferred := SessionTemps @env0:current
+		@env0:at: #'GrailDeferredInitSubclass' otherwise: nil.
+	(deferred == nil or: [(deferred @env0:includes: self) @env0:not]) ifTrue: [^ false].
+	deferred @env0:remove: self.
+	SessionTemps @env0:current @env0:at: #'GrailInitSubclassExactKwargs' put: true.
+	[self ___grailInitSubclass___: kwargsOrNil]
+		@env0:ensure: [SessionTemps @env0:current
+			@env0:removeKey: #'GrailInitSubclassExactKwargs' ifAbsent: [nil]].
+	^ true
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailMetaclassNewSpec___
+	"The __signature_spec__ of this class's metaclass's __new__, following a
+	functools.wraps chain to the function whose parameters actually bind, or
+	nil when there is no Python metaclass or no readable spec."
+
+	| tbl meta fn spec |
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailClassMetaclass' otherwise: nil.
 	meta := tbl == nil ifTrue: [nil] ifFalse: [tbl @env0:at: self otherwise: nil].
-	meta == nil ifTrue: [^ aKwargs].
-	(meta @env0:isKindOf: Behavior) ifFalse: [^ aKwargs].
+	meta == nil ifTrue: [^ nil].
+	(meta @env0:isKindOf: Behavior) ifFalse: [^ nil].
 	fn := [meta ___pyAttrLoad___: #'__new__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	fn == nil ifTrue: [^ aKwargs].
+	fn == nil ifTrue: [^ nil].
 	"Follow the functools.wraps chain: a DECORATED __new__ -- @deprecated's
 	own metaclass wrapper is the case in play -- has the wrapper's signature
 	(*args, **kwargs), which consumes nothing.  The parameters that bind are
@@ -3274,7 +3309,44 @@ ___grailKwargsAfterMetaclass___: aKwargs
 			ifFalse: [fn := inner]].
 	spec := [fn @env1:___pyAttrLoad___: #'__signature_spec__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	(spec == nil or: [spec == None]) ifTrue: [^ aKwargs].
+	(spec == nil or: [spec == None]) ifTrue: [^ nil].
+	^ spec
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailMetaclassNewHasCatchAll___
+	"Whether the metaclass's __new__ takes a **kwargs catch-all beyond the
+	standard four parameters -- the one signature from which what reaches
+	__init_subclass__ CANNOT be read, because what it forwards to
+	super().__new__ is its own code.  See ___grailInitSubclass___:."
+
+	| spec |
+	spec := self ___grailMetaclassNewSpec___.
+	spec == nil ifTrue: [^ false].
+	5 @env0:to: spec @env0:size do: [:i |
+		| entry |
+		entry := spec @env0:at: i.
+		(entry @env0:size @env0:>= 2 and: [(entry @env0:at: 2) @env0:= 4])
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailKwargsAfterMetaclass___: aKwargs
+	"The class-header keywords MINUS those the metaclass's own __new__
+	consumes by naming them.
+
+	Read from the __new__'s signature spec: entries beyond the standard four
+	(mcs, name, bases, namespace) that are plain named parameters.  A **kwargs
+	catch-all is a different kind in the spec and is left alone -- it forwards
+	rather than consumes.  No metaclass, a non-constructing one, or a __new__
+	with nothing beyond the four: the kwargs pass through untouched."
+
+	| spec out consumed |
+	spec := self ___grailMetaclassNewSpec___.
+	spec == nil ifTrue: [^ aKwargs].
 	spec @env0:size @env0:<= 4 ifTrue: [^ aKwargs].
 	"Kinds in the spec: 1 = named, 3 = keyword-only, 4 = **kwargs.  Named and
 	keyword-only parameters consume their keyword by binding it.  A **kwargs
@@ -4435,6 +4507,12 @@ ___grailDispatchMetaclass___
 		the delegation already handled.  Runs in the ensure: so a metaclass that
 		RAISES still leaves no deferral behind for the next class statement."
 		Enum ___grailRunDeferredMemberBuild___: self namespace: ns.
+		"The same net for a DEFERRED __init_subclass__ chain (object class >>
+		___grailInitSubclass___:): normally run inside type.__new__ with the
+		keywords the metaclass forwarded; a dispatch that never got there runs
+		it now with none, which is what the signature guess this replaced gave
+		a **kwargs metaclass -- so no class loses its hook to the deferral."
+		self ___grailRunDeferredInitSubclass___: nil.
 		self ___grailFinishNamespace___.
 		self ___grailDropPendingClassCell___.
 		"Drop the stashed header keywords with the rest of the pending state."
@@ -4525,6 +4603,55 @@ ___grailNsBind___: aName
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	v isNil ifTrue: [^ self].
 	ns @env1:__setitem__: aName @env0:asString _: v.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+method: object
+___grailReplaceBinding___: key _: value
+	"Replace a class-body namespace entry the body ALREADY bound -- the second
+	half of a binding Grail has to make in two steps (the def at its source
+	position, then its decorated object or property once that exists).  An
+	ordinary mapping just stores; EnumDict overrides this, because its
+	__setitem__ refuses a second binding of a name, and this is one binding
+	CPython makes once."
+
+	^ self __setitem__: key _: value
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsRebind___: aName
+	"A class-body def's DECORATOR has just stored its result over the compiled
+	method: put that result in the namespace too, under the key
+	___grailNsBind___: already gave the def, so the key keeps its place.
+
+	___grailNsBind___: says the decorator has run by the time it reads the
+	name back off the class, and the emit no longer agrees: the binds come
+	straight after the body, the decorator stores later.  So a metaclass was
+	handed the UNDECORATED function for every decorated def, where CPython's
+	namespace holds the decorator's result.  Mostly invisible, because
+	abstractmethod and abstractclassmethod also mark the function itself --
+	but abc.abstractproperty marks only the property it returns, so ABCMeta
+	saw nothing abstract and a class with one could be instantiated
+	(test_abc test_abstractproperty_basics).
+
+	RAW, from the holder: CPython's namespace holds the descriptor itself, and
+	reading through ___pyAttrLoad___ would answer a classmethod already bound.
+	And the class's OWN holder only: a decorator that raised stored nothing
+	(the application handler swallows it), and an inherited read then put
+	the PARENT's value in this class's namespace -- an abstract parent method
+	made the overriding subclass abstract."
+
+	| ns holder v |
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifTrue: [^ self].
+	(self @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifFalse: [^ self].
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
+	holder == nil ifTrue: [^ self].
+	v := holder @env0:dynamicInstVarAt: aName @env0:asSymbol.
+	v isNil ifTrue: [^ self].
+	ns ___grailReplaceBinding___: aName @env0:asString _: v.
 	^ self
 %
 
@@ -8479,9 +8606,23 @@ ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass
 	to ask for a category per hit; only the metaclass path calls it, so the cost
 	does not land on classes that have no metaclass."
 
-	| walker dict |
+	| walker dict metaDict |
 	walker := aClass.
 	[walker == nil] whileFalse: [
+		"A class whose body defines the name CLASS-side -- a @classmethod or
+		@staticmethod -- is nearer than any instance-side def above it, and
+		that def is no instance method of this chain's concern: stop and let
+		the class-side lookup answer it.  Walking past it found a base's
+		instance-side def -- the shape a classmethod SUBCLASS such as abc's
+		abstractclassmethod compiles to -- and answered an UnboundMethod for
+		the subclass's own classmethod, so ``D.foo()'' raised 'must be called
+		with an instance' (test_abc TestLegacyAPI, with a Python metaclass)."
+		metaDict := walker @env0:class @env0:methodDictForEnv: 1.
+		(metaDict ~~ nil
+			and: [(metaDict @env0:includesKey: aSym)
+			and: [self ___isPythonSourceMethodCategory___:
+				(walker @env0:class @env0:categoryOfSelector: aSym environmentId: 1)]])
+					ifTrue: [^ false].
 		dict := walker @env0:methodDictForEnv: 1.
 		dict == nil ifFalse: [
 			((dict @env0:includesKey: aSym)
@@ -9240,6 +9381,38 @@ ___pyStoreDynamic___: aSym put: aValue
 						ifTrue: [
 							AttributeError @env0:___signalNoDict___: aSym on: self]
 						ifFalse: [ex @env0:pass]]]
+%
+
+category: 'Grail-Attribute Protocol'
+method: object
+___subclassAttrShadowing___: aSym
+	"A class attribute that a PYTHON subclass defines over a built-in VALUE
+	attribute (see ___pythonValueAttrs___), or nil.
+
+	The value-attribute branch of ___pyAttrLoad___: performs the built-in's
+	method, and it ran before any subclass's class attribute was looked at --
+	backwards from the MRO, where the subclass comes first.  abc's
+
+	    class abstractproperty(property):
+	        __isabstractmethod__ = True
+
+	therefore read property's COMPUTED answer (False: the getter is not
+	abstract), and an ABC with an abstractproperty could be instantiated
+	(test_abc test_abstractproperty_basics).  Only the classes BELOW the one
+	that implements the method can shadow it, so the walk stops there; for an
+	instance of a built-in itself it is one class and no holder."
+
+	| implementor walker holder v |
+	implementor := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	walker := self @env0:class.
+	[walker ~~ nil and: [walker ~~ implementor]] whileTrue: [
+		(walker @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				v == nil ifFalse: [^ v]]].
+		walker := walker @env0:superClass].
+	^ nil
 %
 
 category: 'Grail-Attribute Protocol'
@@ -10330,7 +10503,9 @@ ___pyAttrLoad___: aSym
 	as today."
 	((self @env0:class @env0:respondsTo: #'___pythonValueAttrs___')
 		and: [(self @env0:class @env0:___pythonValueAttrs___) @env0:includes: aSym])
-		ifTrue: [^ self @env0:perform: aSym env: 1].
+		ifTrue: [
+			(self ___subclassAttrShadowing___: aSym) @env0:ifNotNil: [:___sv | ^ ___sv].
+			^ self @env0:perform: aSym env: 1].
 	"``str.strip'' / ``str.split'' etc.: the str builtin is a BoundMethod, not
 	a class (there is no single `str' class -- strings span Unicode7 /
 	Unicode16 / ... under CharacterCollection), so a str METHOD name accessed
@@ -14227,7 +14402,19 @@ ___pyAttrDelete___: aName
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) == meta
 								ifTrue: [meta @env1:___removeSelector:
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1]].
-						^ self
+						"A DECORATED def is BOTH: the decorator's result in the holder
+						and the compiled def it was stored over.  Stopping at the
+						holder left the def to resurface, so ``del A.foo'' on an
+						@abc.abstractmethod answered hasattr(A, 'foo') True (test_abc
+						test_update_del).  Only a name with no own def ends here; one
+						with a def goes on to the removal below."
+						((self @env0:selectorsForEnvironment: 1) @env0:detect: [:sel |
+							(self @env0:___grailSelectorMatchesPythonName___: sel
+								name: aName @env0:asString)
+								and: [((self @env0:categoryOfSelector: sel environmentId: 1)
+									@env0:= #'Grail-Class Methods')
+								and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) == self]]]
+							ifNone: [nil]) == nil ifTrue: [^ self]
 					]
 				]
 			].
