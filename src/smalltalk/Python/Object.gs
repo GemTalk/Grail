@@ -6381,15 +6381,19 @@ ___instanceClassAttrGet___: aValue
 	call reached the function with no receiver (``unbound method ... must be
 	called with an instance as the first argument'').
 
-	Narrowed to UnboundMethod ON PURPOSE.  ___descriptorGet___: (below) already
-	returns a BoundMethod RAW -- deliberately, so a class attribute that is a
-	plain module function (``digest_method = staticmethod(...)'', werkzeug Map's
-	converter-table functions) is NOT redirected at the holder instance -- and
-	binding those the way the runtime-overlay path does regresses that.  An
-	UnboundMethod, by contrast, is what ``OtherClass.method'' answers and has no
-	other meaning than a function awaiting self, so binding it is unambiguous."
+	The same callables the holder path binds (___isDescriptorCallable___:), so
+	a class-body ASSIGNMENT binds exactly like ``Cls.x = v'' after the class
+	exists: an UnboundMethod (what ``OtherClass.method'' answers), a lambda, a
+	module-level def, an lru_cache wrapper.  This used to bind the UnboundMethod
+	alone, on the theory that binding a plain module function would redirect
+	itsdangerous' ``digest_method = staticmethod(hashlib.sha1)'' at the holder
+	instance -- but that value is a staticmethod, not a function, and the
+	predicate already leaves a builtin's function (no __file__) and a bound
+	method unbound, as CPython does.  Meanwhile ``class C: f = lambda self: 1''
+	made ``C().f()'' a missing-argument TypeError, and ``g = outer'' passed the
+	first ARGUMENT as self."
 
-	(aValue isKindOf: UnboundMethod)
+	(self ___isDescriptorCallable___: aValue)
 		ifTrue: [^ MethodBinding instance: self callable: aValue].
 	^ self ___descriptorGet___: aValue
 %
