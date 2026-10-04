@@ -1061,9 +1061,8 @@ __cause__
 	probe __context__ uses (an unset dynamic instVar reads back as ABSENT, which
 	raises rather than answering nil).  Unset -> None, CPython's default.
 
-	Written by ___setCause___:context___:.  NOTE: the ``raise X from Y'' SYNTAX
-	does not set this yet -- RaiseAst parses a ``cause'' but drops it -- so today
-	the only writer is PEP 479 generator wrapping."
+	Written by ___setCause___:context:, which ``raise X from Y'' reaches, and by
+	an assignment ``e.__cause__ = x'' (___pyAttrStore___:put:)."
 
 	^ ([self @env0:dynamicInstVarAt: #'___cause___']
 		@env0:on: AbstractException do: [:e | nil]) ifNil: [None]
@@ -1646,6 +1645,77 @@ ___setCause___: aCause context: aContext
 		self @env0:dynamicInstVarAt: #'___context___' put: aContext].
 	self @env0:dynamicInstVarAt: #'___suppressContext___' put: true.
 	^ self
+%
+
+category: 'Grail-Exception Chaining'
+method: BaseException
+___pyAttrStore___: aName put: aValue
+	"``e.__cause__ = x'', ``e.__context__ = x'' and ``e.__suppress_context__ =
+	b'' are getset descriptors in CPython, not instance attributes.  Grail
+	stored them as ordinary attributes named after the dunder, so they lived
+	in a DIFFERENT slot from the one ``raise X from Y'' writes (___cause___ and
+	friends): a Python read happened to find the attribute, but
+	pythonExceptionChain did not, nothing was validated, and assigning the
+	cause left __suppress_context__ False where CPython sets it -- so
+
+	    e.__cause__ = x; e.__cause__ = None
+
+	showed the implicit context again that CPython keeps suppressed.  Route the
+	three to their slots with CPython's checks.  The size test keeps every
+	other store on an exception at one compare."
+
+	| n |
+	(aName @env0:size @env0:between: 9 and: 20) ifFalse: [
+		^ super ___pyAttrStore___: aName put: aValue].
+	n := aName @env0:asString.
+	n @env0:= '__cause__' ifTrue: [
+		self ___requireChainLink___: aValue role: 'cause'.
+		self @env0:dynamicInstVarAt: #'___cause___'
+			put: (aValue == None ifTrue: [nil] ifFalse: [aValue]).
+		self @env0:dynamicInstVarAt: #'___suppressContext___' put: true.
+		^ aValue].
+	n @env0:= '__context__' ifTrue: [
+		self ___requireChainLink___: aValue role: 'context'.
+		self @env0:dynamicInstVarAt: #'___context___'
+			put: (aValue == None ifTrue: [nil] ifFalse: [aValue]).
+		^ aValue].
+	n @env0:= '__suppress_context__' ifTrue: [
+		(aValue == true or: [aValue == false]) ifFalse: [
+			^ TypeError ___signal___: 'attribute value type must be bool'].
+		self @env0:dynamicInstVarAt: #'___suppressContext___' put: aValue.
+		^ aValue].
+	^ super ___pyAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Exception Chaining'
+method: BaseException
+___requireChainLink___: aValue role: aString
+	"CPython accepts only None or an exception INSTANCE as a cause or context
+	-- a class is refused here, unlike ``raise X from Cls'', which instantiates
+	it."
+
+	(aValue == None or: [aValue @env0:isKindOf: BaseException]) ifFalse: [
+		^ TypeError ___signal___: 'exception ' @env0:, aString
+			@env0:, ' must be None or derive from BaseException']
+%
+
+category: 'Grail-Exception Chaining'
+method: BaseException
+___pyAttrDelete___: aName
+	"The chaining attributes always exist, so CPython refuses to delete them
+	-- with a TypeError, not the AttributeError a missing attribute gets.
+	Grail let ``del e.__cause__'' remove the misplaced attribute the store
+	used to create."
+
+	| n |
+	(aName @env0:size @env0:between: 9 and: 20) ifFalse: [
+		^ super ___pyAttrDelete___: aName].
+	n := aName @env0:asString.
+	(n @env0:= '__cause__' or: [n @env0:= '__context__']) ifTrue: [
+		^ TypeError ___signal___: n @env0:, ' may not be deleted'].
+	n @env0:= '__suppress_context__' ifTrue: [
+		^ TypeError ___signal___: 'can''t delete numeric/char attribute'].
+	^ super ___pyAttrDelete___: aName
 %
 
 category: 'Grail-Exception Chaining'
