@@ -668,7 +668,10 @@ __floordiv__: other
 		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
-	^ (self ifTrue: [1] ifFalse: [0]) @env0:// other
+	"As int, not the kernel's integer //: that answered an int for a float
+	divisor (``True // 2.0'' is 0.0) and raised the kernel's UNCATCHABLE
+	ZeroDivide for ``True // 0''."
+	^ (self ifTrue: [1] ifFalse: [0]) __floordiv__: other
 %
 
 category: 'Grail-Comparison'
@@ -932,7 +935,9 @@ __mod__: other
 		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
-	^ (self ifTrue: [1] ifFalse: [0]) @env0:\\ other
+	"As int, for the reasons __floordiv__: gives (``True % False'' raised the
+	kernel's uncatchable ZeroDivide)."
+	^ (self ifTrue: [1] ifFalse: [0]) __mod__: other
 %
 
 category: 'Grail-Arithmetic'
