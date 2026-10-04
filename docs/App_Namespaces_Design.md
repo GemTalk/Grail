@@ -1,13 +1,15 @@
 # App namespaces: one set of globals per application (design)
 
-**Status:** proposal, 2026-10-04. Nothing here is implemented. It follows
+**Status:** design agreed 2026-10-04; nothing is implemented yet. It follows
 from PRs #1295 (the slot-pair owner guard), #1296 (layout propagation through
 the persistent class registry) and #1297 (refusing a different file under a
 deployed module name, `gemdb.modules`), and from the discussion that led to
-them. §9 lists the decisions this note needs before any code is written.
+them. §10 records the decisions; §9 is the order to build it in.
 
 **Related:** [Persistent_Modules_and_Classes.md](Persistent_Modules_and_Classes.md)
-(D3 class-attribute overlay, D4 `__persistent__`, D10 module source path),
+(§4.1 the three tiers, D3 class-attribute overlay, D4 `__persistent__`, D5
+`__session_init__`, D9 abort unloads, D10 module source path, §8.2 the wanted
+class-scope `__transient__`),
 [GemDB_Module.md](GemDB_Module.md), [LEGB.md](LEGB.md), issue #851 (why
 `__main__` is session-local).
 
@@ -119,7 +121,10 @@ to the shared base. Anything else goes to the current app. So an app's own
 for that run, exactly as a `json.py` ahead of the stdlib on `sys.path` does in
 CPython.
 
-Third-party packages (a venv's `site-packages`) are §9 decision 1.
+Third-party packages (a venv's `site-packages`) belong to the **app**, not the
+shared base (§10, decision 1): each app has its own venv, as in CPython, so two
+apps can pin different versions of a framework. The cost is one build of each
+framework per app.
 
 ### 3.3 Compiling against a namespace
 
@@ -165,6 +170,16 @@ import shop.models
 
 ## 5. `__main__` in an app
 
+An app's state falls into the three tiers Persistent Modules §4.1 already
+names. The work that led here touched two of them, and they are separate
+decisions:
+
+- **Code.** §2.1 (hypothetical 1) is about class *identity* across runs. A
+  canonical `__main__` (§5.1) fixes it, whatever the globals do.
+- **Persistent state.** The rabbit demo is about *data*: §5.2.
+- **Session state.** Sockets, files, locks and scratch values must never be
+  committed, and an app has to be able to say so: §5.3 and §6.
+
 ### 5.1 Classes
 
 In an app, `__main__` is a canonical module like any other, with the key
@@ -178,57 +193,71 @@ D10 applies: a different file with different source is refused. An app
 therefore has **one** top file, which is what the app name means. Re-running
 an edited top file is the normal edit loop.
 
-### 5.2 Globals: a session copy, written back at commit
+### 5.2 Globals are persistent, with GemStone semantics
 
-The globals are **not** a shared dictionary that the running script writes
-into. Doing that brings back every reason #851 made `__main__` session-local:
+In an app, `__main__`'s globals are a **persistent dictionary** of the app,
+and they behave as persistent objects always have in GemStone:
 
-- `import gemdb` on the first line binds a global. Measured on gs40: storing
-  the *identical* object back into a committed dictionary still sets
-  `needsCommit`. So the session would be dirty before the script's first
-  statement, and `with gemdb.transaction():` would refuse.
-- `gemdb.abort()` would roll back the script's own top-level bindings,
-  including `gemdb` itself on a first run.
-- Every top-level temporary (`for line in f:` leaves `line`) would be shared
-  mutable state, and two sessions committing it would conflict.
+- **Each run starts with the globals of the last commit.**
+- **An assignment is a write**, visible to this session at once and to other
+  sessions after a commit.
+- **A failed commit keeps the session's changes**, so the program can inspect
+  the conflict and decide (`gemdb.ConflictError`, as today).
+- **`gemdb.abort()` reloads the committed values.** A global the run had
+  rebound reads its committed value on the next line; a global first bound by
+  this run is gone.
 
-Instead the globals follow D4, which already does this for
-`__persistent__`-listed names:
+Three objections made #851 keep `__main__` session-local, and this design
+answers each:
 
-1. **Bind.** When the top file starts, the session's `__main__` globals are
-   seeded from the app's committed globals.
-2. **Run.** Assignments change the session's copy only. Nothing is dirty until
-   the program writes a persistent object.
-3. **Write back at commit.** `gemdb.commit()` (and the transaction block's
-   commit) already flushes D4 state first (`System class >> commit` calls
-   `___flushPersistentState___`). It also writes back each `__main__` global
-   whose binding changed since the seed. Unchanged bindings write nothing, so
-   re-running a top file that rebinds `gemdb`, `app`, `config` to the same
-   objects does not conflict.
-4. **Abort** discards the transaction as always. The session copy is left
-   alone (§9 decision 3).
+1. **"The session is dirty before the script's first statement."** `import
+   gemdb` rebinds a global, and measured on gs40, storing the *identical*
+   object back into a committed dictionary still sets `needsCommit`. So a
+   module-level store of an object **identical** to the current binding is
+   skipped: codegen emits one identity compare before the store. A re-run
+   that rebinds `gemdb`, `app` and `config` to the same objects writes
+   nothing. On a first run the stores coincide with the cold imports, which
+   dirty the transaction anyway, so "import inside the transaction that
+   commits it" (Persistent Modules §4.2) still describes it.
+2. **"An abort on a first run unbinds `gemdb` itself."** That is consistent,
+   not surprising: D9 already unloads every module an abort rolls back, so the
+   binding goes with the module it named.
+3. **"Every top-level temporary becomes shared, conflicting state."** It does,
+   unless declared transient (§5.3). A top file that loops at top level
+   declares its loop variable; one that does not is told so at commit if the
+   value cannot be committed (§6), and otherwise simply persists it.
 
-What is written back, and what is not:
+`gemdb.root` in an app is an **alias** for these globals: a mapping view, so
+`gemdb.root["hat"]` *is* the global `hat`. A second persistent root would earn
+its keep only if the globals were not themselves the database. Existing code
+that uses `root` keeps working. Outside an app, `root` is unchanged (§7).
 
-- **Data:** yes. That is the point (`hat = rabbit`).
-- **Modules** (`import x` binds `x`): the binding is written. The module
-  itself is already persistent, and its warm bind is cheap.
-- **Classes and functions** defined by the top file: their *code* is persistent
-  through the canonical registry (§5.1), and the binding is written like any
-  other.
-- **Values that cannot be committed** (sockets, open files, locks): skipped,
-  with a warning naming each. They are session state, as in Persistent Modules
-  §4.1 (§9 decision 4).
-- **A name the run deleted** (`del x`) is deleted at commit.
-- **A name the run never mentioned** survives. That is the whole model ("each
-  run starts with the globals of the last commit"), and it is also its hidden
-  state: removing a global needs `del`.
+### 5.3 `__transient__` and `__persistent__`: the default flips with the app
 
-### 5.3 Initialize once: `Final`
+Which names are session state is declared per module, symmetrically:
+
+```python
+__transient__ = ["sock", "line"]      # in an app: these names are never committed
+__persistent__ = ["count"]            # outside an app (D4): these names are
+```
+
+- **In an app, globals are persistent by default.** `__transient__` names the
+  exceptions. A transient global is session state: it is never committed,
+  survives an abort untouched, and starts unbound in each run, so the top
+  file's own assignment rebinds it (the socket is reopened, the loop variable
+  reset).
+- **Outside an app, globals are transient by default**, as today, and D4's
+  `__persistent__` opts names in. It is already implemented, including its
+  flush at `gemdb.commit()`.
+
+Naming an app is how a program says "my globals are the database". The
+declaration a reader has to look for is always the exception.
+
+### 5.4 Initialize once: `Final`
 
 Re-running the top file re-executes every initializer, so `app = Flask(...)`
-builds a new `Flask` on every run and the write-back sees a changed binding.
-The Python spelling for "bind once" already exists:
+builds a new `Flask` on every run, and the new binding is a write. The Python
+spelling for "bind once" already exists:
 
 ```python
 from typing import Final
@@ -240,38 +269,91 @@ the right-hand side once per run, and a CPython run starts empty, so "once per
 run" and "once per object space" coincide there. Under GemDB, a module-level
 `Final` binding that the committed globals already hold **keeps the committed
 value and does not evaluate the right-hand side**, like Clojure's `defonce`. So
-re-runs write nothing for those names and cannot conflict on them. Nothing in
-CPython code changes meaning except that the initializer is skipped on a re-run,
-which is the point. (§9 decision 5.)
+re-runs write nothing for those names, and several sessions starting the same
+app (web workers, say) cannot conflict on them. The only change from CPython is
+that the initializer is skipped on a re-run, which is the point. It is
+documented as a departure next to D4.
 
-### 5.4 `gemdb.root`
+## 6. Session-bound objects are refused at commit
 
-In an app, the globals do what `root` did. `root` can stay as the app's dictionary
-for compatibility (§9 decision 2).
+A global can be committable while something it reaches is not: an object
+holding a socket, a client holding a lock. What happens today depends on the
+object, and only part of it is loud:
 
-## 6. The default namespace
+- A `Semaphore` or a `GsProcess` makes the whole commit fail with
+  TransactionError 2407. Grail hands that to Python as data rather than a
+  Smalltalk error (`gemstone >> ___tryCommit___`).
+- A `GsSocket` or `GsFile` commits **without complaint** and comes back dead in
+  the next session. The same goes for a `CPointer` (NULL after logout) and a
+  `WeakReference` (faults in dead).
+
+A warning is easy to miss, so in an app this becomes an **error, at commit,
+that names the path**:
+
+```
+gemdb.TransientReferenceError: cannot commit hat.connection._sock:
+GsSocket (open socket -- dead after commit/logout). Declare the global in
+__transient__, or the attribute in its class's __transient__.
+```
+
+The detector already exists. The deploy audit classifies session-bound
+objects (`importlib class >> ___deployDescribe___:`) and reports the reference
+path to each. At commit it walks the objects **this transaction wrote** that are
+reachable from the app's globals, not the whole graph, so its cost follows the
+size of the change. Measuring that cost is the first job of the cut (§9).
+
+### 6.1 Class-level `__transient__`
+
+The fix for an otherwise committable object that holds a session-bound one is
+a class-scope declaration (Persistent Modules §8.2 already lists it as wanted):
+
+```python
+class Connection:
+    __transient__ = ("_sock",)
+
+    def __session_init__(self):          # D5: rebuild the session tier
+        self._sock = socket.create_connection(self.address)
+```
+
+The named attributes are never committed: they read as unset in a session
+that did not assign them, and `__session_init__` (D5) is where they are
+rebuilt.
+
+It is GemStone's **DbTransient** idea, but not GemStone's DbTransient
+mechanism. A DbTransient object's slots can silently revert to `nil` *within
+one session* under memory pressure, once nothing holds the object strongly
+(memory note `dbtransient-ivars-are-not-durable-in-session`), and a live
+socket cannot vanish mid-session. So Grail keeps these slots in `SessionTemps`,
+keyed by object, which holds them strongly for the session's life.
+
+## 7. The default namespace
 
 A run that names no app keeps today's semantics exactly:
 
 - `__main__` is session-local, as #851 made it: fresh classes every run, and
   globals that die with the run;
+- globals are transient by default, with D4's `__persistent__` to opt in;
 - the module cache is the user's, shared by every program the user runs, with
   D10 refusing a different file under a deployed name;
-- `gemdb.root` is the way into persistence.
+- `gemdb.root` is its own persistent dictionary and the main way into
+  persistence.
 
 So nothing that works today changes, and the documented problems (§2) remain
 for programs that do not name an app. That is the trade: an app is what a
 program declares when it wants its globals to be the database.
 
-## 7. Two users, one app
+## 8. Two users, one app
 
-"Two users run the same app, possibly from different paths" works within one
-namespace. Identity is (app, dotted name); the path does not matter, and D10
-refuses only a different file with *different source*, so identical
-checkouts at different paths, or on different hosts, share one module. An
-*edit* by either user rebuilds the module for both, which is correct for "the
-same app": they are running one program. A developer who wants isolation
-picks another app name (`shop-dev-james`).
+Several people or sessions running one app under the same GemStone user,
+possibly from different paths, share one namespace. D10 refuses only a
+different file with *different source*, so identical checkouts at different
+paths, or the same installation on several application servers, are one
+module. An edit at the deployed path rebuilds the module for everyone, which
+is correct for "the same app": they are running one program. An edit in a
+*second* checkout is a different file with different source, so its import is
+refused. An app has one source of truth, and `gemdb.modules.relocate` is how a
+developer deliberately moves it. A developer who wants an independent working
+copy picks another app name (`shop-dev-james`).
 
 Sharing across GemStone **users** needs more than this note designs:
 
@@ -290,53 +372,50 @@ So the first cut makes apps **per user** (`UserGlobals #GrailApps`, name →
 namespace), and cross-user apps are a later cut once a shared installation
 exists.
 
-## 8. Cuts
+## 9. Cuts
 
 1. **Namespace object and accessors.** A `GrailAppNamespace` holding the
    registries of §3.1. Every registry accessor reads `SessionTemps
    #GrailCurrentApp` and falls back to `UserGlobals` (the default namespace).
    No behaviour change while no app is set; this is the cut that proves the
    accessors are the only access path.
-2. **Imports resolve per namespace.** File location chooses shared or app;
-   the per-app module-class dictionary goes into the compile symbol list;
-   `set_app` and the launcher option. Test: two apps each with their own
-   `models.py`, both deployed, no refusal, and each app's objects keep their
-   own code (the §2.2 scenario inverted).
-3. **`__main__` in an app.** A canonical `__main__`, and globals bound and
-   written back through the D4 machinery. Tests: §2.1 with `type(b1) is
-   type(b2)` True; the rabbit demo across two sessions; a re-run that changes
-   nothing writes nothing; abort; an uncommittable value is skipped with a
-   warning.
+2. **Imports resolve per namespace.** File location chooses shared or app,
+   with third-party packages in the app; the per-app module-class dictionary
+   goes into the compile symbol list; `set_app` and the launcher option. Test:
+   two apps each with their own `models.py`, both deployed, no refusal, and
+   each app's objects keep their own code (the §2.2 scenario inverted).
+3. **`__main__` in an app.** A canonical `__main__` whose globals are the app's
+   persistent dictionary; the identical-store skip; `__transient__`;
+   `gemdb.root` as the alias. Tests: §2.1 with `type(b1) is type(b2)` True; the
+   rabbit demo across two sessions; a re-run that changes nothing writes
+   nothing; abort reloads a rebound global and unbinds a new one; a transient
+   global is never committed and survives an abort.
 4. **`Final` as initialize-once.**
-5. **`gemdb.admin.apps()` / `drop_app()`**, and the docs: GemDB_Module.md,
-   Persistent Modules (a new departure next to D4), and the getting-started
-   story.
+5. **Session-bound objects refused at commit** (§6), with the walk's cost
+   measured on a realistic app before it is on by default, and class-level
+   `__transient__` (§6.1) in the same cut, since the error message points to it.
+6. **`gemdb.admin.apps()` / `drop_app()`**, and the docs: GemDB_Module.md,
+   Persistent Modules (new departures next to D4 for persistent app globals,
+   `__transient__` and `Final`), and the getting-started story.
 
-Cross-user apps (§7) come after these.
+Cross-user apps (§8) come after these.
 
-## 9. Decisions needed
+## 10. Decisions (2026-10-04)
 
-1. **Third-party packages: per app or shared?** Per app is CPython's model
-   (each app has its own venv, so two apps can pin different Flask versions)
-   and costs one build of each framework per app. Shared builds once but
-   forces every app onto one version, and a version change would then be an
-   edit to every app at once. *Recommendation: per app.*
-2. **`gemdb.root` in an app:** keep it as the app's dictionary, or retire it
-   in favour of the globals? *Recommendation: keep it, per app; it costs
-   nothing and existing code keeps working.*
-3. **Abort and the session copy.** After `gemdb.abort()`, should the
-   `__main__` globals keep the run's values (they are the program's local
-   state; nothing was committed) or be re-seeded from the committed globals
-   (abort means "back to the database")? *Recommendation: keep them.
-   Re-seeding would yank values out from under the running script, the very
-   surprise #851 removed.*
-4. **An uncommittable global at commit:** skip with a warning, or fail the
-   commit? *Recommendation: skip and warn. A socket at top level is normal in
-   a server script, and failing every commit for it would make the feature
-   unusable there.*
-5. **`Final` as initialize-once**, or a Grail-specific marker? `Final` needs no
-   new syntax and already means single assignment to a type checker. Its
-   cost is that skipping the initializer is a departure a reader might not
-   expect. *Recommendation: `Final`, documented as a departure next to D4.*
-6. **The API's name and shape:** `gemdb.set_app(name)` plus `--app` /
-   `GEMDB_APP`, as above.
+1. **Third-party packages are per app**, not shared: CPython's model, one venv
+   per app, so two apps can pin different framework versions.
+2. **`gemdb.root` in an app is an alias for the app's globals.** A second
+   persistent root would only earn its keep if the globals were a session
+   copy; they are not (decision 3).
+3. **An app's globals are persistent, with GemStone semantics**: a failed
+   commit keeps the session's changes, and an abort reloads the committed
+   values. In an app, globals are persistent by default and `__transient__`
+   names the session-only ones. Outside an app, globals stay transient by
+   default and D4's `__persistent__` opts in. This replaces the first draft's
+   "session copy written back at commit", which needed its own abort rule.
+4. **A session-bound object reachable from what a commit writes is an error,
+   naming the path**, not a warning (§6). Class-level `__transient__` is the
+   per-attribute fix, kept in `SessionTemps` rather than GemStone's DbTransient.
+5. **`Final` is the initialize-once marker** (§5.4).
+6. **The API is `gemdb.set_app(name)`**, plus `--app` and `GEMDB_APP` from the
+   launcher.
