@@ -367,5 +367,16 @@ ___memberNames___
 	^ lst @env0:withAll: names
 %
 
+category: 'Grail-Class Namespace'
+method: EnumDict
+___grailReplaceBinding___: key _: value
+	"Replace, without the member and duplicate-name rules: the name was bound
+	once already, by the class body, and this is that same binding completed
+	-- a decorated def's result over its undecorated function.  Going through
+	__setitem__ again raised ``'first' already defined as <function ...>''."
+
+	^ super __setitem__: key _: value
+%
+
 set compile_env: 0
 

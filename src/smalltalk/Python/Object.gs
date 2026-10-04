@@ -4607,6 +4607,19 @@ ___grailNsBind___: aName
 %
 
 category: 'Grail-Class Namespace'
+method: object
+___grailReplaceBinding___: key _: value
+	"Replace a class-body namespace entry the body ALREADY bound -- the second
+	half of a binding Grail has to make in two steps (the def at its source
+	position, then its decorated object or property once that exists).  An
+	ordinary mapping just stores; EnumDict overrides this, because its
+	__setitem__ refuses a second binding of a name, and this is one binding
+	CPython makes once."
+
+	^ self __setitem__: key _: value
+%
+
+category: 'Grail-Class Namespace'
 classmethod: object
 ___grailNsRebind___: aName
 	"A class-body def's DECORATOR has just stored its result over the compiled
@@ -4638,7 +4651,7 @@ ___grailNsRebind___: aName
 	holder == nil ifTrue: [^ self].
 	v := holder @env0:dynamicInstVarAt: aName @env0:asSymbol.
 	v isNil ifTrue: [^ self].
-	ns @env1:__setitem__: aName @env0:asString _: v.
+	ns ___grailReplaceBinding___: aName @env0:asString _: v.
 	^ self
 %
 
