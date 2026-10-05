@@ -8019,42 +8019,213 @@ ___classDict___
 			@env0:on: AbstractException do: [:ex |
 				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 				ex @env0:return: nil]].
+	"__dict__ and __weakref__: CPython lists a getset_descriptor for each in
+	the dict of the class that GIVES its instances that storage -- not a
+	subclass, which inherits it, and not a class whose __slots__ leaves it
+	out.  See ___grailIntroducesInstanceSlot___:."
+	"A method wrap already under either name is a KERNEL method the hidden-
+	ancestor scan folded in -- ``<method '__dict__' of 'int' objects>'' in an
+	int subclass's dict -- and is no attribute of the class: replaced by the
+	descriptor when the class introduces the storage, dropped when it does not."
+	self ___grailIsPythonClass___ ifTrue: [
+		#('__dict__' '__weakref__') @env0:do: [:nm |
+			((d @env0:at: nm otherwise: nil) isKindOf: UnboundMethod)
+				ifTrue: [d @env0:removeKey: nm].
+			((d @env0:includesKey: nm) @env0:not
+				and: [self ___grailIntroducesInstanceSlot___: nm])
+				ifTrue: [ | desc |
+					desc := [self ___grailGetSetDescriptor___: nm]
+						@env0:on: AbstractException do: [:ex |
+							(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+							ex @env0:return: nil].
+					desc == nil ifFalse: [d @env0:at: nm put: desc]]]].
 	"SOURCE ORDER for a class a class statement built.  The sections above
 	read the holder, then the instance-side method dictionary, then the
 	metaclass's -- two of them hash-ordered -- so ``z = 1; def b; a = 2''
 	listed z, a, then b.  ClassDefAst records the body's order
 	(___classBodyOrder___); a type() class has none, and its holder is already
 	in insertion order."
+	"A type() class has no recorded order, but its holder keeps the namespace's
+	insertion order, so its own keys serve.  type.__new__ APPENDS __module__ to
+	a namespace that lacks it, where a class body starts with it, hence the
+	header flag; its other additions follow either way."
 	(self @env0:class @env0:includesSelector: #'___classBodyOrder___' environmentId: 1)
-		ifTrue: [d := self ___grailInBodyOrder___: d].
+		ifTrue: [d := self ___grailInBodyOrder___: d names: self ___classBodyOrder___ headerFirst: true]
+		ifFalse: [
+			self ___grailIsPythonClass___ ifTrue: [
+				d := self ___grailInBodyOrder___: d names: d @env0:keys @env0:asArray headerFirst: false]].
 	^ d
 %
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
-___grailInBodyOrder___: aDict
-	"aDict, a class's __dict__ snapshot, re-keyed in CPython's order:
+___grailIntroducesInstanceSlot___: aName
+	"Whether this class -- a Python-defined one -- is the one that gives its
+	instances ``__dict__'' or ``__weakref__'' storage, so that CPython lists a
+	getset_descriptor for it in this class's __dict__: no base provides it
+	already, and the class does not declare __slots__ without naming it."
 
-	  * the header type.__new__'s namespace starts with -- __module__,
-	    __qualname__, __firstlineno__ -- and a DOCSTRING's __doc__, which is
+	((self @env0:includesSelector: #'___pyDeclaresSlots___' environmentId: 1)
+		and: [(self ___grailSlotsNameTheDirective___: aName) @env0:not])
+		ifTrue: [^ false].
+	^ (self ___grailBasesProvideInstanceSlot___: aName) @env0:not
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailSlotsNameTheDirective___: aName
+	"Whether this class's OWN __slots__ value names ``__dict__'' /
+	``__weakref__'' -- the two directives ClassDefAst >> slotNames drops from
+	the instVar set, so the declared-slot record cannot say.  Read off the
+	class-body value: a string is one name, anything else is asked for
+	membership as Python asks it."
+
+	| v |
+	v := self ___classBodyValueAt___: #'__slots__'.
+	v == nil ifTrue: [^ false].
+	(v isKindOf: CharacterCollection) ifTrue: [^ v @env0:asString @env0:= aName].
+	^ [(v @env1:__contains__: aName) ___isTruthy___]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailIsPythonClass___
+	"A class a class statement OR type() built: the first carries the
+	___pyDefinedClass___ marker, the second only its own attribute holder."
+
+	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
+	self == object ifTrue: [^ false].
+	^ (self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailBasesProvideInstanceSlot___: aName
+	"Whether any of this class's Python __bases__ already gives instances
+	``__dict__'' / ``__weakref__'' (___grailProvidesInstanceSlot___:)."
+
+	| bases |
+	bases := [self ___pyAttrLoad___: #'__bases__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	bases @env0:do: [:b |
+		(b ___grailProvidesInstanceSlot___: aName) ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailProvidesInstanceSlot___: aName
+	"Whether instances of this class -- any class, built-in included -- already
+	have ``__dict__'' / ``__weakref__'' storage that a subclass inherits rather
+	than adds.
+
+	A Python-defined class provides it when it introduced it or a base did.
+	A BUILT-IN answers from CPython's table, measured on 3.14: every
+	BaseException, type and OrderedDict carry a __dict__; int, bytes, tuple
+	(variable-sized, which rules a weakref slot out), set, frozenset, type,
+	OrderedDict and deque refuse or already carry __weakref__.  object and the
+	rest provide neither, so their first Python subclass lists both."
+
+	| nm |
+	self == object ifTrue: [^ false].
+	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
+	self ___grailIsPythonClass___ ifTrue: [
+		^ (self ___grailIntroducesInstanceSlot___: aName)
+			or: [self ___grailBasesProvideInstanceSlot___: aName]].
+	nm := [(self ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: ''].
+	(#('type' 'OrderedDict') @env0:includes: nm) ifTrue: [^ true].
+	aName @env0:= '__dict__' ifTrue: [
+		^ (self @env0:== BaseException) or: [self @env0:inheritsFrom: BaseException]].
+	^ #('int' 'bool' 'bytes' 'tuple' 'set' 'frozenset' 'deque') @env0:includes: nm
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailWeakrefAttribute___
+	"What ``x.__weakref__'' answers, or nil to let the ordinary read decide:
+	the introducing class's getset_descriptor when the receiver is a class,
+	None when it is an instance of one; nil when nothing in the MRO introduces
+	the storage."
+
+	| cls mro |
+	cls := (self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class].
+	mro := [cls ___pyAttrLoad___: #'__mro__']
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: #()].
+	mro @env0:do: [:c |
+		(c ___grailIsPythonClass___
+			and: [c ___grailIntroducesInstanceSlot___: '__weakref__']) ifTrue: [
+				^ (self @env0:isKindOf: Behavior)
+					ifTrue: [c ___grailGetSetDescriptor___: '__weakref__']
+					ifFalse: [None]]].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailGetSetDescriptor___: aName
+	"The ``getset_descriptor'' this class's __dict__ lists under aName, built
+	once per class and session so ``C.__dict__['__dict__'] is
+	C.__dict__['__dict__']'' as in CPython."
+
+	| cache per desc |
+	cache := SessionTemps @env0:current
+		@env0:at: #'GrailGetSetDescriptors'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := cache @env0:at: self ifAbsentPut: [KeyValueDictionary @env0:new].
+	desc := per @env0:at: aName otherwise: nil.
+	desc == nil ifFalse: [^ desc].
+	desc := (((importlib @env0:___instance___) @env1:import_module: 'types')
+		@env1:___pyAttrLoad___: #'GetSetDescriptorType')
+			@env1:value: { aName. self } value: nil.
+	per @env0:at: aName put: desc.
+	^ desc
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailInBodyOrder___: aDict names: order headerFirst: headerFirst
+	"aDict, a class's __dict__ snapshot, re-keyed in CPython's order, given the
+	namespace's names in order:
+
+	  * for a class STATEMENT (headerFirst), the header its body opens with --
+	    __module__, __qualname__, __firstlineno__ -- and a DOCSTRING's __doc__,
 	    the body's first statement;
-	  * the body's names, as ClassDefAst recorded them;
-	  * what type.__new__ adds after the body: each declared slot's member
-	    descriptor, then __doc__ when the class has no docstring (None);
+	  * the names, in order (a type() class's own __doc__ included where its
+	    namespace had it);
+	  * for a type() class, __module__ after them: type.__new__ appends it;
+	  * what type.__new__ adds after the body: __static_attributes__, the
+	    __dict__ / __weakref__ descriptors, each declared slot's member
+	    descriptor, then __doc__ when the class has none (None);
 	  * anything else -- a ``Cls.x = v'' after the class existed -- in the
 	    order already there."
 
-	| order out add doc |
-	order := self ___classBodyOrder___.
+	| out add doc header added |
 	out := (Python @env0:at: #PyDict) @env0:new.
 	add := [:k | | ks |
 		ks := k @env0:asString.
 		((aDict @env0:includesKey: ks) and: [(out @env0:includesKey: ks) @env0:not])
 			ifTrue: [out @env0:at: ks put: (aDict @env0:at: ks)]].
-	#('__module__' '__qualname__' '__firstlineno__') @env0:do: add.
+	header := #('__module__' '__qualname__' '__firstlineno__').
+	added := #('__static_attributes__' '__dict__' '__weakref__').
 	doc := aDict @env0:at: '__doc__' otherwise: nil.
-	(doc ~~ nil and: [doc ~~ None]) ifTrue: [add @env0:value: '__doc__'].
-	order @env0:do: add.
+	headerFirst ifTrue: [
+		header @env0:do: add.
+		(doc ~~ nil and: [doc ~~ None]) ifTrue: [add @env0:value: '__doc__']].
+	order @env0:do: [:k | | ks |
+		ks := k @env0:asString.
+		((added @env0:includes: ks)
+			or: [(header @env0:includes: ks)
+			or: [ks @env0:= '__doc__' and: [doc == nil or: [doc == None]]]])
+			ifFalse: [add @env0:value: k]].
+	headerFirst ifFalse: [header @env0:do: add].
+	added @env0:do: add.
 	(self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
 		ifTrue: [self ___pyDeclaredSlotNames___ @env0:do: add].
 	add @env0:value: '__doc__'.
@@ -9627,6 +9798,20 @@ ___pyAttrLoad___: aSym
 					@env0:, ''' has no attribute ''''']
 				ifFalse: ['''' @env0:, self ___pyTypeNameForError___ @env0:asString
 					@env0:, ''' object has no attribute ''''']])].
+	"``__weakref__'': CPython's getset_descriptor, which a class's __dict__ now
+	lists (___grailGetSetDescriptor___:) and dir() therefore reports.  Read
+	off a class it answers that descriptor, inherited from the class that
+	introduced the storage; read off an instance it answers None, the value
+	of an object no weak reference points at -- Grail keeps no per-instance
+	list to answer the first one from.  Without this, dir() listed a name
+	every getattr of refused, and typing's NamedTuple walk -- getattr over
+	dir() -- failed to import (``type object 'NTC' has no attribute
+	'__weakref__'''); __dict__ needs nothing, the read was always answered.
+	Tested by SIZE first so the common read pays one comparison."
+	((aSym @env0:size) @env0:= 11 and: [aSym @env0:asString @env0:= '__weakref__']) ifTrue: [
+		| w |
+		w := self ___grailWeakrefAttribute___.
+		w == nil ifFalse: [^ w]].
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any

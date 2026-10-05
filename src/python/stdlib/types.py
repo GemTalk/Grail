@@ -312,8 +312,46 @@ if FrameType is None:
 del _derive_frame_type
 
 
-class GetSetDescriptorType:
-    pass
+class getset_descriptor:
+    """``getset_descriptor``: the ``__dict__`` and ``__weakref__`` entries a
+    class's ``__dict__`` holds when the class is the one that gives its
+    instances that storage.  Grail keeps an instance's attributes in its own
+    storage and computes ``vars()`` from it, so instances never consult this;
+    like MemberDescriptorType it exists so the class dict says what CPython's
+    does.  ``__weakref__`` reads None: Grail keeps no per-instance weakref list
+    to answer the first reference from."""
+
+    def __init__(self, name, objclass):
+        self.__name__ = name
+        self.__qualname__ = f"{objclass.__qualname__}.{name}"
+        self.__objclass__ = objclass
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            return self
+        if self.__name__ == '__dict__':
+            return object.__getattribute__(instance, '__dict__')
+        return None
+
+    def __set__(self, instance, value):
+        if self.__name__ == '__dict__':
+            object.__setattr__(instance, '__dict__', value)
+            return
+        raise AttributeError(
+            f"attribute {self.__name__!r} of {self.__objclass__.__name__!r} "
+            "objects is not writable")
+
+    def __delete__(self, instance):
+        raise AttributeError(
+            f"cannot delete attribute {self.__name__!r} of "
+            f"{self.__objclass__.__name__!r} objects")
+
+    def __repr__(self):
+        return f"<attribute {self.__name__!r} of {self.__objclass__.__name__!r} objects>"
+
+
+GetSetDescriptorType = getset_descriptor
+del getset_descriptor
 
 
 class MemberDescriptorType:
