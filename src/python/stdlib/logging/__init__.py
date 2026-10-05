@@ -210,21 +210,11 @@ class StringTemplateStyle(PercentStyle):
         return ('$asctime' in self._fmt) or (self.asctime_search in self._fmt)
 
     def _format(self, record):
-        # string.Template.substitute semantics, done here because Grail's
-        # string module is native and its Template is still a None stub
-        # (src/smalltalk/Python/string.gs).  $$ is a literal $, $name and
-        # ${name} are substituted, and an unknown name is a KeyError --
-        # which PercentStyle.format turns into the ValueError CPython raises.
-        import re
-        values = self._values(record)
-
-        def substitute(match):
-            if match.group(1) is not None:
-                return '$'
-            return str(values[match.group(2) or match.group(3)])
-
-        return re.sub(r'\$(?:(\$)|([_a-zA-Z][_a-zA-Z0-9]*)|\{([_a-zA-Z][_a-zA-Z0-9]*)\})',
-                      substitute, self._fmt)
+        # string.Template is CPython's own now (the native string module had
+        # it as a None stub, so this used to reimplement the substitution).
+        # Imported here so importing logging does not pull in string and re.
+        from string import Template
+        return Template(self._fmt).substitute(**self._values(record))
 
 
 BASIC_FORMAT = '%(levelname)s:%(name)s:%(message)s'

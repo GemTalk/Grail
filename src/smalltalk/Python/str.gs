@@ -2067,6 +2067,16 @@ _format: positional kw: kwargs
 				kwargs: kwargs
 				autoIdx: nextAuto.
 			field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
+			"A spec may hold replacement fields of its own -- ``'{:^{}}'.format(
+			'bar', 6)'' -- expanded AFTER the field's value, sharing its auto
+			numbering.  The spec text went to __format__ unexpanded, which
+			refused it as an invalid specifier."
+			(spec @env0:includes: ${) ifTrue: [
+				| expanded |
+				expanded := spec ___expandFormatSpec___: positional kw: kwargs
+					autoIdx: nextAuto.
+				spec := expanded @env0:at: 1.
+				nextAuto := expanded @env0:at: 2].
 			"Apply conversion flag (r → repr, s → str, a → ascii)."
 			convFlag @env0:isNil ifFalse: [
 				convFlag @env0:= 'r' @env0:ifTrue: [value := value __repr__ @env0:___reprResult___].
@@ -2400,6 +2410,61 @@ ___applyAlignWidthFormat___: spec
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+___expandFormatSpec___: positional kw: kwargs autoIdx: autoIdx
+	"The receiver is a format SPEC holding replacement fields --
+	``^{}'', ``{w}.{p}f''.  Answer { expanded spec. next auto index }.
+
+	One level only, as CPython: a field inside a nested field is ``Max
+	string recursion exceeded''.  Each nested field may carry its own
+	conversion and spec, and an empty name takes the next auto index."
+
+	| out i size nextAuto |
+	out := WriteStream @env0:on: (Unicode7 ___new___).
+	nextAuto := autoIdx.
+	size := self @env0:size.
+	i := 1.
+	[i @env0:<= size] @env0:whileTrue: [
+		| ch |
+		ch := self @env0:at: i.
+		ch == ${
+			ifTrue: [
+				| j field conv inner value piece |
+				j := i @env0:+ 1.
+				[j @env0:<= size and: [(self @env0:at: j) ~~ $}]] @env0:whileTrue: [
+					(self @env0:at: j) == ${ ifTrue: [
+						^ ValueError ___signal___: 'Max string recursion exceeded'].
+					j := j @env0:+ 1].
+				j @env0:> size ifTrue: [
+					^ ValueError ___signal___: 'unmatched ''{'' in format spec'].
+				field := self @env0:copyFrom: i @env0:+ 1 to: j @env0:- 1.
+				inner := ''.
+				conv := nil.
+				(field @env0:indexOf: $:) @env0:> 0 ifTrue: [
+					| k |
+					k := field @env0:indexOf: $:.
+					inner := field @env0:copyFrom: k @env0:+ 1 to: field @env0:size.
+					field := field @env0:copyFrom: 1 to: k @env0:- 1].
+				(field @env0:indexOf: $!) @env0:> 0 ifTrue: [
+					| k |
+					k := field @env0:indexOf: $!.
+					conv := field @env0:copyFrom: k @env0:+ 1 to: field @env0:size.
+					field := field @env0:copyFrom: 1 to: k @env0:- 1].
+				value := self ___resolveFormatField___: field positional: positional
+					kwargs: kwargs autoIdx: nextAuto.
+				field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
+				conv @env0:= 'r' @env0:ifTrue: [value := value __repr__ @env0:___reprResult___].
+				conv @env0:= 's' @env0:ifTrue: [value := value __str__].
+				piece := value __format__: inner.
+				out @env0:nextPutAll: piece @env0:asString.
+				i := j @env0:+ 1]
+			ifFalse: [
+				out @env0:nextPut: ch.
+				i := i @env0:+ 1]].
+	^ { out @env0:contents. nextAuto }
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 ___resolveFormatField___: field positional: positional kwargs: kwargs autoIdx: autoIdx
 	"Look up a format field name in positional / kwargs.  Empty
 	field → auto-index positional; numeric field → explicit
@@ -2409,14 +2474,14 @@ ___resolveFormatField___: field positional: positional kwargs: kwargs autoIdx: a
 	field @env0:isEmpty ifTrue: [
 		(autoIdx @env0:>= positional @env0:size) ifTrue: [
 			IndexError ___signal___: 'Replacement index ' @env0:,
-				autoIdx printString @env0:, ' out of range for positional args tuple'].
+				autoIdx @env0:printString @env0:, ' out of range for positional args tuple'].
 		^ positional @env0:at: autoIdx @env0:+ 1].
 	"Numeric field — explicit positional index."
 	(field @env0:first @env0:isDigit) ifTrue: [
 		idx := field @env0:asNumber.
 		(idx @env0:>= positional @env0:size) ifTrue: [
 			IndexError ___signal___: 'Replacement index ' @env0:,
-				idx printString @env0:, ' out of range for positional args tuple'].
+				idx @env0:printString @env0:, ' out of range for positional args tuple'].
 		^ positional @env0:at: idx @env0:+ 1].
 	"Keyword field: look up through the mapping's own __getitem__ so
 	format_map works with ANY mapping (a regex Match resolves group

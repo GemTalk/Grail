@@ -3263,8 +3263,8 @@ ___parseFormatSpec___: spec typeName: typeName
 	neither digits nor a grouping char after it), or 'n' combined
 	with either grouping (CPython: ``Cannot specify ',' with 'n'.'')."
 
-	| fill align sign alt width grouping precision type i n c fracGrouping noNegZero |
-	fill := $ . align := nil. sign := $-. alt := false.
+	| fill align sign alt width grouping precision type i n c fracGrouping noNegZero zeroAlign |
+	fill := $ . align := nil. sign := $-. alt := false. zeroAlign := false.
 	width := 0. grouping := nil. precision := nil. type := nil.
 	fracGrouping := nil. noNegZero := false.
 	i := 1. n := spec @env0:size.
@@ -3293,7 +3293,7 @@ ___parseFormatSpec___: spec typeName: typeName
 		already given explicitly -- it only DEFAULTS align to '=' (the
 		sign-aware zero-pad) when align is otherwise unset (test_format:
 		format(x, '>021_._f') keeps align '>' but still zero-fills)."
-		align == nil ifTrue: [align := $=].
+		align == nil ifTrue: [align := $=. zeroAlign := true].
 		fill := $0.
 		i := i @env0:+ 1].
 	[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
@@ -3349,8 +3349,10 @@ ___parseFormatSpec___: spec typeName: typeName
 	TYPE, not the value: ``f'{-0:z.1f}''' passes an int and is fine."
 	(noNegZero and: [#($b $c $d $o $x $X $n $s) @env0:includes: type]) ifTrue: [
 		ValueError ___signal___: 'Negative zero coercion (z) not allowed'].
+	"Slot 11: the '=' in slot 2 was DEFAULTED by the '0' flag, not written.
+	A str needs the difference -- see ___formatStrValue___:parsed:."
 	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping.
-		noNegZero }
+		noNegZero. zeroAlign }
 %
 
 category: 'Grail-Format Spec Engine'
@@ -3835,6 +3837,12 @@ ___formatStrValue___: value parsed: p
 	((precision == nil) @env0:not and: [body @env0:size @env0:> precision]) ifTrue: [
 		body := body @env0:copyFrom: 1 to: precision].
 	align == nil ifTrue: [align := $<].
+	"Since 3.10 a '0' before the width gives a str a '0' FILL and leaves its
+	default alignment alone -- format('X', '03') is 'X00'.  Only an '=' the spec
+	WROTE is refused.  The parser defaulted it to '=' as it does for a number,
+	so format('X', '0') raised; slot 11 says which it was."
+	(align @env0:= $= and: [(p @env0:size @env0:>= 11) and: [(p @env0:at: 11) == true]])
+		ifTrue: [align := $<].
 	align @env0:= $= ifTrue: [
 		ValueError ___signal___: '''='' alignment not allowed in string format specifier'].
 	^ self ___formatPadBody___: body fill: fill align: align width: width signLength: 0

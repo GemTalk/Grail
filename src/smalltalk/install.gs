@@ -503,8 +503,6 @@ run
 	at: #'set_iterator' put: nil;
 	at: #'slice' put: nil;
 	at: #'str_iterator' put: nil;
-	at: #'string' put: nil;
-	at: #'string_formatter' put: nil;
 	at: #'sys' put: nil;
 	at: #'sys_flags' put: nil;
 	at: #'sys_implementation' put: nil;
@@ -760,6 +758,7 @@ run
 	at: #'CatchWarningsStateTestCase' put: nil;
 	at: #'CellEmptinessTestCase' put: nil;
 	at: #'CellObjectsTestCase' put: nil;
+	at: #'ChainedAttributeStoreTestCase' put: nil;
 	at: #'ChainedComparisonTestCase' put: nil;
 	at: #'ChainedIdentityCompareTestCase' put: nil;
 	at: #'CheckWarningsHelperTestCase' put: nil;
@@ -1003,6 +1002,7 @@ run
 	at: #'ForStarTargetTestCase' put: nil;
 	at: #'FormatZeroPadGroupsItsFillTestCase' put: nil;
 	at: #'FormatSpecAndComplexTestCase' put: nil;
+	at: #'FormatSpecFieldsTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'FourArgAttrCallTestCase' put: nil;
 	at: #'FractionTestCase' put: nil;
@@ -1665,7 +1665,6 @@ input src/smalltalk/Python/UnboundMethod.gs
 input src/smalltalk/Python/PythonGenerator.gs
 input src/smalltalk/Python/PythonCoroutine.gs
 input src/smalltalk/Python/PythonAsyncGenerator.gs
-input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
 input src/smalltalk/Python/Exception.gs
 input src/smalltalk/Python/GeneratorExit.gs
@@ -1742,7 +1741,6 @@ input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
 input src/smalltalk/Python/os_path.gs
 input src/smalltalk/Python/_random_module.gs
-input src/smalltalk/Python/string.gs
 input src/smalltalk/Python/html_entities.gs
 input src/smalltalk/Python/unicode_names.gs
 input src/smalltalk/Python/unicode_names_lookup.gs
@@ -2216,6 +2214,7 @@ input src/smalltalk/PythonTests/CatchWarningsRecordTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
 input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
 input src/smalltalk/PythonTests/CellObjectsTestCase.gs
+input src/smalltalk/PythonTests/ChainedAttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
@@ -2462,6 +2461,7 @@ input src/smalltalk/PythonTests/FloatTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/FormatZeroPadGroupsItsFillTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
+input src/smalltalk/PythonTests/FormatSpecFieldsTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecTestCase.gs
 input src/smalltalk/PythonTests/ForStarTargetTestCase.gs
 input src/smalltalk/PythonTests/FourArgAttrCallTestCase.gs
