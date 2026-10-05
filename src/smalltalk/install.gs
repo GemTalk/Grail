@@ -1004,6 +1004,7 @@ run
 	at: #'ForStarTargetTestCase' put: nil;
 	at: #'FormatZeroPadGroupsItsFillTestCase' put: nil;
 	at: #'FormatSpecAndComplexTestCase' put: nil;
+	at: #'FormatSpecFieldsTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'FourArgAttrCallTestCase' put: nil;
 	at: #'FractionTestCase' put: nil;
@@ -2463,6 +2464,7 @@ input src/smalltalk/PythonTests/FloatTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/FormatZeroPadGroupsItsFillTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
+input src/smalltalk/PythonTests/FormatSpecFieldsTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecTestCase.gs
 input src/smalltalk/PythonTests/ForStarTargetTestCase.gs
 input src/smalltalk/PythonTests/FourArgAttrCallTestCase.gs
