@@ -2000,90 +2000,77 @@ format
 category: 'Grail-String Methods'
 method: CharacterCollection
 _format: positional kw: kwargs
-	"Python ``str.format(*args, **kwargs)'' — replace ``{...}''
-	placeholders in self with values from positional / kwargs.
+	"Python ``str.format(*args, **kwargs)'' (and, with positional nil,
+	format_map).
 
-	Supported placeholder shapes:
-	  * ``{}'' (auto-index positional)
-	  * ``{N}'' (explicit positional index)
-	  * ``{name}'' (keyword)
-	  * Any of the above plus ``:spec'' (format spec) and/or ``!r''
-	    / ``!s'' / ``!a'' conversion flags.
-	  * ``{{'' / ``}}'' → literal ``{'' / ``}''.
+	CPython's do_string_format -- Objects/stringlib/unicode_format.h --
+	ported routine for routine: build_string/do_markup here,
+	MarkupIterator_next's literal scan inline, parse_field
+	(___parseFormatFieldAt___:), field_name_split + get_field_object
+	(___formatFieldObject___:positional:kw:auto:), do_conversion
+	(___formatConvert___:with:) and render_field (builtins format:_:, which
+	checks __format__ answered a str).  The same split src/python/stdlib/
+	_string.py exposes to string.Formatter, so the two agree.
 
-	Field access (``{0.attr}'', ``{0[i]}'') is NOT yet supported."
+	The hand-written parser this replaces had no ``{0.attr}'' / ``{0[i]}''
+	(``'{0.real}'.format(3)'' died in an uncatchable Smalltalk ArgumentError),
+	no ``!a'', accepted ``'{0}{}''' that CPython refuses, and did not expand
+	nested fields in a spec.
 
-	| size out i ch nextAuto pieces |
+	``auto'' is CPython's AutoNumber -- { state. next field number } -- shared
+	by a spec's nested fields; 2 is PEP 3101's recursion depth."
+
+	^ self ___formatPositional___: positional kw: kwargs depth: 2
+		auto: { #init. 0 }
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatPositional___: positional kw: kwargs depth: depth auto: auto
+	"build_string + do_markup: literal text and replacement fields, in order.
+
+	``pieces'' stays nil for the overwhelmingly common case.  It is only
+	created when a formatted field turns out to be a str holding LONE
+	SURROGATES, which no CharacterCollection -- and so no WriteStream on one
+	-- can hold; see the assembly at the end."
+
+	| size out pieces pos |
+	depth @env0:<= 0 ifTrue: [
+		^ ValueError ___signal___: 'Max string recursion exceeded'].
 	size := self @env0:size.
 	out := WriteStream @env0:on: (Unicode7 ___new___).
-	"``pieces'' stays nil for the overwhelmingly common case.  It is only
-	created when a formatted field turns out to be a str holding LONE
-	SURROGATES, which no CharacterCollection -- and so no WriteStream on one --
-	can hold; see the assembly at the end."
 	pieces := nil.
-	i := 1.
-	nextAuto := 0.
-	[i @env0:<= size] @env0:whileTrue: [
-		ch := self @env0:at: i.
-		(ch == ${ and: [
-			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) == ${]])
-			ifTrue: [
-				out @env0:nextPut: ${.
-				i := i @env0:+ 2
-			] ifFalse: [
-		(ch == $} and: [
-			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) == $}]])
-			ifTrue: [
-				out @env0:nextPut: $}.
-				i := i @env0:+ 2
-			] ifFalse: [
-		(ch == ${) ifTrue: [
-			| endIdx field convFlag spec value piece |
-			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
-			endIdx @env0:isNil ifTrue: [
-				ValueError ___signal___: 'unmatched ''{'' in format string'].
-			"field = name/index, optional !conv, optional :spec."
-			field := self @env0:copyFrom: i @env0:+ 1 to: endIdx @env0:- 1.
-			convFlag := nil.
-			spec := ''.
-			"Split field on ':' (first occurrence)."
-			(field @env0:indexOf: $:) @env0:> 0 ifTrue: [
-				| colonIdx |
-				colonIdx := field @env0:indexOf: $:.
-				spec := field @env0:copyFrom: colonIdx @env0:+ 1 to: field @env0:size.
-				field := field @env0:copyFrom: 1 to: colonIdx @env0:- 1.
-			].
-			"Then split field on '!' for conversion flag."
-			(field @env0:indexOf: $!) @env0:> 0 ifTrue: [
-				| bangIdx |
-				bangIdx := field @env0:indexOf: $!.
-				convFlag := field @env0:copyFrom: bangIdx @env0:+ 1 to: field @env0:size.
-				field := field @env0:copyFrom: 1 to: bangIdx @env0:- 1.
-			].
-			"Resolve the field name to a value."
-			value := self
-				___resolveFormatField___: field
-				positional: positional
-				kwargs: kwargs
-				autoIdx: nextAuto.
-			field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
-			"A spec may hold replacement fields of its own -- ``'{:^{}}'.format(
-			'bar', 6)'' -- expanded AFTER the field's value, sharing its auto
-			numbering.  The spec text went to __format__ unexpanded, which
-			refused it as an invalid specifier."
-			(spec @env0:includes: ${) ifTrue: [
-				| expanded |
-				expanded := spec ___expandFormatSpec___: positional kw: kwargs
-					autoIdx: nextAuto.
-				spec := expanded @env0:at: 1.
-				nextAuto := expanded @env0:at: 2].
-			"Apply conversion flag (r → repr, s → str, a → ascii)."
-			convFlag @env0:isNil ifFalse: [
-				convFlag @env0:= 'r' @env0:ifTrue: [value := value __repr__ @env0:___reprResult___].
-				convFlag @env0:= 's' @env0:ifTrue: [value := value __str__ @env0:___strResult___].
-			].
-			"Format-spec dispatch.  Delegate to value.__format__(spec)."
-			piece := value __format__: spec.
+	pos := 1.
+	[pos @env0:<= size] @env0:whileTrue: [
+		| start c markup atEnd len |
+		"MarkupIterator_next: literal text up to the end, an escaped brace,
+		or an unescaped '{'.  An escaped brace ends the literal WITH one
+		brace in it; the scan resumes after the pair."
+		start := pos.
+		c := nil.
+		markup := false.
+		[markup @env0:not and: [pos @env0:<= size]] @env0:whileTrue: [
+			c := self @env0:at: pos.
+			pos := pos @env0:+ 1.
+			(c == ${ or: [c == $}]) ifTrue: [markup := true]].
+		atEnd := pos @env0:> size.
+		len := pos @env0:- start.
+		(c == $} and: [atEnd or: [(self @env0:at: pos) ~~ c]]) ifTrue: [
+			^ ValueError ___signal___: 'Single ''}'' encountered in format string'].
+		(atEnd and: [c == ${]) ifTrue: [
+			^ ValueError ___signal___: 'Single ''{'' encountered in format string'].
+		atEnd ifFalse: [
+			(self @env0:at: pos) == c
+				ifTrue: [pos := pos @env0:+ 1. markup := false]
+				ifFalse: [len := len @env0:- 1]].
+		len @env0:> 0 ifTrue: [
+			out @env0:nextPutAll: (self @env0:copyFrom: start to: start @env0:+ len @env0:- 1)].
+		markup ifTrue: [
+			| field piece |
+			field := self ___parseFormatFieldAt___: pos.
+			pos := field @env0:at: 4.
+			piece := self ___renderFormatField___: field positional: positional
+				kw: kwargs depth: depth auto: auto.
 			(piece @env0:isKindOf: PyStrSurrogate)
 				ifTrue: [
 					"Flush what the stream holds and set it aside: the rest of
@@ -2096,18 +2083,224 @@ _format: positional kw: kwargs
 					pieces @env0:add: out @env0:contents.
 					pieces @env0:add: piece.
 					out := WriteStream @env0:on: (Unicode7 ___new___)]
-				ifFalse: [out @env0:nextPutAll: piece @env0:asString].
-			i := endIdx @env0:+ 1
-		] ifFalse: [
-			out @env0:nextPut: ch.
-			i := i @env0:+ 1
-		]]].
-	].
+				ifFalse: [out @env0:nextPutAll: piece @env0:asString]]].
 	pieces @env0:isNil ifTrue: [^ out @env0:contents].
 	"___fromCodePoints___ demotes back to an ordinary string when nothing in
 	the result was actually a surrogate after all."
 	pieces @env0:add: out @env0:contents.
 	^ PyStrSurrogate @env0:___fromCodePoints___: (self ___codePointsOfAll___: pieces)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___parseFormatFieldAt___: startPos
+	"parse_field, from just after a field's '{'.  Answer { field name. format
+	spec. conversion Character or nil. position after the field }.
+
+	The name runs to '}', ':' or '!' -- a '[...]' may hold any of them --
+	then an optional conversion, then a spec whose nested braces are
+	counted.  Each error is CPython's, in CPython's order."
+
+	| size pos c done name specStart count conv |
+	size := self @env0:size.
+	pos := startPos.
+	c := nil.
+	done := false.
+	[done @env0:not and: [pos @env0:<= size]] @env0:whileTrue: [
+		c := self @env0:at: pos.
+		pos := pos @env0:+ 1.
+		c == ${ ifTrue: [
+			^ ValueError ___signal___: 'unexpected ''{'' in field name'].
+		c == $[
+			ifTrue: [
+				[pos @env0:<= size and: [(self @env0:at: pos) ~~ $]]]
+					@env0:whileTrue: [pos := pos @env0:+ 1]]
+			ifFalse: [
+				(c == $} or: [c == $: or: [c == $!]]) ifTrue: [done := true]]].
+	name := self @env0:copyFrom: startPos to: pos @env0:- 2.
+	conv := nil.
+	(c == $! or: [c == $:]) ifTrue: [
+		c == $! ifTrue: [
+			pos @env0:> size ifTrue: [
+				^ ValueError ___signal___:
+					'end of string while looking for conversion specifier'].
+			conv := self @env0:at: pos.
+			pos := pos @env0:+ 1.
+			pos @env0:<= size ifTrue: [
+				c := self @env0:at: pos.
+				pos := pos @env0:+ 1.
+				c == $} ifTrue: [^ { name. ''. conv. pos }].
+				c == $: ifFalse: [
+					^ ValueError ___signal___: 'expected '':'' after conversion specifier']]].
+		specStart := pos.
+		count := 1.
+		[pos @env0:<= size] @env0:whileTrue: [
+			c := self @env0:at: pos.
+			pos := pos @env0:+ 1.
+			c == ${ ifTrue: [count := count @env0:+ 1].
+			c == $} ifTrue: [
+				count := count @env0:- 1.
+				count == 0 ifTrue: [
+					^ { name. self @env0:copyFrom: specStart to: pos @env0:- 2. conv. pos }]]].
+		^ ValueError ___signal___: 'unmatched ''{'' in format spec'].
+	c == $} ifFalse: [
+		^ ValueError ___signal___: 'expected ''}'' before end of string'].
+	^ { name. ''. nil. pos }
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___renderFormatField___: field positional: positional kw: kwargs depth: depth auto: auto
+	"output_markup: the field's object, its conversion, its spec -- expanded
+	ONE level down when it holds fields of its own, sharing the auto
+	numbering -- and render_field: PyObject_Format, which refuses a
+	__format__ that answers a non-str (as builtins format:_: does; inline
+	here because the spec is always a str and this is per field)."
+
+	| obj spec result |
+	obj := self ___formatFieldObject___: (field @env0:at: 1)
+		positional: positional kw: kwargs auto: auto.
+	(field @env0:at: 3) == nil ifFalse: [
+		obj := self ___formatConvert___: obj with: (field @env0:at: 3)].
+	spec := field @env0:at: 2.
+	(spec @env0:includes: ${) ifTrue: [
+		spec := spec ___formatPositional___: positional kw: kwargs
+			depth: depth @env0:- 1 auto: auto].
+	result := obj __format__: spec.
+	((result @env0:isKindOf: CharacterCollection)
+		or: [result @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+		^ TypeError ___signal___: ('__format__ must return a str, not '
+			@env0:, (result ___pyTypeNameForError___) @env0:asString)].
+	^ result
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatFieldObject___: fieldName positional: positional kw: kwargs auto: auto
+	"field_name_split + get_field_object.  The first part, up to '.' or '[',
+	is an index when it is all decimal digits (or empty: the next auto
+	number) and a keyword otherwise; then each ``.name'' is a getattr and
+	each ``[key]'' a __getitem__ (an int key when all decimal digits)."
+
+	| size i first idx empty obj |
+	size := fieldName @env0:size.
+	"``{}'' -- the commonest field by far -- is the next auto number and
+	nothing else: no name to copy or scan."
+	size == 0 ifTrue: [
+		(auto @env0:at: 1) == #manual ifTrue: [
+			^ ValueError ___signal___: 'cannot switch from manual field specification to automatic field numbering'].
+		auto @env0:at: 1 put: #auto.
+		idx := auto @env0:at: 2.
+		auto @env0:at: 2 put: idx @env0:+ 1.
+		positional == nil ifTrue: [
+			^ ValueError ___signal___: 'Format string contains positional fields'].
+		idx @env0:>= positional @env0:size ifTrue: [
+			^ IndexError ___signal___: 'Replacement index ' @env0:,
+				idx @env0:printString @env0:, ' out of range for positional args tuple'].
+		^ positional @env0:at: idx @env0:+ 1].
+	i := 1.
+	[i @env0:<= size and: [(fieldName @env0:at: i) ~~ $. and: [(fieldName @env0:at: i) ~~ $[]]]
+		@env0:whileTrue: [i := i @env0:+ 1].
+	"A plain name -- no ``.'' or ``['' -- is the whole field: no copy."
+	first := i @env0:> size
+		ifTrue: [fieldName]
+		ifFalse: [fieldName @env0:copyFrom: 1 to: i @env0:- 1].
+	idx := self ___formatIndexOf___: first.
+	empty := first @env0:isEmpty.
+	(empty or: [idx ~~ -1]) ifTrue: [
+		"The AutoNumber state machine: the first numeric field decides, and
+		the other kind is refused for the rest of the string."
+		(auto @env0:at: 1) == #init ifTrue: [
+			auto @env0:at: 1 put: (empty ifTrue: [#auto] ifFalse: [#manual])].
+		(auto @env0:at: 1) == #manual
+			ifTrue: [empty ifTrue: [
+				^ ValueError ___signal___: 'cannot switch from manual field specification to automatic field numbering']]
+			ifFalse: [empty ifFalse: [
+				^ ValueError ___signal___: 'cannot switch from automatic field numbering to manual field specification']].
+		empty ifTrue: [
+			idx := auto @env0:at: 2.
+			auto @env0:at: 2 put: idx @env0:+ 1]].
+	idx == -1
+		ifTrue: [
+			kwargs == nil ifTrue: [^ KeyError ___signal___: first @env0:asString].
+			obj := kwargs __getitem__: first @env0:asString]
+		ifFalse: [
+			positional == nil ifTrue: [
+				^ ValueError ___signal___: 'Format string contains positional fields'].
+			idx @env0:>= positional @env0:size ifTrue: [
+				^ IndexError ___signal___: 'Replacement index ' @env0:,
+					idx @env0:printString @env0:, ' out of range for positional args tuple'].
+			obj := positional @env0:at: idx @env0:+ 1].
+	"FieldNameIterator_next, over the rest."
+	[i @env0:<= size] @env0:whileTrue: [
+		| c start name isAttr key |
+		c := fieldName @env0:at: i.
+		i := i @env0:+ 1.
+		c == $.
+			ifTrue: [
+				start := i.
+				[i @env0:<= size and: [(fieldName @env0:at: i) ~~ $. and: [(fieldName @env0:at: i) ~~ $[]]]
+					@env0:whileTrue: [i := i @env0:+ 1].
+				name := fieldName @env0:copyFrom: start to: i @env0:- 1.
+				isAttr := true]
+			ifFalse: [
+				| closed |
+				c == $[ ifFalse: [
+					^ ValueError ___signal___: 'Only ''.'' or ''['' may follow '']'' in format field specifier'].
+				start := i.
+				closed := false.
+				[closed @env0:not and: [i @env0:<= size]] @env0:whileTrue: [
+					(fieldName @env0:at: i) == $] ifTrue: [closed := true].
+					i := i @env0:+ 1].
+				closed ifFalse: [
+					^ ValueError ___signal___: 'Missing '']'' in format string'].
+				name := fieldName @env0:copyFrom: start to: i @env0:- 2.
+				isAttr := false].
+		name @env0:isEmpty ifTrue: [
+			^ ValueError ___signal___: 'Empty attribute in format string'].
+		isAttr
+			ifTrue: [obj := (builtins instance) getattr: obj _: name @env0:asString]
+			ifFalse: [
+				key := self ___formatIndexOf___: name.
+				obj := obj __getitem__: (key == -1 ifTrue: [name @env0:asString] ifFalse: [key])]].
+	^ obj
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatIndexOf___: aString
+	"get_integer: the value when every character is a decimal digit, else
+	-1.  Any Unicode decimal digit counts, as in CPython ('{\u0661}',
+	ARABIC-INDIC DIGIT ONE, is field 1); a value past a C Py_ssize_t is
+	CPython's ValueError."
+
+	| acc |
+	aString @env0:isEmpty ifTrue: [^ -1].
+	acc := 0.
+	aString @env0:do: [:ch |
+		ch @env0:isDigit ifFalse: [^ -1].
+		acc := (acc @env0:* 10) @env0:+ ch @env0:digitValue.
+		acc @env0:> 9223372036854775807 ifTrue: [
+			^ ValueError ___signal___: 'Too many decimal digits in format string']].
+	^ acc
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatConvert___: obj with: conv
+	"do_conversion: !r is repr(), !s str(), !a ascii(); any other character
+	is CPython's ValueError, spelled as it spells it."
+
+	| cp |
+	conv == $r ifTrue: [^ obj __repr__ @env0:___reprResult___].
+	conv == $s ifTrue: [^ str __new__: obj].
+	conv == $a ifTrue: [^ (builtins instance) ascii: obj].
+	cp := conv @env0:codePoint.
+	(cp @env0:> 32 and: [cp @env0:< 127]) ifTrue: [
+		^ ValueError ___signal___: 'Unknown conversion specifier '
+			@env0:, (String @env0:with: conv)].
+	^ ValueError ___signal___: 'Unknown conversion specifier \x'
+		@env0:, (cp @env0:printStringRadix: 16) @env0:asLowercase
 %
 
 category: 'Grail-String Methods'
@@ -2336,28 +2529,6 @@ ___formatPad___: count with: fillChar
 	^ s
 %
 
-category: 'Grail-String Methods'
-method: CharacterCollection
-___findFormatBraceEnd___: startIdx
-	"Return the index of the matching ``}'' starting from startIdx,
-	or nil if none.  Respects nested braces inside format specs (one
-	level only — Python's spec mini-language allows nested
-	``{...}'' in the precision slot)."
-
-	| size i depth ch |
-	size := self size.
-	i := startIdx.
-	depth := 0.
-	[i <= size] whileTrue: [
-		ch := self at: i.
-		ch == ${ ifTrue: [depth := depth + 1].
-		ch == $} ifTrue: [
-			depth == 0 ifTrue: [^ i].
-			depth := depth - 1].
-		i := i + 1].
-	^ nil
-%
-
 set compile_env: 1
 
 category: 'Grail-String Methods'
@@ -2410,98 +2581,13 @@ ___applyAlignWidthFormat___: spec
 
 category: 'Grail-String Methods'
 method: CharacterCollection
-___expandFormatSpec___: positional kw: kwargs autoIdx: autoIdx
-	"The receiver is a format SPEC holding replacement fields --
-	``^{}'', ``{w}.{p}f''.  Answer { expanded spec. next auto index }.
-
-	One level only, as CPython: a field inside a nested field is ``Max
-	string recursion exceeded''.  Each nested field may carry its own
-	conversion and spec, and an empty name takes the next auto index."
-
-	| out i size nextAuto |
-	out := WriteStream @env0:on: (Unicode7 ___new___).
-	nextAuto := autoIdx.
-	size := self @env0:size.
-	i := 1.
-	[i @env0:<= size] @env0:whileTrue: [
-		| ch |
-		ch := self @env0:at: i.
-		ch == ${
-			ifTrue: [
-				| j field conv inner value piece |
-				j := i @env0:+ 1.
-				[j @env0:<= size and: [(self @env0:at: j) ~~ $}]] @env0:whileTrue: [
-					(self @env0:at: j) == ${ ifTrue: [
-						^ ValueError ___signal___: 'Max string recursion exceeded'].
-					j := j @env0:+ 1].
-				j @env0:> size ifTrue: [
-					^ ValueError ___signal___: 'unmatched ''{'' in format spec'].
-				field := self @env0:copyFrom: i @env0:+ 1 to: j @env0:- 1.
-				inner := ''.
-				conv := nil.
-				(field @env0:indexOf: $:) @env0:> 0 ifTrue: [
-					| k |
-					k := field @env0:indexOf: $:.
-					inner := field @env0:copyFrom: k @env0:+ 1 to: field @env0:size.
-					field := field @env0:copyFrom: 1 to: k @env0:- 1].
-				(field @env0:indexOf: $!) @env0:> 0 ifTrue: [
-					| k |
-					k := field @env0:indexOf: $!.
-					conv := field @env0:copyFrom: k @env0:+ 1 to: field @env0:size.
-					field := field @env0:copyFrom: 1 to: k @env0:- 1].
-				value := self ___resolveFormatField___: field positional: positional
-					kwargs: kwargs autoIdx: nextAuto.
-				field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
-				conv @env0:= 'r' @env0:ifTrue: [value := value __repr__ @env0:___reprResult___].
-				conv @env0:= 's' @env0:ifTrue: [value := value __str__].
-				piece := value __format__: inner.
-				out @env0:nextPutAll: piece @env0:asString.
-				i := j @env0:+ 1]
-			ifFalse: [
-				out @env0:nextPut: ch.
-				i := i @env0:+ 1]].
-	^ { out @env0:contents. nextAuto }
-%
-
-category: 'Grail-String Methods'
-method: CharacterCollection
-___resolveFormatField___: field positional: positional kwargs: kwargs autoIdx: autoIdx
-	"Look up a format field name in positional / kwargs.  Empty
-	field → auto-index positional; numeric field → explicit
-	positional index; otherwise keyword."
-
-	| idx |
-	field @env0:isEmpty ifTrue: [
-		(autoIdx @env0:>= positional @env0:size) ifTrue: [
-			IndexError ___signal___: 'Replacement index ' @env0:,
-				autoIdx @env0:printString @env0:, ' out of range for positional args tuple'].
-		^ positional @env0:at: autoIdx @env0:+ 1].
-	"Numeric field — explicit positional index."
-	(field @env0:first @env0:isDigit) ifTrue: [
-		idx := field @env0:asNumber.
-		(idx @env0:>= positional @env0:size) ifTrue: [
-			IndexError ___signal___: 'Replacement index ' @env0:,
-				idx @env0:printString @env0:, ' out of range for positional args tuple'].
-		^ positional @env0:at: idx @env0:+ 1].
-	"Keyword field: look up through the mapping's own __getitem__ so
-	format_map works with ANY mapping (a regex Match resolves group
-	names and raises ITS OWN IndexError for unknown groups, which
-	CPython's test_re asserts on); a plain dict raises its native
-	KeyError, matching the old at:ifAbsent: behavior."
-	kwargs @env0:isNil ifTrue: [
-		KeyError ___signal___: '''' @env0:, field @env0:asString @env0:, ''''].
-	^ kwargs __getitem__: field @env0:asString
-%
-
-category: 'Grail-String Methods'
-method: CharacterCollection
 format_map: mapping
 	"str.format_map(mapping) -- like format(**mapping) but keyword
 	fields resolve through the mapping's __getitem__ directly (no dict
 	copy), so mappings with custom item access (regex Match objects,
 	defaultdict-alikes) work."
 
-	^ self _format: #() kw: mapping
+	^ self _format: nil kw: mapping
 %
 
 category: 'Grail-String Methods'

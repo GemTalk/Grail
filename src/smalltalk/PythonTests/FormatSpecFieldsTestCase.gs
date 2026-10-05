@@ -21,7 +21,7 @@ FormatSpecFieldsTestCase comment:
 
 str.format passed ``^{}'' to __format__ unexpanded, which refused it; the
 nested fields now expand after the field''s value, sharing its auto
-numbering (CharacterCollection >> ___expandFormatSpec___:kw:autoIdx:).  A
+numbering (CharacterCollection >> ___renderFormatField___:...).  A
 ''0'' before a str''s width defaulted the alignment to ''='' as for a number,
 so format(''X'', ''0'') raised; it is now a ''0'' fill, left-aligned, as
 CPython 3.10+.  Both are reached by string.Formatter''s own tests.
