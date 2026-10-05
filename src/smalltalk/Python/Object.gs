@@ -5521,8 +5521,7 @@ ___pythonModuleAttrIdentity___
 
 	Grail's Python SymbolDictionary is FLAT, so a class CPython reaches only
 	through a module gets a flattened Smalltalk name: ``functools_partial''
-	for functools.partial, ``sys_flags'' for type(sys.flags),
-	``string_formatter'' for string.Formatter.  That spelling is an
+	for functools.partial, ``sys_flags'' for type(sys.flags).  That spelling is an
 	implementation detail, but it leaked into every Python-visible report --
 	``functools.partial.__name__'' answered 'functools_partial' where CPython
 	says 'partial', and ``__module__'' answered nothing at all where CPython
@@ -5591,7 +5590,6 @@ ___pythonModuleAttrIdentity___
 	by os, which os.DirEntry's own __module__ shows."
 	(n @env0:= 'os_DirEntry') ifTrue: [^ #('DirEntry' 'posix')].
 	(n @env0:= 'os_ScandirIterator') ifTrue: [^ #('ScandirIterator' 'posix')].
-	(n @env0:= 'string_formatter') ifTrue: [^ #('Formatter' 'string')].
 	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
 	"os.stat_result -- a structseq CPython defines in posixmodule and publishes
 	from os; pickle saves it by that name."

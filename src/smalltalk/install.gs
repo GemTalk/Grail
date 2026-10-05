@@ -503,8 +503,6 @@ run
 	at: #'set_iterator' put: nil;
 	at: #'slice' put: nil;
 	at: #'str_iterator' put: nil;
-	at: #'string' put: nil;
-	at: #'string_formatter' put: nil;
 	at: #'sys' put: nil;
 	at: #'sys_flags' put: nil;
 	at: #'sys_implementation' put: nil;
@@ -1666,7 +1664,6 @@ input src/smalltalk/Python/UnboundMethod.gs
 input src/smalltalk/Python/PythonGenerator.gs
 input src/smalltalk/Python/PythonCoroutine.gs
 input src/smalltalk/Python/PythonAsyncGenerator.gs
-input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
 input src/smalltalk/Python/Exception.gs
 input src/smalltalk/Python/GeneratorExit.gs
@@ -1743,7 +1740,6 @@ input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
 input src/smalltalk/Python/os_path.gs
 input src/smalltalk/Python/_random_module.gs
-input src/smalltalk/Python/string.gs
 input src/smalltalk/Python/html_entities.gs
 input src/smalltalk/Python/unicode_names.gs
 input src/smalltalk/Python/unicode_names_lookup.gs
