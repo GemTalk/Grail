@@ -1355,6 +1355,7 @@ run
 	at: #'StringIOSubclassTestCase' put: nil;
 	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
+	at: #'StrFormatFieldsTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'StrMethodKeywordArgsTestCase' put: nil;
 	at: #'StrPaddingTestCase' put: nil;
@@ -2827,6 +2828,7 @@ input src/smalltalk/PythonTests/StringIOSubclassTestCase.gs
 input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
+input src/smalltalk/PythonTests/StrFormatFieldsTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/StrMethodKeywordArgsTestCase.gs
 input src/smalltalk/PythonTests/StrPaddingTestCase.gs
