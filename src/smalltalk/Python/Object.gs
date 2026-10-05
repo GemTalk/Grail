@@ -11891,7 +11891,7 @@ __format__: formatSpec
 	non-empty spec raises TypeError (per CPython 3.4+)."
 
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [
-		^ self __str__
+		^ self __str__ @env0:___strResult___
 	].
 	"Concatenate in env 0: Unicode7 has no env-1 ``,'', so the env-1 sends
 	this message used to build with died as an uncatchable DNU instead of
@@ -11955,10 +11955,36 @@ ___reprResult___
 	Env 0 beside ___isPyStr___, for the same reason: the overrides on
 	CharacterCollection and AbstractPyStr must be found by the same lookup."
 
+	^ self ___nonStringResultOf___: '__repr__'
+%
+
+category: 'Grail-Testing'
+method: object
+___strResult___
+	"Sent to what a __str__ answered, at every site that takes str(x):
+	CPython's PyObject_Str refuses anything but a str (a subclass is fine).
+	Grail handed the value on, so ``str(x)'' could be an int, and ``%s'' and
+	str.format rendered a None as its Smalltalk printString, 'aNoneType'.
+	The same unary-on-the-result shape as ___reprResult___, for the same
+	reason.
+
+	The message names __str__ even when the value came from a __repr__ that
+	object.__str__ fell back to: CPython's object.__str__ calls the repr
+	SLOT, so the only check is PyObject_Str's."
+
+	^ self ___nonStringResultOf___: '__str__'
+%
+
+category: 'Grail-Testing'
+method: object
+___nonStringResultOf___: aDunder
+	"CPython's ``<dunder> returned non-string (type <T>)'' TypeError, naming
+	the receiver's PYTHON type."
+
 	| typeName |
 	typeName := [(self @env1:__class__) @env1:__name__ asString]
 		on: AbstractException do: [:ex | ex return: self class name asString].
-	^ TypeError @env1:___signal___: '__repr__ returned non-string (type ' , typeName , ')'
+	^ TypeError @env1:___signal___: aDunder , ' returned non-string (type ' , typeName , ')'
 %
 
 category: 'Grail-Testing'

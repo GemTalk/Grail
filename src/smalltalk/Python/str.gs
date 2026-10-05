@@ -87,7 +87,8 @@ __new__: obj
 				or: [(obj @env0:class @env0:== Unicode32)
 				or: [(obj @env0:class @env0:== String)
 				or: [obj @env0:class @env0:== Symbol]]]].
-			r := [obj __str__] @env0:on: AbstractException do: [:ex | obj].
+			r := ([obj __str__] @env0:on: AbstractException do: [:ex | obj])
+				@env0:___strResult___.
 			"A kernel string is returned WITHOUT copying.  ___allocateStringLike___
 			builds a string of the RECEIVER's class, so copying a wide
 			Unicode16/32 (auto-promoted by content, not a user subclass) into the
@@ -100,13 +101,14 @@ __new__: obj
 			^ (r isKindOf: CharacterCollection)
 				ifTrue: [self ___allocateStringLike___: r]
 				ifFalse: [r]].
-		^ [obj __str__] @env0:on: MessageNotUnderstood do: [:ex | obj __repr__]].
+		^ ([obj __str__] @env0:on: MessageNotUnderstood do: [:ex | obj __repr__])
+			@env0:___strResult___].
 
 	obj @env0:ifNil: [source := ''].
 	obj @env0:ifNotNil: [
 		(obj isKindOf: CharacterCollection)
 			ifTrue: [source := obj]
-			ifFalse: [source := obj __str__].
+			ifFalse: [source := obj __str__ @env0:___strResult___].
 	].
 	"Allocate a self-typed string of the right size via Behavior's
 	primitive ``new:`` and copy bytes.  Do NOT route through
@@ -2068,7 +2070,7 @@ _format: positional kw: kwargs
 			"Apply conversion flag (r → repr, s → str, a → ascii)."
 			convFlag @env0:isNil ifFalse: [
 				convFlag @env0:= 'r' @env0:ifTrue: [value := value __repr__ @env0:___reprResult___].
-				convFlag @env0:= 's' @env0:ifTrue: [value := value __str__].
+				convFlag @env0:= 's' @env0:ifTrue: [value := value __str__ @env0:___strResult___].
 			].
 			"Format-spec dispatch.  Delegate to value.__format__(spec)."
 			piece := value __format__: spec.
@@ -2125,6 +2127,14 @@ category: 'Grail-Testing'
 method: CharacterCollection
 ___reprResult___
 	"A str is a valid __repr__ result -- see object >> ___reprResult___."
+
+	^ self
+%
+
+category: 'Grail-Testing'
+method: CharacterCollection
+___strResult___
+	"A str is a valid __str__ result -- see object >> ___strResult___."
 
 	^ self
 %
