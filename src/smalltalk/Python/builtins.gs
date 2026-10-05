@@ -6699,6 +6699,7 @@ _input: positional kw: kwargs
 		"str(obj), with __repr__ as the fallback -- print's own two-step."
 		[promptText := obj __str__]
 			@env0:on: MessageNotUnderstood do: [:ex | promptText := obj __repr__].
+		promptText := promptText @env0:___strResult___.
 		promptText := promptText @env0:asString].
 
 	"REFUSE BEFORE READING when a stream input() needs has been deleted."
@@ -7175,6 +7176,7 @@ _print: positional kw: kwargs
 		defines neither -- the same two-step the original did."
 		[strRep := obj __str__]
 			@env0:on: MessageNotUnderstood do: [:ex | strRep := obj __repr__].
+		strRep := strRep @env0:___strResult___.
 		text @env0:nextPutAll: strRep @env0:asString.
 		"BETWEEN, not after: no separator follows the last object."
 		i @env0:< positional @env0:size ifTrue: [
