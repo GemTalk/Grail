@@ -770,6 +770,7 @@ run
 	at: #'EnumBodyCallablesTestCase' put: nil;
 	at: #'ClassDictOrderTestCase' put: nil;
 	at: #'ClassDictEntriesTestCase' put: nil;
+	at: #'DerivedPropertyWinsTestCase' put: nil;
 	at: #'ClassBodyCallableBindsTestCase' put: nil;
 	at: #'MetaclassProtocolsTestCase' put: nil;
 	at: #'AnnotationMachineryTestCase' put: nil;
@@ -967,6 +968,7 @@ run
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'ExceptStarShapesTestCase' put: nil;
 	at: #'ExceptStarTestCase' put: nil;
+	at: #'ExceptionChainingAttributesTestCase' put: nil;
 	at: #'ExceptionFramesAcrossGeneratorsTestCase' put: nil;
 	at: #'ExceptionGroupConstructionTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
@@ -2222,6 +2224,7 @@ input src/smalltalk/PythonTests/AbcClassBuildTestCase.gs
 input src/smalltalk/PythonTests/EnumBodyCallablesTestCase.gs
 input src/smalltalk/PythonTests/ClassDictOrderTestCase.gs
 input src/smalltalk/PythonTests/ClassDictEntriesTestCase.gs
+input src/smalltalk/PythonTests/DerivedPropertyWinsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyCallableBindsTestCase.gs
 input src/smalltalk/PythonTests/MetaclassProtocolsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
@@ -2422,6 +2425,7 @@ input src/smalltalk/PythonTests/EvalLiveMappingTestCase.gs
 input src/smalltalk/PythonTests/EvalInNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/EventLoopTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
+input src/smalltalk/PythonTests/ExceptionChainingAttributesTestCase.gs
 input src/smalltalk/PythonTests/ExceptionFramesAcrossGeneratorsTestCase.gs
 input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
 input src/smalltalk/PythonTests/ExceptionGroupConstructionTestCase.gs

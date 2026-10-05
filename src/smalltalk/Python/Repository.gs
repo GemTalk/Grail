@@ -191,10 +191,10 @@ modules_relocate: aName
 
 category: 'Grail-Repository Administration'
 method: Repository
-apps_set: aName
-	"Python repository.apps_set('shop') -- make app 'shop' current for the rest
-	of the session, creating it if it does not exist (importlib class >>
-	___grailSetApp___:).  gemdb.set_app() wraps it."
+namespaces_use: aName
+	"Python repository.namespaces_use('shop') -- make namespace 'shop' current
+	for the rest of the session, creating it if it does not exist (importlib
+	class >> ___grailSetApp___:).  gemdb.use_namespace() wraps it."
 
 	importlib @env0:___grailSetApp___: aName.
 	^ None
@@ -202,9 +202,9 @@ apps_set: aName
 
 category: 'Grail-Repository Administration'
 method: Repository
-apps_current
-	"Python repository.apps_current() -- the current app's name, or None in
-	the default namespace.  gemdb.app() wraps it."
+namespaces_current
+	"Python repository.namespaces_current() -- the current namespace's name,
+	or None in the default one.  gemdb.namespace() wraps it."
 
 	| appName |
 	appName := importlib @env0:___grailCurrentAppName___.
@@ -214,10 +214,10 @@ apps_current
 
 category: 'Grail-Repository Administration'
 method: Repository
-apps_globals
-	"Python repository.apps_globals() -- the current app's globals, its
-	__main__ module, or None outside an app or before its top file has run.
-	gemdb.root in an app is a view of them."
+namespaces_globals
+	"Python repository.namespaces_globals() -- the current namespace's globals,
+	its __main__ module, or None outside a named namespace or before its top
+	file has run.  gemdb.root in a named namespace is a view of them."
 
 	| m |
 	m := importlib @env0:___grailAppGlobals___.
@@ -227,19 +227,21 @@ apps_globals
 
 category: 'Grail-Repository Administration'
 method: Repository
-apps_list
-	"Python repository.apps_list() -- this user's app names, sorted
-	(importlib class >> ___grailAppNames___).  gemdb.admin.apps() wraps it."
+namespaces_list
+	"Python repository.namespaces_list() -- this user's namespace names, sorted
+	(importlib class >> ___grailAppNames___).  gemdb.admin.namespaces() wraps
+	it."
 
 	^ importlib @env0:___grailAppNames___
 %
 
 category: 'Grail-Repository Administration'
 method: Repository
-apps_drop: aName
-	"Python repository.apps_drop('shop') -- remove an app and everything
-	deployed in it, once nothing is stored against its classes (importlib
-	class >> ___grailDropApp___:).  gemdb.admin.drop_app() wraps it."
+namespaces_drop: aName
+	"Python repository.namespaces_drop('shop') -- remove a namespace and
+	everything deployed in it, once nothing is stored against its classes
+	(importlib class >> ___grailDropApp___:).  gemdb.admin.drop_namespace()
+	wraps it."
 
 	^ importlib @env0:___grailDropApp___: aName
 %

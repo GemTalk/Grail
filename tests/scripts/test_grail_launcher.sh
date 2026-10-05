@@ -359,34 +359,34 @@ if [ "$(cat "$TMP/raceA")" = "ok" ] && [ "$(cat "$TMP/raceB")" = "ok" ]; then ok
         "A: $(cat "$TMP/raceA")" "B: $(cat "$TMP/raceB")"
 fi
 
-# --- --app / GEMDB_APP: run as a GemDB app ----------------------------------
-# docs/App_Namespaces_Design.md §4: the launcher chooses the app before the
-# script's first line, so gemdb.app() already answers it.  The script never
-# commits, so the app it creates is gone when it exits.
-APP="grail_launcher_app_$$"
-printf 'import gemdb\nprint(gemdb.app())\n' > "$TMP/app.py"
-if run "--app NAME" 0 -- --app "$APP" "$TMP/app.py"; then
-    if [ "$(cat "$OUT_FILE")" = "$APP" ]; then ok; else
-        bad "--app NAME sets the app" "want: $APP" "got:  $(cat "$OUT_FILE")"
+# --- --namespace / GEMDB_NAMESPACE: run in a GemDB namespace ----------------
+# docs/App_Namespaces_Design.md §4: the launcher chooses the namespace before
+# the script's first line, so gemdb.namespace() already answers it.  The script
+# never commits, so the namespace it creates is gone when it exits.
+NS="grail_launcher_ns_$$"
+printf 'import gemdb\nprint(gemdb.namespace())\n' > "$TMP/ns.py"
+if run "--namespace NAME" 0 -- --namespace "$NS" "$TMP/ns.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$NS" ]; then ok; else
+        bad "--namespace NAME sets the namespace" "want: $NS" "got:  $(cat "$OUT_FILE")"
     fi
 fi
-if run "--app=NAME" 0 -- "--app=$APP" "$TMP/app.py"; then
-    if [ "$(cat "$OUT_FILE")" = "$APP" ]; then ok; else
-        bad "--app=NAME sets the app" "want: $APP" "got:  $(cat "$OUT_FILE")"
+if run "--namespace=NAME" 0 -- "--namespace=$NS" "$TMP/ns.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$NS" ]; then ok; else
+        bad "--namespace=NAME sets the namespace" "want: $NS" "got:  $(cat "$OUT_FILE")"
     fi
 fi
-GEMDB_APP="$APP" ./grail "$TMP/app.py" >"$OUT_FILE" 2>"$ERR_FILE"
-if [ "$(cat "$OUT_FILE")" = "$APP" ]; then ok; else
-    bad "GEMDB_APP sets the app" "want: $APP" "got:  $(cat "$OUT_FILE")" "stderr: $(cat "$ERR_FILE")"
+GEMDB_NAMESPACE="$NS" ./grail "$TMP/ns.py" >"$OUT_FILE" 2>"$ERR_FILE"
+if [ "$(cat "$OUT_FILE")" = "$NS" ]; then ok; else
+    bad "GEMDB_NAMESPACE sets the namespace" "want: $NS" "got:  $(cat "$OUT_FILE")" "stderr: $(cat "$ERR_FILE")"
 fi
-if run "no app" 0 -- "$TMP/app.py"; then
+if run "no namespace" 0 -- "$TMP/ns.py"; then
     if [ "$(cat "$OUT_FILE")" = "None" ]; then ok; else
-        bad "without --app there is no app" "got: $(cat "$OUT_FILE")"
+        bad "without --namespace there is none" "got: $(cat "$OUT_FILE")"
     fi
 fi
-if run "--app without a name" 2 -- --app; then
-    if grep -q -- "--app requires an argument" "$ERR_FILE"; then ok; else
-        bad "--app without a name says so" "stderr: $(cat "$ERR_FILE")"
+if run "--namespace without a name" 2 -- --namespace; then
+    if grep -q -- "--namespace requires an argument" "$ERR_FILE"; then ok; else
+        bad "--namespace without a name says so" "stderr: $(cat "$ERR_FILE")"
     fi
 fi
 
