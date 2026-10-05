@@ -681,6 +681,91 @@ first inline layout read (W5/W6, option (a)).
   (`test_exception_group` and `test_zipapp` ERROR → OK, `test_except_star`
   21 → 20).
 
+### Phase 7 — future improvements (not scheduled)
+
+Phase 6 ends the plan as written: pydantic works in Grail on the abi3 build,
+its own tests run, and the walls they found are fixed. What follows is the
+list of what would make that support better, recorded so the next piece of
+work starts from measurements rather than from memory. None of it is
+scheduled; each item stands on its own and they can be taken in any order.
+
+**7.1 — the stock wheel: a real CPython layout for `str`, `float`, `bytes`.**
+This is Phase 4's option (a), deferred when (b) was chosen. Today pydantic
+validates only on a `pydantic_core` rebuilt against the stable ABI
+(`scripts/pydantic/build_pydantic_core_abi3.sh`), which needs a Rust
+toolchain. The wheel `pip install pydantic` fetches imports (Package_Census
+row 26) but dies on its first validation, because PyO3's non-abi3 code reads
+`ob_fval`, `ob_sval` and the compact-unicode body INLINE (W5/W6), and a Grail
+wrapper has none of them. The work is giving those immutable values a real
+CPython-shaped body behind the wrapper — the prefix-OOP header of
+[Shim_Object_Model.md](Shim_Object_Model.md) §2 — prototyped on `float`
+first, guarded by Phase 4's test
+`SchemaValidator({'type': 'float'}).validate_python(1.5) == 1.5`. It is the
+deepest item here, and the only one that helps every future wheel rather than
+pydantic alone. Exit: the stock wheel passes the Phase 6 slice with the same
+numbers as the abi3 build.
+
+**7.2 — speed (W7).** A validation is still 200–500× slower than on CPython
+(the W7 table above): constructing a model costs 176 µs against ~1 µs, a
+`model_dump` 374 µs against ~0.8 µs. Phase 6 removed the hotspots a profile
+could see — `PyDict_Next`'s O(n²) rebuild, `at:` sends for array reads, the
+full attribute protocol for `__dict__` replacement — and what is left is
+spread over ~240 methods, every one of them a crossing. So the next gains are
+structural, not local:
+* fewer crossings per call — `GRAIL_SHIM_PROFILE=1` counts them by selector;
+  a `model_dump` still makes ~99;
+* cheaper wrapping — the per-value `wrap:` map lookup and CByteArray, which
+  every argument and result pays;
+* C-side caches for the values pydantic_core asks for repeatedly (interned
+  attribute names, type objects, a model's field dict).
+
+Measure with the Phase 6 benchmark on both builds before and after each step.
+Exit: a target agreed beforehand — an order of magnitude on `model_dump` would
+be a reasonable first one.
+
+**7.3 — the rest of pydantic's test suite.** The Phase 6 slice is 12 of
+pydantic's ~70 test modules, and 269 of its 1,228 tests still differ from
+CPython — mostly one-of-a-kind after the walls tabled above, so the work is a
+long tail rather than a few big fixes. In order of reach:
+* `test_types` (956 tests) cannot import: the TEST module binds more than the
+  255 names a Grail module can hold, GemStone's dynamic-instVar ceiling
+  ([GemStone_Feature_Requests.md](GemStone_Feature_Requests.md) §2.1). Either
+  the kernel ask is met, or module globals get an overflow store like the one
+  `GrailClassAttrHolder` gives class attributes.
+* the modules not yet run — `test_json_schema`, `test_generics`,
+  `test_dataclasses`, `test_discriminated_union`, `test_networks`, … — each
+  baselined under CPython first with the runner, as Phase 6 did.
+* the 18 tests that still kill the gem (RecursionError, one compile error on a
+  nested PEP 695 `type` statement, one pydantic_core panic on a constrained
+  `TypeVar` with `float`), before the ordinary failures — a crash costs a
+  whole run's worth of context.
+* the gaps recorded under Phase 6's *Left, and why it is left*: class keywords
+  through a `**kwargs` metaclass `__new__` not reaching `__init_subclass__`;
+  `importlib.util.module_from_spec` / `exec_module`; `warnings.warn` at module
+  scope reporting line 0; `pydantic_core` importing `pydantic` from inside a C
+  callback when it was imported first; and `from <native module> import *`
+  binding accessor methods (see the note under *Resume here*).
+
+Exit: the slice widened to every module that imports, with its numbers
+tabled here, and no test that kills the gem.
+
+**7.4 — distribution and CI.** Two things keep the Phase 6 result from being
+durable:
+* the abi3 `pydantic_core` exists only as a local build. Until 7.1 lands, a
+  user needs it built for them — a prebuilt abi3 wheel for each platform Grail
+  supports (Darwin arm64, Linux x86_64), produced by the build script in CI
+  and published somewhere `pip` can reach, would make `pip install` work
+  against Grail without a Rust toolchain.
+* nothing in CI exercises pydantic. The Phase 6 SUnit tests need no wheel,
+  but the slice does, so it runs by hand and a regression in it would be seen
+  only by the next person to run it. With the wheel above available, a CI
+  job — nightly, beside the CPython conformance run — could run the slice and
+  gate it against a committed baseline the way `check_cpython_regressions.sh`
+  gates the scoreboard, its baseline CI-measured for the same reason.
+
+Exit: `pip install pydantic` plus the published wheel works in a fresh Grail
+venv, and the nightly reports the slice.
+
 ## Resume here
 
 1. `source .setenv`. The environment has moved more than once, so check it
@@ -720,9 +805,8 @@ first inline layout read (W5/W6, option (a)).
 5. The pydantic sdist's tests: `pip download --no-binary :all: --no-deps
    pydantic==2.13.5`, unpack, and run the slice as Phase 6 shows (the abi3
    venv needs `pytest dirty-equals jsonschema` for the CPython side).
-6. Next, if this continues: `test_types` needs the 255-name module ceiling
-   lifted; the slice's remaining divergences are mostly one-of-a-kind; and
-   FastAPI itself has not been tried.
+6. Next: the future improvements in **Phase 7** above — the stock wheel,
+   speed, the rest of pydantic's test suite, distribution and CI.
 
 Two defects found on the way, both in `module>>___mergePublicAttrsFrom:`.
 `from X import *` **ignored `X.__all__`** — fixed in Phase 6, because
