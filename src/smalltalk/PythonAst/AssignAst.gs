@@ -305,10 +305,17 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '. '.
 	targets do: [:eachTgt |
 		(eachTgt isKindOf: AttributeAst) ifTrue: [
-			"Chained ``...X = rest = value'' attribute store: write straight
-			to dynamicInstVarAt:put: for both self and foreign-receiver
-			targets — mirrors single-target's bypass of the ``attr:''
-			setter dispatch (see printSmalltalkAttributeStoreOn:)."
+			"Chained ``...X = rest = value'' attribute store: the same
+			routing as the single target (printSmalltalkAttributeStoreOn:)
+			-- a slot accessor, else ``__setattr__:_:''.
+
+			The self branch used to write dynamicInstVarAt:put: straight, a
+			shape the single target left behind when it moved to
+			__setattr__.  In a CLASSMETHOD ``cls'' is a self reference and
+			self is a CLASS, which has no dynamic instVars: ``pat =
+			cls.pattern = re.compile(...)'' (string.Template) died with an
+			uncatchable ImproperOperation 2484.  It also skipped a @property
+			setter for ``x = self.p = v''."
 			((eachTgt value isKindOf: NameAst)
 				and: [(CallAst isSelfReference: eachTgt value id)
 					and: [(eachTgt value ___boundInNestedFunction___: eachTgt value id) not]])
@@ -321,9 +328,9 @@ printSmalltalkOn: aStream
 							aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ___chain___. ']
 						ifNil: [
 							aStream
-								nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+								nextPutAll: 'self @env1:__setattr__: ''';
 								nextPutAll: eachTgt ___mangledAttr___;
-								nextPutAll: ''' put: ___chain___. ']
+								nextPutAll: ''' _: ___chain___. ']
 				]
 				ifFalse: [
 					eachTgt value printSmalltalkWithParenthesisOn: aStream.
@@ -820,9 +827,11 @@ ___emitIRChainOn___: aBuilder
 								send: (acc , ':') asSymbol to: aBuilder selfNode
 								with: { aBuilder var: chainLeaf } env: 1)]
 						ifNil: [
+							"__setattr__, as the text emit and the single target --
+							a classmethod's self is a class (see the text emit)."
 							aBuilder add: (aBuilder
-								send: #dynamicInstVarAt:put: to: aBuilder selfNode
-								with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]
+								send: #'__setattr__:_:' to: aBuilder selfNode
+								with: { aBuilder obj: t ___mangledAttr___ asString. aBuilder var: chainLeaf })]]
 				ifFalse: [
 					| recv |
 					recv := t value ___emitIRValueOn___: aBuilder.

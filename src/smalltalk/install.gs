@@ -760,6 +760,7 @@ run
 	at: #'CatchWarningsStateTestCase' put: nil;
 	at: #'CellEmptinessTestCase' put: nil;
 	at: #'CellObjectsTestCase' put: nil;
+	at: #'ChainedAttributeStoreTestCase' put: nil;
 	at: #'ChainedComparisonTestCase' put: nil;
 	at: #'ChainedIdentityCompareTestCase' put: nil;
 	at: #'CheckWarningsHelperTestCase' put: nil;
@@ -2215,6 +2216,7 @@ input src/smalltalk/PythonTests/CatchWarningsRecordTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
 input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
 input src/smalltalk/PythonTests/CellObjectsTestCase.gs
+input src/smalltalk/PythonTests/ChainedAttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
