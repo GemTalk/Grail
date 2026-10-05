@@ -1,4 +1,4 @@
-"""Repository administration: size, backups, garbage collection.
+"""Repository administration: size, backups, garbage collection, namespaces.
 
 Separate from the gemdb top level on purpose: a developer who only
 writes Python never needs any of this, and should never see it.  The
@@ -11,6 +11,8 @@ operations wrap env-1 methods on the kernel Repository class
     gemdb.admin.size()                       # {"bytes": ..., "free_bytes": ...}
     gemdb.admin.backup("/backups/mon.gz")    # .gz -> compressed, else plain
     gemdb.admin.garbage_collect()            # mark-for-collection; returns its report
+    gemdb.admin.namespaces()                 # ["blog", "shop"]
+    gemdb.admin.drop_namespace("blog")       # remove a namespace and all it deployed
 
 ``backup`` and ``garbage_collect`` refuse (:class:`gemdb.PendingChangesError`)
 while the session holds uncommitted changes: a backup writes only
@@ -76,7 +78,40 @@ def garbage_collect():
     return _gemstone.repository.mark_for_collection()
 
 
-__all__ = ["size", "backup", "garbage_collect"]
+def namespaces():
+    """The names of the namespaces in this repository, sorted (see
+    ``gemdb.use_namespace``)."""
+    return list(_gemstone.repository.namespaces_list())
+
+
+def drop_namespace(name):
+    """Remove namespace ``name``: its modules, classes and globals, all at once.
+
+    REFUSES, with ``ValueError``, while the repository holds any instance of
+    the namespace's classes, and says how many -- dropping it would leave
+    those objects on classes nothing can name.  That includes what its own
+    globals hold, which would go with it, so: join the namespace, unbind what
+    its globals (``gemdb.root``) keep, commit, ``garbage_collect()``, then
+    drop it from a session that is not in it.  Also refuses the namespace
+    this session is in, and a namespace that does not exist.
+
+    Scans the repository, so it refuses (``gemdb.PendingChangesError``)
+    while the session has uncommitted changes, and commits itself.  Returns
+    the number of classes the namespace held.
+    """
+    if _gemdb.needs_commit():
+        raise _gemdb.PendingChangesError(
+            "drop_namespace() scans the repository for instances of the "
+            "namespace's classes, "
+            "and a scan discards uncommitted work; this session has changes. "
+            "gemdb.commit() to keep them or gemdb.abort() to discard them first")
+    n = _gemstone.repository.namespaces_drop(str(name))
+    _gemdb.commit()
+    return n
+
+
+__all__ = ["size", "backup", "garbage_collect", "namespaces",
+           "drop_namespace"]
 
 # Warm the function-attribute caches during the cold import, so they are
 # committed with the module -- same mechanism and reasoning as the block
@@ -84,7 +119,7 @@ __all__ = ["size", "backup", "garbage_collect"]
 import sys as _sys
 
 _self = _sys.modules["gemdb.admin"]
-for _name in ("size", "backup", "garbage_collect"):
+for _name in ("size", "backup", "garbage_collect", "namespaces", "drop_namespace"):
     getattr(_self, _name)
 del _self, _name, _sys
 
@@ -100,6 +135,6 @@ del _self, _name, _sys
 import sys as _sys
 
 _self = _sys.modules[__name__]
-for _name in ("size", "backup", "garbage_collect"):
+for _name in ("size", "backup", "garbage_collect", "namespaces", "drop_namespace"):
     getattr(_self, _name)
 del _self, _name, _sys

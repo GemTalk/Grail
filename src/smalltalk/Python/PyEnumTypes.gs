@@ -941,8 +941,10 @@ ___grailBuildMembers: cls names: attrNames
 	-- so both are dropped here, in the one pass.
 
 	A DESCRIPTOR: ``class E(Enum): x = property(f)'' leaves x an ordinary class
-	attribute.  See ___grailFunctional: for why ___isValueDescriptor___: is the
-	predicate and why underscore names are exempt.
+	attribute, and so does every def, lambda and bound method -- see
+	___grailIsBodyDescriptor: for why that is wider than the functional API's
+	___isValueDescriptor___:, and ___grailFunctional: for why underscore names
+	are exempt.
 
 	An INTERNAL CLASS: a class DEFINED IN the body (3.13 -- it was a member,
 	with a DeprecationWarning, through 3.12), so ``class Outer(Enum): class
@@ -968,7 +970,7 @@ ___grailBuildMembers: cls names: attrNames
 				ifFalse: [dynHolder @env0:isNil
 					ifTrue: [nil]
 					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
-			((cls ___isValueDescriptor___: raw)
+			((Enum ___grailIsBodyDescriptor: raw)
 				or: [Enum ___grailIsInternalClass: raw
 					inClassNamed: cls @env0:name @env0:asString])
 						ifTrue: [dropped @env0:add: nameSym]]].
@@ -1115,7 +1117,11 @@ ___grailBuildMembers: cls names: attrNames
 							'_generate_next_value_ must be defined before members']]]] ]
 		@env0:value.
 	byValue := KeyValueDictionary @env0:new.
-	byName := KeyValueDictionary @env0:new.
+	"A PyDict, which keeps insertion order: this map IS _member_map_ and
+	__members__, and CPython's is a dict in definition order, aliases where they
+	were written.  A KeyValueDictionary answered hash order -- ``ZETA = 1;
+	alpha = 2; MID = 3'' listed MID first.  Looked up, since PyDict files in after this."
+	byName := (Python @env0:at: #PyDict) @env0:new.
 	members := OrderedCollection @env0:new.
 	"allOrdered: EVERY freshly-built (non-alias) member in definition order --
 	canonical single-bit members PLUS the multi-bit/zero ones ``members'' drops.
@@ -1750,6 +1756,25 @@ ___grailBuildMembers: cls names: attrNames
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
 	self ___grailStoreRecord: (Array @env0:with: byValue with: byName with: members with: allOrdered) for: cls.
+	"__set_name__ over the body, which CPython's type.__new__ runs at this
+	point and object >> ___pyClassDefined___: runs for an ordinary class.  This
+	hook replaces that one, so nothing ran it: a cached_property in an enum body
+	raised ``Cannot use cached_property instance without calling __set_name__''
+	on first read.  A MEMBER is skipped -- CPython hands type.__new__ a
+	_proto_member for it, whose own __set_name__ is the member build above,
+	never the value's."
+	[ | order |
+	order := ((cls @env0:class @env0:whichClassIncludesSelector:
+		#'___classBodyOrder___' environmentId: 1) ~~ nil)
+			ifTrue: [cls ___classBodyOrder___]
+			ifFalse: [allNames].
+	order @env0:do: [:each | | sym v |
+		sym := each @env0:asString @env0:asSymbol.
+		v := cls ___classBodyValueAt___: sym.
+		(v == nil and: [dynHolder @env0:notNil
+			and: [(dynHolder @env0:dynamicInstanceVariables) @env0:includes: sym]])
+				ifTrue: [v := dynHolder @env0:dynamicInstVarAt: sym].
+		(v @env0:isKindOf: cls) ifFalse: [cls ___setNameOn___: v named: sym]] ] @env0:value.
 	"CPython EnumType wraps a user _generate_next_value_ as a staticmethod in the
 	class __dict__ (test_gnv_is_static: type(cls.__dict__['_generate_next_value_'])
 	is staticmethod).  Grail compiles gnv as a plain method; store a PyStaticMethod
@@ -3004,6 +3029,53 @@ ___grailValueMixinFor: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailIsBodyDescriptor: aValue
+	"CPython enum._is_descriptor, for a CLASS-BODY value: ``hasattr(obj,
+	'__get__') or hasattr(obj, '__set__') or hasattr(obj, '__delete__')''.  A
+	value it accepts is an ordinary class attribute, never a member.
+
+	Wider than ___isValueDescriptor___:, which answers a different question
+	(must an instance read ASK this object for the value?) and so leaves out
+	Grail's function stand-ins on purpose.  Every def, lambda, bound method,
+	functools.partial and cached_property is a descriptor to CPython, and
+	with the narrow test each one became a member: ``@deco def m(self)'' (the
+	decorated result sits in the holder sweep) and ``g = f'' alike, so
+	``Color.RED.m()'' raised ``'Color' object is not callable'' and a
+	cached_property never had __set_name__ called.
+
+	A BUILTIN is the exception, as in CPython, where builtin_function_or_method
+	has no __get__: ``b = len'' stays a member.  Grail carries those as a
+	BoundMethod whose receiver is the builtins module or an instance of a
+	builtin type -- the split BoundMethod >> __repr__ already draws.
+
+	A CLASS is left to ___grailIsInternalClass:inClassNamed:; some Grail kernel
+	classes answer __get__ where CPython's types do not."
+
+	(aValue @env0:isBehavior) ifTrue: [^ false].
+	(object ___isValueDescriptor___: aValue) ifTrue: [^ true].
+	((aValue isKindOf: UnboundMethod) or: [aValue isKindOf: ExecBlock])
+		ifTrue: [^ true].
+	(aValue isKindOf: BoundMethod) ifTrue: [ | rcv |
+		rcv := aValue @env0:instVarAt: 1.
+		(rcv @env0:isKindOf: module) ifTrue: [ | mn |
+			mn := [(rcv @env1:__name__) @env0:asString]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			^ (mn @env0:= 'builtins') @env0:not].
+		(rcv @env0:isBehavior) ifTrue: [^ true].
+		^ ([rcv @env0:class ___pythonBuiltinTypeName___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:isNil].
+	"A function stand-in that binds self through a MethodBinding rather than a
+	__get__ -- an lru_cache wrapper, partialmethod, singledispatchmethod --
+	is a descriptor in CPython all the same."
+	^ (aValue ___respondsTo___: #'___pyBindsSelf___')
+		or: [(aValue ___respondsTo___: #'__get__:_:')
+		or: [(aValue ___respondsTo___: #'___get__:kw:')
+		or: [(aValue ___respondsTo___: #'__set__:_:')
+		or: [aValue ___respondsTo___: #'__delete__:']]]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailIsInternalClass: aValue inClassNamed: clsName
 	"CPython _is_internal_class: is aValue a class DEFINED IN the body of the
 	enum named clsName, as opposed to one merely named there?
@@ -4013,7 +4085,8 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			ifFalse: [kept @env0:add: p]].
 	pairs := kept ] @env0:value.
 	byValue := KeyValueDictionary @env0:new.
-	byName := KeyValueDictionary @env0:new.
+	"Ordered, as in ___grailBuildMembers:names:."
+	byName := (Python @env0:at: #PyDict) @env0:new.
 	members := OrderedCollection @env0:new.
 	[ | lastInt maxInt isFlag autoResolved foreignMixin hasGnv genVals |
 	lastInt := 0.
@@ -4316,9 +4389,13 @@ ___grailSimpleEnum: cls type: etype kw: kwargs
 	Built on the functional API, which keeps member order and already turns a
 	callable under a dunder name into a method override.  Every other
 	underscore name, and every non-member callable, is stored on the new class
-	afterwards.  A @property arrives from ___classDict___ as its getter FUNCTION
-	(Grail compiles a property to an accessor pair, not an object), so the
-	class-side ___grailOwnPropertyNames___ list is what re-wraps it."
+	afterwards.  A builtin @property arrives from ___classDict___ as the property
+	object, as in CPython; one declared another way -- ``@enum.property'' --
+	still arrives as its getter FUNCTION (Grail compiles both to an accessor
+	pair), so the class-side ___grailOwnPropertyNames___ list is what wraps it,
+	and only when it is not a descriptor already.  Wrapping the property object
+	again made a property whose fget was a property: ``'property' object is not
+	callable'' on the first member read."
 
 	| ns propNames pairs later keywords doc newEnum |
 	ns := cls ___classDict___.
@@ -4336,7 +4413,10 @@ ___grailSimpleEnum: cls type: etype kw: kwargs
 		nm @env0:= '__qualname__' ifTrue: [keywords @env0:at: 'qualname' put: v].
 		(#('__doc__' '__module__' '__qualname__' '__dict__' '__weakref__') @env0:includes: nm) ifFalse: [
 			(propNames @env0:includes: nm @env0:asSymbol)
-				ifTrue: [later @env0:add: (Array @env0:with: nm with: (PropertyDescriptor __new__: v))]
+				ifTrue: [later @env0:add: (Array @env0:with: nm with:
+					((v isKindOf: AbstractPropertyDescriptor)
+						ifTrue: [v]
+						ifFalse: [PropertyDescriptor __new__: v]))]
 				ifFalse: [
 					((nm @env0:size @env0:> 0) and: [(nm @env0:at: 1) @env0:= $_])
 						ifTrue: [

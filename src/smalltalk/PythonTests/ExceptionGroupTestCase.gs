@@ -40,7 +40,11 @@ test_creation
 	"Test creating a ExceptionGroup instance."
 	
 	| exc |
-	exc := ExceptionGroup ___new___:  ExceptionGroup .
+	"A group needs CPython's two arguments -- a message and a non-empty
+	sequence of exceptions, here holding a ValueError.  The
+	one-argument ``ExceptionGroup ___new___: ExceptionGroup'' this used is the
+	TypeError CPython raises (``takes exactly 2 arguments'')."
+	exc := ExceptionGroup ___new___: 'eg' _: (Array with: (ValueError ___new___: 'x')).
 	self assert: exc notNil.
 %
 
@@ -50,7 +54,11 @@ test_inheritance
 	"Test that ExceptionGroup inherits from BaseExceptionGroup."
 	
 	| exc |
-	exc := ExceptionGroup ___new___:  ExceptionGroup .
+	"A group needs CPython's two arguments -- a message and a non-empty
+	sequence of exceptions, here holding a ValueError.  The
+	one-argument ``ExceptionGroup ___new___: ExceptionGroup'' this used is the
+	TypeError CPython raises (``takes exactly 2 arguments'')."
+	exc := ExceptionGroup ___new___: 'eg' _: (Array with: (ValueError ___new___: 'x')).
 	self assert: (exc isKindOf: BaseExceptionGroup).
 %
 

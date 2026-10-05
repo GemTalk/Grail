@@ -40,7 +40,11 @@ test_creation
 	"Test creating a BaseExceptionGroup instance."
 	
 	| exc |
-	exc := BaseExceptionGroup ___new___:  BaseExceptionGroup .
+	"A group needs CPython's two arguments -- a message and a non-empty
+	sequence of exceptions, here holding a KeyboardInterrupt, so it stays a BaseExceptionGroup.  The
+	one-argument ``BaseExceptionGroup ___new___: BaseExceptionGroup'' this used is the
+	TypeError CPython raises (``takes exactly 2 arguments'')."
+	exc := BaseExceptionGroup ___new___: 'eg' _: (Array with: (KeyboardInterrupt ___new___: 'x')).
 	self assert: exc notNil.
 %
 
@@ -50,7 +54,11 @@ test_inheritance
 	"Test that BaseExceptionGroup inherits from BaseException."
 	
 	| exc |
-	exc := BaseExceptionGroup ___new___:  BaseExceptionGroup .
+	"A group needs CPython's two arguments -- a message and a non-empty
+	sequence of exceptions, here holding a KeyboardInterrupt, so it stays a BaseExceptionGroup.  The
+	one-argument ``BaseExceptionGroup ___new___: BaseExceptionGroup'' this used is the
+	TypeError CPython raises (``takes exactly 2 arguments'')."
+	exc := BaseExceptionGroup ___new___: 'eg' _: (Array with: (KeyboardInterrupt ___new___: 'x')).
 	self assert: (exc isKindOf: BaseException).
 %
 
@@ -59,7 +67,7 @@ test_inheritance
 category: 'Grail-Setup'
 method: BaseExceptionGroupTestCase
 ___narrowingProbe___
-	"tests/python/exception_group_narrowing.py, whose eight checks were measured
+	"tests/python/exception_group_narrowing.py, whose eleven checks were measured
 	against CPython 3.14.6 (it is self-running, so scripts/
 	check_python_fixtures.sh runs them there too).  Loaded once per test; the
 	module body runs every check at import."
@@ -155,5 +163,28 @@ testExceptStarStillMatchesInsideANarrowedGroup
 
 	self
 		assert: (self narrowingAt: 'except_star_matches_inside_a_narrowed_group')
+		equals: true.
+%
+
+category: 'Grail-Tests - PEP 654 narrowing'
+method: BaseExceptionGroupTestCase
+testDeriveNarrowsLikeTheConstructor
+	"split/subgroup build both halves through derive:, whose default is
+	CPython's ``BaseExceptionGroup(self.message, excs)'' -- so it narrows as
+	the constructor does, and a subclass that does not override derive comes
+	back as a plain group.  Grail built ``self class'', which kept the rest of
+	a mixed BaseExceptionGroup a BaseExceptionGroup: ``suppress(GeneratorExit)''
+	over one then escaped ``assertRaises(ExceptionGroup)'' as an uncaught
+	Smalltalk error -- the last failure in test.test_contextlib.  Measured
+	failing with the old derive: installed."
+
+	self
+		assert: (self narrowingAt: 'splitting_out_the_baseexceptions_narrows_the_rest')
+		equals: true.
+	self
+		assert: (self narrowingAt: 'derive_narrows_like_the_constructor')
+		equals: true.
+	self
+		assert: (self narrowingAt: 'a_subclass_without_derive_splits_into_plain_groups')
 		equals: true.
 %

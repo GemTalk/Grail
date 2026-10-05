@@ -91,6 +91,34 @@ def except_star_matches_inside_a_narrowed_group():
     return seen == ['ValueError', 'TypeError']
 
 
+def splitting_out_the_baseexceptions_narrows_the_rest():
+    """split/subgroup build their halves through derive(), whose default is
+    ``BaseExceptionGroup(self.message, excs)'' -- so it narrows exactly as the
+    constructor does.  Grail's built ``type(self)``, which left the rest a
+    BaseExceptionGroup that ``except ExceptionGroup'' missed: the last error in
+    test.test_contextlib, ``suppress(GeneratorExit)'' over a mixed group."""
+    g = BaseExceptionGroup('m', [GeneratorExit('g'), KeyError('k')])
+    match, rest = g.split(GeneratorExit)
+    return (type(match) is BaseExceptionGroup and type(rest) is ExceptionGroup
+            and type(g.subgroup(KeyError)) is ExceptionGroup)
+
+
+def derive_narrows_like_the_constructor():
+    g = BaseExceptionGroup('m', [KeyboardInterrupt()])
+    return (type(g.derive([ValueError('a')])) is ExceptionGroup
+            and type(g.derive([KeyboardInterrupt()])) is BaseExceptionGroup)
+
+
+def a_subclass_without_derive_splits_into_plain_groups():
+    """The flip side of the same default, and CPython's documented reason a
+    subclass overrides derive: without it, split hands back the BASE type."""
+    class MyGroup(ExceptionGroup):
+        pass
+
+    match, rest = MyGroup('m', [ValueError('a'), TypeError('b')]).split(ValueError)
+    return type(match) is ExceptionGroup and type(rest) is ExceptionGroup
+
+
 CHECKS = (
     a_group_of_exceptions_narrows,
     a_group_containing_a_baseexception_does_not,
@@ -100,6 +128,9 @@ CHECKS = (
     a_subclass_of_baseexceptiongroup_is_never_replaced,
     exceptiongroup_itself_is_unaffected,
     except_star_matches_inside_a_narrowed_group,
+    splitting_out_the_baseexceptions_narrows_the_rest,
+    derive_narrows_like_the_constructor,
+    a_subclass_without_derive_splits_into_plain_groups,
 )
 
 r = {fn.__name__: fn() for fn in CHECKS}

@@ -776,9 +776,22 @@ ___grailRuntimeCompileDictionaries___: aScopeOrNil
 	not through importlib: Class.gs files in before importlib exists.  Only when
 	present -- composing a list must not create it."
 
-	| dicts |
+	| dicts temps ns stack |
 	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
-	(SessionTemps @env0:current @env0:at: #'GrailSessionModuleClasses' otherwise: nil)
+	"An app's module classes (docs/App_Namespaces_Design.md §3.3), for the
+	same reason: the profile list holds PythonModules, not an app's
+	dictionary.  The namespace is the one importlib >> ___grailNamespace___
+	answers -- the module being loaded, else the session's app -- read the
+	same way, straight from SessionTemps."
+	temps := SessionTemps @env0:current.
+	ns := temps @env0:at: #'GrailCurrentApp' otherwise: nil.
+	ns == nil ifFalse: [
+		stack := temps @env0:at: #'GrailNamespaceStack' otherwise: nil.
+		(stack == nil or: [stack @env0:isEmpty]) ifFalse: [ns := stack @env0:last].
+		ns == UserGlobals ifFalse: [
+			(ns @env0:at: #'GrailModuleClasses' otherwise: nil)
+				@env0:ifNotNil: [:d | dicts @env0:insertObject: d at: 1]]].
+	(temps @env0:at: #'GrailSessionModuleClasses' otherwise: nil)
 		@env0:ifNotNil: [:d | dicts @env0:insertObject: d at: 1].
 	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
 	^ dicts
@@ -834,6 +847,7 @@ ___compileMethod: aSource category: aCategory scope: aScopeOrNil
 			compile, fall back to raising the NameError here (still
 			catchable -- the pre-stub behavior)."
 			| lfIdx endIdx pattern stubSrc |
+			self ___traceCodegenGap___: aSource error: ex.
 			lfIdx := aSource @env0:indexOf: Character @env0:lf.
 			endIdx := lfIdx @env0:= 0
 				ifTrue: [aSource @env0:size]
@@ -855,6 +869,33 @@ ___compileMethod: aSource category: aCategory scope: aScopeOrNil
 							@env0:, ']: '
 							@env0:, (ex @env0:messageText @env0:ifNil: ['(no details)']))]].
 	^ self
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___traceCodegenGap___: aSource error: aCompileError
+	"Under GRAIL_CODEGEN_TRACE_DIR, append a runtime method that failed to
+	compile -- its generated source and the compiler's complaint -- to
+	<dir>/codegen_gaps.txt.
+
+	The stub installed in its place says ``see install/import log'', but
+	nothing was ever logged: the source exists only for this call, so a
+	codegen gap in a class defined at run time (a class inside a function)
+	could not be inspected at all.  Module-level classes are already in the
+	trace dir's .tpz; this is the half that never reached it."
+
+	| dir file |
+	dir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
+	(dir == nil or: [dir @env0:isEmpty]) ifTrue: [^ self].
+	file := GsFile @env0:open: dir @env0:, '/codegen_gaps.txt' mode: 'a' onClient: false.
+	file == nil ifTrue: [^ self].
+	[file @env0:nextPutAll: '==== '; @env0:nextPutAll: self @env0:name @env0:asString;
+		@env0:nextPutAll: (String @env0:with: Character @env0:lf);
+		@env0:nextPutAll: (aCompileError @env0:messageText @env0:ifNil: ['(no details)']) @env0:asString;
+		@env0:nextPutAll: (String @env0:with: Character @env0:lf);
+		@env0:nextPutAll: aSource @env0:asString;
+		@env0:nextPutAll: (String @env0:with: Character @env0:lf)]
+		@env0:ensure: [file @env0:close]
 %
 
 category: 'Grail-Class Compilation'

@@ -87,7 +87,8 @@ __new__: obj
 				or: [(obj @env0:class @env0:== Unicode32)
 				or: [(obj @env0:class @env0:== String)
 				or: [obj @env0:class @env0:== Symbol]]]].
-			r := [obj __str__] @env0:on: AbstractException do: [:ex | obj].
+			r := ([obj __str__] @env0:on: AbstractException do: [:ex | obj])
+				@env0:___strResult___.
 			"A kernel string is returned WITHOUT copying.  ___allocateStringLike___
 			builds a string of the RECEIVER's class, so copying a wide
 			Unicode16/32 (auto-promoted by content, not a user subclass) into the
@@ -100,13 +101,14 @@ __new__: obj
 			^ (r isKindOf: CharacterCollection)
 				ifTrue: [self ___allocateStringLike___: r]
 				ifFalse: [r]].
-		^ [obj __str__] @env0:on: MessageNotUnderstood do: [:ex | obj __repr__]].
+		^ ([obj __str__] @env0:on: MessageNotUnderstood do: [:ex | obj __repr__])
+			@env0:___strResult___].
 
 	obj @env0:ifNil: [source := ''].
 	obj @env0:ifNotNil: [
 		(obj isKindOf: CharacterCollection)
 			ifTrue: [source := obj]
-			ifFalse: [source := obj __str__].
+			ifFalse: [source := obj __str__ @env0:___strResult___].
 	].
 	"Allocate a self-typed string of the right size via Behavior's
 	primitive ``new:`` and copy bytes.  Do NOT route through
@@ -804,13 +806,11 @@ __mod__: args
 				ValueError ___signal___: 'incomplete format'
 			].
 			key := nil.
-			"Optional mapping key '(name)'."
+			"Optional mapping key '(name)' -- see ___printfKeyEnd___:from:."
 			(src @env0:at: i) @env0:= $( ifTrue: [
 				| keyStart keyEnd |
 				keyStart := i @env0:+ 1.
-				keyEnd := keyStart.
-				[keyEnd @env0:<= n @env0:and: [(src @env0:at: keyEnd) @env0:~= $)]]
-					@env0:whileTrue: [keyEnd := keyEnd @env0:+ 1].
+				keyEnd := self ___printfKeyEnd___: src from: keyStart.
 				key := src @env0:copyFrom: keyStart to: keyEnd @env0:- 1.
 				i := keyEnd @env0:+ 1
 			].
@@ -825,27 +825,37 @@ __mod__: args
 			"Width: digits or '*' (consumes an argument; negative -> '-' flag)."
 			width := 0.
 			(i @env0:<= n @env0:and: [(src @env0:at: i) @env0:= $*]) ifTrue: [
-				width := (nextArg @env0:value) @env0:asInteger.
+				width := self ___printfStarArg___: nextArg @env0:value.
 				width @env0:< 0 ifTrue: [ flags @env0:add: $-. width := width @env0:abs ].
 				i := i @env0:+ 1
 			] ifFalse: [
 				[i @env0:<= n @env0:and: [(src @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
 					width := (width @env0:* 10) @env0:+ (src @env0:at: i) @env0:digitValue.
-					i := i @env0:+ 1 ]
+					i := i @env0:+ 1 ].
+				"CPython reads a literal width into a Py_ssize_t and refuses one
+				that overflows it (``'%18446744073709551616f''); Grail's Integer
+				would go on to build a result that wide.  Grail's Py_ssize_t is
+				the SmallInteger range -- it is what sys.maxsize reports."
+				width @env0:> SmallInteger @env0:maximumValue ifTrue: [
+					ValueError ___signal___: 'width too big']
 			].
 			"Precision: '.' then digits or '*' ('.' alone means 0)."
 			precision := nil.
 			(i @env0:<= n @env0:and: [(src @env0:at: i) @env0:= $.]) ifTrue: [
 				i := i @env0:+ 1.
 				(i @env0:<= n @env0:and: [(src @env0:at: i) @env0:= $*]) ifTrue: [
-					precision := (nextArg @env0:value) @env0:asInteger.
+					precision := self ___printfStarArg___: nextArg @env0:value.
 					precision @env0:< 0 ifTrue: [precision := nil].
 					i := i @env0:+ 1
 				] ifFalse: [
 					precision := 0.
 					[i @env0:<= n @env0:and: [(src @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
 						precision := (precision @env0:* 10) @env0:+ (src @env0:at: i) @env0:digitValue.
-						i := i @env0:+ 1 ]
+						i := i @env0:+ 1 ].
+					"A LITERAL precision past a C int is ValueError; the '*' form
+					below is OverflowError -- see the next comment."
+					precision @env0:> 2147483647 ifTrue: [
+						ValueError ___signal___: 'precision too big']
 				].
 				"CPython keeps the precision in a C int and validates it; Grail's is
 				an arbitrary-precision Integer, so ``'%.*d' % (sys.maxsize, 1)''
@@ -923,6 +933,55 @@ __mod__: args
 		TypeError ___signal___:
 			'not all arguments converted during string formatting'].
 	^ stream @env0:contents
+%
+
+category: 'Grail-String Operations'
+method: CharacterCollection
+___printfKeyEnd___: src from: keyStart
+	"The index of the ')' closing a %-format mapping key that starts at
+	``keyStart''.  Parentheses inside the key NEST, as in CPython:
+	``'%((foo))s' % {'(foo)': 'bar'}'' reads the key '(foo)'.  Stopping at
+	the first ')' read the key '(foo' and then choked on the stray ')' as a
+	conversion character.  An unclosed key is ValueError.
+
+	A separate method rather than inline in __mod__: on purpose.  Every level
+	of a recursive repr (``e.tag = e; repr(e)'') holds a __mod__ activation,
+	and growing that frame moved test_xml_etree's test_recursive_repr onto a
+	stack alignment where the VM re-trips while resignalling the
+	RecursionError (see ___recursionGuard___), so the error escaped its
+	``except''.  Keeping the scan out of __mod__ keeps its frame as it was."
+
+	| n keyEnd depth |
+	n := src @env0:size.
+	keyEnd := keyStart.
+	depth := 1.
+	[keyEnd @env0:<= n and: [
+		(src @env0:at: keyEnd) @env0:= $( ifTrue: [depth := depth @env0:+ 1].
+		(src @env0:at: keyEnd) @env0:= $) ifTrue: [depth := depth @env0:- 1].
+		depth @env0:> 0]]
+		whileTrue: [keyEnd := keyEnd @env0:+ 1].
+	depth @env0:> 0 ifTrue: [
+		^ ValueError ___signal___: 'incomplete format key'].
+	^ keyEnd
+%
+
+category: 'Grail-String Operations'
+method: CharacterCollection
+___printfStarArg___: value
+	"The argument a '*' width or precision consumes.  It must be an int --
+	CPython's ``* wants int'' TypeError.  ``asInteger'' accepted a str by
+	PARSING it, and for one that is not a number (``'%*s' % ('foo', 'bar')'')
+	raised an ImproperOperation no ``except'' can catch.  A '*' argument too
+	big for a Py_ssize_t (in Grail, a SmallInteger -- sys.maxsize) is
+	OverflowError, as in CPython.  bool is an int."
+
+	value == true ifTrue: [^ 1].
+	value == false ifTrue: [^ 0].
+	(value @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: '* wants int'].
+	(value @env0:isKindOf: SmallInteger) ifFalse: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C ssize_t'].
+	^ value
 %
 
 category: 'Grail-String Operations'
@@ -1230,47 +1289,24 @@ method: CharacterCollection
 count: sub
 	"Return the number of non-overlapping occurrences of substring sub."
 
-	| count index start |
-	count := 0.
-	start := 1.
-	[ index := self @env0:___pyFindString___: sub startingAt: start.
-	  (index @env0:> 0) ] whileTrue: [
-		count := (count @env0:+ 1).
-		start := (index @env0:+ sub @env0:size).
-	].
-	^ count
+	^ self ___pyCount___: sub start: nil end: nil
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 count: sub _: start
-	"count(sub, start) — occurrences at or after 0-based ``start''."
+	"count(sub, start) -- occurrences at or after 0-based ``start''."
 
-	^ self count: sub _: start _: (self @env0:size)
+	^ self ___pyCount___: sub start: start end: nil
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 count: sub _: start _: stop
-	"count(sub, start, stop) — occurrences within the [start, stop)
+	"count(sub, start, stop) -- occurrences within the [start, stop)
 	slice, Python 0-based half-open indices (negatives wrap)."
 
-	| n s e |
-	n := self @env0:size.
-	s := start.
-	e := stop.
-	(s == nil or: [s == None]) ifTrue: [s := 0].
-	(e == nil or: [e == None]) ifTrue: [e := n].
-	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
-	BEFORE the slice arithmetic below, which is env-0 and on a Python
-	object is an uncatchable MessageNotUnderstood.  None must be
-	resolved first: it is a legal bound here and has no __index__."
-	s := s ___asIndex___. e := e ___asIndex___.
-	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
-	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
-	e := e @env0:min: n.
-	s @env0:>= e ifTrue: [^ 0].
-	^ (self @env0:copyFrom: s @env0:+ 1 to: e) count: sub
+	^ self ___pyCount___: sub start: start end: stop
 %
 
 category: 'Grail-String Methods'
@@ -1282,6 +1318,7 @@ _count: positional kw: kwargs
 	positional @env0:isEmpty ifTrue: [
 		TypeError ___signal___: 'count() takes at least 1 argument'
 	].
+	self ___pyCheckArity___: positional max: 3 name: 'count'.
 	sub := positional @env0:at: 1.
 	positional @env0:size @env0:>= 2
 		ifTrue: [start := positional @env0:at: 2]
@@ -1688,9 +1725,15 @@ category: 'Grail-String Methods'
 method: CharacterCollection
 endswith: suffix _: start _: end
 	"str.endswith(suffix, start, end) -- test whether self[start:end] ends
-	with suffix (CPython None / negative-index clamping)."
+	with suffix (CPython None / negative-index clamping).  A window whose
+	start lies past its end matches nothing, not even an empty suffix --
+	``''.endswith('', 1, 0)'' is False -- which the clamped slice alone
+	cannot see; the slice still runs first so a bad suffix is refused."
 
-	^ (self ___boundedSlice___: start end: end) endswith: suffix
+	| w |
+	((self ___boundedSlice___: start end: end) endswith: suffix) ifFalse: [^ false].
+	w := self ___pyAdjust___: start end: end.
+	^ (w @env0:at: 1) @env0:<= (w @env0:at: 2)
 %
 
 category: 'Grail-String Methods'
@@ -1764,81 +1807,165 @@ method: CharacterCollection
 find: sub
 	"Return the lowest index where substring sub is found, or -1 if not found."
 
-	| index |
-	index := self @env0:___pyFindString___: sub startingAt: 1.
-	(index == 0) ifTrue: [ ^ -1 ].
-	^ (index @env0:- (1))  "Convert to 0-based indexing"
+	^ self ___pyFind___: sub start: nil end: nil reverse: false
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 find: sub _: start
-	"Python ``s.find(sub, start)'' — lowest 0-based index of sub at or
-	after ``start'', else -1.  ``start'' follows CPython slice rules:
-	negative counts from the end, out-of-range clamps."
+	"Python ``s.find(sub, start)'' -- see ___pyFind___:start:end:reverse:."
 
-	^ self find: sub _: start _: self @env0:size
+	^ self ___pyFind___: sub start: start end: nil reverse: false
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 find: sub _: start _: stop
-	"Python ``s.find(sub, start, stop)'' — lowest 0-based index of sub
-	within the ``[start, stop)'' slice, else -1.  ``start'' / ``stop''
-	follow CPython slice rules (negative counts from the end,
-	out-of-range clamps).  The returned index is absolute, not relative
-	to ``start''."
+	"Python ``s.find(sub, start, stop)'' -- lowest 0-based index of sub
+	within the [start, stop) slice, else -1.  The index is absolute, not
+	relative to ``start''; see ___pyAdjust___:end: for the bounds."
 
-	| len rawStart normStart normStop subLen slice index st sp |
-	len := self @env0:size.
-	"Normalize start: negatives count from the end; keep rawStart for
-	the empty-substring decision (a start past the end never matches)."
-	"Coerced through __index__ (PEP 357) before the comparison, which is an
-	env-0 send and on a Python object an uncatchable MessageNotUnderstood.
-
-	None is resolved to the default FIRST, because for a SEARCH method it
-	is a legal bound -- ``'abcabc'.find('c', None, None)'' is 2 in CPython,
-	not a TypeError -- and None has no __index__.  Positional methods
-	(list.pop, list.insert, range) are the opposite case and correctly let
-	___asIndex___ refuse None; the two are not interchangeable, so the
-	ordering here is load-bearing rather than defensive."
-	st := (start == nil or: [start == None])
-		ifTrue: [0] ifFalse: [start ___asIndex___].
-	sp := (stop == nil or: [stop == None]) ifTrue: [len] ifFalse: [stop].
-	rawStart := st @env0:< 0 ifTrue: [st @env0:+ len] ifFalse: [st].
-	normStart := (rawStart @env0:max: 0) @env0:min: len.
-	normStop := self ___clampSliceIndex: sp len: len.
-	subLen := sub @env0:size.
-	"Empty substring matches at the start position when that position
-	is within both the string and the [start, stop) window."
-	subLen @env0:= 0 ifTrue: [
-		^ ((rawStart @env0:<= len) and: [normStart @env0:<= normStop])
-			ifTrue: [normStart]
-			ifFalse: [-1]].
-	"Window too small to contain sub → miss (also guards the slice
-	bounds: normStop > normStart whenever this passes)."
-	(normStop @env0:- normStart) @env0:< subLen ifTrue: [^ -1].
-	slice := self @env0:copyFrom: normStart @env0:+ 1 to: normStop.
-	index := slice @env0:___pyFindString___: sub startingAt: 1.
-	index @env0:= 0 ifTrue: [^ -1].
-	^ normStart @env0:+ (index @env0:- 1)
+	^ self ___pyFind___: sub start: start end: stop reverse: false
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
-___clampSliceIndex: idx len: len
-	"CPython slice-bound normalization for a single index against
-	``len'': negatives count from the end, the result clamps to
-	[0, len]."
+___pyNeedle___: sub for: name
+	"The plain string a find/count/index-family call searches for, or nil
+	for a needle holding a surrogate -- which cannot occur in a
+	surrogate-free receiver, so every such search is a miss.
 
-	| i c |
-	"Coerced through __index__ (PEP 357); an Integer short-circuits inside
-	___asIndex___, so the common path is unchanged."
-	c := idx ___asIndex___.
-	i := c @env0:< 0 ifTrue: [c @env0:+ len] ifFalse: [c].
-	i @env0:< 0 ifTrue: [^ 0].
-	i @env0:> len ifTrue: [^ len].
+	Anything that is not a str is CPython's TypeError.  It used to be handed
+	on to the kernel search primitive, whose ArgumentTypeError is a SMALLTALK
+	error no ``except'' can catch: ``'hello'.find(42)'' ended the session.
+	``name'' prefixes the message as CPython's argument clinic does
+	(``find() argument 1 must be str, not int''); nil for the methods whose
+	message has no prefix (partition)."
+
+	sub @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: (name @env0:== nil
+				ifTrue: ['must be str, not ']
+				ifFalse: [name @env0:, '() argument 1 must be str, not '])
+			@env0:, (bytes ___pyTypeNameOf___: sub)].
+	^ sub @env0:___pyPlainStr___
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyAdjust___: start end: end
+	"CPython's ADJUST_INDICES for the [start, end) window of a search:
+	{ start. end } as 0-based offsets.  None (or nil) is the default bound;
+	anything else is coerced through __index__ (PEP 357) first, because the
+	arithmetic below is env-0 and on a Python object an uncatchable
+	MessageNotUnderstood.  Negatives count from the end and END clamps to
+	the length -- but START does not clamp: ``'abc'.find('', 4)'' is -1 while
+	``'abc'.find('', 3)'' is 3, and ``''.startswith('', 1, 0)'' is False.
+	Callers therefore treat start > end as an empty window that matches
+	nothing, not even the empty string."
+
+	| n s e |
+	n := self @env0:size.
+	s := (start == nil or: [start == None])
+		ifTrue: [0] ifFalse: [start ___asIndex___].
+	e := (end == nil or: [end == None])
+		ifTrue: [n] ifFalse: [end ___asIndex___].
+	e @env0:> n
+		ifTrue: [e := n]
+		ifFalse: [e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0]].
+	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
+	^ Array @env0:with: s with: e
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyFind___: sub start: start end: end reverse: reverse
+	^ self ___pyFind___: sub start: start end: end reverse: reverse
+		name: (reverse ifTrue: ['rfind'] ifFalse: ['find'])
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyFind___: sub start: start end: end reverse: reverse name: name
+	"CPython's any_find_slice: the 0-based index of the first (or, when
+	``reverse'', the last) occurrence of sub lying wholly inside
+	self[start:end], else -1.  An empty needle matches at the window's
+	start, or reversed at its end -- ``'abc'.rfind('')'' is 3."
+
+	| p w s e m r |
+	p := self ___pyNeedle___: sub for: name.
+	w := self ___pyAdjust___: start end: end.
+	s := w @env0:at: 1.
+	e := w @env0:at: 2.
+	p @env0:== nil ifTrue: [^ -1].
+	m := p @env0:size.
+	(e @env0:- s) @env0:< m ifTrue: [^ -1].
+	m @env0:= 0 ifTrue: [^ reverse ifTrue: [e] ifFalse: [s]].
+	reverse ifTrue: [
+		"Backwards from the last start whose match still ends by ``e''."
+		r := self @env0:findLastSubString: p startingAt: e @env0:- m @env0:+ 1.
+		^ r @env0:> s ifTrue: [r @env0:- 1] ifFalse: [-1]].
+	e @env0:= self @env0:size ifTrue: [
+		r := self @env0:___pyFindString___: p startingAt: s @env0:+ 1.
+		^ r @env0:= 0 ifTrue: [-1] ifFalse: [r @env0:- 1]].
+	r := (self @env0:copyFrom: s @env0:+ 1 to: e) @env0:___pyFindString___: p startingAt: 1.
+	^ r @env0:= 0 ifTrue: [-1] ifFalse: [r @env0:+ s @env0:- 1]
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyIndex___: sub start: start end: end reverse: reverse
+	"str.index / str.rindex: ___pyFind___, with CPython's ValueError for a
+	miss."
+
+	| i |
+	i := self ___pyFind___: sub start: start end: end reverse: reverse
+		name: (reverse ifTrue: ['rindex'] ifFalse: ['index']).
+	i @env0:< 0 ifTrue: [^ ValueError ___signal___: 'substring not found'].
 	^ i
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyCount___: sub start: start end: end
+	"CPython's str.count: non-overlapping occurrences of sub wholly inside
+	self[start:end].  An empty needle occurs at every position of the window
+	including its end, so ``'aaa'.count('')'' is 4."
+
+	| p w s e m target pos idx count |
+	p := self ___pyNeedle___: sub for: 'count'.
+	w := self ___pyAdjust___: start end: end.
+	s := w @env0:at: 1.
+	e := w @env0:at: 2.
+	p @env0:== nil ifTrue: [^ 0].
+	m := p @env0:size.
+	(e @env0:- s) @env0:< m ifTrue: [^ 0].
+	m @env0:= 0 ifTrue: [^ e @env0:- s @env0:+ 1].
+	target := (s @env0:= 0 and: [e @env0:= self @env0:size])
+		ifTrue: [self]
+		ifFalse: [self @env0:copyFrom: s @env0:+ 1 to: e].
+	count := 0.
+	pos := 1.
+	[(pos @env0:+ m @env0:- 1) @env0:<= target @env0:size
+		and: [(idx := target @env0:___pyFindString___: p startingAt: pos) @env0:> 0]]
+		whileTrue: [
+			count := count @env0:+ 1.
+			pos := idx @env0:+ m].
+	^ count
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyCheckArity___: positional max: max name: name
+	"CPython's ``name expected at most max arguments, got n'' for a varargs
+	entry handed too many.  The entries used to read only the arguments they
+	knew about and silently drop the rest, so ``s.count(x, None, None,
+	None)'' answered a count where CPython raises (test_find_etc_raise_
+	correct_error_messages, issue 11828)."
+
+	positional @env0:size @env0:> max ifTrue: [
+		^ TypeError ___signal___: name @env0:, ' expected at most '
+			@env0:, max @env0:printString @env0:, ' arguments, got '
+			@env0:, positional @env0:size @env0:printString]
 %
 
 category: 'Grail-String Methods'
@@ -1856,8 +1983,8 @@ _find: positional kw: kwargs
 	nargs @env0:= 3 ifTrue: [
 		^ self find: (positional @env0:at: 1)
 			_: (positional @env0:at: 2) _: (positional @env0:at: 3)].
-	TypeError ___signal___:
-		'find() takes 1 to 3 arguments but ' @env0:, nargs @env0:printString @env0:, ' were given'
+	self ___pyCheckArity___: positional max: 3 name: 'find'.
+	TypeError ___signal___: 'find expected at least 1 argument, got 0'
 %
 
 category: 'Grail-String Methods'
@@ -1873,80 +2000,77 @@ format
 category: 'Grail-String Methods'
 method: CharacterCollection
 _format: positional kw: kwargs
-	"Python ``str.format(*args, **kwargs)'' — replace ``{...}''
-	placeholders in self with values from positional / kwargs.
+	"Python ``str.format(*args, **kwargs)'' (and, with positional nil,
+	format_map).
 
-	Supported placeholder shapes:
-	  * ``{}'' (auto-index positional)
-	  * ``{N}'' (explicit positional index)
-	  * ``{name}'' (keyword)
-	  * Any of the above plus ``:spec'' (format spec) and/or ``!r''
-	    / ``!s'' / ``!a'' conversion flags.
-	  * ``{{'' / ``}}'' → literal ``{'' / ``}''.
+	CPython's do_string_format -- Objects/stringlib/unicode_format.h --
+	ported routine for routine: build_string/do_markup here,
+	MarkupIterator_next's literal scan inline, parse_field
+	(___parseFormatFieldAt___:), field_name_split + get_field_object
+	(___formatFieldObject___:positional:kw:auto:), do_conversion
+	(___formatConvert___:with:) and render_field (builtins format:_:, which
+	checks __format__ answered a str).  The same split src/python/stdlib/
+	_string.py exposes to string.Formatter, so the two agree.
 
-	Field access (``{0.attr}'', ``{0[i]}'') is NOT yet supported."
+	The hand-written parser this replaces had no ``{0.attr}'' / ``{0[i]}''
+	(``'{0.real}'.format(3)'' died in an uncatchable Smalltalk ArgumentError),
+	no ``!a'', accepted ``'{0}{}''' that CPython refuses, and did not expand
+	nested fields in a spec.
 
-	| size out i ch nextAuto pieces |
+	``auto'' is CPython's AutoNumber -- { state. next field number } -- shared
+	by a spec's nested fields; 2 is PEP 3101's recursion depth."
+
+	^ self ___formatPositional___: positional kw: kwargs depth: 2
+		auto: { #init. 0 }
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatPositional___: positional kw: kwargs depth: depth auto: auto
+	"build_string + do_markup: literal text and replacement fields, in order.
+
+	``pieces'' stays nil for the overwhelmingly common case.  It is only
+	created when a formatted field turns out to be a str holding LONE
+	SURROGATES, which no CharacterCollection -- and so no WriteStream on one
+	-- can hold; see the assembly at the end."
+
+	| size out pieces pos |
+	depth @env0:<= 0 ifTrue: [
+		^ ValueError ___signal___: 'Max string recursion exceeded'].
 	size := self @env0:size.
 	out := WriteStream @env0:on: (Unicode7 ___new___).
-	"``pieces'' stays nil for the overwhelmingly common case.  It is only
-	created when a formatted field turns out to be a str holding LONE
-	SURROGATES, which no CharacterCollection -- and so no WriteStream on one --
-	can hold; see the assembly at the end."
 	pieces := nil.
-	i := 1.
-	nextAuto := 0.
-	[i @env0:<= size] @env0:whileTrue: [
-		ch := self @env0:at: i.
-		(ch == ${ and: [
-			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) == ${]])
-			ifTrue: [
-				out @env0:nextPut: ${.
-				i := i @env0:+ 2
-			] ifFalse: [
-		(ch == $} and: [
-			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) == $}]])
-			ifTrue: [
-				out @env0:nextPut: $}.
-				i := i @env0:+ 2
-			] ifFalse: [
-		(ch == ${) ifTrue: [
-			| endIdx field convFlag spec value piece |
-			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
-			endIdx @env0:isNil ifTrue: [
-				ValueError ___signal___: 'unmatched ''{'' in format string'].
-			"field = name/index, optional !conv, optional :spec."
-			field := self @env0:copyFrom: i @env0:+ 1 to: endIdx @env0:- 1.
-			convFlag := nil.
-			spec := ''.
-			"Split field on ':' (first occurrence)."
-			(field @env0:indexOf: $:) @env0:> 0 ifTrue: [
-				| colonIdx |
-				colonIdx := field @env0:indexOf: $:.
-				spec := field @env0:copyFrom: colonIdx @env0:+ 1 to: field @env0:size.
-				field := field @env0:copyFrom: 1 to: colonIdx @env0:- 1.
-			].
-			"Then split field on '!' for conversion flag."
-			(field @env0:indexOf: $!) @env0:> 0 ifTrue: [
-				| bangIdx |
-				bangIdx := field @env0:indexOf: $!.
-				convFlag := field @env0:copyFrom: bangIdx @env0:+ 1 to: field @env0:size.
-				field := field @env0:copyFrom: 1 to: bangIdx @env0:- 1.
-			].
-			"Resolve the field name to a value."
-			value := self
-				___resolveFormatField___: field
-				positional: positional
-				kwargs: kwargs
-				autoIdx: nextAuto.
-			field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
-			"Apply conversion flag (r → repr, s → str, a → ascii)."
-			convFlag @env0:isNil ifFalse: [
-				convFlag @env0:= 'r' @env0:ifTrue: [value := value __repr__].
-				convFlag @env0:= 's' @env0:ifTrue: [value := value __str__].
-			].
-			"Format-spec dispatch.  Delegate to value.__format__(spec)."
-			piece := value __format__: spec.
+	pos := 1.
+	[pos @env0:<= size] @env0:whileTrue: [
+		| start c markup atEnd len |
+		"MarkupIterator_next: literal text up to the end, an escaped brace,
+		or an unescaped '{'.  An escaped brace ends the literal WITH one
+		brace in it; the scan resumes after the pair."
+		start := pos.
+		c := nil.
+		markup := false.
+		[markup @env0:not and: [pos @env0:<= size]] @env0:whileTrue: [
+			c := self @env0:at: pos.
+			pos := pos @env0:+ 1.
+			(c == ${ or: [c == $}]) ifTrue: [markup := true]].
+		atEnd := pos @env0:> size.
+		len := pos @env0:- start.
+		(c == $} and: [atEnd or: [(self @env0:at: pos) ~~ c]]) ifTrue: [
+			^ ValueError ___signal___: 'Single ''}'' encountered in format string'].
+		(atEnd and: [c == ${]) ifTrue: [
+			^ ValueError ___signal___: 'Single ''{'' encountered in format string'].
+		atEnd ifFalse: [
+			(self @env0:at: pos) == c
+				ifTrue: [pos := pos @env0:+ 1. markup := false]
+				ifFalse: [len := len @env0:- 1]].
+		len @env0:> 0 ifTrue: [
+			out @env0:nextPutAll: (self @env0:copyFrom: start to: start @env0:+ len @env0:- 1)].
+		markup ifTrue: [
+			| field piece |
+			field := self ___parseFormatFieldAt___: pos.
+			pos := field @env0:at: 4.
+			piece := self ___renderFormatField___: field positional: positional
+				kw: kwargs depth: depth auto: auto.
 			(piece @env0:isKindOf: PyStrSurrogate)
 				ifTrue: [
 					"Flush what the stream holds and set it aside: the rest of
@@ -1959,18 +2083,224 @@ _format: positional kw: kwargs
 					pieces @env0:add: out @env0:contents.
 					pieces @env0:add: piece.
 					out := WriteStream @env0:on: (Unicode7 ___new___)]
-				ifFalse: [out @env0:nextPutAll: piece @env0:asString].
-			i := endIdx @env0:+ 1
-		] ifFalse: [
-			out @env0:nextPut: ch.
-			i := i @env0:+ 1
-		]]].
-	].
+				ifFalse: [out @env0:nextPutAll: piece @env0:asString]]].
 	pieces @env0:isNil ifTrue: [^ out @env0:contents].
 	"___fromCodePoints___ demotes back to an ordinary string when nothing in
 	the result was actually a surrogate after all."
 	pieces @env0:add: out @env0:contents.
 	^ PyStrSurrogate @env0:___fromCodePoints___: (self ___codePointsOfAll___: pieces)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___parseFormatFieldAt___: startPos
+	"parse_field, from just after a field's '{'.  Answer { field name. format
+	spec. conversion Character or nil. position after the field }.
+
+	The name runs to '}', ':' or '!' -- a '[...]' may hold any of them --
+	then an optional conversion, then a spec whose nested braces are
+	counted.  Each error is CPython's, in CPython's order."
+
+	| size pos c done name specStart count conv |
+	size := self @env0:size.
+	pos := startPos.
+	c := nil.
+	done := false.
+	[done @env0:not and: [pos @env0:<= size]] @env0:whileTrue: [
+		c := self @env0:at: pos.
+		pos := pos @env0:+ 1.
+		c == ${ ifTrue: [
+			^ ValueError ___signal___: 'unexpected ''{'' in field name'].
+		c == $[
+			ifTrue: [
+				[pos @env0:<= size and: [(self @env0:at: pos) ~~ $]]]
+					@env0:whileTrue: [pos := pos @env0:+ 1]]
+			ifFalse: [
+				(c == $} or: [c == $: or: [c == $!]]) ifTrue: [done := true]]].
+	name := self @env0:copyFrom: startPos to: pos @env0:- 2.
+	conv := nil.
+	(c == $! or: [c == $:]) ifTrue: [
+		c == $! ifTrue: [
+			pos @env0:> size ifTrue: [
+				^ ValueError ___signal___:
+					'end of string while looking for conversion specifier'].
+			conv := self @env0:at: pos.
+			pos := pos @env0:+ 1.
+			pos @env0:<= size ifTrue: [
+				c := self @env0:at: pos.
+				pos := pos @env0:+ 1.
+				c == $} ifTrue: [^ { name. ''. conv. pos }].
+				c == $: ifFalse: [
+					^ ValueError ___signal___: 'expected '':'' after conversion specifier']]].
+		specStart := pos.
+		count := 1.
+		[pos @env0:<= size] @env0:whileTrue: [
+			c := self @env0:at: pos.
+			pos := pos @env0:+ 1.
+			c == ${ ifTrue: [count := count @env0:+ 1].
+			c == $} ifTrue: [
+				count := count @env0:- 1.
+				count == 0 ifTrue: [
+					^ { name. self @env0:copyFrom: specStart to: pos @env0:- 2. conv. pos }]]].
+		^ ValueError ___signal___: 'unmatched ''{'' in format spec'].
+	c == $} ifFalse: [
+		^ ValueError ___signal___: 'expected ''}'' before end of string'].
+	^ { name. ''. nil. pos }
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___renderFormatField___: field positional: positional kw: kwargs depth: depth auto: auto
+	"output_markup: the field's object, its conversion, its spec -- expanded
+	ONE level down when it holds fields of its own, sharing the auto
+	numbering -- and render_field: PyObject_Format, which refuses a
+	__format__ that answers a non-str (as builtins format:_: does; inline
+	here because the spec is always a str and this is per field)."
+
+	| obj spec result |
+	obj := self ___formatFieldObject___: (field @env0:at: 1)
+		positional: positional kw: kwargs auto: auto.
+	(field @env0:at: 3) == nil ifFalse: [
+		obj := self ___formatConvert___: obj with: (field @env0:at: 3)].
+	spec := field @env0:at: 2.
+	(spec @env0:includes: ${) ifTrue: [
+		spec := spec ___formatPositional___: positional kw: kwargs
+			depth: depth @env0:- 1 auto: auto].
+	result := obj __format__: spec.
+	((result @env0:isKindOf: CharacterCollection)
+		or: [result @env0:isKindOf: PyStrSurrogate]) ifFalse: [
+		^ TypeError ___signal___: ('__format__ must return a str, not '
+			@env0:, (result ___pyTypeNameForError___) @env0:asString)].
+	^ result
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatFieldObject___: fieldName positional: positional kw: kwargs auto: auto
+	"field_name_split + get_field_object.  The first part, up to '.' or '[',
+	is an index when it is all decimal digits (or empty: the next auto
+	number) and a keyword otherwise; then each ``.name'' is a getattr and
+	each ``[key]'' a __getitem__ (an int key when all decimal digits)."
+
+	| size i first idx empty obj |
+	size := fieldName @env0:size.
+	"``{}'' -- the commonest field by far -- is the next auto number and
+	nothing else: no name to copy or scan."
+	size == 0 ifTrue: [
+		(auto @env0:at: 1) == #manual ifTrue: [
+			^ ValueError ___signal___: 'cannot switch from manual field specification to automatic field numbering'].
+		auto @env0:at: 1 put: #auto.
+		idx := auto @env0:at: 2.
+		auto @env0:at: 2 put: idx @env0:+ 1.
+		positional == nil ifTrue: [
+			^ ValueError ___signal___: 'Format string contains positional fields'].
+		idx @env0:>= positional @env0:size ifTrue: [
+			^ IndexError ___signal___: 'Replacement index ' @env0:,
+				idx @env0:printString @env0:, ' out of range for positional args tuple'].
+		^ positional @env0:at: idx @env0:+ 1].
+	i := 1.
+	[i @env0:<= size and: [(fieldName @env0:at: i) ~~ $. and: [(fieldName @env0:at: i) ~~ $[]]]
+		@env0:whileTrue: [i := i @env0:+ 1].
+	"A plain name -- no ``.'' or ``['' -- is the whole field: no copy."
+	first := i @env0:> size
+		ifTrue: [fieldName]
+		ifFalse: [fieldName @env0:copyFrom: 1 to: i @env0:- 1].
+	idx := self ___formatIndexOf___: first.
+	empty := first @env0:isEmpty.
+	(empty or: [idx ~~ -1]) ifTrue: [
+		"The AutoNumber state machine: the first numeric field decides, and
+		the other kind is refused for the rest of the string."
+		(auto @env0:at: 1) == #init ifTrue: [
+			auto @env0:at: 1 put: (empty ifTrue: [#auto] ifFalse: [#manual])].
+		(auto @env0:at: 1) == #manual
+			ifTrue: [empty ifTrue: [
+				^ ValueError ___signal___: 'cannot switch from manual field specification to automatic field numbering']]
+			ifFalse: [empty ifFalse: [
+				^ ValueError ___signal___: 'cannot switch from automatic field numbering to manual field specification']].
+		empty ifTrue: [
+			idx := auto @env0:at: 2.
+			auto @env0:at: 2 put: idx @env0:+ 1]].
+	idx == -1
+		ifTrue: [
+			kwargs == nil ifTrue: [^ KeyError ___signal___: first @env0:asString].
+			obj := kwargs __getitem__: first @env0:asString]
+		ifFalse: [
+			positional == nil ifTrue: [
+				^ ValueError ___signal___: 'Format string contains positional fields'].
+			idx @env0:>= positional @env0:size ifTrue: [
+				^ IndexError ___signal___: 'Replacement index ' @env0:,
+					idx @env0:printString @env0:, ' out of range for positional args tuple'].
+			obj := positional @env0:at: idx @env0:+ 1].
+	"FieldNameIterator_next, over the rest."
+	[i @env0:<= size] @env0:whileTrue: [
+		| c start name isAttr key |
+		c := fieldName @env0:at: i.
+		i := i @env0:+ 1.
+		c == $.
+			ifTrue: [
+				start := i.
+				[i @env0:<= size and: [(fieldName @env0:at: i) ~~ $. and: [(fieldName @env0:at: i) ~~ $[]]]
+					@env0:whileTrue: [i := i @env0:+ 1].
+				name := fieldName @env0:copyFrom: start to: i @env0:- 1.
+				isAttr := true]
+			ifFalse: [
+				| closed |
+				c == $[ ifFalse: [
+					^ ValueError ___signal___: 'Only ''.'' or ''['' may follow '']'' in format field specifier'].
+				start := i.
+				closed := false.
+				[closed @env0:not and: [i @env0:<= size]] @env0:whileTrue: [
+					(fieldName @env0:at: i) == $] ifTrue: [closed := true].
+					i := i @env0:+ 1].
+				closed ifFalse: [
+					^ ValueError ___signal___: 'Missing '']'' in format string'].
+				name := fieldName @env0:copyFrom: start to: i @env0:- 2.
+				isAttr := false].
+		name @env0:isEmpty ifTrue: [
+			^ ValueError ___signal___: 'Empty attribute in format string'].
+		isAttr
+			ifTrue: [obj := (builtins instance) getattr: obj _: name @env0:asString]
+			ifFalse: [
+				key := self ___formatIndexOf___: name.
+				obj := obj __getitem__: (key == -1 ifTrue: [name @env0:asString] ifFalse: [key])]].
+	^ obj
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatIndexOf___: aString
+	"get_integer: the value when every character is a decimal digit, else
+	-1.  Any Unicode decimal digit counts, as in CPython ('{\u0661}',
+	ARABIC-INDIC DIGIT ONE, is field 1); a value past a C Py_ssize_t is
+	CPython's ValueError."
+
+	| acc |
+	aString @env0:isEmpty ifTrue: [^ -1].
+	acc := 0.
+	aString @env0:do: [:ch |
+		ch @env0:isDigit ifFalse: [^ -1].
+		acc := (acc @env0:* 10) @env0:+ ch @env0:digitValue.
+		acc @env0:> 9223372036854775807 ifTrue: [
+			^ ValueError ___signal___: 'Too many decimal digits in format string']].
+	^ acc
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___formatConvert___: obj with: conv
+	"do_conversion: !r is repr(), !s str(), !a ascii(); any other character
+	is CPython's ValueError, spelled as it spells it."
+
+	| cp |
+	conv == $r ifTrue: [^ obj __repr__ @env0:___reprResult___].
+	conv == $s ifTrue: [^ str __new__: obj].
+	conv == $a ifTrue: [^ (builtins instance) ascii: obj].
+	cp := conv @env0:codePoint.
+	(cp @env0:> 32 and: [cp @env0:< 127]) ifTrue: [
+		^ ValueError ___signal___: 'Unknown conversion specifier '
+			@env0:, (String @env0:with: conv)].
+	^ ValueError ___signal___: 'Unknown conversion specifier \x'
+		@env0:, (cp @env0:printStringRadix: 16) @env0:asLowercase
 %
 
 category: 'Grail-String Methods'
@@ -1994,6 +2324,22 @@ ___isPyStr___
 	"True: every CharacterCollection is a Python str."
 
 	^ true
+%
+
+category: 'Grail-Testing'
+method: CharacterCollection
+___reprResult___
+	"A str is a valid __repr__ result -- see object >> ___reprResult___."
+
+	^ self
+%
+
+category: 'Grail-Testing'
+method: CharacterCollection
+___strResult___
+	"A str is a valid __str__ result -- see object >> ___strResult___."
+
+	^ self
 %
 
 category: 'Grail-Testing'
@@ -2051,11 +2397,122 @@ ___pyFindString___: sub startingAt: start
 	complains about it; answering 0 there would turn a type error into a
 	silently wrong -1."
 
-	| p |
+	| p m positions |
 	sub ___isPyStr___ ifFalse: [^ self findString: sub startingAt: start].
 	p := sub ___pyPlainStr___.
 	p == nil ifTrue: [^ 0].
+	"The kernel primitive is a naive scan: fast per comparison, but its worst
+	case is (alignments x needle length), and CPython's suite builds exactly
+	that case -- ``('a'*N*2 + 'b'*N + 'a'*N*2).find('a'*N + 'b'*N*2 + 'a'*N)''
+	for N up to 10**6 is ~10**12 comparisons, i.e. a hang, where CPython's
+	two-way search is linear (string_tests test_adaptive_find,
+	test_find_many_lengths).  So bound the primitive's WORST case: past ~2**35
+	comparisons (seconds, even at its memcmp speed) switch to the linear-time
+	two-way search below, which costs ~0.5s on a 5M-char haystack interpreted.
+	Gating on the bound rather than measured work keeps every ordinary search
+	on the primitive; the price is that a huge needle in a huge haystack takes
+	the interpreted path even when the primitive would have been quick."
+	m := p size.
+	positions := self size - start - m + 2.
+	(m > 1 and: [positions > 0 and: [positions * m > 34359738368]])
+		ifTrue: [^ self ___twoWayFind___: p startingAt: start].
 	^ self findString: p startingAt: start
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___twoWayFind___: needle startingAt: start
+	"Crochemore-Perrin two-way search for needle (a plain string, size >= 2)
+	at or after the 1-based ``start''.  1-based index, or 0 when absent --
+	the contract of findString:startingAt:, which ___pyFindString___ falls
+	back from when its naive worst case is unbounded.  O(n + m) time, O(1)
+	space; the same algorithm as CPython's fastsearch.h and glibc's memmem.
+
+	Indices below are 0-based offsets (``i'' into needle, ``j'' the
+	alignment) and every at: adds 1.  Characters are immediates, so ``=='' is
+	an exact code-point test; ordering, needed only for the critical
+	factorization, goes through codePoint so the comparison mode cannot
+	reorder it."
+
+	| n m fwd rev suffix period periodic j i memory |
+	n := self size.
+	m := needle size.
+	fwd := self ___twoWayMaxSuffix___: needle reversed: false.
+	rev := self ___twoWayMaxSuffix___: needle reversed: true.
+	(fwd at: 1) > (rev at: 1)
+		ifTrue: [suffix := (fwd at: 1) + 1. period := fwd at: 2]
+		ifFalse: [suffix := (rev at: 1) + 1. period := rev at: 2].
+	"Periodic when the left half recurs one period on."
+	periodic := period + suffix <= m.
+	i := 1.
+	[periodic and: [i <= suffix]] whileTrue: [
+		(needle at: i) == (needle at: period + i) ifFalse: [periodic := false].
+		i := i + 1].
+	j := start - 1.
+	periodic ifTrue: [
+		memory := 0.
+		[j <= (n - m)] whileTrue: [
+			i := suffix max: memory.
+			[i < m and: [(needle at: i + 1) == (self at: i + j + 1)]]
+				whileTrue: [i := i + 1].
+			i >= m
+				ifTrue: [
+					i := suffix - 1.
+					[i >= memory and: [(needle at: i + 1) == (self at: i + j + 1)]]
+						whileTrue: [i := i - 1].
+					i < memory ifTrue: [^ j + 1].
+					j := j + period.
+					memory := m - period]
+				ifFalse: [
+					j := j + i - suffix + 1.
+					memory := 0]].
+		^ 0].
+	period := (suffix max: m - suffix) + 1.
+	[j <= (n - m)] whileTrue: [
+		i := suffix.
+		[i < m and: [(needle at: i + 1) == (self at: i + j + 1)]]
+			whileTrue: [i := i + 1].
+		i >= m
+			ifTrue: [
+				i := suffix - 1.
+				[i >= 0 and: [(needle at: i + 1) == (self at: i + j + 1)]]
+					whileTrue: [i := i - 1].
+				i < 0 ifTrue: [^ j + 1].
+				j := j + period]
+			ifFalse: [j := j + i - suffix + 1]].
+	^ 0
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___twoWayMaxSuffix___: x reversed: reversed
+	"The maximal suffix of x under code-point order (or its reverse), for
+	___twoWayFind___'s critical factorization.  Answers { start - 1. period }
+	with 0-based offsets, as in Crochemore-Perrin."
+
+	| m ms j k p a b |
+	m := x size.
+	ms := -1. j := 0. k := 1. p := 1.
+	[j + k < m] whileTrue: [
+		a := (x at: j + k + 1) codePoint.
+		b := (x at: ms + k + 1) codePoint.
+		(reversed ifTrue: [a > b] ifFalse: [a < b])
+			ifTrue: [
+				j := j + k.
+				k := 1.
+				p := j - ms]
+			ifFalse: [
+				a = b
+					ifTrue: [
+						k = p
+							ifTrue: [j := j + p. k := 1]
+							ifFalse: [k := k + 1]]
+					ifFalse: [
+						ms := j.
+						j := ms + 1.
+						k := 1.
+						p := 1]]].
+	^ Array with: ms with: p
 %
 
 category: 'Grail-String Methods'
@@ -2070,28 +2527,6 @@ ___formatPad___: count with: fillChar
 	s := String new: count.
 	s atAllPut: fillChar.
 	^ s
-%
-
-category: 'Grail-String Methods'
-method: CharacterCollection
-___findFormatBraceEnd___: startIdx
-	"Return the index of the matching ``}'' starting from startIdx,
-	or nil if none.  Respects nested braces inside format specs (one
-	level only — Python's spec mini-language allows nested
-	``{...}'' in the precision slot)."
-
-	| size i depth ch |
-	size := self size.
-	i := startIdx.
-	depth := 0.
-	[i <= size] whileTrue: [
-		ch := self at: i.
-		ch == ${ ifTrue: [depth := depth + 1].
-		ch == $} ifTrue: [
-			depth == 0 ifTrue: [^ i].
-			depth := depth - 1].
-		i := i + 1].
-	^ nil
 %
 
 set compile_env: 1
@@ -2146,43 +2581,13 @@ ___applyAlignWidthFormat___: spec
 
 category: 'Grail-String Methods'
 method: CharacterCollection
-___resolveFormatField___: field positional: positional kwargs: kwargs autoIdx: autoIdx
-	"Look up a format field name in positional / kwargs.  Empty
-	field → auto-index positional; numeric field → explicit
-	positional index; otherwise keyword."
-
-	| idx |
-	field @env0:isEmpty ifTrue: [
-		(autoIdx @env0:>= positional @env0:size) ifTrue: [
-			IndexError ___signal___: 'Replacement index ' @env0:,
-				autoIdx printString @env0:, ' out of range for positional args tuple'].
-		^ positional @env0:at: autoIdx @env0:+ 1].
-	"Numeric field — explicit positional index."
-	(field @env0:first @env0:isDigit) ifTrue: [
-		idx := field @env0:asNumber.
-		(idx @env0:>= positional @env0:size) ifTrue: [
-			IndexError ___signal___: 'Replacement index ' @env0:,
-				idx printString @env0:, ' out of range for positional args tuple'].
-		^ positional @env0:at: idx @env0:+ 1].
-	"Keyword field: look up through the mapping's own __getitem__ so
-	format_map works with ANY mapping (a regex Match resolves group
-	names and raises ITS OWN IndexError for unknown groups, which
-	CPython's test_re asserts on); a plain dict raises its native
-	KeyError, matching the old at:ifAbsent: behavior."
-	kwargs @env0:isNil ifTrue: [
-		KeyError ___signal___: '''' @env0:, field @env0:asString @env0:, ''''].
-	^ kwargs __getitem__: field @env0:asString
-%
-
-category: 'Grail-String Methods'
-method: CharacterCollection
 format_map: mapping
 	"str.format_map(mapping) -- like format(**mapping) but keyword
 	fields resolve through the mapping's __getitem__ directly (no dict
 	copy), so mappings with custom item access (regex Match objects,
 	defaultdict-alikes) work."
 
-	^ self _format: #() kw: mapping
+	^ self _format: nil kw: mapping
 %
 
 category: 'Grail-String Methods'
@@ -2190,12 +2595,7 @@ method: CharacterCollection
 index: sub
 	"Return the lowest index where substring sub is found. Raises ValueError if not found."
 
-	| idx |
-	idx := self find: sub.
-	(idx == -1) ifTrue: [
-		ValueError @env0:signal: 'substring not found'
-	].
-	^ idx
+	^ self ___pyIndex___: sub start: nil end: nil reverse: false
 %
 
 category: 'Grail-String Methods'
@@ -2204,12 +2604,9 @@ index: sub _: start
 	"str.index(sub, start): lowest index of substring sub at or after start;
 	ValueError if absent.  Defined so str does NOT inherit the sequence
 	(element-wise) index:_: from SequenceableCollection -- str.index takes a
-	SUBSTRING, delegating to find:_: (CPython str.index(sub[, start[, end]]))."
+	SUBSTRING (CPython str.index(sub[, start[, end]]))."
 
-	| idx |
-	idx := self find: sub _: start.
-	(idx == -1) ifTrue: [ValueError ___signal___: 'substring not found'].
-	^ idx
+	^ self ___pyIndex___: sub start: start end: nil reverse: false
 %
 
 category: 'Grail-String Methods'
@@ -2217,12 +2614,9 @@ method: CharacterCollection
 index: sub _: start _: stop
 	"str.index(sub, start, stop): lowest index of substring sub within the
 	half-open range [start, stop); ValueError if absent.  Shields str from
-	the sequence index:_:_: and delegates to find:_:_:."
+	the sequence index:_:_:."
 
-	| idx |
-	idx := self find: sub _: start _: stop.
-	(idx == -1) ifTrue: [ValueError ___signal___: 'substring not found'].
-	^ idx
+	^ self ___pyIndex___: sub start: start end: stop reverse: false
 %
 
 category: 'Grail-String Test Methods'
@@ -2492,28 +2886,28 @@ ___isPySpaceCodePoint___: cp
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 istitle
-	"Return True if string is titlecased."
+	"Return True if the string is titlecased and has at least one cased
+	character: an uppercase character may only follow an uncased one and a
+	lowercase character only a cased one.  ``''.istitle()'' and
+	``'\n'.istitle()'' are False -- there is nothing cased to be titled."
 
-	| inWord expectUpper |
-	inWord := false.
-	expectUpper := true.
+	| cased previousCased |
+	cased := false.
+	previousCased := false.
 	self @env0:do: [:char |
-		| isLetter isUpper isLower |
-		isLetter := char @env0:isLetter.
-		isLetter ifTrue: [
-			isUpper := char @env0:isUppercase.
-			isLower := char @env0:isLowercase.
-			inWord ifTrue: [
-				isUpper ifTrue: [ ^ false ].
-			] ifFalse: [
-				isLower ifTrue: [ ^ false ].
-				inWord := true.
-			].
-		] ifFalse: [
-			inWord := false.
-		].
-	].
-	^ true
+		char @env0:isUppercase
+			ifTrue: [
+				previousCased ifTrue: [^ false].
+				previousCased := true.
+				cased := true]
+			ifFalse: [
+				char @env0:isLowercase
+					ifTrue: [
+						previousCased ifFalse: [^ false].
+						previousCased := true.
+						cased := true]
+					ifFalse: [previousCased := false]]].
+	^ cased
 %
 
 category: 'Grail-String Test Methods'
@@ -2544,18 +2938,26 @@ join: iterable
 	works for PythonGenerator and other lazy sequences that don't
 	implement Smalltalk's ``do:``."
 
-	| stream first iter done item pieces plain |
+	| stream first iter done item pieces plain index |
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	first := true.
 	iter := iterable __iter__.
 	done := false.
+	index := 0.
 	[done] @env0:whileFalse: [
 		[
 			item := iter __next__.
 			first ifFalse: [stream @env0:nextPutAll: self].
-			plain := item @env0:___isPyStr___
-				ifTrue: [item @env0:___pyPlainStr___]
-				ifFalse: [item].
+			"A non-str item is CPython's TypeError; handed to the stream it
+			was an uncatchable MessageNotUnderstood (``a SmallInteger does not
+			understand #do:'')."
+			item @env0:___isPyStr___ ifFalse: [
+				^ TypeError ___signal___: 'sequence item '
+					@env0:, index @env0:printString
+					@env0:, ': expected str instance, '
+					@env0:, (bytes ___pyTypeNameOf___: item) @env0:, ' found'].
+			index := index @env0:+ 1.
+			plain := item @env0:___pyPlainStr___.
 			plain @env0:== nil
 				ifTrue: [
 					"This piece holds a code point no Character can carry, so the
@@ -2669,8 +3071,13 @@ method: CharacterCollection
 partition: sep
 	"Split the string at the first occurrence of sep, return (before, sep, after)."
 
-	| index before after |
-	index := self @env0:___pyFindString___: sep startingAt: 1.
+	| p index before after |
+	p := self ___pyNeedle___: sep for: nil.
+	(p @env0:~~ nil and: [p @env0:isEmpty])
+		ifTrue: [^ ValueError ___signal___: 'empty separator'].
+	index := p @env0:== nil
+		ifTrue: [0]
+		ifFalse: [self @env0:___pyFindString___: p startingAt: 1].
 	(index == 0) ifTrue: [
 		^ tuple @env0:with: self with: '' with: ''
 	].
@@ -2680,7 +3087,7 @@ partition: sep
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ partition: sep].
 
 	before := self @env0:copyFrom: 1 to: (index @env0:- 1).
-	after := self @env0:copyFrom: (index @env0:+ sep @env0:size) to: self @env0:size.
+	after := self @env0:copyFrom: (index @env0:+ p @env0:size) to: self @env0:size.
 	^ tuple @env0:with: before with: sep with: after
 %
 
@@ -2692,12 +3099,13 @@ removeprefix: prefix
 	| starts p |
 	"A prefix holding a surrogate cannot begin a surrogate-free string, so the
 	string comes back unchanged -- and beginsWith: raises an UNCATCHABLE
-	ArgumentTypeError if handed one.  A non-str argument is passed through so
-	the kernel still complains about it."
+	ArgumentTypeError if handed one.  So, for the same reason, is a non-str
+	argument, which is therefore refused here with CPython's TypeError."
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ removeprefix: prefix].
-	p := prefix @env0:___isPyStr___
-		ifTrue: [prefix @env0:___pyPlainStr___]
-		ifFalse: [prefix].
+	prefix @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: 'removeprefix() argument must be str, not '
+			@env0:, (bytes ___pyTypeNameOf___: prefix)].
+	p := prefix @env0:___pyPlainStr___.
 	p @env0:== nil ifTrue: [^ self].
 	starts := self @env0:beginsWith: p.
 	starts ifTrue: [
@@ -2714,9 +3122,10 @@ removesuffix: suffix
 	| ends p |
 	"See removeprefix:."
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ removesuffix: suffix].
-	p := suffix @env0:___isPyStr___
-		ifTrue: [suffix @env0:___pyPlainStr___]
-		ifFalse: [suffix].
+	suffix @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: 'removesuffix() argument must be str, not '
+			@env0:, (bytes ___pyTypeNameOf___: suffix)].
+	p := suffix @env0:___pyPlainStr___.
 	p @env0:== nil ifTrue: [^ self].
 	ends := self @env0:endsWith: p.
 	ends ifTrue: [
@@ -2730,15 +3139,7 @@ method: CharacterCollection
 replace: old _: new
 	"Return a copy with all occurrences of substring old replaced by new."
 
-	"``old'' holding a surrogate never occurs here, so the string is unchanged
-	-- and copyReplaceAll:with: cannot be handed one.  A surrogate-bearing
-	``new'' has to be spliced in by code point instead."
-	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ replace: old _: new].
-	(old @env0:___isPyStr___ @env0:and: [(old @env0:___pyPlainStr___) @env0:== nil])
-		ifTrue: [^ self].
-	(new @env0:___isPyStr___ @env0:and: [(new @env0:___pyPlainStr___) @env0:== nil])
-		ifTrue: [^ self ___pyReplaceAll___: old _: new _: nil].
-	^ self @env0:copyReplaceAll: old with: new
+	^ self ___pyReplace___: old _: new _: nil
 %
 
 category: 'Grail-String Methods'
@@ -2775,53 +3176,76 @@ ___pyReplaceAll___: old _: new _: count
 category: 'Grail-String Methods'
 method: CharacterCollection
 replace: old _: new _: count
-	"replace(old, new, count) — replace at most ``count'' leftmost
+	"replace(old, new, count) -- replace at most ``count'' leftmost
 	occurrences (negative count means all).  django's WSGIRequest
-	path handling uses ``path_info.replace('/', '', 1)''."
+	path handling uses ``path_info.replace('/', '', 1)''.  A nil/None count
+	is also ``all'': _replace:kw: passes nil when no count was given."
 
 	| n |
-	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ replace: old _: new _: count].
-	n := count.
-	(n == nil or: [n == None or: [n @env0:< 0]]) ifTrue: [
-		^ self replace: old _: new].
-	"Same two surrogate cases as the 2-arg form -- see replace:_:."
-	(old @env0:___isPyStr___ @env0:and: [(old @env0:___pyPlainStr___) @env0:== nil])
-		ifTrue: [^ self].
-	(new @env0:___isPyStr___ @env0:and: [(new @env0:___pyPlainStr___) @env0:== nil])
-		ifTrue: [^ self ___pyReplaceAll___: old _: new _: n].
-	^ self ___replaceFirst___: old _: new _: n
+	n := (count == nil or: [count == None])
+		ifTrue: [nil]
+		ifFalse: [count ___asIndex___].
+	(n @env0:~~ nil and: [n @env0:< 0]) ifTrue: [n := nil].
+	^ self ___pyReplace___: old _: new _: n
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
-___replaceFirst___: old _: new _: count
-	"Replace the first ``count'' non-overlapping occurrences of old.
+___pyReplace___: old _: new _: count
+	"str.replace(old, new[, count]); a nil ``count'' means every occurrence.
 
-	TUNDER-NAMED because it is Grail's own helper, not a Python attribute.
-	Spelt ``_replaceFirst:_:_:'' it matched the fixed-arity ENCODING for a
-	Python method, so dir('') listed a ``_replaceFirst'' that CPython has no
-	such thing as -- the ``___''-prefix filter never saw it."
+	Both arguments must be str: anything else used to reach copyReplaceAll:
+	(silently unchanged for a non-str ``old'') or the kernel's Unicode
+	primitives (an uncatchable ArgumentTypeError for a non-str ``new'').
 
-	| stream oldSize src pos n done |
-	oldSize := old @env0:size.
-	oldSize @env0:= 0 ifTrue: [^ self].
-	src := self.
+	An empty ``old'' is CPython's insert-between-every-character form,
+	``'abc'.replace('', '-', 2)'' == ``'-a-bc''' -- the kernel's
+	copyReplaceAll: answers the receiver unchanged for it.
+
+	``old'' holding a surrogate never occurs here, so the string is
+	unchanged; a surrogate-bearing ``new'' has to be spliced in by code
+	point (___pyReplaceAll___)."
+
+	| po pn m stream pos idx done |
+	old @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: 'replace() argument 1 must be str, not '
+			@env0:, (bytes ___pyTypeNameOf___: old)].
+	new @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: 'replace() argument 2 must be str, not '
+			@env0:, (bytes ___pyTypeNameOf___: new)].
+	self @env0:___isExactPyStr___ ifFalse: [
+		^ self ___asExactStr___ ___pyReplace___: old _: new _: count].
+	po := old @env0:___pyPlainStr___.
+	pn := new @env0:___pyPlainStr___.
+	po @env0:== nil ifTrue: [^ self].
+	(count @env0:~~ nil and: [count @env0:= 0]) ifTrue: [^ self].
+	m := po @env0:size.
+	(pn @env0:== nil and: [m @env0:> 0])
+		ifTrue: [^ self ___pyReplaceAll___: old _: new _: count].
+	m @env0:= 0 ifTrue: [
+		pn @env0:== nil ifTrue: [^ self @env0:copyReplaceAll: old with: new].
+		stream := WriteStream @env0:on: (Unicode7 @env0:new).
+		stream @env0:nextPutAll: pn.
+		done := 1.
+		1 @env0:to: self @env0:size do: [:i |
+			stream @env0:nextPut: (self @env0:at: i).
+			(count @env0:== nil or: [done @env0:< count]) ifTrue: [
+				stream @env0:nextPutAll: pn.
+				done := done @env0:+ 1]].
+		^ stream @env0:contents].
+	count @env0:== nil ifTrue: [^ self @env0:copyReplaceAll: po with: pn].
 	stream := WriteStream @env0:on: (Unicode7 @env0:new).
 	pos := 1.
-	n := src @env0:size.
 	done := 0.
-	[pos @env0:<= n] @env0:whileTrue: [
-		(done @env0:< count
-			and: [(pos @env0:+ oldSize @env0:- 1 @env0:<= n)
-			and: [(src @env0:copyFrom: pos to: pos @env0:+ oldSize @env0:- 1) @env0:= old]]) ifTrue: [
-			stream @env0:nextPutAll: new.
-			pos := pos @env0:+ oldSize.
-			done := done @env0:+ 1
-		] ifFalse: [
-			stream @env0:nextPut: (src @env0:at: pos).
-			pos := pos @env0:+ 1
-		]
-	].
+	[done @env0:< count
+		and: [(idx := self @env0:___pyFindString___: po startingAt: pos) @env0:> 0]]
+		whileTrue: [
+			stream @env0:nextPutAll: (self @env0:copyFrom: pos to: idx @env0:- 1).
+			stream @env0:nextPutAll: pn.
+			pos := idx @env0:+ m.
+			done := done @env0:+ 1].
+	done @env0:= 0 ifTrue: [^ self].
+	stream @env0:nextPutAll: (self @env0:copyFrom: pos to: self @env0:size).
 	^ stream @env0:contents
 %
 
@@ -2875,48 +3299,22 @@ method: CharacterCollection
 rfind: sub
 	"Return the highest index where substring sub is found, or -1 if not found."
 
-	| index lastIndex start |
-	lastIndex := 0.
-	start := 1.
-	[ index := self @env0:___pyFindString___: sub startingAt: start.
-	  (index @env0:> 0) ] whileTrue: [
-		lastIndex := index.
-		start := (index @env0:+ 1).
-	].
-	(lastIndex == 0) ifTrue: [ ^ -1 ].
-	^ (lastIndex @env0:- (1))  "Convert to 0-based indexing"
+	^ self ___pyFind___: sub start: nil end: nil reverse: true
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 rfind: sub _: start
-	^ self rfind: sub _: start _: (self @env0:size)
+	^ self ___pyFind___: sub start: start end: nil reverse: true
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 rfind: sub _: start _: stop
-	"rfind(sub, start, stop) — highest 0-based index of ``sub'' within
+	"rfind(sub, start, stop) -- highest 0-based index of ``sub'' within
 	the [start, stop) slice, or -1.  Negative indices wrap."
 
-	| n s e found |
-	n := self @env0:size.
-	s := start.
-	e := stop.
-	(s == nil or: [s == None]) ifTrue: [s := 0].
-	(e == nil or: [e == None]) ifTrue: [e := n].
-	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
-	BEFORE the slice arithmetic below, which is env-0 and on a Python
-	object is an uncatchable MessageNotUnderstood.  None must be
-	resolved first: it is a legal bound here and has no __index__."
-	s := s ___asIndex___. e := e ___asIndex___.
-	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
-	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
-	e := e @env0:min: n.
-	s @env0:>= e ifTrue: [^ -1].
-	found := (self @env0:copyFrom: s @env0:+ 1 to: e) rfind: sub.
-	found @env0:< 0 ifTrue: [^ -1].
-	^ found @env0:+ s
+	^ self ___pyFind___: sub start: start end: stop reverse: true
 %
 
 category: 'Grail-String Methods'
@@ -2928,6 +3326,7 @@ _rfind: positional kw: kwargs
 	positional @env0:isEmpty ifTrue: [
 		TypeError ___signal___: 'rfind() takes at least 1 argument'
 	].
+	self ___pyCheckArity___: positional max: 3 name: 'rfind'.
 	sub := positional @env0:at: 1.
 	positional @env0:size @env0:= 1 ifTrue: [^ self rfind: sub].
 	positional @env0:size @env0:= 2 ifTrue: [
@@ -2940,12 +3339,7 @@ method: CharacterCollection
 rindex: sub
 	"Return the highest index where substring sub is found. Raises ValueError if not found."
 
-	| idx |
-	idx := self rfind: sub.
-	(idx == -1) ifTrue: [
-		ValueError @env0:signal: 'substring not found'
-	].
-	^ idx
+	^ self ___pyIndex___: sub start: nil end: nil reverse: true
 %
 
 category: 'Grail-String Methods'
@@ -2953,7 +3347,7 @@ method: CharacterCollection
 rindex: sub _: start
 	"rindex(sub, start) -- like rfind, ValueError if absent."
 
-	^ self rindex: sub _: start _: (self @env0:size)
+	^ self ___pyIndex___: sub start: start end: nil reverse: true
 %
 
 category: 'Grail-String Methods'
@@ -2963,12 +3357,7 @@ rindex: sub _: start _: stop
 	the [start, stop) slice; ValueError if absent.  html.parser relies on
 	the sliced form, so a 1-arg-only rindex breaks it on real input."
 
-	| idx |
-	idx := self rfind: sub _: start _: stop.
-	(idx == -1) ifTrue: [
-		ValueError @env0:signal: 'substring not found'
-	].
-	^ idx
+	^ self ___pyIndex___: sub start: start end: stop reverse: true
 %
 
 category: 'Grail-String Methods'
@@ -2980,6 +3369,7 @@ _rindex: positional kw: kwargs
 	positional @env0:isEmpty ifTrue: [
 		TypeError ___signal___: 'rindex() takes at least 1 argument'
 	].
+	self ___pyCheckArity___: positional max: 3 name: 'rindex'.
 	sub := positional @env0:at: 1.
 	positional @env0:size @env0:= 1 ifTrue: [^ self rindex: sub].
 	positional @env0:size @env0:= 2 ifTrue: [
@@ -3009,14 +3399,15 @@ method: CharacterCollection
 rpartition: sep
 	"Split the string at the last occurrence of sep, return (before, sep, after)."
 
-	| index before after start lastIndex |
-	lastIndex := 0.
-	start := 1.
-	[ index := self @env0:___pyFindString___: sep startingAt: start.
-	  (index @env0:> 0) ] whileTrue: [
-		lastIndex := index.
-		start := (index @env0:+ 1).
-	].
+	| p m n lastIndex before after |
+	p := self ___pyNeedle___: sep for: nil.
+	(p @env0:~~ nil and: [p @env0:isEmpty])
+		ifTrue: [^ ValueError ___signal___: 'empty separator'].
+	n := self @env0:size.
+	m := p @env0:== nil ifTrue: [n @env0:+ 1] ifFalse: [p @env0:size].
+	lastIndex := m @env0:> n
+		ifTrue: [0]
+		ifFalse: [self @env0:findLastSubString: p startingAt: n @env0:- m @env0:+ 1].
 
 	(lastIndex == 0) ifTrue: [
 		^ tuple @env0:with: '' with: '' with: self
@@ -3027,7 +3418,7 @@ rpartition: sep
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ rpartition: sep].
 
 	before := self @env0:copyFrom: 1 to: (lastIndex @env0:- 1).
-	after := self @env0:copyFrom: (lastIndex @env0:+ sep @env0:size) to: self @env0:size.
+	after := self @env0:copyFrom: (lastIndex @env0:+ m) to: n.
 	^ tuple @env0:with: before with: sep with: after
 %
 
@@ -3036,69 +3427,38 @@ method: CharacterCollection
 rsplit
 	"Return a list of words in the string, using whitespace as the delimiter (from right)."
 
-	"For now, same as split since we don't have maxsplit parameter"
-	^ self split
+	^ self ___pyRSplit___: nil max: -1
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 rsplit: sep
-	"rsplit(sep) with no maxsplit — identical to split(sep)."
+	"rsplit(sep) with no maxsplit."
 
-	^ self split: sep
+	^ self ___pyRSplit___: sep max: -1
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 rsplit: sep _: maxsplit
-	^ self _rsplit: { sep. maxsplit } kw: nil
+	^ self ___pyRSplit___: sep max: maxsplit
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 _rsplit: positional kw: kwargs
-	"Python ``str.rsplit(sep=None, maxsplit=-1)`` varargs entry.
-	Splits are counted from the RIGHT: the leading pieces coalesce
-	back into the head entry so the result has at most
-	``maxsplit + 1`` elements (email._policybase's
-	``doc.rsplit('\n', 1)`` docstring surgery)."
+	"Python ``str.rsplit(sep=None, maxsplit=-1)`` varargs entry
+	(email._policybase's ``doc.rsplit('\n', 1)`` docstring surgery)."
 
-	| sep maxsplit base keep head |
-	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ _rsplit: positional kw: kwargs].
-	sep := nil.
-	maxsplit := -1.
-	positional @env0:isEmpty ifFalse: [
-		sep := positional @env0:at: 1.
-		positional @env0:size @env0:>= 2 ifTrue: [
-			maxsplit := positional @env0:at: 2
-		].
-	].
-	kwargs @env0:isNil ifFalse: [
-		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
-		maxsplit := kwargs @env0:at: 'maxsplit' ifAbsent: [maxsplit].
-	].
-	(sep == nil or: [sep == None])
-		ifTrue: [base := self split]
-		ifFalse: [base := self split: sep].
-	(maxsplit @env0:< 0 or: [base @env0:size @env0:<= (maxsplit @env0:+ 1)])
-		ifTrue: [^ base].
-	keep := base @env0:copyFrom: (base @env0:size @env0:- maxsplit @env0:+ 1) to: base @env0:size.
-	head := (base @env0:copyFrom: 1 to: base @env0:size @env0:- maxsplit).
-	(sep == nil or: [sep == None])
-		ifTrue: [
-			head := (head @env0:inject: '' into: [:acc :each |
-				acc @env0:isEmpty ifTrue: [each] ifFalse: [acc @env0:, ' ' @env0:, each]])
-		] ifFalse: [
-			head := (head @env0:inject: '' into: [:acc :each |
-				acc @env0:isEmpty ifTrue: [each] ifFalse: [acc @env0:, sep @env0:, each]])
-		].
-	^ (OrderedCollection @env0:with: head) @env0:, keep
+	| args |
+	args := self ___pySplitArgs___: positional kw: kwargs name: 'rsplit'.
+	^ self ___pyRSplit___: (args @env0:at: 1) max: (args @env0:at: 2)
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 split: sep _: maxsplit
-	^ self _split: { sep. maxsplit } kw: nil
+	^ self ___pySplit___: sep max: maxsplit
 %
 
 category: 'Grail-String Methods'
@@ -3127,18 +3487,14 @@ category: 'Grail-String Methods'
 method: CharacterCollection
 split
 	"Return a list of words in the string, using whitespace as the
-	delimiter.  ``subStrings'' yields plain GemStone String substrings;
-	rebuild each as the receiver's str class (Unicode7) so they satisfy
-	``isinstance(x, str)'' downstream (see split: sep).
+	delimiter -- see ___pySplit___:max:.
 
 	Answer an OrderedCollection -- the canonical Python ``list''
-	surrogate -- not the Array subStrings produces: a returned Array
-	broke ``text.split() == wrap(...)'' comparisons (class-strict
-	sequence __eq__) and would reject list mutations like append."
+	surrogate -- not an Array: a returned Array broke
+	``text.split() == wrap(...)'' comparisons (class-strict sequence
+	__eq__) and would reject list mutations like append."
 
-	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ split].
-	^ OrderedCollection @env0:withAll:
-		((self @env0:subStrings) @env0:collect: [:p | (self @env0:copyEmpty) @env0:, p])
+	^ self ___pySplit___: nil max: -1
 %
 
 category: 'Grail-String Methods'
@@ -3146,41 +3502,9 @@ method: CharacterCollection
 split: sep
 	"split(sep) - return a list of substrings using sep as the
 	delimiter.  Multi-character separators are honoured.  An empty
-	sep raises ValueError per CPython."
+	sep raises ValueError per CPython; None splits on whitespace."
 
-	| sepStr sepSize text n result start i |
-	"A separator holding a surrogate cannot occur in a surrogate-free string,
-	so there is nothing to split on and CPython's answer is [self].  Asked
-	before ``asString'', which REFUSES for such a separator."
-	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ split: sep].
-	(sep @env0:___isPyStr___ @env0:and: [(sep @env0:___pyPlainStr___) @env0:== nil])
-		ifTrue: [^ OrderedCollection @env0:with: self].
-	sepStr := sep @env0:asString.
-	sepSize := sepStr @env0:size.
-	sepSize @env0:= 0 ifTrue: [
-		ValueError ___signal___: 'empty separator'
-	].
-	"Keep ``self'' (don't ``asString'' it) so the ``copyFrom:to:''
-	substrings preserve the receiver's str class (Unicode7) rather than
-	degrading to a plain GemStone String.  A plain String fails
-	``isinstance(x, str)'' downstream (str == Unicode7), which broke
-	e.g. urllib.parse.unquote_to_bytes on split results."
-	text := self.
-	n := text @env0:size.
-	result := OrderedCollection @env0:new.
-	start := 1.
-	i := 1.
-	[i @env0:+ sepSize @env0:- 1 @env0:<= n] @env0:whileTrue: [
-		(text @env0:copyFrom: i to: i @env0:+ sepSize @env0:- 1) @env0:= sepStr ifTrue: [
-			result @env0:add: (text @env0:copyFrom: start to: i @env0:- 1).
-			i := i @env0:+ sepSize.
-			start := i
-		] ifFalse: [
-			i := i @env0:+ 1
-		]
-	].
-	result @env0:add: (text @env0:copyFrom: start to: n).
-	^ result
+	^ self ___pySplit___: sep max: -1
 %
 
 category: 'Grail-String Methods'
@@ -3190,12 +3514,179 @@ _split: positional kw: kwargs
 	Grail jinja2's lexer hits the 2-arg form via the call-site
 	``source.split('\\n')`` getting routed through the varargs
 	dispatch (the static caller doesn't see the receiver is a str
-	at compile time).  Falls back to the existing fixed-arity
-	``split`` / ``split:`` methods; ``maxsplit`` is honored when
-	positive."
+	at compile time)."
 
-	| sep maxsplit base trimmed |
-	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ _split: positional kw: kwargs].
+	| args |
+	args := self ___pySplitArgs___: positional kw: kwargs name: 'split'.
+	^ self ___pySplit___: (args @env0:at: 1) max: (args @env0:at: 2)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pySplitSeparator___: sep
+	"The plain separator for split/rsplit: nil when it holds a surrogate (it
+	cannot occur here, so the whole string is the one piece), CPython's
+	TypeError for a non-str and ValueError for an empty one."
+
+	| p |
+	sep @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: 'must be str or None, not '
+			@env0:, (bytes ___pyTypeNameOf___: sep)].
+	p := sep @env0:___pyPlainStr___.
+	(p @env0:~~ nil and: [p @env0:isEmpty])
+		ifTrue: [^ ValueError ___signal___: 'empty separator'].
+	^ p
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pySplitLimit___: maxsplit
+	"How many splits split/rsplit may make: maxsplit coerced through
+	__index__, with a negative (or absent) one meaning ``no limit'' -- one
+	more than the receiver could ever need."
+
+	| k |
+	(maxsplit == nil or: [maxsplit == None])
+		ifTrue: [^ self @env0:size @env0:+ 1].
+	k := maxsplit ___asIndex___.
+	k @env0:< 0 ifTrue: [^ self @env0:size @env0:+ 1].
+	^ k
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___isPySpaceAt___: i
+	"str.isspace() for the character at 1-based ``i'', answering the
+	printable-ASCII majority without the full table lookup."
+
+	| cp |
+	cp := (self @env0:at: i) @env0:codePoint.
+	(cp @env0:> 32 and: [cp @env0:< 127]) ifTrue: [^ false].
+	^ self ___isPySpaceCodePoint___: cp
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pySplit___: sep max: maxsplit
+	"str.split(sep, maxsplit), after CPython's split / split_whitespace.
+
+	With no separator, runs of str.isspace() characters separate the words,
+	leading and trailing whitespace produce no empty words, and once
+	maxsplit is used up the REMAINDER is kept verbatim (its own internal and
+	trailing whitespace included) -- ``'  a  b c '.split(None, 1)'' is
+	``['a', 'b c ']''.  The earlier implementation split fully and rejoined
+	the tail with single spaces, and read a positional None separator as
+	the string 'None'.
+
+	Pieces are copyFrom:to: of the receiver so they keep its str class."
+
+	| n max result i j p m idx |
+	self @env0:___isExactPyStr___ ifFalse: [
+		^ self ___asExactStr___ ___pySplit___: sep max: maxsplit].
+	n := self @env0:size.
+	result := OrderedCollection @env0:new.
+	(sep == nil or: [sep == None]) ifTrue: [
+		max := self ___pySplitLimit___: maxsplit.
+		i := 1.
+		[max @env0:> 0] whileTrue: [
+			[i @env0:<= n and: [self ___isPySpaceAt___: i]] whileTrue: [i := i @env0:+ 1].
+			i @env0:> n ifTrue: [^ result].
+			j := i.
+			[i @env0:<= n and: [(self ___isPySpaceAt___: i) @env0:not]]
+				whileTrue: [i := i @env0:+ 1].
+			result @env0:add: (self @env0:copyFrom: j to: i @env0:- 1).
+			max := max @env0:- 1].
+		[i @env0:<= n and: [self ___isPySpaceAt___: i]] whileTrue: [i := i @env0:+ 1].
+		i @env0:<= n ifTrue: [result @env0:add: (self @env0:copyFrom: i to: n)].
+		^ result].
+	p := self ___pySplitSeparator___: sep.
+	max := self ___pySplitLimit___: maxsplit.
+	p @env0:== nil ifTrue: [result @env0:add: self. ^ result].
+	m := p @env0:size.
+	i := 1.
+	[max @env0:> 0
+		and: [(i @env0:+ m @env0:- 1) @env0:<= n
+		and: [(idx := self @env0:___pyFindString___: p startingAt: i) @env0:> 0]]]
+		whileTrue: [
+			result @env0:add: (self @env0:copyFrom: i to: idx @env0:- 1).
+			i := idx @env0:+ m.
+			max := max @env0:- 1].
+	result @env0:add: (self @env0:copyFrom: i to: n).
+	^ result
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyRSplit___: sep max: maxsplit
+	"str.rsplit(sep, maxsplit): ___pySplit___:max: working from the right,
+	after CPython's rsplit / rsplit_whitespace.  Separators are matched
+	right to left, so ``'abbbc'.rsplit('bb')'' is ``['ab', 'c']'' where a
+	left-to-right split gives ``['a', 'bc']'', and the unsplit HEAD keeps its
+	leading whitespace.  The earlier implementation took a left split and
+	re-joined its head, so it got both wrong.
+
+	Pieces are collected right to left with add: and reversed ONCE on the
+	way out (___pyReversed___:): addFirst: shifts the collection, which made
+	``text.rsplit()'' quadratic -- 3.6s for a 1 MB string."
+
+	| n max result i j p m idx |
+	self @env0:___isExactPyStr___ ifFalse: [
+		^ self ___asExactStr___ ___pyRSplit___: sep max: maxsplit].
+	n := self @env0:size.
+	result := OrderedCollection @env0:new.
+	(sep == nil or: [sep == None]) ifTrue: [
+		max := self ___pySplitLimit___: maxsplit.
+		i := n.
+		[max @env0:> 0] whileTrue: [
+			[i @env0:>= 1 and: [self ___isPySpaceAt___: i]] whileTrue: [i := i @env0:- 1].
+			i @env0:< 1 ifTrue: [^ self ___pyReversed___: result].
+			j := i.
+			[i @env0:>= 1 and: [(self ___isPySpaceAt___: i) @env0:not]]
+				whileTrue: [i := i @env0:- 1].
+			result @env0:add: (self @env0:copyFrom: i @env0:+ 1 to: j).
+			max := max @env0:- 1].
+		[i @env0:>= 1 and: [self ___isPySpaceAt___: i]] whileTrue: [i := i @env0:- 1].
+		i @env0:>= 1 ifTrue: [result @env0:add: (self @env0:copyFrom: 1 to: i)].
+		^ self ___pyReversed___: result].
+	p := self ___pySplitSeparator___: sep.
+	max := self ___pySplitLimit___: maxsplit.
+	p @env0:== nil ifTrue: [result @env0:add: self. ^ result].
+	m := p @env0:size.
+	j := n.
+	[max @env0:> 0
+		and: [j @env0:>= m
+		and: [(idx := self @env0:findLastSubString: p startingAt: j @env0:- m @env0:+ 1) @env0:> 0]]]
+		whileTrue: [
+			result @env0:add: (self @env0:copyFrom: idx @env0:+ m to: j).
+			j := idx @env0:- 1.
+			max := max @env0:- 1].
+	result @env0:add: (self @env0:copyFrom: 1 to: j).
+	^ self ___pyReversed___: result
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyReversed___: anOrderedCollection
+	"A new OrderedCollection (a Python list) holding anOrderedCollection's
+	elements last to first."
+
+	| out |
+	out := OrderedCollection @env0:new: anOrderedCollection @env0:size.
+	anOrderedCollection @env0:reverseDo: [:each | out @env0:add: each].
+	^ out
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pySplitArgs___: positional kw: kwargs name: name
+	"{ sep. maxsplit } for the varargs split/rsplit entries.  More than two
+	positionals is CPython's TypeError -- reading only the first two let
+	``'hello'.split(42, 42, 42)'' answer a list."
+
+	| sep maxsplit |
+	positional @env0:size @env0:> 2 ifTrue: [
+		^ TypeError ___signal___: name @env0:, '() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)'].
 	sep := nil.
 	maxsplit := -1.
 	positional @env0:isEmpty ifFalse: [
@@ -3208,26 +3699,7 @@ _split: positional kw: kwargs
 		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
 		maxsplit := kwargs @env0:at: 'maxsplit' ifAbsent: [maxsplit].
 	].
-	sep @env0:isNil
-		ifTrue: [base := self split]
-		ifFalse: [base := self split: sep].
-	(maxsplit @env0:< 0 or: [base @env0:size @env0:<= (maxsplit @env0:+ 1)])
-		ifTrue: [^ base].
-	"Coalesce trailing pieces back into one tail so the result has
-	at most ``maxsplit + 1`` entries."
-	trimmed := base @env0:copyFrom: 1 to: maxsplit.
-	sep @env0:isNil
-		ifTrue: [
-			"Whitespace split: tail is everything after the maxsplit-th
-			separator run.  Approximate by joining with single spaces."
-			trimmed @env0:add: ((base @env0:copyFrom: maxsplit @env0:+ 1 to: base @env0:size)
-				@env0:inject: '' into: [:acc :each | acc @env0:, ' ' @env0:, each]) @env0:trimSeparators
-		] ifFalse: [
-			trimmed @env0:add: ((base @env0:copyFrom: maxsplit @env0:+ 1 to: base @env0:size)
-				@env0:inject: '' into: [:acc :each |
-					acc @env0:isEmpty ifTrue: [each] ifFalse: [acc @env0:, sep @env0:, each]])
-		].
-	^ trimmed
+	^ Array @env0:with: sep with: maxsplit
 %
 
 category: 'Grail-String Methods'
@@ -3407,9 +3879,15 @@ category: 'Grail-String Methods'
 method: CharacterCollection
 startswith: prefix _: start _: end
 	"str.startswith(prefix, start, end) -- test whether self[start:end] starts
-	with prefix (CPython None / negative-index clamping)."
+	with prefix (CPython None / negative-index clamping).  A window whose
+	start lies past its end matches nothing, not even an empty prefix --
+	``''.startswith('', 1, 0)'' is False -- which the clamped slice alone
+	cannot see; the slice still runs first so a bad prefix is refused."
 
-	^ (self ___boundedSlice___: start end: end) startswith: prefix
+	| w |
+	((self ___boundedSlice___: start end: end) startswith: prefix) ifFalse: [^ false].
+	w := self ___pyAdjust___: start end: end.
+	^ (w @env0:at: 1) @env0:<= (w @env0:at: 2)
 %
 
 category: 'Grail-String Methods'

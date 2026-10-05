@@ -376,9 +376,15 @@ initializeBuiltinModules
 		@env0:at: #gemstone 	put: gemstone 	instance;
 		@env0:at: #html 		put: html 		instance;
 		@env0:at: #cmath 		put: cmath 		instance;
-		@env0:at: #random 		put: random 	instance;
+		"random deliberately NOT seeded, as fractions and ipaddress are not:
+		``import random'' resolves to the vendored CPython random.py, over the
+		native _random (MT19937) -- see _random_module.gs."
 		@env0:at: #os 			put: os 		instance;
-		@env0:at: #string 		put: string 	instance;
+		"string deliberately NOT seeded, as random is not: ``import string''
+		resolves to the vendored CPython string package, whose Template and
+		Formatter the hand-written Smalltalk module never had (Template was
+		None; Formatter() could not be called as string.Formatter() and took
+		no *args) -- over a pure-Python _string."
 		@env0:at: #sys 			put: sys 		instance;
 		@env0:at: #zlib 		put: zlib 		instance;
 		@env0:yourself.
@@ -1919,7 +1925,7 @@ initialize_runtime_info
 	class-side registry), so do NOT snapshot the dict into a #modules instance
 	slot here: a committed/deployed sys instance would otherwise pin a stale
 	deploy-time dict (the canonical sys.modules seam)."
-	self @env0:at: #builtin_module_names put: (tuple @env0:withAll: {'builtins'. 'cmath'. 'fractions'. 'gemstone'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}).
+	self @env0:at: #builtin_module_names put: (tuple @env0:withAll: {'builtins'. 'cmath'. 'fractions'. 'gemstone'. 'importlib'. 'math'. 'os'. 'sys'}).
 	"CPython's ``sys.stdlib_module_names'' is a BUILD-TIME CONSTANT compiled into
 	the interpreter, not a runtime scan of the stdlib directory, so vendoring the
 	name list is the faithful implementation rather than a shortcut.  The names

@@ -359,6 +359,37 @@ if [ "$(cat "$TMP/raceA")" = "ok" ] && [ "$(cat "$TMP/raceB")" = "ok" ]; then ok
         "A: $(cat "$TMP/raceA")" "B: $(cat "$TMP/raceB")"
 fi
 
+# --- --namespace / GEMDB_NAMESPACE: run in a GemDB namespace ----------------
+# docs/App_Namespaces_Design.md §4: the launcher chooses the namespace before
+# the script's first line, so gemdb.namespace() already answers it.  The script
+# never commits, so the namespace it creates is gone when it exits.
+NS="grail_launcher_ns_$$"
+printf 'import gemdb\nprint(gemdb.namespace())\n' > "$TMP/ns.py"
+if run "--namespace NAME" 0 -- --namespace "$NS" "$TMP/ns.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$NS" ]; then ok; else
+        bad "--namespace NAME sets the namespace" "want: $NS" "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+if run "--namespace=NAME" 0 -- "--namespace=$NS" "$TMP/ns.py"; then
+    if [ "$(cat "$OUT_FILE")" = "$NS" ]; then ok; else
+        bad "--namespace=NAME sets the namespace" "want: $NS" "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+GEMDB_NAMESPACE="$NS" ./grail "$TMP/ns.py" >"$OUT_FILE" 2>"$ERR_FILE"
+if [ "$(cat "$OUT_FILE")" = "$NS" ]; then ok; else
+    bad "GEMDB_NAMESPACE sets the namespace" "want: $NS" "got:  $(cat "$OUT_FILE")" "stderr: $(cat "$ERR_FILE")"
+fi
+if run "no namespace" 0 -- "$TMP/ns.py"; then
+    if [ "$(cat "$OUT_FILE")" = "None" ]; then ok; else
+        bad "without --namespace there is none" "got: $(cat "$OUT_FILE")"
+    fi
+fi
+if run "--namespace without a name" 2 -- --namespace; then
+    if grep -q -- "--namespace requires an argument" "$ERR_FILE"; then ok; else
+        bad "--namespace without a name says so" "stderr: $(cat "$ERR_FILE")"
+    fi
+fi
+
 # --- report ----------------------------------------------------------------
 
 echo "grail launcher: $pass passed, $fail failed"

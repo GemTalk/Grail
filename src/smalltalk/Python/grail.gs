@@ -156,6 +156,31 @@ _end_fresh_import: aName
 	there, a later ordinary import of the same name would compile against the
 	fresh module's class."
 
+	^ self ___endFreshImport___: aName keepingInstance: false
+%
+
+category: 'Grail-Fresh Import'
+method: grail
+_end_fresh_import_kept: aName
+	"grail._end_fresh_import_kept(name) -- _end_fresh_import, but the fresh
+	module STAYS its class's session singleton, so it lives for the session.
+
+	For a copy whose code will run: a method reaches its module's globals
+	through ``<module class> ___instance___'', and with the registry entry gone
+	that mints ANOTHER instance and re-runs the module body.  test_statistics'
+	pure-Python copy (import_fresh_module with blocked=) then compared its
+	NormalDist instances against a third module's class and found them unequal.
+	A plain fresh import keeps the dropping form: what test_struct checks there
+	is that the module can be collected, and it never calls into it again."
+
+	^ self ___endFreshImport___: aName keepingInstance: true
+%
+
+category: 'Grail-Fresh Import'
+method: grail
+___endFreshImport___: aName keepingInstance: keep
+	"The body of _end_fresh_import / _end_fresh_import_kept."
+
 	| name set mod classes |
 	name := aName @env0:asString.
 	set := SessionTemps @env0:current @env0:at: #'GrailFreshImports' otherwise: nil.
@@ -168,7 +193,8 @@ _end_fresh_import: aName
 			@env0:do: [:k | classes @env0:removeKey: k].
 		"...and the per-session singleton registry (module class >>
 		___sessionInstances___), keyed by that class: the last thing holding it."
-		module @env0:___sessionInstances___ @env0:removeKey: mod @env0:class ifAbsent: []].
+		keep ifFalse: [
+			module @env0:___sessionInstances___ @env0:removeKey: mod @env0:class ifAbsent: []]].
 	^ None
 %
 

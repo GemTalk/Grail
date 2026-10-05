@@ -216,9 +216,9 @@ testInheritanceReadsBaseSlot
 category: 'Grail-Tests - Inheritance'
 method: SlotsTestCase
 testBaseSlotNotDuplicated
-	"Derived's layout CONTINUES Base's: base_v keeps Base's position and
-	Base's accessor pair serves it, deriv_v is appended with a pair of
-	Derived's own.  No named instVar on either class."
+	"Derived's layout CONTINUES Base's: base_v keeps Base's position, deriv_v
+	is appended, and Derived compiles its own pair for both -- Base's indexed
+	pair answers only for Base's own instances (the owner guard).  No named instVar on either class."
 
 	| base derived |
 	base := testModule @env1:___pyAttrLoad___: #Base.
@@ -227,7 +227,7 @@ testBaseSlotNotDuplicated
 	self assert: derived instVarNames isEmpty.
 	self assert: (base perform: #'___pySlotLayout___' env: 1) asArray equals: #(#base_v).
 	self assert: (derived perform: #'___pySlotLayout___' env: 1) asArray equals: #(#base_v #deriv_v).
-	self assert: (derived whichClassIncludesSelector: #'___pyattr_base_v___' environmentId: 1) == base.
+	self assert: (derived whichClassIncludesSelector: #'___pyattr_base_v___' environmentId: 1) == derived.
 	self assert: (derived whichClassIncludesSelector: #'___pyattr_deriv_v___' environmentId: 1) == derived.
 %
 

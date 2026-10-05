@@ -72,6 +72,34 @@ serverKeyPassword
 			'/examples/openssl/private/server_1_server_passwd.txt'
 %
 
+category: 'Grail-Private'
+method: SslModuleTestCase
+serve: aServerBlock clientHolder: holder
+	"Run the server half of a test whose client is forked.
+
+	The server blocks in accept() with no timeout, so a client that FAILS --
+	it is never coming -- used to leave it waiting forever: the forked
+	client's handler caught the error, and nothing woke the server.  That hung
+	shard 4 of run_tests.sh on macOS for hours (a refused connect; see
+	use_ssl.make_https_listener).  So each client's handler now closes the
+	listener, which makes the server's accept raise, and this reports the
+	CLIENT's error, the cause, rather than the server's 'accept failed'.
+
+	The assert is made AFTER the handler has returned, never inside it:
+	signalling the TestFailure from within the handler of the server's Python
+	exception recorded the one test as both a failure and an error."
+
+	| result serverError |
+	result := aServerBlock on: AbstractException do: [:e |
+		(holder at: 1) isNil ifTrue: [e pass].
+		serverError := e messageText.
+		e return: nil].
+	serverError isNil ifFalse: [
+		self assert: false description: 'client raised: ', (holder at: 1) printString,
+			' (and the server, its listener closed: ', serverError printString, ')'].
+	^ result
+%
+
 category: 'Grail-Tests-Ssl'
 method: SslModuleTestCase
 testAServerSurvivesAClientThatFailsTheHandshake
@@ -86,12 +114,20 @@ testAServerSurvivesAClientThatFailsTheHandshake
 	port := listener at: 2.
 	done := Semaphore new.
 	holder := Array new: 1.
+	"AbstractException, not Error, in every forked client in this class: a
+	Python exception is not an Error, so a client that raised one -- a refused
+	connect, say -- went unhandled in its forked process, which stopped the
+	whole topaz run and with it the shard, and never signalled the semaphore."
 	[
 		[holder at: 1 put: (fixture @env1:client_probe_then_roundtrip: port _: 'ping' asByteArray)]
-			on: Error do: [:error | holder at: 1 put: error].
+			on: AbstractException do: [:error |
+				holder at: 1 put: error.
+				(listener at: 1) @env1:close].
 		done signal
 	] fork.
-	serverResult := fixture @env1:serve_through_a_failed_handshake: (listener at: 1).
+	serverResult := self
+		serve: [fixture @env1:serve_through_a_failed_handshake: (listener at: 1)]
+		clientHolder: holder.
 	done wait.
 	clientResult := holder at: 1.
 	self assert: (clientResult isKindOf: OrderedCollection)
@@ -116,10 +152,14 @@ testAServerReadsPastARaggedEofAsEmptyEveryTime
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (fixture @env1:client_send_then_drop: port _: 'hello' asByteArray)]
-			on: Error do: [:error | holder at: 1 put: error].
+			on: AbstractException do: [:error |
+				holder at: 1 put: error.
+				(listener at: 1) @env1:close].
 		done signal
 	] fork.
-	serverResult := fixture @env1:serve_and_read_past_a_ragged_eof: (listener at: 1).
+	serverResult := self
+		serve: [fixture @env1:serve_and_read_past_a_ragged_eof: (listener at: 1)]
+		clientHolder: holder.
 	done wait.
 	clientResult := holder at: 1.
 	self assert: clientResult equals: 'ack' asByteArray.
@@ -146,10 +186,12 @@ testTlsRoundtrip
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:client_roundtrip: port _: 'ping' asByteArray)]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e |
+				holder at: 1 put: e.
+				lsock @env1:close].
 		sem signal
 	] fork.
-	mod @env1:serve_one_echo: lsock.
+	self serve: [mod @env1:serve_one_echo: lsock] clientHolder: holder.
 	sem wait.
 	result := holder at: 1.
 	self assert: (result isKindOf: OrderedCollection)
@@ -187,12 +229,16 @@ testUpgradedAcceptRaggedEofAndSni
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:client_read_to_eof: port)]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e |
+				holder at: 1 put: e.
+				raw @env1:close].
 		sem signal
 	] fork.
-	seen := mod @env1:serve_upgraded_then_drop: raw _: self serverCertFile
-		_: self serverKeyFile _: self serverKeyPassword
-		_: 'hello over tls' asByteArray.
+	seen := self
+		serve: [mod @env1:serve_upgraded_then_drop: raw _: self serverCertFile
+			_: self serverKeyFile _: self serverKeyPassword
+			_: 'hello over tls' asByteArray]
+		clientHolder: holder.
 	sem wait.
 	result := holder at: 1.
 	self assert: (result isKindOf: OrderedCollection)

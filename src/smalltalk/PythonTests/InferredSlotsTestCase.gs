@@ -211,8 +211,9 @@ category: 'Grail-Tests - Shape'
 method: InferredSlotsTestCase
 testSubclassReusesTheParentsSlotAndAccessor
 	"B(A) assigns a (A's slot) and b (its own): B's layout CONTINUES A's, so a
-	keeps A's position and A's accessor serves it, and b is appended with a
-	pair of B's own.  Names come out root-first, in layout order -- the order
+	keeps A's position, and b is appended.  B compiles its OWN pair for a too,
+	at the same position: A's indexed pair answers only for A's own instances
+	(the owner guard, object class >> ___grailCompileIndexedPair___:).  Names come out root-first, in layout order -- the order
 	``super().__init__'' assigns them, and the order CPython's instance
 	__dict__ shows."
 
@@ -223,7 +224,8 @@ testSubclassReusesTheParentsSlotAndAccessor
 	self assert: (a perform: #'___pySlotLayout___' env: 1) asArray equals: #(#a).
 	self assert: (b perform: #'___pySlotLayout___' env: 1) asArray equals: #(#a #b).
 	self assert: b instVarNames isEmpty.
-	self assert: (b whichClassIncludesSelector: #'___pyattr_a___' environmentId: 1) == a.
+	self assert: (b whichClassIncludesSelector: #'___pyattr_a___' environmentId: 1) == b.
+	self assert: (a whichClassIncludesSelector: #'___pyattr_a___' environmentId: 1) == a.
 	self assert: (b whichClassIncludesSelector: #'___pyattr_b___' environmentId: 1) == b.
 	self assert: (b @env1:___pyInferredSlotNames___) asArray equals: #(#a #b).
 %
@@ -243,9 +245,11 @@ testPropertyAndSetattrSubclassesGetForwarders
 	self assert: (sub whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == sub.
 	self assert: (hooked whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == hooked.
 	self assert: (hooked whichClassIncludesSelector: #'___pyattr_y___:' environmentId: 1) == hooked.
-	"...but the getter is still Point's: __setattr__ only intercepts stores."
-	self assert: (hooked whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1)
-		== (self classNamed: #Point in: mod).
+	"...but the getter still reads the slot: __setattr__ only intercepts
+	stores.  It is HookedSub's own indexed getter (the owner guard keeps
+	Point's for Point's instances), not a forwarder."
+	self assert: (hooked whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == hooked.
+	self assert: (hooked @env1:___grailIsIndexedPair___: #'___pyattr_x___').
 %
 
 category: 'Grail-Tests - Shape'

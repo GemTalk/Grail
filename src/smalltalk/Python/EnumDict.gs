@@ -211,7 +211,7 @@ __setitem__: key _: value
 		^ super __setitem__: key _: value].
 	"Descriptors and classes DEFINED in the body are not members (see
 	Enum ___grailBuildMembers: for both rules); everything else is."
-	((self ___isValueDescriptor___: value)
+	((Enum ___grailIsBodyDescriptor: value)
 		or: [Enum ___grailIsInternalClass: value
 			inClassNamed: (clsName @env0:isNil ifTrue: [''] ifFalse: [clsName @env0:asString])])
 		ifFalse: [
@@ -365,6 +365,17 @@ ___memberNames___
 	lst := Python @env0:at: #list otherwise: nil.
 	lst == nil ifTrue: [^ Array @env0:withAll: names].
 	^ lst @env0:withAll: names
+%
+
+category: 'Grail-Class Namespace'
+method: EnumDict
+___grailReplaceBinding___: key _: value
+	"Replace, without the member and duplicate-name rules: the name was bound
+	once already, by the class body, and this is that same binding completed
+	-- a decorated def's result over its undecorated function.  Going through
+	__setitem__ again raised ``'first' already defined as <function ...>''."
+
+	^ super __setitem__: key _: value
 %
 
 set compile_env: 0

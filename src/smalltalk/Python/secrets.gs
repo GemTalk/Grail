@@ -55,12 +55,13 @@ _generator
 
 	Backed by HostRandom, which draws from the OS CSPRNG — the correct
 	source for the `secrets` module (cf. CPython's secrets, which is backed
-	by os.urandom).  `Random` is a seedable Mersenne-Twister PRNG and is
-	NOT cryptographically secure; it backs the `random` module instead.
+	by os.urandom).  The `random` module is CPython's random.py over
+	_random's seedable Mersenne Twister (PyMersenneTwister), which is NOT
+	cryptographically secure.
 
 	Stored in SessionTemps (not the committed module slot) so each Gem
 	session gets its own generator and using `secrets` never commits RNG
-	state — see the `random` module's `_generator`.  HostRandom also wraps a
+	state — as _random keeps the entropy source it seeds from.  HostRandom also wraps a
 	closable OS resource, so re-create it if a prior one was closed."
 
 	| temps gen |

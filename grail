@@ -6,6 +6,7 @@
 #   grail -c 'code' [args...]   run a string of code
 #   grail                       interactive Python prompt
 #   grail -D <file.py|-m mod>   run, and hand errors to topaz for debugging
+#   grail --namespace NAME ...  run in GemDB namespace NAME (= GEMDB_NAMESPACE=NAME)
 #   grail -h | -V               this help | the Grail version
 #
 #  For gem configuration, create a gem.conf in current directory
@@ -26,11 +27,29 @@ if [ ! -f ~/.topazini ] && [ ! -f ./.topazini ]; then
 fi
 
 usage() {
-    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 case "$1" in
     -h|--help) usage; exit 0 ;;
+esac
+
+# --namespace NAME runs the program in a GemDB namespace
+# (docs/App_Namespaces_Design.md §4): its globals persist across runs and its
+# own modules are deployed apart from other programs'.  It travels as
+# GEMDB_NAMESPACE, which importlib reads before the script runs, so setting the
+# variable directly does the same.
+case "$1" in
+    --namespace)
+        if [ "$#" -lt 2 ]; then
+            echo "grail: --namespace requires an argument" >&2
+            exit 2
+        fi
+        export GEMDB_NAMESPACE="$2"
+        shift 2 ;;
+    --namespace=*)
+        export GEMDB_NAMESPACE="${1#--namespace=}"
+        shift ;;
 esac
 
 # A leading -D is grail's own option; the TARGET is what follows it, and that is

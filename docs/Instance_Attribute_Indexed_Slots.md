@@ -36,6 +36,22 @@ own installer merges the parent's layout and compiles its own pair for every
 inherited name whose position differs from the parent's, and the registry walk
 covers only a subclass defined in another module.
 
+**Two things learned later (PRs #1295 and the follow-up).** The general rule
+below was not enforced until #1295: a subclass inherited its parent's pair
+when the position matched, and a subclass the rebuild could not see kept its
+old layout while inheriting the parent's NEW pair. That pair's position named
+one of the subclass's own slots, so the read answered another attribute and the
+store overwrote it. Measured with a `__main__` subclass across two sessions.
+Now every indexed pair carries an **owner guard** (`self class ==` the class it
+was compiled for, else the generic load/store), and every class with a layout
+compiles its own pair for every live name in it. The walk was also too
+narrow: propagation followed `__subclasses__`, which is per session, so a
+subclass in a module this session had not imported was never updated. It now
+walks `___grailSlotSubtree___`, the persistent canonical class registry
+unioned with `__subclasses__`. A session-local class (`__main__`, a function
+body) is in neither registry outside the session that built it; the guard is
+what keeps its instances correct.
+
 **Related:** PR #965 (inferred slots), `object class >>
 ___grailInstallInferredSlots___:properties:` in [Object.gs](../src/smalltalk/Python/Object.gs),
 `ClassDefAst >> ___inferredSlotNames___`, `object >> ___pySlotIndexFor___:`,
@@ -143,8 +159,9 @@ every name in its layout**, inherited or not (today only the declaring class
 does). Then a pair never needs to agree with a superclass's positions, A's
 methods running on a B instance dispatch to B's pair, and the "override the
 accessor when the position differs" case is not special. A rebuild of A walks
-its transitive subclasses (`___registerSubclass___` keeps the registry) and
-recompiles their layouts and pairs; the MI merge copies A's *methods* into a
+its transitive subclasses (`___grailSlotSubtree___`: the persistent canonical
+class registry plus the session's `__subclasses__`) and recompiles their
+layouts and pairs; the MI merge copies A's *methods* into a
 class that lists A as a secondary base, and those methods send the pair too,
 so that class needs positions for A's names — the merge asks the layout, as
 it asks for class attributes now.

@@ -138,7 +138,8 @@ test.test_format
 # land the arithmetic-range fix first, then add the module in one step.
 #
 # NOTE: test_json and test_string are PACKAGES (directories) in 3.14, not
-# single modules -- out of scope for the V1 single-module harness.
+# single modules.  A package's SUBMODULE can be listed, as test_asyncio's are;
+# test.test_string.test_string is (with the vendored string package).
 #
 # Not wired, and not for lack of trying: test_metaclass, test_unpack_ex,
 # test_genexps, test_descrtut, test_extcall and test_pep646_syntax carry NO
@@ -441,3 +442,23 @@ test.test_generators
 test.test_long
 test.test_exception_hierarchy
 test.test_copyreg
+
+# --- Tracked baseline (added 2026-10-04): test_random ---
+#
+# Runnable once ``random'' became CPython's random.py over a native _random
+# (MT19937, src/smalltalk/Python/_random_module.gs); before that it could not
+# import -- no random.SystemRandom, no random.Random.  Vendored verbatim, with
+# its randv2_32.pck / randv2_64.pck / randv3.pck data (test_bug_1727780 replays
+# generator states CPython pickled).  Measured on Darwin arm64:
+#
+#   test_random              114t  0F/15E   Grail's integer capacity limit
+#                                           (getrandbits of 2G bits, 130144-bit
+#                                           ceiling), unittest.mock patching of
+#                                           a method (MagicMock ___instance___),
+#                                           an __index__ object as choices'
+#                                           k, no os.pipe
+test.test_random
+
+# string: CPython's pure-Python string package over a pure-Python _string
+# (the hand-written Smalltalk module had Template = None).
+test.test_string.test_string

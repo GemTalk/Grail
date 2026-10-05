@@ -569,6 +569,11 @@ method: bool
 __add__: other
 	"Add bool (as int) to other."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__radd__:'.
+		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:+ other
@@ -656,9 +661,17 @@ method: bool
 __floordiv__: other
 	"Floor division of bool (as int) by other."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rfloordiv__:'.
+		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
-	^ (self ifTrue: [1] ifFalse: [0]) @env0:// other
+	"As int, not the kernel's integer //: that answered an int for a float
+	divisor (``True // 2.0'' is 0.0) and raised the kernel's UNCATCHABLE
+	ZeroDivide for ``True // 0''."
+	^ (self ifTrue: [1] ifFalse: [0]) __floordiv__: other
 %
 
 category: 'Grail-Comparison'
@@ -915,9 +928,16 @@ method: bool
 __mod__: other
 	"Modulo of bool (as int) by other."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rmod__:'.
+		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
-	^ (self ifTrue: [1] ifFalse: [0]) @env0:\\ other
+	"As int, for the reasons __floordiv__: gives (``True % False'' raised the
+	kernel's uncatchable ZeroDivide)."
+	^ (self ifTrue: [1] ifFalse: [0]) __mod__: other
 %
 
 category: 'Grail-Arithmetic'
@@ -925,6 +945,11 @@ method: bool
 __mul__: other
 	"Multiply bool (as int) by other."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rmul__:'.
+		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:* other
@@ -976,6 +1001,11 @@ method: bool
 __pow__: other
 	"Raise bool (as int) to power of other."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rpow__:'.
+		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:raisedTo: other
@@ -1002,6 +1032,11 @@ method: bool
 __sub__: other
 	"Subtract other from bool (as int)."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rsub__:'.
+		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:- (other)
@@ -1012,9 +1047,16 @@ method: bool
 __truediv__: other
 	"True division of bool (as int) by other."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rtruediv__:'.
+		pri == nil ifFalse: [^ pri]].
 	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'].
-	^ (self ifTrue: [1] ifFalse: [0]) @env0:/ other
+	"int's true division, not the kernel's ``/'': that answered an exact
+	Smalltalk Fraction for ``True / 2'', where Python's ``/'' is a float."
+	^ (self ifTrue: [1] ifFalse: [0]) __truediv__: other
 %
 
 category: 'Grail-Bitwise'

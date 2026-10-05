@@ -24,7 +24,7 @@ A module attribute read compiles to a unary send, and so does a zero-argument
 call: both emit ``(m) f''''.  Whether that collapse is right depends entirely
 on what the method DOES.
 
-  * a FUNCTION -- os.getcwd, hashlib.md5, random.random -- performs the work
+  * a FUNCTION -- os.getcwd, hashlib.md5, time.time -- performs the work
     and answers the result, so performing it IS calling it.  Harmless.
   * a VALUE ACCESSOR answers something the caller then means to call, and the
     collapse silently DROPS the call:

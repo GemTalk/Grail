@@ -5287,6 +5287,36 @@ testWerkzeugDatastructuresFullExports
 
 category: 'Grail-Tests - werkzeug'
 method: FlaskScaffoldingTestCase
+testWerkzeugAbortCarriesItsArguments
+	"abort(400, 'age must be a whole number') raises a BadRequest whose
+	description is that message, and a Flask view that does it answers 400
+	with the message in the body.  abort and Aborter raised cls() and dropped
+	every argument after the status, so every refusal answered the generic
+	text; the Response form raised TypeError.  The last check is the guard:
+	with no description, the generic text stays.
+
+	Measured against Werkzeug 3.1.9 / Flask 3.1.3 under CPython 3.14; see
+	tests/python/pkg_scaffolding/use_werkzeug_abort.py."
+
+	| mod mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'pkg_scaffolding.use_werkzeug_abort' ifAbsent: [].
+	mod := self loadFixture: 'use_werkzeug_abort'.
+	#( 'abort_carries_its_description'
+	   'abort_carries_a_keyword_description'
+	   'the_description_reaches_the_response_body'
+	   'an_aborter_carries_its_description'
+	   'abort_with_a_response_raises_it_wrapped'
+	   'an_unmapped_status_is_a_lookup_error'
+	   'method_not_allowed_takes_a_description'
+	   'flask_abort_in_a_view_answers_with_its_description'
+	   'without_a_description_the_generic_text_stays' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'werkzeug abort check failed: ' , k]
+%
+
+category: 'Grail-Tests - werkzeug'
+method: FlaskScaffoldingTestCase
 testWerkzeugRoutingImports
 	"werkzeug.routing — Map / Rule / Converters / MapAdapter +
 	exceptions.  Step 7 lands the upstream source-drop with two
@@ -5593,9 +5623,12 @@ testFlaskServeHttps
 	port := res at: 2.
 	sem := Semaphore new.
 	holder := Array new: 1.
+	"AbstractException, not Error, in the forked clients here: a Python
+	exception is not an Error, and one escaping a forked process stops the whole
+	run.  See SslModuleTestCase>>testAServerSurvivesAClientThatFailsTheHandshake."
 	[
 		[holder at: 1 put: (mod @env1:https_get: port _: '/')]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	mod @env1:serve_one: server.
@@ -5616,7 +5649,7 @@ testFlaskServeHttps
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:https_get: port _: '/scheme')]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	mod @env1:serve_one: server.
@@ -5647,7 +5680,7 @@ testFlaskServeThreaded
 	holder := Array new: 1.
 	[
 		[holder at: 1 put: (mod @env1:plain_get: port _: '/')]
-			on: Error do: [:e | holder at: 1 put: e].
+			on: AbstractException do: [:e | holder at: 1 put: e].
 		sem signal
 	] fork.
 	mod @env1:serve_one: server.

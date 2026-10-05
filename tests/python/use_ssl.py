@@ -18,7 +18,15 @@ def make_https_listener(certfile, keyfile, password):
     ctx.load_cert_chain(certfile, keyfile, password)
     raw = socket.socket()
     raw.bind(("127.0.0.1", 0))
-    raw.listen(1)
+    # A backlog of 5, not 1.  The forked client can connect TWICE before the
+    # server's green thread gets round to accept() -- serve_through_a_failed_
+    # handshake's probe, then the real client -- and macOS answers a SYN to a
+    # full queue with a RST, where Linux drops it and the client retries.  So
+    # on a Mac the second connect was refused (errno 61), the client died, and
+    # the server waited in accept() forever: shard 4 of run_tests.sh hung,
+    # 7 runs in 8, while CI on Linux stayed green.  Measured: backlog 1, 7 of 8
+    # refused; backlog 5, 8 of 8 clean.
+    raw.listen(5)
     port = raw.getsockname()[1]
     lsock = ctx.wrap_socket(raw, server_side=True)
     return [lsock, port]
@@ -53,7 +61,7 @@ def make_plain_listener():
     happens per connection, after accept(), in serve_upgraded_then_drop."""
     raw = socket.socket()
     raw.bind(("127.0.0.1", 0))
-    raw.listen(1)
+    raw.listen(5)  # see make_https_listener: a backlog of 1 refuses on macOS
     return [raw, raw.getsockname()[1]]
 
 

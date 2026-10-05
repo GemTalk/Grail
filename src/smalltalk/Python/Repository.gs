@@ -170,6 +170,84 @@ schema_drop_class: aName
 
 category: 'Grail-Repository Administration'
 method: Repository
+modules_forget: aName
+	"Python repository.modules_forget('models') -- un-deploy a module and its
+	submodules, once nothing is stored against their classes (importlib class
+	>> ___grailForgetModule___:).  gemdb.modules.forget() wraps it."
+
+	^ importlib @env0:___grailForgetModule___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+modules_relocate: aName
+	"Python repository.modules_relocate('models') -- the deployed module now
+	lives in another file and is the same module: lift the source-path refusal
+	for this session (importlib class >> ___grailRelocateModule___:).
+	gemdb.modules.relocate() wraps it."
+
+	^ importlib @env0:___grailRelocateModule___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+namespaces_use: aName
+	"Python repository.namespaces_use('shop') -- make namespace 'shop' current
+	for the rest of the session, creating it if it does not exist (importlib
+	class >> ___grailSetApp___:).  gemdb.use_namespace() wraps it."
+
+	importlib @env0:___grailSetApp___: aName.
+	^ None
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+namespaces_current
+	"Python repository.namespaces_current() -- the current namespace's name,
+	or None in the default one.  gemdb.namespace() wraps it."
+
+	| appName |
+	appName := importlib @env0:___grailCurrentAppName___.
+	appName == nil ifTrue: [^ None].
+	^ appName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+namespaces_globals
+	"Python repository.namespaces_globals() -- the current namespace's globals,
+	its __main__ module, or None outside a named namespace or before its top
+	file has run.  gemdb.root in a named namespace is a view of them."
+
+	| m |
+	m := importlib @env0:___grailAppGlobals___.
+	m == nil ifTrue: [^ None].
+	^ m
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+namespaces_list
+	"Python repository.namespaces_list() -- this user's namespace names, sorted
+	(importlib class >> ___grailAppNames___).  gemdb.admin.namespaces() wraps
+	it."
+
+	^ importlib @env0:___grailAppNames___
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
+namespaces_drop: aName
+	"Python repository.namespaces_drop('shop') -- remove a namespace and
+	everything deployed in it, once nothing is stored against its classes
+	(importlib class >> ___grailDropApp___:).  gemdb.admin.drop_namespace()
+	wraps it."
+
+	^ importlib @env0:___grailDropApp___: aName
+%
+
+category: 'Grail-Repository Administration'
+method: Repository
 schema_rename_class: aName _: newName
 	"Python repository.schema_rename_class('module.Old', 'New') -- move a
 	renamed class's instances onto the class the new source defines

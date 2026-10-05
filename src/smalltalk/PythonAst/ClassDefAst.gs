@@ -1608,6 +1608,61 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream]] value: OrderedCollection new.
+	"The subset declared with the BUILTIN property (FunctionDefAst >>
+	___isBuiltinPropertyDef___).  object >> ___classDict___ enters a property
+	object for these alone: an ``@enum.property'' def compiles to the same
+	accessor pair, but its __dict__ entry in CPython is no ``property''.
+
+	Emitted before the body, beside ___grailOwnPropertyNames___, for the same
+	reason: ___grailNsBind___: builds a property for the namespace only for
+	these names."
+	[:builtinNames |
+	self instanceMethodDefs do: [:def |
+		(def ___isBuiltinPropertyDef___ and: [(builtinNames includes: def name asSymbol) not])
+			ifTrue: [builtinNames add: def name asSymbol]].
+	builtinNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___grailBuiltinPropertyNames___'; lf.
+		src nextPutAll: '	^ #('.
+		builtinNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
+
+	"__firstlineno__ and __static_attributes__, the two entries CPython 3.13's
+	compiler adds to every class statement's namespace: the first line of the
+	definition (its first DECORATOR's, when it has one) and the sorted names of
+	``self.X'' stores in the body's functions (___staticAttributeNames___).
+	Stored as the class's own attributes, which is what makes them readable,
+	inheritable through the class chain and listed in __dict__; a type() class
+	gets neither, as in CPython."
+	[ | firstLine attrs |
+	firstLine := self beginLine.
+	decorator_list isNil ifFalse: [
+		decorator_list do: [:deco |
+			((deco isKindOf: AbstractLocationNode) and: [deco beginLine notNil])
+				ifTrue: [firstLine := firstLine min: deco beginLine]]].
+	aStream nextPutAll: self ___stVarName___;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''__firstlineno__'' put: ';
+		nextPutAll: firstLine printString; nextPutAll: '.'; lf.
+	attrs := self ___staticAttributeNames___.
+	aStream nextPutAll: self ___stVarName___;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''__static_attributes__'' put: '.
+	attrs isEmpty
+		ifTrue: [aStream nextPutAll: '(___tuple___ perform: #new env: 0)']
+		ifFalse: [
+			aStream nextPutAll: '(___tuple___ perform: #withAll: env: 0 withArguments: {{'.
+			attrs do: [:nm | self printQuotedString: nm on: aStream]
+				separatedBy: [aStream nextPutAll: '. '].
+			aStream nextPutAll: '}})'].
+	aStream nextPutAll: '.'; lf] value.
 	"__prepare__(name, bases, **kwds) is handed the header: the RESOLVED bases
 	when there are several (the list the storage-base choice saw), the sole base
 	as written (its substitution happens in ___subclass___, and the runtime
@@ -2264,7 +2319,19 @@ printSmalltalkRuntimeOn: aStream
 		renamedPairsOrdered isEmpty ifFalse: [
 			aStream nextPutAll: ' renamed: '.
 			self printSymbolPairArray: renamedPairsOrdered on: aStream].
-		aStream nextPutAll: '.'; lf].
+		aStream nextPutAll: '.'; lf]
+	ifFalse: [
+		"A body that assigns nothing of its own (``class Dog(Animal): def
+		speak(self): ...'') still has its parent's positions, and the parent's
+		indexed pairs answer only for the parent's own instances (the owner
+		guard, object class >> ___grailCompileIndexedPair___:).  So such a class
+		takes its own copy of the layout and its own pairs -- at run time, since
+		whether the parent HAS a layout is not known here.  A separate selector,
+		so every body that already emitted the installer generates the same
+		source as before."
+		(importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath) ifTrue: [
+			aStream nextPutAll: self ___stVarName___;
+				nextPutAll: ' ___grailAdoptInheritedSlotLayout___.'; lf]].
 
 	"Read accessors for the class's METHODS and class-body DATA attributes
 	(GRAIL_ATTR_ACCESSORS, stage 3): ``c.foo'' / ``c.MAX'' from anywhere
@@ -2418,16 +2485,35 @@ printSmalltalkRuntimeOn: aStream
 	plain @classmethod / @staticmethod / @property def emits nothing here
 	exactly as before."
 	self ___allFunctionDefs___ do: [:def |
-		| decos |
+		| decos kind marking |
 		decos := def applicableMethodDecorators.
+		"A property accessor whose remaining decorators only MARK it
+		(___wrapsPropertyAccessor___ false) is served by the compiled
+		accessor; its decorators run, but nothing is stored over the property
+		-- see FunctionDefAst >> printMarkingDecoratorsOn:.  Storing nothing,
+		it is exempt from the rebind-later rule, which exists so an earlier
+		def's STORE cannot land over a later one: a getter and its @x.setter
+		share the name, and skipping the getter left its @abstractmethod
+		unapplied (test_abc test_descriptors_with_abstractmethod)."
+		kind := decos isEmpty ifTrue: [nil] ifFalse: [def ___propertyAccessorKind___].
+		marking := (kind == #getter or: [kind == #setter or: [kind == #deleter]])
+			and: [def ___wrapsPropertyAccessor___ not].
 		(decos isEmpty not
 			and: [(decoratedProps includes: def name asSymbol) not
-			and: [(self ___isRebindLaterInBody___: def) not]]) ifTrue: [
-			def
-				printMethodDecoratorsOn: aStream
-				decorators: decos
-				className: self ___stVarName___
-				siblingNames: decoratorScope]].
+			and: [marking or: [(self ___isRebindLaterInBody___: def) not]]]) ifTrue: [
+			marking
+				ifTrue: [
+					def
+						printMarkingDecoratorsOn: aStream
+						decorators: decos
+						className: self ___stVarName___
+						siblingNames: decoratorScope]
+				ifFalse: [
+					def
+						printMethodDecoratorsOn: aStream
+						decorators: decos
+						className: self ___stVarName___
+						siblingNames: decoratorScope]]].
 	"A DECORATED property's accessors are not rebound one by one: together
 	they are ONE property object -- see ___decoratedPropertyNames___."
 	decoratedProps do: [:n |
@@ -4383,6 +4469,56 @@ ___inferredSlotNames___
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___staticAttributeNames___
+	"CPython 3.13's __static_attributes__, as sorted Strings: every X in a
+	``self.X'' STORE -- assignment, augmented, annotated, a tuple element, a
+	for or with target -- in any function of the class body, nested functions
+	and lambdas included.  Purely syntactic, as CPython's compiler makes it:
+	the receiver must be spelled ``self'' whatever the first parameter is
+	called, ``del self.X'' does not count, names are not mangled, and a nested
+	CLASS's functions count for that class instead.
+
+	Not ___inferredSlotNames___'s walk, which answers a different question (what
+	storage do the instances need?) and so stops at nested defs, takes Del, and
+	drops dunders and properties."
+
+	| names |
+	names := Set new.
+	self ___collectStaticAttributes___: body body inFunction: false into: names.
+	^ names asSortedCollection asArray
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___collectStaticAttributes___: aValue inFunction: inFunction into: names
+	"___staticAttributeNames___'s walk -- the reflective descent
+	___collectSelfAttrWrites___:self:into: uses, skipping ``parent''."
+
+	aValue isNil ifTrue: [^ self].
+	aValue isString ifTrue: [^ self].
+	(aValue isKindOf: ClassDefAst) ifTrue: [^ self].
+	((aValue isKindOf: FunctionDefAst) or: [aValue isKindOf: LambdaAst]) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				self ___collectStaticAttributes___: (aValue instVarAt: i) inFunction: true into: names]].
+		^ self].
+	(inFunction and: [(aValue isKindOf: AttributeAst)
+		and: [(aValue ctx isKindOf: StoreAst)
+		and: [(aValue value isKindOf: NameAst)
+		and: [aValue value id asString = 'self']]]])
+			ifTrue: [names add: aValue attr asString].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				self ___collectStaticAttributes___: (aValue instVarAt: i) inFunction: inFunction into: names]].
+		^ self].
+	(aValue isKindOf: Collection) ifTrue: [
+		aValue do: [:each | self ___collectStaticAttributes___: each inFunction: inFunction into: names]].
+	^ self
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 ___collectSelfAttrWrites___: aValue self: selfName into: names
 	"___inferredSlotNames___'s walk: reflective over each node's instance
 	variables (skipping ``parent'', which walks back up), through collections
@@ -4606,8 +4742,12 @@ ___isRebindLaterInBody___: aDef
 	nm := aDef name asSymbol.
 	idx + 1 to: stmts size do: [:i | | st |
 		st := stmts at: i.
+		"A later def whose decorator READS this binding -- ``@foo.setter'' over
+		a non-property ``foo'' -- consumes aDef's store rather than replacing
+		it, so the store must run first; keep looking for a real rebind."
 		(((st isKindOf: FunctionDefAst) or: [st isKindOf: AsyncFunctionDefAst])
-				and: [st name asSymbol == nm])
+				and: [st name asSymbol == nm
+				and: [(st ___readsEarlierBindingOf___: nm) not]])
 			ifTrue: [^ true].
 		((st isKindOf: AssignAst)
 				and: [st targets anySatisfy: [:t | (t isKindOf: NameAst) and: [t id asSymbol == nm]]])

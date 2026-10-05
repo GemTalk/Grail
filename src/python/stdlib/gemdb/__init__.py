@@ -28,6 +28,10 @@ Two ways to commit, for two ways of working:
 pending changes of your own; it refuses (rather than silently discarding)
 when you do.
 
+A commit GemStone refuses outright -- it reaches a generator, which
+cannot outlive the session -- raises :class:`SessionStateError`; that
+transaction needs an abort before anything commits again.
+
 Conflicts carry the actual objects: ``ConflictError.conflicts`` maps the
 GemStone conflict categories (e.g. ``"Write-Write"``) to lists of the
 live objects fought over.  To retry automatically, use the decorator
@@ -45,6 +49,9 @@ Python never meets it:
 * :mod:`gemdb.admin` -- repository administration: ``size()``,
   ``backup(path)``, ``garbage_collect()``.
 * :mod:`gemdb.sessions` -- who is connected: ``current()``, ``all()``.
+* ``gemdb.use_namespace(name)`` -- give a program a namespace of its own:
+  its globals persist across runs, and two programs that each have a
+  ``models.py`` can both be deployed in one repository.
 * ``gemdb.stats`` and ``gemdb.locks`` are reserved for cache statistics
   and object locking, and do not exist yet.
 
@@ -124,6 +131,87 @@ class ConflictError(GemDBError):
         return objects if isinstance(objects, list) else []
 
 
+class SessionStateError(GemDBError, TypeError):
+    """GemStone refused a commit: it reaches an object that cannot outlive the session.
+
+    A generator, or anything holding one, is the case GemStone refuses
+    today; the message names the object GemStone found.  A ``TypeError``
+    too, as CPython's ``pickle`` raises for a socket or a lock.
+
+    Unlike a conflict, a refused transaction cannot be committed even once
+    the object is removed: GemStone allows no further commit until an
+    abort, and the abort discards the whole transaction.  ``aborted`` says
+    which: ``True`` when ``with gemdb.transaction():`` has already aborted
+    it; ``False`` after an explicit ``gemdb.commit()``, whose uncommitted
+    state stays readable until you call ``gemdb.abort()``.
+
+    Keep such an object out of the commit instead: name a module global
+    in ``__transient__``, or hold it somewhere a commit does not reach.
+    """
+
+    def __init__(self, message, aborted):
+        self.aborted = aborted
+        tail = ("; the transaction was aborted" if aborted
+                else "; this transaction can no longer be committed -- "
+                     "gemdb.abort() discards it, and commits work again after that")
+        super().__init__("commit refused: " + message + tail)
+
+
+def _commit_or_raise(aborted_on_failure):
+    """Commit; raise ConflictError or SessionStateError when it does not.
+
+    With ``aborted_on_failure`` (the ``with`` block), a failed transaction
+    is aborted before the exception is raised.
+    """
+    gs = _gemstone
+    outcome = gs.___commitOrRefusal___()
+    if outcome is True:
+        return
+    if outcome is False:
+        conflicts = gs.transaction_conflicts
+        if aborted_on_failure:
+            gs.system.abort()
+        raise ConflictError(conflicts, aborted=aborted_on_failure)
+    # GemStone refused the commit outright -- (error number, message).
+    if aborted_on_failure:
+        gs.system.abort()
+    number, message = outcome
+    if number == 2407:
+        raise SessionStateError(message, aborted=aborted_on_failure)
+    raise GemDBError("commit refused (GemStone error " + str(number) + "): "
+                     + message + ("; the transaction was aborted" if aborted_on_failure
+                                  else "; gemdb.abort() discards the transaction"))
+
+
+def use_namespace(name):
+    """Run the rest of this session in namespace ``name``, creating it if new.
+
+    In a named namespace the top file's globals are the database: each run
+    starts with the globals of the last commit, and ``gemdb.root`` is a view
+    of them.  The namespace also holds the modules the program imports: its
+    ``models`` and another namespace's ``models`` are two deployed modules,
+    each with its own classes, where without namespaces the second would be
+    refused (docs/App_Namespaces_Design.md).  Modules that ship with Grail
+    -- the standard library, gemdb itself -- stay shared by every namespace;
+    anything else, a venv's packages included, belongs to the namespace.
+
+    Call it first, before the program's own imports: it raises
+    ``RuntimeError`` once a module that would belong to the namespace has
+    been imported, or when the session is already in a different namespace.
+    ``import gemdb`` does not count, being shared.  Calling it again with the
+    same name does nothing.  A new namespace is created in the current
+    transaction and kept by the next commit, as an import is.
+    ``./grail --namespace NAME`` and the ``GEMDB_NAMESPACE`` environment
+    variable do the same before the script runs.
+    """
+    _gemstone.repository.namespaces_use(str(name))
+
+
+def namespace():
+    """The name of this session's namespace, or None when none is named."""
+    return _gemstone.repository.namespaces_current()
+
+
 def needs_commit():
     """True when the session holds changes a commit would write."""
     return _gemstone.needs_commit
@@ -134,15 +222,16 @@ def commit():
 
     The failed transaction is NOT aborted: your changes stay in place so
     you can inspect ``ConflictError.conflicts`` and decide -- typically
-    ``gemdb.abort()`` and redo.  Inside a ``with gemdb.transaction():``
+    ``gemdb.abort()`` and redo.  Raises SessionStateError when GemStone
+    refuses the commit because it reaches an object that cannot outlive
+    the session (a generator); that transaction needs ``gemdb.abort()``
+    before anything commits again.  Inside a ``with gemdb.transaction():``
     block this raises instead: the block commits on exit.
     """
     if _state().get("in_transaction"):
         raise GemDBError("commit() inside a transaction block: "
                          "the block commits when it exits")
-    gs = _gemstone
-    if not gs.system.commit():
-        raise ConflictError(gs.transaction_conflicts, aborted=False)
+    _commit_or_raise(False)
 
 
 def abort():
@@ -254,10 +343,7 @@ class _Transaction:
         if exc_type is not None:
             gs.system.abort()
             return False
-        if not gs.system.commit():
-            conflicts = gs.transaction_conflicts
-            gs.system.abort()
-            raise ConflictError(conflicts, aborted=True)
+        _commit_or_raise(True)
         return False
 
     def __call__(self, func):
@@ -302,6 +388,65 @@ def transaction(func=None, *, retries=0):
     return _Transaction(retries=retries)
 
 
+class _NamespaceGlobals:
+    """``gemdb.root`` in a named namespace: a view of its globals, its top file's
+    ``__main__`` namespace (docs/App_Namespaces_Design.md §5.2).
+    ``gemdb.root["hat"]`` IS the global ``hat``.  Dunder names (``__name__``,
+    ``__builtins__``, ...) are reachable by key but left out of iteration, so
+    listing the root lists the program's own state."""
+
+    def __init__(self, namespace):
+        self._d = namespace
+
+    def _names(self):
+        return [k for k in self._d
+                if not (k.startswith("__") and k.endswith("__"))]
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __setitem__(self, key, value):
+        self._d[key] = value
+
+    def __delitem__(self, key):
+        del self._d[key]
+
+    def __contains__(self, key):
+        return key in self._d
+
+    def __len__(self):
+        return len(self._names())
+
+    def __iter__(self):
+        return iter(self._names())
+
+    def get(self, key, default=None):
+        return self._d[key] if key in self._d else default
+
+    def setdefault(self, key, default=None):
+        if key not in self._d:
+            self._d[key] = default
+        return self._d[key]
+
+    def pop(self, key, *args):
+        if key in self._d:
+            value = self._d[key]
+            del self._d[key]
+            return value
+        if args:
+            return args[0]
+        raise KeyError(key)
+
+    def keys(self):
+        return self._names()
+
+    def values(self):
+        return [self._d[k] for k in self._names()]
+
+    def items(self):
+        return [(k, self._d[k]) for k in self._names()]
+
+
 class _Root:
     """The persistent namespace behind ``gemdb.root``.
 
@@ -310,16 +455,39 @@ class _Root:
     Smalltalk tools).  The backing dictionary is created lazily on the
     first WRITE -- never on a read, so browsing an empty database leaves
     nothing to commit.
+
+    In a named namespace (``gemdb.use_namespace``) the root is instead its
+    globals -- its top file's ``__main__`` namespace, which there is
+    persistent -- so ``gemdb.root["hat"]`` is the global ``hat``.
     """
+
+    def _named(self):
+        # In a named namespace, the root IS its globals: a view of them, or
+        # None before its top file has first run.  _UNNAMED outside one.
+        if _gemstone.repository.namespaces_current() is None:
+            return _UNNAMED
+        main = _gemstone.repository.namespaces_globals()
+        return None if main is None else _NamespaceGlobals(vars(main))
 
     def _peek(self):
         # The committed backing dict, or None before the first write.
+        named = self._named()
+        if named is not _UNNAMED:
+            return named
         try:
             return _gemstone[_ROOT_KEY]
         except KeyError:
             return None
 
     def _ensure(self):
+        named = self._named()
+        if named is not _UNNAMED:
+            if named is None:
+                raise RuntimeError(
+                    "gemdb.root in namespace "
+                    + repr(_gemstone.repository.namespaces_current())
+                    + " is its top file's globals, and no top file has run in it yet")
+            return named
         gs = _gemstone
         try:
             return gs[_ROOT_KEY]
@@ -390,11 +558,12 @@ class _Root:
         return "gemdb.root(" + repr(sorted(self.keys(), key=str)) + ")"
 
 
+_UNNAMED = object()
 root = _Root()
 
 __all__ = ["root", "transaction", "commit", "abort", "refresh",
-           "needs_commit", "GemDBError", "ConflictError",
-           "PendingChangesError", "admin", "sessions"]
+           "needs_commit", "use_namespace", "namespace", "GemDBError", "ConflictError",
+           "PendingChangesError", "SessionStateError", "admin", "sessions"]
 
 # Warm the function-attribute caches, here in the module body.  The
 # first ATTRIBUTE READ of a module function wraps it as a BoundMethod
@@ -411,7 +580,8 @@ import sys as _sys
 
 _self = _sys.modules["gemdb"]
 for _name in ("transaction", "commit", "abort", "refresh", "needs_commit",
-              "_state", "root", "_pending_imports", "_naming"):
+              "use_namespace", "namespace", "_state", "root", "_pending_imports", "_naming",
+              "_commit_or_raise"):
     getattr(_self, _name)
 _precached = _gemstone.sessionDict
 del _self, _name, _sys
@@ -421,4 +591,4 @@ del _self, _name, _sys
 # gemdb ships them warmed too: a lazy first ``import gemdb.admin`` in
 # some later session would be a cold import, and its writes would trip
 # the very entry check the warming above protects.
-from . import admin, schema, sessions
+from . import admin, modules, schema, sessions

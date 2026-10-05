@@ -122,6 +122,111 @@ ___adoptInstance___: anInstance
 	self ___sessionInstances___ at: self put: anInstance
 %
 
+category: 'Grail-Phase A Dynamic InstVars'
+method: module
+___storeAnnotate___: aBlock
+	"Store the module's PEP 649 ``__annotate__'' (ModuleAst >>
+	___emitModuleAnnotationsOn___:) -- unless it already holds a closure of
+	the SAME compiled block over the same module.  The emitted block captures
+	nothing but the module and takes its arguments, so two such closures
+	compute the same annotations; but each run makes a new one, which on an
+	app's re-run over committed globals is a write that changes nothing
+	(docs/App_Namespaces_Design.md §5.2).  After an edit the module body is
+	recompiled, the block's method differs, and the store goes through."
+
+	| current |
+	current := super dynamicInstVarAt: #'__annotate__'.
+	((current isKindOf: ExecBlock)
+		and: [current method == aBlock method
+		and: [current selfValue == aBlock selfValue]]) ifTrue: [^ current].
+	^ self dynamicInstVarAt: #'__annotate__' put: aBlock
+%
+
+category: 'Grail-Phase A Dynamic InstVars'
+method: module
+___finalIsBound___: aSymbol
+	"Does a module-level ``name: Final = ...'' find its name already bound in
+	PERSISTENT globals, so that it keeps that value and skips its initializer
+	(AnnAssignAst >> printSmalltalkOn:, docs/App_Namespaces_Design.md §5.4)?
+	Only when this module instance is committed -- an app's top file, a
+	deployed module rebuilt in place -- since only then do the globals outlive
+	the run.  A session-local __main__ starts empty every run, as CPython's
+	does, and evaluates every Final as written."
+
+	^ self isCommitted and: [(self dynamicInstVarAt: aSymbol) notNil]
+%
+
+category: 'Grail-Transient Globals'
+method: module
+___transientGlobals___
+	"This module's ``__transient__'' globals, name -> value, for THIS SESSION
+	(SessionTemps, keyed by the module's class): what the overrides
+	importlib class >> ___installTransientGlobals___:on: compiles read and
+	write instead of the module's own storage.  An abort leaves SessionTemps
+	alone, so a transient global survives one; a new session starts without
+	them."
+
+	| reg d |
+	reg := SessionTemps current at: #'GrailTransientGlobals' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailTransientGlobals' put: reg].
+	d := reg at: self class otherwise: nil.
+	d isNil ifTrue: [
+		d := IdentityKeyValueDictionary new.
+		reg at: self class put: d].
+	^ d
+%
+
+category: 'Grail-Phase A Dynamic InstVars'
+method: module
+dynamicInstVarAt: aSymbol put: aValue
+	"A module global, stored -- unless the global ALREADY holds aValue, or an
+	equal value Python cannot tell from it, when the store is skipped.
+	Storing the identical object back into a COMMITTED module still writes it
+	(measured on gs40: needsCommit goes true), so a module whose body re-runs
+	over its committed instance -- an app's ``__main__'', re-run with its
+	globals intact (docs/App_Namespaces_Design.md §5.2), or a deployed module
+	rebuilt in place -- would otherwise dirty the session with ``import
+	gemdb'', every class statement and every constant, changing nothing.
+	Every module-scope store the codegen emits, and a ``global'' store from a
+	function, comes through here.  nil and _remoteNil are never skipped: they
+	are the primitive's absent and remove markers, not values."
+
+	| current |
+	(aValue == nil or: [aValue == _remoteNil]) ifTrue: [^ super dynamicInstVarAt: aSymbol put: aValue].
+	current := super dynamicInstVarAt: aSymbol.
+	(current == aValue or: [self ___isSameImmutable___: current as: aValue]) ifTrue: [^ aValue].
+	^ super dynamicInstVarAt: aSymbol put: aValue
+%
+
+category: 'Grail-Phase A Dynamic InstVars'
+method: module
+___isSameImmutable___: a as: b
+	"Are a and b equal values of an IMMUTABLE Python type -- str, an int, or
+	a tuple of such -- so that keeping a in place of b is invisible to Python?
+	``pair = (1, 2)'' builds a new tuple on every run where CPython folds it
+	into one code constant; a re-run keeping the committed one is what CPython
+	would show.  Only the exact same class, so 1 and 1.0 (equal, not the same
+	value) are never confused, and only types Python cannot mutate: a list or a
+	dict is a different object however equal."
+
+	a == nil ifTrue: [^ false].
+	a class == b class ifFalse: [^ false].
+	(a isKindOf: CharacterCollection) ifTrue: [^ a = b].
+	"Integers only: 0.0 = -0.0 holds, and Python tells them apart.  A float
+	small enough to be a SmallDouble is immediate, so identity covers it."
+	(a isKindOf: Integer) ifTrue: [^ a = b].
+	a class == tuple ifTrue: [
+		a size = b size ifFalse: [^ false].
+		1 to: a size do: [:i | | x y |
+			x := a at: i.
+			y := b at: i.
+			(x == y or: [self ___isSameImmutable___: x as: y]) ifFalse: [^ false]].
+		^ true].
+	^ false
+%
+
 set compile_env: 1
 
 category: 'Grail-Singleton'

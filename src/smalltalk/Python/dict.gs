@@ -663,8 +663,8 @@ __repr__
 
 	    self @env0:keysAndValuesDo: [:key :value |
 		    | keyRepr valueRepr |
-		    keyRepr := key __repr__.
-		    valueRepr := value __repr__.
+		    keyRepr := key __repr__ @env0:___reprResult___.
+		    valueRepr := value __repr__ @env0:___reprResult___.
 		    stream @env0:nextPutAll: keyRepr.
 		    stream @env0:nextPutAll: ': '.
 		    stream @env0:nextPutAll: valueRepr.

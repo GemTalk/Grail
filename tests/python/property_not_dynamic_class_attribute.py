@@ -143,12 +143,25 @@ except AttributeError:
 import enum as _enum
 r['dca_is_enum_property'] = repr(types.DynamicClassAttribute is _enum.property)
 
-# The DECORATOR form ``@property def q'' is compiled by ClassDefAst into a plain
-# getter METHOD, so no descriptor is stored and both classifiers answer 'method'.
-# Long-standing and orthogonal to this change -- the CALL form above, which does
-# store one, is what exercises the isinstance this file is about.
+# The DECORATOR form ``@property def q'' is compiled by ClassDefAst into a
+# getter METHOD.  A read OFF THE CLASS answers a property built from it
+# (UnboundMethod >> ___grailPropertyOrSelf___), and the class __dict__ holds that
+# same property, so pydoc -- which reads through getattr -- and inspect -- which
+# reads the __dict__ -- both classify it as CPython does.
 r['decorated_pydoc_kind'] = repr(_kind(pydoc.classify_class_attrs, HasDecoratedProp, 'q'))
 r['decorated_inspect_kind'] = repr(_kind(inspect.classify_class_attrs, HasDecoratedProp, 'q'))
+
+# ...but only the BUILTIN property.  ``@enum.property def e'' compiles to the same
+# accessors, and CPython's __dict__ holds an enum.property there, which is not a
+# ``property'' -- Enum.__dir__ keeps or drops a name on exactly that test.
+class HasEnumProp:
+    @_enum.property
+    def e(self):
+        return 1
+
+
+r['enum_property_dict_entry_is_not_a_property'] = repr(
+    isinstance(HasEnumProp.__dict__['e'], property))
 
 
 EXPECTED = {
@@ -177,12 +190,13 @@ EXPECTED = {
     'plain_setter_has_fset': repr(True),
     'prop_set_name': repr('p'),
     'class_access': repr('AttributeError'),
+    'decorated_pydoc_kind': repr('readonly property'),
+    'decorated_inspect_kind': repr('property'),
+    'enum_property_dict_entry_is_not_a_property': repr(False),
 }
 
 GRAIL_ONLY = {
     'dca_is_enum_property': repr(True),
-    'decorated_pydoc_kind': repr('method'),
-    'decorated_inspect_kind': repr('method'),
 }
 
 

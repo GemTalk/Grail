@@ -705,6 +705,11 @@ method: int
 __add__: other
 	"Add two integers or integer and other number."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__radd__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:+ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
@@ -786,6 +791,14 @@ __divmod__: other
 	report divmod()."
 
 	| d |
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rdivmod__:'.
+		pri == nil ifFalse: [^ pri]].
+	"A FLOAT divisor runs float's divmod, as for // (see __floordiv__:)."
+	(other @env0:isKindOf: Float) ifTrue: [
+		^ (float ___intToFloatChecked___: self) __divmod__: other].
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := other]
 	ifFalse: [
@@ -874,6 +887,11 @@ category: 'Grail-Arithmetic'
 method: int
 __floordiv__: other
 	"Floor division."
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rfloordiv__:'.
+		pri == nil ifFalse: [^ pri]].
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
 	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
@@ -883,6 +901,14 @@ __floordiv__: other
 	failed on the wrong exception.  Confining the guard to the branch that will
 	actually do the arithmetic gets the order right without duplicating the
 	dispatch."
+	"A FLOAT divisor: CPython's int // answers NotImplemented and float's
+	runs, so the quotient is a float -- ``7 // 2.0'' is 3.0, where the
+	kernel's integer // answered 3.  The int converts first, raising
+	OverflowError when it is too large for a float (int.__divmod__ and
+	int.__mod__ hand over the same way, so all three come from float's one
+	divmod routine)."
+	(other @env0:isKindOf: Float) ifTrue: [
+		^ (float ___intToFloatChecked___: self) __floordiv__: other].
 	(other isKindOf: Number) ifTrue: [
 		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 			ZeroDivisionError ___signal___: 'division by zero'].
@@ -1054,6 +1080,11 @@ category: 'Grail-Arithmetic'
 method: int
 __mod__: other
 	"Modulo operation."
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rmod__:'.
+		pri == nil ifFalse: [^ pri]].
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
 	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
@@ -1063,6 +1094,9 @@ __mod__: other
 	failed on the wrong exception.  Confining the guard to the branch that will
 	actually do the arithmetic gets the order right without duplicating the
 	dispatch."
+	"A FLOAT divisor runs float's %, as for // (see __floordiv__:)."
+	(other @env0:isKindOf: Float) ifTrue: [
+		^ (float ___intToFloatChecked___: self) __mod__: other].
 	(other isKindOf: Number) ifTrue: [
 		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 			ZeroDivisionError ___signal___: 'division by zero'].
@@ -1082,6 +1116,11 @@ method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rmul__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:* other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
@@ -1154,6 +1193,11 @@ __pow__: other
 	resignal its NumericError as catchable OverflowError (DELIBERATE
 	deviation -- CPython ints are unbounded)."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rpow__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [
 		"CPython: 0 raised to a NEGATIVE power is a ZeroDivisionError (an int
 		exponent coerces to float, so it is 0.0 ** -n -> division by zero),
@@ -1500,6 +1544,11 @@ method: int
 __sub__: other
 	"Subtract other from self."
 
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rsub__:'.
+		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:- (other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
@@ -1513,12 +1562,21 @@ __truediv__: other
 	a float (the exact quotient rounded to nearest), NOT an exact rational.
 	Only int/int is coerced here; int/float already gives a float and
 	int/<GemStone Fraction> keeps its (pre-existing) exact result."
+	"A Python subclass of int or float may claim the operation first
+	(object >> ___numericReflectedFirst___:selector:)."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rtruediv__:'.
+		pri == nil ifFalse: [^ pri]].
 	"CPython: division/modulo by zero raises catchable ZeroDivisionError;
 	the kernel ZeroDivide is uncatchable."
 	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Integer) ifTrue: [^ self ___intTrueDivFloat___: other].
+	"An int SUBCLASS instance is an int too, and int/int is a float.  The
+	kernel's ``/'' coerced the wrapper to its plain value and answered an exact
+	Smalltalk Fraction -- ``1 / MyInt(2)'' printed 1/2."
+	(other isKindOf: AbstractPyInt) ifTrue: [^ self ___intTrueDivFloat___: other @env0:value].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [

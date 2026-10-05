@@ -616,14 +616,17 @@ ___grailSchemaReport___
 	System @env0:needsCommit ifTrue: [
 		^ ImproperOperation @env0:signal:
 			'the schema report scans the repository for instances, which needs a clean transaction: commit or abort first'].
-	reg := importlib @env0:___canonicalClassRegistry___.
 	classes := OrderedCollection @env0:new.
 	keys := OrderedCollection @env0:new.
-	reg @env0:keysAndValuesDo: [:k :v |
-		((v @env0:isKindOf: Behavior)
-			@env0:and: [(v @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1)
-			@env0:and: [(v ___grailSlotLayoutReport___) @env0:anySatisfy: [:r | (r @env0:at: 3) @env0:~= 'assigned']]]) ifTrue: [
-				classes @env0:add: v. keys @env0:add: k @env0:asString]].
+	"The shared base's classes and, in an app, the app's
+	(docs/App_Namespaces_Design.md §3.1)."
+	importlib @env0:___grailSessionNamespacesDo___: [:ns |
+		reg := importlib @env0:___canonicalClassRegistry___.
+		reg @env0:keysAndValuesDo: [:k :v |
+			((v @env0:isKindOf: Behavior)
+				@env0:and: [(v @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1)
+				@env0:and: [(v ___grailSlotLayoutReport___) @env0:anySatisfy: [:r | (r @env0:at: 3) @env0:~= 'assigned']]]) ifTrue: [
+					classes @env0:add: v. keys @env0:add: k @env0:asString]]].
 	classes @env0:isEmpty ifTrue: [^ #()].
 	lists := SystemRepository @env0:listInstances: classes @env0:asArray.
 	rows := Array @env0:new: classes @env0:size.
@@ -839,11 +842,7 @@ ___grailRenameSlot___: old to: new tree: tree instances: byClassOrNil ignoringAs
 			___grailRemoveOwnIndexedPair___ applies, so the pair that is about
 			to be removed is the one replaced -- a @property or hook forwarder
 			of the same spelling is neither removed nor replaced."
-			ownsPair := (c @env0:includesSelector: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol environmentId: 1)
-				@env0:and: [((c @env0:categoryOfSelector: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol environmentId: 1)
-						@env0:asString @env0:= 'Grail-Inferred Slots')
-					@env0:and: [(c @env0:compiledMethodAt: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol environmentId: 1)
-						@env0:sourceString @env0:includesString: '_basicSize']].
+			ownsPair := c ___grailIsIndexedPair___: ('___pyattr_' @env0:, old @env0:asString @env0:, '___') @env0:asSymbol.
 			(c @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [ | layout src |
 				layout := OrderedCollection @env0:withAll: (c @env0:perform: #'___pySlotLayout___' env: 1).
 				layout @env0:at: po put: (byClassOrNil == nil ifTrue: [new] ifFalse: [('~' @env0:, old @env0:asString) @env0:asSymbol]).
@@ -1012,9 +1011,12 @@ ___grailCompactSlots___: tree instances: byClass
 							c ___grailCompileIndexedPair___: n position: p
 								forwardGetter: (gsrc @env0:includesString: '_basicSize') @env0:not]]
 					ifFalse: [
-						"An ancestor's pair serves only while it reads this position."
+						"An ancestor's FORWARDER serves only while it reads this
+						position; an ancestor's INDEXED pair never does -- its owner
+						guard answers only for that ancestor's instances."
 						(owner @env0:isNil
-							@env0:or: [((owner @env0:perform: #'___pySlotLayout___' env: 1) @env0:indexOf: n) @env0:~= p]) ifTrue: [
+							@env0:or: [((owner @env0:perform: #'___pySlotLayout___' env: 1) @env0:indexOf: n) @env0:~= p
+							@env0:or: [owner ___grailIsIndexedPair___: getter]]) ifTrue: [
 								c ___grailCompileIndexedPair___: n position: p forwardGetter: hookInChain]]]]].
 	^ { classesDone. instancesDone }
 %
@@ -1028,19 +1030,35 @@ ___grailSlotSubtree___
 	(docs/Persistent_Modules_and_Classes.md: every module-level class, imported
 	in this session or not) unioned with the session's subclass registry
 	(__subclasses__), so a class defined in a not-yet-imported module and one
-	built by type() in this session are both found."
+	built by type() in this session are both found.
 
-	| result queue reg |
+	The registry is read ONCE, into a superclass -> subclasses index, rather
+	than once per class visited: layout propagation walks this on every
+	rebuild of a class with a layout."
+
+	| result queue byParent |
 	result := OrderedCollection @env0:with: self.
 	queue := OrderedCollection @env0:with: self.
-	reg := importlib @env0:___canonicalClassRegistry___.
-	[queue @env0:isEmpty] @env0:whileFalse: [ | c subs |
+	byParent := IdentityKeyValueDictionary @env0:new.
+	"Every namespace the session reads: an app's class may subclass a shared
+	one (docs/App_Namespaces_Design.md §3.1)."
+	importlib @env0:___grailSessionNamespacesDo___: [:ns |
+		(importlib @env0:___canonicalClassRegistry___) @env0:keysAndValuesDo: [:k :v |
+			(v @env0:isKindOf: Behavior) ifTrue: [
+				(byParent @env0:at: v @env0:superclass ifAbsentPut: [OrderedCollection @env0:new]) @env0:add: v]]].
+	[queue @env0:isEmpty] @env0:whileFalse: [ | c subs sessionSubs |
 		c := queue @env0:removeFirst.
 		subs := OrderedCollection @env0:new.
-		reg @env0:keysAndValuesDo: [:k :v |
-			((v @env0:isKindOf: Behavior) @env0:and: [v @env0:superclass == c]) ifTrue: [
-				(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]]].
-		([c __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()]) @env0:do: [:v |
+		(byParent @env0:at: c otherwise: #()) @env0:do: [:v |
+			(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]].
+		"__subclasses__ is a LIST for an ordinary class; on a class rooted at
+		``type'' it is type's descriptor (an UnboundMethod), which is not a
+		collection of anything.  Layout propagation reaches this walk from a
+		metaclass's rebuild (UnboundCallArityTestCase), where the old
+		__subclasses__ walk had the same guard."
+		sessionSubs := [c __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+		(sessionSubs @env0:isKindOf: Collection) ifFalse: [sessionSubs := #()].
+		sessionSubs @env0:do: [:v |
 			((v @env0:isKindOf: Behavior) @env0:and: [v @env0:superclass == c]) ifTrue: [
 				(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]]].
 		subs @env0:do: [:s |
@@ -1062,16 +1080,10 @@ ___grailRemoveOwnIndexedPair___: aName
 	| getter setter |
 	getter := ('___pyattr_' @env0:, aName @env0:asString @env0:, '___') @env0:asSymbol.
 	setter := (getter @env0:asString @env0:, ':') @env0:asSymbol.
-	(self @env0:includesSelector: getter environmentId: 1) ifTrue: [
-		(((self @env0:categoryOfSelector: getter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
-			@env0:and: [(self @env0:compiledMethodAt: getter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
-			ifTrue: [
-				[self @env1:___removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
-	(self @env0:includesSelector: setter environmentId: 1) ifTrue: [
-		(((self @env0:categoryOfSelector: setter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
-			@env0:and: [(self @env0:compiledMethodAt: setter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
-			ifTrue: [
-				[self @env1:___removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+	(self ___grailIsIndexedPair___: getter) ifTrue: [
+		[self @env1:___removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(self ___grailIsIndexedPair___: setter) ifTrue: [
+		[self @env1:___removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	^ self
 %
 
@@ -1099,86 +1111,137 @@ ___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter 
 	forwardSetter: likewise a Python __setattr__ in the chain must see every
 	store, so the setter half forwards to ``self __setattr__: 'x' _: v'' --
 	whose default tail writes the position by index, not through this pair.
-	Guarded compiles, category ``Grail-Inferred Slots'', like the rest."
+	Guarded compiles, category ``Grail-Inferred Slots'', like the rest.
 
-	| lf n p getter |
+	THE OWNER GUARD.  The position literal is right for THIS class's layout
+	only, and a subclass's layout can put another name there: B(A) holding
+	(x y) while A, rebuilt, holds (x z).  The installer gives every subclass
+	it can SEE its own pair, but one it cannot see -- a class built in an
+	earlier session's __main__, or in a module this session never imported
+	-- inherits this one, and reading A's position 2 on a B instance answers
+	B's y for z, and storing there overwrites it.  So the storage halves
+	answer only for an instance of exactly this class, and any other receiver
+	falls to the generic load / store, which ask the receiver's OWN class's
+	slot-index table: z is absent there (AttributeError, or a per-object
+	store) and y is never touched.  The class is reached through
+	``___grailSlotPairOwner___'', a literal variable bound in a scope
+	dictionary for this compile only, since a Python class is built
+	inDictionary: nil and has no name to compile against.  The forwarding
+	halves need no guard: they never read a position."
+
+	| lf n p getter scope guard |
 	lf := Character @env0:lf @env0:asString.
 	n := aName @env0:asString.
 	p := pos @env0:printString.
 	getter := '___pyattr_' @env0:, n @env0:, '___'.
+	scope := SymbolDictionary @env0:new.
+	scope @env0:at: #'___grailSlotPairOwner___' put: self.
+	guard := '	self @env0:class == ___grailSlotPairOwner___ ifFalse: ['.
 	[self ___compileMethod: (forwardGetter
 			ifTrue: [getter @env0:, lf @env0:, '	^ self ___pyAttrLoad___: #''' @env0:, n @env0:, '''']
 			ifFalse: [getter @env0:, lf @env0:,
+				guard @env0:, '^ self ___pyAttrLoad___: #''' @env0:, n @env0:, '''].' @env0:, lf @env0:,
 				'	^ (' @env0:, p @env0:, ' @env0:<= self @env0:_basicSize ifTrue: [self @env0:at: ' @env0:, p
 				@env0:, '] ifFalse: [nil]) ifNil: [self ___pyAttrLoad___: #''' @env0:, n @env0:, ''']'])
-		category: 'Grail-Inferred Slots']
+		category: 'Grail-Inferred Slots'
+		scope: scope]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	[self ___compileMethod: (forwardSetter
 			ifTrue: [getter @env0:, ': ___1' @env0:, lf @env0:, '	self __setattr__: ''' @env0:, n @env0:, ''' _: ___1']
 			ifFalse: [getter @env0:, ': ___1' @env0:, lf @env0:,
+			guard @env0:, 'self ___pyAttrStore___: #''' @env0:, n @env0:, ''' put: ___1.  ^ self].' @env0:, lf @env0:,
 			'	' @env0:, p @env0:, ' @env0:> self @env0:_basicSize ifTrue: [self @env0:size: ' @env0:, p @env0:, '].' @env0:, lf @env0:,
 			'	self @env0:at: ' @env0:, p @env0:, ' put: ___1'])
-		category: 'Grail-Inferred Slots']
+		category: 'Grail-Inferred Slots'
+		scope: scope]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ self
 %
 
 category: 'Grail-Slots'
 classmethod: object
+___grailIsIndexedPair___: aSelector
+	"Whether THIS class's own method aSelector is an indexed-slot pair half --
+	category ``Grail-Inferred Slots'' and reading the indexed part -- as
+	opposed to a @property or hook forwarder of the same spelling, which reads
+	no position and so is as right on a subclass as here."
+
+	^ (self @env0:includesSelector: aSelector environmentId: 1)
+		@env0:and: [((self @env0:categoryOfSelector: aSelector environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
+		@env0:and: [(self @env0:compiledMethodAt: aSelector environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize']]
+%
+
+category: 'Grail-Slots'
+classmethod: object
 ___grailPropagateSlotLayoutToSubclasses___
-	"After this class's layout GREW on a rebuild: every subclass that owns a
-	layout of its own APPENDS the names it lacks (its existing positions never
-	move -- its instances depend on them), recompiles its index table, and gets
-	its OWN pair for each appended name at its own position, so the parent's
-	pair -- compiled for the parent's position, which on the subclass may be
-	another name's slot -- is never the one that answers.  Recurses, because a
-	grandchild owns positions of its own too.  A subclass with NO own layout
-	inherits the parent's numbering unchanged and needs nothing, but its
-	subclasses are still visited.
+	"After this class's layout GREW on a rebuild: every class below it that
+	owns a layout APPENDS the names its parent has and it lacks (its existing
+	positions never move -- its instances depend on them), recompiles its index
+	table, and gets its OWN pair for each appended name at its own position.
+	A parent's indexed pair answers only for the parent's own instances (the
+	owner guard, ___grailCompileIndexedPair___:), so without this a subclass's
+	instances would read the new name through the generic path, and as absent.
 
 	James's example (docs/Instance_Attribute_Indexed_Slots.md par.2): A (a1),
 	B(A) (a1 b1); A redefined with (a1 a2) -> B becomes (a1 b1 a2), and B's
 	___pyattr_a2___ reads position 3 where A's reads 2.
 
-	The direct subclasses come from importlib's registry through __subclasses__
-	(a class built ``inDictionary: nil'' is invisible to the kernel's own walk).
+	THE SUBCLASSES ARE ___grailSlotSubtree___'s: the persistent canonical class
+	registry unioned with this session's __subclasses__, primary chain only,
+	parents before children.  __subclasses__ alone is per SESSION, so a subclass
+	defined in a module this session never imported was left on its old layout
+	-- its instances then read the parent's new name as absent, and before the
+	owner guard read ANOTHER attribute's slot for it.  Each class merges against
+	its OWN superclass's layout, which the walk order has already updated, so a
+	grandchild picks up what its parent just appended.  A class with no layout
+	of its own (one built before every subclass took a copy) is passed through:
+	its own subclasses are still reached, against its inherited layout.
 
-	Nothing is ever RETIRED here: a name this class stopped assigning survives
-	in every layout (docs/Schema_Evolution_Design.md), and a hole a drop left
-	is the drop's own business (___grailDropSlot___: walks the subtree).  A
-	name this class assigns that a subclass holds as a hole is revived there
-	in place."
+	A class from a module this session has not imported is WRITTEN here, like
+	the rebuilt class itself: the rebuild's transaction carries both, and an
+	abort discards both.  A session-local class (__main__, a function body) is
+	reached only through __subclasses__, i.e. only in the session that built
+	it; the owner guard is what keeps its instances safe elsewhere.
 
-	| mine lf subs tomb bare |
+	The pairs honour each subclass's own hooks: a Python __getattribute__ /
+	__setattr__ in ITS chain must see every read / store, as the installer
+	arranges for its own names.
+
+	Nothing is ever RETIRED here: a name a class stopped assigning survives in
+	every layout (docs/Schema_Evolution_Design.md), and a hole a drop left is
+	the drop's own business (___grailDropSlot___: walks the subtree).  A name
+	the parent assigns that a subclass holds as a hole is revived there in
+	place."
+
+	| lf tomb bare hookInChainOf setattrHookInChainOf |
 	"A class with no layout anywhere in its metaclass chain has nothing to hand
-	down: a MULTIPLE-INHERITANCE subclass reaches here through the registry of a
-	SECONDARY base (``class LabeledStorage(ReadOnlyMixin, Storage)'' is a
-	subclass of Storage but inherits its shape from ReadOnlyMixin), and the
-	secondary base's slot machinery is deliberately not copied onto it."
+	down."
 	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
 		ifTrue: [^ self].
-	mine := self @env0:perform: #'___pySlotLayout___' env: 1.
 	lf := Character @env0:lf @env0:asString.
 	tomb := [:n | ('~' @env0:, n @env0:asString) @env0:asSymbol].
 	bare := [:e | | s | s := e @env0:asString.
 		(s @env0:first == $~) ifTrue: [(s @env0:copyFrom: 2 to: s @env0:size) @env0:asSymbol] ifFalse: [e @env0:asSymbol]].
-	"__subclasses__ is a LIST for an ordinary class; on a class rooted at
-	``type'' it is type's descriptor (an UnboundMethod), which is not a
-	collection of anything -- a metaclass has no slot layout to propagate."
-	subs := [self __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
-	(subs @env0:isKindOf: Collection) ifFalse: [^ self].
-	subs @env0:do: [:sub |
-		(sub @env0:isKindOf: Behavior) ifTrue: [
-		(sub @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
-			| own changed needPair src |
+	hookInChainOf := [:c | | o |
+		o := c @env0:whichClassIncludesSelector: #'__getattribute__:' environmentId: 1.
+		o @env0:notNil @env0:and: [o @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]].
+	setattrHookInChainOf := [:c | | o |
+		o := c @env0:whichClassIncludesSelector: #'__setattr__:_:' environmentId: 1.
+		o @env0:notNil @env0:and: [o @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]].
+	self ___grailSlotSubtree___ @env0:do: [:sub |
+		(sub ~~ self
+			@env0:and: [(sub @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1)
+			@env0:and: [(sub @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil]])
+				ifTrue: [ | parent own changed needPair src |
+			parent := sub @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1.
 			own := OrderedCollection @env0:withAll: (sub @env0:perform: #'___pySlotLayout___' env: 1).
 			changed := false.
 			needPair := OrderedCollection @env0:new.
-			mine @env0:do: [:e | | n di |
+			parent @env0:do: [:e | | n di |
 				n := bare @env0:value: e.
-				"Live here and absent there: the subclass appends it, or revives
-				its hole in place; either way it gets its own pair at its own
-				position.  A hole here changes nothing there."
+				"Live in the parent and absent here: append it, or revive its hole
+				in place; either way it gets its own pair at its own position.  A
+				hole in the parent changes nothing here."
 				(e == n @env0:and: [(own @env0:includes: n) @env0:not]) ifTrue: [
 					di := own @env0:indexOf: (tomb @env0:value: n).
 					di @env0:= 0 ifTrue: [own @env0:add: n] ifFalse: [own @env0:at: di put: n].
@@ -1192,9 +1255,28 @@ ___grailPropagateSlotLayoutToSubclasses___
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				sub ___grailCompileSlotIndexTable___].
 			needPair @env0:do: [:n |
-				sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n) forwardGetter: false]].
-		sub ___grailPropagateSlotLayoutToSubclasses___]].
+				sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n)
+					forwardGetter: (hookInChainOf @env0:value: sub)
+					forwardSetter: (setattrHookInChainOf @env0:value: sub)]]].
 	^ self
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailAdoptInheritedSlotLayout___
+	"Emitted by ClassDefAst, in place of the installer, for a class body that
+	assigns, declares and forwards nothing of its own.  When the parent has a
+	slot layout, take a copy of it and compile this class's own pair for every
+	name in it: the parent's indexed pairs answer only for the parent's own
+	instances (the owner guard, ___grailCompileIndexedPair___:), so without its
+	own pairs every attribute of such a class would take the generic path.  A
+	parent without a layout -- every stdlib class, and every class with the
+	positions off -- leaves nothing to do."
+
+	((self @env0:inheritsFrom: PythonInstance)
+		@env0:and: [(self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil])
+			ifFalse: [^ self].
+	^ self ___grailInstallInferredSlots___: #() declared: #() properties: #() indexed: true
 %
 
 category: 'Grail-Slots'
@@ -1223,7 +1305,11 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	For each name x, in order:
 
 	  1. An ANCESTOR already implements ``___pyattr_x___'' at the SAME position
-	     -> compile nothing: the parent's pair reads and writes the same slot.
+	     as a FORWARDER -> compile nothing: it reads no position.  An ancestor's
+	     INDEXED pair never serves this class, even at the same position: its
+	     owner guard answers only for that ancestor's own instances
+	     (___grailCompileIndexedPair___:), so every class with a layout compiles
+	     its own indexed pair for every live name in it.
 	     For an INFERRED name a parent pair over a name the parent's layout
 	     lacks -- a @property forwarder (step 3 below, run when the parent was
 	     built) -- wins as well: CPython's data descriptor over the instance
@@ -1320,7 +1406,12 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	declaredNames @env0:do: [:n | layoutNames @env0:add: n @env0:asSymbol].
 	wantIndexed ifTrue: [
 		inferredNames @env0:do: [:n | (layoutNames @env0:includes: n @env0:asSymbol) ifFalse: [layoutNames @env0:add: n @env0:asSymbol]]].
-	layout := ((wantIndexed @env0:or: [declaredNames @env0:isEmpty @env0:not])
+	"A parent with a layout counts too, whatever this body infers: the owner
+	guard (___grailCompileIndexedPair___:) refuses an inherited pair's fast
+	path, so a subclass that assigns nothing of its own still needs its own
+	copy of the layout and its own pairs to stay on it."
+	layout := ((wantIndexed @env0:or: [declaredNames @env0:isEmpty @env0:not
+			@env0:or: [(self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil]])
 			@env0:and: [self @env0:inheritsFrom: PythonInstance])
 		ifTrue: [self ___grailMergedSlotLayout___: layoutNames]
 		ifFalse: [#()].
@@ -1338,15 +1429,25 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 			@env0:and: [(self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil])
 		ifTrue: [self @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1]
 		ifFalse: [#()].
-	"An INHERITED name this class does not infer but holds at a DIFFERENT
-	position than the parent (the parent appended it after this class had
-	handed that position to a name of its own) needs this class's own pair, or
-	the parent's pair would read and write the wrong slot on these instances."
-	layout @env0:doWithIndex: [:n :pos |
+	"An INHERITED name this class does not infer gets this class's own pair:
+	always when the parent holds it at a DIFFERENT position (the parent
+	appended it after this class had handed that position to a name of its
+	own), and otherwise whenever the pair it would inherit is an indexed one,
+	whose owner guard answers only for the parent's own instances.  An
+	inherited @property / hook forwarder at the same position keeps winning:
+	it reads no position.  Nor does this body's OWN @property of that name,
+	which step 3 below turns into the forwarder; a pair compiled here first
+	would make step 3 see this class as the owner and skip it."
+	layout @env0:doWithIndex: [:n :pos | | inheritedOwner |
 		((layoutNames @env0:includes: n) @env0:not
 			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not
-			@env0:and: [(parentLayout @env0:indexOf: n) @env0:~= pos]]) ifTrue: [
-				self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain forwardSetter: setattrHookInChain]].
+			@env0:and: [(propertyNames @env0:anySatisfy: [:p | p @env0:asSymbol == n]) @env0:not]]) ifTrue: [
+				inheritedOwner := ownerOf @env0:value: ('___pyattr_' @env0:, n @env0:asString @env0:, '___') @env0:asSymbol.
+				((parentLayout @env0:indexOf: n) @env0:~= pos
+					@env0:or: [inheritedOwner @env0:isNil
+					@env0:or: [inheritedOwner ___grailIsIndexedPair___: ('___pyattr_' @env0:, n @env0:asString @env0:, '___') @env0:asSymbol]])
+						ifTrue: [
+							self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain forwardSetter: setattrHookInChain]]].
 	"A name the new body no longer assigns SURVIVES with its pair
 	(docs/Schema_Evolution_Design.md): nothing is removed on a rebuild.  A hole
 	(``~name'', left by an explicit drop) has no pair and no index entry."
@@ -1374,9 +1475,13 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 		then this class needs its own pair.  A parent pair over a name the parent's
 		LAYOUT lacks is a @property forwarder, which keeps winning for an INFERRED
 		name and loses to a DECLARED one (step 1 above)."
+		"...and never an INDEXED parent pair, even at the same position: its owner
+		guard answers only for the parent's own instances (see
+		___grailCompileIndexedPair___:), so this class compiles its own."
 		inherited := (owner @env0:notNil @env0:and: [owner @env0:~~ self])
 			@env0:and: [(parentLayout @env0:includes: each @env0:asSymbol)
-				ifTrue: [(parentLayout @env0:indexOf: each @env0:asSymbol) @env0:= (layout @env0:indexOf: each @env0:asSymbol)]
+				ifTrue: [(parentLayout @env0:indexOf: each @env0:asSymbol) @env0:= (layout @env0:indexOf: each @env0:asSymbol)
+					@env0:and: [(owner ___grailIsIndexedPair___: getter @env0:asSymbol) @env0:not]]
 				ifFalse: [(declaredNames @env0:includes: each) @env0:not]].
 		inherited ifFalse: [
 			hookInChain ifTrue: [
@@ -2720,11 +2825,28 @@ ___grailInitSubclass___: kwargs
 	__new__ asking for its keyword got None, and the hook chain got the
 	keyword instead, upside down twice over."
 	kw := kwargs.
-	(kw @env0:notNil and: [kw @env0:isEmpty @env0:not]) ifTrue: [
+	((kw @env0:notNil and: [kw @env0:isEmpty @env0:not])
+		and: [(SessionTemps @env0:current
+			@env0:at: #'GrailInitSubclassExactKwargs' otherwise: nil) ~~ true]) ifTrue: [
 		(SessionTemps @env0:current
 			@env0:at: #'GrailPendingClassKwargs'
 			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
 				@env0:at: self put: kw.
+		"DEFERRED when the metaclass __new__ ends in a **kwargs catch-all.
+		Whether such a __new__ forwards the keywords is its own code, so any
+		guess from the signature is wrong for half the metaclasses: abc.ABCMeta
+		forwards every one (``super().__new__(mcls, name, bases, namespace,
+		**kwargs)'') and the guess handed the hook NONE (test_abc's
+		TestABCWithInitSubclass).  CPython runs the hook inside type.__new__,
+		with exactly what reached it, and so does this now: type >>
+		__new__:_:_:_: runs the deferred hook on the class under construction,
+		and ___grailDispatchMetaclass___ drops it if the metaclass never
+		delegates up -- in which case CPython would not have run it either."
+		self ___grailMetaclassNewHasCatchAll___ ifTrue: [
+			(SessionTemps @env0:current
+				@env0:at: #'GrailDeferredInitSubclass'
+				ifAbsentPut: [IdentitySet @env0:new]) @env0:add: self.
+			^ self].
 		kw := self ___grailKwargsAfterMetaclass___: kw].
 	"An ASSIGNED __init_subclass__, which is a different thing from a defined
 	one and was not looked for at all.  PEP 702's @deprecated works by
@@ -3141,25 +3263,43 @@ ___grailRunAssignedInitSubclass___: aHook kw: kwargs
 
 category: 'Grail-Initialization'
 classmethod: object
-___grailKwargsAfterMetaclass___: aKwargs
-	"The class-header keywords MINUS those the metaclass's own __new__
-	consumes by naming them.
+___grailRunDeferredInitSubclass___: kwargsOrNil
+	"Run the __init_subclass__ chain ___grailInitSubclass___: deferred, with
+	the keywords that actually reached type.__new__ -- once.  Answers false
+	when this class has nothing deferred.
 
-	Read from the __new__'s signature spec: entries beyond the standard four
-	(mcs, name, bases, namespace) that are plain named parameters.  A **kwargs
-	catch-all is a different kind in the spec and is left alone -- it forwards
-	rather than consumes.  No metaclass, a non-constructing one, or a __new__
-	with nothing beyond the four: the kwargs pass through untouched."
+	The keywords are used as they arrive: they ARE what the metaclass
+	forwarded, so the signature-based filter (and the deferral itself) must
+	stand down for this one call."
 
-	| tbl meta fn spec out consumed |
+	| deferred |
+	deferred := SessionTemps @env0:current
+		@env0:at: #'GrailDeferredInitSubclass' otherwise: nil.
+	(deferred == nil or: [(deferred @env0:includes: self) @env0:not]) ifTrue: [^ false].
+	deferred @env0:remove: self.
+	SessionTemps @env0:current @env0:at: #'GrailInitSubclassExactKwargs' put: true.
+	[self ___grailInitSubclass___: kwargsOrNil]
+		@env0:ensure: [SessionTemps @env0:current
+			@env0:removeKey: #'GrailInitSubclassExactKwargs' ifAbsent: [nil]].
+	^ true
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailMetaclassNewSpec___
+	"The __signature_spec__ of this class's metaclass's __new__, following a
+	functools.wraps chain to the function whose parameters actually bind, or
+	nil when there is no Python metaclass or no readable spec."
+
+	| tbl meta fn spec |
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailClassMetaclass' otherwise: nil.
 	meta := tbl == nil ifTrue: [nil] ifFalse: [tbl @env0:at: self otherwise: nil].
-	meta == nil ifTrue: [^ aKwargs].
-	(meta @env0:isKindOf: Behavior) ifFalse: [^ aKwargs].
+	meta == nil ifTrue: [^ nil].
+	(meta @env0:isKindOf: Behavior) ifFalse: [^ nil].
 	fn := [meta ___pyAttrLoad___: #'__new__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	fn == nil ifTrue: [^ aKwargs].
+	fn == nil ifTrue: [^ nil].
 	"Follow the functools.wraps chain: a DECORATED __new__ -- @deprecated's
 	own metaclass wrapper is the case in play -- has the wrapper's signature
 	(*args, **kwargs), which consumes nothing.  The parameters that bind are
@@ -3175,7 +3315,44 @@ ___grailKwargsAfterMetaclass___: aKwargs
 			ifFalse: [fn := inner]].
 	spec := [fn @env1:___pyAttrLoad___: #'__signature_spec__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	(spec == nil or: [spec == None]) ifTrue: [^ aKwargs].
+	(spec == nil or: [spec == None]) ifTrue: [^ nil].
+	^ spec
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailMetaclassNewHasCatchAll___
+	"Whether the metaclass's __new__ takes a **kwargs catch-all beyond the
+	standard four parameters -- the one signature from which what reaches
+	__init_subclass__ CANNOT be read, because what it forwards to
+	super().__new__ is its own code.  See ___grailInitSubclass___:."
+
+	| spec |
+	spec := self ___grailMetaclassNewSpec___.
+	spec == nil ifTrue: [^ false].
+	5 @env0:to: spec @env0:size do: [:i |
+		| entry |
+		entry := spec @env0:at: i.
+		(entry @env0:size @env0:>= 2 and: [(entry @env0:at: 2) @env0:= 4])
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailKwargsAfterMetaclass___: aKwargs
+	"The class-header keywords MINUS those the metaclass's own __new__
+	consumes by naming them.
+
+	Read from the __new__'s signature spec: entries beyond the standard four
+	(mcs, name, bases, namespace) that are plain named parameters.  A **kwargs
+	catch-all is a different kind in the spec and is left alone -- it forwards
+	rather than consumes.  No metaclass, a non-constructing one, or a __new__
+	with nothing beyond the four: the kwargs pass through untouched."
+
+	| spec out consumed |
+	spec := self ___grailMetaclassNewSpec___.
+	spec == nil ifTrue: [^ aKwargs].
 	spec @env0:size @env0:<= 4 ifTrue: [^ aKwargs].
 	"Kinds in the spec: 1 = named, 3 = keyword-only, 4 = **kwargs.  Named and
 	keyword-only parameters consume their keyword by binding it.  A **kwargs
@@ -4336,6 +4513,12 @@ ___grailDispatchMetaclass___
 		the delegation already handled.  Runs in the ensure: so a metaclass that
 		RAISES still leaves no deferral behind for the next class statement."
 		Enum ___grailRunDeferredMemberBuild___: self namespace: ns.
+		"The same net for a DEFERRED __init_subclass__ chain (object class >>
+		___grailInitSubclass___:): normally run inside type.__new__ with the
+		keywords the metaclass forwarded; a dispatch that never got there runs
+		it now with none, which is what the signature guess this replaced gave
+		a **kwargs metaclass -- so no class loses its hook to the deferral."
+		self ___grailRunDeferredInitSubclass___: nil.
 		self ___grailFinishNamespace___.
 		self ___grailDropPendingClassCell___.
 		"Drop the stashed header keywords with the rest of the pending state."
@@ -4450,6 +4633,73 @@ ___grailNsBind___: aName
 %
 
 category: 'Grail-Class Namespace'
+method: object
+___grailReplaceBinding___: key _: value
+	"Replace a class-body namespace entry the body ALREADY bound -- the second
+	half of a binding Grail has to make in two steps (the def at its source
+	position, then its decorated object or property once that exists).  An
+	ordinary mapping just stores; EnumDict overrides this, because its
+	__setitem__ refuses a second binding of a name, and this is one binding
+	CPython makes once."
+
+	^ self __setitem__: key _: value
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsRebindProperty___: aName
+	"After ___grailOwnPropertyNames___ exists: put the PROPERTY a class read now
+	answers for aName into the namespace, where the bind at the def's position
+	could only see the getter.  Only when it really is a property -- an
+	enum.property and the like are already in the namespace as what they are."
+
+	| ns v |
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifTrue: [^ self].
+	v := [self ___pyAttrLoad___: aName @env0:asSymbol]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(v @env0:isKindOf: AbstractPropertyDescriptor) ifFalse: [^ self].
+	ns ___grailReplaceBinding___: aName @env0:asString _: v.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsRebind___: aName
+	"A class-body def's DECORATOR has just stored its result over the compiled
+	method: put that result in the namespace too, under the key
+	___grailNsBind___: already gave the def, so the key keeps its place.
+
+	___grailNsBind___: says the decorator has run by the time it reads the
+	name back off the class, and the emit no longer agrees: the binds come
+	straight after the body, the decorator stores later.  So a metaclass was
+	handed the UNDECORATED function for every decorated def, where CPython's
+	namespace holds the decorator's result.  Mostly invisible, because
+	abstractmethod and abstractclassmethod also mark the function itself --
+	but abc.abstractproperty marks only the property it returns, so ABCMeta
+	saw nothing abstract and a class with one could be instantiated
+	(test_abc test_abstractproperty_basics).
+
+	RAW, from the holder: CPython's namespace holds the descriptor itself, and
+	reading through ___pyAttrLoad___ would answer a classmethod already bound.
+	And the class's OWN holder only: a decorator that raised stored nothing
+	(the application handler swallows it), and an inherited read then put
+	the PARENT's value in this class's namespace -- an abstract parent method
+	made the overriding subclass abstract."
+
+	| ns holder v |
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifTrue: [^ self].
+	(self @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifFalse: [^ self].
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
+	holder == nil ifTrue: [^ self].
+	v := holder @env0:dynamicInstVarAt: aName @env0:asSymbol.
+	v isNil ifTrue: [^ self].
+	ns ___grailReplaceBinding___: aName @env0:asString _: v.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
 classmethod: object
 ___grailNsDescriptorFor___: aSym loaded: aValue
 	"The object CPython's class-body namespace holds for the def aSym, given
@@ -4504,31 +4754,6 @@ ___grailNsDescriptorFor___: aSym loaded: aValue
 
 category: 'Grail-Class Namespace'
 classmethod: object
-___grailNsRebind___: aName
-	"A decorated class-body def's decorator has run and stored its result in
-	the holder: replace the namespace's entry for aName with it.
-
-	Through the mapping's RAW storage, not __setitem__.  CPython's namespace
-	receives a decorated def exactly once, already decorated; Grail's received
-	the raw function at the def's position (___grailNsBind___:), and calling
-	__setitem__ a second time would be a second binding -- which an enum
-	namespace refuses as a reused name.  The entry keeps its position.  A
-	mapping that is not a dict underneath is left as it is.  Answers the
-	receiver; no namespace, no value: nothing to do."
-
-	| ns v |
-	ns := self ___grailPendingNamespace___.
-	ns isNil ifTrue: [^ self].
-	v := self ___grailNsHolderValueFor___: aName @env0:asSymbol.
-	v isNil ifTrue: [^ self].
-	(ns @env0:isKindOf: KeyValueDictionary) ifTrue: [
-		[ns @env0:at: aName @env0:asString put: v]
-			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
-	^ self
-%
-
-category: 'Grail-Class Namespace'
-classmethod: object
 ___grailNsHolderValueFor___: aSym
 	"What the class's ___dynInstVars___ holder stores under aSym, raw -- a
 	decorated def's decorator result -- or nil."
@@ -4547,15 +4772,24 @@ ___grailNsOwnPropertyFor___: aSym
 	"A property object for aSym when the class body declared it a @property
 	(___grailOwnPropertyNames___, compiled before the body runs), around the
 	class's own getter; nil for any other name.  See ___grailNsBind___: for
-	why this is built rather than read off the class."
+	why this is built rather than read off the class.
 
-	^ [((self @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___'
+	The BUILTIN property only (___grailBuiltinPropertyNames___, compiled before
+	the body as well): an @enum.property def compiles to the same accessor
+	pair, but CPython's namespace holds an enum.property, not a property.  The
+	object is UnboundMethod >> ___grailPropertyOrSelf___'s, so the namespace,
+	the class read and __dict__ all hand out the same property, setter and
+	deleter included."
+
+	| prop |
+	((self @env0:class @env0:includesSelector: #'___grailBuiltinPropertyNames___'
 			environmentId: 1)
-		and: [(self @env1:___grailOwnPropertyNames___) @env0:includes: aSym])
-			ifTrue: [PropertyDescriptor __new__:
-				(UnboundMethod definingClass: self selector: aSym)]
-			ifFalse: [nil]]
-		@env0:on: AbstractException do: [:e | e @env0:return: nil]
+		and: [[(self @env1:___grailBuiltinPropertyNames___) @env0:includes: aSym]
+			@env0:on: AbstractException do: [:e | e @env0:return: false]])
+		ifFalse: [^ nil].
+	prop := [(UnboundMethod definingClass: self selector: aSym) ___grailPropertyOrSelf___]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ (prop @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [prop] ifFalse: [nil]
 %
 
 category: 'Grail-Class Namespace'
@@ -5400,8 +5634,7 @@ ___pythonModuleAttrIdentity___
 
 	Grail's Python SymbolDictionary is FLAT, so a class CPython reaches only
 	through a module gets a flattened Smalltalk name: ``functools_partial''
-	for functools.partial, ``sys_flags'' for type(sys.flags),
-	``string_formatter'' for string.Formatter.  That spelling is an
+	for functools.partial, ``sys_flags'' for type(sys.flags).  That spelling is an
 	implementation detail, but it leaked into every Python-visible report --
 	``functools.partial.__name__'' answered 'functools_partial' where CPython
 	says 'partial', and ``__module__'' answered nothing at all where CPython
@@ -5470,7 +5703,6 @@ ___pythonModuleAttrIdentity___
 	by os, which os.DirEntry's own __module__ shows."
 	(n @env0:= 'os_DirEntry') ifTrue: [^ #('DirEntry' 'posix')].
 	(n @env0:= 'os_ScandirIterator') ifTrue: [^ #('ScandirIterator' 'posix')].
-	(n @env0:= 'string_formatter') ifTrue: [^ #('Formatter' 'string')].
 	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
 	"os.stat_result -- a structseq CPython defines in posixmodule and publishes
 	from os; pickle saves it by that name."
@@ -5537,7 +5769,7 @@ ___pythonBuiltinExceptionNames___
 	in CPython's builtins module (``ValueError.__module__ == 'builtins'``).  The
 	authoritative inclusion list, matching CPython 3.14's builtins exactly, so
 	the Python compile dictionary's OTHER exception subclasses are excluded:
-	module exceptions (StatisticsError->statistics, UnsupportedOperation->io,
+	module exceptions (JSONDecodeError->json.decoder, UnsupportedOperation->io,
 	ZlibError->zlib) and Grail control-flow internals (PythonBreak / PythonContinue
 	/ PythonReturn) must NOT be tagged 'builtins' nor exposed in builtins.
 
@@ -5590,7 +5822,7 @@ ___pythonBuiltinTypeModule___
 	    same shape as the Grail-defined types — class-named and bound in the
 	    Python dict — and are matched the same identity-confirmed way, so
 	    ``ValueError.__module__`` / ``OSError.__module__`` report 'builtins'
-	    while a module exception (StatisticsError) or a user ``class E(ValueError)``
+	    while a module exception (JSONDecodeError) or a user ``class E(ValueError)``
 	    (name not in the list) is not.
 
 	Everything else answers nil and MUST keep its own __module__ (user classes,
@@ -6260,17 +6492,57 @@ ___instanceClassAttrGet___: aValue
 	call reached the function with no receiver (``unbound method ... must be
 	called with an instance as the first argument'').
 
-	Narrowed to UnboundMethod ON PURPOSE.  ___descriptorGet___: (below) already
-	returns a BoundMethod RAW -- deliberately, so a class attribute that is a
-	plain module function (``digest_method = staticmethod(...)'', werkzeug Map's
-	converter-table functions) is NOT redirected at the holder instance -- and
-	binding those the way the runtime-overlay path does regresses that.  An
-	UnboundMethod, by contrast, is what ``OtherClass.method'' answers and has no
-	other meaning than a function awaiting self, so binding it is unambiguous."
+	The same callables the holder path binds (___isDescriptorCallable___:), so
+	a class-body ASSIGNMENT binds exactly like ``Cls.x = v'' after the class
+	exists: an UnboundMethod (what ``OtherClass.method'' answers), a lambda, a
+	module-level def, an lru_cache wrapper.  This used to bind the UnboundMethod
+	alone, on the theory that binding a plain module function would redirect
+	itsdangerous' ``digest_method = staticmethod(hashlib.sha1)'' at the holder
+	instance -- but that value is a staticmethod, not a function, and the
+	predicate already leaves a builtin's function (no __file__) and a bound
+	method unbound, as CPython does.  Meanwhile ``class C: f = lambda self: 1''
+	made ``C().f()'' a missing-argument TypeError, and ``g = outer'' passed the
+	first ARGUMENT as self.
 
-	(aValue isKindOf: UnboundMethod)
+	EXCEPT a function of Grail's OWN stdlib (___grailMayStandInForABuiltin___:).
+	``__file__'' is how the predicate tells CPython's builtins from Python
+	functions, and Grail implements in Python much that CPython implements in
+	C: operator.add, threading.Lock.  Stored in a class body they must not bind
+	-- glob's ``concat_path = operator.add'', Flask's lock attributes -- so that
+	case keeps the unbound read it always had."
+
+	(self ___grailMayStandInForABuiltin___: aValue)
+		ifTrue: [^ self ___descriptorGet___: aValue].
+	(self ___isDescriptorCallable___: aValue)
 		ifTrue: [^ MethodBinding instance: self callable: aValue].
 	^ self ___descriptorGet___: aValue
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailMayStandInForABuiltin___: aValue
+	"Whether aValue is a top-level function of a module in Grail's ported stdlib
+	-- one that may be Grail's Python implementation of what CPython provides as
+	a C builtin, which is no descriptor.  operator.add is a function here and a
+	builtin_function_or_method there; so are threading.Lock and many more.
+
+	Grail cannot tell which of its stdlib functions are builtins in CPython, so
+	all of them answer true; the cost is that a stdlib function CPython writes
+	in Python (textwrap.dedent) does not bind when assigned in a class body,
+	which nothing does on purpose.  CPython's own TEST modules are excepted:
+	they are pure Python there too.  Matched on the path segment, so it holds
+	wherever the checkout lives."
+
+	| rcvr file |
+	(aValue isKindOf: BoundMethod) ifFalse: [^ false].
+	rcvr := aValue @env0:receiver.
+	(rcvr isKindOf: module) ifFalse: [^ false].
+	file := rcvr @env0:dynamicInstVarAt: #'__file__'.
+	(file isKindOf: CharacterCollection) ifFalse: [^ false].
+	file := file @env0:asString.
+	((file @env0:indexOfSubCollection: '/src/python/stdlib/') @env0:= 0)
+		ifTrue: [^ false].
+	^ (file @env0:indexOfSubCollection: '/src/python/stdlib/test/') @env0:= 0
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -7677,8 +7949,24 @@ ___classDict___
 			and: [nm @env0:~= '___dynInstVars___'
 			and: [(d @env0:includesKey: nm) @env0:not
 			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]) ifTrue: [
-			d @env0:at: nm put:
-				(UnboundMethod definingClass: defCls selector: nm @env0:asSymbol)]].
+			| um |
+			um := UnboundMethod definingClass: defCls selector: nm @env0:asSymbol.
+			"A declarative @property's getter is entered as the PROPERTY, the
+			same cached object a read off the class answers, so
+			``C.__dict__['p'] is C.p'' as in CPython.  It held the getter
+			function, and inspect.classify_class_attrs -- which takes its kind
+			from this mapping -- called every @property 'data'.
+
+			The BUILTIN property only (___grailBuiltinPropertyNames___): an
+			``@enum.property'' def has the same accessors, but CPython's
+			__dict__ holds an enum.property there, which is no ``property'' --
+			and Enum.__dir__ drops a member-shadowed ``property'' that it keeps
+			otherwise, so entering one put ``first'' in dir(MainEnum.second)."
+			((defCls @env0:class @env0:includesSelector: #'___grailBuiltinPropertyNames___'
+					environmentId: 1)
+				and: [(defCls ___grailBuiltinPropertyNames___) @env0:includes: nm @env0:asSymbol])
+				ifTrue: [um := um ___grailPropertyOrSelf___].
+			d @env0:at: nm put: um]].
 	"(c) own instance-side methods."
 	imd := [self @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 	imd == nil ifFalse: [
@@ -7950,7 +8238,218 @@ ___classDict___
 			@env0:on: AbstractException do: [:ex |
 				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 				ex @env0:return: nil]].
+	"__dict__ and __weakref__: CPython lists a getset_descriptor for each in
+	the dict of the class that GIVES its instances that storage -- not a
+	subclass, which inherits it, and not a class whose __slots__ leaves it
+	out.  See ___grailIntroducesInstanceSlot___:."
+	"A method wrap already under either name is a KERNEL method the hidden-
+	ancestor scan folded in -- ``<method '__dict__' of 'int' objects>'' in an
+	int subclass's dict -- and is no attribute of the class: replaced by the
+	descriptor when the class introduces the storage, dropped when it does not."
+	self ___grailIsPythonClass___ ifTrue: [
+		#('__dict__' '__weakref__') @env0:do: [:nm |
+			((d @env0:at: nm otherwise: nil) isKindOf: UnboundMethod)
+				ifTrue: [d @env0:removeKey: nm].
+			((d @env0:includesKey: nm) @env0:not
+				and: [self ___grailIntroducesInstanceSlot___: nm])
+				ifTrue: [ | desc |
+					desc := [self ___grailGetSetDescriptor___: nm]
+						@env0:on: AbstractException do: [:ex |
+							(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+							ex @env0:return: nil].
+					desc == nil ifFalse: [d @env0:at: nm put: desc]]]].
+	"SOURCE ORDER for a class a class statement built.  The sections above
+	read the holder, then the instance-side method dictionary, then the
+	metaclass's -- two of them hash-ordered -- so ``z = 1; def b; a = 2''
+	listed z, a, then b.  ClassDefAst records the body's order
+	(___classBodyOrder___); a type() class has none, and its holder is already
+	in insertion order."
+	"A type() class has no recorded order, but its holder keeps the namespace's
+	insertion order, so its own keys serve.  type.__new__ APPENDS __module__ to
+	a namespace that lacks it, where a class body starts with it, hence the
+	header flag; its other additions follow either way."
+	(self @env0:class @env0:includesSelector: #'___classBodyOrder___' environmentId: 1)
+		ifTrue: [d := self ___grailInBodyOrder___: d names: self ___classBodyOrder___ headerFirst: true]
+		ifFalse: [
+			self ___grailIsPythonClass___ ifTrue: [
+				d := self ___grailInBodyOrder___: d names: d @env0:keys @env0:asArray headerFirst: false]].
 	^ d
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailIntroducesInstanceSlot___: aName
+	"Whether this class -- a Python-defined one -- is the one that gives its
+	instances ``__dict__'' or ``__weakref__'' storage, so that CPython lists a
+	getset_descriptor for it in this class's __dict__: no base provides it
+	already, and the class does not declare __slots__ without naming it."
+
+	((self @env0:includesSelector: #'___pyDeclaresSlots___' environmentId: 1)
+		and: [(self ___grailSlotsNameTheDirective___: aName) @env0:not])
+		ifTrue: [^ false].
+	^ (self ___grailBasesProvideInstanceSlot___: aName) @env0:not
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailSlotsNameTheDirective___: aName
+	"Whether this class's OWN __slots__ value names ``__dict__'' /
+	``__weakref__'' -- the two directives ClassDefAst >> slotNames drops from
+	the instVar set, so the declared-slot record cannot say.  Read off the
+	class-body value: a string is one name, anything else is asked for
+	membership as Python asks it."
+
+	| v |
+	v := self ___classBodyValueAt___: #'__slots__'.
+	v == nil ifTrue: [^ false].
+	(v isKindOf: CharacterCollection) ifTrue: [^ v @env0:asString @env0:= aName].
+	^ [(v @env1:__contains__: aName) ___isTruthy___]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailIsPythonClass___
+	"A class a class statement OR type() built: the first carries the
+	___pyDefinedClass___ marker, the second only its own attribute holder."
+
+	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
+	self == object ifTrue: [^ false].
+	^ (self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailBasesProvideInstanceSlot___: aName
+	"Whether any of this class's Python __bases__ already gives instances
+	``__dict__'' / ``__weakref__'' (___grailProvidesInstanceSlot___:)."
+
+	| bases |
+	bases := [self ___pyAttrLoad___: #'__bases__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	bases @env0:do: [:b |
+		(b ___grailProvidesInstanceSlot___: aName) ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailProvidesInstanceSlot___: aName
+	"Whether instances of this class -- any class, built-in included -- already
+	have ``__dict__'' / ``__weakref__'' storage that a subclass inherits rather
+	than adds.
+
+	A Python-defined class provides it when it introduced it or a base did.
+	A BUILT-IN answers from CPython's table, measured on 3.14: every
+	BaseException, type and OrderedDict carry a __dict__; int, bytes, tuple
+	(variable-sized, which rules a weakref slot out), set, frozenset, type,
+	OrderedDict and deque refuse or already carry __weakref__.  object and the
+	rest provide neither, so their first Python subclass lists both."
+
+	| nm |
+	self == object ifTrue: [^ false].
+	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
+	self ___grailIsPythonClass___ ifTrue: [
+		^ (self ___grailIntroducesInstanceSlot___: aName)
+			or: [self ___grailBasesProvideInstanceSlot___: aName]].
+	nm := [(self ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: ''].
+	(#('type' 'OrderedDict') @env0:includes: nm) ifTrue: [^ true].
+	aName @env0:= '__dict__' ifTrue: [
+		^ (self @env0:== BaseException) or: [self @env0:inheritsFrom: BaseException]].
+	^ #('int' 'bool' 'bytes' 'tuple' 'set' 'frozenset' 'deque') @env0:includes: nm
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailWeakrefAttribute___
+	"What ``x.__weakref__'' answers, or nil to let the ordinary read decide:
+	the introducing class's getset_descriptor when the receiver is a class,
+	None when it is an instance of one; nil when nothing in the MRO introduces
+	the storage."
+
+	| cls mro |
+	cls := (self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class].
+	mro := [cls ___pyAttrLoad___: #'__mro__']
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: #()].
+	mro @env0:do: [:c |
+		(c ___grailIsPythonClass___
+			and: [c ___grailIntroducesInstanceSlot___: '__weakref__']) ifTrue: [
+				^ (self @env0:isKindOf: Behavior)
+					ifTrue: [c ___grailGetSetDescriptor___: '__weakref__']
+					ifFalse: [None]]].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailGetSetDescriptor___: aName
+	"The ``getset_descriptor'' this class's __dict__ lists under aName, built
+	once per class and session so ``C.__dict__['__dict__'] is
+	C.__dict__['__dict__']'' as in CPython."
+
+	| cache per desc |
+	cache := SessionTemps @env0:current
+		@env0:at: #'GrailGetSetDescriptors'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := cache @env0:at: self ifAbsentPut: [KeyValueDictionary @env0:new].
+	desc := per @env0:at: aName otherwise: nil.
+	desc == nil ifFalse: [^ desc].
+	desc := (((importlib @env0:___instance___) @env1:import_module: 'types')
+		@env1:___pyAttrLoad___: #'GetSetDescriptorType')
+			@env1:value: { aName. self } value: nil.
+	per @env0:at: aName put: desc.
+	^ desc
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailInBodyOrder___: aDict names: order headerFirst: headerFirst
+	"aDict, a class's __dict__ snapshot, re-keyed in CPython's order, given the
+	namespace's names in order:
+
+	  * for a class STATEMENT (headerFirst), the header its body opens with --
+	    __module__, __qualname__, __firstlineno__ -- and a DOCSTRING's __doc__,
+	    the body's first statement;
+	  * the names, in order (a type() class's own __doc__ included where its
+	    namespace had it);
+	  * for a type() class, __module__ after them: type.__new__ appends it;
+	  * what type.__new__ adds after the body: __static_attributes__, the
+	    __dict__ / __weakref__ descriptors, each declared slot's member
+	    descriptor, then __doc__ when the class has none (None);
+	  * anything else -- a ``Cls.x = v'' after the class existed -- in the
+	    order already there."
+
+	| out add doc header added |
+	out := (Python @env0:at: #PyDict) @env0:new.
+	add := [:k | | ks |
+		ks := k @env0:asString.
+		((aDict @env0:includesKey: ks) and: [(out @env0:includesKey: ks) @env0:not])
+			ifTrue: [out @env0:at: ks put: (aDict @env0:at: ks)]].
+	header := #('__module__' '__qualname__' '__firstlineno__').
+	added := #('__static_attributes__' '__dict__' '__weakref__').
+	doc := aDict @env0:at: '__doc__' otherwise: nil.
+	headerFirst ifTrue: [
+		header @env0:do: add.
+		(doc ~~ nil and: [doc ~~ None]) ifTrue: [add @env0:value: '__doc__']].
+	order @env0:do: [:k | | ks |
+		ks := k @env0:asString.
+		((added @env0:includes: ks)
+			or: [(header @env0:includes: ks)
+			or: [ks @env0:= '__doc__' and: [doc == nil or: [doc == None]]]])
+			ifFalse: [add @env0:value: k]].
+	headerFirst ifFalse: [header @env0:do: add].
+	added @env0:do: add.
+	(self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+		ifTrue: [self ___pyDeclaredSlotNames___ @env0:do: add].
+	add @env0:value: '__doc__'.
+	aDict @env0:keysDo: add.
+	^ out
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -8514,6 +9013,29 @@ ___isDescriptorCallable___: aValue
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___class___: aClass owns: aSym family: family
+	"True when aClass itself defines the unary aSym or any of the 7 selectors in
+	family, in env 1 -- session methods included.
+
+	Asked of the class rather than of ``methodDictForEnv: 1'': that builds a
+	fresh merged copy of the persistent and transient dictionaries on every
+	call (_copyDictForQuery:, then addAll:, a privilege check per entry), and
+	the two chain walks below ran it for every class in the chain on every
+	attribute load that reached them -- 89% of the time of ``str.__new__'',
+	which cost ~140 us to look up.  includesSelector:environmentId: looks in
+	the transient dictionary and then the persistent one, which is the same
+	membership the merged copy answers for env 1."
+
+	(aClass @env0:includesSelector: aSym environmentId: 1) ifTrue: [^ true].
+	1 to: 7 do: [:i | | sel |
+		sel := family @env0:at: i.
+		sel == nil ifFalse: [
+			(aClass @env0:includesSelector: sel environmentId: 1) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___chainOwnsAnyOf___: family orUnary: aSym from: aClass
 	"True when any class in aClass's chain defines the unary aSym or any
 	selector in family, in env 1.
@@ -8524,14 +9046,10 @@ ___chainOwnsAnyOf___: family orUnary: aSym from: aClass
 	-- which on this build is a merge of the persistent and the transient
 	(session method) dicts, i.e. the expensive part, done eightfold."
 
-	| walker dict |
+	| walker |
 	walker := aClass.
 	[walker == nil] whileFalse: [
-		dict := walker @env0:methodDictForEnv: 1.
-		dict == nil ifFalse: [
-			(dict @env0:includesKey: aSym) ifTrue: [^ true].
-			1 to: 7 do: [:i |
-				(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]].
+		(self ___class___: walker owns: aSym family: family) ifTrue: [^ true].
 		walker := walker @env0:superClass].
 	^ false
 %
@@ -8565,14 +9083,10 @@ ___ownChainOwnsAnyOf___: family orUnary: aSym from: aClass
 	where they live, and importlib's MI merge already draws the line the same
 	way (``walker ~~ PythonInstance and: [walker ~~ Object]'')."
 
-	| walker dict |
+	| walker |
 	walker := aClass.
 	[(walker == nil) or: [(walker == PythonInstance) or: [walker == Object]]] whileFalse: [
-		dict := walker @env0:methodDictForEnv: 1.
-		dict == nil ifFalse: [
-			(dict @env0:includesKey: aSym) ifTrue: [^ true].
-			1 to: 7 do: [:i |
-				(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]].
+		(self ___class___: walker owns: aSym family: family) ifTrue: [^ true].
 		walker := walker @env0:superClass].
 	^ false
 %
@@ -8602,9 +9116,23 @@ ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass
 	to ask for a category per hit; only the metaclass path calls it, so the cost
 	does not land on classes that have no metaclass."
 
-	| walker dict |
+	| walker dict metaDict |
 	walker := aClass.
 	[walker == nil] whileFalse: [
+		"A class whose body defines the name CLASS-side -- a @classmethod or
+		@staticmethod -- is nearer than any instance-side def above it, and
+		that def is no instance method of this chain's concern: stop and let
+		the class-side lookup answer it.  Walking past it found a base's
+		instance-side def -- the shape a classmethod SUBCLASS such as abc's
+		abstractclassmethod compiles to -- and answered an UnboundMethod for
+		the subclass's own classmethod, so ``D.foo()'' raised 'must be called
+		with an instance' (test_abc TestLegacyAPI, with a Python metaclass)."
+		metaDict := walker @env0:class @env0:methodDictForEnv: 1.
+		(metaDict ~~ nil
+			and: [(metaDict @env0:includesKey: aSym)
+			and: [self ___isPythonSourceMethodCategory___:
+				(walker @env0:class @env0:categoryOfSelector: aSym environmentId: 1)]])
+					ifTrue: [^ false].
 		dict := walker @env0:methodDictForEnv: 1.
 		dict == nil ifFalse: [
 			((dict @env0:includesKey: aSym)
@@ -8750,6 +9278,61 @@ ___unaryGetterShadowedBySetter___: getterSym setter: setterSym
 	(getterOwner == nil or: [setterOwner == nil]) ifTrue: [^ false].
 	getterOwner == setterOwner ifTrue: [^ false].
 	^ setterOwner @env0:inheritsFrom: getterOwner
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailDerivedDataDescriptorFor: aSym
+	"A data descriptor (a property, or an object with __set__ / __delete__)
+	that a class between the receiver's class and the owner of the unary
+	getter ``aSym'' -- both included -- holds in its attribute holder, or nil.
+
+	The pair read performs the getter it finds, and that getter can belong to
+	an ANCESTOR's property while a nearer class has rebound the name.  CPython
+	takes the first class in the MRO that has the name, and a data descriptor
+	there wins outright.  Three shapes reached the ancestor's getter instead:
+
+	    class Sub(Base): pass;  Sub.p = property(...)     -- answered Base's p
+	    class Sub(Base): @Base.p.deleter def p(self)       -- ran the DELETER
+	    class Sub(Base): @to_property def p(self)          -- ran the raw body
+
+	the second and third because the decorated def is compiled under its own
+	name and its decorated result goes to the holder.  The owner itself is
+	included for exactly that: its holder entry IS the decorator's result.
+
+	DATA descriptors only.  A plain class value or a method in the holder must
+	not outrank an INSTANCE slot behind the same accessor pair, which CPython's
+	instance __dict__ wins over too.
+
+	Each class's SESSION OVERLAY is asked before its holder: a runtime
+	``Cls.p = v'' on a canonical class lands there instead (see
+	___classAttrOverlayLookup___:name:), which is every class of a module the
+	test harness loads."
+
+	| owner walker holder v isData ov inner |
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [^ nil].
+	isData := [:x | x ~~ nil and: [(x isKindOf: AbstractPropertyDescriptor)
+		or: [(x isKindOf: PythonInstance)
+			and: [(x ___respondsTo___: #'__set__:_:')
+			or: [(x ___respondsTo___: #'___set__:kw:')
+			or: [x ___respondsTo___: #'__delete__:']]]]]].
+	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	walker := self @env0:class.
+	[walker == nil] whileFalse: [
+		ov == nil ifFalse: [
+			inner := ov @env0:at: walker otherwise: nil.
+			inner == nil ifFalse: [
+				v := inner @env0:at: aSym otherwise: nil.
+				(isData @env0:value: v) ifTrue: [^ v]]].
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				(isData @env0:value: v) ifTrue: [^ v]]].
+		walker == owner ifTrue: [^ nil].
+		walker := walker @env0:superClass].
+	^ nil
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -9367,6 +9950,38 @@ ___pyStoreDynamic___: aSym put: aValue
 
 category: 'Grail-Attribute Protocol'
 method: object
+___subclassAttrShadowing___: aSym
+	"A class attribute that a PYTHON subclass defines over a built-in VALUE
+	attribute (see ___pythonValueAttrs___), or nil.
+
+	The value-attribute branch of ___pyAttrLoad___: performs the built-in's
+	method, and it ran before any subclass's class attribute was looked at --
+	backwards from the MRO, where the subclass comes first.  abc's
+
+	    class abstractproperty(property):
+	        __isabstractmethod__ = True
+
+	therefore read property's COMPUTED answer (False: the getter is not
+	abstract), and an ABC with an abstractproperty could be instantiated
+	(test_abc test_abstractproperty_basics).  Only the classes BELOW the one
+	that implements the method can shadow it, so the walk stops there; for an
+	instance of a built-in itself it is one class and no holder."
+
+	| implementor walker holder v |
+	implementor := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	walker := self @env0:class.
+	[walker ~~ nil and: [walker ~~ implementor]] whileTrue: [
+		(walker @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				v == nil ifFalse: [^ v]]].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Attribute Protocol'
+method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
 	The presence of an ``attr:`` keyword method is ambiguous: on a
@@ -9402,6 +10017,20 @@ ___pyAttrLoad___: aSym
 					@env0:, ''' has no attribute ''''']
 				ifFalse: ['''' @env0:, self ___pyTypeNameForError___ @env0:asString
 					@env0:, ''' object has no attribute ''''']])].
+	"``__weakref__'': CPython's getset_descriptor, which a class's __dict__ now
+	lists (___grailGetSetDescriptor___:) and dir() therefore reports.  Read
+	off a class it answers that descriptor, inherited from the class that
+	introduced the storage; read off an instance it answers None, the value
+	of an object no weak reference points at -- Grail keeps no per-instance
+	list to answer the first one from.  Without this, dir() listed a name
+	every getattr of refused, and typing's NamedTuple walk -- getattr over
+	dir() -- failed to import (``type object 'NTC' has no attribute
+	'__weakref__'''); __dict__ needs nothing, the read was always answered.
+	Tested by SIZE first so the common read pays one comparison."
+	((aSym @env0:size) @env0:= 11 and: [aSym @env0:asString @env0:= '__weakref__']) ifTrue: [
+		| w |
+		w := self ___grailWeakrefAttribute___.
+		w == nil ifFalse: [^ w]].
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any
@@ -9561,10 +10190,10 @@ ___pyAttrLoad___: aSym
 		owner notNil ifTrue: [
 			"A 0-arg selector is either a data accessor (``__name__'',
 			``Grail-Constants'') that must be PERFORMED to yield its value,
-			or a native module FUNCTION (random.random, time.time — 0-arg
+			or a native module FUNCTION (time.time, os.getcwd — 0-arg
 			functions compiled to a unary Smalltalk selector) that must read
-			as a first-class BoundMethod, NOT be auto-invoked: ``from random
-			import random'' would otherwise bind the float random() returns.
+			as a first-class BoundMethod, NOT be auto-invoked: ``from time
+			import time'' would otherwise bind the float time() returns.
 			Discriminate by category.  Only the FUNCTION categories below
 			(plus Python defs in ``Grail-Methods'') wrap; the DEFAULT stays
 			perform, so an unlisted category behaves exactly as before — a
@@ -10296,7 +10925,12 @@ ___pyAttrLoad___: aSym
 								___setterCat @env0:~= 'Grail-Fixed Arity Forwarders'
 									and: [___setterCat @env0:~= 'Grail-Class Side Forwarders']]]]]])
 		ifTrue: [
-			| instVal metaclass |
+			| instVal metaclass derived |
+			"A DATA DESCRIPTOR stored on a class at least as derived as the
+			pair's getter wins, as CPython's MRO walk has it -- see
+			___grailDerivedDataDescriptorFor:."
+			derived := self ___grailDerivedDataDescriptorFor: aSym.
+			derived == nil ifFalse: [^ self ___descriptorGet___: derived].
 			instVal := self @env0:perform: aSym env: 1.
 			"If the per-instance slot is still nil, fall back to the
 			class-side accessor for the class-level default — matches
@@ -10453,7 +11087,9 @@ ___pyAttrLoad___: aSym
 	as today."
 	((self @env0:class @env0:respondsTo: #'___pythonValueAttrs___')
 		and: [(self @env0:class @env0:___pythonValueAttrs___) @env0:includes: aSym])
-		ifTrue: [^ self @env0:perform: aSym env: 1].
+		ifTrue: [
+			(self ___subclassAttrShadowing___: aSym) @env0:ifNotNil: [:___sv | ^ ___sv].
+			^ self @env0:perform: aSym env: 1].
 	"``str.strip'' / ``str.split'' etc.: the str builtin is a BoundMethod, not
 	a class (there is no single `str' class -- strings span Unicode7 /
 	Unicode16 / ... under CharacterCollection), so a str METHOD name accessed
@@ -11474,7 +12110,7 @@ __format__: formatSpec
 	non-empty spec raises TypeError (per CPython 3.4+)."
 
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [
-		^ self __str__
+		^ self __str__ @env0:___strResult___
 	].
 	"Concatenate in env 0: Unicode7 has no env-1 ``,'', so the env-1 sends
 	this message used to build with died as an uncatchable DNU instead of
@@ -11517,6 +12153,57 @@ ___isPyStr___
 	to index or concatenate'' should keep isKindOf: and say so."
 
 	^ false
+%
+
+category: 'Grail-Testing'
+method: object
+___reprResult___
+	"Sent to what a __repr__ answered, at every site that takes a repr:
+	CPython's PyObject_Repr refuses anything but a str (a subclass is fine)
+	with this TypeError.  Grail handed the value on, so ``repr(x)'' could be
+	an int, and a list holding such an x failed with a Smalltalk
+	doesNotUnderstand: instead.
+
+	A UNARY send to the RESULT, deliberately.  Several of the sites are
+	container reprs on the recursive-repr path (test_xml_etree's
+	test_recursive_repr, test_reprlib, test_copy), where a wider frame moves
+	the VM's stack trip and can surface its re-trip defect -- a str.__mod__
+	temp once did.  ``x __repr__ @env0:___reprResult___'' adds no temp and
+	pushes nothing before the recursive call.
+
+	Env 0 beside ___isPyStr___, for the same reason: the overrides on
+	CharacterCollection and AbstractPyStr must be found by the same lookup."
+
+	^ self ___nonStringResultOf___: '__repr__'
+%
+
+category: 'Grail-Testing'
+method: object
+___strResult___
+	"Sent to what a __str__ answered, at every site that takes str(x):
+	CPython's PyObject_Str refuses anything but a str (a subclass is fine).
+	Grail handed the value on, so ``str(x)'' could be an int, and ``%s'' and
+	str.format rendered a None as its Smalltalk printString, 'aNoneType'.
+	The same unary-on-the-result shape as ___reprResult___, for the same
+	reason.
+
+	The message names __str__ even when the value came from a __repr__ that
+	object.__str__ fell back to: CPython's object.__str__ calls the repr
+	SLOT, so the only check is PyObject_Str's."
+
+	^ self ___nonStringResultOf___: '__str__'
+%
+
+category: 'Grail-Testing'
+method: object
+___nonStringResultOf___: aDunder
+	"CPython's ``<dunder> returned non-string (type <T>)'' TypeError, naming
+	the receiver's PYTHON type."
+
+	| typeName |
+	typeName := [(self @env1:__class__) @env1:__name__ asString]
+		on: AbstractException do: [:ex | ex return: self class name asString].
+	^ TypeError @env1:___signal___: aDunder , ' returned non-string (type ' , typeName , ')'
 %
 
 category: 'Grail-Testing'
@@ -12761,6 +13448,59 @@ ___rbinOpFallback___: other op: opString
 	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
 		@env0:, ': ''' @env0:, (other ___pyTypeNameForError___)
 		@env0:, ''' and ''' @env0:, (self ___pyTypeNameForError___) @env0:, '''')
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___numericReflectedFirst___: other selector: refSelector
+	"The answer of ``other''s REFLECTED method (__radd__ & co.) when CPython
+	would call it BEFORE the receiver's forward one, else nil.  The receiver is
+	a built-in number (int, bool, float); ``other'' matters only when it is an
+	instance of a Python subclass of int or float.
+
+	CPython asks the right operand first in two such cases:
+	  * SUBCLASS PRIORITY -- type(other) is a proper subclass of type(self)
+	    that overrides the reflected method: ``1 + MyInt(2)'', ``1.0 /
+	    MyFloat(2.0)'';
+	  * A NARROWER RECEIVER -- int's methods answer NotImplemented for a float,
+	    so ``1 / MyFloat(2.0)'' reaches MyFloat.__rtruediv__ too.
+	Neither holds for ``1.0 + MyInt(2)'' (float handles an int itself) nor for
+	``True + MyInt(2)'' (MyInt is no subclass of bool, and the int method bool
+	inherits handles it).  Grail's numeric dunders saw neither case: such an
+	instance is an AbstractPyInt / AbstractPyFloat wrapper, a Number, and the
+	kernel's coercion turned it straight back into a plain number.
+
+	Only an OVERRIDE counts.  The inherited reflected method computes what the
+	forward one does, so ignoring it changes no result and keeps the plain path.
+
+	A reflected method answering NotImplemented has declined, and the forward
+	computation runs -- CPython's order under subclass priority.  For a
+	narrower receiver CPython would raise TypeError instead; that difference is
+	left alone.  test_statistics TestHarmonicMean.test_types_conserved:
+	harmonic_mean of float-subclass data computes ``1 / x''."
+
+	| root owner refBase fn result |
+	(other @env0:isKindOf: AbstractPyFloat)
+		ifTrue: [root := AbstractPyFloat]
+		ifFalse: [
+			((other @env0:isKindOf: AbstractPyInt)
+				and: [self @env0:isKindOf: Integer]) ifFalse: [^ nil].
+			root := AbstractPyInt].
+	owner := other @env0:class
+		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+	(owner @env0:notNil and: [owner @env0:inheritsFrom: root])
+		ifTrue: [result := other @env0:perform: refSelector env: 1 withArguments: { self }]
+		ifFalse: [
+			"A class-body alias -- ``__radd__ = __add__'' -- is a class
+			attribute, not a compiled method; ___binOpFallback___ asks the
+			same way."
+			refBase := (refSelector @env0:asString @env0:copyFrom: 1
+				to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
+			fn := other ___classAttrDunder___: refBase.
+			fn == nil ifTrue: [^ nil].
+			result := fn ___pyCallValue___: { other. self } kw: nil].
+	result == NotImplemented ifTrue: [^ nil].
+	^ result
 %
 
 ! ------------------- Comparison NotImplemented protocol
@@ -14313,7 +15053,19 @@ ___pyAttrDelete___: aName
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) == meta
 								ifTrue: [meta @env1:___removeSelector:
 									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1]].
-						^ self
+						"A DECORATED def is BOTH: the decorator's result in the holder
+						and the compiled def it was stored over.  Stopping at the
+						holder left the def to resurface, so ``del A.foo'' on an
+						@abc.abstractmethod answered hasattr(A, 'foo') True (test_abc
+						test_update_del).  Only a name with no own def ends here; one
+						with a def goes on to the removal below."
+						((self @env0:selectorsForEnvironment: 1) @env0:detect: [:sel |
+							(self @env0:___grailSelectorMatchesPythonName___: sel
+								name: aName @env0:asString)
+								and: [((self @env0:categoryOfSelector: sel environmentId: 1)
+									@env0:= #'Grail-Class Methods')
+								and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) == self]]]
+							ifNone: [nil]) == nil ifTrue: [^ self]
 					]
 				]
 			].
@@ -14831,6 +15583,30 @@ ___grailCompiledSelectorsForPythonName___: aSymbol
 
 category: 'Grail-Self-Send Overrides'
 classmethod: object
+___grailStoredValueIsAProperty___: aValue
+	"Is aValue a ``property'' (or enum.property)?  Storing one on a class never
+	installs self-send dispatchers.
+
+	A property lives on ACCESSOR selectors -- its getter ``p'' and setter
+	``p:'', its own or inherited from a base's property -- and the attribute
+	protocol PERFORMS those selectors for every read and store of the
+	attribute.  A dispatcher over them took each read and store for a CALL of
+	the bound value: under GRAIL_DIRECT_CALLS ``ctx.maximum_version = v'' in
+	ssl.py (SSLContext's property over _SSLContext's) raised 'TLSVersion'
+	object is not callable and test_ssl could not import, and reading an
+	``@typing.override @property'' raised 'str' object is not callable.
+
+	Reads and stores resolve the right property without a dispatcher -- they
+	always have with the flag off.  What a dispatcher would add is only a
+	direct CALL of the property's value (``obj.p(x)''), which CallAst keeps on
+	load-then-call for the class's own properties (___directCallSelector___,
+	exclusion 10)."
+
+	^ aValue @env0:isKindOf: AbstractPropertyDescriptor
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
 ___grailClassBodyStoreShadows___: aValue name: aName
 	"GRAIL_DIRECT_CALLS: does a class-body store of aValue under aName shadow a
 	compiled method -- i.e. is it worth installing self-send dispatchers for?
@@ -14874,6 +15650,7 @@ ___grailClassBodyStoreShadows___: aValue name: aName
 		and: [(aName @env0:asString @env0:at: 1) == $_
 		and: [(aName @env0:asString @env0:at: 2) ~~ $_
 		and: [(aName @env0:asString @env0:last) == $_]]])) ifTrue: [^ false].
+	(self ___grailStoredValueIsAProperty___: aValue) ifTrue: [^ false].
 	"Descriptors stored by a class body (functools.singledispatchmethod, a
 	user __get__ class) shadow the compiled method too -- ___grailCallOverride___
 	binds them through __get__."
@@ -15807,9 +16584,11 @@ ___pyAttrStore___: aName put: aValue
 		defined in a deployed module takes -- and a hook after them fires for
 		some classes and not others.  Order does not matter: the dispatcher reads
 		the stored value when it is CALLED, not when it is installed."
-		(object @env0:___grailIsPatchableCallable___: aValue) ifTrue: [
-			[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		((object @env0:___grailIsPatchableCallable___: aValue)
+			and: [(object @env0:___grailStoredValueIsAProperty___: aValue) not])
+				ifTrue: [
+					[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 		"Canonical-class overlay: runtime stores on a shared canonical
 		class stay session-local (docs/Persistent_Modules_and_Classes.md
 		par.7).  False (the default -- the class is not canonical) falls

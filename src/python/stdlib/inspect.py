@@ -1176,8 +1176,13 @@ def _check_class(klass, attr, cache):
 
 def _shadowed_dict(klass, cache):
     # A class body that binds ``__dict__`` itself (a property, say) hides the
-    # instance dict; CPython's check also excludes the ordinary getset
-    # descriptor, which Grail's class dict never lists.
+    # instance dict.  The ordinary getset descriptor a class's own __dict__
+    # lists for the storage it introduces does not, and CPython's check
+    # excludes it exactly so: its type, its name, its own class.  Grail's class
+    # dict lists that descriptor now; without the exclusion every such class
+    # read as shadowed, getattr_static never consulted an instance dict, and
+    # every runtime-checkable Protocol with a data member refused an instance
+    # that had it.
     for entry in _static_getmro(klass):
         # ``type`` and ``object`` list their own ``__dict__`` -- the getset
         # descriptor CPython's check excludes by type -- so an entry on one
@@ -1188,7 +1193,11 @@ def _shadowed_dict(klass, cache):
             continue
         d = _getattr_static_class_dict(entry, cache)
         if '__dict__' in d:
-            return d['__dict__']
+            class_dict = d['__dict__']
+            if not (type(class_dict) is _types.GetSetDescriptorType
+                    and class_dict.__name__ == '__dict__'
+                    and class_dict.__objclass__ is entry):
+                return class_dict
     return _sentinel
 
 
@@ -1631,7 +1640,37 @@ def ismethoddescriptor(obj):
     return False
 
 
-def isabstract(obj):
+def isabstract(object):
+    """Return true if the object is an abstract base class (ABC).
+
+    CPython's, with one respelling: Grail has no ``__flags__``, so the
+    TPFLAGS_IS_ABSTRACT bit -- which CPython's type sets exactly when
+    ``__abstractmethods__`` is assigned a non-empty set -- is read as that set
+    being non-empty.  It was a stub answering False for every class, which no
+    caller outside test_abc depends on."""
+    if not isinstance(object, type):
+        return False
+    try:
+        if object.__abstractmethods__:
+            return True
+    except AttributeError:
+        pass
+    import abc
+    if not issubclass(type(object), abc.ABCMeta):
+        return False
+    if hasattr(object, '__abstractmethods__'):
+        # ABCMeta.__new__ has finished running, so the set above was accurate.
+        return False
+    # ABCMeta.__new__ has not finished yet -- probably __init_subclass__ -- so
+    # look for abstract methods by hand.
+    for name, value in object.__dict__.items():
+        if getattr(value, "__isabstractmethod__", False):
+            return True
+    for base in object.__bases__:
+        for name in getattr(base, "__abstractmethods__", ()):
+            value = getattr(object, name, None)
+            if getattr(value, "__isabstractmethod__", False):
+                return True
     return False
 
 

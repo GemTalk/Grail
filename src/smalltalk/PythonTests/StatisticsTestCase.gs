@@ -24,6 +24,13 @@ StatisticsTestCase category: 'Grail-SUnit'
 ! ===============================================================================
 ! StatisticsTestCase - Tests for Python statistics module
 ! ===============================================================================
+! ``statistics'' is CPython's own statistics.py (src/python/stdlib), vendored
+! unmodified.  It used to be a hand-written Smalltalk module that these tests
+! called directly; that module covered the averages and spreads below and left
+! out NormalDist, StatisticsError's place in the module, kde() and the private
+! helpers test_statistics exercises (_sum, _exact_ratio, _convert, ...).  The
+! tests now go through Python, as user code does, so they check the vendored
+! module running on Grail rather than a particular implementation.
 
 ! ------------------- Remove existing test methods
 expectvalue /Metaclass3
@@ -34,125 +41,100 @@ StatisticsTestCase class removeAllMethods: 0.
 
 set compile_env: 0
 
+category: 'Grail-Tests - Support'
+method: StatisticsTestCase
+statistics: anExpression
+	"The value of a Python expression evaluated after ``import statistics''."
+
+	^ self eval: 'import statistics
+' , anExpression
+%
+
+category: 'Grail-Tests - Support'
+method: StatisticsTestCase
+assert: aNumber closeTo: expected
+	self assert: ((aNumber - expected) abs < 0.00001)
+		description: aNumber printString , ' is not close to ' , expected printString
+%
+
 category: 'Grail-Tests - Correlation'
 method: StatisticsTestCase
 testCorrelation
-	"Test statistics.correlation()"
+	"statistics.correlation()  Perfect positive correlation."
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:correlation: {1. 2. 3. 4. 5} _: {2. 4. 6. 8. 10}.
-
-	"Perfect positive correlation"
-	self assert: (((result - 1.0) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.correlation([1, 2, 3, 4, 5], [2, 4, 6, 8, 10])') closeTo: 1.0
 %
 
 category: 'Grail-Tests - Correlation'
 method: StatisticsTestCase
 testCorrelationNegative
-	"Test statistics.correlation() with negative correlation"
+	"statistics.correlation() with negative correlation  Perfect negative correlation."
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:correlation: {1. 2. 3. 4. 5} _: {10. 8. 6. 4. 2}.
-
-	"Perfect negative correlation"
-	self assert: (((result - -1.0) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.correlation([1, 2, 3, 4, 5], [10, 8, 6, 4, 2])') closeTo: -1.0
 %
 
 category: 'Grail-Tests - Correlation'
 method: StatisticsTestCase
 testCovariance
-	"Test statistics.covariance()"
+	"statistics.covariance()  Covariance of x and y=2x is 2 * variance(x) = 2 * 2.5."
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:covariance: {1. 2. 3. 4. 5} _: {2. 4. 6. 8. 10}.
-
-	"Covariance of x and y=2x should be 2 * variance(x) = 2 * 2.5 = 5.0"
-	self assert: (((result - 5.0) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.covariance([1, 2, 3, 4, 5], [2, 4, 6, 8, 10])') closeTo: 5.0
 %
 
 category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testFmean
-	"Test statistics.fmean() fast floating-point mean"
+	"statistics.fmean(), the fast floating-point mean"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:fmean: {1. 2. 3. 4. 5}.
-
-	self assert: (((result - 3.0) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.fmean([1, 2, 3, 4, 5])') closeTo: 3.0
 %
 
 category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testFmeanWithWeights
-	"Test statistics.fmean() with weights"
+	"statistics.fmean() with weights  Weighted mean: (1*1 + 2*2 + 3*3) / (1+2+3) = 14/6."
 
-	| s result expected |
-	s := statistics ___instance___.
-	result := s @env1:_fmean: {{1. 2. 3}} kw: (KeyValueDictionary new at: 'weights' put: {1. 2. 3}; yourself).
-
-	"Weighted mean: (1*1 + 2*2 + 3*3) / (1+2+3) = 14/6 = 2.333..."
-	expected := (14/6) asFloat.
-	self assert: (((result - expected) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.fmean([1, 2, 3], weights=[1, 2, 3])') closeTo: (14 / 6) asFloat
 %
 
 category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testGeometricMean
-	"Test statistics.geometric_mean()"
+	"statistics.geometric_mean()  (1*2*4*8)^(1/4) = 64^0.25."
 
-	| s result expected |
-	s := statistics ___instance___.
-	result := s @env1:geometric_mean: {1. 2. 4. 8}.
-
-	"Geometric mean of 1,2,4,8 = (1*2*4*8)^(1/4) = 64^0.25 = 2.828..."
-	expected := 64 raisedTo: 0.25.
-	self assert: (((result - expected) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.geometric_mean([1, 2, 4, 8])') closeTo: (64 raisedTo: 0.25)
 %
 
 category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testHarmonicMean
-	"Test statistics.harmonic_mean()"
+	"statistics.harmonic_mean()  3 / (1/1 + 1/2 + 1/4)."
 
-	| s result expected |
-	s := statistics ___instance___.
-	result := s @env1:harmonic_mean: {1. 2. 4}.
-
-	"Harmonic mean: 3 / (1/1 + 1/2 + 1/4) = 3 / 1.75 = 1.714..."
-	expected := 3 / 1.75.
-	self assert: (((result - expected) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.harmonic_mean([1, 2, 4])') closeTo: (3 / 1.75)
 %
 
 category: 'Grail-Tests - Regression'
 method: StatisticsTestCase
-testLinearRegression
-	"Test statistics.linear_regression()"
+testLinearRegressionIntercept
+	"statistics.linear_regression() -- the intercept  y = 2x + 1."
 
-	| s result slope intercept |
-	s := statistics ___instance___.
-	result := s @env1:linear_regression: {1. 2. 3. 4. 5} _: {3. 5. 7. 9. 11}.
+	self assert: (self statistics: 'statistics.linear_regression([1, 2, 3, 4, 5], [3, 5, 7, 9, 11]).intercept') closeTo: 1.0
+%
 
-	"y = 2x + 1, so slope=2, intercept=1"
-	slope := result at: 1.
-	intercept := result at: 2.
-	self assert: (((slope - 2.0) abs) < 0.00001).
-	self assert: (((intercept - 1.0) abs) < 0.00001).
+category: 'Grail-Tests - Regression'
+method: StatisticsTestCase
+testLinearRegressionSlope
+	"statistics.linear_regression() -- the slope  y = 2x + 1."
+
+	self assert: (self statistics: 'statistics.linear_regression([1, 2, 3, 4, 5], [3, 5, 7, 9, 11]).slope') closeTo: 2.0
 %
 
 category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testMean
-	"Test statistics.mean() with simple data"
+	"statistics.mean() with simple data"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:mean: {1. 2. 3. 4. 5}.
-
-	self assert: result equals: 3.
+	self assert: (self statistics: 'statistics.mean([1, 2, 3, 4])') closeTo: 2.5
 %
 
 category: 'Grail-Tests - Mean'
@@ -194,139 +176,106 @@ testMeanAndMedianAnswerInTheDatasType
 category: 'Grail-Tests - Mean'
 method: StatisticsTestCase
 testMeanEmpty
-	"Test statistics.mean() raises error for empty data"
+	"statistics.mean() of no data raises StatisticsError, which is a
+	ValueError -- and the module's own class, not a built-in."
 
-	| s |
-	s := statistics ___instance___.
-
-	self should: [
-		s @env1:mean: {}.
-	] raise: StatisticsError.
-%
-
-category: 'Grail-Tests - Mean'
-method: StatisticsTestCase
-testMeanFloat
-	"Test statistics.mean() returns correct float"
-
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:mean: {1. 2. 3. 4}.
-
-	self assert: (((result - 2.5) abs) < 0.00001).
+	self should: [self statistics: 'statistics.mean([])'] raise: ValueError.
+	self assert: (self statistics: 'try:
+    statistics.mean([])
+except statistics.StatisticsError as e:
+    r = type(e).__module__
+r') equals: 'statistics'
 %
 
 category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianEven
-	"Test statistics.median() with even number of elements"
+	"statistics.median() with an even count"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:median: {1. 2. 3. 4}.
-
-	self assert: (((result - 2.5) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.median([1, 2, 3, 4])') closeTo: 2.5
 %
 
 category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianHigh
-	"Test statistics.median_high()"
+	"statistics.median_high()"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:median_high: {1. 2. 3. 4}.
-
-	self assert: result equals: 3.
+	self assert: (self statistics: 'statistics.median_high([1, 2, 3, 4])') equals: 3
 %
 
 category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianLow
-	"Test statistics.median_low()"
+	"statistics.median_low()"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:median_low: {1. 2. 3. 4}.
-
-	self assert: result equals: 2.
+	self assert: (self statistics: 'statistics.median_low([1, 2, 3, 4])') equals: 2
 %
 
 category: 'Grail-Tests - Median'
 method: StatisticsTestCase
 testMedianOdd
-	"Test statistics.median() with odd number of elements"
+	"statistics.median() with an odd count"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:median: {1. 3. 5. 7. 9}.
-
-	self assert: result equals: 5.
+	self assert: (self statistics: 'statistics.median([1, 3, 5, 7, 9])') equals: 5
 %
 
-category: 'Grail-Tests - Variance'
+category: 'Grail-Tests - Accelerator'
+method: StatisticsTestCase
+testPurePythonCopyWithoutTheAccelerator
+	"import_fresh_module('statistics', blocked=['_statistics']) builds a copy of
+	the module that does not use the C shim's _normal_dist_inv_cdf, as
+	test_statistics' py_statistics expects -- and a copy whose own code works.
+
+	Grail's helper used to ignore blocked= and answer the ordinary module, whose
+	_normal_dist_inv_cdf IS the shim's.  The first copy it built then lost its
+	module singleton at _end_fresh_import, so a method reading a module global
+	minted a THIRD module: py.NormalDist(0, 1) == py.NormalDist(0, 1) was False."
+
+	self assert: (self statistics: 'from test.support import import_helper
+py = import_helper.import_fresh_module(''statistics'', blocked=[''_statistics''])
+''%s %s %s %s'' % (py is statistics,
+    py._normal_dist_inv_cdf.__module__,
+    statistics._normal_dist_inv_cdf.__module__,
+    py.NormalDist(0, 1) == py.NormalDist(0, 1))')
+		equals: 'False statistics _statistics True'
+%
+
+category: 'Grail-Tests - Spread'
 method: StatisticsTestCase
 testPstdev
-	"Test statistics.pstdev() population standard deviation"
+	"statistics.pstdev()"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:pstdev: {2. 4. 4. 4. 5. 5. 7. 9}.
-
-	"Population stdev = sqrt(4.0) = 2.0"
-	self assert: (((result - 2.0) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.pstdev([2, 4, 4, 4, 5, 5, 7, 9])') closeTo: 2.0
 %
 
-category: 'Grail-Tests - Variance'
+category: 'Grail-Tests - Spread'
 method: StatisticsTestCase
 testPvariance
-	"Test statistics.pvariance() population variance"
+	"statistics.pvariance()"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:pvariance: {2. 4. 4. 4. 5. 5. 7. 9}.
-
-	"Population variance = 4.0"
-	self assert: (((result - 4.0) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.pvariance([2, 4, 4, 4, 5, 5, 7, 9])') closeTo: 4.0
 %
 
 category: 'Grail-Tests - Quantiles'
 method: StatisticsTestCase
 testQuantiles
-	"Test statistics.quantiles() default quartiles"
+	"statistics.quantiles() -- quartiles by default, so three cut points"
 
-	| s result |
-	s := statistics ___instance___.
-	result := s @env1:quantiles: {1. 2. 3. 4. 5. 6. 7. 8. 9. 10}.
-
-	"Default n=4 gives quartiles (3 cut points)"
-	self assert: result size equals: 3.
+	self assert: (self statistics: 'len(statistics.quantiles([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))') equals: 3
 %
 
-category: 'Grail-Tests - Variance'
+category: 'Grail-Tests - Spread'
 method: StatisticsTestCase
 testStdev
-	"Test statistics.stdev() sample standard deviation"
+	"statistics.stdev()"
 
-	| s result expected |
-	s := statistics ___instance___.
-	result := s @env1:stdev: {2. 4. 4. 4. 5. 5. 7. 9}.
-
-	"Sample stdev = sqrt(4.571...) = 2.138..."
-	expected := 4.571428571428571 sqrt.
-	self assert: (((result - expected) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.stdev([2, 4, 4, 4, 5, 5, 7, 9])') closeTo: 4.571428571428571 sqrt
 %
 
-category: 'Grail-Tests - Variance'
+category: 'Grail-Tests - Spread'
 method: StatisticsTestCase
 testVariance
-	"Test statistics.variance() sample variance"
+	"statistics.variance()"
 
-	| s result expected |
-	s := statistics ___instance___.
-	result := s @env1:variance: {2. 4. 4. 4. 5. 5. 7. 9}.
-
-	"Sample variance of 2,4,4,4,5,5,7,9 = 4.571..."
-	expected := 4.571428571428571.
-	self assert: (((result - expected) abs) < 0.00001).
+	self assert: (self statistics: 'statistics.variance([2, 4, 4, 4, 5, 5, 7, 9])') closeTo: 4.571428571428571
 %

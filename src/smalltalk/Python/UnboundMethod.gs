@@ -314,6 +314,68 @@ ___forClassRead___: aClass selector: aSym
 category: 'Grail-Instance Creation'
 classmethod: UnboundMethod
 ___forClassRead___: aClass family: family selector: aSym
+	"What a read of a method name OFF THE CLASS answers: the interned
+	UnboundMethod (___forClassReadMethod___:family:selector:) -- or, when the
+	defining class declared the name a @property, the PROPERTY.
+
+	Grail compiles @property declaratively into accessor methods, so no
+	property object ever existed and ``C.foo'' answered the getter function.
+	Instance reads never needed one; reads off the class do: ``@C.foo.getter''
+	in a subclass, ``C.foo.__isabstractmethod__'', inspect, dataclasses
+	(test_abc's test_abstractproperty_basics and
+	test_descriptors_with_abstractmethod).  Built here, at the class read, so
+	the instance path -- the hot one -- is untouched."
+
+	^ (self ___forClassReadMethod___: aClass family: family selector: aSym)
+		___grailPropertyOrSelf___
+%
+
+category: 'Grail-Descriptor'
+method: UnboundMethod
+___grailPropertyOrSelf___
+	"The property a declarative @property compiled to, when this handle is its
+	getter; else the receiver.
+
+	fget is the receiver; fset the ``name:'' setter unless the property is
+	read-only (that selector then only raises, filed under
+	'Grail-Property-ReadOnly'); fdel the ``___propDeleter_name'' method when
+	there is one.  Cached per (class, name) for the session, so ``C.foo is
+	C.foo'' as in CPython, and rebuilt when the getter is recompiled."
+
+	| owner getter setSel delSel cache per entry fset fdel prop |
+	owner := definingClass.
+	(owner @env0:isKindOf: Behavior) ifFalse: [^ self].
+	owner @env0:isMeta ifTrue: [^ self].
+	(owner @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___'
+		environmentId: 1) ifFalse: [^ self].
+	((owner @env1:___grailOwnPropertyNames___) @env0:includes: selector @env0:asSymbol)
+		ifFalse: [^ self].
+	getter := owner @env0:compiledMethodAt: selector environmentId: 1 otherwise: nil.
+	getter == nil ifTrue: [^ self].
+	cache := SessionTemps @env0:current
+		@env0:at: #'GrailClassReadProperties'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := cache @env0:at: owner ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	entry := per @env0:at: selector otherwise: nil.
+	(entry ~~ nil and: [(entry @env0:at: 1) == getter]) ifTrue: [^ entry @env0:at: 2].
+	setSel := (selector @env0:asString @env0:, ':') @env0:asSymbol.
+	fset := ((owner @env0:includesSelector: setSel environmentId: 1)
+		and: [(owner @env0:categoryOfSelector: setSel environmentId: 1)
+			@env0:~= #'Grail-Property-ReadOnly'])
+		ifTrue: [UnboundMethod definingClass: owner selector: setSel]
+		ifFalse: [None].
+	delSel := ('___propDeleter_' @env0:, selector @env0:asString) @env0:asSymbol.
+	fdel := (owner @env0:includesSelector: delSel environmentId: 1)
+		ifTrue: [UnboundMethod definingClass: owner selector: delSel]
+		ifFalse: [None].
+	prop := PropertyDescriptor __new__: self _: fset _: fdel.
+	per @env0:at: selector put: (Array @env0:with: getter with: prop).
+	^ prop
+%
+
+category: 'Grail-Instance Creation'
+classmethod: UnboundMethod
+___forClassReadMethod___: aClass family: family selector: aSym
 	"``Cls.method'' as object >> ___pyAttrLoad___ reads it off a class: the
 	handle interned under the class that DEFINES the method, so an inherited
 	read is the definer's own object, as CPython's is.

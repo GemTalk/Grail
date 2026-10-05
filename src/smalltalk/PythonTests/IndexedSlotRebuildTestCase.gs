@@ -284,12 +284,14 @@ class B(A):
 	self assert: (bInst @env1:___pyAttrLoad___: #y) equals: 2.
 	self assert: (bInst @env1:___pyAttrLoad___: #b1) equals: 7.
 	self should: [aInst @env1:___pyAttrLoad___: #x] raise: AttributeError.
-	"The pairs read the new positions: A's y pair, and B's own b1 pair."
+	"The pairs read the new positions: B's own b1 pair, and B's own y pair
+	(A's indexed pair answers only for A's own instances -- the owner guard)."
 	bInst @env1:set_b1: 8.
 	self assert: (bInst @env1:___pyAttrLoad___: #b1) equals: 8.
 	self assert: (bInst at: 3) equals: 8.
 	self assert: (b2 whichClassIncludesSelector: #'___pyattr_b1___' environmentId: 1) == b2.
-	self assert: (b2 whichClassIncludesSelector: #'___pyattr_y___' environmentId: 1) == a2.
+	self assert: (b2 whichClassIncludesSelector: #'___pyattr_y___' environmentId: 1) == b2.
+	self assert: (bInst @env1:___pyattr_y___) equals: 2 description: 'B''s own y pair reads the compacted position'.
 	"A fresh instance is built to the compact layout."
 	bInst := b2 @env1:___pyCallValue___: { } kw: nil.
 	self assert: bInst _basicSize equals: 3.
@@ -361,8 +363,8 @@ category: 'Grail-Tests'
 method: IndexedSlotRebuildTestCase
 testParentStopsAssigningUnderSubclasses
 	"A stops assigning a1 while B(A) merely inherited it and D(A) assigns it
-	itself.  Nothing changes in any layout: a1 survives everywhere, A's pair
-	keeps serving it, and every instance reads what it held.  Both subclasses
+	itself.  Nothing changes in any layout: a1 survives everywhere, each class's
+	own pair keeps serving it, and every instance reads what it held.  Both subclasses
 	are rebuilt in the same module load, so this is the merge path
 	(___grailMergedSlotLayout___:), not the registry walk."
 	| mod a b d bInst dInst mod2 a2 b2 d2 |
@@ -386,7 +388,7 @@ class D(A):
 	dInst := d @env1:___pyCallValue___: { } kw: nil.
 	self assert: (self layoutOf: b) equals: #(#a1 #a2 #b1).
 	self assert: (self layoutOf: d) equals: #(#a1 #a2).
-	self assert: (d whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a.
+	self assert: (d whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == d.
 	mod2 := self loadRevision: 'class A:
     def __init__(self):
         self.a2 = 2
@@ -407,7 +409,7 @@ class D(A):
 	self assert: (self layoutOf: b2) equals: #(#a1 #a2 #b1).
 	self assert: (self layoutOf: d2) equals: #(#a1 #a2).
 	self assert: (a2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a2.
-	self assert: (d2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == a2.
+	self assert: (d2 whichClassIncludesSelector: #'___pyattr_a1___' environmentId: 1) == d2.
 	self assert: (bInst @env1:___pyAttrLoad___: #a1) equals: 1.
 	self assert: (bInst @env1:___pyAttrLoad___: #b1) equals: 7.
 	self assert: (dInst @env1:___pyAttrLoad___: #a1) equals: 5.
@@ -818,4 +820,154 @@ class B(A):
 	self should: [b @env1:___grailRenameSlotSessionOnly___: #x _: #a] raise: ValueError.
 	self assert: (self layoutOf: b) equals: #(#x #b) description: 'nothing changed'.
 	self assert: (self layoutOf: a) equals: #(#x)
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testUnseenSubclassDoesNotInheritTheParentsPosition
+	"A subclass the parent's rebuild cannot reach keeps its old layout, so the
+	parent's NEW name may sit, in the parent, at a position the subclass gave
+	to one of its own.  A (x) and B(A) (x y); A rebuilt as (x z): z is A's
+	position 2 and B's y.  B here is defined in a FUNCTION BODY, so the module
+	re-run drops its subclass registration and nothing rebuilds the instance's
+	class -- the same position a __main__ class from an earlier session is in.
+	A's methods run on the old B instance must not read or overwrite y: before
+	the owner guard, ``getz()'' answered 'Y' and ``setz()'' replaced it."
+	| mod bInst bClass mod2 |
+	mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+
+def make():
+    class B(A):
+        def __init__(self):
+            super().__init__()
+            self.y = ''Y''
+    return B
+
+b = make()()
+'.
+	bInst := mod @env1:b.
+	bClass := bInst class.
+	self assert: (self layoutOf: bClass) equals: #(#x #y).
+	mod2 := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+        self.z = ''Z''
+
+    def getz(self):
+        return self.z
+
+    def setz(self, v):
+        self.z = v
+
+def make():
+    class B(A):
+        def __init__(self):
+            super().__init__()
+            self.y = ''Y''
+    return B
+'.
+	self assert: (self layoutOf: (mod2 @env1:A)) equals: #(#x #z).
+	self assert: (self layoutOf: bClass) equals: #(#x #y)
+		description: 'the unseen subclass was not rebuilt -- the case under test'.
+	self should: [bInst @env1:getz] raise: AttributeError.
+	bInst @env1:setz: 'ZZ'.
+	self assert: (bInst @env1:___pyAttrLoad___: #y) equals: 'Y' description: 'y was not overwritten'.
+	self assert: (bInst @env1:getz) equals: 'ZZ'.
+	self assert: (bInst @env1:___pyAttrLoad___: #x) equals: 'X'
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testSubclassAssigningNothingOwnsItsPairs
+	"A subclass whose body assigns nothing of its own still takes a copy of the
+	parent's layout and compiles its own pair for every name in it, so its
+	instances stay on the fast path past the parent pair's owner guard."
+	| mod a b inst |
+	mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = 1
+
+    def bump(self):
+        self.x += 1
+        return self.x
+
+class B(A):
+    def hello(self):
+        return self.x
+'.
+	a := mod @env1:A.
+	b := mod @env1:B.
+	self assert: (self layoutOf: b) equals: #(#x).
+	self assert: (b whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == b.
+	self assert: (b whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == b.
+	self assert: (a whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == a.
+	inst := b @env1:___pyCallValue___: { } kw: nil.
+	self assert: (inst @env1:hello) equals: 1.
+	self assert: (inst @env1:bump) equals: 2.
+	self assert: (inst at: 1) equals: 2 description: 'stored at the position, not per object'.
+	self assert: (inst dynamicInstVarAt: #x) isNil
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testParentGrowthReachesASubclassInAnotherModule
+	"A subclass defined in ANOTHER module, which this session has not imported
+	-- simulated by dropping that module's session subclass registrations --
+	still takes the parent's new name when the parent is rebuilt: propagation
+	walks the persistent canonical class registry (___grailSlotSubtree___), not
+	only __subclasses__, which is per session.  B (x y) under A rebuilt as
+	(x z) becomes (x y z) with its own z pair at 3, so A's methods store z
+	into the B instance's position, not per object, and y is untouched."
+	| subPath subName mod bInst bClass mod2 |
+	subName := 'grail_indexed_slot_rebuild_sub'.
+	subPath := '/tmp/' , subName , '_' , System myUserProfile userId asString , '.py'.
+	self ___forgetCanonicalModule___: subName.
+	[mod := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+'.
+	(GsFile openWriteOnServer: subPath)
+		nextPutAll: 'from grail_indexed_slot_rebuild import A
+
+class B(A):
+    def __init__(self):
+        super().__init__()
+        self.y = ''Y''
+
+b = B()
+';
+		close.
+	bInst := (importlib loadModuleFromPath: subPath name: subName) @env1:b.
+	bClass := bInst class.
+	self assert: (self layoutOf: bClass) equals: #(#x #y).
+	"A session that never imported the subclass's module has no registration
+	for B under A."
+	importlib ___forgetSubclassesFromModule___: subName.
+	(importlib @env1:modules) removeKey: subName asSymbol ifAbsent: [].
+	mod2 := self loadRevision: 'class A:
+    def __init__(self):
+        self.x = ''X''
+        self.z = ''Z''
+
+    def getz(self):
+        return self.z
+
+    def setz(self, v):
+        self.z = v
+'.
+	self assert: (self layoutOf: (mod2 @env1:A)) equals: #(#x #z).
+	self assert: (self layoutOf: bClass) equals: #(#x #y #z)
+		description: 'the unimported subclass appended z'.
+	self assert: (bClass whichClassIncludesSelector: #'___pyattr_z___' environmentId: 1) == bClass.
+	self should: [bInst @env1:getz] raise: AttributeError.
+	bInst @env1:setz: 'ZZ'.
+	self assert: (bInst at: 3) equals: 'ZZ' description: 'stored at B''s own position'.
+	self assert: (bInst dynamicInstVarAt: #z) isNil.
+	self assert: (bInst @env1:___pyAttrLoad___: #y) equals: 'Y'
+	] ensure: [
+		[GsFile removeServerFile: subPath] on: Error do: [:e | ].
+		(importlib @env1:modules) removeKey: subName asSymbol ifAbsent: [].
+		self ___forgetCanonicalModule___: subName]
 %

@@ -228,6 +228,38 @@ pkgutil.get_data("sys", "anything") is None'.
 	self assert: result
 %
 
+category: 'Grail-Tests - pkgutil'
+method: StdlibLongTailTestCase
+testPkgutilIterModulesAndWalkPackagesListWhatIsThere
+	"pkgutil.iter_modules and walk_packages were stubs that answered an empty
+	iterator whatever the path, so nothing that discovers modules by listing
+	them found any: Django's management commands, database backends,
+	migrations loader and template tag libraries, Werkzeug's find_modules.
+	They now walk directories as CPython's file finder does -- .py modules,
+	packages with an __init__, nothing else -- and with no path walk the
+	roots Grail imports from, its bundled stdlib among them.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/pkgutil_iter_modules.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'pkgutil_iter_modules' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/pkgutil_iter_modules.py')
+		name: 'pkgutil_iter_modules'.
+	#( 'iter_modules_lists_modules_and_packages'
+	   'iter_modules_skips_namespace_dirs_dotted_names_and_other_files'
+	   'iter_modules_applies_the_prefix'
+	   'each_result_names_its_directory'
+	   'a_name_is_listed_once_across_directories'
+	   'a_missing_directory_lists_nothing'
+	   'a_bare_string_path_is_refused'
+	   'walk_packages_recurses_into_packages'
+	   'with_no_path_the_standard_library_is_listed' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'pkgutil check failed: ' , k]
+%
+
 category: 'Grail-Tests - importlib.util'
 method: StdlibLongTailTestCase
 testSpecFromLoaderAsksTheLoaderWhetherItIsAPackage

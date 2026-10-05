@@ -165,7 +165,7 @@ env-1 audit.  Most are documented deviations rather than fixable bugs.
   user-written Smalltalk extensions appear.
 
 - [ ] **Kwargs `ifAbsent: [nil]` sentinels in varargs handlers** —
-  `random.gs`, `statistics.gs`, `builtins.gs`.  The local nil
+  `builtins.gs`.  The local nil
   is then compared with `a == nil or: [a == None]` to detect "argument
   not given".  Intentional (distinguishes absent from explicit `None`)
   and stays as nil; documented here so a future blanket nil-sweep

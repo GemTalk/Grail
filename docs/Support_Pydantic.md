@@ -666,13 +666,20 @@ first inline layout read (W5/W6, option (a)).
   build and the sdist's tests), so it is run by hand, not in CI.
 * Tier 2 (2026-10-02, Darwin arm64): `check_python_fixtures.sh` 518 fixtures
   agree; the CPython conformance gate reads **0 regressions, 1 improvement**
-  (`test_ssl` FAIL/5 → FAIL/3). Two regressions its first run caught were
-  this phase's and are fixed: copying Enum's default `_missing_` onto mixed
-  enums had overwritten user overrides (`test_enum`), and
-  `ClassBodyRebindingTestCase` pinned the old namespace reading of a
-  duplicate `@enum.property`. `test_pickle` timed out once at 600 s; it takes
-  526 s alone with or without this phase (measured both), so that is the
-  machine, not a regression.
+  (`test_ssl` FAIL/5 → FAIL/3). A regression its first run caught was this
+  phase's and is fixed: copying Enum's default `_missing_` onto mixed enums
+  had overwritten user overrides (`test_enum`). `test_pickle` times out at
+  600 s in a full run on this machine now and then; alone it takes ~510–526 s
+  with or without this phase (measured both), so that is the machine, not a
+  regression.
+* After merging `origin/main` (which had fixed the same namespace problems in
+  parallel — `___grailNsRebind___:`, the builtin-property record, `type`'s
+  class keywords; theirs are kept where they overlap): `run_tests.sh` 7,721
+  run, 7,720 passed, the one failure an expectation this branch had changed
+  and has now restored; gated against `origin/main`'s board, 0 regressions
+  besides that `test_pickle` timeout (OK alone), 3 improvements
+  (`test_exception_group` and `test_zipapp` ERROR → OK, `test_except_star`
+  21 → 20).
 
 ## Resume here
 

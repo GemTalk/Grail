@@ -755,6 +755,63 @@ ___importScanInto___: aSet value: v
 	^ self
 %
 
+category: 'Grail-Naming'
+method: AbstractNode
+___bindsSmalltalkTempNamed___: aSymbol
+	"Does any def, lambda or comprehension at or below this node bind aSymbol
+	as a SMALLTALK TEMP -- a parameter, a body local (the block's declared
+	variables or its Python ``writes''), or a comprehension target?  Text
+	codegen spells every Python local as a temp of the same name, and it spells
+	the module singleton by its backing class's BARE name
+	(``random @env0:___instance___''), so such a temp captures every module
+	reference in that scope.  importlib>>___moduleDefinesItsOwnName___:as:
+	asks this of the whole module.  Reflective over the instVars, skipping the
+	``parent'' back-pointer, like ___importBoundNamesInto___:."
+
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: LambdaAst]) ifTrue: [
+		((self ___functionDeclaresLocal___: self named: aSymbol)
+			or: [self ___functionBindsPythonLocal___: self named: aSymbol])
+				ifTrue: [^ true]].
+	(self isKindOf: ComprehensionAst) ifTrue: [
+		(self ___nameNodesIn___: self target anySatisfy: [:n | n id asSymbol == aSymbol])
+			ifTrue: [^ true]].
+	2 to: self class instSize do: [:i |
+		| v |
+		v := self instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(v ___bindsSmalltalkTempNamed___: aSymbol) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						((each isKindOf: AbstractNode)
+							and: [each ___bindsSmalltalkTempNamed___: aSymbol])
+								ifTrue: [^ true]]]]].
+	^ false
+%
+
+category: 'Grail-Naming'
+method: AbstractNode
+___nameNodesIn___: aNode anySatisfy: aBlock
+	"Is there a NameAst at or below aNode (a comprehension target: a name, or a
+	tuple / list / starred nesting of them) for which aBlock answers true?"
+
+	(aNode isKindOf: NameAst) ifTrue: [^ aBlock value: aNode].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ false].
+	2 to: aNode class instSize do: [:i |
+		| v |
+		v := aNode instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(self ___nameNodesIn___: v anySatisfy: aBlock) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						(self ___nameNodesIn___: each anySatisfy: aBlock)
+							ifTrue: [^ true]]]]].
+	^ false
+%
+
 category: 'Grail-code generation'
 method: AbstractNode
 ___storesModuleSlot___: aSymbol
@@ -1542,6 +1599,80 @@ ___enclosingFunctionLocalBeyondClass___: aSymbol
 			ifTrue: [
 				(self ___functionBindsPythonLocal___: node named: aSymbol)
 					ifTrue: [^ passedClass]].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___is: aChild inBodyOf: aDef
+	"Whether aChild, met on the way up from a node, is aDef's BODY -- the
+	suite itself or one of its statements, whichever the parent links name --
+	rather than part of its header (bases, keywords, decorators, defaults)."
+
+	| suite |
+	suite := aDef body.
+	suite isNil ifTrue: [^ false].
+	aChild == suite ifTrue: [^ true].
+	(suite isKindOf: SuiteAst)
+		ifTrue: [^ suite body notNil and: [suite body includesIdentical: aChild]].
+	^ (suite isKindOf: Collection) and: [suite includesIdentical: aChild]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___headerLocalBeyondClass___: aSymbol
+	"As ___enclosingFunctionLocalBeyondClass___, for a node in an expression
+	that is evaluated INLINE in the enclosing scope -- a class's bases and
+	keywords, or a class's or function's decorators.
+
+	Only a METHOD BODY is compiled apart from its surroundings (it
+	string-compiles onto its class with no lexical link to the enclosing
+	temps), so a class is crossed only when the walk comes up out of the body
+	of one of its methods.  A header is evaluated where the class statement
+	stands, so the plain walk -- which counts the header's own class as soon as
+	it reaches it -- answered true for every header name, and the callers
+	stood down from the cell read altogether.  That was right for a local of
+	the method the class statement sits in, and wrong for a name from beyond
+	that method's class:
+
+	    def test_factory(abc_ABCMeta):
+	        class TestABC(unittest.TestCase):
+	            def test_x(self):
+	                class A(metaclass=abc_ABCMeta): ...
+
+	``abc_ABCMeta'' is no temp of test_x, so emitting it bare failed to
+	compile (undefined symbol) and test_x became a codegen-gap stub -- 62 of
+	test.test_abc's 64 errors.  Here it is beyond TestABC, and reads
+	TestABC's cell like any other free name in test_x."
+
+	| prev node passedClass fromFunctionBody lastDef |
+	prev := self.
+	node := parent.
+	passedClass := false.
+	fromFunctionBody := false.
+	lastDef := nil.
+	[node notNil] whileTrue: [
+		"Only a def that is a DIRECT statement of the class body is a method,
+		compiled apart.  A def nested in a compound statement of the body --
+		``if flag: def __init_subclass__'' -- is emitted INLINE, as a closure in
+		the enclosing scope, so its free names are real temps there
+		(init_subclass_class_body.py, a_star_args_hook_gets_the_class_positionally)."
+		(node isKindOf: ClassDefAst) ifTrue: [
+			(fromFunctionBody and: [lastDef notNil
+				and: [node body notNil and: [node body body notNil
+				and: [node body body includesIdentical: lastDef]]]])
+					ifTrue: [passedClass := true].
+			fromFunctionBody := false].
+		(node isKindOf: FunctionDefAst) ifTrue: [
+			fromFunctionBody := self ___is: prev inBodyOf: node.
+			lastDef := node.
+			(fromFunctionBody and: [self ___functionBindsPythonLocal___: node named: aSymbol])
+				ifTrue: [^ passedClass]].
+		(node isKindOf: LambdaAst) ifTrue: [
+			(self ___functionBindsPythonLocal___: node named: aSymbol)
+				ifTrue: [^ passedClass]].
+		prev := node.
 		node := node parent].
 	^ false
 %

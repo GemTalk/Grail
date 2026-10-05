@@ -100,9 +100,8 @@ _lookupMethod: aSym
 	| walker |
 	walker := cls superClass.
 	[walker notNil] whileTrue: [
-		| md |
-		md := walker methodDictForEnv: 1.
-		(md includesKey: aSym) ifTrue: [^ md at: aSym].
+		(walker compiledMethodAt: aSym environmentId: 1 otherwise: nil)
+			ifNotNil: [:m | ^ m].
 		walker := walker superClass].
 	^ nil
 %
@@ -184,6 +183,12 @@ _lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
 	(twilio.twiml: MessagingResponse() left TwiML.__init__ unrun,
 	so ``verbs`` / ``attrs`` never materialized)."
 
+	"Each class is asked for each selector (compiledMethodAt:environmentId:
+	otherwise:, which looks in the session-method dictionary and then the
+	persistent one) rather than through ``methodDictForEnv: 1'', which builds a
+	fresh merged copy of both per call: that copy was half the time of every
+	``super().__new__(cls, x)'' -- markupsafe.Markup, once per escaped value."
+
 	"ANSWERS A PAIR: { method. cameFromTheClassSide }.  The side is what the
 	caller needs to bind the right receiver, and this is the only place that
 	knows it -- re-deriving it afterwards from the method object was tried
@@ -259,38 +264,33 @@ _lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
 					| hook |
 					hook := self _assignedInitSubclassOn: (mro at: i).
 					hook == nil ifFalse: [^ { hook. #assigned }]].
-				md := (mro at: i) methodDictForEnv: 1.
-				mdMeta := alsoMeta
-					ifTrue: [(mro at: i) class methodDictForEnv: 1]
-					ifFalse: [nil].
 				1 to: selectors size do: [:k |
 					| sel metaSel |
 					sel := selectors at: k.
 					metaSel := metaSelectors at: k.
 					sel ifNotNil: [
-						(md includesKey: sel) ifTrue: [^ { md at: sel. false }]].
-					metaSel ifNotNil: [
-						(mdMeta ~~ nil and: [(mdMeta includesKey: metaSel)
-							and: [self _isPythonClassMethod: metaSel on: (mro at: i)]])
-							ifTrue: [^ { mdMeta at: metaSel. true }]]]].
+						((mro at: i) compiledMethodAt: sel environmentId: 1 otherwise: nil)
+							ifNotNil: [:m | ^ { m. false }]].
+					(metaSel notNil and: [alsoMeta]) ifTrue: [
+						((mro at: i) class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
+							ifNotNil: [:m |
+								(self _isPythonClassMethod: metaSel on: (mro at: i))
+									ifTrue: [^ { m. true }]]]]].
 			^ nil]].
 	walker := cls superClass.
 	[walker notNil] whileTrue: [
-		| md mdMeta |
-		md := walker methodDictForEnv: 1.
-		mdMeta := alsoMeta
-			ifTrue: [walker class methodDictForEnv: 1]
-			ifFalse: [nil].
 		1 to: selectors size do: [:k |
 			| sel metaSel |
 			sel := selectors at: k.
 			metaSel := metaSelectors at: k.
 			sel ifNotNil: [
-				(md includesKey: sel) ifTrue: [^ { md at: sel. false }]].
-			metaSel ifNotNil: [
-				(mdMeta ~~ nil and: [(mdMeta includesKey: metaSel)
-					and: [self _isPythonClassMethod: metaSel on: walker]])
-					ifTrue: [^ { mdMeta at: metaSel. true }]]].
+				(walker compiledMethodAt: sel environmentId: 1 otherwise: nil)
+					ifNotNil: [:m | ^ { m. false }]].
+			(metaSel notNil and: [alsoMeta]) ifTrue: [
+				(walker class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
+					ifNotNil: [:m |
+						(self _isPythonClassMethod: metaSel on: walker)
+							ifTrue: [^ { m. true }]]]].
 		walker := walker superClass].
 	^ nil
 %
@@ -543,6 +543,56 @@ ___superTypeMethodFor___: aSym
 
 category: 'Grail-Attribute'
 method: Super
+___superValueMethodFor___: aSym
+	"int's or float's own method, bound to the WRAPPED VALUE, for a ``super()''
+	inside a subclass of int or float -- or nil when this is not that case.
+
+	``class MyFloat(float)'' is an AbstractPyFloat wrapper (the kernel Float is
+	sealed), so the parent chain the walk above follows is AbstractPyFloat,
+	Number, Object, and float's methods are not on it.  ``super().__truediv__(o)''
+	-- the ordinary way to write an operator override that defers to float --
+	raised AttributeError (test_statistics' MyFloat).  An attribute LOAD on the
+	wrapper already forwards to the value (AbstractPyFloat / AbstractPyInt >>
+	___pyAttrLoad___:); this is the same step for super(), and like the type
+	bridge above it is reached only once the ordinary walk has missed, so an
+	override between here and the built-in still wins."
+
+	((obj @env0:isKindOf: AbstractPyFloat) or: [obj @env0:isKindOf: AbstractPyInt])
+		ifFalse: [^ nil].
+	(obj ___grailValueImplements___: aSym) ifFalse: [^ nil].
+	^ BoundMethod @env1:receiver: obj @env0:value selector: aSym
+%
+
+category: 'Grail-Attribute'
+method: Super
+___bindHolderValue___: v
+	"Bind a value found in a parent's class-attribute holder, as CPython's
+	super does: a DESCRIPTOR is asked for its own binding,
+	``v.__get__(None if obj is a class else obj, owner)''.
+
+	Binding everything as a method of obj was right for the decorated
+	functions the holder mostly carries, and wrong for the three descriptors
+	that land there whenever a decorator is not one the class build knows to
+	compile -- ``@classmethod @abstractmethod'', a classmethod or property
+	SUBCLASS such as abc's abstractclassmethod / abstractproperty.
+	``super().foo()'' from a classmethod then called the classmethod OBJECT
+	(``'classmethod' object is not callable''), and ``super().foo'' from a
+	property answered a bound method instead of the parent's value
+	(test_abc's abstract* tests)."
+
+	| inst owner |
+	((v @env0:isKindOf: PyClassMethod)
+		or: [(v @env0:isKindOf: PyStaticMethod)
+		or: [v @env0:isKindOf: PropertyDescriptor]])
+			ifFalse: [^ MethodBinding instance: obj callable: v].
+	(obj @env0:isKindOf: Behavior)
+		ifTrue: [inst := None. owner := obj]
+		ifFalse: [inst := obj. owner := obj @env0:class].
+	^ v __get__: inst _: owner
+%
+
+category: 'Grail-Attribute'
+method: Super
 ___pyAttrLoad___: aSym
 	"super().<aSym> — return a BoundMethod-equivalent that, when
 	invoked, executes the parent class''s method with obj as the
@@ -616,7 +666,7 @@ ___pyAttrLoad___: aSym
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				v := holder @env0:dynamicInstVarAt: aSym.
-				v == nil ifFalse: [^ MethodBinding instance: obj callable: v]
+				v == nil ifFalse: [^ self ___bindHolderValue___: v]
 			]
 		].
 		walker := walker @env0:superClass
@@ -700,6 +750,8 @@ ___pyAttrLoad___: aSym
 	(self @env0:_superDefinesAnyFormOf: s) ifFalse: [
 		| bridged |
 		bridged := self ___superTypeMethodFor___: aSym.
+		bridged == nil ifFalse: [^ bridged].
+		bridged := self ___superValueMethodFor___: aSym.
 		bridged == nil ifFalse: [^ bridged].
 		^ AttributeError ___signal___:
 			('''super'' object has no attribute ''' @env0:, s @env0:, '''')].
