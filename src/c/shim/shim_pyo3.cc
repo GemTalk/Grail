@@ -111,6 +111,27 @@ int PyObject_GenericSetDict(PyObject *obj, PyObject *value, void *context) {
  * Calls
  * ==================================================================== */
 
+/* ``args[0].name(*args[1:nargs], **dict(zip(kwnames, args[nargs:])))'' --
+   CPython's method-call form of vectorcall.  It was a stub answering NULL with
+   no exception set, so pydantic_core's call of a model's model_post_init
+   surfaced as ``SystemError: attempted to fetch exception but none was set''
+   (docs/Support_Pydantic.md, Phase 6).  The offset flag is masked off as
+   PyObject_Vectorcall masks it: args has no slot before it to borrow here. */
+extern "C" PyObject *PyObject_VectorcallMethod(PyObject *name, PyObject *const *args,
+                                               size_t nargsf, PyObject *kwnames) {
+    Py_ssize_t nargs = (Py_ssize_t)(nargsf & ~(1ULL << 63));
+    if (nargs < 1 || args == NULL) {
+        PyErr_SetString(PyExc_SystemError,
+                        "PyObject_VectorcallMethod() called without a receiver");
+        return NULL;
+    }
+    PyObject *callable = PyObject_GetAttr(args[0], name);
+    if (callable == NULL) return NULL;
+    PyObject *result = PyObject_Vectorcall(callable, args + 1, (size_t)(nargs - 1), kwnames);
+    Py_DECREF(callable);
+    return result;
+}
+
 /* The fallback PyO3's INLINED vectorcall takes when the callable's type has
    no vectorcall slot -- which is every Grail-backed object, since the shim's
    static types leave Py_TPFLAGS_HAVE_VECTORCALL clear.  `keywords' is a
@@ -725,8 +746,9 @@ int PyUnicodeWriter_WriteChar(void *writer, Py_UCS4 ch) {
 void _Py_IncRef(PyObject *o) { if (o) o->ob_refcnt++; }
 void _Py_DecRef(PyObject *o) { if (o) o->ob_refcnt--; }
 
+extern "C" unsigned long long PyLong_AsUnsignedLongLongMask_impl(PyObject *o);  /* cpython.cc */
 unsigned long long PyLong_AsUnsignedLongLongMask(PyObject *o) {
-    return (unsigned long long)PyLong_AsLongLong(o);
+    return PyLong_AsUnsignedLongLongMask_impl(o);
 }
 
 /* 3.13: the interpreter's constants by number (Include/object.h

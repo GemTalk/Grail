@@ -242,26 +242,6 @@ extern "C" void PyMutex_Lock(PyMutex *m) {
 extern "C" void PyMutex_Unlock(PyMutex *m) {
     (void)0;
 }
-extern "C" PyObject * PyNumber_Absolute(PyObject *o) {
-    STUBLOG("PyNumber_Absolute");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Add(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Add");
-    return 0;
-}
-extern "C" PyObject * PyNumber_And(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_And");
-    return 0;
-}
-extern "C" int PyNumber_Check(PyObject *o) {
-    STUBLOG("PyNumber_Check");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Divmod(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Divmod");
-    return 0;
-}
 /* float(o): pass through floats; otherwise coerce via the server's
    double conversion (applies __float__/__index__ on the Grail side). */
 extern "C" PyObject * PyNumber_Float(PyObject *o) {
@@ -269,64 +249,12 @@ extern "C" PyObject * PyNumber_Float(PyObject *o) {
     if (PyFloat_Check(o)) { Py_INCREF(o); return o; }
     return PyFloat_FromDouble(PyFloat_AsDouble(o));
 }
-extern "C" PyObject * PyNumber_FloorDivide(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_FloorDivide");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Invert(PyObject *o) {
-    STUBLOG("PyNumber_Invert");
-    return 0;
-}
 /* int(o): already-int passes through; otherwise coerce via the server's
    Py_ssize_t conversion (which applies __index__/__int__ on the Grail side). */
 extern "C" PyObject * PyNumber_Long(PyObject *o) {
     if (o == NULL) return NULL;
     if (PyLong_Check(o)) { Py_INCREF(o); return o; }
     return PyLong_FromSsize_t(PyLong_AsSsize_t(o));
-}
-extern "C" PyObject * PyNumber_Lshift(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Lshift");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Multiply(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Multiply");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Negative(PyObject *o) {
-    STUBLOG("PyNumber_Negative");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Or(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Or");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Positive(PyObject *o) {
-    STUBLOG("PyNumber_Positive");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Power(PyObject *o1, PyObject *o2, PyObject *o3) {
-    STUBLOG("PyNumber_Power");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Remainder(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Remainder");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Rshift(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Rshift");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Subtract(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Subtract");
-    return 0;
-}
-extern "C" PyObject * PyNumber_TrueDivide(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_TrueDivide");
-    return 0;
-}
-extern "C" PyObject * PyNumber_Xor(PyObject *o1, PyObject *o2) {
-    STUBLOG("PyNumber_Xor");
-    return 0;
 }
 extern "C" int PyOS_snprintf(char *str, size_t size, const char *format, ...) {
     va_list ap; va_start(ap,format); int r=vsnprintf(str,size,format,ap); va_end(ap); return r;
@@ -401,13 +329,10 @@ extern "C" PyObject * PyObject_SelfIter(PyObject *) {
     STUBLOG("PyObject_SelfIter");
     return 0;
 }
+/* len(o): PyObject_Length's other name (cpython.cc).  It was a stub
+   answering 0, which pydantic_core's model_dump reaches. */
 extern "C" Py_ssize_t PyObject_Size(PyObject *o) {
-    STUBLOG("PyObject_Size");
-    return 0;
-}
-extern "C" PyObject * PyObject_VectorcallMethod(PyObject *name, PyObject *const *args, size_t nargsf, PyObject *kwnames) {
-    STUBLOG("PyObject_VectorcallMethod");
-    return 0;
+    return PyObject_Length(o);
 }
 extern "C" PyObject * PySeqIter_New(PyObject *) {
     STUBLOG("PySeqIter_New");

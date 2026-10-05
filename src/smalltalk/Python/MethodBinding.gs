@@ -153,6 +153,30 @@ __func__
 	^ callable
 %
 
+category: 'Grail-Reflection'
+method: MethodBinding
+__signature_spec__
+	"The callable's def-time parameter spec WITHOUT its first positional
+	parameter -- the one this binding supplies.  CPython's signature() of a
+	bound method drops it; this forwarded the function's spec whole, so a
+	classmethod bound through ``classmethod.__get__'' read as ``(cls, v)''
+	rather than ``(v)''.  pydantic picks a validator's calling convention by
+	counting those parameters, and so called every classmethod field
+	validator with an extra info argument.
+
+	A leading *args is not dropped: it absorbs the binding, as in CPython."
+
+	| spec first |
+	spec := [callable @env1:___pyAttrLoad___: #'__signature_spec__']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(spec == nil or: [spec == None or: [spec @env0:isEmpty]])
+		ifTrue: [^ ExecBlock @env0:___pyNone___].
+	first := spec @env0:at: 1.
+	(((first @env0:at: 2) @env0:= 0) or: [(first @env0:at: 2) @env0:= 1])
+		ifFalse: [^ spec].
+	^ spec @env0:copyFrom: 2 to: spec @env0:size
+%
+
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
 ! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
 ! invisible to the probe and the hook silently does nothing.

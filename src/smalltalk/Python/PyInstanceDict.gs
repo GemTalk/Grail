@@ -629,6 +629,33 @@ __copy__
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
+__deepcopy__: memo
+	"copy.deepcopy() of a __dict__: a deep copy of the plain dict copy()
+	answers, which is what CPython's deepcopy of a real dict gives.
+
+	Missing, deepcopy fell back to reduce-and-rebuild exactly as copy.copy()
+	had: the rebuilt view had no instance behind it, the first store went to
+	nil, and the ImproperOperation it raised is a Smalltalk error no Python
+	``except'' sees.  pydantic's model_copy(deep=True) is
+	``deepcopy(self.__dict__, memo=memo)'', so it took the whole process down
+	(tests/test_main.py's test_model_construct_with_model_post_init_and_model_copy).
+
+	The view is entered in memo as the result too, as _deepcopy_dict enters
+	the dict it is building, so a value that refers back to the __dict__
+	finds the copy rather than recursing."
+
+	| copyMod result |
+	copyMod := (importlib @env0:___instance___) @env1:import_module: 'copy'.
+	result := (copyMod @env1:___pyAttrLoad___: #deepcopy)
+		@env1:value: { self copy. memo } value: nil.
+	(memo ~~ nil and: [memo ~~ None]) ifTrue: [
+		memo @env1:__setitem__: (((Python @env0:at: #builtins) @env0:___instance___)
+			@env1:id: self) _: result].
+	^ result
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
 items
 	"A live dict_items view -- see ``keys''."
 

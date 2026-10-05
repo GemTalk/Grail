@@ -687,6 +687,15 @@ Three ways out, in ascending order of what they ask of the runtime.
 
 > **Chosen (2026-09-29).** The measured symbol floor, the ranked walls and the
 > phased plan are in [Support_Pydantic.md](Support_Pydantic.md).
+>
+> **Working (2026-10-02).** `pydantic.BaseModel` runs in Grail on an abi3
+> build of the real `_pydantic_core` (Phases 0–5), and pydantic's own test
+> suite runs: a 12-module slice — `test_main`, `test_fields`,
+> `test_validators`, `test_serialize`, `test_json` and seven more — compared
+> test by test against CPython (Phase 6). The cost is speed: a validation is
+> two to three orders of magnitude slower than on CPython (W7), every one of
+> it shim crossings. The stock PyPI wheel imports but cannot validate yet; it
+> needs a real CPython memory layout for `str`/`float` (Phase 4, option (a)).
 
 Grail already loads real CPython C extensions through a hand-written shim
 (`_sre`, `_bisect`, `_crc32c`, `_statistics`), and
@@ -759,14 +768,16 @@ no pydantic at all.
 
 Stated plainly, so this document is not read as more than it is:
 
-* No FastAPI, starlette, pydantic or anyio code has been vendored or run
-  under Grail. The line counts and dependency facts come from CPython venvs;
+* No FastAPI, starlette or anyio code has been vendored or run under Grail
+  (pydantic now has — §4, Route A). The line counts and dependency facts come from CPython venvs;
   the 67/72 import result and the coroutine table come from Grail.
 * The depth of the suspension fix in §3 is unmeasured. It could be a
   contained change to `___grailAwait___:` plus the generator send path, or it
   could reach into codegen. Nobody has tried.
-* Route A's viability for a **PyO3** binary is unmeasured. The NumPy
-  evidence is encouraging and is about a different toolchain.
+* ~~Route A's viability for a **PyO3** binary is unmeasured.~~ Measured
+  (2026-10-02): it works for pydantic_core on the abi3 build, at W7's cost
+  — see [Support_Pydantic.md](Support_Pydantic.md). What is still
+  unmeasured is FastAPI on top of it.
 * `test_typing` and `test_annotationlib` both currently score IMPORTERROR
   (PEP 695 type aliases; an f-string parse). pydantic v2 leans hard on
   `annotationlib` and modern typing, so those rows are probably on the

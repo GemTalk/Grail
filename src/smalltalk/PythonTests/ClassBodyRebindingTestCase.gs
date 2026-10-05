@@ -122,8 +122,18 @@ testEnumRejectsEverySpellingOfADuplicate
 		equals: '''red'' already defined as 1'.
 	self assert: (self resultAt: 'dup_assign_def') asString
 		equals: '''red'' already defined as 1'.
-	self assert: (self resultAt: 'dup_property_assign') asString
-		equals: '''red'' already defined as 1'.
+	"A def's binding is the object its decorator made: CPython's namespace
+	holds the enum.property, so the second binding of ``red'' is refused as
+	``already defined as <enum.property object at 0x...>''.  Grail's mapping
+	held the bare getter until Phase 6 of docs/Support_Pydantic.md, and this
+	asserted the ``as 1'' that followed from that.  Grail's enum.property reprs
+	as a plain property, so the shape is asserted, not the module prefix."
+	self assert: (((self resultAt: 'dup_property_assign') asString)
+		beginsWith: '''red'' already defined as <')
+		description: (self resultAt: 'dup_property_assign') asString.
+	self assert: (((self resultAt: 'dup_property_assign') asString)
+		includesString: 'property object at ')
+		description: (self resultAt: 'dup_property_assign') asString.
 %
 
 category: 'Grail-Tests - Enum duplicate names'

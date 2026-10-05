@@ -568,6 +568,17 @@ printSmalltalkOn: aStream
 		nextPutAll: ' posonlyargcount: '; nextPutAll: (args posonlyargs ifNil: [#()]) size printString;
 		nextPutAll: ' kwonlyargcount: '; nextPutAll: (args kwonlyargs ifNil: [#()]) size printString;
 		nextPutAll: ')'.
+	"And the PARAMETER SPEC inspect.signature builds from, the def's own
+	``___pySig___:'' stamp.  A lambda had none, so every lambda's signature was
+	``()'' whatever it declared -- and pydantic, which decides from it whether
+	``Field(default_factory=lambda data: ...)'' wants the validated data,
+	called the factory with no argument.  Emitted by a FunctionDefAst carrying
+	this lambda's arguments, so the two cannot drift."
+	[ | specDef |
+	specDef := FunctionDefAst new args: args; yourself.
+	specDef hasSignatureSpec ifTrue: [
+		aStream nextPutAll: '; @env0:___pySig___: '.
+		specDef emitSignatureSpecOn: aStream]] value.
 	hasOuter
 		ifTrue: [aStream nextPutAll: '] value)']
 		ifFalse: [aStream nextPut: $)].
@@ -890,6 +901,11 @@ ___emitIRLambdaBlockOn___: aBuilder
 			aBuilder obj: (args kwonlyargs ifNil: [#()]) size }
 		env: 0.
 	specs add: { #'___pyCode___:'. { code }. 0 }.
+	"The parameter spec, as the text path stamps it (printSmalltalkOn:)."
+	[ | specDef |
+	specDef := FunctionDefAst new args: args; yourself.
+	specDef hasSignatureSpec ifTrue: [
+		specs add: { #'___pySig___:'. { specDef ___emitIRSignatureSpecOn___: aBuilder }. 0 }]] value.
 	^ aBuilder cascade: blk specs: specs
 %
 

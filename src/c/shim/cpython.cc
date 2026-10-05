@@ -31,6 +31,43 @@ extern "C" {
 #include <dlfcn.h>
 #include <ctype.h>
 #include "grail_case_tables.h"   /* generated simple Unicode case tables */
+
+/* GRAIL_SHIM_PROFILE=1: count every GciPerform the shim makes, by selector,
+   and print the table at exit -- each one is a crossing into Smalltalk, which
+   is where a wheel's time goes (docs/Support_Pydantic.md, Phase 6 / W7).
+   Off by default: one getenv per process, then a branch per call. */
+static int g_prof_on = -1;
+static struct { const char *sel; long n; } g_prof[256];
+static int g_prof_count = 0;
+static void prof_dump(void) {
+    for (int i = 1; i < g_prof_count; i++)          /* insertion sort, by count */
+        for (int j = i; j > 0 && g_prof[j].n > g_prof[j - 1].n; j--) {
+            auto t = g_prof[j]; g_prof[j] = g_prof[j - 1]; g_prof[j - 1] = t; }
+    long total = 0;
+    for (int i = 0; i < g_prof_count; i++) total += g_prof[i].n;
+    fprintf(stderr, "SHIM-PROFILE: %ld GciPerform calls\n", total);
+    for (int i = 0; i < g_prof_count && i < 40; i++)
+        fprintf(stderr, "SHIM-PROFILE: %10ld  %s\n", g_prof[i].n, g_prof[i].sel);
+}
+static OopType grail_counted_perform(OopType r, const char *sel, const OopType *a, int n) {
+    if (g_prof_on < 0) {
+        g_prof_on = getenv("GRAIL_SHIM_PROFILE") ? 1 : 0;
+        if (g_prof_on) atexit(prof_dump);
+    }
+    if (g_prof_on) {
+        int i = 0;
+        while (i < g_prof_count && g_prof[i].sel != sel && strcmp(g_prof[i].sel, sel) != 0) i++;
+        if (i == g_prof_count && g_prof_count < 256) { g_prof[i].sel = sel; g_prof[i].n = 0; g_prof_count++; }
+        if (i < 256) g_prof[i].n++;
+    }
+    return GciPerform(r, sel, a, n);
+}
+#define GciPerform(r, s, a, n) grail_counted_perform((r), (s), (a), (n))
+
+/* Reading an element of a result ARRAY the server answered is GciFetchOop,
+   a direct read -- not GciPerform(arr, "at:"), a full message send into
+   Smalltalk.  The profile above found ``at:'' to be 120 of the 219 crossings
+   in one pydantic model_dump(). */
 #include "grail_digit_table.h"    /* generated Unicode Nd (decimal digit) ranges */
 
 /* Binary-search a sorted GrailCasePair table; return mapped code or ch. */
@@ -243,6 +280,16 @@ static void init_types(void) {
               Py_TPFLAGS_DEFAULT);
     init_type(&PyModule_Type, "module", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
+    /* set / frozenset: pyo3-ffi INLINES PySet_Check / PyFrozenSet_Check as
+       ``Py_TYPE(o) == &PySet_Type || PyType_IsSubtype(...)'', so a Grail set
+       has to cross typed as these and they have to be real types.  Both were
+       zeroed declarations (shim_numpy.cc), never initialised -- a NULL
+       ob_type -- and a Grail set crossed as ``object'', so pydantic_core
+       refused a model's fields-set for model_dump(exclude_unset=True). */
+    init_type(&PySet_Type, "set", &PyBaseObject_Type,
+              Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
+    init_type(&PyFrozenSet_Type, "frozenset", &PyBaseObject_Type,
+              Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
 
     /* Record every static shim type so is_foreign() can tell a Grail-backed
        wrapper (ob_type is one of these) from a wheel's own object. */
@@ -257,6 +304,8 @@ static void init_types(void) {
     register_shim_type(&PyDict_Type);
     register_shim_type(&PyTuple_Type);
     register_shim_type(&_PyNone_Type);
+    register_shim_type(&PySet_Type);
+    register_shim_type(&PyFrozenSet_Type);
 
     init_exception_types();
 }
@@ -1090,9 +1139,9 @@ static void take_callback_error(void) {
     }
     char base[128], msg[1024];
     OopType i1 = GciI64ToOop(1), i2 = GciI64ToOop(2), i3 = GciI64ToOop(3);
-    fetch_string(GciPerform(arr, "at:", &i1, 1), base, sizeof(base));
-    fetch_string(GciPerform(arr, "at:", &i2, 1), msg, sizeof(msg));
-    int64 ptr = GciOopToI64(GciPerform(arr, "at:", &i3, 1));
+    fetch_string(GciFetchOop(arr, GciOopToI64(i1)), base, sizeof(base));
+    fetch_string(GciFetchOop(arr, GciOopToI64(i2)), msg, sizeof(msg));
+    int64 ptr = GciOopToI64(GciFetchOop(arr, GciOopToI64(i3)));
     GciErr(&e);
     PyObject *inst = (PyObject *)(intptr_t)ptr;
     if (ptr != 0 && plausible_pyobj(inst) && plausible_pyobj(inst->ob_type)) {
@@ -1243,6 +1292,16 @@ static int64 oopToLongWithIndex(OopType oop) {
     if (GCI_OOP_IS_SMALL_INT(oop)) {
         return GciOopToI64(oop);
     }
+    /* A STR is not an integer, and asking it is not free: CPython's
+       PyLong_AsLong raises TypeError for one, and PyO3 extracts with exactly
+       that to tell an int from anything else -- pydantic_core's literal
+       serializer tries ``item.extract::<i64>()'' on every expected value
+       before trying it as a str.  The probe below DNU'd on each, which is
+       noisy and, under a deep stack, was where the gem ran out of it. */
+    if (GciIsKindOfClass(oop, OOP_CLASS_CHARACTER_COLLECTION)) {
+        PyErr_SetString(PyExc_TypeError, "'str' object cannot be interpreted as an integer");
+        return -1;
+    }
     OopType indexed = GciPerform_(oop, "__index__", NULL, 0, 1);
     /* Same shape as the encodeAsUTF8 probes: "no __index__" is an expected
        answer for this send, but __index__ EXISTING AND RAISING is not.
@@ -1253,6 +1312,15 @@ static int64 oopToLongWithIndex(OopType oop) {
        these conversions (PyLong_AsLong and friends) and every caller here
        reaches one of them. */
     if (probe_failed_for_real("__index__")) return -1;
+    /* No __index__ at all -- the expected DNU, which probe_failed_for_real
+       lets through -- is CPython's TypeError.  It used to fall through to
+       GciOopToI64(nil), which answered 0 with no Python error set, so PyO3
+       read the object as the integer 0: pydantic_core counted a str literal
+       as ``Literal[0]''. */
+    if (indexed == OOP_NIL) {
+        PyErr_SetString(PyExc_TypeError, "object cannot be interpreted as an integer");
+        return -1;
+    }
     return GciOopToI64(indexed);
 }
 
@@ -1373,8 +1441,8 @@ static const char *grail_utf8(PyObject *obj, Py_ssize_t *size) {
     OopType arr = GciPerform(server, "PyUnicode_UTF8Buffer:", &oop, 1);
     if (check_gci_error()) return NULL;
     OopType one = GciI64ToOop(1), two = GciI64ToOop(2);
-    OopType addrOop = GciPerform(arr, "at:", &one, 1);
-    OopType sizeOop = GciPerform(arr, "at:", &two, 1);
+    OopType addrOop = GciFetchOop(arr, GciOopToI64(one));
+    OopType sizeOop = GciFetchOop(arr, GciOopToI64(two));
     if (check_gci_error()) return NULL;
     if (size) *size = (Py_ssize_t)GciOopToI64(sizeOop);
     return (const char *)(intptr_t)GciOopToI64(addrOop);
@@ -1603,6 +1671,30 @@ static void diag_foreign(PyObject *obj) {
     fflush(stderr);
 }
 
+/* The names of a wheel type's METH_CLASS / METH_STATIC methods, up its tp_base
+   chain, space-separated into buf.  The Grail class the shim builds for a
+   wheel's EXCEPTION type forwards only INSTANCE attributes to the C object, so
+   these have to be put on the class itself
+   (CPythonShim>>___buildForeignExceptionClass:base:pointer:classMethods:).
+   pydantic_core's ValidationError.from_exception_data is one: pydantic's
+   frozen-model and validate_assignment paths raise through it. */
+static void foreign_class_method_names(PyTypeObject *type, char *buf, size_t cap)
+{
+    size_t used = 0;
+    buf[0] = '\0';
+    for (PyTypeObject *t = type; t != NULL; t = t->tp_base) {
+        for (PyMethodDef *ml = t->tp_methods; ml && ml->ml_name; ml++) {
+            if (!(ml->ml_flags & (METH_CLASS | METH_STATIC))) continue;
+            size_t len = strlen(ml->ml_name);
+            if (used + len + 2 > cap) return;
+            if (used > 0) buf[used++] = ' ';
+            memcpy(buf + used, ml->ml_name, len);
+            used += len;
+            buf[used] = '\0';
+        }
+    }
+}
+
 /* Reverse proxy: bridge a foreign C PyObject* (a prebuilt wheel's own
    object, e.g. a numpy DType) into a Grail ShimForeignObject, so Grail
    code that receives it (e.g. numpy.dtypes._add_dtype_helper(DType, ...))
@@ -1654,11 +1746,14 @@ static OopType foreign_proxy_oop(PyObject *obj) {
         const char *base = own;
         for (PyTypeObject *b = t->tp_base; base == NULL && b != NULL; b = b->tp_base)
             base = name_for_exc_type((PyObject *)b);
-        OopType args[4] = { GciI64ToOop((int64)(intptr_t)obj), GciNewString(nm),
+        char cms[4096];
+        foreign_class_method_names(t, cms, sizeof(cms));
+        OopType args[5] = { GciI64ToOop((int64)(intptr_t)obj), GciNewString(nm),
                             GciNewString(base ? base : "Exception"),
-                            own ? OOP_TRUE : OOP_FALSE };
+                            own ? OOP_TRUE : OOP_FALSE, GciNewString(cms) };
         return GciPerform(server,
-            "foreignExceptionTypeForPointer:typeName:baseName:isShimType:", args, 4);
+            "foreignExceptionTypeForPointer:typeName:baseName:isShimType:classMethods:",
+            args, 5);
     }
     OopType args[2] = { GciI64ToOop((int64)(intptr_t)obj), GciNewString(nm) };
     return GciPerform(server, "foreignProxyForPointer:typeName:", args, 2);
@@ -3010,6 +3105,61 @@ extern "C" int PyCallable_Check(PyObject *obj) {
     return result == OOP_TRUE ? 1 : 0;
 }
 
+/* --- Number protocol (binary / unary operators) ---
+
+   Python's operator semantics -- NotImplemented, the reflected operand, int
+   arbitrary precision -- live on the Grail side, so each operator is the
+   ``operator'' module's function of the same meaning
+   (CPythonShim>>PyNumber_Op:a:b:c:n:).  They were all stubs answering NULL
+   with NO error set, so a wheel that used one died: PyO3's abi3 build
+   extracts a 128-bit integer with PyNumber_Rshift / PyNumber_And, and
+   pydantic_core serialising a UUID to JSON took the gem down
+   (docs/Support_Pydantic.md, Phase 6). */
+static PyObject *number_op(const char *op, int n, PyObject *a, PyObject *b, PyObject *c) {
+    if (a == NULL || (n >= 2 && b == NULL)) {
+        PyErr_SetString(PyExc_SystemError, "NULL operand to a number operation");
+        return NULL;
+    }
+    OopType args[5] = { GciNewString(op), pyobj_oop(a),
+                        n >= 2 ? pyobj_oop(b) : OOP_NIL,
+                        n >= 3 ? pyobj_oop(c) : OOP_NIL,
+                        GciI64ToOop(n) };
+    OopType r = GciPerform(server, "PyNumber_Op:a:b:c:n:", args, 5);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
+}
+extern "C" PyObject *PyNumber_Add(PyObject *a, PyObject *b)         { return number_op("add", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Subtract(PyObject *a, PyObject *b)    { return number_op("sub", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Multiply(PyObject *a, PyObject *b)    { return number_op("mul", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_FloorDivide(PyObject *a, PyObject *b) { return number_op("floordiv", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_TrueDivide(PyObject *a, PyObject *b)  { return number_op("truediv", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Remainder(PyObject *a, PyObject *b)   { return number_op("mod", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Divmod(PyObject *a, PyObject *b)      { return number_op("divmod", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Lshift(PyObject *a, PyObject *b)      { return number_op("lshift", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Rshift(PyObject *a, PyObject *b)      { return number_op("rshift", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_And(PyObject *a, PyObject *b)         { return number_op("and_", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Or(PyObject *a, PyObject *b)          { return number_op("or_", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Xor(PyObject *a, PyObject *b)         { return number_op("xor", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_Power(PyObject *a, PyObject *b, PyObject *c) {
+    return (c == NULL || c == Py_None) ? number_op("pow", 2, a, b, NULL)
+                                       : number_op("pow", 3, a, b, c);
+}
+extern "C" PyObject *PyNumber_Negative(PyObject *a) { return number_op("neg", 1, a, NULL, NULL); }
+extern "C" PyObject *PyNumber_Positive(PyObject *a) { return number_op("pos", 1, a, NULL, NULL); }
+extern "C" PyObject *PyNumber_Absolute(PyObject *a) { return number_op("abs", 1, a, NULL, NULL); }
+extern "C" PyObject *PyNumber_Invert(PyObject *a)   { return number_op("invert", 1, a, NULL, NULL); }
+/* An int, a float (bool included), or anything with __index__ / __float__
+   / __int__ -- CPython's test; asked of the server only past the two inline
+   cases. */
+extern "C" int PyNumber_Check(PyObject *o) {
+    if (o == NULL) return 0;
+    if (PyLong_Check(o) || PyFloat_Check(o)) return 1;
+    OopType args[5] = { GciNewString("___check"), pyobj_oop(o), OOP_NIL, OOP_NIL, GciI64ToOop(1) };
+    OopType r = GciPerform(server, "PyNumber_Op:a:b:c:n:", args, 5);
+    if (check_gci_error()) { PyErr_Clear(); return 0; }
+    return r == OOP_TRUE ? 1 : 0;
+}
+
 extern "C" PyObject *PyObject_RichCompare(PyObject *v, PyObject *w, int op) {
     if (v == NULL || w == NULL) return NULL;
     OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop(op) };
@@ -3051,17 +3201,17 @@ extern "C" int PySlice_Unpack(PyObject *slice, Py_ssize_t *start,
     OopType idx1[1] = { OOP_One };
     OopType idx2[1] = { OOP_Two };
     OopType idx3[1] = { OOP_Three };
-    OopType stepOop = GciPerform(result, "at:", idx3, 1);
+    OopType stepOop = GciFetchOop(result, GciOopToI64(idx3[0]));
     *step = (stepOop == OOP_NIL) ? 1 : (Py_ssize_t)GciOopToI64(stepOop);
     if (*step == 0) {
         PyErr_SetString(PyExc_ValueError, "slice step cannot be zero");
         return -1;
     }
-    OopType startOop = GciPerform(result, "at:", idx1, 1);
+    OopType startOop = GciFetchOop(result, GciOopToI64(idx1[0]));
     *start = (startOop == OOP_NIL)
         ? (*step < 0 ? PY_SSIZE_T_MAX : 0)
         : (Py_ssize_t)GciOopToI64(startOop);
-    OopType stopOop = GciPerform(result, "at:", idx2, 1);
+    OopType stopOop = GciFetchOop(result, GciOopToI64(idx2[0]));
     *stop = (stopOop == OOP_NIL)
         ? (*step < 0 ? PY_SSIZE_T_MIN : PY_SSIZE_T_MAX)
         : (Py_ssize_t)GciOopToI64(stopOop);
@@ -3161,27 +3311,50 @@ extern "C" void PyBuffer_Release(Py_buffer *view) {
  * CPython API — Dict (additional)
  * ==================================================================== */
 
+/* PyDict_Next walks a SNAPSHOT: the first call of a walk (pos 0) fetches
+   every { key, value } address in one crossing (CPythonShim>>
+   PyDict_ItemsFlat:, insertion order) and the rest of the walk is served
+   here.  It used to be one crossing per entry, each of which rebuilt the
+   dict's whole key list to find entry ``pos'' -- O(n^2) per walk, and 44% of
+   a pydantic model_dump() (docs/Support_Pydantic.md, Phase 6).  A small ring
+   of snapshots keyed by dict pointer, because a serializer walks an inner
+   dict in the middle of walking an outer one.  CPython does not allow a dict
+   to be MUTATED during PyDict_Next either, so a snapshot answers what the
+   live walk would; a walk resumed at a pos > 0 on a dict with no snapshot
+   just takes one. */
+#define DICT_NEXT_SLOTS 8
+static struct { PyObject *dict; int64 *items; Py_ssize_t n; } g_dn[DICT_NEXT_SLOTS];
+static int g_dn_next = 0;
+
+static int dict_next_slot(PyObject *dict, int refresh) {
+    int slot = -1;
+    for (int i = 0; i < DICT_NEXT_SLOTS; i++)
+        if (g_dn[i].dict == dict) { slot = i; break; }
+    if (slot >= 0 && !refresh) return slot;
+    OopType arg = pyobj_oop(dict);
+    OopType flat = GciPerform(server, "PyDict_ItemsFlat:", &arg, 1);
+    if (check_gci_error() || flat == OOP_NIL) return -1;
+    int64 n = GciFetchSize_(flat);
+    if (slot < 0) { slot = g_dn_next; g_dn_next = (g_dn_next + 1) % DICT_NEXT_SLOTS; }
+    free(g_dn[slot].items);
+    g_dn[slot].items = (int64 *)malloc((size_t)(n > 0 ? n : 1) * sizeof(int64));
+    if (g_dn[slot].items == NULL) { g_dn[slot].dict = NULL; return -1; }
+    for (int64 i = 0; i < n; i++)
+        g_dn[slot].items[i] = GciOopToI64(GciFetchOop(flat, i + 1));
+    g_dn[slot].dict = dict;
+    g_dn[slot].n = (Py_ssize_t)(n / 2);
+    return slot;
+}
+
 extern "C" int PyDict_Next(PyObject *dict, Py_ssize_t *ppos, PyObject **pkey,
                             PyObject **pvalue) {
-    /* Iterate over a GemStone-backed dictionary.
-       Delegate to server — it returns an Array { key, value } or nil. */
     if (dict == NULL) return 0;
-    OopType args[2] = { pyobj_oop(dict), GciI64ToOop(*ppos) };
-    OopType result = GciPerform(server, "PyDict_Next:pos:", args, 2);
-    if (check_gci_error()) return 0;
-    if (result == OOP_NIL) return 0;
-
-    /* Result is an Array of { key_addr, value_addr, next_pos } */
-    OopType keyArr[1] = { OOP_One  };
-    OopType valArr[1] = { OOP_Two };
-    OopType nextArr[1] = { OOP_Three };
-    OopType keyAddr = GciPerform(result, "at:", keyArr, 1);
-    OopType valAddr = GciPerform(result, "at:", valArr, 1);
-    OopType nextPos = GciPerform(result, "at:", nextArr, 1);
-
-    *pkey = addr_to_pyobj(keyAddr);
-    *pvalue = addr_to_pyobj(valAddr);
-    *ppos = (Py_ssize_t)GciOopToI64(nextPos);
+    int slot = dict_next_slot(dict, *ppos == 0);
+    if (slot < 0) return 0;
+    if (*ppos < 0 || *ppos >= g_dn[slot].n) return 0;
+    if (pkey)   *pkey   = (PyObject *)(intptr_t)g_dn[slot].items[2 * *ppos];
+    if (pvalue) *pvalue = (PyObject *)(intptr_t)g_dn[slot].items[2 * *ppos + 1];
+    (*ppos)++;
     return 1;
 }
 
@@ -3766,6 +3939,21 @@ static struct {
  * ==================================================================== */
 
 static PyObject *module_cache[MAX_MODULES];
+
+/* A DYNAMICALLY LOADED extension is initialised once per PROCESS
+   (docs/Support_Pydantic.md, W8).  The library stays mapped across a logout,
+   and what its init built -- PyO3's Rust statics: interned strings, type
+   pointers, the module's own attributes -- points at Grail objects of the
+   session that ran it, which a logout discards.  Running the init again in
+   the next session of the same gem process re-used those dangling pointers
+   and segfaulted (measured: pydantic_core, logout then login in one topaz).
+   CPython does not re-initialise an extension in one process either.  So a
+   module first loaded in an EARLIER session is refused with an ImportError
+   naming the cause; g_session_gen counts logins (GciUserActionInit). */
+static int g_session_gen = 0;
+#define MAX_DYN_EVER 64
+static struct { char name[64]; int gen; } g_dyn_ever[MAX_DYN_EVER];
+static int g_dyn_ever_count = 0;
 static char      module_names[MAX_MODULES][64];
 static int       num_modules = 0;
 
@@ -4123,7 +4311,7 @@ static OopType shimCallKw(OopType modOop, OopType methOop,
     PyObject *args[SHIM_KW_MAX_ARGS];
     for (Py_ssize_t i = 0; i < npos; i++) {
         OopType idxOop = GciI64ToOop(i + 1);
-        OopType addrOop = GciPerform(posArrOop, "at:", &idxOop, 1);
+        OopType addrOop = GciFetchOop(posArrOop, GciOopToI64(idxOop));
         args[i] = (PyObject *)(intptr_t)GciOopToI64(addrOop);
     }
     PyObject *kwnames = PyTuple_New(nkw);
@@ -4133,8 +4321,8 @@ static OopType shimCallKw(OopType modOop, OopType methOop,
     }
     for (Py_ssize_t i = 0; i < nkw; i++) {
         OopType idxOop = GciI64ToOop(i + 1);
-        OopType nameOop = GciPerform(kwNamesOop, "at:", &idxOop, 1);
-        OopType valAddrOop = GciPerform(kwValsOop, "at:", &idxOop, 1);
+        OopType nameOop = GciFetchOop(kwNamesOop, GciOopToI64(idxOop));
+        OopType valAddrOop = GciFetchOop(kwValsOop, GciOopToI64(idxOop));
         /* The name is already a Smalltalk String — wrap it as a PyObject */
         OopType nameAddr = GciPerform(server, "PyUnicode_FromString:", &nameOop, 1);
         PyTuple_SetItem(kwnames, i, addr_to_pyobj(nameAddr));
@@ -4184,9 +4372,21 @@ static OopType shimLoadModule(OopType modOop)
  * addresses for None, True, False.
  * ==================================================================== */
 
+static void new_session_reset(void);
+
 static OopType shimInit(OopType serverOop, OopType noneAddr,
-                        OopType trueAddr, OopType falseAddr)
+                        OopType trueAddr, OopType falseAddr, OopType sessionToken)
 {
+    /* A NEW SESSION of this process?  GciUserActionInit/Shutdown do not run
+       across a logout and re-login in one gem process -- the library stays
+       initialised -- so the boundary is the token CPythonShim class>>
+       ensureLoaded: makes once per session (see g_dyn_ever). */
+    static int64 last_token = 0;
+    int64 token = GciOopToI64(sessionToken);
+    if (token != last_token) {
+        if (last_token != 0) new_session_reset();
+        last_token = token;
+    }
     server = serverOop;
 
     /* Extract OOPs from the Smalltalk-allocated CByteArray wrappers
@@ -4255,6 +4455,8 @@ static OopType shimTypeAddr(OopType nameOop)
     else if (strcmp(name, "object") == 0) type = &PyBaseObject_Type;
     else if (strcmp(name, "type")   == 0) type = &PyType_Type;
     else if (strcmp(name, "NoneType") == 0) type = &_PyNone_Type;
+    else if (strcmp(name, "set")    == 0) type = &PySet_Type;
+    else if (strcmp(name, "frozenset") == 0) type = &PyFrozenSet_Type;
     /* Not types: the three singletons, so Grail can hand C THESE pointers
        for None / True / False (CPythonShim>>initTypeAddresses). */
     else if (strcmp(name, "None")  == 0) type = (PyTypeObject *)&_Py_NoneStruct;
@@ -4632,6 +4834,19 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
         }
     }
 
+    /* Loaded in an earlier SESSION of this process?  See g_dyn_ever. */
+    for (int i = 0; i < g_dyn_ever_count; i++) {
+        if (strcmp(g_dyn_ever[i].name, name) == 0 && g_dyn_ever[i].gen != g_session_gen) {
+            char msg[512];
+            snprintf(msg, sizeof(msg),
+                "ImportError: extension module '%s' was initialised in an earlier "
+                "session of this gem process and cannot be initialised again; "
+                "import it in a new gem process", name);
+            raise_error(msg);
+            return OOP_NIL;
+        }
+    }
+
     /* dlopen the .so */
     void *handle = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
@@ -4675,6 +4890,11 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     snprintf(module_names[num_modules], sizeof(module_names[num_modules]), "%s", name);
     module_cache[num_modules] = mod;
     num_modules++;
+    if (g_dyn_ever_count < MAX_DYN_EVER) {
+        snprintf(g_dyn_ever[g_dyn_ever_count].name, sizeof(g_dyn_ever[0].name), "%s", name);
+        g_dyn_ever[g_dyn_ever_count].gen = g_session_gen;
+        g_dyn_ever_count++;
+    }
 
     /* Multi-phase modules: run Py_mod_exec slots (registers constants,
        creates heap types). Previously only the static-registry path did
@@ -4870,7 +5090,7 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
     if (!tuple) { raise_error("shimCallObject: could not allocate args"); return OOP_NIL; }
     for (Py_ssize_t i = 0; i < npos; i++) {
         OopType idxOop = GciI64ToOop(i + 1);
-        OopType addrOop = GciPerform(posArrOop, "at:", &idxOop, 1);
+        OopType addrOop = GciFetchOop(posArrOop, GciOopToI64(idxOop));
         PyTuple_SetItem(tuple, i, (PyObject *)(intptr_t)GciOopToI64(addrOop));
     }
     PyObject *kwargs = NULL;
@@ -4878,8 +5098,8 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
         kwargs = PyDict_New();
         for (Py_ssize_t i = 0; i < nkw; i++) {
             OopType idxOop = GciI64ToOop(i + 1);
-            OopType nameOop = GciPerform(kwNamesOop, "at:", &idxOop, 1);
-            OopType valAddrOop = GciPerform(kwValsOop, "at:", &idxOop, 1);
+            OopType nameOop = GciFetchOop(kwNamesOop, GciOopToI64(idxOop));
+            OopType valAddrOop = GciFetchOop(kwValsOop, GciOopToI64(idxOop));
             OopType nameAddr = GciPerform(server, "PyUnicode_FromString:", &nameOop, 1);
             PyDict_SetItem(kwargs, addr_to_pyobj(nameAddr),
                            (PyObject *)(intptr_t)GciOopToI64(valAddrOop));
@@ -4920,6 +5140,26 @@ static OopType shimForeignGetAttr(OopType ptrOop, OopType nameOop)
     check_and_raise_error();
     if (!v) return OOP_NIL;
     OopType res = pyobj_oop(v);
+    check_and_raise_error();
+    return res;
+}
+
+/* str() / repr() of a wheel's own object, asked by Grail
+   (ShimForeignObject>>__str__ / __repr__): its own tp_str / tp_repr, the way
+   C's PyObject_Str already reaches it.  nil when the pointer is not a
+   plausible object or the type has no slot, and the proxy then renders
+   itself -- before this, every str() of a foreign object was the proxy's
+   ``<ShimForeignObject ...>'', so a pydantic_core ValidationError built by
+   from_exception_data printed as one. */
+static OopType shimForeignStr(OopType ptrOop, OopType reprOop)
+{
+    PyObject *obj = (PyObject *)(intptr_t)GciOopToI64(ptrOop);
+    if (!plausible_pyobj(obj) || !plausible_pyobj(obj->ob_type)) return OOP_NIL;
+    PyErr_Clear();
+    PyObject *r = foreign_str(obj, reprOop == OOP_TRUE);
+    buffer_cache_clear();
+    if (r == NULL) { PyErr_Clear(); return OOP_NIL; }
+    OopType res = pyobj_oop(r);
     check_and_raise_error();
     return res;
 }
@@ -5911,26 +6151,47 @@ extern "C" long long PyLong_AsLongLong(PyObject *obj) {
     return (long long)oopToLongWithIndex(int_conv_oop(obj));
 }
 
+/* Unsigned 64-bit values, which GemStone holds as LargeIntegers from 2^60
+   up, cross as two 32-bit halves (CPythonShim>>PyLong_U64Parts:mask: and
+   PyLong_FromU64Hi:lo:).  PyO3's abi3 build reads and writes a 128-bit int
+   as two of these -- the low half through the MASK form, which takes any
+   int -- so pydantic_core's UUID support needs every one of them exact.
+   They went through the signed SmallInteger path, and a UUID's int did not
+   fit (docs/Support_Pydantic.md, Phase 6). */
+static int u64_parts(PyObject *obj, int mask, unsigned long long *out) {
+    OopType args[2] = { int_conv_oop(obj), mask ? OOP_TRUE : OOP_FALSE };
+    OopType r = GciPerform(server, "PyLong_U64Parts:mask:", args, 2);
+    if (check_gci_error()) return -1;
+    if (r == OOP_NIL) return -1;
+    unsigned long long lo = (unsigned long long)GciOopToI64(GciFetchOop(r, 1));
+    unsigned long long hi = (unsigned long long)GciOopToI64(GciFetchOop(r, 2));
+    *out = (hi << 32) | lo;
+    return 0;
+}
+
 extern "C" PyObject *PyLong_FromUnsignedLongLong(unsigned long long v) {
-    /* Values above 2^63-1 cannot ride the tagged SmallInteger path;
-       extensions in practice pass sizes/flags that fit. Saturate with an
-       OverflowError rather than corrupting silently. */
-    if (v > (unsigned long long)PY_SSIZE_T_MAX) {
-        PyErr_SetString(PyExc_OverflowError,
-                        "value too large for the shim's integer path");
-        return NULL;
-    }
-    return PyLong_FromSsize_t((Py_ssize_t)v);
+    if (v <= (unsigned long long)(1ULL << 59))
+        return PyLong_FromSsize_t((Py_ssize_t)v);
+    OopType args[2] = { GciI64ToOop((int64)(v >> 32)), GciI64ToOop((int64)(v & 0xFFFFFFFFULL)) };
+    OopType r = GciPerform(server, "PyLong_FromU64Hi:lo:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 extern "C" unsigned long long PyLong_AsUnsignedLongLong(PyObject *obj) {
+    unsigned long long v;
     if (obj == NULL) return (unsigned long long)-1;
-    return (unsigned long long)oopToLongWithIndex(int_conv_oop(obj));
+    return u64_parts(obj, 0, &v) < 0 ? (unsigned long long)-1 : v;
+}
+
+extern "C" unsigned long long PyLong_AsUnsignedLongLongMask_impl(PyObject *obj) {
+    unsigned long long v;
+    if (obj == NULL) return (unsigned long long)-1;
+    return u64_parts(obj, 1, &v) < 0 ? (unsigned long long)-1 : v;
 }
 
 extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject *obj) {
-    if (obj == NULL) return (unsigned long)-1;
-    return (unsigned long)oopToLongWithIndex(int_conv_oop(obj));
+    return (unsigned long)PyLong_AsUnsignedLongLongMask_impl(obj);
 }
 
 extern "C" PyObject *PyLong_FromDouble(double v) {
@@ -6468,7 +6729,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimCall", shimCall, 8);
     GCI_DECLARE_ACTION("shimCallTyped", shimCallTyped, 8);
     GCI_DECLARE_ACTION("shimLoadModule", shimLoadModule, 1);
-    GCI_DECLARE_ACTION("shimInit", shimInit, 4);
+    GCI_DECLARE_ACTION("shimInit", shimInit, 5);
     GCI_DECLARE_ACTION("shimTypeAddr", shimTypeAddr, 1);
     GCI_DECLARE_ACTION("shimDynLoad", shimDynLoad, 2);
     GCI_DECLARE_ACTION("shimModuleAttrs", shimModuleAttrs, 1);
@@ -6476,6 +6737,23 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimCallObject", shimCallObject, 4);
     GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
+    GCI_DECLARE_ACTION("shimForeignStr", shimForeignStr, 2);
+}
+
+/* Drop everything that points at the PREVIOUS session's Grail objects:
+   loaded-module bookkeeping (registry modules re-initialise on demand; a
+   dynamically loaded one is refused -- g_dyn_ever), module attributes,
+   dict-walk snapshots, the pending error and the callback flag. */
+static void new_session_reset(void) {
+    g_session_gen++;
+    buffer_cache_clear();
+    num_modules = 0;
+    module_attrs_count = 0;
+    for (int i = 0; i < DICT_NEXT_SLOTS; i++) { free(g_dn[i].items); g_dn[i].items = NULL; g_dn[i].dict = NULL; }
+    g_cb_error_flag = 0;
+    current_error_type = NULL;
+    current_error_msg[0] = '\0';
+    forget_saved_gs_error();
 }
 
 extern "C" void GciUserActionShutdown(void) {

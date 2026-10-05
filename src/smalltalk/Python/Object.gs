@@ -4422,11 +4422,140 @@ ___grailNsBind___: aName
 	a conditionally-defined nested class among them.  CPython would have the
 	name; answering nothing is the narrower miss, and it keeps a namespace
 	from turning a def into a class-definition-time error."
-	v := [self ___pyAttrLoad___: aName @env0:asSymbol]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	v isNil ifTrue: [^ self].
+	"A PROPERTY IS BUILT, NOT LOADED.  A class-side load runs the METACLASS's
+	data descriptors first, as CPython's type.__getattribute__ does, and a
+	metaclass may define a property of the same name: pydantic's
+	ModelMetaclass has a deprecated ``__fields__'' beside BaseModel's own, so
+	reading the name back to offer it to the namespace called the metaclass
+	getter, and every ``import pydantic'' warned PydanticDeprecatedSince20.
+	CPython evaluates nothing here -- the namespace receives the property the
+	body made."
+	"A DECORATED def's value is the decorator's RESULT, raw.  The decorator
+	stored it in the ___dynInstVars___ holder; a load would run its __get__
+	-- pydantic's @computed_field answers a PydanticDescriptorProxy, whose
+	__get__ on the class is not the proxy -- and the metaclass, which finds
+	computed fields by looking for exactly that proxy in the namespace, found
+	none: every model's model_computed_fields was empty.  Taken first, so a
+	``@computed_field @property def'' is the proxy and not the bare property
+	the next branch would build."
+	v := self ___grailNsHolderValueFor___: aName @env0:asSymbol.
+	v isNil ifTrue: [v := self ___grailNsOwnPropertyFor___: aName @env0:asSymbol].
+	v isNil ifTrue: [
+		v := [self ___pyAttrLoad___: aName @env0:asSymbol]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		v isNil ifTrue: [^ self].
+		v := self ___grailNsDescriptorFor___: aName @env0:asSymbol loaded: v].
 	ns @env1:__setitem__: aName @env0:asString _: v.
 	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsDescriptorFor___: aSym loaded: aValue
+	"The object CPython's class-body namespace holds for the def aSym, given
+	aValue, what ___pyAttrLoad___ answered for it.
+
+	A load resolves the descriptor, and the namespace wants the descriptor
+	itself.  ``@classmethod def cm'' loaded as the method BOUND to the class
+	and ``@property def p'' as the getter function, where CPython's mapping
+	holds a classmethod and a property object.  A metaclass that tells fields
+	from methods by type then took both for fields: pydantic.v1's
+	ModelMetaclass leaves classmethod and property alone and raised
+	``no validator found for <class 'BoundMethod'>'' on a classmethod, so
+	pydantic's own tests/test_main.py did not import.
+
+	Built from the same records ___classDict___ uses, so the namespace and
+	``C.__dict__'' agree: a def compiled onto the metaclass is a staticmethod
+	if ___staticMethodNames___ lists it and a classmethod otherwise.  A
+	property never reaches here; ___grailNsOwnPropertyFor___: builds it.
+
+	A name a decorator rebound is left as loaded: the decorator's result sits in
+	the ___dynInstVars___ holder, and that, not the compiled method, is what the
+	body bound."
+
+	| metaCls holder statics |
+	[ | rebound |
+	holder := (self ___respondsTo___: #___dynInstVars___)
+		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
+		ifFalse: [nil].
+	rebound := holder ~~ nil
+		and: [(holder @env0:dynamicInstVarAt: aSym) ~~ nil].
+	rebound ifTrue: [^ aValue] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(self @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1)
+		@env0:isNil ifTrue: [^ aValue].
+	metaCls := self @env0:class.
+	^ [((aSym @env0:asString @env0:beginsWith: '___') @env0:not
+		and: [metaCls ___grailOwnsPythonDef___: aSym
+			family: (importlib @env0:___pythonNameFamilyOf___: aSym)
+			forwarders: false])
+		ifTrue: [
+			statics := ((metaCls @env0:compiledMethodAt: #'___staticMethodNames___'
+					environmentId: 1 otherwise: nil) @env0:notNil)
+				ifTrue: [self @env1:___staticMethodNames___]
+				ifFalse: [#()].
+			((statics @env0:includes: aSym) or: [statics @env0:includes: aSym @env0:asString])
+				ifTrue: [PyStaticMethod __new__: aValue]
+				ifFalse: [PyClassMethod __new__:
+					(UnboundMethod definingClass: metaCls selector: aSym)]]
+		ifFalse: [aValue]]
+		@env0:on: AbstractException do: [:e | e @env0:return: aValue]
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsRebind___: aName
+	"A decorated class-body def's decorator has run and stored its result in
+	the holder: replace the namespace's entry for aName with it.
+
+	Through the mapping's RAW storage, not __setitem__.  CPython's namespace
+	receives a decorated def exactly once, already decorated; Grail's received
+	the raw function at the def's position (___grailNsBind___:), and calling
+	__setitem__ a second time would be a second binding -- which an enum
+	namespace refuses as a reused name.  The entry keeps its position.  A
+	mapping that is not a dict underneath is left as it is.  Answers the
+	receiver; no namespace, no value: nothing to do."
+
+	| ns v |
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifTrue: [^ self].
+	v := self ___grailNsHolderValueFor___: aName @env0:asSymbol.
+	v isNil ifTrue: [^ self].
+	(ns @env0:isKindOf: KeyValueDictionary) ifTrue: [
+		[ns @env0:at: aName @env0:asString put: v]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsHolderValueFor___: aSym
+	"What the class's ___dynInstVars___ holder stores under aSym, raw -- a
+	decorated def's decorator result -- or nil."
+
+	^ [ | holder |
+	holder := (self ___respondsTo___: #___dynInstVars___)
+		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
+		ifFalse: [nil].
+	holder == nil ifTrue: [nil] ifFalse: [holder @env0:dynamicInstVarAt: aSym]]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil]
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsOwnPropertyFor___: aSym
+	"A property object for aSym when the class body declared it a @property
+	(___grailOwnPropertyNames___, compiled before the body runs), around the
+	class's own getter; nil for any other name.  See ___grailNsBind___: for
+	why this is built rather than read off the class."
+
+	^ [((self @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___'
+			environmentId: 1)
+		and: [(self @env1:___grailOwnPropertyNames___) @env0:includes: aSym])
+			ifTrue: [PropertyDescriptor __new__:
+				(UnboundMethod definingClass: self selector: aSym)]
+			ifFalse: [nil]]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil]
 %
 
 category: 'Grail-Class Namespace'
@@ -6493,7 +6622,115 @@ ___classBodyDefinitionalStore___: aName put: aValue
 				object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: v.
 				^ v].
 	self ___classHolderAttrStore___: aName put: v.
+	"A PROTOCOL DUNDER needs a method to be reached by.  See
+	___grailInstallProtocolForwarder___:value:."
+	self ___grailInstallProtocolForwarder___: aName value: v.
 	^ v
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailInstallProtocolForwarder___: aName value: aValue
+	"Make a conditionally-defined protocol dunder -- a ``def __setattr__''
+	under a class-body ``if'', ``for'', ``try'' or ``with'' -- reachable by the
+	protocol that calls it.
+
+	Such a def is a VALUE in the class's ___dynInstVars___ holder, not a
+	compiled method (ClassDefAst >> emitClassBodyIfDef:on: says why), and
+	Grail's protocols are Smalltalk sends: ``obj.x = v'' sends __setattr__:_:,
+	``len(obj)'' sends __len__, ``obj[k]'' sends __getitem__:.  A send finds
+	methods, never holder entries, so the hook was silently ignored --
+	measured on 2026-10-02, __setattr__, __delattr__, __len__, __getitem__,
+	__contains__, __iter__, __call__, __hash__ and __bool__ all fell through to
+	the inherited default when defined under an ``if''.  pydantic's BaseModel
+	defines __setattr__ and __delattr__ under ``if not TYPE_CHECKING:'', so a
+	frozen model accepted assignment, validate_assignment validated nothing and
+	extra='forbid' let any attribute through.
+
+	So compile, on the class, the selectors a def of the same arity would
+	have compiled to -- the fixed-arity form(s) and the ``_<name>:kw:''
+	transport -- each forwarding to the function, which it fetches when CALLED
+	(___grailProtocolHookFor___:) so a later rebinding is seen.  Only for a
+	dunder the class does not already compile: one that does is an
+	unconditional def being rebound, and the self-send dispatchers cover it.
+	Skipped for the dunders that are not called through an instance send --
+	__new__, __init_subclass__, __class_getitem__, __set_name__ -- and for a
+	value that is not a plain function (a staticmethod or classmethod wrapper
+	keeps the holder path it has)."
+
+	| nm sym family code argc ndefaults minArgs maxArgs |
+	nm := aName @env0:asString.
+	((nm @env0:size @env0:> 4)
+		and: [(nm @env0:beginsWith: '__') and: [(nm @env0:endsWith: '__')
+		and: [(nm @env0:beginsWith: '___') @env0:not]]]) ifFalse: [^ self].
+	(#('__new__' '__init_subclass__' '__class_getitem__' '__set_name__'
+		'__module__' '__qualname__' '__doc__' '__slots__' '__annotations__'
+		'__classcell__' '__firstlineno__' '__static_attributes__')
+			@env0:includes: nm) ifTrue: [^ self].
+	(aValue @env0:isKindOf: ExecBlock) ifFalse: [^ self].
+	sym := nm @env0:asSymbol.
+	family := importlib @env0:___pythonNameFamilyOf___: sym.
+	(family @env0:anySatisfy: [:sel |
+		(self @env0:includesSelector: sel environmentId: 1)]) ifTrue: [^ self].
+	[code := aValue @env1:___pyAttrLoad___: #'__code__'.
+	 argc := code @env1:___pyAttrLoad___: #'co_argcount'.
+	 ndefaults := [(aValue @env1:___pyAttrLoad___: #'__defaults__') @env1:__len__]
+		@env0:on: AbstractException do: [:e | e @env0:return: 0]]
+		@env0:on: AbstractException do: [:e | ^ self].
+	(argc @env0:isKindOf: SmallInteger) ifFalse: [^ self].
+	(ndefaults @env0:isKindOf: SmallInteger) ifFalse: [ndefaults := 0].
+	"Positional parameters after self."
+	maxArgs := argc @env0:- 1.
+	minArgs := (maxArgs @env0:- ndefaults) @env0:max: 0.
+	maxArgs @env0:< 0 ifTrue: [^ self].
+	[ | src |
+	minArgs @env0:to: (maxArgs @env0:min: 6) do: [:n |
+		src := nm.
+		n @env0:> 0 ifTrue: [
+			src := src @env0:, ': a1'.
+			2 @env0:to: n do: [:k |
+				src := src @env0:, ' _: a' @env0:, k @env0:printString]].
+		src := src @env0:, (String @env0:with: Character @env0:lf)
+			@env0:, '	^ (self ___grailProtocolHookFor___: #''' @env0:, nm
+			@env0:, ''') @env1:value: { self'.
+		1 @env0:to: n do: [:k | src := src @env0:, '. a' @env0:, k @env0:printString].
+		src := src @env0:, ' } value: nil'.
+		self ___compileMethod: src category: 'Grail-Protocol Forwarders'].
+	src := '_' @env0:, nm @env0:, ': positional kw: kwargs'
+		@env0:, (String @env0:with: Character @env0:lf)
+		@env0:, '	^ (self ___grailProtocolHookFor___: #''' @env0:, nm
+		@env0:, ''') @env1:value: ({ self } @env0:, positional @env0:asArray) value: kwargs'.
+	self ___compileMethod: src category: 'Grail-Protocol Forwarders' ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailProtocolHookFor___: aSym
+	"The function a protocol forwarder calls: the nearest class in the
+	receiver's chain whose ___dynInstVars___ holder has aSym.  The raw value --
+	the forwarder passes the receiver itself.  Read straight from the
+	holders, not through ___classChainAttrLookup___:, because that refuses a
+	hit when a nearer class COMPILES the name, and the forwarder doing the
+	asking is exactly such a method.
+
+	A miss answers a function that raises AttributeError: the binding the
+	forwarder stood for has gone (``del C.__len__''), and CPython's protocol
+	then finds nothing either."
+
+	| c holder v |
+	c := self @env0:class.
+	[c ~~ nil] @env0:whileTrue: [
+		holder := [c @env0:perform: #'___dynInstVars___' env: 1]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		(holder ~~ nil and: [(v := [holder @env0:dynamicInstVarAt: aSym]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil]) ~~ nil])
+			ifTrue: [^ v].
+		c := c @env0:superclass].
+	^ [:positional :kw | AttributeError ___signal___:
+		'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
+		''' object has no attribute ''' @env0:, aSym @env0:asString @env0:, '''']
 %
 
 category: 'Grail-Class Attr Overlay'
@@ -13826,14 +14063,30 @@ ___grailReplaceInstanceDict___: aDict
 	non-dict, then every current attribute removed and each item of aDict
 	stored -- see __setattr__:_:."
 
-	| old |
-	(aDict @env0:isKindOf: KeyValueDictionary) ifFalse: [
+	"STRAIGHT INTO THE INSTANCE'S STORAGE, through the view's raw protocol --
+	CPython swaps the dict and runs no descriptor, so neither does this.  It
+	used to delete and store each key through the full attribute protocol
+	(___pyAttrDelete___ / ___pyAttrStore___, with their descriptor and
+	class-overlay probes), which was a quarter of constructing a pydantic
+	model (docs/Support_Pydantic.md, Phase 6)."
+
+	| view old new |
+	"ANOTHER INSTANCE'S __dict__ is a dict too, a live view of it: taken as a
+	snapshot.  THIS instance's own view is already its dict -- clearing the
+	instance to refill it from that view would empty it -- so that assignment
+	is a no-op, as CPython's ``o.__dict__ = o.__dict__'' is."
+	new := aDict.
+	(aDict @env0:isKindOf: PyInstanceDict) ifTrue: [
+		aDict @env0:source == self ifTrue: [^ None].
+		new := aDict @env1:copy].
+	(new @env0:isKindOf: KeyValueDictionary) ifFalse: [
 		^ TypeError ___signal___: ('__dict__ must be set to a dictionary, not a '''
 			@env0:, aDict ___pyTypeNameForError___ @env0:, '''')].
-	old := (self ___pyAttrLoad___: #'__dict__') @env1:keys.
-	(Array @env0:withAll: old) @env0:do: [:k |
-		[self ___pyAttrDelete___: k] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
-	aDict @env0:keysAndValuesDo: [:k :v | self ___pyAttrStore___: k put: v].
+	view := PyInstanceDict @env0:on: self.
+	old := OrderedCollection @env0:new.
+	view @env0:keysAndValuesDo: [:k :v | old @env0:add: k].
+	old @env0:do: [:k | view @env0:___rawRemoveKey___: k].
+	new @env0:keysAndValuesDo: [:k :v | view @env0:___rawAt___: k put: v].
 	^ None
 %
 

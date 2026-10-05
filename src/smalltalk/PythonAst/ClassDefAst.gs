@@ -1575,6 +1575,39 @@ printSmalltalkRuntimeOn: aStream
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"The names this class declares as @property (or @cached_property), as a
+	class-side method so the record is committed with the class -- a session
+	stamp would not survive deployment.  A property compiles to an accessor
+	pair that looks, from outside, exactly like a method with a default
+	argument (both answer unary ``x'' and keyword ``x:''), so nothing else at
+	run time can tell ``super().x'' -- a property, whose getter must run --
+	from ``super().m'', a method to bind.  Super >> ___pyAttrLoad___: asks the
+	nearest parent defining the name.
+
+	Emitted BEFORE THE BODY RUNS, not with the other class-side records after
+	it: ___grailNsBind___: reads it while the body executes, to hand a
+	metaclass's namespace a property object for a @property def rather than
+	the getter function.  It depends on the AST alone, so nothing it needs is
+	missing this early."
+	[:propNames |
+	self instanceMethodDefs do: [:def |
+		(def ___isPropertyDef___ and: [(propNames includes: def name asSymbol) not])
+			ifTrue: [propNames add: def name asSymbol]].
+	propNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___grailOwnPropertyNames___'; lf.
+		src nextPutAll: '	^ #('.
+		propNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
 	"__prepare__(name, bases, **kwds) is handed the header: the RESOLVED bases
 	when there are several (the list the storage-base choice saw), the sole base
 	as written (its substitution happens in ___subclass___, and the runtime
@@ -2538,34 +2571,6 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream].
-
-	"The names this class declares as @property (or @cached_property), as a
-	class-side method so the record is committed with the class -- a session
-	stamp would not survive deployment.  A property compiles to an accessor
-	pair that looks, from outside, exactly like a method with a default
-	argument (both answer unary ``x'' and keyword ``x:''), so nothing else at
-	run time can tell ``super().x'' -- a property, whose getter must run --
-	from ``super().m'', a method to bind.  Super >> ___pyAttrLoad___: asks the
-	nearest parent defining the name."
-	[:propNames |
-	self instanceMethodDefs do: [:def |
-		(def ___isPropertyDef___ and: [(propNames includes: def name asSymbol) not])
-			ifTrue: [propNames add: def name asSymbol]].
-	propNames isEmpty ifFalse: [
-		| src |
-		src := WriteStream on: String new.
-		src nextPutAll: '___grailOwnPropertyNames___'; lf.
-		src nextPutAll: '	^ #('.
-		propNames do: [:nm |
-			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
-		src nextPutAll: ' )'.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: src contents
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream]] value: OrderedCollection new.
 
 	"Names the body binds MORE THAN ONCE, counting defs and assignments alike.
 

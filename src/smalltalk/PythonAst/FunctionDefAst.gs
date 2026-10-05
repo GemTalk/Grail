@@ -1539,6 +1539,18 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
 		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
+		lf.
+	"And hand the RESULT to the class-body namespace, where CPython's mapping
+	holds it: the body's own binding of the name ran before the decorator could
+	(see above), so the mapping had the raw function.  A metaclass that finds
+	members by what the decorator returned -- pydantic's computed fields are a
+	PydanticDescriptorProxy -- found none.  See object class >>
+	___grailNsRebind___:."
+	aStream
+		nextPutAll: aClassName;
+		nextPutAll: ' @env1:___grailNsRebind___: ''';
+		nextPutAll: name;
+		nextPutAll: '''.';
 		lf
 %
 

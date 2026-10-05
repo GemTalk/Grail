@@ -996,7 +996,38 @@ ___mergePublicAttrsFrom: aModule
 	SymbolDictionary keys as a fallback for the legacy pre-Phase-A
 	storage path (built-in modules that haven't migrated yet)."
 
-	| pairs cls mdict seen |
+	| pairs cls mdict seen all |
+	"WITH AN __all__, EXACTLY ITS NAMES.  CPython's import-all binds X.__all__
+	when X defines one and falls back to the public names only when it does
+	not; this merge always took the fallback, so a star import brought across
+	everything X itself had imported.  ``from pk.sub import *'' with
+	``__all__ = ['pub']'' bound pub and also sub's Path and partial.  Harmless
+	until a package re-exports several submodules that way: pydantic.v1's
+	__init__ star-imports five, CPython's namespace there holds 219 names, and
+	Grail's passed the 255 a module can hold, so ``import pydantic.v1'' died
+	with an uncatchable ImproperOperation.
+
+	The rule is builtins >> ___doitStarImport___:into:'s, minus its raise: a
+	name __all__ lists but X lacks is skipped here, because the parse-time half
+	of the import has already reported it."
+	all := [aModule @env1:___pyAttrLoad___: #'__all__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	all @env0:isNil ifFalse: [
+		| iter done |
+		iter := [all __iter__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		iter @env0:isNil ifFalse: [
+			done := false.
+			[done] @env0:whileFalse: [
+				| nm val |
+				nm := [iter __next__] @env0:on: StopIteration do: [:ex |
+					done := true. ex @env0:return: nil].
+				done ifFalse: [
+					val := [aModule @env1:___pyAttrLoad___: nm @env0:asString @env0:asSymbol]
+						@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
+					val == nil ifFalse: [
+						importlib @env0:___bind: val
+							onParent: self as: nm @env0:asString @env0:asSymbol]]].
+			^ self]].
 	"Phase A canonical store — every module global a user-level
 	source assigned via `name = value` or `globals().update({...})`
 	lives here as a dynamic instVar."

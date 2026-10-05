@@ -214,11 +214,18 @@ ensureLoaded: aShim
 		System loadUserActionLibrary: libraryPath.
 	].
 	"Always init for the current instance (idempotent on the C side)"
+	"The fifth argument is THIS session's token, made once per session: the C
+	side cannot otherwise tell a logout and re-login in one gem process from a
+	re-init in the same session, and objects of the old session must not be
+	reached (docs/Support_Pydantic.md, W8).  Time plus session id, so two
+	sessions of one process never share it."
 	System userAction: #shimInit withArgs: {
 		aShim .
 		(aShim wrap: None) memoryAddress .
 		(aShim wrap: true) memoryAddress .
-		(aShim wrap: false) memoryAddress
+		(aShim wrap: false) memoryAddress .
+		(SessionTemps current at: #'GrailShimSessionToken' ifAbsentPut: [
+			((Time millisecondClockValue \\ 16r1000000000) * 1000) + (System session \\ 1000) + 1])
 	}.
 	aShim initTypeAddresses.
 %
@@ -505,7 +512,8 @@ ___staticTypeObjectFor: aClass
 	No ^ inside the blocks: this runs nested in user actions (typeAddrFor:)."
 
 	| addr |
-	#(#float #int #bool #str #bytes #list #dict #tuple #object #type #NoneType) do: [:n |
+	#(#float #int #bool #str #bytes #list #dict #tuple #object #type #NoneType
+		#set #frozenset) do: [:n |
 		(addr isNil and: [(Python at: n otherwise: nil) == aClass])
 			ifTrue: [addr := typeAddresses at: n otherwise: nil]].
 	addr isNil ifTrue: [
@@ -534,8 +542,8 @@ ___buildTypeMirrorFor: aClass
 	0 to: (lay at: 1) - 8 by: 8 do: [:off | m int64At: off put: 0].
 	m int64At: 0 put: 16r10000000.
 	m int64At: 8 put: (typeAddresses at: #type).
-	modName := [aClass @env1:___pyAttrLoad___: #'__module__'] on: Error do: [:e | e return: nil].
-	qual := [aClass @env1:___pyAttrLoad___: #'__qualname__'] on: Error do: [:e | e return: nil].
+	modName := [aClass @env1:___pyAttrLoad___: #'__module__'] on: AbstractException do: [:e | e return: nil].
+	qual := [aClass @env1:___pyAttrLoad___: #'__qualname__'] on: AbstractException do: [:e | e return: nil].
 	(qual isKindOf: CharacterCollection) ifFalse: [qual := aClass name asString].
 	nameStr := ((modName isKindOf: CharacterCollection) and: [modName asString ~= 'builtins'])
 		ifTrue: [modName asString , '.' , qual asString]
@@ -543,12 +551,22 @@ ___buildTypeMirrorFor: aClass
 	nameBytes := self ___cStringFor: nameStr.
 	m int64At: (lay at: 2) put: nameBytes memoryAddress.
 	m int64At: (lay at: 3) put: 32.
-	base := [aClass @env1:___pyAttrLoad___: #'__base__'] on: Error do: [:e | e return: nil].
+	base := [aClass @env1:___pyAttrLoad___: #'__base__'] on: AbstractException do: [:e | e return: nil].
 	(base isNil or: [base == None or: [base isBehavior not]]) ifTrue: [base := Object].
+	"A METACLASS'S BASE IS ``type''.  Grail's Python metaclasses are Smalltalk
+	metaclass subclasses, and their __base__ reads as one -- EnumType's is
+	``PythonInstance class'', the rest of its __mro__ Object class, Class,
+	Metaclass3, Module, Behavior -- where CPython's chain is (type, object).
+	Mirroring that chain gave pydantic_core a tp_base no Python name answers
+	for, and its getattr(enum, 'EnumMeta') failed on the way."
+	(base isBehavior and: [base isMeta]) ifTrue: [
+		base := Python at: #type otherwise: base.
+		flags := 1 bitShift: 31].
 	base == aClass ifFalse: [
 		m int64At: (lay at: 5) put: (self typeObjectFor: base) memoryAddress].
-	flags := (1 bitShift: 9) bitOr: ((1 bitShift: 10) bitOr: (1 bitShift: 12)).
-	mro := [aClass @env1:___pyAttrLoad___: #'__mro__'] on: Error do: [:e | e return: #()].
+	flags := (flags ifNil: [0]) bitOr:
+		((1 bitShift: 9) bitOr: ((1 bitShift: 10) bitOr: (1 bitShift: 12))).
+	mro := [aClass @env1:___pyAttrLoad___: #'__mro__'] on: AbstractException do: [:e | e return: #()].
 	{ #int -> 24. #list -> 25. #tuple -> 26. #bytes -> 27. #str -> 28. #dict -> 29.
 	  #BaseException -> 30. #type -> 31 } do: [:assoc | | c |
 		c := Python at: assoc key otherwise: nil.
@@ -686,6 +704,17 @@ ___ug_PyObject_IsSubclass: aClass cls: aClassOrTuple
 category: 'Grail-Wrapping'
 method: CPythonShim
 foreignExceptionTypeForPointer: ptrInt typeName: nameStr baseName: baseName isShimType: isShim
+	"As ...classMethods:, for a caller with no class-method names to give:
+	the translation of a pending C exception, whose type the shim has already
+	shown Grail (and so built) by the time it is raised."
+
+	^ self foreignExceptionTypeForPointer: ptrInt typeName: nameStr
+		baseName: baseName isShimType: isShim classMethods: ''
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+foreignExceptionTypeForPointer: ptrInt typeName: nameStr baseName: baseName isShimType: isShim classMethods: cmNames
 	"The Grail class an exception TYPE of the C side is seen as, called from
 	the shim's foreign_proxy_oop in place of foreignProxyForPointer:.
 
@@ -697,7 +726,9 @@ foreignExceptionTypeForPointer: ptrInt typeName: nameStr baseName: baseName isSh
 	catch what the wheel raises, and ``type(e).__name__'' is the wheel's name.
 	Its instances carry the C exception object (___noteForeignException:...)
 	and forward every attribute they lack to it through the namespace's
-	__getattr__ -- which is how ``e.errors()'' reaches Rust.
+	__getattr__ -- which is how ``e.errors()'' reaches Rust.  cmNames, the
+	type's METH_CLASS / METH_STATIC method names as the shim lists them, go on
+	the class itself (___buildForeignExceptionClass:base:pointer:classMethods:).
 
 	No ^ inside the blocks: this runs inside a user action (see typeAddrFor:)."
 
@@ -712,20 +743,31 @@ foreignExceptionTypeForPointer: ptrInt typeName: nameStr baseName: baseName isSh
 		ifAbsentPut: [ IntegerKeyValueDictionary new ].
 	cls := cache at: ptrInt ifAbsent: [nil].
 	cls isNil ifTrue: [
-		cls := self ___buildForeignExceptionClass: nameStr base: base.
+		cls := self ___buildForeignExceptionClass: nameStr base: base
+			pointer: ptrInt classMethods: cmNames.
 		cache at: ptrInt put: cls].
 	^ cls
 %
 
 category: 'Grail-Wrapping'
 method: CPythonShim
-___buildForeignExceptionClass: nameStr base: base
+___buildForeignExceptionClass: nameStr base: base pointer: ptrInt classMethods: cmNames
 	"type(<tail of nameStr>, (base,), ns): __module__ / __qualname__ split from
 	the C tp_name the way CPython reports a type's, and a __getattr__ that
 	forwards to the C instance each Grail instance carries (a Smalltalk block
-	is an acceptable namespace function: it receives { self. name })."
+	is an acceptable namespace function: it receives { self. name }).
 
-	| dot tail modName ns |
+	The __getattr__ serves INSTANCES only, so the C type's own class and static
+	methods -- cmNames -- are put on the class as staticmethods that call them
+	off the C type: ``ValidationError.from_exception_data'' was an
+	AttributeError, and pydantic raises a frozen-model or validate_assignment
+	error through it.  The C type binds a classmethod's cls itself, so no cls is
+	passed.  A result that is the C side's instance of this very exception comes
+	back as an instance of the Grail class, carrying it, exactly as a raised one
+	does in ___translateShimError: -- so it can be raised, and caught as the
+	class it is."
+
+	| dot tail modName ns cls |
 	dot := 0.
 	nameStr size to: 1 by: -1 do: [:i | (dot = 0 and: [(nameStr at: i) == $.]) ifTrue: [dot := i]].
 	tail := dot = 0 ifTrue: [nameStr] ifFalse: [nameStr copyFrom: dot + 1 to: nameStr size].
@@ -739,10 +781,26 @@ ___buildForeignExceptionClass: nameStr base: base
 			ifTrue: [(Python at: #AttributeError) @env1:___signal___:
 				'''' , tail , ''' object has no attribute ''' , (positional at: 2) asString , '''']
 			ifFalse: [fo @env1:___pyAttrLoad___: (positional at: 2) asString asSymbol]].
-	^ (Python at: #type) @env1:value: {
+	(cmNames isNil or: [cmNames isEmpty]) ifFalse: [
+		(cmNames subStrings: ' ') do: [:cm | | sel |
+			sel := cm asSymbol.
+			ns @env1:__setitem__: cm _: ((Python at: #staticmethod) @env1:__new__:
+				[:positional :kw | | r |
+					r := ((self foreignProxyForPointer: ptrInt typeName: nameStr)
+						@env1:___pyAttrLoad___: sel) @env1:value: positional value: kw.
+					((r isKindOf: ShimForeignObject) and: [cls notNil])
+						ifTrue: [ | e |
+							e := cls @env1:value: {
+								[r @env1:__str__] on: AbstractException do: [:x | x return: '']
+							} value: nil.
+							e dynamicInstVarAt: #'___grailForeign___' put: r.
+							e]
+						ifFalse: [r]])]].
+	cls := (Python at: #type) @env1:value: {
 		tail.
 		(Python at: #tuple) @env0:with: base.
-		ns } value: nil
+		ns } value: nil.
+	^ cls
 %
 
 category: 'Grail-Wrapping'
@@ -794,8 +852,46 @@ typeAddrFor: aValue
 		ifFalse: [((aValue isKindOf: PythonInstance)
 				and: [typeAddresses includesKey: #'___mirrorLayout___'])
 			ifTrue: [t := (self typeObjectFor: aValue class) memoryAddress]
-		ifFalse: [t := typeAddresses at: Object ifAbsent: [0]]]]]]]]].
+		ifFalse: [t := self ___nativeTypeAddrFor: aValue]]]]]]]].
 		t]
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___nativeTypeAddrFor: aValue
+	"The C type of an object none of typeAddrFor:'s cases claims: its class's
+	MIRROR when Python's type() of it IS that class, as it is for Grail's
+	natively implemented types -- datetime.date is PyDate, a plain Smalltalk
+	class -- and object's otherwise.
+
+	Before, every such value crossed typed as ``object'', so C's
+	Py_TYPE(date) was not the type datetime.date crossed as and
+	PyObject_TypeCheck failed: pydantic_core's date validator refused a real
+	date with ``input_type=object'', and the date it built itself with ``'object'
+	object is not an instance of 'date'''.  A value whose Python type is some
+	OTHER class (a function is a BoundMethod or a block underneath) keeps
+	object's, as before.
+
+	Decided once per class, since wrap: is the hot path; session state, like
+	the mirrors themselves.  No ^ inside a block: this runs inside a user
+	action (see typeAddrFor:)."
+
+	| cache cls addr pyType |
+	cls := aValue class.
+	cache := SessionTemps current
+		at: #'GrailShimNativeTypeAddrs'
+		ifAbsentPut: [ IdentityKeyValueDictionary new ].
+	addr := cache at: cls otherwise: nil.
+	addr notNil ifTrue: [^ addr].
+	addr := typeAddresses at: Object ifAbsent: [0].
+	(cls ~~ Object and: [typeAddresses includesKey: #'___mirrorLayout___']) ifTrue: [
+		pyType := [(builtins @env1:instance) @env1:type: aValue]
+			on: AbstractException do: [:e | e return: nil].
+		pyType == cls ifTrue: [
+			addr := [(self typeObjectFor: cls) memoryAddress]
+				on: AbstractException do: [:e | e return: addr]]].
+	cache at: cls put: addr.
+	^ addr
 %
 
 ! ===============================================================================
@@ -812,7 +908,8 @@ initTypeAddresses
 
 	| addr |
 	typeAddresses := Dictionary new.
-	#('float' 'int' 'bool' 'str' 'bytes' 'list' 'dict' 'tuple' 'object' 'type' 'NoneType')
+	#('float' 'int' 'bool' 'str' 'bytes' 'list' 'dict' 'tuple' 'object' 'type' 'NoneType'
+		'set' 'frozenset')
 		do: [:name |
 			typeAddresses at: name asSymbol put: (System userAction: #shimTypeAddr with: name).
 		].
@@ -821,6 +918,15 @@ initTypeAddresses
 	typeAddresses at: NoneType put: (typeAddresses at: #NoneType).
 	typeAddresses at: UndefinedObject put: (typeAddresses at: #NoneType).
 	typeAddresses at: Boolean put: (typeAddresses at: #bool).
+	"set and frozenset, and their subclasses, to the shim's static types of
+	those names: a wheel's PySet_Check is an inline compare against them (see
+	the shim's init_types)."
+	#(#set #frozenset) do: [:n | | cls |
+		cls := Python at: n otherwise: nil.
+		(cls notNil and: [(typeAddresses at: n otherwise: 0) ~= 0]) ifTrue: [
+			addr := typeAddresses at: n.
+			typeAddresses at: cls put: addr.
+			cls allSubclasses do: [:each | typeAddresses at: each put: addr]]].
 	"Map Float and all subclasses"
 	addr := typeAddresses at: #float.
 	typeAddresses at: Float put: addr.
@@ -1154,6 +1260,15 @@ foreignGetAttr: cPtr name: aString
 	error."
 
 	^ self ___shimUserAction: #shimForeignGetAttr withArgs: { cPtr . aString }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+foreignStr: cPtr repr: aBoolean
+	"str() -- or repr() when aBoolean -- of a wheel's own C object, through its
+	tp_str / tp_repr; nil when C has nothing to offer."
+
+	^ self ___shimUserAction: #shimForeignStr withArgs: { cPtr . aBoolean == true }
 %
 
 category: 'Grail-Calling'
@@ -1961,6 +2076,21 @@ PyDict_Next: aDictionary pos: posOop
 
 category: 'Grail-CPython API'
 method: CPythonShim
+PyDict_ItemsFlat: aDictionary
+	"{ key1Addr. value1Addr. key2Addr. value2Addr. ... } in insertion order --
+	the whole of a dict in one crossing, for the shim's PyDict_Next snapshot.
+	keysAndValuesDo: walks the storage, which is the insertion order (see
+	PyDict_Next:pos:)."
+
+	| out |
+	out := OrderedCollection new.
+	aDictionary keysAndValuesDo: [:k :v |
+		out add: (self wrap: k) memoryAddress; add: (self wrap: v) memoryAddress].
+	^ out asArray
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
 PyDict_SetItemString: aDictionary key: aString value: aValue
 	aDictionary at: aString put: aValue.
 %
@@ -1987,7 +2117,13 @@ PyDict_Contains: aDictionary key: aKey
 category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_DelItem: aDictionary key: aKey
-	aDictionary removeKey: aKey.
+	"An instance's __dict__ is a live VIEW (PyInstanceDict), which has no
+	removeKey: -- pydantic_core's validate_assignment deletes from a model's
+	__dict__ copy, and the MessageNotUnderstood took the assignment down."
+
+	(aDictionary isKindOf: PyInstanceDict)
+		ifTrue: [aDictionary @env1:__delitem__: aKey]
+		ifFalse: [aDictionary removeKey: aKey].
 %
 
 category: 'Grail-CPython API'
@@ -2271,13 +2407,76 @@ PyObject_RichCompareBool: v with: w op: opInt
 category: 'Grail-CPython API'
 method: CPythonShim
 ___ug_PyObject_RichCompareBool: v with: w op: opInt
-	"Dispatch rich comparison to the appropriate Python dunder method.
-	op: 0=LT, 1=LE, 2=EQ, 3=NE, 4=GT, 5=GE."
+	"Rich comparison with Python's OPERATOR semantics.  op: 0=LT, 1=LE, 2=EQ,
+	3=NE, 4=GT, 5=GE.
+
+	Through object's ___cmpXx___: helpers -- what ``a == b'' compiles to --
+	not the bare dunder.  The dunder may answer NotImplemented, which C then
+	read as TRUE: ``'z'.__eq__(None)'' is NotImplemented, so pydantic_core's
+	exclude_defaults took a str field set to 'z' for its default None and
+	dropped it.  The helpers try the reflected operand and fall back to
+	identity, as CPython's PyObject_RichCompare does."
 
 	| selectors selector |
-	selectors := #(#'__lt__:' #'__le__:' #'__eq__:' #'__ne__:' #'__gt__:' #'__ge__:').
+	selectors := #(#'___cmpLt___:' #'___cmpLe___:' #'___cmpEq___:' #'___cmpNe___:' #'___cmpGt___:' #'___cmpGe___:').
 	selector := selectors at: opInt + 1.
 	^ v perform: selector env: 1 withArguments: { w }
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyLong_U64Parts: anInt mask: aBoolean
+	"{ low 32 bits. high 32 bits } of an unsigned 64-bit value, for the shim's
+	PyLong_AsUnsignedLongLong (aBoolean false: OverflowError outside
+	0 .. 2^64-1, as CPython's) and its MASK forms (aBoolean true: the low 64
+	bits of any int, two's complement for a negative one).  A non-int is asked
+	for its __index__.  Guarded: that is Python code."
+
+	^ self ___guardCallback: [ | n |
+		n := (anInt isKindOf: Integer)
+			ifTrue: [anInt]
+			ifFalse: [anInt @env1:__index__].
+		(aBoolean ~~ true and: [n < 0 or: [n >= (2 raisedTo: 64)]]) ifTrue: [
+			(Python at: #OverflowError) @env1:___signal___:
+				(n < 0
+					ifTrue: ['can''t convert negative int to unsigned']
+					ifFalse: ['int too big to convert'])].
+		n := n bitAnd: 16rFFFFFFFFFFFFFFFF.
+		{ n bitAnd: 16rFFFFFFFF. (n bitShift: -32) bitAnd: 16rFFFFFFFF }]
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyLong_FromU64Hi: hi lo: lo
+	"The int (hi << 32) | lo, for the shim's PyLong_FromUnsignedLongLong above
+	the SmallInteger range."
+
+	^ (self wrap: ((hi bitShift: 32) bitOr: lo)) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyNumber_Op: opName a: a b: b c: c n: n
+	"One number-protocol operation for the shim's PyNumber_* (see number_op
+	in cpython.cc): the ``operator'' module's function named opName on the
+	first n operands -- ``divmod'' and ``pow'' are builtins, three-argument
+	pow included -- so the answer has Python's semantics, reflected operands
+	and arbitrary-precision ints with them.  ``___check'' is PyNumber_Check.
+	Guarded: the operator is Python code."
+
+	^ self ___guardCallback: [ | args fn r |
+		args := n = 1 ifTrue: [{ a }] ifFalse: [n = 2 ifTrue: [{ a. b }] ifFalse: [{ a. b. c }]].
+		opName = '___check'
+			ifTrue: [
+				r := #(#'__index__' #'__float__' #'__int__') anySatisfy: [:sel |
+					((builtins @env1:instance) @env1:hasattr: a _: sel asString) @env1:___isTruthy___].
+				r]
+			ifFalse: [
+				fn := (opName = 'divmod' or: [opName = 'pow'])
+					ifTrue: [(builtins @env1:instance) @env1:___pyAttrLoad___: opName asSymbol]
+					ifFalse: [((importlib @env0:___instance___) @env1:import_module: 'operator')
+						@env1:___pyAttrLoad___: opName asSymbol].
+				(self wrap: (fn @env1:value: args value: nil)) memoryAddress]]
 %
 
 category: 'Grail-CPython API'
@@ -2293,10 +2492,11 @@ category: 'Grail-CPython API'
 method: CPythonShim
 ___ug_PyObject_RichCompare: v with: w op: opInt
 	"Like PyObject_RichCompareBool but returns the wrapped result object
-	(normally a Boolean, but a dunder may return any object)."
+	(normally a Boolean, but a dunder may return any object).  The operator
+	helpers, for the same reason as there."
 
 	| selectors selector |
-	selectors := #(#'__lt__:' #'__le__:' #'__eq__:' #'__ne__:' #'__gt__:' #'__ge__:').
+	selectors := #(#'___cmpLt___:' #'___cmpLe___:' #'___cmpEq___:' #'___cmpNe___:' #'___cmpGt___:' #'___cmpGe___:').
 	selector := selectors at: opInt + 1.
 	^ (self wrap: (v perform: selector env: 1 withArguments: { w })) memoryAddress
 %
@@ -2511,6 +2711,14 @@ PyDict_Items: aDictionary
 category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_Copy: aDictionary
+	"A COPY of an instance's __dict__ is a plain dict, as CPython's is.  The
+	Smalltalk copy of the PyInstanceDict view was a second view of the SAME
+	instance, so pydantic_core's validate_assignment -- copy __dict__, set the
+	field in the copy, assign it back -- edited the model in place and then
+	assigned the model its own view."
+
+	(aDictionary isKindOf: PyInstanceDict)
+		ifTrue: [^ (self wrap: aDictionary @env1:copy) memoryAddress].
 	^ (self wrap: aDictionary copy) memoryAddress
 %
 

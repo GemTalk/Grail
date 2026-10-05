@@ -133,12 +133,12 @@ lands in `out/pypi/<project>.out` (gitignored).
 | 18 | aiobotocore | 3.9.0 | ext-dep | **IMPORTS** | | |
 | 19 | numpy | 2.5.2 | ext | CRASH | fatal `dlopen` of `_multiarray_umath...so` | out of scope, via G4 |
 | 20 | pycparser | 3.0 | pure | **IMPORTS** | | |
-| 21 | pydantic | 2.13.5 | ext-dep | CRASH | `CompileError (error 1001), expected a right bracket (])` | G1 |
+| 21 | pydantic | 2.13.5 | ext-dep | **IMPORTS** | re-measured 2026-10-02; `BaseModel` works on the abi3 `pydantic_core` build ([Support_Pydantic.md](Support_Pydantic.md)) | was G1 |
 | 22 | pytest | 9.1.1 | pure | FAILS | `NameError: name 'EnvironmentError' is not defined` | G8, then G5 |
 | 23 | click | 8.5.0 | pure | SHADOWED | Grail's own `src/python/stdlib/click` answered | G10 |
 | 24 | iniconfig | 2.3.0 | pure | **IMPORTS** | | |
 | 25 | anyio | 4.14.2 | pure | FAILS | `ImportError: cannot import name 'AnyStr' from 'typing'` | G2, then G9 |
-| 26 | pydantic-core | 2.46.5 | ext | FAILS | `AttributeError: module '?' has no attribute '_Final'` | G2 |
+| 26 | pydantic-core | 2.46.5 | ext | **IMPORTS** | re-measured 2026-10-02; the stock wheel imports but its first validation kills the gem (inline `str`/`float` layout, W5/W6) — validating needs the abi3 build | was G2 |
 | 27 | grpcio-status | 1.83.1 | ext-dep | **IMPORTS** | | |
 | 28 | attrs | 26.1.0 | pure | FAILS | `FrozenInstanceError: can't set attribute` | G11 |
 | 29 | s3transfer | 0.19.2 | pure | FAILS | `AttributeError: 'super' object has no attribute '__call__'` | G7 six.moves |
@@ -163,6 +163,12 @@ lands in `out/pypi/<project>.out` (gitignored).
 | 48 | tqdm | 4.70.0 | pure | **IMPORTS** | | |
 | 49 | aiohttp | 3.14.3 | ext | CRASH | fatal `dlopen` of multidict's `.so` | out of scope, via G4 |
 | 50 | yarl | 1.24.5 | ext | CRASH | fatal `dlopen` of multidict's `.so` | out of scope, via G4 |
+
+**Rows 21 and 26 were re-measured on 2026-10-02**, after the pydantic work in
+[Support_Pydantic.md](Support_Pydantic.md) (Phases 0–6); every other row, and
+every total below, is the original measurement. The G1 and G2 walls those two
+rows stopped at are gone for them, and pydantic's own test suite now runs —
+see that document for the slice and its numbers.
 
 (The "then Gx" entries come from the stubbed probe pass described below, not
 from this run.)

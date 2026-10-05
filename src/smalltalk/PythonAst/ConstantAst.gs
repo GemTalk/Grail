@@ -102,6 +102,17 @@ printSmalltalkOn: aStream
 			nextPutAll: ')'.
 		^self.
 	].
+	"A literal TOO BIG FOR A DOUBLE -- ``1e400'', or pydantic's
+	``2.2250738585072011e308'' -- parses to infinity, and an infinity's
+	printString is the GemStone global's name, PlusInfinity / MinusInfinity,
+	which module code does not compile against: the whole module failed with
+	``undefined symbol PlusInfinity'' (pydantic's tests/test_validators.py).
+	Emitted as the overflow itself, which needs no global."
+	((value isKindOf: Float) and: [value _isNaN not and: [(value - value) _isNaN]]) ifTrue: [
+		aStream nextPutAll: (value > 0
+			ifTrue: ['(1.0e308 @env0:* 10.0)']
+			ifFalse: ['(-1.0e308 @env0:* 10.0)']).
+		^self].
 	aStream print: value.
 %
 

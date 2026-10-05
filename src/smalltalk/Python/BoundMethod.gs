@@ -1126,8 +1126,21 @@ __func__
 		compiles a @classmethod / @staticmethod onto the metaclass, so an
 		UnboundMethod on the class itself cannot resolve the selector (``type
 		object 'X' has no method ...'').  The receiver supplied at call time
-		is the class, which is an instance of that metaclass."
-		^ UnboundMethod definingClass: receiver @env0:class selector: selector].
+		is the class, which is an instance of that metaclass.
+
+		The metaclass that DEFINES it, not the receiver's: for an inherited
+		classmethod CPython's ``C.g.__func__ is B.g.__func__'' holds -- one
+		function, in B's dict.  Interned on C's metaclass it was a second
+		handle, and pydantic, which recognises BaseModel's own
+		__get_pydantic_core_schema__ by exactly that identity, took every
+		model for one overriding it and warned PydanticDeprecatedSince211 on
+		each schema build."
+		^ UnboundMethod
+			definingClass: (UnboundMethod
+				definerOf: receiver @env0:class
+				family: (importlib @env0:___pythonNameFamilyOf___: selector)
+				selector: selector)
+			selector: selector].
 	self ___isPythonBoundMethod___ ifTrue: [
 		^ UnboundMethod definingClass: receiver @env0:class selector: selector].
 	^ self
