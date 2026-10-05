@@ -3170,7 +3170,7 @@ repr: anObject
 			ex @env0:return: nil].
 	slot == None ifTrue: [
 		^ TypeError ___signal___: '''NoneType'' object is not callable'].
-	^ anObject __repr__
+	^ anObject __repr__ @env0:___reprResult___
 %
 
 category: 'Grail-Format Spec Engine'
@@ -4577,7 +4577,7 @@ ascii: anObject
 	escaped as \\xHH / \\uHHHH / \\UHHHHHHHH."
 
 	| r ws cp hex |
-	r := anObject __repr__.
+	r := anObject __repr__ @env0:___reprResult___.
 	ws := AppendStream @env0:on: Unicode7 @env0:new.
 	r @env0:do: [:ch |
 		cp := ch @env0:codePoint.

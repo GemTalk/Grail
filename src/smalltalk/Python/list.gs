@@ -349,7 +349,7 @@ __repr__
 	i := 1.
 	[i @env0:<= self @env0:size] @env0:whileTrue: [
 		i @env0:> 1 ifTrue: [stream @env0:nextPutAll: ', '].
-		stream @env0:nextPutAll: ((self @env0:at: i) __repr__).
+		stream @env0:nextPutAll: ((self @env0:at: i) __repr__ @env0:___reprResult___).
 		i := i @env0:+ 1].
 	stream @env0:nextPut: $].
 	stream @env0:contents]

@@ -523,7 +523,7 @@ __repr__
 
 	self @env0:do: [:each |
 			| reprStr |
-			reprStr := each __repr__.
+			reprStr := each __repr__ @env0:___reprResult___.
 			stream @env0:nextPutAll: reprStr
 		] separatedBy: [stream @env0:nextPutAll: ', '].
 

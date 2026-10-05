@@ -188,7 +188,7 @@ __repr__
 	first := true.
 	self @env0:do: [:each |
 		first ifFalse: [stream @env0:nextPutAll: ', '].
-		stream @env0:nextPutAll: each __repr__.
+		stream @env0:nextPutAll: each __repr__ @env0:___reprResult___.
 		first := false
 	].
 

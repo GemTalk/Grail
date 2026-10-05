@@ -465,13 +465,13 @@ __repr__
 	size == 1 ifTrue: [
 		"Single element tuple needs trailing comma"
 		| reprStr |
-		reprStr := (self @env0:at: 1) __repr__.
+		reprStr := (self @env0:at: 1) __repr__ @env0:___reprResult___.
 		stream @env0:nextPutAll: reprStr.
 		stream @env0:nextPutAll: ','.
 	] ifFalse: [
 		self @env0:do: [:each |
 				| reprStr |
-				reprStr := each __repr__.
+				reprStr := each __repr__ @env0:___reprResult___.
 				stream @env0:nextPutAll: reprStr
 			] separatedBy: [stream @env0:nextPutAll: ', ']
 	].

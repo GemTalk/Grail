@@ -2067,7 +2067,7 @@ _format: positional kw: kwargs
 			field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
 			"Apply conversion flag (r → repr, s → str, a → ascii)."
 			convFlag @env0:isNil ifFalse: [
-				convFlag @env0:= 'r' @env0:ifTrue: [value := value __repr__].
+				convFlag @env0:= 'r' @env0:ifTrue: [value := value __repr__ @env0:___reprResult___].
 				convFlag @env0:= 's' @env0:ifTrue: [value := value __str__].
 			].
 			"Format-spec dispatch.  Delegate to value.__format__(spec)."
@@ -2119,6 +2119,14 @@ ___isPyStr___
 	"True: every CharacterCollection is a Python str."
 
 	^ true
+%
+
+category: 'Grail-Testing'
+method: CharacterCollection
+___reprResult___
+	"A str is a valid __repr__ result -- see object >> ___reprResult___."
+
+	^ self
 %
 
 category: 'Grail-Testing'

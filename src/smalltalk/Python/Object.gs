@@ -11938,6 +11938,31 @@ ___isPyStr___
 
 category: 'Grail-Testing'
 method: object
+___reprResult___
+	"Sent to what a __repr__ answered, at every site that takes a repr:
+	CPython's PyObject_Repr refuses anything but a str (a subclass is fine)
+	with this TypeError.  Grail handed the value on, so ``repr(x)'' could be
+	an int, and a list holding such an x failed with a Smalltalk
+	doesNotUnderstand: instead.
+
+	A UNARY send to the RESULT, deliberately.  Several of the sites are
+	container reprs on the recursive-repr path (test_xml_etree's
+	test_recursive_repr, test_reprlib, test_copy), where a wider frame moves
+	the VM's stack trip and can surface its re-trip defect -- a str.__mod__
+	temp once did.  ``x __repr__ @env0:___reprResult___'' adds no temp and
+	pushes nothing before the recursive call.
+
+	Env 0 beside ___isPyStr___, for the same reason: the overrides on
+	CharacterCollection and AbstractPyStr must be found by the same lookup."
+
+	| typeName |
+	typeName := [(self @env1:__class__) @env1:__name__ asString]
+		on: AbstractException do: [:ex | ex return: self class name asString].
+	^ TypeError @env1:___signal___: '__repr__ returned non-string (type ' , typeName , ')'
+%
+
+category: 'Grail-Testing'
+method: object
 ___isExactPyStr___
 	"Is the receiver a Python ``str'' EXACTLY -- of type ``str'' itself, rather
 	than an instance of a str SUBCLASS?
