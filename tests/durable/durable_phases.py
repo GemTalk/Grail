@@ -65,6 +65,13 @@ def generator():
     print('generator: %s %s' % (r.status, r.error))
 
 
+def loop():
+    h = durable.start(flows.loop_flow, 5)
+    durable.run_executor(idle_timeout=2)     # every park: commit, then resume here
+    r = h.run
+    print('loop: status=%s result=%r resumes=%d' % (r.status, r.result, r.resumes))
+
+
 def show():
     for r in durable.runs():
         print(r, 'checkpoints=%d resumes=%d result=%r error=%r'
@@ -78,5 +85,5 @@ def show():
 
 PHASES = {f.__name__: f for f in
           (reset, start_order, executor, approve, order_result,
-           start_crashy, crashy_result, generator, show)}
+           start_crashy, crashy_result, generator, loop, show)}
 PHASES[sys.argv[1]]()
