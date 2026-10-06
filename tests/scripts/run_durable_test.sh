@@ -172,20 +172,25 @@ stop_if_failed show
 
 echo "--- park shapes: a park inside each of 21 Python constructs"
 # GemStone resumes a block made before the capture with a stale home context
-# (reported 2026-10-05), so some shapes came back silently WRONG.  durable now
+# (Kermit 52132), so some shapes came back silently WRONG.  durable now
 # refuses the ones it can recognise (_resume_hazard): on the IR codegen path
 # every shape must be right or refused with a reason.  The text path compiles
 # far more as blocks; there, which shapes come back wrong VARIES from run to
 # run (measured: nested_loops and boolean_short_circuit each wrong in some
 # runs and right in others), so a wrong result is XFAIL -- but every shape
 # must still finish, and the refusals must still happen.
+#
+# raise_after_park used to be expected right on IR, and was flaky: its except
+# handler, made before the park and run after it, lost its write (6, not 600)
+# in 2 of 4 IR jobs of #1344's merge-queue run.  That expectation is gone
+# (Kermit 52132): a try statement around a park is now refused, so the three
+# try/except shapes are deterministic refusals on both paths.
 phase shapes
-REFUSED=' try_finally closure_nonlocal closure_reads_outer '
+REFUSED=' try_in_loop loop_in_try try_finally raise_after_park with_block with_in_loop closure_nonlocal closure_reads_outer '
 if [ "${GRAIL_IR_CODEGEN-}" = 0 ]; then
     TEXT_PATH=1
 else
     TEXT_PATH=
-    REFUSED="$REFUSED with_block with_in_loop "
 fi
 SHAPES_SEEN=0
 while read -r _ name verdict; do

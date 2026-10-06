@@ -184,8 +184,8 @@ uncommitted changes back to its last successful checkpoint.
   and its writes never reach the resumed frames. Plain Smalltalk shows it,
   with no Grail code involved: `b value: 1` parks and is resumed, then
   `b value: 2` sees the temps as they were at the capture. This was reported
-  to GemTalk on 2026-10-05, on 4.0.0-a2 and 4.0.0.a4, with native code on and
-  off.
+  to GemTalk on 2026-10-05 as **Kermit 52132**, on 4.0.0-a2 and 4.0.0.a4, with
+  native code on and off.
 
   A survey of 21 Python shapes (`tests/durable/park_shapes.py`), each
   parking inside a different construct, found three that came back silently
@@ -195,14 +195,25 @@ uncommitted changes back to its last successful checkpoint.
   * a park inside a closure that writes its outer function's locals
     (`nonlocal`): all of its writes were lost.
 
+  A fourth turned up later, and only some of the time. In a park inside
+  `try/except`, the handler is a block created before the capture. It runs
+  only if its exception is raised after the resume, and then its writes are
+  lost too. `raise_after_park` returned 6 instead of 600 in 2 of 4 IR jobs of
+  one CI run, and about 1 local run in 150.
+
   `durable` now refuses these with a `CheckpointError` naming the function,
-  before anything is committed (`durable._resume_hazard`). It refuses any park
-  with a `try/finally` or `with` open around it, and any park while a frame
-  holds a closure over its own locals (a function whose `co_freevars` is not
-  empty), because such a closure reads stale values even when it doesn't
-  write. Loops, `while`, `try/except`, raising after the park, comprehensions,
-  lambdas and closures that use only their own arguments, recursion, `match`
-  and walrus all resume correctly on IR.
+  before anything is committed (`durable._resume_hazard`). It refuses a park
+  in two cases:
+  * a `try` statement (`except` or `finally`) or a `with` statement is open
+    around it. This holds even when the handler may never run, because if it
+    does run it is wrong without any sign.
+  * a frame holds a closure over its own locals (a function whose
+    `co_freevars` is not empty). Such a closure reads stale values even when
+    it doesn't write.
+
+  Loops, `while`, comprehensions, lambdas and closures that use only their
+  own arguments, recursion, `match` and walrus all resume correctly on IR.
+  Their compiled `break`, `continue` and `return` handlers are not refused.
 * **The text codegen path is unreliable.** With `GRAIL_IR_CODEGEN=0`, loop
   bodies and many other constructs compile to blocks. Which shapes come back
   wrong changes from run to run of the same build: `with`, lambdas, nested
@@ -235,8 +246,9 @@ uncommitted changes back to its last successful checkpoint.
   after the checkpoint in the killed gem correctly absent; `generator_flow`
   refused with a `CheckpointError` naming the Semaphore; `loop_flow`
   parking five times inside a loop body; and the park-shapes phase, which
-  parks inside each of 21 Python constructs. On IR, every shape must come out
-  right or be refused with a reason. On the text codegen path a wrong result
+  parks inside each of 21 Python constructs. Every shape must come out right
+  or be refused with a reason. The eight hazard shapes must be refused on both
+  codegen paths. On the text codegen path a wrong result
   is reported as XFAIL, because which shapes go wrong varies between runs
   (§6), but every shape must still finish.
   Every gem runs under a watchdog (`GRAIL_DURABLE_PHASE_TIMEOUT`, 120 s by
