@@ -178,11 +178,226 @@ ___transientGlobals___
 	^ d
 %
 
+category: 'Grail-Session Globals'
+method: module
+___sessionGlobals___
+	"This session's own values for this module's globals, or nil when it has
+	none: an Array of the values (name -> value) and the names this session
+	deleted.  See ___globalStoreIsSessionLocal___ for which stores land here,
+	and docs/Persistent_Modules_and_Classes.md D14.
+
+	Held in SessionTemps and keyed by the module instance, like the class
+	overlay (D3): it is never committed, an abort leaves it alone, and a new
+	session starts without it."
+
+	| reg |
+	reg := SessionTemps current at: #'GrailSessionModuleGlobals' otherwise: nil.
+	reg == nil ifTrue: [^ nil].
+	^ reg at: self otherwise: nil
+%
+
+category: 'Grail-Session Globals'
+method: module
+___sessionGlobalsCreate___
+	| reg rec |
+	reg := SessionTemps current at: #'GrailSessionModuleGlobals' otherwise: nil.
+	reg == nil ifTrue: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailSessionModuleGlobals' put: reg].
+	rec := reg at: self otherwise: nil.
+	rec == nil ifTrue: [
+		rec := Array with: IdentityKeyValueDictionary new with: IdentitySet new.
+		reg at: self put: rec.
+		self class ___installSessionGlobalReaders___].
+	^ rec
+%
+
+category: 'Grail-Session Globals'
+classmethod: module
+___installSessionGlobalReaders___
+	"Make this module class's global reads and listings consult the session's
+	own values (module >> ___sessionGlobals___), in THIS session only.
+
+	Installed on the first session-local store to one of its modules, as
+	transient session methods (Behavior >> ___compileSessionMethod:...):
+	never committed, invisible to other sessions, and absent from every
+	module this session has not changed, whose reads stay the primitive.
+	That is the point.  A persistent override on ``module'' made every global
+	read in every module a Smalltalk send, and the RecursionError conversion
+	runs in a reserve of about 343 frames: BaseExceptionTestCase
+	test_recursion_raises_recursion_error failed with any version of it, and
+	passed or failed with the size of the override's frame.  A module this
+	session patched pays one send per global read.
+
+	Not over a class's own persistent override of these selectors (a
+	module-level ``__transient__'', D12): a session method would shadow it.
+	The store funnel checks for that first (___globalStoreIsSessionLocal___)."
+
+	| temps done |
+	temps := SessionTemps current.
+	done := temps at: #'GrailSessionGlobalReaders' otherwise: nil.
+	done == nil ifTrue: [
+		done := IdentitySet new.
+		temps at: #'GrailSessionGlobalReaders' put: done].
+	(done includes: self) ifTrue: [^ self].
+	self @env1:___compileSessionMethod: 'dynamicInstVarAt: aSymbol
+	"A module global as this session sees it: its own value or deletion first
+	(module >> ___sessionGlobals___), then the module''s.  Installed by
+	module class >> ___installSessionGlobalReaders___."
+	| reg rec v |
+	reg := SessionTemps current at: #''GrailSessionModuleGlobals'' otherwise: nil.
+	reg == nil ifTrue: [^ super dynamicInstVarAt: aSymbol].
+	rec := reg at: self otherwise: nil.
+	rec == nil ifTrue: [^ super dynamicInstVarAt: aSymbol].
+	v := (rec at: 1) at: aSymbol otherwise: nil.
+	v == nil ifFalse: [^ v].
+	((rec at: 2) includes: aSymbol) ifTrue: [^ nil].
+	^ super dynamicInstVarAt: aSymbol'
+		category: 'Grail-Session Globals' scope: nil environmentId: 0.
+	self @env1:___compileSessionMethod: 'dynamicInstanceVariables
+	"The module''s global names as this session sees them: the stored ones
+	less those this session deleted, then the ones only this session set."
+	| names rec |
+	names := super dynamicInstanceVariables.
+	rec := self ___sessionGlobals___.
+	rec == nil ifTrue: [^ names].
+	names := names reject: [:n | (rec at: 2) includes: n].
+	(rec at: 1) keysDo: [:k | (names includes: k) ifFalse: [names := names copyWith: k]].
+	^ names'
+		category: 'Grail-Session Globals' scope: nil environmentId: 0.
+	done add: self
+%
+
+category: 'Grail-Session Globals'
+classmethod: module
+___forgetSessionGlobalsOf___: aName
+	"Drop this session's own values for the module named aName.  Called when
+	that module's body starts to run again (a rebuild in place, a reload), so
+	the new definitions are not hidden behind the old session's changes."
+
+	| reg doomed |
+	reg := SessionTemps current at: #'GrailSessionModuleGlobals' otherwise: nil.
+	reg == nil ifTrue: [^ self].
+	doomed := OrderedCollection new.
+	reg keysDo: [:m |
+		((m at: #'__name__' otherwise: nil) ifNotNil: [:n | n asString = aName asString])
+			== true ifTrue: [doomed add: m]].
+	doomed do: [:m | reg removeKey: m ifAbsent: []]
+%
+
+category: 'Grail-Session Globals'
+classmethod: module
+___withPersistentGlobalStores___: aBlock
+	"Evaluate aBlock with stores to module globals going to the modules
+	themselves, wherever they would otherwise go to this session's overlay.
+	For the import machinery's own stores, which are part of building a
+	module: binding a submodule on its parent package
+	(importlib class >> ___bind:onParent:as:) has to commit with the
+	deployment, or a later session binding the package finds no
+	``xml.etree''."
+
+	| temps prior |
+	temps := SessionTemps current.
+	prior := temps at: #'GrailPersistentGlobalStores' otherwise: nil.
+	temps at: #'GrailPersistentGlobalStores' put: true.
+	^ aBlock ensure: [
+		prior == nil
+			ifTrue: [temps removeKey: #'GrailPersistentGlobalStores' ifAbsent: []]
+			ifFalse: [temps at: #'GrailPersistentGlobalStores' put: prior]]
+%
+
+category: 'Grail-Session Globals'
+method: module
+___globalsAreSessionLocal___
+	"Do this module's globals become session state once its body has run?
+	True for Grail's own sources -- everything under grailDir/src/python/:
+	the stdlib, gemdb, durable and the vendored frameworks -- so that a
+	program patching ``durable._registry'' or calling ``csv.field_size_limit''
+	changes them for itself, as in CPython, and not for every later session
+	of the user.  A user's own modules keep persistent globals.
+
+	Asked afresh on each store, never remembered per module: a session
+	registry keyed by the module would hold every module the session ever
+	stored into, and a fresh import (test.support's import_fresh_module) must
+	be collectable once dropped.  Only the src/python/ prefix is remembered."
+
+	| file gd memo |
+	"The module's own __file__, never this session's: a program cannot move a
+	module into or out of the stdlib by assigning one."
+	file := super dynamicInstVarAt: #'__file__'.
+	(file isKindOf: CharacterCollection) ifFalse: [^ false].
+	gd := importlib grailDir.
+	gd == nil ifTrue: [^ false].
+	"{grailDir. its src/python/ prefix}, rebuilt if grailDir changes."
+	memo := SessionTemps current at: #'GrailSharedSourcePrefix' otherwise: nil.
+	(memo == nil or: [(memo at: 1) ~~ gd]) ifTrue: [
+		memo := Array with: gd with: gd asString , '/src/python/'.
+		SessionTemps current at: #'GrailSharedSourcePrefix' put: memo].
+	^ file asString beginsWith: (memo at: 2)
+%
+
+category: 'Grail-Session Globals'
+method: module
+___globalStoreIsSessionLocal___
+	"Does a store to one of this module's globals belong to this session
+	only?  docs/Persistent_Modules_and_Classes.md §4: what a module's body
+	produces is the module and commits with it; everything later is the
+	session's own.  So a store is session-local when the module's body is not
+	running and its globals are session state once it has
+	(___globalsAreSessionLocal___).  A function the body calls is part of the
+	body; the same function called afterwards is not.  The body test comes
+	first because it is cheaper and settles every store a module body makes."
+
+	self ___bodyIsRunning___ ifTrue: [^ false].
+	(SessionTemps current at: #'GrailPersistentGlobalStores' otherwise: nil) == true
+		ifTrue: [^ false].
+	self ___globalsAreSessionLocal___ ifFalse: [^ false].
+	"A class with its own persistent readers (D12's __transient__ overrides)
+	cannot take the session readers, so its stores stay where they were."
+	^ ((self class persistentMethodDictForEnv: 0) ifNil: [true] ifNotNil: [:d |
+		(d includesKey: #'dynamicInstVarAt:') not])
+%
+
+category: 'Grail-Session Globals'
+method: module
+___bodyIsRunning___
+	| stack name |
+	stack := SessionTemps current at: #'GrailInitializingModules' otherwise: nil.
+	(stack == nil or: [stack isEmpty]) ifTrue: [^ false].
+	name := self at: #'__name__' otherwise: nil.
+	name == nil ifTrue: [^ false].
+	name := name asString.
+	^ stack anySatisfy: [:each | each asString = name]
+%
+
+category: 'Grail-Session Globals'
+method: module
+___sessionGlobalAt___: aSymbol put: aValue
+	"Store aValue as this session's own value of the global aSymbol.  nil and
+	_remoteNil delete, as they do for the primitive: the name is hidden from
+	this session even when the committed module still holds it."
+
+	| rec |
+	rec := self ___sessionGlobalsCreate___.
+	(aValue == nil or: [aValue == _remoteNil])
+		ifTrue: [
+			(rec at: 1) removeKey: aSymbol ifAbsent: [].
+			(rec at: 2) add: aSymbol]
+		ifFalse: [
+			(rec at: 1) at: aSymbol put: aValue.
+			(rec at: 2) remove: aSymbol ifAbsent: []].
+	^ aValue
+%
+
 category: 'Grail-Phase A Dynamic InstVars'
 method: module
 dynamicInstVarAt: aSymbol put: aValue
-	"A module global, stored -- unless the global ALREADY holds aValue, or an
-	equal value Python cannot tell from it, when the store is skipped.
+	"A module global, stored -- in this session's overlay when the store is
+	the session's own (___globalStoreIsSessionLocal___), otherwise in the
+	module itself.
+
+	In the module, the store is skipped when the global ALREADY holds aValue,
+	or an equal value Python cannot tell from it.
 	Storing the identical object back into a COMMITTED module still writes it
 	(measured on gs40: needsCommit goes true), so a module whose body re-runs
 	over its committed instance -- an app's ``__main__'', re-run with its
@@ -194,6 +409,8 @@ dynamicInstVarAt: aSymbol put: aValue
 	are the primitive's absent and remove markers, not values."
 
 	| current |
+	self ___globalStoreIsSessionLocal___
+		ifTrue: [^ self ___sessionGlobalAt___: aSymbol put: aValue].
 	(aValue == nil or: [aValue == _remoteNil]) ifTrue: [^ super dynamicInstVarAt: aSymbol put: aValue].
 	current := super dynamicInstVarAt: aSymbol.
 	(current == aValue or: [self ___isSameImmutable___: current as: aValue]) ifTrue: [^ aValue].
@@ -609,9 +826,15 @@ ___mayCacheFunctionHandles___
 	wedging the loser's commits.  The read answers BoundMethod's per-session
 	intern instead, which keeps ``m.f is m.f'' within the session.
 
-	NativeModule overrides this: its slots already live in SessionTemps."
+	NativeModule overrides this: its slots already live in SessionTemps.
+
+	Nor does a module whose stores are now session-local
+	(___globalStoreIsSessionLocal___): the handle would go to this session's
+	overlay, which every later read of the module would then have to search.
+	The per-session intern serves just as well."
 
 	^ self @env0:isCommitted @env0:not
+		and: [self @env0:___globalStoreIsSessionLocal___ @env0:not]
 %
 
 category: 'Grail-Attribute Access'

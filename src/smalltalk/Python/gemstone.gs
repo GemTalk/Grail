@@ -521,6 +521,12 @@ ___commitOrRefusal___
 				ifTrue: [importlib @env0:___grailRefusalDetail___:
 					(ex @env0:gsArguments @env0:atOrNil: 1)]
 				ifFalse: [nil].
+			"None, not nil, when no path was found: gemdb tests ``detail is not
+			None'' and then unpacks it, and a Smalltalk nil passes that test and
+			cannot be unpacked -- the refusal became a TypeError.  The search
+			scans objects in memory and has missed under a loaded run
+			(run_tests.sh's gemdb phase, 2026-10-06)."
+			detail == nil ifTrue: [detail := None].
 			ex @env0:return: (tuple
 				@env0:with: ex @env0:number
 				with: (str @env0:withAll: (ex @env0:messageText))

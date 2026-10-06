@@ -418,8 +418,13 @@ ___installTransientGlobals___: aNames on: aModuleClass
 	no longer declares any removes them."
 
 	| lit |
+	"The PERSISTENT dictionary, not includesSelector:, which also sees this
+	session's readers for a module it patched (module class >>
+	___installSessionGlobalReaders___) -- and once a class has session
+	methods, the kernel's removeSelector: fails for every selector."
 	#(#'dynamicInstVarAt:' #'dynamicInstVarAt:put:' #'dynamicInstanceVariables') do: [:sel |
-		(aModuleClass includesSelector: sel environmentId: 0)
+		(((aModuleClass persistentMethodDictForEnv: 0) ifNil: [#()] ifNotNil: [:d | d keys])
+			includes: sel)
 			ifTrue: [aModuleClass removeSelector: sel environmentId: 0]].
 	aNames isEmpty ifTrue: [^ self].
 	lit := String new.
@@ -4732,7 +4737,13 @@ ___loadModuleFromPath___: pathString name: moduleName
 	co_filename does not name a readable file.  With no __loader__ that lookup
 	silently answered []."
 	"A re-run keeps the spec it was committed with: same file, same source."
-	rerun ifFalse: [
+	"These stores, like the body's, build the module, so they go to the module
+	even when it is a committed one being rebuilt in place, whose later
+	stores are session-local (module >> ___globalStoreIsSessionLocal___).
+	This session's own values for it are dropped first: the rebuild replaces
+	what they changed."
+	module ___forgetSessionGlobalsOf___: moduleName.
+	rerun ifFalse: [module ___withPersistentGlobalStores___: [
 	moduleInstance @env0:dynamicInstVarAt: #'__spec__' put: nil.
 	self
 		___initModuleAttrsFrom___: (self
@@ -4744,7 +4755,7 @@ ___loadModuleFromPath___: pathString name: moduleName
 				ifFalse: [nil]))
 		on: moduleInstance.
 	"Register BEFORE execution so circular imports resolve"
-	self registerModule: moduleName with: moduleInstance].
+	self registerModule: moduleName with: moduleInstance]].
 	"Execute the module body.  Registration happens BEFORE the body runs (so
 	circular imports see a module object), which means a body that raises
 	would otherwise leave a half-built module stuck in sys.modules — its
@@ -5478,7 +5489,11 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 		and: [(aParent dynamicInstVarAt: sym) == aChildModule])
 		ifTrue: [^ self].
 	aParent at: sym put: aChildModule.
-	aParent dynamicInstVarAt: sym put: aChildModule.
+	"Binding the child is part of building it, so it commits with the
+	deployment even on a parent whose later stores are session-local:
+	otherwise a session binding a deployed ``xml'' finds no ``xml.etree''."
+	module ___withPersistentGlobalStores___: [
+		aParent dynamicInstVarAt: sym put: aChildModule].
 %
 
 category: 'Grail-Module Registry'
@@ -8330,6 +8345,7 @@ ___pushInitializingModule___: aName
 	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
 	self @env0:___forgetBodyClassAttrsOf___: aName @env0:asString.
 	self @env0:___markBodyClassAttrsReplayed___: aName @env0:asString.
+	module @env0:___forgetSessionGlobalsOf___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
 %
 
@@ -9979,7 +9995,11 @@ reload: aModule
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.
 	importlib @env0:___resetMintedThisLoad___: name.
 	importlib @env0:___beginDepCollection___: name.
-	[aModule initialize] @env0:ensure: [
+	"The re-run is the module's body, so its stores go to the module, as a
+	load's do (module >> ___globalStoreIsSessionLocal___), and replace what
+	this session had changed: a patched function is the module's own again."
+	module @env0:___forgetSessionGlobalsOf___: name.
+	[module @env0:___withPersistentGlobalStores___: [aModule initialize]] @env0:ensure: [
 		imported := importlib @env0:___endDepCollection___: name].
 	"After a successful re-run: the current source is what the (same,
 	identity-preserved) instance now reflects -- update the committed hash
