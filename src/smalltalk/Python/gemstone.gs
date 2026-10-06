@@ -422,15 +422,20 @@ category: 'Grail-Continuations'
 method: gemstone
 ___cleanupFramesIn___: aContinuation
 	"Python gemstone.___cleanupFramesIn___(k) -- the names of the functions
-	whose try/finally or with statement is open in aContinuation, between
-	the capture and durable's _entry: (a list of str; empty when none).
+	whose try statement (except or finally) or with statement is open in
+	aContinuation, between the capture and durable's _entry: (a list of str;
+	empty when none).
 
-	stdlib durable refuses such a checkpoint.  A cleanup block -- the
-	argument of ensure:, ifCurtailed: or ___ensureFinally___:finally: -- is
-	created before the capture and valued after the resume, and GemStone
-	gives it the home VariableContext of the capture, not of the resumed
-	frame (measured on 4.0.0-a2 and 4.0.0.a4; reported 2026-10-05).  Its
-	writes to the function's locals are lost, and its reads are stale."
+	stdlib durable refuses such a checkpoint.  A cleanup or handler block --
+	the argument of ensure:, ifCurtailed: or ___ensureFinally___:finally:, or
+	the handler of on:do: -- is created before the capture and valued after
+	the resume, and GemStone gives it the home VariableContext of the
+	capture, not of the resumed frame (Kermit 52132; measured on 4.0.0-a2
+	and 4.0.0.a4).  Its writes to the function's locals are lost, and its
+	reads are stale.  A handler is valued only when its exception is raised,
+	so a try/except around a park came out right in most runs and wrong in
+	some: ``except ValueError as e: total = e.args[0] * 100'' after the
+	resume left total unchanged (6, not 600) in 2 of 4 IR CI jobs."
 
 	| names stop linkHome |
 	names := OrderedCollection @env0:new.
@@ -452,8 +457,25 @@ ___cleanupFramesIn___: aContinuation
 							ifTrue: [ home := linkHome @env0:value: (f @env0:at: 10) ].
 						sel == #'___ensureFinally___:finally:'
 							ifTrue: [ home := linkHome @env0:value: (f @env0:at: 11) ].
+						"A Python except clause: on: a PyLazyExceptSelector, or on:
+						BaseException for a bare except (TryAst >>
+						___emitIRSelectorFor___:index:token:on:), plus the
+						AbstractException handler a try statement adds.  NOT the
+						loop and comprehension handlers (PythonBreak, PythonContinue,
+						PythonLoopDrained, PythonReturn): they resume right, and
+						every loop has them."
+						(((sel == #'on:do:') or: [ sel == #'onException:do:' ])
+							and: [ | sig |
+								sig := f @env0:at: 11.
+								(sig @env0:isKindOf: PyLazyExceptSelector)
+									or: [ sig == BaseException or: [ sig == AbstractException ] ] ])
+							ifTrue: [ home := linkHome @env0:value: (f @env0:at: 12) ].
+						"Not Grail's own handlers: ___callCatchingVMErrors___:_:_: (this
+						module) wraps every workflow, and its handler reads no
+						workflow local."
 						(home @env0:notNil and: [ (home @env0:inClass == ExecBlock) @env0:not
-								and: [ (home @env0:inClass == BaseException @env0:class) @env0:not ] ])
+								and: [ (home @env0:inClass == BaseException @env0:class) @env0:not
+								and: [ (home @env0:inClass == self @env0:class) @env0:not ] ] ])
 							ifTrue: [ | nm |
 								nm := home @env0:selector @env0:asString.
 								(nm @env0:indexOf: $:) @env0:> 0

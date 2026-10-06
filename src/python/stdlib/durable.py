@@ -195,29 +195,32 @@ def _resume_hazard(k):
     """Why the stack in ``k`` would resume WRONG, or None.
 
     After a resume, GemStone gives a block created before the capture the
-    home context of the capture rather than of the resumed frame (a defect
-    reported to GemTalk on 2026-10-05; docs/Durable_Execution.md §6).  The
-    resumed frames see the right locals; that block sees stale ones, and
-    its writes are lost.  Two Python shapes run such a block again after a
+    home context of the capture rather than of the resumed frame (Kermit
+    52132, reported 2026-10-05; docs/Durable_Execution.md §6).  The resumed
+    frames see the right locals; that block sees stale ones, and its writes
+    are lost.  Two kinds of Python construct run such a block again after a
     park, and both returned wrong results silently on the IR codegen path:
 
-    * a try/finally or with statement open around the park -- its cleanup
+    * a try statement (except or finally) or a with statement open around
+      the park -- its cleanup, or its handler when the exception is raised,
       is a block valued after the resume;
     * a nested function or lambda over the workflow's locals, held in a
       local -- called again after the resume, it reads and writes the
       capture's copy (a ``nonlocal`` counter came back 0, not 6).
 
-    Loops, try/except, comprehensions and closures that use only their own
-    arguments are unaffected there (tests/durable/park_shapes.py).  The text
-    codegen path (GRAIL_IR_CODEGEN=0) compiles many more constructs as
-    blocks, and which of them resume wrong varies from run to run; this
-    cannot catch those.
+    A try/except is refused even when its handler may never run: the handler
+    only runs wrong if its exception is raised, and then silently, and it did
+    (6 for 600 in 2 of 4 IR CI jobs).  Loops, comprehensions and closures
+    that use only their own arguments are unaffected there
+    (tests/durable/park_shapes.py).  The text codegen path
+    (GRAIL_IR_CODEGEN=0) compiles many more constructs as blocks, and which
+    of them resume wrong varies from run to run; this cannot catch those.
     """
     cleanup = gemstone.___cleanupFramesIn___(k)
     if cleanup:
-        return ('a try/finally or with statement is open in %s; its cleanup would '
-                'run with stale locals after the resume (a GemStone defect)'
-                % ', '.join(cleanup))
+        return ('a try or with statement is open in %s; its handler or cleanup '
+                'would run with stale locals after the resume (a GemStone defect, '
+                'Kermit 52132)' % ', '.join(cleanup))
     f = sys._getframe(2)
     while f is not None:
         if f.f_globals.get('__name__') == __name__:
@@ -228,7 +231,7 @@ def _resume_hazard(k):
                           if getattr(getattr(value, '__code__', None), 'co_freevars', ()))
             if held:
                 return ('%s holds %s, a closure over its locals; called after the '
-                        'resume it would see stale ones (a GemStone defect)'
+                        'resume it would see stale ones (a GemStone defect, Kermit 52132)'
                         % (f.f_code.co_name, ', '.join(held)))
         f = f.f_back
     return None
