@@ -1,4 +1,4 @@
-# GRAIL: CPython 3.14.7's xml/sax/xmlreader.py, VERBATIM.  Pure Python over
+# GRAIL: CPython 3.14.8's xml/sax/xmlreader.py, VERBATIM.  Pure Python over
 # handler and _exceptions.  Provides XMLReader, InputSource, AttributesImpl and
 # AttributesNSImpl -- none of which parse anything themselves.
 """An XML Reader is the SAX 2 name for an XML parser. XML Parsers
@@ -92,7 +92,7 @@ class XMLReader:
         raise SAXNotRecognizedException("Property '%s' not recognized" % name)
 
 class IncrementalParser(XMLReader):
-    """This interface adds three extra methods to the XMLReader
+    """This interface adds four extra methods to the XMLReader
     interface that allow XML parsers to support incremental
     parsing. Support for this interface is optional, since not all
     underlying XML parsers support this functionality.
@@ -107,7 +107,7 @@ class IncrementalParser(XMLReader):
     is, after parse has been called and before it returns.
 
     By default, the class also implements the parse method of the XMLReader
-    interface using the feed, close and reset methods of the
+    interface using the prepareParser, feed and close methods of the
     IncrementalParser interface as a convenience to SAX 2.0 driver
     writers."""
 
@@ -277,6 +277,7 @@ class InputSource:
 # ===== ATTRIBUTESIMPL =====
 
 class AttributesImpl:
+    """Implementation of the Attributes interface."""
 
     def __init__(self, attrs):
         """Non-NS-aware implementation.

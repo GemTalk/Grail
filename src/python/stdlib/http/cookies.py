@@ -25,6 +25,17 @@
 __all__ = ['CookieError', 'BaseCookie', 'SimpleCookie']
 
 
+def _has_control_character(*val):
+    """True if any value's str() holds a C0 control character or DEL
+    (CPython's _control_character_re, without the re dependency)."""
+    for v in val:
+        for ch in str(v):
+            o = ord(ch)
+            if o < 0x20 or o == 0x7F:
+                return True
+    return False
+
+
 class CookieError(Exception):
     pass
 
@@ -277,12 +288,19 @@ class Morsel(dict):
         return '<%s: %s>' % (self.__class__.__name__, self.OutputString())
 
     def js_output(self, attrs=None):
+        import urllib.parse
+        output_string = self.OutputString(attrs)
+        if _has_control_character(output_string):
+            raise CookieError("Control characters are not allowed in cookies")
+        # Percent-encode the value to avoid template injection in cookie
+        # values (CPython 3.14.8).
+        output_encoded = urllib.parse.quote(output_string, safe='',
+                                            encoding='utf-8')
         return ('\n        <script type="text/javascript">\n'
                 '        <!-- begin hiding\n'
-                '        document.cookie = "%s";\n'
+                '        document.cookie = decodeURIComponent("%s");\n'
                 '        // end hiding -->\n'
-                '        </script>\n        ' %
-                self.OutputString(attrs).replace('"', '\\"'))
+                '        </script>\n        ' % (output_encoded,))
 
     def OutputString(self, attrs=None):
         result = []

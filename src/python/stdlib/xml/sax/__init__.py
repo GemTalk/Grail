@@ -1,4 +1,4 @@
-# GRAIL: CPython 3.14.7's xml/sax/__init__.py, VERBATIM.
+# GRAIL: CPython 3.14.8's xml/sax/__init__.py, VERBATIM.
 #
 # This replaces a deliberate stub whose docstring said make_parser, parse,
 # parseString, InputSource, ContentHandler, ErrorHandler and the SAX exception
@@ -37,12 +37,21 @@ from ._exceptions import (SAXException, SAXNotRecognizedException,
 
 
 def parse(source, handler, errorHandler=ErrorHandler()):
+    """Parse an XML document with the default parser.
+
+    source is a system identifier, a path-like object or a file object,
+    handler is a ContentHandler instance, and errorHandler is an
+    ErrorHandler instance.  All work is done by the handler."""
     parser = make_parser()
     parser.setContentHandler(handler)
     parser.setErrorHandler(errorHandler)
     parser.parse(source)
 
 def parseString(string, handler, errorHandler=ErrorHandler()):
+    """Parse an XML document from a string with the default parser.
+
+    string is a str or a bytes-like object, the other arguments are the
+    same as for parse()."""
     import io
     if errorHandler is None:
         errorHandler = ErrorHandler()

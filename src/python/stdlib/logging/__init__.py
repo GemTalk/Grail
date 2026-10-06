@@ -448,7 +448,13 @@ class Logger(Filterer):
 
     def removeHandler(self, handler):
         if handler in self.handlers:
-            self.handlers.remove(handler)
+            # Replace the list rather than mutate it, so a callHandlers()
+            # already iterating the old one is undisturbed: a handler that
+            # removes itself in emit() no longer makes the next handler
+            # miss the record (CPython 3.14.8, gh-79366).
+            remaining = self.handlers.copy()
+            remaining.remove(handler)
+            self.handlers = remaining
 
     def hasHandlers(self):
         """True if this logger or any propagated ancestor has a handler."""

@@ -187,6 +187,15 @@ bigaddrspacetest = _PassthroughDecorator()
 thread_unsafe = _PassthroughDecorator()
 skip_if_sanitizer = _PassthroughDecorator()
 skip_if_unlimited_stack_size = _PassthroughDecorator()
+# CPython 3.14.8's decorators for tests that exhaust the C stack with deep
+# recursion: one skips when the stack is too big to overflow, the other runs
+# the test in a thread with an 8 MiB stack.  Grail has no C stack to size --
+# deep Python recursion stops at the recursion limit with RecursionError on
+# every machine -- so neither has anything to do here, and the test runs as
+# written.
+skip_if_huge_c_stack = _PassthroughDecorator()
+run_with_limited_c_stack = _PassthroughDecorator()
+C_STACK_SIZE = 8 * 1024 * 1024
 skip_on_s390x = _PassthroughDecorator()
 skip_emscripten_stack_overflow = _PassthroughDecorator()
 skip_wasi_stack_overflow = _PassthroughDecorator()

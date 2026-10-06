@@ -1,5 +1,5 @@
 # http.cookiejar -- RFC 2965 / Netscape cookie handling for HTTP clients.
-# VENDORED VERBATIM FROM CPython 3.14.6 rather than reimplemented.
+# VENDORED VERBATIM FROM CPython 3.14.8 rather than reimplemented.
 #
 # WHY the source drop and not a hand-rolled subset (which is what Grail's
 # sibling http.client / http.server / http.cookies are): almost all of this
@@ -110,7 +110,8 @@ def _debug(*args):
 HTTPONLY_ATTR = "HTTPOnly"
 HTTPONLY_PREFIX = "#HttpOnly_"
 DEFAULT_HTTP_PORT = str(http.client.HTTP_PORT)
-NETSCAPE_MAGIC_RGX = re.compile("#( Netscape)? HTTP Cookie File")
+NETSCAPE_MAGIC_RGX = re.compile("#( Netscape)? HTTP Cookie File",
+                                re.IGNORECASE | re.ASCII)
 MISSING_FILENAME_TEXT = ("a filename was not supplied (nor was the CookieJar "
                          "instance initialised with one)")
 NETSCAPE_HEADER_TEXT =  """\
@@ -2106,7 +2107,8 @@ class MozillaCookieJar(FileCookieJar):
                 assert domain_specified == initial_dot
 
                 discard = False
-                if expires == "":
+                # curl and Wget set expires to 0 for session cookies.
+                if expires == "0" or expires == "":
                     expires = None
                     discard = True
 
