@@ -188,6 +188,8 @@ class Mock:
             setattr(type(self), name, _make_magic_forwarder(name))
         if name == "return_value":
             object.__setattr__(self, "_mock_return_set", True)
+        elif name == "side_effect":
+            value = _try_iter(value)
         object.__setattr__(self, name, value)
 
     def __getattr__(self, name):
@@ -242,7 +244,15 @@ class Mock:
         if effect is not None:
             if _is_exception(effect):
                 raise effect
-            result = effect(*args, **kw)
+            if callable(effect):
+                result = effect(*args, **kw)
+            else:
+                # An iterable side_effect, stored as an iterator by
+                # __setattr__: each call answers (or raises) the next item,
+                # and StopIteration once it is exhausted, as in CPython.
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
             if result is not DEFAULT:
                 return result
         # CPython's order: side_effect, then wraps, then return_value -- but an
@@ -304,6 +314,18 @@ class Mock:
             if recorded == expected:
                 return None
         raise AssertionError(repr(expected) + " call not found")
+
+
+def _try_iter(obj):
+    """CPython's: a side_effect that is neither None, an exception nor
+    callable is iterated, one item per call."""
+    if obj is None or _is_exception(obj) or callable(obj):
+        return obj
+    try:
+        return iter(obj)
+    except TypeError:
+        # Not iterable either: leave it, so the call fails as CPython's does.
+        return obj
 
 
 def _is_exception(obj):

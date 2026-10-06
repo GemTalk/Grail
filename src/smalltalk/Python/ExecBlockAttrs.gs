@@ -585,16 +585,44 @@ staticSlotAt: aBlock attr: aName put: aValue
 	| holder key |
 	holder := self staticSlotsFor: aBlock.
 	key := aName asString.
+	key = '__closure__' ifTrue: [^ self ___stampClosure___: aBlock cells: aValue in: holder].
 	(holder includesKey: key) ifTrue: [^ aValue].
 	holder at: key put: aValue.
-	"The one moment the function and its cells are known to come from the SAME
-	activation, which is what makes the base depth measurable at all -- see
-	___closureBaseDepthFrom___:cells:."
-	key = '__closure__' ifTrue: [
-		holder
-			at: '___closureBaseDepth___'
-			put: (self ___closureBaseDepthFrom___: aBlock cells: aValue)].
 	^ aValue
+%
+
+category: 'Grail-Closures'
+classmethod: ExecBlockAttrs
+___stampClosure___: aBlock cells: cells in: holder
+	"The def-site half of ``__closure__'': the slot TEMPLATE and the base depth,
+	decoded from the first evaluation's cells -- and then the cells DROPPED.
+
+	The cells' reader/setter blocks hold that first activation's
+	VariableContext, so keeping them in this session-lifetime table kept every
+	local of that activation alive for the session: the first evaluation of
+	each nested def leaked its enclosing frame (weakref never cleared; test_ssl
+	test_sni_callback_context_released_before_second_client_hello).
+	___closureFor___: rebuilds cells from the FUNCTION's own staticLink, so the
+	stored cells are only the undecodable-site fallback, and only then kept."
+
+	| tmpl |
+	(holder includesKey: '___closureTemplate___') ifTrue: [^ cells].
+	holder
+		at: '___closureBaseDepth___'
+		put: (self ___closureBaseDepthFrom___: aBlock cells: cells).
+	tmpl := (cells isNil or: [cells isEmpty]) ifTrue: [nil] ifFalse: [
+		| t |
+		t := Array new: cells size.
+		1 to: cells size do: [:i | | d |
+			d := self ___closureSlotForReader___: (cells at: i).
+			d isNil ifTrue: [t := nil] ifFalse: [t isNil ifFalse: [t at: i put: d]]].
+		t].
+	(tmpl isNil or: [(holder at: '___closureBaseDepth___' otherwise: nil) isNil])
+		ifTrue: [
+			holder at: '___closureTemplate___' put: #none.
+			holder at: '__closure__' put: cells]
+		ifFalse: [holder at: '___closureTemplate___' put: tmpl].
+	^ cells
 %
 
 category: 'Grail-Access'

@@ -164,14 +164,24 @@ _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
 	arities 1..3 and nothing else.
 
 	The shape is uniform, so it is generated rather than enumerated: one
-	colon for the first argument and ``_:'' for each one after it."
-	fixedSel := nargs = 0
+	colon for the first argument and ``_:'' for each one after it.
+
+	A selector that is ALREADY a keyword of exactly this arity is complete,
+	not a base name: a property's fset handle is on the setter ``name:'', so
+	``fset(obj, v)'' looked for ``name::'' and every
+	``C.__dict__['p'].__set__'' / ``.fset'' raised AttributeError.  The
+	handle stays on the setter itself -- its __isabstractmethod__ must be
+	the SETTER's, which test_abc's abstract-property cases read.  A Python
+	name never contains a colon, so ordinary handles cannot match."
+	fixedSel := (nargs > 0 and: [selector numArgs = nargs])
+		ifTrue: [selector]
+		ifFalse: [nargs = 0
 		ifTrue: [selector]
 		ifFalse: [ | ws |
 			ws := WriteStream on: String new.
 			ws nextPutAll: selector asString; nextPut: $:.
 			2 to: nargs do: [:ignored | ws nextPutAll: '_:'].
-			ws contents asSymbol].
+			ws contents asSymbol]].
 	vaSel := ('_' , selector asString , ':kw:') asSymbol.
 	walker := rootClass.
 	[walker notNil] whileTrue: [
