@@ -526,6 +526,102 @@ def dispatcher_shadow_is_not_an_attribute():
             and 'cp' in _CachedOverDef.__dict__ and _CachedOverDef().cp == 1)
 
 
+# Python looks ``recv.m'' up before it evaluates the arguments; a direct send
+# evaluates them first and looks up only on a miss.  The direct send is taken
+# only where no argument's evaluation can see the lookup, or be changed by it.
+
+class _LogGetattr:
+    def __init__(self, log):
+        object.__setattr__(self, 'log', log)
+
+    def __getattr__(self, name):
+        self.log.append('lookup')
+        return lambda *a: self.log.append('call')
+
+
+def lookup_precedes_a_call_argument():
+    log = []
+    o = _LogGetattr(log)
+
+    def arg():
+        log.append('arg')
+        return 1
+    o.m(arg())
+    return log == ['lookup', 'arg', 'call']
+
+
+def lookup_precedes_an_attribute_argument():
+    log = []
+
+    class P:
+        @property
+        def v(self):
+            log.append('arg')
+            return 1
+    o = _LogGetattr(log)
+    p = P()
+    o.m(p.v)
+    return log == ['lookup', 'arg', 'call']
+
+
+def lookup_sees_a_nonlocal_rebinding():
+    x = 1
+    seen = []
+
+    def bump():
+        nonlocal x
+        x = 2
+
+    class Hook:
+        def __getattr__(self, name):
+            bump()
+            return seen.append
+    Hook().m(x)
+    return seen == [2]
+
+
+_rebound_by_lookup = 1
+
+
+def lookup_sees_a_global_rebinding():
+    global _rebound_by_lookup
+    _rebound_by_lookup = 1
+    seen = []
+
+    class Hook:
+        def __getattr__(self, name):
+            global _rebound_by_lookup
+            _rebound_by_lookup = 2
+            return seen.append
+    Hook().m(_rebound_by_lookup)
+    return seen == [2]
+
+
+def missing_attribute_beats_an_unbound_local(flag=False):
+    class Empty:
+        pass
+    if flag:
+        y = 1
+    try:
+        Empty().m(y)
+    except AttributeError:
+        return True
+    except UnboundLocalError:
+        return 'UnboundLocalError raised first'
+
+
+def safe_arguments_still_call(a=3):
+    out = []
+    b = 4
+    for c in (5,):
+        out.append(a)
+        out.append(b)
+        out.append(c)
+        out.append(-1)
+    out.extend([v for v in (6,)])
+    return out == [3, 4, 5, -1, 6]
+
+
 CHECKS = [
     foreign_receiver_method,
     stored_callable_on_instance,
@@ -560,6 +656,12 @@ CHECKS = [
     module_function_patched_at_runtime,
     decorated_method_frame_keeps_its_name,
     dispatcher_shadow_is_not_an_attribute,
+    lookup_precedes_a_call_argument,
+    lookup_precedes_an_attribute_argument,
+    lookup_sees_a_nonlocal_rebinding,
+    lookup_sees_a_global_rebinding,
+    missing_attribute_beats_an_unbound_local,
+    safe_arguments_still_call,
 ]
 
 

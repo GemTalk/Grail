@@ -1209,7 +1209,220 @@ ___directCallSelector___
 			and: [self class classPropertyNames includes: attrSym]) ifTrue: [^ nil].
 		(self class classDecoratedFunctionNames notNil
 			and: [self class classDecoratedFunctionNames includes: attrSym]) ifTrue: [^ nil]].
+	"11. Python looks ``recv.m'' up BEFORE it evaluates the arguments; a direct
+	send evaluates them first and looks up only on a miss.  The two orders
+	differ only when the lookup and the argument evaluation can see each other
+	-- a logging __getattr__ (test_decorators' test_eval_order), a property, an
+	argument that rebinds recv.m.  So the direct send is taken only when no
+	argument's evaluation can be observed or changed by the lookup."
+	self ___argumentsAreUnobservable___ ifFalse: [^ nil].
 	^ self class fastPathSelectorForAttr: attrSym arity: arguments size
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___argumentsAreUnobservable___
+	"Does evaluating this call's arguments neither do anything the attribute
+	lookup could see, nor read anything the lookup could change?  Then running
+	the lookup after them (a direct send's miss) is indistinguishable from
+	CPython's lookup-first order.  Each argument must be:
+
+	  * a literal, or a numeric literal under unary minus or plus (CPython
+	    folds ``-1'' to a constant);
+	  * a name bound in the innermost def or lambda on every path to this call:
+	    a parameter; a comprehension, ``for'' or ``with'' target the call sits
+	    under; or a local an earlier statement of an enclosing block assigns.
+
+	and the name must be one the lookup cannot rebind or unbind: never
+	deleted, never an ``except ... as'' name (deleted when its handler ends),
+	never rebound by a nested scope's ``nonlocal''.  A global, a builtin, an
+	attribute read, a call or an operator (which can reach a user dunder)
+	does not qualify.  A name that MIGHT be unbound does not either: when the
+	attribute is also missing, CPython raises its AttributeError and a direct
+	send would raise the UnboundLocalError first."
+
+	| scope |
+	arguments isEmpty ifTrue: [^ true].
+	scope := self ___innermostFunctionScope___.
+	^ (arguments anySatisfy: [:arg |
+		(self ___argumentIsUnobservable___: arg in: scope) not]) not
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___innermostFunctionScope___
+	"The innermost FunctionDefAst or LambdaAst enclosing this call, or nil when
+	a class body or the module is reached first (their names are not locals:
+	a lookup side effect can rebind them) or the parent chain is broken."
+
+	| node |
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [^ node].
+		((node isKindOf: ClassDefAst) or: [node isKindOf: ModuleAst]) ifTrue: [^ nil].
+		node := node parent].
+	^ nil
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___argumentIsUnobservable___: anArg in: aScope
+	"One argument of ___argumentsAreUnobservable___."
+
+	| sym |
+	(anArg isKindOf: ConstantAst) ifTrue: [^ true].
+	(((anArg isKindOf: USubAst) or: [anArg isKindOf: UAddAst])
+		and: [(anArg operand isKindOf: ConstantAst)
+		and: [anArg operand value isKindOf: Number]]) ifTrue: [^ true].
+	(anArg isKindOf: NameAst) ifFalse: [^ false].
+	aScope == nil ifTrue: [^ false].
+	sym := anArg id asSymbol.
+	((self ___namesTheLookupCanRebindIn___: aScope) includes: sym) ifTrue: [^ false].
+	(self ___functionBindsParameter___: aScope named: sym) ifTrue: [^ true].
+	^ self ___name___: anArg isBoundOnEveryPathIn: aScope
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___name___: aNameAst isBoundOnEveryPathIn: aScope
+	"Walk up from aNameAst to aScope.  True when, on the way, the name is the
+	target of a comprehension generator the expression sits in (not in that
+	generator's own iterable), of a ``for'' whose BODY holds it, of a ``with''
+	whose body holds it, or is assigned by a statement that comes EARLIER in a
+	statement list holding the path.  The last three need the name to be a
+	Python local of aScope: a global-declared name is the module's, which the
+	lookup can rebind.  Conservative: anything else answers false."
+
+	| sym isLocal node par |
+	sym := aNameAst id asSymbol.
+	isLocal := self ___functionBindsPythonLocal___: aScope named: sym.
+	node := aNameAst.
+	[node ~~ aScope] whileTrue: [
+		par := node parent.
+		par == nil ifTrue: [^ false].
+		(((par isKindOf: ListCompAst) or: [(par isKindOf: SetCompAst)
+			or: [(par isKindOf: DictCompAst) or: [par isKindOf: GeneratorExpAst]]])
+			and: [(par generators includesIdentical: node) not
+			and: [par generators anySatisfy: [:g | self ___target: g target binds: sym]]])
+				ifTrue: [^ true].
+		((par isKindOf: ComprehensionAst)
+			and: [node ~~ par iter
+			and: [self ___target: par target binds: sym]]) ifTrue: [^ true].
+		isLocal ifTrue: [
+			((par isKindOf: ForAst)
+				and: [(self ___node: node isIn: par body)
+				and: [self ___target: par target binds: sym]]) ifTrue: [^ true].
+			((par isKindOf: WithAst)
+				and: [(self ___node: node isIn: par body)
+				and: [par items anySatisfy: [:item |
+					item optional_vars notNil
+						and: [self ___target: item optional_vars binds: sym]]]]) ifTrue: [^ true].
+			(self ___statementsBefore: node in: par anySatisfy: [:stmt |
+				self ___statement: stmt assigns: sym]) ifTrue: [^ true]].
+		node := par].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___node: aNode isIn: aBody
+	"Is aNode the body itself, or one of its statements?"
+
+	aNode == aBody ifTrue: [^ true].
+	^ (aBody isKindOf: SequenceableCollection) and: [aBody includesIdentical: aNode]
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___statementsBefore: aNode in: aParent anySatisfy: aBlock
+	"Does a statement that precedes aNode in one of aParent's statement lists
+	satisfy aBlock?  A SuiteAst holds its list in ``body''; a compound
+	statement may hold one directly.  Reflective over the instVars, skipping
+	the ``parent'' back-pointer, like ___nameNodesIn___:anySatisfy:."
+
+	2 to: aParent class instSize do: [:i |
+		| v idx |
+		v := aParent instVarAt: i.
+		((v isKindOf: SequenceableCollection) and: [(v isKindOf: CharacterCollection) not])
+			ifTrue: [
+				idx := v indexOfIdentical: aNode.
+				1 to: idx - 1 do: [:j | (aBlock value: (v at: j)) ifTrue: [^ true]]]].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___statement: aStmt assigns: aSymbol
+	"Does aStmt, having completed, leave aSymbol bound?  A plain, augmented or
+	annotated (with a value) assignment whose target names it."
+
+	(aStmt isKindOf: AssignAst) ifTrue: [
+		^ aStmt targets anySatisfy: [:t | self ___target: t binds: aSymbol]].
+	(aStmt isKindOf: AugAssignAst) ifTrue: [
+		^ (aStmt target isKindOf: NameAst) and: [aStmt target id asSymbol == aSymbol]].
+	(aStmt isKindOf: AnnAssignAst) ifTrue: [
+		^ aStmt value notNil
+			and: [(aStmt target isKindOf: NameAst) and: [aStmt target id asSymbol == aSymbol]]].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___target: aTarget binds: aSymbol
+	"Does the assignment target aTarget bind the bare name aSymbol -- a name, or
+	a tuple / list / starred nesting of names?  ``d[k] = v'' and ``o.a = v''
+	bind nothing, even though they mention names."
+
+	(aTarget isKindOf: NameAst) ifTrue: [^ aTarget id asSymbol == aSymbol].
+	(aTarget isKindOf: StarredAst) ifTrue: [^ self ___target: aTarget value binds: aSymbol].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		^ aTarget elts anySatisfy: [:e | self ___target: e binds: aSymbol]].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___namesTheLookupCanRebindIn___: aScope
+	"The names of aScope that code running during the lookup could unbind or
+	rebind even though aScope binds them: any ``del''-ed name and any ``except
+	... as'' name of aScope's own body, and any name a nested def or class
+	declares ``nonlocal''.  Cached for the last scope asked about -- the call
+	sites of one def are emitted together."
+
+	| cache names |
+	cache := SessionTemps current at: #'GrailUnobservableArgsScope' otherwise: nil.
+	(cache notNil and: [(cache at: 1) == aScope]) ifTrue: [^ cache at: 2].
+	names := IdentitySet new.
+	2 to: aScope class instSize do: [:i |
+		self ___collectRebindableNamesIn___: (aScope instVarAt: i) into: names nested: false].
+	SessionTemps current at: #'GrailUnobservableArgsScope' put: (Array with: aScope with: names).
+	^ names
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___collectRebindableNamesIn___: aValue into: aSet nested: isNested
+	"Helper of ___namesTheLookupCanRebindIn___."
+
+	| nested |
+	((aValue isKindOf: SequenceableCollection) and: [(aValue isKindOf: CharacterCollection) not])
+		ifTrue: [
+			aValue do: [:each | self ___collectRebindableNamesIn___: each into: aSet nested: isNested].
+			^ self].
+	(aValue isKindOf: AbstractNode) ifFalse: [^ self].
+	(aValue isKindOf: NonlocalAst) ifTrue: [
+		isNested ifTrue: [aValue names do: [:n | aSet add: n asSymbol]].
+		^ self].
+	isNested ifFalse: [
+		(aValue isKindOf: DeleteAst) ifTrue: [
+			aValue targets do: [:t |
+				self ___nameNodesIn___: t anySatisfy: [:n | aSet add: n id asSymbol. false]]].
+		((aValue isKindOf: ExceptHandlerAst) and: [aValue name notNil])
+			ifTrue: [aSet add: aValue name asSymbol]].
+	nested := isNested or: [(aValue isKindOf: FunctionDefAst)
+		or: [(aValue isKindOf: LambdaAst) or: [aValue isKindOf: ClassDefAst]]].
+	2 to: aValue class instSize do: [:i |
+		self ___collectRebindableNamesIn___: (aValue instVarAt: i) into: aSet nested: nested]
 %
 
 category: 'Grail-Direct Calls'
