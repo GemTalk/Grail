@@ -510,6 +510,22 @@ def decorated_method_frame_keeps_its_name():
     return _Decorated().where() == 'where'
 
 
+class _CachedOverDef:
+    import functools
+
+    @functools.cached_property
+    def cp(self):
+        return 1
+
+
+def dispatcher_shadow_is_not_an_attribute():
+    # A callable stored over a compiled def installs a dispatcher, which keeps
+    # the def under a second selector; that name is no attribute of the class.
+    names = list(_CachedOverDef.__dict__) + dir(_CachedOverDef)
+    return (not any('grailOrig' in n for n in names)
+            and 'cp' in _CachedOverDef.__dict__ and _CachedOverDef().cp == 1)
+
+
 CHECKS = [
     foreign_receiver_method,
     stored_callable_on_instance,
@@ -543,6 +559,7 @@ CHECKS = [
     truthiness_does_not_consult_getattr,
     module_function_patched_at_runtime,
     decorated_method_frame_keeps_its_name,
+    dispatcher_shadow_is_not_an_attribute,
 ]
 
 

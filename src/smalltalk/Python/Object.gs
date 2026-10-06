@@ -11548,11 +11548,18 @@ ___grailPythonNameForSelector___: aSelector
 	(see ___grailIsFixedAritySelector___:from:).
 
 	Shared by __dir__ and ___classDict___, which used to decode it two
-	different ways and so disagreed about what a class defines."
+	different ways and so disagreed about what a class defines.
+
+	A self-send dispatcher's ``___grailOrig_'' SHADOW names nothing: it is
+	the original def kept under a second selector.  The transport's shadow
+	``___grailOrig__cp:kw:'' decodes to ``__grailOrig__cp'', which the callers'
+	``___'' exclusion misses, so it showed in __dict__ and dir()."
 
 	| s sz index |
 	s := aSelector @env0:asString.
 	sz := s @env0:size.
+	((sz @env0:> 13) and: [(s @env0:copyFrom: 1 to: 13) @env0:= '___grailOrig_'])
+		ifTrue: [^ nil].
 	((sz @env0:> 4)
 		and: [((s @env0:at: 1) == $_)
 		and: [(s @env0:copyFrom: (sz @env0:- 3) to: sz) @env0:= ':kw:']])

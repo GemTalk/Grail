@@ -101,7 +101,7 @@ assertAllChecksPassIn: aModule
 	"``failures'' is the fixture's own import-time run of every check: the
 	names that did not answer True, comma-joined, empty when all passed."
 
-	self assert: (aModule @env1:___pyAttrLoad___: #check_count) equals: 32.
+	self assert: (aModule @env1:___pyAttrLoad___: #check_count) equals: 33.
 	self assert: (aModule @env1:___pyAttrLoad___: #failures) asString equals: ''.
 %
 
