@@ -13,10 +13,9 @@
 # the refusal must surface as a CheckpointError naming the Semaphore rather
 # than as a gem death.
 #
-# Then loop_flow parks inside a loop body, five times.  On the text codegen
-# path (GRAIL_IR_CODEGEN=0) that is a known GemStone defect -- a block valued
-# again after a resume sees a stale home context -- so there it is reported
-# as XFAIL rather than failing the run.
+# Then loop_flow parks inside a loop body five times, and the park-shapes
+# phase parks inside 21 Python constructs (tests/durable/park_shapes.py):
+# each must come out right or be refused by durable with a reason.
 #
 # Each phase is one `grail` process (tests/durable/durable_phases.py), so a
 # "gem" here is a real OS process with its own session.  Assumes a running
@@ -73,7 +72,7 @@ phase() {   # phase <name> [idle_timeout] -- one gem; its output goes to the log
     run_gem out/durable_phase.out "$limit" "$@"
     rc=$?
     grep -v '^\s*[~^]*$' out/durable_phase.out | tee -a "$LOG"
-    if [ "$rc" -eq 124 ] && [ -z "${EXPECTED_FAILURE-}" ]; then
+    if [ "$rc" -eq 124 ]; then
         echo "FAIL: phase $1 timed out after ${limit}s"
         EXIT=1
     fi
@@ -149,25 +148,16 @@ expect 'Semaphore'
 stop_if_failed generator_flow
 
 echo "--- loop_flow: park inside a loop body, five times"
+phase loop
 LOOP_WANT='loop: status=done result=10 resumes=5'
-if [ "${GRAIL_IR_CODEGEN-}" = 0 ]; then
-    # Known GemStone defect on this path (reported 2026-10-05): the loop body
-    # is a block valued again after each resume, and it sees a stale home
-    # context.  Measured with durable itself compiled by this path: the run
-    # is recorded done with result 0, and the executor then never sees it
-    # finish, so the phase hangs -- hence a limit of 20s where it normally
-    # takes about 3.
-    EXPECTED_FAILURE=1 PHASE_LIMIT=20 phase loop
-    if grep -qF -- "$LOOP_WANT" out/durable_phase.out; then
-        echo "XPASS: loop_flow is right on the text codegen path -- if GemStone has fixed the stale block context, make this check strict"
-    else
-        echo "XFAIL: loop_flow on the text codegen path (known GemStone defect: stale block home context after a resume)"
-    fi
+if [ "${GRAIL_IR_CODEGEN-}" = 0 ] && ! grep -qF -- "$LOOP_WANT" out/durable_phase.out \
+        && grep -q '^loop: status=done ' out/durable_phase.out; then
+    # The text codegen path: see the park-shapes phase below.
+    echo "XFAIL: loop_flow on the text codegen path: $(grep '^loop: ' out/durable_phase.out)"
 else
-    phase loop
     expect "$LOOP_WANT"
-    stop_if_failed loop_flow
 fi
+stop_if_failed loop_flow
 
 phase show
 expect 'A: reserve o-1 total=42'
@@ -178,5 +168,46 @@ forbid 'crashy: hanging until killed'       # written in the killed gem, never c
 expect 'resumed (timer)'
 expect 'resumed (message)'
 expect 'resumed (recover)'
+stop_if_failed show
+
+echo "--- park shapes: a park inside each of 21 Python constructs"
+# GemStone resumes a block made before the capture with a stale home context
+# (reported 2026-10-05), so some shapes came back silently WRONG.  durable now
+# refuses the ones it can recognise (_resume_hazard): on the IR codegen path
+# every shape must be right or refused with a reason.  The text path compiles
+# far more as blocks; there, which shapes come back wrong VARIES from run to
+# run (measured: nested_loops and boolean_short_circuit each wrong in some
+# runs and right in others), so a wrong result is XFAIL -- but every shape
+# must still finish, and the refusals must still happen.
+phase shapes
+REFUSED=' try_finally closure_nonlocal closure_reads_outer '
+if [ "${GRAIL_IR_CODEGEN-}" = 0 ]; then
+    TEXT_PATH=1
+else
+    TEXT_PATH=
+    REFUSED="$REFUSED with_block with_in_loop "
+fi
+SHAPES_SEEN=0
+while read -r _ name verdict; do
+    name=${name%:}
+    SHAPES_SEEN=$((SHAPES_SEEN + 1))
+    case "$REFUSED" in
+        *" $name "*) want=refused ;;
+        *) want=ok ;;
+    esac
+    if [ "$verdict" = "$want" ]; then
+        continue
+    fi
+    if [ -n "$TEXT_PATH" ] && [ "$want" = ok ] && [[ "$verdict" == "WRONG status=done "* ]]; then
+        echo "XFAIL: shape $name on the text codegen path: $verdict"
+        continue
+    fi
+    echo "FAIL: shape $name: want $want, got $verdict"
+    EXIT=1
+done < <(grep '^shape ' out/durable_phase.out)
+if [ "$SHAPES_SEEN" -ne 21 ]; then
+    echo "FAIL: $SHAPES_SEEN shape results, want 21"
+    EXIT=1
+fi
 
 finish

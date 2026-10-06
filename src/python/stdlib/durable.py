@@ -33,6 +33,7 @@ audit of non-committable state on the stack beyond the commit's own
 refusal; conflicts abort rather than retry.
 """
 
+import sys
 import time
 import _thread
 
@@ -190,12 +191,60 @@ def _current():
     return run
 
 
+def _resume_hazard(k):
+    """Why the stack in ``k`` would resume WRONG, or None.
+
+    After a resume, GemStone gives a block created before the capture the
+    home context of the capture rather than of the resumed frame (a defect
+    reported to GemTalk on 2026-10-05; docs/Durable_Execution.md §6).  The
+    resumed frames see the right locals; that block sees stale ones, and
+    its writes are lost.  Two Python shapes run such a block again after a
+    park, and both returned wrong results silently on the IR codegen path:
+
+    * a try/finally or with statement open around the park -- its cleanup
+      is a block valued after the resume;
+    * a nested function or lambda over the workflow's locals, held in a
+      local -- called again after the resume, it reads and writes the
+      capture's copy (a ``nonlocal`` counter came back 0, not 6).
+
+    Loops, try/except, comprehensions and closures that use only their own
+    arguments are unaffected there (tests/durable/park_shapes.py).  The text
+    codegen path (GRAIL_IR_CODEGEN=0) compiles many more constructs as
+    blocks, and which of them resume wrong varies from run to run; this
+    cannot catch those.
+    """
+    cleanup = gemstone.___cleanupFramesIn___(k)
+    if cleanup:
+        return ('a try/finally or with statement is open in %s; its cleanup would '
+                'run with stale locals after the resume (a GemStone defect)'
+                % ', '.join(cleanup))
+    f = sys._getframe(2)
+    while f is not None:
+        if f.f_globals.get('__name__') == __name__:
+            if f.f_code.co_name == '_entry':
+                break
+        else:
+            held = sorted(name for name, value in f.f_locals.items()
+                          if getattr(getattr(value, '__code__', None), 'co_freevars', ()))
+            if held:
+                return ('%s holds %s, a closure over its locals; called after the '
+                        'resume it would see stale ones (a GemStone defect)'
+                        % (f.f_code.co_name, ', '.join(held)))
+        f = f.f_back
+    return None
+
+
 def _park(run, status, **fields):
     """Commit a continuation of the caller's stack.  Answers None on the
     first return; a ``_Wake`` when the continuation is later resumed --
     possibly in another gem, possibly much later."""
     k = gemstone.___captureContinuation___()
     if gemstone.___isContinuation___(k):
+        hazard = _resume_hazard(k)
+        if hazard is not None:
+            # Nothing is committed or changed yet: refuse before the run
+            # record moves, so the run fails with the reason, not a wrong result.
+            raise CheckpointError('durable: cannot checkpoint here: ' + hazard)
         run.continuation = k
         run.checkpoints += 1
         run.status = status
@@ -215,6 +264,7 @@ def _park(run, status, **fields):
             run.log('checkpoint refused')
             raise CheckpointError('durable: cannot checkpoint here: %s' % (e,)) from None
         return None
+    _register_worker()      # a resumed stack runs in a GsProcess of its own
     run.resumes += 1
     run.log('resumed (%s)' % k.reason)
     return k
@@ -267,9 +317,12 @@ def _entry(run):
     # resumed run finishes -- in whatever gem -- THIS frame records the result.
     # It holds no session-local objects in a local (see _session).
     _session()['current_run'] = run
+    _register_worker()
     try:
         try:
-            result = run.fn(*run.args, **run.kwargs)
+            # A GemStone Error under the workflow comes back as RuntimeError,
+            # so it is recorded below rather than ending the run silently.
+            result = gemstone.___callCatchingVMErrors___(run.fn, run.args, run.kwargs)
         except Parked:
             return
         except BaseException as e:
@@ -302,6 +355,15 @@ def _record_failure(run, e):
         run.lease_until = None
         run.continuation = None
         _commit()
+
+
+def _register_worker():
+    # Tell the executor which GsProcess runs the workflow, so it can notice
+    # that process dying.  Resuming a continuation does NOT continue in the
+    # process that sent value: -- that one is left stopped in 'debug' and
+    # the stack runs in a new GsProcess (measured on 4.0) -- so a resumed
+    # stack registers again from _park.
+    _session()['worker'] = gemstone.___processFor___(_thread.get_ident())
 
 
 def _resume_entry(continuation, wake):
@@ -341,13 +403,31 @@ def _execute(run, reason):
     s = _session()
     s['current_run'] = run
     s['finished'] = False
+    s['worker'] = None
     if reason == 'start' or run.continuation is None:
         _thread.start_new_thread(_entry, (run,))
     else:
         _thread.start_new_thread(_resume_entry, (run.continuation, _Wake(reason)))
     while not s['finished']:
+        worker = s['worker']
+        if worker is not None and gemstone.___processEnded___(worker):
+            # The worker ended -- or stopped in the debugger -- without
+            # reaching _entry's finally, so nothing else will ever say the
+            # run is over.  Before this check the executor waited forever.
+            if not s['finished']:
+                _record_lost(run)
+            break
         time.sleep(0.01)
     s['current_run'] = None
+    s['worker'] = None
+
+
+def _record_lost(run):
+    if run.status in ('done', 'failed'):
+        return
+    _record_failure(run, RuntimeError(
+        'the workflow process ended without finishing the run -- it died '
+        'or stopped on a GemStone signal nothing handled'))
 
 
 def run_executor(once=False, idle_timeout=None, poll=0.05, lease=LEASE_SECONDS):

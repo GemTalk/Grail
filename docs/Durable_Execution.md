@@ -177,23 +177,53 @@ uncommitted changes back to its last successful checkpoint.
 * **Conflicts abort rather than retry**, and the run registry is a plain
   dict, so two sessions `start()`ing at once can conflict. An
   `RcKeyValueDictionary` is the fix importlib already uses.
-* **A park inside a loop body is wrong on the text codegen path.** The text
-  path (`GRAIL_IR_CODEGEN=0`) compiles a loop body as a block, and after a
-  continuation resumes, GemStone gives a block valued again a stale home
-  context. Plain Smalltalk shows it, with no Grail code involved: `b value: 1`
-  parks and is resumed, then `b value: 2` reads the temps as they were before
-  the capture. So `for i in range(5): durable.sleep(0); total += i` finishes
-  with `total == 0`, and the executor then never sees the run end. This was
-  reported to GemTalk on 2026-10-05. The default IR path keeps the loop in the
-  method and is correct.
+* **Some parks are refused because GemStone would resume them wrong.** After
+  a continuation resumes, the resumed frames get fresh copies of their
+  `VariableContext`s. A block object created before the capture keeps its
+  `staticLink` to the old one, so if it runs again it reads the old locals,
+  and its writes never reach the resumed frames. Plain Smalltalk shows it,
+  with no Grail code involved: `b value: 1` parks and is resumed, then
+  `b value: 2` sees the temps as they were at the capture. This was reported
+  to GemTalk on 2026-10-05, on 4.0.0-a2 and 4.0.0.a4, with native code on and
+  off.
+
+  A survey of 21 Python shapes (`tests/durable/park_shapes.py`), each
+  parking inside a different construct, found three that came back silently
+  wrong on the default IR codegen path:
+  * a park inside `try/finally`: the `finally` clause's writes were lost;
+  * a park inside `with` in a loop: a loop increment was lost;
+  * a park inside a closure that writes its outer function's locals
+    (`nonlocal`): all of its writes were lost.
+
+  `durable` now refuses these with a `CheckpointError` naming the function,
+  before anything is committed (`durable._resume_hazard`). It refuses any park
+  with a `try/finally` or `with` open around it, and any park while a frame
+  holds a closure over its own locals (a function whose `co_freevars` is not
+  empty), because such a closure reads stale values even when it doesn't
+  write. Loops, `while`, `try/except`, raising after the park, comprehensions,
+  lambdas and closures that use only their own arguments, recursion, `match`
+  and walrus all resume correctly on IR.
+* **The text codegen path is unreliable.** With `GRAIL_IR_CODEGEN=0`, loop
+  bodies and many other constructs compile to blocks. Which shapes come back
+  wrong changes from run to run of the same build: `with`, lambdas, nested
+  loops, `match` and generator-expression consumers have all been wrong in
+  some runs and right in others. The refusals above still apply there, but
+  they cannot catch these. The text path is IR's fallback, so a workflow
+  should not rely on it.
 * **Native code works.** Linux CI runs `GEM_NATIVE_CODE_ENABLED=2`, and the
-  multi-gem test passes there. The loop defect above is the same with native
-  code on and off.
+  multi-gem test passes there. The stale-context defect above is the same with
+  native code on and off.
 * **No audit before the commit.** The refusal names one object; a
   `deploy_check`-style walk of the captured frames would name the Python
   local holding it.
 * **Cancellation** is not implemented; it would be cooperative (a flag the
   workflow reads at its next `durable` call).
+* **Every resume leaves a GemStone process behind.** `aContinuation value: x`
+  does not continue in the process that sent it: the resumed stack runs in a
+  new `GsProcess`, and the sender is left in status `debug` for good, one per
+  resume. `durable` leaves these alone, because terminating one could run
+  unwind blocks copied from the workflow's stack. This was reported to GemTalk
+  with the stale-context defect.
 
 ## 7. Tests
 
@@ -203,9 +233,12 @@ uncommitted changes back to its last successful checkpoint.
   locals; `crashy_flow` checkpointed and `kill -9`ed, recovered by the next
   gem (`checkpoint()` answered `True`, result `50`), and the log line written
   after the checkpoint in the killed gem correctly absent; `generator_flow`
-  refused with a `CheckpointError` naming the Semaphore; and `loop_flow`
-  parking five times inside a loop body. On the text codegen path,
-  `loop_flow` reports XFAIL (the defect in §6).
+  refused with a `CheckpointError` naming the Semaphore; `loop_flow`
+  parking five times inside a loop body; and the park-shapes phase, which
+  parks inside each of 21 Python constructs. On IR, every shape must come out
+  right or be refused with a reason. On the text codegen path a wrong result
+  is reported as XFAIL, because which shapes go wrong varies between runs
+  (§6), but every shape must still finish.
   Every gem runs under a watchdog (`GRAIL_DURABLE_PHASE_TIMEOUT`, 120 s by
   default), and the run stops at the first failing check.
 * `GemstoneContinuationTestCase` (SUnit): capture answers a continuation;
