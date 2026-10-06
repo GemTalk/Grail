@@ -6403,6 +6403,50 @@ type: className _: bases _: namespace kw: classKeywords
 	the first, and re-pointing it would leave the first class's methods reading
 	the second."
 	newClass @env1:___grailApplyClassCell___: namespace.
+	"A FUNCTION from the namespace must be reachable by a self-send, which a
+	class attribute is not -- see ___grailInstallAttrFunctionForwarder___:value:."
+	ownAttrNames @env0:do: [:k |
+		[newClass ___grailInstallAttrFunctionForwarder___: k
+			value: (newClass ___classAttrOwnOrInherited___: k)]
+				@env0:on: AbstractException do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil]].
+	"__slots__ HANDED TO type() GETS ITS ACCESSORS, as the class statement's
+	do: ClassDefAst emits ___grailInstallInferredSlots___:declared:... at the
+	end of every class build, and a class built here never had the line.  So a
+	declared slot had no storage of its own, and under a STRICT slotted base
+	(``__slots__ = ()'') the store was refused and the read raised -- which is
+	every ``@dataclass(slots=True)'' over such a base, since CPython's
+	dataclasses rebuilds the class through type(): annotated_types' Predicate,
+	and pydantic with it.  Names as type() accepted them above (a str is one
+	name, otherwise an iterable of them)."
+	(namespace notNil and: [(namespace @env1:__contains__: '__slots__') ___isTruthy___]) ifTrue: [
+		| spec declared |
+		spec := namespace @env1:__getitem__: '__slots__'.
+		declared := (spec @env0:isKindOf: CharacterCollection)
+			ifTrue: [Array @env0:with: spec @env0:asSymbol]
+			ifFalse: [((builtins @env1:instance) @env1:list: spec) @env0:asArray
+				@env0:collect: [:n | n @env0:asString @env0:asSymbol]].
+		"The markers a class statement compiles for a declared __slots__
+		(ClassDefAst, before its installer line), in the same order: the
+		value-visibility marker and the slot index table, the declaration
+		marker and its names, then strictness -- no ``__dict__'' entry, and
+		only when the whole chain is slotted (___pyStrictSlotsAllowed___)."
+		newClass ___compileMethod: '___pyHasSlots___
+	^ true' category: 'Grail-Slots'.
+		newClass ___grailCompileSlotIndexTable___.
+		newClass ___compileMethod: '___pyDeclaresSlots___
+	^ true' category: 'Grail-Slots'.
+		newClass @env0:class ___compileMethod: (declared @env0:inject: '___pyDeclaredSlotNames___
+	^ #(' into: [:src :n | src @env0:, ' #''' @env0:, n @env0:asString @env0:, '''']) @env0:, ' )'
+			category: 'Grail-Slots'.
+		((declared @env0:includes: #'__dict__') @env0:not
+			and: [newClass ___pyStrictSlotsAllowed___]) ifTrue: [
+				newClass ___compileMethod: '___pySlotsStrict___
+	^ true' category: 'Grail-Slots'].
+		declared @env0:isEmpty ifFalse: [
+			newClass ___grailInstallInferredSlots___: #() declared: declared
+				properties: #() indexed: false]].
 	"PEP 487, WHICH type() RUNS AND THIS DID NOT.  CPython fires both halves
 	from type.__new__ -- __set_name__ over the namespace, then
 	__init_subclass__ on the nearest base that defines one -- so a class built

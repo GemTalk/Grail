@@ -791,6 +791,7 @@ run
 	at: #'ClassIdentityAndRelativeImportTestCase' put: nil;
 	at: #'ClassBodyRebindingAndInstanceDictTestCase' put: nil;
 	at: #'PydanticPhase6WallsTestCase' put: nil;
+	at: #'FastapiWallsTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
 	at: #'ClassAttrShadowsInheritedTestCase' put: nil;
 	at: #'ClassmethodViaSelfMergedTestCase' put: nil;
@@ -2256,6 +2257,7 @@ input src/smalltalk/PythonTests/ClassBodyNestedDefBindingTestCase.gs
 input src/smalltalk/PythonTests/ClassIdentityAndRelativeImportTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyRebindingAndInstanceDictTestCase.gs
 input src/smalltalk/PythonTests/PydanticPhase6WallsTestCase.gs
+input src/smalltalk/PythonTests/FastapiWallsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrShadowsInheritedTestCase.gs
 input src/smalltalk/PythonTests/ClassmethodViaSelfMergedTestCase.gs

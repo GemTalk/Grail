@@ -155,6 +155,23 @@ __func__
 
 category: 'Grail-Reflection'
 method: MethodBinding
+__defaults__
+	"The callable's -- binding a first argument does not change which trailing
+	parameters have defaults."
+
+	^ [callable @env1:___pyAttrLoad___: #'__defaults__']
+		@env0:on: AbstractException do: [:e | e @env0:return: ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Reflection'
+method: MethodBinding
+__kwdefaults__
+	^ [callable @env1:___pyAttrLoad___: #'__kwdefaults__']
+		@env0:on: AbstractException do: [:e | e @env0:return: ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Reflection'
+method: MethodBinding
 __signature_spec__
 	"The callable's def-time parameter spec WITHOUT its first positional
 	parameter -- the one this binding supplies.  CPython's signature() of a
@@ -197,6 +214,8 @@ ___pythonValueAttrs___
 		add: #'__module__';
 		add: #'__doc__';
 		add: #'__annotations__';
+		add: #'__defaults__';
+		add: #'__kwdefaults__';
 		yourself
 %
 

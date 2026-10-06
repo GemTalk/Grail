@@ -95,6 +95,34 @@ def later():
 later = lambda: 'assigned'
 RESULTS['assignment_after_def_wins'] = (later() == 'assigned')
 
+# A STAR import may bind any name, so a later def of one of them has to win.
+# CPython's signal.py is this shape -- `from _signal import *`, then a
+# `def signal(...)` wrapper -- and `signal.signal` stayed _signal's raw function.
+from colorsys import *                                        # noqa: E402,F403
+
+
+def rgb_to_hsv(r, g, b):
+    return 'redefined'
+
+
+def _wrap_keep(f):
+    return f
+
+
+@_wrap_keep
+def hsv_to_rgb(h, s, v):
+    return 'redefined'
+
+
+def _calls_rgb_to_hsv():
+    return rgb_to_hsv(0, 0, 0)
+
+
+RESULTS['star_import_then_def'] = (rgb_to_hsv(0, 0, 0) == 'redefined')
+RESULTS['star_import_then_decorated_def'] = (hsv_to_rgb(0, 0, 0) == 'redefined')
+RESULTS['star_import_then_def_bare_call'] = (_calls_rgb_to_hsv() == 'redefined')
+RESULTS['star_import_other_names_kept'] = (rgb_to_yiq(0, 0, 0) == (0.0, 0.0, 0.0))
+
 
 @typing.overload
 def ov(x: int) -> int: ...

@@ -1506,6 +1506,35 @@ ___rawAnnotateForClass___: aClass
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+__defaults__
+	"``Cls.method.__defaults__'' -- see BoundMethod >> __defaults__."
+
+	^ ExecBlock @env0:___pyDefaultsTuple___:
+		(self ___rawDefaults___ ifNotNil: [:r | r @env0:at: 1])
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__kwdefaults__
+	"``Cls.method.__kwdefaults__'' -- see BoundMethod >> __defaults__."
+
+	^ ExecBlock @env0:___pyKwDefaultsDict___:
+		(self ___rawDefaults___ ifNotNil: [:r | r @env0:at: 2])
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___rawDefaults___
+	| cls entry |
+	cls := self ___metadataClass___.
+	cls == nil ifTrue: [^ nil].
+	entry := self ___tableEntryFor___: cls table: #'___methodDefaultKeysTable___'.
+	entry == nil ifTrue: [^ nil].
+	^ ExecBlock @env0:___pyDefaultsFromKeys___: entry on: cls
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 __signature_spec__
 	"``Cls.method'' -- UNBOUND, so every parameter including ``self'' is still
 	to be supplied and the spec is reported whole.  The bound counterpart
@@ -1903,6 +1932,8 @@ ___pythonValueAttrs___
 		add: #'__annotations__';
 		add: #'__annotate__';
 		add: #'__signature_spec__';
+		add: #'__defaults__';
+		add: #'__kwdefaults__';
 		add: #'__doc__';
 		add: #'__code__';
 		add: #'__closure__';

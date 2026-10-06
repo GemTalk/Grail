@@ -2091,6 +2091,61 @@ ___setFunctionSignature___: aName spec: aSpec
 
 category: 'Grail-Signatures'
 method: module
+___setFunctionDefaults___: aName block: aBlock
+	"Record how to answer a module-level function's ``__defaults__'' and
+	``__kwdefaults__'': aBlock answers ``{ { posValue ... } . { name . value ...
+	} }''.  FunctionDefAst emits it at the def statement, beside the signature
+	spec, and builds each value through the SAME module-keyed memo the
+	function's method binds from (___moduleDefaultAt:compute:) -- so
+	``f.__defaults__'' and inspect.signature report the very objects a call
+	receives, whichever of the two evaluates the default first.
+
+	A block, not the values: evaluating the defaults here would move a default
+	with side effects (or one naming something defined later in the module)
+	from first call to import, which is a separate change from exposing them.
+	Session-local, as the signature table is: module instances are."
+
+	| tbl inner |
+	tbl := module ___functionDefaultsTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [
+		inner := KeyValueDictionary new.
+		tbl at: self put: inner].
+	inner at: aName asString put: aBlock.
+	^ self
+%
+
+category: 'Grail-Signatures'
+method: module
+___functionDefaultsFor___: aName
+	"``{ posValues . kwPairs }'' for a module-level function, or nil."
+
+	| tbl inner blk |
+	tbl := module ___functionDefaultsTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [^ nil].
+	blk := inner at: aName asString otherwise: nil.
+	blk isNil ifTrue: [^ nil].
+	^ blk value
+%
+
+category: 'Grail-Signatures'
+classmethod: module
+___functionDefaultsTable___
+	"Session-local module-instance -> (function-name -> defaults block); see
+	___functionSignatureTable___."
+
+	| st tbl |
+	st := SessionTemps current.
+	tbl := st at: #GrailModuleFunctionDefaults otherwise: nil.
+	tbl isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary new.
+		st at: #GrailModuleFunctionDefaults put: tbl].
+	^ tbl
+%
+
+category: 'Grail-Signatures'
+method: module
 ___functionSignatureFor___: aName
 	"The stored parameter spec for a module-level function, or nil."
 

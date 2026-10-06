@@ -5119,7 +5119,92 @@ ___pyClassDefined___: attrNames
 
 	self ___grailInstallOrigBases___.
 	self ___grailInstallAttrMethodShadows___: attrNames.
+	self ___grailInstallAssignedProtocolForwarders___: attrNames.
 	^ self ___invokeSetNameHooks___: attrNames
+%
+
+category: 'Grail-Python Protocol'
+classmethod: object
+___grailIsProtocolDunderName___: aName
+	"Is aName a special METHOD name Grail dispatches as a Smalltalk send --
+	``=='' sends __eq__:, ``+'' sends __add__:, len() sends __len__?  A
+	POSITIVE list, of CPython's slot methods and the protocols Grail sends;
+	deliberately without the construction hooks (__init__, __new__,
+	__init_subclass__, __class_getitem__, __set_name__) and the attribute
+	machinery (__getattr__, __getattribute__, __setattr__, __delattr__),
+	which have paths of their own.  Asked by ClassDefAst (a protocol dunder's
+	accessor setter) and by the forwarder installs for an ASSIGNED function
+	(___grailInstallAssignedProtocolForwarders___:, ___pyAttrStore___)."
+
+	| base |
+	base := #( #'__repr__' #'__str__' #'__bytes__' #'__format__' #'__hash__'
+		#'__bool__' #'__len__' #'__length_hint__' #'__iter__' #'__next__'
+		#'__reversed__' #'__contains__' #'__getitem__' #'__setitem__'
+		#'__delitem__' #'__missing__' #'__call__'
+		#'__eq__' #'__ne__' #'__lt__' #'__le__' #'__gt__' #'__ge__'
+		#'__get__' #'__set__' #'__delete__'
+		#'__enter__' #'__exit__' #'__aenter__' #'__aexit__'
+		#'__await__' #'__aiter__' #'__anext__'
+		#'__index__' #'__int__' #'__float__' #'__complex__'
+		#'__round__' #'__trunc__' #'__floor__' #'__ceil__'
+		#'__neg__' #'__pos__' #'__abs__' #'__invert__'
+		#'__copy__' #'__deepcopy__' #'__reduce__' #'__reduce_ex__'
+		#'__getstate__' #'__setstate__' #'__getnewargs__' #'__getnewargs_ex__'
+		#'__sizeof__' #'__fspath__' #'__dir__'
+		#'__instancecheck__' #'__subclasscheck__' ).
+	(base @env0:includes: aName @env0:asString @env0:asSymbol) ifTrue: [^ true].
+	"The binary operators, each with its reflected and in-place forms."
+	#( 'add' 'sub' 'mul' 'matmul' 'truediv' 'floordiv' 'mod' 'divmod' 'pow'
+		'lshift' 'rshift' 'and' 'xor' 'or' ) @env0:do: [:op |
+		(#( '__' '__r' '__i' ) @env0:anySatisfy: [:pre |
+			aName @env0:asString @env0:= ((pre @env0:, op) @env0:, '__')]) ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Python Protocol'
+classmethod: object
+___grailForwardsAssignedDunder___: aName
+	"Does an ASSIGNED function under aName get an instance-side forwarder?  The
+	protocol dunders (___grailIsProtocolDunderName___:), plus __setattr__ and
+	__delattr__, which ``obj.x = v'' and ``del obj.x'' reach only as sends --
+	CPython's dataclasses installs a frozen class's pair with setattr().  NOT
+	__init__ / __new__: instantiation already reads an assigned one
+	(___dynamicClassAttr___:), and a forwarder there would be stale code once a
+	reload empties the holder."
+
+	| s |
+	s := aName @env0:asString.
+	(s @env0:= '__setattr__' or: [s @env0:= '__delattr__']) ifTrue: [^ true].
+	^ self ___grailIsProtocolDunderName___: aName
+%
+
+category: 'Grail-Python Protocol'
+classmethod: object
+___grailInstallAssignedProtocolForwarders___: attrNames
+	"A FUNCTION a class body ASSIGNS to a protocol dunder -- ``__len__ = lambda
+	self: 0'', ``__setitem__ = __delitem__ = _fail'' -- is a class attribute,
+	and a protocol send (len(), ``x[k] = v'') finds methods, never attributes:
+	``len(obj)'' answered ``object of type ... has no len()''.  Give each the
+	instance-side forwarder a conditional def of the same name already gets
+	(___grailInstallProtocolForwarder___:value:, which also decides which
+	names and values qualify and skips a dunder the class compiles itself).
+	Own attributes only, read straight from this class's holder."
+
+	| holder |
+	attrNames == nil ifTrue: [^ self].
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [^ self].
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
+	holder == nil ifTrue: [^ self].
+	attrNames @env0:do: [:nm | | v |
+		v := (object ___grailForwardsAssignedDunder___: nm)
+			ifTrue: [holder @env0:dynamicInstVarAt: nm @env0:asString @env0:asSymbol]
+			ifFalse: [nil].
+		v == nil ifFalse: [
+			[self ___grailInstallProtocolForwarder___: nm value: v]
+				@env0:on: AbstractException do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil]]].
+	^ self
 %
 
 category: 'Grail-Initialization'
@@ -6274,6 +6359,32 @@ value: positional value: kwargs
 	which one a class happens to use decides whether the metaclass runs."
 	metaResult := self ___grailMetaclassCall___: positional kw: kwargs.
 	metaResult @env0:== #'___noMetaCall___' ifFalse: [^ metaResult].
+	"A PYTHON CLASS MADE BY ``type(name, bases, ns)'' with no Python base --
+	``type('T', (), {'__init__': init})'' -- has no synthesized value:value: of
+	its own (ClassDefAst writes one per class STATEMENT, and a subclass of such
+	a class inherits it), so it lands here, where one positional is the
+	built-in ``__new__: cls'' form: ``T(1)'' became ``1 new'', an uncatchable
+	MessageNotUnderstood, and ``T()'' skipped __init__ altogether.  CPython's
+	dataclasses builds every ``slots=True'' class exactly this way, and
+	pydantic declares its internal dataclasses with slots.  Run the sequence
+	the synthesized method runs for a plain class instead."
+	"Recognised by the class-side ``___dynInstVars___'' accessor every
+	GENERATED Python class compiles for itself -- not by a PythonInstance
+	root, which ``type(name, (object,), ns)'' (dataclasses passes the
+	original bases) does not have."
+	((self @env0:inheritsFrom: PythonInstance)
+		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]) ifTrue: [
+		| instance dynInit |
+		instance := self ___allocateInstance___: positional kw: kwargs.
+		instance ___pyBuiltinSubclassInit___: positional kw: kwargs new: false.
+		dynInit := self ___dynamicClassAttr___: #'__init__'.
+		dynInit == nil ifFalse: [
+			dynInit ___pyCallValue___: ({ instance } @env0:, positional) kw: kwargs.
+			^ instance].
+		[instance @env0:perform: #'___init__:kw:' env: 1
+			withArguments: { positional. kwargs }]
+				@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: nil].
+		^ instance].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
 		"ONLY IF IT IS IMPLEMENTED, which the dispatch order above has always
 		said and this branch did not do.  A built-in class with no ``_new:kw:''
@@ -6794,6 +6905,34 @@ ___grailMayStandInForABuiltin___: aValue
 	^ (file @env0:indexOfSubCollection: '/src/python/stdlib/test/') @env0:= 0
 %
 
+category: 'Grail-Attribute Access'
+method: object
+___isObjectDefault___: aValue for: aSym
+	"Is aValue object's OWN method of that name -- ``object.__eq__'' stored as
+	the class attribute ``__eq__''?
+
+	That binding means ``use the default'', and the default is exactly the
+	method that asks ___dynamicClassAttr___: in the first place: object >>
+	__repr__ found ``object.__repr__'' in the class store and called it, which
+	ran object >> __repr__ again on the same receiver, until RecursionError.
+	starlette's HTTPConnection is the shape that matters -- ``__eq__ =
+	object.__eq__'' over collections.abc.Mapping's ``def __eq__'' -- and a plain
+	``C.__repr__ = object.__repr__'' at run time looped the same way.  So such
+	a value reads as ABSENT, and the default runs as the default.
+
+	Not for __init__ / __new__: instantiation reads a nil answer as ``run the
+	compiled __init__'', which for a class that defines one is not object's."
+
+	| sel idx |
+	(aValue @env0:isKindOf: UnboundMethod) ifFalse: [^ false].
+	(aValue @env0:definingClass) == object ifFalse: [^ false].
+	(aSym == #'__init__' or: [aSym == #'__new__']) ifTrue: [^ false].
+	sel := aValue @env0:selector @env0:asString.
+	idx := sel @env0:indexOf: $:.
+	idx @env0:> 0 ifTrue: [sel := sel @env0:copyFrom: 1 to: idx @env0:- 1].
+	^ sel @env0:= aSym @env0:asString
+%
+
 category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___dynamicClassAttr___: aSym
@@ -6817,7 +6956,9 @@ ___dynamicClassAttr___: aSym
 	shadow the committed ___dynInstVars___ store.  The lookup walks the same
 	superclass chain this method does."
 	(self ___classAttrOverlayLookup___: walker name: aSym)
-		@env0:ifNotNil: [:___ovv | ^ ___ovv].
+		@env0:ifNotNil: [:___ovv |
+			(self ___isObjectDefault___: ___ovv for: aSym) ifTrue: [^ nil].
+			^ ___ovv].
 	[walker == nil] whileFalse: [
 		(walker ___respondsTo___: #___dynInstVars___)
 			ifTrue: [
@@ -6826,6 +6967,9 @@ ___dynamicClassAttr___: aSym
 				holder == nil ifFalse: [
 					dynValue := holder @env0:dynamicInstVarAt: aSym.
 					dynValue == nil ifFalse: [
+						"object's own method under its own name is the default,
+						not an override -- see ___isObjectDefault___:for:."
+						(self ___isObjectDefault___: dynValue for: aSym) ifTrue: [^ nil].
 						"MRO ORDER, as the overlay walk above applies it: a value
 						a BASE was assigned yields to a subclass whose own body
 						defines the name.  typing's Protocol assigns
@@ -7179,7 +7323,7 @@ ___grailInstallProtocolForwarder___: aName value: aValue
 	value that is not a plain function (a staticmethod or classmethod wrapper
 	keeps the holder path it has)."
 
-	| nm sym family code argc ndefaults minArgs maxArgs |
+	| nm sym family |
 	nm := aName @env0:asString.
 	((nm @env0:size @env0:> 4)
 		and: [(nm @env0:beginsWith: '__') and: [(nm @env0:endsWith: '__')
@@ -7193,6 +7337,47 @@ ___grailInstallProtocolForwarder___: aName value: aValue
 	family := importlib @env0:___pythonNameFamilyOf___: sym.
 	(family @env0:anySatisfy: [:sel |
 		(self @env0:includesSelector: sel environmentId: 1)]) ifTrue: [^ self].
+	^ self ___grailCompileHookForwardersFor___: nm value: aValue
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailInstallAttrFunctionForwarder___: aName value: aValue
+	"Make a FUNCTION that ``type(name, bases, ns)'' copied in as a class
+	attribute reachable by a self-send, when nothing on the class's chain
+	compiles that name.  ``self.b()'' inside a method is the plain Smalltalk
+	send ``self b'', and a class attribute is not a method -- so a class
+	REBUILT from another's namespace lost every method-to-method call:
+
+	    N = type('N', (object,), dict(Base.__dict__))
+	    N().a()            # a calls self.b() -> doesNotUnderstand #b
+
+	which is every ``@dataclass(slots=True)'' (CPython's dataclasses rebuilds
+	the class that way) -- pydantic's _DefinitionsRemapping, and with it every
+	JSON schema and OpenAPI document.  A name the chain does compile is left to
+	the self-send dispatchers ___pyAttrStore___ already installs."
+
+	| nm family |
+	nm := aName @env0:asString.
+	(nm @env0:beginsWith: '___') ifTrue: [^ self].
+	((aValue @env0:isKindOf: ExecBlock)
+		or: [aValue @env0:isKindOf: UnboundMethod]) ifFalse: [^ self].
+	family := importlib @env0:___pythonNameFamilyOf___: nm @env0:asSymbol.
+	(family @env0:anySatisfy: [:sel |
+		(self @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:notNil])
+			ifTrue: [^ self].
+	^ self ___grailCompileHookForwardersFor___: nm value: aValue
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailCompileHookForwardersFor___: nm value: aValue
+	"Compile, on this class, the selectors a def of aValue's arity would have
+	compiled to -- the fixed-arity forms and the ``_<nm>:kw:'' transport --
+	each fetching the function when CALLED (___grailProtocolHookFor___:) and
+	calling it with the receiver first."
+
+	| code argc ndefaults minArgs maxArgs pattern |
 	[code := aValue @env1:___pyAttrLoad___: #'__code__'.
 	 argc := code @env1:___pyAttrLoad___: #'co_argcount'.
 	 ndefaults := [(aValue @env1:___pyAttrLoad___: #'__defaults__') @env1:__len__]
@@ -7211,19 +7396,103 @@ ___grailInstallProtocolForwarder___: aName value: aValue
 			src := src @env0:, ': a1'.
 			2 @env0:to: n do: [:k |
 				src := src @env0:, ' _: a' @env0:, k @env0:printString]].
+		"The method pattern, reused verbatim as the super send's arguments."
+		pattern := src.
 		src := src @env0:, (String @env0:with: Character @env0:lf)
-			@env0:, '	^ (self ___grailProtocolHookFor___: #''' @env0:, nm
-			@env0:, ''') @env1:value: { self'.
+			@env0:, '	| ___f |' @env0:, (String @env0:with: Character @env0:lf)
+			@env0:, '	___f := self ___grailProtocolHookOrNil___: #''' @env0:, nm @env0:, '''.'
+			@env0:, (String @env0:with: Character @env0:lf)
+			@env0:, ((self @env0:superclass @env0:whichClassIncludesSelector: (self ___grailSelectorOfPattern___: pattern) environmentId: 1) @env0:notNil
+				ifTrue: ['	___f == nil ifTrue: [^ super ' @env0:, pattern @env0:, '].']
+				ifFalse: ['	___f == nil ifTrue: [___f := self ___grailProtocolHookFor___: #''' @env0:, nm @env0:, '''].'])
+			@env0:, (String @env0:with: Character @env0:lf)
+			@env0:, '	^ ___f @env1:value: { self'.
 		1 @env0:to: n do: [:k | src := src @env0:, '. a' @env0:, k @env0:printString].
 		src := src @env0:, ' } value: nil'.
 		self ___compileMethod: src category: 'Grail-Protocol Forwarders'].
 	src := '_' @env0:, nm @env0:, ': positional kw: kwargs'
 		@env0:, (String @env0:with: Character @env0:lf)
-		@env0:, '	^ (self ___grailProtocolHookFor___: #''' @env0:, nm
-		@env0:, ''') @env1:value: ({ self } @env0:, positional @env0:asArray) value: kwargs'.
+		@env0:, '	| ___f |' @env0:, (String @env0:with: Character @env0:lf)
+		@env0:, '	___f := self ___grailProtocolHookOrNil___: #''' @env0:, nm @env0:, '''.'
+		@env0:, (String @env0:with: Character @env0:lf)
+		@env0:, ((self @env0:superclass @env0:whichClassIncludesSelector: ('_' @env0:, nm @env0:, ':kw:') @env0:asSymbol environmentId: 1) @env0:notNil
+			ifTrue: ['	___f == nil ifTrue: [^ super _' @env0:, nm @env0:, ': positional kw: kwargs].']
+			ifFalse: ['	___f == nil ifTrue: [___f := self ___grailProtocolHookFor___: #''' @env0:, nm @env0:, '''].'])
+		@env0:, (String @env0:with: Character @env0:lf)
+		@env0:, '	^ ___f @env1:value: ({ self } @env0:, positional @env0:asArray) value: kwargs'.
 	self ___compileMethod: src category: 'Grail-Protocol Forwarders' ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ self
+%
+
+category: 'Grail-Python Protocol'
+method: object
+___grailRemoveProtocolForwarders___: aName
+	"Remove the receiver CLASS's own protocol forwarders for aName -- the methods
+	___grailInstallProtocolForwarder___:value: compiled so a send could reach a
+	function stored under a protocol dunder.  Called when that holder entry is
+	deleted.
+
+	A forwarder fetches its function when CALLED, so outliving the entry it
+	served left it raising AttributeError on a name the class no longer binds:
+	``class C: __eq__ = lambda s, o: True; del __eq__'' made ``C() == C()''
+	raise, where CPython falls back to object's identity comparison.  Own
+	methods only, and only that category."
+
+	| fam |
+	(self @env0:isKindOf: Behavior) ifFalse: [^ self].
+	fam := importlib @env0:___pythonNameFamilyOf___: aName @env0:asString @env0:asSymbol.
+	fam @env0:do: [:sel |
+		((self @env0:includesSelector: sel environmentId: 1)
+			and: [(self @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-Protocol Forwarders'])
+			ifTrue: [
+				[self @env1:___removeSelector: sel environmentId: 1]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailSelectorOfPattern___: aPattern
+	"The selector a method pattern such as ``__eq__: a1'' or ``__add__: a1 _: a2''
+	declares -- its keywords run together, or the pattern itself when unary."
+
+	| out |
+	(aPattern @env0:includes: $:) ifFalse: [^ aPattern @env0:asSymbol].
+	out := WriteStream @env0:on: String @env0:new.
+	(aPattern @env0:subStrings: ' ') @env0:do: [:tok |
+		(tok @env0:last @env0:= $:) ifTrue: [out @env0:nextPutAll: tok]].
+	^ out @env0:contents @env0:asSymbol
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailProtocolHookOrNil___: aSym
+	"What a protocol forwarder calls: ___grailProtocolHookFor___:'s function, or
+	nil when no holder on the chain has aSym -- and the forwarder then runs the
+	method it shadowed (``super'').  A forwarder is compiled CODE and outlives
+	the attribute it stood for: a class rebuilt with its identity reused has
+	its holder emptied (___grailResetClassNamespace___) while its methods stay,
+	so in the window before the body re-binds the name -- or after a ``del'' --
+	the protocol must behave as if nothing was ever assigned, not raise.  A
+	reloaded dataclass compared and printed its instances in that window."
+
+	| c holder v |
+	"The session overlay first -- where ``C.x = f'' lands once C is a
+	canonical (already-registered) class, i.e. on every reload; see
+	___dynamicClassAttr___:, which reads the two in the same order."
+	(self ___classAttrOverlayLookup___: self @env0:class name: aSym)
+		@env0:ifNotNil: [:___ovv | ^ ___ovv].
+	c := self @env0:class.
+	[c ~~ nil] @env0:whileTrue: [
+		holder := [c @env0:perform: #'___dynInstVars___' env: 1]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		(holder ~~ nil and: [(v := [holder @env0:dynamicInstVarAt: aSym]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil]) ~~ nil])
+			ifTrue: [^ v].
+		c := c @env0:superclass].
+	^ nil
 %
 
 category: 'Grail-Class Attr Overlay'
@@ -7241,6 +7510,11 @@ ___grailProtocolHookFor___: aSym
 	then finds nothing either."
 
 	| c holder v |
+	"The session overlay first -- where ``C.x = f'' lands once C is a
+	canonical (already-registered) class, i.e. on every reload; see
+	___dynamicClassAttr___:, which reads the two in the same order."
+	(self ___classAttrOverlayLookup___: self @env0:class name: aSym)
+		@env0:ifNotNil: [:___ovv | ^ ___ovv].
 	c := self @env0:class.
 	[c ~~ nil] @env0:whileTrue: [
 		holder := [c @env0:perform: #'___dynInstVars___' env: 1]
@@ -7305,7 +7579,8 @@ ___classBodyDefinitionalDelete___: aName
 	holder == nil ifFalse: [
 		(holder @env0:dynamicInstVarAt: getterSym) == nil ifFalse: [
 			found := true.
-			holder @env0:removeDynamicInstVar: getterSym]].
+			holder @env0:removeDynamicInstVar: getterSym.
+			self ___grailRemoveProtocolForwarders___: getterSym]].
 	found ifFalse: [
 		^ NameError ___signal___:
 			'name ''' @env0:, aName @env0:asString @env0:, ''' is not defined'].
@@ -7384,9 +7659,15 @@ ___grailResetClassNamespace___
 			and: [(sel @env0:asString @env0:beginsWith: '___dynInstVars___') @env0:not])
 				or: [cat @env0:= #'Grail-MI-Inherited'])
 					ifTrue: [meta @env1:___removeSelector: sel environmentId: 1]].
-	(self @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
-		((self @env0:categoryOfSelector: sel environmentId: 1)
-			@env0:= #'Grail-MI-Inherited')
+	"...and the protocol forwarders, which are derived from ATTRIBUTES the
+	rebuild binds again (___grailInstallProtocolForwarder___:value:).  Left in
+	place they read as the class already defining the name: CPython's
+	dataclasses sets ``__eq__'' only when ``'__eq__' not in cls.__dict__'', so a
+	reloaded dataclass kept a forwarder with nothing behind it."
+	(self @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel | | cat |
+		cat := self @env0:categoryOfSelector: sel environmentId: 1.
+		((cat @env0:= #'Grail-MI-Inherited')
+			or: [cat @env0:= #'Grail-Protocol Forwarders'])
 				ifTrue: [self @env1:___removeSelector: sel environmentId: 1]].
 	self ___grailResetClassMethods___.
 	self ___grailEmptyClassHolder___.
@@ -12296,9 +12577,18 @@ __eq__: other
 	(test_compare.test_comparisons / test_issue_1393 /
 	test_comp_classes_different)."
 
-	| fn |
+	| fn r |
 	fn := self ___dynamicInstanceDunder___: #'__eq__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
+	"A ``def __eq__(*args)'' compiles only the varargs form, so the fixed
+	``__eq__:'' send lands here.  Probed HERE, on the virtual path, and not in
+	___grailObjectEq___:, which is also what an EXPLICIT ``object.__eq__(a, b)''
+	runs: there the probe re-dispatched, and a class whose body says
+	``__eq__ = object.__eq__'' over an inherited ``def __eq__'' (starlette's
+	HTTPConnection over Mapping) has a shadow forwarder in that slot calling
+	object.__eq__ -- which probed it again, until RecursionError."
+	r := self ___varargsDunder___: #'___eq__:kw:' with: other.
+	r == nil ifFalse: [^ r].
 	^ self ___grailObjectEq___: other
 %
 
@@ -12340,8 +12630,7 @@ ___grailObjectEq___: other
 	a fixed slot; it never looks at the class dict."
 
 	| r |
-	r := self ___varargsDunder___: #'___eq__:kw:' with: other.
-	r == nil ifFalse: [^ r].
+	"No varargs-__eq__ probe here -- see object >> __eq__:, which makes it."
 	"A CLASS compares through its metaclass, as __lt__ below already does:
 	``A == B'' is ``type(A).__eq__(A, B)''.  pickletester's pickling_metaclass
 	defines __eq__ so a class rebuilt by unpickling equals the original, and
@@ -14297,6 +14586,14 @@ ___classAttrCmp___: baseSym with: other
 	| fn r |
 	fn := self ___classAttrDunder___: baseSym.
 	fn == nil ifTrue: [^ nil].
+	"``__lt__ = object.__lt__'' (or ``C.__lt__ = object.__lt__'') binds object's
+	OWN operator, which is no override at all: CPython's object.__lt__ answers
+	NotImplemented.  Calling it re-entered this very method -- the wrapper sends
+	__lt__: to the instance, which lands back here and finds the same
+	attribute -- and the comparison died with RecursionError instead of the
+	TypeError CPython raises."
+	((fn @env0:isKindOf: UnboundMethod) and: [(fn @env0:definingClass) == object])
+		ifTrue: [^ nil].
 	r := fn ___pyCallValue___: { self. other } kw: nil.
 	(r == (Python @env0:at: #NotImplemented otherwise: nil)
 		or: [r @env0:== NotImplemented]) ifTrue: [^ nil].
@@ -15404,6 +15701,7 @@ ___pyAttrDelete___: aName
 				(holder == nil) ifFalse: [
 					(holder @env0:dynamicInstVarAt: sym) == nil ifFalse: [
 						holder @env0:removeDynamicInstVar: sym.
+						self ___grailRemoveProtocolForwarders___: sym.
 						"A class-BODY attribute is a Grail-Class Attrs accessor pair over
 						that holder entry (docs/Class_Attribute_Single_Home.md), and the
 						pair is what the loader reads as ``this class binds the name'' --
@@ -16677,6 +16975,17 @@ ___grailPerformClassAttrSetter___: setterSym on: aClass with: aValue
 
 category: 'Grail-Self-Send Overrides'
 classmethod: object
+___grailClassAttrStoring___
+	"True while ___grailPerformClassAttrSetter___:on:with: is storing through a
+	class-side accessor setter -- which is how every Grail store reaches one.
+	A PROTOCOL DUNDER's setter asks it (ClassDefAst >> ___isProtocolDunderAttr___:):
+	an unmarked send of ``__eq__:'' to a class is ``C == x'', not a store."
+
+	^ (SessionTemps @env0:current @env0:at: #'GrailClassAttrStoring' otherwise: nil) == true
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
 ___grailClassAttrSetterDiverts___
 	"Asked on entry by every SYNTHESIZED setter whose selector a Python call can
 	also spell -- the class-side class-attribute accessor ``attr:'' ('Grail-Class
@@ -17028,6 +17337,16 @@ ___pyAttrStore___: aName put: aValue
 			ifTrue: [
 				self ___classHolderAttrStore___: aName put: aValue.
 				self ___grailShadowRuntimeDunder___: aName.
+				"A FUNCTION stored under a protocol dunder needs a method to be
+				reached by, exactly as a class-body one gets at the end of the class
+				statement (___grailInstallAssignedProtocolForwarders___:).  CPython's dataclasses
+				installs a frozen class's __setattr__ / __delattr__ this way, and
+				without the forwarder ``frozen.a = 2'' simply stored.  Not on a
+				COMMITTED class, for ___grailShadowRuntimeDunder___:'s reason: a
+				compiled method there is code every session shares."
+				(self @env0:isCommitted @env0:not
+					and: [object ___grailForwardsAssignedDunder___: aName]) ifTrue: [
+						self ___grailInstallProtocolForwarder___: aName value: aValue].
 				^ aValue].
 		"Built-in / non-Python class with no setter.  CPython's refusal here is
 		a TypeError naming the type as IMMUTABLE, not an AttributeError:

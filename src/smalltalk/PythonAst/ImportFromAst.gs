@@ -290,6 +290,28 @@ ___boundTargetNames___
 	^ names collect: [:each | self boundNameFor: each]
 %
 
+category: 'Grail-code generation'
+method: ImportFromAst
+___storesModuleSlot___: aSymbol
+	"A STAR import may store ANY module slot, so a later top-level def of any
+	name has to clear its slot (FunctionDefAst >>
+	___rebindsAnEarlierModuleBinding___).  Which names it binds is decided by
+	the runtime merge (module >> ___mergePublicAttrsFrom:), from X's __all__ or
+	its public names, and parse time cannot know them.
+
+	    from _signal import *       # binds signal, getsignal, ...
+	    def signal(signalnum, handler): ...
+
+	is CPython's signal.py.  The star-merged _signal.signal sat in the slot,
+	the slot out-ranks the def's method, so ``signal.signal'' stayed the raw
+	function and the def was never reached.  The cost of answering true for
+	every name is one removeDynamicInstVar: per later top-level def, in a
+	module that has a star import."
+
+	self wasStarImport ifTrue: [^ true].
+	^ super ___storesModuleSlot___: aSymbol
+%
+
 category: 'Grail-Class Body'
 method: ImportFromAst
 classBodyAttributePairs

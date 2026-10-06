@@ -501,6 +501,9 @@ printSmalltalkOn: aStream
 				nextPutAll: ''' spec: '.
 			self emitSignatureSpecOn: aStream.
 			aStream nextPutAll: '.'].
+		"...and its default VALUES, for __defaults__ / __kwdefaults__ and the
+		signature -- see ___emitModuleDefaultsBlockOn___:."
+		self ___emitModuleDefaultsBlockOn___: aStream.
 		"Clear a slot an earlier statement stored, for a decorated def as well:
 		its chain reads the base through the slot, so the real
 		``@pass_context def sync_do_map'' after two @overload stubs wrapped the
@@ -2907,6 +2910,43 @@ ___defaultOwnerClassName___
 	^ (self isKindOf: StaticFunctionDefAst)
 		ifTrue: [nil]
 		ifFalse: [CallAst classBeingCompiled ifNotNil: [:c | c asString]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___emitModuleDefaultsBlockOn___: aStream
+	"For a module-level def with defaults: record, at the def statement, a block
+	answering its default VALUES -- ``{ { pos ... } . { 'k' . kw ... } }'' --
+	for ``f.__defaults__'' / ``f.__kwdefaults__'' and inspect.signature (module
+	>> ___setFunctionDefaults___:block:).
+
+	Each value is emitDefTimeDefaultFor:node:on:'s, keyed exactly as the
+	method's own binding keys it -- the TRANSPORT name for a positional
+	parameter, the Python name for a keyword-only one, as the two bindings
+	spell them -- so the block and a call share one memo entry and see one
+	object.  A module function compiles to a method, so it has no def-time
+	temps for a stamp to read, which is why it is a block over the memo."
+
+	| pos kw |
+	pos := self ___defaultedPositionalParams___.
+	kw := self ___defaultedKeywordOnlyParams___.
+	(pos isEmpty and: [kw isEmpty]) ifTrue: [^ self].
+	aStream
+		lf;
+		nextPutAll: 'self @env0:___setFunctionDefaults___: ''';
+		nextPutAll: name;
+		nextPutAll: ''' block: [{ {'.
+	pos doWithIndex: [:pair :i |
+		i > 1 ifTrue: [aStream nextPut: $.].
+		aStream space.
+		self emitDefTimeDefaultFor: (self transportParamName: (pair at: 1))
+			node: (pair at: 2) on: aStream].
+	aStream nextPutAll: ' } . {'.
+	kw doWithIndex: [:pair :i |
+		i > 1 ifTrue: [aStream nextPut: $.].
+		aStream nextPutAll: ' '''; nextPutAll: (pair at: 1) asString; nextPutAll: '''. '.
+		self emitDefTimeDefaultFor: (pair at: 1) node: (pair at: 2) on: aStream].
+	aStream nextPutAll: ' } }].'
 %
 
 category: 'Grail-code generation'

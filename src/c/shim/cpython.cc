@@ -5130,7 +5130,17 @@ static OopType shimForeignGetAttr(OopType ptrOop, OopType nameOop)
         check_and_raise_error();
         return OOP_NIL;
     }
-    PyObject *v = foreign_getattr_c(obj, name);
+    /* ``obj.__class__'' is its type, as for every CPython object -- the
+       generic getattr finds it on no dict.  CPython's dataclasses reads
+       ``f.default.__class__.__hash__'' for every field, and pydantic gives
+       fields defaults that are pydantic_core objects (PydanticUndefined). */
+    PyObject *v;
+    if (strcmp(name, "__class__") == 0) {
+        v = (PyObject *)obj->ob_type;
+        Py_INCREF(v);
+    } else {
+        v = foreign_getattr_c(obj, name);
+    }
     if (v == NULL && !PyErr_Occurred()) {
         PyTypeObject *t = is_foreign_type(obj) ? (PyTypeObject *)obj : obj->ob_type;
         PyErr_Format(PyExc_AttributeError, "'%s' object has no attribute '%s'",

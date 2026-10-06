@@ -47,6 +47,15 @@ class _FunctionTypeMeta(type):
             return False
         if hasattr(obj, '__self__'):
             return isinstance(obj.__self__, ModuleType)
+        # A BUILT-IN type's method read through the type -- ``object.__hash__``,
+        # ``list.append`` -- is a slot wrapper / method descriptor in CPython,
+        # not a function.  Grail reports it as an UnboundMethod like ``B.m``;
+        # what tells them apart is the code object, which only a Python def
+        # has.  CPython's dataclasses relies on the difference: it reads
+        # ``f.__code__`` from every FunctionType in a class dict, and pydantic's
+        # InstanceOf binds ``__hash__ = object.__hash__``.
+        if hasattr(obj, '__objclass__') and not hasattr(obj, '__code__'):
+            return False
         # 'function' is what the ExecBlock family and UnboundMethod now report
         # (their Python-visible name was corrected); the Smalltalk spellings
         # stay in the tuple for anything that escapes the mapping.

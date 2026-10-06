@@ -1,69 +1,94 @@
-# GRAIL minimal signal stub.
-#
-# Gems don't expose POSIX signal handling to Python code.  Django's
-# autoreload / dev-server shutdown paths import this and register
-# handlers; registration is accepted and remembered (so getsignal
-# round-trips) but nothing is ever delivered.
+import _signal
+from _signal import *
+from enum import IntEnum as _IntEnum
 
-SIGABRT = 6
-SIGALRM = 14
-SIGBUS = 10
-SIGCHLD = 20
-SIGCONT = 19
-SIGFPE = 8
-SIGHUP = 1
-SIGILL = 4
-SIGINT = 2
-SIGKILL = 9
-SIGPIPE = 13
-SIGQUIT = 3
-SIGSEGV = 11
-SIGSTOP = 17
-SIGTERM = 15
-SIGTSTP = 18
-SIGTTIN = 21
-SIGTTOU = 22
-SIGUSR1 = 30
-SIGUSR2 = 31
-SIGWINCH = 28
+_globals = globals()
 
-SIG_DFL = 0
-SIG_IGN = 1
+_IntEnum._convert_(
+        'Signals', __name__,
+        lambda name:
+            name.isupper()
+            and (name.startswith('SIG') and not name.startswith('SIG_'))
+            or name.startswith('CTRL_'))
 
-NSIG = 32
+_IntEnum._convert_(
+        'Handlers', __name__,
+        lambda name: name in ('SIG_DFL', 'SIG_IGN'))
 
-_handlers = {}
+if 'pthread_sigmask' in _globals:
+    _IntEnum._convert_(
+            'Sigmasks', __name__,
+            lambda name: name in ('SIG_BLOCK', 'SIG_UNBLOCK', 'SIG_SETMASK'))
 
 
+def _int_to_enum(value, enum_klass):
+    """Convert a possible numeric value to an IntEnum member.
+    If it's not a known member, return the value itself.
+    """
+    if not isinstance(value, int):
+        return value
+    try:
+        return enum_klass(value)
+    except ValueError:
+        return value
+
+
+def _enum_to_int(value):
+    """Convert an IntEnum member to a numeric value.
+    If it's not an IntEnum member return the value itself.
+    """
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return value
+
+
+# Similar to functools.wraps(), but only assign __doc__.
+# __module__ should be preserved,
+# __name__ and __qualname__ are already fine,
+# __annotations__ is not set.
+def _wraps(wrapped):
+    def decorator(wrapper):
+        wrapper.__doc__ = wrapped.__doc__
+        return wrapper
+    return decorator
+
+@_wraps(_signal.signal)
 def signal(signalnum, handler):
-    old = _handlers.get(signalnum, SIG_DFL)
-    _handlers[signalnum] = handler
-    return old
+    handler = _signal.signal(_enum_to_int(signalnum), _enum_to_int(handler))
+    return _int_to_enum(handler, Handlers)
 
 
+@_wraps(_signal.getsignal)
 def getsignal(signalnum):
-    return _handlers.get(signalnum, SIG_DFL)
+    handler = _signal.getsignal(signalnum)
+    return _int_to_enum(handler, Handlers)
 
 
-def raise_signal(signalnum):
-    raise NotImplementedError("signal delivery is not supported in Grail")
+if 'pthread_sigmask' in _globals:
+    @_wraps(_signal.pthread_sigmask)
+    def pthread_sigmask(how, mask):
+        sigs_set = _signal.pthread_sigmask(how, mask)
+        return set(_int_to_enum(x, Signals) for x in sigs_set)
 
 
-def alarm(seconds):
-    return 0
+if 'sigpending' in _globals:
+    @_wraps(_signal.sigpending)
+    def sigpending():
+        return {_int_to_enum(x, Signals) for x in _signal.sigpending()}
 
 
-def pause():
-    raise NotImplementedError("signal.pause is not supported in Grail")
+if 'sigwait' in _globals:
+    @_wraps(_signal.sigwait)
+    def sigwait(sigset):
+        retsig = _signal.sigwait(sigset)
+        return _int_to_enum(retsig, Signals)
 
 
-def default_int_handler(signum, frame):
-    raise KeyboardInterrupt
+if 'valid_signals' in _globals:
+    @_wraps(_signal.valid_signals)
+    def valid_signals():
+        return {_int_to_enum(x, Signals) for x in _signal.valid_signals()}
 
 
-def strsignal(signalnum):
-    return "signal %d" % signalnum
-
-
-def valid_signals():
-    return set(range(1, NSIG))
+del _globals, _wraps

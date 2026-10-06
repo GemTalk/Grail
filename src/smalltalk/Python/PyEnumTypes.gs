@@ -3567,6 +3567,17 @@ ___grailMemberRepr: m
 		^ '<' @env0:, cls @env0:name @env0:asString @env0:, '.'
 			@env0:, (Enum ___grailCompositeNameFor: m) @env0:, ': '
 			@env0:, (valRepr @env0:value: v) @env0:, '>'].
+	"CPython's ``_value_repr_'' applies here as in Enum.__repr__: a @dataclass
+	mixin's GENERATED __repr__ is replaced by the fields alone
+	(___grailFindDataRepr:).  This is the path a data-mixed member takes once
+	the mixin's __repr__ is reachable as a method -- which it is when
+	dataclasses installs it with setattr and Grail compiles a protocol
+	forwarder for it."
+	(Enum ___grailFindDataRepr: cls) == #dataclass ifTrue: [
+		(Enum ___grailDataclassRepr: (m @env0:dynamicInstVarAt: #value)) @env0:ifNotNil: [:dc |
+			^ '<' @env0:, cls @env0:name @env0:asString @env0:, '.'
+				@env0:, (m @env0:dynamicInstVarAt: #name) @env0:asString @env0:, ': '
+				@env0:, dc @env0:, '>']].
 	^ '<' @env0:, cls @env0:name @env0:asString @env0:, '.'
 		@env0:, (m @env0:dynamicInstVarAt: #name) @env0:asString @env0:, ': '
 		@env0:, (valRepr @env0:value: (m @env0:dynamicInstVarAt: #value)) @env0:, '>'

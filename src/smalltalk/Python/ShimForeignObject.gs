@@ -152,6 +152,12 @@ ___pyAttrLoad___: aSym
 	(aSym == #'__name__' or: [aSym == #'__qualname__'])
 		ifTrue: [^ self @env0:unqualifiedName].
 	aSym == #'__module__' ifTrue: [^ self @env0:moduleName].
+	"``__hash__'' that C does not answer is object's: a PyO3 class inherits
+	tp_hash, which no dict carries, and CPython's dataclasses reads
+	``default.__class__.__hash__'' for every field (pydantic's defaults are
+	pydantic_core objects).  Approximate in one direction: a foreign type that
+	set tp_hash to PyObject_HashNotImplemented would read as hashable here."
+	aSym == #'__hash__' ifTrue: [^ object ___pyAttrLoad___: #'__hash__'].
 	"@env0:, -- this method compiles in env 1, where a String has no #, and
 	the miss raised MessageNotUnderstood instead of the AttributeError.
 	Inside a C extension's init that turned an ordinary hasattr-style probe

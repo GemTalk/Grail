@@ -346,6 +346,8 @@ ___pythonValueAttrs___
 		add: #'__annotations__';
 		add: #'__annotate__';
 		add: #'__signature_spec__';
+		add: #'__defaults__';
+		add: #'__kwdefaults__';
 		add: #'__doc__';
 		add: #'__code__';
 		add: #'__closure__';
@@ -1378,6 +1380,62 @@ ___rawAnnotateForClass___: aClass name: aName
 		v := tbl @env0:at: aName otherwise: nil.
 		v == nil ifFalse: [^ v]].
 	^ self ___rawAnnotateForClass___: (aClass @env0:superclass) name: aName
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__defaults__
+	"``func.__defaults__'' -- the positional default VALUES, or None.  A module
+	function's come from the def-time block its module recorded
+	(module >> ___setFunctionDefaults___:block:); a method's from the class-body
+	default store, through its defining class's ___methodDefaultKeysTable___.
+	Either way they are the objects a call binds.  inspect.signature reads
+	them, which is how FastAPI finds ``Depends(...)'' on a parameter."
+
+	^ ExecBlock @env0:___pyDefaultsTuple___:
+		(self ___rawDefaults___ ifNotNil: [:r | r @env0:at: 1])
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__kwdefaults__
+	"``func.__kwdefaults__'' -- see __defaults__."
+
+	^ ExecBlock @env0:___pyKwDefaultsDict___:
+		(self ___rawDefaults___ ifNotNil: [:r | r @env0:at: 2])
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___rawDefaults___
+	"``{ posValues . kwPairs }'' for this function, or nil when none is known."
+
+	| cls entry |
+	receiver == nil ifTrue: [^ nil].
+	(receiver isKindOf: module) ifTrue: [
+		^ receiver @env0:___functionDefaultsFor___: selector @env0:asString].
+	cls := (receiver isKindOf: Class)
+		ifTrue: [receiver]
+		ifFalse: [receiver @env0:class].
+	entry := self ___methodDefaultKeysForClass___: cls name: selector @env0:asString.
+	entry == nil ifTrue: [^ nil].
+	^ ExecBlock @env0:___pyDefaultsFromKeys___: entry on: cls
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___methodDefaultKeysForClass___: aClass name: aName
+	"First ___methodDefaultKeysTable___ entry named aName along the lookup chain,
+	or nil -- the walk ___methodSignatureForClass___:name: makes."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
+		((c @env0:class @env0:whichClassIncludesSelector: #'___methodDefaultKeysTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := c ___methodDefaultKeysTable___.
+			v := tbl @env0:at: aName otherwise: nil.
+			v == nil ifFalse: [^ v]]].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'

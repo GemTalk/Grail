@@ -768,17 +768,180 @@ no pydantic at all.
 
 Stated plainly, so this document is not read as more than it is:
 
-* No FastAPI, starlette or anyio code has been vendored or run under Grail
-  (pydantic now has — §4, Route A). The line counts and dependency facts come from CPython venvs;
-  the 67/72 import result and the coroutine table come from Grail.
-* The depth of the suspension fix in §3 is unmeasured. It could be a
-  contained change to `___grailAwait___:` plus the generator send path, or it
-  could reach into codegen. Nobody has tried.
+* ~~No FastAPI, starlette or anyio code has been run under Grail.~~ Run
+  (2026-10-05): with a monkeypatch per wall, a FastAPI app serves `GET` and a
+  pydantic-validated `POST` — see §7. Nothing is vendored; the stack is
+  installed into a venv. The line counts and dependency facts in §1 come from
+  CPython venvs; the 67/72 import result and the coroutine table come from
+  Grail.
+* ~~The depth of the suspension fix in §3 is unmeasured.~~ Done (§3).
 * ~~Route A's viability for a **PyO3** binary is unmeasured.~~ Measured
   (2026-10-02): it works for pydantic_core on the abi3 build, at W7's cost
-  — see [Support_Pydantic.md](Support_Pydantic.md). What is still
-  unmeasured is FastAPI on top of it.
+  — see [Support_Pydantic.md](Support_Pydantic.md). FastAPI on top of it
+  is §7.
 * `test_typing` and `test_annotationlib` both currently score IMPORTERROR
   (PEP 695 type aliases; an f-string parse). pydantic v2 leans hard on
   `annotationlib` and modern typing, so those rows are probably on the
   critical path for Route A/B and were not investigated here.
+
+## 7. The first end-to-end run *(2026-10-05, measured)*
+
+Route A was chosen (§4) and pydantic runs (Phases 0–6 of
+[Support_Pydantic.md](Support_Pydantic.md)), so the question became what
+stands between that and FastAPI. This section answers it by running the
+current stack until it stops, recording the wall, monkeypatching past it in
+the probe script, and running again.
+
+**Setup.** Darwin arm64, GemStone 4.0.0.a4, branch `jmason/fastapi` (the
+pydantic Phase 6 tree), `GRAIL_IR_CODEGEN=0`. A copy of the pydantic abi3 venv
+(Support_Pydantic.md, *Resume here* step 2) with the current FastAPI resolved
+into it — note it has moved on since §1:
+
+| package | §1 (2026-08-22) | now |
+|---|---|---|
+| `fastapi` | 0.141.1 | 0.142.2 |
+| `starlette` | 1.6.0 | 1.7.0 |
+| `anyio` | 4.14.2 | 4.15.1 |
+| `pydantic` / `pydantic_core` | 2.13.4 / 2.46.4 | 2.13.5 / 2.46.5 (abi3 build) |
+| `httpx` (for testing) | — | 0.28.1 |
+
+```bash
+cp -R /tmp/pydantic_abi3 /tmp/fastapi_abi3
+/tmp/fastapi_abi3/bin/python -m pip install fastapi 'pydantic==2.13.5' 'pydantic_core==2.46.5' httpx
+env -u PYTHONPATH VIRTUAL_ENV=/tmp/fastapi_abi3 GRAIL_IR_CODEGEN=0 ./grail probe.py
+```
+
+(`python -m pip`, not `bin/pip`: a copied venv's `pip` still has the original
+venv's interpreter in its shebang.) pip keeps the installed abi3
+`pydantic_core` because its version already satisfies FastAPI.
+
+**The app is driven without `TestClient`** — `httpx.AsyncClient` over
+`httpx.ASGITransport(app=app)` inside `asyncio.run`. `TestClient` needs a
+thread (wall 7 below); the ASGI transport needs only the loop §3 built.
+
+### Result
+
+With every wall below patched in the probe, against the same probe on
+CPython 3.14:
+
+| request | Grail | CPython |
+|---|---|---|
+| `GET /` (`async def`) | `200 {'hello': 'world'}` | same |
+| `POST /items` with a pydantic body, `price: "1.5"` | `200 {'name': 'x', 'double': 3.0}` | same |
+| `POST /items` missing a field | `422`, keys `msg, input, type, loc` | `422`, keys `type, loc, msg, input` |
+| `GET /dep?q=7` with `db=Depends(get_db)` | `200 {'q': 7, 'db': 'Depends(get_db)'}` | `200 {'q': 7, 'db': "'DB'"}` |
+| `GET /dep` (`q: int = Query(3)` defaulted) | `TypeError: cannot create 'ExecBlock2' instances` | `200 {'q': 3, ...}` |
+| `GET /openapi.json` | `UnboundLocalError: status_code` | `200` |
+| `import fastapi`, fresh gem | **~70 s** | 0.3 s |
+| build a 3-route app | ~7 s | ~0 s |
+
+So routing, request parsing, pydantic body validation and the 422 path work
+end to end on the loop §3 built, on the shim §4 chose. What does not is
+everything that reads a **default value** — dependency injection, parameter
+defaults and OpenAPI — and that is one wall (3).
+
+### The walls, in the order met
+
+| # | wall | symptom in FastAPI | kind |
+|---|---|---|---|
+| 1 | `signal.Signals` absent; `shlex.shlex` absent (Grail's `shlex` is an 88-line `split`/`join`/`quote`); no `concurrent.interpreters`; no `runpy` | `import anyio` → `import fastapi` fails. anyio imports all four at module scope (`to_interpreter` imports `concurrent.interpreters` unguarded on 3.14; `starlette.datastructures` imports `shlex`) | stdlib |
+| 2 | a class body binding `__eq__ = object.__eq__` makes the **class's own** `==` answer the class: `M == int` → `M` | starlette's `HTTPConnection` binds exactly that. `class X(Request)` then raises `Cannot inherit from plain Generic` (typing's `Generic in cls.__bases__` is true), and an ABC check makes `issubclass(NoneType, HTTPConnection)` true — so `isinstance(None, Mapping)` answers **True**, and `httpx.Headers(None)` fails | runtime |
+| 3 | functions have no `__defaults__` / `__kwdefaults__`, and `inspect.signature` reports each default as `_DefaultText`, its source text | **dependency injection**: FastAPI finds `Depends(...)`, `Query(...)`, `Body(...)` by reading `Parameter.default`. It sees text, so a dependency is passed as the string `'Depends(get_db)'` and a `Query(3)` default crashes; OpenAPI's `isinstance(status_code_param.default, int)` fails | codegen |
+| 4 | Grail's `dataclasses` is a metadata-and-`__init__` stub; it never calls `__post_init__` | FastAPI's `ModelField` is a `@dataclass` whose `__post_init__` builds its `TypeAdapter`: `'ModelField' object has no attribute '_type_adapter'` on the first body | stdlib |
+| 5 | `isinstance(x, T)` raises when `T` is a PyO3 `#[pyclass]` — it surfaces as a `ShimForeignObject`, not a `type` | `jsonable_encoder` tests `isinstance(obj, PydanticUndefinedType)` on every response | shim |
+| 6 | a plain `def` endpoint runs through `anyio.to_thread.run_sync` → `anyio._backends._asyncio`, which imports `asyncio.base_events._run_until_complete_cb` and wants a worker thread | only `async def` endpoints serve | asyncio + threads |
+| 7 | `TestClient` runs the app through `anyio.from_thread.start_blocking_portal` | `concurrent.futures.TimeoutError: Future has no result (Grail futures are synchronous)` | asyncio + threads |
+
+Wall 2 deserves its note because of how far the symptom lands from the
+cause: it surfaced as `'NoneType' object has no attribute 'items'` inside
+httpx, three packages from the class body responsible, and only *after* the
+app was built — an `isinstance(None, Mapping)` made earlier, before
+`HTTPConnection` existed, had cached the right negative answer and hid it.
+
+Also seen, not yet chased: importing `h11` on its own once killed the gem
+(`InternalError 2261 … CorruptObj, process switch not allowed in protected
+mode`) — `httpx` imports fine; and the 422 detail's key ORDER differs from
+CPython (row 3 of the result table), which is likely the order the shim
+builds pydantic_core's error dicts in.
+
+### The plan from here
+
+| phase | walls | gate |
+|---|---|---|
+| 1 | 1 — the four stdlib gaps | `import fastapi` with no probe patches |
+| 2 | 2, 3, 4 — the general runtime bugs | each a fixture against CPython 3.14; **tier 2** (they are shared machinery) |
+| 3 | 5, and the error-dict key order | shim tests in `CPythonShimTestCase` |
+| 4 | 6, 7 — sync endpoints and `TestClient` | decision pending: a same-green-thread portal (run each call to completion with `asyncio.run`) vs a real GsProcess-backed thread pool and cross-thread `concurrent.futures` |
+| 5 | serve over HTTP with `grail_asgi`; a slice of FastAPI's own tests with the pydantic Phase 6 runner, compared test by test; latency and import time | — |
+
+
+### Phases 1 and 2, done *(2026-10-05)*
+
+`tests/python/fastapi_walls.py` (+ `FastapiWallsTestCase`, both codegen arms)
+holds a check for each wall below, every one measured against CPython 3.14.
+
+**Phase 1 — the stdlib floor.** `anyio` and `starlette` import with nothing
+patched.
+
+| wall | fix |
+|---|---|
+| `signal.Signals` / `Handlers` | `signal.py` is CPython's, verbatim, over a `_signal` stand-in (Grail's old stub, plus the rest of Darwin's 1..31) |
+| `shlex.shlex` | `shlex.py` is CPython's; `test.test_shlex` joins the manifest, **OK 45/0/0** |
+| `concurrent.interpreters` | the public surface with CPython's exception bases; every operation needing a second interpreter raises `InterpreterError` |
+| `runpy` | CPython's, verbatim |
+| *(found on the way)* a top-level `def` after `from X import *` did not rebind a name the star import had bound — exactly CPython's `signal.py` | `ImportFromAst >> ___storesModuleSlot___:` answers true for a star import, so the def clears the slot |
+
+**Phase 2 — the runtime walls.** With these, FastAPI's dependency injection,
+parameter defaults, body validation and 422 path run with no workaround —
+`GET /dep?q=7` → `{'q': 7, 'db': 'DB'}`, `GET /dep` → `{'q': 3, ...}`:
+
+| wall | fix |
+|---|---|
+| 2 — class-body `__eq__ = object.__eq__` made the CLASS's `==` a store | the accessor pair stays (math, the `None`-blocking rule and `callable()` all read it), but a protocol dunder's SETTER falls through to `super` unless a marked store is in progress (`ClassDefAst class >> ___isProtocolDunderAttr___:`, `object class >> ___grailClassAttrStoring___`) |
+| 2b — a function ASSIGNED to a protocol dunder (`__len__ = lambda ...`) was never reached by the protocol | instance-side forwarders at the end of the class statement (`___grailInstallAssignedProtocolForwarders___:`) and on a runtime `setattr` (frozen dataclasses' `__setattr__`); they fall back to `super` when the attribute is gone, and a rebuilt class drops them |
+| 2c — `object`'s own method stored under its own name recursed (`__lt__ = object.__lt__`, `C.__repr__ = object.__repr__`, and `__eq__ = object.__eq__` over an inherited `def __eq__` — starlette's exact shape) | `object >> ___isObjectDefault___:for:` makes such a value read as absent; the varargs-`__eq__` probe moved out of `___grailObjectEq___:`, which an explicit `object.__eq__(a, b)` runs |
+| 3 — module functions and methods had no `__defaults__`; `inspect.signature` defaults were source text | module functions record a defaults block at the def (`module >> ___setFunctionDefaults___:block:`) over the same memo the method binds from; methods get a class-side `___methodDefaultKeysTable___` naming the class-body default store. Closures already had a real `__defaults__` (read from the def-time temps, assignment writing through — `FunctionDefaultsTestCase`), so nothing changed there. `inspect` now uses the values and keeps `_DefaultText` only where none is available |
+| 4 — `dataclasses` was a stub (no `__post_init__`, `frozen`, `slots`) | CPython's module, verbatim. It needed: `exec`'d defs to read a parameter named `self` (`NameAst` bailed out in a doit); `sys._clear_type_descriptors`; a `__code__` on a class's `__annotate_func__`; `types.FunctionType` to exclude a built-in type's method (`object.__hash__`); and four `type(name, bases, ns)` bugs, below |
+| 4b — `type(name, bases, ns)` | `T(1)` with an `__init__` in the namespace was `__new__(1)` (uncatchable) and `T()` skipped `__init__`; `(object,)` rooted the class at the kernel `Object` rather than `PythonInstance`; declared `__slots__` got no accessors; and a copied function was unreachable by a self-send (`self.b()`), which broke every method-to-method call in a `slots=True` dataclass |
+| 5 (early) — CPython's dataclasses reads `default.__class__.__hash__`, and pydantic's defaults are pydantic_core objects | the shim answers `__class__` (`Py_TYPE`) in C, and a foreign `__hash__` C does not answer falls back to `object.__hash__` |
+
+Tests that pinned the old `dataclasses` stub were moved to CPython's answers:
+`FlaskScaffoldingTestCase` (`make_dataclass` now works; `MISSING` is a
+`_MISSING_TYPE`) and `EnumDataclassReprTestCase` (a `repr=False` field is left
+out of the generated `__repr__`; a member's field reads its default, `True`).
+The enum member repr of a `@dataclass` mixin applies CPython's `_value_repr_`
+in `Enum >> ___grailMemberRepr:` too, since the mixin's `__repr__` is now a
+forwarder the merge would otherwise find; and `importlib >>
+___primaryChainProvides___:` does not count forwarders as methods.
+
+**Known, not fixed** (none on FastAPI's path):
+
+* the accessor pair's unary GETTER has the same collision as the setter had:
+  `repr(C)` of a class whose body assigns `__repr__` answers the function;
+* `class C: __eq__ = None` keeps the old class-level `==` collision (the
+  `None`-blocking readers need the pair);
+* a class attribute holding `object.__repr__` read through an instance binds
+  the wrong receiver (pre-existing);
+* after a class-body `del __eq__`, `C.__dict__` still lists an `__eq__`.
+
+**Where FastAPI stops now** (async endpoints and dependencies, no patches
+but wall 5's encoder `isinstance`):
+
+| request | result |
+|---|---|
+| `GET /`, `GET /dep?q=7`, `GET /dep`, `POST /items` (200 and 422) | as CPython (the 422 detail's key ORDER still differs) |
+| a plain `def` dependency or endpoint | wall 6: `asyncio.base_events` (Phase 4) |
+| `GET /openapi.json` | new shim wall: pydantic validating the OpenAPI model raises `RuntimeError: The given object is not a float` (Phase 3) |
+| `import fastapi` | **~102 s** (was ~70 s): CPython's dataclasses `exec`s source for every dataclass, and Grail's `exec` compiles |
+
+**Gates** (Darwin arm64, 2026-10-05, after merging the pydantic Phase 6 tree):
+`run_tests.sh` **7725 run, 7725 passed**, 8 of 8 shards; the CPython
+conformance gate **0 regressions** (four modules timed out while the SUnit
+suite ran beside it, and are OK alone: test_math, test_bytes, test_pickle,
+test___all__), 3 improvements inherited from `main` (test_zipapp,
+test_exception_group, test_except_star) and one new row, `test_shlex` OK
+45/0/0; `check_python_fixtures.sh` 538 fixtures agree with CPython.
+
+**Next:** Phase 3 (the shim: `isinstance` against PyO3 types, the OpenAPI
+"not a float" error, the 422 key order) and the Phase 4 decision on sync
+endpoints and `TestClient`.

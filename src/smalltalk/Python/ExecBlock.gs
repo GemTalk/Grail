@@ -851,6 +851,55 @@ ___pyClosure___: anArrayOfCells
 %
 
 category: 'Grail-Attribute Access'
+classmethod: ExecBlock
+___pyDefaultsTuple___: anArray
+	"``__defaults__'' from the raw positional default VALUES a function object
+	found for itself: a tuple, or None when there are none -- or when one of
+	them could not be recovered (nil), since a tuple with a hole would misalign
+	every default after it.  Shared by BoundMethod, UnboundMethod and the
+	closure accessor, so the three agree on that rule."
+
+	(anArray == nil or: [anArray isEmpty]) ifTrue: [^ self ___pyNone___].
+	(anArray includesIdentical: nil) ifTrue: [^ self ___pyNone___].
+	^ self ___pyTupleClass___ perform: #'withAll:' env: 0 withArguments: { anArray }
+%
+
+category: 'Grail-Attribute Access'
+classmethod: ExecBlock
+___pyKwDefaultsDict___: aFlatArray
+	"``__kwdefaults__'' from ``{ name1. value1. name2. value2 ... }'': a dict, or
+	None when empty.  A value that could not be recovered (nil) is left out, so
+	the parameter reads as required rather than as defaulting to nothing."
+
+	| d |
+	(aFlatArray == nil or: [aFlatArray isEmpty]) ifTrue: [^ self ___pyNone___].
+	d := (Python at: #PyDict) perform: #new env: 0.
+	1 to: aFlatArray size by: 2 do: [:i |
+		(aFlatArray at: i + 1) == nil ifFalse: [
+			d at: (aFlatArray at: i) put: (aFlatArray at: i + 1)]].
+	d isEmpty ifTrue: [^ self ___pyNone___].
+	^ d
+%
+
+category: 'Grail-Attribute Access'
+classmethod: ExecBlock
+___pyDefaultsFromKeys___: anEntry on: aClass
+	"Resolve a ___methodDefaultKeysTable___ entry -- ``{ { posKey ... } . { name .
+	key ... } }'', compiled by ClassDefAst -- into ``{ posValues . kwPairs }'',
+	reading each key from the per-class default store the class body filled
+	(ClassDefAst >> emitMethodDefaultStoresOn:className:), so the values are the
+	objects a call binds.  A key the store does not hold answers nil."
+
+	| pos kw |
+	pos := (anEntry at: 1) collect: [:k | aClass ___grailClassDefault___: k].
+	kw := Array new: (anEntry at: 2) size.
+	1 to: (anEntry at: 2) size by: 2 do: [:i |
+		kw at: i put: ((anEntry at: 2) at: i).
+		kw at: i + 1 put: (aClass ___grailClassDefault___: ((anEntry at: 2) at: i + 1))].
+	^ { pos . kw }
+%
+
+category: 'Grail-Attribute Access'
 method: ExecBlock
 ___pyKwDefaults___: aCell
 	"Stamp this closure's keyword-only-defaults CELL at def-time.  FunctionDefAst
