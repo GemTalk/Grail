@@ -66,6 +66,18 @@ testTopLevelDefRebindsAnEarlierBinding
 
 category: 'Grail-Tests - module rebinding'
 method: ModuleDefRebindingTestCase
+testTopLevelDefRebindsAStarImportedName
+	"``from X import *'' stores module slots chosen at run time, so a later
+	top-level def of any name clears its slot (ImportFromAst >>
+	___storesModuleSlot___:).  CPython's signal.py star-imports _signal and
+	then defines signal() / getsignal() over it; the raw functions used to win."
+
+	self assertFixtureChecks: #('star_import_then_def' 'star_import_then_decorated_def'
+		'star_import_then_def_bare_call' 'star_import_other_names_kept')
+%
+
+category: 'Grail-Tests - module rebinding'
+method: ModuleDefRebindingTestCase
 testOverloadIsCPythons
 	"typing.overload is CPython's again: the stubs answer _overload_dummy and
 	the implementation displaces it; a lone stub raises when called.  Before

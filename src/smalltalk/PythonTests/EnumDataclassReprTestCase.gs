@@ -99,13 +99,14 @@ testTheMemberShowsOnlyTheReprFields
 category: 'Grail-Tests - The generated repr is replaced'
 method: EnumDataclassReprTestCase
 testOnlyTheMemberReprChanges
-	"str() is unaffected, the value keeps its own full repr, and the field left
-	out of the member repr is still readable on the value -- which is the object
-	CPython hands to v_repr in the first place."
+	"str() is unaffected, the value keeps its own repr (the generated one, which
+	itself honours repr=False since dataclasses became CPython's), and the field
+	left out of the member repr is still readable on the value -- which is the
+	object CPython hands to v_repr in the first place."
 
 	self assert: (self resultAt: 'str') asString equals: 'Creature.DOG'.
 	self assert: (self resultAt: 'value_repr') asString
-		equals: 'CreatureDataMixin(size=''medium'', legs=4, tail=True)'.
+		equals: 'CreatureDataMixin(size=''medium'', legs=4)'.
 	self assert: (self resultAt: 'hidden_on_value').
 	self assert: (self resultAt: 'field_on_value') asString equals: 'medium'.
 %
@@ -113,14 +114,17 @@ testOnlyTheMemberReprChanges
 category: 'Grail-Tests - The generated repr is replaced'
 method: EnumDataclassReprTestCase
 testMemberFieldAccessIsAKnownGap
-	"Pinned so it is not mistaken for part of this fix: in CPython the member is
-	itself an instance of the dataclass, so Creature.DOG.tail is True.  Grail
-	leaves the fields on the value only, and the member falls through to the
-	class attribute -- still the Field object, because Grail's @dataclass does
-	not replace a field(...) declaration with its default either."
+	"In CPython the member is itself an instance of the dataclass, so
+	Creature.DOG.tail is True.  Grail leaves the fields on the value only, and
+	the member falls through to the CLASS attribute -- which, now that
+	dataclasses is CPython's, is the field's default (True) rather than the
+	Field object the old stub left there.  So the answer agrees with CPython,
+	though by a different route: a field whose class attribute is not its
+	default (a default_factory) would still differ.  The fixture key keeps its
+	old name."
 
 	self assert: (self resultAt: 'member_field_is_a_known_gap') asString
-		equals: 'Field(name=''tail'', default=True, init=True)'.
+		equals: 'True'.
 %
 
 category: 'Grail-Tests - The other outcomes are unchanged'
@@ -159,9 +163,9 @@ method: EnumDataclassReprTestCase
 testADataclassInstanceAsAnOrdinaryValueKeepsItsOwnRepr
 	"The rule is about the enum's data TYPE, not about the value happening to be
 	a dataclass.  Bases of (Enum,) make CPython's walk stop at Enum and take its
-	_value_repr_ (None), so the value reprs itself -- mixin name, hidden field
-	and all."
+	_value_repr_ (None), so the value reprs itself -- mixin name and all.  (A
+	repr=False field is left out by the generated __repr__ itself.)"
 
 	self assert: (self resultAt: 'plain_value') asString
-		equals: '<Plain.A: Free(x=1, hidden=9)>'.
+		equals: '<Plain.A: Free(x=1)>'.
 %

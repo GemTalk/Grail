@@ -86,18 +86,16 @@ def field_factory_rejects_both_defaults():
 
 
 def missing_sentinel_singleton():
-    return repr(MISSING), MISSING is MISSING
+    # CPython's MISSING is an instance of _MISSING_TYPE with the default repr.
+    return type(MISSING).__name__, MISSING is MISSING
 
 
-def make_dataclass_is_stub():
-    """make_dataclass requires 3-arg type(name, bases, ns) which
-    Grail doesn't expose — should raise NotImplementedError so
-    callers can fall back to a regular class statement."""
-    try:
-        make_dataclass('Cls', ['a', 'b'])
-        return 'no-error'
-    except NotImplementedError:
-        return 'caught'
+def make_dataclass_works():
+    """make_dataclass builds the class with 3-arg type(name, bases, ns) --
+    dataclasses is CPython's now, and Grail's type() call is complete enough."""
+    Cls = make_dataclass('Cls', ['a', ('b', int, 5)])
+    c = Cls(1)
+    return repr((c.a, c.b, repr(c)))
 
 
 def frozen_error_is_attribute_error():

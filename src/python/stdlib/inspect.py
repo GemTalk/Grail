@@ -542,20 +542,58 @@ def _signature_from_spec(func):
     if not spec:
         return None
     ann = _annotations_for_render(func)
+    values = _default_values(func, spec)
     params = []
-    for entry in spec:
+    for index, entry in enumerate(spec):
         name = entry[0]
         kind = _KINDS[entry[1]]
         # Two elements means "no default" -- see emitSignatureEntryFor:.
         default = entry[2] if len(entry) > 2 else None
+        if default is None:
+            default = _empty
+        elif index in values:
+            default = values[index]
+        else:
+            default = _DefaultText(default, func)
         params.append(Parameter(
-            name, kind,
-            default=(_DefaultText(default, func) if default is not None
-                     else _empty),
+            name, kind, default=default,
             annotation=ann.get(name, _empty)))
     return Signature(parameters=params,
                      return_annotation=ann.get('return', _empty))
 
+
+
+def _default_values(func, spec):
+    """{spec index: default VALUE} for the parameters whose value the function
+    object can supply -- ``__defaults__`` and ``__kwdefaults__``, which Grail
+    now carries for module functions, methods and closures alike.
+
+    CPython's signature() reads exactly these, and a caller can tell: FastAPI
+    finds ``Depends(...)`` / ``Query(...)`` by testing the default's TYPE, which
+    no source text can pass.  A parameter whose value is not available keeps
+    the _DefaultText stand-in.
+
+    The positional defaults belong to the LAST positional parameters that
+    have one, so they are matched from the end: a bound method's spec has
+    already dropped its receiver, and a binding that dropped a defaulted first
+    parameter shortens the spec, not the tuple.
+    """
+    found = {}
+    try:
+        pos_defaults = getattr(func, '__defaults__', None)
+        kw_defaults = getattr(func, '__kwdefaults__', None)
+    except BaseException:
+        return found
+    if isinstance(pos_defaults, tuple) and pos_defaults:
+        positional = [i for i, e in enumerate(spec)
+                      if e[1] in (0, 1) and len(e) > 2 and e[2] is not None]
+        for i, value in zip(reversed(positional), reversed(pos_defaults)):
+            found[i] = value
+    if isinstance(kw_defaults, dict) and kw_defaults:
+        for i, e in enumerate(spec):
+            if e[1] == 3 and len(e) > 2 and e[2] is not None and e[0] in kw_defaults:
+                found[i] = kw_defaults[e[0]]
+    return found
 
 class _DefaultText:
     """A default rendered from its SOURCE TEXT rather than its value.

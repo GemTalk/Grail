@@ -6154,6 +6154,14 @@ ___selectStorageBase___: rawBases
 
 	| bases layoutBase |
 	bases := self ___resolveMroEntries___: rawBases.
+	"``object'' NAMED AS A BASE is the same root as no base at all.  A class
+	statement maps ``class R(object):'' to PythonInstance, but
+	``type('R', (object,), ns)'' rooted the class at the kernel Object -- a
+	different class from the identical statement, with no Python instance
+	layout: a declared __slots__ had nowhere to live, so every slotted class
+	CPython's dataclasses rebuilds (it passes the original bases, which are
+	``(object,)'' for a class with none) refused its own fields."
+	bases := bases reject: [:b | b == Object].
 	bases isEmpty ifTrue: [^ PythonInstance].
 	bases do: [:b |
 		(self ___hasBuiltinStorage___: b)
@@ -7780,14 +7788,23 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 		whileTrue: [
 		| md |
 		md := walker methodDictForEnv: 1.
-		md ~~ nil ifTrue: [
+		md ~~ nil ifTrue: [ | has |
+			"A PROTOCOL FORWARDER on an ancestor is not a method that ancestor
+			defines: it stands for a function ASSIGNED to the name
+			(object >> ___grailInstallProtocolForwarder___:value:), which this
+			merge never counted when it was only a holder entry.  Counting the
+			forwarder stopped Enum's __repr__ being copied over a @dataclass
+			mixin's generated one -- ``<Creature.DOG: CreatureDataMixin(...)>''."
+			has := [:sel | (md includesKey: sel)
+				and: [(walker categoryOfSelector: sel environmentId: 1)
+					~= #'Grail-Protocol Forwarders']].
 			(walker == aClass
 				ifTrue: [md includesKey: aSelector]
 				ifFalse: [
 					((aSource isKindOf: Behavior)
 						and: [aSource == walker or: [aSource inheritsFrom: walker]])
-						ifTrue: [md includesKey: aSelector]
-						ifFalse: [family anySatisfy: [:sel | md includesKey: sel]]])
+						ifTrue: [has value: aSelector]
+						ifFalse: [family anySatisfy: [:sel | has value: sel]]])
 					ifTrue: [^ true]].
 		walker := walker superClass
 	].

@@ -1191,7 +1191,21 @@ printSmalltalkRuntimeOn: aStream
 		flag read, then the store, as before."
 		setterSrc := attrName , ': ___1' , lf
 			, '	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
-			, attrName , ''') @env1:value: { ___1 } value: nil].' , lf
+			, attrName , ''') @env1:value: { ___1 } value: nil].' , lf.
+		"A PROTOCOL DUNDER's setter selector is also the PROTOCOL's own send:
+		``__eq__ = object.__eq__'' compiles ``C class >> __eq__:'', and ``C == x''
+		is exactly the send ``C __eq__: x''.  So comparing the CLASS stored x into
+		C.__eq__ and answered C -- starlette's HTTPConnection binds that name, and
+		typing then refused every subclass of Request (``Cannot inherit from plain
+		Generic'') while every ABC check against Mapping went wrong.  Every real
+		store arrives MARKED (object class >> ___grailPerformClassAttrSetter___:
+		on:with:), so an unmarked send is the protocol acting on the class object,
+		and it gets what the class would answer without this pair."
+		(self ___isProtocolDunderAttr___: attrName) ifTrue: [
+			setterSrc := setterSrc
+				, '	(___object___ @env0:___grailClassAttrStoring___) ifFalse: [^ super '
+				, attrName , ': ___1].' , lf].
+		setterSrc := setterSrc
 			, '	self ___classHolderAttrStore___: #''' , attrName , ''' put: ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
@@ -1461,6 +1475,8 @@ printSmalltalkRuntimeOn: aStream
 	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
 	a block, so it cannot carry the def-time cascade a nested def does."
 	self emitMethodSignatureTableOn: aStream className: name.
+	"...and the default VALUES' store keys, for __defaults__ / __kwdefaults__."
+	self emitMethodDefaultKeysTableOn: aStream className: name.
 	"And the receiver name that table drops, so the UNBOUND read can put it
 	back -- CPython's signature(Cls.method) shows ``self''."
 	self emitMethodReceiverTableOn: aStream className: name.
@@ -1839,9 +1855,8 @@ printSmalltalkRuntimeOn: aStream
 								"Through the marked store helper, not a bare ``Cls attr: v'' send:
 								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
 								send as a Python call (see ___grailClassAttrSetterDiverts___)."
-								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
-									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
-									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
+								self ___emitClassAttrStoreOpen___: pair key on: aStream.
+								aStream nextPutAll: '('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('; nextPutAll: self ___stVarName___; nextPutAll: ' ';
 									nextPutAll: (emittedChainValues at: pair value);
@@ -1891,9 +1906,8 @@ printSmalltalkRuntimeOn: aStream
 										pair value printSmalltalkWithParenthesisOn: aStream.
 										aStream nextPutAll: ').'; lf]
 									ifFalse: [
-								aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
-									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
-									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
+								self ___emitClassAttrStoreOpen___: pair key on: aStream.
+								aStream nextPutAll: '('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('.
 								pair value printSmalltalkWithParenthesisOn: aStream.
@@ -2010,9 +2024,20 @@ printSmalltalkRuntimeOn: aStream
 					aStream nextPutAll: ' @env0:yourself).'; lf]
 				ifFalse: [
 					aStream nextPutAll: self ___stVarName___;
-						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotate_func__'' put: '.
+						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotate_func__'' put: (('.
 					self emitClassAnnotateBlockOn: aStream.
-					aStream nextPutAll: '.'; lf.
+					"With a __code__, as every function in a class __dict__ has in
+					 CPython: dataclasses' slots=True walks the dict reading
+					 ``f.__code__.co_freevars'' for each one, and this was the only
+					 entry without it (AttributeError from @dataclass(slots=True))."
+					aStream
+						nextPutAll: ') @env0:___pyCode___: (PyCode @env0:name: ''__annotate__'' qualname: ''';
+						nextPutAll: name asString;
+						nextPutAll: '.__annotate__'' filename: '.
+					self emitSourceFilenameLiteralOn: aStream.
+					aStream
+						nextPutAll: ' firstlineno: '; nextPutAll: self beginLine printString;
+						nextPutAll: ' argcount: 1 posonlyargcount: 1 kwonlyargcount: 0)).'; lf.
 					"...and into the class-body NAMESPACE, when a metaclass prepared
 					 one: CPython's ``__annotate_func__'' is a class-body binding, so a
 					 metaclass __new__ reads it from ns --
@@ -2576,9 +2601,8 @@ printSmalltalkRuntimeOn: aStream
 			and: [(readInOrder includes: pair key asSymbol) not]]]) ifTrue: [
 				"Marked store helper rather than a bare setter send -- see the
 				attribute-value emit above and ___grailClassAttrSetterDiverts___."
-				aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
-					nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
-					nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
+				self ___emitClassAttrStoreOpen___: pair key on: aStream.
+				aStream nextPutAll: '('; nextPutAll: self ___stVarName___;
 					nextPutAll: ' @env1:___pyAttrLoad___: #''';
 					nextPutAll: pair value id asString; nextPutAll: ''').'; lf]].
 
@@ -5263,6 +5287,47 @@ emitClassBodyIfDef: aDef on: aStream
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___emitClassAttrStoreOpen___: aName on: aStream
+	"Open a class-body store of attribute aName through its class-side setter,
+	by the MARKED helper (see ___grailClassAttrSetterDiverts___ and, for a
+	protocol dunder, ___isProtocolDunderAttr___:); the caller writes the
+	parenthesised value and the closing ``).''."
+
+	aStream nextPutAll: '___object___ @env0:___grailPerformClassAttrSetter___: #''';
+		nextPutAll: aName asString; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+		nextPutAll: ' with: '
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___isProtocolDunderAttr___: aName
+	"See the class-side method, which NameAst asks too."
+
+	^ self class ___isProtocolDunderAttr___: aName
+%
+
+category: 'Grail-Class Compilation'
+classmethod: ClassDefAst
+___isProtocolDunderAttr___: aName
+	"Is aName a special METHOD name -- one Grail dispatches as a Smalltalk send
+	(``=='' sends __eq__:, ``+'' sends __add__:) -- so that the class-side
+	SETTER of its accessor pair has the protocol's own selector, and an
+	unmarked send of it is the protocol acting on the CLASS OBJECT rather than
+	a store?  See the pair emission in printSmalltalkOn:, which makes such a
+	setter fall through to ``super'' unless a store is in progress.
+
+	    class HTTPConnection(Mapping[str, Any], Generic[StateT]):
+	        __eq__ = object.__eq__          -- starlette.requests
+
+	A POSITIVE list, of CPython's slot methods and the protocols Grail sends.
+	The pair itself stays: it is how math, the None-blocking rule, callable()
+	and many more find a dunder a class body ASSIGNED."
+
+	^ object @env1:___grailIsProtocolDunderName___: aName
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 ___classBodyDeletedNames___
 	"Names this class body ``del''s, anywhere in it, as Symbols.
 
@@ -5866,6 +5931,57 @@ emitMethodSignatureTableOn: aStream className: aClassName
 		def emitSignatureSpecOn: src
 			skipReceiver: (def isKindOf: StaticFunctionDefAst) not.
 		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: src contents
+		category: 'Grail-Signatures'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodDefaultKeysTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodDefaultKeysTable___'' -- method name ->
+	``#( #( posKey ... ) #( 'kwName' kwKey ... ) )'' -- naming, for each method
+	with defaults, the per-class store entries emitMethodDefaultStoresOn:
+	fills while the class body runs.  BoundMethod / UnboundMethod >>
+	__defaults__ read the values through it, so ``m.__defaults__'' and
+	inspect.signature report the objects a call binds -- which is how FastAPI
+	finds ``Depends(...)'' on a dependency class's __init__.
+
+	KEYS, NOT EXPRESSIONS.  The table is literals only, so it always compiles
+	-- a default expression naming an enclosing function's local would not
+	compile in a separate class-side method, and would take every method's
+	entry with it.  The store holds the evaluated values already.
+
+	Exactly the defs that store does (no static methods, no overload stubs),
+	keyed by the same ___classDefaultKeyFor___:className: spelling."
+
+	| defs src |
+	defs := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [(def isKindOf: StaticFunctionDefAst) not
+			and: [def ___defaultedPositionalParams___ notEmpty
+				or: [def ___defaultedKeywordOnlyParams___ notEmpty]]]].
+	defs isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodDefaultKeysTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	defs do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString;
+			nextPutAll: ''' put: #( #('.
+		def ___defaultedPositionalParams___ do: [:pair |
+			src nextPutAll: ' #'''; nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1)
+				className: aClassName); nextPut: $'].
+		src nextPutAll: ' ) #('.
+		def ___defaultedKeywordOnlyParams___ do: [:pair |
+			src nextPutAll: ' '''; nextPutAll: (pair at: 1) asString; nextPutAll: ''' #''';
+				nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
+				nextPut: $'].
+		src nextPutAll: ' ) );'].
 	src nextPutAll: ' @env0:yourself)'.
 	self
 		emitCompileMethodOn: self ___stVarName___

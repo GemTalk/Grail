@@ -1115,6 +1115,19 @@ getrecursionlimit
 
 category: 'Grail-Built-in Functions'
 method: sys
+_clear_type_descriptors: aType
+	"_clear_type_descriptors(type) -> None.  CPython 3.14's dataclasses calls
+	it from _add_slots, on the class it is about to REPLACE with a slotted
+	copy, to drop that class's __dict__ / __weakref__ getset descriptors so
+	they stop referencing it.  Grail has no such descriptors to clear, so this
+	is the whole of it -- but without the name, ``@dataclass(slots=True)''
+	raised AttributeError."
+
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
 _getframe
 	"_getframe() -> the CALLER's frame.  CPython's default depth is 0, which
 	means the frame of whoever called _getframe, not _getframe's own."

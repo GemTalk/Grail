@@ -2356,24 +2356,25 @@ category: 'Grail-Tests - dataclasses'
 method: FlaskScaffoldingTestCase
 testDataclassesMissingSentinel
 	"MISSING is a typed singleton — distinguishes ``no default''
-	from ``default of None''."
+	from ``default of None''.  CPython's: an instance of _MISSING_TYPE."
 
 	| mod result |
 	mod := self loadFixture: 'use_dataclasses'.
 	result := mod @env1:missing_sentinel_singleton.
-	self assert: (result @env1:__getitem__: 0) equals: 'MISSING'.
+	self assert: (result @env1:__getitem__: 0) equals: '_MISSING_TYPE'.
 	self assert: (result @env1:__getitem__: 1) equals: true
 %
 
 category: 'Grail-Tests - dataclasses'
 method: FlaskScaffoldingTestCase
-testDataclassesMakeDataclassStub
-	"make_dataclass raises NotImplementedError — Grail doesn't
-	expose 3-arg type(name, bases, ns) class creation."
+testDataclassesMakeDataclassWorks
+	"make_dataclass builds a working class -- dataclasses is CPython's module,
+	over 3-arg type(name, bases, ns)."
 
 	| mod |
 	mod := self loadFixture: 'use_dataclasses'.
-	self assert: mod @env1:make_dataclass_is_stub equals: 'caught'
+	self assert: mod @env1:make_dataclass_works
+		equals: '(1, 5, ''Cls(a=1, b=5)'')'
 %
 
 category: 'Grail-Tests - dataclasses'

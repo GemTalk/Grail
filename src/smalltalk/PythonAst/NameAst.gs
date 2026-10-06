@@ -2044,7 +2044,14 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 
 	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet child |
 	(NameAst isReservedSmalltalkIdentifier: aSymbol) ifFalse: [^ false].
-	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"A module compile, OR an exec()/eval() doit: a def compiled there declares
+	its parameter under the same transport name, so its body must read it.
+	Bailing out for the doit left ``def __init__(self, x): self.x = x'' run
+	through exec() reading Smalltalk's self -- nil in a doit -- which is how
+	every method CPython's dataclasses generates (it builds them with exec)
+	failed with ``'UndefinedObject' object has no attribute 'x'''."
+	(CallAst moduleClassBeingCompiled isNil
+		and: [ModuleAst compilingDoitScope isNil]) ifTrue: [^ false].
 	child := self.
 	node := parent.
 	[node notNil] whileTrue: [

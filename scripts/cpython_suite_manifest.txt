@@ -462,3 +462,7 @@ test.test_random
 # string: CPython's pure-Python string package over a pure-Python _string
 # (the hand-written Smalltalk module had Template = None).
 test.test_string.test_string
+
+# shlex: CPython's module, vendored verbatim (the 88-line split/join/quote
+# stub had no `shlex` lexer class, which starlette.datastructures imports).
+test.test_shlex
