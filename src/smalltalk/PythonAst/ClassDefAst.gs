@@ -123,7 +123,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName decoratedProps
 	  slotNamesOrdered slotNameSet mangledSlotNames savedBackingInstVars
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
-	  slotPropertyNames accessorInferredNames accessorPairsWanted renamedPairsOrdered
+	  slotPropertyNames accessorInferredNames accessorPairsWanted renamedPairsOrdered declaresTransient
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
@@ -2299,13 +2299,23 @@ printSmalltalkRuntimeOn: aStream
 	nothing but declares properties or an attribute hook, for the forwarder
 	cases."
 	renamedPairsOrdered := self renamedNamePairs.
+	"Class-level __transient__ (docs/App_Namespaces_Design.md §6.3): record the
+	names and route them to session storage BEFORE the slot installer, which
+	keeps them out of the indexed layout -- and runs whenever the body declares
+	them, so a name an ANCESTOR inferred as a slot gets this class's dynamic
+	pair even when this body infers nothing."
+	declaresTransient := self transientValueAst notNil.
+	declaresTransient ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___grailInstallTransientAttrs___.'; lf].
 	(slotNamesOrdered isEmpty not
+		or: [declaresTransient
 		or: [renamedPairsOrdered isEmpty not
 		or: [accessorPairsWanted
 		and: [accessorInferredNames isEmpty not
 			or: [slotPropertyNames isEmpty not
 			or: [self instanceMethodDefs anySatisfy: [:def |
-				#('__setattr__' '__getattribute__') includes: def name asString]]]]]]) ifTrue: [
+				#('__setattr__' '__getattribute__') includes: def name asString]]]]]]]) ifTrue: [
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailInstallInferredSlots___: '.
 		self printSymbolArray: (accessorPairsWanted ifTrue: [accessorInferredNames] ifFalse: [#()]) on: aStream.
@@ -4253,6 +4263,32 @@ slotsValueAst
 		((stmt isKindOf: AnnAssignAst)
 			and: [(stmt target isKindOf: NameAst)
 			and: [stmt target id asString = '__slots__'
+			and: [stmt value notNil]]])
+				ifTrue: [result := stmt value].
+	].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+transientValueAst
+	"Return the value-expression AST of the class body's ``__transient__''
+	assignment -- plain or annotated -- or nil when the class declares none
+	(docs/App_Namespaces_Design.md §6.3).  Only its presence is read here:
+	the value is evaluated with the body and parsed at run time by
+	object class >> ___grailInstallTransientAttrs___."
+
+	| result |
+	result := nil.
+	body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [stmt targets size = 1
+			and: [(stmt targets first isKindOf: NameAst)
+			and: [stmt targets first id asString = '__transient__']]])
+				ifTrue: [result := stmt value].
+		((stmt isKindOf: AnnAssignAst)
+			and: [(stmt target isKindOf: NameAst)
+			and: [stmt target id asString = '__transient__'
 			and: [stmt value notNil]]])
 				ifTrue: [result := stmt value].
 	].

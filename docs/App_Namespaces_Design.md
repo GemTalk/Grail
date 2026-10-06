@@ -427,9 +427,8 @@ What Grail does meanwhile:
 
 Until the kernel marks GsSocket and GsFile, a socket or file in a committed
 global still commits and fails in the next session, as §6.0 measured.
-Naming the global in `__transient__` keeps it out of the commit today;
-class-level `__transient__` (§6.3, not built yet) will do the same for an
-attribute.
+Naming the global in `__transient__` keeps it out of the commit, and
+class-level `__transient__` (§6.3) does the same for an attribute.
 
 ### 6.3 Class-level `__transient__`
 
@@ -447,6 +446,38 @@ class Connection:
 The named attributes are never committed: they read as unset in a session
 that did not assign them, and `__session_init__` (D5) is where they are
 rebuilt.
+
+*As built (cut 5):*
+
+- **Where they live.** In `SessionTemps`, keyed by the object (below). The
+  names get no slot position, so they are never in the object's storage, and
+  `vars()`, `getattr`, `setattr`, `del` and `hasattr` treat them as any other
+  attribute. A store on a committed object is not a write, and an abort leaves
+  the value alone.
+- **When `__session_init__` runs.** Lazily, once per object per session: on
+  the first read of a transient attribute that this session has not set, if
+  the object is committed and its class defines the hook. A new object built
+  this session does not run it; its `__init__` sets the attribute. The hook is
+  marked as run before it is called, so one that reads an attribute it has
+  not yet set gets `AttributeError` rather than recursing.
+- **Inheritance.** A subclass's names join its base's (`__transient__` is
+  read from each class's own body and unioned), so a subclass never commits a
+  name its base keeps transient, even one it assigns in its own `__init__`.
+- **The value** is a str (one name) or a collection of str, as for
+  `__slots__`. Anything else is a `TypeError` at class creation, and a name in
+  both `__slots__` and `__transient__` is a `ValueError`, as CPython refuses a
+  `__slots__` name that conflicts with a class variable.
+- **Mechanism.** `ClassDefAst` emits `___grailInstallTransientAttrs___` after a
+  body that assigns `__transient__`. It records the names class-side and
+  overrides the five env-0 dynamic-instVar accessors (read, store, delete,
+  listing, and the pairs the `__dict__` view reads). The slot installer keeps
+  the names out of the layout and the index table and gives them the dynamic
+  pair, so every path reaches the overrides. A rebuild without the declaration
+  drops the overrides.
+- **Cost.** Only instances of a class that declares it pay: each dynamic
+  attribute access asks the class for its names.
+- **Not covered:** a class *attribute* such as `_cache = {}` in the class body
+  still commits with the class (Persistent Modules §8.2).
 
 It is GemStone's **DbTransient** idea, but not GemStone's DbTransient
 mechanism. A DbTransient object's slots can silently revert to `nil` *within
@@ -596,7 +627,8 @@ exists.
    routes `gemdb.commit()` and `gemdb.transaction()` through `___tryCommit___`,
    so a refusal is a catchable `gemdb.SessionStateError`, which names the
    path to the refused object; the deploy audit shares its walker and path
-   renderer. Class-level `__transient__` (§6.3) remains to do.
+   renderer. Class-level `__transient__` (§6.3) is built; see its as-built
+   notes.
 
 6. **`gemdb.admin.namespaces()` / `drop_namespace()`**, and the docs: GemDB_Module.md,
    Persistent Modules (new departures next to D4 for persistent app globals,

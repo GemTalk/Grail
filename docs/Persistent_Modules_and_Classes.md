@@ -703,8 +703,10 @@ The names have to be a literal list or tuple of strings in the module body,
 known when the class is built. That module's class, and only it, gets
 overrides of the three dynamic-instVar accessors, with the names inlined and
 the values kept in SessionTemps. A module that declares nothing pays nothing.
-The declaration is itself transient, so it is not a write either. The
-class-scope `__transient__` of §8.2 is a separate, still-open item.
+The declaration is itself transient, so it is not a write either. A
+class-scope `__transient__` now exists for INSTANCE attributes
+(App_Namespaces_Design.md §6.3); the class-attribute case of §8.2 is still
+open.
 
 ### D13. A module-level `Final` initializes once
 
@@ -949,6 +951,11 @@ cross-user conflicts. Same shape at module scope for anything not listed in
 Wanted: a class-scope `__transient__ = [...]` (SessionDict-backed, the mirror of
 D4; the module-scope one is D12), and a `deploy_check` predicate that flags
 mutable class-body containers the way it already flags sockets and locks.
+
+Partly done: class-level `__transient__` exists for INSTANCE attributes
+(`self._sock`; App_Namespaces_Design.md §6.3). A name it lists is kept out of
+each instance's storage. It does not make a class attribute such as `_cache`
+session-local, which is what this item asks for.
 
 ### 8.3 Instance migration for a changed class shape
 

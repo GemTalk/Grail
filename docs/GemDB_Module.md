@@ -170,8 +170,22 @@ the block aborts before raising (`aborted=True`), and after an explicit
 `gemdb.abort()` discards the transaction.
 
 Sockets and open files are not refused yet: they commit, and fail in the
-next session. Keep them out of the commit (`__transient__` for a module
-global). Asking GemStone to refuse them too, and to let a refused
+next session. Keep them out of the commit: `__transient__` for a module
+global, and for an attribute a class-level `__transient__`, with a
+`__session_init__` that rebuilds it in a later session:
+
+```python
+class Connection:
+    __transient__ = ("_sock",)          # never committed
+
+    def __init__(self, address):
+        self.address = address
+        self._sock = socket.create_connection(address)
+
+    def __session_init__(self):         # first use in a later session
+        self._sock = socket.create_connection(self.address)
+```
+ Asking GemStone to refuse them too, and to let a refused
 transaction be fixed and retried, is
 [GemStone_Feature_Requests.md §1.8](GemStone_Feature_Requests.md); the
 decision is in [App_Namespaces_Design.md §6.2](App_Namespaces_Design.md).
@@ -684,6 +698,15 @@ is now `gemdb.schema`, above.
   in the namespace is refused. A module-level `Final` evaluates on the first run and
   keeps its committed value, without evaluating, on the re-run and after the
   edit.
+* `tests/scripts/runClassTransientTest.gs` (wired in as `class-transient`) —
+  class-level `__transient__` over two sessions. A deploy audit before the
+  deploying commit finds nothing in a module global holding a transient socket;
+  the committed object stores no socket and no `_sock`; a store on a committed
+  object is not a write and survives an abort. In a new session
+  `__session_init__` rebuilds the attribute once per object, through a dict in
+  `gemdb.root`, a subclass, and a deployed module's global.
+  `ClassTransientTestCase` covers the in-session half: layout, `vars()`, `del`,
+  the subclass union, and the two errors.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
   — the class-level half over a fixture module with a committed instance:
   the refusals for a changed base, a removed class and a renamed one, and
