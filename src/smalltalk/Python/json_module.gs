@@ -338,7 +338,13 @@ _encodeObject: dict onto: stream indent: indent depth: depth separators: sep ens
 	itemSep := sep @env0:at: 1.
 	keySep := sep @env0:at: 2.
 	stream @env0:nextPut: ${.
-	keys := dict @env0:keys @env0:asArray.
+	"keysDo:, not keys: a Python dict (PyDict) walks its INSERTION order there,
+	which is what CPython's encoder emits, while ``keys'' answers a Set in hash
+	order -- every serialised object came out shuffled, FastAPI's 422 bodies
+	included (``msg, input, type, loc'' for ``type, loc, msg, input'')."
+	keys := OrderedCollection @env0:new.
+	dict @env0:keysDo: [:k | keys @env0:add: k].
+	keys := keys @env0:asArray.
 	sortKeys ifTrue: [
 		keys := keys @env0:asSortedCollection: [:a :b | a @env0:asString @env0:< b @env0:asString].
 		keys := keys @env0:asArray

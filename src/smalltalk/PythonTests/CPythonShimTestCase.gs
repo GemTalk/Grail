@@ -2838,6 +2838,56 @@ testDuringCallDoRestoresDepthAndReturnsValue
 ! The C-API answers pydantic_core reached and the shim got wrong, each through
 ! the _shimtest function that makes the call the way a PyO3 wheel does.
 
+category: 'Grail-Tests - FastAPI Phase 3'
+method: CPythonShimTestCase
+testIsinstanceAgainstAForeignType
+	"A type defined in a C extension reaches Grail as a proxy, not a Behavior,
+	and ``isinstance(x, T)'' raised ``arg 2 must be a type'' -- fastapi's
+	jsonable_encoder asks it of pydantic_core's PydanticUndefinedType for every
+	value.  Answered in C now (shimForeignTypeCheck), and type() of a proxy is
+	its C type, by identity."
+
+	| shim bi obj typ |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	bi := builtins @env1:instance.
+	obj := shim callModule: '_shimtest' method: 'test_make_counter'.
+	typ := shim callModule: '_shimtest' method: 'test_counter_type'.
+	self assert: (bi @env1:isinstance: obj _: typ).
+	self deny: (bi @env1:isinstance: 5 _: typ).
+	self assert: (bi @env1:isinstance: obj _: (self eval: '(int, )') , { typ }).
+	self assert: (bi @env1:issubclass: typ _: typ).
+	self deny: (bi @env1:issubclass: (self eval: 'int') _: typ).
+	self assert: (bi @env1:type: obj) == typ
+%
+
+category: 'Grail-Tests - FastAPI Phase 3'
+method: CPythonShimTestCase
+testFloatAsDoubleFollowsCPython
+	"PyFloat_AsDouble read anything that was not a SmallInteger or a Float with
+	GciOopToFlt -- ``The given object is not a float'' for a bool or a dict,
+	``not representable'' for an int beyond 64 bits -- which pydantic hit
+	building FastAPI's OpenAPI document.  Now CPython's nb_float / nb_index,
+	with TypeError and OverflowError, and no exception raised inside the user
+	action."
+
+	| shim r |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: 2) equals: 2.0.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: 1.5) equals: 1.5.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: true) equals: 1.0.
+	r := shim callModule: '_shimtest' method: 'test_as_double' with: (self eval: '10**20').
+	self assert: r equals: 1.0e20.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: (self eval: '10**400'))
+		equals: 'OverflowError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: (self eval: '{1: 2}'))
+		equals: 'TypeError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double'
+			with: (self eval: '__import__(''fractions'').Fraction(1, 4)'))
+		equals: 0.25
+%
+
 category: 'Grail-Tests - Pydantic Phase 6'
 method: CPythonShimTestCase
 testVectorcallMethodCallsTheMethod

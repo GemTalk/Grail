@@ -1622,6 +1622,43 @@ test_as_long(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
     return PyLong_FromLong(v);
 }
 
+/* test_counter_type() -> the C-defined _shimtest.Counter TYPE itself, which
+   reaches Grail as a foreign proxy -- for isinstance / issubclass / type()
+   against a wheel's own class (FastAPI Phase 3: pydantic_core's
+   PydanticUndefinedType). */
+static PyObject *
+test_counter_type(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    if (!CounterType) {
+        PyErr_SetString(PyExc_RuntimeError, "Counter type not initialized");
+        return NULL;
+    }
+    Py_INCREF(CounterType);
+    return CounterType;
+}
+
+/* test_as_double(obj) -> PyFloat_AsDouble(obj), or the name of the exception
+   it raised ("TypeError" / "OverflowError").  pydantic_core asks for a float
+   from every member of a union it tries -- a dict, a bool, an int beyond 64
+   bits -- and expects CPython's answers. */
+static PyObject *
+test_as_double(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_as_double expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    double v = PyFloat_AsDouble(args[0]);
+    if (v == -1.0 && PyErr_Occurred()) {
+        const char *name = PyErr_ExceptionMatches(PyExc_OverflowError) ? "OverflowError"
+                         : PyErr_ExceptionMatches(PyExc_TypeError) ? "TypeError" : NULL;
+        if (name == NULL) return NULL;
+        PyErr_Clear();
+        return PyUnicode_FromString(name);
+    }
+    return PyFloat_FromDouble(v);
+}
+
 /* test_dict_copy_del(d, key) -> a PyDict_Copy of d with key deleted from
    the copy by PyDict_DelItem.  On an instance's __dict__ view both used to
    fail: the copy was a second view of the same instance, and the view had
@@ -1876,6 +1913,10 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_set_type(obj) -> 1 set, 2 frozenset, 0 other"},
     {"test_as_long", (PyCFunction)(void *)test_as_long,
      METH_FASTCALL, "test_as_long(obj) -> PyLong_AsLong(obj) or 'TypeError'"},
+    {"test_counter_type", (PyCFunction)(void *)test_counter_type,
+     METH_FASTCALL, "test_counter_type() -> the _shimtest.Counter type"},
+    {"test_as_double", (PyCFunction)(void *)test_as_double,
+     METH_FASTCALL, "test_as_double(obj) -> PyFloat_AsDouble(obj) or the error name"},
     {"test_dict_copy_del", (PyCFunction)(void *)test_dict_copy_del,
      METH_FASTCALL, "test_dict_copy_del(d, key) -> copy of d without key"},
     {"test_type_check", (PyCFunction)(void *)test_type_check,

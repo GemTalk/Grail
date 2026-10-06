@@ -945,3 +945,26 @@ test_exception_group, test_except_star) and one new row, `test_shlex` OK
 **Next:** Phase 3 (the shim: `isinstance` against PyO3 types, the OpenAPI
 "not a float" error, the 422 key order) and the Phase 4 decision on sync
 endpoints and `TestClient`.
+
+### Phase 3, done *(2026-10-06)*
+
+With these, every response the probe app gives — `GET /`, `/dep` with and
+without `q`, the pydantic `POST` and its 422, and **`/openapi.json`** — is
+byte-identical to CPython's, with nothing patched (async endpoints and
+dependencies; plain `def` ones are Phase 4).
+
+| wall | fix |
+|---|---|
+| 5 — `isinstance(x, T)` raised when `T` is a PyO3 class (`PydanticUndefinedType`); fastapi's `jsonable_encoder` asks it of every value | `isinstance` / `issubclass` against a foreign TYPE are answered in C (`shimForeignTypeCheck`: `PyObject_TypeCheck` / `PyType_IsSubtype`; a Grail object is never an instance); `type()` of a proxy is its C type, so `type(PydanticUndefined) is PydanticUndefinedType` holds |
+| 5b — OpenAPI generation: `RuntimeError: The given object is not a float`, then a segfault in `PyDict_SetItem` | `PyFloat_AsDouble` read anything but a SmallInteger or Float with `GciOopToFlt` (a dict, a bool) and an int beyond 64 bits with `GciOopToI64`. Now CPython's `nb_float` / `nb_index` with TypeError and OverflowError — and the Smalltalk half answers a failure MARKER rather than signalling, because an exception unwinding across the user-action frame is uncontinuable (that was the segfault) |
+| 5c — the 422 detail's key order | not the shim: Grail's `json.dumps` walked every dict in HASH order (`dict keys`); it walks insertion order now (`keysDo:`), as CPython's encoder does |
+
+Tests: `CPythonShimTestCase` *FastAPI Phase 3* (`_shimtest.test_counter_type`,
+`test_as_double`), and the json order checks in `fastapi_walls.py` (60 checks).
+
+**Measured** (Darwin arm64, same probe as §7): **~32 ms per request** against
+CPython's 0.2 ms, and `import fastapi` still ~102 s.
+
+**Next:** Phase 4 — plain `def` endpoints and dependencies (anyio's asyncio
+backend: `asyncio.base_events`, a worker thread) and `TestClient` (anyio's
+blocking portal).

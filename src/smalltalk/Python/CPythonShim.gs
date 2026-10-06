@@ -1264,6 +1264,17 @@ foreignGetAttr: cPtr name: aString
 
 category: 'Grail-Calling'
 method: CPythonShim
+foreignTypeCheck: objPtr type: typePtr subclass: aBoolean
+	"isinstance (aBoolean false) / issubclass (true) against a wheel's own TYPE
+	typePtr, for the candidate objPtr -- 0 for a Grail object.  nil when
+	typePtr is not a type.  See shimForeignTypeCheck in cpython.cc."
+
+	^ self ___shimUserAction: #shimForeignTypeCheck
+		withArgs: { objPtr . typePtr . aBoolean == true }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 foreignStr: cPtr repr: aBoolean
 	"str() -- or repr() when aBoolean -- of a wheel's own C object, through its
 	tp_str / tp_repr; nil when C has nothing to offer."
@@ -1743,6 +1754,40 @@ category: 'Grail-CPython API'
 method: CPythonShim
 PyFloat_FromDouble: aFloat
 	^ (self wrap: aFloat) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyFloat_AsDouble: anObject
+	"CPython's PyFloat_AsDouble for what the C side does not decode itself
+	(SmallInteger, SmallDouble, Float, bool): nb_float, then nb_index.
+
+	Answers a Float -- or, for a failure, a Symbol naming the CPython error
+	(#overflow: an int too large for a double; #type: no __float__ / __index__,
+	or one that raised), which the C side turns into the Python exception.  It
+	must NOT signal: this runs inside a C user action, and an exception
+	unwinding across that frame is an uncontinuable error.  pydantic_core asks
+	for a float from every member of a union it tries, a dict included, and
+	expects the TypeError."
+
+	| f hook |
+	^ [(anObject isKindOf: Integer)
+		ifTrue: [
+			f := anObject asFloat.
+			f abs = PlusInfinity ifTrue: [#overflow] ifFalse: [f]]
+		ifFalse: [
+			(anObject isKindOf: Number)
+				ifTrue: [anObject asFloat]
+				ifFalse: [
+					hook := [anObject @env1:___pyAttrLoad___: #'__float__']
+						on: AbstractException do: [:ex | ex return: nil].
+					hook isNil ifTrue: [
+						hook := [anObject @env1:___pyAttrLoad___: #'__index__']
+							on: AbstractException do: [:ex | ex return: nil]].
+					hook isNil
+						ifTrue: [#type]
+						ifFalse: [(hook @env1:value: #() value: nil) asFloat]]]]
+		on: AbstractException do: [:ex | ex return: #type]
 %
 
 category: 'Grail-CPython API'
