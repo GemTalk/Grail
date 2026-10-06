@@ -23,8 +23,8 @@ numeric half of isalnum.
 All three answered the kernel''s Character >> isDigit -- the Decimal set of an
 older Unicode -- so ''\u00b2''.isdigit() and ''\u00bd''.isnumeric() were
 False and isnumeric was isdecimal.  The answers now come from
-unicode_numeric_types.gs, generated from CPython''s own str methods by
-scripts/generate_unicode_numeric.py.
+unicode_char_types.gs, generated from CPython''s own str methods by
+scripts/generate_unicode_char_types.py.
 
 Every expectation in tests/python/str_numeric_types.py was produced by
 CPython 3.14; the fixture gate re-checks it there.'

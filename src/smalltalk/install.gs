@@ -1354,6 +1354,7 @@ run
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'StringIOSubclassTestCase' put: nil;
+	at: #'StrAlphaTypesTestCase' put: nil;
 	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
 	at: #'StrFormatFieldsTestCase' put: nil;
@@ -1868,7 +1869,7 @@ input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/dict_view.gs
 input src/smalltalk/Python/mappingproxy.gs
 input src/smalltalk/Python/str.gs
-input src/smalltalk/Python/unicode_numeric_types.gs
+input src/smalltalk/Python/unicode_char_types.gs
 input src/smalltalk/Python/Subscript.gs
 input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/UndefinedObject.gs
@@ -2829,6 +2830,7 @@ input src/smalltalk/PythonTests/StopAsyncIterationTestCase.gs
 input src/smalltalk/PythonTests/StopIterationTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/StringIOSubclassTestCase.gs
+input src/smalltalk/PythonTests/StrAlphaTypesTestCase.gs
 input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
