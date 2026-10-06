@@ -428,6 +428,104 @@ def setter_property_store_and_self_read():
     return (s.x, s.bump()) == (5, 6)
 
 
+# --- dunder probes: special methods are looked up on the TYPE ----------------
+#
+# ``if x:'' / bool(x) / len(x) probe __bool__ and __len__ through Grail's
+# soft-miss path.  Under the flag the miss hook once loaded the attribute to
+# "recover" it, which consulted __getattr__ -- CPython never does for a special
+# method -- and raised and caught an AttributeError per probe (pure-Python
+# pickle ran 3.5x slower; test_pickle went past the suite budget).
+
+class _GetattrLogger:
+    def __init__(self):
+        self.log = []
+
+    def __getattr__(self, name):
+        self.log.append(name)
+        raise AttributeError(name)
+
+
+def truthiness_does_not_consult_getattr():
+    g = _GetattrLogger()
+    truthy = bool(g)
+    if g:
+        pass
+    return truthy is True and g.log == []
+
+
+# --- a module's top-level def, patched at runtime -----------------------------
+#
+# A module's def is a method of its class, so with the flag ``x.f(a)'' on a
+# receiver the compiler cannot see is a module ran the compiled def and ignored
+# ``mod.f = g''.  catch_warnings(record=True) patches _py_warnings exactly so,
+# and every warning was printed instead of recorded.
+
+def _module_patch_target(x):
+    return ('orig', x)
+
+
+def _calls_module_patch_target(x):
+    return _module_patch_target(x)
+
+
+def module_function_patched_at_runtime():
+    import sys
+    this = sys.modules[__name__]
+    holder = [this]
+    saved = this._module_patch_target
+    log = []
+    this._module_patch_target = log.append
+    try:
+        via_reference = holder[0]._module_patch_target(1)
+        via_module = _calls_module_patch_target(2)
+    finally:
+        this._module_patch_target = saved
+    restored = holder[0]._module_patch_target(3)
+    return (via_reference, via_module, log, restored) == (None, None, [1, 2], ('orig', 3))
+
+
+# --- a decorated method's frame keeps its name ---------------------------------
+#
+# The class-body store of a decorator's wrapper over the raw def installs a
+# self-send dispatcher, which moves the def to a ``___grailOrig_'' shadow; the
+# wrapper then runs the shadow, and a traceback showed the shadow's selector.
+
+def _passthrough(f):
+    import functools
+
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        return f(*args, **kwargs)
+    return wrapper
+
+
+class _Decorated:
+    @_passthrough
+    def where(self):
+        import traceback
+        return traceback.extract_stack()[-1].name
+
+
+def decorated_method_frame_keeps_its_name():
+    return _Decorated().where() == 'where'
+
+
+class _CachedOverDef:
+    import functools
+
+    @functools.cached_property
+    def cp(self):
+        return 1
+
+
+def dispatcher_shadow_is_not_an_attribute():
+    # A callable stored over a compiled def installs a dispatcher, which keeps
+    # the def under a second selector; that name is no attribute of the class.
+    names = list(_CachedOverDef.__dict__) + dir(_CachedOverDef)
+    return (not any('grailOrig' in n for n in names)
+            and 'cp' in _CachedOverDef.__dict__ and _CachedOverDef().cp == 1)
+
+
 CHECKS = [
     foreign_receiver_method,
     stored_callable_on_instance,
@@ -458,6 +556,10 @@ CHECKS = [
     decorated_property_reads_its_value,
     own_property_value_called_through_self,
     setter_property_store_and_self_read,
+    truthiness_does_not_consult_getattr,
+    module_function_patched_at_runtime,
+    decorated_method_frame_keeps_its_name,
+    dispatcher_shadow_is_not_an_attribute,
 ]
 
 
