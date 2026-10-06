@@ -401,15 +401,29 @@ What Grail does meanwhile:
   So decision 3's "a failed commit keeps the session's changes" holds for a
   conflict, not for a refusal; the exception says so. Refusing before
   anything is flushed is ask (c) of the feature request.
-- **Naming the path is for later, and only on the failing path.** After a
-  refusal the session's state is still readable (measured: `needsCommit` is
-  true and the stored value is still there), so a walk from
-  `System _writtenObjects` to the refused object can name it in Python terms
-  before the program aborts. A successful commit never pays for it. Ask (d)
-  would make even that walk unnecessary.
-- **`gemstone.deploy_check()` stays the deliberate audit.** Its walk needs an
-  indexed queue (with `removeFirst`, 1.25M objects took 74 s rather than
-  0.92 s) and its classifier misses CByteArray.
+- **The refusal names the path, found only on the failing path.**
+  `SessionStateError.path` reads like `gemdb.root['jobs'][1].task`, and the
+  message adds the holder's Python type and what it holds. A forward walk
+  from `System _writtenObjects` turned out not to work here: after the failed
+  flush, every new object the commit was writing reads `isCommitted` true
+  until the abort (measured), so a walk that follows only new objects stops
+  at its roots. Instead the refusal's handler climbs **backward** from the
+  refused object, one in-memory reference scan per level
+  (`SystemRepository listReferencesInMemory:`), through referrers that carry
+  that committed mark. Stack temporaries and session caches never do, so
+  they drop out. It stops at a nameable anchor: `gemdb.root`, a module, a
+  class. Measured at 0.03 s in a small session and 0.1 s with 20,000 dicts
+  in memory; a successful commit never pays for it. Ask (d) would make even
+  that search unnecessary.
+- **`gemstone.deploy_check()` stays the deliberate audit**, sharing the
+  classifier and the path renderer. Its walk now has an indexed queue (with
+  `removeFirst`, 1.25M objects took 74 s rather than 0.92 s), follows the
+  committed objects this transaction wrote as well as new ones (which removes
+  its documented v1 limitation), reads storage rather than iterating a
+  module (which can run code), stops at DbTransient instances, and flags
+  CByteArray and socket subclasses. It no longer flags a `threading.Lock`,
+  which commits and works in a later session (§6.0); the old walk had
+  descended into storage the commit never writes.
 
 Until the kernel marks GsSocket and GsFile, a socket or file in a committed
 global still commits and fails in the next session, as §6.0 measured.
@@ -580,9 +594,9 @@ exists.
    so the rest of the definition is a feature request
    ([GemStone_Feature_Requests.md §1.8](GemStone_Feature_Requests.md)). Grail
    routes `gemdb.commit()` and `gemdb.transaction()` through `___tryCommit___`,
-   so a refusal is a catchable `gemdb.SessionStateError`. Naming the path on a
-   refusal, the deploy audit's walker, and class-level `__transient__` (§6.3)
-   remain to do.
+   so a refusal is a catchable `gemdb.SessionStateError`, which names the
+   path to the refused object; the deploy audit shares its walker and path
+   renderer. Class-level `__transient__` (§6.3) remains to do.
 
 6. **`gemdb.admin.namespaces()` / `drop_namespace()`**, and the docs: GemDB_Module.md,
    Persistent Modules (new departures next to D4 for persistent app globals,

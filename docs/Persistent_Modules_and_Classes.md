@@ -808,10 +808,11 @@ is why:
 - the session tier must be storable *outside* the module instance
   (`SessionDict`), or a deploy sweeps a dead socket into the repository;
 - `gemstone.deploy_check(module)` exists: an on-demand pre-commit audit that
-  walks the not-yet-committed graph and names the session-bound values a commit
-  would sweep in (open handles, `Semaphore`, raw `CPointer`, unrecompilable
-  `SrePattern`, `SreMatch`, `WeakReference`), each with a path from the module.
-  It is an audit, not a write barrier.
+  walks what committing the module would write (new objects, and committed ones
+  this transaction wrote) and names the session-bound values a commit would
+  sweep in (open handles, `Semaphore`, raw `CPointer`/`CByteArray`,
+  unrecompilable `SrePattern`, `SreMatch`, `WeakReference`), each by its Python
+  path from the module. It is an audit, not a write barrier.
 
 ---
 
@@ -985,9 +986,11 @@ left, both opt-in ([Schema_Evolution_Design.md](Schema_Evolution_Design.md)).
   `Grail-Annotations` methods are emitted only when a class *is* one of those, so
   dropping the `@dataclass` decorator on an edit leaves its synthesised methods
   behind. Arguably the class is a different class at that point.
-- **`deploy_check` v1 gap.** It follows only non-committed references, so a new
-  resource held through an already-committed-but-dirty object is not reached;
-  that needs the VM dirty set.
+- **`deploy_check` v1 gap — closed.** It followed only non-committed
+  references, so a new resource held through an already-committed-but-dirty
+  object was not reached. The walk now also follows committed objects in the
+  VM dirty set (`System _writtenObjects`), so such a resource is reached
+  (App_Namespaces_Design.md §6.2).
 - **Concurrent same-module cold import** collides on `PythonModules`, which must
   stay a plain `SymbolDictionary` for name resolution. No longer an open item,
   and no longer answered by "publishing should come from one session" — §4.2
