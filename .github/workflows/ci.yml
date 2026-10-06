@@ -172,6 +172,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A gem that fails a VM assertion (UTL_GUARANTEE) prints its C stack
+      # through $GEMSTONE/bin/pstack, which needs gdb -- and the image has
+      # none.  On 2026-10-04 a durable-test gem died at omgc.c:1684 here and
+      # printed only "Cannot find gdb", leaving GemTalk no stack to work
+      # from.  The second half proves gdb can attach in this container: a
+      # SIGUSR1 makes topaz print its C stack the same way.  Neither half
+      # fails the job -- a missing stack is a reason to look, not a red run.
+      - name: install gdb, so a gem that dies in the VM prints its C stack
+        run: |
+          if ! { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gdb > /dev/null; }; then
+            echo "::warning::gdb did not install; a gem that dies in the VM will print no C stack"
+            exit 0
+          fi
+          runuser -u ci -- bash -c '
+            export GEMSTONE=/opt/gemstone/product PATH=/opt/gemstone/product/bin:$PATH
+            sleep 30 | topaz -l > /tmp/usr1.out 2>&1 &
+            sleep 3
+            kill -USR1 "$(pgrep -u ci -x topaz | head -1)"
+            sleep 10
+            pkill -u ci -x topaz
+            if grep -q "^#[0-9]" /tmp/usr1.out; then
+              echo "gdb attached: a gem that dies in the VM will print its C stack"
+            else
+              echo "::warning::gdb could not print a C stack in this container"
+              head -60 /tmp/usr1.out
+            fi
+            exit 0'
+
       # NetLDI guest mode (-g) is disallowed when NetLDI runs as root, and a
       # GitHub container job runs as root.  Keep the job root (GitHub needs it
       # for the workspace mount + JS actions) but run ALL GemStone work as the

@@ -177,10 +177,18 @@ uncommitted changes back to its last successful checkpoint.
 * **Conflicts abort rather than retry**, and the run registry is a plain
   dict, so two sessions `start()`ing at once can conflict. An
   `RcKeyValueDictionary` is the fix importlib already uses.
-* **Native code is untested.** This Mac runs interpreted; Linux CI runs
-  `GEM_NATIVE_CODE_ENABLED`. `convertToPortableStack` exists for that case and
-  the primitive is expected to handle it; the multi-gem test in `run_tests.sh`
-  is what will say so when CI runs it.
+* **A park inside a loop body is wrong on the text codegen path.** The text
+  path (`GRAIL_IR_CODEGEN=0`) compiles a loop body as a block, and after a
+  continuation resumes, GemStone gives a block valued again a stale home
+  context. Plain Smalltalk shows it, with no Grail code involved: `b value: 1`
+  parks and is resumed, then `b value: 2` reads the temps as they were before
+  the capture. So `for i in range(5): durable.sleep(0); total += i` finishes
+  with `total == 0`, and the executor then never sees the run end. This was
+  reported to GemTalk on 2026-10-05. The default IR path keeps the loop in the
+  method and is correct.
+* **Native code works.** Linux CI runs `GEM_NATIVE_CODE_ENABLED=2`, and the
+  multi-gem test passes there. The loop defect above is the same with native
+  code on and off.
 * **No audit before the commit.** The refusal names one object; a
   `deploy_check`-style walk of the captured frames would name the Python
   local holding it.
@@ -195,7 +203,11 @@ uncommitted changes back to its last successful checkpoint.
   locals; `crashy_flow` checkpointed and `kill -9`ed, recovered by the next
   gem (`checkpoint()` answered `True`, result `50`), and the log line written
   after the checkpoint in the killed gem correctly absent; `generator_flow`
-  refused with a `CheckpointError` naming the Semaphore.
+  refused with a `CheckpointError` naming the Semaphore; and `loop_flow`
+  parking five times inside a loop body. On the text codegen path,
+  `loop_flow` reports XFAIL (the defect in §6).
+  Every gem runs under a watchdog (`GRAIL_DURABLE_PHASE_TIMEOUT`, 120 s by
+  default), and the run stops at the first failing check.
 * `GemstoneContinuationTestCase` (SUnit): capture answers a continuation;
   `value: 42` returns 42 from the same call with locals restored; a
   continuation is multi-shot; `___isContinuation___` is false for anything else.

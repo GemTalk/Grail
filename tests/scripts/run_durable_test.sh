@@ -13,9 +13,24 @@
 # the refusal must surface as a CheckpointError naming the Semaphore rather
 # than as a gem death.
 #
+# Then loop_flow parks inside a loop body, five times.  On the text codegen
+# path (GRAIL_IR_CODEGEN=0) that is a known GemStone defect -- a block valued
+# again after a resume sees a stale home context -- so there it is reported
+# as XFAIL rather than failing the run.
+#
 # Each phase is one `grail` process (tests/durable/durable_phases.py), so a
 # "gem" here is a real OS process with its own session.  Assumes a running
 # stone and a sourced .setenv (mirrors run_gemdb_conflict_test.sh).
+#
+# Every gem runs under a watchdog (GRAIL_DURABLE_PHASE_TIMEOUT, default 120s),
+# and the run stops at the first failing check.  Both exist because of one CI
+# run (PR #1321, 2026-10-04): a gem died in a VM assertion while resuming
+# order_flow, the later phases ran against the run it left half-done, and
+# the executor phase then started crashy_flow fresh -- whose sleep(3600)
+# held the job until GitHub cancelled it at 45 minutes.  A phase normally
+# takes a second or two; 120s is a wide margin that still lets a gem which
+# hits a UTL_GUARANTEE finish its 60s wait for a debugger, so the assertion
+# and its stacks reach the log.
 set -u
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
@@ -30,9 +45,38 @@ mkdir -p out
 LOG=out/durable_test.out
 : > "$LOG"
 EXIT=0
+PHASE_TIMEOUT=${GRAIL_DURABLE_PHASE_TIMEOUT:-120}
 
+kill_gem() {    # kill_gem <pid of a ./grail wrapper> -- its topaz (the gem) too
+    pkill -9 -P "$1" 2>/dev/null
+    kill -9 "$1" 2>/dev/null
+}
+run_gem() {     # run_gem <out> <seconds> <phase> [args] -- one gem, killed if it overruns
+    local out=$1 limit=$2 tenths=0
+    shift 2
+    ./grail tests/durable/durable_phases.py "$@" > "$out" 2>&1 &
+    local pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$tenths" -ge $((limit * 10)) ]; then
+            kill_gem "$pid"
+            wait "$pid" 2>/dev/null
+            echo "TIMEOUT: phase $1 still running after ${limit}s; killed" >> "$out"
+            return 124
+        fi
+        sleep 0.1
+        tenths=$((tenths + 1))
+    done
+    wait "$pid"
+}
 phase() {   # phase <name> [idle_timeout] -- one gem; its output goes to the log and the terminal
-    ./grail tests/durable/durable_phases.py "$@" 2>&1 | grep -v '^\s*[~^]*$' | tee -a "$LOG"
+    local limit=${PHASE_LIMIT:-$PHASE_TIMEOUT} rc
+    run_gem out/durable_phase.out "$limit" "$@"
+    rc=$?
+    grep -v '^\s*[~^]*$' out/durable_phase.out | tee -a "$LOG"
+    if [ "$rc" -eq 124 ] && [ -z "${EXPECTED_FAILURE-}" ]; then
+        echo "FAIL: phase $1 timed out after ${limit}s"
+        EXIT=1
+    fi
 }
 expect() {  # expect <literal> -- the log must contain it
     if ! grep -qF -- "$1" "$LOG"; then
@@ -46,9 +90,25 @@ forbid() {
         EXIT=1
     fi
 }
+finish() {
+    PHASE_LIMIT=60 phase reset > /dev/null
+    if [ "$EXIT" -eq 0 ]; then
+        echo "durable: PASS (log: $LOG)"
+    else
+        echo "durable: FAIL (log: $LOG)"
+    fi
+    exit $EXIT
+}
+stop_if_failed() {  # every later phase builds on the state this one left
+    if [ "$EXIT" -ne 0 ]; then
+        echo "durable: stopping after $1 -- the later phases would only run against what it left behind"
+        finish
+    fi
+}
 
 phase reset
 expect 'reset ok'
+stop_if_failed reset
 
 echo "--- order_flow across four gems"
 phase start_order
@@ -62,14 +122,16 @@ phase executor
 expect "executor: executed=1 statuses=['done']"
 phase order_result
 expect "order result: {'order': 'o-1', 'total': 42, 'approved': {'ok': True}} (checkpoints=3 resumes=2)"
+stop_if_failed order_flow
 
 echo "--- crashy_flow: checkpoint, kill -9 the gem, recover in another"
 ./grail tests/durable/durable_phases.py start_crashy > out/durable_crashy.out 2>&1 &
 CRASHY=$!
 sleep 5
 # The wrapper and its topaz are separate processes; the topaz is the gem.
-pkill -9 -f 'durable_phases.py start_crashy' 2>/dev/null
-kill -9 "$CRASHY" 2>/dev/null
+# Only this wrapper's children: a pattern would also kill another
+# checkout's durable test running on the same machine.
+kill_gem "$CRASHY"
 wait "$CRASHY" 2>/dev/null
 cat out/durable_crashy.out | tee -a "$LOG"
 expect 'crashy: started'
@@ -78,11 +140,34 @@ phase executor 8
 expect 'executor: executed=1'
 phase crashy_result
 expect 'crashy result: 50 (resumes=1)'
+stop_if_failed crashy_flow
 
 echo "--- generator_flow: a live generator at the checkpoint is refused, not fatal"
 phase generator
 expect 'generator: failed CheckpointError: durable: cannot checkpoint here'
 expect 'Semaphore'
+stop_if_failed generator_flow
+
+echo "--- loop_flow: park inside a loop body, five times"
+LOOP_WANT='loop: status=done result=10 resumes=5'
+if [ "${GRAIL_IR_CODEGEN-}" = 0 ]; then
+    # Known GemStone defect on this path (reported 2026-10-05): the loop body
+    # is a block valued again after each resume, and it sees a stale home
+    # context.  Measured with durable itself compiled by this path: the run
+    # is recorded done with result 0, and the executor then never sees it
+    # finish, so the phase hangs -- hence a limit of 20s where it normally
+    # takes about 3.
+    EXPECTED_FAILURE=1 PHASE_LIMIT=20 phase loop
+    if grep -qF -- "$LOOP_WANT" out/durable_phase.out; then
+        echo "XPASS: loop_flow is right on the text codegen path -- if GemStone has fixed the stale block context, make this check strict"
+    else
+        echo "XFAIL: loop_flow on the text codegen path (known GemStone defect: stale block home context after a resume)"
+    fi
+else
+    phase loop
+    expect "$LOOP_WANT"
+    stop_if_failed loop_flow
+fi
 
 phase show
 expect 'A: reserve o-1 total=42'
@@ -94,10 +179,4 @@ expect 'resumed (timer)'
 expect 'resumed (message)'
 expect 'resumed (recover)'
 
-phase reset > /dev/null
-if [ "$EXIT" -eq 0 ]; then
-    echo "durable: PASS (log: $LOG)"
-else
-    echo "durable: FAIL (log: $LOG)"
-fi
-exit $EXIT
+finish
