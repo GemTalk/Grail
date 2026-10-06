@@ -1163,6 +1163,7 @@ run
 	at: #'ModuleAttrDeleteTestCase' put: nil;
 	at: #'ModuleDocstringTestCase' put: nil;
 	at: #'ModuleSpecTestCase' put: nil;
+	at: #'ModuleGlobalRebindStringsTestCase' put: nil;
 	at: #'BareNameManglingTestCase' put: nil;
 	at: #'GlobalsShadowBuiltinTestCase' put: nil;
 	at: #'ModuleCachedAbsentTestCase' put: nil;
@@ -2636,6 +2637,7 @@ input src/smalltalk/PythonTests/ModuleAttrsAreNotDictMethodsTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrDeleteTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
+input src/smalltalk/PythonTests/ModuleGlobalRebindStringsTestCase.gs
 input src/smalltalk/PythonTests/BareNameManglingTestCase.gs
 input src/smalltalk/PythonTests/GlobalsShadowBuiltinTestCase.gs
 input src/smalltalk/PythonTests/ModuleCachedAbsentTestCase.gs

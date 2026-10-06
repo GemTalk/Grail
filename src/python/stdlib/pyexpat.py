@@ -811,7 +811,9 @@ class xmlparser:
             return False
         nxt = rest[1] if len(rest) > 1 else ''
         if nxt and not _is_name_start(nxt):
-            self._fail(errors.XML_ERROR_INVALID_TOKEN)
+            # expat's scanLt stops AT the character after the ``<''
+            self._fail(errors.XML_ERROR_INVALID_TOKEN, self._line,
+                       self._col + 1)
         end = self._find_tag_end(i)
         if end < 0:
             if isfinal:
@@ -835,7 +837,9 @@ class xmlparser:
             elif c == '>':
                 return j
             elif c == '<':
-                self._fail(errors.XML_ERROR_INVALID_TOKEN)
+                # expat blames the stray ``<'' itself, not the tag's start
+                self._fail(errors.XML_ERROR_INVALID_TOKEN, *self._offset_pos(
+                    self._line, self._col, buf[i:j], j - i))
             j += 1
         return -1
 

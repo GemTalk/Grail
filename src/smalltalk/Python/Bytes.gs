@@ -761,11 +761,28 @@ ___bufferOperand___: value
 
 	(value isKindOf: bytes) ifTrue: [^ value].
 	(value ___respondsTo___: #'__buffer__:') ifTrue: [
-		| resolved |
-		resolved := [value @env1:__buffer__: 0]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-		(resolved isKindOf: bytes) ifTrue: [^ resolved]].
+		^ [self ___exportBuffer___: value]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	^ nil
+%
+
+category: 'Grail-Type'
+classmethod: bytes
+___exportBuffer___: value
+	"``value.__buffer__(0)'' as a ByteArray; its exceptions propagate.
+
+	Grail's own memoryview answers bytes, but a Python class's __buffer__ --
+	and pickle.PickleBuffer's -- answers a memoryview, as PEP 688 says.  The
+	bytes(x) constructor unwrapped that; ___bufferOperand___: did not, so
+	b''.join([obj]) refused every Python-level exporter.  Callers that run
+	before MemoryView.gs is filed (Bytearray.gs) come here rather than
+	naming memoryview themselves."
+
+	| exported |
+	exported := value @env1:__buffer__: 0.
+	(exported isKindOf: memoryview) ifTrue: [exported := exported @env1:tobytes].
+	(exported isKindOf: bytes) ifTrue: [^ exported].
+	^ TypeError ___signal___: '__buffer__ returned non-memoryview object'
 %
 
 category: 'Grail-Type'
@@ -3345,7 +3362,7 @@ category: 'Grail-Sequence Methods'
 method: bytes
 join: iterable
 	"Join iterable of bytes with self as separator"
-	| iterClass parts resolvedParts totalSize result offset |
+	| iterClass parts resolvedParts totalSize result offset seqlen |
 	iterClass := iterable @env0:class.
 
 	"list / tuple are used by index directly; any other Python iterable
@@ -3379,14 +3396,23 @@ join: iterable
 	 ``parts'': the iterable may be a tuple, and storing into one raises the
 	 uncatchable ``Attempt to modify invariant object''.  The loops below read
 	 the resolved array, so they see bytes whatever was passed."
-	resolvedParts := Array @env0:new: parts @env0:size.
-	1 @env0:to: parts @env0:size do: [:i |
-		| resolved |
-		resolved := bytes ___bufferOperand___: (parts @env0:at: i).
+	"An item's __buffer__ runs Python, which may mutate a list we index
+	directly.  As CPython's stringlib join: read each item ONCE (a replaced
+	slot still joins the buffer already taken) and re-check the length after
+	each item -- indexing the stale length raised an uncatchable OffsetError
+	(test_join_concurrent_buffer_mutation)."
+	seqlen := parts @env0:size.
+	resolvedParts := Array @env0:new: seqlen.
+	1 @env0:to: seqlen do: [:i |
+		| item resolved |
+		item := parts @env0:at: i.
+		resolved := bytes ___bufferOperand___: item.
 		resolved @env0:isNil ifTrue: [
 			TypeError ___signal___: ('sequence item ' @env0:, (i @env0:- 1) @env0:printString
 				@env0:, ': expected a bytes-like object, '
-				@env0:, (bytes ___pyTypeNameOf___: (parts @env0:at: i)) @env0:, ' found')].
+				@env0:, (bytes ___pyTypeNameOf___: item) @env0:, ' found')].
+		parts @env0:size @env0:= seqlen ifFalse: [
+			RuntimeError ___signal___: 'sequence changed size during iteration'].
 		resolvedParts @env0:at: i put: resolved].
 	parts := resolvedParts.
 

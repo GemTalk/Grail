@@ -213,7 +213,14 @@ ___isSameImmutable___: a as: b
 
 	a == nil ifTrue: [^ false].
 	a class == b class ifFalse: [^ false].
-	(a isKindOf: CharacterCollection) ifTrue: [^ a = b].
+	"By CODEPOINT, as Python compares strings -- never the kernel's ``='',
+	which under Unicode comparison mode is an ICU collation: 'e' followed by a
+	combining acute equals the precomposed letter, and an Arabic-Indic digit
+	equals its ASCII twin.  Skipping on that made ``x = '1\u0662'; x =
+	'\u06612''' leave x holding the FIRST string, and every module-level
+	``for s in [...]'' over such strings yield its first element again."
+	(a isKindOf: CharacterCollection) ifTrue: [
+		^ a size = b size and: [(a @env1:___codePointCompare___: b) = 0]].
 	"Integers only: 0.0 = -0.0 holds, and Python tells them apart.  A float
 	small enough to be a SmallDouble is immediate, so identity covers it."
 	(a isKindOf: Integer) ifTrue: [^ a = b].
