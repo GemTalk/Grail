@@ -1,11 +1,12 @@
 # Supporting pydantic v2 — loading `_pydantic_core` through the CPython shim
 
-Status: **Phases 0–5 done — `pydantic.BaseModel` works in Grail** (on the
-abi3 build of `pydantic_core`): validation, nested models, constraints,
-validators, `model_dump` / `_json`, `model_copy`, JSON schema, all matching
-CPython on the probe set. Phase 6 (breadth and measurement) is next. Phases
-0–2 merged as #1277; Phase 3 is #1282 (`jmason/pydantic1`); Phase 4 (b) is
-#1286 (`jmason/pydantic2`); Phase 5 is on `jmason/pydantic3`.
+Status: **Phases 0–6 done — `pydantic.BaseModel` works in Grail, and
+pydantic's own test suite runs** (on the abi3 build of `pydantic_core`).
+`import pydantic` is clean; a 12-module slice of pydantic's tests runs to the
+end with the outcome CPython gets on most tests (Phase 6 below has the table);
+W7 is measured and W8 is closed. Phases 0–2 merged as #1277, Phase 3 as #1282,
+Phase 4 (b) as #1286; Phase 5 is #1289 (`jmason/pydantic3`); Phase 6 is on
+`jmason/pydantic4`.
 
 ## The decision
 
@@ -516,11 +517,254 @@ Seen and not yet addressed:
 validation vs CPython (W7); W8 audit. Update `Package_Census.md` rows 21 and 26,
 and `Support_FastAPI.md` §4/§6.
 
-### Tests and CI (open)
-Phases 1–3 can have SUnit tests that need no wheel (the `_shimtestmodule.c` /
-`ShimForeignObjectTestCase` pattern: exception types, `RaisedException`,
-generic forwarding). A test that loads the real `.so` needs the wheel in CI;
-decide whether CI installs it or those tests skip without it.
+**Phase 6 so far (2026-10-02, branch `jmason/pydantic4`).**
+
+*W7 — speed, measured.* Same loops, same machine (Darwin arm64),
+`scratchpad bench.py`; Grail figures are the mean of three runs (±10%):
+
+| operation | Grail, start of Phase 6 | Grail, end of Phase 6 | CPython 3.14 stock | CPython 3.14 abi3 |
+| --- | ---: | ---: | ---: | ---: |
+| `SchemaValidator(int).validate_python('1')` | 8.0 µs | 5.7 µs | 0.1 µs | 0.1 µs |
+| typed_dict validate | 25.3 µs | 23.9 µs | 0.2 µs | 0.2 µs |
+| `M(x='1', y='s')` | 192 µs | 176 µs | 1.1 µs | 1.2 µs |
+| `m.model_dump()` | 523 µs | 374 µs | 0.8 µs | 0.9 µs |
+| `m.model_dump_json()` | 612 µs | 427 µs | 0.8 µs | 0.9 µs |
+| `M.model_validate_json(...)` | 525 µs | 455 µs | 0.9 µs | 1.0 µs |
+
+(The model rows were re-measured after the slice's fixes, three runs within
+1% of each other; the two `SchemaValidator` rows are from mid-phase.)
+
+* **The abi3 build costs nothing on CPython** — option (b) is free.
+* Grail is two to three orders of magnitude slower, and the cost is the
+  crossings: `GRAIL_SHIM_PROFILE=1` now prints a per-selector count of every
+  `GciPerform` at exit. A `model_dump` made 219; 120 of them were `at:` sends
+  reading a result Array, now `GciFetchOop` reads (99 left). Time follows the
+  Smalltalk side, not the count: `ProfMonitorTree` put **`PyDict_Next` at 44%**
+  — it rebuilt the dict's key list on every call, O(n²) per walk; it now walks
+  a per-dict snapshot fetched once (`PyDict_ItemsFlat:`), −31% on
+  `model_dump`. `__dict__` replacement now writes through the instance-dict
+  view's raw store instead of the full attribute protocol (−13% on
+  construction). What remains is spread across ~240 methods — wrap: map
+  lookups, dict hashing, per-call wrapping — with no single hotspot left.
+
+*W8 — process-lifetime state, audited.* A logout and re-login in ONE gem
+process (topaz allows it) used to **segfault** on the next import of
+pydantic: the C side survived the logout (the dlopen'd library, `module_cache`,
+`module_attrs`, PyO3's Rust statics — interned strings, type pointers) while
+the Grail objects they point at did not. `GciUserActionInit`/`Shutdown` do
+not run across such a re-login, so the boundary is detected in `shimInit`
+from a token `CPythonShim class>>ensureLoaded:` makes once per session; on a
+new session the shim drops its session-scoped state, and a DYNAMICALLY
+LOADED extension first initialised in an earlier session is refused with
+`ImportError: extension module '…' was initialised in an earlier session of
+this gem process and cannot be initialised again; import it in a new gem
+process` — CPython does not re-initialise an extension in one process
+either. The shim's own built-in modules (`_sre`) re-initialise and keep
+working (checked: `re.sub` / `re.findall` in both sessions).
+
+*pydantic's own tests — the slice.* Real pytest does not import in Grail
+(it needs `importlib.machinery`'s `PathFinder` for assertion rewriting), so
+`tests/pydantic/` carries a stand-in: `minipytest/pytest.py` (raises, warns,
+marks, `param`, fixtures, `approx`, `monkeypatch`) and
+`run_pydantic_tests.py`, which collects a module's tests, expands
+parametrize, resolves fixtures and prints one `RESULT|id|outcome|msg` line per
+test. **The runner is run under CPython too**, against the same sdist
+(pydantic 2.13.5), and the CPython tallies match real pytest's (`test_main`:
+244 passed, 25 skipped, 1 xfailed). `compare_results.py` diffs the two
+test by test and clusters the divergences. `run_pydantic_slice.sh` restarts
+past a test that kills the gem, recording it as `crashed`.
+
+```bash
+PYTHONPATH=<abi3 venv>/lib/python3.14/site-packages GRAIL_IR_CODEGEN=0 \
+  tests/pydantic/run_pydantic_slice.sh <sdist>/tests/test_main.py out.grail
+<abi3 venv>/bin/python tests/pydantic/run_pydantic_tests.py <sdist>/tests/test_main.py > out.cpy
+python3 tests/pydantic/compare_results.py out.grail out.cpy
+```
+
+*The slice, measured 2026-10-02* (Darwin arm64, `GRAIL_IR_CODEGEN=0`, the
+abi3 build; "crashed" is a test that killed the gem, recorded and stepped
+past):
+
+| module | tests | CPython passes | of those, Grail passes | same outcome as CPython | crashed the gem |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `test_main` | 266 | 240 | 215 | 241 | 0 |
+| `test_fields` | 68 | 68 | 62 | 62 | 0 |
+| `test_validators` | 179 | 174 | 92 | 96 | 3 |
+| `test_serialize` | 89 | 88 | 45 | 46 | 1 |
+| `test_json` | 60 | 58 | 50 | 52 | 0 |
+| `test_aliases` | 153 | 121 | 115 | 147 | 0 |
+| `test_computed_fields` | 37 | 33 | 23 | 27 | 0 |
+| `test_root_model` | 78 | 78 | 70 | 70 | 0 |
+| `test_private_attributes` | 35 | 35 | 19 | 19 | 2 |
+| `test_construction` | 42 | 42 | 25 | 25 | 10 |
+| `test_edge_cases` | 193 | 192 | 147 | 148 | 2 |
+| `test_create_model` | 28 | 28 | 25 | 25 | 0 |
+| **12 modules** | **1228** | **1157** | **888 (76%)** | **958 (78%)** | **18** |
+
+At the start of the phase none of this ran: `tests/test_main.py` did not
+import. `test_types` (956 tests) still does not — the TEST MODULE itself binds
+more than the 255 names a Grail module can hold, GemStone's dynamic-instVar
+ceiling ([GemStone_Feature_Requests.md](GemStone_Feature_Requests.md) §2.1),
+which is structural and not this phase's to lift.
+
+*The walls the slice found*, each a general Grail or shim bug rather than a
+pydantic quirk, in the order they were met:
+
+| wall | symptom in pydantic | fix |
+| --- | --- | --- |
+| a metaclass's class-body namespace held a classmethod's **bound** value and a property's **getter** | `tests/test_main.py` did not import: pydantic.v1's metaclass took both for fields | `___grailNsBind___:` offers the descriptor; `___grailOwnPropertyNames___` compiles before the body |
+| `from m import *` **ignored `__all__`** | `pydantic.v1` passed the 255 attributes a module can hold — uncatchable | `module>>___mergePublicAttrsFrom:` |
+| `warnings.warn(msg, Cat)` skipped `Cat.__init__` | every deprecation printed `a … occurred (error 2702)` | `warnings` calls the category |
+| a type mirror's base chain read a **Smalltalk metaclass**, and its `on: Error` missed Python exceptions | Rust panic: `type object 'PythonInstance class' has no attribute '__module__'` | mirror base is `type`; `on: AbstractException` |
+| an inherited classmethod's `__func__` differed per class | `PydanticDeprecatedSince211` on every schema build | `__func__` resolves on the defining class |
+| `copy.deepcopy(obj.__dict__)` stored into nil | `model_copy(deep=True)` killed the gem | `PyInstanceDict>>__deepcopy__:` |
+| a metaclass property ran when the body bound a same-named def | `PydanticDeprecatedSince20` on every `import pydantic` | properties are built, not loaded |
+| `PyObject_VectorcallMethod` was a stub | `SystemError` from every `model_post_init` | implemented |
+| `__annotations__` cleared **in place** by a metaclass did not reach the class | `extra='allow'` refused every model | replay compares contents |
+| a protocol dunder under a class-body **`if`** was ignored (`__setattr__`, `__delattr__`, `__len__`, `__getitem__`, `__iter__`, `__call__`, `__hash__`, `__bool__`, …) | frozen models accepted assignment; `validate_assignment` and `extra='forbid'` did nothing | forwarders compiled at class build |
+| `ValidationError`'s class methods were not on its Grail class; a foreign object's `str()` was the proxy's | `from_exception_data` AttributeError; messages read `<ShimForeignObject …>` | `METH_CLASS`/`STATIC` names passed at build; `shimForeignStr` |
+| non-`PythonInstance` objects (a `datetime.date`) crossed typed as `object` | dates refused as `input_type=object` | `___nativeTypeAddrFor:` |
+| `PySet_Type` / `PyFrozenSet_Type` were never initialised | `model_dump(exclude_unset=True)` failed | real static types |
+| `PyDict_Copy` of an instance `__dict__` was a second **view**; `PyDict_DelItem` sent it `removeKey:` | `validate_assignment` recursed to stack overflow | plain-dict copy; `__delitem__:` |
+| the shim's rich compare sent the bare dunder, and `NotImplemented` read as true | `exclude_defaults` dropped a `str` field defaulting to `None` | the `___cmpXx___:` operator helpers |
+| `uuid` was a 71-line stub; `colorsys` was missing | UUID fields and `default_factory=uuid4` | both vendored from CPython 3.14.7 |
+| every **lambda's** signature was `()`; a `classmethod.__get__` binding kept `cls` | `default_factory=lambda data: …` and classmethod validators called with the wrong arguments | lambdas stamp `___pySig___:`; `MethodBinding>>__signature_spec__` |
+| `PyLong_AsLong` of a `str` answered 0 with no error | `Literal['a', StrEnum.X]` built as `Literal[0]` | TypeError, and no `__index__` probe for a string |
+| `super().__new__(mcls, name, bases, ns, **kw)` refused | `class M(Base, a=1)` could not be written | `type>>___new__:kw:` |
+| a str/int-mixed enum had no `_missing_` | every `StrEnum`-style field failed schema build | copied with the enum protocol |
+| an infinite float literal (`1e400`, `2.2250738585072011e308`) compiled to `PlusInfinity` | `tests/test_validators.py` did not compile | emitted as an overflow |
+| a decorator's result reached a metaclass's namespace only after it ran | `@computed_field` found nothing | `___grailNsRebind___:` after the decorator store |
+| a module-level `@overload` stub's arity method survived its implementation | `computed_field(f)` answered `None` | stubs followed by an implementation compile no method |
+| Grail's `dataclasses` stub counted a string `ClassVar` as a field | `ComputedFieldInfo(...)`: missing argument `repr` | skipped |
+| the `PyNumber_*` operators were stubs answering NULL with no error | `dump_json(uuid)` killed the gem | implemented over `operator` |
+| unsigned 64-bit conversions rode the signed SmallInteger path | a UUID's 128-bit int, which abi3 PyO3 reads as two halves, failed | exact, via 32-bit halves |
+| `functools.cache`'s wrapper class had no `__module__` | a model with an `@cache` method failed to build | `'functools'`, as CPython's |
+
+*Left, and why it is left.* Class keywords through a metaclass whose
+`__new__` takes `**kwargs` do not reach `__init_subclass__` — Grail runs the
+hook outside the metaclass dispatch and cannot see what the `__new__`
+forwards. Grail's `importlib` has no `module_from_spec` / `exec_module` (the
+runner's `create_module` falls back to importing by name). A `warnings.warn`
+at MODULE scope reports line 0 (`sys._getframe().f_lineno` is 0 for a
+module's own frame). Importing `pydantic_core` WITHOUT `pydantic` first makes
+its error formatting import `pydantic` from inside a C callback, which runs
+out of stack (harmless — it answers None). The stock wheel still dies on its
+first inline layout read (W5/W6, option (a)).
+
+### Tests and CI
+* `tests/python/pydantic_phase6_walls.py` (+ `PydanticPhase6WallsTestCase`,
+  both codegen arms): the Python-level walls above, 41 checks measured
+  against CPython 3.14.
+* `CPythonShimTestCase` *Pydantic Phase 6* tests, through new `_shimtest`
+  functions that make each call the way a PyO3 wheel does: vectorcall-method,
+  the set types, `PyLong_AsLong` of a str, `PyDict_Copy`/`DelItem` of an
+  instance dict, a native type's subtype check, str-vs-None rich compare, and
+  two `PyDict_Next` walks in lockstep.
+* `tests/scripts/run_shim_relogin_test.sh` (in `run_tests.sh`): W8 — a
+  dlopen'd extension across logout/login in one linked gem.
+* None of these needs the wheel. The pydantic slice itself does (the abi3
+  build and the sdist's tests), so it is run by hand, not in CI.
+* Tier 2 (2026-10-02, Darwin arm64): `check_python_fixtures.sh` 518 fixtures
+  agree; the CPython conformance gate reads **0 regressions, 1 improvement**
+  (`test_ssl` FAIL/5 → FAIL/3). A regression its first run caught was this
+  phase's and is fixed: copying Enum's default `_missing_` onto mixed enums
+  had overwritten user overrides (`test_enum`). `test_pickle` times out at
+  600 s in a full run on this machine now and then; alone it takes ~510–526 s
+  with or without this phase (measured both), so that is the machine, not a
+  regression.
+* After merging `origin/main` (which had fixed the same namespace problems in
+  parallel — `___grailNsRebind___:`, the builtin-property record, `type`'s
+  class keywords; theirs are kept where they overlap): `run_tests.sh` 7,721
+  run, 7,720 passed, the one failure an expectation this branch had changed
+  and has now restored; gated against `origin/main`'s board, 0 regressions
+  besides that `test_pickle` timeout (OK alone), 3 improvements
+  (`test_exception_group` and `test_zipapp` ERROR → OK, `test_except_star`
+  21 → 20).
+
+### Phase 7 — future improvements (not scheduled)
+
+Phase 6 ends the plan as written: pydantic works in Grail on the abi3 build,
+its own tests run, and the walls they found are fixed. What follows is the
+list of what would make that support better, recorded so the next piece of
+work starts from measurements rather than from memory. None of it is
+scheduled; each item stands on its own and they can be taken in any order.
+
+**7.1 — the stock wheel: a real CPython layout for `str`, `float`, `bytes`.**
+This is Phase 4's option (a), deferred when (b) was chosen. Today pydantic
+validates only on a `pydantic_core` rebuilt against the stable ABI
+(`scripts/pydantic/build_pydantic_core_abi3.sh`), which needs a Rust
+toolchain. The wheel `pip install pydantic` fetches imports (Package_Census
+row 26) but dies on its first validation, because PyO3's non-abi3 code reads
+`ob_fval`, `ob_sval` and the compact-unicode body INLINE (W5/W6), and a Grail
+wrapper has none of them. The work is giving those immutable values a real
+CPython-shaped body behind the wrapper — the prefix-OOP header of
+[Shim_Object_Model.md](Shim_Object_Model.md) §2 — prototyped on `float`
+first, guarded by Phase 4's test
+`SchemaValidator({'type': 'float'}).validate_python(1.5) == 1.5`. It is the
+deepest item here, and the only one that helps every future wheel rather than
+pydantic alone. Exit: the stock wheel passes the Phase 6 slice with the same
+numbers as the abi3 build.
+
+**7.2 — speed (W7).** A validation is still 200–500× slower than on CPython
+(the W7 table above): constructing a model costs 176 µs against ~1 µs, a
+`model_dump` 374 µs against ~0.8 µs. Phase 6 removed the hotspots a profile
+could see — `PyDict_Next`'s O(n²) rebuild, `at:` sends for array reads, the
+full attribute protocol for `__dict__` replacement — and what is left is
+spread over ~240 methods, every one of them a crossing. So the next gains are
+structural, not local:
+* fewer crossings per call — `GRAIL_SHIM_PROFILE=1` counts them by selector;
+  a `model_dump` still makes ~99;
+* cheaper wrapping — the per-value `wrap:` map lookup and CByteArray, which
+  every argument and result pays;
+* C-side caches for the values pydantic_core asks for repeatedly (interned
+  attribute names, type objects, a model's field dict).
+
+Measure with the Phase 6 benchmark on both builds before and after each step.
+Exit: a target agreed beforehand — an order of magnitude on `model_dump` would
+be a reasonable first one.
+
+**7.3 — the rest of pydantic's test suite.** The Phase 6 slice is 12 of
+pydantic's ~70 test modules, and 269 of its 1,228 tests still differ from
+CPython — mostly one-of-a-kind after the walls tabled above, so the work is a
+long tail rather than a few big fixes. In order of reach:
+* `test_types` (956 tests) cannot import: the TEST module binds more than the
+  255 names a Grail module can hold, GemStone's dynamic-instVar ceiling
+  ([GemStone_Feature_Requests.md](GemStone_Feature_Requests.md) §2.1). Either
+  the kernel ask is met, or module globals get an overflow store like the one
+  `GrailClassAttrHolder` gives class attributes.
+* the modules not yet run — `test_json_schema`, `test_generics`,
+  `test_dataclasses`, `test_discriminated_union`, `test_networks`, … — each
+  baselined under CPython first with the runner, as Phase 6 did.
+* the 18 tests that still kill the gem (RecursionError, one compile error on a
+  nested PEP 695 `type` statement, one pydantic_core panic on a constrained
+  `TypeVar` with `float`), before the ordinary failures — a crash costs a
+  whole run's worth of context.
+* the gaps recorded under Phase 6's *Left, and why it is left*: class keywords
+  through a `**kwargs` metaclass `__new__` not reaching `__init_subclass__`;
+  `importlib.util.module_from_spec` / `exec_module`; `warnings.warn` at module
+  scope reporting line 0; `pydantic_core` importing `pydantic` from inside a C
+  callback when it was imported first; and `from <native module> import *`
+  binding accessor methods (see the note under *Resume here*).
+
+Exit: the slice widened to every module that imports, with its numbers
+tabled here, and no test that kills the gem.
+
+**7.4 — distribution and CI.** Two things keep the Phase 6 result from being
+durable:
+* the abi3 `pydantic_core` exists only as a local build. Until 7.1 lands, a
+  user needs it built for them — a prebuilt abi3 wheel for each platform Grail
+  supports (Darwin arm64, Linux x86_64), produced by the build script in CI
+  and published somewhere `pip` can reach, would make `pip install` work
+  against Grail without a Rust toolchain.
+* nothing in CI exercises pydantic. The Phase 6 SUnit tests need no wheel,
+  but the slice does, so it runs by hand and a regression in it would be seen
+  only by the next person to run it. With the wheel above available, a CI
+  job — nightly, beside the CPython conformance run — could run the slice and
+  gate it against a committed baseline the way `check_cpython_regressions.sh`
+  gates the scoreboard, its baseline CI-measured for the same reason.
+
+Exit: `pip install pydantic` plus the published wheel works in a fresh Grail
+venv, and the nightly reports the slice.
 
 ## Resume here
 
@@ -558,20 +802,26 @@ decide whether CI installs it or those tests skip without it.
    (cd /tmp/pdc/pydantic_core-2.46.5 && CARGO_HOME=/tmp/pdc/cargo cargo fetch)
    # pyo3 / pyo3-ffi / jiter land in /tmp/pdc/cargo/registry/src/*/
    ```
-5. Start at **Phase 0**, then Phase 1.
+5. The pydantic sdist's tests: `pip download --no-binary :all: --no-deps
+   pydantic==2.13.5`, unpack, and run the slice as Phase 6 shows (the abi3
+   venv needs `pytest dirty-equals jsonschema` for the CPython side).
+6. Next: the future improvements in **Phase 7** above — the stock wheel,
+   speed, the rest of pydantic's test suite, distribution and CI.
 
-Two unrelated defects found on the way, not on pydantic's path (its star
-imports are under `TYPE_CHECKING`), recorded so they are not lost — both in
-`module>>___mergePublicAttrsFrom:` (`src/smalltalk/Python/module.gs:987`):
-`from X import *` **ignores `X.__all__`** and copies every public name; and
-`from <native module> import *` binds a native module's constant *accessor
-methods* as functions (`from string import *` makes `ascii_lowercase` a
-function; `string.ascii_lowercase` is right).
+Two defects found on the way, both in `module>>___mergePublicAttrsFrom:`.
+`from X import *` **ignored `X.__all__`** — fixed in Phase 6, because
+`pydantic.v1`'s star imports are not under `TYPE_CHECKING` and hit it. Still
+open: `from <native module> import *` binds a native module's constant
+*accessor methods* as functions (`from string import *` makes
+`ascii_lowercase` a function; `string.ascii_lowercase` is right).
 
 ## What has not been established
 
-* Nothing past `dlopen` has run. The wall order in Phases 2–5 is predicted
-  from PyO3 and pydantic_core source, not observed.
-* Whether pydantic's Python half has further walls beyond W4.
-* A complete abi3 build of pydantic_core (only the first 7 errors are known).
-* Any performance number.
+* The rest of pydantic's suite: the slice is 12 of its ~70 test modules, and
+  `test_types` (956 tests), `test_json_schema`, `test_generics`,
+  `test_dataclasses` have not been run under Grail.
+* Whether the slice's remaining divergences cluster further — after the walls
+  above they are mostly one-of-a-kind.
+* FastAPI itself: nothing in it has been run, only the pydantic half of
+  Route A.
+* The stock (non-abi3) wheel past import — that is option (a) of Phase 4.

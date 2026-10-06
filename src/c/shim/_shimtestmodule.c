@@ -1570,6 +1570,143 @@ test_from_format(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
 /* Module definition                                                   */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Phase 6 (docs/Support_Pydantic.md): API a PyO3 wheel reaches that  */
+/* the shim answered wrongly.                                          */
+/* ------------------------------------------------------------------ */
+
+/* test_vectorcall_method(obj, name, arg) -> obj.name(arg), through
+   PyObject_VectorcallMethod -- a stub answering NULL with no error set,
+   until pydantic_core called a model's model_post_init through it. */
+static PyObject *
+test_vectorcall_method(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_vectorcall_method expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *vargs[2] = { args[0], args[2] };
+    return PyObject_VectorcallMethod(args[1], vargs, 2, NULL);
+}
+
+/* test_set_type(obj) -> 1 set, 2 frozenset, 0 neither -- the INLINE
+   compare pyo3-ffi makes for PySet_Check / PyFrozenSet_Check. */
+static PyObject *
+test_set_type(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_set_type expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyTypeObject *t = Py_TYPE(args[0]);
+    if (t == &PySet_Type || PyType_IsSubtype(t, &PySet_Type)) return PyLong_FromSsize_t(1);
+    if (t == &PyFrozenSet_Type || PyType_IsSubtype(t, &PyFrozenSet_Type)) return PyLong_FromSsize_t(2);
+    return PyLong_FromSsize_t(0);
+}
+
+/* test_as_long(obj) -> PyLong_AsLong(obj), or the string "TypeError" when
+   that raised TypeError, as CPython's does for a str. */
+static PyObject *
+test_as_long(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_as_long expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    long v = PyLong_AsLong(args[0]);
+    if (v == -1 && PyErr_Occurred()) {
+        if (!PyErr_ExceptionMatches(PyExc_TypeError)) return NULL;
+        PyErr_Clear();
+        return PyUnicode_FromString("TypeError");
+    }
+    return PyLong_FromLong(v);
+}
+
+/* test_dict_copy_del(d, key) -> a PyDict_Copy of d with key deleted from
+   the copy by PyDict_DelItem.  On an instance's __dict__ view both used to
+   fail: the copy was a second view of the same instance, and the view had
+   no removeKey:. */
+static PyObject *
+test_dict_copy_del(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_dict_copy_del expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *copy = PyDict_Copy(args[0]);
+    if (copy == NULL) return NULL;
+    if (PyDict_DelItem(copy, args[1]) < 0) return NULL;
+    return copy;
+}
+
+/* test_type_check(obj, type) -> PyObject_TypeCheck(obj, type), the inline
+   ``Py_TYPE(o) == t || PyType_IsSubtype(Py_TYPE(o), t)'' a wheel makes. */
+static PyObject *
+test_type_check(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_type_check expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    PyTypeObject *t = (PyTypeObject *)args[1];
+    if (Py_TYPE(args[0]) == t || PyType_IsSubtype(Py_TYPE(args[0]), t)) Py_RETURN_TRUE;
+    Py_RETURN_FALSE;
+}
+
+/* test_dict_next(a, b) -> [ka1, va1, kb1, vb1, ka2, ...]: both dicts walked
+   with PyDict_Next IN LOCKSTEP, which the shim's snapshot of a walk (one
+   fetch at pos 0, then served from C) has to keep apart. */
+static PyObject *
+test_dict_next(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_dict_next expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *out = PyList_New(0);
+    if (out == NULL) return NULL;
+    Py_ssize_t pa = 0, pb = 0;
+    PyObject *k, *v;
+    int more_a = 1, more_b = 1;
+    while (more_a || more_b) {
+        if (more_a && (more_a = PyDict_Next(args[0], &pa, &k, &v))) {
+            PyList_Append(out, k);
+            PyList_Append(out, v);
+        }
+        if (more_b && (more_b = PyDict_Next(args[1], &pb, &k, &v))) {
+            PyList_Append(out, k);
+            PyList_Append(out, v);
+        }
+    }
+    return out;
+}
+
+/* test_u128(n) -> n, taken apart and rebuilt as PyO3's abi3 build does
+   for a 128-bit int: PyLong_AsUnsignedLongLongMask for the low half,
+   PyNumber_Rshift + PyLong_AsUnsignedLongLong for the high half, then
+   PyLong_FromUnsignedLongLong / PyNumber_Lshift / PyNumber_Or to rebuild. */
+static PyObject *
+test_u128(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_u128 expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    unsigned long long lo = PyLong_AsUnsignedLongLongMask(args[0]);
+    if (lo == (unsigned long long)-1 && PyErr_Occurred()) return NULL;
+    PyObject *sixty4 = PyLong_FromSsize_t(64);
+    PyObject *shifted = PyNumber_Rshift(args[0], sixty4);
+    if (shifted == NULL) return NULL;
+    unsigned long long hi = PyLong_AsUnsignedLongLong(shifted);
+    if (hi == (unsigned long long)-1 && PyErr_Occurred()) return NULL;
+    PyObject *hi_o = PyLong_FromUnsignedLongLong(hi);
+    PyObject *lo_o = PyLong_FromUnsignedLongLong(lo);
+    if (hi_o == NULL || lo_o == NULL) return NULL;
+    PyObject *up = PyNumber_Lshift(hi_o, sixty4);
+    if (up == NULL) return NULL;
+    return PyNumber_Or(up, lo_o);
+}
+
 static PyMethodDef shimtest_methods[] = {
     {"test_kwargs", (PyCFunction)(void *)test_kwargs,
      METH_FASTCALL | METH_KEYWORDS, "test_kwargs(*a, x=0, y=0) -> sum"},
@@ -1733,6 +1870,20 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_type_ready() -> 2 if ok"},
     {"test_sizeof_type", (PyCFunction)(void *)test_sizeof_type,
      METH_FASTCALL, "test_sizeof_type() -> sizeof(PyTypeObject)"},
+    {"test_vectorcall_method", (PyCFunction)(void *)test_vectorcall_method,
+     METH_FASTCALL, "test_vectorcall_method(obj, name, arg) -> obj.name(arg)"},
+    {"test_set_type", (PyCFunction)(void *)test_set_type,
+     METH_FASTCALL, "test_set_type(obj) -> 1 set, 2 frozenset, 0 other"},
+    {"test_as_long", (PyCFunction)(void *)test_as_long,
+     METH_FASTCALL, "test_as_long(obj) -> PyLong_AsLong(obj) or 'TypeError'"},
+    {"test_dict_copy_del", (PyCFunction)(void *)test_dict_copy_del,
+     METH_FASTCALL, "test_dict_copy_del(d, key) -> copy of d without key"},
+    {"test_type_check", (PyCFunction)(void *)test_type_check,
+     METH_FASTCALL, "test_type_check(obj, type) -> PyObject_TypeCheck"},
+    {"test_dict_next", (PyCFunction)(void *)test_dict_next,
+     METH_FASTCALL, "test_dict_next(a, b) -> both walked in lockstep"},
+    {"test_u128", (PyCFunction)(void *)test_u128,
+     METH_FASTCALL, "test_u128(n) -> n via PyO3's abi3 128-bit path"},
     {NULL, NULL, 0, NULL}
 };
 

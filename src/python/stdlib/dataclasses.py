@@ -254,6 +254,19 @@ def replace(*args, **changes):
     return cls(**new_kwargs)
 
 
+def _is_classvar_annotation(ann):
+    """``ClassVar'' or ``ClassVar[...]'', as an object or as the string a
+    future-annotations module stores -- CPython's _is_type test, which accepts
+    a bare ``ClassVar'' and any ``<module>.ClassVar''."""
+    if ann is None:
+        return False
+    if isinstance(ann, str):
+        head = ann.strip().split('[', 1)[0].strip()
+        return head == 'ClassVar' or head.endswith('.ClassVar')
+    import typing
+    return ann is typing.ClassVar or getattr(ann, '__origin__', None) is typing.ClassVar
+
+
 def _collect_fields(cls):
     """Build the ``{name: Field}'' ordered dict for the class.
 
@@ -275,6 +288,16 @@ def _collect_fields(cls):
         return OrderedDict()
 
     bare = set(getattr(cls, '___bareAnnotatedFields___', ()) or ())
+    # A ClassVar is not a field (CPython _process_class).  The annotation may
+    # be the STRING form under ``from __future__ import annotations'' --
+    # pydantic's ComputedFieldInfo declares ``decorator_repr: ClassVar[str]''
+    # that way, and counting it shifted every positional __init__ argument
+    # one field along ("missing required argument: repr").
+    try:
+        anns = cls.__dict__.get('__annotations__') or getattr(cls, '__annotations__', {}) or {}
+    except Exception:
+        anns = {}
+    order = [name for name in order if not _is_classvar_annotation(anns.get(name))]
     # OrderedDict, not {} — Grail's plain dict is hash-ordered, but
     # dataclass field layout (and thus positional __init__ binding,
     # fields(), asdict, ...) must follow declaration order.

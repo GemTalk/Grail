@@ -369,6 +369,8 @@ extern PyTypeObject _PyNone_Type;
 extern PyTypeObject PyByteArray_Type;
 extern PyTypeObject PyFunction_Type;
 extern PyTypeObject PyModule_Type;
+extern PyTypeObject PySet_Type;
+extern PyTypeObject PyFrozenSet_Type;
 
 /* ========== NULL ========== */
 
@@ -1060,6 +1062,14 @@ extern PyObject _Py_NotImplementedStruct;
 /* Vectorcall protocol */
 PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
                                size_t nargsf, PyObject *kwnames);
+PyObject *PyObject_VectorcallMethod(PyObject *name, PyObject *const *args,
+                                     size_t nargsf, PyObject *kwnames);
+int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
+unsigned long long PyLong_AsUnsignedLongLongMask(PyObject *o);
+unsigned long long PyLong_AsUnsignedLongLong(PyObject *o);
+PyObject *PyNumber_Rshift(PyObject *a, PyObject *b);
+PyObject *PyNumber_Lshift(PyObject *a, PyObject *b);
+PyObject *PyNumber_Or(PyObject *a, PyObject *b);
 
 /* Error handling (additional) */
 int PyErr_ExceptionMatches(PyObject *exc);

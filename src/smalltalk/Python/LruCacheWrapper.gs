@@ -306,6 +306,17 @@ set compile_env: 1
 
 ! ------- Class-side construction (env-1 entry from functools)
 
+category: 'Grail-Class Attrs'
+classmethod: LruCacheWrapper
+__module__
+	"``type(functools.cache(f)).__module__'', 'functools' as in CPython (whose
+	type is functools._lru_cache_wrapper).  Missing, the read raised
+	AttributeError, and pydantic -- which asks it of every class-body value
+	to recognise ignored types -- failed on a model with an ``@cache'' method."
+
+	^ 'functools'
+%
+
 category: 'Grail-Instance Creation'
 classmethod: LruCacheWrapper
 ___wrap___: aFunction

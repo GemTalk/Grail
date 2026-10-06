@@ -687,6 +687,27 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	sl := self ___grailCompileSymbolList___.
 	topLevelDefs := moduleAst body body select: [:stmt |
 		stmt isKindOf: FunctionDefAst].
+	"An @overload STUB followed by its implementation compiles NO method.
+	ClassDefAst already drops a class body's stubs (FunctionDefAst >>
+	isOverloadStub says why); a module's were compiled, and a stub's
+	fixed-arity selector survived the implementation, which compiles only the
+	varargs form when it has defaults or keyword-only parameters -- so
+	``f(1)'' ran the stub and answered None.  pydantic's computed_field is
+	exactly that shape: ``@computed_field def area'' answered None, and no
+	model had a computed field.  The stub's statement still runs (overload()
+	is applied, and the implementation clears the slot it leaves); only its
+	method is gone.  A stub with no implementation after it keeps its method,
+	so the name still exists."
+	[ | lastImpl kept |
+	lastImpl := IdentityDictionary new.
+	topLevelDefs doWithIndex: [:stmt :i |
+		stmt isOverloadStub ifFalse: [lastImpl at: stmt name asSymbol put: i]].
+	kept := OrderedCollection new.
+	topLevelDefs doWithIndex: [:stmt :i |
+		(stmt isOverloadStub
+			and: [(lastImpl at: stmt name asSymbol ifAbsent: [0]) > i])
+				ifFalse: [kept add: stmt]].
+	topLevelDefs := kept] value.
 	functionNames := IdentitySet new.
 	topLevelDefs do: [:stmt | functionNames add: stmt name asSymbol].
 

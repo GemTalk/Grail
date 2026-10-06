@@ -174,4 +174,31 @@ value: positional value: kwargs
 		kwargs: kwargs
 %
 
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+__str__
+	"str() of a wheel's own object is its C tp_str (CPythonShim>>
+	foreignStr:repr:), as C's own PyObject_Str already answered it.  The proxy
+	renders itself only when C has nothing -- a synthetic pointer, a type with
+	no slot."
+
+	| r |
+	r := [(CPythonShim @env0:current) @env0:foreignStr: cPtr repr: false]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	r == nil ifTrue: [^ self @env0:printString].
+	^ r
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+__repr__
+	"repr() of a wheel's own object: its C tp_repr; see __str__."
+
+	| r |
+	r := [(CPythonShim @env0:current) @env0:foreignStr: cPtr repr: true]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	r == nil ifTrue: [^ self @env0:printString].
+	^ r
+%
+
 set compile_env: 0

@@ -1645,9 +1645,14 @@ ___display___: message category: cat filename: filename lineno: lineno
 		ifTrue: [
 			"Only a real Warning subclass can be instantiated.  warn() accepts
 			a category that is neither -- test_warning_classes passes a string
-			on purpose -- and such a warning keeps its message as it came."
-			inst := cat @env1:___new___.
-			inst @env1:___args___: { message }].
+			on purpose -- and such a warning keeps its message as it came.
+
+			CALLED, not assembled: CPython's warn() does ``category(message)'',
+			so a category's own __init__ runs.  Building it from ___new___ and
+			___args___: skipped that, and pydantic's PydanticDeprecationWarning
+			-- whose __init__ sets the ``message'' its __str__ reads -- printed
+			as ``a PydanticDeprecatedSince20 occurred (error 2702)''."
+			inst := cat @env1:value: { message } value: nil].
 	"An unresolvable location is recorded as nil -- a WarningMessage says it
 	does not know -- but DISPLAYED as ``<unknown>:0'', because the rendering
 	has to put something on the line."
@@ -2620,10 +2625,10 @@ ___message___: aMessage category: aCategory filename: aFilename lineno: aLineno
 	msg := aMessage.
 	(msg @env0:isKindOf: AbstractException)
 		ifFalse: [
-			"___new___ / ___args___: are env-1 on BaseException; this classmethod
-			is env-0 beside the ivar setter, so both sends name their env."
-			msg := aCategory @env1:___new___.
-			msg @env1:___args___: { aMessage }].
+			"CALLED, so the category's own __init__ runs, as CPython's
+			``category(message)'' does (see the display path in warnings).  The
+			send names env 1: this classmethod is env-0 beside the ivar setter."
+			msg := aCategory @env1:value: { aMessage } value: nil].
 	inst := self @env0:new.
 	inst
 		___setMessage___: msg

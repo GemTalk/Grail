@@ -344,6 +344,11 @@ timed "gemdb-conflict" tests/scripts/run_gemdb_conflict_test.sh || EXIT=$?
 # are per-session state: two RPC sessions set one ContextVar and do Decimal
 # arithmetic with overlapping transactions, and every commit must succeed.
 timed "contextvars-session" tests/scripts/run_contextvars_session_test.sh || EXIT=$?
+# The CPython shim across logout + login in ONE linked gem: a dlopen'd
+# extension initialised in an earlier session must be refused with an
+# ImportError (it used to segfault the gem), and the shim's built-in modules
+# must keep working (docs/Support_Pydantic.md, W8).
+timed "shim-relogin" tests/scripts/run_shim_relogin_test.sh || EXIT=$?
 
 # Durable execution on GemStone continuations (stdlib durable, docs/Durable_Execution.md):
 # one workflow crosses six gems -- parked on sleep() and recv(), resumed by

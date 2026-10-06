@@ -1575,6 +1575,67 @@ printSmalltalkRuntimeOn: aStream
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"The names this class declares as @property (or @cached_property), as a
+	class-side method so the record is committed with the class -- a session
+	stamp would not survive deployment.  A property compiles to an accessor
+	pair that looks, from outside, exactly like a method with a default
+	argument (both answer unary ``x'' and keyword ``x:''), so nothing else at
+	run time can tell ``super().x'' -- a property, whose getter must run --
+	from ``super().m'', a method to bind.  Super >> ___pyAttrLoad___: asks the
+	nearest parent defining the name.
+
+	Emitted BEFORE THE BODY RUNS, not with the other class-side records after
+	it: ___grailNsBind___: reads it while the body executes, to hand a
+	metaclass's namespace a property object for a @property def rather than
+	the getter function.  It depends on the AST alone, so nothing it needs is
+	missing this early."
+	[:propNames |
+	self instanceMethodDefs do: [:def |
+		(def ___isPropertyDef___ and: [(propNames includes: def name asSymbol) not])
+			ifTrue: [propNames add: def name asSymbol]].
+	propNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___grailOwnPropertyNames___'; lf.
+		src nextPutAll: '	^ #('.
+		propNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
+	"The subset declared with the BUILTIN property (FunctionDefAst >>
+	___isBuiltinPropertyDef___).  object >> ___classDict___ enters a property
+	object for these alone: an ``@enum.property'' def compiles to the same
+	accessor pair, but its __dict__ entry in CPython is no ``property''.
+
+	Emitted before the body, beside ___grailOwnPropertyNames___, for the same
+	reason: ___grailNsBind___: builds a property for the namespace only for
+	these names."
+	[:builtinNames |
+	self instanceMethodDefs do: [:def |
+		(def ___isBuiltinPropertyDef___ and: [(builtinNames includes: def name asSymbol) not])
+			ifTrue: [builtinNames add: def name asSymbol]].
+	builtinNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___grailBuiltinPropertyNames___'; lf.
+		src nextPutAll: '	^ #('.
+		builtinNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
+
 	"__firstlineno__ and __static_attributes__, the two entries CPython 3.13's
 	compiler adds to every class statement's namespace: the first line of the
 	definition (its first DECORATOR's, when it has one) and the sorted names of
@@ -2596,69 +2657,6 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream].
-
-	"The names this class declares as @property (or @cached_property), as a
-	class-side method so the record is committed with the class -- a session
-	stamp would not survive deployment.  A property compiles to an accessor
-	pair that looks, from outside, exactly like a method with a default
-	argument (both answer unary ``x'' and keyword ``x:''), so nothing else at
-	run time can tell ``super().x'' -- a property, whose getter must run --
-	from ``super().m'', a method to bind.  Super >> ___pyAttrLoad___: asks the
-	nearest parent defining the name."
-	[:propNames |
-	self instanceMethodDefs do: [:def |
-		(def ___isPropertyDef___ and: [(propNames includes: def name asSymbol) not])
-			ifTrue: [propNames add: def name asSymbol]].
-	propNames isEmpty ifFalse: [
-		| src |
-		src := WriteStream on: String new.
-		src nextPutAll: '___grailOwnPropertyNames___'; lf.
-		src nextPutAll: '	^ #('.
-		propNames do: [:nm |
-			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
-		src nextPutAll: ' )'.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: src contents
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		"Now that the class can say these are properties, re-read each into a
-		metaclass's namespace: the read answers the property object, which is
-		what CPython's namespace holds, where the bind after the body could
-		only see the getter (UnboundMethod >> ___grailPropertyOrSelf___)."
-		propNames do: [:nm |
-			aStream
-				nextPutAll: self ___stVarName___;
-				nextPutAll: ' @env1:___grailNsRebindProperty___: ''';
-				nextPutAll: nm asString;
-				nextPutAll: '''.';
-				lf]]] value: OrderedCollection new.
-
-	"The subset declared with the BUILTIN property (FunctionDefAst >>
-	___isBuiltinPropertyDef___).  object >> ___classDict___ enters a property
-	object for these alone: an ``@enum.property'' def compiles to the same
-	accessor pair, but its __dict__ entry in CPython is no ``property''."
-	[:builtinNames |
-	self instanceMethodDefs do: [:def |
-		(def ___isBuiltinPropertyDef___ and: [(builtinNames includes: def name asSymbol) not])
-			ifTrue: [builtinNames add: def name asSymbol]].
-	builtinNames isEmpty ifFalse: [
-		| src |
-		src := WriteStream on: String new.
-		src nextPutAll: '___grailBuiltinPropertyNames___'; lf.
-		src nextPutAll: '	^ #('.
-		builtinNames do: [:nm |
-			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
-		src nextPutAll: ' )'.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: src contents
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream]] value: OrderedCollection new.
 
 	"Names the body binds MORE THAN ONCE, counting defs and assignments alike.
 

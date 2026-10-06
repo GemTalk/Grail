@@ -309,10 +309,24 @@ __new__: mcls _: aName _: bases _: ns
 				"Replayed when the metaclass changed it -- or when the class does
 				not have it at all, which is a __prepare__ that SEEDED the
 				namespace with a name the body never bound."
+				"...or, for __annotations__, when the metaclass changed its
+				CONTENTS.  The namespace's dict is a copy of the class's (object
+				class >> ___grailDispatchMetaclass___ seeds it), so a metaclass
+				that edits it in place leaves the same object behind, which the
+				snapshot reads as untouched.  pydantic's ModelMetaclass clears
+				BaseModel's that way -- ``namespace.get('__annotations__',
+				{}).clear()'' -- and on CPython, where that dict IS the class's,
+				BaseModel then has no annotations.  Grail's kept them, every
+				model inherited ``__pydantic_extra__: Dict[str, Any] | None'',
+				and extra='allow' refused it as not a dict annotation."
 				((k @env0:asString @env0:= '__classcell__') @env0:not
 					and: [(pending ___grailNamespaceChanged___: k value: v)
-						or: [[pending ___pyAttrLoad___: k @env0:asSymbol. false]
-							@env0:on: AbstractException do: [:ex | ex @env0:return: true]]])
+						or: [([pending ___pyAttrLoad___: k @env0:asSymbol. false]
+							@env0:on: AbstractException do: [:ex | ex @env0:return: true])
+						or: [(k @env0:asString @env0:= '__annotations__')
+							and: [[((pending ___pyAttrLoad___: #'__annotations__')
+									@env1:__eq__: v) ___isTruthy___ @env0:not]
+								@env0:on: AbstractException do: [:ex | ex @env0:return: false]]]]])
 						@env0:ifTrue: [
 						[pending ___pyAttrStore___: k @env0:asSymbol put: v]
 							@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]].

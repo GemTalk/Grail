@@ -1904,7 +1904,7 @@ ___grailLookupValue: cls value: aValue
 	before ValueError.  Only a USER _missing_ triggers this -- no base enum
 	class defines the selector, so whichClassIncludesSelector finds only an
 	override."
-	(cls @env0:class @env0:whichClassIncludesSelector: #'_missing_:' environmentId: 1) @env0:notNil
+	(self ___grailHasUserMissing: cls)
 		ifTrue: [^ self ___grailMissing: cls value: aValue].
 	^ ValueError ___signal___: (Enum ___grailValueRepr: aValue)
 		@env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString
@@ -2321,12 +2321,23 @@ ___grailHasUserMissing: cls
 	answers None).  A plain Flag's metaclass chains through Enum class and so
 	INHERITS that default; an IntFlag's (AbstractPyInt-rooted) does not -- this
 	test treats both the same, so a STRICT flag with no user override raises the
-	``invalid value'' boundary error rather than falling through to _missing_."
+	``invalid value'' boundary error rather than falling through to _missing_.
+
+	Enum's default is not one either where it is COPIED: the copy
+	___grailInstallClassProtocol: puts on a data-mixed enum's metaclass (so
+	that ``StrFoo._missing_'' exists, as in CPython) is compiled from Enum
+	class's own SOURCE, which is how it is told apart -- not by category,
+	which a user's enum classmethod shares.  Counting the copy as an override
+	sent every int- and str-mixed enum's unknown value through the _missing_
+	path, and test_enum's boundary and ValueError messages changed."
 
 	| dc |
 	dc := cls @env0:class @env0:whichClassIncludesSelector: #'_missing_:'
 		environmentId: 1.
-	^ dc @env0:notNil and: [dc @env0:~~ Enum @env0:class]
+	dc @env0:isNil ifTrue: [^ false].
+	dc == Enum @env0:class ifTrue: [^ false].
+	^ ((dc @env0:sourceCodeAt: #'_missing_:' environmentId: 1)
+		@env0:= (Enum @env0:class @env0:sourceCodeAt: #'_missing_:' environmentId: 1)) @env0:not
 %
 
 category: 'Grail-Enum Metaclass'
@@ -3835,7 +3846,10 @@ ___grailInstallClassProtocol: cls
 		#'_member_names_' #'_member_map_' #'__members__' #'_value2member_map_'
 		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__' #'__new__'
 		#'_flag_mask_' #'_singles_mask_' #'_all_bits_'
-		#'___grailSetClassBoundary___:')
+		#'___grailSetClassBoundary___:'
+		"_missing_: pydantic's enum schema reads ``enum_type._missing_'' for
+		every enum annotation, and a str- or int-mixed one had none."
+		#'_missing_:')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -3843,8 +3857,12 @@ ___grailInstallClassProtocol: cls
 				ifTrue: [nil]
 				ifFalse: [[prov @env0:categoryOfSelector: sel environmentId: 1]
 					@env0:on: AbstractException do: [:e | nil]].
+			"_missing_: only where NOTHING provides one: a user's own _missing_
+			classmethod is a 'Grail-Enum Metaclass' method too, and copying the
+			default over it broke test_enum's test_missing_override."
 			((provCat @env0:= #'Grail-Enum Metaclass')
-				or: [provCat @env0:= #'Grail-Class Attrs']) ifFalse: [
+				or: [provCat @env0:= #'Grail-Class Attrs'
+				or: [sel == #'_missing_:' and: [prov @env0:notNil]]]) ifFalse: [
 				[ | src cat |
 				src := Enum @env0:class @env0:sourceCodeAt: sel environmentId: 1.
 				cat := Enum @env0:class @env0:categoryOfSelector: sel environmentId: 1.

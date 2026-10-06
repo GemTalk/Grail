@@ -2831,3 +2831,154 @@ testDuringCallDoRestoresDepthAndReturnsValue
 	"And a call still defers sweeps after that repair."
 	self deny: (shim ___duringCallDo: [shim ___betweenShimCalls])
 %
+
+! ===============================================================================
+! Tests - pydantic Phase 6 (docs/Support_Pydantic.md)
+! ===============================================================================
+! The C-API answers pydantic_core reached and the shim got wrong, each through
+! the _shimtest function that makes the call the way a PyO3 wheel does.
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testVectorcallMethodCallsTheMethod
+	"PyObject_VectorcallMethod was a stub answering NULL with no error set:
+	pydantic_core's call of model_post_init surfaced as ``SystemError:
+	attempted to fetch exception but none was set''."
+
+	| shim r |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	r := shim callModule: '_shimtest' method: 'test_vectorcall_method'
+		with: 'a,b' with: 'split' with: ','.
+	self assert: r asArray equals: #('a' 'b')
+%
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testSetsCrossAsTheSetTypes
+	"pyo3-ffi INLINES PySet_Check as a compare against &PySet_Type, which the
+	shim never initialised; a Grail set crossed as ``object''."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_set_type'
+		with: (self eval: '{1, 2}')) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_set_type'
+		with: (self eval: 'frozenset((1,))')) equals: 2.
+	self assert: (shim callModule: '_shimtest' method: 'test_set_type'
+		with: (self eval: '[1]')) equals: 0
+%
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testAsLongOfAStrRaisesTypeError
+	"PyLong_AsLong of a str answered 0 with no error set, so PyO3 read a str
+	literal as the integer 0."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_long' with: 'abc')
+		equals: 'TypeError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_long' with: 41)
+		equals: 41
+	"Not asserted for a plain object(): that still goes through the __index__
+	PROBE, whose expected DNU raised under SUnit's handlers is the 6011 loop
+	CPythonShim>>___betweenShimCalls describes, not a TypeError."
+%
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testDictCopyOfAnInstanceDictIsIndependent
+	"PyDict_Copy of an instance's __dict__ answered a second VIEW of the same
+	instance, and PyDict_DelItem sent the view removeKey: -- so pydantic_core's
+	validate_assignment edited the model in place, or failed."
+
+	| shim inst copy |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	inst := self eval: 'class _ShimP6:
+    pass
+_shimp6 = _ShimP6()
+_shimp6.a = 1
+_shimp6.b = 2
+_shimp6'.
+	copy := shim callModule: '_shimtest' method: 'test_dict_copy_del'
+		with: (inst @env1:___pyAttrLoad___: #'__dict__') with: 'a'.
+	self assert: (copy @env1:__len__) equals: 1.
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 1.
+	self assert: (inst @env1:___pyAttrLoad___: #b) equals: 2
+%
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testANativeTypeInstanceIsItsTypesSubtype
+	"A datetime.date -- a natively implemented type -- crossed typed as
+	``object'', so PyObject_TypeCheck against the date type failed and
+	pydantic_core refused a real date."
+
+	| shim pair |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	pair := self eval: 'import datetime
+(datetime.date(2017, 1, 1), datetime.date, datetime.datetime)'.
+	self assert: (shim callModule: '_shimtest' method: 'test_type_check'
+		with: (pair at: 1) with: (pair at: 2)) equals: true.
+	self assert: (shim callModule: '_shimtest' method: 'test_type_check'
+		with: (pair at: 1) with: (pair at: 3)) equals: false
+%
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testRichCompareOfStrAndNoneIsFalse
+	"PyObject_RichCompareBool sent the bare __eq__, which answers
+	NotImplemented for str and None, and C read that as TRUE -- so
+	exclude_defaults dropped a str field whose default is None."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare'
+		with: 'z' with: (Python at: #None) with: 2) equals: false.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare'
+		with: (Python at: #None) with: 'q' with: 2) equals: false.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare'
+		with: 'z' with: (Python at: #None) with: 3) equals: true
+%
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testDictNextWalksTwoDictsInLockstep
+	"PyDict_Next serves a walk from one snapshot taken at pos 0 (the shim's
+	g_dn ring), which halved a model_dump's crossings.  Two walks in flight
+	at once must each see their own dict, in insertion order."
+
+	| shim r |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	r := shim callModule: '_shimtest' method: 'test_dict_next'
+		with: (self eval: '{"a": 1, "b": 2, "c": 3}')
+		with: (self eval: '{"x": 10, "y": 20}').
+	self assert: r asArray equals: #('a' 1 'x' 10 'b' 2 'y' 20 'c' 3)
+%
+
+category: 'Grail-Tests - Pydantic Phase 6'
+method: CPythonShimTestCase
+testA128BitIntRoundTripsTheAbi3Way
+	"PyO3's abi3 build reads a 128-bit int as two unsigned 64-bit halves
+	(PyLong_AsUnsignedLongLongMask, PyNumber_Rshift) and rebuilds one with
+	PyLong_FromUnsignedLongLong / PyNumber_Lshift / PyNumber_Or.  The
+	PyNumber_* were stubs answering NULL with no error, and the 64-bit
+	conversions went through the signed SmallInteger path, so a UUID's int
+	killed the gem."
+
+	| shim n |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	n := 16r123456781234567812345678123456FF.
+	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: n) equals: n.
+	n := (2 raisedTo: 128) - 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: n) equals: n.
+	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: 5) equals: 5
+%
