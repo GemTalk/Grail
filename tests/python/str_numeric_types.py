@@ -5,7 +5,7 @@ Grail answered all three with the kernel's Character >> isDigit -- the Decimal
 set of an older Unicode -- so '\u00b2'.isdigit() and '\u00bd'.isnumeric() were
 False, isnumeric was simply isdecimal, and 180 decimal digits added since
 (Kawi, Garay, Sunuwar, ...) were not decimal.  The answers now come from tables
-generated from CPython's own str methods (scripts/generate_unicode_numeric.py).
+generated from CPython's own str methods (scripts/generate_unicode_char_types.py).
 
 SAMPLE is every first and last code point of every range those tables hold,
 and its neighbours on each side -- so a boundary off by one shows here -- taken
@@ -156,9 +156,8 @@ def numeric_boundaries():
 
 
 def numerics_are_alphanumeric():
-    # isalnum is isalpha or isnumeric.  Only the numeric half is checked: the
-    # neighbours of these ranges include letters newer than the kernel's
-    # isLetter, which Grail does not yet know (isalpha is a separate gap).
+    # isalnum is isalpha or isnumeric; this is the numeric half.  The whole of
+    # isalnum, at every boundary of its own table, is in str_alpha_types.py.
     numeric = [c for c in SAMPLE if chr(c).isnumeric()]
     return len(numeric), all(chr(c).isalnum() for c in numeric)
 
