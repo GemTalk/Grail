@@ -1359,6 +1359,7 @@ run
 	at: #'StrFormatFieldsTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'StrMethodKeywordArgsTestCase' put: nil;
+	at: #'StrNumericTypesTestCase' put: nil;
 	at: #'StrPaddingTestCase' put: nil;
 	at: #'StrRequiresAStrTestCase' put: nil;
 	at: #'StrSearchAndSplitTestCase' put: nil;
@@ -1867,6 +1868,7 @@ input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/dict_view.gs
 input src/smalltalk/Python/mappingproxy.gs
 input src/smalltalk/Python/str.gs
+input src/smalltalk/Python/unicode_numeric_types.gs
 input src/smalltalk/Python/Subscript.gs
 input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/UndefinedObject.gs
@@ -2833,6 +2835,7 @@ input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/StrFormatFieldsTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/StrMethodKeywordArgsTestCase.gs
+input src/smalltalk/PythonTests/StrNumericTypesTestCase.gs
 input src/smalltalk/PythonTests/StrPaddingTestCase.gs
 input src/smalltalk/PythonTests/StrRequiresAStrTestCase.gs
 input src/smalltalk/PythonTests/StrSearchAndSplitTestCase.gs
