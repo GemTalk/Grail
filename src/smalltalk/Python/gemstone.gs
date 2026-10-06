@@ -401,8 +401,11 @@ category: 'Grail-Built-in Functions'
 method: gemstone
 ___commitOrRefusal___
 	"Commit, answering True; False on a conflict; or, when GemStone REFUSED
-	the commit outright, a tuple (error number, message).  ___tryCommit___
-	with the number kept, so a caller can tell why: 2407 is a session-bound
+	the commit outright, a tuple (error number, message, detail).
+	___tryCommit___ with the number kept, so a caller can tell why, and for a
+	2407 the detail: a tuple (path, sentence) naming where the refused object
+	is held -- ``gemdb.root['jobs'] (a generator) holds a Semaphore, which
+	GemStone never commits'' -- or None when no path is found.  2407 is a session-bound
 	object (an instancesNonPersistent instance -- a generator's Semaphore)
 	reachable from the commit set; 2403/2424 is a commit attempted after such
 	a refusal without the abort it needs.  gemdb.commit() and
@@ -419,9 +422,19 @@ ___commitOrRefusal___
 
 	^ [ System commit ]
 		@env0:on: TransactionError
-		do: [:ex | ex @env0:return: (tuple
-			@env0:with: ex @env0:number
-			with: (str @env0:withAll: (ex @env0:messageText)))]
+		do: [:ex | | detail |
+			"Where the refused object is held, found NOW: the handler runs before
+			anyone aborts, while the failed flush's marks are still there
+			(importlib >> ___grailRefusalPathTo___:).  Only on this path, so a
+			successful commit never pays for the search."
+			detail := ex @env0:number == 2407
+				ifTrue: [importlib @env0:___grailRefusalDetail___:
+					(ex @env0:gsArguments @env0:atOrNil: 1)]
+				ifFalse: [nil].
+			ex @env0:return: (tuple
+				@env0:with: ex @env0:number
+				with: (str @env0:withAll: (ex @env0:messageText))
+				with: detail)]
 %
 
 ! ===============================================================================

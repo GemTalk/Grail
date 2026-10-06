@@ -24,9 +24,10 @@ DeployCheckTestCase category: 'Grail-SUnit'
 ! ===============================================================================
 ! DeployCheckTestCase -- gemstone.deploy_check(module), the pre-deploy audit
 ! (docs/Persistent_Modules_and_Classes.md §6.3).  Imports two fixtures --
-! one holding session-bound resources in module globals (an open socket + a
-! threading.Lock over a Semaphore), one fully commit-clean -- and asserts the
-! audit flags exactly the session-bound values on the dirty one and nothing on
+! one holding session-bound resources (an open socket, a generator, a socket
+! two levels down) beside a threading.Lock, which commits fine; one fully
+! commit-clean, compiled regex included -- and asserts the audit flags
+! exactly the session-bound values, each by its Python path, and nothing on
 ! the clean one.  The suite never commits, so this exercises the walk itself,
 ! not the commit path.
 ! ===============================================================================
@@ -73,7 +74,8 @@ category: 'Grail-Tests-deploy'
 method: DeployCheckTestCase
 testCleanModuleReportsNothing
 	"A module whose globals are all committable (ints, lists, dicts,
-	functions) audits clean."
+	functions, a compiled regex, which rebuilds its C pointer) audits
+	clean."
 
 	self assert: (self checkModule: 'grail_deploy_clean') @env1:__len__ equals: 0
 %
@@ -90,20 +92,41 @@ testDirtyModuleFlagsSocket
 category: 'Grail-Tests-deploy'
 method: DeployCheckTestCase
 testDirtyModuleFlagsSemaphore
-	"A threading.Lock's Semaphore is flagged (non-persistable -- commit
-	would fail 2407)."
+	"A generator's Semaphore is flagged (non-persistable -- commit would
+	fail 2407), under the generator's path and Python type."
 
-	self assert: (self findings: 'grail_deploy_dirty' includeSubstring: 'Semaphore')
+	self assert: (self findings: 'grail_deploy_dirty'
+		includeSubstring: 'grail_deploy_dirty.gen (a generator) -> Semaphore')
+%
+
+category: 'Grail-Tests-deploy'
+method: DeployCheckTestCase
+testLockIsNotFlagged
+	"A threading.Lock commits and works in a later session (measured,
+	docs/App_Namespaces_Design.md §6.0): its Semaphore is held where a commit
+	never writes.  The old walk descended into that storage and flagged it."
+
+	self deny: (self findings: 'grail_deploy_dirty' includeSubstring: '.lock')
+%
+
+category: 'Grail-Tests-deploy'
+method: DeployCheckTestCase
+testNestedPathNamesKeyAndAttribute
+	"A socket held as an attribute of an object in a dict is reported by its
+	Python path: the dict key, then the attribute."
+
+	self assert: (self findings: 'grail_deploy_dirty'
+		includeSubstring: 'grail_deploy_dirty.conns[''primary'']._sock (a socket) -> GsSocket')
 %
 
 category: 'Grail-Tests-deploy'
 method: DeployCheckTestCase
 testFindingsCarryClassPath
-	"Each finding names the reference path from the module down to the
-	session-bound object (module class first)."
+	"Each finding names the path from the module down to the session-bound
+	object in Python terms, with the holder's Python type."
 
 	self assert: (self findings: 'grail_deploy_dirty'
-		includeSubstring: 'Grail_deploy_dirty.')
+		includeSubstring: 'grail_deploy_dirty.sock (a socket) -> GsSocket')
 %
 
 category: 'Grail-Tests-deploy'

@@ -135,8 +135,10 @@ class SessionStateError(GemDBError, TypeError):
     """GemStone refused a commit: it reaches an object that cannot outlive the session.
 
     A generator, or anything holding one, is the case GemStone refuses
-    today; the message names the object GemStone found.  A ``TypeError``
-    too, as CPython's ``pickle`` raises for a socket or a lock.
+    today.  ``path`` says where the commit found it, in Python terms --
+    ``gemdb.root['jobs'][3].gen`` -- and the message what it holds; ``path``
+    is None when it cannot be traced.  A ``TypeError`` too, as CPython's
+    ``pickle`` raises for a socket or a lock.
 
     Unlike a conflict, a refused transaction cannot be committed even once
     the object is removed: GemStone allows no further commit until an
@@ -149,8 +151,11 @@ class SessionStateError(GemDBError, TypeError):
     in ``__transient__``, or hold it somewhere a commit does not reach.
     """
 
-    def __init__(self, message, aborted):
+    def __init__(self, message, aborted, detail=None):
         self.aborted = aborted
+        self.path = None
+        if detail is not None:
+            self.path, message = detail
         tail = ("; the transaction was aborted" if aborted
                 else "; this transaction can no longer be committed -- "
                      "gemdb.abort() discards it, and commits work again after that")
@@ -175,9 +180,9 @@ def _commit_or_raise(aborted_on_failure):
     # GemStone refused the commit outright -- (error number, message).
     if aborted_on_failure:
         gs.system.abort()
-    number, message = outcome
+    number, message, detail = outcome
     if number == 2407:
-        raise SessionStateError(message, aborted=aborted_on_failure)
+        raise SessionStateError(message, aborted=aborted_on_failure, detail=detail)
     raise GemDBError("commit refused (GemStone error " + str(number) + "): "
                      + message + ("; the transaction was aborted" if aborted_on_failure
                                   else "; gemdb.abort() discards the transaction"))
