@@ -71,8 +71,13 @@ check('signal_signal_returns_enum', repr(_old), '<Handlers.SIG_DFL: 0>')
 check('signal_getsignal_returns_enum', repr(signal.getsignal(signal.SIGTERM)),
       '<Handlers.SIG_IGN: 1>')
 signal.signal(signal.SIGTERM, _old)
+# Not "every entry is a member": on Linux valid_signals() also holds the
+# real-time signal numbers, which CPython leaves as plain ints.
+_vs = signal.valid_signals()
 check('signal_valid_signals_are_members',
-      all(isinstance(s, Signals) for s in signal.valid_signals()), True)
+      (isinstance(min(_vs), Signals), signal.SIGINT in _vs, signal.SIGTERM in _vs,
+       all(isinstance(s, int) for s in _vs)),
+      (True, True, True, True))
 check('signal_signal_is_the_wrapper', signal.signal.__module__, 'signal')
 
 # --- 2. shlex --------------------------------------------------------------
