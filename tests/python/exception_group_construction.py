@@ -21,7 +21,8 @@ Grail did not check or did not copy:
   base, so it had no ``exceptions`` at all.
 
 Every EXPECTED value was produced by running these functions under CPython
-3.14 (``--emit``), not written by hand.
+3.14 (``--emit``), not written by hand -- under 3.14.8 since the list-shaped
+repr changed there (see a_list_shows_only_as_one_of_exactly_two_args).
 """
 
 import collections
@@ -126,6 +127,28 @@ def repr_keeps_the_argument_shape():
     eg = ExceptionGroup('d', dq)
     dq.clear()
     return (repr(tup), repr(eg))
+
+
+def a_list_shows_only_as_one_of_exactly_two_args():
+    # CPython 3.14.8 (gh-146096): the list shape needs args == (message, list).
+    # A subclass whose __new__ takes a third argument shows the exceptions
+    # TUPLE, as do the groups split() derives from it; 3.14.7 showed the list.
+    class Two(ExceptionGroup):
+        def __new__(cls, message, excs):
+            return super().__new__(cls, message, excs)
+
+    class Three(ExceptionGroup):
+        def __new__(cls, message, excs, code):
+            return super().__new__(cls, message, excs)
+
+        def derive(self, excs):
+            return Three(self.message, excs, 0)
+
+    three = Three('m', [ValueError(1), TypeError(2)], 7)
+    match, rest = three.split(ValueError)
+    return (repr(Two('m', [ValueError(1)])), len(three.args), repr(three),
+            repr(match), repr(rest),
+            repr(ExceptionGroup('m', [ValueError(1)]).split(ValueError)[0]))
 
 
 def a_broken_repr_fails_construction():
@@ -252,6 +275,7 @@ CHECKS = [
     bad_constructor_arguments, which_class_is_built,
     a_subclass_new_takes_its_own_arguments, a_mixed_base_group_is_a_real_group,
     fields_are_readonly_snapshots, repr_keeps_the_argument_shape,
+    a_list_shows_only_as_one_of_exactly_two_args,
     a_broken_repr_fails_construction, a_matching_group_is_answered_itself,
     a_bad_condition_is_refused, parts_carry_the_original_state,
     non_sequence_notes_are_not_copied, derive_must_answer_a_group,
@@ -262,10 +286,11 @@ CHECKS = [
 EXPECTED = {
     'bad_constructor_arguments': (('TypeError', 'BaseExceptionGroup.__new__() takes exactly 2 arguments (1 given)'), ('TypeError', 'BaseExceptionGroup.__new__() takes exactly 2 arguments (3 given)'), ('TypeError', 'BaseExceptionGroup.__new__() argument 1 must be str, not None'), ('TypeError', 'second argument (exceptions) must be a sequence'), ('TypeError', 'second argument (exceptions) must be a sequence'), ('ValueError', 'second argument (exceptions) must be a non-empty sequence'), ('ValueError', 'Item 0 of second argument (exceptions) is not an exception'), ('ValueError', 'Item 1 of second argument (exceptions) is not an exception')),
     'which_class_is_built': ('ExceptionGroup', 'BaseExceptionGroup', ('TypeError', 'Cannot nest BaseExceptions in an ExceptionGroup'), ('TypeError', "Cannot nest BaseExceptions in 'MyEG'"), ('TypeError', "Cannot nest BaseExceptions in 'MixedEG'"), 'MyBEG', 'MixedEG'),
-    'a_subclass_new_takes_its_own_arguments': ('EG', 42, "EG('m', [ValueError(1), TypeError(2)])", 'EG', 42, "EG('m', [TypeError(2)])", ('TypeError', "Cannot nest BaseExceptions in 'EG'")),
+    'a_subclass_new_takes_its_own_arguments': ('EG', 42, "EG('m', (ValueError(1), TypeError(2)))", 'EG', 42, "EG('m', (TypeError(2),))", ('TypeError', "Cannot nest BaseExceptions in 'EG'")),
     'a_mixed_base_group_is_a_real_group': ('MixedEG', 2, 'm', 'm (2 sub-exceptions)'),
     'fields_are_readonly_snapshots': ('tuple', 2, "ExceptionGroup('test', [ValueError(1), TypeError(2)])", ('test', []), ('AttributeError', 'readonly attribute'), ('AttributeError', 'readonly attribute'), 'test'),
     'repr_keeps_the_argument_shape': ("BaseExceptionGroup('t', (ValueError(1), KeyboardInterrupt(2)))", "ExceptionGroup('d', deque([ValueError(1), TypeError(2)]))"),
+    'a_list_shows_only_as_one_of_exactly_two_args': ("Two('m', [ValueError(1)])", 3, "Three('m', (ValueError(1), TypeError(2)))", "Three('m', (ValueError(1),))", "Three('m', (TypeError(2),))", "ExceptionGroup('m', [ValueError(1)])"),
     'a_broken_repr_fails_construction': (('TypeError', '__repr__ returned non-string (type NoneType)'), 'ValueError'),
     'a_matching_group_is_answered_itself': (True, True, True, None, False, True),
     'a_bad_condition_is_refused': ('TypeError', 'TypeError', 'TypeError', 'TypeError', 'TypeError'),

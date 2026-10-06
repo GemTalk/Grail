@@ -3500,7 +3500,7 @@ parseFStringLiteral
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
 	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
-	  wrapped anchor sawT sawNonT tExpr |
+	  wrapped anchor sawT sawNonT uncommented hadComment |
 	startTok := self peek.
 	parts := OrderedCollection new.
 	sawT := false.
@@ -3557,14 +3557,27 @@ parseFStringLiteral
 							pos := pos + 1.
 						].
 					] ifNil: [
-						(ch == $' or: [ch == $"]) ifTrue: [
+						"A comment (PEP 701) runs to the end of its line: a brace,
+						quote, ``!'' or ``:'' in it is not structure.  Not inside a
+						format spec, where ``#'' is the alternate-form flag."
+						(ch == $# and: [inSpec not]) ifTrue: [
+							[pos <= len and: [(value at: pos) ~= Character lf]]
+								whileTrue: [pos := pos + 1]
+						] ifFalse: [
+						"In a format spec's own text a quote or a paren is a literal
+						character -- a quote may be the fill, as in f'{s:''^7}' -- and only braces
+						are structure; inside a field nested in the spec (depth > 0)
+						it is expression text again."
+						((ch == $' or: [ch == $"]) and: [inSpec not or: [bracketDepth > 0]]) ifTrue: [
 							strQuote := ch.
 							inSpec ifTrue: [specBuf nextPut: ch].
 							pos := pos + 1.
 						] ifFalse: [
-							(ch == $( or: [ch == $[ or: [ch == ${]])
+							(ch == ${ or: [(ch == $( or: [ch == $[])
+									and: [inSpec not or: [bracketDepth > 0]]])
 								ifTrue: [bracketDepth := bracketDepth + 1].
-							(ch == $) or: [ch == $] or: [ch == $}]])
+							(ch == $} or: [(ch == $) or: [ch == $]])
+									and: [inSpec not or: [bracketDepth > 0]]])
 								ifTrue: [
 									ch == $} ifTrue: [
 										bracketDepth == 0 ifTrue: [
@@ -3599,6 +3612,7 @@ parseFStringLiteral
 								].
 							].
 						].
+						].
 					].
 				].
 				"After loop, pos is at the position past ``}``."
@@ -3614,6 +3628,14 @@ parseFStringLiteral
 					exprEnd - 1 - backCount
 				]).
 				formatSpec := inSpec ifTrue: [specBuf contents] ifFalse: [nil].
+				"Comments come out of the field's text before anything reads it:
+				the debug text and a t-string's expression are CPython's
+				comment-free reconstruction, and the child parse below cannot
+				take one either -- wrapped as ``(x  # c)'' its closing paren is
+				commented out."
+				uncommented := self ___ftstringExprWithoutComments___: exprText.
+				hadComment := uncommented ~~ exprText.
+				exprText := uncommented.
 				"``f'{expr=}''' -- the self-documenting form (Python 3.8).  The field's
 				SOURCE is emitted verbatim, surrounding whitespace and the ``='' with
 				it, and then the value: repr'd when no conversion and no format spec
@@ -3693,7 +3715,9 @@ parseFStringLiteral
 				exprAst ifNotNil: [:e |
 					anchor := tok fieldStarts ifNil: [nil] ifNotNil: [:fs |
 						fs detect: [:a | (a at: 1) = exprStart] ifNone: [nil]].
-					(wrapped and: [anchor notNil])
+					"A removed comment shifts every offset after it, so the
+					 constant-difference rebase no longer holds."
+					(wrapped and: [anchor notNil and: [hadComment not]])
 						ifTrue: [
 							e ___rebaseFragmentPositionsBy: (anchor at: 2) + lead - 2
 								line: (anchor at: 3) + leadNewlines - 1]
@@ -3705,12 +3729,12 @@ parseFStringLiteral
 					ifTrue: [
 						"PEP 750: the field stays UNCONVERTED -- the value, its source
 						 text, the conversion and the spec go into an Interpolation.
-						 CPython keeps the text's leading whitespace and drops the
-						 trailing (t'{ x }' has expression ' x')."
-						tExpr := exprText asString.
-						[tExpr notEmpty and: [tExpr last isSeparator]]
-							whileTrue: [tExpr := tExpr copyFrom: 1 to: tExpr size - 1].
-						parts add: #interp -> { exprAst. tExpr. conversion. formatSpec }]
+						 The text is verbatim up to the delimiter, whitespace at both
+						 ends included: t'{ x }' has expression ' x '.  CPython 3.14.7
+						 and earlier dropped the trailing whitespace (' x'); 3.14.8
+						 keeps it (gh-154719).  For the debug form the ``='' and what
+						 follows it are already gone (see above)."
+						parts add: #interp -> { exprAst. exprText asString. conversion. formatSpec }]
 					ifFalse: [
 						converted := self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok.
 						parts add: #expr -> converted].
@@ -3765,6 +3789,50 @@ parseFStringLiteral
 
 category: 'Grail-parsing'
 method: PythonParser
+___ftstringExprWithoutComments___: text
+	"A replacement field's source with its comments removed -- CPython's
+	set_ftstring_expr (Parser/lexer/lexer.c), which builds both the debug
+	text of ``f'{x=}''' and a t-string Interpolation's expression.  A ``#''
+	outside a string literal drops the rest of its line but not the newline;
+	a backslash copies the next character unread, so an escaped quote neither
+	opens nor closes a string.  Quote tracking is CPython's own: any quote
+	opens, only the same quote closes, which is right for the valid string
+	tokens a field can hold.  Answers ``text'' itself (the identical object)
+	when there is no comment."
+
+	| out i ch inString quote |
+	(text includes: $#) ifFalse: [^ text].
+	out := WriteStream on: Unicode7 new.
+	inString := false.
+	i := 1.
+	[i <= text size] whileTrue: [
+		ch := text at: i.
+		ch == $\
+			ifTrue: [
+				out nextPut: ch.
+				i := i + 1.
+				i <= text size ifTrue: [out nextPut: (text at: i)]]
+			ifFalse: [
+				(ch == $" or: [ch == $'])
+					ifTrue: [
+						inString
+							ifFalse: [inString := true. quote := ch]
+							ifTrue: [ch == quote ifTrue: [inString := false]].
+						out nextPut: ch]
+					ifFalse: [
+						(ch == $# and: [inString not])
+							ifTrue: [
+								[i <= text size and: [(text at: i) ~= Character lf]]
+									whileTrue: [i := i + 1].
+								i <= text size ifTrue: [out nextPut: Character lf]]
+							ifFalse: [out nextPut: ch]]].
+		i := i + 1].
+	"A ``#'' inside a string literal removes nothing."
+	^ out contents = text ifTrue: [text] ifFalse: [out contents]
+%
+
+category: 'Grail-parsing'
+method: PythonParser
 ___fstringDebugEqualsIn___: text
 	"Index of the trailing ``='' that makes a replacement field the
 	self-documenting ``f'{expr=}''' form, or 0 when there is none.
@@ -3773,9 +3841,18 @@ ___fstringDebugEqualsIn___: text
 	that spacing in the emitted text.  An ``='' preceded by = ! < > : belongs
 	to a comparison or a walrus instead, so f'{a==10}' is an ordinary field."
 
-	| i prev |
+	| i prev newline |
 	i := text size.
-	[i > 0 and: [(text at: i) isSeparator]] whileTrue: [i := i - 1].
+	"CPython 3.14.8's _strip_interpolation_debug_expr: whitespace, and an
+	explicit line continuation (a backslash ending a line), may follow the
+	``=''."
+	[newline := false.
+	 [i > 0 and: [(text at: i) isSeparator]] whileTrue: [
+		((text at: i) == Character lf or: [(text at: i) == Character cr])
+			ifTrue: [newline := true].
+		i := i - 1].
+	 newline and: [i > 0 and: [(text at: i) == $\]]]
+		whileTrue: [i := i - 1].
 	i == 0 ifTrue: [^ 0].
 	(text at: i) == $= ifFalse: [^ 0].
 	i == 1 ifTrue: [^ i].
