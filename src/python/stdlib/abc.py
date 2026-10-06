@@ -229,7 +229,13 @@ except ImportError:
             """Override for isinstance(instance, cls)."""
             # Inline the cache checking
             _grail_session_caches(cls)
-            subclass = instance.__class__
+            try:
+                subclass = instance.__class__
+            except AttributeError:
+                # Fall back to the type when the instance has no __class__,
+                # as the built-in isinstance() does (CPython 3.14.8,
+                # gh-153772).
+                subclass = type(instance)
             if subclass in cls._abc_cache:
                 return True
             subtype = type(instance)

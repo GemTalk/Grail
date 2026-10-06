@@ -1356,6 +1356,7 @@ run
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'StringIOSubclassTestCase' put: nil;
+	at: #'Stdlib3148FixesTestCase' put: nil;
 	at: #'StrAlphaTypesTestCase' put: nil;
 	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
@@ -2834,6 +2835,7 @@ input src/smalltalk/PythonTests/StopAsyncIterationTestCase.gs
 input src/smalltalk/PythonTests/StopIterationTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/StringIOSubclassTestCase.gs
+input src/smalltalk/PythonTests/Stdlib3148FixesTestCase.gs
 input src/smalltalk/PythonTests/StrAlphaTypesTestCase.gs
 input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs

@@ -1,5 +1,5 @@
 # argparse -- command-line parsing.
-# VENDORED VERBATIM FROM CPython 3.14.6 rather than reimplemented.
+# VENDORED VERBATIM FROM CPython 3.14.8 rather than reimplemented.
 #
 # WHAT IT REPLACES: a 467-line hand-written subset whose ArgumentParser
 # accepted 4 of CPython's 15 constructor parameters -- prog, description,
@@ -24,7 +24,7 @@
 #
 # The drop was tried first, as PR #731 (ipaddress) and #733 (http.cookiejar)
 # did, and it imports and runs UNMODIFIED: everything below this header block
-# is CPython 3.14.6's argparse.py byte for byte, with no adaptation.  What it
+# is CPython 3.14.8's argparse.py byte for byte, with no adaptation.  What it
 # needed was three fixes OUTSIDE it, each a real defect in its own right
 # rather than an argparse special case:
 #
@@ -1882,6 +1882,9 @@ def _prog_name(prog=None):
         modspec = None
     if modspec is None:
         # simple script
+        return _os.path.basename(arg0)
+    if modspec.name != '__main__' and arg0 != modspec.origin:
+        # named module executed as main without altering sys.argv[0]
         return _os.path.basename(arg0)
     py = _os.path.basename(_sys.executable)
     if modspec.name != '__main__':

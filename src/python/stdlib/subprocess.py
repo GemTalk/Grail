@@ -85,10 +85,21 @@ class CalledProcessError(SubprocessError):
         return self.output
 
     def __str__(self):
-        if self.returncode and self.returncode < 0:
-            return "Command %s died with signal %d" % (repr(self.cmd), -self.returncode)
-        return "Command %s returned non-zero exit status %d" % (
-            repr(self.cmd), self.returncode)
+        # CPython 3.14.8's text.  A returncode that is not an int (None, a
+        # float) formats instead of raising TypeError; the command is
+        # quoted with '%s', not repr'd; the sentence ends in a period.
+        if isinstance(self.returncode, int) and self.returncode < 0:
+            try:
+                import signal
+                return "Command '%s' died with %r." % (
+                        self.cmd, signal.Signals(-self.returncode))
+            except (AttributeError, ValueError):
+                # GRAIL: signal has no Signals enum yet, so every signal
+                # reads as CPython's text for one it does not know.
+                return "Command '%s' died with unknown signal %d." % (
+                        self.cmd, -self.returncode)
+        return (f"Command '{self.cmd}' returned non-zero "
+                f"exit status {self.returncode}.")
 
 
 class CompletedProcess:
