@@ -776,6 +776,7 @@ run
 	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'AnyAllShareTheTruthTestTestCase' put: nil;
 	at: #'AppNamespaceTestCase' put: nil;
+	at: #'ClassTransientTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
 	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
@@ -2234,6 +2235,7 @@ input src/smalltalk/PythonTests/MetaclassProtocolsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/AnyAllShareTheTruthTestTestCase.gs
 input src/smalltalk/PythonTests/AppNamespaceTestCase.gs
+input src/smalltalk/PythonTests/ClassTransientTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs

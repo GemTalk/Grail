@@ -1279,9 +1279,137 @@ ___grailAdoptInheritedSlotLayout___
 	^ self ___grailInstallInferredSlots___: #() declared: #() properties: #() indexed: true
 %
 
+category: 'Grail-Transient Attrs'
+classmethod: object
+___grailInstallTransientAttrs___
+	"Class-level ``__transient__'' (docs/App_Namespaces_Design.md §6.3): the
+	instance attributes it names are never committed.  They live in SESSION
+	storage keyed by the object (object >> ___transientAttrsCreate:), read as
+	unset in a session that did not assign them, and a committed object's
+	``__session_init__'' runs on the first such miss to rebuild them:
+
+	    class Connection:
+	        __transient__ = ('_sock',)
+	        def __session_init__(self):
+	            self._sock = socket.create_connection(self.address)
+
+	Emitted by ClassDefAst after a class body that assigns ``__transient__'',
+	before the slot installer, which keeps these names out of the indexed
+	layout so every access reaches the dynamic-instVar accessors.  Here those
+	accessors are overridden (env 0, the five every read, store, delete,
+	listing and __dict__ view goes through) to route the names to session
+	storage.  The names are the union along the class chain, so a subclass
+	can add names and never commits one its base keeps transient; the
+	overrides read that union from the class side (___pyTransientAttrs___),
+	so a base's and a subclass's overrides agree.  A value is a str (one
+	name) or an iterable of str, as for __slots__; anything else is a
+	TypeError at class creation."
+
+	| own sup inherited names lit lf meta |
+	lf := Character @env0:lf @env0:asString.
+	own := self ___grailTransientNamesFrom___: (self ___grailOwnClassAttr___: '__transient__').
+	sup := self @env0:superclass.
+	inherited := ((sup @env0:class @env0:whichClassIncludesSelector: #'___pyTransientAttrs___' environmentId: 1) @env0:notNil)
+		ifTrue: [sup @env0:perform: #'___pyTransientAttrs___' env: 1]
+		ifFalse: [#()].
+	names := OrderedCollection @env0:new.
+	inherited @env0:do: [:n | names @env0:add: n @env0:asSymbol].
+	own @env0:do: [:n | (names @env0:includes: n) ifFalse: [names @env0:add: n]].
+	names @env0:isEmpty ifTrue: [^ self].
+	meta := self @env0:class.
+	lit := String @env0:new.
+	names @env0:do: [:n | lit := lit @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
+	meta ___compileMethod: '___pyTransientAttrs___' @env0:, lf @env0:, '	^ #(' @env0:, lit @env0:, ' )'
+		category: 'Grail-Transient Attrs'.
+	#('dynamicInstVarAt: aSymbol
+	(self ___isTransientAttr___: aSymbol) ifTrue: [^ self ___transientAttrAt___: aSymbol].
+	^ super dynamicInstVarAt: aSymbol'
+	'dynamicInstVarAt: aSymbol put: aValue
+	(self ___isTransientAttr___: aSymbol) ifTrue: [^ self ___transientAttrAt___: aSymbol put: aValue].
+	^ super dynamicInstVarAt: aSymbol put: aValue'
+	'removeDynamicInstVar: aSymbol
+	(self ___isTransientAttr___: aSymbol) ifTrue: [^ self ___transientAttrAt___: aSymbol put: nil].
+	^ super removeDynamicInstVar: aSymbol'
+	'dynamicInstanceVariables
+	"The STORED names (the primitive, never super, so a base class''s override
+	does not list the transient names twice) and the bound transient ones."
+	| d |
+	d := self ___transientAttrsCreate: false.
+	^ (self _instvarNamesAfter: self namedSize) , (d isNil ifTrue: [#()] ifFalse: [d keys asArray])'
+	'dynamicInstVarPairs
+	| out |
+	out := OrderedCollection new.
+	(self _instvarNamesAfter: self namedSize) do: [:n |
+		out add: n; add: (super dynamicInstVarAt: n)].
+	out addAll: self ___transientAttrPairs___.
+	^ out asArray')
+		@env0:do: [:src |
+			self @env0:compileMethod: src
+				dictionaries: System @env0:myUserProfile @env0:symbolList
+				category: #'Grail-Transient Attrs'
+				environmentId: 0].
+	^ self
+%
+
+category: 'Grail-Transient Attrs'
+classmethod: object
+___grailTransientNamesFrom___: aValue
+	"``__transient__'''s value as an Array of Symbols: a str is ONE name (as
+	for __slots__), any other iterable a sequence of str; nil (no own
+	declaration) is none.  Anything else raises TypeError, at class
+	creation, rather than leaving an attribute silently persistent."
+
+	| out |
+	aValue == nil ifTrue: [^ #()].
+	(aValue @env0:isKindOf: CharacterCollection) ifTrue: [^ { aValue @env0:asSymbol }].
+	(aValue @env0:isKindOf: Collection) ifFalse: [
+		^ TypeError ___signal___: '__transient__ must be a str or a sequence of str, not '''
+			@env0:, (importlib @env0:___grailPyTypeName___: aValue) @env0:, ''''].
+	out := OrderedCollection @env0:new.
+	aValue @env0:do: [:each |
+		(each @env0:isKindOf: CharacterCollection) ifFalse: [
+			^ TypeError ___signal___: '__transient__ items must be str, not '''
+				@env0:, (importlib @env0:___grailPyTypeName___: each) @env0:, ''''].
+		out @env0:add: each @env0:asSymbol].
+	^ out @env0:asArray
+%
+
+category: 'Grail-Transient Attrs'
+classmethod: object
+___grailOwnClassAttr___: aString
+	"The value the receiver class's OWN body bound to aString, or nil -- never
+	an inherited one.  The two homes are the ones
+	___classBodyDefinitionalStore___:put: writes: an accessor compiled into
+	'Grail-Class Attrs' for a name the body assigned unconditionally, and the
+	per-class ___dynInstVars___ holder for everything else (the reading Enum
+	class >> ___grailOwnClassAttr:named: does for ``_ignore_'')."
+
+	| sym meta holder |
+	sym := aString @env0:asSymbol.
+	meta := self @env0:class.
+	(meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
+		ifTrue: [^ [self @env0:perform: sym env: 1]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	holder := (self ___respondsTo___: #___dynInstVars___)
+		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
+		ifFalse: [nil].
+	holder == nil ifTrue: [^ nil].
+	^ holder @env0:dynamicInstVarAt: sym
+%
+
+category: 'Grail-Transient Attrs'
+classmethod: object
+___grailTransientAttrNames___
+	"The receiver class's __transient__ names, own and inherited, or #()."
+
+	^ ((self @env0:class @env0:whichClassIncludesSelector: #'___pyTransientAttrs___' environmentId: 1) @env0:notNil)
+		ifTrue: [self ___pyTransientAttrs___]
+		ifFalse: [#()]
+%
+
 category: 'Grail-Slots'
 classmethod: object
-___grailInstallInferredSlots___: inferredNames declared: declaredNames properties: propertyNames indexed: wantIndexed
+___grailInstallInferredSlots___: rawInferredNames declared: declaredNames properties: propertyNames indexed: wantIndexed
 	"Compile the accessor pairs for this class's slots: the DECLARED __slots__
 	names (always) and the INFERRED ones (GRAIL_INFERRED_SLOTS; see ClassDefAst
 	>> ___inferredSlotNames___).  Emitted by ClassDefAst as one line at the
@@ -1365,7 +1493,21 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	survives in the layout and the pair is what serves it
 	(docs/Schema_Evolution_Design.md)."
 
-	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain setattrHookOwner setattrHookInChain layout hadLayout parentLayout layoutNames |
+	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain setattrHookOwner setattrHookInChain layout hadLayout parentLayout layoutNames inferredNames transient |
+	"Class-level __transient__ names (___grailInstallTransientAttrs___, run
+	just before this) never get a position: they are kept out of the
+	inferred names, and below get the DYNAMIC pair, whose storage the
+	transient overrides route to session storage.  A name both __slots__ and
+	__transient__ declare is refused, as CPython refuses a __slots__ name that
+	conflicts with a class variable."
+	transient := self ___grailTransientAttrNames___.
+	inferredNames := rawInferredNames.
+	transient @env0:isEmpty ifFalse: [
+		declaredNames @env0:do: [:n |
+			(transient @env0:includes: n @env0:asSymbol) ifTrue: [
+				^ ValueError ___signal___: '''' @env0:, n @env0:asString
+					@env0:, ''' in __slots__ conflicts with __transient__']].
+		inferredNames := rawInferredNames @env0:reject: [:n | transient @env0:includes: n @env0:asSymbol]].
 	lf := Character @env0:lf @env0:asString.
 	ivNames := self @env0:allInstVarNames @env0:collect: [:n | n @env0:asString].
 	compileGuarded := [:src |
@@ -1440,8 +1582,9 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	would make step 3 see this class as the owner and skip it."
 	layout @env0:doWithIndex: [:n :pos | | inheritedOwner |
 		((layoutNames @env0:includes: n) @env0:not
+			@env0:and: [(transient @env0:includes: n) @env0:not
 			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not
-			@env0:and: [(propertyNames @env0:anySatisfy: [:p | p @env0:asSymbol == n]) @env0:not]]) ifTrue: [
+			@env0:and: [(propertyNames @env0:anySatisfy: [:p | p @env0:asSymbol == n]) @env0:not]]]) ifTrue: [
 				inheritedOwner := ownerOf @env0:value: ('___pyattr_' @env0:, n @env0:asString @env0:, '___') @env0:asSymbol.
 				((parentLayout @env0:indexOf: n) @env0:~= pos
 					@env0:or: [inheritedOwner @env0:isNil
@@ -1530,6 +1673,26 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 						'	___i := self ___pySlotIndexFor___: #''' @env0:, n @env0:, '''.' @env0:, lf @env0:,
 						'	___i == 0 ifTrue: [self @env0:dynamicInstVarAt: #''' @env0:, n @env0:,
 						''' put: ___1] ifFalse: [self @env0:instVarAt: ___i put: ___1]']]]]].
+	"A __transient__ name gets the DYNAMIC pair whatever it had before -- an
+	inherited indexed pair, or this class's own from a build before the name
+	became transient -- so every self.x read and store reaches the
+	dynamic-instVar accessors the transient overrides route.  Any position it
+	holds is left unread: the index table skips it too."
+	transient @env0:do: [:each | | n getter |
+		n := each @env0:asString.
+		getter := '___pyattr_' @env0:, n @env0:, '___'.
+		(propertyNames @env0:anySatisfy: [:p | p @env0:asSymbol == each @env0:asSymbol]) ifFalse: [
+			hookInChain
+				ifTrue: [compileGuarded @env0:value: getter @env0:, lf @env0:,
+					'	^ self ___pyAttrLoad___: #''' @env0:, n @env0:, '''']
+				ifFalse: [compileGuarded @env0:value: getter @env0:, lf @env0:,
+					'	^ (self @env0:dynamicInstVarAt: #''' @env0:, n @env0:,
+					''') ifNil: [self ___pyAttrLoad___: #''' @env0:, n @env0:, ''']'].
+			setattrHookInChain
+				ifTrue: [compileGuarded @env0:value: getter @env0:, ': ___1' @env0:, lf @env0:,
+					'	self __setattr__: ''' @env0:, n @env0:, ''' _: ___1']
+				ifFalse: [compileGuarded @env0:value: getter @env0:, ': ___1' @env0:, lf @env0:,
+					'	self @env0:dynamicInstVarAt: #''' @env0:, n @env0:, ''' put: ___1']]].
 	propertyNames @env0:do: [:each | | n getter owner |
 		n := each @env0:asString.
 		getter := '___pyattr_' @env0:, n @env0:, '___'.
@@ -7205,10 +7368,16 @@ ___grailResetClassMethods___
 				or: [(cat @env0:= #'Grail-Class Side Forwarders')
 				or: [cat @env0:= #'Grail-Dynamic Rebinding Originals']]]])
 					ifTrue: [self @env1:___removeSelector: sel environmentId: 1]].
-	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
-		((meta @env0:categoryOfSelector: sel environmentId: 1)
-			@env0:= #'Grail-Class Methods')
+	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel | | cat |
+		cat := meta @env0:categoryOfSelector: sel environmentId: 1.
+		((cat @env0:= #'Grail-Class Methods') or: [cat @env0:= #'Grail-Transient Attrs'])
 				ifTrue: [meta @env1:___removeSelector: sel environmentId: 1]].
+	"A rebuilt body that no longer declares __transient__ must commit those
+	attributes again, so its env-0 overrides go with the class-side list; one
+	that still declares it re-emits both (___grailInstallTransientAttrs___)."
+	(self @env0:methodDictForEnv: 0) @env0:keys @env0:asArray @env0:do: [:sel |
+		((self @env0:categoryOfSelector: sel environmentId: 0) @env0:= #'Grail-Transient Attrs')
+			ifTrue: [self @env0:removeSelector: sel environmentId: 0]].
 	"The self-send dispatcher record for this class goes with the methods: the
 	dispatchers themselves are 'Grail-Class Methods' and were just removed, and
 	the ``___grailOrig_'' shadows are removed above, so a store in the rebuilt
@@ -9629,9 +9798,14 @@ ___grailCompileSlotIndexTable___
 	match (docs/Instance_Attribute_Indexed_Slots.md)."
 	"A TOMBSTONE (``~name'', a retired position) gets no entry: the name reads
 	as absent, whatever an old instance still holds there."
-	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil ifFalse: [
+	"A __transient__ name gets no entry either: its value lives in session
+	storage, and a position it held before it became transient must not be
+	read (object class >> ___grailInstallTransientAttrs___)."
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil ifFalse: [ | transient |
+		transient := self ___grailTransientAttrNames___.
 		(self @env0:perform: #'___pySlotLayout___' env: 1) @env0:doWithIndex: [:nm :pos |
-			(self ___grailSlotIsTombstone___: nm) ifFalse: [
+			((self ___grailSlotIsTombstone___: nm)
+				or: [transient @env0:includes: nm @env0:asSymbol]) ifFalse: [
 				src := src @env0:, '	aSym == #''' @env0:, nm @env0:asString
 					@env0:, ''' ifTrue: [^ ' @env0:, (0 @env0:- pos) @env0:printString @env0:, '].' @env0:, lf]]].
 	src := src @env0:, '	^ aSym @env0:isSymbol ifTrue: [0] ifFalse: [self ___pySlotIndexFor___: aSym @env0:asSymbol]'.
@@ -12267,6 +12441,108 @@ ___pyPlainStr___
 	usually the whole answer the caller needed."
 
 	^ nil
+%
+
+category: 'Grail-Transient Attrs'
+method: object
+___transientAttrsCreate: aBoolean
+	"This object's class-level ``__transient__'' attributes, name -> value,
+	for THIS SESSION (docs/App_Namespaces_Design.md §6.3), or nil when it has
+	none and aBoolean is false.  SessionTemps, keyed by the object and held
+	STRONGLY for the session's life: a DbTransient slot would revert to nil
+	mid-session once nothing else held the object, and a live socket must not
+	vanish.  Never committed, untouched by an abort, empty in a new session."
+
+	| reg d |
+	reg := SessionTemps current at: #'GrailTransientAttrs' otherwise: nil.
+	reg isNil ifTrue: [
+		aBoolean ifFalse: [^ nil].
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailTransientAttrs' put: reg].
+	d := reg at: self otherwise: nil.
+	(d isNil and: [aBoolean]) ifTrue: [
+		d := SymbolKeyValueDictionary new.
+		reg at: self put: d].
+	^ d
+%
+
+category: 'Grail-Transient Attrs'
+method: object
+___isTransientAttr___: aSymbol
+	"Is aSymbol one of the receiver's class-level __transient__ names (own or
+	inherited)?  Asked only by the overrides ___grailInstallTransientAttrs___
+	compiles, so only instances of such a class pay for it."
+
+	^ (self class @env1:___pyTransientAttrs___) includesIdentical: aSymbol
+%
+
+category: 'Grail-Transient Attrs'
+method: object
+___transientAttrAt___: aSymbol
+	"The session value of transient attribute aSymbol, or nil (unset).  The
+	first miss on a COMMITTED object in a session runs its class's
+	``__session_init__'' once (D5 for an instance), then reads again: a
+	committed object faulted into a new session rebuilds its session tier on
+	first use."
+
+	| d v |
+	d := self ___transientAttrsCreate: false.
+	d isNil ifFalse: [
+		v := d at: aSymbol otherwise: nil.
+		v isNil ifFalse: [^ v]].
+	self ___runInstanceSessionInitOnce___ ifFalse: [^ nil].
+	d := self ___transientAttrsCreate: false.
+	^ d isNil ifTrue: [nil] ifFalse: [d at: aSymbol otherwise: nil]
+%
+
+category: 'Grail-Transient Attrs'
+method: object
+___transientAttrAt___: aSymbol put: aValue
+	"Store (or, for nil, unbind) transient attribute aSymbol for this session."
+
+	| d |
+	(aValue == nil or: [aValue == _remoteNil])
+		ifTrue: [
+			d := self ___transientAttrsCreate: false.
+			d isNil ifFalse: [d removeKey: aSymbol ifAbsent: []]]
+		ifFalse: [(self ___transientAttrsCreate: true) at: aSymbol put: aValue].
+	^ aValue
+%
+
+category: 'Grail-Transient Attrs'
+method: object
+___transientAttrPairs___
+	"The bound transient attributes as a flat name/value Array, the shape
+	dynamicInstVarPairs answers."
+
+	| d out |
+	d := self ___transientAttrsCreate: false.
+	d isNil ifTrue: [^ #()].
+	out := OrderedCollection new.
+	d keysAndValuesDo: [:k :v | out add: k; add: v].
+	^ out asArray
+%
+
+category: 'Grail-Transient Attrs'
+method: object
+___runInstanceSessionInitOnce___
+	"Run the receiver's ``__session_init__'' if it is committed, its class
+	defines one, and it has not run for this object in this session.  Marked
+	BEFORE the call, so a hook that reads an attribute it has not yet set
+	gets AttributeError rather than recursing.  Answers whether it ran."
+
+	| done |
+	self isCommitted ifFalse: [^ false].
+	(self class whichClassIncludesSelector: #'__session_init__' environmentId: 1) isNil
+		ifTrue: [^ false].
+	done := SessionTemps current at: #'GrailTransientInitDone' otherwise: nil.
+	done isNil ifTrue: [
+		done := IdentitySet new.
+		SessionTemps current at: #'GrailTransientInitDone' put: done].
+	(done includes: self) ifTrue: [^ false].
+	done add: self.
+	self perform: #'__session_init__' env: 1.
+	^ true
 %
 
 set compile_env: 1
