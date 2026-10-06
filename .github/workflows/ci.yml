@@ -252,8 +252,8 @@ jobs:
               sleep 8
               kill -USR1 "$(pgrep -u ci -n -x topaz)"
               sleep 15
-              grep -E -i "SIGUSR1|C-level|gdb|ptrace|^#[0-9]" usr1.out | head -40
-              if grep -q "^#[0-9]" usr1.out; then
+              sed -n "/start gdb stacks/,/end gdb stacks/p" usr1.out | grep -v -E "^(Copyright|License|This is free|There is NO|Type .(show|apropos|help)|For (bug|help)|<http|  *<http|Find the GDB)" | head -80
+              if grep -q -E "^ *#[0-9]+ " usr1.out; then
                 echo "gdb attached: a gem that dies in the VM will print its C stack"
               else
                 echo "::warning::gdb could not print a C stack in this container"
