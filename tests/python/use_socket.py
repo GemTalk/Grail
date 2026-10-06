@@ -239,3 +239,62 @@ def exception_aliases():
         SocketError is OSError,
         issubclass(socket.timeout, OSError),
     ]
+
+
+def abortive_close_resets_peer():
+    """SO_LINGER (1, 0) makes close() ABORTIVE: the peer gets a RST, not a
+    FIN.  What was sent before it still reads; the next recv() is
+    ConnectionResetError.  Without the option the same exchange ends in a
+    clean EOF -- which is what Grail gave for both, because GsSocket has no
+    LINGER option and setsockopt ignored it (test_ssl's
+    TestPreHandshakeClose depends on the RST)."""
+    import socket, struct, time
+
+    def exchange(linger):
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        cli = socket.socket()
+        cli.connect(srv.getsockname())
+        conn, _ = srv.accept()
+        if linger:
+            cli.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                           struct.pack('ii', 1, 0))
+        cli.sendall(b"hello")
+        time.sleep(0.1)
+        cli.close()
+        time.sleep(0.1)
+        out = [conn.recv(10)]
+        try:
+            out.append(conn.recv(10))
+        except OSError as e:
+            out.append((type(e).__name__, e.errno))
+        conn.close()
+        srv.close()
+        return out
+
+    import errno
+    return [exchange(True), exchange(False), errno.ECONNRESET]
+
+
+def unclosed_socket_warns():
+    """A socket that dies still open warns ResourceWarning "unclosed <repr>",
+    CPython's sock_finalize; a closed one is quiet."""
+    import socket, warnings
+    from test import support
+    s = socket.socket()
+    r = repr(s)
+    quiet = socket.socket()
+    quiet.close()
+    rq = repr(quiet)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        s = None
+        quiet = None
+        support.gc_collect()
+    # Only this test's sockets: a collection also finalizes whatever earlier
+    # code in the session left open, and each of those warns too.
+    found = [str(w.message) for w in caught
+             if issubclass(w.category, ResourceWarning)
+             and "unclosed " in str(w.message)]
+    return [found.count("unclosed " + r), found.count("unclosed " + rq)]

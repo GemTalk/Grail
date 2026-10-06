@@ -179,3 +179,27 @@ testExceptionAliases
 	self assert: (r @env1:__getitem__: 3) description: 'from socket import error failed'.
 	self assert: (r @env1:__getitem__: 4).
 %
+
+category: 'Grail-Tests-Socket'
+method: SocketModuleTestCase
+testAbortiveCloseResetsPeer
+	"setsockopt(SO_LINGER, (1, 0)) reaches the descriptor: close() sends a
+	RST, so the peer reads what arrived and then ConnectionResetError, where
+	a plain close() ends in a clean EOF.  GsSocket has no LINGER option, and
+	setsockopt used to accept and ignore it."
+
+	self
+		assert: (self loadFixture @env1:abortive_close_resets_peer) @env1:__repr__
+		equals: '[[b''hello'', (''ConnectionResetError'', 54)], [b''hello'', b''''], 54]'
+%
+
+category: 'Grail-Tests-Socket'
+method: SocketModuleTestCase
+testUnclosedSocketWarns
+	"A socket that dies open warns ``ResourceWarning: unclosed <repr>'' (and
+	is closed); one closed first is quiet."
+
+	self
+		assert: (self loadFixture @env1:unclosed_socket_warns) @env1:__repr__
+		equals: '[1, 0]'
+%
