@@ -206,7 +206,8 @@ ___forgetFd___: fd
 category: 'Grail-Private'
 classmethod: PyRawSocket
 ___peeredGsSockets___
-	"The GsSockets a detach() handed on after they had a peer.  hadPeer is the
+	"The GsSockets that have had a peer (connect, accept, a getpeername that
+	found one, a detach of a socket that knew it).  hadPeer is the
 	only record of that once Linux has seen the peer's RESET -- getpeername
 	then fails with ENOTCONN, as for a socket that never connected -- and
 	ssl.py wraps a socket by detaching it and adopting its fd into a new
@@ -1048,7 +1049,7 @@ connect: address
 		out -- which no ``except ConnectionRefusedError'' could catch."
 		^ self ___raiseConnectCode___:
 			(self ___resolvedConnectCode___: sock on: host port: port timeoutMs: ms)].
-	hadPeer := true.
+	self ___notePeer___.
 	^ None
 %
 
@@ -1108,7 +1109,7 @@ connect_ex: address
 			ifTrue: [sock @env0:connectTo: port on: host]
 			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
 		ok == true
-			ifTrue: [hadPeer := true. 0]
+			ifTrue: [self ___notePeer___. 0]
 			ifFalse: [self ___resolvedConnectCode___: sock on: host port: port timeoutMs: ms] ]
 		@env0:on: Error
 		do: [:e | | code |
@@ -1155,7 +1156,7 @@ ___noPeerErrno___: sock
 	first made recv() on a reset socket raise ENOTCONN, where CPython reads
 	what arrived or gets ECONNRESET (test_ssl test_wrong_cert_tls12)."
 
-	sock @env0:peerAddress @env0:notNil ifTrue: [hadPeer := true. ^ nil].
+	sock @env0:peerAddress @env0:notNil ifTrue: [self ___notePeer___. ^ nil].
 	"lastErrorCode is the PLATFORM's errno -- ENOTCONN is 107 on Linux -- so it
 	is mapped onto Grail's errno module, which ssl.py compares it against
 	(``e.errno != errno.ENOTCONN'' in SSLSocket._create).  Unmapped, every TLS
@@ -1163,6 +1164,19 @@ ___noPeerErrno___: sock
 	^ self ___normalizeConnectErrno___:
 		(([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
 			@env0:ifNil: [57])
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___notePeer___
+	"This socket has a peer: remember it here (hadPeer) and on the GsSocket
+	(___peeredGsSockets___), for the object that adopts its fd.  ssl.py adopts
+	BEFORE it detaches, so a client socket's connect is the only place the
+	fact can be recorded in time."
+
+	hadPeer := true.
+	gsSocket @env0:isNil ifFalse: [
+		PyRawSocket @env0:___peeredGsSockets___ @env0:add: gsSocket]
 %
 
 category: 'Grail-Private'
