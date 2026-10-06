@@ -170,14 +170,19 @@ __repr__
 	clearing the list a group was built from does not change its repr.  The
 	exceptions keep the SHAPE of what was passed: a list argument shows as a
 	list, a tuple as a tuple, and anything else as the repr() saved when the
-	group was made (see ___args___:)."
+	group was made (see ___args___:).
+
+	The list shape needs args to be EXACTLY (message, list), as of CPython
+	3.14.8 (gh-146096).  A subclass whose __new__ takes more arguments --
+	EG('m', [e], 42) -- shows the exceptions tuple; 3.14.7 and earlier showed
+	the list whenever args[1] was one."
 
 	| excsStr a |
 	excsStr := self @env0:dynamicInstVarAt: #'___excsRepr___'.
 	excsStr == nil ifTrue: [
 		a := self args.
 		excsStr := (builtins instance) repr:
-			(((a @env0:size @env0:>= 2) and: [(a @env0:at: 2) @env0:isKindOf: OrderedCollection])
+			(((a @env0:size @env0:= 2) and: [(a @env0:at: 2) @env0:isKindOf: OrderedCollection])
 				ifTrue: [list @env0:withAll: self exceptions]
 				ifFalse: [self exceptions])].
 	^ (self @env0:class @env0:name @env0:asString) @env0:asUnicodeString

@@ -65,6 +65,28 @@ def generator():
     print('generator: %s %s' % (r.status, r.error))
 
 
+def loop():
+    h = durable.start(flows.loop_flow, 5)
+    durable.run_executor(idle_timeout=2)     # every park: commit, then resume here
+    r = h.run
+    print('loop: status=%s result=%r resumes=%d' % (r.status, r.result, r.resumes))
+
+
+def shapes():
+    import park_shapes
+    handles = [(f.__name__, durable.start(f, 3)) for f in park_shapes.SHAPES]
+    durable.run_executor(idle_timeout=1)
+    for name, h in handles:
+        r = h.run
+        if r.status == 'done' and r.result == park_shapes.EXPECTED[name]:
+            verdict = 'ok'
+        elif r.status == 'failed' and 'cannot checkpoint here' in (r.error or ''):
+            verdict = 'refused'
+        else:
+            verdict = 'WRONG status=%s result=%r error=%r' % (r.status, r.result, r.error)
+        print('shape %s: %s' % (name, verdict))
+
+
 def show():
     for r in durable.runs():
         print(r, 'checkpoints=%d resumes=%d result=%r error=%r'
@@ -78,5 +100,5 @@ def show():
 
 PHASES = {f.__name__: f for f in
           (reset, start_order, executor, approve, order_result,
-           start_crashy, crashy_result, generator, show)}
+           start_crashy, crashy_result, generator, loop, shapes, show)}
 PHASES[sys.argv[1]]()

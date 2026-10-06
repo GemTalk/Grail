@@ -2326,6 +2326,60 @@ ___isPyStr___
 	^ true
 %
 
+category: 'Grail-Unicode Data'
+classmethod: CharacterCollection
+___pyCodePoint___: cp inRanges: ranges
+	"Is cp in ``ranges'', one of the Numeric_Type tables in
+	unicode_char_types.gs?  ASCII is answered without the search -- every
+	such table holds exactly 48-57 below 128 -- because that is nearly every
+	character these predicates see."
+
+	cp < 128 ifTrue: [^ cp >= 48 and: [cp <= 57]].
+	^ self ___pySearchCodePoint___: cp inRanges: ranges
+%
+
+category: 'Grail-Unicode Data'
+classmethod: CharacterCollection
+___pyIsAlphaCodePoint___: cp
+	"str.isalpha for one code point: ASCII letters directly, the rest from
+	the generated table in unicode_char_types.gs."
+
+	cp < 128 ifTrue: [^ (cp >= 97 and: [cp <= 122]) or: [cp >= 65 and: [cp <= 90]]].
+	^ self ___pySearchCodePoint___: cp inRanges: self ___pyAlphaRanges___
+%
+
+category: 'Grail-Unicode Data'
+classmethod: CharacterCollection
+___pyIsAlnumCodePoint___: cp
+	"str.isalnum for one code point -- isalpha or isnumeric, which is one
+	generated table rather than two searches."
+
+	cp < 128 ifTrue: [
+		^ (cp >= 97 and: [cp <= 122]) or: [
+			(cp >= 65 and: [cp <= 90]) or: [cp >= 48 and: [cp <= 57]]]].
+	^ self ___pySearchCodePoint___: cp inRanges: self ___pyAlnumRanges___
+%
+
+category: 'Grail-Unicode Data'
+classmethod: CharacterCollection
+___pySearchCodePoint___: cp inRanges: ranges
+	"Binary search: is cp in ``ranges'', a sorted literal Array of inclusive
+	(first last) pairs from unicode_char_types.gs?"
+
+	| lo hi mid |
+	lo := 1.
+	hi := ranges size // 2.
+	[lo <= hi] whileTrue: [
+		mid := (lo + hi) // 2.
+		cp < (ranges at: mid * 2 - 1)
+			ifTrue: [hi := mid - 1]
+			ifFalse: [
+				cp > (ranges at: mid * 2)
+					ifTrue: [lo := mid + 1]
+					ifFalse: [^ true]]].
+	^ false
+%
+
 category: 'Grail-Testing'
 method: CharacterCollection
 ___reprResult___
@@ -2622,37 +2676,58 @@ index: sub _: start _: stop
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isalnum
-	"Return True if all characters are alphanumeric and there is at least one character."
+	"True when every character is alphabetic or numeric (and there is one):
+	CPython's isalpha or isdecimal or isdigit or isnumeric, and the last
+	contains the other two.  This was the kernel's isAlphaNumeric --
+	letter-or-DECIMAL from an older Unicode -- which missed both '\u00bd' and
+	every newer letter.  The kernel's answer is still asked first, for
+	speed; see isalpha for why that cannot change the result."
 
-	| isEmpty allAlnum |
-	isEmpty := self @env0:isEmpty.
-	isEmpty ifTrue: [ ^ false ].
-
-	allAlnum := true.
+	self @env0:isEmpty ifTrue: [^ false].
 	self @env0:do: [:char |
-		| isAlnum |
-		isAlnum := char @env0:isAlphaNumeric.
-		isAlnum ifFalse: [ allAlnum := false ].
-	].
-	^ allAlnum
+		(char @env0:isAlphaNumeric or: [
+			CharacterCollection @env0:___pyIsAlnumCodePoint___: char @env0:codePoint])
+				ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-String Test Methods'
+method: CharacterCollection
+___pyAllInRanges___: ranges
+	"Every character's code point in ``ranges'' -- one of the Numeric_Type
+	tables -- and at least one character."
+
+	self @env0:isEmpty ifTrue: [^ false].
+	self @env0:do: [:char |
+		(CharacterCollection @env0:___pyCodePoint___: char @env0:codePoint inRanges: ranges)
+			ifFalse: [^ false]].
+	^ true
 %
 
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isalpha
-	"Return True if all characters are alphabetic and there is at least one character."
+	"True when every character is a letter -- general category Lu, Ll, Lt,
+	Lm or Lo -- and there is at least one.  The answer comes from a table
+	generated from CPython's own str.isalpha (unicode_char_types.gs,
+	scripts/generate_unicode_char_types.py).  This was the kernel's
+	Character >> isLetter, the same definition from an older Unicode, which
+	missed 24,262 newer letters: CJK extensions, Egyptian hieroglyphs,
+	Tangut, ...
 
-	| isEmpty allAlpha |
-	isEmpty := self @env0:isEmpty.
-	isEmpty ifTrue: [ ^ false ].
+	isLetter is still asked first, because it is a primitive and the table
+	is a binary search: asking the table alone made a non-ASCII letter about
+	five times slower.  That cannot change the answer, since isLetter claims
+	no character the table rejects -- measured on every code point -- so
+	the search runs only for the newer letters and for the non-letter that
+	ends the loop."
 
-	allAlpha := true.
+	self @env0:isEmpty ifTrue: [^ false].
 	self @env0:do: [:char |
-		| isAlpha |
-		isAlpha := char @env0:isLetter.
-		isAlpha ifFalse: [ allAlpha := false ].
-	].
-	^ allAlpha
+		(char @env0:isLetter or: [
+			CharacterCollection @env0:___pyIsAlphaCodePoint___: char @env0:codePoint])
+				ifFalse: [^ false]].
+	^ true
 %
 
 category: 'Grail-String Test Methods'
@@ -2673,37 +2748,26 @@ isascii
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isdecimal
-	"Return True if all characters are decimal characters."
+	"True when every character is Numeric_Type=Decimal (and there is one).
 
-	| isEmpty allDecimal |
-	isEmpty := self @env0:isEmpty.
-	isEmpty ifTrue: [ ^ false ].
+	isdecimal, isdigit and isnumeric are Unicode's Numeric_Type, each a
+	superset of the one before, read from tables generated from CPython's own
+	str methods (unicode_char_types.gs, scripts/generate_unicode_char_types.py).
+	All three used to answer the kernel's Character >> isDigit -- the Decimal
+	set only, and an older Unicode's -- so '\u00b2'.isdigit() and
+	'\u00bd'.isnumeric() were False and 180 newer decimal digits were not
+	decimal."
 
-	allDecimal := true.
-	self @env0:do: [:char |
-		| isDigit |
-		isDigit := char @env0:isDigit.
-		isDigit ifFalse: [ allDecimal := false ].
-	].
-	^ allDecimal
+	^ self ___pyAllInRanges___: CharacterCollection @env0:___pyDecimalRanges___
 %
 
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isdigit
-	"Return True if all characters are digits and there is at least one character."
+	"True when every character is Numeric_Type Decimal or Digit -- '\u00b2'
+	and the circled digits are digits but not decimal.  See isdecimal."
 
-	| isEmpty allDigit |
-	isEmpty := self @env0:isEmpty.
-	isEmpty ifTrue: [ ^ false ].
-
-	allDigit := true.
-	self @env0:do: [:char |
-		| isDigit |
-		isDigit := char @env0:isDigit.
-		isDigit ifFalse: [ allDigit := false ].
-	].
-	^ allDigit
+	^ self ___pyAllInRanges___: CharacterCollection @env0:___pyDigitRanges___
 %
 
 category: 'Grail-String Test Methods'
@@ -2751,9 +2815,10 @@ islower
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isnumeric
-	"Return True if all characters are numeric characters."
+	"True when every character has a Numeric_Type -- '\u00bd', Roman numerals
+	and CJK numerals too.  This answered isdecimal.  See isdecimal."
 
-	^ self isdecimal
+	^ self ___pyAllInRanges___: CharacterCollection @env0:___pyNumericRanges___
 %
 
 category: 'Grail-String Representation'

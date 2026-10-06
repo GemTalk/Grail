@@ -776,6 +776,7 @@ run
 	at: #'AnnotationMachineryTestCase' put: nil;
 	at: #'AnyAllShareTheTruthTestTestCase' put: nil;
 	at: #'AppNamespaceTestCase' put: nil;
+	at: #'ClassTransientTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
 	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'ClassAttrDictSubclassTestCase' put: nil;
@@ -989,6 +990,7 @@ run
 	at: #'ExitStackUsageTestCase' put: nil;
 	at: #'FStringFieldPositionsTestCase' put: nil;
 	at: #'FStringPep701TestCase' put: nil;
+	at: #'FTStringFieldTextTestCase' put: nil;
 	at: #'FileExistsErrorTestCase' put: nil;
 	at: #'FileIoTestCase' put: nil;
 	at: #'FileNotFoundErrorTestCase' put: nil;
@@ -1355,11 +1357,13 @@ run
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'StringIOSubclassTestCase' put: nil;
+	at: #'StrAlphaTypesTestCase' put: nil;
 	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
 	at: #'StrFormatFieldsTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'StrMethodKeywordArgsTestCase' put: nil;
+	at: #'StrNumericTypesTestCase' put: nil;
 	at: #'StrPaddingTestCase' put: nil;
 	at: #'StrRequiresAStrTestCase' put: nil;
 	at: #'StrSearchAndSplitTestCase' put: nil;
@@ -1868,6 +1872,7 @@ input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/dict_view.gs
 input src/smalltalk/Python/mappingproxy.gs
 input src/smalltalk/Python/str.gs
+input src/smalltalk/Python/unicode_char_types.gs
 input src/smalltalk/Python/Subscript.gs
 input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/UndefinedObject.gs
@@ -2235,6 +2240,7 @@ input src/smalltalk/PythonTests/MetaclassProtocolsTestCase.gs
 input src/smalltalk/PythonTests/AnnotationMachineryTestCase.gs
 input src/smalltalk/PythonTests/AnyAllShareTheTruthTestTestCase.gs
 input src/smalltalk/PythonTests/AppNamespaceTestCase.gs
+input src/smalltalk/PythonTests/ClassTransientTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
@@ -2478,6 +2484,7 @@ input src/smalltalk/PythonTests/FrameReceiverSuggestionTestCase.gs
 input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
+input src/smalltalk/PythonTests/FTStringFieldTextTestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
 input src/smalltalk/PythonTests/FunctionalEnumModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionBuiltinsAttrTestCase.gs
@@ -2829,12 +2836,14 @@ input src/smalltalk/PythonTests/StopAsyncIterationTestCase.gs
 input src/smalltalk/PythonTests/StopIterationTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/StringIOSubclassTestCase.gs
+input src/smalltalk/PythonTests/StrAlphaTypesTestCase.gs
 input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/StrFormatFieldsTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/StrMethodKeywordArgsTestCase.gs
+input src/smalltalk/PythonTests/StrNumericTypesTestCase.gs
 input src/smalltalk/PythonTests/StrPaddingTestCase.gs
 input src/smalltalk/PythonTests/StrRequiresAStrTestCase.gs
 input src/smalltalk/PythonTests/StrSearchAndSplitTestCase.gs

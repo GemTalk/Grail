@@ -100,9 +100,11 @@ category: 'Grail-Tests'
 method: ExceptionGroupConstructionTestCase
 testFieldsAndRepr
 	"message/exceptions are read-only snapshots; repr keeps the shape of the
-	argument and is taken at construction."
+	argument -- a list only when args is exactly (message, list), as of
+	CPython 3.14.8 -- and is taken at construction."
 
 	self assertAll: #('fields_are_readonly_snapshots' 'repr_keeps_the_argument_shape'
+		'a_list_shows_only_as_one_of_exactly_two_args'
 		'a_broken_repr_fails_construction')
 %
 

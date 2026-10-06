@@ -96,12 +96,63 @@ def _get_source():
     return out
 
 
+# A line number the source does not have is no line, not an IndexError, as of
+# CPython 3.14.8 (gh-155319); 3.14.7 raised for lineno 3 and lineno 0.
 check('warn_explicit_asks_the_loader_for_the_source', _get_source(),
       [('ok', ['foobar']),
-       ('IndexError: list index out of range', ['foobar']),
-       ('IndexError: list index out of range', ['foobar']),
+       ('ok', ['foobar']),
+       ('ok', ['foobar']),
        ('TypeError: must be str, not bytes', ['foobar']),
        ('ok', ['foobar'])])
+
+
+def _loader_line():
+    # 3.14.8 hands the loader's line to the WarningMessage (gh-155319), asks
+    # the loader for __spec__.name before __name__ -- which is '__main__' for a
+    # script (gh-123011) -- and treats an ImportError from get_source as no
+    # line.  3.14.7 recorded line=None, asked for '__main__', and raised.
+    import importlib.machinery
+    out = []
+    first = None
+    for lineno, name, spec_name, exc in ((2, 'm', 'm', None),
+                                         (3, 'm', 'm', None),
+                                         (1, '__main__', 'real', None),
+                                         (1, 'm', 'm', ImportError('no'))):
+        class Loader:
+            calls = []
+
+            def get_source(self, fullname, exc=exc):
+                Loader.calls.append(fullname)
+                if exc is not None:
+                    raise exc
+                return 'line one\nline two'
+
+        loader = Loader()
+        g = {'__loader__': loader, '__name__': name,
+             '__spec__': importlib.machinery.ModuleSpec(spec_name, loader)}
+        first = first or g
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            warnings.warn_explicit('foo', UserWarning, 'bar', lineno,
+                                   module_globals=g)
+        out.append((list(Loader.calls), [x.line for x in w]))
+    # A replaced showwarning gets it too: _showwarnmsg passes all six fields.
+    seen = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        warnings.showwarning = lambda *args: seen.append(args[4:])
+        warnings.warn_explicit('foo', UserWarning, 'bar', 2,
+                               module_globals=first)
+    out.append(seen)
+    return out
+
+
+check('warn_explicit_shows_the_loader_s_line', _loader_line(),
+      [(['m'], ['line two']),
+       (['m'], [None]),
+       (['real'], ['line one']),
+       (['m'], [None]),
+       [(None, 'line two')]])
 
 
 def _bad_splitlines():

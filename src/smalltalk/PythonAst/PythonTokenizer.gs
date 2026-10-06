@@ -869,7 +869,7 @@ tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  braceDepth nestQuote fieldStarts isTString |
+	  fields nestQuote fieldStarts isTString frame |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -910,7 +910,7 @@ tokenizeString
 
 	"Read string contents"
 	str := Unicode7 new.
-	braceDepth := 0.
+	fields := OrderedCollection new.
 	fieldStarts := nil.
 	nestQuote := nil.
 	[
@@ -925,31 +925,64 @@ tokenizeString
 		  * escapes must survive VERBATIM, because f'{'\n'.join(cmd)}' has to
 		    reach the inner parser as text it can tokenize -- decoding the \n
 		    here would hand it a string literal with a raw newline inside.
-		A ``#`` here is NOT treated as a comment: a format spec may legitimately
-		contain one (``{id(self):#x}``), and swallowing to end of line there ate
-		the closing quote.  Comments inside a field still work, because the
-		parser hands the field to a child parse wrapped in parentheses and that
-		parse strips them; only a ``}`` or a quote INSIDE a comment would now
-		mislead the depth, which is rarer than a ``#`` spec by a wide margin.
+
+		``fields'' is the stack of open replacement fields, innermost last, each
+		{ bracket depth. in its format spec? } -- CPython's lexer keeps the
+		same two facts, and the scan needs both because the same character
+		means different things in the two halves of a field:
+		  * in the EXPRESSION, ``#'' starts a comment that runs to the end of
+		    the line (PEP 701), and a brace or quote inside it is not
+		    structure; brackets of all three kinds nest; ``:'' at depth 0
+		    begins the format spec;
+		  * in the FORMAT SPEC, the text is literal -- ``#'' is the alternate
+		    form flag ({id(self):#x}) and a quote is just a character -- and
+		    ``{'' opens a NESTED field ({x:>{width}}).
+		``}'' at depth 0 closes the innermost field in either half.  Before
+		this, one counter stood for all of it, and ``#'' could not be a
+		comment because it could equally be a spec flag; so a quote inside a
+		comment opened a string and swallowed the rest of the source.
 
 		Nested quotes are tracked so a brace inside an embedded literal cannot
 		shift the depth.  That tracking is also what makes arbitrary nesting
 		work: each nested f-string's quotes pair off in turn, so the scan
 		finds the right closing quote without recursing."
-		(isFString and: [braceDepth > 0 or: [nestQuote notNil]]) ifTrue: [
+		(isFString and: [fields notEmpty or: [nestQuote notNil]]) ifTrue: [
 			nestQuote
 				ifNil: [
-					(char == $' or: [char == $"])
-						ifTrue: [nestQuote := char. str add: self advance]
-						ifFalse: [
-						char == ${ ifTrue: [braceDepth := braceDepth + 1. str add: self advance]
-						ifFalse: [
-						char == $} ifTrue: [braceDepth := braceDepth - 1. str add: self advance]
-						ifFalse: [
-						char == $\ ifTrue: [
+					frame := fields last.
+					char == $\
+						ifTrue: [
 							str add: self advance.
 							self atEnd ifFalse: [str add: self advance]]
-						ifFalse: [str add: self advance]]]]]
+						ifFalse: [
+					(frame at: 2)
+						ifTrue: [
+							"Format spec."
+							char == ${ ifTrue: [fields add: (Array with: 0 with: false)].
+							char == $} ifTrue: [fields removeLast].
+							str add: self advance]
+						ifFalse: [
+							"Expression."
+							(char == $' or: [char == $"])
+								ifTrue: [nestQuote := char. str add: self advance]
+								ifFalse: [
+							char == $#
+								ifTrue: [
+									[self peek notNil and: [self peek ~~ Character lf]]
+										whileTrue: [str add: self advance]]
+								ifFalse: [
+							(char == $( or: [char == $[ or: [char == ${]])
+								ifTrue: [frame at: 1 put: (frame at: 1) + 1]
+								ifFalse: [
+							(char == $) or: [char == $] or: [char == $}]])
+								ifTrue: [
+									(frame at: 1) > 0
+										ifTrue: [frame at: 1 put: (frame at: 1) - 1]
+										ifFalse: [char == $} ifTrue: [fields removeLast]]]
+								ifFalse: [
+							(char == $: and: [(frame at: 1) = 0])
+								ifTrue: [frame at: 2 put: true]]].
+								str add: self advance]]]]]
 				ifNotNil: [
 					char == $\
 						ifTrue: [
@@ -1123,7 +1156,7 @@ tokenizeString
 							 whose text is kept verbatim, do the two differ by a constant."
 							fieldStarts isNil ifTrue: [fieldStarts := OrderedCollection new].
 							fieldStarts add: { str size + 2. position + 1. line }.
-							braceDepth := 1]].
+							fields add: (Array with: 0 with: false)]].
 				str add: self advance.
 			]].
 		].

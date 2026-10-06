@@ -704,7 +704,8 @@ known when the class is built. That module's class, and only it, gets
 overrides of the three dynamic-instVar accessors, with the names inlined and
 the values kept in SessionTemps. A module that declares nothing pays nothing.
 The declaration is itself transient, so it is not a write either. The
-class-scope `__transient__` of §8.2 is a separate, still-open item.
+class-scope `__transient__` (App_Namespaces_Design.md §6.3, and §8.2 below)
+covers instance attributes and class attributes.
 
 ### D13. A module-level `Final` initializes once
 
@@ -808,10 +809,11 @@ is why:
 - the session tier must be storable *outside* the module instance
   (`SessionDict`), or a deploy sweeps a dead socket into the repository;
 - `gemstone.deploy_check(module)` exists: an on-demand pre-commit audit that
-  walks the not-yet-committed graph and names the session-bound values a commit
-  would sweep in (open handles, `Semaphore`, raw `CPointer`, unrecompilable
-  `SrePattern`, `SreMatch`, `WeakReference`), each with a path from the module.
-  It is an audit, not a write barrier.
+  walks what committing the module would write (new objects, and committed ones
+  this transaction wrote) and names the session-bound values a commit would
+  sweep in (open handles, `Semaphore`, raw `CPointer`/`CByteArray`,
+  unrecompilable `SrePattern`, `SreMatch`, `WeakReference`), each by its Python
+  path from the module. It is an audit, not a write barrier.
 
 ---
 
@@ -949,6 +951,43 @@ Wanted: a class-scope `__transient__ = [...]` (SessionDict-backed, the mirror of
 D4; the module-scope one is D12), and a `deploy_check` predicate that flags
 mutable class-body containers the way it already flags sockets and locks.
 
+**Done (2026-10-06).** A name in a class's `__transient__` that the class body
+also binds is a session-local class attribute:
+
+```python
+class Registry:
+    __transient__ = ("_cache",)
+    _cache = {}               # committed as a template, never mutated
+```
+
+- **Each session gets its own shallow copy** (`copy.copy`) of the body's
+  value, so `Registry._cache[k] = v`, `self._cache[k] = v` and a subclass's
+  `Sub._cache` all reach that session's copy. The committed value stays as the
+  body left it. Mutating the copy is not a write; a rebinding goes to the
+  session overlay, as D3 already routes it.
+- **Seeded into the D3 overlay**, which every class-attribute read consults
+  first. That happens after the class statement in the session that runs the
+  body, including a warm reuse, and on bind in every later session, beside the
+  module-body class-attribute replay. The classes to seed are recorded per
+  namespace and pruned when a module or class is forgotten or dropped.
+- **A template that cannot be copied is a `TypeError` at class creation.**
+  Without the declaration, the template would be shared and mutated; with an
+  uncopyable value, every later session would fail instead.
+- **Only canonical classes are seeded.** On a session-local class a store goes
+  to the class itself, which a copy would hide.
+- A name the body does not bind stays an instance attribute
+  (App_Namespaces_Design.md §6.3).
+
+**The audit** reports what the declaration exists to prevent, as it happens:
+`deploy_check(module)` lists each committed class-body dict, list or set of
+the module's classes that the current transaction has written, the container
+itself or one of its buckets. That is `Cls._cache[k] = v` on a committed
+class. It does not list every container a body binds, since frameworks fill
+class-level dicts on purpose at class creation (dataclass fields, enum maps).
+
+    myapp.Registry.shared (a dict) -> committed class-body container written by
+    this transaction; name it in __transient__ to keep it per session
+
 ### 8.3 Instance migration for a changed class shape
 
 Decided (2026-07-13) that it must never be an import side effect, and deferred
@@ -985,9 +1024,11 @@ left, both opt-in ([Schema_Evolution_Design.md](Schema_Evolution_Design.md)).
   `Grail-Annotations` methods are emitted only when a class *is* one of those, so
   dropping the `@dataclass` decorator on an edit leaves its synthesised methods
   behind. Arguably the class is a different class at that point.
-- **`deploy_check` v1 gap.** It follows only non-committed references, so a new
-  resource held through an already-committed-but-dirty object is not reached;
-  that needs the VM dirty set.
+- **`deploy_check` v1 gap — closed.** It followed only non-committed
+  references, so a new resource held through an already-committed-but-dirty
+  object was not reached. The walk now also follows committed objects in the
+  VM dirty set (`System _writtenObjects`), so such a resource is reached
+  (App_Namespaces_Design.md §6.2).
 - **Concurrent same-module cold import** collides on `PythonModules`, which must
   stay a plain `SymbolDictionary` for name resolution. No longer an open item,
   and no longer answered by "publishing should come from one session" — §4.2

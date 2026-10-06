@@ -122,11 +122,11 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
 | test.test_sax | OK | 186 | 0 | 0 | 0 |  |
-| test.test_ssl | FAIL | 196 | 3 | 0 | 24 |  |
+| test.test_ssl | FAIL | 196 | 5 | 0 | 23 |  |
 | test.test_urllib2_localnet | OK | 21 | 0 | 0 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_xml_etree | OK | 226 | 0 | 0 | 6 |  |
-| test.test_zipapp | ERROR | 35 | 0 | 3 | 0 |  |
+| test.test_zipapp | OK | 35 | 0 | 0 | 0 |  |
 | test.test_urlparse | OK | 77 | 0 | 0 | 5 |  |
 | test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
@@ -136,10 +136,11 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_statistics | OK | 371 | 0 | 0 | 6 |  |
 | test.test_abc | OK | 72 | 0 | 0 | 0 |  |
 | test.test_userstring | OK | 71 | 0 | 0 | 2 |  |
-| test.test_exception_group | ERROR | 52 | 23 | 1 | 0 |  |
-| test.test_except_star | ERROR | 60 | 10 | 11 | 0 |  |
+| test.test_exception_group | OK | 52 | 0 | 0 | 0 |  |
+| test.test_except_star | ERROR | 60 | 10 | 10 | 0 |  |
 | test.test_generators | ERROR | 50 | 10 | 10 | 1 |  |
 | test.test_long | ERROR | 47 | 6 | 8 | 7 |  |
 | test.test_exception_hierarchy | ERROR | 16 | 2 | 3 | 1 |  |
 | test.test_copyreg | FAIL | 6 | 2 | 0 | 0 |  |
 | test.test_random | ERROR | 114 | 0 | 14 | 4 |  |
+| test.test_string.test_string | OK | 41 | 0 | 0 | 1 |  |

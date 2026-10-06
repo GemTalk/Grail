@@ -32,6 +32,19 @@ def crashy_flow(n):
     return n * 10
 
 
+def loop_flow(n):
+    # Parks inside a loop body, so the loop runs on in each resumed stack.
+    # Right on the IR codegen path.  On the text path the body is a block,
+    # and GemStone gives a block made before the capture a stale home
+    # context after the resume (reported to GemTalk 2026-10-05): `total` has
+    # come back 0, though not on every run (docs/Durable_Execution.md §6).
+    total = 0
+    for i in range(n):
+        durable.sleep(0)
+        total += i
+    return total
+
+
 def generator_flow():
     g = (i for i in range(3))
     next(g)

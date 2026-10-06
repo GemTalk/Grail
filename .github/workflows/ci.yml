@@ -85,9 +85,20 @@ jobs:
       # the runner's system python3 is 3.10 and predates ExceptionGroup.  This
       # is the only step here that needs an interpreter; everything else in
       # this job is pure shell.
+      #
+      # Pinned to the PATCH release.  The fixtures record CPython's exact
+      # answers, and a patch release can change them: '3.14' let each runner
+      # take whichever 3.14.x it had cached, and on 2026-10-06 the merge queue
+      # ran 3.14.7 and 3.14.8 side by side.  3.14.8 changed the
+      # ExceptionGroup repr (a tuple, not the list passed in), the t-string
+      # expression text (trailing whitespace kept) and warn_explicit (no
+      # IndexError for a lineno past the source), so the same commit passed
+      # on one runner and failed on the next.  Move this deliberately, in a
+      # PR that brings the fixtures (and Grail) along -- as the move to
+      # 3.14.8 did.
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: '3.14.8'
 
       - name: fixture-gate self-test
         run: tests/scripts/test_python_fixture_gate.sh
@@ -172,6 +183,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A gem that fails a VM assertion (UTL_GUARANTEE) prints its C stack
+      # through $GEMSTONE/bin/pstack, which needs gdb -- and the image has
+      # none.  On 2026-10-04 a durable-test gem died at omgc.c:1684 here and
+      # printed only "Cannot find gdb", leaving GemTalk no stack to work
+      # from.  "prove gdb can print a gem's C stack", after the suite, checks
+      # that it can attach.  A failed install warns rather than failing.
+      - name: install gdb, so a gem that dies in the VM prints its C stack
+        run: |
+          if ! { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gdb > /dev/null; }; then
+            echo "::warning::gdb did not install; a gem that dies in the VM will print no C stack"
+          fi
+
       # NetLDI guest mode (-g) is disallowed when NetLDI runs as root, and a
       # GitHub container job runs as root.  Keep the job root (GitHub needs it
       # for the workspace mount + JS actions) but run ALL GemStone work as the
@@ -217,6 +240,44 @@ jobs:
       # on the topaz line (it finds the ~/.topazini setup-testing-env.sh
       # wrote); the -C is run_tests.sh's own TOPAZ_CFG.  NO COMMENTS OR
       # APOSTROPHES INSIDE THE bash -c BODY: it is one single-quoted string.
+      # A SIGUSR1 makes a logged-in gem print its C stack through pstack, the
+      # same path a failed VM assertion takes; gdb's frames start "#0".  It
+      # needs the stone, so it runs after the suite.  It warns rather than
+      # failing: a missing stack is a reason to look, not a red run.  NO
+      # APOSTROPHES INSIDE THE bash -c BODY: it is one single-quoted string.
+      - name: prove gdb can print a gem's C stack
+        if: always()
+        run: |
+          command -v gdb > /dev/null || { echo "::warning::no gdb, so no C stack probe"; exit 0; }
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            bash -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              cd /tmp
+              printf "login\nrun\n(Delay forSeconds: 120) wait. true\n%%\nlogout\n" > usr1.tpz
+              topaz -l < usr1.tpz > usr1.out 2>&1 &
+              sleep 8
+              GEM=$(pgrep -u ci -n -x topaz)
+              kill -USR1 "$GEM"
+              for i in $(seq 1 90); do
+                grep -q "end gdb stacks" usr1.out && break
+                sleep 1
+              done
+              echo "gdb section complete after ${i}s"
+              sed -n "/start gdb stacks/,/end gdb stacks/p" usr1.out | grep -v -E "^(Copyright|License|This is free|There is NO|Type .(show|apropos|help)|For (bug|help)|<http|  *<http|Find the GDB)" | head -80
+              if grep -q -E "^ *#[0-9]+ " usr1.out; then
+                echo "gdb attached: a gem that dies in the VM will print its C stack"
+              else
+                echo "::warning::gdb could not print a C stack in this container"
+              fi
+              kill "$GEM" 2> /dev/null
+              wait
+              exit 0'
+
       - name: prove the ${{ matrix.arm }} arm really ran
         if: always()
         run: |

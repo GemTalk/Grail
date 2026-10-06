@@ -401,21 +401,34 @@ What Grail does meanwhile:
   So decision 3's "a failed commit keeps the session's changes" holds for a
   conflict, not for a refusal; the exception says so. Refusing before
   anything is flushed is ask (c) of the feature request.
-- **Naming the path is for later, and only on the failing path.** After a
-  refusal the session's state is still readable (measured: `needsCommit` is
-  true and the stored value is still there), so a walk from
-  `System _writtenObjects` to the refused object can name it in Python terms
-  before the program aborts. A successful commit never pays for it. Ask (d)
-  would make even that walk unnecessary.
-- **`gemstone.deploy_check()` stays the deliberate audit.** Its walk needs an
-  indexed queue (with `removeFirst`, 1.25M objects took 74 s rather than
-  0.92 s) and its classifier misses CByteArray.
+- **The refusal names the path, found only on the failing path.**
+  `SessionStateError.path` reads like `gemdb.root['jobs'][1].task`, and the
+  message adds the holder's Python type and what it holds. A forward walk
+  from `System _writtenObjects` turned out not to work here: after the failed
+  flush, every new object the commit was writing reads `isCommitted` true
+  until the abort (measured), so a walk that follows only new objects stops
+  at its roots. Instead the refusal's handler climbs **backward** from the
+  refused object, one in-memory reference scan per level
+  (`SystemRepository listReferencesInMemory:`), through referrers that carry
+  that committed mark. Stack temporaries and session caches never do, so
+  they drop out. It stops at a nameable anchor: `gemdb.root`, a module, a
+  class. Measured at 0.03 s in a small session and 0.1 s with 20,000 dicts
+  in memory; a successful commit never pays for it. Ask (d) would make even
+  that search unnecessary.
+- **`gemstone.deploy_check()` stays the deliberate audit**, sharing the
+  classifier and the path renderer. Its walk now has an indexed queue (with
+  `removeFirst`, 1.25M objects took 74 s rather than 0.92 s), follows the
+  committed objects this transaction wrote as well as new ones (which removes
+  its documented v1 limitation), reads storage rather than iterating a
+  module (which can run code), stops at DbTransient instances, and flags
+  CByteArray and socket subclasses. It no longer flags a `threading.Lock`,
+  which commits and works in a later session (§6.0); the old walk had
+  descended into storage the commit never writes.
 
 Until the kernel marks GsSocket and GsFile, a socket or file in a committed
 global still commits and fails in the next session, as §6.0 measured.
-Naming the global in `__transient__` keeps it out of the commit today;
-class-level `__transient__` (§6.3, not built yet) will do the same for an
-attribute.
+Naming the global in `__transient__` keeps it out of the commit, and
+class-level `__transient__` (§6.3) does the same for an attribute.
 
 ### 6.3 Class-level `__transient__`
 
@@ -433,6 +446,39 @@ class Connection:
 The named attributes are never committed: they read as unset in a session
 that did not assign them, and `__session_init__` (D5) is where they are
 rebuilt.
+
+*As built (cut 5):*
+
+- **Where they live.** In `SessionTemps`, keyed by the object (below). The
+  names get no slot position, so they are never in the object's storage, and
+  `vars()`, `getattr`, `setattr`, `del` and `hasattr` treat them as any other
+  attribute. A store on a committed object is not a write, and an abort leaves
+  the value alone.
+- **When `__session_init__` runs.** Lazily, once per object per session: on
+  the first read of a transient attribute that this session has not set, if
+  the object is committed and its class defines the hook. A new object built
+  this session does not run it; its `__init__` sets the attribute. The hook is
+  marked as run before it is called, so one that reads an attribute it has
+  not yet set gets `AttributeError` rather than recursing.
+- **Inheritance.** A subclass's names join its base's (`__transient__` is
+  read from each class's own body and unioned), so a subclass never commits a
+  name its base keeps transient, even one it assigns in its own `__init__`.
+- **The value** is a str (one name) or a collection of str, as for
+  `__slots__`. Anything else is a `TypeError` at class creation, and a name in
+  both `__slots__` and `__transient__` is a `ValueError`, as CPython refuses a
+  `__slots__` name that conflicts with a class variable.
+- **Mechanism.** `ClassDefAst` emits `___grailInstallTransientAttrs___` after a
+  body that assigns `__transient__`. It records the names class-side and
+  overrides the five env-0 dynamic-instVar accessors (read, store, delete,
+  listing, and the pairs the `__dict__` view reads). The slot installer keeps
+  the names out of the layout and the index table and gives them the dynamic
+  pair, so every path reaches the overrides. A rebuild without the declaration
+  drops the overrides.
+- **Cost.** Only instances of a class that declares it pay: each dynamic
+  attribute access asks the class for its names.
+- **Class attributes too.** A listed name the body also binds, such as
+  `_cache = {}`, is a session-local class attribute: each session gets its own
+  copy of the committed value (Persistent Modules §8.2).
 
 It is GemStone's **DbTransient** idea, but not GemStone's DbTransient
 mechanism. A DbTransient object's slots can silently revert to `nil` *within
@@ -580,9 +626,10 @@ exists.
    so the rest of the definition is a feature request
    ([GemStone_Feature_Requests.md §1.8](GemStone_Feature_Requests.md)). Grail
    routes `gemdb.commit()` and `gemdb.transaction()` through `___tryCommit___`,
-   so a refusal is a catchable `gemdb.SessionStateError`. Naming the path on a
-   refusal, the deploy audit's walker, and class-level `__transient__` (§6.3)
-   remain to do.
+   so a refusal is a catchable `gemdb.SessionStateError`, which names the
+   path to the refused object; the deploy audit shares its walker and path
+   renderer. Class-level `__transient__` (§6.3) is built; see its as-built
+   notes.
 
 6. **`gemdb.admin.namespaces()` / `drop_namespace()`**, and the docs: GemDB_Module.md,
    Persistent Modules (new departures next to D4 for persistent app globals,

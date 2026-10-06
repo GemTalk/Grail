@@ -151,6 +151,18 @@ which GemStone never commits). `commit()` and the block raise
 such objects. It is never retried: replaying the function would store the
 same object again.
 
+The error says where the commit found the object, in Python terms:
+
+```
+gemdb.SessionStateError: commit refused: gemdb.root['jobs'][1].task (a generator)
+holds a Semaphore, which GemStone never commits; this transaction can no longer
+be committed -- gemdb.abort() discards it, and commits work again after that
+```
+
+`SessionStateError.path` is that path alone (`"gemdb.root['jobs'][1].task"`),
+or `None` when it cannot be traced. Finding it costs up to about a tenth of
+a second (measured), on the refusal only.
+
 Unlike a conflict, the refused transaction cannot be committed even after
 removing the object: GemStone allows no further commit until an abort. So
 the block aborts before raising (`aborted=True`), and after an explicit
@@ -158,8 +170,22 @@ the block aborts before raising (`aborted=True`), and after an explicit
 `gemdb.abort()` discards the transaction.
 
 Sockets and open files are not refused yet: they commit, and fail in the
-next session. Keep them out of the commit (`__transient__` for a module
-global). Asking GemStone to refuse them too, and to let a refused
+next session. Keep them out of the commit: `__transient__` for a module
+global, and for an attribute a class-level `__transient__`, with a
+`__session_init__` that rebuilds it in a later session:
+
+```python
+class Connection:
+    __transient__ = ("_sock",)          # never committed
+
+    def __init__(self, address):
+        self.address = address
+        self._sock = socket.create_connection(address)
+
+    def __session_init__(self):         # first use in a later session
+        self._sock = socket.create_connection(self.address)
+```
+ Asking GemStone to refuse them too, and to let a refused
 transaction be fixed and retried, is
 [GemStone_Feature_Requests.md §1.8](GemStone_Feature_Requests.md); the
 decision is in [App_Namespaces_Design.md §6.2](App_Namespaces_Design.md).
@@ -634,7 +660,9 @@ is now `gemdb.schema`, above.
   `gemdb`) — the single-session surface plus the fresh-session
   properties, two logins, leaves the repository clean. Includes a refused
   commit (a stored generator) through `commit()`, the block and the
-  retrying decorator: `SessionStateError`, the abort it needs, no retry. Commits and
+  retrying decorator: `SessionStateError`, the abort it needs, no retry, and
+  the path it names (through dict keys, a list index and an attribute). Also
+  `deploy_check` finding a new socket inside a committed, written dict. Commits and
   aborts, so it cannot be an SUnit test.
 * `tests/scripts/runSchemaTest.gs` (wired in as `gemdb-schema`) — the
   `gemdb.schema` surface over a two-class fixture: the three layout
@@ -670,6 +698,19 @@ is now `gemdb.schema`, above.
   in the namespace is refused. A module-level `Final` evaluates on the first run and
   keeps its committed value, without evaluating, on the re-run and after the
   edit.
+* `tests/scripts/runClassTransientTest.gs` (wired in as `class-transient`) —
+  class-level `__transient__` over two sessions. A deploy audit before the
+  deploying commit finds nothing in a module global holding a transient socket;
+  the committed object stores no socket and no `_sock`; a store on a committed
+  object is not a write and survives an abort. In a new session
+  `__session_init__` rebuilds the attribute once per object, through a dict in
+  `gemdb.root`, a subclass, and a deployed module's global. A transient class
+  attribute (`_cache = {}`): mutating the session's copy is not a write and
+  leaves the committed template empty; a new session gets a fresh copy; and
+  `deploy_check` names a committed class-body dict written in place, but not
+  the transient one. Forgetting the module prunes the seeding registry.
+  `ClassTransientTestCase` covers the in-session half: layout, `vars()`, `del`,
+  the subclass union, which names are class attributes, and the three errors.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
   — the class-level half over a fixture module with a committed instance:
   the refusals for a changed base, a removed class and a renamed one, and
