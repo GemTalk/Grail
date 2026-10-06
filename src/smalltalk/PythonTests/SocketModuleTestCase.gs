@@ -201,5 +201,5 @@ testUnclosedSocketWarns
 
 	self
 		assert: (self loadFixture @env1:unclosed_socket_warns) @env1:__repr__
-		equals: '[1, True]'
+		equals: '[1, 0]'
 %

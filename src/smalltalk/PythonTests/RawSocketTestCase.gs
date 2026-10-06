@@ -359,12 +359,14 @@ testUnsupportedSocketOptionIsAcceptedNotRaised
 	deliberate: the stdlib sets tuning options opportunistically, and raising
 	on them would break callers CPython does not break.  getsockopt of one,
 	by contrast, DOES raise -- reading back a value we never stored would be
-	the lie."
+	the lie.  The option is TCP_KEEPIDLE (IPPROTO_TCP, 4).  It was SO_LINGER,
+	until that one reached the descriptor: CPython, and now Grail, answer
+	EINVAL for SO_LINGER given an int rather than a packed struct linger."
 
 	| sock raised |
 	sock := PyRawSocket @env1:__new__: 2 _: 1.
-	sock @env1:setsockopt: 1 _: 13 _: 1.
-	raised := [sock @env1:getsockopt: 1 _: 13. false] on: OSError do: [:e | true].
+	sock @env1:setsockopt: 6 _: 4 _: 1.
+	raised := [sock @env1:getsockopt: 6 _: 4. false] on: OSError do: [:e | true].
 	self assert: raised.
 	sock @env1:close.
 %

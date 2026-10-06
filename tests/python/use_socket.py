@@ -286,10 +286,15 @@ def unclosed_socket_warns():
     r = repr(s)
     quiet = socket.socket()
     quiet.close()
+    rq = repr(quiet)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         s = None
         quiet = None
         support.gc_collect()
-    found = [w for w in caught if issubclass(w.category, ResourceWarning)]
-    return [len(found), str(found[0].message) == "unclosed " + r if found else False]
+    # Only this test's sockets: a collection also finalizes whatever earlier
+    # code in the session left open, and each of those warns too.
+    found = [str(w.message) for w in caught
+             if issubclass(w.category, ResourceWarning)
+             and "unclosed " in str(w.message)]
+    return [found.count("unclosed " + r), found.count("unclosed " + rq)]
