@@ -247,17 +247,23 @@ jobs:
               export PATH="$GEMSTONE/bin:$PATH"
               export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
               cd /tmp
-              printf "login\nrun\n(Delay forSeconds: 25) wait. true\n%%\nlogout\n" > usr1.tpz
+              printf "login\nrun\n(Delay forSeconds: 120) wait. true\n%%\nlogout\n" > usr1.tpz
               topaz -l < usr1.tpz > usr1.out 2>&1 &
               sleep 8
-              kill -USR1 "$(pgrep -u ci -n -x topaz)"
-              sleep 15
+              GEM=$(pgrep -u ci -n -x topaz)
+              kill -USR1 "$GEM"
+              for i in $(seq 1 90); do
+                grep -q "end gdb stacks" usr1.out && break
+                sleep 1
+              done
+              echo "gdb section complete after ${i}s"
               sed -n "/start gdb stacks/,/end gdb stacks/p" usr1.out | grep -v -E "^(Copyright|License|This is free|There is NO|Type .(show|apropos|help)|For (bug|help)|<http|  *<http|Find the GDB)" | head -80
               if grep -q -E "^ *#[0-9]+ " usr1.out; then
                 echo "gdb attached: a gem that dies in the VM will print its C stack"
               else
                 echo "::warning::gdb could not print a C stack in this container"
               fi
+              kill "$GEM" 2> /dev/null
               wait
               exit 0'
 
