@@ -614,6 +614,32 @@ class BaseBytesTest:
         with self.assertRaises(TypeError):
             dot_join([memoryview(b"ab"), "cd", b"ef"])
 
+    def test_join_concurrent_buffer_mutation(self):
+        # __buffer__() can release the GIL, letting another thread concurrently
+        # mutate the joined sequence (simulated here by mutating in __buffer__).
+        # See: https://github.com/python/cpython/issues/151295
+        def make_seq(mutate):
+            # Item is only referenced from the list slot, so mutate() frees it.
+            class Item:
+                def __buffer__(self, flags):
+                    mutate(seq)
+                    return memoryview(b'x')
+            seq = [b'a', Item(), b'c']
+            return seq
+
+        for sep in (self.type2test(b''), self.type2test(b'::')):
+            with self.subTest(sep=sep):
+                # Changing the list length is reported as a RuntimeError.
+                seq = make_seq(lambda seq: seq.clear())
+                self.assertRaises(RuntimeError, sep.join, seq)
+
+                # The list length is unchanged, so the size-change recheck
+                # cannot fire: only keeping the item alive avoids the crash.
+                def replace(seq):
+                    seq[1] = b'z'
+                seq = make_seq(replace)
+                self.assertEqual(sep.join(seq), sep.join([b'a', b'x', b'c']))
+
     def test_count(self):
         b = self.type2test(b'mississippi')
         i = 105
@@ -1481,7 +1507,6 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         self.assertRaises(MemoryError, bytearray().resize, sys.maxsize)
         self.assertRaises(MemoryError, bytearray(1000).resize, sys.maxsize)
 
-
     def test_setitem(self):
         def setitem_as_mapping(b, i, val):
             b[i] = val
@@ -1643,6 +1668,30 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         b = bytearray(range(256))
         b[8:] = b
         self.assertEqual(b, bytearray(list(range(8)) + list(range(256))))
+
+    def test_setslice_reentrant_resize(self):
+        # gh-153578: a buffer argument whose __buffer__ resizes the bytearray
+        # while the buffer is being acquired must not leave the slice bounds
+        # with lo > hi, which drove a negative-size memmove (an out-of-bounds
+        # write) in the setslice path reached through extend().
+        class Evil:
+            def __init__(self, resize):
+                self.resize = resize
+            def __buffer__(self, flags):
+                self.resize()
+                return memoryview(b'ABCDEFGH')
+        # clear() during __buffer__: extend appends to the emptied bytearray.
+        b = bytearray(b'x' * 100)
+        b.extend(Evil(b.clear))
+        self.assertEqual(b, b'ABCDEFGH')
+        # partial shrink during __buffer__.
+        b = bytearray(b'x' * 100)
+        b.extend(Evil(lambda: b.__delitem__(slice(30, None))))
+        self.assertEqual(b, b'x' * 30 + b'ABCDEFGH')
+        # grow during __buffer__: the data lands at the original end.
+        b = bytearray(b'x' * 10)
+        b.extend(Evil(lambda: b.extend(b'y' * 100)))
+        self.assertEqual(b, b'x' * 10 + b'ABCDEFGH' + b'y' * 100)
 
     def test_iconcat(self):
         b = bytearray(b"abc")
@@ -2571,10 +2620,6 @@ class FreeThreadingTest(unittest.TestCase):
             b.wait()
             a += c
 
-        def irepeat(b, a):  # MODIFIES!
-            b.wait()
-            a *= 2
-
         def subscript(b, a):
             b.wait()
             try: assert a[0] != 0xdd
@@ -2696,9 +2741,10 @@ class FreeThreadingTest(unittest.TestCase):
 
         check([clear] + [repeat] * 10)
         check([clear] + [iconcat] * 10)
-        check([clear] + [irepeat] * 10)
         check([clear] + [ass_subscript] * 10)
         check([clear] + [repr_] * 10)
+        # gh-148605: Do not test "a *= 2" since it allocates up to 4 GiB using
+        # 10 threads
 
         # value errors
 
@@ -2793,6 +2839,19 @@ class FreeThreadingTest(unittest.TestCase):
         threads = [threading.Thread(target=resize_stress, args=(ba,)) for _ in range(4)]
         with threading_helper.start_threads(threads):
             pass
+
+    @threading_helper.reap_threads
+    @threading_helper.requires_working_threading()
+    def test_free_threading_bytearray_resize_other_thread(self):
+        # Shrinking a bytearray whose buffer another thread owns must not
+        # adopt the immortal single-byte bytes object a the buffer.
+        ba = bytearray(b'abc')
+        thread = threading.Thread(target=ba.resize, args=(1,))
+        with threading_helper.start_threads([thread]):
+            pass
+        ba[0] = ord('X')
+        self.assertEqual(ba, bytearray(b'X'))
+        self.assertEqual(ord(b'a'), ord('a'))
 
 if __name__ == "__main__":
     unittest.main()

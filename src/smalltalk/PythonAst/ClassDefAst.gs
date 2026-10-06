@@ -127,7 +127,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
-	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
+	  metaclassKw savedAliasTargets savedNeedsClassCell savedNeedsClassDict savedCellMethodNames
 	  savedCellRebindable
 	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody
 	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder |
@@ -384,6 +384,8 @@ printSmalltalkRuntimeOn: aStream
 	so a nested class statement must not inherit or clobber the outer answer."
 	savedNeedsClassCell := CallAst classNeedsClassCell.
 	CallAst classNeedsClassCell: false.
+	savedNeedsClassDict := CallAst classNeedsClassDict.
+	CallAst classNeedsClassDict: false.
 	"Whether this class's cell can be REBOUND -- decided by a subtree walk here,
 	before any method source is generated, because it cannot be discovered
 	during the emit (see ___classCellIsRebindable___)."
@@ -2904,6 +2906,16 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: ' @env0:isBehavior) ifTrue: [';
 			nextPutAll: self ___stVarName___;
 			nextPutAll: ' @env1:___grailBindClassCell___].'; lf].
+	"``__classdict__'' read from a lambda / genexp in the body: the mapping it
+	answered is filled with the finished namespace, so a reference taken during
+	the body sees every binding once the class exists (CPython's is the
+	namespace dict itself)."
+	CallAst classNeedsClassDict ifTrue: [
+		aStream nextPutAll: '(';
+			nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env0:isBehavior) ifTrue: [';
+			nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___grailFillClassDict___].'; lf].
 
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
 	rebinds C to ``A(B(C))`` — the decorator closest to the class
@@ -2931,6 +2943,7 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classCapturedNames: savedCapturedNames.
 	CallAst classCapturedWriteNames: savedCapturedWriteNames.
 	CallAst classNeedsClassCell: savedNeedsClassCell.
+	CallAst classNeedsClassDict: savedNeedsClassDict.
 	CallAst classCellMethodNames: savedCellMethodNames.
 	CallAst classCellRebindable: savedCellRebindable.
 

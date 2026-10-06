@@ -515,7 +515,7 @@ skipTypeParams
 	placeholder, so its constraints have nothing to act on.  A consumer that
 	wants the bare name strips the stars (ExecBlock >> ___pyTypeVarNamed___:)."
 
-	| depth tok names expectName stars boundToks inBound |
+	| depth tok names expectName stars boundToks inBound sawAsync sawFor |
 	names := OrderedCollection new.
 	tok := self peek.
 	(tok notNil and: [tok isOp: '[']) ifFalse: [^ names asArray].
@@ -524,8 +524,16 @@ skipTypeParams
 	stars := ''.
 	boundToks := nil.
 	inBound := false.
+	sawAsync := false.
+	sawFor := false.
 	[
 		tok := self advance.
+		"A bound or default is DROPPED here, so it never reaches
+		ModuleAst >> ___validateAsyncPlacement___:scope:.  It runs in a type-
+		parameter scope, which is never async, so any await / async for in it
+		is CPython's SyntaxError (``def f[T=[await x for x in y]](): pass'')."
+		((tok isKeyword: 'await') or: [tok isKeyword: 'async']) ifTrue: [sawAsync := true].
+		(tok isKeyword: 'for') ifTrue: [sawFor := true].
 		"ONE depth for every bracket kind.  It counted only [ and ], so the comma
 		inside a constraint tuple -- ``[U: (int, bytes)]'' -- read as the next
 		parameter and ``bytes'' became a type parameter of its own."
@@ -555,6 +563,10 @@ skipTypeParams
 			boundToks := OrderedCollection new].
 		depth = 0
 	] whileFalse.
+	sawAsync ifTrue: [
+		^ SyntaxError signal: (sawFor
+			ifTrue: ['asynchronous comprehension outside of an asynchronous function']
+			ifFalse: ['await expression cannot be used within a TypeVar bound'])].
 	^ names asArray
 %
 

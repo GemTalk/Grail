@@ -494,6 +494,20 @@ extend: iterable
 		^ None
 	].
 
+	"PEP 688 exporter (a class with __buffer__, pickle.PickleBuffer,
+	memoryview).  CPython takes the buffer path BEFORE iterating, and such an
+	object need not be iterable at all.  As bytearray_extend ->
+	bytearray_setslice(self, n, n, obj): the insertion point is the size
+	BEFORE __buffer__ runs, clamped to the size after, because __buffer__ may
+	resize the receiver (test_setslice_reentrant_resize, gh-153578)."
+	(iterable ___respondsTo___: #'__buffer__:') ifTrue: [
+		| at data |
+		at := self @env0:size.
+		data := bytes ___exportBuffer___: iterable.
+		self @env1:___refuseIfBufferExported___.
+		self @env0:insertAll: data at: (at @env0:min: self @env0:size) @env0:+ 1.
+		^ None].
+
 	"A str is iterable but not of integers -- CPython rejects it by name."
 	(iterable isKindOf: CharacterCollection) ifTrue: [
 		TypeError ___signal___: 'expected iterable of integers; got: ''str'''

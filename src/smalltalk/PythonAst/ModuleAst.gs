@@ -404,6 +404,8 @@ ___validateAsyncPlacement___: node scope: scopeSym
 	(node isKindOf: FunctionDefAst) ifTrue: [ | inner |
 		self ___validateAsyncPlacement___: node decoratorList scope: scopeSym.
 		self ___validateAsyncPlacement___: node args scope: scopeSym.
+		"Annotations run in an ANNOTATION SCOPE (PEP 649), never async."
+		self ___validateAsyncPlacement___: node returns scope: #annotation.
 		inner := node isAsync
 			ifTrue: [node isGenerator ifTrue: [#asyncgen] ifFalse: [#async]]
 			ifFalse: [#sync].
@@ -427,11 +429,53 @@ ___validateAsyncPlacement___: node scope: scopeSym
 			self ___validateAsyncPlacement___: g target scope: #genexp.
 			self ___validateAsyncPlacement___: g ifs scope: #genexp].
 		^ self].
+	(node isKindOf: TypeAliasAst) ifTrue: [
+		"Only the VALUE: ``assign'' is the same expression wrapped for codegen."
+		self ___validateAsyncPlacement___: node value scope: #typealias.
+		^ self].
+	(node isKindOf: ArgAst) ifTrue: [
+		self ___validateAsyncPlacement___: node annotation scope: #annotation.
+		^ self].
+	(node isKindOf: AnnAssignAst) ifTrue: [
+		self ___validateAsyncPlacement___: node target scope: scopeSym.
+		self ___validateAsyncPlacement___: node annotation scope: #annotation.
+		self ___validateAsyncPlacement___: node value scope: scopeSym.
+		^ self].
+	"A list/set/dict comprehension is INLINED (PEP 709) but keeps its own
+	async rule: unless the enclosing scope may await, everything after the
+	outermost iterable is #comp, where an await or an ``async for'' is CPython's
+	``asynchronous comprehension outside of an asynchronous function'' -- that
+	message, not ``'await' outside ...'', is what test_coroutines matches.  The
+	outermost iterable still runs in the enclosing scope."
+	((node isKindOf: ListCompAst) or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: DictCompAst]]) ifTrue: [ | inner |
+		inner := (#(#async #asyncgen #genexp) includes: scopeSym)
+			ifTrue: [scopeSym] ifFalse: [#comp].
+		node generators doWithIndex: [:g :i |
+			(g is_async = 1 and: [inner == #comp]) ifTrue: [
+				^ SyntaxError signal:
+					'asynchronous comprehension outside of an asynchronous function'].
+			self ___validateAsyncPlacement___: g iter
+				scope: (i = 1 ifTrue: [scopeSym] ifFalse: [inner]).
+			self ___validateAsyncPlacement___: g target scope: inner.
+			self ___validateAsyncPlacement___: g ifs scope: inner].
+		(node isKindOf: DictCompAst)
+			ifTrue: [
+				self ___validateAsyncPlacement___: node key scope: inner.
+				self ___validateAsyncPlacement___: node value scope: inner]
+			ifFalse: [self ___validateAsyncPlacement___: node elt scope: inner].
+		^ self].
 	(node isKindOf: AwaitAst) ifTrue: [
 		(#(#async #asyncgen #genexp) includes: scopeSym) ifFalse: [
-			^ SyntaxError signal: (scopeSym == #module
+			^ SyntaxError signal: (scopeSym == #comp
+				ifTrue: ['asynchronous comprehension outside of an asynchronous function']
+				ifFalse: [(#(#module #class) includes: scopeSym)
 				ifTrue: ['''await'' outside function']
-				ifFalse: ['''await'' outside async function'])].
+				ifFalse: [scopeSym == #annotation
+				ifTrue: ['await expression cannot be used within an annotation']
+				ifFalse: [scopeSym == #typealias
+				ifTrue: ['await expression cannot be used within a type alias']
+				ifFalse: ['''await'' outside async function']]]])].
 		self ___validateAsyncPlacement___: node value scope: scopeSym.
 		^ self].
 	(node isKindOf: YieldFromAst) ifTrue: [
@@ -450,10 +494,6 @@ ___validateAsyncPlacement___: node scope: scopeSym
 				ifTrue: ['''async for'' outside async function']
 				ifFalse: ['''async with'' outside async function'])]
 		"children walk in the same scope through the generic tail below"].
-	((node isKindOf: ComprehensionAst) and: [node is_async = 1]) ifTrue: [
-		(#(#async #asyncgen #genexp) includes: scopeSym) ifFalse: [
-			^ SyntaxError signal:
-				'asynchronous comprehension outside of an asynchronous function']].
 	node class allInstVarNames doWithIndex: [:n :i |
 		n == #parent ifFalse: [
 			self ___validateAsyncPlacement___: (node instVarAt: i) scope: scopeSym]].

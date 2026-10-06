@@ -1276,8 +1276,14 @@ ___resolveModuleGlobals___: moduleGlobals
 	| b typeName |
 	(moduleGlobals @env0:isNil or: [moduleGlobals @env0:== None])
 		ifTrue: [^ nil].
-	(moduleGlobals @env0:isKindOf: AbstractDictionary) ifFalse: [
-		b := (Python @env0:at: #builtins) @env0:___instance___.
+	b := (Python @env0:at: #builtins) @env0:___instance___.
+	"Python's question, isinstance(x, dict), not the kernel's: a module's
+	globals() is a dict to Python but no AbstractDictionary, so the
+	documented warn_explicit(..., module_globals=globals()) raised the
+	self-contradicting TypeError that module_globals must be a dict, not
+	a dict."
+	(b @env1:isinstance: moduleGlobals _: (b @env1:___pyAttrLoad___: #'dict'))
+		@env1:___isTruthy___ ifFalse: [
 		typeName := (b @env1:type: moduleGlobals) @env1:___pyAttrLoad___: #'__name__'.
 		TypeError ___signal___:
 			'module_globals must be a dict, not ''' @env0:, typeName @env0:, ''''].
