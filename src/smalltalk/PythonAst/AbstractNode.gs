@@ -257,10 +257,25 @@ ___hasModuleScopeAwait___
 	___collectModuleScopeStarImportsInto___ uses; ``parent'' points UP and is
 	skipped by index."
 
-	((self isKindOf: FunctionDefAst)
-		or: [(self isKindOf: AsyncFunctionDefAst)
-			or: [(self isKindOf: LambdaAst) or: [self isKindOf: ClassDefAst]]])
-				ifTrue: [^ false].
+	"A new scope ends the walk -- but only for the part that RUNS in it.  A
+	def's decorators and defaults, a lambda's defaults, and a class's
+	decorators, bases and keywords are evaluated in the ENCLOSING scope, so an
+	await there awaits at module level and CPython marks the module
+	(``a = (lambda x=[await sleep(0, 1) for _ in [0]]: x)()[0]'',
+	test_compile_top_level_await).  A generator expression likewise runs only
+	its OUTERMOST iterable here; an await in its body makes it an async
+	genexp, not the module a coroutine (``g = (await x for x in y)'' is 0)."
+	(self isKindOf: FunctionDefAst) ifTrue: [   "AsyncFunctionDefAst included"
+		^ (self ___anyHasModuleScopeAwait___: self decoratorList)
+			or: [self ___anyHasModuleScopeAwait___: self args]].
+	(self isKindOf: LambdaAst) ifTrue: [
+		^ self ___anyHasModuleScopeAwait___: self args].
+	(self isKindOf: ClassDefAst) ifTrue: [
+		^ (self ___anyHasModuleScopeAwait___: self decorator_list)
+			or: [(self ___anyHasModuleScopeAwait___: self bases)
+			or: [self ___anyHasModuleScopeAwait___: self keywords]]].
+	(self isKindOf: GeneratorExpAst) ifTrue: [
+		^ self ___anyHasModuleScopeAwait___: self generators first iter].
 	((self isKindOf: AwaitAst)
 		or: [(self isKindOf: AsyncForAst) or: [self isKindOf: AsyncWithAst]])
 			ifTrue: [^ true].
@@ -279,6 +294,21 @@ ___hasModuleScopeAwait___
 			val do: [:each |
 				((each isKindOf: AbstractNode)
 					and: [each ___hasModuleScopeAwait___]) ifTrue: [^ true]]]].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___anyHasModuleScopeAwait___: aNodeOrCollection
+	"___hasModuleScopeAwait___ over one child slot, which may be nil, a node, or
+	an Array / OrderedCollection of nodes."
+
+	(aNodeOrCollection isKindOf: AbstractNode)
+		ifTrue: [^ aNodeOrCollection ___hasModuleScopeAwait___].
+	((aNodeOrCollection isKindOf: Array)
+			or: [aNodeOrCollection isKindOf: OrderedCollection]) ifTrue: [
+		^ aNodeOrCollection anySatisfy: [:each |
+			(each isKindOf: AbstractNode) and: [each ___hasModuleScopeAwait___]]].
 	^ false
 %
 

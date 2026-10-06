@@ -4124,6 +4124,71 @@ ___grailClassCellValue___
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___grailOwnClassCellValue___
+	"What ``__class__'' reads inside a lambda or genexp written DIRECTLY in this
+	class's body (NameAst >> ___inFunctionScopeOfClassBody___).
+
+	Unlike ___grailClassCellValue___ this reads the receiver's OWN holder only:
+	the cell is bound by ___grailBindClassCell___ once the class exists, and
+	until then a chain walk would find a BASE class's cell and answer the base.
+	No own cell, or an empty one, is CPython's free-variable NameError -- which
+	is what ``[(lambda: __class__)() for _ in [1]]'' in a class body raises."
+
+	| holder cell v raised |
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
+	cell := holder == nil
+		ifTrue: [nil]
+		ifFalse: [holder @env0:dynamicInstVarAt: #'___grailClassCell___'].
+	raised := cell == nil.
+	raised ifFalse: [
+		v := [cell @env1:cell_contents]
+			@env0:on: AbstractException do: [:ex | raised := true. ex @env0:return: nil]].
+	raised ifTrue: [
+		^ NameError @env1:___signal___:
+			('cannot access free variable ''__class__'' where it is not '
+				@env0:, 'associated with a value in enclosing scope')].
+	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailClassDictCell___
+	"What ``__classdict__'' reads inside a lambda or genexp written directly in
+	this class's body: the class namespace mapping.  Created on first read and
+	kept in the class's OWN holder under a ``___'' key (hidden from __dict__ and
+	dir()); ___grailFillClassDict___ fills it when the class statement ends, so
+	a reference taken during the body sees the finished namespace afterwards.
+	Grail has no live class-body namespace (docs/Class_Body_Namespace.md), so
+	DURING the body it holds only what was filled so far -- nothing."
+
+	| holder d |
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
+	d := holder == nil
+		ifTrue: [nil]
+		ifFalse: [holder @env0:dynamicInstVarAt: #'___grailClassDict___'].
+	d == nil ifTrue: [
+		d := PyDict @env0:new.
+		self @env1:___classHolderAttrStore___: #'___grailClassDict___' put: d].
+	^ d
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailFillClassDict___
+	"Copy the finished class namespace into the ``__classdict__'' mapping, if a
+	lambda / genexp in the body asked for one.  Emitted by ClassDefAst only for
+	such a class, after the metaclass dispatch."
+
+	| d ns |
+	d := self @env1:___grailClassDictCell___.
+	ns := self @env1:___pyAttrLoad___: #'__dict__'.
+	(ns @env1:keys) @env0:do: [:k |
+		d @env1:__setitem__: k _: (ns @env1:__getitem__: k)].
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailClassCellValueForSuper___
 	"The same read as ___grailClassCellValue___, but for a zero-argument
 	``super()'' rather than a bare ``__class__''.

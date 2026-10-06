@@ -805,6 +805,42 @@ ___emitSmalltalkOn___: aStream
 	as a VALUE while inClassBodyValueEmit is still on, so that flag alone read
 	its body as class-body code and raised ``name '__class__' is not defined''.
 	classBodyValueDefNode marks that window: inside it the read is a method's."
+	"A FUNCTION SCOPE written directly in a class body -- a lambda, or a
+	generator expression's body -- closes over the class's implicit cells like
+	a method does: ``__class__'' is the class BEING DEFINED (filled once it
+	exists) and ``__classdict__'' is its namespace.  Without this the read fell
+	to the class-body branch below and answered the ENCLOSING class, or raised
+	NameError at module scope -- test_listcomps
+	test_references___class___nested_used / ___classdict___nested.
+
+	The class is reached through the Smalltalk variable the body is building it
+	in, which the lambda's block closes over.  The class body is always emitted
+	as text -- the IR arm refuses this window (___irDunderClassLoadKind___) and
+	a method-local class travels as a compiled-text helper -- so this is the
+	one place for both arms."
+	((ctx isKindOf: LoadAst)
+		and: [(id asSymbol == #'__class__' or: [id asSymbol == #'__classdict__'])
+		and: [CallAst inClassBodyValueEmit == true
+		and: [CallAst classBodyValueDefNode isNil
+		and: [CallAst classBeingCompiled notNil
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
+		and: [(self ___boundInNestedFunction___: id asSymbol) not
+		and: [self ___inFunctionScopeOfClassBody___]]]]]]])
+		ifTrue: [
+			id asSymbol == #'__class__'
+				ifTrue: [
+					"CPython creates the cell for this read, so the class
+					must bind one (ClassDefAst's ___grailBindClassCell___)."
+					CallAst classNeedsClassCell: true.
+					aStream nextPutAll: '(';
+						nextPutAll: CallAst ___classBeingCompiledVar___;
+						nextPutAll: ' @env1:___grailOwnClassCellValue___)']
+				ifFalse: [
+					CallAst classNeedsClassDict: true.
+					aStream nextPutAll: '(';
+						nextPutAll: CallAst ___classBeingCompiledVar___;
+						nextPutAll: ' @env1:___grailClassDictCell___)'].
+			^ self].
 	((ctx isKindOf: LoadAst)
 		and: [id asSymbol == #'__class__'
 		and: [CallAst classBeingCompiled notNil
@@ -1921,6 +1957,43 @@ ___defScopesName___: aFunctionNode enteredFrom: aChildNode
 	argsIndex := aFunctionNode class allInstVarNames indexOf: #args.
 	argsIndex = 0 ifTrue: [^ true].
 	^ (aFunctionNode instVarAt: argsIndex) ~~ aChildNode
+%
+
+category: 'other'
+method: NameAst
+___inFunctionScopeOfClassBody___
+	"Whether a lambda BODY or a generator-expression BODY lies between this
+	node and the nearest enclosing ClassDefAst.  A lambda's defaults and a
+	genexp's outermost iterable are evaluated in the enclosing scope and do not
+	count.  An inlined list/set/dict comprehension is not counted either: the
+	class-body branches keep their existing answer for it."
+
+	| child node |
+	child := self.
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		((node isKindOf: LambdaAst)
+			and: [self ___defScopesName___: node enteredFrom: child]) ifTrue: [^ true].
+		((node isKindOf: GeneratorExpAst)
+			and: [(child == node generators first
+				and: [self ___reachedThroughIterOf___: child]) not]) ifTrue: [^ true].
+		child := node.
+		node := node parent].
+	^ false
+%
+
+category: 'other'
+method: NameAst
+___reachedThroughIterOf___: aComprehensionAst
+	"Whether this node sits under aComprehensionAst's ``iter''."
+
+	| node |
+	node := self.
+	[node notNil and: [node ~~ aComprehensionAst]] whileTrue: [
+		node == aComprehensionAst iter ifTrue: [^ true].
+		node := node parent].
+	^ false
 %
 
 category: 'other'
