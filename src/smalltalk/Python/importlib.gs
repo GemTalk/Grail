@@ -1530,6 +1530,8 @@ ___grailDropCanonicalClass___: aKey
 	reg removeKey: aKey asString ifAbsent: [].
 	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
 		[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]].
+	(self ___grailNamespace___ at: #'GrailTransientClassAttrClasses' otherwise: nil) ifNotNil: [:set |
+		set remove: cls ifAbsent: []].
 	^ Array with: 1 with: 0
 %
 
@@ -1997,16 +1999,19 @@ ___deployCheck___: aModuleName
 	dict is found too.  Returns a Python list of description strings.
 	Never commits, never mutates."
 
-	| mod |
+	| mod written |
 	mod := self @env1:lookupModule: aModuleName.
 	mod isNil ifTrue: [
 		^ list withAll: {
 			('deploy_check: module ''' , aModuleName asString
 				, ''' is not imported in this session') }].
-	^ list withAll: (self
+	written := IdentitySet withAll: System _writtenObjects.
+	^ list withAll: ((self
 		___grailSessionBoundFrom___: mod
-		written: (IdentitySet withAll: System _writtenObjects)
+		written: written
 		limit: 300000)
+			addAll: (self ___grailWrittenClassContainersOf___: aModuleName written: written);
+			yourself)
 %
 
 category: 'Grail-Deploy Audit'
@@ -2051,6 +2056,90 @@ ___grailSessionBoundFrom___: aRoot written: writtenSet limit: maxObjects
 								parents at: ref put: obj.
 								queue add: ref]]]]].
 	^ findings
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailWrittenClassContainersOf___: aModuleName written: writtenSet
+	"The other half of the audit (docs/Persistent_Modules_and_Classes.md
+	§8.2): a COMMITTED class-body container -- a dict, list or set a class of
+	aModuleName binds in its body -- that this transaction has written.
+	``Cls._cache[k] = v'' mutates the committed object in place, so it dirties
+	the transaction and, once committed, every other session sees it and can
+	conflict on it.  Reported as it happens, not for every container a body
+	binds: frameworks fill class-level dicts deliberately at class creation.
+	Written means the container itself or one of its buckets.  A name in the
+	class's __transient__ is a per-session copy and never reported."
+
+	| out |
+	out := OrderedCollection new.
+	self ___grailSessionNamespacesDo___: [:ns | | reg |
+		reg := ns at: #'GrailCanonicalClasses' otherwise: nil.
+		reg isNil ifFalse: [
+			reg do: [:cls |
+				((cls isKindOf: Behavior)
+					and: [([cls @env1:__module__] on: Error do: [:e | e return: nil]) = aModuleName asString])
+						ifTrue: [self ___grailWrittenContainersOfClass___: cls written: writtenSet into: out]]]].
+	^ out
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailWrittenContainersOfClass___: aClass written: writtenSet into: findings
+	"___grailWrittenClassContainersOf___:written: for one class: its OWN
+	class-body attributes, from both homes (the 'Grail-Class Attrs'
+	accessors and the ___dynInstVars___ holder)."
+
+	| names meta holder transient qual |
+	names := Set new.
+	meta := aClass class.
+	(meta selectorsForEnvironment: 1) do: [:sel |
+		((meta categoryOfSelector: sel environmentId: 1) = #'Grail-Class Attrs'
+			and: [sel numArgs = 0]) ifTrue: [names add: sel]].
+	holder := [aClass @env1:___dynInstVars___] on: Error do: [:e | e return: nil].
+	holder isNil ifFalse: [names addAll: (holder _instvarNamesAfter: holder namedSize)].
+	transient := (meta includesSelector: #'___pyTransientClassAttrs___' environmentId: 1)
+		ifTrue: [aClass @env1:___pyTransientClassAttrs___]
+		ifFalse: [#()].
+	qual := ([aClass @env1:__qualname__] on: Error do: [:e | e return: aClass name]) asString.
+	(names asSortedCollection: [:a :b | a asString <= b asString]) do: [:sym | | v |
+		(transient includes: sym) ifFalse: [
+			v := aClass @env1:___grailOwnClassAttr___: sym asString.
+			((self ___grailIsMutableContainer___: v)
+				and: [v isCommitted
+				and: [self ___grailWritten___: v in: writtenSet]]) ifTrue: [
+					findings add: ([aClass @env1:__module__] on: Error do: [:e | e return: '?']) asString
+						, '.' , qual , '.' , sym asString
+						, ' (' , (self ___grailArticled___: (self ___grailPyTypeName___: v)) , ')'
+						, ' -> committed class-body container written by this transaction;'
+						, ' name it in __transient__ to keep it per session']]].
+	^ findings
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailIsMutableContainer___: v
+	"A dict (not a module), a list, or a set (not a frozenset)."
+
+	v isNil ifTrue: [^ false].
+	v isSpecial ifTrue: [^ false].
+	(v isKindOf: module) ifTrue: [^ false].
+	(v isKindOf: AbstractDictionary) ifTrue: [^ true].
+	(v isKindOf: list) ifTrue: [^ true].
+	((v isKindOf: set) and: [(v isKindOf: frozenset) not]) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailWritten___: v in: writtenSet
+	"Has this transaction written v, or storage directly under it (a dict's
+	collision buckets, a collection's backing array)?"
+
+	(writtenSet includes: v) ifTrue: [^ true].
+	self ___grailRawRefsOf___: v do: [:ref |
+		(ref notNil and: [ref isSpecial not and: [writtenSet includes: ref]]) ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Deploy Audit'
@@ -3953,7 +4042,29 @@ ___restoreAllBodyClassAttrs___
 	whose body ran in this session is marked too: its stores are already in the
 	overlay, first hand.  PEEKS the registry, since this is a read path."
 
-	self ___grailSessionNamespacesDo___: [:ns | self ___restoreAllBodyClassAttrsIn___: ns].
+	self ___grailSessionNamespacesDo___: [:ns |
+		self ___restoreAllBodyClassAttrsIn___: ns.
+		self ___seedTransientClassAttrsIn___: ns].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___seedTransientClassAttrsIn___: ns
+	"Give this session its own copy of every recorded class's transient
+	class attributes (object class >> ___grailSeedTransientClassAttrs___;
+	docs/Persistent_Modules_and_Classes.md §8.2).  Beside the body-store
+	replay, and for the same reason: the class body does not run in a session
+	that binds the deployed module.  Seeding fills only empty overlay slots, so
+	repeating it on a later bind is harmless -- and restores a copy a ``del''
+	took away rather than exposing the template."
+
+	| reg |
+	reg := ns at: #'GrailTransientClassAttrClasses' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	reg do: [:cls |
+		[cls @env1:___grailSeedTransientClassAttrs___]
+			on: Error do: [:e | e return: nil]].
 	^ self
 %
 
@@ -4243,6 +4354,11 @@ ___forgetCanonicalModule___: aModuleName
 	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
 		victims do: [:cls |
 			[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
+	"...and from the classes whose transient class attributes each session
+	seeds, or the set would pin them (object class >>
+	___grailRecordTransientClassAttrs___:)."
+	(self ___grailNamespace___ at: #'GrailTransientClassAttrClasses' otherwise: nil) ifNotNil: [:set |
+		victims do: [:cls | set remove: cls ifAbsent: []]].
 	"This session's hash-state verdict -- the other half of the doc §5 D6 guard."
 	self _stateMap removeKey: modName asSymbol ifAbsent: [].
 	"And the generated module class, from the dictionary of the namespace it

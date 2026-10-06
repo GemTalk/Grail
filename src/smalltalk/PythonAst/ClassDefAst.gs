@@ -2954,6 +2954,13 @@ printSmalltalkRuntimeOn: aStream
 		aStream
 			nextPutAll: '___importlib___ @env0:___resetClassAttrOverlay___: ';
 			nextPutAll: self ___stVarName___; nextPutAll: '.'; lf.
+		"...and, for a body declaring __transient__, give this session its own
+		copy of each transient CLASS attribute in the overlay just reset
+		(docs/Persistent_Modules_and_Classes.md §8.2).  After the reset, or
+		the reset would drop it."
+		self transientValueAst notNil ifTrue: [
+			aStream nextPutAll: self ___stVarName___;
+				nextPutAll: ' @env1:___grailSeedTransientClassAttrs___.'; lf].
 	].
 	"The module BINDING closes the block, so it runs for the
 	global-declared case too -- where no canonical guard was opened."

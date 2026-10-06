@@ -70,6 +70,16 @@ class Pool(Conn):
 
 
 default = Conn("db0")
+
+
+class Registry:
+    __transient__ = ("_cache",)
+    _cache = {}
+    shared = {}
+
+
+class SubRegistry(Registry):
+    pass
 '; close.
 "SELF-HEAL: a run that died before its cleanup left these behind."
 importlib ___forgetCanonicalModule___: 'grail_class_transient_fixture'.
@@ -131,6 +141,39 @@ repr([dirty, c._sock])
 '.
 check value: 'a transient store on a committed object is not a write; an abort leaves it'
   value: r = '[False, ''kept'']'.
+
+
+"TRANSIENT CLASS ATTRIBUTES (docs/Persistent_Modules_and_Classes.md §8.2):
+the body's value is a committed template; each session mutates its own copy."
+r := evalPython value: '
+import gemdb
+from grail_class_transient_fixture import Registry, SubRegistry
+Registry._cache["a"] = 1
+r = [gemdb.needs_commit(), Registry._cache, SubRegistry._cache is Registry._cache,
+     Registry()._cache is Registry._cache]
+repr(r)
+'.
+check value: 'a transient class attribute: mutating this session''s copy is not a write'
+  value: r = '[False, {''a'': 1}, True, True]'.
+check value: 'the committed template is untouched'
+  value: (evalPython value: '
+from grail_class_transient_fixture import Registry
+repr(Registry.___grailOwnClassAttr___("_cache"))
+') = '{}'.
+
+"The audit's other half: a committed class-body container mutated in place
+IS a write, and deploy_check names it -- but not the transient one."
+r := evalPython value: '
+import gemdb, gemstone
+from grail_class_transient_fixture import Registry
+Registry.shared["x"] = 1
+dirty = gemdb.needs_commit()
+found = gemstone.deploy_check("grail_class_transient_fixture")
+gemdb.abort()
+repr([dirty, found])
+'.
+check value: 'deploy_check names a committed class-body dict this transaction wrote, and only it'
+  value: r = '[True, [''grail_class_transient_fixture.Registry.shared (a dict) -> committed class-body container written by this transaction; name it in __transient__ to keep it per session'']]'.
 
 out cr.
 failures isEmpty ifFalse: [
@@ -194,6 +237,21 @@ repr(r)
 '.
   check value: 'a new session: __session_init__ rebuilds the transient attribute, once per object'
     value: r = '[''rebuilt:db1'', True, 1, False, ''rebuilt:db2'', False, ''rebuilt:db0'']'.
+
+  "The check above ran __session_init__, which writes a committed object;
+  start this one from a clean transaction (the overlay copy survives)."
+  System abortTransaction.
+  r := evalPython value: '
+import gemdb
+from grail_class_transient_fixture import Registry
+r = [dict(Registry._cache)]
+Registry._cache["b"] = 2
+r.append(Registry._cache)
+r.append(gemdb.needs_commit())
+repr(r)
+'.
+  check value: 'a new session gets its own fresh copy of a transient class attribute'
+    value: r = '[{}, {''b'': 2}, False]'.
 ] ensure: [
   System abortTransaction.
   evalPython value: '
@@ -204,6 +262,12 @@ gemdb.root.pop("class_transient_test", None)
   importlib ___forgetCanonicalModule___: 'grail_class_transient_fixture'.
   System commit.
   GsFile removeServerFile: tmpDir , '/grail_class_transient_fixture.py'].
+
+"Forgetting the module lets its classes go from the set every session seeds
+transient class attributes from, or the set would pin them."
+check value: 'forgetting the module removes its classes from the transient-class registry'
+  value: ((UserGlobals at: #'GrailTransientClassAttrClasses' ifAbsent: [#()])
+    anySatisfy: [:c | #(#Registry #SubRegistry) includes: c name]) not.
 
 out cr.
 failures isEmpty

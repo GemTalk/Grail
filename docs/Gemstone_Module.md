@@ -227,6 +227,12 @@ non-persistent class such as `Semaphore` (a generator holds one), a
 rebuilds its pointer), and so is a `threading.Lock`, which commits and works in
 a later session. An empty list means the module's new closure is commit-clean.
 
+It also reports a committed class-body container of the module's classes that
+the current transaction has written: `Registry._cache[k] = v` on a deployed
+class mutates the committed dict in place. A name the class lists in
+`__transient__` is a per-session copy instead, and is not reported
+([Persistent_Modules_and_Classes.md §8.2](Persistent_Modules_and_Classes.md)).
+
 * It is an **audit, not a write barrier** — it never commits and never mutates,
   and nothing calls it for you. Run it before the commit that deploys a module.
 * It is bounded to what the commit would **write**: objects not yet committed,
