@@ -107,8 +107,14 @@ __delattr__: name
 	wrapper's ``dict_attr'' and expects the NEXT update_wrapper to be the
 	thing that raises).
 
-	A genuinely absent name still raises, per CPython."
+	A genuinely absent name still raises, per CPython.
 
+	``del func.__kwdefaults__'' is not a removal: the attribute is a getset
+	in CPython, and deleting it stores None, so every keyword-only parameter
+	becomes required."
+
+	(name @env0:asSymbol == #'__kwdefaults__') ifTrue: [
+		^ self @env1:___setKwDefaults___: ExecBlock @env0:___pyNone___].
 	((ExecBlock @env0:___pyAttrsClass___) @env0:removeAt: self attr: name)
 		ifTrue: [^ ExecBlock @env0:___pyNone___].
 	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError') ___signal___:
@@ -224,10 +230,19 @@ ___setKwDefaults___: value
 	captured that same cell object at def-time -- consults the new value on the
 	next call.  Python None clears the defaults (stored as nil, so every
 	keyword-only parameter becomes required again).  A block with no cell yet
-	(had no keyword-only params) gets one created, so the attribute round-trips."
+	(had no keyword-only params) gets one created, so the attribute round-trips.
 
-	| cell stored |
+	Anything but None or a dict is refused, as CPython's setter refuses it:
+	Grail stored a list of pairs, and the next call failed far from here."
+
+	| cell stored b |
 	stored := (value == (ExecBlock @env0:___pyNone___)) ifTrue: [nil] ifFalse: [value].
+	stored @env0:isNil ifFalse: [
+		b := (Python @env0:at: #builtins) @env0:___instance___.
+		((b @env1:isinstance: stored _: (b @env1:___pyAttrLoad___: #'dict'))
+			@env1:___isTruthy___) ifFalse: [
+				^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'TypeError')
+					___signal___: '__kwdefaults__ must be set to a dict object']].
 	cell := (ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__kwdefaults__'.
 	cell @env0:isNil ifTrue: [
 		cell := Array @env0:new: 1.
