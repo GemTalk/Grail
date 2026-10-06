@@ -67,6 +67,9 @@ class Conn:
 
 class Pool(Conn):
     __transient__ = "_cache"
+
+
+default = Conn("db0")
 '; close.
 "SELF-HEAL: a run that died before its cleanup left these behind."
 importlib ___forgetCanonicalModule___: 'grail_class_transient_fixture'.
@@ -80,6 +83,13 @@ evalPython value: 'import sys
 if "' , tmpDir , '" not in sys.path:
     sys.path.append("' , tmpDir , '")
 import grail_class_transient_fixture'.
+"BEFORE the deploying commit, which is when the audit is meant to run: the
+module global ``default'' holds a Conn whose socket is transient."
+r := evalPython value: '
+import gemstone
+" | ".join(gemstone.deploy_check("grail_class_transient_fixture"))
+'.
+check value: 'deploy_check: a module global holding a transient socket is clean' value: r = ''.
 System commit.
 
 r := evalPython value: '
@@ -103,11 +113,11 @@ import gemdb
 gemdb.root["class_transient_test"]["conn"]
 '.
 names := conn _instvarNamesAfter: conn namedSize.
-stored := (1 to: conn _basicSize) collect: [:i | conn _at: i].
+stored := ((1 to: conn _basicSize) collect: [:i | conn _at: i]) asOrderedCollection.
+names do: [:n | stored add: (conn dynamicInstVarAt: n)].
 check value: 'the committed object stores no _sock and no socket'
   value: ((names includes: #'_sock') not
-    and: [(stored anySatisfy: [:v | v isKindOf: GsSocket]) not
-    and: [(names anySatisfy: [:n | (conn dynamicInstVarAt: n) isKindOf: GsSocket]) not]]).
+    and: [(stored anySatisfy: [:v | (importlib ___grailPyTypeName___: v) = 'socket']) not]).
 check value: 'the stored object is committed' value: conn isCommitted.
 
 r := evalPython value: '
@@ -121,12 +131,6 @@ repr([dirty, c._sock])
 '.
 check value: 'a transient store on a committed object is not a write; an abort leaves it'
   value: r = '[False, ''kept'']'.
-
-r := evalPython value: '
-import gemstone
-" | ".join(gemstone.deploy_check("grail_class_transient_fixture"))
-'.
-check value: 'deploy_check sees nothing session-bound in the module' value: r = ''.
 
 out cr.
 failures isEmpty ifFalse: [
@@ -184,10 +188,12 @@ r = [first, second is first, inits, hasattr(c, "_sock")]
 p = gemdb.root["class_transient_test"]["pool"]
 r.append(p._sock)
 r.append(hasattr(p, "_cache"))
+import grail_class_transient_fixture as m
+r.append(m.default._sock)
 repr(r)
 '.
   check value: 'a new session: __session_init__ rebuilds the transient attribute, once per object'
-    value: r = '[''rebuilt:db1'', True, 1, False, ''rebuilt:db2'', False]'.
+    value: r = '[''rebuilt:db1'', True, 1, False, ''rebuilt:db2'', False, ''rebuilt:db0'']'.
 ] ensure: [
   System abortTransaction.
   evalPython value: '
