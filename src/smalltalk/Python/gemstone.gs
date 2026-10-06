@@ -372,6 +372,96 @@ ___resumeContinuation___: aContinuation _: aValue
 	^ aContinuation @env0:value: aValue
 %
 
+category: 'Grail-Continuations'
+method: gemstone
+___callCatchingVMErrors___: aCallable _: args _: kwargs
+	"Python gemstone.___callCatchingVMErrors___(fn, args, kwargs) --
+	fn(*args, **kwargs), with a GemStone Error raised under it (an MNU in a
+	runtime method, a failed primitive) re-raised as a Python RuntimeError
+	naming it.  Python's except cannot catch a Smalltalk Error, and
+	_thread's process wrapper swallows one, so a durable workflow that hit
+	one ended silently and its run stayed 'running'.  Python exceptions are
+	not Errors and pass through untouched."
+
+	^ [ aCallable @env1:value: args value: ((kwargs @env0:isNil or: [ kwargs @env1:__len__ @env0:= 0 ])
+			ifTrue: [ nil ] ifFalse: [ kwargs ]) ]
+		@env0:on: Error
+		do: [:e | RuntimeError ___signal___: ('GemStone error ' @env0:, e @env0:number @env0:printString
+				@env0:, ': ' @env0:, e @env0:messageText @env0:asString) ]
+%
+
+category: 'Grail-Continuations'
+method: gemstone
+___processFor___: anIdent
+	"Python gemstone.___processFor___(ident) -- the GsProcess that
+	_thread.start_new_thread answered ``ident'' (its oop) for.  Call it while
+	the thread can still be running, and keep the result: an ended process
+	may be collected and its oop reused."
+
+	^ Object @env0:_objectForOop: anIdent
+%
+
+category: 'Grail-Continuations'
+method: gemstone
+___processEnded___: aProcess
+	"Python gemstone.___processEnded___(p) -- True once the GsProcess has
+	terminated (or was never one), or has stopped in the debugger: a signal
+	no handler took that is not an Error (so _thread's on: Error did not end
+	it) leaves a process in status 'debug', waiting for a debugger that a
+	gem running a script never attaches.  Nothing is terminated here: a
+	process that resumed a continuation is also left in 'debug' (the
+	resumed stack runs in a new GsProcess, measured on 4.0), and its stack
+	may hold copies of the workflow's unwind blocks."
+
+	(aProcess @env0:isKindOf: GsProcess) ifFalse: [ ^ true ].
+	aProcess @env0:_isTerminated ifTrue: [ ^ true ].
+	^ aProcess @env0:_statusString @env0:= 'debug'
+%
+
+category: 'Grail-Continuations'
+method: gemstone
+___cleanupFramesIn___: aContinuation
+	"Python gemstone.___cleanupFramesIn___(k) -- the names of the functions
+	whose try/finally or with statement is open in aContinuation, between
+	the capture and durable's _entry: (a list of str; empty when none).
+
+	stdlib durable refuses such a checkpoint.  A cleanup block -- the
+	argument of ensure:, ifCurtailed: or ___ensureFinally___:finally: -- is
+	created before the capture and valued after the resume, and GemStone
+	gives it the home VariableContext of the capture, not of the resumed
+	frame (measured on 4.0.0-a2 and 4.0.0.a4; reported 2026-10-05).  Its
+	writes to the function's locals are lost, and its reads are stale."
+
+	| names stop linkHome |
+	names := OrderedCollection @env0:new.
+	stop := false.
+	linkHome := [:blk | (blk @env0:isKindOf: ExecBlock)
+		ifTrue: [ blk @env0:method @env0:homeMethod ] ifFalse: [ nil ] ].
+	1 @env0:to: aContinuation @env0:stackDepth do: [:i | | f meth sel home |
+		stop ifFalse: [
+			f := aContinuation @env0:_frameContentsAt: i.
+			meth := f @env0:isNil ifTrue: [ nil ] ifFalse: [ f @env0:at: 1 ].
+			meth @env0:notNil ifTrue: [
+				((meth @env0:isMethodForBlock and: [ meth @env0:homeMethod @env0:selector == #'_entry:' ])
+					and: [ (meth @env0:homeMethod @env0:inClass @env0:name) @env0:= #durable ])
+					ifTrue: [ stop := true ]
+					ifFalse: [
+						sel := meth @env0:selector.
+						home := nil.
+						((sel == #'ensure:') or: [ sel == #'ifCurtailed:' ])
+							ifTrue: [ home := linkHome @env0:value: (f @env0:at: 10) ].
+						sel == #'___ensureFinally___:finally:'
+							ifTrue: [ home := linkHome @env0:value: (f @env0:at: 11) ].
+						(home @env0:notNil and: [ (home @env0:inClass == ExecBlock) @env0:not
+								and: [ (home @env0:inClass == BaseException @env0:class) @env0:not ] ])
+							ifTrue: [ | nm |
+								nm := home @env0:selector @env0:asString.
+								(nm @env0:indexOf: $:) @env0:> 0
+									ifTrue: [ nm := nm @env0:copyFrom: 1 to: (nm @env0:indexOf: $:) @env0:- 1 ].
+								(names @env0:includes: nm) ifFalse: [ names @env0:add: nm ] ] ] ] ] ].
+	^ list @env0:withAll: (names @env0:collect: [:n | str @env0:withAll: n])
+%
+
 category: 'Grail-Built-in Functions'
 method: gemstone
 ___tryCommit___
