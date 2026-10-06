@@ -85,9 +85,19 @@ jobs:
       # the runner's system python3 is 3.10 and predates ExceptionGroup.  This
       # is the only step here that needs an interpreter; everything else in
       # this job is pure shell.
+      #
+      # Pinned to the PATCH release.  The fixtures record CPython's exact
+      # answers, and a patch release can change them: '3.14' let each runner
+      # take whichever 3.14.x it had cached, and on 2026-10-06 the merge queue
+      # ran 3.14.7 and 3.14.8 side by side.  3.14.8 changed the
+      # ExceptionGroup repr (a tuple, not the list passed in), the t-string
+      # expression text (trailing whitespace kept) and warn_explicit (no
+      # IndexError for a lineno past the source), so the same commit passed
+      # on one runner and failed on the next.  Move this deliberately, in a
+      # PR that brings the fixtures (and Grail) along.
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: '3.14.7'
 
       - name: fixture-gate self-test
         run: tests/scripts/test_python_fixture_gate.sh
