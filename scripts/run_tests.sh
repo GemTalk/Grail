@@ -356,6 +356,10 @@ timed "shim-relogin" tests/scripts/run_shim_relogin_test.sh || EXIT=$?
 # recovers it from the committed continuation.  Each phase is its own `grail`
 # gem, so it lives in a shell driver rather than SUnit.
 timed "durable" tests/scripts/run_durable_test.sh || EXIT=$?
+# A program's change to a Grail-shipped module (stdlib, gemdb, durable) stays
+# in its session (Persistent_Modules D14): one gem patches and commits, the
+# next must see the modules as shipped.  Two gems, so a shell driver.
+timed "module-globals" tests/scripts/run_module_globals_test.sh || EXIT=$?
 
 # Functional test for gemdb.schema (layout/report/drop/rename/compact, the
 # public surface for deliberate schema change). Every operation but layout()

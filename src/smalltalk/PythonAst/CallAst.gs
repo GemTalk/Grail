@@ -3306,6 +3306,23 @@ classNeedsClassCell: aBoolean
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classNeedsClassDict
+	"Did a lambda / genexp in the class body being compiled read
+	``__classdict__''?  Set by NameAst; ClassDefAst then fills the namespace
+	mapping once the class exists.  Saved and restored per class body, like
+	classNeedsClassCell."
+
+	^ (self ___compileContext___ at: #'classNeedsClassDict' otherwise: false) == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classNeedsClassDict: aBoolean
+	self ___compileContext___ at: #'classNeedsClassDict' put: aBoolean == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classCapturedWriteNames
 	"Enclosing-function locals ASSIGNED (``nonlocal x; x = ...'') from the
 	CLASS-METHOD bodies being generated.  A write needs a MUTABLE cell, so

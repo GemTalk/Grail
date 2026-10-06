@@ -310,16 +310,23 @@ class ConfigParser:
         if self._defaults:
             fp.write("[" + DEFAULTSECT + "]\n")
             for key in self._defaults:
-                fp.write(key + delim + str(self._defaults[key]) + "\n")
+                fp.write(key + delim + _fold_value(self._defaults[key]) + "\n")
             fp.write("\n")
         for section in self._section_order:
             fp.write("[" + section + "]\n")
             opts = self._sections[section]
             for key in opts:
-                value = str(opts[key])
-                fp.write(key + delim + value.replace("\n", "\n\t") + "\n")
+                fp.write(key + delim + _fold_value(opts[key]) + "\n")
             fp.write("\n")
         return None
+
+
+def _fold_value(value):
+    """A value as write() emits it: every line ending -- \\r\\n, \\r or
+    \\n -- becomes a \\n\\t continuation, so the value reads back intact
+    (CPython 3.14.8).  [DEFAULT] values were not folded at all before."""
+    return (str(value).replace("\r\n", "\n").replace("\r", "\n")
+            .replace("\n", "\n\t"))
 
 
 class RawConfigParser(ConfigParser):

@@ -527,9 +527,35 @@ OPENSSL_VERSION = L.OpenSSL_version(0).decode('ascii')
 _OPENSSL_API_VERSION = OPENSSL_VERSION_INFO
 
 
+# ------------------------------------------------------------ immutable types
+
+_immutable_types = set()
+
+
+class _ImmutableType(type):
+    """Py_TPFLAGS_IMMUTABLETYPE, which _ssl.c's own types carry: setting or
+    deleting an attribute on one is a TypeError (test_ssl test_ssl_types).
+    Only the types named at the end of this module, once it has finished
+    setting them up: a subclass -- ssl.py's SSLContext, whose
+    ``sslsocket_class'' it assigns -- is a heap type in CPython, and stays
+    writable."""
+
+    def __setattr__(cls, name, value):
+        if cls in _immutable_types:
+            raise TypeError(f"cannot set {name!r} attribute of immutable "
+                            f"type '{cls.__module__}.{cls.__name__}'")
+        type.__setattr__(cls, name, value)
+
+    def __delattr__(cls, name):
+        if cls in _immutable_types:
+            raise TypeError(f"cannot delete {name!r} attribute of immutable "
+                            f"type '{cls.__module__}.{cls.__name__}'")
+        type.__delattr__(cls, name)
+
+
 # ------------------------------------------------------------ exceptions
 
-class SSLError(OSError):
+class SSLError(OSError, metaclass=_ImmutableType):
     """An error occurred in the SSL implementation."""
 
     def __str__(self):
@@ -897,7 +923,7 @@ def _test_decode_cert(path):
         L.ERR_clear_error()
 
 
-class Certificate:
+class Certificate(metaclass=_ImmutableType):
     """A certificate, as get_verified_chain() and get_unverified_chain()
     answer them (Modules/_ssl/cert.c)."""
 
@@ -1009,7 +1035,7 @@ def _cipher_to_dict(cipher):
 
 # ------------------------------------------------------------ MemoryBIO
 
-class MemoryBIO:
+class MemoryBIO(metaclass=_ImmutableType):
     """A memory BIO (Modules/_ssl.c _ssl.MemoryBIO)."""
 
     def __init__(self):
@@ -1045,7 +1071,11 @@ class MemoryBIO:
         return _C.read(buf, 0, n)
 
     def write(self, b):
-        data = bytes(memoryview(b))
+        view = memoryview(b)
+        if not view.c_contiguous:
+            # The ``y*'' argument _ssl.c parses asks for a C-contiguous buffer.
+            raise BufferError('memoryview: underlying buffer is not C-contiguous')
+        data = bytes(view)
         if len(data) > 0x7FFFFFFF:
             raise OverflowError('string longer than %d bytes' % 0x7FFFFFFF)
         if self._eof_written:
@@ -1074,7 +1104,7 @@ MemoryBIO.__module__ = '_ssl'
 
 # ------------------------------------------------------------ SSLSession
 
-class SSLSession:
+class SSLSession(metaclass=_ImmutableType):
     """A TLS session (Modules/_ssl.c _ssl.SSLSession)."""
 
     def __init__(self, *args, **kwargs):
@@ -1155,7 +1185,7 @@ _PLATFORM_CA_DIRS = (
 )
 
 
-class _SSLContext:
+class _SSLContext(metaclass=_ImmutableType):
     """An SSL_CTX (Modules/_ssl.c _ssl._SSLContext)."""
 
     def __new__(cls, protocol, *args, **kwargs):
@@ -1948,7 +1978,7 @@ def _need_callbacks(what, psk=False):
 _MAX_RECORD = 5 + 16384 + 2048
 
 
-class _SSLSocket:
+class _SSLSocket(metaclass=_ImmutableType):
     """An SSL connection (Modules/_ssl.c _ssl._SSLSocket).
 
     Always over memory BIOs.  With a socket, WANT_READ is satisfied by
@@ -2860,6 +2890,10 @@ def nid2obj(nid):
         return _asn1obj_tuple(obj)
     finally:
         L.ASN1_OBJECT_free(obj)
+
+
+_immutable_types.update((_SSLContext, _SSLSocket, MemoryBIO, Certificate,
+                         SSLSession, SSLError))
 
 
 # The socket module's C API that _ssl.c imports; ssl.py checks for it.

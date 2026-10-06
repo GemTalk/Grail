@@ -725,6 +725,56 @@ correct program depends on the re-evaluation.
 `AnnAssignAst` wraps the store in `(self ___finalIsBound___: #name) ifFalse:
 [...]`. Module-scope annotated stores never take the IR path.
 
+### D14. A change to one of Grail's own modules is the session's
+
+D3 for module globals. Grail's own modules (everything under
+`grailDir/src/python/`: the stdlib, gemdb, durable and the vendored
+frameworks) are committed once and bound by every session. A program that
+patches one, as tests and mocks do, used to change it for every later
+session of that user as soon as anything committed. On 2026-10-04 a stress
+script's `durable._registry = lambda: ...` was committed into `durable` that
+way, and every later gem of the user ran with it. `csv.field_size_limit(n)`
+and `gc.disable()` were committed too, because a function's `global` store
+writes the same storage.
+
+So a store to such a module's globals is session-local unless the module's
+own body is running. That covers `m.x = v`, `setattr`, `del m.x`,
+`m.__dict__[k] = v` and a `global` store in one of its functions. The
+boundary is §4's: the body, and anything it calls, builds the module and
+commits with it; anything later is the session's. The importer's own stores
+(`__spec__`, `__file__` and the rest, and the binding of a submodule on its
+parent package) also count as building, even on a committed instance being
+rebuilt.
+
+- **Where:** `SessionTemps #GrailSessionModuleGlobals`, keyed by the module
+  instance, holds the session's values and the names it deleted. Stores
+  reach it through `module >> dynamicInstVarAt:put:`, which every global
+  store and the kernel's `removeDynamicInstVar:` go through; the decision is
+  `___globalStoreIsSessionLocal___`. Reads see it through `dynamicInstVarAt:`
+  and `dynamicInstanceVariables` overrides that
+  `module class >> ___installSessionGlobalReaders___` installs on the
+  module's class as transient session methods, on the first such store. They
+  are never committed and other sessions never see them.
+- **Cost:** none for a module the session has not changed, whose reads stay
+  the primitive. That is deliberate. A first version overrode the readers on
+  `module` for every module. A global read then cost about the same (0.87 s
+  against 0.86 s for a loop of reads), but the RecursionError conversion runs
+  in a reserve of about 343 frames, and
+  `BaseExceptionTestCase>>test_recursion_raises_recursion_error` failed or
+  passed with the size of that override's frame. A changed module pays one
+  send per global read.
+- **Lifetime:** never committed, kept across an abort (like D3's overlay),
+  gone in a new session. When the module's body runs again (a rebuild, or
+  `importlib.reload`), the session's values are dropped and the re-run's
+  stores go to the module, as they did before this change. So a reload
+  forgets an attribute only the session had set, where CPython keeps it.
+- **Not covered:** a user's own modules keep persistent globals, and so does
+  an app's `__main__` (D11). A `__dunder__` kept in the module's dictionary
+  rather than in a global (`__name__`, `__doc__`) is still written to the
+  module. Mutating a *value* the module holds (`logging.getLogger().setLevel`,
+  appending to a module-level list) changes that committed object, as before.
+- **Test:** `tests/scripts/run_module_globals_test.sh` (`module-globals`).
+
 ## 6. Lifecycle
 
 ### 6.1 A module
@@ -1133,6 +1183,7 @@ binding is exercised by every run.
 | class-statement epilogue | `___canonicalClassRegister___:name:value:` |
 | namespace / method reset on rebuild | `object >> ___grailResetClassNamespace___`, `___grailResetClassMethods___` |
 | runtime class-attr overlay | `object >> ___classAttrOverlayStore___:name:value:`, `GrailClassAttrOverlay` |
+| session-local module globals (D14) | `module >> ___globalStoreIsSessionLocal___`, `module class >> ___installSessionGlobalReaders___`, `GrailSessionModuleGlobals` |
 | metaclass restore on bind | `___restoreCanonicalMetaclasses___:` |
 | lazy first-touch bind | `module class >> instance` → `___canonicalInstanceForModuleClass___:` |
 | dependency record, staleness | `___recordDepsOf___:srcHash:names:`, `___isCurrentModule___:`, `GrailCanonicalModuleDeps` |
@@ -1151,7 +1202,7 @@ Session-local (never committed): `GrailSysModules`, `GrailModuleInstances`,
 `GrailSubclassRegistry`, `GrailMiRegistry`, `GrailMroOverrideRegistry`,
 `GrailFunctoolsPlaceholder`, `GrailModuleClassKeys`, `GrailNativeModuleSlots`,
 `GrailNativeModuleEntries`, `GrailModuleDepCollectors`, `GrailModuleCurrency`,
-`GrailSourceHashNow`, and the `CallAst` compile context.
+`GrailSourceHashNow`, `GrailSessionModuleGlobals`, and the `CallAst` compile context.
 
 ---
 

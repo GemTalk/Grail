@@ -1,4 +1,4 @@
-# GRAIL: CPython 3.14.7's xml/sax/saxutils.py, VERBATIM -- replacing the
+# GRAIL: CPython 3.14.8's xml/sax/saxutils.py, VERBATIM -- replacing the
 # three-function cut-down that stood here before.  XMLGenerator and
 # XMLFilterBase are SERIALIZERS and filters, not parsers, so they work in full
 # without expat; prepare_input_source drives urllib.request, which Grail has.
@@ -119,6 +119,7 @@ def _gettextwriter(out, encoding):
                             write_through=True)
 
 class XMLGenerator(handler.ContentHandler):
+    """Content handler which writes the events back as an XML document."""
 
     def __init__(self, out=None, encoding="iso-8859-1", short_empty_elements=False):
         handler.ContentHandler.__init__(self)
@@ -195,9 +196,9 @@ class XMLGenerator(handler.ContentHandler):
 
         for prefix, uri in self._undeclared_ns_maps:
             if prefix:
-                self._write(' xmlns:%s="%s"' % (prefix, uri))
+                self._write(' xmlns:%s=%s' % (prefix, quoteattr(uri)))
             else:
-                self._write(' xmlns="%s"' % uri)
+                self._write(' xmlns=%s' % quoteattr(uri))
         self._undeclared_ns_maps = []
 
         for (name, value) in attrs.items():

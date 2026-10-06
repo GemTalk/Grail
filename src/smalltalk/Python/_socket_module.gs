@@ -196,9 +196,28 @@ ___gsSocketForFd___: fd
 category: 'Grail-Private'
 classmethod: PyRawSocket
 ___forgetFd___: fd
+	| gs |
 	fd isNil ifTrue: [^ self].
-	self ___fdRegistry___ removeKey: fd ifAbsent: [nil].
+	gs := self ___fdRegistry___ removeKey: fd ifAbsent: [nil].
+	gs isNil ifFalse: [self ___peeredGsSockets___ remove: gs ifAbsent: [nil]].
 	^ self
+%
+
+category: 'Grail-Private'
+classmethod: PyRawSocket
+___peeredGsSockets___
+	"The GsSockets that have had a peer (connect, accept, a getpeername that
+	found one, a detach of a socket that knew it).  hadPeer is the
+	only record of that once Linux has seen the peer's RESET -- getpeername
+	then fails with ENOTCONN, as for a socket that never connected -- and
+	ssl.py wraps a socket by detaching it and adopting its fd into a new
+	object.  Without this the adopter judged afresh, after the reset, and
+	read ENOTCONN where the bytes sent before it were waiting (test_ssl
+	TestPreHandshakeClose, Linux only)."
+
+	^ SessionTemps current
+		at: #GrailRawSocketPeered
+		ifAbsentPut: [IdentitySet new]
 %
 
 category: 'Grail-Private'
@@ -224,7 +243,14 @@ ___setSock: aGsSocket family: fam type: typ proto: prot
 	aGsSocket ifNotNil: [PyRawSocket ___registerFd___: aGsSocket].
 	"An adopted socket -- the fd accept() hands back -- is connected already."
 	hadPeer := aGsSocket notNil
-		and: [([aGsSocket peerAddress] on: Error do: [:e | e return: nil]) notNil].
+		and: [(PyRawSocket ___peeredGsSockets___ includes: aGsSocket)
+			or: [([aGsSocket peerAddress] on: Error do: [:e | e return: nil]) notNil]].
+	"Watched for dying open: ___finalizeUnclosed___ is CPython's sock_finalize."
+	aGsSocket ifNotNil: [
+		FinalizerEphemeron
+			on: self
+			do: [:aSocket :unused | aSocket @env1:___finalizeUnclosed___]
+			with: nil].
 	^ self
 %
 
@@ -270,7 +296,26 @@ ___fail: what
 	reports failure by answering nil and stashing the detail, so without
 	this the Python side would see a bare ''operation failed''."
 
-	| detail |
+	| detail code |
+	"A peer that RESET or went away is CPython's errno-carrying subclass --
+	``except ConnectionResetError'' is how callers tell a dropped peer from a
+	bug -- not a bare OSError with GemStone's ``recv(14,...) failed with'' text
+	and no errno.  A reset is what an abortive close (SO_LINGER 0) sends."
+	code := [gsSocket isNil ifTrue: [nil] ifFalse: [gsSocket lastErrorCode]]
+		on: Error do: [:e | e return: nil].
+	code isNil ifFalse: [
+		code := self @env1:___normalizeConnectErrno___: code.
+		"Named here rather than through OSError's errnomap, which leaves the
+		network errnos out because Darwin and Linux number them differently;
+		this code has already been normalized to Grail's numbering."
+		code = 54 ifTrue: [
+			^ ConnectionResetError @env1:___signalNew___:
+				{ 54 . 'Connection reset by peer' } kw: nil].
+		code = 53 ifTrue: [
+			^ ConnectionAbortedError @env1:___signalNew___:
+				{ 53 . 'Software caused connection abort' } kw: nil].
+		code = 32 ifTrue: [
+			^ BrokenPipeError @env1:___signalNew___: { 32 . 'Broken pipe' } kw: nil]].
 	detail := [gsSocket isNil ifTrue: [nil] ifFalse: [gsSocket lastErrorString]]
 		on: Error do: [:e | e return: nil].
 	^ OSError @env1:___signal___:
@@ -598,6 +643,41 @@ close
 	^ None
 %
 
+category: 'Grail-Finalization'
+method: PyRawSocket
+___finalizeUnclosed___
+	"CPython's sock_finalize: a socket that dies still holding its descriptor
+	warns ``ResourceWarning: unclosed <socket ...>'' and then closes it --
+	warning FIRST, so the repr still shows the address it leaked.  Run at the
+	next safe point after the socket dies (FinalizerEphemeron), and never by
+	way of a Python close() override, which CPython's destructor does not
+	call either.  A closed or detached socket is quiet.  Nothing raised here
+	may escape into whatever code reached the safe point (test_ssl
+	test_dealloc_warn)."
+
+	| fd |
+	(sockClosed == true or: [gsSocket @env0:isNil]) ifTrue: [^ self].
+	[ | wmClass |
+		wmClass := Python @env0:at: #warnings otherwise: nil.
+		wmClass == nil ifFalse: [
+			wmClass instance
+				___warn___: 'unclosed ' @env0:, (self __repr__) @env0:asString
+				category: ResourceWarning
+				stacklevel: 1]]
+		@env0:on: AbstractException
+		do: [:ex |
+			((ex @env0:isKindOf: AlmostOutOfStack)
+				or: [ex @env0:isKindOf: AlmostOutOfStackError])
+					ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	gsSocket @env0:isNil ifTrue: [^ self].
+	fd := gsSocket @env0:id.
+	[gsSocket @env0:close] @env0:on: Error do: [:e | e @env0:return: nil].
+	PyRawSocket @env0:___forgetFd___: fd.
+	gsSocket := nil.
+	sockClosed := true
+%
+
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 detach
@@ -609,7 +689,9 @@ detach
 	fd := self fileno.
 	gsSocket @env0:notNil ifTrue: [
 		[gsSocket @env0:setCloseOnGc: false]
-			@env0:on: Error do: [:e | e @env0:return: nil]].
+			@env0:on: Error do: [:e | e @env0:return: nil].
+		hadPeer == true ifTrue: [
+			PyRawSocket @env0:___peeredGsSockets___ @env0:add: gsSocket]].
 	gsSocket := nil.
 	sockClosed := true.
 	^ fd
@@ -717,6 +799,9 @@ _accept
 	"Keep the fd alive past this GsSocket's own GC: socket.py will adopt it."
 	[conn @env0:setCloseOnGc: false] @env0:on: Error do: [:e | e @env0:return: nil].
 	fd := PyRawSocket @env0:___registerFd___: conn.
+	"An accepted connection HAD a peer, even if it resets before socket.py
+	adopts the fd (see ___peeredGsSockets___)."
+	PyRawSocket @env0:___peeredGsSockets___ @env0:add: conn.
 	^ tuple @env0:withAll: { fd . tuple @env0:withAll: { (conn @env0:peerAddress @env0:ifNil: ['']) .
 			(conn @env0:peerPort @env0:ifNil: [0]) } }
 %
@@ -842,6 +927,8 @@ ___normalizeConnectErrno___: code
 	((code @env0:= 51) @env0:or: [code @env0:= 101]) ifTrue: [^ 51].   "ENETUNREACH"
 	((code @env0:= 65) @env0:or: [code @env0:= 113]) ifTrue: [^ 65].   "EHOSTUNREACH"
 	((code @env0:= 57) @env0:or: [code @env0:= 107]) ifTrue: [^ 57].   "ENOTCONN"
+	((code @env0:= 54) @env0:or: [code @env0:= 104]) ifTrue: [^ 54].   "ECONNRESET"
+	((code @env0:= 53) @env0:or: [code @env0:= 103]) ifTrue: [^ 53].   "ECONNABORTED"
 	^ code
 %
 
@@ -962,7 +1049,7 @@ connect: address
 		out -- which no ``except ConnectionRefusedError'' could catch."
 		^ self ___raiseConnectCode___:
 			(self ___resolvedConnectCode___: sock on: host port: port timeoutMs: ms)].
-	hadPeer := true.
+	self ___notePeer___.
 	^ None
 %
 
@@ -1022,7 +1109,7 @@ connect_ex: address
 			ifTrue: [sock @env0:connectTo: port on: host]
 			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
 		ok == true
-			ifTrue: [hadPeer := true. 0]
+			ifTrue: [self ___notePeer___. 0]
 			ifFalse: [self ___resolvedConnectCode___: sock on: host port: port timeoutMs: ms] ]
 		@env0:on: Error
 		do: [:e | | code |
@@ -1069,7 +1156,7 @@ ___noPeerErrno___: sock
 	first made recv() on a reset socket raise ENOTCONN, where CPython reads
 	what arrived or gets ECONNRESET (test_ssl test_wrong_cert_tls12)."
 
-	sock @env0:peerAddress @env0:notNil ifTrue: [hadPeer := true. ^ nil].
+	sock @env0:peerAddress @env0:notNil ifTrue: [self ___notePeer___. ^ nil].
 	"lastErrorCode is the PLATFORM's errno -- ENOTCONN is 107 on Linux -- so it
 	is mapped onto Grail's errno module, which ssl.py compares it against
 	(``e.errno != errno.ENOTCONN'' in SSLSocket._create).  Unmapped, every TLS
@@ -1077,6 +1164,19 @@ ___noPeerErrno___: sock
 	^ self ___normalizeConnectErrno___:
 		(([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
 			@env0:ifNil: [57])
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___notePeer___
+	"This socket has a peer: remember it here (hadPeer) and on the GsSocket
+	(___peeredGsSockets___), for the object that adopts its fd.  ssl.py adopts
+	BEFORE it detaches, so a client socket's connect is the only place the
+	fact can be recorded in time."
+
+	hadPeer := true.
+	gsSocket @env0:isNil ifFalse: [
+		PyRawSocket @env0:___peeredGsSockets___ @env0:add: gsSocket]
 %
 
 category: 'Grail-Private'
@@ -1117,12 +1217,72 @@ setsockopt: level _: optname _: value
 
 	| sock entry |
 	sock := self @env0:___ensureOpen.
+	(level @env0:= 1 @env0:and: [optname @env0:= 13]) ifTrue: [
+		^ self ___setLinger___: value on: sock].
 	entry := PyRawSocket @env0:___gsOptionFor: level opt: optname.
 	entry @env0:isNil ifTrue: [^ None].
 	(entry @env0:at: 2) @env0:= #bool
 		ifTrue: [sock @env0:option: (entry @env0:at: 1)
 					put: (value @env0:= 0) @env0:not]
 		ifFalse: [sock @env0:option: (entry @env0:at: 1) put: value].
+	^ None
+%
+
+category: 'Grail-Private'
+classmethod: PyRawSocket
+___setsockoptCallout___
+	"libc's setsockopt, for the options GsSocket has no name for.  A CCallout
+	wraps per-process C state, so it is cached in SessionTemps, as os's are."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_socket_setsockopt_callout'
+		ifAbsentPut: [
+			CCallout
+				@env0:library: (CLibrary @env0:named: os ___libcName)
+				name: 'setsockopt'
+				result: #'int32'
+				args: #(#'int32' #'int32' #'int32' #'ptr' #'uint32')]
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___setLinger___: value on: sock
+	"SO_LINGER, which GsSocket has no named option for (``option: 'LINGER'''
+	is ArgumentError 2291), so it goes to libc's setsockopt on the socket's
+	own fd, with THIS platform's constants rather than Grail's Linux ones
+	(design note 1).  Ignoring it, as an unknown option is ignored, made
+	``struct.pack('ii', 1, 0)'' -- the abortive close -- a no-op: close()
+	sent a FIN instead of a RST, and test_ssl's TestPreHandshakeClose then
+	saw a peer that still read as connected and handshook with plaintext.
+	The value is the packed ``struct linger'' (or an int, which the kernel
+	judges, as CPython passes it through)."
+
+	| bytes buf errno result |
+	bytes := (value @env0:isKindOf: Integer)
+		ifTrue: [ | ba |
+			ba := ByteArray @env0:new: 4.
+			1 @env0:to: 4 do: [:i |
+				ba @env0:at: i put: ((value @env0:bitShift: (i @env0:- 1) @env0:* -8) @env0:bitAnd: 255)].
+			ba]
+		ifFalse: [
+			(value @env0:isKindOf: ByteArray) ifFalse: [
+				^ TypeError ___signal___: 'a bytes-like object is required, not '''
+					@env0:, value ___pyDnuTypeName___ @env0:, ''''].
+			value].
+	buf := CByteArray @env0:withAll: bytes nullTerminate: false.
+	errno := Array @env0:new: 1.
+	result := PyRawSocket ___setsockoptCallout___
+		@env0:callWith: {
+			sock @env0:id.
+			os ___isDarwin ifTrue: [16rFFFF] ifFalse: [1].
+			os ___isDarwin ifTrue: [16r80] ifFalse: [13].
+			buf.
+			bytes @env0:size }
+		errno: errno.
+	result @env0:= -1 ifTrue: [
+		^ OSError ___signalNew___: {
+			self ___normalizeConnectErrno___: (errno @env0:at: 1).
+			os ___strerrorCallout @env0:callWith: { errno @env0:at: 1 } } kw: nil].
 	^ None
 %
 

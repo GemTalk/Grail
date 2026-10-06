@@ -86,6 +86,12 @@ _METHODS_EXPECTING_BODY = {'PATCH', 'POST', 'PUT'}
 _MAX_LINE = 65536
 _MAX_HEADERS = 100
 
+# maximal number of interim (1xx) responses tolerated before the final
+# response (CPython 3.14.8).  Without a bound, a server streaming
+# "100 Continue" responses hangs getresponse() forever; a socket timeout
+# cannot detect that, as data keeps arriving within every timeout window.
+_MAXINTERIMRESPONSES = 100
+
 # CPython spells these _MAXLINE / _MAXHEADERS, and third-party code reads
 # them off the module by that name (urllib3's backported _tunnel does, on
 # Pythons older than 3.11.9).  Same objects, both spellings.
@@ -423,12 +429,15 @@ class HTTPResponse(io.BufferedIOBase):
 
     def begin(self):
         # Skip any number of 1xx informational responses.
-        while True:
+        for _ in range(_MAXINTERIMRESPONSES):
             status, reason = self._read_status()
             if status != 100 and status != 101:
                 break
             # discard the informational response's headers
             self._read_headers()
+        else:
+            raise HTTPException(
+                'got more than %d interim responses' % _MAXINTERIMRESPONSES)
         # CPython sets both: urllib.request's handlers read ``code''.
         self.code = self.status = status
         self.reason = reason
@@ -474,11 +483,17 @@ class HTTPResponse(io.BufferedIOBase):
                 raise HTTPException('truncated chunked body')
             size = int(size_line, 16)
             if size == 0:
-                # consume optional trailers up to the blank line
+                # consume optional trailers up to the blank line, bounded
+                # like the header block (CPython 3.14.8)
+                trailers_read = 0
                 while True:
                     trailer = self._readline()
                     if not trailer or trailer == b'\r\n' or trailer == b'\n':
                         break
+                    trailers_read += 1
+                    if trailers_read > _MAX_HEADERS:
+                        raise HTTPException(
+                            'got more than %d trailers' % _MAX_HEADERS)
                 break
             chunks.append(self.fp.read(size))
             self.fp.read(2)     # trailing CRLF after each chunk

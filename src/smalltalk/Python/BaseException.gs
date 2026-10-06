@@ -1662,9 +1662,23 @@ ___pyAttrStore___: aName put: aValue
 
 	showed the implicit context again that CPython keeps suppressed.  Route the
 	three to their slots with CPython's checks.  The size test keeps every
-	other store on an exception at one compare."
+	other store on an exception at one compare.
+
+	``e.args = x'' is a getset too: CPython's setter stores tuple(x), and
+	every reader -- str(), repr(), an ExceptionGroup's repr -- sees the new
+	value.  Grail stored an ordinary attribute named ``args'', which a Python
+	read found but str() and repr() did not, so ``e.args = (2,); str(e)''
+	still said the constructor's argument, a list stayed a list, and a
+	non-iterable was accepted.  The slot is set directly, not through
+	___args___:, because CPython's setter only replaces args: an OSError
+	keeps its errno and a SyntaxError its lineno, where ___args___: would
+	parse them again."
 
 	| n |
+	(aName @env0:size @env0:= 4 and: [aName @env0:asString @env0:= 'args'])
+		ifTrue: [
+			args := tuple __new__: aValue.
+			^ aValue].
 	(aName @env0:size @env0:between: 9 and: 20) ifFalse: [
 		^ super ___pyAttrStore___: aName put: aValue].
 	n := aName @env0:asString.
@@ -1705,9 +1719,11 @@ ___pyAttrDelete___: aName
 	"The chaining attributes always exist, so CPython refuses to delete them
 	-- with a TypeError, not the AttributeError a missing attribute gets.
 	Grail let ``del e.__cause__'' remove the misplaced attribute the store
-	used to create."
+	used to create.  ``args'' is refused the same way."
 
 	| n |
+	(aName @env0:size @env0:= 4 and: [aName @env0:asString @env0:= 'args'])
+		ifTrue: [^ TypeError ___signal___: 'args may not be deleted'].
 	(aName @env0:size @env0:between: 9 and: 20) ifFalse: [
 		^ super ___pyAttrDelete___: aName].
 	n := aName @env0:asString.

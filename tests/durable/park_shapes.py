@@ -2,9 +2,9 @@
 
 Each parks (durable.sleep(0)) inside a different Python construct and then
 computes from locals updated after the resume.  GemStone gives a block made
-before the capture a stale home context after the resume (reported to
-GemTalk 2026-10-05), so some shapes resumed WRONG, silently; durable now
-refuses those it can recognise (durable._resume_hazard).  EXPECTED is what
+before the capture a stale home context after the resume (Kermit 52132),
+so some shapes resumed WRONG, silently; durable now refuses those it can
+recognise (durable._resume_hazard), including every park inside a try.  EXPECTED is what
 CPython computes with sleep() a no-op.  Grail-only: not a tests/python
 fixture."""
 import durable

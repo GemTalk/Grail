@@ -2072,7 +2072,13 @@ fromisoformat: s
 	the repr of the ORIGINAL string in the message)."
 	dateFields := [
 		dateLen := PyDate @env1:___findIsoDatetimeSeparator___: str.
-		PyDate @env1:___parseIsoDateFields___: (str @env0:copyFrom: 1 to: dateLen)]
+		"dateLen is where the date WOULD end: 10 for any 'YYYY-' prefix, even
+		when the string is only 9 long ('2020-2020', '2020-12-1').  CPython
+		slices dtstr[:10], which clamps; copyFrom:to: past the end raised an
+		uncatchable OffsetError instead.  The short date then fails to parse
+		as the ValueError this handler reports."
+		PyDate @env1:___parseIsoDateFields___:
+			(str @env0:copyFrom: 1 to: (dateLen @env0:min: str @env0:size))]
 		@env0:on: ValueError
 		do: [:ex | ^ ValueError ___signal___:
 			'Invalid isoformat string: ''' @env0:, str @env0:, ''''].
