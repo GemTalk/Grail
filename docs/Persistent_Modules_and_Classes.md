@@ -703,10 +703,9 @@ The names have to be a literal list or tuple of strings in the module body,
 known when the class is built. That module's class, and only it, gets
 overrides of the three dynamic-instVar accessors, with the names inlined and
 the values kept in SessionTemps. A module that declares nothing pays nothing.
-The declaration is itself transient, so it is not a write either. A
-class-scope `__transient__` now exists for INSTANCE attributes
-(App_Namespaces_Design.md §6.3); the class-attribute case of §8.2 is still
-open.
+The declaration is itself transient, so it is not a write either. The
+class-scope `__transient__` (App_Namespaces_Design.md §6.3, and §8.2 below)
+covers instance attributes and class attributes.
 
 ### D13. A module-level `Final` initializes once
 
@@ -952,10 +951,42 @@ Wanted: a class-scope `__transient__ = [...]` (SessionDict-backed, the mirror of
 D4; the module-scope one is D12), and a `deploy_check` predicate that flags
 mutable class-body containers the way it already flags sockets and locks.
 
-Partly done: class-level `__transient__` exists for INSTANCE attributes
-(`self._sock`; App_Namespaces_Design.md §6.3). A name it lists is kept out of
-each instance's storage. It does not make a class attribute such as `_cache`
-session-local, which is what this item asks for.
+**Done (2026-10-06).** A name in a class's `__transient__` that the class body
+also binds is a session-local class attribute:
+
+```python
+class Registry:
+    __transient__ = ("_cache",)
+    _cache = {}               # committed as a template, never mutated
+```
+
+- **Each session gets its own shallow copy** (`copy.copy`) of the body's
+  value, so `Registry._cache[k] = v`, `self._cache[k] = v` and a subclass's
+  `Sub._cache` all reach that session's copy. The committed value stays as the
+  body left it. Mutating the copy is not a write; a rebinding goes to the
+  session overlay, as D3 already routes it.
+- **Seeded into the D3 overlay**, which every class-attribute read consults
+  first. That happens after the class statement in the session that runs the
+  body, including a warm reuse, and on bind in every later session, beside the
+  module-body class-attribute replay. The classes to seed are recorded per
+  namespace and pruned when a module or class is forgotten or dropped.
+- **A template that cannot be copied is a `TypeError` at class creation.**
+  Without the declaration, the template would be shared and mutated; with an
+  uncopyable value, every later session would fail instead.
+- **Only canonical classes are seeded.** On a session-local class a store goes
+  to the class itself, which a copy would hide.
+- A name the body does not bind stays an instance attribute
+  (App_Namespaces_Design.md §6.3).
+
+**The audit** reports what the declaration exists to prevent, as it happens:
+`deploy_check(module)` lists each committed class-body dict, list or set of
+the module's classes that the current transaction has written, the container
+itself or one of its buckets. That is `Cls._cache[k] = v` on a committed
+class. It does not list every container a body binds, since frameworks fill
+class-level dicts on purpose at class creation (dataclass fields, enum maps).
+
+    myapp.Registry.shared (a dict) -> committed class-body container written by
+    this transaction; name it in __transient__ to keep it per session
 
 ### 8.3 Instance migration for a changed class shape
 

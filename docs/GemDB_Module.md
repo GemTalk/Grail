@@ -704,9 +704,13 @@ is now `gemdb.schema`, above.
   the committed object stores no socket and no `_sock`; a store on a committed
   object is not a write and survives an abort. In a new session
   `__session_init__` rebuilds the attribute once per object, through a dict in
-  `gemdb.root`, a subclass, and a deployed module's global.
+  `gemdb.root`, a subclass, and a deployed module's global. A transient class
+  attribute (`_cache = {}`): mutating the session's copy is not a write and
+  leaves the committed template empty; a new session gets a fresh copy; and
+  `deploy_check` names a committed class-body dict written in place, but not
+  the transient one. Forgetting the module prunes the seeding registry.
   `ClassTransientTestCase` covers the in-session half: layout, `vars()`, `del`,
-  the subclass union, and the two errors.
+  the subclass union, which names are class attributes, and the three errors.
 * `tests/scripts/runClassSchemaTest.gs` (wired in as `gemdb-class-schema`)
   — the class-level half over a fixture module with a committed instance:
   the refusals for a changed base, a removed class and a renamed one, and

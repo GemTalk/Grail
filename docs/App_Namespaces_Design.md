@@ -476,8 +476,9 @@ rebuilt.
   drops the overrides.
 - **Cost.** Only instances of a class that declares it pay: each dynamic
   attribute access asks the class for its names.
-- **Not covered:** a class *attribute* such as `_cache = {}` in the class body
-  still commits with the class (Persistent Modules §8.2).
+- **Class attributes too.** A listed name the body also binds, such as
+  `_cache = {}`, is a session-local class attribute: each session gets its own
+  copy of the committed value (Persistent Modules §8.2).
 
 It is GemStone's **DbTransient** idea, but not GemStone's DbTransient
 mechanism. A DbTransient object's slots can silently revert to `nil` *within
