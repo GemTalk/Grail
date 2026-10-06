@@ -1316,6 +1316,13 @@ ___grailInstallTransientAttrs___
 	inherited @env0:do: [:n | names @env0:add: n @env0:asSymbol].
 	own @env0:do: [:n | (names @env0:includes: n) ifFalse: [names @env0:add: n]].
 	names @env0:isEmpty ifTrue: [^ self].
+	"CLASS attributes among the OWN names -- ``_cache = {}'' in this body --
+	are session-local too (docs/Persistent_Modules_and_Classes.md §8.2): the
+	body's value is committed untouched as a TEMPLATE, and each session reads
+	and mutates its own shallow copy (___grailSeedTransientClassAttrs___).
+	Copied once here, so a value that cannot be copied is a TypeError at class
+	creation rather than in some later session."
+	self ___grailRecordTransientClassAttrs___: own.
 	meta := self @env0:class.
 	lit := String @env0:new.
 	names @env0:do: [:n | lit := lit @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
@@ -1349,6 +1356,85 @@ ___grailInstallTransientAttrs___
 				category: #'Grail-Transient Attrs'
 				environmentId: 0].
 	^ self
+%
+
+category: 'Grail-Transient Attrs'
+classmethod: object
+___grailRecordTransientClassAttrs___: ownNames
+	"Of ownNames (this body's own __transient__), the ones the body also
+	BINDS are transient CLASS attributes.  Record them class-side
+	(___pyTransientClassAttrs___), check each template copies, and enter the
+	class in its namespace's GrailTransientClassAttrClasses, which every
+	later session seeds from (importlib class >> ___restoreAllBodyClassAttrs___)."
+
+	| classNames lit lf ns reg |
+	classNames := ownNames @env0:select: [:n | (self ___grailOwnClassAttr___: n @env0:asString) ~~ nil].
+	classNames @env0:isEmpty ifTrue: [^ self].
+	classNames @env0:do: [:n | | template |
+		template := self ___grailOwnClassAttr___: n @env0:asString.
+		[self ___grailSessionCopyOf___: template]
+			@env0:on: AbstractException
+			do: [:e | ^ TypeError ___signal___: '__transient__ class attribute '''
+				@env0:, n @env0:asString @env0:, ''' cannot be copied for each session: '
+				@env0:, ([e @env0:messageText @env0:asString] @env0:on: AbstractException do: [:x | x @env0:return: '?'])]].
+	lf := Character @env0:lf @env0:asString.
+	lit := String @env0:new.
+	classNames @env0:do: [:n | lit := lit @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
+	self @env0:class ___compileMethod: '___pyTransientClassAttrs___' @env0:, lf @env0:, '	^ #(' @env0:, lit @env0:, ' )'
+		category: 'Grail-Transient Attrs'.
+	ns := importlib @env0:___grailNamespace___.
+	reg := ns @env0:at: #'GrailTransientClassAttrClasses' otherwise: nil.
+	reg == nil ifTrue: [
+		reg := IdentitySet @env0:new.
+		ns @env0:at: #'GrailTransientClassAttrClasses' put: reg].
+	(reg @env0:includes: self) ifFalse: [reg @env0:add: self].
+	^ self
+%
+
+category: 'Grail-Transient Attrs'
+classmethod: object
+___grailSeedTransientClassAttrs___
+	"Give THIS SESSION its own shallow copy of each of the receiver's
+	transient class attributes, in the session-local overlay every class
+	attribute read consults first (D3), so ``Cls._cache[k] = v'' mutates the
+	copy and the committed template stays as the body left it.  Only into an
+	empty overlay slot, so a session's own rebinding is never replaced; only
+	for a CANONICAL class, since a store on any other class goes to the class
+	itself and would then be hidden behind a stale copy.  Emitted after the
+	class statement (on a build and on a warm reuse alike) and replayed for
+	every recorded class when a later session binds a module."
+
+	| names st ov inner |
+	(self @env0:class @env0:includesSelector: #'___pyTransientClassAttrs___' environmentId: 1)
+		ifFalse: [^ self].
+	(self ___classAttrOverlayApplies___: self) ifFalse: [^ self].
+	names := self ___pyTransientClassAttrs___.
+	st := SessionTemps @env0:current.
+	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	ov == nil ifTrue: [
+		ov := IdentityKeyValueDictionary @env0:new.
+		st @env0:at: #'GrailClassAttrOverlay' put: ov].
+	inner := ov @env0:at: self otherwise: nil.
+	inner == nil ifTrue: [
+		inner := KeyValueDictionary @env0:new.
+		ov @env0:at: self put: inner].
+	names @env0:do: [:sym |
+		(inner @env0:includesKey: sym) ifFalse: [ | template |
+			template := self ___grailOwnClassAttr___: sym @env0:asString.
+			template == nil ifFalse: [
+				inner @env0:at: sym put: (self ___grailSessionCopyOf___: template)]]].
+	^ self
+%
+
+category: 'Grail-Transient Attrs'
+classmethod: object
+___grailSessionCopyOf___: aValue
+	"copy.copy(aValue): a session's own copy of a transient class
+	attribute's template."
+
+	| copyMod |
+	copyMod := (importlib @env0:___instance___) @env1:import_module: 'copy'.
+	^ (copyMod @env1:___pyAttrLoad___: #copy) @env1:value: { aValue } value: nil
 %
 
 category: 'Grail-Transient Attrs'

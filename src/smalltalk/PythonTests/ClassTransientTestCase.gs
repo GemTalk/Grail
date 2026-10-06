@@ -202,3 +202,38 @@ for value in (5, ("a", 3)):
         r.append(str(e))
 r') asArray equals: #('__transient__ must be a str or a sequence of str, not ''int''' '__transient__ items must be str, not ''int''')
 %
+
+category: 'Grail-Tests-transient'
+method: ClassTransientTestCase
+testOnlyBodyBoundNamesAreClassAttributes
+	"Of the names in __transient__, those the class body also binds are
+	transient CLASS attributes (docs/Persistent_Modules_and_Classes.md §8.2);
+	the others are instance attributes only."
+
+	self assert: (self eval: '
+class Registry:
+    __transient__ = ("_cache", "_sock")
+    _cache = {}
+repr([str(n) for n in Registry.___pyTransientClassAttrs___()])') equals: '[''_cache'']'
+%
+
+category: 'Grail-Tests-transient'
+method: ClassTransientTestCase
+testUncopyableClassAttributeRaisesTypeError
+	"Each session gets a copy of a transient class attribute, so a template
+	that cannot be copied is refused when the class is created, not in some
+	later session."
+
+	self assert: (self eval: '
+class NoCopy:
+    def __copy__(self):
+        raise TypeError("no copies")
+try:
+    class Bad:
+        __transient__ = ("_x",)
+        _x = NoCopy()
+    r = "no error"
+except TypeError as e:
+    r = str(e)
+r') equals: '__transient__ class attribute ''_x'' cannot be copied for each session: no copies'
+%
