@@ -1982,125 +1982,182 @@ category: 'Grail-Deploy Audit'
 classmethod: importlib
 ___deployCheck___: aModuleName
 	"Pre-deploy audit (docs/Persistent_Modules_and_Classes.md §6.3):
-	walk the NOT-YET-COMMITTED object graph reachable from module
-	aModuleName's instance and report every reachable instance of a
-	SESSION-BOUND class -- open GsFile/GsSocket handles,
-	Semaphore/GsProcess, a raw CPointer, an SrePattern that cannot
-	recompile (no compileArgs), an SreMatch, a WeakReference -- each with
-	a short class-path from the module.  These are the values a deploy
-	commit would sweep into the repository, where they fault dead / NULL
-	in a later session.  Run it BEFORE committing a module you intend to
-	deploy; an empty result means the module's new closure is
-	commit-clean.
+	walk what committing module aModuleName would make persistent and
+	report every SESSION-BOUND value in it (___deploySessionBound___:),
+	each as a Python-style path from the module -- ``m.conn._sock (a
+	socket) -> GsSocket (...)''.  These are the values a deploy commit
+	would sweep into the repository, where they fault dead / NULL in a
+	later session, or that make the commit fail outright.  Run it BEFORE
+	committing a module you intend to deploy; an empty result means the
+	module's new closure is commit-clean.
 
-	Bounded to the deploy's NEW closure by following only NON-committed
-	references -- an already-committed object is the existing image, not
-	this deploy's concern.  Known limitation (v1): a NEW session resource
-	held through a pre-committed-but-dirty object is not reached (that
-	needs the VM dirty-set); the common case (new resources in new module
-	globals / the new class closure) is covered.  Returns a Python list of
-	description strings.  Never commits, never mutates."
+	The walk (___grailSessionBoundFrom___:written:limit:) follows objects
+	not yet committed AND committed objects this transaction has written
+	(System _writtenObjects), so a new socket stored in an already-committed
+	dict is found too.  Returns a Python list of description strings.
+	Never commits, never mutates."
 
-	| mod worklist visited parents findings count |
+	| mod |
 	mod := self @env1:lookupModule: aModuleName.
 	mod isNil ifTrue: [
 		^ list withAll: {
 			('deploy_check: module ''' , aModuleName asString
 				, ''' is not imported in this session') }].
-	worklist := OrderedCollection with: mod.
-	visited := IdentitySet new.
-	parents := IdentityKeyValueDictionary new.
-	findings := OrderedCollection new.
-	count := 0.
-	[worklist isEmpty] whileFalse: [ | obj |
-		obj := worklist removeFirst.
-		(visited includes: obj) ifFalse: [
-			visited add: obj.
-			count := count + 1.
-			count > 300000
-				ifTrue: [
-					findings add: '... deploy_check truncated at 300000 objects'.
-					^ list withAll: findings].
-			(self ___deploySessionBound___: obj) ifTrue: [
-				findings add:
-					((self ___deployPathFor___: obj parents: parents)
-						, ' -> ' , (self ___deployDescribe___: obj))].
-			"Do NOT descend into Behavior (walks whole class/method graph, and
-			classes are committed anyway); bytes hold no object refs."
-			(obj isKindOf: Behavior) ifFalse: [
-				self ___deployRefsOf: obj do: [:ref |
-					(ref ~~ nil
-						and: [(ref isSpecial) not
-						and: [(ref isCommitted) not
-						and: [(visited includes: ref) not]]]) ifTrue: [
-							(parents includesKey: ref)
-								ifFalse: [parents at: ref put: obj].
-							worklist add: ref]]]]].
-	^ list withAll: findings
+	^ list withAll: (self
+		___grailSessionBoundFrom___: mod
+		written: (IdentitySet withAll: System _writtenObjects)
+		limit: 300000)
 %
 
 category: 'Grail-Deploy Audit'
 classmethod: importlib
-___deploySessionBound___: obj
-	"True when obj is an instance of a class that cannot survive a
-	commit + fault into a later session (see ___deployCheck___)."
+___grailSessionBoundFrom___: aRoot written: writtenSet limit: maxObjects
+	"Breadth-first from aRoot over what a commit would make persistent:
+	every reference to an object not yet committed, or to a committed
+	object in writtenSet.  An unwritten committed object cannot reference
+	anything new, so stopping there bounds the walk to this transaction's
+	new closure (about 0.75 us per object, docs/App_Namespaces_Design.md
+	§6.2).  Answers an OrderedCollection of finding strings, one per
+	session-bound object, which is not descended into.
 
-	| cn |
-	(obj isKindOf: Semaphore) ifTrue: [^ true].
-	(obj isKindOf: GsProcess) ifTrue: [^ true].
-	(obj isKindOf: GsFile) ifTrue: [^ true].
-	(obj isKindOf: CPointer) ifTrue: [^ true].
-	cn := obj class name asString.
-	(cn = 'GsSocket') ifTrue: [^ true].
-	(cn = 'SreMatch') ifTrue: [^ true].
-	(cn = 'WeakReference') ifTrue: [^ true].
-	"An SrePattern is fine IF it remembers its compile args (it recompiles
-	on first use next session); flag only the un-recompilable ones."
-	(cn = 'SrePattern') ifTrue: [
-		^ (obj instVarAt: (obj class allInstVarNames indexOf: 'compileArgs')) isNil].
+	The queue is INDEXED, never removeFirst: an OrderedCollection's
+	removeFirst made the old walk quadratic (1.25M objects: 74 s, against
+	0.92 s indexed)."
+
+	| queue next visited parents findings |
+	queue := OrderedCollection with: aRoot.
+	visited := IdentitySet with: aRoot.
+	parents := IdentityKeyValueDictionary new.
+	findings := OrderedCollection new.
+	next := 1.
+	[next <= queue size] whileTrue: [ | obj |
+		next > maxObjects ifTrue: [
+			findings add: '... deploy_check truncated at ' , maxObjects printString , ' objects'.
+			^ findings].
+		obj := queue at: next.
+		next := next + 1.
+		((obj ~~ aRoot) and: [self ___deploySessionBound___: obj])
+			ifTrue: [ | finding |
+				"One line per path: a generator holds two Semaphores."
+				finding := (self ___grailDescribeChain___: (self ___grailChainTo___: obj parents: parents))
+					, ' -> ' , (self ___deployDescribe___: obj).
+				(findings includes: finding) ifFalse: [findings add: finding]]
+			ifFalse: [
+				(self ___grailWalkStopsAt___: obj) ifFalse: [
+					self ___grailRawRefsOf___: obj do: [:ref |
+						((self ___grailWalkFollows___: ref written: writtenSet)
+							and: [(visited includes: ref) not]) ifTrue: [
+								visited add: ref.
+								parents at: ref put: obj.
+								queue add: ref]]]]].
+	^ findings
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailWalkFollows___: ref written: writtenSet
+	"Would a commit write ref?  Yes when it is new, or committed and
+	written in this transaction."
+
+	ref isNil ifTrue: [^ false].
+	ref isSpecial ifTrue: [^ false].
+	^ ref isCommitted not or: [writtenSet includes: ref]
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailWalkStopsAt___: obj
+	"Objects whose references the walk does not follow: code (classes and
+	methods are committed by the deploy itself), bytes (no references),
+	DbTransient instances (their slots are never committed), a compiled
+	pattern that rebuilds its C pointer (___grailRebuildsSessionState___:),
+	and a continuation, which durable execution commits on purpose."
+
+	| cls |
+	(obj isKindOf: Behavior) ifTrue: [^ true].
+	(obj isKindOf: GsNMethod) ifTrue: [^ true].
+	cls := obj class.
+	cls isBytes ifTrue: [^ true].
+	cls instancesDbTransient ifTrue: [^ true].
+	(self ___grailRebuildsSessionState___: obj) ifTrue: [^ true].
+	((obj isKindOf: GsProcess) and: [obj isContinuation]) ifTrue: [^ true].
 	^ false
 %
 
 category: 'Grail-Deploy Audit'
 classmethod: importlib
-___deployRefsOf: obj do: aBlock
-	"Evaluate aBlock with each object directly referenced by obj: named
-	instVars, collection contents (dict keys+values), indexed slots of a
-	non-collection variable object, and dynamic instVars (module globals /
-	PythonInstance attrs).  Bytes objects hold no references."
-  | pairs |
-	obj class isBytes ifTrue: [^ self].
-	1 to: obj class instSize do: [:i |
-		aBlock value: (obj instVarAt: i)].
-	(obj isKindOf: Collection) ifTrue: [
-		(obj respondsTo: #'keysAndValuesDo:')
-			ifTrue: [[obj keysAndValuesDo: [:k :v | aBlock value: k. aBlock value: v]]
-				on: AbstractException do: [:e | e return: nil]]
-			ifFalse: [[obj do: [:e | aBlock value: e]]
-				on: AbstractException do: [:e | e return: nil]]]
-	ifFalse: [
-		(obj class isVariable) ifTrue: [
-			1 to: obj size do: [:i | aBlock value: (obj at: i)]]].
-	pairs := obj dynamicInstVarPairs .
-	1 to: (pairs size - 1) by: 2 do: [:i |
-		aBlock value: (pairs at: i + 1)]
+___grailRebuildsSessionState___: obj
+	"True for an object that holds a C pointer but rebuilds it in a later
+	session: an SrePattern that kept its compileArgs recompiles on first use
+	(the issue2-sre-ptr regression).  Every reachable committed CPointer on a
+	development extent was one of these (measured 2026-10-04, 179 of 179)."
+
+	| idx |
+	obj class name == #SrePattern ifFalse: [^ false].
+	idx := obj class allInstVarNames indexOf: #compileArgs.
+	^ idx > 0 and: [(obj instVarAt: idx) notNil]
 %
 
 category: 'Grail-Deploy Audit'
 classmethod: importlib
-___deployPathFor___: obj parents: parents
-	"A short class-name breadcrumb from the module root down to obj, using
-	the BFS parent map."
+___grailRawRefsOf___: obj do: aBlock
+	"Evaluate aBlock with each object obj references, read from its
+	STORAGE rather than through its protocol: named instVars, the indexed
+	part (or an NSC's members), and dynamic instVars.  Never keysAndValuesDo:
+	-- on a module that runs code (sys.breakpoint is performed on read) --
+	and dynamic instVar NAMES come from the primitive, so a class's own
+	accessor overrides (__transient__, NativeModule's session slots) do not
+	hide or invent any."
 
-	| chain walker steps |
-	chain := OrderedCollection new.
-	walker := obj.
-	steps := 0.
-	[walker notNil and: [steps < 40]] whileTrue: [
-		chain addFirst: (walker class name asString).
-		walker := parents at: walker otherwise: nil.
-		steps := steps + 1].
-	^ '.' @env1:join: (list withAll: chain)
+	| cls |
+	cls := obj class.
+	cls isBytes ifTrue: [^ self].
+	1 to: cls instSize do: [:i | aBlock value: (obj instVarAt: i)].
+	cls isNsc
+		ifTrue: [obj do: [:each | aBlock value: each]]
+		ifFalse: [
+			cls isIndexable ifTrue: [
+				1 to: obj _basicSize do: [:i | aBlock value: (obj _at: i)]]].
+	(obj _instvarNamesAfter: obj namedSize) do: [:n |
+		aBlock value: (obj dynamicInstVarAt: n)]
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailSessionBoundKind___: obj
+	"What makes obj session-bound, as a phrase for an error message, or nil
+	(docs/App_Namespaces_Design.md §6.1): an instance of an
+	instancesNonPersistent class, which the kernel refuses at commit
+	(TransactionError 2407); an open socket or file, or a C pointer, which
+	commit and are dead in a later session."
+
+	obj class instancesNonPersistent ifTrue: [
+		^ 'a ' , obj class name , ', which GemStone never commits'].
+	(obj isKindOf: GsSocket) ifTrue: [
+		^ 'an open socket (' , obj class name , '), dead in a later session'].
+	(obj isKindOf: GsFile) ifTrue: [
+		^ 'an open file (GsFile), dead in a later session'].
+	((obj isKindOf: CPointer) or: [obj isKindOf: CByteArray]) ifTrue: [
+		^ 'a C pointer (' , obj class name , '), NULL in a later session'].
+	^ nil
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___deploySessionBound___: obj
+	"True when the audit should flag obj: every session-bound kind
+	(___grailSessionBoundKind___:), plus values that commit but are wrong in
+	a later session -- an SrePattern that cannot recompile, an SreMatch, a
+	WeakReference (faults in dead), a GsProcess that is not a continuation."
+
+	| cn |
+	(self ___grailSessionBoundKind___: obj) notNil ifTrue: [^ true].
+	((obj isKindOf: GsProcess) and: [obj isContinuation not]) ifTrue: [^ true].
+	cn := obj class name.
+	cn == #SreMatch ifTrue: [^ true].
+	cn == #WeakReference ifTrue: [^ true].
+	cn == #SrePattern ifTrue: [^ (self ___grailRebuildsSessionState___: obj) not].
+	^ false
 %
 
 category: 'Grail-Deploy Audit'
@@ -2112,14 +2169,240 @@ ___deployDescribe___: obj
 	cn := obj class name asString.
 	(cn = 'SrePattern') ifTrue: [
 		^ 'SrePattern (no compileArgs -- cannot recompile in a later session)'].
-	(cn = 'GsFile') ifTrue: [^ 'GsFile (open OS file handle -- dead after commit/logout)'].
-	(cn = 'GsSocket') ifTrue: [^ 'GsSocket (open socket -- dead after commit/logout)'].
-	((obj isKindOf: Semaphore)) ifTrue: [^ 'Semaphore (non-persistable -- commit will FAIL, error 2407)'].
+	(obj isKindOf: GsFile) ifTrue: [^ 'GsFile (open OS file handle -- dead after commit/logout)'].
+	(obj isKindOf: GsSocket) ifTrue: [^ cn , ' (open socket -- dead after commit/logout)'].
+	(obj class instancesNonPersistent) ifTrue: [^ cn , ' (non-persistable -- commit will FAIL, error 2407)'].
 	((obj isKindOf: GsProcess)) ifTrue: [^ 'GsProcess (session thread -- not persistable)'].
-	((obj isKindOf: CPointer)) ifTrue: [^ 'CPointer (raw C address -- NULL after commit/logout)'].
+	((obj isKindOf: CPointer) or: [obj isKindOf: CByteArray]) ifTrue: [
+		^ cn , ' (raw C address -- NULL after commit/logout)'].
 	(cn = 'SreMatch') ifTrue: [^ 'SreMatch (match object -- has no recompile path)'].
 	(cn = 'WeakReference') ifTrue: [^ 'WeakReference (faults in DEAD in a later session)'].
 	^ cn , ' (session-bound)'
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailRefusalPathTo___: aRefused
+	"After a commit refusal (TransactionError 2407), find where aRefused is
+	held, as an Array from a nameable anchor (___grailIsPathAnchor___:) down
+	to aRefused, or nil.  Runs only on the failing path, so a successful
+	commit never pays for it.
+
+	It climbs BACKWARD, one in-memory reference scan per level
+	(SystemRepository listReferencesInMemory:), and keeps only referrers that
+	answer isCommitted.  That is the mark the failed flush leaves: the objects
+	the commit was writing read as committed until the abort (measured on
+	4.0), while stack temporaries and session caches never do, so they drop
+	out.  A forward walk from System _writtenObjects cannot be used here for
+	the same reason -- every new object it would follow now reads as
+	committed."
+
+	| frontier parents seen |
+	frontier := Array with: aRefused.
+	parents := IdentityKeyValueDictionary new.
+	seen := IdentitySet with: aRefused.
+	1 to: 24 do: [:level | | refs nextFrontier |
+		refs := SystemRepository listReferencesInMemory: frontier.
+		nextFrontier := OrderedCollection new.
+		1 to: frontier size do: [:i | | child |
+			child := frontier at: i.
+			(refs at: i) do: [:ref |
+				((seen includes: ref) not
+					and: [ref isSpecial not
+					and: [ref isCommitted]]) ifTrue: [
+						seen add: ref.
+						parents at: ref put: child.
+						(self ___grailIsPathAnchor___: ref) ifTrue: [
+							^ self ___grailChainDownFrom___: ref parents: parents].
+						nextFrontier add: ref]]].
+		nextFrontier isEmpty ifTrue: [^ nil].
+		frontier := nextFrontier asArray].
+	^ nil
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailIsPathAnchor___: obj
+	"Can a path start at obj?  gemdb.root's dictionary, a module (a
+	namespace's globals are its __main__), a class, or a dictionary in the
+	symbol list.  Module first: every module is a SymbolDictionary."
+
+	obj == (UserGlobals at: #GemDBRoot otherwise: nil) ifTrue: [^ true].
+	(obj isKindOf: module) ifTrue: [^ true].
+	(obj isKindOf: Behavior) ifTrue: [^ true].
+	((obj isKindOf: SymbolDictionary)
+		and: [System myUserProfile symbolList includesIdentical: obj]) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailChainDownFrom___: anAnchor parents: downward
+	"The Array anAnchor, ..., the refused object, following the downward
+	links ___grailRefusalPathTo___: recorded (referrer -> what it holds)."
+
+	| chain node |
+	chain := OrderedCollection with: anAnchor.
+	node := anAnchor.
+	[(node := downward at: node otherwise: nil) notNil] whileTrue: [chain add: node].
+	^ chain asArray
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailChainTo___: obj parents: upward
+	"The Array root, ..., obj, from the forward walk's parent links."
+
+	| chain node |
+	chain := OrderedCollection with: obj.
+	node := obj.
+	[(node := upward at: node otherwise: nil) notNil] whileTrue: [chain addFirst: node].
+	^ chain asArray
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailDescribeChain___: aChain
+	"___grailPathOfChain___: with, when the chain ends INSIDE the last
+	object it names (a generator's process, a socket's GsSocket), that
+	object's Python type -- ``gemdb.root['jobs'][3].gen (a generator)'' --
+	which is what the reader recognises."
+
+	| pathAndLast |
+	pathAndLast := self ___grailPathOfChain___: aChain.
+	(pathAndLast at: 2) == aChain last ifTrue: [^ pathAndLast at: 1].
+	^ (pathAndLast at: 1) , ' ('
+		, (self ___grailArticled___: (self ___grailPyTypeName___: (pathAndLast at: 2))) , ')'
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailPathOfChain___: aChain
+	"A chain of objects as Python sees it, and the last object it names:
+	{ ``gemdb.root['jobs'][3].gen''. theGenerator }.  The anchor's name,
+	then the member that holds each next Python-visible object.  Storage
+	between two such objects (a dict's buckets, a collision bucket, a
+	socket's GsSocket) has no Python name and is skipped."
+
+	| out i last |
+	out := WriteStream on: String new.
+	out nextPutAll: (self ___grailAnchorName___: aChain first).
+	i := 1.
+	last := aChain first.
+	[i < aChain size] whileTrue: [ | j label |
+		j := i + 1.
+		label := nil.
+		[label isNil and: [j <= aChain size]] whileTrue: [
+			label := self ___grailMemberLabelFrom___: (aChain at: i) to: (aChain at: j).
+			label isNil ifTrue: [j := j + 1]].
+		label isNil
+			ifTrue: [i := aChain size]
+			ifFalse: [
+				out nextPutAll: label.
+				last := aChain at: j.
+				i := j]].
+	^ { out contents. last }
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailAnchorName___: obj
+	"How a path's first object reads in Python."
+
+	obj == (UserGlobals at: #GemDBRoot otherwise: nil) ifTrue: [^ 'gemdb.root'].
+	(obj isKindOf: module) ifTrue: [
+		^ ([obj @env1:__name__] on: Error do: [:e | e return: '?']) asString].
+	(obj isKindOf: Behavior) ifTrue: [
+		^ ([obj @env1:__name__] on: Error do: [:e | e return: obj name]) asString].
+	(obj isKindOf: SymbolDictionary) ifTrue: [^ obj name asString].
+	^ '<' , (self ___grailPyTypeName___: obj) , ' object>'
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailMemberLabelFrom___: holder to: member
+	"The Python spelling of ``holder holds member'' -- '.name', '[key]',
+	'[index]' -- or nil when member is not one of holder's Python-visible
+	members (it is storage).  Reads storage, never runs Python code; a key
+	that is not a str or an int is shown by its type."
+
+	| cls |
+	(holder _instvarNamesAfter: holder namedSize) do: [:n |
+		(holder dynamicInstVarAt: n) == member ifTrue: [^ '.' , n asString]].
+	(holder isKindOf: module) ifTrue: [^ nil].
+	(holder isKindOf: AbstractDictionary) ifTrue: [
+		holder keysAndValuesDo: [:k :v |
+			v == member ifTrue: [^ '[' , (self ___grailKeyRepr___: k) , ']']].
+		^ nil].
+	(holder isKindOf: SequenceableCollection) ifTrue: [
+		1 to: holder size do: [:i |
+			(holder at: i) == member ifTrue: [^ '[' , (i - 1) printString , ']']].
+		^ nil].
+	cls := holder class.
+	cls isNsc ifTrue: [
+		^ (holder includesIdentical: member) ifTrue: ['{...}'] ifFalse: [nil]].
+	(holder isKindOf: PythonInstance) ifTrue: [ | layout |
+		layout := [cls @env1:___pySlotLayout___] on: Error do: [:e | e return: #()].
+		1 to: (holder _basicSize min: layout size) do: [:i |
+			(holder _at: i) == member ifTrue: [^ '.' , (layout at: i) asString]]].
+	"A declared slot on a kernel-rooted class is the named instVar ___slot_x___."
+	1 to: cls instSize do: [:i | | n |
+		n := (cls allInstVarNames at: i) asString.
+		((n size > 11)
+			and: [(n copyFrom: 1 to: 8) = '___slot_'
+			and: [(holder instVarAt: i) == member]]) ifTrue: [
+				^ '.' , (n copyFrom: 9 to: n size - 3)]].
+	^ nil
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailKeyRepr___: aKey
+	"A dict key as Python's repr would show it, for a str or an int; any
+	other key by its type, without running its __repr__."
+
+	(aKey isKindOf: CharacterCollection) ifTrue: [^ aKey asString printString].
+	(aKey isKindOf: Integer) ifTrue: [^ aKey printString].
+	^ '<' , (self ___grailPyTypeName___: aKey) , '>'
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailPyTypeName___: obj
+	"obj's Python type name, type(obj).__name__ -- 'generator', not the
+	Smalltalk 'PythonGenerator' -- falling back to the Smalltalk class name."
+
+	^ ([(obj @env1:___pyMetaclass___) @env1:__name__]
+		on: Error do: [:e | e return: obj class name]) asString
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailArticled___: aNoun
+	"'a generator', 'an int'."
+
+	^ ((aNoun notEmpty and: ['aeiouAEIOU' includes: aNoun first]) ifTrue: ['an '] ifFalse: ['a ']) , aNoun
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___grailRefusalDetail___: aRefused
+	"For a commit GemStone refused because of aRefused: a tuple (path,
+	sentence) -- ``gemdb.root['jobs'] (a generator) holds a Semaphore, which
+	GemStone never commits'' -- or nil when no path is found.  Never
+	signals: it runs inside the refusal's handler."
+
+	^ [ | chain kind |
+		chain := self ___grailRefusalPathTo___: aRefused.
+		chain isNil
+			ifTrue: [nil]
+			ifFalse: [
+				kind := (self ___grailSessionBoundKind___: aRefused)
+					ifNil: ['a ' , aRefused class name].
+				tuple
+					with: (str withAll: ((self ___grailPathOfChain___: chain) at: 1))
+					with: (str withAll: (self ___grailDescribeChain___: chain) , ' holds ' , kind)]]
+		on: Error do: [:e | e return: nil]
 %
 
 category: 'Grail-Canonical Classes'

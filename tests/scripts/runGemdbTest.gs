@@ -272,6 +272,8 @@ try:
     r = "committed"
 except gemdb.SessionStateError as e:
     r = "refused:" + str(isinstance(e, TypeError)) + ":" + str(e.aborted)
+    p = e.path
+    m = str(e)
 del gemdb.root["gemdb_test"]["gen"]
 try:
     gemdb.commit()
@@ -283,10 +285,12 @@ except gemdb.GemDBError:
 gemdb.abort()
 gemdb.root["gemdb_test"]["n"] = 5
 gemdb.commit()
-r + "/" + r2 + "/" + str("gen" in gemdb.root["gemdb_test"])
+r + "/" + r2 + "/" + str("gen" in gemdb.root["gemdb_test"]) + "/" + p + "/" + str("(a generator) holds a Semaphore" in m)
 '.
 check value: 'explicit commit of a generator: SessionStateError, then abort, then commits'
-  value: r = 'refused:True:False/needs-abort/False'.
+  value: (r copyFrom: 1 to: 37) = 'refused:True:False/needs-abort/False/'.
+check value: 'the refusal names where the generator is held, in Python terms'
+  value: r = 'refused:True:False/needs-abort/False/gemdb.root[''gemdb_test''][''gen'']/True'.
 check value: 'refused commit recovered: session clean' value: System needsCommit not.
 
 "The block form aborts the refused transaction itself, and the retrying
@@ -316,6 +320,60 @@ r + "/" + str(len(calls)) + "/" + str("gen" in gemdb.root["gemdb_test"])
 '.
 check value: 'block refusal aborts; decorator does not retry it; next block commits'
   value: r = 'refused:True/1/False'.
+
+"The path follows a list index and an instance attribute (an indexed slot,
+named by the class's layout), and is found inside the block before it aborts."
+r := evalPython value: '
+import gemdb
+class Worker:
+    def __init__(self):
+        self.name = "w"
+        self.task = (x for x in range(3))
+try:
+    with gemdb.transaction():
+        gemdb.root["gemdb_test"]["workers"] = [None, Worker()]
+    r = "committed"
+except gemdb.SessionStateError as e:
+    r = str(e.path)
+r
+'.
+check value: 'refusal path through a list index and an attribute'
+  value: r = 'gemdb.root[''gemdb_test''][''workers''][1].task'.
+check value: 'refusal path search left the session clean' value: System needsCommit not.
+
+"deploy_check walks into a COMMITTED object this transaction wrote: a new
+socket stored in a deployed module's already-committed dict.  The old walk
+followed only uncommitted references and missed it (its documented v1
+limitation).  A fixture of our own, deployed and then forgotten, as the
+first-read fixture below is."
+[| tmpDir path file |
+  tmpDir := importlib grailTmpDir.
+  path := tmpDir , '/grail_written_walk_fixture.py'.
+  (GsFile existsOnServer: path) == true ifTrue: [GsFile removeServerFile: path].
+  file := GsFile open: path mode: 'wb' onClient: false.
+  file nextPutAll: 'conns = {}
+'; close.
+  "SELF-HEAL: a run that died before its cleanup left the fixture deployed."
+  importlib ___forgetCanonicalModule___: 'grail_written_walk_fixture'.
+  System commit.
+  [evalPython value: 'import sys
+if "' , tmpDir , '" not in sys.path:
+    sys.path.append("' , tmpDir , '")
+import grail_written_walk_fixture'.
+    System commit.
+    r := evalPython value: '
+import gemstone, socket
+import grail_written_walk_fixture as m
+m.conns["primary"] = socket.socket()
+" | ".join(gemstone.deploy_check("grail_written_walk_fixture"))
+'.
+    check value: 'deploy_check finds a new socket inside a committed, written dict'
+      value: (r includesString: 'grail_written_walk_fixture.conns[''primary''] (a socket) -> GsSocket')
+  ] ensure: [
+    System abortTransaction.
+    importlib ___forgetCanonicalModule___: 'grail_written_walk_fixture'.
+    System commit.
+    GsFile removeServerFile: path]] value.
 check value: 'block refusal left session clean' value: System needsCommit not.
 
 "gemstone's commit and continuation FUNCTIONS read as functions through an

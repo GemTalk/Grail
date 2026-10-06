@@ -209,22 +209,31 @@ gemstone.deploy_check(operator)      # [] -- this module's new closure is clean
 gemstone.deploy_check('operator')    # a dotted-name string works too
 ```
 
-It walks the **not-yet-committed** object graph reachable from the module's
-instance and returns a Python list of one-line descriptions, each with a
-class-path from the module, for every reachable instance of a session-bound
-class: open `GsFile`/`GsSocket` handles, `Semaphore`/`GsProcess`, a raw
-`CPointer`, an `SrePattern` that cannot recompile (no `compileArgs`), an
-`SreMatch`, a `WeakReference`. An empty list means the module's new closure is
-commit-clean.
+It walks what committing the module would write, starting at the module's
+instance, and returns a Python list of one-line descriptions, one per
+session-bound value it reaches, each naming the value by its Python path:
+
+```python
+gemstone.deploy_check("myapp")
+# ["myapp.conns['primary']._sock (a socket) -> GsSocket (open socket -- dead after commit/logout)",
+#  "myapp.gen (a generator) -> Semaphore (non-persistable -- commit will FAIL, error 2407)"]
+```
+
+Session-bound means: open `GsFile`/`GsSocket` handles, an instance of a
+non-persistent class such as `Semaphore` (a generator holds one), a
+`GsProcess` that is not a continuation, a raw `CPointer` or `CByteArray`, an
+`SrePattern` that cannot recompile (no `compileArgs`), an `SreMatch`, a
+`WeakReference`. A compiled pattern that kept its `compileArgs` is clean (it
+rebuilds its pointer), and so is a `threading.Lock`, which commits and works in
+a later session. An empty list means the module's new closure is commit-clean.
 
 * It is an **audit, not a write barrier** — it never commits and never mutates,
   and nothing calls it for you. Run it before the commit that deploys a module.
-* It is bounded to the deploy's **new** closure: it follows only non-committed
-  references, because an already-committed object is the existing image rather
-  than this deploy's concern. That bound is also its v1 limitation — a new
-  session resource held through a pre-committed-but-dirty object is not reached
-  (that needs the VM dirty set). The common case, new resources in new module
-  globals or the new class closure, is covered.
+* It is bounded to what the commit would **write**: objects not yet committed,
+  and committed objects this transaction has written (the VM dirty set, `System
+  _writtenObjects`), so a new socket stored in an already-committed dict is
+  found. An unwritten committed object is the existing image rather than this
+  deploy's concern, and cannot reference anything new.
 * A module not imported in this session comes back as a one-element list saying
   so, not an exception. The walk truncates at 300000 objects with a final
   `'... deploy_check truncated'` line.

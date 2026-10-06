@@ -151,6 +151,18 @@ which GemStone never commits). `commit()` and the block raise
 such objects. It is never retried: replaying the function would store the
 same object again.
 
+The error says where the commit found the object, in Python terms:
+
+```
+gemdb.SessionStateError: commit refused: gemdb.root['jobs'][1].task (a generator)
+holds a Semaphore, which GemStone never commits; this transaction can no longer
+be committed -- gemdb.abort() discards it, and commits work again after that
+```
+
+`SessionStateError.path` is that path alone (`"gemdb.root['jobs'][1].task"`),
+or `None` when it cannot be traced. Finding it costs up to about a tenth of
+a second (measured), on the refusal only.
+
 Unlike a conflict, the refused transaction cannot be committed even after
 removing the object: GemStone allows no further commit until an abort. So
 the block aborts before raising (`aborted=True`), and after an explicit
@@ -634,7 +646,9 @@ is now `gemdb.schema`, above.
   `gemdb`) — the single-session surface plus the fresh-session
   properties, two logins, leaves the repository clean. Includes a refused
   commit (a stored generator) through `commit()`, the block and the
-  retrying decorator: `SessionStateError`, the abort it needs, no retry. Commits and
+  retrying decorator: `SessionStateError`, the abort it needs, no retry, and
+  the path it names (through dict keys, a list index and an attribute). Also
+  `deploy_check` finding a new socket inside a committed, written dict. Commits and
   aborts, so it cannot be an SUnit test.
 * `tests/scripts/runSchemaTest.gs` (wired in as `gemdb-schema`) — the
   `gemdb.schema` surface over a two-class fixture: the three layout
