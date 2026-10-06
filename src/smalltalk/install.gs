@@ -989,6 +989,7 @@ run
 	at: #'ExitStackUsageTestCase' put: nil;
 	at: #'FStringFieldPositionsTestCase' put: nil;
 	at: #'FStringPep701TestCase' put: nil;
+	at: #'FTStringFieldTextTestCase' put: nil;
 	at: #'FileExistsErrorTestCase' put: nil;
 	at: #'FileIoTestCase' put: nil;
 	at: #'FileNotFoundErrorTestCase' put: nil;
@@ -2481,6 +2482,7 @@ input src/smalltalk/PythonTests/FrameReceiverSuggestionTestCase.gs
 input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
+input src/smalltalk/PythonTests/FTStringFieldTextTestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
 input src/smalltalk/PythonTests/FunctionalEnumModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionBuiltinsAttrTestCase.gs

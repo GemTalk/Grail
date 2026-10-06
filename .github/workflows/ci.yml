@@ -94,10 +94,11 @@ jobs:
       # expression text (trailing whitespace kept) and warn_explicit (no
       # IndexError for a lineno past the source), so the same commit passed
       # on one runner and failed on the next.  Move this deliberately, in a
-      # PR that brings the fixtures (and Grail) along.
+      # PR that brings the fixtures (and Grail) along -- as the move to
+      # 3.14.8 did.
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.14.7'
+          python-version: '3.14.8'
 
       - name: fixture-gate self-test
         run: tests/scripts/test_python_fixture_gate.sh

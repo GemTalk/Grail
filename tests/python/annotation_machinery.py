@@ -7,7 +7,10 @@ Each was wrong or missing in Grail before test_annotationlib was fixed, and
 each is asserted there only indirectly -- a regression in one would surface as
 a failure in a module about something else.
 
-Every EXPECTED value was measured by RUNNING CPython 3.14.6 on this file.
+Every EXPECTED value was measured by RUNNING CPython 3.14.6 on this file,
+except tstring_repr, re-measured on 3.14.8: since gh-154719 a t-string
+expression keeps its trailing whitespace, so t'{ x }' records ' x ' where
+3.14.7 recorded ' x'.  See ftstring_field_text.py.
 """
 
 import annotationlib
@@ -278,7 +281,7 @@ EXPECTED = {
     'tstring_mixed_with_str': "ok -> 'cannot mix t-string literals with string or bytes literals'",
     'tstring_parts': "ok -> (('a', 'b'), (1,))",
     'tstring_plus_str': 'TypeError: can only concatenate string.templatelib.Template (not "str") to string.templatelib.Template',
-    'tstring_repr': '''ok -> "Template(strings=('a', 'b', 'cx=', '{z}'), interpolations=(Interpolation(1, ' x', None, ''), Interpolation(1, 'x', 'r', '>5'), Interpolation(1, 'x', 'r', '')))"''',
+    'tstring_repr': '''ok -> "Template(strings=('a', 'b', 'cx=', '{z}'), interpolations=(Interpolation(1, ' x ', None, ''), Interpolation(1, 'x', 'r', '>5'), Interpolation(1, 'x', 'r', '')))"''',
     'tstring_string_format': '''ok -> {'a': "t'{x}'", 'b': "t'{x:1}'", 'c': "t'{x | y * z}'", 'd': "t'{ 0}'"}''',
     'tuple_alias': "ok -> ('tuple[int, ...]', 'tuple[typing.Unpack[Ts]]')",
     'type_params_are_stable': 'ok -> (True, True)',

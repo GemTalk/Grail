@@ -96,6 +96,7 @@ method: WarningsAndDecoratedPropertiesTestCase
 testWarnExplicitAsksTheLoader
 
 	self assertAll: #('warn_explicit_asks_the_loader_for_the_source'
+		'warn_explicit_shows_the_loader_s_line'
 		'the_source_is_split_by_str_s_own_splitlines')
 %
 
@@ -133,8 +134,8 @@ testAFreshWarningsIsANewModule
 category: 'Grail-Tests - warnings'
 method: WarningsAndDecoratedPropertiesTestCase
 testEveryFixtureCheckIsAssertedByATestHere
-	"The lists above name 11 checks.  A check added to the fixture without
+	"The lists above name 12 checks.  A check added to the fixture without
 	being listed would pass unasserted here, so the count is pinned."
 
-	self assert: (self results @env1:__len__) equals: 11
+	self assert: (self results @env1:__len__) equals: 12
 %

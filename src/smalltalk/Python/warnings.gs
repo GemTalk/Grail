@@ -1287,33 +1287,44 @@ ___resolveModuleGlobals___: moduleGlobals
 category: 'Grail-Private'
 method: warnings
 ___sourceLineFrom___: aLoader globals: moduleGlobals lineno: lineno
-	"_warnings.c's get_source_line: the source line ``lineno'' of the module
-	``moduleGlobals'' names, fetched through its loader's get_source, or nil.
+	"_warnings.c's get_source_line, as of CPython 3.14.8: the source line
+	``lineno'' of the module ``moduleGlobals'' names, fetched through its
+	loader's get_source, or nil.  The answer is displayed -- warn_explicit
+	hands it to the WarningMessage as ``line'' (gh-155319) -- and getting it
+	is observable too: get_source is called, a non-str source is a
+	TypeError, and anything else get_source raises propagates.  All of that
+	happens before the filters are consulted, so an ignored warning raises
+	it too.  test_warnings' test_issue31285 counts the get_source calls.
 
-	Nothing displays the answer -- CPython builds the WarningMessage with
-	line=None, so the source line printed is linecache's reading of the
-	filename -- and it is computed anyway, because computing it is observable:
-	get_source is called with the module's ``__name__'', whatever it raises
-	propagates, a non-str source is a TypeError, and a line number the source
-	does not have is an IndexError.  All of that happens before the filters are
-	consulted, so an ignored warning raises it too.  test_warnings'
-	test_issue31285 counts the get_source calls.
+	3.14.8 changed three things, and 3.14.7 differs on each:
+	  * the module name is ``__spec__.name'' when there is one, and only
+	    then ``__name__'' -- which is ``__main__'' for a script, a name its
+	    loader does not know (gh-123011);
+	  * an ImportError from get_source means no line, not an error;
+	  * a line number the source does not have means no line, not an
+	    IndexError.
 
 	The split is str's OWN splitlines, as PyUnicode_Splitlines is: a str
 	subclass overriding splitlines -- that test's BadSource -- does not get a
 	say.
 
-	Nil, and nothing called, when there is no loader, no ``__name__'', or a
-	loader without get_source, as in C."
+	Nil, and nothing called, when there is no loader, no name, or a loader
+	without get_source, as in C."
 
-	| b name getSource src lines |
+	| b spec name getSource src lines |
 	(aLoader @env0:isNil or: [aLoader @env0:== None]) ifTrue: [^ nil].
-	name := moduleGlobals @env1:get: '__name__' _: None.
-	name @env0:== None ifTrue: [^ nil].
 	b := (Python @env0:at: #builtins) @env0:___instance___.
+	name := None.
+	spec := moduleGlobals @env1:get: '__spec__' _: None.
+	(spec @env0:~~ None and: [(b @env1:hasattr: spec _: 'name') == true])
+		ifTrue: [name := b @env1:getattr: spec _: 'name'].
+	name @env0:== None ifTrue: [
+		name := moduleGlobals @env1:get: '__name__' _: None].
+	name @env0:== None ifTrue: [^ nil].
 	(b @env1:hasattr: aLoader _: 'get_source') == true ifFalse: [^ nil].
 	getSource := aLoader @env1:___pyAttrLoad___: #'get_source'.
-	src := getSource @env1:___pyCallValue___: { name } kw: nil.
+	src := [getSource @env1:___pyCallValue___: { name } kw: nil]
+		@env0:on: ImportError do: [:ex | ex @env0:return: None].
 	src @env0:== None ifTrue: [^ nil].
 	((src @env0:isKindOf: CharacterCollection)
 		or: [src @env0:isKindOf: PyStrSurrogate]) ifFalse: [
@@ -1321,8 +1332,7 @@ ___sourceLineFrom___: aLoader globals: moduleGlobals lineno: lineno
 				@env0:, ((b @env1:type: src) @env1:___pyAttrLoad___: #'__name__')].
 	lines := ((b @env1:___pyAttrLoad___: #'str') @env1:___pyAttrLoad___: #'splitlines')
 		@env1:___pyCallValue___: { src } kw: nil.
-	(lineno @env0:< 1 or: [lineno @env0:> lines @env1:__len__]) ifTrue: [
-		^ IndexError ___signal___: 'list index out of range'].
+	(lineno @env0:< 1 or: [lineno @env0:> lines @env1:__len__]) ifTrue: [^ nil].
 	^ lines @env1:__getitem__: lineno @env0:- 1
 %
 
@@ -1516,6 +1526,19 @@ warn_explicit: message _: category _: filename _: lineno module: module
 category: 'Grail-Public'
 method: warnings
 warn_explicit: message _: category _: filename _: lineno module: module registry: registry
+	"No source line in hand -- see the line: form."
+
+	^ self warn_explicit: message _: category _: filename _: lineno
+		module: module registry: registry line: nil
+%
+
+category: 'Grail-Public'
+method: warnings
+warn_explicit: message _: category _: filename _: lineno module: module registry: registry line: line
+	"``line'' is the source line, or nil to read it from the file: CPython's
+	warn_explicit takes it from module_globals' loader when it can (3.14.8,
+	gh-155319) and hands it to the WarningMessage."
+
 	"warn_explicit with the REGISTRY it dedupes through.
 
 	The registry is a plain dict remembering which warnings have already been
@@ -1549,7 +1572,7 @@ warn_explicit: message _: category _: filename _: lineno module: module registry
 	(self ___recordAction___: action text: text category: cat
 		lineno: lineno registry: reg) ifFalse: [^ None].
 	^ self ___display___: message category: cat
-		filename: filename lineno: lineno
+		filename: filename lineno: lineno line: line
 %
 
 category: 'Grail-Private'
@@ -1615,6 +1638,15 @@ ___categoryFor___: message _: category
 category: 'Grail-Private'
 method: warnings
 ___display___: message category: cat filename: filename lineno: lineno
+	"No source line in hand: the display reads it from the file."
+
+	^ self ___display___: message category: cat filename: filename lineno: lineno
+		line: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___display___: message category: cat filename: filename lineno: lineno line: line
 	"What happens to a warning the filters decided to SHOW.  CPython's
 	_showwarnmsg, and the order is the whole content of it:
 
@@ -1667,14 +1699,19 @@ ___display___: message category: cat filename: filename lineno: lineno
 			@env1:callable: hook) @env0:== true ifFalse: [
 				^ TypeError ___signal___:
 					'showwarning() argument must be callable'].
-		^ hook @env1:value: { inst. cat. shownFile. shownLine } value: nil].
+		"All six of a WarningMessage's display fields, as _showwarnmsg passes
+		them -- file and line included, so a replacement sees the source line
+		warn_explicit took from a loader."
+		^ hook @env1:value: { inst. cat. shownFile. shownLine. None.
+			line @env0:isNil ifTrue: [None] ifFalse: [line] } value: nil].
 	recList := self _recordList.
 	recList == nil ifFalse: [
-		recList @env0:add: (WarningMessage
+		recList @env0:add: ((WarningMessage
 			@env0:___message___: inst category: cat
-			filename: filename lineno: lineno).
+			filename: filename lineno: lineno)
+				@env0:___line___: line).
 		^ None].
-	^ self showwarning: inst _: cat _: shownFile _: shownLine _: nil _: nil
+	^ self showwarning: inst _: cat _: shownFile _: shownLine _: nil _: line
 %
 
 category: 'Grail-Private'
@@ -1932,7 +1969,7 @@ _warn_explicit: positional kw: kwargs
 	(``module='package.module''' is the common shape) failed argument binding
 	outright."
 
-	| msg cat lineno reg mg |
+	| msg cat lineno reg mg line |
 	positional @env0:size @env0:< 4 ifTrue: [
 		TypeError ___signal___:
 			'warn_explicit() missing required arguments'].
@@ -1950,7 +1987,7 @@ _warn_explicit: positional kw: kwargs
 		ifTrue: [kwargs @env0:at: 'module_globals']
 		ifFalse: [positional @env0:size @env0:>= 7
 			ifTrue: [positional @env0:at: 7] ifFalse: [nil]].
-	self ___sourceLineFrom___: (self ___resolveModuleGlobals___: mg)
+	line := self ___sourceLineFrom___: (self ___resolveModuleGlobals___: mg)
 		globals: mg lineno: lineno.
 	^ self
 		warn_explicit: msg
@@ -1962,6 +1999,7 @@ _warn_explicit: positional kw: kwargs
 			ifFalse: [positional @env0:size @env0:>= 5
 				ifTrue: [positional @env0:at: 5] ifFalse: [nil]])
 		registry: reg
+		line: line
 %
 
 category: 'Grail-Public'
@@ -2671,6 +2709,16 @@ ___setMessage___: aMessage category: aCategory filename: aFilename lineno: aLine
 	file := None.
 	line := None.
 	source := None.
+	^ self
+%
+
+category: 'Grail-Private'
+method: WarningMessage
+___line___: aLine
+	"The source line warn_explicit took from a loader; nil leaves None, for
+	the display to read from the file."
+
+	aLine == nil ifFalse: [line := aLine].
 	^ self
 %
 
