@@ -318,6 +318,28 @@ check value: 'block refusal aborts; decorator does not retry it; next block comm
   value: r = 'refused:True/1/False'.
 check value: 'block refusal left session clean' value: System needsCommit not.
 
+"gemstone's commit and continuation FUNCTIONS read as functions through an
+alias.  An attribute read of a unary native-module method PERFORMS it unless the
+method is in a function category, and only the literal gemstone.f() is a direct
+send -- so ___tryCommit___ read through an alias used to COMMIT at the read
+(and then call the Boolean), and ___captureContinuation___ to capture one."
+r := evalPython value: '
+import gemdb
+import gemstone as g
+gemdb.root["gemdb_test"]["pending"] = 1
+reads = [g.___tryCommit___, g.___commitOrRefusal___, g.___captureContinuation___]
+r = str(all(callable(f) for f in reads)) + ":" + str(gemdb.needs_commit())
+gemdb.abort()
+r
+'.
+check value: 'commit/continuation functions read through an alias: callable, nothing committed'
+  value: r = 'True:True'.
+check value: 'alias reads: the pending write was aborted, not committed'
+  value: (evalPython value: '
+import gemdb
+"pending" in gemdb.root["gemdb_test"]
+') = false.
+
 "READING A FUNCTION OF A DEPLOYED MODULE IS NOT A WRITE (issue #851).  The
 first attribute read of a module function used to cache its BoundMethod in the
 module instance's dynamic-instVar slot -- and a deployed module instance is

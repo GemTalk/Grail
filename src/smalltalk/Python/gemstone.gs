@@ -341,7 +341,7 @@ sessionDict: name
 ! generator (a forked GsProcess parked on a Semaphore) -- or the commit refuses
 ! it by class name.
 
-category: 'Grail-Continuations'
+category: 'Grail-Built-in Functions'
 method: gemstone
 ___captureContinuation___
 	"Python gemstone.___captureContinuation___() -- answer a continuation of
@@ -372,7 +372,7 @@ ___resumeContinuation___: aContinuation _: aValue
 	^ aContinuation @env0:value: aValue
 %
 
-category: 'Grail-Continuations'
+category: 'Grail-Built-in Functions'
 method: gemstone
 ___tryCommit___
 	"Commit, answering True; False on a conflict; or a str saying why GemStone
@@ -382,7 +382,13 @@ ___tryCommit___
 	answering false, and a Smalltalk error crossing into Python cannot be
 	caught there, so the refusal is caught here and handed over as data.
 	After a refusal the session must abort before it can commit again
-	(ImproperOperation 2424, measured on 4.0)."
+	(ImproperOperation 2424, measured on 4.0).
+
+	A FUNCTION category, like ___captureContinuation___ and
+	___commitOrRefusal___: in any other, an attribute read through an alias
+	(``import gemstone as g; g.___tryCommit___()'') PERFORMS the method --
+	committing at the read -- and then calls the Boolean.  Only the literal
+	``gemstone.f()'' is a direct send that never reads the attribute."
 
 	| outcome |
 	outcome := self ___commitOrRefusal___.
