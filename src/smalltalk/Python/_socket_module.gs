@@ -196,9 +196,27 @@ ___gsSocketForFd___: fd
 category: 'Grail-Private'
 classmethod: PyRawSocket
 ___forgetFd___: fd
+	| gs |
 	fd isNil ifTrue: [^ self].
-	self ___fdRegistry___ removeKey: fd ifAbsent: [nil].
+	gs := self ___fdRegistry___ removeKey: fd ifAbsent: [nil].
+	gs isNil ifFalse: [self ___peeredGsSockets___ remove: gs ifAbsent: [nil]].
 	^ self
+%
+
+category: 'Grail-Private'
+classmethod: PyRawSocket
+___peeredGsSockets___
+	"The GsSockets a detach() handed on after they had a peer.  hadPeer is the
+	only record of that once Linux has seen the peer's RESET -- getpeername
+	then fails with ENOTCONN, as for a socket that never connected -- and
+	ssl.py wraps a socket by detaching it and adopting its fd into a new
+	object.  Without this the adopter judged afresh, after the reset, and
+	read ENOTCONN where the bytes sent before it were waiting (test_ssl
+	TestPreHandshakeClose, Linux only)."
+
+	^ SessionTemps current
+		at: #GrailRawSocketPeered
+		ifAbsentPut: [IdentitySet new]
 %
 
 category: 'Grail-Private'
@@ -224,7 +242,8 @@ ___setSock: aGsSocket family: fam type: typ proto: prot
 	aGsSocket ifNotNil: [PyRawSocket ___registerFd___: aGsSocket].
 	"An adopted socket -- the fd accept() hands back -- is connected already."
 	hadPeer := aGsSocket notNil
-		and: [([aGsSocket peerAddress] on: Error do: [:e | e return: nil]) notNil].
+		and: [(PyRawSocket ___peeredGsSockets___ includes: aGsSocket)
+			or: [([aGsSocket peerAddress] on: Error do: [:e | e return: nil]) notNil]].
 	"Watched for dying open: ___finalizeUnclosed___ is CPython's sock_finalize."
 	aGsSocket ifNotNil: [
 		FinalizerEphemeron
@@ -669,7 +688,9 @@ detach
 	fd := self fileno.
 	gsSocket @env0:notNil ifTrue: [
 		[gsSocket @env0:setCloseOnGc: false]
-			@env0:on: Error do: [:e | e @env0:return: nil]].
+			@env0:on: Error do: [:e | e @env0:return: nil].
+		hadPeer == true ifTrue: [
+			PyRawSocket @env0:___peeredGsSockets___ @env0:add: gsSocket]].
 	gsSocket := nil.
 	sockClosed := true.
 	^ fd
@@ -777,6 +798,9 @@ _accept
 	"Keep the fd alive past this GsSocket's own GC: socket.py will adopt it."
 	[conn @env0:setCloseOnGc: false] @env0:on: Error do: [:e | e @env0:return: nil].
 	fd := PyRawSocket @env0:___registerFd___: conn.
+	"An accepted connection HAD a peer, even if it resets before socket.py
+	adopts the fd (see ___peeredGsSockets___)."
+	PyRawSocket @env0:___peeredGsSockets___ @env0:add: conn.
 	^ tuple @env0:withAll: { fd . tuple @env0:withAll: { (conn @env0:peerAddress @env0:ifNil: ['']) .
 			(conn @env0:peerPort @env0:ifNil: [0]) } }
 %
