@@ -331,6 +331,9 @@ run
 	at: #'dict_items' put: nil;
 	at: #'dict_keyiterator' put: nil;
 	at: #'dict_keys' put: nil;
+	at: #'dict_reverseitemiterator' put: nil;
+	at: #'dict_reversekeyiterator' put: nil;
+	at: #'dict_reversevalueiterator' put: nil;
 	at: #'dict_set_view' put: nil;
 	at: #'dict_valueiterator' put: nil;
 	at: #'dict_values' put: nil;
@@ -898,6 +901,7 @@ run
 	at: #'DictDeleteByEqualKeyTestCase' put: nil;
 	at: #'DictHashesBeforeEqTestCase' put: nil;
 	at: #'DictKwargsTestCase' put: nil;
+	at: #'DictReversedPositionsTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
 	at: #'DictUnpackingTestCase' put: nil;
 	at: #'DirectCallsTestCase' put: nil;
@@ -1687,6 +1691,7 @@ input src/smalltalk/Python/KeyboardInterrupt.gs
 input src/smalltalk/Python/SystemExit.gs
 input src/smalltalk/Python/dict_itemiterator.gs
 input src/smalltalk/Python/dict_keyiterator.gs
+input src/smalltalk/Python/dict_reverseiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
 input src/smalltalk/Python/enumerate.gs
@@ -2388,6 +2393,7 @@ input src/smalltalk/PythonTests/DerivedPropertyWinsTestCase.gs
 input src/smalltalk/PythonTests/DictDeleteByEqualKeyTestCase.gs
 input src/smalltalk/PythonTests/DictHashesBeforeEqTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
+input src/smalltalk/PythonTests/DictReversedPositionsTestCase.gs
 input src/smalltalk/PythonTests/DictTestCase.gs
 input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
 input src/smalltalk/PythonTests/DirectCallsTestCase.gs

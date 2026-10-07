@@ -122,18 +122,51 @@ Evidence:
   count, so the mapping cannot be predicted from the setting.
   BOTH are startup-only: `System configurationAt:put:` answers `ImproperOperation`
   for each at runtime.
-* **An UNEXPLAINED divergence, recorded rather than diagnosed.** Twice, inside
-  SUnit, a shape reported `raised RecursionError instead: maximum recursion depth
-  exceeded` -- the exception IS a `RecursionError` and `except RecursionError:` did
-  not match it, while a later `except Exception:` did. The same shapes match
-  correctly outside SUnit. The obvious explanation is that clause resolution
-  (`PyLazyExceptSelector` evaluates the clause expression inside `#handles:`, which
-  is what gives Python's lazy timing) cannot run with the stack nearly gone -- but
-  that is NOT SUPPORTED: padding the call chain with 400, 800 and 1200 extra frames
-  reproduces nothing, at ERROR_PERCENT 25 or 75. So raw depth is not the variable
-  and the cause is open. Candidates not yet tested: the clause SHIELD
-  (`___handlerTokenActive___:`), which is sensitive to which handlers are active,
-  and SUnit's own `on:do:`/`ensure:` frames.
+* **The "`except RecursionError` did not match" divergence -- EXPLAINED
+  (2026-10-06): the yellow page re-arms on the `#resignalAs:` trim.** Inside SUnit
+  a shape would report `raised RecursionError instead: maximum recursion depth
+  exceeded`: `except RecursionError:` missed and a later `except Exception:`
+  caught. The mechanism:
+  1. the trip unprotects the yellow page and signals AlmostOutOfStackError;
+  2. `___recursionGuard___` converts it with `#resignalAs:`, which trims the
+     stack back to the signal point;
+  3. the VM re-protects the page on any unwind that leaves SP above it, with NO
+     margin (`OmProcessStackType::checkYellowProtection`, om_inline.hf; the native
+     `om::checkYellowProtection` likewise). Only interpreter entry keeps a margin
+     (`stackMargin`, fix 51168);
+  4. so when the trip fell where the trim left SP just above the page, the
+     RecursionError's handler search (`PyLazyExceptSelector >> handles:` ->
+     `BaseException class >> handles:`) tripped AGAIN, four frames up;
+  5. that second, raw overflow skipped every handler between the recursion and
+     the guard, and the guard's conversion of it was what the outer clause saw.
+
+  That is why raw depth was not the variable, and padding by hundreds of frames
+  reproduced nothing. What matters is the PHASE of the trip within the
+  recursion cycle:
+  - a fixture that sweeps a small base padding across one cycle
+    (tests/python/recursion_overflow_alignment.py) fails at exactly one padding
+    in seven;
+  - test_pickle's test_bad_getattr failed at GEM_MAX_SMALLTALK_STACK_DEPTH 74000
+    and passed at 70000 and 80000;
+  - GEM_SMALLTALK_STACK_ERROR_PERCENT 25/50/75 changed nothing.
+
+  It also reproduces with no Grail code: a block recursion calling a primitive,
+  with a per-level `on: ExceptionSet do:`, a `resignalAs:` guard and an inner
+  `on: ZeroDivide`. Every third base padding escapes, each escape with two
+  trips. The kernel fix is a margin before re-protecting.
+
+  Grail now converts in the FIRST handler search instead, while the page is
+  still unprotected:
+  - `BaseException class >> handles:` treats a raw AlmostOutOfStack(Error) as a
+    RecursionError;
+  - `___payloadOf___:` builds and caches that RecursionError on the raw
+    exception;
+  - Grail's catch-everything sites use `BaseException ___catchAll___` (an
+    ExceptionSet), because on:do:'s VM fast path never sends `#handles:` to a
+    class selector.
+
+  The guard's `#resignalAs:` is left only for an overflow no Python handler
+  claimed.
 * Recursion through `__getattr__` is worse and unfixable in Grail: the overflow
   arrives with C-PRIMITIVE frames on the stack (the `doesNotUnderstand:` route a
   missing attribute takes), and the `return` in the `except` clause cannot cross

@@ -79,7 +79,15 @@ PyDict comment:
 order (CPython 3.7+). ``order'' is an OrderedCollection of keys in
 insertion order, maintained by the mutator overrides and walked by the
 iteration overrides. ``rehashing'' guards the table-rebuild reentry. See
-docs/Ordered_Dict.md.'
+docs/Ordered_Dict.md.
+
+``order'' is CPython''s entries array: a deleted key leaves a nil where it
+was (no Python key is ever nil), every walker skips them, and an insert
+compacts the list once they outnumber the live keys, as CPython''s resize
+does.  clear() empties it, as CPython starts a new keys table.  Both happen
+in place: a walk in progress must never hold a list the dict has dropped.  The
+positions are what reversed() iterates by (dict_reversekeyiterator), which
+is how a mutation under a live reverse iterator has CPython''s outcome.'
 %
 
 expectvalue /Class
@@ -304,7 +312,7 @@ at: aKey put: aValue
 	rehashing == true ifTrue: [^ super at: aKey put: aValue].
 	isNew := (self includesKey: aKey) not.
 	super at: aKey put: aValue.
-	isNew ifTrue: [self ___order___ addLast: aKey. self ___bumpVersion___].
+	isNew ifTrue: [self ___appendToOrder___: aKey. self ___bumpVersion___].
 	^ aValue
 %
 
@@ -315,8 +323,29 @@ add: anAssociation
 	rehashing == true ifTrue: [^ super add: anAssociation].
 	isNew := (self includesKey: anAssociation key) not.
 	super add: anAssociation.
-	isNew ifTrue: [self ___order___ addLast: anAssociation key. self ___bumpVersion___].
+	isNew ifTrue: [self ___appendToOrder___: anAssociation key. self ___bumpVersion___].
 	^ anAssociation
+%
+
+category: 'Grail-Mutation'
+method: PyDict
+___appendToOrder___: aKey
+	"Add a new key's entry.  First drop the deleted entries when they
+	outnumber the live ones: CPython reclaims them when an insert finds its
+	entries array full, which happens at about this ratio.  The positions a
+	live reverse iterator holds then point into the new list, as they do into
+	CPython's resized table."
+
+	| o live |
+	o := self ___order___.
+	(o size >= 16 and: [o size - self size > self size]) ifTrue: [
+		"In place, never a new list: a walk in progress (keysDo: from a
+		set operation whose key's __eq__ mutates this dict) holds the old
+		one and would go on reading keys the dict no longer has."
+		live := o reject: [:k | k == nil].
+		[o isEmpty] whileFalse: [o removeLast].
+		o addAll: live].
+	o addLast: aKey
 %
 
 category: 'Grail-Mutation'
@@ -350,8 +379,10 @@ ___removeKeyFromOrder___: aKey
 
 	index := self ___order___ indexOf: aKey.
 	index = 0 ifTrue: [
-		index := self ___order___ findFirst: [:each | self compareKey: aKey with: each]].
-	index = 0 ifFalse: [self ___order___ removeAtIndex: index]
+		index := self ___order___ findFirst: [:each |
+			each ~~ nil and: [self compareKey: aKey with: each]]].
+	"A deleted entry stays, as nil: see the class comment."
+	index = 0 ifFalse: [self ___order___ at: index put: nil]
 %
 
 category: 'Grail-Mutation'
@@ -408,28 +439,28 @@ category: 'Grail-Iteration'
 method: PyDict
 keysDo: aBlock
 	rehashing == true ifTrue: [^ super keysDo: aBlock].
-	self ___order___ do: [:k | aBlock value: k]
+	self ___order___ do: [:k | k == nil ifFalse: [aBlock value: k]]
 %
 
 category: 'Grail-Iteration'
 method: PyDict
 valuesDo: aBlock
 	rehashing == true ifTrue: [^ super valuesDo: aBlock].
-	self ___order___ do: [:k | aBlock value: (self at: k)]
+	self ___order___ do: [:k | k == nil ifFalse: [aBlock value: (self at: k)]]
 %
 
 category: 'Grail-Iteration'
 method: PyDict
 keysAndValuesDo: aBlock
 	rehashing == true ifTrue: [^ super keysAndValuesDo: aBlock].
-	self ___order___ do: [:k | aBlock value: k value: (self at: k)]
+	self ___order___ do: [:k | k == nil ifFalse: [aBlock value: k value: (self at: k)]]
 %
 
 category: 'Grail-Iteration'
 method: PyDict
 associationsDo: aBlock
 	rehashing == true ifTrue: [^ super associationsDo: aBlock].
-	self ___order___ do: [:k | aBlock value: (self associationAt: k)]
+	self ___order___ do: [:k | k == nil ifFalse: [aBlock value: (self associationAt: k)]]
 %
 
 category: 'Grail-Iteration'
@@ -461,9 +492,76 @@ copy
 
 	| c |
 	c := super copy.
-	c ___setOrder___: (self ___order___ copy).
+	c ___setOrder___: (self ___order___ reject: [:k | k == nil]).
 	^ c
 %
+
+category: 'Grail-Mutation'
+method: PyDict
+___clear___
+	"Remove every key and empty the entry list, as CPython's clear() starts a
+	new keys table: a reverse iterator made before it finds its position past
+	the end and stops (test_reversed_dict_after_clear_and_restore)."
+
+	| o |
+	self keys do: [:k | super removeKey: k ifAbsent: []].
+	"Emptied in place, for the reason ___appendToOrder___: gives: a walk in
+	progress ends instead of reading keys that are gone.  test_set's
+	TestMethodsMutating_Set_Dict clears a dict from inside a key's __eq__."
+	o := self ___order___.
+	[o isEmpty] whileFalse: [o removeLast].
+	self ___bumpVersion___
+%
+
+category: 'Grail-Mutation'
+method: PyDict
+___popLast___
+	"Remove the last entry and answer it as an Association, or nil when the
+	dict is empty.  CPython's popitem: the entries list is cut back to the
+	popped one, deleted entries before it included, so the next insert takes
+	its place."
+
+	| o i k v |
+	o := self ___order___.
+	i := o size.
+	[i > 0 and: [(o at: i) == nil]] whileTrue: [i := i - 1].
+	i = 0 ifTrue: [^ nil].
+	k := o at: i.
+	v := self at: k.
+	super removeKey: k.
+	[o size >= i] whileTrue: [o removeLast].
+	self ___bumpVersion___.
+	^ k -> v
+%
+
+set compile_env: 1
+
+category: 'Grail-Mutation Methods'
+method: PyDict
+clear
+	self @env0:___clear___.
+	^ None
+%
+
+category: 'Grail-Mutation Methods'
+method: PyDict
+popitem
+	"Remove and return the last (key, value) pair; KeyError when empty."
+
+	| assoc |
+	assoc := self @env0:___popLast___.
+	assoc @env0:== nil ifTrue: [
+		^ KeyError ___signal___: 'popitem(): dictionary is empty'].
+	^ tuple @env0:with: assoc @env0:key with: assoc @env0:value
+%
+
+category: 'Grail-Iteration'
+method: PyDict
+__reversed__
+	^ dict_reversekeyiterator @env0:___on: self
+%
+
+set compile_env: 0
 
 set compile_env: 0
 
