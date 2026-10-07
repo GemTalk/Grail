@@ -1724,6 +1724,10 @@ ___pyAttrDelete___: aName
 	| n |
 	(aName @env0:size @env0:= 4 and: [aName @env0:asString @env0:= 'args'])
 		ifTrue: [^ TypeError ___signal___: 'args may not be deleted'].
+	((self ___memberAttributeNames___) @env0:includes: aName @env0:asString @env0:asSymbol)
+		ifTrue: [
+			self @env1:___pyAttrStore___: aName put: None.
+			^ None].
 	(aName @env0:size @env0:between: 9 and: 20) ifFalse: [
 		^ super ___pyAttrDelete___: aName].
 	n := aName @env0:asString.
@@ -1732,6 +1736,30 @@ ___pyAttrDelete___: aName
 	n @env0:= '__suppress_context__' ifTrue: [
 		^ TypeError ___signal___: 'can''t delete numeric/char attribute'].
 	^ super ___pyAttrDelete___: aName
+%
+
+category: 'Grail-Attribute Access'
+method: BaseException
+___memberAttributeNames___
+	"The attributes CPython implements as plain object MEMBERS of this
+	exception's type: they accept any value, and ``del'' resets them to None
+	rather than removing them (3.14.8 test_exceptions test_object_attributes).
+	Grail deleted the stored value, which raised AttributeError on the next
+	read or exposed a computed fallback (SystemExit.code from args).  The
+	numeric members (UnicodeError start/end) are not here: CPython refuses to
+	delete those."
+
+	(self @env0:isKindOf: SyntaxError) ifTrue: [
+		^ #(#msg #filename #lineno #offset #text #end_lineno #end_offset
+			#print_file_and_line #'_metadata')].
+	(self @env0:isKindOf: ImportError) ifTrue: [^ #(#msg #name #path #name_from)].
+	(self @env0:isKindOf: AttributeError) ifTrue: [^ #(#name #obj)].
+	(self @env0:isKindOf: NameError) ifTrue: [^ #(#name)].
+	(self @env0:isKindOf: OSError) ifTrue: [^ #(#errno #strerror #filename #filename2)].
+	(self @env0:isKindOf: UnicodeError) ifTrue: [^ #(#encoding #object #reason)].
+	(self @env0:isKindOf: SystemExit) ifTrue: [^ #(#code)].
+	(self @env0:isKindOf: StopIteration) ifTrue: [^ #(#value)].
+	^ #()
 %
 
 category: 'Grail-Exception Chaining'
