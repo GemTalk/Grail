@@ -49,7 +49,7 @@ doit
 module subclass: 'NativeModule'
   instVarNames: #()
   classVars: #()
-  classInstVars: #( grailCommittedInstance )
+  classInstVars: #( grailCommittedInstance grailCommittedDictView )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -89,11 +89,33 @@ ___installCommittedInstance___
 	invariant.  install.sh recreates the runtime classes on every run, so
 	the instance is recreated with them rather than migrated."
 
-	| inst |
+	| inst view |
 	inst := self new.
 	inst immediateInvariant.
 	grailCommittedInstance := inst.
+	"Its ``__dict__'' view too, committed beside it, so that every session's
+	``m.__dict__'' is one object (PyModuleDict class >> on:).  The view holds
+	nothing but the module.  It matters because importlib stamps
+	``builtins.__dict__'' into each module as ``__builtins__'', and a
+	deployed module keeps the stamp it was committed with: a per-session view
+	there left ``textwrap.__builtins__ is builtins.__dict__'' False in every
+	later session."
+	view := (Python at: #PyModuleDict) new.
+	view _setSource: inst.
+	view immediateInvariant.
+	grailCommittedDictView := view.
 	^ inst
+%
+
+category: 'Grail-Singleton'
+classmethod: NativeModule
+___committedDictView___
+	"The committed ``__dict__'' view of ___committedInstance___, or nil."
+
+	^ (grailCommittedDictView ~~ nil
+		and: [grailCommittedDictView source == self ___committedInstance___])
+			ifTrue: [grailCommittedDictView]
+			ifFalse: [nil]
 %
 
 category: 'Grail-Singleton'
