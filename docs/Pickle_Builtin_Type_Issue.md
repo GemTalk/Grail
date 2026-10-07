@@ -75,7 +75,7 @@ Both fail in Grail:
 
 - **Do not just expose the whole `Python` dict.** It also contains
   Grail-internal classes (`PyCode`, `PyDict`, `PythonReturn`, `PythonBreak`,
-  `PythonContinue`, `PythonClass`) that are **not** CPython builtins. Populate
+  `PythonContinue`) that are **not** CPython builtins. Populate
   a **curated CPython builtins set**, or those leak as `builtins.PyCode` etc.
 - **Making `builtins.int` resolvable at all causes a net +1 regression in
   `test.test_functools` on the CPython scoreboard** — because once

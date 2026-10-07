@@ -24,9 +24,9 @@ ClassDefAst>>printSmalltalkOn: gated the real class emission on
 ``CallAst moduleClassBeingCompiled notNil'' and, in an eval/exec context, fell
 back to a "legacy dict-based representation" building a PythonClass (a
 SymbolDictionary of class attributes).  That fallback could never run:
-src/smalltalk/Python/PythonClass.gs is not in install.gs''s input list, so the
-class is never created -- the name is pre-declared as nil in the Python
-dictionary and stays nil.  The emitted ``PythonClass perform: #new env: 0''
+src/smalltalk/Python/PythonClass.gs was never in install.gs''s input list (it
+has since been deleted), so the class was never created -- the name was
+pre-declared as nil in the Python dictionary and stayed nil.  The emitted ``PythonClass perform: #new env: 0''
 raised ``a UndefinedObject does not understand #new'', a SMALLTALK error, so
 every exec of a class statement aborted uncatchably.  That was 30 of
 test_listcomps'' 52 errors.
