@@ -416,6 +416,9 @@ run
 	at: #'functools_partialmethod' put: nil;
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
+	at: #'dict_reverseitemiterator' put: nil;
+	at: #'dict_reversekeyiterator' put: nil;
+	at: #'dict_reversevalueiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;
 	at: #'dict_view' put: nil;
 	at: #'mappingproxy' put: nil;
@@ -1165,6 +1168,7 @@ run
 	at: #'ModuleDocstringTestCase' put: nil;
 	at: #'ModuleSpecTestCase' put: nil;
 	at: #'ModuleGlobalRebindStringsTestCase' put: nil;
+	at: #'DictReversedPositionsTestCase' put: nil;
 	at: #'BareNameManglingTestCase' put: nil;
 	at: #'GlobalsShadowBuiltinTestCase' put: nil;
 	at: #'ModuleCachedAbsentTestCase' put: nil;
@@ -1681,6 +1685,7 @@ input src/smalltalk/Python/KeyboardInterrupt.gs
 input src/smalltalk/Python/SystemExit.gs
 input src/smalltalk/Python/dict_itemiterator.gs
 input src/smalltalk/Python/dict_keyiterator.gs
+input src/smalltalk/Python/dict_reverseiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
 input src/smalltalk/Python/enumerate.gs
@@ -2640,6 +2645,7 @@ input src/smalltalk/PythonTests/ModuleAttrDeleteTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalRebindStringsTestCase.gs
+input src/smalltalk/PythonTests/DictReversedPositionsTestCase.gs
 input src/smalltalk/PythonTests/BareNameManglingTestCase.gs
 input src/smalltalk/PythonTests/GlobalsShadowBuiltinTestCase.gs
 input src/smalltalk/PythonTests/ModuleCachedAbsentTestCase.gs
