@@ -44,6 +44,7 @@ version_info = (2, 6, 0)
 native_encoding = 'UTF-8'
 
 import codecs
+import re
 
 XML_PARAM_ENTITY_PARSING_NEVER = 0
 XML_PARAM_ENTITY_PARSING_UNLESS_STANDALONE = 1
@@ -85,6 +86,7 @@ class _Errors:
     XML_ERROR_UNCLOSED_CDATA_SECTION = 'unclosed CDATA section'
     XML_ERROR_UNBOUND_PREFIX = 'unbound prefix'
     XML_ERROR_XML_DECL = 'XML declaration not well-formed'
+    XML_ERROR_TEXT_DECL = 'text declaration not well-formed'
     XML_ERROR_UNKNOWN_ENCODING = 'unknown encoding'
     XML_ERROR_INCORRECT_ENCODING = 'encoding specified in XML declaration is incorrect'
 
@@ -111,6 +113,7 @@ class _Errors:
         'error in processing external entity reference': 21,
         'unbound prefix': 27,
         'XML declaration not well-formed': 30,
+        'text declaration not well-formed': 31,
         'unknown encoding': 18,
         'encoding specified in XML declaration is incorrect': 19,
     }
@@ -270,6 +273,7 @@ class xmlparser:
         self._rawhead = b''       # bytes held back until it is
         self._encoding_used = None
         self._encoding_col = None # where a declared encoding's value starts
+        self._bom = 0             # 1 when the input began with a byte-order mark
         self._attlists = {}       # element -> {attribute: (type, default)}
         self._pending_cr = False  # a CR ending the last chunk, maybe of a CRLF
         # Reparse deferral: expat's input buffer, in bytes, as far as its
@@ -302,6 +306,14 @@ class xmlparser:
                     piece = self._decode(piece, final)
                 except _UndecodableBytes as bad:
                     self._fail_at_undecodable(bad)
+            # A character XML does not allow -- a C0 control, U+FFFE -- is an
+            # invalid token wherever it appears, and expat reports it once it
+            # has parsed everything before it, exactly as it does bytes the
+            # encoding cannot decode.  Grail passed them through.
+            invalid = _INVALID_XML_CHAR.search(piece)
+            if invalid is not None:
+                self._fail_at_undecodable(
+                    _UndecodableBytes(piece[:invalid.start()], False))
             self._buf += self._normalise_newlines(piece, final)
         if self._dtd_mode:
             self._advance(self._subset(self._buf[self._pos:], isfinal, True))
@@ -532,6 +544,18 @@ class xmlparser:
             if enc is None:
                 return ''
             raw, self._rawhead = self._rawhead, b''
+            # A byte-order mark is a column on line 1 in every position expat
+            # reports.  And after a UTF-16 one the byte order is KNOWN, so it
+            # is decoded with that codec rather than plain ``utf-16'': the
+            # text before an undecodable unit is re-decoded on its own, and
+            # without the mark ``utf-16'' reads it in the machine's order.
+            if raw.startswith(b'\xef\xbb\xbf'):
+                self._bom = 1
+            elif (enc.lower().replace('_', '-') in ('utf-16', 'utf16')
+                    and raw[:2] in (b'\xff\xfe', b'\xfe\xff')):
+                self._bom = 1
+                enc = 'utf-16-le' if raw[:2] == b'\xff\xfe' else 'utf-16-be'
+                raw = raw[2:]
             # An unknown encoding is a LookupError, not an ExpatError: CPython's
             # pyexpat asks the codec registry, and lets its answer through --
             # for a declared encoding and for ParserCreate's alike.
@@ -553,7 +577,7 @@ class xmlparser:
         error is placed at the first bad byte.  It used to fail at once, at
         line 1 column 0, and always as an invalid token; expat calls a
         sequence the input ends inside a partial character."""
-        self._buf += bad.good
+        self._buf += self._normalise_newlines(bad.good, True)
         self._scan(False)
         # A text run the scanner held back for want of a closing ``<'' is
         # complete here -- nothing can follow the bad byte -- and expat
@@ -592,7 +616,10 @@ class xmlparser:
             return 'utf-8' if isfinal else None
         text = head[:end].decode('ascii', 'replace')
         declared, at = _declared_encoding(text)
-        if declared is None:
+        if declared is None or not _XML_ENCODING_NAME.fullmatch(declared):
+            # Expat parses the declaration before it looks the encoding up,
+            # so a malformed name (``8bit'') is a malformed declaration,
+            # reported by _xml_decl -- not a codec lookup.
             return 'utf-8'
         self._encoding_col = at
         # The declaration was just read as 8-bit text, so the bytes cannot be
@@ -626,6 +653,8 @@ class xmlparser:
             # Inside an internal entity's replacement text, positions are
             # in that text; expat blames the reference in the document.
             lineno, offset = self._ref_pos
+        if lineno == 1:
+            offset += self._bom
         self.ErrorCode = code
         self.ErrorLineNumber = lineno
         self.ErrorColumnNumber = offset
@@ -642,12 +671,13 @@ class xmlparser:
         else:
             self._col += len(chunk)
         self._pos += n
+        col = self._col + self._bom if self._line == 1 else self._col
         self.CurrentLineNumber = self._line
-        self.CurrentColumnNumber = self._col
+        self.CurrentColumnNumber = col
         # expat's error-position getters ARE its current-position getters;
         # only a failure (_fail) pins them.
         self.ErrorLineNumber = self._line
-        self.ErrorColumnNumber = self._col
+        self.ErrorColumnNumber = col
 
     def _offset_pos(self, base_line, base_col, text, index):
         """(line, col) of `index` within `text`, given where `text` started.
@@ -789,8 +819,9 @@ class xmlparser:
                     self._fail(errors.XML_ERROR_UNCLOSED_TOKEN)
                 return False
             body = buf[i + 2:end]
+            start = (self._line, self._col)
             self._advance(end + 2 - i)
-            self._pi(body)
+            self._pi(body, start)
             return True
         if rest.startswith('<!DOCTYPE'):
             return self._scan_doctype(isfinal)
@@ -1030,11 +1061,11 @@ class xmlparser:
 
     # ----------------------------------------------------- pieces of markup
 
-    def _pi(self, body):
-        body = body.lstrip()
+    def _pi(self, body, start=None):
         if body[:3].lower() == 'xml' and (len(body) == 3 or not _is_name_char(body[3])):
-            self._xml_decl(body)
+            self._xml_decl(body, start)
             return
+        body = body.lstrip()
         k = 0
         while k < len(body) and _is_name_char(body[k]):
             k += 1
@@ -1050,24 +1081,101 @@ class xmlparser:
         else:
             self._default('<!--%s-->' % text)
 
-    def _xml_decl(self, body):
-        attrs = {}
-        for key in ('version', 'encoding', 'standalone'):
-            at = body.find(key + '=')
-            if at < 0:
-                continue
-            q = body[at + len(key) + 1:at + len(key) + 2]
-            if q not in '"\'':
-                self._fail(errors.XML_ERROR_XML_DECL)
-            close = body.find(q, at + len(key) + 2)
-            if close < 0:
-                self._fail(errors.XML_ERROR_XML_DECL)
-            attrs[key] = body[at + len(key) + 2:close]
-        # An external entity opens with a TEXT declaration, where the version
-        # is optional and standalone has no meaning.
+    def _xml_decl(self, body, start=None):
+        """An XML declaration -- a TEXT declaration in an external entity --
+        parsed as expat's doParseXmlDecl parses it: the pseudo-attributes
+        version, encoding and standalone, in that order, each a name, an
+        ``='' with optional space around it, and a quoted value of
+        ``[A-Za-z0-9._-]''.  A malformed one fails where expat's badPtr points,
+        usually the start of the offending value or name.
+
+        Expat 2.8.3 and 2.8.5 (bundled with CPython 3.14.8) also refuse an
+        empty version and any version outside ``1.[0-9]+''.  The previous
+        version of this method found each name with str.find, so it refused
+        ``version = "1.0"'' and accepted ``version=" 1.0"''."""
         external = self._fragment or self._dtd_mode
-        if 'version' not in attrs and not external:
-            self._fail(errors.XML_ERROR_XML_DECL)
+        code = (errors.XML_ERROR_TEXT_DECL if external
+                else errors.XML_ERROR_XML_DECL)
+        end = len(body)
+
+        def bad(at):
+            if start is None:
+                self._fail(code)
+            line, col = self._offset_pos(start[0], start[1] + 2, body, at)
+            self._fail(code, line, col)
+
+        def pseudo(k):
+            # expat's parsePseudoAttribute: (name, name_at, value, value_at,
+            # next), with name None at the end of the declaration.
+            if k == end:
+                return None, k, None, k, k
+            if body[k] not in _XML_DECL_SPACE:
+                bad(k)
+            while k < end and body[k] in _XML_DECL_SPACE:
+                k += 1
+            if k == end:
+                return None, k, None, k, k
+            name_at = k
+            while True:
+                if k == end or not body[k].isascii():
+                    bad(k)
+                if body[k] == '=':
+                    name_end = k
+                    break
+                if body[k] in _XML_DECL_SPACE:
+                    name_end = k
+                    while k < end and body[k] in _XML_DECL_SPACE:
+                        k += 1
+                    if k == end or body[k] != '=':
+                        bad(k)
+                    break
+                k += 1
+            if name_end == name_at:
+                bad(k)
+            k += 1
+            while k < end and body[k] in _XML_DECL_SPACE:
+                k += 1
+            if k == end or body[k] not in _XML_DECL_QUOTES:
+                bad(k)
+            quote = body[k]
+            k += 1
+            value_at = k
+            while k == end or body[k] != quote:
+                if k == end or not _xml_decl_value_char(body[k]):
+                    bad(k)
+                k += 1
+            return (body[name_at:name_end], name_at,
+                    body[value_at:k], value_at, k + 1)
+
+        attrs = {}
+        name, name_at, value, value_at, k = pseudo(3)
+        if name is None:
+            bad(k)
+        if name != 'version':
+            if not external:
+                bad(name_at)
+        else:
+            if not _XML_VERSION_NUM.fullmatch(value):
+                bad(value_at)
+            attrs['version'] = value
+            name, name_at, value, value_at, k = pseudo(k)
+            if name is None and external:
+                bad(k)
+        if name == 'encoding':
+            if not (value[:1].isascii() and value[:1].isalpha()):
+                bad(value_at)
+            attrs['encoding'] = value
+            name, name_at, value, value_at, k = pseudo(k)
+        if name is not None:
+            if name != 'standalone' or external:
+                bad(name_at)
+            if value not in ('yes', 'no'):
+                bad(value_at)
+            attrs['standalone'] = value
+            while k < end and body[k] in _XML_DECL_SPACE:
+                k += 1
+            if k != end:
+                bad(k)
         standalone = -1
         if attrs.get('standalone') == 'yes':
             standalone = 1
@@ -1566,7 +1674,10 @@ class xmlparser:
             value = text[i + 1:close]
             i = close + 1
             if name in seen:
-                self._fail(errors.XML_ERROR_DUPLICATE_ATTRIBUTE)
+                # expat blames the repeated NAME, not the tag
+                line, col = self._offset_pos(self._line, self._col,
+                                             '<' + body, start + 1)
+                self._fail(errors.XML_ERROR_DUPLICATE_ATTRIBUTE, line, col)
             seen.add(name)
             vline, vcol = self._offset_pos(self._line, self._col,
                                            '<' + body, i - len(value))
@@ -2039,6 +2150,26 @@ def _declared_encoding(decl):
     if close < 0:
         return None, None
     return decl[k + 1:close], k + 1
+
+
+_XML_DECL_SPACE = ' \t\r\n'
+_XML_DECL_QUOTES = '"\''
+
+# Expat 2.8.5's checkXmlDeclVersionNum: XML 1.0 fifth edition's VersionNum.
+_XML_VERSION_NUM = re.compile(r'1\.[0-9]+')
+
+# An EncName, as doParseXmlDecl checks it: an ASCII letter, then value chars.
+_XML_ENCODING_NAME = re.compile(r'[A-Za-z][A-Za-z0-9._-]*')
+
+# What expat refuses as a character anywhere in a document: everything outside
+# XML 1.0's Char production -- the C0 controls but tab, LF and CR, the
+# surrogates, and U+FFFE / U+FFFF.
+_INVALID_XML_CHAR = re.compile(
+    '[^\t\n\r\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]')
+
+
+def _xml_decl_value_char(c):
+    return c.isascii() and (c.isalnum() or c in '._-')
 
 
 def ParserCreate(encoding=None, namespace_separator=None, intern=None):
