@@ -415,7 +415,9 @@ ___installTransientGlobals___: aNames on: aModuleClass
 	Done by overriding the three dynamic-instVar accessors every module-global
 	read, store, delete and listing goes through, ON THIS CLASS ONLY, with the
 	names inlined: a module that declares nothing pays nothing.  A rebuild that
-	no longer declares any removes them."
+	no longer declares any removes them.  The readers also look in the spill
+	past the 255-global ceiling (module >> ___storeNewGlobal___:put:), whose
+	own readers they replace."
 
 	| lit |
 	"The PERSISTENT dictionary, not includesSelector:, which also sees this
@@ -432,8 +434,11 @@ ___installTransientGlobals___: aNames on: aModuleClass
 	lit := '#(' , lit , ' )'.
 	aModuleClass
 		compileMethod: 'dynamicInstVarAt: aSymbol
+	| v |
 	(' , lit , ' includesIdentical: aSymbol) ifTrue: [^ self ___transientGlobals___ at: aSymbol otherwise: nil].
-	^ super dynamicInstVarAt: aSymbol'
+	v := super dynamicInstVarAt: aSymbol.
+	v == nil ifFalse: [^ v].
+	^ self ___spilledGlobalAt___: aSymbol'
 			dictionaries: System myUserProfile symbolList
 			category: 'Grail-Transient Globals'
 			environmentId: 0.
@@ -450,7 +455,7 @@ ___installTransientGlobals___: aNames on: aModuleClass
 			environmentId: 0.
 	aModuleClass
 		compileMethod: 'dynamicInstanceVariables
-	^ super dynamicInstanceVariables , self ___transientGlobals___ keys asArray'
+	^ self ___storedGlobalNames___ , self ___transientGlobals___ keys asArray'
 			dictionaries: System myUserProfile symbolList
 			category: 'Grail-Transient Globals'
 			environmentId: 0
