@@ -101,7 +101,7 @@ assertAllChecksPassIn: aModule
 	"``failures'' is the fixture's own import-time run of every check: the
 	names that did not answer True, comma-joined, empty when all passed."
 
-	self assert: (aModule @env1:___pyAttrLoad___: #check_count) equals: 33.
+	self assert: (aModule @env1:___pyAttrLoad___: #check_count) equals: 39.
 	self assert: (aModule @env1:___pyAttrLoad___: #failures) asString equals: ''.
 %
 
@@ -138,16 +138,72 @@ testAllChecksPassWithDirectCallsOnIR
 
 category: 'Grail-Tests - Structure'
 method: DirectCallsTestCase
+testOnlyUnobservableArgumentsGetTheDirectSend
+	"Exclusion 11: Python looks the attribute up before evaluating the
+	arguments, and a direct send looks it up after them, on a miss.  So the
+	send is direct only when the arguments are literals or names bound on
+	every path (parameters, earlier-assigned locals, loop and comprehension
+	targets); a call, an attribute read, an operator, a global, a
+	maybe-unbound local, or a name the lookup could rebind keeps
+	load-then-call."
+
+	| shapeOf |
+	shapeOf := [:body | | out |
+		out := (importlib smalltalkForSource: 'def f(c, p):
+' , body) asString.
+		(out includesString: '___pyAttrLoad___: #''foo''')
+			ifTrue: [#load]
+			ifFalse: [(out includesString: ' foo: (') ifTrue: [#direct] ifFalse: [out]]].
+	importlib ___directCallsForce___: true.
+	{
+		{'    c.foo(p)'. #direct}.
+		{'    c.foo(1, -2, ''s'', None)'. #direct}.
+		{'    x = 1
+    c.foo(x)'. #direct}.
+		{'    for x in p:
+        c.foo(x)'. #direct}.
+		{'    return [c.foo(x) for x in p]'. #direct}.
+		{'    c.foo(g(p))'. #load}.
+		{'    c.foo(p.attr)'. #load}.
+		{'    c.foo(p + 1)'. #load}.
+		{'    c.foo(glob)'. #load}.
+		{'    if p:
+        x = 1
+    c.foo(x)'. #load}.
+		{'    for x in p:
+        pass
+    c.foo(x)'. #load}.
+		{'    x = 1
+    def g():
+        nonlocal x
+        x = 2
+    c.foo(x)'. #load}.
+		{'    e = 1
+    try:
+        pass
+    except Exception as e:
+        pass
+    c.foo(e)'. #load}.
+	} do: [:pair |
+		self assert: (shapeOf value: (pair at: 1)) equals: (pair at: 2)]
+%
+
+category: 'Grail-Tests - Structure'
+method: DirectCallsTestCase
 testFlagChangesTheEmittedShape
 	"``c.foo(i)'' on an unresolved receiver: load-then-call with the flag off,
 	one keyword send with it on.  Asserted on the generated source so a silent
 	fall-back to the legacy shape cannot pass as a semantic pass."
 
-	| off on |
+	| src off on |
+	"Inside a def, with a parameter argument: a module-level ``i'' is a global,
+	which the lookup could rebind (exclusion 11)."
+	src := 'def f(c, i):
+    return c.foo(i)'.
 	importlib ___directCallsForce___: false.
-	off := (importlib smalltalkForSource: 'c.foo(i)') asString.
+	off := (importlib smalltalkForSource: src) asString.
 	importlib ___directCallsForce___: true.
-	on := (importlib smalltalkForSource: 'c.foo(i)') asString.
+	on := (importlib smalltalkForSource: src) asString.
 	self assert: (off includesString: '___pyAttrLoad___: #''foo''') description: off.
 	self assert: (off includesString: 'value: nil') description: off.
 	self assert: (on includesString: ' foo: (') description: on.
