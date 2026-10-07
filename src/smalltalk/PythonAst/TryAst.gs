@@ -186,7 +186,7 @@ printSmalltalkOn: aStream
 				and the shield lives on PyLazyExceptSelector, so the class has to be
 				wrapped rather than emitted directly."
 				index = 1
-					ifTrue: [aStream nextPutAll: 'BaseException']
+					ifTrue: [aStream nextPutAll: '(BaseException @env0:___catchAll___)']
 					ifFalse: [
 						aStream nextPutAll: '(PyLazyExceptSelector @env0:on: [BaseException] shieldedFor: ', self ___trySiteTokenLiteral___, ')']]
 			ifNotNil: [
@@ -664,7 +664,7 @@ printExceptStarOn: aStream
 	body printSmalltalkOn: aStream.
 	orelse size > 0 ifTrue: [aStream nextPutAll: 'true'; lf].
 	aStream decreaseIndent.
-	aStream nextPutAll: '] @env0:on: BaseException do: [:'; nextPutAll: exVar;
+	aStream nextPutAll: '] @env0:on: BaseException @env0:___catchAll___ do: [:'; nextPutAll: exVar;
 		nextPutAll: ' | | '; nextPutAll: restVar; nextPut: $ ; nextPutAll: normVar;
 		nextPut: $ ; nextPutAll: rrVar; nextPutAll: ' | '; increaseIndent; lf.
 	self ___emitPushCatchingFrameOn___: aStream.
@@ -1064,7 +1064,10 @@ ___emitIRExceptStarPartOn___: aBuilder
 	aBuilder at: self ___irTryStampPosition___.
 	nest := aBuilder
 		send: #on:do: to: protectedBlk
-		with: { aBuilder globalNamed: #BaseException. handlerBlk } env: 0.
+		with: {
+			aBuilder send: #'___catchAll___' to: (aBuilder globalNamed: #BaseException)
+				with: { } env: 0.
+			handlerBlk } env: 0.
 	hasElse
 		ifTrue: [aBuilder if: nest then: [orelse ___emitIRStatementsOn___: aBuilder]]
 		ifFalse: [aBuilder add: nest].
@@ -1199,7 +1202,12 @@ ___emitIRSelectorFor___: aHandler index: anIndex token: aToken on: aBuilder
 	| lazy typeBlk |
 	lazy := aBuilder globalNamed: #PyLazyExceptSelector.
 	aHandler type isNil ifTrue: [
-		anIndex = 1 ifTrue: [^ aBuilder globalNamed: #BaseException].
+		"BaseException ___catchAll___, not the class: a class selector takes
+		on:do:'s VM fast path, which never asks #handles:, so a raw stack
+		overflow would pass a bare except by (see ___catchAll___)."
+		anIndex = 1 ifTrue: [
+			^ aBuilder send: #'___catchAll___' to: (aBuilder globalNamed: #BaseException)
+				with: { } env: 0].
 		typeBlk := aBuilder inBlockDo: [
 			aBuilder add: (aBuilder globalNamed: #BaseException)].
 		^ aBuilder send: #on:shieldedFor: to: lazy

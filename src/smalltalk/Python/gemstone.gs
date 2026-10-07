@@ -458,9 +458,12 @@ ___cleanupFramesIn___: aContinuation
 						sel == #'___ensureFinally___:finally:'
 							ifTrue: [ home := linkHome @env0:value: (f @env0:at: 11) ].
 						"A Python except clause: on: a PyLazyExceptSelector, or on:
-						BaseException for a bare except (TryAst >>
-						___emitIRSelectorFor___:index:token:on:), plus the
-						AbstractException handler a try statement adds.  NOT the
+						BaseException ___catchAll___ for a bare except (TryAst >>
+						___emitIRSelectorFor___:index:token:on:) and for a with
+						statement -- the ExceptionSet that lets them meet a raw stack
+						overflow; matching only the bare class stopped seeing a text-
+						path with statement -- plus the AbstractException handler a try
+						statement adds.  NOT the
 						loop and comprehension handlers (PythonBreak, PythonContinue,
 						PythonLoopDrained, PythonReturn): they resume right, and
 						every loop has them."
@@ -468,7 +471,9 @@ ___cleanupFramesIn___: aContinuation
 							and: [ | sig |
 								sig := f @env0:at: 11.
 								(sig @env0:isKindOf: PyLazyExceptSelector)
-									or: [ sig == BaseException or: [ sig == AbstractException ] ] ])
+									or: [ sig == BaseException
+								or: [ sig == (BaseException @env0:___catchAll___)
+								or: [ sig == AbstractException ] ] ] ])
 							ifTrue: [ home := linkHome @env0:value: (f @env0:at: 12) ].
 						"Not Grail's own handlers: ___callCatchingVMErrors___:_:_: (this
 						module) wraps every workflow, and its handler reads no

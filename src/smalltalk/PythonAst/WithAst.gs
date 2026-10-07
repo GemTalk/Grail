@@ -138,7 +138,7 @@ printItem: anIndex onStream: aStream
 	async-specific -- plain ``with'' had it identically."
 	aStream nextPutAll: 'true'.
 	aStream decreaseIndent; lf.
-	aStream nextPutAll: '] @env0:on: BaseException do: [:___ex___ |'.
+	aStream nextPutAll: '] @env0:on: BaseException @env0:___catchAll___ do: [:___ex___ |'.
 	aStream increaseIndent; lf.
 	"Python's ``return``/``break``/``continue`` are GemStone signals that
 	inherit from BaseException in this hierarchy, so they fall into this
@@ -467,7 +467,10 @@ ___emitIRItem___: anIndex on: aBuilder
 				to: (aBuilder inBlockDo: [
 					aBuilder add: (aBuilder
 						send: #on:do: to: protected
-						with: { aBuilder globalNamed: #BaseException. handler } env: 0)])
+						with: {
+							aBuilder send: #'___catchAll___' to: (aBuilder globalNamed: #BaseException)
+								with: { } env: 0.
+							handler } env: 0)])
 				with: { aBuilder obj: Error. stUnwind } env: 0.
 			ensureBlk := aBuilder inBlockDo: [
 				aBuilder unless: (aBuilder var: handledLeaf) then: [

@@ -84,42 +84,27 @@ def the_pair_is_not_identical():
 GRAIL_CHECKS = [
     the_pair_is_not_identical,
     eq_on_reflexive_dicts,
+    ne_on_reflexive_dicts,
+    eq_is_still_catchable_after_ne,
 ]
 
-# NOT driven under Grail: ``y != x'' is STILL uncatchable when the comparison
-# runs inside SUnit, and this is a real open defect, not a fixture artifact.
-# Measured on gs40, 2026-08-28, with dict>>__eq__: converting locally:
+# ``y != x'' used to be uncatchable inside SUnit (measured on gs40, 2026-08-28):
 #
 #     reflexive-dict comparison check failed: ne_on_reflexive_dicts
 #       -- 'raised RecursionError instead: maximum recursion depth exceeded'
 #
-# The MESSAGE TEXT locates the conversion.  ``maximum recursion depth exceeded''
-# with no suffix is BaseException class>>___recursionGuard___; the local
-# conversions all add one (dict>>__eq__: says ``... in comparison'').  So inside
-# SUnit the overflow does not land in the handler dict>>__eq__: protects at all
-# -- it is converted far out by the boundary guard, whose #resignalAs: restarts
-# the handler search, and the restarted search SKIPS the inner
-# ``except RecursionError'' and is answered by the outer ``except BaseException''.
-# A clause-level trace of the two spellings, taken outside SUnit where the same
-# asymmetry appeared:
-#
-#     eq:  clause=RecursionError exc=RecursionError -> true
-#     ne:  clause=BaseException  exc=RecursionError -> true   (inner never asked)
-#
-# Why ``!='' and not ``=='': object>>__ne__: reaches __eq__ only after several
-# probes (___dynamicClassAttr___:, ___varargsDunder___:,
-# whichClassIncludesSelector:), so it spends more frames per recursion level and
-# the overflow lands somewhere different.  WHICH property of the landing site
-# decides the restarted search is not yet established.
-#
-# This is the same phenomenon recursion_shapes.py records for a custom class's
-# __eq__ -- "run from a bare evaluation it answers True, but run inside SUnit
-# ... raised RecursionError instead" -- and notes as having an unknown trigger.
-# The check here is the first DETERMINISTIC in-suite reproduction of it.
-#
-# Kept in CHECKS so the CPython gate keeps proving what the shape is supposed to
-# do; not asserted under Grail, because a red test is not a record.
-CHECKS = GRAIL_CHECKS + [ne_on_reflexive_dicts, eq_is_still_catchable_after_ne]
+# The overflow was converted far out by BaseException class>>___recursionGuard___,
+# whose #resignalAs: TRIMS the stack back to the overflow before signalling.  The
+# VM re-protects the yellow guard page on that unwind with no margin, so when the
+# trip fell where the trim left the stack pointer just above the page, the
+# RecursionError's own handler search tripped again -- and that second overflow
+# skipped the inner ``except RecursionError'' and reached the outer
+# ``except BaseException''.  Which spelling hit it depended only on frames per
+# recursion level (``!='' goes through object>>__ne__:'s probes), i.e. on where
+# in the cycle the trip landed.  A raw overflow is now a RecursionError to
+# Python in the FIRST handler search (BaseException class >> handles:), with no
+# trim, so both spellings are driven under Grail.
+CHECKS = GRAIL_CHECKS
 
 
 if __name__ == '__main__':
