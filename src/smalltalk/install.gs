@@ -1168,7 +1168,6 @@ run
 	at: #'ModuleDocstringTestCase' put: nil;
 	at: #'ModuleSpecTestCase' put: nil;
 	at: #'ModuleGlobalRebindStringsTestCase' put: nil;
-	at: #'SyntaxErrorMessagesTestCase' put: nil;
 	at: #'DictReversedPositionsTestCase' put: nil;
 	at: #'ModuleGlobalsPast255TestCase' put: nil;
 	at: #'BareNameManglingTestCase' put: nil;
@@ -1408,6 +1407,7 @@ run
 	at: #'SurrogateStrTestCase' put: nil;
 	at: #'SurrogatepassDecodeTestCase' put: nil;
 	at: #'SymbolStrHashEqTestCase' put: nil;
+	at: #'SyntaxErrorMessagesTestCase' put: nil;
 	at: #'SyntaxErrorTestCase' put: nil;
 	at: #'SyntaxWarningTestCase' put: nil;
 	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
@@ -2648,7 +2648,6 @@ input src/smalltalk/PythonTests/ModuleAttrDeleteTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalRebindStringsTestCase.gs
-input src/smalltalk/PythonTests/SyntaxErrorMessagesTestCase.gs
 input src/smalltalk/PythonTests/DictReversedPositionsTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalsPast255TestCase.gs
 input src/smalltalk/PythonTests/BareNameManglingTestCase.gs
@@ -2895,6 +2894,7 @@ input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
 input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
 input src/smalltalk/PythonTests/SurrogateStrTestCase.gs
 input src/smalltalk/PythonTests/SymbolStrHashEqTestCase.gs
+input src/smalltalk/PythonTests/SyntaxErrorMessagesTestCase.gs
 input src/smalltalk/PythonTests/SyntaxErrorTestCase.gs
 input src/smalltalk/PythonTests/SyntaxWarningTestCase.gs
 input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs
