@@ -214,6 +214,27 @@ set compile_env: 1
 !   48 msg (ptr)        56 state (ptr)         ... 112 bytes total
 ! ===============================================================================
 
+category: 'Grail-Error Messages'
+classmethod: ZlibDecompress
+___errorMessage___: rc while: aPhase stream: strm
+	"CPython's zlib_error: ``Error <rc> <phase>'', then libz's own explanation
+	from the stream's ``msg'' field (``incorrect header check'', ``invalid
+	block type'', ...) or, when libz left it NULL, the text CPython supplies for
+	three codes.  Grail reported the bare first half, so every corrupt stream
+	read the same."
+
+	| zmsg |
+	zmsg := nil.
+	(strm @env0:int64At: 48) @env0:= 0
+		ifFalse: [zmsg := strm @env0:stringFromCharStarAt: 48].
+	zmsg == nil ifTrue: [
+		rc @env0:= -5 ifTrue: [zmsg := 'incomplete or truncated stream'].
+		rc @env0:= -2 ifTrue: [zmsg := 'inconsistent stream state'].
+		rc @env0:= -3 ifTrue: [zmsg := 'invalid input data']].
+	zmsg == nil ifTrue: [^ 'Error ' @env0:, rc @env0:printString @env0:, ' ' @env0:, aPhase].
+	^ 'Error ' @env0:, rc @env0:printString @env0:, ' ' @env0:, aPhase @env0:, ': ' @env0:, zmsg
+%
+
 category: 'Grail-Instance Creation'
 classmethod: ZlibDecompress
 wbits: wbits
@@ -334,8 +355,10 @@ _run: inBytes flushMode: flushMode maxLength: maxLength
 								rc @env0:= -5
 									ifTrue: [done := true]
 									ifFalse: [
-										ZlibError ___signal___: ('Error ' @env0:, rc @env0:printString
-											@env0:, ' while decompressing data')]]
+										ZlibError ___signal___: (ZlibDecompress
+											___errorMessage___: rc
+											while: 'while decompressing data'
+											stream: strm)]]
 							ifFalse: [
 								"Room left in the output buffer means libz emitted
 								everything it could from the input it has."
