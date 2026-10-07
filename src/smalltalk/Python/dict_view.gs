@@ -171,7 +171,38 @@ __iter__
 category: 'Grail-Iterator Protocol'
 method: dict_view
 __reversed__
+	| cls |
+	cls := self ___reverseIteratorClass___.
+	(cls @env0:~~ nil @env0:and: [mapping @env0:isKindOf: PyDict])
+		ifTrue: [^ cls @env0:___on: mapping].
 	^ (self @env0:___elements) __reversed__
+%
+
+category: 'Grail-Iterator Protocol'
+method: dict_view
+___reverseIteratorClass___
+	"The CPython reverse-iterator type for this view over a PyDict, or nil to
+	reverse a snapshot (a mapping that keeps no entry positions)."
+
+	^ nil
+%
+
+category: 'Grail-Iterator Protocol'
+method: dict_keys
+___reverseIteratorClass___
+	^ dict_reversekeyiterator
+%
+
+category: 'Grail-Iterator Protocol'
+method: dict_values
+___reverseIteratorClass___
+	^ dict_reversevalueiterator
+%
+
+category: 'Grail-Iterator Protocol'
+method: dict_items
+___reverseIteratorClass___
+	^ dict_reverseitemiterator
 %
 
 ! ------------------- set-like view (keys / items): & | - ^ and comparisons

@@ -123,10 +123,11 @@ testReflexiveDictComparisonRaisesACatchableRecursionError
 	sensitive to frame width -- and that makes ``y != x'' catchable when the
 	comparison is evaluated on its own.
 
-	It does NOT make it catchable INSIDE this suite, where the overflow lands
-	somewhere the dict handler does not protect and the boundary guard converts it
-	after all.  That case is left unasserted on purpose; the fixture carries the
-	measurement and what it rules out.
+	Inside this suite the overflow landed somewhere the dict handler does not
+	protect, and the boundary guard's #resignalAs: re-tripped (its trim lets the
+	VM re-protect the yellow page; see testOverflowIsCatchableAtEveryAlignment).
+	A raw overflow is now a RecursionError in the first handler search, so the
+	``!='' checks are asserted too.
 
 	Evaluated inside ___recursionGuard___, as testRecursionContextChain is and for
 	the same reason: without a guard above it the runaway's AlmostOutOfStackError
@@ -140,12 +141,10 @@ testReflexiveDictComparisonRaisesACatchableRecursionError
 	mod := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/reflexive_dict_comparison.py')
 		name: 'reflexive_dict_comparison'.
-	"Only the checks in the fixture's GRAIL_CHECKS.  ``y != x'' is still
-	uncatchable in-suite -- an open defect the fixture documents with its
-	evidence, and deliberately not asserted here, since a red test records
-	nothing that the comment does not record better."
 	#( 'the_pair_is_not_identical'
-	   'eq_on_reflexive_dicts' ) do: [:k |
+	   'eq_on_reflexive_dicts'
+	   'ne_on_reflexive_dicts'
+	   'eq_is_still_catchable_after_ne' ) do: [:k |
 		| got |
 		"Report WHAT the check answered, not merely that it did not answer true.
 		Each failure mode reads differently -- ``raised RecursionError instead''
@@ -213,4 +212,36 @@ testReprStillCallsReprWhenItsSlotProbeRaises
 			(GrailReprLookupSignaller signalling: [
 				AttributeError @env1:___signal___: 'no __repr__ here']))
 		equals: 'reached __repr__'
+%
+
+category: 'Grail-Tests-RecursionError'
+method: RecursionErrorTestCase
+testOverflowIsCatchableAtEveryAlignment
+	"A runaway recursion must end in a RecursionError the nearest ``except''
+	catches, wherever the stack runs out.
+
+	It did not, at one base padding in seven.  ___recursionGuard___ converted
+	the overflow with #resignalAs:, whose trim back to the overflow lets the VM
+	re-protect the yellow guard page with no margin; when the trip fell where
+	the trim left the stack pointer just above the page, the RecursionError's
+	own handler search tripped again, and that second overflow skipped every
+	handler between the recursion and the guard -- ``except RecursionError''
+	missed while a later ``except BaseException'' caught (test_pickle's
+	test_bad_getattr).  A raw overflow is now a RecursionError to Python in the
+	FIRST handler search (BaseException class >> handles:, ___catchAll___),
+	before anything unwinds.
+
+	The fixture sweeps the base padding across more than a recursion cycle, so
+	every phase is covered whatever stack depth the gem has; it also pins what a
+	handler meeting the overflow sees (finally order, with/__exit__, bare raise
+	identity).  Verified against CPython by running it directly."
+
+	| mod |
+	importlib @env1:modules removeKey: #'recursion_overflow_alignment' ifAbsent: [].
+	mod := BaseException @env1:___recursionGuard___: [
+		importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/recursion_overflow_alignment.py')
+			name: 'recursion_overflow_alignment'].
+	self assert: (mod @env1:___pyAttrLoad___: #check_count) equals: 8.
+	self assert: (mod @env1:___pyAttrLoad___: #failures) asString equals: ''
 %
