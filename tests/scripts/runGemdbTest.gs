@@ -287,6 +287,13 @@ gemdb.root["gemdb_test"]["n"] = 5
 gemdb.commit()
 r + "/" + r2 + "/" + str("gen" in gemdb.root["gemdb_test"]) + "/" + p + "/" + str("(a generator) holds a Semaphore" in m)
 '.
+"When the refusal names no path, print what the search saw: the miss has
+happened only inside full run_tests.sh runs, never alone, so the log of the
+run it happens in is the only evidence (importlib >> ___grailRefusalPathTo___:)."
+(r includesString: 'gemdb.root') ifFalse: [
+  out nextPutAll: 'REFUSAL TRACE (no path found) r=', r printString; cr.
+  (SessionTemps current at: #GrailRefusalTrace otherwise: #()) do: [:l |
+    out nextPutAll: 'REFUSAL TRACE ', l; cr]].
 check value: 'explicit commit of a generator: SessionStateError, then abort, then commits'
   value: (r copyFrom: 1 to: 37) = 'refused:True:False/needs-abort/False/'.
 check value: 'the refusal names where the generator is held, in Python terms'

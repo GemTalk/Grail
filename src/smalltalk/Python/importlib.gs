@@ -415,7 +415,9 @@ ___installTransientGlobals___: aNames on: aModuleClass
 	Done by overriding the three dynamic-instVar accessors every module-global
 	read, store, delete and listing goes through, ON THIS CLASS ONLY, with the
 	names inlined: a module that declares nothing pays nothing.  A rebuild that
-	no longer declares any removes them."
+	no longer declares any removes them.  The readers also look in the spill
+	past the 255-global ceiling (module >> ___storeNewGlobal___:put:), whose
+	own readers they replace."
 
 	| lit |
 	"The PERSISTENT dictionary, not includesSelector:, which also sees this
@@ -432,8 +434,11 @@ ___installTransientGlobals___: aNames on: aModuleClass
 	lit := '#(' , lit , ' )'.
 	aModuleClass
 		compileMethod: 'dynamicInstVarAt: aSymbol
+	| v |
 	(' , lit , ' includesIdentical: aSymbol) ifTrue: [^ self ___transientGlobals___ at: aSymbol otherwise: nil].
-	^ super dynamicInstVarAt: aSymbol'
+	v := super dynamicInstVarAt: aSymbol.
+	v == nil ifFalse: [^ v].
+	^ self ___spilledGlobalAt___: aSymbol'
 			dictionaries: System myUserProfile symbolList
 			category: 'Grail-Transient Globals'
 			environmentId: 0.
@@ -450,7 +455,7 @@ ___installTransientGlobals___: aNames on: aModuleClass
 			environmentId: 0.
 	aModuleClass
 		compileMethod: 'dynamicInstanceVariables
-	^ super dynamicInstanceVariables , self ___transientGlobals___ keys asArray'
+	^ self ___storedGlobalNames___ , self ___transientGlobals___ keys asArray'
 			dictionaries: System myUserProfile symbolList
 			category: 'Grail-Transient Globals'
 			environmentId: 0
@@ -2291,7 +2296,13 @@ ___grailRefusalPathTo___: aRefused
 	the same reason -- every new object it would follow now reads as
 	committed."
 
-	| frontier parents seen |
+	"Each referrer it considers is also recorded, up to 200 lines, in
+	SessionTemps #GrailRefusalTrace: the gemdb phase of run_tests.sh found
+	no path in 2 of 5 full runs and always found it alone, and the record is
+	what the next miss will be read from."
+	| frontier parents seen dbg |
+	dbg := OrderedCollection new.
+	SessionTemps current at: #GrailRefusalTrace put: dbg.
 	frontier := Array with: aRefused.
 	parents := IdentityKeyValueDictionary new.
 	seen := IdentitySet with: aRefused.
@@ -2301,6 +2312,12 @@ ___grailRefusalPathTo___: aRefused
 		1 to: frontier size do: [:i | | child |
 			child := frontier at: i.
 			(refs at: i) do: [:ref |
+				dbg size < 200 ifTrue: [dbg add: (String new
+					addAll: 'L'; addAll: level printString; addAll: ' ';
+					addAll: child class name; addAll: '<-'; addAll: ref class name;
+					addAll: ' committed='; addAll: ref isCommitted printString;
+					addAll: ' seen='; addAll: (seen includes: ref) printString;
+					yourself)].
 				((seen includes: ref) not
 					and: [ref isSpecial not
 					and: [ref isCommitted]]) ifTrue: [

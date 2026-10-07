@@ -59,9 +59,11 @@ on: aModule
 	"ONE view per module per session -- CPython contract: ``locals() is
 	globals()'' at module scope, and ``mod.__dict__'' is the same object
 	on every read.  The memo lives in SessionTemps (session-local,
-	identity-keyed): the view is a transient convenience object and must
-	NOT become reachable from a committed canonical module, which a
-	dynamic-instVar cache on the module would do."
+	identity-keyed), not in a dynamic-instVar cache on the module, which
+	would write a committed module on a read.  A native module's committed
+	instance has one committed view for every session instead, so a view
+	committed in another module (its ``__builtins__'' stamp) is still this
+	session's."
 
 	| st cache key inst |
 	st := SessionTemps current.
@@ -77,7 +79,13 @@ on: aModule
 	key := aModule isNil ifTrue: [#'GrailNilModule'] ifFalse: [aModule].
 	inst := cache at: key otherwise: nil.
 	inst isNil ifTrue: [
-		inst := super on: aModule.
+		"A native module's committed instance has a committed view, the same
+		object in every session (NativeModule class >>
+		___installCommittedInstance___)."
+		((aModule isKindOf: NativeModule)
+			and: [aModule == aModule class ___committedInstance___])
+				ifTrue: [inst := aModule class ___committedDictView___].
+		inst isNil ifTrue: [inst := super on: aModule].
 		cache at: key put: inst].
 	^ inst
 %
