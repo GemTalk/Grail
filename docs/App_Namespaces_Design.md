@@ -164,6 +164,21 @@ import shop.models
   later import resolves, so `use_namespace` raises if a non-shared module has
   already been imported this session, and also if a different app is already
   set. `import gemdb` itself is shared, so it is always allowed first.
+- **In a top file, the first statement.** Whether `__main__` is session-local
+  or the app's is decided when its class is built, before the file's first
+  statement runs. So the call cannot switch the running `__main__`. Instead,
+  when it is the top file's first statement after a docstring and imports
+  (`ModuleAst >> ___leadsWithUseNamespace___`), `___grailSetApp___:` signals
+  `GrailMainRestart`. `runPath:` / `runModule:` (`importlib class >>
+  ___runTopFile___:`) then drop the session-local `__main__`, set the app and
+  run the file again, now as the app's `__main__`. The second time the imports
+  are already loaded and the call does nothing, so nothing that ran before it
+  is seen to run twice. The name may be computed (`sys.argv[1]`), since the
+  restart happens at run time. Anywhere else in a top file the call raises
+  `RuntimeError`: it could no longer give the file the app's globals, and
+  per-run globals in a program that asked for persistent ones would be a
+  silent wrong answer. Outside a top file (code evaluated in a shell or a
+  test) it only sets the app for later imports, as before.
 - **Also from the launcher.** `./grail --namespace shop app.py`, or a
   `GEMDB_NAMESPACE` environment variable, so a deployment can choose the app
   without editing the top file. The launcher sets it before running anything.
@@ -218,7 +233,11 @@ an edited top file is the normal edit loop.
 In an app, `__main__`'s globals are a **persistent dictionary** of the app,
 and they behave as persistent objects always have in GemStone:
 
-- **Each run starts with the globals of the last commit.**
+- **Each run starts with the globals of the last commit.** That includes a
+  commit the program makes from its own body, which is the only place a
+  Python program can commit. So an app's `__main__` is recorded in the app's
+  registry *before* its body runs (every other module is recorded after its
+  body completes), and a body that fails takes the entry back.
 - **An assignment is a write**, visible to this session at once and to other
   sessions after a commit.
 - **A failed commit keeps the session's changes**, so the program can inspect
