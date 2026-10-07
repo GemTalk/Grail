@@ -40,6 +40,10 @@ Storage:
     and resolved through Smalltalk symbol-list lookup at compile time.
     The compile pipeline in `importlib loadModuleFromPath:` depends on
     this for variable resolution.
+  * Module-level Python globals are GemStone dynamic instVars, which cap
+    at 255 per object.  The 256th and later go to an unbounded holder in
+    one of them, and that module''s class gets readers that look there
+    (see ___storeNewGlobal___:put:).
   * In contrast, builtins (abs, len, type, ...) are dispatched via
     real env-1 methods on the `builtins` class — see
     docs/Rewrite_Dispatch_Model.md. The dictionary-style storage here
@@ -246,19 +250,21 @@ ___installSessionGlobalReaders___
 	module class >> ___installSessionGlobalReaders___."
 	| reg rec v |
 	reg := SessionTemps current at: #''GrailSessionModuleGlobals'' otherwise: nil.
-	reg == nil ifTrue: [^ super dynamicInstVarAt: aSymbol].
-	rec := reg at: self otherwise: nil.
-	rec == nil ifTrue: [^ super dynamicInstVarAt: aSymbol].
-	v := (rec at: 1) at: aSymbol otherwise: nil.
+	reg == nil ifFalse: [
+		rec := reg at: self otherwise: nil.
+		rec == nil ifFalse: [
+			v := (rec at: 1) at: aSymbol otherwise: nil.
+			v == nil ifFalse: [^ v].
+			((rec at: 2) includes: aSymbol) ifTrue: [^ nil]]].
+	v := super dynamicInstVarAt: aSymbol.
 	v == nil ifFalse: [^ v].
-	((rec at: 2) includes: aSymbol) ifTrue: [^ nil].
-	^ super dynamicInstVarAt: aSymbol'
+	^ self ___spilledGlobalAt___: aSymbol'
 		category: 'Grail-Session Globals' scope: nil environmentId: 0.
 	self @env1:___compileSessionMethod: 'dynamicInstanceVariables
 	"The module''s global names as this session sees them: the stored ones
 	less those this session deleted, then the ones only this session set."
 	| names rec |
-	names := super dynamicInstanceVariables.
+	names := self ___storedGlobalNames___.
 	rec := self ___sessionGlobals___.
 	rec == nil ifTrue: [^ names].
 	names := names reject: [:n | (rec at: 2) includes: n].
@@ -353,9 +359,11 @@ ___globalStoreIsSessionLocal___
 		ifTrue: [^ false].
 	self ___globalsAreSessionLocal___ ifFalse: [^ false].
 	"A class with its own persistent readers (D12's __transient__ overrides)
-	cannot take the session readers, so its stores stay where they were."
+	cannot take the session readers, so its stores stay where they were.  Its
+	store override is the mark: the spill's readers
+	(___installSpilledGlobalReaders___) override no store."
 	^ ((self class persistentMethodDictForEnv: 0) ifNil: [true] ifNotNil: [:d |
-		(d includesKey: #'dynamicInstVarAt:') not])
+		(d includesKey: #'dynamicInstVarAt:put:') not])
 %
 
 category: 'Grail-Session Globals'
@@ -411,10 +419,158 @@ dynamicInstVarAt: aSymbol put: aValue
 	| current |
 	self ___globalStoreIsSessionLocal___
 		ifTrue: [^ self ___sessionGlobalAt___: aSymbol put: aValue].
-	(aValue == nil or: [aValue == _remoteNil]) ifTrue: [^ super dynamicInstVarAt: aSymbol put: aValue].
+	(aValue == nil or: [aValue == _remoteNil]) ifTrue: [
+		self ___spilledGlobalRemove___: aSymbol.
+		^ super dynamicInstVarAt: aSymbol put: aValue].
 	current := super dynamicInstVarAt: aSymbol.
+	current == nil ifTrue: [^ self ___storeNewGlobal___: aSymbol put: aValue].
 	(current == aValue or: [self ___isSameImmutable___: current as: aValue]) ifTrue: [^ aValue].
 	^ super dynamicInstVarAt: aSymbol put: aValue
+%
+
+category: 'Grail-Spilled Globals'
+method: module
+___storeNewGlobal___: aSymbol put: aValue
+	"Store a global the module's own dynamic instVars do not hold: a new name,
+	or one already in the spill.
+
+	GemStone caps dynamic instVars at 255 per object (ImproperOperation 2484),
+	and CPython has no limit on a module's globals.  3.14.8's test_typing goes
+	past it at runtime, and pydantic.v1 did at import.  So the 256th name and
+	every one after it goes to an unbounded, insertion-ordered holder instead
+	(___spillGlobal___:put:), as class attributes already do
+	(GrailClassAttrHolder).  Once a holder exists every new name goes there, so
+	the module's names stay in first-store order: the dynamic instVars first,
+	then the holder's."
+
+	| h cur |
+	h := super dynamicInstVarAt: #'___grailSpilledGlobals___'.
+	h == nil ifFalse: [
+		cur := h dynamicInstVarAt: aSymbol.
+		(cur ~~ nil and: [cur == aValue or: [self ___isSameImmutable___: cur as: aValue]])
+			ifTrue: [^ aValue].
+		"A rebuild can have removed the readers (importlib class >>
+		___installTransientGlobals___:on:); the holder is no use without them."
+		self class ___installSpilledGlobalReaders___.
+		^ h dynamicInstVarAt: aSymbol put: aValue].
+	^ [super dynamicInstVarAt: aSymbol put: aValue]
+		on: ImproperOperation
+		do: [:ex |
+			(ex number == 2484 and: [self class ~~ module])
+				ifFalse: [ex pass].
+			ex return: (self ___spillGlobal___: aSymbol put: aValue)]
+%
+
+category: 'Grail-Spilled Globals'
+method: module
+___spillGlobal___: aSymbol put: aValue
+	"Start this module's spill: the store of aSymbol has just been refused for
+	want of a 256th dynamic instVar.  The holder needs a slot of its own, so the
+	most recently stored global moves into it with aSymbol.  The kernel keeps
+	dynamic instVars in first-store order, so the names still read back in the
+	order they were stored.
+
+	The readers go in first: from then on every read of this module's globals
+	looks in the holder when the instVar is absent."
+
+	| last lastVal h |
+	self class ___installSpilledGlobalReaders___.
+	last := super dynamicInstanceVariables last.
+	lastVal := super dynamicInstVarAt: last.
+	h := GrailClassAttrHolder new.
+	h dynamicInstVarAt: last put: lastVal.
+	h dynamicInstVarAt: aSymbol put: aValue.
+	super dynamicInstVarAt: last put: _remoteNil.
+	super dynamicInstVarAt: #'___grailSpilledGlobals___' put: h.
+	^ aValue
+%
+
+category: 'Grail-Spilled Globals'
+method: module
+___spilledGlobalAt___: aSymbol
+	"The value of a global past the dynamic-instVar ceiling, or nil."
+
+	| h |
+	h := super dynamicInstVarAt: #'___grailSpilledGlobals___'.
+	h == nil ifTrue: [^ nil].
+	^ h dynamicInstVarAt: aSymbol
+%
+
+category: 'Grail-Spilled Globals'
+method: module
+___spilledGlobalRemove___: aSymbol
+	| h |
+	h := super dynamicInstVarAt: #'___grailSpilledGlobals___'.
+	h == nil ifFalse: [h removeDynamicInstVar: aSymbol]
+%
+
+category: 'Grail-Spilled Globals'
+method: module
+___storedGlobalNames___
+	"The names of the globals the module itself holds: its dynamic instVars,
+	then the spill's, without the spill holder's own slot."
+
+	| names h |
+	names := super dynamicInstanceVariables.
+	h := super dynamicInstVarAt: #'___grailSpilledGlobals___'.
+	h == nil ifTrue: [^ names].
+	^ (names reject: [:n | n == #'___grailSpilledGlobals___']) , h dynamicInstanceVariables
+%
+
+category: 'Grail-Spilled Globals'
+method: module
+___storedGlobalPairs___
+	"dynamicInstVarPairs over the module's own globals and its spill: a flat
+	Array alternating name and value."
+
+	| pairs h out |
+	pairs := super dynamicInstVarPairs.
+	h := super dynamicInstVarAt: #'___grailSpilledGlobals___'.
+	h == nil ifTrue: [^ pairs].
+	out := OrderedCollection new.
+	1 to: pairs size by: 2 do: [:i |
+		(pairs at: i) == #'___grailSpilledGlobals___' ifFalse: [
+			out add: (pairs at: i); add: (pairs at: i + 1)]].
+	out addAll: h dynamicInstVarPairs.
+	^ out asArray
+%
+
+category: 'Grail-Spilled Globals'
+classmethod: module
+___installSpilledGlobalReaders___
+	"Make reads and listings of this module class's globals see the spill
+	(module >> ___storeNewGlobal___:put:), by overriding the three readers ON
+	THIS CLASS ONLY.  Reads stay the bare primitive in every module that never
+	spills: a persistent override on ``module'' would make every global read in
+	every module a Smalltalk send, and the RecursionError conversion runs in a
+	reserve of about 343 frames (module class >> ___installSessionGlobalReaders___).
+
+	Persistent, not session methods: the spill commits with the module, and so
+	must the readers that find it.  Never over a class's own readers: the
+	``__transient__'' ones (importlib class >> ___installTransientGlobals___:on:)
+	and this session's (___installSessionGlobalReaders___) already look in the
+	spill."
+
+	| d |
+	self == module ifTrue: [^ self].
+	d := self persistentMethodDictForEnv: 0.
+	{ #'dynamicInstVarAt:' -> 'dynamicInstVarAt: aSymbol
+	"A module global, from the spill when the module''s own instVars lack it.
+	Installed by module class >> ___installSpilledGlobalReaders___."
+	| v |
+	v := super dynamicInstVarAt: aSymbol.
+	v == nil ifFalse: [^ v].
+	^ self ___spilledGlobalAt___: aSymbol'.
+	  #'dynamicInstanceVariables' -> 'dynamicInstanceVariables
+	^ self ___storedGlobalNames___'.
+	  #'dynamicInstVarPairs' -> 'dynamicInstVarPairs
+	^ self ___storedGlobalPairs___' } do: [:each |
+		(d ~~ nil and: [d includesKey: each key]) ifFalse: [
+			self
+				compileMethod: each value
+				dictionaries: System myUserProfile symbolList
+				category: 'Grail-Spilled Globals'
+				environmentId: 0]]
 %
 
 category: 'Grail-Phase A Dynamic InstVars'
