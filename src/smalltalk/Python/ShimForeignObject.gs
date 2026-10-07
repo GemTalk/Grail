@@ -168,6 +168,35 @@ ___pyAttrLoad___: aSym
 
 category: 'Grail-Python Protocol'
 method: ShimForeignObject
+___pyMetaclass___
+	"type(proxy) -- the object's C type (Py_TYPE), as a proxy, not the Smalltalk
+	class ShimForeignObject.  Proxies are canonical per pointer, so
+	``type(PydanticUndefined) is PydanticUndefinedType'' holds, as in CPython.
+	Falls back to the Smalltalk answer if C cannot say."
+
+	^ [self ___pyAttrLoad___: #'__class__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: super ___pyMetaclass___]
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+___grailForeignTypeCheck___: aCandidate subclass: aBoolean
+	"isinstance(aCandidate, self) -- or issubclass(aCandidate, self) when
+	aBoolean -- for a proxied C-extension TYPE, answered in C by
+	PyObject_TypeCheck / PyType_IsSubtype.  A Grail object is never an instance
+	(or subclass) of a PyO3 class, so only another proxy is passed through;
+	everything else is asked as 0.  nil when the receiver is not a type."
+
+	| ptr |
+	ptr := (aCandidate @env0:isKindOf: ShimForeignObject)
+		ifTrue: [aCandidate @env0:cPtr]
+		ifFalse: [0].
+	^ [(CPythonShim @env0:current) @env0:foreignTypeCheck: ptr type: cPtr subclass: aBoolean]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
 value: positional value: kwargs
 	"Calling a wheel's own object -- a type (SchemaValidator(schema)), a
 	builtin function, a bound method answered by ___pyAttrLoad___: -- goes

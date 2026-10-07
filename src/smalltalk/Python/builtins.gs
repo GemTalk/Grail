@@ -5066,6 +5066,17 @@ ___isInstanceSingle___: anObject of: aClass
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
 	UNCATCHABLE ArgumentTypeError (killed test_functools)."
+	"A TYPE DEFINED IN A C EXTENSION -- a PyO3 class such as pydantic_core's
+	PydanticUndefinedType -- reaches Grail as a proxy, not a Behavior, and is
+	answered in C (ShimForeignObject >> ___grailForeignTypeCheck___:subclass:).
+	fastapi's jsonable_encoder asks ``isinstance(obj, PydanticUndefinedType)''
+	of every value it encodes.  Probed by selector: ShimForeignObject is filed
+	after this file.  nil means the proxy is not a type, which falls through to
+	the TypeError below as before."
+	((aClass isKindOf: Behavior) not
+		and: [aClass ___respondsTo___: #'___grailForeignTypeCheck___:subclass:']) ifTrue: [
+			(aClass ___grailForeignTypeCheck___: anObject subclass: false)
+				@env0:ifNotNil: [:r | ^ r]].
 	(aClass isKindOf: Behavior) ifFalse: [
 		"A non-class classinfo may still supply __instancecheck__ on its own
 		type -- CPython looks the hook up on TYPE(cls) without first requiring
@@ -5620,6 +5631,11 @@ ___isSubclass___: aClass of: aClassOrTuple depth: aDepth
 	FIRST argument before asking, which is what lets
 	``issubclass(typing.List, typing.List | typing.Tuple)'' work with a
 	non-class on both sides.  See ___nonClassCheckHook___."
+	"A C-extension TYPE as the target -- see ___isInstanceSingle___:of:."
+	((target isKindOf: Behavior) not
+		and: [target ___respondsTo___: #'___grailForeignTypeCheck___:subclass:']) ifTrue: [
+			(target ___grailForeignTypeCheck___: sub subclass: true)
+				@env0:ifNotNil: [:r | ^ r]].
 	(target isKindOf: Behavior) ifFalse: [ | hook |
 		hook := target ___nonClassCheckHook___: #'__subclasscheck__'.
 		hook @env0:notNil ifTrue: [

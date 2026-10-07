@@ -40,6 +40,12 @@ Phase 2 -- general runtime bugs:
    ``__new__(1)`` -- an uncatchable error -- and skipped ``__init__`` on
    ``T()``.  dataclasses makes every ``slots=True`` class this way.
 
+Phase 3:
+
+10. ``json.dumps`` walked a dict in HASH order -- FastAPI's 422 body came out
+    ``msg, input, type, loc`` for ``type, loc, msg, input``.  (The shim walls of
+    Phase 3 are in CPythonShimTestCase: they need a C extension's objects.)
+
 Every expectation here was measured against CPython 3.14.
 """
 
@@ -445,6 +451,20 @@ _T2 = type('_T2', (object,), {'__slots__': ('a',), '__init__': _init})
 check('type_made_class_init', (_T1(1).a, _T1(a=2).a, _T2(3).a), (1, 2, 3))
 check('type_made_class_no_init_refuses_args',
       _raises(lambda: type('_T3', (), {})(1), TypeError), True)
+
+# --- 10. json.dumps keeps a dict's insertion order ----------------------------
+
+import json                                                     # noqa: E402
+
+_ordered = {'type': 'missing', 'loc': ['body', 'price'], 'msg': 'Field required',
+            'input': {'name': 'x', 'b': 1, 'a': 2}}
+check('json_dumps_insertion_order', json.dumps(_ordered),
+      '{"type": "missing", "loc": ["body", "price"], "msg": "Field required", '
+      '"input": {"name": "x", "b": 1, "a": 2}}')
+check('json_dumps_sort_keys', json.dumps({'b': 1, 'a': 2, 'c': {'z': 0, 'y': 1}}, sort_keys=True),
+      '{"a": 2, "b": 1, "c": {"y": 1, "z": 0}}')
+check('json_dumps_indent_order', json.dumps({'z': 1, 'a': 2}, indent=1),
+      '{\n "z": 1,\n "a": 2\n}')
 
 if __name__ == '__main__':
     for _name in sorted(RESULTS):

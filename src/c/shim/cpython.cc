@@ -1244,13 +1244,39 @@ extern "C" double PyFloat_AsDouble(PyObject *obj) {
         return GCI_OOP_IS_SMALL_INT(fo) ? (double)GciOopToI64(fo) : GciOopToFlt(fo);
     }
     OopType oop = pyobj_oop(obj);
-    /* CPython accepts ints (and __index__-able wrappers) here too. */
+    /* The cheap cases inline: a SmallInteger, a SmallDouble, a heap Float,
+       and bool (which is not a SmallInteger in Grail). */
     if (GCI_OOP_IS_SMALL_INT(oop))
         return (double)GciOopToI64(oop);
-    if (Py_TYPE(obj) != NULL &&
-        (Py_TYPE(obj)->tp_flags & Py_TPFLAGS_LONG_SUBCLASS))
-        return (double)oopToLongWithIndex(oop);
-    return GciOopToFlt(oop);
+    if (GCI_OOP_IS_SMALL_DOUBLE(oop))
+        return GCI_OOP_TO_SMALL_DOUBLE(oop);
+    if (oop == OOP_TRUE) return 1.0;
+    if (oop == OOP_FALSE) return 0.0;
+    if (GciIsKindOfClass(oop, OOP_CLASS_BINARY_FLOAT))
+        return GciOopToFlt(oop);
+    /* Everything else is CPython's nb_float / nb_index protocol, answered in
+       Smalltalk (CPythonShim>>PyFloat_AsDouble:): an int beyond 64 bits --
+       this used GciOopToI64 and failed ``not representable'' -- and any
+       object with __float__ or __index__.  GciOopToFlt on those raised
+       GemStone's ``The given object is not a float'', which pydantic hit
+       building FastAPI's OpenAPI document. */
+    OopType f = GciPerform(server, "PyFloat_AsDouble:", &oop, 1);
+    if (check_gci_error()) return -1.0;
+    /* A Symbol is the failure answer (the server must not raise inside a
+       user action): #overflow or #type. */
+    if (GciIsKindOfClass(f, OOP_CLASS_SYMBOL)) {
+        char tag[16];
+        fetch_string(f, tag, sizeof(tag));
+        if (strcmp(tag, "overflow") == 0)
+            PyErr_SetString(PyExc_OverflowError, "int too large to convert to float");
+        else
+            PyErr_Format(PyExc_TypeError, "must be real number, not %s",
+                         (Py_TYPE(obj) && Py_TYPE(obj)->tp_name) ? Py_TYPE(obj)->tp_name : "object");
+        return -1.0;
+    }
+    if (GCI_OOP_IS_SMALL_DOUBLE(f)) return GCI_OOP_TO_SMALL_DOUBLE(f);
+    if (GCI_OOP_IS_SMALL_INT(f)) return (double)GciOopToI64(f);
+    return GciOopToFlt(f);
 }
 
 extern "C" int PyFloat_Check(PyObject *obj) {
@@ -5174,6 +5200,35 @@ static OopType shimForeignStr(OopType ptrOop, OopType reprOop)
     return res;
 }
 
+/* isinstance() / issubclass() against a wheel's own TYPE, asked by Grail
+   (ShimForeignObject>>___foreignTypeCheck___:).  typeOop is the proxied type's
+   pointer; objOop is the candidate's pointer, or 0 for a Grail object, which
+   is never an instance of a PyO3 class.  With wantSubclass the candidate is
+   itself a type and the question is PyType_IsSubtype.  Answers nil when the
+   pointer is not a type at all -- the caller then raises CPython's
+   ``arg 2 must be a type'' TypeError -- else true / false.  fastapi's
+   jsonable_encoder asks ``isinstance(obj, PydanticUndefinedType)'' of every
+   value it encodes. */
+static OopType shimForeignTypeCheck(OopType objOop, OopType typeOop, OopType wantSubclassOop)
+{
+    PyObject *t = (PyObject *)(intptr_t)GciOopToI64(typeOop);
+    if (!plausible_pyobj(t) || !plausible_pyobj(t->ob_type) || !is_foreign_type(t))
+        return OOP_NIL;
+    int64_t ptr = GciOopToI64(objOop);
+    if (ptr == 0) return OOP_FALSE;
+    PyObject *o = (PyObject *)(intptr_t)ptr;
+    if (!plausible_pyobj(o) || !plausible_pyobj(o->ob_type)) return OOP_FALSE;
+    PyTypeObject *sub;
+    if (wantSubclassOop == OOP_TRUE) {
+        if (!is_foreign_type(o)) return OOP_FALSE;
+        sub = (PyTypeObject *)o;
+    } else {
+        sub = o->ob_type;
+    }
+    if (sub == (PyTypeObject *)t) return OOP_TRUE;
+    return PyType_IsSubtype(sub, (PyTypeObject *)t) ? OOP_TRUE : OOP_FALSE;
+}
+
 /* tp_new of a Grail class's type mirror: ``cls.__new__(cls)'' in Grail
    (CPythonShim>>PyType_GenericNew:).  pydantic_core builds a model
    instance this way when the model has no custom __init__ -- it reads the
@@ -6748,6 +6803,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
     GCI_DECLARE_ACTION("shimForeignStr", shimForeignStr, 2);
+    GCI_DECLARE_ACTION("shimForeignTypeCheck", shimForeignTypeCheck, 3);
 }
 
 /* Drop everything that points at the PREVIOUS session's Grail objects:
