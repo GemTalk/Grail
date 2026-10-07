@@ -396,8 +396,8 @@ ___guardCallback: aBlock
 	existing path, which GciPerform traps.  nil is the block's answer on error;
 	C does not use it, the flag having told it to fail."
 
-	^ aBlock on: BaseException do: [:ex |
-		SessionTemps current at: #'GrailShimCallbackException' put: ex.
+	^ aBlock on: BaseException ___catchAll___ do: [:ex |
+		SessionTemps current at: #'GrailShimCallbackException' put: (BaseException ___payloadOf___: ex).
 		(typeAddresses at: #'___cbErrorFlag___' otherwise: nil)
 			ifNotNil: [:flag | flag int32At: 0 put: 1].
 		ex return: nil]
