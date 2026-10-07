@@ -5889,7 +5889,7 @@ ___pythonBuiltinTypeName___
 	(tuple/set/frozenset/complex/bytearray/NoneType) are class-named with
 	their Python name already, and non-type classes (BoundMethod, ExecBlock,
 	...) plus user Python classes MUST keep their own name (the inspect
-	stubs and PythonClass>>__name__ depend on it).  Keyed by Smalltalk class
+	stubs depend on it).  Keyed by Smalltalk class
 	NAME so no class-global resolution is needed and concrete subclass
 	variants (SmallInteger, LargePositiveInteger, ...) are covered
 	explicitly."

@@ -436,6 +436,7 @@ run
 	at: #'PyDate' put: nil;
 	at: #'PyDateTime' put: nil;
 	at: #'PyFrame' put: nil;
+	at: #'PyGenericAlias' put: nil;
 	at: #'PyHostProcess' put: nil;
 	at: #'PyInstanceDict' put: nil;
 	at: #'PyInstanceDictMapping' put: nil;
@@ -450,7 +451,6 @@ run
 	at: #'PySysModules' put: nil;
 	at: #'PythonAsyncGenerator' put: nil;
 	at: #'PythonBreak' put: nil;
-	at: #'PythonClass' put: nil;
 	at: #'PythonContinue' put: nil;
 	at: #'PythonCoroutine' put: nil;
 	at: #'PythonGenerator' put: nil;
@@ -627,7 +627,6 @@ run
 	at: #'PatternAst' put: nil;
 	at: #'PowAst' put: nil;
 	at: #'PrettyWriteStream' put: nil;
-	at: #'PyGenericAlias' put: nil;
 	at: #'PyMethodIRBuilder' put: nil;
 	at: #'PythonParser' put: nil;
 	at: #'PythonToken' put: nil;
