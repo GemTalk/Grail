@@ -552,10 +552,14 @@ every namespace uses, and anything else, a venv's packages included, belongs to
 the namespace. So a program's own `json.py` and the stdlib's `json` can both be
 deployed.
 
-`use_namespace` comes before the program's own imports. It raises
-`RuntimeError` once a module that would belong to the namespace is already
-imported (naming it), or when the session is already in a different
-namespace; the same name again does nothing. A new namespace is created in the
+`use_namespace` comes before the program's own imports. In a top file it must
+be the first statement after the docstring and imports, and the file then runs
+again from the top in the namespace, so that its globals are the namespace's
+(below); the imports before it are found already loaded and the call does
+nothing the second time. Anywhere else in a top file it raises `RuntimeError`.
+It also raises `RuntimeError` once a module that would belong to the namespace
+is already imported (naming it), or when the session is already in a
+different namespace; the same name again does nothing. A new namespace is created in the
 current transaction and kept by the next commit, as an import is.
 `gemdb.namespace()` answers the current namespace's name, or `None`.
 `./grail --namespace shop shop.py` and `GEMDB_NAMESPACE=shop` choose the

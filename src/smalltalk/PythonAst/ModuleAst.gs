@@ -1119,6 +1119,34 @@ ___hasFutureAnnotations___
 
 category: 'Grail-code generation'
 method: ModuleAst
+___leadsWithUseNamespace___
+	"True when the module's first statement, after an optional docstring and
+	any imports, is a bare call of ``use_namespace'' -- ``gemdb.use_namespace(
+	name)'' or ``use_namespace(name)''.  For a top file this is what lets the
+	call restart it in the namespace (importlib class >> ___runTopFile___:):
+	the statements before it only bind modules, which the second run finds
+	already loaded, so nothing that ran before the call can be seen to run
+	twice.  The call's target is not resolved here; the restart happens only
+	when gemdb's use_namespace is what runs."
+
+	| stmts i call fn |
+	stmts := body body.
+	i := self ___docString___ isNil ifTrue: [1] ifFalse: [2].
+	[i <= stmts size
+		and: [((stmts at: i) isKindOf: ImportAst) or: [(stmts at: i) isKindOf: ImportFromAst]]]
+			whileTrue: [i := i + 1].
+	i <= stmts size ifFalse: [^ false].
+	((stmts at: i) isKindOf: ExprAst) ifFalse: [^ false].
+	call := (stmts at: i) value.
+	(call isKindOf: CallAst) ifFalse: [^ false].
+	fn := call function.
+	(fn isKindOf: AttributeAst) ifTrue: [^ fn attr asString = 'use_namespace'].
+	(fn isKindOf: NameAst) ifTrue: [^ fn id asString = 'use_namespace'].
+	^ false
+%
+
+category: 'Grail-code generation'
+method: ModuleAst
 ___moduleAnnotationStatements___
 	"The module's own annotated NAMES, in order -- ``x: int = 1'' at top level.
 
