@@ -2291,7 +2291,13 @@ ___grailRefusalPathTo___: aRefused
 	the same reason -- every new object it would follow now reads as
 	committed."
 
-	| frontier parents seen |
+	"Each referrer it considers is also recorded, up to 200 lines, in
+	SessionTemps #GrailRefusalTrace: the gemdb phase of run_tests.sh found
+	no path in 2 of 5 full runs and always found it alone, and the record is
+	what the next miss will be read from."
+	| frontier parents seen dbg |
+	dbg := OrderedCollection new.
+	SessionTemps current at: #GrailRefusalTrace put: dbg.
 	frontier := Array with: aRefused.
 	parents := IdentityKeyValueDictionary new.
 	seen := IdentitySet with: aRefused.
@@ -2301,6 +2307,12 @@ ___grailRefusalPathTo___: aRefused
 		1 to: frontier size do: [:i | | child |
 			child := frontier at: i.
 			(refs at: i) do: [:ref |
+				dbg size < 200 ifTrue: [dbg add: (String new
+					addAll: 'L'; addAll: level printString; addAll: ' ';
+					addAll: child class name; addAll: '<-'; addAll: ref class name;
+					addAll: ' committed='; addAll: ref isCommitted printString;
+					addAll: ' seen='; addAll: (seen includes: ref) printString;
+					yourself)].
 				((seen includes: ref) not
 					and: [ref isSpecial not
 					and: [ref isCommitted]]) ifTrue: [
