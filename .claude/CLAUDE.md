@@ -67,6 +67,26 @@ fails with that instruction, instead of building the C shim and then dying on
 topaz's bare "userId/password is invalid". CI is unaffected — it logs in as
 `DataCurator`, which every extent has.
 
+## Adding a file to `install.gs`: put it in its sorted place
+
+Most of `src/smalltalk/install.gs`'s lists are **kept sorted**, so that PRs
+open at the same time insert at different places. A list kept in insertion
+order makes every one of them add its line at the same anchor, and then every
+pair conflicts as soon as one merges. The sort was done once (86933fd2) and
+drifted back because nothing enforced it; now CI does.
+
+* **Sorted (case-insensitive):** every forward-reference block in Step 2
+  (`at: #'Name' put: nil;`), by name; and the Step 6 test-class inputs between
+  `! >>> SORTED TEST INPUTS` and `! <<< END SORTED TEST INPUTS`, by FILE name.
+  Add a new entry at its alphabetical place, never at the end.
+* **Not sorted:** the `Python/` and `PythonAst/` inputs (Steps 4 and 5). They
+  are in dependency order -- superclasses first, `None` bound before any file
+  that mentions it -- and the comments say why each one is where it is.
+* A test class that subclasses ANOTHER test class goes in the pinned head above
+  the markers (as `CPythonTestCase` does), not inside the sorted run.
+* `python3 scripts/sort_install_gs.py --fix` sorts everything; `--check` is the
+  CI step in the `scripts` job and fails a PR that adds out of order.
+
 ## How much CPython suite to run before a PR
 
 Two tiers, chosen by WHAT THE CHANGE TOUCHES, not by how big it feels. The full

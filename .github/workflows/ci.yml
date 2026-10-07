@@ -116,6 +116,13 @@ jobs:
       - name: archive fixtures agree with CPython
         run: python3 tests/scripts/make_archive_fixtures.py --check
 
+      # install.gs's forward-reference blocks and test-class inputs are kept
+      # sorted so concurrent PRs insert at different places rather than all at
+      # the end of the list, where every pair of them conflicts.  Fix with
+      # python3 scripts/sort_install_gs.py --fix.
+      - name: install.gs lists are sorted
+        run: python3 scripts/sort_install_gs.py --check
+
   test-main:
     name: test-main ${{ matrix.arm }} (${{ matrix.name }}, ${{ matrix.shards }})
     runs-on: ubuntu-22.04
