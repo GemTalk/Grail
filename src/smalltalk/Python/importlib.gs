@@ -4034,6 +4034,20 @@ ___forgetBodyClassAttrsOf___: aModuleName
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___forgetFunctionMetaOf___: aModuleName
+	"Drop aModuleName's committed signature and annotation record before its
+	body runs again (module >> ___recordFunctionMeta___:name:value:), so a
+	function the new source no longer defines leaves nothing behind.  PEEKS
+	the registry."
+
+	| reg |
+	reg := self ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___markBodyClassAttrsReplayed___: aModuleName
 	"This session is running aModuleName's body itself, so its stores reach the
 	overlay first hand; a later replay must not add the committed record's
@@ -8378,6 +8392,7 @@ ___pushInitializingModule___: aName
 	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
 	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
 	self @env0:___forgetBodyClassAttrsOf___: aName @env0:asString.
+	self @env0:___forgetFunctionMetaOf___: aName @env0:asString.
 	self @env0:___markBodyClassAttrsReplayed___: aName @env0:asString.
 	module @env0:___forgetSessionGlobalsOf___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString

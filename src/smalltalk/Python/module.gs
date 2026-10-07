@@ -2249,6 +2249,7 @@ ___setFunctionSignature___: aName spec: aSpec
 		inner := KeyValueDictionary new.
 		tbl at: self put: inner].
 	inner at: aName asString put: aSpec.
+	self ___recordFunctionMeta___: #signatures name: aName value: aSpec.
 	^ self
 %
 
@@ -2315,8 +2316,9 @@ ___functionSignatureFor___: aName
 	| tbl inner |
 	tbl := module ___functionSignatureTable___.
 	inner := tbl at: self otherwise: nil.
-	inner isNil ifTrue: [^ nil].
-	^ inner at: aName asString otherwise: nil
+	inner isNil ifTrue: [^ self ___recordedFunctionMeta___: #signatures name: aName].
+	^ (inner at: aName asString otherwise: nil)
+		ifNil: [self ___recordedFunctionMeta___: #signatures name: aName]
 %
 
 category: 'Grail-Signatures'
@@ -2355,6 +2357,7 @@ ___setFunctionAnnotations___: aName annotate: aBlock
 		inner := KeyValueDictionary new.
 		tbl at: self put: inner].
 	inner at: aName asString put: aBlock.
+	self ___recordFunctionMeta___: #annotations name: aName value: aBlock.
 	^ self
 %
 
@@ -2367,8 +2370,70 @@ ___functionAnnotateFor___: aName
 	| tbl inner |
 	tbl := module ___functionAnnotationsTable___.
 	inner := tbl at: self otherwise: nil.
-	inner isNil ifTrue: [^ nil].
-	^ inner at: aName asString otherwise: nil
+	inner isNil ifTrue: [^ self ___recordedFunctionMeta___: #annotations name: aName].
+	^ (inner at: aName asString otherwise: nil)
+		ifNil: [self ___recordedFunctionMeta___: #annotations name: aName]
+%
+
+category: 'Grail-Signatures'
+method: module
+___recordFunctionMeta___: aKind name: aName value: aValue
+	"Record, COMMITTED, what this module's body declared for its top-level
+	function aName: its signature spec (aKind #signatures) or its
+	``__annotate__'' block (#annotations).
+
+	The session tables above hold them for the session that ran the body.  A
+	session that BINDS the deployed module does not run it, so it had neither:
+	``inspect.signature(m.f)'' answered ``()'' and ``m.f.__annotations__'' {}
+	(test_traceback's test_signatures failed locally once run_tests.sh had
+	deployed traceback).  This is docs/Persistent_Modules_and_Classes.md §4.3's
+	rule: what the build writes and is not on the class needs a committed
+	record.  Same shape as importlib >> ___recordBodyClassAttr___:name:value:
+	-- an RcKeyValueDictionary keyed by the module's name, in the module's
+	namespace, dropped when the body runs again
+	(importlib >> ___forgetFunctionMetaOf___:).
+
+	Only from the module's own body, and never for a session-local module
+	(``__main__''), which nothing binds.  A spec is strings and integers --
+	defaults are kept as source text -- and an annotate block is code over
+	the module, so both commit with the deployment."
+
+	| nm reg rec kind |
+	self ___bodyIsRunning___ ifFalse: [^ self].
+	nm := self at: #'__name__' otherwise: nil.
+	nm isNil ifTrue: [^ self].
+	nm := nm asString.
+	(importlib ___isSessionLocalModule___: nm) ifTrue: [^ self].
+	reg := importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' put: reg].
+	rec := reg at: nm otherwise: nil.
+	rec isNil ifTrue: [
+		rec := KeyValueDictionary new.
+		reg at: nm put: rec].
+	kind := rec at: aKind otherwise: nil.
+	kind isNil ifTrue: [
+		kind := KeyValueDictionary new.
+		rec at: aKind put: kind].
+	kind at: aName asString put: aValue
+%
+
+category: 'Grail-Signatures'
+method: module
+___recordedFunctionMeta___: aKind name: aName
+	"The committed record of ___recordFunctionMeta___:name:value:, or nil."
+
+	| nm reg rec kind |
+	reg := importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
+	reg isNil ifTrue: [^ nil].
+	nm := self at: #'__name__' otherwise: nil.
+	nm isNil ifTrue: [^ nil].
+	rec := reg at: nm asString otherwise: nil.
+	rec isNil ifTrue: [^ nil].
+	kind := rec at: aKind otherwise: nil.
+	kind isNil ifTrue: [^ nil].
+	^ kind at: aName asString otherwise: nil
 %
 
 category: 'Grail-Annotations'
