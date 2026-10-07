@@ -1412,6 +1412,7 @@ run
 	at: #'SurrogatepassDecodeTestCase' put: nil;
 	at: #'SurrogateStrTestCase' put: nil;
 	at: #'SymbolStrHashEqTestCase' put: nil;
+	at: #'SyntaxErrorMessagesTestCase' put: nil;
 	at: #'SyntaxErrorTestCase' put: nil;
 	at: #'SyntaxWarningTestCase' put: nil;
 	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
@@ -2911,6 +2912,7 @@ input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
 input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
 input src/smalltalk/PythonTests/SurrogateStrTestCase.gs
 input src/smalltalk/PythonTests/SymbolStrHashEqTestCase.gs
+input src/smalltalk/PythonTests/SyntaxErrorMessagesTestCase.gs
 input src/smalltalk/PythonTests/SyntaxErrorTestCase.gs
 input src/smalltalk/PythonTests/SyntaxWarningTestCase.gs
 input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs

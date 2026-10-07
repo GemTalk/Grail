@@ -1046,7 +1046,12 @@ ___runClosureBody___: aCode globals: globalsDict freevars: freevars cells: cells
 	1 @env0:to: freevars @env0:size do: [:i |
 		ns @env1:__setitem__: (freevars @env0:at: i) @env0:asString
 			_: ((cells @env0:at: i) @env1:___pyAttrLoad___: #'cell_contents')].
-	self _exec: { src. globalsDict. ns } kw: nil.
+	"The text is a FUNCTION body: its return'' and yield'' are legal,
+	which ModuleAst class >> ___validateContext___: is told here."
+	[SessionTemps @env0:current @env0:at: #'GrailParsingFunctionBody' put: true.
+	 self _exec: { src. globalsDict. ns } kw: nil]
+		@env0:ensure: [SessionTemps @env0:current
+			@env0:removeKey: #'GrailParsingFunctionBody' ifAbsent: []].
 	"WRITE BACK.  A cell is a one-slot box and the body cannot change which box
 	a name refers to, so storing the final value is exactly what reading
 	through the cell would have produced."
@@ -1333,25 +1338,77 @@ method: builtins
 ___signalNonUtf8Source___: bytes
 	"CPython's decoding error for source, which names the first byte that is
 	not valid UTF-8 and points at PEP 263 -- the encoding-declaration PEP,
-	because declaring one is the fix."
+	because declaring one is the fix.
 
-	| bad i |
-	i := 1.
-	bad := 0.
-	[i @env0:<= bytes @env0:size] @env0:whileTrue: [
-		(bytes @env0:at: i) @env0:> 127 ifTrue: [bad := bytes @env0:at: i. i := bytes @env0:size].
-		i := i @env0:+ 1].
+	The FIRST INVALID SEQUENCE, not the first non-ASCII byte: a valid a-umlaut
+	followed by a stray 0xff is blamed on the 0xff, which Grail reported as the
+	umlaut's lead byte.  And located as 3.14.8 locates it (gh-157378): the line
+	holding that byte, and the column in CHARACTERS of the valid text before it
+	on that line, so a multi-byte character counts once."
+
+	| bad lineNo lineStart offset hex |
+	bad := self ___firstInvalidUtf8Index___: bytes.
+	lineNo := 1.
+	lineStart := 1.
+	1 @env0:to: bad @env0:- 1 do: [:i |
+		(bytes @env0:at: i) @env0:= 10 ifTrue: [
+			lineNo := lineNo @env0:+ 1.
+			lineStart := i @env0:+ 1]].
+	offset := bad @env0:> lineStart
+		ifTrue: [(((bytes @env0:copyFrom: lineStart to: bad @env0:- 1) @env1:decode)
+			@env0:size) @env0:+ 1]
+		ifFalse: [1].
+	hex := ((bytes @env0:at: bad) @env0:printStringRadix: 16) @env0:asLowercase.
+	hex @env0:size @env0:< 2 ifTrue: [hex := '0' @env0:, hex].
 	"WITH A LOCATION, because str(e) prints it: CPython's text ends
 	``(<string>, line 1)'', which comes from the exception's filename and
-	lineno rather than from the message.  A bare ___signal___: leaves both
-	None and the printed form is a character-for-character mismatch."
+	lineno rather than from the message."
 	^ SyntaxError @env1:___signalNew___: (Array
-		@env0:with: ('Non-UTF-8 code starting with ''\x' @env0:,
-			(bad @env0:printStringRadix: 16) @env0:asLowercase @env0:,
-			''' on line 1, but no encoding declared; ' @env0:,
+		@env0:with: ('Non-UTF-8 code starting with ''\x' @env0:, hex @env0:,
+			''' on line ' @env0:, lineNo @env0:printString @env0:,
+			', but no encoding declared; ' @env0:,
 			'see https://peps.python.org/pep-0263/ for details')
-		@env0:with: (tuple @env0:withAll: { '<string>'. 1. None. None. None. None }))
+		@env0:with: (tuple @env0:withAll: { '<string>'. lineNo. offset. None. lineNo. offset }))
 		kw: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___firstInvalidUtf8Index___: bytes
+	"The 1-based index of the byte where bytes stop being valid UTF-8: a
+	continuation byte with no lead, a lead not followed by its continuations, an
+	overlong or surrogate encoding, or a byte UTF-8 never uses."
+
+	| i n b need lo hi |
+	i := 1.
+	n := bytes @env0:size.
+	[i @env0:<= n] @env0:whileTrue: [
+		b := bytes @env0:at: i.
+		b @env0:< 16r80
+			ifTrue: [i := i @env0:+ 1]
+			ifFalse: [
+				lo := 16r80.
+				hi := 16rBF.
+				need := 0.
+				(b @env0:between: 16rC2 and: 16rDF) ifTrue: [need := 1].
+				(b @env0:between: 16rE0 and: 16rEF) ifTrue: [
+					need := 2.
+					b @env0:= 16rE0 ifTrue: [lo := 16rA0].
+					b @env0:= 16rED ifTrue: [hi := 16r9F]].
+				(b @env0:between: 16rF0 and: 16rF4) ifTrue: [
+					need := 3.
+					b @env0:= 16rF0 ifTrue: [lo := 16r90].
+					b @env0:= 16rF4 ifTrue: [hi := 16r8F]].
+				need @env0:= 0 ifTrue: [^ i].
+				1 @env0:to: need do: [:k |
+					| c |
+					(i @env0:+ k) @env0:> n ifTrue: [^ i].
+					c := bytes @env0:at: i @env0:+ k.
+					k @env0:= 1
+						ifTrue: [(c @env0:between: lo and: hi) ifFalse: [^ i]]
+						ifFalse: [(c @env0:between: 16r80 and: 16rBF) ifFalse: [^ i]]].
+				i := i @env0:+ need @env0:+ 1]].
+	^ n @env0:max: 1
 %
 
 category: 'Grail-Built-in Functions'

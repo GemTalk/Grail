@@ -342,6 +342,7 @@ parseSource: sourceString allowTopLevelAwait: allowAwait
 	module := PythonParser parse: sourceString.
 	module source isNil ifTrue: [module source: sourceString].
 	AbstractNode ___currentModuleSource___: sourceString.
+	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #async.
 	^ module
 %
@@ -371,6 +372,7 @@ parseSource: sourceString
 	through, and it costs a reference rather than a copy."
 	module source isNil ifTrue: [module source: sourceString].
 	AbstractNode ___currentModuleSource___: sourceString.
+	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #module.
 	^module
 %
@@ -453,8 +455,8 @@ ___validateAsyncPlacement___: node scope: scopeSym
 			ifTrue: [scopeSym] ifFalse: [#comp].
 		node generators doWithIndex: [:g :i |
 			(g is_async = 1 and: [inner == #comp]) ifTrue: [
-				^ SyntaxError signal:
-					'asynchronous comprehension outside of an asynchronous function'].
+				^ self ___syntaxError___:
+					'asynchronous comprehension outside of an asynchronous function' node: node].
 			self ___validateAsyncPlacement___: g iter
 				scope: (i = 1 ifTrue: [scopeSym] ifFalse: [inner]).
 			self ___validateAsyncPlacement___: g target scope: inner.
@@ -467,7 +469,7 @@ ___validateAsyncPlacement___: node scope: scopeSym
 		^ self].
 	(node isKindOf: AwaitAst) ifTrue: [
 		(#(#async #asyncgen #genexp) includes: scopeSym) ifFalse: [
-			^ SyntaxError signal: (scopeSym == #comp
+			^ self ___syntaxError___: (scopeSym == #comp
 				ifTrue: ['asynchronous comprehension outside of an asynchronous function']
 				ifFalse: [(#(#module #class) includes: scopeSym)
 				ifTrue: ['''await'' outside function']
@@ -475,28 +477,182 @@ ___validateAsyncPlacement___: node scope: scopeSym
 				ifTrue: ['await expression cannot be used within an annotation']
 				ifFalse: [scopeSym == #typealias
 				ifTrue: ['await expression cannot be used within a type alias']
-				ifFalse: ['''await'' outside async function']]]])].
+				ifFalse: ['''await'' outside async function']]]]) node: node].
 		self ___validateAsyncPlacement___: node value scope: scopeSym.
 		^ self].
 	(node isKindOf: YieldFromAst) ifTrue: [
 		(#(#async #asyncgen) includes: scopeSym) ifTrue: [
-			^ SyntaxError signal: '''yield from'' inside async function'].
+			^ self ___syntaxError___: '''yield from'' inside async function' node: node].
 		self ___validateAsyncPlacement___: node value scope: scopeSym.
 		^ self].
 	(node isKindOf: ReturnAst) ifTrue: [
 		(scopeSym == #asyncgen and: [node value notNil]) ifTrue: [
-			^ SyntaxError signal: '''return'' with value in async generator'].
+			^ self ___syntaxError___: '''return'' with value in async generator' node: node].
 		self ___validateAsyncPlacement___: node value scope: scopeSym.
 		^ self].
 	((node isKindOf: AsyncForAst) or: [node isKindOf: AsyncWithAst]) ifTrue: [
 		(#(#async #asyncgen) includes: scopeSym) ifFalse: [
-			^ SyntaxError signal: ((node isKindOf: AsyncForAst)
+			^ self ___syntaxError___: ((node isKindOf: AsyncForAst)
 				ifTrue: ['''async for'' outside async function']
-				ifFalse: ['''async with'' outside async function'])]
+				ifFalse: ['''async with'' outside async function']) node: node]
 		"children walk in the same scope through the generic tail below"].
 	node class allInstVarNames doWithIndex: [:n :i |
 		n == #parent ifFalse: [
 			self ___validateAsyncPlacement___: (node instVarAt: i) scope: scopeSym]].
+%
+
+category: 'Grail-parsing'
+classmethod: ModuleAst
+___syntaxError___: aMessage node: aNode
+	"A SyntaxError CPython's compiler raises after the parse, located at the
+	node it is about: the statement for ``'return' outside function'', the
+	expression for ``'yield' outside function''.  Unlocated, the boundary
+	placed every one of them at the end of the source."
+
+	| src |
+	src := AbstractNode ___currentModuleSource___.
+	(src isNil or: [aNode position isNil]) ifTrue: [^ SyntaxError signal: aMessage].
+	^ PythonParser ___signal___: SyntaxError message: aMessage in: src
+		from: aNode position to: (aNode endPosition ifNil: [aNode position]) + 1
+%
+
+category: 'Grail-parsing'
+classmethod: ModuleAst
+___validateContext___: aModule
+	"CPython's compile-time checks on where a statement may stand, which the
+	grammar does not express: ``return'' and ``yield'' only in a function,
+	``break'' and ``continue'' only in a loop of the same function,
+	``nonlocal'' not at module level, and a starred expression only where it
+	unpacks.  Grail compiled all of these.
+
+	A def's body text run by exec() with a closure (builtins >>
+	___runClosureBody___:...) is checked as the function body it is."
+
+	self ___validateContext___: aModule
+		fn: ((SessionTemps current at: #'GrailParsingFunctionBody' otherwise: nil) == true
+			ifTrue: [#function] ifFalse: [#module])
+		loop: false
+		scopes: ((SessionTemps current at: #'GrailParsingFunctionBody' otherwise: nil) == true
+			ifTrue: [nil] ifFalse: [#()])
+%
+
+category: 'Grail-parsing'
+classmethod: ModuleAst
+___validateContext___: node fn: fnSym loop: inLoop scopes: scopes
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___validateContext___: each fn: fnSym loop: inLoop scopes: scopes].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	(node isKindOf: FunctionDefAst) ifTrue: [
+		self ___validateContext___: node decoratorList fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node args fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node returns fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node body fn: #function loop: false
+			scopes: (scopes isNil ifTrue: [nil] ifFalse: [
+				scopes copyWith: (self ___boundNamesOf___: node body)]).
+		^ self].
+	(node isKindOf: LambdaAst) ifTrue: [
+		self ___validateContext___: node args fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node body fn: #function loop: false scopes: scopes.
+		^ self].
+	(node isKindOf: ClassDefAst) ifTrue: [
+		node class allInstVarNames doWithIndex: [:n :i |
+			n == #parent ifFalse: [
+				n == #body
+					ifTrue: [self ___validateContext___: (node instVarAt: i) fn: #class loop: false scopes: scopes]
+					ifFalse: [self ___validateContext___: (node instVarAt: i) fn: fnSym loop: inLoop scopes: scopes]]].
+		^ self].
+	(node isKindOf: ReturnAst) ifTrue: [
+		(#(#module #class) includes: fnSym) ifTrue: [
+			^ self ___syntaxError___: '''return'' outside function' node: node].
+		(node value isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'can''t use starred expression here' node: node value]].
+	(node isKindOf: BreakAst) ifTrue: [
+		inLoop ifFalse: [^ self ___syntaxError___: '''break'' outside loop' node: node].
+		^ self].
+	(node isKindOf: ContinueAst) ifTrue: [
+		inLoop ifFalse: [^ self ___syntaxError___: '''continue'' not properly in loop' node: node].
+		^ self].
+	((node isKindOf: YieldAst) or: [node isKindOf: YieldFromAst]) ifTrue: [
+		(#(#module #class) includes: fnSym) ifTrue: [
+			^ self ___syntaxError___: '''yield'' outside function' node: node]].
+	(node isKindOf: NonlocalAst) ifTrue: [
+		fnSym == #module ifTrue: [
+			^ self ___syntaxError___: 'nonlocal declaration not allowed at module level'
+				node: node].
+		"CPython's symbol table: each name must be bound by an enclosing
+		FUNCTION -- a class body in between is skipped, and the module never
+		counts.  The parser records every scope's bound and nonlocal names on
+		its BlockAst; ``__class__'' is the one name a class provides."
+		"A def's body text run on its own (scopes nil) cannot see the function
+		it came from, so its nonlocals are not checked."
+		(fnSym == #function and: [scopes notNil]) ifTrue: [
+			node names do: [:n |
+				(n asSymbol == #'__class__' or: [
+					(scopes copyFrom: 1 to: (scopes size - 1 max: 0))
+						anySatisfy: [:each | each includes: n asSymbol]]) ifFalse: [
+					^ self ___syntaxError___: 'no binding for nonlocal ''' , n asString , ''' found'
+						node: node]]].
+		^ self].
+	(node isKindOf: AssignAst) ifTrue: [
+		node targets do: [:each | self ___validateStarredTarget___: each].
+		(node value isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'can''t use starred expression here' node: node value]].
+	(node isKindOf: ExprAst) ifTrue: [
+		(node value isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'can''t use starred expression here' node: node value]].
+	(node isKindOf: ForAst) ifTrue: [
+		self ___validateStarredTarget___: node target.
+		self ___validateContext___: node target fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node iter fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node body fn: fnSym loop: true scopes: scopes.
+		self ___validateContext___: node orelse fn: fnSym loop: inLoop scopes: scopes.
+		^ self].
+	(node isKindOf: WhileAst) ifTrue: [
+		self ___validateContext___: node test fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node body fn: fnSym loop: true scopes: scopes.
+		self ___validateContext___: node orelse fn: fnSym loop: inLoop scopes: scopes.
+		^ self].
+	node class allInstVarNames doWithIndex: [:n :i |
+		n == #parent ifFalse: [
+			self ___validateContext___: (node instVarAt: i) fn: fnSym loop: inLoop scopes: scopes]]
+%
+
+category: 'Grail-parsing'
+classmethod: ModuleAst
+___boundNamesOf___: aBody
+	"The names a function scope binds, as Symbols, from the BlockAst the
+	parser built for it: its locals and parameters, and its own nonlocals
+	(an inner nonlocal can resolve through those)."
+
+	| names |
+	names := IdentitySet new.
+	(aBody isKindOf: BlockAst) ifFalse: [^ names].
+	aBody variables isNil ifFalse: [aBody variables do: [:n | names add: n asSymbol]].
+	aBody nonlocalNames isNil ifFalse: [aBody nonlocalNames do: [:n | names add: n asSymbol]].
+	^ names
+%
+
+category: 'Grail-parsing'
+classmethod: ModuleAst
+___validateStarredTarget___: aTarget
+	"A starred assignment target stands only inside a list or tuple, and only
+	once per one."
+
+	| starred |
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___syntaxError___: 'starred assignment target must be in a list or tuple'
+			node: aTarget].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifFalse: [^ self].
+	starred := aTarget elts select: [:each | each isKindOf: StarredAst].
+	starred size > 1 ifTrue: [
+		^ self ___syntaxError___: 'multiple starred expressions in assignment' node: aTarget].
+	aTarget elts do: [:each |
+		(each isKindOf: StarredAst)
+			ifTrue: [self ___validateStarredTarget___: each value]
+			ifFalse: [self ___validateStarredTarget___: each]]
 %
 
 category: 'Grail-evaluation'

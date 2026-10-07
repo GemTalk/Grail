@@ -10,7 +10,7 @@ Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack paramStack annotatedStack compTargetStack ownReadStack
                     blockingStack nonlocalStack globalStack inCompTarget
                     underscoreDefCount underscoreCurrentName readStack walrusAllowed
-                    inWalrusValue walrusRefusal mangleClassStack)
+                    inWalrusValue walrusRefusal mangleClassStack blockHeader barryAsFlufl)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -407,8 +407,7 @@ expect: aType value: aValue
 	| tok |
 	tok := self advance.
 	(tok type == aType and: [tok value = aValue]) ifFalse: [
-		SyntaxError signal: 'Expected ' , aType , ' ''' , aValue , ''' but got ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
-	].
+		^ self ___invalidSyntaxAt___: tok].
 	^tok
 %
 
@@ -420,8 +419,7 @@ expectType: aType
 	| tok |
 	tok := self advance.
 	tok type == aType ifFalse: [
-		SyntaxError signal: 'Expected ' , aType , ' but got ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
-	].
+		^ self ___invalidSyntaxAt___: tok].
 	^tok
 %
 
@@ -519,6 +517,7 @@ skipTypeParams
 	names := OrderedCollection new.
 	tok := self peek.
 	(tok notNil and: [tok isOp: '[']) ifFalse: [^ names asArray].
+	self ___checkTypeParamsAt___: position.
 	depth := 0.
 	expectName := false.
 	stars := ''.
@@ -708,7 +707,7 @@ parseAsync
 		withNode changeClassTo: AsyncWithAst.
 		^withNode
 	].
-	SyntaxError signal: 'Expected def, for, or with after async at line ' , tok line printString.
+	^ self ___invalidSyntaxAt___: self peek
 %
 
 category: 'Grail-parsing - expressions'
@@ -877,13 +876,7 @@ parseAtom
 	 render test_bad_indentation asserts is a CONSEQUENCE of the offset, not a
 	 special case in the renderer -- which is why the offset has to be 1 and not
 	 the column the indent actually reached."
-	(tok notNil and: [tok type == #INDENT]) ifTrue: [
-		PythonParser ___signalLocated___: IndentationError
-			message: 'unexpected indent'
-			in: source
-			at: (PythonParser ___lineStartPositionIn___: source at: tok position)
-			endOffset: -1].
-	SyntaxError signal: 'Unexpected token: ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
+	^ self ___invalidSyntaxAt___: tok
 %
 
 category: 'Grail-parsing - expressions'
@@ -897,6 +890,7 @@ parseBitwiseAnd
 	[self atOp: '&'] whileTrue: [
 		| right |
 		self advance.
+		self ___rejectStarredOperand___.
 		right := self parseShift.
 		left := BinOpAst new
 			left: left;
@@ -918,6 +912,7 @@ parseBitwiseOr
 	[self atOp: '|'] whileTrue: [
 		| right |
 		self advance.
+		self ___rejectStarredOperand___.
 		right := self parseBitwiseXor.
 		left := BinOpAst new
 			left: left;
@@ -939,6 +934,7 @@ parseBitwiseXor
 	[self atOp: '^'] whileTrue: [
 		| right |
 		self advance.
+		self ___rejectStarredOperand___.
 		right := self parseBitwiseAnd.
 		left := BinOpAst new
 			left: left;
@@ -963,10 +959,68 @@ parseBlock
 		^self parseSimpleStatements
 	].
 	self skipNewlines.
-	self expectType: #INDENT.
+	self ___expectIndentedBlock___.
 	stmts := self parseStatements.
 	self expectType: #DEDENT.
 	^stmts
+%
+
+category: 'Grail-token access'
+method: PythonParser
+___expectIndentedBlock___
+	"Consume the INDENT that opens a block, or raise CPython's
+	IndentationError naming the header the block belongs to: expected an
+	indented block after 'if' statement on line 1'', at the token that should
+	have been indented.  ___expectColon___:header:forced: recorded the header."
+
+	| tok header |
+	header := blockHeader.
+	blockHeader := nil.
+	tok := self peek.
+	(tok notNil and: [tok type == #INDENT]) ifTrue: [^ self advance].
+	^ self ___raise___: IndentationError
+		message: (header isNil
+			ifTrue: ['expected an indented block']
+			ifFalse: ['expected an indented block after ' , (header at: 1)
+				, ' on line ' , (header at: 2) printString])
+		from: tok to: tok
+%
+
+category: 'Grail-token access'
+method: PythonParser
+___expectColon___: aHeaderName header: aHeaderTok forced: aBoolean
+	"Consume the colon ending a compound statement's header, or raise what
+	CPython's grammar raises.  Where the colon is a FORCED token (else'',
+	try'', finally'', a def), any other token is expected ':''.  Elsewhere
+	(if'', while'', for'', with'', class'', except'', match'',
+	case'') that message is for a header that ENDS where the colon should be
+	-- invalid_if_stmt and its siblings match NEWLINE there -- and anything
+	else is plain invalid syntax''.
+
+	Also records the header for the block that follows, so a missing indent
+	can name it."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: ':']) ifTrue: [
+		blockHeader := Array with: aHeaderName
+			with: (aHeaderTok isNil ifTrue: [tok line] ifFalse: [aHeaderTok line]).
+		^ self advance].
+	(aBoolean or: [tok notNil and: [tok type == #NEWLINE]]) ifTrue: [
+		^ self ___syntaxError___: 'expected '':''' at: tok].
+	^ self ___invalidSyntaxAt___: tok
+%
+
+category: 'Grail-token access'
+method: PythonParser
+___expectForced___: aValue
+	"A forced token (&&'(''' in CPython's grammar): any other token is
+	expected '(''' at that token."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: aValue]) ifTrue: [^ self advance].
+	^ self ___syntaxError___: 'expected ''' , aValue , '''' at: tok
 %
 
 category: 'Grail-parsing - simple statements'
@@ -1131,12 +1185,591 @@ ___signalSyntaxError___: aMessage from: startTok to: endTok
 		kw: nil
 %
 
+category: 'Grail-parsing'
+classmethod: PythonParser
+___signal___: aClass message: aMessage in: aSource from: aStart to: anEnd
+	"Raise aClass located as CPython locates its parser errors: from the 1-based
+	source index aStart to the EXCLUSIVE index anEnd, as lineno / offset /
+	end_lineno / end_offset, all 1-based and in characters.  An anEnd of nil
+	means a point (end_offset = offset, the shape CPython's tokenizer gives).
+
+	Every located error the parser raises goes through here, so a position is
+	worked out in one place: against the RAW line, leading indentation and
+	non-ASCII characters included, which is what 3.14.8's gh-156894 fixed in
+	CPython for errors that cover a range."
+
+	| loc endLoc locTuple endLine endOffset |
+	loc := self ___sourceLocationIn___: aSource at: aStart.
+	loc isNil ifTrue: [^ aClass signal: aMessage].
+	anEnd isNil
+		ifTrue: [endLine := loc @env0:at: 1. endOffset := loc @env0:at: 2]
+		ifFalse: [
+			"A range ending just past a NEWLINE ends on the newline's own line,
+			one column after it -- CPython's NEWLINE token is one character
+			wide.  Past the end of the source (the implicit newline at end of
+			input) it counts on from the last column."
+			(anEnd > (aSource size + 1))
+				ifTrue: [
+					endLoc := self ___sourceLocationIn___: aSource at: aSource size + 1.
+					endLine := endLoc @env0:at: 1.
+					endOffset := (endLoc @env0:at: 2) + (anEnd - aSource size - 1)]
+				ifFalse: [
+					((anEnd > 1) and: [(anEnd - 1) >= aStart
+						and: [(aSource at: anEnd - 1) == Character lf]])
+						ifTrue: [
+							endLoc := self ___sourceLocationIn___: aSource at: anEnd - 1.
+							endLine := endLoc @env0:at: 1.
+							endOffset := (endLoc @env0:at: 2) + 1]
+						ifFalse: [
+							endLoc := self ___sourceLocationIn___: aSource at: anEnd.
+							endLoc isNil
+								ifTrue: [endLine := loc @env0:at: 1. endOffset := (loc @env0:at: 2) + 1]
+								ifFalse: [endLine := endLoc @env0:at: 1. endOffset := endLoc @env0:at: 2]]]].
+	locTuple := Array @env0:new: 6.
+	locTuple @env0:at: 1 put: '<string>'.
+	locTuple @env0:at: 2 put: (loc @env0:at: 1).
+	locTuple @env0:at: 3 put: (loc @env0:at: 2).
+	locTuple @env0:at: 4 put: (loc @env0:at: 3).
+	locTuple @env0:at: 5 put: endLine.
+	locTuple @env0:at: 6 put: endOffset.
+	^ aClass @env1:___signalNew___:
+		(Array @env0:with: aMessage with: (tuple @env0:withAll: locTuple))
+		kw: nil
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___syntaxError___: aMessage at: aTok
+	"CPython's RAISE_SYNTAX_ERROR_KNOWN_LOCATION on a token: the whole token."
+
+	^ self ___syntaxError___: aMessage from: aTok to: aTok
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___syntaxError___: aMessage from: startTokOrNode to: endTokOrNode
+	"CPython's RAISE_SYNTAX_ERROR_KNOWN_RANGE: from the first character of
+	the first token or node to one past the last character of the second."
+
+	^ self ___raise___: SyntaxError message: aMessage
+		from: startTokOrNode to: endTokOrNode
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___raise___: aClass message: aMessage from: startTokOrNode to: endTokOrNode
+	| startPos endPos |
+	startPos := startTokOrNode isNil ifTrue: [nil] ifFalse: [startTokOrNode position].
+	startPos isNil ifTrue: [^ aClass signal: aMessage].
+	endPos := endTokOrNode isNil ifTrue: [nil] ifFalse: [endTokOrNode endPosition].
+	endPos isNil ifTrue: [endPos := startPos].
+	"An operator's width is its text; a newline or end-of-input marker is one
+	character wide (___signal___: counts it past the end of the line)."
+	((endTokOrNode isKindOf: PythonToken) and: [endTokOrNode type == #OP])
+		ifTrue: [endPos := endPos max: endTokOrNode position + endTokOrNode value size - 1].
+	((endTokOrNode isKindOf: PythonToken)
+		and: [#(#NEWLINE #ENDMARKER #DEDENT) includes: endTokOrNode type])
+			ifTrue: [endPos := endTokOrNode position].
+	^ PythonParser ___signal___: aClass message: aMessage in: source
+		from: startPos to: endPos + 1
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___syntaxError___: aMessage node: aNode
+	"A compile-time error about one construct, located at its node."
+
+	^ self ___syntaxError___: aMessage from: aNode to: aNode
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___invalidSyntaxAt___: aTok
+	"CPython's generic error: ``invalid syntax'' at the token the parse could
+	not accept.  A tokenizer error later in the source is reported instead, as
+	CPython's _PyPegen_tokenize_full_source_to_check_for_errors does -- and
+	Grail's tokenizer has already run over the whole source, so nothing is
+	left to report here."
+
+	aTok isNil ifTrue: [^ SyntaxError signal: 'invalid syntax'].
+	(aTok type == #INDENT) ifTrue: [
+		"CPython 3.14.8 places it at the indentation's last column: offset
+		equal to its width, end_offset -1."
+		| lineStart k |
+		lineStart := PythonParser ___lineStartPositionIn___: source at: aTok position.
+		k := lineStart.
+		[k <= source size and: [(source at: k) == $  or: [(source at: k) == Character tab]]]
+			whileTrue: [k := k + 1].
+		^ PythonParser ___signalLocated___: IndentationError
+			message: 'unexpected indent'
+			in: source
+			at: ((k - 1) max: lineStart)
+			endOffset: -1].
+	^ self ___syntaxError___: 'invalid syntax' at: aTok
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___exprName___: aNode
+	"CPython's _PyPegen_get_expr_name: the noun its SyntaxErrors use for an
+	expression -- ``cannot assign to function call'', ``cannot delete
+	conditional expression''."
+
+	"An f-string or t-string is built as a call (___fformat___, the templatelib
+	constructor), so its token says what it was."
+	(self ___tokenIndexAt___: aNode position) > 0 ifTrue: [
+		| tok |
+		tok := tokens at: (self ___tokenIndexAt___: aNode position).
+		(tok type == #FSTRING and: [tok endPosition = aNode endPosition])
+			ifTrue: [^ 'f-string expression'].
+		(tok type == #TSTRING and: [tok endPosition = aNode endPosition])
+			ifTrue: [^ 't-string expression']].
+	(aNode isKindOf: AttributeAst) ifTrue: [^ 'attribute'].
+	(aNode isKindOf: SubscriptAst) ifTrue: [^ 'subscript'].
+	(aNode isKindOf: StarredAst) ifTrue: [^ 'starred'].
+	(aNode isKindOf: NameAst) ifTrue: [^ 'name'].
+	(aNode isKindOf: ListAst) ifTrue: [^ 'list'].
+	(aNode isKindOf: TupleAst) ifTrue: [^ 'tuple'].
+	(aNode isKindOf: LambdaAst) ifTrue: [^ 'lambda'].
+	(aNode isKindOf: CallAst) ifTrue: [^ 'function call'].
+	((aNode isKindOf: BoolOpAst) or: [(aNode isKindOf: BinOpAst)
+		or: [aNode isKindOf: UnaryOpAst]]) ifTrue: [^ 'expression'].
+	(aNode isKindOf: GeneratorExpAst) ifTrue: [^ 'generator expression'].
+	((aNode isKindOf: YieldAst) or: [aNode isKindOf: YieldFromAst])
+		ifTrue: [^ 'yield expression'].
+	(aNode isKindOf: AwaitAst) ifTrue: [^ 'await expression'].
+	(aNode isKindOf: ListCompAst) ifTrue: [^ 'list comprehension'].
+	(aNode isKindOf: SetCompAst) ifTrue: [^ 'set comprehension'].
+	(aNode isKindOf: DictCompAst) ifTrue: [^ 'dict comprehension'].
+	(aNode isKindOf: DictAst) ifTrue: [^ 'dict literal'].
+	(aNode isKindOf: SetAst) ifTrue: [^ 'set display'].
+	((aNode isKindOf: JoinedStrAst) or: [aNode isKindOf: FormattedValueAst])
+		ifTrue: [^ 'f-string expression'].
+	(aNode isKindOf: TemplateStrAst) ifTrue: [^ 't-string expression'].
+	(aNode isKindOf: ConstantAst) ifTrue: [
+		aNode value == nil ifTrue: [^ 'None'].
+		aNode value == true ifTrue: [^ 'True'].
+		aNode value == false ifTrue: [^ 'False'].
+		aNode value == #'...' ifTrue: [^ 'ellipsis'].
+		^ 'literal'].
+	(aNode isKindOf: CompareAst) ifTrue: [^ 'comparison'].
+	(aNode isKindOf: IfExpAst) ifTrue: [^ 'conditional expression'].
+	(aNode isKindOf: NamedExprAst) ifTrue: [^ 'named expression'].
+	^ 'expression'
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___invalidTarget___: aNode kind: aKind
+	"CPython's _PyPegen_get_invalid_target: the first sub-expression of aNode
+	that cannot be an assignment (aKind #star), for-loop (#for) or del (#del)
+	target, or nil.  Names, attributes and subscripts are targets; tuples and
+	lists are when all their elements are; a starred one is, except in del."
+
+	| child |
+	aNode isNil ifTrue: [^ nil].
+	((aNode isKindOf: TupleAst) or: [aNode isKindOf: ListAst]) ifTrue: [
+		aNode elts do: [:each |
+			child := self ___invalidTarget___: each kind: aKind.
+			child isNil ifFalse: [^ child]].
+		^ nil].
+	(aNode isKindOf: StarredAst) ifTrue: [
+		aKind == #del ifTrue: [^ aNode].
+		^ self ___invalidTarget___: aNode value kind: aKind].
+	(aNode isKindOf: CompareAst) ifTrue: [
+		"``for x in y'' read as an expression is the comparison ``x in y''."
+		(aKind == #for and: [(aNode cmpopList first isKindOf: InAst)])
+			ifTrue: [^ self ___invalidTarget___: aNode left kind: aKind].
+		^ aNode].
+	((aNode isKindOf: NameAst) or: [(aNode isKindOf: SubscriptAst)
+		or: [aNode isKindOf: AttributeAst]]) ifTrue: [^ nil].
+	^ aNode
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___tokenIndexAt___: aPosition
+	"The index in ``tokens'' of the token starting at source index aPosition."
+
+	tokens doWithIndex: [:each :i | each position = aPosition ifTrue: [^ i]].
+	^ 0
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___isParenthesized___: aNode
+	"Is aNode written inside its own parentheses -- ``(yield)'', ``(a + b)''?
+	The tree keeps no record of a group, but the tokens do: the token before
+	the node's first is ``('' and the one after its last is the matching ``)''."
+
+	| i close |
+	i := self ___tokenIndexAt___: aNode position.
+	i <= 1 ifTrue: [^ false].
+	((tokens at: i - 1) isOp: '(') ifFalse: [^ false].
+	close := self ___indexOfClose___: i - 1.
+	close isNil ifTrue: [^ false].
+	^ (tokens at: close - 1) endPosition = aNode endPosition
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___isParenthesizedTuple___: aNode
+	"Is aNode a tuple written with its own parentheses -- (a, b)'', not
+	a, b'' or (a), b''?"
+
+	| i close |
+	(aNode isKindOf: TupleAst) ifFalse: [^ false].
+	i := self ___tokenIndexAt___: aNode position.
+	(i = 0 or: [((tokens at: i) isOp: '(') not]) ifTrue: [^ false].
+	close := self ___indexOfClose___: i.
+	^ close notNil and: [(tokens at: close) endPosition = aNode endPosition]
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___isBitwiseOrLevel___: aNode
+	"Would CPython's bitwise_or rule have parsed exactly aNode?  Not when it is
+	a comparison, a not, a boolean operation, a conditional, a lambda, a
+	starred or named expression, or a yield -- unless it is parenthesised,
+	which makes it an atom."
+
+	(self ___isParenthesized___: aNode) ifTrue: [^ true].
+	^ ((aNode isKindOf: CompareAst) or: [(aNode isKindOf: NotAst)
+		or: [(aNode isKindOf: BoolOpAst) or: [(aNode isKindOf: IfExpAst)
+		or: [(aNode isKindOf: LambdaAst) or: [(aNode isKindOf: StarredAst)
+		or: [(aNode isKindOf: NamedExprAst) or: [(aNode isKindOf: YieldAst)
+		or: [aNode isKindOf: YieldFromAst]]]]]]]]) not
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___startsWithExcludedAtom___: aNode
+	"CPython's ``!(list|tuple|genexp|'True'|'None'|'False')'' lookahead: does
+	the source at aNode begin with one of those?"
+
+	| tok i close |
+	i := self ___tokenIndexAt___: aNode position.
+	i = 0 ifTrue: [^ false].
+	tok := tokens at: i.
+	((tok isKeyword: 'None') or: [(tok isKeyword: 'True') or: [tok isKeyword: 'False']])
+		ifTrue: [^ true].
+	((tok isOp: '(') or: [tok isOp: '[']) ifFalse: [^ false].
+	close := self ___indexOfClose___: i.
+	close isNil ifTrue: [^ false].
+	(tok isOp: '[') ifTrue: [
+		"a list display, not a list comprehension"
+		^ ((i + 1 to: close - 1) anySatisfy: [:k | (tokens at: k) isKeyword: 'for']) not].
+	"a tuple or a generator expression, not a plain group"
+	^ (self ___segmentsFrom: i + 1 to: close - 1) size > 1
+		or: [((tokens at: close - 1) isOp: ',')
+		or: [(i + 1 to: close - 1) anySatisfy: [:k | (tokens at: k) isKeyword: 'for']]]
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___rhsAfterEqualsIsBitwiseOr___
+	"At an ``='': does a bitwise_or follow it that is not itself followed by
+	``='' or ``:=''?  The tail of CPython's invalid_named_expression.  Answers
+	the parsed node, or nil.  Looks ahead only: the position is restored."
+
+	| saved node tok |
+	saved := position.
+	^ [self advance.
+	   tok := self peek.
+	   (tok isNil or: [(tok isKeyword: 'not') or: [(tok isKeyword: 'lambda')
+		or: [(tok isKeyword: 'yield') or: [(tok isOp: '*') or: [tok isOp: '**']]]]])
+			ifTrue: [nil]
+			ifFalse: [
+				node := [self parseBitwiseOr] on: SyntaxError do: [:ex | ex return: nil].
+				(node notNil and: [(tok := self peek) notNil
+					and: [(tok isOp: '=') or: [tok isOp: ':=']]]) ifTrue: [node := nil].
+				node]]
+		ensure: [position := saved]
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___checkFirstAssignTarget___: first
+	"Raise CPython's SyntaxError for a statement's FIRST assignment target,
+	which cannot be assigned to.  The parser is at the ``='' after it.
+
+	The FIRST target is also what CPython's invalid_named_expression sees:
+	when its last element is a bitwise_or followed by ``='' and a bitwise_or,
+	the message names that element and adds ``here. Maybe you meant '=='
+	instead of '='?'' -- or, for a plain name, suggests ``=='' or ``:=''.
+	Not when another ``='' follows the right-hand side: that is a chained
+	assignment, and it gets the plain message, as every later target does
+	(setStoreCtx:)."
+
+	| bad last rhs |
+	true ifTrue: [
+		last := ((first isKindOf: TupleAst) and: [(self ___isParenthesizedTuple___: first) not])
+			ifTrue: [first elts last] ifFalse: [first].
+		(last notNil and: [(self ___isBitwiseOrLevel___: last)
+			and: [(self ___startsWithExcludedAtom___: last) not]]) ifTrue: [
+				rhs := self ___rhsAfterEqualsIsBitwiseOr___.
+				rhs notNil ifTrue: [
+					(last isKindOf: NameAst) ifTrue: [
+						(self ___invalidTarget___: first kind: #star) isNil ifFalse: [
+							^ self ___syntaxError___:
+								'invalid syntax. Maybe you meant ''=='' or '':='' instead of ''=''?'
+								from: last to: rhs]]
+					ifFalse: [
+						^ self ___syntaxError___: 'cannot assign to ' , (self ___exprName___: last)
+							, ' here. Maybe you meant ''=='' instead of ''=''?'
+							node: last]]]].
+	bad := self ___invalidTarget___: first kind: #star.
+	bad isNil ifFalse: [
+		^ self ___syntaxError___: 'cannot assign to ' , (self ___exprName___: bad)
+			node: bad]
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___endOfNextExpression___
+	"The last token of the expression at the cursor, or the token there when
+	none parses: the end of a range CPython draws over a construct that runs
+	on past the error.  A lookahead for the location only."
+
+	| saved |
+	saved := position.
+	^ [[self parseExpression. self lastToken]
+		on: SyntaxError do: [:ex | ex return: (tokens at: saved)]]
+		ensure: [position := saved]
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___canStartExpression___: aTok
+	"Could an expression begin at aTok?  For the errors that depend on what
+	follows: a missing comma, a statement where an expression was due."
+
+	aTok isNil ifTrue: [^ false].
+	(#(#NAME #NUMBER #STRING #FSTRING #BYTES #TSTRING) includes: aTok type) ifTrue: [^ true].
+	(aTok type == #KEYWORD) ifTrue: [
+		^ #('None' 'True' 'False' 'lambda' 'await' 'not') anySatisfy: [:k | aTok isKeyword: k]].
+	(aTok type == #OP) ifTrue: [
+		^ #('(' '[' '{' '-' '+' '~' '...') anySatisfy: [:k | aTok isOp: k]].
+	^ false
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___missingCommaFrom___: aStartTok
+	"CPython's invalid_expression: two expressions side by side inside
+	brackets are ``invalid syntax. Perhaps you forgot a comma?'', drawn from
+	the first to the end of the second.  Otherwise the generic error."
+
+	| tok end |
+	tok := self peek.
+	(self ___canStartExpression___: tok) ifTrue: [
+		end := self ___endOfNextExpression___.
+		end == tok
+			ifFalse: [
+				^ self ___syntaxError___: 'invalid syntax. Perhaps you forgot a comma?'
+					from: aStartTok to: end]
+			ifTrue: [
+				(tok type ~~ #KEYWORD) ifTrue: [
+					^ self ___syntaxError___: 'invalid syntax. Perhaps you forgot a comma?'
+						from: aStartTok to: end]]].
+	^ self ___invalidSyntaxAt___: tok
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___endOfNextStarExpressions___
+	"___endOfNextExpression___ for a comma-separated run."
+
+	| saved |
+	saved := position.
+	^ [[self parseStarExpressions. self lastToken]
+		on: SyntaxError do: [:ex | ex return: (tokens at: saved)]]
+		ensure: [position := saved]
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___checkStrayEquals___: anExpr
+	"An ``='' where a test ends: CPython's invalid_named_expression.  After a
+	bare name it suggests ``=='' or ``:='', drawn over ``name = value''; after
+	another expression it says that expression cannot be assigned to here."
+
+	| rhs |
+	(self atOp: '=') ifFalse: [^ self].
+	((self ___isBitwiseOrLevel___: anExpr)
+		and: [(self ___startsWithExcludedAtom___: anExpr) not]) ifFalse: [^ self].
+	rhs := self ___rhsAfterEqualsIsBitwiseOr___.
+	rhs isNil ifTrue: [^ self].
+	(anExpr isKindOf: NameAst) ifTrue: [
+		^ self ___syntaxError___:
+			'invalid syntax. Maybe you meant ''=='' or '':='' instead of ''=''?'
+			from: anExpr to: rhs].
+	^ self ___syntaxError___: 'cannot assign to ' , (self ___exprName___: anExpr)
+		, ' here. Maybe you meant ''=='' instead of ''=''?' node: anExpr
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___expectDictColonAfter___: aKey
+	"The ``:'' after a dictionary key, or CPython's invalid_kvpair: ``':'
+	expected after dictionary key'', placed on the key's last character with
+	an end_offset of 0, as CPython places it."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: ':']) ifTrue: [^ self advance].
+	(tok notNil and: [(tok isOp: '}') or: [tok isOp: ',']]) ifFalse: [
+		^ self ___invalidSyntaxAt___: tok].
+	^ PythonParser ___signalLocated___: SyntaxError
+		message: ''':'' expected after dictionary key'
+		in: source at: aKey endPosition endOffset: 0
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___parseDictValue___
+	"A dictionary value after its ``:''.  CPython names the two ways it goes
+	wrong: nothing there, and a starred expression."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [(tok isOp: '}') or: [tok isOp: ',']]) ifTrue: [
+		^ self ___syntaxError___: 'expression expected after dictionary key and '':'''
+			at: self lastToken].
+	(tok notNil and: [tok isOp: '*']) ifTrue: [
+		self advance.
+		^ self ___syntaxError___: 'cannot use a starred expression in a dictionary value'
+			from: tok to: self ___endOfNextExpression___].
+	^ self parseExpression
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___signalTryWithoutHandler___
+	"``expected 'except' or 'finally' block'', where CPython puts it: at the
+	newline ending the try's body, with an end_offset of -1."
+
+	| k |
+	k := position - 1.
+	[k >= 1 and: [(tokens at: k) type ~~ #NEWLINE]] whileTrue: [k := k - 1].
+	k < 1 ifTrue: [^ self ___syntaxError___: 'expected ''except'' or ''finally'' block' at: self peek].
+	^ PythonParser ___signalLocated___: SyntaxError
+		message: 'expected ''except'' or ''finally'' block'
+		in: source at: (tokens at: k) position endOffset: -1
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___rejectStarredOperand___
+	"An operand cannot be starred: ``1 + *2'' is invalid syntax at the star.
+	parseAtom builds a StarredAst wherever an atom may stand, which the star-
+	aware callers (assignment targets, displays, calls, subscripts) rely on, so
+	the refusal is made here, after an operator, where no star is legal."
+
+	(self atOp: '*') ifTrue: [^ self ___invalidSyntaxAt___: self peek]
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___lastTokenOfLine___
+	"The last token before the NEWLINE that ends the current logical line."
+
+	| j |
+	j := position.
+	[j < tokens size and: [((tokens at: j + 1) type == #NEWLINE
+		or: [(tokens at: j + 1) type == #ENDMARKER]) not]] whileTrue: [j := j + 1].
+	^ tokens at: (j min: tokens size)
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___checkImportTarget___
+	"After ``as'': a name, ending the alias.  Anything else is CPython's
+	invalid_dotted_as_name -- ``cannot use literal as import target'' -- when
+	it is an expression, and invalid syntax when it is not."
+
+	| tok nxt expr |
+	tok := self peek.
+	nxt := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+	(tok notNil and: [tok type == #NAME and: [nxt isNil or: [(nxt isOp: ',')
+		or: [(nxt isOp: ')') or: [(nxt isOp: ';') or: [nxt type == #NEWLINE
+		or: [nxt type == #ENDMARKER]]]]]]]) ifTrue: [^ self].
+	expr := [self parseExpression] on: SyntaxError do: [:ex | ex return: nil].
+	expr isNil ifTrue: [^ self ___invalidSyntaxAt___: tok].
+	^ self ___syntaxError___: 'cannot use ' , (self ___exprName___: expr) , ' as import target'
+		node: expr
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___checkTypeParamsAt___: lb
+	"A type parameter list: CPython refuses an empty one, and the same name
+	twice."
+
+	| rb names |
+	rb := self ___indexOfClose___: lb.
+	rb isNil ifTrue: [^ self].
+	rb = (lb + 1) ifTrue: [
+		^ PythonParser ___signal___: SyntaxError message: 'Type parameter list cannot be empty'
+			in: source from: (tokens at: rb) position to: nil].
+	names := IdentitySet new.
+	(self ___segmentsFrom: lb + 1 to: rb - 1) do: [:seg |
+		| k t |
+		k := 1.
+		[k <= seg size and: [((tokens at: (seg at: k)) isOp: '*')
+			or: [(tokens at: (seg at: k)) isOp: '**']]] whileTrue: [k := k + 1].
+		k <= seg size ifTrue: [
+			t := tokens at: (seg at: k).
+			(names includes: t value asString asSymbol) ifTrue: [
+				^ self ___syntaxError___: 'duplicate type parameter ''' , t value asString , ''''
+					at: t].
+			names add: t value asString asSymbol]]
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___checkComplexLiteral___: aValue
+	"A value pattern that adds or subtracts is CPython's complex_number: a
+	real literal and an imaginary one, each named when it is not."
+
+	| real imag isNumber |
+	((aValue isKindOf: BinOpAst) and: [(aValue op isKindOf: AddAst) or: [aValue op isKindOf: SubAst]])
+		ifFalse: [^ aValue].
+	real := aValue left.
+	imag := aValue right.
+	(real isKindOf: USubAst) ifTrue: [real := real operand].
+	isNumber := [:n | (n isKindOf: ConstantAst) and: [(n value isKindOf: Number) or: [n value isKindOf: complex]]].
+	((isNumber value: real) and: [(real value isKindOf: complex) not]) ifFalse: [
+		^ self ___syntaxError___: 'real number required in complex literal' node: aValue left].
+	((isNumber value: imag) and: [imag value isKindOf: complex]) ifFalse: [
+		^ self ___syntaxError___: 'imaginary number required in complex literal' node: imag].
+	^ aValue
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___fstringError___: aMessage token: aTok fieldAt: aFieldStart index: anIndex
+	"An f-string (or t-string) field error, at the character CPython names:
+	the field's text is verbatim source, so an index into it maps to the
+	source through the field's recorded start."
+
+	| anchor at |
+	anchor := aTok fieldStarts ifNil: [nil] ifNotNil: [:fs |
+		fs detect: [:a | (a at: 1) = aFieldStart] ifNone: [nil]].
+	anchor isNil ifTrue: [
+		^ SyntaxError signal: (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage].
+	at := (anchor at: 2) + anIndex - (anchor at: 1).
+	^ PythonParser ___signal___: SyntaxError
+		message: (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage
+		in: source from: at to: at + 1
+%
+
 category: 'Grail-parsing - arguments'
 method: PythonParser
 parseCallArgList
 	"Parse function call arguments. Returns an Array of {positional. keywords}."
 
-	| args kwargs sawKeyword sawKwargsUnpack kwNames tok |
+	| args kwargs sawKeyword sawKwargsUnpack kwNames tok argStartTok |
 	args := Array new.
 	kwargs := Array new.
 	"Argument-ordering guards, matching CPython (test_keywordonlyarg
@@ -1149,12 +1782,19 @@ parseCallArgList
 	((tok := self peek) notNil and: [(tok isOp: ')') not]) ifTrue: [
 		[
 			(self peek isOp: ')') ifTrue: [false] ifFalse: [
+				argStartTok := self peek.
 				"**kwargs"
 				(self atOp: '**') ifTrue: [
+					| kwValue |
 					self advance.
+					kwValue := self parseExpression.
+					(self atOp: '=') ifTrue: [
+						self advance.
+						^ self ___syntaxError___: 'cannot assign to keyword argument unpacking'
+							from: argStartTok to: self ___endOfNextExpression___].
 					kwargs add: (KeywordAst new
 						arg: nil;
-						value: self parseExpression;
+						value: kwValue;
 						from: self lastToken to: self lastToken ; yourself).
 					sawKwargsUnpack := true.
 				] ifFalse: [
@@ -1162,11 +1802,20 @@ parseCallArgList
 				(self atOp: '*') ifTrue: [
 					"``*x'' fills positional slots, so it may follow a keyword
 					(``f(a=1, *b)'' is legal) but NOT ``**'' unpacking."
-					sawKwargsUnpack ifTrue: [
-						SyntaxError signal: 'iterable argument unpacking follows keyword argument unpacking'].
+					| commaTok starValue |
+					commaTok := self lastToken.
 					self advance.
+					starValue := self parseExpression.
+					sawKwargsUnpack ifTrue: [
+						^ self ___syntaxError___:
+							'iterable argument unpacking follows keyword argument unpacking'
+							from: commaTok to: self lastToken].
+					(self atOp: '=') ifTrue: [
+						self advance.
+						^ self ___syntaxError___: 'cannot assign to iterable argument unpacking'
+							from: argStartTok to: self ___endOfNextExpression___].
 					args add: (StarredAst new
-						value: self parseExpression;
+						value: starValue;
 						ctx: self loadCtx;
 						from: self lastToken to: self lastToken ; yourself).
 				] ifFalse: [
@@ -1182,8 +1831,23 @@ parseCallArgList
 					argument list."
 					expr := self ___withWalrus___: true do: [self parseExpression].
 					"Check for keyword argument: name=value"
-					(self matchOp: '=') ifTrue: [
-						| name value |
+					(self atOp: '=') ifTrue: [
+						| name value eqTok |
+						eqTok := self advance.
+						"CPython's invalid_kwarg: only a bare name takes a keyword
+						value.  True/False/None, any other expression, and a missing
+						value are each refused with their own message."
+						((expr isKindOf: ConstantAst) and: [(expr value == true)
+							or: [(expr value == false) or: [expr value == nil]]]) ifTrue: [
+								^ self ___syntaxError___: 'cannot assign to ' , exprStartTok value asString
+									from: exprStartTok to: eqTok].
+						(expr isKindOf: NameAst) ifFalse: [
+							^ self ___syntaxError___:
+								'expression cannot contain assignment, perhaps you meant "=="?'
+								from: expr to: eqTok].
+						(self peek isNil or: [(self atOp: ',') or: [self atOp: ')']]) ifTrue: [
+							^ self ___syntaxError___: 'expected argument value expression'
+								from: exprStartTok to: eqTok].
 						"The keyword's RAW spelling, from its own token: expr is a NameAst
 						 that parseAtom has MANGLED, and CPython never mangles a call-site
 						 keyword -- ``self.f(__a=1)'' inside class C passes __a, which is
@@ -1196,7 +1860,8 @@ parseCallArgList
 							ifFalse: [nil].
 						name ifNotNil: [
 							(kwNames includes: name asSymbol) ifTrue: [
-								SyntaxError signal: 'keyword argument repeated: ' , name].
+								^ self ___syntaxError___: 'keyword argument repeated: ' , name
+									from: exprStartTok to: self ___endOfNextExpression___].
 							kwNames add: name asSymbol].
 						sawKeyword := true.
 						"Explicitly FORBIDDEN even though the call as a whole
@@ -1210,9 +1875,11 @@ parseCallArgList
 						"A bare positional argument may not follow a keyword or
 						``**'' unpacking."
 						sawKwargsUnpack ifTrue: [
-							SyntaxError signal: 'positional argument follows keyword argument unpacking'].
+							^ self ___syntaxError___: 'positional argument follows keyword argument unpacking'
+								at: self peek].
 						sawKeyword ifTrue: [
-							SyntaxError signal: 'positional argument follows keyword argument'].
+							^ self ___syntaxError___: 'positional argument follows keyword argument'
+								at: self peek].
 						"Check for comprehension in generator expression — either ``for`` or ``async for``"
 						((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 							| generators genEndTok |
@@ -1242,7 +1909,11 @@ parseCallArgList
 						].
 					].
 				]].
-				self matchOp: ','.
+				"A comma, or the end of the list.  It was optional, so ``f(a b)''
+				compiled; CPython's invalid_expression calls it a missing comma."
+				(self matchOp: ',') ifFalse: [
+					(self peek isNil or: [self atOp: ')']) ifFalse: [
+						^ self ___missingCommaFrom___: argStartTok]].
 				true
 			]
 		] whileTrue.
@@ -1276,13 +1947,21 @@ parseClassDefWithDecorators: decorators
 	bases := Array new.
 	keywords := Array new.
 	(self matchOp: '(') ifTrue: [
-		| result |
+		| result openIdx |
+		openIdx := position - 1.
 		result := self parseCallArgList.
+		"A class's bases are arguments, but not a generator expression:
+		``class C(x for x in y)'' is invalid syntax at the ``for''."
+		(result first anySatisfy: [:b | b isKindOf: GeneratorExpAst]) ifTrue: [
+			| k |
+			k := openIdx + 1.
+			[k < position and: [((tokens at: k) isKeyword: 'for') not]] whileTrue: [k := k + 1].
+			^ self ___invalidSyntaxAt___: (tokens at: k)].
 		bases := result first.
 		keywords := result last.
 		self expect: #OP value: ')'.
 	].
-	self expect: #OP value: ':'.
+	self ___expectColon___: 'class definition' header: tok forced: false.
 	self pushScope.
 	classNesting := classNesting + 1.
 	"PRIVATE-NAME MANGLING is scoped to the class BODY, and only to it: the
@@ -1330,6 +2009,7 @@ parseComparison
 	[self peekComparisonOp notNil] whileTrue: [
 		| op right |
 		op := self parseComparisonOp.
+		self ___rejectStarredOperand___.
 		right := self parseBitwiseOr.
 		ops add: op.
 		comparators add: right.
@@ -1350,8 +2030,21 @@ parseComparisonOp
 	| tok |
 	tok := self peek.
 	(tok isOp: '==') ifTrue: [self advance. ^EqAst basicNew].
-	(tok isOp: '!=') ifTrue: [self advance. ^NotEqAst basicNew].
-	(tok isOp: '<') ifTrue: [self advance. ^LtAst basicNew].
+	(tok isOp: '!=') ifTrue: [
+		barryAsFlufl == true ifTrue: [
+			^ self ___syntaxError___: 'with Barry as BDFL, use ''<>'' instead of ''!=''' at: tok].
+		self advance. ^NotEqAst basicNew].
+	(tok isOp: '<') ifTrue: [
+		| nxt |
+		"``<>'' is two tokens to the lexer.  Adjacent, they are CPython's
+		invalid_noteq (gh-151464): a suggestion of ``!='' -- or, after ``from
+		__future__ import barry_as_FLUFL'', the inequality itself."
+		nxt := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+		(nxt notNil and: [(nxt isOp: '>') and: [nxt position = (tok position + 1)]]) ifTrue: [
+			barryAsFlufl == true ifTrue: [self advance; advance. ^ NotEqAst basicNew].
+			^ self ___syntaxError___: 'invalid syntax.  Maybe you meant ''!='' instead of ''<>''?'
+				from: tok to: nxt].
+		self advance. ^LtAst basicNew].
 	(tok isOp: '<=') ifTrue: [self advance. ^LtEAst basicNew].
 	(tok isOp: '>') ifTrue: [self advance. ^GtAst basicNew].
 	(tok isOp: '>=') ifTrue: [self advance. ^GtEAst basicNew].
@@ -1378,14 +2071,17 @@ parseComprehensions
 	| generators |
 	generators := Array new.
 	[(self atKeyword: 'for') or: [self atKeyword: 'async']] whileTrue: [
-		| forTok target iter ifs isAsync |
+		| forTok target iter ifs isAsync targetPos |
 		isAsync := 0.
 		(self atKeyword: 'async') ifTrue: [
 			self advance.
 			isAsync := 1.
 		].
 		forTok := self advance. "consume 'for'"
+		targetPos := position.
 		target := self parseStarTargets.
+		(self atKeyword: 'in') ifFalse: [
+			^ self ___reportForTargetFrom___: targetPos comprehension: true].
 		"Comprehension targets are comprehension-local in Python 3 —
 		flag the registration so declareWrite: keeps them out of the
 		enclosing scope's write set (see declareWrite:).  Save/restore
@@ -1468,7 +2164,7 @@ parseDecorated
 		self ___markAsyncFunctionDef: funcNode.
 		^funcNode
 	].
-	SyntaxError signal: 'Expected function or class definition after decorator'.
+	^ self ___invalidSyntaxAt___: self peek
 %
 
 category: 'Grail-parsing - compound statements'
@@ -1517,15 +2213,20 @@ method: PythonParser
 parseDelete
 	"Parse: del target_list"
 
-	| tok targets |
+	| tok targets expr bad |
 	tok := self advance. "consume 'del'"
-	targets := Array new.
-	targets add: (self setDelCtx: self parsePrimary).
-	[self matchOp: ','] whileTrue: [ | aTok |
-		((aTok := self peek) notNil and: [ aTok isNewline not]) ifTrue: [
-			targets add: (self setDelCtx: self parsePrimary).
-		].
-	].
+	"Parsed as CPython's invalid_del_stmt reads it -- star_expressions -- so
+	that a target that cannot be deleted is named and placed: ``del f()'' is
+	``cannot delete function call''.  Primaries alone accepted it, and
+	``del (a if b else c)'' compiled."
+	expr := self parseStarExpressions.
+	bad := self ___invalidTarget___: expr kind: #del.
+	bad isNil ifFalse: [
+		^ self ___syntaxError___: 'cannot delete ' , (self ___exprName___: bad) node: bad].
+	targets := ((expr isKindOf: TupleAst) and: [(self ___isParenthesizedTuple___: expr) not])
+		ifTrue: [expr elts asArray]
+		ifFalse: [Array with: expr].
+	targets := targets collect: [:each | self setDelCtx: each].
 	^DeleteAst new
 		targets: targets;
 		from: tok to: self lastToken ; yourself
@@ -1536,12 +2237,15 @@ method: PythonParser
 parseDictDisplayFromStar: startTok
 	"Parse dict display starting with **unpack."
 
-	| keys values |
+	| keys values starTok |
 	keys := Array new.
 	values := Array new.
-	self advance. "consume '**'"
+	starTok := self advance. "consume '**'"
 	keys add: nil.
 	values add: self parseExpression.
+	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
+		^ self ___syntaxError___: 'dict unpacking cannot be used in dict comprehension'
+			at: starTok].
 	[self matchOp: ','] whileTrue: [
 		(self atOp: '}') ifFalse: [
 			(self atOp: '**') ifTrue: [
@@ -1550,8 +2254,8 @@ parseDictDisplayFromStar: startTok
 				values add: self parseExpression.
 			] ifFalse: [
 				keys add: self parseExpression.
-				self expect: #OP value: ':'.
-				values add: self parseExpression.
+				self ___expectDictColonAfter___: keys last.
+				values add: self ___parseDictValue___.
 			].
 		].
 	].
@@ -1599,7 +2303,7 @@ ___parseDictOrSetDisplay___
 	(self matchOp: ':') ifTrue: [
 		| value keys values |
 
-		value := self parseExpression.
+		value := self ___parseDictValue___.
 
 		"Dict comprehension — ``for`` or ``async for`` opens the clause"
 		((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
@@ -1626,8 +2330,8 @@ ___parseDictOrSetDisplay___
 					values add: self parseExpression.
 				] ifFalse: [
 					keys add: self parseExpression.
-					self expect: #OP value: ':'.
-					values add: self parseExpression.
+					self ___expectDictColonAfter___: keys last.
+					values add: self ___parseDictValue___.
 				].
 			].
 		].
@@ -1642,6 +2346,9 @@ ___parseDictOrSetDisplay___
 	"Set comprehension — ``for`` or ``async for`` opens the clause"
 	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 		| generators |
+		(first isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'iterable unpacking cannot be used in comprehension'
+				node: first].
 		generators := self parseComprehensions.
 		self expect: #OP value: '}'.
 		^SetCompAst new
@@ -1658,7 +2365,8 @@ ___parseDictOrSetDisplay___
 			elts add: self parseStarExpression.
 		].
 	].
-	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'.
+	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'
+		elements: elts.
 	self expect: #OP value: '}'.
 	^SetAst new
 		elts: elts;
@@ -1696,7 +2404,8 @@ parseElif
 	of this gate refused it, which is how four Django tests found the
 	omission."
 	test := self ___withWalrus___: true do: [self parseExpression].
-	self expect: #OP value: ':'.
+	self ___checkStrayEquals___: test.
+	self ___expectColon___: '''elif'' statement' header: tok forced: false.
 	body := self parseBlock.
 	orelse := Array new.
 	"SkippingNewlines, because a SINGLE-LINE suite leaves its trailing NEWLINE
@@ -1712,7 +2421,7 @@ parseElif
 		orelse := Array with: self parseElif.
 	] ifFalse: [
 		((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
-			self expect: #OP value: ':'.
+			self ___expectColon___: '''else'' statement' header: self lastToken forced: true.
 			orelse := self parseBlock.
 		].
 	].
@@ -1815,14 +2524,14 @@ parseExpression
 		"Only where the grammar says namedexpr_test -- see
 		___withWalrus___:do:."
 		walrusAllowed ifFalse: [
-			^ SyntaxError signal: self ___walrusRefusalMessage___].
+			^ self ___syntaxError___: self ___walrusRefusalMessage___ at: tok].
 		"The TARGET has to be a bare name.  Anything else gets CPython's
 		own wording, which names the shape that was written -- see
 		___walrusTargetName___:."
 		targetName := self ___walrusTargetName___: expr.
 		targetName ifNotNil: [
-			^ SyntaxError signal:
-				'cannot use assignment expressions with ' , targetName].
+			^ self ___syntaxError___:
+				'cannot use assignment expressions with ' , targetName node: expr].
 		self advance.
 		"The RIGHT-HAND SIDE is ``expression'' in CPython's grammar, not
 		``namedexpr'': ``(x := y := 1)'' is invalid syntax, while the
@@ -1854,33 +2563,7 @@ ___walrusTargetName___: anExpr
 	business storing or did not compile at all."
 
 	(anExpr isKindOf: NameAst) ifTrue: [^ nil].
-	(anExpr isKindOf: TupleAst) ifTrue: [^ 'tuple'].
-	(anExpr isKindOf: ListCompAst) ifTrue: [^ 'list comprehension'].
-	(anExpr isKindOf: SetCompAst) ifTrue: [^ 'set comprehension'].
-	(anExpr isKindOf: DictCompAst) ifTrue: [^ 'dict comprehension'].
-	(anExpr isKindOf: GeneratorExpAst) ifTrue: [^ 'generator expression'].
-	(anExpr isKindOf: ListAst) ifTrue: [^ 'list'].
-	(anExpr isKindOf: SetAst) ifTrue: [^ 'set display'].
-	(anExpr isKindOf: DictAst) ifTrue: [^ 'dict literal'].
-	(anExpr isKindOf: AttributeAst) ifTrue: [^ 'attribute'].
-	(anExpr isKindOf: SubscriptAst) ifTrue: [^ 'subscript'].
-	(anExpr isKindOf: CallAst) ifTrue: [^ 'function call'].
-	(anExpr isKindOf: LambdaAst) ifTrue: [^ 'lambda'].
-	(anExpr isKindOf: IfExpAst) ifTrue: [^ 'conditional expression'].
-	(anExpr isKindOf: AwaitAst) ifTrue: [^ 'await expression'].
-	(anExpr isKindOf: YieldAst) ifTrue: [^ 'yield expression'].
-	(anExpr isKindOf: YieldFromAst) ifTrue: [^ 'yield expression'].
-	(anExpr isKindOf: CompareAst) ifTrue: [^ 'comparison'].
-	(anExpr isKindOf: JoinedStrAst) ifTrue: [^ 'f-string expression'].
-	(anExpr isKindOf: ConstantAst) ifTrue: [
-		anExpr value isNil ifTrue: [^ 'None'].
-		anExpr value == true ifTrue: [^ 'True'].
-		anExpr value == false ifTrue: [^ 'False'].
-		^ 'literal'].
-	"Operators, unary and boolean forms all answer the same word in
-	CPython -- ``a + b'', ``not a'' and ``a and b'' are each just
-	``expression''."
-	^ 'expression'
+	^ self ___exprName___: anExpr
 %
 
 category: 'Grail-parsing - statements'
@@ -1908,7 +2591,9 @@ parseExpressionOrAssignment
 		((expr isKindOf: NameAst)
 			or: [(expr isKindOf: AttributeAst)
 			or: [expr isKindOf: SubscriptAst]]) ifFalse: [
-				SyntaxError signal: 'illegal expression for augmented assignment'].
+				^ self ___syntaxError___: '''' , (self ___exprName___: expr)
+					, ''' is an illegal expression for augmented assignment'
+					node: expr].
 		self setStoreCtx: expr.
 		^AugAssignAst new
 			target: expr;
@@ -1928,6 +2613,7 @@ parseExpressionOrAssignment
 			(self matchOp: '=') ifTrue: [
 				value := self parseExpression.
 			].
+			self ___checkAnnotationTarget___: expr.
 			self setStoreCtx: expr.
 			"``(x): int = 1'' is NOT simple: CPython evaluates the annotation
 			and binds x, but records nothing in __annotations__.  The parens
@@ -1951,6 +2637,8 @@ parseExpressionOrAssignment
 	"Regular assignment: x = value (possibly chained: x = y = value)"
 	(tok notNil and: [tok isOp: '=']) ifTrue: [
 		| targets value |
+		(self ___invalidTarget___: expr kind: #star) isNil
+			ifFalse: [self ___checkFirstAssignTarget___: expr].
 		targets := Array new.
 		self setStoreCtx: expr.
 		targets add: expr.
@@ -1959,6 +2647,9 @@ parseExpressionOrAssignment
 			nextExpr := self parseStarExpressions.
 			"Check if followed by another '=' - if so, this is another target"
 			((aTok := self peek) notNil and: [ aTok isOp: '=']) ifTrue: [
+				(nextExpr isKindOf: YieldAst) | (nextExpr isKindOf: YieldFromAst) ifTrue: [
+					^ self ___syntaxError___: 'assignment to yield expression not possible'
+						node: nextExpr].
 				self setStoreCtx: nextExpr.
 				targets add: nextExpr.
 			] ifFalse: [
@@ -1977,12 +2668,29 @@ parseExpressionOrAssignment
 	SyntaxError in CPython -- the parenthesised ``(x := 0)'' is the legal
 	spelling, and that one arrives through parseExpression above."
 	(tok notNil and: [tok isOp: ':=']) ifTrue: [
-		^ SyntaxError signal: 'invalid syntax'].
+		^ self ___invalidSyntaxAt___: tok].
 
 	"Expression statement"
 	^ExprAst new
 		value: expr;
 		from: startTok to: self lastToken ; yourself
+%
+
+category: 'Grail-target validation'
+method: PythonParser
+___checkAnnotationTarget___: expr
+	"CPython's invalid_assignment rules for an annotated target: only a name,
+	an attribute or a subscript can be annotated."
+
+	((expr isKindOf: TupleAst) and: [(self ___isParenthesizedTuple___: expr) not])
+		ifTrue: [^ self ___syntaxError___: 'only single target (not tuple) can be annotated'
+			node: expr elts first].
+	((expr isKindOf: TupleAst) or: [expr isKindOf: ListAst]) ifTrue: [
+		^ self ___syntaxError___: 'only single target (not ' , (self ___exprName___: expr)
+			, ') can be annotated' node: expr].
+	((expr isKindOf: NameAst) or: [(expr isKindOf: AttributeAst)
+		or: [expr isKindOf: SubscriptAst]]) ifFalse: [
+			^ self ___syntaxError___: 'illegal target for annotation' node: expr]
 %
 
 category: 'Grail-parsing - expressions'
@@ -1995,6 +2703,7 @@ parseFactor
 	(tok notNil and: [tok isOp: '+']) ifTrue: [
 		| operand |
 		self advance.
+		self ___rejectStarredOperand___.
 		operand := self parseFactor.
 		^UAddAst new
 			operand: operand;
@@ -2003,6 +2712,7 @@ parseFactor
 	(tok notNil and: [tok isOp: '-']) ifTrue: [
 		| operand |
 		self advance.
+		self ___rejectStarredOperand___.
 		operand := self parseFactor.
 		^USubAst new
 			operand: operand;
@@ -2011,6 +2721,7 @@ parseFactor
 	(tok notNil and: [tok isOp: '~']) ifTrue: [
 		| operand |
 		self advance.
+		self ___rejectStarredOperand___.
 		operand := self parseFactor.
 		^InvertAst new
 			operand: operand;
@@ -2019,25 +2730,59 @@ parseFactor
 	^self parsePower
 %
 
+category: 'Grail-target validation'
+method: PythonParser
+___reportForTargetFrom___: aPosition comprehension: aBoolean
+	"A ``for'' whose target is not followed by ``in''.  CPython re-reads
+	what follows the ``for'': in a comprehension, bitwise_or expressions not
+	followed by ``in'' are ``'in' expected after for-loop variables''
+	(invalid_for_if_clause); then the whole as star_expressions, where a
+	target that cannot be assigned to is named (invalid_for_target --
+	``for x + 1 in y'' is ``cannot assign to expression'').  Otherwise it is
+	the generic error, at the token the target stopped on."
+
+	| failTok expr bad |
+	failTok := self peek.
+	aBoolean ifTrue: [
+		position := aPosition.
+		expr := [self parseBitwiseOr. [self matchOp: ','] whileTrue: [
+					(self atKeyword: 'in') ifFalse: [self parseBitwiseOr]]. true]
+			on: SyntaxError do: [:ex | ex return: false].
+		(expr and: [(self atKeyword: 'in') not]) ifTrue: [
+			^ self ___syntaxError___: '''in'' expected after for-loop variables'
+				at: self peek]].
+	position := aPosition.
+	expr := [self parseStarExpressions] on: SyntaxError do: [:ex | ex return: nil].
+	expr isNil ifFalse: [
+		bad := self ___invalidTarget___: expr kind: #for.
+		bad isNil ifFalse: [
+			^ self ___syntaxError___: 'cannot assign to ' , (self ___exprName___: bad)
+				node: bad]].
+	^ self ___invalidSyntaxAt___: failTok
+%
+
 category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseFor
 	"Parse: for target in iter: body [else: body]"
 
-	| tok target iter body orelse |
+	| tok target iter body orelse targetPos |
 	tok := self advance. "consume 'for'"
+	targetPos := position.
 	target := self parseStarTargets.
+	(self atKeyword: 'in') ifFalse: [
+		^ self ___reportForTargetFrom___: targetPos comprehension: false].
 	self setStoreCtx: target.
 	self expect: #KEYWORD value: 'in'.
 	iter := self parseStarExpressions.
-	self expect: #OP value: ':'.
+	self ___expectColon___: '''for'' statement' header: tok forced: false.
 	body := self parseBlock.
 	orelse := Array new.
 	"SkippingNewlines -- see parseIf.  A single-line suite leaves its trailing
 	NEWLINE unconsumed, so ``for i in x: pass'' followed by ``else:'' never
 	matched here."
 	((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
-		self expect: #OP value: ':'.
+		self ___expectColon___: '''else'' statement' header: self lastToken forced: true.
 		orelse := self parseBlock.
 	].
 	^ForAst new
@@ -2058,6 +2803,7 @@ parseFromImportName
 	nameTok := self expectType: #NAME.
 	asName := nil.
 	(self matchKeyword: 'as') ifTrue: [
+		self ___checkImportTarget___.
 		asName := self advance value asSymbol.
 		"``as _'' must track NameAst's parse-time rename of ``_'' —
 		reads of the alias emit ___unused___, so the binding has to
@@ -2098,14 +2844,14 @@ parseFunctionDefWithDecorators: decorators
 	nameTok value = '_' ifTrue: [nameTok value: self underscoreDefName asString].
 	self declareWrite: nameTok value asSymbol.
 	typeParamNames := self skipTypeParams.
-	self expect: #OP value: '('.
+	self ___expectForced___: '('.
 	args := self parseFunctionParametersUntil: ')'.
 	self expect: #OP value: ')'.
 	returns := nil.
 	(self matchOp: '->') ifTrue: [
 		returns := self parseExpression.
 	].
-	self expect: #OP value: ':'.
+	self ___expectColon___: 'function definition' header: tok forced: true.
 	self pushScope.
 	"Declare parameter names in the function body's scope so name
 	resolution treats parameters as locals (Python LEGB).  Without
@@ -2233,7 +2979,7 @@ parseFunctionParametersUntil: endOp
 	Returns an ArgumentsAst."
 
 	| posonlyargs args vararg kwonlyargs kw_defaults kwarg defaults
-	  sawSlash sawStar sawDefault allowAnnotations seenNames aTok |
+	  sawSlash sawStar sawDefault allowAnnotations seenNames aTok starTok |
 	posonlyargs := Array new.
 	args := Array new.
 	vararg := nil.
@@ -2254,10 +3000,19 @@ parseFunctionParametersUntil: endOp
 				"Nothing may follow ``**kwargs`` -- a parameter, *, ** or /
 				alike, one message for all four (CPython's pegen)."
 				kwarg notNil ifTrue: [
-					SyntaxError signal: 'arguments cannot follow var-keyword argument'].
+					^ self ___syntaxError___: 'arguments cannot follow var-keyword argument' at: tok].
+				"``def f((a))'': CPython names the parentheses."
+				(tok isOp: '(') ifTrue: [
+					| close |
+					close := self ___indexOfClose___: position.
+					^ self ___syntaxError___: (endOp = ':'
+							ifTrue: ['Lambda expression parameters cannot be parenthesized']
+							ifFalse: ['Function parameters cannot be parenthesized'])
+						from: tok to: (close isNil ifTrue: [tok] ifFalse: [tokens at: close])].
 				"Check for / (positional-only separator)"
 				(tok isOp: '/') ifTrue: [
-					self advance.
+					| slashTok |
+					slashTok := self advance.
 					"CPython's three placement refusals, in its precedence:
 					after any * (bare, *args, or inside the keyword-only
 					section) the slash is too late; a second slash may not
@@ -2265,14 +3020,14 @@ parseFunctionParametersUntil: endOp
 					``def f(/)`` shape reporting plain invalid syntax, the
 					grammar having nothing to say about an empty prefix."
 					sawStar ifTrue: [
-						SyntaxError signal: '/ must be ahead of *'].
+						^ self ___syntaxError___: '/ must be ahead of *' at: slashTok].
 					sawSlash ifTrue: [
-						SyntaxError signal: '/ may appear only once'].
+						^ self ___syntaxError___: '/ may appear only once' at: slashTok].
 					args isEmpty ifTrue: [
 						((self peek notNil) and: [self peek isOp: endOp])
-							ifTrue: [SyntaxError signal: 'invalid syntax']
-							ifFalse: [SyntaxError signal:
-								'at least one argument must precede /']].
+							ifTrue: [^ self ___invalidSyntaxAt___: self peek]
+							ifFalse: [^ self ___syntaxError___:
+								'at least one argument must precede /' at: slashTok]].
 					posonlyargs := args.
 					args := Array new.
 					"Move defaults to posonlyargs"
@@ -2281,13 +3036,18 @@ parseFunctionParametersUntil: endOp
 				] ifFalse: [
 				"Check for * (keyword-only separator or *args)"
 				(tok isOp: '*') ifTrue: [
-					self advance.
+					sawStar ifTrue: [
+						^ self ___syntaxError___: '* argument may appear only once' at: tok].
+					starTok := self advance.
 					sawStar := true.
 					"If followed by name, it's *args"
 					(self peek notNil and: [self peekType == #NAME]) ifTrue: [
 						| argNode |
 						argNode := self parseSingleParamWithAnnotations: allowAnnotations.
 						vararg := argNode.
+						(self atOp: '=') ifTrue: [
+							^ self ___syntaxError___: 'var-positional argument cannot have default value'
+								at: self peek].
 					].
 					self matchOp: ','.
 				] ifFalse: [
@@ -2295,10 +3055,14 @@ parseFunctionParametersUntil: endOp
 				(tok isOp: '**') ifTrue: [
 					self advance.
 					kwarg := self parseSingleParamWithAnnotations: allowAnnotations.
+					(self atOp: '=') ifTrue: [
+						^ self ___syntaxError___: 'var-keyword argument cannot have default value'
+							at: self peek].
 					self matchOp: ','.
 				] ifFalse: [
 					"Regular parameter"
-					| param default |
+					| param default paramTok |
+					paramTok := self peek.
 					param := self parseSingleParamWithAnnotations: allowAnnotations.
 					default := nil.
 					(self matchOp: '=') ifTrue: [
@@ -2317,7 +3081,8 @@ parseFunctionParametersUntil: endOp
 						default isNil
 							ifTrue: [
 								sawDefault ifTrue: [
-									SyntaxError signal: 'parameter without a default follows parameter with a default']]
+									^ self ___syntaxError___: 'parameter without a default follows parameter with a default'
+										at: paramTok]]
 							ifFalse: [sawDefault := true].
 						args add: param.
 						default ifNotNil: [defaults add: default].
@@ -2335,7 +3100,7 @@ parseFunctionParametersUntil: endOp
 	follow bare *'' (test_keywordonlyarg testSyntaxErrorForFunctionDefinition:
 	``def f(p, *)'', ``def f(p1, *, **k1)'')."
 	(sawStar and: [vararg isNil and: [kwonlyargs isEmpty]]) ifTrue: [
-		SyntaxError signal: 'named arguments must follow bare *'].
+		^ self ___syntaxError___: 'named arguments must follow bare *' at: starTok].
 	"A parameter name may appear only once across the whole signature -- the
 	posonly / regular / *vararg / keyword-only / **kwarg sections share one
 	namespace.  CPython: ``duplicate argument 'X' in function definition''
@@ -2347,8 +3112,9 @@ parseFunctionParametersUntil: endOp
 		(kwarg isNil ifTrue: [#()] ifFalse: [{kwarg}]))
 		do: [:p |
 			(seenNames includes: p name asSymbol) ifTrue: [
-				SyntaxError signal:
-					'duplicate argument ''' , p name asString , ''' in function definition'].
+				^ self ___syntaxError___:
+					'duplicate argument ''' , p name asString , ''' in function definition'
+					node: p].
 			seenNames add: p name asSymbol].
 
 	^ArgumentsAst new
@@ -2410,23 +3176,17 @@ ___checkGlobalDeclarationLegal___: aName at: aToken
 category: 'Grail-parsing - simple statements'
 method: PythonParser
 ___signalGlobalSyntaxError___: aMessage at: aToken
-	"Signal with CPython's message.  The location fields are filled in
-	the same shape CPython uses (offset is 1-based on the ``global''
-	token's column), so a caller reading e.lineno / e.offset sees the
-	global STATEMENT rather than nothing."
+	"A declaration CPython's symbol table refuses (``name 'x' is parameter and
+	global''), located as it locates it: the whole global statement."
 
-	| loc |
-	"PythonToken carries ``position'' (an index into the source), not a
-	column; a precise column would need a line-start table, so the
-	position is reported as-is rather than invented."
-	loc := Array @env0:with: '<string>'
-		with: (aToken line ifNil: [0])
-		with: (aToken position ifNil: [0])
-		with: nil.
-	"@env1: explicitly -- ___signalNew___:kw: is an env-1 method and this
-	file compiles at env 0, so a bare send raises MessageNotUnderstood
-	instead of the SyntaxError it was meant to build."
-	^ SyntaxError @env1:___signalNew___: (Array @env0:with: aMessage with: (tuple @env0:withAll: loc)) kw: nil
+	| i j |
+	i := self ___tokenIndexAt___: aToken position.
+	i = 0 ifTrue: [^ SyntaxError signal: aMessage].
+	j := i.
+	[j < tokens size and: [((tokens at: j + 1) type == #NEWLINE
+		or: [((tokens at: j + 1) isOp: ';') or: [(tokens at: j + 1) type == #ENDMARKER]]) not]]
+			whileTrue: [j := j + 1].
+	^ self ___syntaxError___: aMessage from: aToken to: (tokens at: j)
 %
 
 category: 'Grail-parsing - simple statements'
@@ -2478,7 +3238,8 @@ parseIf
 	point of PEP 572, and the unparenthesised ``if n := f()'' is legal
 	too."
 	test := self ___withWalrus___: true do: [self parseExpression].
-	self expect: #OP value: ':'.
+	self ___checkStrayEquals___: test.
+	self ___expectColon___: '''if'' statement' header: tok forced: false.
 	body := self parseBlock.
 	orelse := Array new.
 	"SkippingNewlines, because a SINGLE-LINE suite leaves its trailing NEWLINE
@@ -2494,8 +3255,10 @@ parseIf
 		orelse := Array with: self parseElif.
 	] ifFalse: [
 		((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
-			self expect: #OP value: ':'.
+			self ___expectColon___: '''else'' statement' header: self lastToken forced: true.
 			orelse := self parseBlock.
+			(self atKeywordSkippingNewlines: 'elif') ifTrue: [
+				^ self ___syntaxError___: '''elif'' block follows an ''else'' block' at: self peek].
 		].
 	].
 	^IfAst new
@@ -2524,6 +3287,9 @@ parseImport
 	[self matchOp: ','] whileTrue: [
 		names add: self parseImportName.
 	].
+	(self atKeyword: 'from') ifTrue: [
+		^ self ___syntaxError___: 'Did you mean to use ''from ... import ...'' instead?'
+			from: tok to: (self ___lastTokenOfLine___)].
 	names do: [:alias |
 		| bound |
 		bound := alias asName ifNil: [
@@ -2562,6 +3328,10 @@ parseImportFrom
 		].
 	].
 	self expect: #KEYWORD value: 'import'.
+	(self peek notNil and: [self peek type == #NEWLINE]) ifTrue: [
+		^ PythonParser ___signal___: SyntaxError
+			message: 'Expected one or more names after ''import'''
+			in: source from: self peek position to: nil].
 	"Parse names"
 	(self matchOp: '*') ifTrue: [
 		"``from X import *'' is legal ONLY at module level.  A star import
@@ -2579,7 +3349,7 @@ parseImportFrom
 		later reference raised NameError at run time instead of
 		SyntaxError at compile time (test_scope testUnoptimizedNamespaces)."
 		variableStack size > 1 ifTrue: [
-			SyntaxError signal: 'import * only allowed at module level'].
+			^ self ___syntaxError___: 'import * only allowed at module level' at: self lastToken].
 		names := Array with: (AliasAst new
 			name: #'*';
 			asName: nil;
@@ -2590,6 +3360,9 @@ parseImportFrom
 		names := Array new.
 		names add: self parseFromImportName.
 		[self matchOp: ','] whileTrue: [
+			(hasParen not and: [self peek notNil and: [self peek type == #NEWLINE]]) ifTrue: [
+				^ self ___syntaxError___: 'trailing comma not allowed without surrounding parentheses'
+					at: self peek].
 			((aTok := self peek) notNil and: [ aTok isOp: ')']) ifFalse: [
 				names add: self parseFromImportName.
 			].
@@ -2601,6 +3374,9 @@ parseImportFrom
 			self declareWrite: (alias asName ifNil: [alias name]).
 		].
 	].
+	(moduleStr = '__future__' and: [level = 0]) ifTrue: [
+		(names anySatisfy: [:alias | alias name == #'barry_as_FLUFL'])
+			ifTrue: [barryAsFlufl := true]].
 	^ImportFromAst new
 		module: moduleStr;
 		names: names;
@@ -2623,8 +3399,7 @@ parseImportName
 	(self matchKeyword: 'as') ifTrue: [
 		"The alias must be a NAME -- ``import math as await'' consumed the
 		KEYWORD token as if it were one (test_badsyntax_2)."
-		(self peek notNil and: [self peek type == #NAME]) ifFalse: [
-			SyntaxError signal: 'invalid syntax'].
+		self ___checkImportTarget___.
 		asName := self advance value asSymbol.
 		asName == #'_' ifTrue: [asName := #'___unused___'].
 		asName := self ___mangle___: asName.
@@ -2753,7 +3528,17 @@ ___checkUnparenthesizedComprehension___: aMessage
 	measurement rather than being re-derived here."
 
 	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
-		SyntaxError signal: aMessage]
+		^ self ___invalidSyntaxAt___: self peek]
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___checkUnparenthesizedComprehension___: aMessage elements: anArray
+	"The list and set form: CPython's invalid_comprehension draws the hint
+	over the elements that should have been parenthesised."
+
+	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
+		^ self ___syntaxError___: aMessage from: anArray first to: anArray last]
 %
 
 category: 'Grail-parsing - atoms'
@@ -2777,6 +3562,9 @@ ___parseListDisplay___
 	"List comprehension — either ``for`` or ``async for`` opens the clause"
 	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 		| generators |
+		(expr isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'iterable unpacking cannot be used in comprehension'
+				node: expr].
 		generators := self parseComprehensions.
 		self expect: #OP value: ']'.
 		^ListCompAst new
@@ -2793,7 +3581,8 @@ ___parseListDisplay___
 			elts add: self parseStarExpression.
 		].
 	].
-	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'.
+	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'
+		elements: elts.
 	self expect: #OP value: ']'.
 	^ListAst new
 		elts: elts;
@@ -2934,11 +3723,17 @@ ___parseParenExpr___
 			from: startTok to: self lastToken ; yourself
 	].
 
+	(self atOp: '**') ifTrue: [
+		^ self ___syntaxError___: 'cannot use double starred expression here' at: self peek].
 	expr := self parseStarExpression.
+	self ___checkStrayEquals___: expr.
 
 	"Check for comprehension (generator expression) — ``for`` or ``async for`` opens the clause"
 	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 		| generators |
+		(expr isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'iterable unpacking cannot be used in comprehension'
+				node: expr].
 		generators := self parseComprehensions.
 		self expect: #OP value: ')'.
 		^GeneratorExpAst new
@@ -2954,9 +3749,11 @@ ___parseParenExpr___
 		exprs add: expr.
 		(self atOp: ')') ifFalse: [
 			exprs add: self parseStarExpression.
+			self ___checkStrayEquals___: exprs last.
 			[self matchOp: ','] whileTrue: [
 				(self atOp: ')') ifFalse: [
 					exprs add: self parseStarExpression.
+					self ___checkStrayEquals___: exprs last.
 				].
 			].
 		].
@@ -2968,6 +3765,8 @@ ___parseParenExpr___
 			from: startTok to: self lastToken ; yourself
 	] ifFalse: [
 		"Parenthesized single expression"
+		(expr isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'cannot use starred expression here' node: expr].
 		self expect: #OP value: ')'.
 		^expr
 	].
@@ -2993,6 +3792,7 @@ parsePower
 	(self atOp: '**') ifTrue: [
 		| right |
 		self advance.
+		self ___rejectStarredOperand___.
 		right := self parseFactor.
 		^BinOpAst new
 			left: left;
@@ -3104,6 +3904,7 @@ parseShift
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := opTok value = '<<' ifTrue: [LShiftAst] ifFalse: [RShiftAst].
+		self ___rejectStarredOperand___.
 		right := self parseSum.
 		left := BinOpAst new
 			left: left;
@@ -3186,9 +3987,16 @@ checkSimpleStatementTerminator: lastStmt
 	"Every ``;'' has already been consumed by the caller's loop, so reaching
 	here with one is impossible; a dedent is the block parser's business."
 	(self ___py2StatementKeywordOf___: lastStmt) ifNotNil: [:kw |
-		^ SyntaxError signal: 'Missing parentheses in call to ''' , kw
-			, '''. Did you mean ' , kw , '(...)?'].
-	^ SyntaxError signal: 'invalid syntax'
+		"From the keyword to the end of what follows it, as CPython's
+		invalid_legacy_expression draws it."
+		^ self ___syntaxError___: 'Missing parentheses in call to ''' , kw
+			, '''. Did you mean ' , kw , '(...)?'
+			from: lastStmt to: self ___endOfNextStarExpressions___].
+	((tok isKeyword: 'if') and: [(lastStmt isKindOf: PassAst)
+		or: [(lastStmt isKindOf: BreakAst) or: [lastStmt isKindOf: ContinueAst]]]) ifTrue: [
+			^ self ___syntaxError___: 'expected expression before ''if'', but statement is given'
+				node: lastStmt].
+	^ self ___invalidSyntaxAt___: tok
 %
 
 category: 'Grail-parsing - statements'
@@ -3544,6 +4352,17 @@ parseFStringLiteral
 				| bracketDepth strQuote exprEnd |
 				pos := pos + 1.
 				exprStart := pos.
+				"CPython's invalid_fstring_replacement_field: a field whose
+				expression is missing, named by what stands in its place."
+				[| k c |
+				 k := pos.
+				 [k <= len and: [(value at: k) == $ ]] whileTrue: [k := k + 1].
+				 k <= len ifTrue: [
+					c := value at: k.
+					('=!:}' includesValue: c) ifTrue: [
+						^ self ___fstringError___: 'valid expression required before '''
+								, c asString , ''''
+							token: tok fieldAt: exprStart index: k]]] value.
 				bracketDepth := 0.
 				strQuote := nil.
 				conversion := nil.
@@ -3604,6 +4423,23 @@ parseFStringLiteral
 								inSpec ifTrue: [specBuf nextPut: ch. pos := pos + 1] ifFalse: [
 									"Conversion flag: ``!r`` / ``!s`` / ``!a``
 									(only at depth 0, after the expression)."
+									"A ``!'' that is not ``!='' opens a conversion, which
+									must be one of s, r and a."
+									(ch == $! and: [bracketDepth == 0 and: [pos < len
+										and: [(value at: pos + 1) ~~ $=
+										and: [('rsa' includesValue: (value at: pos + 1)) not]]]])
+										ifTrue: [
+											| c2 k |
+											c2 := value at: pos + 1.
+											(c2 == $} or: [c2 == $:]) ifTrue: [
+												^ self ___fstringError___: 'missing conversion character'
+													token: tok fieldAt: exprStart index: pos + 1].
+											c2 isLetter ifTrue: [
+												k := pos + 1.
+												[k <= len and: [(value at: k) isLetter]] whileTrue: [k := k + 1].
+												^ self ___fstringError___: 'invalid conversion character '''
+														, (value copyFrom: pos + 1 to: k - 1) , ''': expected ''s'', ''r'', or ''a'''
+													token: tok fieldAt: exprStart index: pos + 1]].
 									(ch == $! and: [bracketDepth == 0
 										and: [(pos < len) and: [
 											| c2 |
@@ -4118,6 +4954,7 @@ parseSum
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := opTok value = '+' ifTrue: [AddAst] ifFalse: [SubAst].
+		self ___rejectStarredOperand___.
 		right := self parseTerm.
 		left := BinOpAst new
 			left: left;
@@ -4141,6 +4978,7 @@ parseTerm
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := self operatorClassFor: opTok value.
+		self ___rejectStarredOperand___.
 		right := self parseFactor.
 		left := BinOpAst new
 			left: left;
@@ -4163,7 +5001,18 @@ parseTernary
 		| test orelse |
 		self advance. "consume 'if'"
 		test := self parseDisjunction.
-		self expect: #KEYWORD value: 'else'.
+		"CPython's invalid_expression: a conditional with no else names
+		itself, from its body to its condition -- and an else with no
+		expression after it says that a statement was given."
+		(self atKeyword: 'else') ifFalse: [
+			(self atOp: ':') ifTrue: [^ self ___invalidSyntaxAt___: self peek].
+			^ self ___syntaxError___: 'expected ''else'' after ''if'' expression'
+				from: startTok to: test].
+		self advance.
+		(self ___canStartExpression___: self peek) ifFalse: [
+			^ self ___syntaxError___:
+				'expected expression after ''else'', but statement is given'
+				at: self peek].
 		"``disjunction 'if' disjunction 'else' expression'' -- the else arm
 		is EXPRESSION, so ``(a if b else c := 1)'' is not a walrus in the
 		arm but a walrus applied to the whole conditional, which CPython
@@ -4189,25 +5038,59 @@ parseTry
 
 	| tok body handlers orelse finalbody |
 	tok := self advance. "consume 'try'"
-	self expect: #OP value: ':'.
+	self ___expectColon___: '''try'' statement' header: tok forced: true.
 	body := self parseBlock.
+	"CPython's invalid_try_stmt: a try with neither handler is refused, at
+	the end of its body's last line."
+	((self atKeywordSkippingNewlines: 'except') or: [self atKeywordSkippingNewlines: 'finally'])
+		ifFalse: [^ self ___signalTryWithoutHandler___].
 	handlers := Array new.
 	orelse := Array new.
 	finalbody := Array new.
 
 	"Parse except clauses"
 	[self atKeywordSkippingNewlines: 'except'] whileTrue: [
-		| exceptTok excType excName exceptBody aTok isStarClause |
+		| exceptTok excType excName exceptBody aTok isStarClause starTok |
 		exceptTok := self advance. "consume 'except'"
 		"PEP 654 ``except*''.  Consumed HERE, before the type expression:
 		left in place it parsed as a STARRED EXPRESSION -- ``except (*T)''
 		-- and surfaced at runtime as ``*-unpack in call sites is not yet
 		supported'', an error naming neither except nor exception groups."
+		starTok := self peek.
 		isStarClause := self matchOp: '*'.
+		"CPython refuses mixing the two forms in one try, at the clause that
+		mixes them: ``except*'' after ``except'' over both tokens, ``except''
+		after ``except*'' at the keyword.  And an ``except*'' must name a type."
+		(handlers notEmpty and: [handlers first isStar ~~ isStarClause]) ifTrue: [
+			^ isStarClause
+				ifTrue: [self ___syntaxError___:
+					'cannot have both ''except'' and ''except*'' on the same ''try'''
+					from: exceptTok to: starTok]
+				ifFalse: [self ___syntaxError___:
+					'cannot have both ''except'' and ''except*'' on the same ''try'''
+					at: exceptTok]].
+		(isStarClause and: [self peek notNil and: [(self atOp: ':') or: [self peek type == #NEWLINE]]])
+			ifTrue: [^ self ___syntaxError___: 'expected one or more exception types' at: self peek].
 		excType := nil.
 		excName := nil.
 		((aTok := self peek) notNil and: [(aTok isOp: ':') not]) ifTrue: [
 			excType := self parseExpression.
+			"PEP 758 (3.14): the types may be listed without parentheses when
+			there is no ``as''.  With one, CPython asks for the parentheses,
+			from the first type to the name."
+			(self atOp: ',') ifTrue: [
+				| types |
+				types := OrderedCollection with: excType.
+				[self matchOp: ','] whileTrue: [types add: self parseExpression].
+				(self atKeyword: 'as') ifTrue: [
+					self advance.
+					^ self ___syntaxError___:
+						'multiple exception types must be parenthesized when using ''as'''
+						from: excType to: self peek].
+				excType := TupleAst new
+					elts: types asArray;
+					ctx: self loadCtx;
+					from: excType to: self lastToken ; yourself].
 			(self matchKeyword: 'as') ifTrue: [
 				excName := self advance value asSymbol.
 				"``except E as _'' must track the parse-time rename of ``_''
@@ -4226,7 +5109,9 @@ parseTry
 				self declareWrite: excName.
 			].
 		].
-		self expect: #OP value: ':'.
+		self ___expectColon___: (isStarClause
+				ifTrue: ['''except*'' statement'] ifFalse: ['''except'' statement'])
+			header: exceptTok forced: false.
 		exceptBody := self parseBlock.
 		"Checked HERE rather than at codegen: it is a SyntaxError, so it has
 		to fire while parsing the source that contains it."
@@ -4244,27 +5129,18 @@ parseTry
 		"CPython rejects mixing the two forms in one try, and so must we:
 		the emitted shapes are different, so a mixed try has no meaning to
 		fall back on."
-		(handlers anySatisfy: [:h | h isStar]) ifTrue: [
-			(handlers allSatisfy: [:h | h isStar]) ifFalse: [
-				SyntaxError signal: 'cannot have both ''except'' and ''except*'' on the same ''try'''
-			].
-			"``except*'' must name an exception type -- a bare ``except*:''
-			has nothing to split on."
-			excType ifNil: [
-				SyntaxError signal: 'expected one or more exception types'
-			]
-		].
+
 	].
 
 	"Parse else clause"
 	((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
-		self expect: #OP value: ':'.
+		self ___expectColon___: '''else'' statement' header: self lastToken forced: true.
 		orelse := self parseBlock.
 	].
 
 	"Parse finally clause"
 	((self atKeywordSkippingNewlines: 'finally') and: [self matchKeyword: 'finally']) ifTrue: [
-		self expect: #OP value: ':'.
+		self ___expectColon___: '''finally'' statement' header: self lastToken forced: true.
 		finalbody := self parseBlock.
 		"Flag the enclosing scope as return-blocking — the finally
 		cleanup is emitted AFTER the try body, the same pattern that
@@ -4291,14 +5167,15 @@ parseWhile
 	point of PEP 572, and the unparenthesised ``while n := f()'' is legal
 	too."
 	test := self ___withWalrus___: true do: [self parseExpression].
-	self expect: #OP value: ':'.
+	self ___checkStrayEquals___: test.
+	self ___expectColon___: '''while'' statement' header: tok forced: false.
 	body := self parseBlock.
 	orelse := Array new.
 	"SkippingNewlines -- see parseIf.  A single-line suite leaves its trailing
 	NEWLINE unconsumed, so ``for i in x: pass'' followed by ``else:'' never
 	matched here."
 	((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
-		self expect: #OP value: ':'.
+		self ___expectColon___: '''else'' statement' header: self lastToken forced: true.
 		orelse := self parseBlock.
 	].
 	^WhileAst new
@@ -4330,7 +5207,7 @@ parseWith
 			items add: self parseWithItem.
 		].
 	].
-	self expect: #OP value: ':'.
+	self ___expectColon___: '''with'' statement' header: tok forced: false.
 	body := self parseBlock.
 	^WithAst new
 		items: items;
@@ -4406,7 +5283,7 @@ parseYieldExpression
 	].
 	value := nil.
 	((aTok := self peek) notNil and: [aTok isNewline not and: [aTok isEndMarker not and: [(aTok isOp:')') not 
-        and: [(aTok isOp: ']') not]]]]) ifTrue: [
+        and: [(aTok isOp: ']') not and: [(aTok isOp: '=') not and: [(aTok isOp: ';') not]]]]]]) ifTrue: [
 		value := self parseStarExpressions.
 	].
 	^YieldAst new
@@ -4422,6 +5299,8 @@ parseYieldStatement
 	| tok expr |
 	tok := self peek.
 	expr := self parseYieldExpression.
+	(self atOp: '=') ifTrue: [
+		^ self ___syntaxError___: 'assignment to yield expression not possible' node: expr].
 	^ExprAst new
 		value: expr;
 		from: tok to: self lastToken ; yourself
@@ -4782,8 +5661,10 @@ setStoreCtx: anExpr
 	messageText; builtins>>_compile: re-raises with that text through the env-1
 	___signal___: so the Python str(e) carries it (test_illegal_assignment's
 	assertRaisesRegex)."
-	illegal := self ___illegalStoreTargetDesc___: anExpr.
-	illegal ifNotNil: [ SyntaxError signal: 'cannot assign to ' , illegal ].
+	illegal := self ___invalidTarget___: anExpr kind: #star.
+	illegal ifNotNil: [
+		^ self ___syntaxError___: 'cannot assign to ' , (self ___exprName___: illegal)
+			node: illegal].
 	varNames := anExpr class allInstVarNames.
 	index := varNames indexOf: #ctx.
 	index > 0 ifTrue: [anExpr instVarAt: index put: self storeCtx].
@@ -5139,7 +6020,7 @@ parseMatch
 	| tok subject cases |
 	tok := self advance.  "consume the soft keyword 'match'"
 	subject := self parseMatchSubject.
-	self expect: #OP value: ':'.
+	self ___expectColon___: '''match'' statement' header: tok forced: false.
 	cases := self parseCaseBlocks.
 	cases isEmpty ifTrue: [
 		SyntaxError signal: 'expected at least one case block at line ',
@@ -5180,7 +6061,7 @@ parseCaseBlocks
 	| cases |
 	self expectType: #NEWLINE.
 	self skipNewlines.
-	self expectType: #INDENT.
+	self ___expectIndentedBlock___.
 	cases := Array new.
 	self skipNewlines.
 	[(self peek notNil)
@@ -5209,7 +6090,7 @@ parseCaseBlock
 	pattern := self parseMatchPatterns.
 	guard := nil.
 	(self matchKeyword: 'if') ifTrue: [guard := self parseExpression].
-	self expect: #OP value: ':'.
+	self ___expectColon___: '''case'' statement' header: tok forced: false.
 	body := self parseBlock.
 	^MatchCaseAst new
 		pattern: pattern;
@@ -5249,6 +6130,19 @@ parseMatchPattern
 	inner := self parseMatchOrPattern.
 	(self atKeyword: 'as') ifFalse: [^inner].
 	self advance.
+	"CPython's invalid_as_pattern: ``_'' cannot be bound, and an expression
+	that is not a name is named."
+	(self peek notNil and: [self peek isName and: [self peek value asString = '_']])
+		ifTrue: [^ self ___syntaxError___: 'cannot use ''_'' as a target' at: self peek].
+	(self peek notNil and: [self peek isName and: [| nxt |
+			nxt := position + 1 <= tokens size ifTrue: [tokens at: position + 1].
+			nxt notNil and: [(nxt isOp: '.') or: [(nxt isOp: '(') or: [nxt isOp: '[']]]]])
+		| (self peek notNil and: [self peek isName not]) ifTrue: [
+			| expr |
+			expr := [self parseExpression] on: SyntaxError do: [:ex | ex return: nil].
+			expr notNil ifTrue: [
+				^ self ___syntaxError___: 'cannot use ' , (self ___exprName___: expr)
+					, ' as pattern target' node: expr]].
 	target := self parseMatchCaptureTarget.
 	^MatchAsAst new
 		pattern: inner;
@@ -5329,7 +6223,7 @@ parseMatchClosedPattern
 	so a top-level ``|'' stays the or-pattern separator instead of being
 	swallowed as bitwise-or."
 	^MatchValueAst new
-		value: self parseBitwiseXor;
+		value: (self ___checkComplexLiteral___: self parseBitwiseXor);
 		from: tok to: self lastToken ; yourself
 %
 
@@ -5442,7 +6336,11 @@ parseMatchMapping
 		(self atOp: '**')
 			ifTrue: [
 				self advance.
-				rest := self parseMatchCaptureTarget]
+				rest := self parseMatchCaptureTarget.
+				"The double-star capture comes last."
+				((self atOp: ',') and: [(position + 1 <= tokens size)
+					and: [((tokens at: position + 1) isOp: '}') not]]) ifTrue: [
+						^ self ___invalidSyntaxAt___: (tokens at: position + 1)]]
 			ifFalse: [
 				keys := keys copyWith: self parseMatchMappingKey.
 				self expect: #OP value: ':'.
@@ -5558,8 +6456,11 @@ parseMatchClassPattern: clsNode from: tok
 				kwPats := kwPats copyWith: self parseMatchPattern]
 			ifFalse: [
 				seenKeyword ifTrue: [
-					SyntaxError signal: 'positional patterns follow keyword patterns at line ',
-						tok line printString].
+					| posTok |
+					posTok := self peek.
+					self parseMatchPattern.
+					^ self ___syntaxError___: 'positional patterns follow keyword patterns'
+						from: posTok to: self lastToken].
 				pats := pats copyWith: self parseMatchPattern].
 		(self matchOp: ',') ifFalse: [
 			self expect: #OP value: ')'.
@@ -5646,6 +6547,7 @@ ___rewriteTypeParamStatement___
 	lb := i + 2.
 	rb := self ___indexOfClose___: lb.
 	rb isNil ifTrue: [^ false].
+	self ___checkTypeParamsAt___: lb.
 	params := self ___typeParamsFrom: lb + 1 to: rb - 1.
 	params isEmpty ifTrue: [^ false].
 	name := nameTok value asString.

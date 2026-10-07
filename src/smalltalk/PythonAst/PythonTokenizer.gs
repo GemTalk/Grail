@@ -356,6 +356,25 @@ isStringStart
 	"Single-char prefix: r, b, f, t, u, R, B, F, T, U -- t is PEP 750's template string"
 	((char == $r or: [char == $R or: [char == $b or: [char == $B or: [char == $f or: [char == $F or: [char == $t or: [char == $T or: [char == $u or: [char == $U]]]]]]]]]) and: [next == $' or: [next == $"]]) ifTrue: [^true].
 
+	"A run of distinct prefix letters before a quote is a string, and the
+	combinations CPython 3.14 refuses are refused here with its message:
+	``ub'a''' is ``'u' and 'b' prefixes are incompatible'', over the prefix.
+	Grail lexed it as the name ``ub'' and a string, and reported the string."
+	[| k letters ch |
+	 k := 0.
+	 letters := OrderedCollection new.
+	 [ch := self peekAt: k.
+	  ch notNil and: [('bBrRuUfFtT' includesValue: ch)
+		and: [(letters includes: ch asLowercase) not]]]
+		whileTrue: [letters add: ch asLowercase. k := k + 1].
+	 (letters size >= 2 and: [ch == $' or: [ch == $"]]) ifTrue: [
+		#(#($u $b) #($u $r) #($u $f) #($u $t) #($b $f) #($b $t) #($f $t)) do: [:pair |
+			((letters includes: (pair at: 1)) and: [letters includes: (pair at: 2)]) ifTrue: [
+				^ PythonParser ___signal___: SyntaxError
+					message: '''' , (pair at: 1) asString , ''' and ''' , (pair at: 2) asString
+						, ''' prefixes are incompatible'
+					in: source from: position to: position + k]]]] value.
+
 	"Two-char prefix: rb, br, fr, rf, tr, rt (and case variants)"
 	third := self peekAt: 2.
 	third ifNil: [^false].
@@ -543,122 +562,211 @@ tokenizeLine
 category: 'Grail-tokenizing'
 method: PythonTokenizer
 tokenizeNumber
-	"Tokenize a numeric literal (int, float, hex, oct, bin, complex)."
+	"Tokenize a numeric literal (int, float, hex, oct, bin, complex): a port of
+	the number section of CPython's tok_get, with its errors.
 
-	| startLine startPos str isFloat ch next |
+	Grail's lexer had none of them.  It took an underscore anywhere, so ``1_''
+	and ``1__0'' were numbers; it took ``01'' and ``0x''; and it stopped at a
+	letter, so ``1a'' and ``5j6'' were two tokens and a parse error somewhere
+	after.  CPython raises ``invalid decimal literal'', ``invalid digit '2' in
+	binary literal'', ``leading zeros in decimal integer literals are not
+	permitted'' and so on, placed where its lexer stopped.
+
+	The structure follows the C so the positions do: ``nextc'' consumes a
+	character, ``backup'' returns it, and an error is placed at the cursor
+	(___numberError___:).  A number never spans a newline, so the cursor is
+	moved directly and ``line'' is untouched."
+
+	| startLine startPos c nextc backup isDigitC isXDigit decimalTail verify
+	  finish fractionPart exponentPart imaginaryPart nonzero zerosEnd isOct isBin |
 	startLine := line.
-	startPos := position .
-	str := Unicode7 new.
-	isFloat := false.
-	ch := self peek.
+	startPos := position.
+	nextc := [
+		c := source atOrNil: position.
+		c notNil ifTrue: [position := position + 1].
+		c].
+	backup := [c notNil ifTrue: [position := position - 1]].
+	"Code points, not Character comparisons: ASCII digits only, as CPython's
+	isdigit, whatever the session's comparison mode."
+	isDigitC := [:ch | ch notNil and: [ch codePoint between: 48 and: 57]].
+	isXDigit := [:ch | (isDigitC value: ch) or: [ch notNil
+		and: [(ch codePoint between: 97 and: 102) or: [ch codePoint between: 65 and: 70]]]].
+	isOct := [:ch | ch notNil and: [ch codePoint between: 48 and: 55]].
+	isBin := [:ch | ch == $0 or: [ch == $1]].
+	"tok_decimal_tail: digits, each underscore between two of them."
+	decimalTail := [
+		| done |
+		done := false.
+		[done] whileFalse: [
+			[nextc value. isDigitC value: c] whileTrue.
+			c == $_
+				ifTrue: [
+					nextc value.
+					(isDigitC value: c) ifFalse: [
+						backup value.
+						^ self ___numberError___: 'invalid decimal literal']]
+				ifFalse: [done := true]].
+		c].
+	"verify_end_of_number: a letter, digit or underscore straight after a
+	number is an error -- unless it begins a keyword that can follow one
+	(``1if x else y''), which CPython only warns about."
+	verify := [:ch :kind |
+		| r |
+		r := false.
+		ch == $a ifTrue: [r := self ___numberFollowedBy___: 'nd'].
+		ch == $e ifTrue: [r := self ___numberFollowedBy___: 'lse'].
+		ch == $f ifTrue: [r := self ___numberFollowedBy___: 'or'].
+		ch == $i ifTrue: [r := 'fns' includes: (source atOrNil: position)].
+		ch == $o ifTrue: [r := self ___numberFollowedBy___: 'r'].
+		ch == $n ifTrue: [r := self ___numberFollowedBy___: 'ot'].
+		(r not and: [ch notNil and: [ch codePoint < 128
+			and: [ch isLetter or: [ch isDigit or: [ch == $_]]]]]) ifTrue: [
+				position := position - 1.
+				^ self ___numberError___: 'invalid ' , kind , ' literal']].
+	finish := [
+		| text |
+		backup value.
+		text := (source copyFrom: startPos to: position - 1) reject: [:ch | ch == $_].
+		self addToken: #NUMBER value: text line: startLine position: startPos.
+		^ self].
+	imaginaryPart := [
+		nextc value.
+		verify value: c value: 'imaginary'.
+		finish value].
+	exponentPart := [
+		| e |
+		e := c.
+		nextc value.
+		(c == $+ or: [c == $-])
+			ifTrue: [
+				nextc value.
+				(isDigitC value: c) ifFalse: [
+					backup value.
+					^ self ___numberError___: 'invalid decimal literal']]
+			ifFalse: [
+				(isDigitC value: c) ifFalse: [
+					"``1e'' then no digit: the number is the part before the e."
+					backup value.
+					verify value: e value: 'decimal'.
+					c := e.
+					finish value]].
+		decimalTail value.
+		(c == $j or: [c == $J]) ifTrue: [imaginaryPart value].
+		verify value: c value: 'decimal'.
+		finish value].
+	fractionPart := [
+		(isDigitC value: c) ifTrue: [decimalTail value].
+		(c == $e or: [c == $E]) ifTrue: [exponentPart value].
+		(c == $j or: [c == $J]) ifTrue: [imaginaryPart value].
+		verify value: c value: 'decimal'.
+		finish value].
 
-	"Hex, octal, binary"
-	(ch == $0 and: [(next := self peekAt: 1) notNil]) ifTrue: [
-		(next == $x or: [next == $X]) ifTrue: [
-			str add: self advance; add: self advance.
-			[ ch := self peek.  ch notNil and: ['0123456789abcdefABCDEF_' includesValue: ch ]] whileTrue: [
-				ch == $_ ifFalse: [ str add: ch ].
-				self advance.
-			].
-			self addToken: #NUMBER value: str line: startLine position: startPos .
-			^self
-		].
-		(next == $o or: [next == $O]) ifTrue: [
-			str add: self advance; add: self advance.
-			[ ch := self peek .  ch notNil and: ['01234567_' includesValue: ch ]] whileTrue: [
-				ch == $_ ifFalse: [ str add: ch ].
-				self advance.
-			].
-			self addToken: #NUMBER value: str line: startLine position: startPos .
-			^self
-		].
-		(next == $b or: [next == $B]) ifTrue: [
-			str add: self advance; add: self advance.
-			[ ch := self peek .  ch notNil and: ['01_' includesValue: ch ]] whileTrue: [
-				ch == $_ ifFalse: [ str add: ch ].
-				self advance.
-			].
-			self addToken: #NUMBER value: str line: startLine position: startPos .
-			^self
-		].
-	].
+	nextc value.
+	c == $. ifTrue: [nextc value. fractionPart value].
+	c == $0 ifTrue: [
+		nextc value.
+		(c == $x or: [c == $X]) ifTrue: [
+			nextc value.
+			[c == $_ ifTrue: [nextc value].
+			 (isXDigit value: c) ifFalse: [
+				backup value.
+				^ self ___numberError___: 'invalid hexadecimal literal'].
+			 [nextc value. isXDigit value: c] whileTrue.
+			 c == $_] whileTrue.
+			verify value: c value: 'hexadecimal'.
+			finish value].
+		(c == $o or: [c == $O]) ifTrue: [
+			nextc value.
+			[c == $_ ifTrue: [nextc value].
+			 (isOct value: c) ifFalse: [
+				(isDigitC value: c) ifTrue: [
+					^ self ___numberError___: 'invalid digit ''' , c asString , ''' in octal literal'].
+				backup value.
+				^ self ___numberError___: 'invalid octal literal'].
+			 [nextc value. isOct value: c] whileTrue.
+			 c == $_] whileTrue.
+			(isDigitC value: c) ifTrue: [
+				^ self ___numberError___: 'invalid digit ''' , c asString , ''' in octal literal'].
+			verify value: c value: 'octal'.
+			finish value].
+		(c == $b or: [c == $B]) ifTrue: [
+			nextc value.
+			[c == $_ ifTrue: [nextc value].
+			 (isBin value: c) ifFalse: [
+				(isDigitC value: c) ifTrue: [
+					^ self ___numberError___: 'invalid digit ''' , c asString , ''' in binary literal'].
+				backup value.
+				^ self ___numberError___: 'invalid binary literal'].
+			 [nextc value. isBin value: c] whileTrue.
+			 c == $_] whileTrue.
+			(isDigitC value: c) ifTrue: [
+				^ self ___numberError___: 'invalid digit ''' , c asString , ''' in binary literal'].
+			verify value: c value: 'binary'.
+			finish value].
+		"Maybe an old-style octal: zeros, then a non-zero digit is an error."
+		nonzero := false.
+		[c == $_ ifTrue: [
+			nextc value.
+			(isDigitC value: c) ifFalse: [
+				backup value.
+				^ self ___numberError___: 'invalid decimal literal']].
+		 c == $0] whileTrue: [nextc value].
+		zerosEnd := position.
+		(isDigitC value: c) ifTrue: [nonzero := true. decimalTail value].
+		c == $. ifTrue: [nextc value. fractionPart value].
+		(c == $e or: [c == $E]) ifTrue: [exponentPart value].
+		(c == $j or: [c == $J]) ifTrue: [imaginaryPart value].
+		nonzero ifTrue: [
+			^ PythonParser ___signal___: SyntaxError
+				message: 'leading zeros in decimal integer literals are not permitted; '
+					, 'use an 0o prefix for octal integers'
+				in: source from: startPos to: zerosEnd - 1].
+		verify value: c value: 'decimal'.
+		finish value].
+	decimalTail value.
+	c == $. ifTrue: [nextc value. fractionPart value].
+	(c == $e or: [c == $E]) ifTrue: [exponentPart value].
+	(c == $j or: [c == $J]) ifTrue: [imaginaryPart value].
+	verify value: c value: 'decimal'.
+	finish value
+%
 
-	"Decimal integer or float"
-	[ ch := self peek .  ch notNil and: [(self isDigit: ch ) or: [ch == $_]]] whileTrue: [
-		ch == $_ ifFalse: [ str add: ch ].
-		self advance.
-	].
+category: 'Grail-tokenizing'
+method: PythonTokenizer
+___numberFollowedBy___: aString
+	"CPython's lookahead(): do the characters after the cursor spell aString,
+	with no identifier character after them?"
 
-	"Decimal point"
-  ch := self peek  .
-  ch == $.  ifTrue: [ 
-		next := self peekAt: 1.
-		next ifNotNil: [
-			(self isDigit: next) ifTrue: [
-				isFloat := true.
-				str add: self advance.
-				[ ch := self peek.  ch notNil and: [(self isDigit: ch ) or: [ch == $_]]] whileTrue: [
-					ch == $_ ifFalse: [ str  add: ch ].
-					self advance.
-				].
-			] ifFalse: [
-				"Standalone dot after digits - check if it's really a dot operator.
-				``j''/``J'' is the exception: it is the IMAGINARY suffix, not an
-				attribute, so ``0.j'' is the complex literal 0j (CPython reads the
-				fraction, then an optional exponent, then an optional j).  Treating
-				it as attribute access made ``0.j'' parse as ``0 . j'' and raise
-				``SmallInteger object has no attribute 'j''' -- while ``1.5j'',
-				``.01j'' and ``1e3j'' all worked, because only the trailing-dot form
-				reaches this branch (test_format test_negative_zero uses 0.j/-0.j)."
-				((self isIdentifierStart: next )
-					and: [(self ___dotStartsNumberTail___) not])
-					ifTrue: [
-						"This is attr access, e.g. 123 .method - stop here"
-					] ifFalse: [
-						"Trailing dot, e.g. 1. -- or the dot of 0.j / 1.e+300"
-						isFloat := true.
-						str add: self advance.
-					].
-			].
-		] ifNil: [
-			"Dot at end of source"
-			isFloat := true.
-			str add: self advance.
-		].
-	].
-	"Also handle case like .5 (dot first)"
-	(str size == 0 and: [ self peek == $. ]) ifTrue: [
-		isFloat := true.
-		str add: self advance.
-		[ ch := self peek .
-      ch notNil and: [(self isDigit: ch ) or: [ ch == $_]]] whileTrue: [
-			ch == $_ ifFalse: [ str add: ch ].
-			self advance.
-		].
-	].
+	| after |
+	(source size - position + 1) < aString size ifTrue: [^ false].
+	1 to: aString size do: [:k |
+		(source at: position + k - 1) == (aString at: k) ifFalse: [^ false]].
+	after := source atOrNil: position + aString size.
+	^ (after notNil and: [after codePoint >= 128 or: [self isIdentifierPart: after]]) not
+%
 
-	"Exponent"
-  ch := self peek .
-	(ch == $e or: [ ch == $E ]) ifTrue: [
-		isFloat := true.
-		str add: self advance.
-    ch := self peek .
-		(ch == $+ or: [ ch == $- ]) ifTrue: [
-			str add: self advance.
-		].
-		[ ch := self peek .
-      ch notNil and: [(self isDigit: ch ) or: [ ch == $_]]] whileTrue: [
-			ch == $_ ifFalse: [ str add: ch ].
-			self advance.
-		].
-	].
+category: 'Grail-tokenizing'
+method: PythonTokenizer
+___numberError___: aMessage
+	"CPython's _PyTokenizer_syntaxerror: offset and end_offset both the number
+	of characters of the line before the lexer's cursor."
 
-	"Complex suffix"
-  ch := self peek .
-	(ch == $j or: [ ch == $J ]) ifTrue: [
-		str add: self advance.
-	].
-	self addToken: #NUMBER value: str line: startLine position: startPos .
+	^ PythonParser ___signal___: SyntaxError message: aMessage
+		in: source from: position - 1 to: nil
+%
+
+category: 'Grail-tokenizing'
+method: PythonTokenizer
+___unterminatedString___: isTriple from: aStart
+	"CPython's unterminated-string errors: at the start of the literal, its
+	prefix included, naming the line where the lexer found the end missing."
+
+	^ PythonParser ___signal___: SyntaxError
+		message: (isTriple
+			ifTrue: ['unterminated triple-quoted string literal (detected at line ']
+			ifFalse: ['unterminated string literal (detected at line '])
+			, line printString , ')'
+		in: source from: aStart to: nil
 %
 
 category: 'Grail-tokenizing'
@@ -778,9 +886,25 @@ tokenizeOperator
 		openBrackets add: (Array with: char with: startPos with: startLine).
 	].
 	(char == $) or: [char == $] or: [char == $} ]]) ifTrue: [
+		| opening |
+		"CPython's lexer: a closer with nothing open is ``unmatched ')''', one
+		of the wrong kind names both, and both are placed at the closer."
+		openBrackets isEmpty ifTrue: [
+			^ PythonParser ___signal___: SyntaxError
+				message: 'unmatched ''' , char asString , ''''
+				in: source from: startPos to: nil].
+		opening := openBrackets removeLast.
+		((opening at: 1) == $( and: [char == $)]) | ((opening at: 1) == $[ and: [char == $]])
+			| ((opening at: 1) == ${ and: [char == $}]) ifFalse: [
+				^ PythonParser ___signal___: SyntaxError
+					message: 'closing parenthesis ''' , char asString
+						, ''' does not match opening parenthesis ''' , (opening at: 1) asString , ''''
+						, ((opening at: 3) = startLine
+							ifTrue: ['']
+							ifFalse: [' on line ' , (opening at: 3) printString])
+					in: source from: startPos to: nil].
 		parenDepth := parenDepth - 1.
 		parenDepth < 0 ifTrue: [parenDepth := 0].
-		openBrackets isEmpty ifFalse: [openBrackets removeLast].
 	].
 
 	"Single-character operator"
@@ -915,7 +1039,7 @@ tokenizeString
 	nestQuote := nil.
 	[
 		char := self peek.
-		char ifNil:[ SyntaxError signal: 'unterminated string literal at line ' , startLine printString ].
+		char ifNil:[ ^ self ___unterminatedString___: triple from: startPos ].
 		"PEP 701: inside an f-string's {...} replacement field the text is
 		SOURCE for the inner parser, not string data.  Two consequences, and
 		together they are why this is a separate branch rather than a guard on
@@ -1008,7 +1132,7 @@ tokenizeString
 					^self
 				].
 				char == Lf ifTrue: [
-					SyntaxError signal: 'EOL while scanning string literal at line ' , startLine printString.
+					^ self ___unterminatedString___: false from: startPos
 				].
 			].
 			"Raw strings: backslash followed by anything is a two-char
@@ -1021,7 +1145,7 @@ tokenizeString
 				| nextCh |
 				self advance.
 				nextCh := self advance.
-				nextCh ifNil:[ SyntaxError signal: 'unterminated string literal'].
+				nextCh ifNil:[ ^ self ___unterminatedString___: triple from: startPos ].
 				str add: $\; add: nextCh
 			] ifFalse: [
 			"Handle escape sequences"
@@ -1032,7 +1156,7 @@ tokenizeString
 				bsPos := position.
 				self advance.
 				escaped := self advance.
-	      escaped ifNil:[ SyntaxError signal: 'unterminated string literal'].
+	      escaped ifNil:[ ^ self ___unterminatedString___: triple from: startPos ].
 				escaped == $n ifTrue: [ str lf ]
 				ifFalse: [escaped == $t ifTrue: [ str add: Tab ]
 				ifFalse: [escaped == $r ifTrue: [ str addCodePoint: 13 ]
