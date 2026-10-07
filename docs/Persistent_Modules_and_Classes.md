@@ -658,7 +658,10 @@ Test: `tests/scripts/runModulePathTest.gs` (`module-source-path`).
 `GEMDB_NAMESPACE`) gives a program its own copy of every name-keyed registry,
 its own module-class dictionary, and a canonical `__main__`
 ([App_Namespaces_Design.md](App_Namespaces_Design.md), which calls it an *app
-namespace*). Two departures follow, both only inside a named namespace:
+namespace*). In a top file, `use_namespace` has to be the first statement
+after a docstring and imports: the file then restarts in the namespace, since
+its `__main__` was built before the call ran. Elsewhere in a top file the call
+is refused. Two departures follow, both only inside a named namespace:
 
 - **Where a module goes is decided by its file, not its name.** Grail's own
   sources (`src/python/`: the stdlib, vendored frameworks, `gemdb`) are deployed

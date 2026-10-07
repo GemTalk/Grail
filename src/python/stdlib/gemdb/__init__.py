@@ -200,14 +200,27 @@ def use_namespace(name):
     -- the standard library, gemdb itself -- stay shared by every namespace;
     anything else, a venv's packages included, belongs to the namespace.
 
-    Call it first, before the program's own imports: it raises
-    ``RuntimeError`` once a module that would belong to the namespace has
-    been imported, or when the session is already in a different namespace.
-    ``import gemdb`` does not count, being shared.  Calling it again with the
-    same name does nothing.  A new namespace is created in the current
+    In a top file, make it the first statement, after the docstring and
+    imports::
+
+        import gemdb
+        gemdb.use_namespace("shop")
+
+    The file then runs again from the top in the namespace, so that its
+    globals are the namespace's; the imports before the call are found
+    already loaded the second time, and the call does nothing.  Anywhere
+    else in a top file it raises ``RuntimeError``, since the globals could
+    no longer be the namespace's.  ``./grail --namespace NAME`` and the
+    ``GEMDB_NAMESPACE`` environment variable choose the namespace before
+    the file runs, and need no call.
+
+    Elsewhere (code evaluated in a shell, say) it sets the namespace for
+    what is imported from then on.  It raises ``RuntimeError`` once a
+    module that would belong to the namespace has been imported, or when
+    the session is already in a different namespace.  Modules that ship
+    with Grail do not count, being shared.  Calling it again with the same
+    name does nothing.  A new namespace is created in the current
     transaction and kept by the next commit, as an import is.
-    ``./grail --namespace NAME`` and the ``GEMDB_NAMESPACE`` environment
-    variable do the same before the script runs.
     """
     _gemstone.repository.namespaces_use(str(name))
 

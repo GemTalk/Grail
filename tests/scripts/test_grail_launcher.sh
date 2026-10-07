@@ -390,6 +390,66 @@ if run "--namespace without a name" 2 -- --namespace; then
     fi
 fi
 
+# --- a namespace's top file keeps its globals across runs --------------------
+# docs/Persistent_Modules_and_Classes.md D11.  Each script counts its runs in a
+# global and commits from its own body, the only place a Python program can.
+# Two defects made every run print "runs 1":
+#  * __main__ was recorded as the namespace's globals only AFTER its body, so
+#    the program's own commit left it out -- with --namespace too;
+#  * gemdb.use_namespace() as the first statement came too late: __main__ was
+#    already built session-local.  Now the file restarts in the namespace.
+# CPython has no counterpart; the expectations are the design's.
+NSF="grail_launcher_first_$$"
+NSG="grail_launcher_flag_$$"
+cat > "$TMP/count_first.py" <<'PY'
+"""A docstring and imports may come before the call."""
+import gemdb
+import sys
+gemdb.use_namespace(sys.argv[1])
+runs = globals().get("runs", 0) + 1
+print("runs", runs, gemdb.namespace())
+gemdb.commit()
+PY
+cat > "$TMP/count_flag.py" <<'PY'
+import gemdb
+runs = globals().get("runs", 0) + 1
+print("runs", runs, gemdb.namespace())
+gemdb.commit()
+PY
+for n in 1 2; do
+    if run "use_namespace first, run $n" 0 -- "$TMP/count_first.py" "$NSF"; then
+        if [ "$(cat "$OUT_FILE")" = "runs $n $NSF" ]; then ok; else
+            bad "use_namespace() first gives persistent globals (run $n)" \
+                "want: runs $n $NSF" "got:  $(cat "$OUT_FILE")"
+        fi
+    fi
+    if run "--namespace, run $n" 0 -- --namespace "$NSG" "$TMP/count_flag.py"; then
+        if [ "$(cat "$OUT_FILE")" = "runs $n $NSG" ]; then ok; else
+            bad "--namespace gives persistent globals (run $n)" \
+                "want: runs $n $NSG" "got:  $(cat "$OUT_FILE")"
+        fi
+    fi
+done
+# Anywhere but first, the globals could no longer be the namespace's: refused,
+# not silently left per-run.  The statement before it ran once.
+printf 'import gemdb\nprint("before")\ngemdb.use_namespace("%s")\nprint("after")\n' \
+    "grail_launcher_late_$$" > "$TMP/late.py"
+if run "use_namespace not first" 1 -- "$TMP/late.py"; then
+    if [ "$(cat "$OUT_FILE")" = "before" ] \
+            && grep -q "must be the top file's first statement" "$ERR_FILE"; then ok; else
+        bad "use_namespace() not first is refused" \
+            "stdout: $(cat "$OUT_FILE")" "stderr: $(cat "$ERR_FILE")"
+    fi
+fi
+cat > "$TMP/drop.py" <<'PY'
+import sys
+import gemdb.admin
+for name in sys.argv[1:]:
+    if name in gemdb.admin.namespaces():
+        gemdb.admin.drop_namespace(name)
+PY
+if ! run "drop the namespaces" 0 -- "$TMP/drop.py" "$NSF" "$NSG"; then :; fi
+
 # --- report ----------------------------------------------------------------
 
 echo "grail launcher: $pass passed, $fail failed"

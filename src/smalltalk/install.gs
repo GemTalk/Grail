@@ -1362,6 +1362,7 @@ run
 	at: #'StaticmethodShadowingTestCase' put: nil;
 	at: #'StatisticsTestCase' put: nil;
 	at: #'Stdlib3148FixesTestCase' put: nil;
+	at: #'Stdlib3148NativeTestCase' put: nil;
 	at: #'StdlibLongTailTestCase' put: nil;
 	at: #'StdlibModuleNamesTestCase' put: nil;
 	at: #'StopAsyncIterationTestCase' put: nil;
@@ -1723,6 +1724,7 @@ input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/grail.gs
 input src/smalltalk/Python/PyObject.gs
 input src/smalltalk/Python/GrailShimError.gs
+input src/smalltalk/Python/GrailMainRestart.gs
 input src/smalltalk/Python/CPythonShim.gs
 input src/smalltalk/Python/ShimForeignObject.gs
 input src/smalltalk/EmbeddedPython/CPythonException.gs
@@ -2858,6 +2860,7 @@ input src/smalltalk/PythonTests/StaticmethodOverridesBaseMethodTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/Stdlib3148FixesTestCase.gs
+input src/smalltalk/PythonTests/Stdlib3148NativeTestCase.gs
 input src/smalltalk/PythonTests/StdlibLongTailTestCase.gs
 input src/smalltalk/PythonTests/StdlibModuleNamesTestCase.gs
 input src/smalltalk/PythonTests/StopAsyncIterationTestCase.gs
