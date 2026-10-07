@@ -78,6 +78,12 @@ def check_fresh():
     check('a new session has gc enabled', gc.isenabled())
     check('a new session still has the deleted global',
           durable.LEASE_SECONDS == 30.0)
+    # The first session deployed durable, and importlib stamped builtins'
+    # __dict__ into it as __builtins__.  That must be this session's
+    # builtins.__dict__ too, not the deploying session's view.
+    import builtins
+    check("a deployed module's __builtins__ is this session's builtins.__dict__",
+          durable.__builtins__ is builtins.__dict__)
     gemdb.root.pop('module_globals_test', None)
     gemdb.commit()
 
