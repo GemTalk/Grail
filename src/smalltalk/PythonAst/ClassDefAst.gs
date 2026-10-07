@@ -64,9 +64,10 @@ printSmalltalkOn: aStream
 	This used to be gated on ``CallAst moduleClassBeingCompiled notNil'', with
 	an eval/exec context falling back to a ``legacy dict-based
 	representation'' that built a PythonClass (a SymbolDictionary of class
-	attributes).  That fallback could never run: PythonClass.gs is not in
-	install.gs's input list, so the class was never created -- the name is
-	pre-declared as nil in the Python dictionary and stays nil.  The emitted
+	attributes).  That fallback could never run: PythonClass.gs was never in
+	install.gs's input list (it has since been deleted), so the class was
+	never created -- the name was pre-declared as nil in the Python dictionary
+	and stayed nil.  The emitted
 	``PythonClass perform: #new env: 0'' therefore raised
 	``a UndefinedObject does not understand #new'', a SMALLTALK error, so
 	every ``exec(''class C: ...'')'' aborted uncatchably.  That was 30 of
