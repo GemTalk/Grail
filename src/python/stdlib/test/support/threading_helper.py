@@ -85,3 +85,41 @@ def threading_setup():
 
 def threading_cleanup(*original_values):
     return None
+
+
+def run_concurrently(worker_func, nthreads=None, args=(), kwargs={}):
+    """Run the worker function(s) concurrently in multiple threads.
+
+    If `worker_func` is a single callable, it is used for all threads.
+    If it is a list of callables, each callable is used for one thread.
+
+    GRAIL: upstream re-raises through catch_threading_exception, which is a
+    stub here that never sees a worker's exception, so each worker records
+    its own and the first is re-raised after the join.  Grail's Thread takes
+    no ``kwargs=``, so the wrapper closes over args/kwargs instead.
+    """
+    from collections.abc import Iterable
+
+    if nthreads is None:
+        nthreads = len(worker_func)
+    if not isinstance(worker_func, Iterable):
+        worker_func = [worker_func] * nthreads
+    assert len(worker_func) == nthreads
+
+    barrier = threading.Barrier(nthreads)
+    errors = []
+
+    def wrapper_func(func):
+        # Wait for all threads to reach this point before proceeding.
+        barrier.wait()
+        try:
+            func(*args, **kwargs)
+        except BaseException as exc:
+            errors.append(exc)
+
+    workers = [threading.Thread(target=wrapper_func, args=(func,))
+               for func in worker_func]
+    with start_threads(workers):
+        pass
+    if errors:
+        raise errors[0]

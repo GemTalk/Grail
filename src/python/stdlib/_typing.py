@@ -343,8 +343,9 @@ class ParamSpec(_Common):
         self.__contravariant__ = bool(contravariant)
         self.__infer_variance__ = bool(infer_variance)
         self.__default__ = default
-        if bound is not None:
-            bound = _typing_module()._type_check(bound, "Bound must be a type.")
+        # gh-151955 (3.14.8): ParamSpec stores its bound as given -- a list, a
+        # tuple, a string or any object -- with no _type_check.  TypeVar's
+        # bound is still checked.
         self.__bound__ = bound
         self.__module__ = _caller_module(1)
 

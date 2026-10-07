@@ -132,7 +132,15 @@ def subs_parameters(alias, args, parameters, item):
         subst = getattr(arg, '__typing_subst__', None)
         param = arg
         if subst is not None:
-            arg = subst(argitems[_index(parameters, arg)])
+            # gh-155752: __parameters__ is cached, so an argument can gain
+            # __typing_subst__ after it was computed.  _index answers -1 for
+            # it, which argitems[-1] silently took as the LAST argument.
+            iparam = _index(parameters, arg)
+            if iparam < 0:
+                raise TypeError(
+                    f"argument {arg!r} with __typing_subst__ was not found "
+                    f"in __parameters__")
+            arg = subst(argitems[iparam])
         else:
             arg = _subs_tvars(arg, parameters, argitems)
         if unpack:
