@@ -217,14 +217,15 @@ is no third verb.
 
 The body not running is the point of a bind — and it is also the trap. Anything
 Grail keeps in **session-local** storage that only the class build or the module
-body writes is, by construction, absent in a session that binds. Two such records
-existed and were both wrong for a bound module before being fixed:
+body writes is, by construction, absent in a session that binds. Each of these
+records was wrong for a bound module before it was fixed:
 
 | Record | Home | Restored by |
 |---|---|---|
 | `metaclass=` | `SessionTemps`, written by the class build | `___restoreCanonicalMetaclasses___:` from a committed per-module registry |
 | an MI class's declared bases + MRO | `___miRegistry___` (SessionTemps) | `___restoreCanonicalClassStructure___:` from `GrailCanonicalClassStructure` |
 | direct-subclass links (`__subclasses__()`) | `___subclassRegistry___` (SessionTemps) | the same method, *derived*: a class is rooted at its Smalltalk superclass |
+| a module function's signature spec and `__annotate__` | `GrailModuleFunctionSignatures` / `GrailModuleFunctionAnnotations` (SessionTemps), written by the body | read through, not replayed: `module >> ___recordFunctionMeta___:name:value:` also records them in the committed `GrailCanonicalFunctionMeta` (keyed by module name, dropped when the body runs again), and the readers fall back to it |
 
 **The rule, stated once so the next such record is caught by review rather than
 by a user:** if the class build writes it and it is not on the class, a bind
@@ -657,7 +658,10 @@ Test: `tests/scripts/runModulePathTest.gs` (`module-source-path`).
 `GEMDB_NAMESPACE`) gives a program its own copy of every name-keyed registry,
 its own module-class dictionary, and a canonical `__main__`
 ([App_Namespaces_Design.md](App_Namespaces_Design.md), which calls it an *app
-namespace*). Two departures follow, both only inside a named namespace:
+namespace*). In a top file, `use_namespace` has to be the first statement
+after a docstring and imports: the file then restarts in the namespace, since
+its `__main__` was built before the call ran. Elsewhere in a top file the call
+is refused. Two departures follow, both only inside a named namespace:
 
 - **Where a module goes is decided by its file, not its name.** Grail's own
   sources (`src/python/`: the stdlib, vendored frameworks, `gemdb`) are deployed

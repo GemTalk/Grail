@@ -9,7 +9,11 @@ as shipped (docs/Persistent_Modules_and_Classes.md D14).
 
 Grail-only (gemdb), so this is not a tests/python fixture.
 """
+import inspect
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import csv
 import fnmatch
@@ -17,6 +21,7 @@ import gc
 
 import durable
 import gemdb
+import signature_fixture
 
 failures = []
 
@@ -84,6 +89,15 @@ def check_fresh():
     import builtins
     check("a deployed module's __builtins__ is this session's builtins.__dict__",
           durable.__builtins__ is builtins.__dict__)
+    # signature_fixture was deployed by the first session; its body did not
+    # run here, so the signature and annotations come from the committed
+    # record (module >> ___recordFunctionMeta___:name:value:).
+    check('a deployed function keeps its signature',
+          str(inspect.signature(signature_fixture.f))
+          == "(a, /, b: int = 3, *, c: str = 'x', **kw) -> list")
+    check('a deployed function keeps its annotations',
+          signature_fixture.f.__annotations__
+          == {'b': int, 'c': str, 'return': list})
     gemdb.root.pop('module_globals_test', None)
     gemdb.commit()
 

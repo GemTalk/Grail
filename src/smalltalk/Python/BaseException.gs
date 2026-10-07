@@ -23,7 +23,7 @@ expectvalue /Class
 doit
 (Globals at: #Exception) subclass: 'BaseException'
   instVarNames: #( args tracebackObj )
-  classVars: #( MiSecondaryBases )
+  classVars: #( MiSecondaryBases CatchAllSelector )
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
@@ -123,8 +123,19 @@ handles: anException
 	A fix reading the registry works in the session that imported the module cold
 	and silently stops working in every session that binds it."
 
-	| subs |
+	| subs ovf |
 	(super handles: anException) ifTrue: [^ true].
+	"A RAW STACK OVERFLOW is a RecursionError to Python, here in the FIRST
+	handler search -- while the VM still has the yellow page unprotected.
+	Waiting for ___recursionGuard___ to convert it means resignalAs:, whose
+	trim back to the signal point can re-protect the page with no margin, so
+	the RecursionError's own search re-trips and escapes every except above
+	the guard (test_pickle test_bad_getattr).  The handler gets the
+	RecursionError through ___payloadOf___:.  A class test only: nothing is
+	built during the search."
+	ovf := anException class.
+	(ovf == AlmostOutOfStackError or: [ovf == AlmostOutOfStack]) ifTrue: [
+		^ RecursionError == self or: [RecursionError inheritsFrom: self]].
 	MiSecondaryBases == nil ifTrue: [^ false].
 	subs := MiSecondaryBases at: self otherwise: nil.
 	subs == nil ifTrue: [^ false].
@@ -741,13 +752,42 @@ ___recursionGuard___: aBlock
 		 GRAIL_STACK_TRACE is set, so an ordinary run pays nothing and the
 		 instrumentation cannot itself perturb the reserve it measures.  The
 		 SessionTemps tally is unconditional: two sends, no I/O."
-		BaseException @env0:___noteStackOverflow___: ex.
-		re := RecursionError ___new___.
-		re ___args___: { 'maximum recursion depth exceeded' }.
-		re @env0:messageText: 'maximum recursion depth exceeded'.
-		re ___applyImplicitContext___.
-		BaseException @env0:___noteStackOverflowConverted___.
+		"A PAYLOAD ALREADY BUILT means a Python handler caught this overflow in
+		 the first search (BaseException class >> handles:) and then let it go
+		 on -- a bare ``raise'', a ``with'' whose __exit__ declined.  Every
+		 handler above this guard has had its turn, so the RecursionError is
+		 signalled OUTWARD from here.  resignalAs: would restart at the
+		 overflow and run that handler's body a second time."
+		(ex @env0:dynamicInstVarAt: #'___grailPayload___' ifAbsent: [nil]) ifNotNil: [:p |
+			^ ex @env0:return: (BaseException @env0:___signalCarrying___: p)].
+		re := self ___overflowPayloadFor___: ex.
 		ex @env0:resignalAs: re]
+%
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
+___overflowPayloadFor___: anOverflow
+	"The RecursionError a raw AlmostOutOfStack(Error) stands for, built on first
+	use and kept on it as its ___grailPayload___ -- the carrier slot
+	___payloadOf___: reads -- so every handler that meets this overflow, and a
+	re-raise from any of them, sees ONE RecursionError.
+
+	Built as CPython builds it: Python args and messageText, and the implicit
+	__context__ every raise takes (the runaway is often inside a handler, which
+	is what gives test_long_context_chain its chain).  No stack capture here:
+	___payloadOf___: copies the overflow's own, which is the stack at the trip."
+
+	| re |
+	re := anOverflow @env0:dynamicInstVarAt: #'___grailPayload___' ifAbsent: [nil].
+	re == nil ifFalse: [^ re].
+	BaseException @env0:___noteStackOverflow___: anOverflow.
+	re := RecursionError ___new___.
+	re ___args___: { 'maximum recursion depth exceeded' }.
+	re @env0:messageText: 'maximum recursion depth exceeded'.
+	re ___applyImplicitContext___.
+	anOverflow @env0:dynamicInstVarAt: #'___grailPayload___' put: re.
+	BaseException @env0:___noteStackOverflowConverted___.
+	^ re
 %
 
 ! The three stack-exhaustion recorders are ENV 0 on purpose.  They are pure
@@ -5452,11 +5492,18 @@ ___payloadOf___: anException
 	every exception raised for the first time and every exception GemStone
 	itself signals."
 
-	| payload |
+	| payload ovf |
 	(anException @env0:isKindOf: AbstractException) @env0:ifFalse: [^ anException].
 	payload := [anException @env0:dynamicInstVarAt: #'___grailPayload___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	payload == nil ifTrue: [^ anException].
+	payload == nil ifTrue: [
+		"A raw stack overflow caught by a Python handler in the first search
+		(BaseException class >> handles:) carries a RecursionError it has not
+		built yet."
+		ovf := anException @env0:class.
+		(ovf == AlmostOutOfStackError or: [ovf == AlmostOutOfStack])
+			ifFalse: [^ anException].
+		payload := BaseException @env1:___overflowPayloadFor___: anException].
 	"The CAPTURE crosses too, when the payload has none of its own.  A carrier is
 	what gets signalled, so the VM's raise-time capture lands on the carrier --
 	and a payload whose own capture was spent (released once its traceback was
@@ -5547,7 +5594,7 @@ ___ensureFinally___: protectedBlock finally: finallyBlock
 	ranFinally := false.
 	propExc := nil.
 	result := [ [protectedBlock value]
-			on: BaseException
+			on: self ___catchAll___
 			do: [:ex |
 				ranFinally := true.
 				"A ``return'' / ``break'' / ``continue'' passing through the
@@ -5610,6 +5657,12 @@ ___resignalable___: anException
 	is PythonGenerator >> _resignalable:'s rule, applied at the other site that
 	re-raises a caught exception."
 
+	| ovf |
+	"A raw stack overflow a ``finally'' caught (BaseException class >> handles:
+	let ``on: BaseException'' take it) goes on as its RecursionError."
+	ovf := anException @env0:class.
+	(ovf == AlmostOutOfStackError or: [ovf == AlmostOutOfStack])
+		ifTrue: [^ self ___resignalable___: (self ___payloadOf___: anException)].
 	^ ((anException @env0:isKindOf: AbstractException)
 		@env0:and: [anException @env0:_basicSize @env0:> 0])
 			ifTrue: [anException @env0:copy]
@@ -7585,4 +7638,33 @@ ___readQuotedStringAt___: anIndex in: src
 					ifFalse: [^ Array with: ws contents with: i + 1]]
 			ifFalse: [ws nextPut: c. i := i + 1]].
 	^ nil
+%
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
+___catchAll___
+	"The selector for a handler that must see every Python exception AND a raw
+	stack overflow: ``BaseException , AlmostOutOfStackError , AlmostOutOfStack''.
+
+	A raw overflow is a RecursionError to Python (BaseException class >>
+	handles:), but on:do: takes a VM fast path for a CLASS or an ExceptionSet
+	selector -- Behavior>>_subclassOf:, never #handles: -- so ``on:
+	BaseException'' passes it by.  Grail's own catch-everything sites (with,
+	finally, a first bare except, except*, the shim's callback guard) use this
+	set instead, which keeps the fast path and still lets them meet the
+	overflow in the first search, before anything unwinds.  Built once at
+	install (___initCatchAll___); BaseException alone if that has not run."
+
+	^ CatchAllSelector ifNil: [BaseException]
+%
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
+___initCatchAll___
+	CatchAllSelector := (BaseException , AlmostOutOfStackError) , AlmostOutOfStack
+%
+
+run
+BaseException ___initCatchAll___.
+BaseException ___catchAll___ printString
 %

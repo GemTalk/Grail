@@ -416,6 +416,9 @@ run
 	at: #'functools_partialmethod' put: nil;
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
+	at: #'dict_reverseitemiterator' put: nil;
+	at: #'dict_reversekeyiterator' put: nil;
+	at: #'dict_reversevalueiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;
 	at: #'dict_view' put: nil;
 	at: #'mappingproxy' put: nil;
@@ -1166,6 +1169,7 @@ run
 	at: #'ModuleSpecTestCase' put: nil;
 	at: #'ModuleGlobalRebindStringsTestCase' put: nil;
 	at: #'SyntaxErrorMessagesTestCase' put: nil;
+	at: #'DictReversedPositionsTestCase' put: nil;
 	at: #'ModuleGlobalsPast255TestCase' put: nil;
 	at: #'BareNameManglingTestCase' put: nil;
 	at: #'GlobalsShadowBuiltinTestCase' put: nil;
@@ -1683,6 +1687,7 @@ input src/smalltalk/Python/KeyboardInterrupt.gs
 input src/smalltalk/Python/SystemExit.gs
 input src/smalltalk/Python/dict_itemiterator.gs
 input src/smalltalk/Python/dict_keyiterator.gs
+input src/smalltalk/Python/dict_reverseiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
 input src/smalltalk/Python/enumerate.gs
@@ -1715,6 +1720,7 @@ input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/grail.gs
 input src/smalltalk/Python/PyObject.gs
 input src/smalltalk/Python/GrailShimError.gs
+input src/smalltalk/Python/GrailMainRestart.gs
 input src/smalltalk/Python/CPythonShim.gs
 input src/smalltalk/Python/ShimForeignObject.gs
 input src/smalltalk/EmbeddedPython/CPythonException.gs
@@ -2643,6 +2649,7 @@ input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalRebindStringsTestCase.gs
 input src/smalltalk/PythonTests/SyntaxErrorMessagesTestCase.gs
+input src/smalltalk/PythonTests/DictReversedPositionsTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalsPast255TestCase.gs
 input src/smalltalk/PythonTests/BareNameManglingTestCase.gs
 input src/smalltalk/PythonTests/GlobalsShadowBuiltinTestCase.gs

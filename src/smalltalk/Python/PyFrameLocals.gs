@@ -134,7 +134,7 @@ ___refresh___
 			removeKey: mutates the very order being walked."
 			gone := OrderedCollection new.
 			super ___order___ do: [:k |
-				(fresh includesKey: k) ifFalse: [gone add: k]].
+				(k ~~ nil and: [(fresh includesKey: k) not]) ifTrue: [gone add: k]].
 			gone do: [:k | self removeKey: k ifAbsent: [nil]].
 			fresh keysAndValuesDo: [:k :v | self at: k put: v]]
 	] ensure: [

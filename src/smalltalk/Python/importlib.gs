@@ -3066,9 +3066,12 @@ ___grailSetApp___: aName
 	into the default namespace, so its classes would sit outside the app the
 	rest of the program runs in.  Grail's own modules (gemdb among them) are
 	shared and do not count, and neither does __main__, whose own first
-	statements are what call this.  Setting the current app again is a no-op."
+	statements are what call this.  Setting the current app again is a no-op.
 
-	| appName current offenders |
+	Called from a top file run by runPath: or runModule:, it gives the file's
+	globals to the namespace (___mainToRestartIn___:)."
+
+	| appName current offenders main |
 	appName := aName asString.
 	appName isEmpty ifTrue: [^ ValueError @env1:___signal___: 'a namespace name must not be empty'].
 	current := self ___grailCurrentAppName___.
@@ -3089,7 +3092,39 @@ ___grailSetApp___: aName
 			''') must come before the program''s modules are imported; already imported: ' ,
 			(offenders asArray inject: '' into: [:acc :each |
 				acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]])].
+	main := self ___mainToRestartIn___: appName.
+	main isNil ifFalse: [
+		^ GrailMainRestart new appName: appName; moduleClass: main class; signal].
 	^ self ___grailUseApp___: appName
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___mainToRestartIn___: appName
+	"The session-local ``__main__'' that choosing app appName should restart
+	in it (___runTopFile___:), or nil when the call is not the running top
+	file's -- code evaluated in a shell, or a top file loaded some other way --
+	and the switch applies to later imports only, as it always has.
+
+	The top file's body has to be the code calling: the innermost module body
+	running is ``__main__''.  And the call has to be its first statement after a
+	docstring and imports (ModuleAst >> ___leadsWithUseNamespace___), since
+	the restart runs everything before it again.  Anywhere else in the top
+	file it is refused rather than leaving the globals in the session while
+	the program's imports go to the namespace: a program that asked for
+	persistent globals and silently got per-run ones is the wrong answer."
+
+	| temps stack main |
+	temps := SessionTemps current.
+	(temps at: #'GrailTopFileRun' otherwise: nil) isNil ifTrue: [^ nil].
+	stack := self ___initializingModuleStack___.
+	(stack notEmpty and: [stack last = '__main__']) ifFalse: [^ nil].
+	main := (self @env1:modules) at: #'__main__' otherwise: nil.
+	main isNil ifTrue: [^ nil].
+	(temps at: #'GrailMainLeadsWithUseNamespace' otherwise: false) ifTrue: [^ main].
+	^ RuntimeError @env1:___signal___: 'use_namespace(''' , appName ,
+		''') must be the top file''s first statement, after its docstring and imports, for its globals to be the namespace''s; or choose the namespace with ./grail --namespace ' ,
+		appName , ' or GEMDB_NAMESPACE'
 %
 
 category: 'Grail-App Namespaces'
@@ -4034,6 +4069,20 @@ ___forgetBodyClassAttrsOf___: aModuleName
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___forgetFunctionMetaOf___: aModuleName
+	"Drop aModuleName's committed signature and annotation record before its
+	body runs again (module >> ___recordFunctionMeta___:name:value:), so a
+	function the new source no longer defines leaves nothing behind.  PEEKS
+	the registry."
+
+	| reg |
+	reg := self ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___markBodyClassAttrsReplayed___: aModuleName
 	"This session is running aModuleName's body itself, so its stores reach the
 	overlay first hand; a later replay must not add the committed record's
@@ -4532,7 +4581,8 @@ ___loadModuleFromPath___: pathString name: moduleName
 	new instances when the cache is missed."
 
 	| moduleAst moduleClass moduleInstance
-	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local rerun |
+	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local rerun
+	  earlyEntry previousEntry |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
@@ -4690,6 +4740,12 @@ ___loadModuleFromPath___: pathString name: moduleName
 		ImportFromAst nodes can find their enclosing ModuleAst (for relative
 		import resolution)."
 		moduleAst setParent: nil.
+		"Whether a top file may be restarted in the namespace its first
+		statement chooses (___mainToRestartIn___:)."
+		(local and: [moduleName = '__main__']) ifTrue: [
+			SessionTemps current
+				at: #'GrailMainLeadsWithUseNamespace'
+				put: moduleAst ___leadsWithUseNamespace___].
 
 		"Expand `from X import *` into explicit `from X import a, b, c`.
 		Done by parsing the target module's source, collecting its top-level
@@ -4773,6 +4829,17 @@ ___loadModuleFromPath___: pathString name: moduleName
 		on: moduleInstance.
 	"Register BEFORE execution so circular imports resolve"
 	self registerModule: moduleName with: moduleInstance]].
+	"An app's ``__main__'' is recorded as the app's globals BEFORE its body
+	runs, not after it like every other module.  A program commits from its
+	own body -- there is nowhere else for a Python program to commit -- so
+	recorded afterwards it would be left out of every commit the program
+	makes, and each run would start with fresh globals.  A body that fails
+	takes the entry back, as below for a module's sys.modules entry; what
+	it already committed stays, as any committed write does."
+	earlyEntry := local not and: [rerun not and: [moduleName = '__main__']].
+	earlyEntry ifTrue: [
+		previousEntry := self ___canonicalModules___ at: moduleName otherwise: nil.
+		self ___canonicalModules___ at: moduleName put: moduleInstance].
 	"Execute the module body.  Registration happens BEFORE the body runs (so
 	circular imports see a module object), which means a body that raises
 	would otherwise leave a half-built module stuck in sys.modules — its
@@ -4813,6 +4880,10 @@ ___loadModuleFromPath___: pathString name: moduleName
 			Python raise still takes the unload path below."
 			(ex isKindOf: Notification) ifTrue: [ex pass].
 			self removeModule: moduleName.
+			earlyEntry ifTrue: [
+				previousEntry isNil
+					ifTrue: [self ___canonicalModules___ removeKey: moduleName ifAbsent: []]
+					ifFalse: [self ___canonicalModules___ at: moduleName put: previousEntry]].
 			"A failed rebuild leaves the committed instance half re-executed
 			(in this transaction only).  Put the old hash back so the next
 			import sees the module as stale and retries, instead of finding a
@@ -5675,7 +5746,7 @@ runPath: pathString arguments: anArrayOrNil
 			(Array @env0:with: pathString @env0:asString) , anArrayOrNil].
 	self @env1:___installScriptDir___: pathString.
 	self ___grailAppFromEnvironment___.
-	^ self loadModuleFromPath: pathString name: '__main__'
+	^ self ___runTopFile___: pathString
 %
 
 category: 'Grail-Module Loading'
@@ -5741,7 +5812,36 @@ runModule: aName arguments: anArrayOrNil
 		sys @env1:___setArgv___:
 			(Array @env0:with: path @env0:asString) , anArrayOrNil].
 	self ___grailAppFromEnvironment___.
-	^ self loadModuleFromPath: path name: '__main__'
+	^ self ___runTopFile___: path
+%
+
+category: 'Grail-App Namespaces'
+classmethod: importlib
+___runTopFile___: pathString
+	"Load pathString as ``__main__'' for runPath: and runModule:.
+
+	A top file whose first statement (after a docstring and imports) is
+	gemdb.use_namespace(name) gets the namespace's persistent globals, as
+	``./grail --namespace name'' would give it (D11).  Whether ``__main__'' is
+	session-local is decided when its class is built, before that statement
+	runs, so the call cannot simply switch it: ___grailSetApp___: signals
+	GrailMainRestart instead, and this drops the session-local ``__main__''
+	(the loader has already removed it from sys.modules), chooses the namespace
+	and runs the file again.  The second time its imports are found loaded and
+	the call does nothing, so nothing that ran before it runs twice."
+
+	| temps restart |
+	temps := SessionTemps current.
+	temps at: #'GrailTopFileRun' put: true.
+	restart := [[^ self loadModuleFromPath: pathString name: '__main__']
+			on: GrailMainRestart do: [:ex | ex return: ex]]
+		ensure: [
+			temps removeKey: #'GrailTopFileRun' ifAbsent: [].
+			temps removeKey: #'GrailMainLeadsWithUseNamespace' ifAbsent: []].
+	(self ___sessionModuleClasses___ keyAtValue: restart moduleClass ifAbsent: [nil])
+		ifNotNil: [:key | self ___sessionModuleClasses___ removeKey: key].
+	self ___grailSetApp___: restart appName.
+	^ self loadModuleFromPath: pathString name: '__main__'
 %
 
 category: 'Grail-Module Loading'
@@ -8378,6 +8478,7 @@ ___pushInitializingModule___: aName
 	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
 	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
 	self @env0:___forgetBodyClassAttrsOf___: aName @env0:asString.
+	self @env0:___forgetFunctionMetaOf___: aName @env0:asString.
 	self @env0:___markBodyClassAttrsReplayed___: aName @env0:asString.
 	module @env0:___forgetSessionGlobalsOf___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
