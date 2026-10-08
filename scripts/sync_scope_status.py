@@ -240,8 +240,9 @@ def test_tally(rows, tiers):
     return "\n".join(out)
 
 
-def not_ok_rows(rows):
-    """The board rows that are not OK, each with its counts."""
+def not_ok_rows(rows, unmeasured):
+    """The board rows that are not OK, each with its counts, then the wired
+    modules the board has no row for yet (the nightly measures them next)."""
     bad = [r for r in rows if r[1] != "OK"]
     out = ["**%d of the %d rows on the committed board are not OK.**"
            % (len(bad), len(rows))]
@@ -250,6 +251,10 @@ def not_ok_rows(rows):
     for dotted, st, tests, fail, err, skip in bad:
         out.append("- `%s` %s, %d tests: %d failed, %d errors, %d skipped"
                    % (dotted, st, tests, fail, err, skip))
+    if unmeasured:
+        out += ["", "Wired, but not on the board until the next nightly "
+                "measures them: %s." % ", ".join(
+                    "`%s`" % m for m in unmeasured)]
     return "\n".join(out)
 
 
@@ -284,7 +289,7 @@ def main():
     new = replace_block(new, TALLY_TABLE_TAG, tally_table(counts, totals))
     new = replace_block(new, WIRED_SENTENCE_TAG, wired_sentence(counts, totals))
     new = replace_block(new, TEST_TALLY_TAG, test_tally(rows, tiers))
-    new = replace_block(new, NOT_OK_ROWS_TAG, not_ok_rows(rows))
+    new = replace_block(new, NOT_OK_ROWS_TAG, not_ok_rows(rows, missing))
     print("in-scope total: %s %d  %s %d  unmeasured %d  (%d modules, %d wired)"
           % (OK, totals[OK], NOT_OK, totals[NOT_OK], totals[UNKNOWN],
              sum(totals.values()), totals[OK] + totals[NOT_OK]))
