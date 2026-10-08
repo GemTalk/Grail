@@ -6553,7 +6553,7 @@ ___isTruthy___
 
 category: 'Grail-Convenience Methods - Unary'
 method: object
-___ignore: anObject
+___ignore___: anObject
 	"Evaluate the receiver and the argument (for its side effect) and
 	return the receiver, discarding the argument.  Used by the chained
 	``in''/``not in'' codegen: the membership result is the receiver, and

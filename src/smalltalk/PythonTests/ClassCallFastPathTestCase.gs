@@ -195,7 +195,7 @@ testCodegenBuiltinsFastPathTakesPrecedence
 
 	| src |
 	src := self generatedSourceFor: 'repr(42)'.
-	self assert: (src includesString: '#builtins) instance').
+	self assert: (src includesString: '#builtins) @env0:___instance___').
 	self assert: (src includesString: 'repr: ').
 	self deny: (src includesString: '@env1:__new__')
 %

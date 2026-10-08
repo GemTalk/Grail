@@ -903,6 +903,17 @@ setdefault: key _: default
 
 category: 'Grail-Mutation Methods'
 method: dict
+___pyUpdate___: other
+	"update: under a Grail-internal selector, for codegen: a dict display ``{**m}'' and a call's ``**m'' beside named keywords.
+	Generated code must not send its own plumbing in env 1 under a selector
+	that decodes as a Python name, or a sender search cannot tell it from a
+	Python ``.update(...)'' call (issue #1155)."
+
+	^ self update: other
+%
+
+category: 'Grail-Mutation Methods'
+method: dict
 update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
 

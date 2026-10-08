@@ -352,7 +352,7 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock outerSou
 			traceback wrapper's single expression, so no trailing period."
 			aStream decreaseIndent;
 				nextPutAll: '] @env0:on: PythonLoopDrained do: [:___ex___ | nil].'; lf.
-			aStream decreaseIndent; nextPutAll: '] value'; lf.
+			aStream decreaseIndent; nextPutAll: '] @env0:value'; lf.
 			self ___emitTracebackFrameCloseFor: gen iter on: aStream]
 		ifFalse: [
 			aStream decreaseIndent;

@@ -502,7 +502,7 @@ ___doitStarImport___: aModule into: aScope
 	copies it to the caller's mapping from there.
 
 	A module-level star import is expanded at PARSE time from a literal
-	``__all__'' and topped up by module >> ___mergePublicAttrsFrom:.  A doit
+	``__all__'' and topped up by module >> ___mergePublicAttrsFrom___:.  A doit
 	had only the parse-time half, so a module whose __all__ is not a literal
 	bound nothing at all: ``exec('from _collections_abc import *', ns)'' left
 	ns empty, because Grail's _collections_abc takes its __all__ from

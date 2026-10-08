@@ -32,7 +32,7 @@ PydanticPhase6WallsTestCase category: 'Grail-SUnit'
 !     object class >> ___grailNsBind___:, ___grailNsDescriptorFor___:loaded:,
 !     ___grailNsOwnPropertyFor___:; ClassDefAst compiles
 !     ___grailOwnPropertyNames___ before the body runs;
-!   * ``from m import *'' ignored __all__ -- module >> ___mergePublicAttrsFrom:;
+!   * ``from m import *'' ignored __all__ -- module >> ___mergePublicAttrsFrom___:;
 !   * warnings.warn assembled the category without its __init__ -- warnings;
 !   * an inherited classmethod's __func__ differed per class -- BoundMethod;
 !   * copy.deepcopy(obj.__dict__) stored into nil -- PyInstanceDict >>

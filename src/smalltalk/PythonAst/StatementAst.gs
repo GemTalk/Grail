@@ -165,14 +165,14 @@ printImportBindingOpenOn: aStream name: targetName
 category: 'Grail-IR Codegen'
 method: StatementAst
 ___emitIRBuiltinsInstanceOn___: aBuilder
-	"``((Python @env0:at: #builtins) instance)'' -- the receiver both import
+	"``((Python @env0:at: #builtins) @env0:___instance___)'' -- the receiver both import
 	forms send ___import__:kw: to."
 
 	| builtinsCls |
 	builtinsCls := aBuilder
 		send: #at: to: (aBuilder globalNamed: #Python)
 		with: { aBuilder obj: #builtins } env: 0.
-	^ aBuilder send: #instance to: builtinsCls with: { } env: 1
+	^ aBuilder send: #'___instance___' to: builtinsCls with: { } env: 0
 %
 
 category: 'Grail-IR Codegen'

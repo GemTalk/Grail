@@ -1475,7 +1475,7 @@ update: other
 
 category: 'Python-Mutation Methods'
 method: module
-___mergePublicAttrsFrom: aModule
+___mergePublicAttrsFrom___: aModule
 	"Copy every public (non-underscore-prefixed) attribute from
 	aModule's namespace into self.  Used by `from X import *`
 	codegen to pick up dynamically-injected names that parse-time

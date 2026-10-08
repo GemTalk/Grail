@@ -102,7 +102,7 @@ r['star_import_brings_IntEnum'] = repr('IntEnum' in _bound)
 # ``unique`` is a METHOD on the module rather than a stored dict entry, and it
 # used to be missed for exactly that reason -- star-import walked the dict
 # entries and the dynamic instVars and never looked at the method dictionary.
-# module >> ___mergePublicAttrsFrom: now walks the methods too, so it arrives.
+# module >> ___mergePublicAttrsFrom___: now walks the methods too, so it arrives.
 #
 # WHAT REMAINS a gap: the star-import still does not consult ``__all__''.  It
 # publishes every public attribute it can find, which happens to be a superset

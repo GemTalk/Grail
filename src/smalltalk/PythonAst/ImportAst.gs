@@ -109,7 +109,7 @@ valueSourceFor: anAlias
 	stream := WriteStream on: String new.
 	walks ifTrue: [stream nextPut: $(].
 	stream
-		nextPutAll: '((Python @env0:at: #builtins) instance) ';
+		nextPutAll: '((Python @env0:at: #builtins) @env0:___instance___) ';
 		nextPutAll: self ___importSelectorPrefix___;
 		nextPutAll: ': { ''';
 		nextPutAll: importName;
@@ -190,7 +190,7 @@ category: 'Grail-IR Codegen'
 method: ImportAst
 ___emitIRStatementOn___: aBuilder
 	"printSmalltalkOn: + valueSourceFor:'s shape, one statement per alias:
-	  name := (((Python @env0:at: #builtins) instance) ___import__: { 'a.b.c' } kw: nil)
+	  name := (((Python @env0:at: #builtins) @env0:___instance___) ___import__: { 'a.b.c' } kw: nil)
 	and, for ``import a.b.c as x'', the leaf reached by walking the dotted
 	segments after the import: ``(...) @env1:b @env1:c''.  The varargs fast
 	path is used directly so the import does not depend on ``__import__''

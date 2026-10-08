@@ -42,7 +42,7 @@ ChainedIdentityCompareTestCase category: 'Grail-SUnit'
 ! operands, so the container is the Smalltalk RECEIVER.  A non-final membership
 ! test therefore stages its container in a temp of its own, runs the test, and
 ! copies the container into the shared temp for the next comparison -- discarding
-! the copy's value through ___ignore:, so the expression still yields the
+! the copy's value through ___ignore___:, so the expression still yields the
 ! membership result.  setParent: was already allocating that second temp for the
 ! text path; the IR folder just had no use for it.
 !

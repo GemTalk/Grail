@@ -7840,6 +7840,61 @@ pythonPositionsForMethod: aMethod
 
 category: 'Grail-Python Positions'
 classmethod: BaseException
+pythonSelectorsSentBy: aMethod
+	"PUBLIC (issue #1155).  The selectors aMethod sends AS PYTHON NAMES: its
+	env-1 sends whose selector importlib >> pythonNameOfSelector: decodes,
+	including sends from its inner blocks, as an IdentitySet.  So a sender
+	search can ask whether a method calls Python ``size'' without counting
+	Grail's own env-0 ``@env0:size'' checks, which _selectorPool merges in.
+
+	What it answers, by pythonPositionKindForMethod: --
+	  #curPos    text codegen: exact.  Every env-0 send in generated text is
+	             spelled @env0:, so the env-1 sends are the others; and Grail's
+	             own plumbing in env 1 uses ___name___ selectors, which do not
+	             decode.  Env1PlumbingSendsTestCase holds codegen to both.
+	  #irSource  direct-to-IR: nil, meaning UNKNOWN.  An IR method has no
+	             generated text, and nothing public in the compiled method says
+	             which environment a send targets.  The kernel half is proposed
+	             on #1155 (GsNMethod >> _selectorIdPool); until it lands, a
+	             consumer should say it cannot tell rather than guess.
+	  nil        not a generated Python method: an empty set.
+
+	Not every answer is a CALL.  A module-global or attribute read compiled as
+	a unary send is a reference to that name, and an operator lowered to a
+	dunder send (``x[i]'' to __getitem__:) appears under the dunder.  Those
+	are Python names the method really uses.  What it cannot report is a name
+	that is never SENT, and that is most method calls: ``o.m(x)'' loads ``m''
+	by a Symbol argument (``o ___pyAttrLoad___: #m'') and calls the result
+	through ``value:value:'', so no send is named m.  Only a direct send --
+	``self.m(x)'' on the class's own method, ``self._dict()'' in _grail_session
+	-- carries the name as its selector.  _selectorPool has the same blind
+	spot; the name is in the method's literals instead.  ``getattr(o, 'x')''
+	and a callable held in a variable are the same case.
+
+	One implicit reference remains: a zero-argument ``super()'' reads its
+	class through the module global, so the class's own name appears in the
+	methods that use it."
+
+	| kind src offs result |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind == #irSource ifTrue: [^ nil].
+	result := IdentitySet new.
+	kind == #curPos ifFalse: [^ result].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ result].
+	offs := aMethod _sourceOffsetsOfSends.
+	1 to: offs size by: 2 do: [:i |
+		| off sel |
+		off := offs at: i.
+		sel := offs at: i + 1.
+		((off > 6 and: [(src copyFrom: off - 6 to: off - 1) = '@env0:']) not
+			and: [(importlib pythonNameOfSelector: sel) notNil])
+				ifTrue: [result add: sel]].
+	^ result
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
 ___pySourceStringOf___: aMethod
 	"Private to the position API: aMethod's source, or nil.  Re-passes
 	AlmostOutOfStackError for the reason the rest of this file documents at
