@@ -249,9 +249,17 @@ mkdir -p "$PROJECT_ROOT/out"
 rm -f "$PROJECT_ROOT"/out/shard_*.out
 SHARD_PIDS=()
 for i in $SHARDS; do
-  GRAIL_TEST_WORKERS="$WORKERS" GRAIL_TEST_SHARD="$i" \
-    LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTestsShard.gs < /dev/null \
-    > "$PROJECT_ROOT/out/shard_$i.out" 2>&1 &
+  # Head each log with every GRAIL_* variable the shard inherits, so it can be
+  # re-run by hand with the same switches (#1039): runTestsShard.gs prints the
+  # two this loop sets, but not the modes taken from the caller's environment
+  # (GRAIL_IR_CODEGEN=0 and friends), and re-running without one silently
+  # tests the other arm. A name not listed is unset, i.e. at its default.
+  # `exec` keeps $! the topaz PID, as it was before the subshell.
+  ( export GRAIL_TEST_WORKERS="$WORKERS" GRAIL_TEST_SHARD="$i"
+    echo "GRAIL_* environment (unlisted = unset):"
+    env | grep '^GRAIL_' | sort | sed 's/^/  /'
+    LC_ALL=C exec topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTestsShard.gs < /dev/null
+  ) > "$PROJECT_ROOT/out/shard_$i.out" 2>&1 &
   SHARD_PIDS+=("$!")
 done
 for pid in "${SHARD_PIDS[@]}"; do
