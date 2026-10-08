@@ -16,9 +16,11 @@ not authored.  Run this after a suite run that moves a row:
     python3 scripts/sync_scope_status.py            # rewrite the doc
     python3 scripts/sync_scope_status.py --check    # exit 1 if out of date
 
-Only the Status cell of each in-scope row is touched, plus the two <!-- tag -->
-blocks that report the tallies; module names, rationales, row order and every
-other section are left byte-identical.  The out-of-scope tables deliberately have
+Only the Status cell of each in-scope row is touched, plus the <!-- tag -->
+blocks that report what the board says (module tallies, test counts, and the
+rows that are not OK); module names, rationales, row order and every other
+section are left byte-identical.  CI runs --check, and the nightly's
+baseline-refresh PR re-runs this beside the board it commits.  The out-of-scope tables deliberately have
 no Status column -- for them "not measured" is the intent rather than a gap.
 """
 
@@ -46,6 +48,12 @@ SEPARATOR = "|:------:|--------|-----------|"
 # column.  Each is regenerated between a matching pair of HTML comments.
 TALLY_TABLE_TAG = "status-tally"
 WIRED_SENTENCE_TAG = "wired-tally"
+TEST_TALLY_TAG = "test-tally"
+NOT_OK_ROWS_TAG = "not-ok-rows"
+
+# An OK row at or above this skipped fraction is listed by name under the test
+# tally, so a green module that runs little of itself is visible as such.
+HEAVY_SKIP = 0.5
 
 # "### P1 -- Core language & built-in types  .  90 modules"
 TIER_HEADING = re.compile(r"^### (P[1-4]) — ")
@@ -80,17 +88,30 @@ def manifest_modules():
     return names
 
 
-def scoreboard_status():
+BOARD_ROW = re.compile(
+    r"^\|\s*(test\.test_\w+(?:\.\w+)*)\s*\|\s*(\w+)\s*\|"
+    r"\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|")
+
+
+def scoreboard_rows():
+    """[(dotted, status, tests, fail, err, skip)] in board order."""
+    rows = []
+    for line in SCOREBOARD.read_text().splitlines():
+        m = BOARD_ROW.match(line)
+        if m:
+            rows.append((m.group(1), m.group(2))
+                        + tuple(int(g) for g in m.groups()[2:]))
+    return rows
+
+
+def scoreboard_status(rows):
     """{test_foo: 'OK'|'ERROR'|...} from the committed per-module rows.  A
     package row is OK only while every one of its wired submodules is."""
     status = {}
-    row = re.compile(r"^\|\s*(test\.test_\w+(?:\.\w+)*)\s*\|\s*(\w+)\s*\|")
-    for line in SCOREBOARD.read_text().splitlines():
-        m = row.match(line)
-        if m:
-            name = scope_name(m.group(1))
-            if status.get(name, "OK") == "OK":
-                status[name] = m.group(2)
+    for dotted, st, *_ in rows:
+        name = scope_name(dotted)
+        if status.get(name, "OK") == "OK":
+            status[name] = st
     return status
 
 
@@ -101,9 +122,11 @@ def icon_for(module, listed, status):
 
 
 def rewrite(text, listed, status):
-    """Rewrite the in-scope tier tables; return (new_text, per-tier counts)."""
+    """Rewrite the in-scope tier tables; return (new_text, per-tier counts,
+    {test_foo: tier})."""
     out = []
     counts = {}
+    tiers = {}
     tier = None
     for line in text.splitlines():
         heading = TIER_HEADING.match(line)
@@ -136,12 +159,14 @@ def rewrite(text, listed, status):
             module, rationale = m.group(1), m.group(2)
             icon = icon_for(module, listed, status)
             counts[tier][icon] += 1
+            tiers[module] = tier
             out.append("| %s | `%s` | %s |" % (icon, module, rationale))
             continue
 
         out.append(line)
 
-    return "\n".join(out) + ("\n" if text.endswith("\n") else ""), counts
+    return ("\n".join(out) + ("\n" if text.endswith("\n") else ""), counts,
+            tiers)
 
 
 def replace_block(text, tag, body):
@@ -179,6 +204,55 @@ def wired_sentence(counts, totals):
                totals[OK]))
 
 
+def test_tally(rows, tiers):
+    """Per-tier test counts from the board, with passing = tests - failures -
+    errors - skipped: a skip is not a pass.  Then the OK rows that skip at
+    least HEAVY_SKIP of themselves, by name."""
+    by_tier = {}
+    for dotted, _st, tests, fail, err, skip in rows:
+        t = by_tier.setdefault(tiers.get(scope_name(dotted), "other"),
+                               [0, 0, 0, 0])
+        t[0] += 1
+        t[1] += tests
+        t[2] += skip
+        t[3] += tests - fail - err - skip
+
+    def line(label, nrows, tests, skip, passing, bold=""):
+        pct = "%d%%" % round(100.0 * skip / tests) if tests else "-"
+        cells = ["%d" % v for v in (nrows, tests, skip, passing)] + [pct]
+        return "| %s | %s |" % (label, " | ".join(
+            bold + c + bold for c in cells))
+
+    out = ["| Tier | board rows | tests | skipped | passing | skipped % |",
+           "|------|-----------:|------:|--------:|--------:|----------:|"]
+    total = [0, 0, 0, 0]
+    for tier in sorted(by_tier):
+        out.append(line(tier, *by_tier[tier]))
+        total = [a + b for a, b in zip(total, by_tier[tier])]
+    out.append(line("**all**", *total, bold="**"))
+
+    heavy = ["`%s` %d of %d" % (scope_name(d), skip, tests)
+             for d, st, tests, _f, _e, skip in rows
+             if st == "OK" and tests and skip / tests >= HEAVY_SKIP]
+    if heavy:
+        out += ["", "OK rows that skip at least %d%% of their tests: %s."
+                % (round(100 * HEAVY_SKIP), " · ".join(heavy))]
+    return "\n".join(out)
+
+
+def not_ok_rows(rows):
+    """The board rows that are not OK, each with its counts."""
+    bad = [r for r in rows if r[1] != "OK"]
+    out = ["**%d of the %d rows on the committed board are not OK.**"
+           % (len(bad), len(rows))]
+    if bad:
+        out.append("")
+    for dotted, st, tests, fail, err, skip in bad:
+        out.append("- `%s` %s, %d tests: %d failed, %d errors, %d skipped"
+                   % (dotted, st, tests, fail, err, skip))
+    return "\n".join(out)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
@@ -186,7 +260,8 @@ def main():
     args = ap.parse_args()
 
     listed = manifest_modules()
-    status = scoreboard_status()
+    rows = scoreboard_rows()
+    status = scoreboard_status(rows)
 
     missing = sorted(set(listed) - set(status))
     if missing:
@@ -195,7 +270,7 @@ def main():
               file=sys.stderr)
 
     old = SCOPE.read_text()
-    new, counts = rewrite(old, listed, status)
+    new, counts, tiers = rewrite(old, listed, status)
 
     totals = {OK: 0, NOT_OK: 0, UNKNOWN: 0}
     for tier in sorted(counts):
@@ -208,6 +283,8 @@ def main():
 
     new = replace_block(new, TALLY_TABLE_TAG, tally_table(counts, totals))
     new = replace_block(new, WIRED_SENTENCE_TAG, wired_sentence(counts, totals))
+    new = replace_block(new, TEST_TALLY_TAG, test_tally(rows, tiers))
+    new = replace_block(new, NOT_OK_ROWS_TAG, not_ok_rows(rows))
     print("in-scope total: %s %d  %s %d  unmeasured %d  (%d modules, %d wired)"
           % (OK, totals[OK], NOT_OK, totals[NOT_OK], totals[UNKNOWN],
              sum(totals.values()), totals[OK] + totals[NOT_OK]))
