@@ -166,7 +166,7 @@ printSmalltalkOn: aStream
 	nothing."
 	(self wasStarImport and: [ModuleAst compilingDoitScope notNil]) ifTrue: [
 		aStream
-			nextPutAll: '(((Python @env0:at: #builtins) instance) ___doitStarImport___: (((Python @env0:at: #builtins) instance) ';
+			nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___doitStarImport___: (((Python @env0:at: #builtins) @env0:___instance___) ';
 			nextPutAll: self ___importSelectorPrefix___;
 			nextPutAll: ': { ''';
 			nextPutAll: self resolvedModuleName;
@@ -199,7 +199,7 @@ printSmalltalkOn: aStream
 		rather than the top-level package, which is what an empty
 		fromlist on a dotted name would yield."
 		aStream
-			nextPutAll: 'self @env1:___mergePublicAttrsFrom: (((Python @env0:at: #builtins) instance) ';
+			nextPutAll: 'self @env1:___mergePublicAttrsFrom___: (((Python @env0:at: #builtins) @env0:___instance___) ';
 			nextPutAll: self ___importSelectorPrefix___;
 			nextPutAll: ': { ''';
 			nextPutAll: absoluteName;
@@ -233,7 +233,7 @@ valueSourceFor: anAlias
 		ifTrue: [
 			"Callable on a converted module — wrap in BoundMethod."
 			stream
-				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) instance) ';
+				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) @env0:___instance___) ';
 				nextPutAll: self ___importSelectorPrefix___;
 				nextPutAll: ': { ''';
 				nextPutAll: absoluteName;
@@ -252,7 +252,7 @@ valueSourceFor: anAlias
 			and a bare unary send would dispatch the env-1 ``auto'' method,
 			returning an integer."
 			stream
-				nextPutAll: '((((Python @env0:at: #builtins) instance) ';
+				nextPutAll: '((((Python @env0:at: #builtins) @env0:___instance___) ';
 				nextPutAll: self ___importSelectorPrefix___;
 				nextPutAll: ': { ''';
 				nextPutAll: absoluteName;
@@ -296,7 +296,7 @@ ___storesModuleSlot___: aSymbol
 	"A STAR import may store ANY module slot, so a later top-level def of any
 	name has to clear its slot (FunctionDefAst >>
 	___rebindsAnEarlierModuleBinding___).  Which names it binds is decided by
-	the runtime merge (module >> ___mergePublicAttrsFrom:), from X's __all__ or
+	the runtime merge (module >> ___mergePublicAttrsFrom___:), from X's __all__ or
 	its public names, and parse time cannot know them.
 
 	    from _signal import *       # binds signal, getsignal, ...

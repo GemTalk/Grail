@@ -67,7 +67,10 @@ ___emitSmalltalkOn___: aStream
 	elts do: [:each |
 		"``{*a, 1}'': a STARRED element adds every item of the iterable, which
 		is what set>>update: does -- ``adding elements from any iterable'',
-		and the direct analogue of DictAst's ``___d update:'' for ``**''.
+		and the direct analogue of DictAst's ``___d ___pyUpdate___:'' for ``**''.
+		Both spellings keep Grail's plumbing out of env 1 under a Python-shaped
+		selector: ___pyUpdate___: is internal and @env0:add: is the facade store
+		set>>add: itself forwards to (issue #1155).
 		The element used to be printed as itself, and StarredAst's own emit
 		is a ``*-unpack in call sites is not yet supported'' TypeError
 		signal, so the display raised at RUN time -- which is why the upstream
@@ -76,10 +79,10 @@ ___emitSmalltalkOn___: aStream
 		ORDER of iteration is still observable through a user __hash__."
 		(each isKindOf: StarredAst)
 			ifTrue: [
-				aStream nextPutAll: '___s update: '.
+				aStream nextPutAll: '___s ___pyUpdate___: '.
 				each value printSmalltalkWithParenthesisOn: aStream]
 			ifFalse: [
-				aStream nextPutAll: '___s add: '.
+				aStream nextPutAll: '___s @env0:add: '.
 				"Parenthesize: an element that prints as a keyword send
 				(``x @env1:___pyAttrLoad___: #'attr''') would otherwise fuse
 				with ``add:'' into one selector (#add:___pyAttrLoad___:) —
@@ -88,7 +91,7 @@ ___emitSmalltalkOn___: aStream
 				each printSmalltalkWithParenthesisOn: aStream].
 		aStream nextPutAll: '. '.
 	].
-	aStream nextPutAll: '___s] value: (___set___ perform: #new env: 0))'.
+	aStream nextPutAll: '___s] @env0:value: (___set___ perform: #new env: 0))'.
 %
 method: SetAst
 elts
@@ -127,8 +130,8 @@ ___irEligibleValueLocals___: localNames
 category: 'Grail-IR Codegen'
 method: SetAst
 ___emitIRValueOn___: aBuilder
-	"``{a, *b}'' -> ``([:___s | ___s add: (a). ___s update: (b). ___s]
-	value: (set perform: #new env: 0))'' -- printSmalltalkOn:'s shape."
+	"``{a, *b}'' -> ``([:___s | ___s @env0:add: (a). ___s ___pyUpdate___: (b). ___s]
+	@env0:value: (set perform: #new env: 0))'' -- printSmalltalkOn:'s shape."
 
 	| accBlk fresh |
 	aBuilder atNode: self.
@@ -136,18 +139,19 @@ ___emitIRValueOn___: aBuilder
 		send: #new to: (aBuilder globalNamed: #set) with: { } env: 0.
 	accBlk := aBuilder blockWithArg: #'___s' do: [:sLeaf |
 		elts do: [:each |
-			"___emitSmalltalkOn___:'s two element shapes: ``___s add: (e)'' and,
-			for a star, ``___s update: (e)'' -- every item of the iterable, in
-			position."
+			"___emitSmalltalkOn___:'s two element shapes: ``___s @env0:add: (e)''
+			and, for a star, ``___s ___pyUpdate___: (e)'' -- every item of the
+			iterable, in position."
 			(each isKindOf: StarredAst)
 				ifTrue: [aBuilder add: (aBuilder
-					send: #update:
+					send: #'___pyUpdate___:'
 					to: (aBuilder var: sLeaf)
 					with: { each value ___emitIRValueOn___: aBuilder })]
 				ifFalse: [aBuilder add: (aBuilder
 					send: #add:
 					to: (aBuilder var: sLeaf)
-					with: { each ___emitIRValueOn___: aBuilder })]].
+					with: { each ___emitIRValueOn___: aBuilder }
+					env: 0)]].
 		aBuilder add: (aBuilder var: sLeaf)].
 	^ aBuilder send: #value: to: accBlk with: { fresh } env: 0
 %

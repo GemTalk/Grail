@@ -954,6 +954,7 @@ run
 	at: #'EnumSecondaryMixinTestCase' put: nil;
 	at: #'EnumTestCase' put: nil;
 	at: #'EnumTupleStorageTestCase' put: nil;
+	at: #'Env1PlumbingSendsTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
 	at: #'EOFErrorTestCase' put: nil;
@@ -2449,6 +2450,7 @@ input src/smalltalk/PythonTests/EnumRootPickleIdentityTestCase.gs
 input src/smalltalk/PythonTests/EnumSecondaryMixinTestCase.gs
 input src/smalltalk/PythonTests/EnumTestCase.gs
 input src/smalltalk/PythonTests/EnumTupleStorageTestCase.gs
+input src/smalltalk/PythonTests/Env1PlumbingSendsTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
 input src/smalltalk/PythonTests/EOFErrorTestCase.gs

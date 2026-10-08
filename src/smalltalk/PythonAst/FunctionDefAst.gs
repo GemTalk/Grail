@@ -433,7 +433,7 @@ printSmalltalkClassBodyRuntimeDefOn: aStream
 		ifNil: [aStream nextPutAll: self ___mangledName___]
 		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
 			nextPutAll: ' value: { '; nextPutAll: self ___mangledName___; nextPutAll: ' } value: nil)'].
-	aStream nextPutAll: '. ] value.'; lf
+	aStream nextPutAll: '. ] @env0:value.'; lf
 %
 
 category: 'Grail-other'
@@ -767,14 +767,14 @@ printSmalltalkOn: aStream
 		CallAst ___restoreScopeDepth___: savedScopeDepth].
 	aStream
 		decreaseIndent;
-		nextPutAll: '] value.';
+		nextPutAll: '] @env0:value.';
 		lf.
 	"Implicit fall-off return value is Python ``None``. Explicit ``return``
 	signals PythonReturn (caught by the outer handler) and bypasses this."
 	aStream nextPutAll: 'None.'; lf.
 	aStream
 		decreaseIndent;
-		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]';
+		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]';
 		lf.
 	"nested: true matches the def-time ___pyCode___: cascade a few lines
 	below, which stamps this closure-form def's own __code__ with
@@ -797,9 +797,9 @@ printSmalltalkOn: aStream
 	then cascade onto the block the wrapper returns."
 	hasKwonly ifTrue: [
 		aStream nextPutAll: ') @env0:shallowCopy @env0:___pyKwDefaults___: ___kwdefaults___'; lf.
-		aStream nextPutAll: '] value)'.
+		aStream nextPutAll: '] @env0:value)'.
 	] ifFalse: [
-		hasPosDefaults ifTrue: [aStream nextPutAll: '] value'].
+		hasPosDefaults ifTrue: [aStream nextPutAll: '] @env0:value'].
 	].
 	"Every execution of a ``def'' must yield a DISTINCT function object -- that
 	is what CPython does, and Python code depends on it.  GemStone reuses a
@@ -4808,7 +4808,7 @@ ___emitIRWrappedBodyOn___: aBuilder
 	    ^ <PythonGenerator | PythonCoroutine | PythonAsyncGenerator>
 	        @env1:withBlock: [:___gen___ |
 	            [ stmt. stmt. ... None ]
-	                @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]]
+	                @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]]
 	        name: 'f' qualname: 'C.f'
 	        code: [((PyCode @env0:name:qualname:filename:firstlineno:argcount:
 	                    posonlyargcount:kwonlyargcount:) @env0:___setFlags___: n)]
@@ -4844,7 +4844,7 @@ ___emitIRWrappedBodyOn___: aBuilder
 				aBuilder add: (aBuilder globalNamed: #None)].
 			handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
 				aBuilder add: (aBuilder
-					send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
+					send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 0)].
 			aBuilder atNode: self.
 			aBuilder add: (aBuilder
 				send: #on:do: to: bodyBlk
@@ -5921,7 +5921,7 @@ generateModuleMethodSourceOn: aStream
 			[
 			<body statements>
 			] value.
-			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue].
 
 	For varargs (has *args, **kwargs, or defaults):
 		_name: positional kw: kwargs
@@ -5932,7 +5932,7 @@ generateModuleMethodSourceOn: aStream
 			[
 			<body statements>
 			] value.
-			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]."
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]."
 
 	| paramNames bodyVars allLocals assignedNames needsTemp instVarNames canOptimise
 	  savedReturnMode useDirectReturn useMethodTemps |
@@ -6364,7 +6364,7 @@ generateModuleMethodSourceOn: aStream
 		self printBodyOn: aStream.
 	] ensure: [CallAst returnEmitMode: savedReturnMode].
 	"Close the outer block only when we opened one."
-	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
+	useMethodTemps == true ifFalse: [aStream nextPutAll: '] @env0:value'].
 %
 
 category: 'Grail-Module Method Compilation'
@@ -6781,7 +6781,7 @@ printBodyOn: aStream
 			ifFalse: [aStream nextPutAll: 'None.'; lf].
 	].
 	(useDirect or: [useMethod]) ifFalse: [
-		aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
+		aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]'.
 	].
 	"nested: false matches the method form's def-time stamp: this def compiles
 	to a real Smalltalk method (class body or module top level), which the
@@ -7051,7 +7051,7 @@ generateMethodSourceOn: aStream
 			a := ___1. b := ___2.
 			[
 			[<body>] value.
-			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue].
 			] value
 
 	For varargs:
@@ -7412,7 +7412,7 @@ generateMethodSourceOn: aStream
 		CallAst returnEmitMode: savedReturnMode.
 		CallAst selfParameterRebound: savedSelfRebound].
 	"Close the outer block only when one was opened."
-	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
+	useMethodTemps == true ifFalse: [aStream nextPutAll: '] @env0:value'].
 %
 
 category: 'Grail-printing'
@@ -7840,7 +7840,7 @@ ___irNestedDefReasonUnguarded___: localNames
 	    <name> := ([| ___default_p___ | ___default_p___ := <expr>.     (defaults only)
 	        [:___positional___ :___kwargs___ | | <params> <locals> |
 	            <arg-count / missing checks; p := positional[i] / kwargs['p'] / default>
-	            [ [ stmts ] value. None ] on: PythonReturn do: [:___ex___ | ___ex___ returnValue]
+	            [ [ stmts ] value. None ] on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]
 	        ]] value) shallowCopy
 	            ___pyNamed___: 'name' [doc: '...']; ___pyModuleNamed___: 'mod';
 	            ___pyQualname___: 'outer.<locals>.name'; ___pyCode___: (...);
@@ -8607,7 +8607,7 @@ category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___emitIRNestedBodyOn___: aBuilder
 	"The closure block's body statement: ``[ [ stmts ] value. None ] on:
-	PythonReturn do: [:___ex___ | ___ex___ returnValue]'' -- the text's
+	PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]'' -- the text's
 	#exception return mode, ReturnAst signalling inside (inNestedFunction) --
 	or, for a generator / coroutine def, that same shape inside the lazy
 	wrapper, ``<PythonGenerator> withBlock: [:___gen___ | ...] name:qualname:
@@ -8625,7 +8625,7 @@ ___emitIRNestedBodyOn___: aBuilder
 			aBuilder add: (aBuilder send: #value to: inner with: { } env: 0).
 			aBuilder add: (aBuilder globalNamed: #None)].
 		handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
-			aBuilder add: (aBuilder send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
+			aBuilder add: (aBuilder send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 0)].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #on:do: to: bodyBlk

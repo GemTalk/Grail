@@ -10218,6 +10218,38 @@ ___irCensusReset___
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
+___irSendCensus___
+	"The IR send census (issue #1155): nil while off, else an OrderedCollection
+	of { targetClass. methodSelector. sends } with one entry per IR method
+	build, where sends is an OrderedCollection of { selector. envId } -- every
+	send node PyMethodIRBuilder built for that method, in build order.
+
+	It exists because an IR-compiled method has no generated text to read, and
+	GsNMethod>>_selectorPool merges both environments, so nothing in the
+	compiled method says which of its sends are env 1.  The census records what
+	the BUILDER asked for, which is what a guard needs to keep Grail's own
+	plumbing out of env 1 under a Python-shaped selector.  When the kernel can
+	answer the environment of each send (_selectorIdPool, proposed on #1155),
+	ask the method instead.
+
+	Off by default, and off costs one SessionTemps probe per method build:
+	the builder captures the collection once, in initClass:selector:env:."
+
+	^ SessionTemps current at: #'___grailIRSendCensus___' otherwise: nil
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irSendCensusOn: aBoolean
+	"Start (with an empty census) or stop recording ___irSendCensus___."
+
+	aBoolean
+		ifTrue: [SessionTemps current at: #'___grailIRSendCensus___' put: OrderedCollection new]
+		ifFalse: [SessionTemps current removeKey: #'___grailIRSendCensus___' ifAbsent: []]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
 ___irCensusNote___: aReason module: aModuleName def: aDefName count: n
 	| census counts examples list byModule perModule |
 	census := self ___irCensus___.

@@ -159,7 +159,7 @@ testStarImportIgnoresAllWhichIsAKnownGap
 	enum module rather than a stored dict entry, and it used to be missed for
 	exactly that reason: the star-import walked the dict entries and the dynamic
 	instVars and never looked at the method dictionary.  module >>
-	___mergePublicAttrsFrom: now walks the methods too, so ``unique'' arrives,
+	___mergePublicAttrsFrom___: now walks the methods too, so ``unique'' arrives,
 	and this test asserts that rather than the old absence.
 
 	WHAT REMAINS a gap, and why the name of this test still fits: the

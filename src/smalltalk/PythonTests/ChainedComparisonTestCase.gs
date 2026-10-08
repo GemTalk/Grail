@@ -99,7 +99,7 @@ category: 'Grail-Tests - in/not-in non-final'
 method: ChainedComparisonTestCase
 test_in_as_non_final_operator
 	"``in'' / ``not in'' used as a NON-final chain operator emitted invalid
-	Smalltalk before PR #83 (unbalanced parens + an undefined ___ignore:
+	Smalltalk before PR #83 (unbalanced parens + an undefined ___ignore___:
 	selector).  `x not in [7,8] == False` parses as
 	`(x not in [7,8]) and ([7,8] == False)`."
 

@@ -492,7 +492,7 @@ printSmalltalkOn: aStream
 	lambda, so this is the only emit.)"
 	(self ___irBodyHasYieldOrAwait___: body)
 		ifTrue: [
-			aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
+			aStream nextPutAll: 'PythonGenerator @env1:___withBlock___: [:___gen___ |'; lf.
 			body printSmalltalkOn: aStream.
 			aStream nextPutAll: ']']
 		ifFalse: [body printSmalltalkOn: aStream].
@@ -580,7 +580,7 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '; @env0:___pySig___: '.
 		specDef emitSignatureSpecOn: aStream]] value.
 	hasOuter
-		ifTrue: [aStream nextPutAll: '] value)']
+		ifTrue: [aStream nextPutAll: '] @env0:value)']
 		ifFalse: [aStream nextPut: $)].
 %
 method: LambdaAst

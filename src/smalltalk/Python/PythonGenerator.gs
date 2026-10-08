@@ -259,6 +259,19 @@ set compile_env: 1
 
 category: 'Grail-Instance Creation'
 classmethod: PythonGenerator
+___withBlock___: aBlock
+	"withBlock: under a Grail-internal selector, for the generated code that
+	wraps a generator / coroutine body without a def to name (generator
+	expressions, a generator lambda, a closure-form def).  Generated code must
+	not send its own plumbing in env 1 under a selector that decodes as a
+	Python name (issue #1155).  Sent to self, so PythonCoroutine's and
+	PythonAsyncGenerator's own withBlock: still apply."
+
+	^ self withBlock: aBlock
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PythonGenerator
 withBlock: aBlock
 	"Wrap aBlock as a fresh generator.  No work happens until the
 	first advance — Python semantics."
