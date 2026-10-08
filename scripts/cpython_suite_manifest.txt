@@ -466,3 +466,21 @@ test.test_string.test_string
 # shlex: CPython's module, vendored verbatim (the 88-line split/join/quote
 # stub had no `shlex` lexer class, which starlette.datastructures imports).
 test.test_shlex
+
+# --- Tracked baseline (added 2026-10-08): test_uuid ---
+#
+# uuid has been CPython's module since #1331 (the 71-line stub of #1160 is
+# gone).  Vendored verbatim from 3.14.8.  Measured on Darwin arm64, identical on
+# the IR and text arms:
+#
+#   test_uuid               120t  5F/14E/69S
+#     #1371 a patched time.time_ns is ignored by time.time_ns() calls   4F
+#           (uuid1_time, uuid6, uuid6_test_vectors, uuid6_uniqueness)
+#     #1370 f(h, hex=h) drops the keyword instead of raising TypeError  1F
+#           (test_exceptions)
+#     mock.patch.multiple -- Grail's mock is a subset                   10E
+#     no os.defpath (arp/ifconfig/netstat getnode)                       3E
+#     no os.pipe (testIssue8621)                                         1E
+#   62 of the 69 skips are the *WithExtModule classes, which need the C
+#   _uuid accelerator Grail does not have; CPython itself skips 16.
+test.test_uuid

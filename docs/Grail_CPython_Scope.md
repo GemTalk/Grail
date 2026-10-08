@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 56 | 5 | 29 | 90 |
-| P2 | 17 | 3 | 14 | 34 |
-| P3 | 13 | 1 | 42 | 56 |
-| P4 | 12 | 3 | 60 | 75 |
-| **In-scope** | **98** | **12** | **145** | **255** |
+| P1 | 57 | 4 | 29 | 90 |
+| P2 | 21 | 1 | 12 | 34 |
+| P3 | 15 | 1 | 40 | 56 |
+| P4 | 14 | 2 | 59 | 75 |
+| **In-scope** | **107** | **8** | **140** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **110 are wired into the harness** (P1 61 · P2 20 · P3 14 · P4 15) and **98 of those score OK**.
+Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **107 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -182,7 +182,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_enumerate` | enumerate builtin (language). |
 |  | `test_eof` | Parser EOF handling (language). |
 | ❗ | `test_except_star` | except* / PEP 654 (language). |
-| ❗ | `test_exception_group` | ExceptionGroup (language). |
+| ✅ | `test_exception_group` | ExceptionGroup (language). |
 | ❗ | `test_exception_hierarchy` | Built-in exception hierarchy (language). |
 | ✅ | `test_exception_variations` | try/except/finally variations (language). |
 |  | `test_exceptions` | Exceptions (language). |
@@ -256,7 +256,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 
 | Status | Module | Rationale |
 |:------:|--------|-----------|
-| ❗ | `test_abc` | abc / ABCMeta — pure-Python, foundational to the type system. |
+| ✅ | `test_abc` | abc / ABCMeta — pure-Python, foundational to the type system. |
 |  | `test_abstract_numbers` | numbers ABC tower — pure Python. |
 | ✅ | `test_bisect` | bisect — pure-Python algorithm. |
 |  | `test_cmath` | cmath — complex math. |
@@ -282,14 +282,14 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 |  | `test_ordered_dict` | OrderedDict. |
 | ❗ | `test_random` | random — Mersenne Twister PRNG. CPython's random.py over a native `_random`; wired 2026-10-04 at 114t 0F/14E. |
 | ✅ | `test_re` | re — core (in harness). |
-| ❗ | `test_statistics` | statistics — pure Python. |
-|  | `test_string` | string module (vendored) — Formatter/Template (pure). |
+| ✅ | `test_statistics` | statistics — pure Python. |
+| ✅ | `test_string` | string module (vendored) — Formatter/Template (pure). |
 |  | `test_strtod` | String→double conversion (float parsing). |
 | ✅ | `test_textwrap` | textwrap — core (in harness). |
 |  | `test_unittest` | unittest (vendored) — the test framework itself. |
 | ✅ | `test_userdict` | collections.UserDict (vendored). |
 | ✅ | `test_userlist` | collections.UserList (vendored). |
-| ❗ | `test_userstring` | collections.UserString (vendored). |
+| ✅ | `test_userstring` | collections.UserString (vendored). |
 
 ### P3 — Broader stdlib (serialization · io · dates · typing · introspection)  ·  56 modules
 
@@ -310,7 +310,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_colorsys` | colorsys — pure color-space math. |
 |  | `test_configparser` | configparser (INI) — pure Python. |
 |  | `test_context` | contextvars — pure-Python context state. |
-| ❗ | `test_contextlib` | contextlib — pure Python. |
+| ✅ | `test_contextlib` | contextlib — pure Python. |
 | ✅ | `test_contextlib_async` | async contextlib — pure Python. |
 | ❗ | `test_copyreg` | copyreg — pickle/copy registry. |
 |  | `test_csv` | csv — reader/writer (pure semantics). |
@@ -337,7 +337,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_queue` | queue — pure structures (thread-safety atop them). |
 | ✅ | `test_reprlib` | reprlib — pure Python. |
 |  | `test_sched` | sched — pure event scheduler. |
-|  | `test_shlex` | shlex — pure lexer. |
+| ✅ | `test_shlex` | shlex — pure lexer. |
 |  | `test_strftime` | time.strftime formatting — pure. |
 |  | `test_strptime` | _strptime parsing — pure. |
 | ✅ | `test_struct` | struct — binary packing; C-accelerated but pure semantics. *(edge — see below)* |
@@ -413,7 +413,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_smtpnet` | smtplib against a live external server (needs real network). *(edge — see below)* |
 |  | `test_socket` | socket — net transport; requires a GemStone GsSocket bridge. *(edge — see below)* |
 |  | `test_socketserver` | socketserver — atop sockets. *(edge — see below)* |
-| ❗ | `test_ssl` | ssl — C/OpenSSL TLS; needed by the secure net stack. *(edge — see below)* |
+| ✅ | `test_ssl` | ssl — C/OpenSSL TLS; needed by the secure net stack. *(edge — see below)* |
 |  | `test_stringprep` | stringprep (RFC 3454) — pure (net/security). |
 |  | `test_tabnanny` | tabnanny — indentation checker (tokenize-based tool). *(edge — see below)* |
 |  | `test_timeout` | Socket timeout behavior (net). *(edge — see below)* |
@@ -424,14 +424,14 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_urllib_response` | urllib response objects — web stack. |
 |  | `test_urllibnet` | urllib against the live internet (needs real network). *(edge — see below)* |
 | ✅ | `test_urlparse` | urllib.parse — pure URL parsing (web stack). |
-|  | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
+| ❗ | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
 | ✅ | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
 |  | `test_wsgiref` | wsgiref (vendored) — WSGI reference (web stack). |
 |  | `test_xml_dom_minicompat` | xml.dom minicompat (vendored xml). |
 |  | `test_xml_dom_xmlbuilder` | xml.dom xmlbuilder (vendored xml). |
 | ✅ | `test_xml_etree` | xml.etree.ElementTree (vendored xml). |
 |  | `test_xmlrpc` | xmlrpc — web stack. |
-| ❗ | `test_zipapp` | zipapp — build/run .pyz apps (zip + exec). *(edge — see below)* |
+| ✅ | `test_zipapp` | zipapp — build/run .pyz apps (zip + exec). *(edge — see below)* |
 |  | `test_zipfile` | zipfile — ZIP archives (pure-ish + zlib codec). *(edge — see below)* |
 |  | `test_zipimport` | zipimport — importing modules from ZIPs. *(edge — see below)* |
 |  | `test_zipimport_support` | zipimport traceback/source support. *(edge — see below)* |
@@ -755,6 +755,9 @@ list used to carry and landed the nine tranche modules below with real counts:
   `test_exception_hierarchy` ERROR 16t 2F/3E, `test_copyreg` FAIL 6t 2F/0E.
 
 `test_contextlib`, wired below, joins them as a twelfth at the next nightly.
+`test_uuid`, wired on 2026-10-08 (ERROR 120t 5F/14E when trialled), joins
+them the same way; the manifest comment lists its causes, #1370 and #1371
+among them.
 
 Every phase-4 module is green, including the eight this section used to list
 as not yet green (`test_datetime`, `test_enum`, `test_copy`, `test_listcomps`,
