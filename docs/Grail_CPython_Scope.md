@@ -30,8 +30,8 @@ Where the in-scope tiers stand:
 | P1 | 57 | 4 | 29 | 90 |
 | P2 | 21 | 1 | 12 | 34 |
 | P3 | 15 | 1 | 40 | 56 |
-| P4 | 14 | 1 | 60 | 75 |
-| **In-scope** | **107** | **7** | **141** | **255** |
+| P4 | 14 | 2 | 59 | 75 |
+| **In-scope** | **107** | **8** | **140** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **114 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 15) and **107 of those score OK**.
+Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **107 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -449,7 +449,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_urllib_response` | urllib response objects — web stack. |
 |  | `test_urllibnet` | urllib against the live internet (needs real network). *(edge — see below)* |
 | ✅ | `test_urlparse` | urllib.parse — pure URL parsing (web stack). |
-|  | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
+| ❗ | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
 | ✅ | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
 |  | `test_wsgiref` | wsgiref (vendored) — WSGI reference (web stack). |
 |  | `test_xml_dom_minicompat` | xml.dom minicompat (vendored xml). |
@@ -770,7 +770,9 @@ records only what changes slowly: what is still open, and why.
 The list below is generated from the committed board by
 `scripts/sync_scope_status.py`, and CI fails a PR that leaves it stale. It
 replaced a hand-written list that still named `test_ssl`, `test_statistics`
-and `test_abc` as failing after the board had them OK.
+and `test_abc` as failing after the board had them OK. A module wired since
+the last nightly is listed too; its trial score and causes go in its comment
+in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
 **7 of the 118 rows on the committed board are not OK.**
@@ -782,6 +784,8 @@ and `test_abc` as failing after the board had them OK.
 - `test.test_exception_hierarchy` ERROR, 16 tests: 2 failed, 3 errors, 1 skipped
 - `test.test_copyreg` FAIL, 6 tests: 2 failed, 0 errors, 0 skipped
 - `test.test_random` ERROR, 116 tests: 0 failed, 9 errors, 4 skipped
+
+Wired, but not on the board until the next nightly measures them: `test_uuid`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list

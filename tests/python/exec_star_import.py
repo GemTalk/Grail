@@ -19,7 +19,7 @@ the names: the star import is wrapped in try/except, which under the old
 behaviour did not help at all.
 
 WHAT IS GIVEN UP in a doit is the runtime merge step.  A module-level star
-import also emits ``self ___mergePublicAttrsFrom: X'', which catches names that
+import also emits ``self ___mergePublicAttrsFrom___: X'', which catches names that
 appear only at run time (something a helper injected via globals().update()).
 An exec'd body has no module instance -- ``self'' is nil there -- so that send
 would be a doesNotUnderstand on nil, which is exactly the uncatchable failure

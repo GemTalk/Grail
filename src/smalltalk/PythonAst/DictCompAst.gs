@@ -75,7 +75,7 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: ').'; lf.
 		].
 	aStream nextPutAll: '___r___'; lf.
-	aStream decreaseIndent; nextPutAll: '] value)'
+	aStream decreaseIndent; nextPutAll: '] @env0:value)'
 %
 method: DictCompAst
 key

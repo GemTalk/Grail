@@ -3417,12 +3417,37 @@ ___mapSpanForMethod___: aMethod ip: anIp
 	map, no step point, no containing range -- so the caller falls back to the
 	___curPos___ scan exactly as before."
 
-	| src marker ofs step best bestWidth k n |
+	| src marker ofs step entry |
 	src := [aMethod @env0:sourceString] on: Error do: [:ex |
 		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 		ex return: nil].
 	src isNil ifTrue: [^ nil].
-	"THE MAP IS THE LAST THING IN THE SOURCE, and finding it has to cost the
+	"The map is checked for BEFORE the step-point primitives, so a method that
+	carries none -- most Smalltalk, every IR def that sends nothing -- pays for
+	one character test and nothing else."
+	marker := self ___positionMapMarkerIn___: src.
+	marker isNil ifTrue: [^ nil].
+	step := [aMethod @env0:_previousStepPointForIp: anIp] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	step isNil ifTrue: [^ nil].
+	ofs := [aMethod @env0:_sourceOffsetsAt: step] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	ofs isNil ifTrue: [^ nil].
+	entry := self ___innermostMapEntryIn___: src marker: marker containing: ofs.
+	entry isNil ifTrue: [^ nil].
+	^ { entry at: 3. entry at: 4. entry at: 5. entry at: 6 }
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___positionMapMarkerIn___: src
+	"The index of the quote that opens src's OWN ___GRAILPOS___ position-map
+	comment, or nil when src carries none.  One definition of ``own map'',
+	shared by the ip-keyed reader above and the source-index API (issue #1137).
+
+	THE MAP IS THE LAST THING IN THE SOURCE, and finding it has to cost the
 	MAP's length, not the SOURCE's.  A module body embeds every method it
 	compiles as a STRING LITERAL of that method's source -- maps included -- so
 	searching forwards finds a map belonging to some other method entirely and
@@ -3434,59 +3459,69 @@ ___mapSpanForMethod___: aMethod ip: anIp
 	closing quote, then a run of digits and spaces -- and require the marker
 	immediately before it.  A method with no map fails on its last character and
 	pays nothing."
-	k := src @env0:size.
-	[k @env0:>= 1 and: [(src @env0:at: k) @env0:isSeparator]]
-		@env0:whileTrue: [k := k @env0:- 1].
-	(k @env0:>= 1 and: [(src @env0:at: k) @env0:== $"]) ifFalse: [^ nil].
-	k := k @env0:- 1.
-	[k @env0:>= 1 and: [(src @env0:at: k) @env0:isDigit
-		or: [(src @env0:at: k) @env0:== $ ]]] @env0:whileTrue: [k := k @env0:- 1].
-	marker := k @env0:- 14.
-	(marker @env0:>= 1
-		and: [(src @env0:copyFrom: marker to: k) @env0:= '"___GRAILPOS___'])
-			ifFalse: [^ nil].
-	step := [aMethod @env0:_previousStepPointForIp: anIp] on: Error do: [:ex |
-		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
-		ex return: nil].
-	step isNil ifTrue: [^ nil].
-	ofs := [aMethod @env0:_sourceOffsetsAt: step] on: Error do: [:ex |
-		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
-		ex return: nil].
-	ofs isNil ifTrue: [^ nil].
+
+	| k marker |
+	src isNil ifTrue: [^ nil].
+	k := src size.
+	[k >= 1 and: [(src at: k) isSeparator]] whileTrue: [k := k - 1].
+	(k >= 1 and: [(src at: k) == $"]) ifFalse: [^ nil].
+	k := k - 1.
+	[k >= 1 and: [(src at: k) isDigit or: [(src at: k) == $ ]]]
+		whileTrue: [k := k - 1].
+	marker := k - 14.
+	(marker >= 1 and: [(src copyFrom: marker to: k) = '"___GRAILPOS___'])
+		ifFalse: [^ nil].
+	^ marker
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___innermostMapEntryIn___: src marker: marker containing: ofs
+	"The position-map entry -- { startOfs. endOfs. beginLine. colno. endLine.
+	endColno } -- with the SMALLEST range containing ofs, or nil.  marker is
+	___positionMapMarkerIn___:'s answer for src.
+
+	INNERMOST IS SMALLEST RANGE.  Ranges nest exactly as the AST does, so the
+	shortest containing one is the deepest node.  Ties cannot arise between
+	different nodes: two nodes with identical extents describe the same text,
+	and either answer is the same span.
+
+	Parsed in one pass without collecting the map, because the ip-keyed caller
+	runs while a traceback is being built and asks about one offset.  A caller
+	asking about many offsets of one method (pythonSendSitesIn:selector:) pays
+	this per offset; maps are short next to the sources they describe."
+
+	| k n best bestWidth |
 	"Six numbers per entry, whitespace separated, to the closing quote."
-	k := marker @env0:+ 15.
-	n := Array @env0:new: 6.
-	[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:~= $"]] @env0:whileTrue: [
+	k := marker + 15.
+	n := Array new: 6.
+	[k <= src size and: [(src at: k) ~= $"]] whileTrue: [
 		| i good any |
 		good := true.
 		1 to: 6 do: [:j |
 			| digits |
-			[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:= $ ]]
-				@env0:whileTrue: [k := k @env0:+ 1].
+			[k <= src size and: [(src at: k) = $ ]] whileTrue: [k := k + 1].
 			"Accumulated, not collected: a WriteStream per number is six
 			allocations per entry for a value that is always a SmallInteger."
 			digits := 0.
 			any := false.
-			[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:isDigit]]
-				@env0:whileTrue: [
-					any := true.
-					digits := digits @env0:* 10
-						@env0:+ (src @env0:at: k) @env0:digitValue.
-					k := k @env0:+ 1].
+			[k <= src size and: [(src at: k) isDigit]] whileTrue: [
+				any := true.
+				digits := digits * 10 + (src at: k) digitValue.
+				k := k + 1].
 			any
-				ifTrue: [n @env0:at: j put: digits]
+				ifTrue: [n at: j put: digits]
 				ifFalse: [good := false]].
 		good ifFalse: [
 			"Malformed tail -- keep whatever complete entries were read."
 			^ best].
-		i := (n @env0:at: 2) @env0:- (n @env0:at: 1).
-		((n @env0:at: 1) @env0:<= ofs and: [ofs @env0:<= (n @env0:at: 2)])
+		i := (n at: 2) - (n at: 1).
+		((n at: 1) <= ofs and: [ofs <= (n at: 2)])
 			ifTrue: [
-				(best isNil or: [i @env0:< bestWidth]) ifTrue: [
+				(best isNil or: [i < bestWidth]) ifTrue: [
 					bestWidth := i.
-					best := { n @env0:at: 3. n @env0:at: 4. n @env0:at: 5. n @env0:at: 6 }]].
-		[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:= $ ]]
-			@env0:whileTrue: [k := k @env0:+ 1]].
+					best := n copy]].
+		[k <= src size and: [(src at: k) = $ ]] whileTrue: [k := k + 1]].
 	^ best
 %
 
@@ -3519,16 +3554,7 @@ ___derivePythonSpanForMethod___: aMethod ip: anIp
 		(self ___isCaretLine___: (lines @env0:at: i))
 			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
 	caretIdx @env0:= 0 ifTrue: [^ nil].
-	result := nil.
-	1 to: (caretIdx @env0:min: lines @env0:size) do: [:i |
-		| rest p |
-		rest := lines @env0:at: i.
-		[p := rest @env0:indexOfSubCollection: '___curPos___ := #('.
-		 p @env0:> 0] whileTrue: [
-			| parsed |
-			parsed := self ___parsePositionLiteral___: rest from: (p @env0:+ 18).
-			parsed notNil ifTrue: [result := parsed].
-			rest := rest @env0:copyFrom: (p @env0:+ 18) to: rest @env0:size]].
+	result := self ___ownStoreSpanIn___: aMethod report: report.
 	^ self ___refineSpan___: result forMethod: aMethod ip: anIp
 %
 
@@ -3714,40 +3740,9 @@ ___derivePythonLineForMethod___: aMethod ip: anIp
 		(self ___isCaretLine___: (lines @env0:at: i))
 			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
 	caretIdx @env0:= 0 ifTrue: [^ nil].
-	result := nil.
-	1 to: (caretIdx @env0:min: lines @env0:size) do: [:i |
-		| rest p |
-		rest := lines @env0:at: i.
-		"Read only the digits IMMEDIATELY following the assignment, and take the
-		LAST assignment on the line.  Collecting every digit to end-of-line instead
-		concatenated the line number with any other numeric literal the statement
-		carried -- a for-loop over a generator derived ``37133718'' from
-		``___curPos___ := 37.'' followed by more generated code on the same line --
-		and a whole statement does land on one line, so this is the common case, not
-		an exotic one."
-		[p := rest @env0:indexOfSubCollection: '___curPos___ := '.
-		 p @env0:> 0] whileTrue: [
-			| digits k |
-			digits := WriteStream @env0:on: String @env0:new.
-			k := p @env0:+ 16.
-			"A PEP 657 span store -- ``___curPos___ := #(line col endLine endCol
-			 src)'' -- carries the line as the array's FIRST element.  Stepping
-			 over the ``#('' finds it in the same place the bare-integer form
-			 puts it.  This is load-bearing beyond the line number: a frame is
-			 IDENTIFIED as Python by this scan answering non-nil, so a store
-			 shape it cannot read makes the whole frame vanish from the
-			 traceback rather than merely lose its columns (§9.39)."
-			((k @env0:< rest @env0:size)
-				and: [((rest @env0:at: k) @env0:= $#)
-					and: [(rest @env0:at: (k @env0:+ 1)) @env0:= $(]])
-				ifTrue: [k := k @env0:+ 2].
-			[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:isDigit]]
-				whileTrue: [
-					digits @env0:nextPut: (rest @env0:at: k).
-					k := k @env0:+ 1].
-			digits @env0:contents @env0:isEmpty
-				ifFalse: [result := digits @env0:contents @env0:asNumber].
-			rest := rest @env0:copyFrom: (p @env0:+ 16) to: rest @env0:size]].
+	"The stores are read from the method's SOURCE, not from the report lines,
+	and only the method's OWN ones -- see ___ownStoreLineIn___:report:."
+	result := self ___ownStoreLineIn___: aMethod report: report.
 	"OPT-IN trace, off unless GRAIL_LINE_TRACE_DIR is set.  Deliberately a single
 	guarded SEND rather than an inline block: this method's temp count is
 	load-bearing.  It runs while a traceback is being built, which is exactly
@@ -3757,6 +3752,250 @@ ___derivePythonLineForMethod___: aMethod ip: anIp
 		self ___traceLineDerivation___: aMethod ip: anIp caret: caretIdx
 			lines: lines result: result].
 	^ result
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___ownStoreLineIn___: aMethod report: report
+	"The Python line of the LAST of aMethod's own ``___curPos___ :='' stores on a
+	source line at or above report's caret, or nil.  report is aMethod's
+	``_sourceAtIp:'' answer and is read only to find which source line the caret
+	marks (___caretSourceLineIn___:).
+
+	OWN STORES ONLY (issue #1137).  This used to scan the report text, and a
+	module body embeds the source of every method it compiles as a STRING
+	LITERAL, stores included.  So while a module-level statement that compiles
+	a method was still running -- a class statement's __init_subclass__, a
+	class decorator, anything sys._getframe(1) or extract_stack() sees from
+	there -- the scan answered the last line of the last method embedded
+	before the caret.  Measured: ``class C(Base):'' on line 7, with a method
+	ending on line 13, read f_lineno 13 where CPython reads 7, on both codegen
+	paths (module bodies are text-compiled either way).
+
+	Read only the digits IMMEDIATELY following the assignment.  Collecting every
+	digit to end-of-line instead concatenated the line number with any other
+	numeric literal the statement carried -- a for-loop over a generator derived
+	``37133718'' from ``___curPos___ := 37.'' followed by more generated code on
+	the same line -- and a whole statement does land on one line, so this is the
+	common case, not an exotic one.
+
+	A PEP 657 span store -- ``___curPos___ := #(line col endLine endCol src)'' --
+	carries the line as the array's FIRST element.  Stepping over the ``#(''
+	finds it in the same place the bare-integer form puts it.  This is
+	load-bearing beyond the line number: a frame is IDENTIFIED as Python by this
+	scan answering non-nil, so a store shape it cannot read makes the whole frame
+	vanish from the traceback rather than merely lose its columns (§9.39)."
+
+	| table src caretLine offsets lineNos |
+	table := self ___ownCurPosTableFor___: aMethod.
+	table isNil ifTrue: [^ nil].
+	caretLine := self ___caretSourceLineIn___: report.
+	caretLine isNil ifTrue: [^ nil].
+	src := table at: 1.
+	offsets := table at: 2.
+	lineNos := table at: 3.
+	offsets size to: 1 by: -1 do: [:i |
+		(lineNos at: i) <= caretLine ifTrue: [
+			| k n any |
+			k := (offsets at: i) + 16.
+			(k < src size and: [(src at: k) == $# and: [(src at: k + 1) == $(]])
+				ifTrue: [k := k + 2].
+			n := 0.
+			any := false.
+			[k <= src size and: [(src at: k) isDigit]] whileTrue: [
+				any := true.
+				n := n * 10 + (src at: k) digitValue.
+				k := k + 1].
+			any ifTrue: [^ n]]].
+	^ nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___ownStoreSpanIn___: aMethod report: report
+	"The 5-element span of the LAST of aMethod's own SPAN-form stores --
+	``___curPos___ := #(...)'' -- at or above report's caret, or nil.  The twin
+	of ___ownStoreLineIn___:report:, and own-stores-only for the same reason.  A
+	bare-integer store is skipped rather than answered, so a statement codegen
+	gave no span to is left exactly as it was rather than guessed at."
+
+	| table src caretLine offsets lineNos |
+	table := self ___ownCurPosTableFor___: aMethod.
+	table isNil ifTrue: [^ nil].
+	caretLine := self ___caretSourceLineIn___: report.
+	caretLine isNil ifTrue: [^ nil].
+	src := table at: 1.
+	offsets := table at: 2.
+	lineNos := table at: 3.
+	offsets size to: 1 by: -1 do: [:i |
+		(lineNos at: i) <= caretLine ifTrue: [
+			| k |
+			k := (offsets at: i) + 16.
+			(k < src size and: [(src at: k) == $# and: [(src at: k + 1) == $(]])
+				ifTrue: [
+					(self ___parsePositionLiteral___: src from: k + 2)
+						ifNotNil: [:parsed | ^ parsed]]]].
+	^ nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___caretSourceLineIn___: report
+	"The source line a ``_sourceAtIp:'' report's FIRST caret marks, or nil when
+	it has none.
+
+	The report is the method's source, one report line per source line (tabs
+	expanded, every line indented), with a caret line inserted BELOW the line
+	holding the step point.  So the number of lines above the first caret is
+	the caret's source line.  Counted with empty lines KEPT: a ``subStrings:''
+	split drops them, which made its index no source line at all.
+
+	Walked with indexOf:, testing only a line whose first non-blank character
+	is ``*'' -- the rest cannot be a caret line -- so finding the caret costs
+	no copy per line."
+
+	| start lineNo |
+	report isNil ifTrue: [^ nil].
+	start := 1.
+	lineNo := 0.
+	[start <= report size] whileTrue: [
+		| stop k |
+		stop := report indexOf: Character lf startingAt: start.
+		stop = 0 ifTrue: [stop := report size + 1].
+		k := start.
+		[k < stop and: [(report at: k) isSeparator]] whileTrue: [k := k + 1].
+		(k < stop and: [(report at: k) == $*
+			and: [self ___isCaretLine___: (report copyFrom: start to: stop - 1)]])
+				ifTrue: [^ lineNo].
+		lineNo := lineNo + 1.
+		start := stop + 1].
+	^ nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___ownCurPosTableFor___: aMethod
+	"{ source. storeOffsets. storeLines } for aMethod's OWN ``___curPos___ :=''
+	stores (___ownCurPosStoresIn___:), each store's 1-based source line beside
+	it; nil when the source is unreadable.
+
+	NOT CACHED, deliberately.  Lexing costs about 2.5% of the ``_sourceAtIp:''
+	report every caller has already paid for: 1.0 ms against 38.8 ms on
+	traceback's 541 KB module body, 3.0 ms against 126.8 ms on argparse's
+	1.76 MB one.  And a cache keyed on the method would retain every method a
+	frame walk touched, including the ones it answered nil for, which is what
+	TracebackTestCase>>testTheLineCacheIsNotPoisonedByRecycledMethodOops
+	forbids: a retained method's OOP can never be recycled, so that test goes
+	vacuous.  The (method, ip) caches above this one already make a revisit
+	free."
+
+	| src offsets lineNos line from |
+	src := [aMethod sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	src isNil ifTrue: [^ nil].
+	offsets := self ___ownCurPosStoresIn___: src.
+	lineNos := Array new: offsets size.
+	line := 1.
+	from := 1.
+	1 to: offsets size do: [:i |
+		| lf |
+		[lf := src indexOf: Character lf startingAt: from.
+		 lf > 0 and: [lf < (offsets at: i)]] whileTrue: [
+			line := line + 1.
+			from := lf + 1].
+		lineNos at: i put: line].
+	^ { src. offsets. lineNos }
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___ownCurPosStoresIn___: src
+	"Private to the position readers: the index of every ``___curPos___ :=''
+	store that is src's OWN code, as an Array in source order -- never one
+	inside a string literal or a comment.
+
+	A module body embeds the source of every method it compiles as a STRING
+	LITERAL, stores and all, so a plain substring search over a module
+	initialize answers the stores of every method defined in the module.
+	Measured on _grail_session>>initialize: 32 matches, 2 of them its own, and
+	the last match on line 81 (inside SessionDict.items()) where the module's
+	own last store is line 21 (issue #1137)."
+
+	^ self ___codeOccurrencesOf___: '___curPos___ := ' in: src
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___codeOccurrencesOf___: aPattern in: src
+	"Every index at which aPattern starts in src's CODE, as an Array in source
+	order -- skipping occurrences inside a string or symbol literal ('...',
+	with '' as an escaped quote), a comment (between double quotes), or after a
+	character literal's $.
+
+	A lexer, but only as much of one as tells code from literal, and driven by
+	indexOf: rather than by character: in code the next thing that matters is
+	the nearest quote, double quote or $, and inside a literal only its closing
+	character does.  Each of the three code-state positions is searched again
+	only once the lexer has moved past it, so an absent character costs one
+	failed search, not one per step.  A 541 KB module body therefore costs a
+	few thousand primitive searches, not half a million interpreted steps.
+
+	aPattern must not START inside a literal for this to say anything; it may
+	contain quote characters, in which case the lexer resumes AT the
+	occurrence and lexes the pattern's own quotes like any other."
+
+	| out cand pos sq dq dl skip |
+	out := OrderedCollection new.
+	(src isNil or: [aPattern isEmpty]) ifTrue: [^ out asArray].
+	skip := (aPattern detect: [:c | c == $' or: [c == $" or: [c == $$]]] ifNone: [nil])
+		isNil ifTrue: [aPattern size] ifFalse: [0].
+	pos := 1.
+	sq := dq := dl := -1.
+	cand := src indexOfSubCollection: aPattern startingAt: 1.
+	[cand > 0] whileTrue: [
+		| inCode |
+		inCode := nil.
+		[inCode isNil] whileTrue: [
+			| q close |
+			(sq ~= 0 and: [sq < pos]) ifTrue: [sq := src indexOf: $' startingAt: pos].
+			(dq ~= 0 and: [dq < pos]) ifTrue: [dq := src indexOf: $" startingAt: pos].
+			(dl ~= 0 and: [dl < pos]) ifTrue: [dl := src indexOf: $$ startingAt: pos].
+			q := sq.
+			(dq > 0 and: [q = 0 or: [dq < q]]) ifTrue: [q := dq].
+			(dl > 0 and: [q = 0 or: [dl < q]]) ifTrue: [q := dl].
+			(q = 0 or: [q >= cand])
+				ifTrue: [inCode := true]
+				ifFalse: [
+					close := self ___literalEndAt___: q in: src.
+					"Unterminated: everything after q is inside it."
+					close = 0 ifTrue: [^ out asArray].
+					close >= cand ifTrue: [inCode := false].
+					pos := close + 1]].
+		inCode ifTrue: [
+			out add: cand.
+			pos := cand + skip].
+		cand := src indexOfSubCollection: aPattern startingAt: (pos max: cand + 1)].
+	^ out asArray
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___literalEndAt___: q in: src
+	"Private to ___codeOccurrencesOf___:in: -- the index of the LAST character of
+	the literal or comment that src's character q opens, or 0 when it is never
+	closed."
+
+	| c i e |
+	c := src at: q.
+	c == $$ ifTrue: [^ q + 1].
+	c == $" ifTrue: [^ src indexOf: $" startingAt: q + 1].
+	"A string or symbol: a doubled quote is one literal quote, not the end."
+	i := q + 1.
+	[e := src indexOf: $' startingAt: i.
+	 e > 0 and: [e < src size and: [(src at: e + 1) == $']]]
+		whileTrue: [i := e + 2].
+	^ e
 %
 
 category: 'Grail-Traceback Building'
@@ -7410,9 +7649,158 @@ pythonPositionKindForMethod: aMethod
 	(self ___isIRPythonMethod___: aMethod) ifTrue: [^ #irSource].
 	src := self ___pySourceStringOf___: aMethod.
 	src isNil ifTrue: [^ nil].
-	^ (src indexOfSubCollection: '___curPos___ := ') > 0
-		ifTrue: [#curPos]
-		ifFalse: [nil]
+	"Its OWN stores: a module body whose only stores sit inside the method
+	sources it embeds is not a store-carrying method (issue #1137)."
+	^ (self ___ownCurPosStoresIn___: src) isEmpty
+		ifTrue: [nil]
+		ifFalse: [#curPos]
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+pythonPositionForMethod: aMethod atSourceIndex: anInteger
+	"PUBLIC (issue #1137).  The Python position of the code at anInteger, a
+	1-based index into ``aMethod sourceString'', as the same 5-element Array
+	pythonPositionsForMethod: answers:
+
+	    { beginLine. colno. endLine. endColno. sourceLine }
+
+	or nil when aMethod is not generated Python or nothing covers the index.
+
+	The static counterpart of the ip-keyed lookup a traceback makes, and the
+	same rule: the innermost range in the method's position map that contains
+	the index; where no range does, the position the method last recorded
+	before it.  Only aMethod's OWN map and stores are read, never ones inside a
+	string literal -- a module body embeds the source of every method it
+	compiles, and a text scan that forgets that answers another method's line.
+
+	The index is in aMethod's OWN coordinates, so it means a different thing
+	on each codegen path (pythonPositionKindForMethod: says which):
+
+	  #curPos    an index into the generated Smalltalk.  Uncovered, it answers
+	             the ___curPos___ store in effect -- a statement.  sourceLine is
+	             that store's, so it is nil when the map names a different line.
+	  #irSource  an index into the def's Python slice.  Uncovered, it answers
+	             the line the index is on, with no columns.
+
+	Indexes worth asking about are where sends are: pythonSendSitesIn:selector:
+	answers them, with their positions, without a text search."
+
+	| kind src |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind isNil ifTrue: [^ nil].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ nil].
+	^ self ___positionIn___: src kind: kind at: anInteger
+		marker: (self ___positionMapMarkerIn___: src)
+		stores: (kind == #curPos
+			ifTrue: [self ___ownCurPosStoresIn___: src]
+			ifFalse: [#()])
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+pythonSendSitesIn: aMethod selector: aSelectorOrNil
+	"PUBLIC (issue #1137).  Every send aMethod's compiled code makes of
+	aSelectorOrNil (of every selector, when nil), in source order, as an Array
+	of 4-element Arrays:
+
+	    { selector. sourceIndex. position. nodeRange }
+
+	  sourceIndex  where the VM records the send, a 1-based index into
+	               ``aMethod sourceString'' -- the selector's position.
+	  position     pythonPositionForMethod: aMethod atSourceIndex: sourceIndex,
+	               the 5-element Array, or nil.
+	  nodeRange    { start. end } of the innermost position-map range holding
+	               the send, or nil.  The range of the PYTHON NODE the send
+	               belongs to, so two sends with equal ranges compile one Python
+	               expression -- the global-shadow probe, for one, prints a
+	               builtin call's arguments once per branch.
+
+	Answers an empty Array for a method that is not generated Python.
+
+	READ FROM THE COMPILED METHOD, NOT ITS TEXT.  The sends come from the VM's
+	own send table (``_sourceOffsetsOfSends''), so a send is listed only if the
+	method makes it: a selector that merely appears in a string literal -- every
+	send of every method a module body compiles, which it embeds as source --
+	or in a comment is not.  For the same reason it works on BOTH codegen paths,
+	where a search of the generated Smalltalk finds nothing at all on an IR
+	method, whose source is the user's Python."
+
+	| kind src pairs marker stores want seen out |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind isNil ifTrue: [^ #()].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ #()].
+	pairs := [aMethod _sourceOffsetsOfSends] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	pairs isNil ifTrue: [^ #()].
+	marker := self ___positionMapMarkerIn___: src.
+	stores := kind == #curPos
+		ifTrue: [self ___ownCurPosStoresIn___: src]
+		ifFalse: [#()].
+	want := aSelectorOrNil isNil ifFalse: [aSelectorOrNil asSymbol].
+	seen := Set new.
+	out := OrderedCollection new.
+	1 to: pairs size - 1 by: 2 do: [:i |
+		| ofs sel |
+		ofs := pairs at: i.
+		sel := pairs at: i + 1.
+		((want isNil or: [sel == want])
+			and: [(ofs isKindOf: SmallInteger)
+			and: [(seen includes: { ofs. sel }) not]]) ifTrue: [
+				| entry |
+				seen add: { ofs. sel }.
+				entry := marker isNil ifFalse: [
+					self ___innermostMapEntryIn___: src marker: marker containing: ofs].
+				out add: {
+					sel.
+					ofs.
+					self ___positionIn___: src kind: kind at: ofs
+						marker: marker stores: stores.
+					entry isNil ifFalse: [{ entry at: 1. entry at: 2 }] }]].
+	^ (out asSortedCollection: [:a :b | (a at: 2) <= (b at: 2)]) asArray
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___positionIn___: src kind: kind at: anInteger marker: marker stores: stores
+	"Private to the position API: pythonPositionForMethod:atSourceIndex: with
+	the per-method work -- finding the map, lexing for the own stores -- done
+	once by the caller, so a caller asking about every send pays for it once."
+
+	| entry |
+	(anInteger isKindOf: SmallInteger) ifFalse: [^ nil].
+	(anInteger < 1 or: [anInteger > src size]) ifTrue: [^ nil].
+	entry := marker isNil ifFalse: [
+		self ___innermostMapEntryIn___: src marker: marker containing: anInteger].
+	kind == #irSource ifTrue: [
+		| first line |
+		first := (self ___irSliceFirstLineIn___: src) ifNil: [1].
+		entry isNil ifFalse: [
+			line := entry at: 3.
+			^ { line. entry at: 4. entry at: 5. entry at: 6.
+				self ___sourceLine___: line - first + 1 of: src }].
+		"No node covers it: the slice line the index is on -- unless that is
+		past the slice, in the metadata Grail appends after it."
+		line := 1.
+		1 to: anInteger - 1 do: [:k | (src at: k) == Character lf ifTrue: [line := line + 1]].
+		line > (self ___irSliceSourceLineCountIn___: (self ___splitLinesOf___: src))
+			ifTrue: [^ nil].
+		^ { line + first - 1. nil. nil. nil. self ___sourceLine___: line of: src }].
+	kind == #curPos ifTrue: [
+		| store |
+		store := nil.
+		stores size to: 1 by: -1 do: [:i |
+			(store isNil and: [(stores at: i) < anInteger]) ifTrue: [
+				store := self ___parsePositionAt___: (stores at: i) + 16 in: src]].
+		entry isNil ifTrue: [^ store].
+		^ { entry at: 3. entry at: 4. entry at: 5. entry at: 6.
+			(store notNil and: [(store at: 1) = (entry at: 3)])
+				ifTrue: [store at: 5]
+				ifFalse: [nil] }].
+	^ nil
 %
 
 category: 'Grail-Python Positions'
@@ -7452,6 +7840,61 @@ pythonPositionsForMethod: aMethod
 
 category: 'Grail-Python Positions'
 classmethod: BaseException
+pythonSelectorsSentBy: aMethod
+	"PUBLIC (issue #1155).  The selectors aMethod sends AS PYTHON NAMES: its
+	env-1 sends whose selector importlib >> pythonNameOfSelector: decodes,
+	including sends from its inner blocks, as an IdentitySet.  So a sender
+	search can ask whether a method calls Python ``size'' without counting
+	Grail's own env-0 ``@env0:size'' checks, which _selectorPool merges in.
+
+	What it answers, by pythonPositionKindForMethod: --
+	  #curPos    text codegen: exact.  Every env-0 send in generated text is
+	             spelled @env0:, so the env-1 sends are the others; and Grail's
+	             own plumbing in env 1 uses ___name___ selectors, which do not
+	             decode.  Env1PlumbingSendsTestCase holds codegen to both.
+	  #irSource  direct-to-IR: nil, meaning UNKNOWN.  An IR method has no
+	             generated text, and nothing public in the compiled method says
+	             which environment a send targets.  The kernel half is proposed
+	             on #1155 (GsNMethod >> _selectorIdPool); until it lands, a
+	             consumer should say it cannot tell rather than guess.
+	  nil        not a generated Python method: an empty set.
+
+	Not every answer is a CALL.  A module-global or attribute read compiled as
+	a unary send is a reference to that name, and an operator lowered to a
+	dunder send (``x[i]'' to __getitem__:) appears under the dunder.  Those
+	are Python names the method really uses.  What it cannot report is a name
+	that is never SENT, and that is most method calls: ``o.m(x)'' loads ``m''
+	by a Symbol argument (``o ___pyAttrLoad___: #m'') and calls the result
+	through ``value:value:'', so no send is named m.  Only a direct send --
+	``self.m(x)'' on the class's own method, ``self._dict()'' in _grail_session
+	-- carries the name as its selector.  _selectorPool has the same blind
+	spot; the name is in the method's literals instead.  ``getattr(o, 'x')''
+	and a callable held in a variable are the same case.
+
+	One implicit reference remains: a zero-argument ``super()'' reads its
+	class through the module global, so the class's own name appears in the
+	methods that use it."
+
+	| kind src offs result |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind == #irSource ifTrue: [^ nil].
+	result := IdentitySet new.
+	kind == #curPos ifFalse: [^ result].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ result].
+	offs := aMethod _sourceOffsetsOfSends.
+	1 to: offs size by: 2 do: [:i |
+		| off sel |
+		off := offs at: i.
+		sel := offs at: i + 1.
+		((off > 6 and: [(src copyFrom: off - 6 to: off - 1) = '@env0:']) not
+			and: [(importlib pythonNameOfSelector: sel) notNil])
+				ifTrue: [result add: sel]].
+	^ result
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
 ___pySourceStringOf___: aMethod
 	"Private to the position API: aMethod's source, or nil.  Re-passes
 	AlmostOutOfStackError for the reason the rest of this file documents at
@@ -7466,19 +7909,15 @@ ___pySourceStringOf___: aMethod
 category: 'Grail-Python Positions'
 classmethod: BaseException
 ___curPosPositionsFromSource___: src
-	"Private to the position API: every ___curPos___ store in the generated text,
-	in source order.  The same marker the ip-keyed scan reads, but over the whole
-	method rather than up to a caret."
+	"Private to the position API: every one of src's OWN ___curPos___ stores, in
+	source order -- never one inside a string literal, where a module body
+	carries the source of every method it compiles (issue #1137)."
 
-	| out idx p |
+	| out |
 	out := OrderedCollection new.
-	idx := 1.
-	[p := src indexOfSubCollection: '___curPos___ := ' startingAt: idx.
-	 p > 0] whileTrue: [
-		| parsed |
-		parsed := self ___parsePositionAt___: p + 16 in: src.
-		parsed ifNotNil: [:each | out add: each].
-		idx := p + 16].
+	(self ___ownCurPosStoresIn___: src) do: [:p |
+		(self ___parsePositionAt___: p + 16 in: src)
+			ifNotNil: [:each | out add: each]].
 	^ out asArray
 %
 

@@ -31,7 +31,7 @@ GlobalsShadowBuiltinTestCase category: 'Grail-SUnit'
 !
 ! Grail classified a bare name at COMPILE time.  A name the module never
 ! assigned statically became a direct send to the builtins singleton
-! (``((Python @env0:at: #builtins) instance) len: ...''), so a later write into
+! (``((Python @env0:at: #builtins) @env0:___instance___) len: ...''), so a later write into
 ! the module namespace could not be seen: it landed (``'len' in globals()''
 ! answered True) and nothing consulted it.  That was test_dynamic's
 ! test_globals_shadow_builtins -- the ONE test of its family that failed.

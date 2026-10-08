@@ -367,6 +367,17 @@ symmetric_difference_update: other
 
 category: 'Grail-Mutation Methods'
 method: set
+___pyUpdate___: other
+	"update: under a Grail-internal selector, for codegen: a set display's starred element ``{*it}''.
+	Generated code must not send its own plumbing in env 1 under a selector
+	that decodes as a Python name, or a sender search cannot tell it from a
+	Python ``.update(...)'' call (issue #1155)."
+
+	^ self update: other
+%
+
+category: 'Grail-Mutation Methods'
+method: set
 update: other
 	"Update the set, adding elements from any iterable."
 

@@ -271,7 +271,7 @@ ___emitIROpAt___: i left: leftV right: rightV carry: carryOrNil on: aBuilder
 	container into the shared chain temp: ``in'' reverses its operands, so the
 	container is the receiver and cannot be captured by the caller's ordinary
 	``rhs := <comparator>'' the way a rich comparison's right operand is.  The
-	text answers that with ___ignore:, which evaluates the copy and still yields
+	text answers that with ___ignore___:, which evaluates the copy and still yields
 	the membership result, and so does this."
 
 	| op helper |
@@ -294,7 +294,7 @@ ___emitIROpAt___: i left: leftV right: rightV carry: carryOrNil on: aBuilder
 		| contains truthy |
 		contains := aBuilder send: #'___pyContains___:' to: rightV with: { leftV }.
 		carryOrNil ifNotNil: [:carry |
-			contains := aBuilder send: #'___ignore:' to: contains with: { carry }].
+			contains := aBuilder send: #'___ignore___:' to: contains with: { carry }].
 		(op isMemberOf: InAst) ifTrue: [^ contains].
 		truthy := aBuilder send: #'___isTruthy___' to: contains with: { }.
 		^ aBuilder send: #not to: truthy with: { } env: 0].

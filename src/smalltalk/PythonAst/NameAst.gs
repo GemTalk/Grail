@@ -552,8 +552,8 @@ method: NameAst
 ___emitIRBuiltinValueReadOn___: aBuilder
 	"emitBuiltinFirstClassRead:on: (cut 68) -- a builtin FUNCTION read as a
 	value (``f = len'', ``map(len, xs)''):
-	    (((Python @env0:at: #builtins) instance) @env1:___globalAt___: #len
-	        otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) instance)
+	    (((Python @env0:at: #builtins) @env0:___instance___) @env1:___globalAt___: #len
+	        otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) @env0:___instance___)
 	                                 selector: #len])
 	The chain probes the module's dynamic slot first (a runtime
 	``builtins.len = fake'' and the cached wrap both live there, so ``len is
@@ -561,10 +561,10 @@ ___emitIRBuiltinValueReadOn___: aBuilder
 	only on the miss, as the text's."
 
 	| builtinsInst |
-	builtinsInst := [aBuilder send: #instance
+	builtinsInst := [aBuilder send: #'___instance___'
 		to: (aBuilder send: #at: to: (aBuilder globalNamed: #Python)
 			with: { aBuilder obj: #builtins } env: 0)
-		with: { } env: 1].
+		with: { } env: 0].
 	aBuilder atNode: self.
 	^ aBuilder
 		send: #'___globalAt___:otherwise:'
@@ -1701,9 +1701,9 @@ emitBuiltinFirstClassRead: aName on: aStream
 			nextPutAll: ''')'.
 		^ self].
 	aStream
-		nextPutAll: '(((Python @env0:at: #builtins) instance) @env1:___globalAt___: #''';
+		nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) @env1:___globalAt___: #''';
 		nextPutAll: aName;
-		nextPutAll: ''' otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
+		nextPutAll: ''' otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) @env0:___instance___) selector: #';
 		nextPutAll: aName;
 		nextPutAll: '])'.
 %
