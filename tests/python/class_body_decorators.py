@@ -57,12 +57,6 @@ class Wrapped:
         return x * 2
 
 
-class Failing:
-    @boom
-    def m(self):
-        return 'survived'
-
-
 class Declarative:
     cls_attr = 7
 
@@ -199,11 +193,18 @@ class Plain:
         return x
 
 
-def failing_decorator_leaves_the_method_intact():
-    """Strictly additive: a decorator that raises must leave the compiled
-    method in place -- exactly the old behaviour of dropping the decorator --
-    rather than breaking the class."""
-    return Failing().m() == 'survived'
+def a_failing_decorator_propagates():
+    """A decorator that raises makes the class statement raise, as in
+    CPython.  Grail used to swallow it and keep the undecorated method
+    (issue #1369), which is what this check asserted until then."""
+    try:
+        class Failing:
+            @boom
+            def m(self):
+                return 'survived'
+    except RuntimeError as e:
+        return str(e) == 'this decorator always fails'
+    return False
 
 
 def declarative_decorators_are_untouched():

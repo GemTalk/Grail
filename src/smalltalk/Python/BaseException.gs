@@ -6498,14 +6498,24 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 							everything ABOVE the body being reachable at all --
 							``warnings.warn(..., stacklevel=2)'' at module level during an
 							import walked one hop from the wrong frame and blamed the
-							importer's CALLER (unittest) instead of the importer.  The line
-							is 0: with no markers none is derivable, and CPython's walkers
-							only need it to be an int."
+							importer's CALLER (unittest) instead of the importer.
+
+							THE LINE.  A block inside the body supplies one as frameLine;
+							otherwise it is derived at the body's own ip -- module bodies
+							do carry ___curPos___ stores, and the derivation reads only the
+							body's OWN ones, never those of the methods it embeds as
+							literals (issue #1137).  This used to answer 0 whenever no block
+							supplied a line, which went unseen while module-level decorators
+							were applied inside a block; with that block gone (issue #1369)
+							a decorator reading sys._getframe(1).f_lineno saw 0.  0 remains
+							the answer only when nothing is derivable, since CPython's
+							walkers need an int."
 							((meth @env0:selector == #'initialize')
 								and: [(st @env0:at: i @env0:+ 2) @env0:isKindOf: module])
 								ifTrue: [
 									pairs @env0:add: { meth. ip. '<module>'.
-										(frameLine ifNil: [0]).
+										(frameLine ifNil: [
+											(self ___pythonLineForMethod___: meth ip: ip) ifNil: [0]]).
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
@@ -8130,26 +8140,6 @@ ___catchAll___
 	install (___initCatchAll___); BaseException alone if that has not run."
 
 	^ CatchAllSelector ifNil: [BaseException]
-%
-
-category: 'Grail-Exception handling'
-classmethod: BaseException
-___isStackExhaustion___: anException
-	"True when anException is the stack running out, in any of the three forms
-	it can reach a handler in: the VM's warning, AlmostOutOfStack (a
-	Notification) or AlmostOutOfStackError (an Error), or the RecursionError
-	Grail converts it into.  Which one a given handler sees depends only on
-	whether some handler nearer the overflow converted it first -- a module-
-	level decorator met the RecursionError, a class-body one the raw warning --
-	so a handler that must not absorb exhaustion has to test for all three.
-
-	For emitted handlers that catch broadly: generated code cannot name the two
-	kernel classes, since its symbol list does not reach them.  See
-	AbstractNode>>___printDecoratorHandlerPassOn___:."
-
-	^ (anException isKindOf: AlmostOutOfStack)
-		or: [(anException isKindOf: AlmostOutOfStackError)
-			or: [anException isKindOf: RecursionError]]
 %
 
 category: 'Grail-Exception handling'

@@ -1592,7 +1592,9 @@ printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName sib
 	for a deleter -- so an abstract setter marks the property's fset, as
 	CPython's property(fget, fset).__isabstractmethod__ requires.  (A
 	metaclass's namespace gets the property from ClassDefAst's re-read after
-	___grailOwnPropertyNames___ is compiled.)"
+	___grailOwnPropertyNames___ is compiled.)
+
+	A decorator that raises propagates, as in CPython (issue #1369)."
 
 	| saved kind base |
 	kind := self ___propertyAccessorKind___.
@@ -1601,7 +1603,6 @@ printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName sib
 		ifFalse: [kind == #deleter
 			ifTrue: ['___propDeleter_' , name asString]
 			ifFalse: [name asString]].
-	aStream nextPutAll: '['.
 	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
 	saved := CallAst inDecoratorEmit.
 	CallAst inDecoratorEmit: true.
@@ -1614,11 +1615,7 @@ printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName sib
 			ensure: [
 				CallAst classBodyDecoratorScope: nil.
 				CallAst inDecoratorEmit: saved].
-	aStream
-		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	'.
-	self ___printDecoratorHandlerPassOn___: aStream.
-	aStream nextPutAll: '].'; lf
+	aStream nextPutAll: '.'; lf
 %
 
 category: 'Grail-code generation'
@@ -1648,15 +1645,11 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	chain threads correctly even when an inner decorator returns a fresh
 	wrapper.
 
-	Wrapped in a handler, like the module-scope path: if applying a decorator
-	raises, the store never runs and the compiled method stays in place --
-	exactly the previous behaviour of dropping the decorator.  That keeps this
-	strictly additive; decorators that apply take effect, decorators that
-	cannot are no worse than before.  Python control-flow signals are
-	re-raised rather than swallowed."
+	A decorator that raises propagates out of the class statement, as in
+	CPython.  It used to be applied inside ``on: AbstractException do:'',
+	leaving the compiled method silently undecorated (issue #1369)."
 
 	aStream
-		nextPutAll: '[';
 		nextPutAll: aClassName;
 		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 		nextPutAll: name;
@@ -1678,7 +1671,7 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	which was wrong twice over at this position: the cell store is emitted
 	AFTER the decorator loop, and ``self'' here is the ENCLOSING receiver,
 	not the class holding the cells.  The read raised, the application
-	handler below swallowed it as designed, and the decorator silently never
+	handler then in place swallowed it, and the decorator silently never
 	applied (the probe matrix lives in docs/Issues.md; test_asyncgen's
 	test_python_async_iterator_types_coroutine_anext was the sighting)."
 	___savedDecoEmit___ := CallAst inDecoratorEmit.
@@ -1702,11 +1695,7 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	(self ___decoratorBaseIsClassMethod___
 		and: [self ___classMethodIsOutermost___])
 		ifTrue: [aStream nextPutAll: ')'].
-	aStream
-		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	'.
-	self ___printDecoratorHandlerPassOn___: aStream.
-	aStream nextPutAll: '].'; lf.
+	aStream nextPutAll: '.'; lf.
 	"The namespace a metaclass is handed must hold the DECORATED object; see
 	object class >> ___grailNsRebind___:."
 	aStream
@@ -1920,26 +1909,20 @@ printModuleDecoratorsOn: aStream decorators: decoList
 	nest around it — so a chain threads correctly even when an inner
 	decorator returns a fresh wrapper rather than the original.
 
-	The application is wrapped in a handler: if applying any decorator
-	raises (e.g. werkzeug's ``@LocalProxy'', a class that isn't callable
-	through the Grail call path), the store never runs and the slot is
-	left ABSENT — exactly the pre-fix behaviour (decorator dropped, bare
-	call uses the fast self-send of the real method).  This makes the
-	generalisation strictly additive: decorators that apply cleanly take
-	effect, decorators that can't are no worse than before.  Control-flow
-	signals (Python return / break / continue) are re-raised."
+	A decorator that raises propagates, as in CPython: the module stops at
+	that def.  It used to be applied inside ``on: AbstractException do:'',
+	leaving the def silently undecorated -- added for werkzeug's
+	``@LocalProxy'', which applies cleanly now -- and that hid real defects
+	(issue #1369): a stub getfullargspec unregistered every Django template
+	tag, and missing test.support decorators ran tests meant to be skipped."
 
 	aStream
 		lf;
-		nextPutAll: '[self @env0:dynamicInstVarAt: #''';
+		nextPutAll: 'self @env0:dynamicInstVarAt: #''';
 		nextPutAll: name;
 		nextPutAll: ''' put: '.
 	self printDecoratorChainOn: aStream decorators: decoList index: 1.
-	aStream
-		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	'.
-	self ___printDecoratorHandlerPassOn___: aStream.
-	aStream nextPutAll: '].'
+	aStream nextPutAll: '.'
 %
 
 category: 'Grail-code generation'
