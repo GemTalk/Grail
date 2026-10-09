@@ -2749,6 +2749,33 @@ ___defaultSourceString___
 
 category: 'Grail-code generation'
 method: AbstractNode
+___printDecoratorHandlerPassOn___: aStream
+	"The one statement every decorator-application handler opens with: re-signal
+	what must never be absorbed, as ``((cond)) ifTrue: [___de pass]'' with no
+	terminator.  The handlers themselves -- printModuleDecoratorsOn:,
+	printMethodDecoratorsOn:, printMarkingDecoratorsOn: and ClassDefAst's
+	___printDecoratedProperty___: -- catch AbstractException so that a
+	decorator which cannot be applied leaves the def undecorated (issue #1369
+	is about whether they should).  Two kinds of signal pass through:
+
+	  PythonReturn / PythonBreak / PythonContinue -- control flow, not failure.
+	  Stack exhaustion -- AlmostOutOfStack, AlmostOutOfStackError, or the
+	    RecursionError Grail converts them into (BaseException class>>
+	    ___isStackExhaustion___:, since generated code cannot name the kernel
+	    classes).  Absorbing it turned a decorator that recursed into a SILENTLY
+	    DROPPED decorator where CPython raises RecursionError -- measured at the
+	    module, method and property-setter sites on both codegen paths -- and
+	    absorbing the raw warning consumes the VM's only notice of the
+	    overflow.  A decorator that runs out of stack is not one that cannot be
+	    applied.
+
+	One emitter so the four sites cannot drift apart again."
+
+	aStream nextPutAll: '((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [(___de isKindOf: PythonContinue) @env0:or: [BaseException @env0:___isStackExhaustion___: ___de]]]) ifTrue: [___de @env0:pass]'
+%
+
+category: 'Grail-code generation'
+method: AbstractNode
 emitSourceFilenameLiteralOn: aStream
 	"Instance-side twin of the class-side implementation below -- the emitters
 	that need this are a mix (ComprehensionAst's is a classmethod, TryAst's and

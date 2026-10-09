@@ -1616,8 +1616,9 @@ printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName sib
 				CallAst inDecoratorEmit: saved].
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
-		lf
+		nextPutAll: '	'.
+	self ___printDecoratorHandlerPassOn___: aStream.
+	aStream nextPutAll: '].'; lf
 %
 
 category: 'Grail-code generation'
@@ -1703,8 +1704,9 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 		ifTrue: [aStream nextPutAll: ')'].
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
-		lf.
+		nextPutAll: '	'.
+	self ___printDecoratorHandlerPassOn___: aStream.
+	aStream nextPutAll: '].'; lf.
 	"The namespace a metaclass is handed must hold the DECORATED object; see
 	object class >> ___grailNsRebind___:."
 	aStream
@@ -1935,7 +1937,9 @@ printModuleDecoratorsOn: aStream decorators: decoList
 	self printDecoratorChainOn: aStream decorators: decoList index: 1.
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].'
+		nextPutAll: '	'.
+	self ___printDecoratorHandlerPassOn___: aStream.
+	aStream nextPutAll: '].'
 %
 
 category: 'Grail-code generation'

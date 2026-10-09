@@ -8134,6 +8134,26 @@ ___catchAll___
 
 category: 'Grail-Exception handling'
 classmethod: BaseException
+___isStackExhaustion___: anException
+	"True when anException is the stack running out, in any of the three forms
+	it can reach a handler in: the VM's warning, AlmostOutOfStack (a
+	Notification) or AlmostOutOfStackError (an Error), or the RecursionError
+	Grail converts it into.  Which one a given handler sees depends only on
+	whether some handler nearer the overflow converted it first -- a module-
+	level decorator met the RecursionError, a class-body one the raw warning --
+	so a handler that must not absorb exhaustion has to test for all three.
+
+	For emitted handlers that catch broadly: generated code cannot name the two
+	kernel classes, since its symbol list does not reach them.  See
+	AbstractNode>>___printDecoratorHandlerPassOn___:."
+
+	^ (anException isKindOf: AlmostOutOfStack)
+		or: [(anException isKindOf: AlmostOutOfStackError)
+			or: [anException isKindOf: RecursionError]]
+%
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
 ___initCatchAll___
 	CatchAllSelector := (BaseException , AlmostOutOfStackError) , AlmostOutOfStack
 %
