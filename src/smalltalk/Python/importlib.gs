@@ -4166,7 +4166,8 @@ ___restoreAllBodyClassAttrsIn___: ns
 						slot isNil ifTrue: [
 							slot := KeyValueDictionary new.
 							ov at: cls put: slot].
-						(slot includesKey: sym) ifFalse: [slot at: sym put: val]]]]]].
+						(slot includesKey: sym) ifFalse: [slot at: sym put: val].
+						cls @env1:___noteClassDunderStore___: sym]]]]].
 	^ self
 %
 

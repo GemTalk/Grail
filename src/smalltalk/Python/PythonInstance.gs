@@ -104,6 +104,11 @@ __iter__
 		ifTrue: [
 			TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
 				@env0:, ''' object is not iterable')].
+	"A class attribute under the name -- ``Cls.__iter__ = v'' after the class
+	exists, or a value no compiled forwarder stands for -- is the protocol
+	(issue #1218)."
+	(self ___typeDunder___: #'__iter__') @env0:ifNotNil: [:___fn |
+		^ self ___callTypeAttr___: ___fn with: #()].
 	(self ___hasProtocolForCall___: '__getitem__')
 		ifFalse: [
 			TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
@@ -125,6 +130,11 @@ __getitem__: key
 	``'PythonGenerator' object is not subscriptable'' where CPython says
 	``'generator'''."
 
+	"A class attribute under the name -- ``Cls.__getitem__ = v'' after the class
+	exists, or a value no compiled forwarder stands for -- is the protocol
+	(issue #1218)."
+	(self ___typeDunder___: #'__getitem__') @env0:ifNotNil: [:___fn |
+		^ self ___callTypeAttr___: ___fn with: { key }].
 	TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
 		@env0:, ''' object is not subscriptable')
 %
@@ -136,6 +146,11 @@ __setitem__: key _: aValue
 	(test_heapq's LenOnly fixture -- heappush into a non-sequence).
 	Named through ___pyDnuTypeName___ for the reason __getitem__: gives."
 
+	"A class attribute under the name -- ``Cls.__setitem__ = v'' after the class
+	exists, or a value no compiled forwarder stands for -- is the protocol
+	(issue #1218)."
+	(self ___typeDunder___: #'__setitem__') @env0:ifNotNil: [:___fn |
+		^ self ___callTypeAttr___: ___fn with: { key. aValue }].
 	TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
 		@env0:, ''' object does not support item assignment')
 %
@@ -150,6 +165,11 @@ __delitem__: key
 	support item deletion'', with the contraction; the ``does not'' spelling
 	is what CPython uses only for a type with no sequence slot at all."
 
+	"A class attribute under the name -- ``Cls.__delitem__ = v'' after the class
+	exists, or a value no compiled forwarder stands for -- is the protocol
+	(issue #1218)."
+	(self ___typeDunder___: #'__delitem__') @env0:ifNotNil: [:___fn |
+		^ self ___callTypeAttr___: ___fn with: { key }].
 	TypeError ___signal___: (self @env0:___pyItemDeletionMessage___)
 %
 
@@ -168,6 +188,11 @@ __next__
 	through.  Asked before raising, exactly as object's context-manager and
 	iteration defaults now do."
 
+	"A class attribute under the name -- ``Cls.__next__ = v'' after the class
+	exists, or a value no compiled forwarder stands for -- is the protocol
+	(issue #1218)."
+	(self ___typeDunder___: #'__next__') @env0:ifNotNil: [:___fn |
+		^ self ___callTypeAttr___: ___fn with: #()].
 	(self ___grailMetaclassMethodFor___: #'__next__') @env0:ifNotNil: [:___m |
 		^ self @env0:performMethod: ___m].
 	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
@@ -242,6 +267,16 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	named __sub__ instead of raising TypeError."
 	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
 	binOp == #'___noBinOp___' ifFalse: [^ binOp].
+	"A missing DUNDER that the type holds as a CLASS ATTRIBUTE -- ``__neg__ =
+	f'', ``__len__ = lst.__len__'', ``C.__index__ = g'' after the class exists.
+	There is no compiled method for the send (-o, len(o), bool(o), o.__index__
+	from a slice) to find, so it lands here; call the attribute the way
+	CPython's slot lookup does (issue #1218).  The callers that treat a miss as
+	``protocol absent'' -- bool() trying __bool__ then __len__ -- still see the
+	MessageNotUnderstood when the type holds nothing."
+	(self @env1:___typeDunderBaseOf___: aSelector) ifNotNil: [:___base |
+		(self @env1:___typeDunder___: ___base) ifNotNil: [:___fn |
+			^ self @env1:___callTypeAttr___: ___fn with: anArray asArray]].
 	"GRAIL_DIRECT_CALLS: a direct ``obj foo: a'' / ``obj foo'' that missed is a
 	Python CALL -- load the attribute and call it (the loader's AttributeError
 	when there is none; a stored 5 raises ``not callable'').  FIRST after the
@@ -418,28 +453,22 @@ value: positional value: kwargs
 	class's own env-1 instance selectors and ``UserId(5)'' died on the DNU
 	below -- a MessageNotUnderstood, which no Python ``except'' can catch.
 
-	CPython's rule is ``type(obj).__call__(obj, *args)'': the attribute is
-	looked up on the TYPE and the instance is passed as the first argument.
-	That is what this does.  The accessor PAIR is required, exactly as the
-	module branch of Object>>___pyAttrLoad___: requires it, so that an
-	ordinary class-side METHOD named __call__ is not mistaken for a class
+	CPython's rule is that the attribute is looked up on the TYPE and then
+	bound by the descriptor protocol -- ``type(obj).__call__(obj, *args)''
+	for a function.  ___classAttrDunder___: requires the accessor PAIR,
+	exactly as the module branch of Object>>___pyAttrLoad___: does, so that
+	an ordinary class-side METHOD named __call__ is not mistaken for a class
 	attribute holding one.
 
-	Self is prepended here rather than relying on descriptor binding because
-	the read does NOT bind: ``c.__call__'' answers the same unbound wrapper as
-	``C.__call__'', so ``c.__call__(9)'' reports a missing argument.  Binding
-	the accessor-pair home properly is a wider change than this call site."
-	(((cls @env0:class @env0:whichClassIncludesSelector: #'__call__'
-			environmentId: 1) notNil)
-		and: [(cls @env0:class @env0:whichClassIncludesSelector: #'__call__:'
-			environmentId: 1) notNil])
-			ifTrue: [
-				| fn |
-				fn := self ___descriptorGet___:
-					(cls @env0:perform: #'__call__' env: 1).
-				fn notNil ifTrue: [
-					^ fn @env1:___pyCallValue___:
-						({ self } @env0:, positional @env0:asArray) kw: kwargs]].
+	The value is found by ___classAttrDunder___:, which also sees a
+	``Cls.__call__ = v'' stored after the class exists, and it is bound the
+	way CPython's slot lookup binds it (object >> ___typeAttrBound___:): a
+	function gets the instance first, a staticmethod or an ALREADY-BOUND
+	method or a callable instance does not (issue #1218).  This used to
+	prepend self to whatever it found, so ``__call__ = obj.m'' ran m with the
+	instance as an extra argument."
+	(self ___typeDunder___: #'__call__') @env0:ifNotNil: [:fn |
+		^ (self ___typeAttrBound___: fn) @env1:___pyCallValue___: positional kw: kwargs].
 	"No __call__: CPython's TypeError, raised here.  This used to fall
 	through to a DNU on the original selector, on the theory that the DNU
 	path would reshape it -- it did not: the send reached the CLASS side,

@@ -4299,7 +4299,9 @@ reversed: aSequence
 	prevent (test_enumerate's TestReversed.test_objmethods)."
 	(self ___reversedBlocked___: aSequence)
 		ifTrue: [^ self ___notReversible___: aSequence].
-	(aSequence ___respondsTo___: #'__reversed__')
+	((aSequence ___respondsTo___: #'__reversed__')
+		or: [(aSequence @env0:isKindOf: PythonInstance)
+			and: [(aSequence ___typeDunder___: #'__reversed__') ~~ nil]])
 		ifTrue: [^ aSequence __reversed__].
 	"A string reversed must yield 1-char STRINGS, matching forward str
 	iteration -- the ``reverseDo:'' fallback yields Characters, so
