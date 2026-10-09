@@ -76,6 +76,12 @@ __new__: obj
 	((obj @env0:class @env0:whichClassIncludesSelector: #__float__ environmentId: 1) @env0:notNil) ifTrue: [
 		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
 	].
+	"...or held as a CLASS ATTRIBUTE (``__float__ = f'', ``Cls.__float__ = f''): the send
+	reaches PythonInstance >> doesNotUnderstand:, which calls it as CPython's
+	slot lookup does (issue #1218)."
+	((obj @env0:isKindOf: PythonInstance) and: [(obj ___typeDunder___: #'__float__') ~~ nil]) ifTrue: [
+		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
+	].
 
 	"Try to convert from integer"
 	(obj isKindOf: Integer) ifTrue: [
@@ -501,6 +507,12 @@ ___fromNumberValue___: obj
 		^ self ___coerceFloatResult___: (obj ___float__: { } kw: nil) from: '__float__'
 	].
 	((obj @env0:class @env0:whichClassIncludesSelector: #__float__ environmentId: 1) @env0:notNil) ifTrue: [
+		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
+	].
+	"...or held as a CLASS ATTRIBUTE (``__float__ = f'', ``Cls.__float__ = f''): the send
+	reaches PythonInstance >> doesNotUnderstand:, which calls it as CPython's
+	slot lookup does (issue #1218)."
+	((obj @env0:isKindOf: PythonInstance) and: [(obj ___typeDunder___: #'__float__') ~~ nil]) ifTrue: [
 		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
 	].
 	(obj isKindOf: Integer) ifTrue: [^ obj @env0:asFloat].
