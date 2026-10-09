@@ -150,3 +150,20 @@ testAnIntrospectedSignatureStillRenders
 
 	self assert: (self check: #'an_introspected_signature_still_renders') equals: true.
 %
+
+category: 'Grail-Tests - getfullargspec'
+method: InspectSignatureObjectsTestCase
+testGetfullargspecIsTheSevenFieldNamedtuple
+	"It used to be a stub that could not be unpacked, so Django's
+	@register.simple_tag raised and the tag was silently never registered
+	(issue #1369)."
+
+	self assert: (self check: #'getfullargspec_is_the_seven_field_namedtuple') equals: true.
+%
+
+category: 'Grail-Tests - getfullargspec'
+method: InspectSignatureObjectsTestCase
+testGetfullargspecPutsPositionalOnlyFirstAndEmptiesAsNone
+	self assert: (self check: #'getfullargspec_puts_positional_only_first_and_empties_as_none')
+		equals: true.
+%
