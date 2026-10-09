@@ -300,23 +300,74 @@ def isroutine(obj):
     return ismethod(obj) or isfunction(obj)
 
 
-def getfullargspec(obj):
-    """Return a 7-tuple-shaped object describing obj's signature.
-    Stub: empty arg lists, no annotations."""
-    return _FullArgSpec(args=[], varargs=None, varkw=None, defaults=None,
-                        kwonlyargs=[], kwonlydefaults=None, annotations={})
+FullArgSpec = _namedtuple(
+    'FullArgSpec',
+    'args, varargs, varkw, defaults, kwonlyargs, kwonlydefaults, annotations')
 
 
-class _FullArgSpec:
-    def __init__(self, args, varargs, varkw, defaults, kwonlyargs,
-                 kwonlydefaults, annotations):
-        self.args = args
-        self.varargs = varargs
-        self.varkw = varkw
-        self.defaults = defaults
-        self.kwonlyargs = kwonlyargs
-        self.kwonlydefaults = kwonlydefaults
-        self.annotations = annotations
+def getfullargspec(func):
+    """Get the names and default values of a callable object's parameters.
+
+    CPython's algorithm over signature(), as CPython itself implements it:
+    the 7-field FullArgSpec namedtuple, positional-only names first in
+    ``args``, ``defaults`` / ``kwonlydefaults`` None when empty, and the
+    ``__wrapped__`` chain NOT followed.
+
+    This used to be a stub answering an object with empty fields that could
+    not be unpacked.  Django's ``@register.simple_tag`` (and inclusion_tag,
+    simple_block_tag) unpack it as a 7-tuple, so every such decorator raised,
+    and Grail's decorator handler (issue #1369) silently left the function
+    undecorated and the tag unregistered.
+
+    One known difference: for a BOUND method CPython keeps the bound argument
+    (skip_bound_arg=False), while Grail's signature() drops it.
+    """
+    try:
+        sig = signature(func, follow_wrapped=False)
+    except Exception as ex:
+        raise TypeError('unsupported callable') from ex
+
+    args = []
+    varargs = None
+    varkw = None
+    posonlyargs = []
+    kwonlyargs = []
+    annotations = {}
+    defaults = ()
+    kwdefaults = {}
+
+    if sig.return_annotation is not sig.empty:
+        annotations['return'] = sig.return_annotation
+
+    for param in sig.parameters.values():
+        kind = param.kind
+        name = param.name
+        if kind is Parameter.POSITIONAL_ONLY:
+            posonlyargs.append(name)
+            if param.default is not param.empty:
+                defaults += (param.default,)
+        elif kind is Parameter.POSITIONAL_OR_KEYWORD:
+            args.append(name)
+            if param.default is not param.empty:
+                defaults += (param.default,)
+        elif kind is Parameter.VAR_POSITIONAL:
+            varargs = name
+        elif kind is Parameter.KEYWORD_ONLY:
+            kwonlyargs.append(name)
+            if param.default is not param.empty:
+                kwdefaults[name] = param.default
+        elif kind is Parameter.VAR_KEYWORD:
+            varkw = name
+        if param.annotation is not param.empty:
+            annotations[name] = param.annotation
+
+    if not kwdefaults:
+        kwdefaults = None
+    if not defaults:
+        defaults = None
+
+    return FullArgSpec(posonlyargs + args, varargs, varkw, defaults,
+                       kwonlyargs, kwdefaults, annotations)
 
 
 class _ParameterKind:
