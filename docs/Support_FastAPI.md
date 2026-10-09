@@ -871,7 +871,7 @@ builds pydantic_core's error dicts in.
 | 1 | 1 — the four stdlib gaps | `import fastapi` with no probe patches |
 | 2 | 2, 3, 4 — the general runtime bugs | each a fixture against CPython 3.14; **tier 2** (they are shared machinery) |
 | 3 | 5, and the error-dict key order | shim tests in `CPythonShimTestCase` |
-| 4 | 6, 7 — sync endpoints and `TestClient` | decision pending: a same-green-thread portal (run each call to completion with `asyncio.run`) vs a real GsProcess-backed thread pool and cross-thread `concurrent.futures` |
+| 4 | 6, 7 — sync endpoints and `TestClient` | **done** on cooperative green threads, anyio unmodified (below) |
 | 5 | serve over HTTP with `grail_asgi`; a slice of FastAPI's own tests with the pydantic Phase 6 runner, compared test by test; latency and import time | — |
 
 
@@ -968,3 +968,116 @@ CPython's 0.2 ms, and `import fastapi` still ~102 s.
 **Next:** Phase 4 — plain `def` endpoints and dependencies (anyio's asyncio
 backend: `asyncio.base_events`, a worker thread) and `TestClient` (anyio's
 blocking portal).
+
+### Phase 4 — sync code paths on cooperative green threads *(decided 2026-10-08)*
+
+FastAPI runs every plain `def` endpoint and dependency through
+`anyio.to_thread.run_sync`, and `TestClient` runs the app through anyio's
+blocking portal (an event loop on another thread, called into from the test's
+thread). Three ways were weighed:
+
+* **(a) same-thread** -- run the sync callable inline on the loop's green
+  thread, and give `TestClient` a portal that drives each call on the calling
+  thread. First chosen, then dropped: it needed a new mechanism for patching
+  third-party modules at import plus patches to anyio internals, tied to
+  anyio's private layout.
+* **cooperative green threads -- chosen.** Once anyio's asyncio backend
+  imported (below), its OWN worker-thread path ran a sync callable on Grail's
+  existing `threading` -- green threads on GsProcess, which switch only at a
+  blocking point (a Semaphore wait, a Delay, a socket wait). anyio stays
+  unmodified. What Grail has to supply is what CPython supplies: a real
+  `concurrent.futures` (the cross-thread wait the blocking portal uses), and a
+  loop that a `call_soon_threadsafe` from another thread can wake.
+* **preemptive / real threads -- deferred, for future discussion.** Parallel
+  workers, or green threads switched at arbitrary points rather than only where
+  they block. That is genuine concurrency inside one gem session -- every
+  shared structure in the runtime (the import machinery, SessionTemps-keyed
+  caches, the shim's single user-action frame) would need an audit, which is a
+  project of its own. Questions to settle first: whether a GsProcess per worker
+  is the right unit, how a C extension call (one user action at a time)
+  interacts with a second green thread, and whether `threading` in Grail should
+  ever be more than cooperative.
+
+Even the cooperative model is new ground for the runtime: before Phase 4 no
+Grail path ran user code on a second green thread while the loop was live, so
+a C-extension call (pydantic_core validating inside a sync endpoint) on a
+worker thread is the first thing to watch.
+
+### Phase 4, done *(2026-10-08)*
+
+Plain `def` endpoints and dependencies (including a `yield` dependency, which
+starlette enters and exits on worker threads), `BackgroundTasks` with a sync
+function, `run_in_threadpool`, an `asynccontextmanager` lifespan, `request.state`,
+`HTTPException` and the 422 path all run through **`TestClient`** — with and
+without `with` — and every response matches CPython's. anyio, starlette and
+FastAPI are unmodified. A sync endpoint runs on a worker green thread
+(`threading.current_thread()` is not the main thread), as on CPython.
+
+What it took, in the order the probe met it:
+
+| wall | fix |
+|---|---|
+| anyio's asyncio backend would not import: `asyncio.base_events`, `asyncio.Protocol`, `asyncio.subprocess` | `protocols`, `transports`, `streams`, `subprocess`, `format_helpers`, `log`, `constants` are CPython's, verbatim; `base_events` is Grail's loop under CPython's name, plus `Server` and `_run_until_complete_cb` |
+| `del self` (anyio `TaskHandle._run_coro`) did not compile | `DeleteAst` stores nil into the transport identifier; a later read raises `UnboundLocalError` (`NameAst`) |
+| `find_root_task`: `'method' object is not iterable` | asyncio `Future` callbacks are `(fn, context)` pairs with `context=`; `run_until_complete` registers `base_events._run_until_complete_cb` |
+| `anyio.run()` answered `None` without running | a four-argument classmethod override lost to a base's DECORATED classmethod (a class-attribute store): `___definesPythonMethod___` probed class-side arities up to three. It probes `___selectorFamilyFor___` now, the same selectors attribute load can reach |
+| `run_sync_from_thread(func, args, token=...)`: "takes a different number of arguments" | a simple-positional `@classmethod`/`@staticmethod` has no `_name:kw:` companion. Keywords are bound at call time from the class's `___methodSignatureTable___`, on the path that was the TypeError. (Compiling class-side companions was tried first and reverted: attribute load probes the metaclass for `_name:kw:`, so a base classmethod then shadowed a subclass's instance method of the same name) |
+| `TestClient`: "Future has no result (Grail futures are synchronous)" | `concurrent.futures` is CPython's (`ProcessPoolExecutor` still refuses at construction). It needed real `threading.Condition` / `Semaphore` / `BoundedSemaphore` — they raised "would block forever" — CPython's, plus `RLock._release_save` / `_acquire_restore`, `threading._register_atexit`, `os.process_cpu_count` |
+| the portal's loop never woke | `call_soon_threadsafe` was `call_soon`, and a loop with nothing due busy-spun. The loop now waits in `select._select_waking` on a lock it holds; `call_soon_threadsafe` releases it. GemStone has no Unix-domain sockets for a self-pipe, so the wait is on the lock's semaphore, with socket readiness armed on the same semaphore (`PyRawSocket >> ___select___:_:_:wake:`) |
+| `asyncio.to_thread`, `loop.run_in_executor`, `wrap_future`, `run_coroutine_threadsafe` missing | CPython's; `asyncio.run` / `Runner.close` shut the default executor down |
+| sync endpoints saw the wrong `ContextVar` values | the current context was one slot per SESSION, shared by every green thread. It is per thread now (`_thread._get_context`): a started thread's on its GsProcess, the main thread's in SessionTemps (`#GrailPyMainContext` — a later GCI call can run on another process). `_thread.get_ident()` inside a generator is its resumer's thread, as in CPython (`importlib ___pythonThreadOf___:`), so a generator shares its thread's context and lock ownership |
+| `queue.Queue` polled under `time.sleep(0.005)` | CPython's `queue.py` |
+| a thread could vanish silently | `_thread._spawnProcess` swallowed any GemStone error; it prints "Exception in thread (uncaught GemStone error)" and a stack now. That is how the next row was found |
+
+Tests: 24 new checks in `tests/python/fastapi_walls.py` (`FastapiWallsTestCase`,
+both arms; 84 checks in all), each measured against CPython 3.14.
+
+**Measured** (Darwin arm64, warm, TestClient):
+
+| | Grail | CPython |
+|---|---|---|
+| async endpoint | ~40 ms/request | <1 ms |
+| sync endpoint, no dependencies | ~56 ms/request | ~1 ms |
+| sync endpoint with sync, `yield` and async dependencies (≈5 thread hops) | ~220–260 ms/request | 1.4 ms |
+| one thread hop (`asyncio.to_thread(int)` / `anyio.to_thread.run_sync(int)`) | 7.7 / 6.7 ms | 0.06 ms |
+| `asyncio.sleep(0)` loop turn | 0.69 ms | 0.012 ms |
+| `import fastapi` / `+ fastapi.testclient` | 105.6 s / +22.2 s | 0.3 s |
+
+A hop costs about what its Python does — the executor, queue and Condition
+machinery — at Grail's usual ~100× CPython; there is no fixed delay left in it
+(the polling queue was one). Making it cheaper (a native `SimpleQueue`, a
+leaner executor) is optimisation for later.
+
+**Known, not fixed:**
+
+* **Cold-run memory.** The first run after `install.sh` compiles every module
+  it imports, and compiling anyio's backend on the portal thread could exhaust
+  temporary object memory: `String >> ,` signals a non-resumable
+  `AlmostOutOfMemoryError` rather than fail fatally. The thread died (silently,
+  until the reporting above), and the test thread waited forever. A warm run
+  does not compile and does not hit it.
+* A `@classmethod` / `@staticmethod` of **seven or more** arguments is not
+  reachable by attribute load at all — the selector family stops at six, and
+  class-side defs get no `_name:kw:` (pre-existing).
+* An instance method overriding a base's classmethod of **one or more**
+  arguments reads as the base's classmethod (`C().cm(1)`): instance attribute
+  load binds any class-side fixed-arity selector it finds (pre-existing; the
+  zero-argument shape is `SuperLookupTestCase`'s and works).
+* `f(1, 2, b=3)` for `def f(a, b)` does not raise "got multiple values" on
+  instance methods and module functions — their `_name:kw:` forwarders bind
+  positionals first (pre-existing; the new class-side binder does raise it).
+* Running probes as the SAME GemStone user while `run_tests.sh` deploys
+  frameworks once left a canonical `collections.abc` committed in a state where
+  `MutableMapping.pop`'s mangled default raised `NameError`; a re-install
+  cleared it. Two sessions of one user rebuilding canonical modules at once is
+  the likely cause — keep probes off the stone while a suite runs.
+
+**Gates** (Darwin arm64, 2026-10-08): `run_tests.sh` **7763 run, 7763
+passed**, 8 of 8 shards, every post-suite script passing (the two-session
+contextvars test included); the CPython conformance gate **0 regressions** —
+three modules timed out while the SUnit suite ran beside it and are OK alone
+(test_math, test_pickle, test___all__); `check_python_fixtures.sh` 548
+fixtures agree with CPython.
+
+**Next:** Phase 5 — serve the app over HTTP with `grail_asgi`, and run a slice of
+FastAPI's own test suite.

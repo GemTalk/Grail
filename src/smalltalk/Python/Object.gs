@@ -8083,21 +8083,26 @@ category: 'Grail-Class Attr Overlay'
 method: object
 ___definesPythonMethod___: aClass name: aSym
 	"True when aClass's OWN env-1 method dictionary defines aSym in any of the
-	shapes a Python ``def'' compiles to: the bare unary selector, the
-	fixed-arity keyword forms, or the varargs ``_name:kw:'' forwarder.  Own
-	dictionary only -- inheritance is the caller's walk."
+	shapes a Python ``def'' compiles to that an attribute load can reach: the
+	bare unary selector and ___selectorFamilyFor___'s fixed-arity keyword forms
+	and varargs ``_name:kw:'' forwarder.  Own dictionary only -- inheritance is
+	the caller's walk.
 
-	| md s meta cmd |
+	The family, not a hand-kept list.  The lists here stopped short of it --
+	three arguments class-side, four instance-side -- so a WIDER override was
+	invisible and an ancestor's holder entry beat it: anyio's
+	``AsyncIOBackend.run(cls, func, args, kwargs, options)'' lost to
+	AsyncBackend's ``@classmethod @abstractmethod'' stub (a decorated method,
+	so a holder entry), and anyio.run() answered None without running
+	anything.  Probing exactly what ___pyAttrLoad___ can find keeps the two in
+	step: a method the load path could not reach does not outrank anything."
+
+	| md family meta cmd |
+	family := self ___selectorFamilyFor___: aSym string: aSym @env0:asString.
 	md := aClass @env0:methodDictForEnv: 1.
-	s := aSym @env0:asString.
 	md == nil ifFalse: [
 		(md @env0:includesKey: aSym) ifTrue: [^ true].
-		(md @env0:includesKey: (s @env0:, ':') @env0:asSymbol) ifTrue: [^ true].
-		(md @env0:includesKey: (s @env0:, ':_:') @env0:asSymbol) ifTrue: [^ true].
-		(md @env0:includesKey: (s @env0:, ':_:_:') @env0:asSymbol) ifTrue: [^ true].
-		(md @env0:includesKey: (s @env0:, ':_:_:_:') @env0:asSymbol) ifTrue: [^ true].
-		(md @env0:includesKey: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol)
-			ifTrue: [^ true]].
+		family @env0:do: [:sel | (md @env0:includesKey: sel) ifTrue: [^ true]]].
 	"A @staticmethod / @classmethod is a ``def'' too, and CPython puts it in the
 	same class dict; Grail compiles it CLASS-SIDE, on the metaclass, in category
 	Grail-Class Methods.  Count it, or a base's ``mk = None'' -- a holder entry,
@@ -8111,11 +8116,10 @@ ___definesPythonMethod___: aClass name: aSym
 	meta := aClass @env0:class.
 	cmd := meta @env0:methodDictForEnv: 1.
 	cmd == nil ifTrue: [^ false].
-	{ aSym.
-	  (s @env0:, ':') @env0:asSymbol.
-	  (s @env0:, ':_:') @env0:asSymbol.
-	  (s @env0:, ':_:_:') @env0:asSymbol.
-	  ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol } @env0:do: [:sel |
+	((cmd @env0:includesKey: aSym)
+		and: [(meta @env0:categoryOfSelector: aSym environmentId: 1)
+			@env0:= #'Grail-Class Methods']) ifTrue: [^ true].
+	family @env0:do: [:sel |
 		((cmd @env0:includesKey: sel)
 			and: [(meta @env0:categoryOfSelector: sel environmentId: 1)
 				@env0:= #'Grail-Class Methods']) ifTrue: [^ true]].

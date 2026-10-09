@@ -16,24 +16,32 @@ not by descriptor.  add_reader accepts either -- an int is resolved back
 through _socket's fd registry -- so the CPython spelling
 ``loop.add_reader(sock.fileno(), cb)'' works as well as passing the socket.
 
-STILL MISSING: transports and protocols.  ``sock_recv''/``sock_sendall'' and
-friends are here, which is what a hand-written server or a stream-based one
-needs, but there is no create_server / create_connection / StreamReader yet, so
-an ASGI server cannot be pointed at this loop unmodified.  See
+STILL MISSING: the loop half of transports.  ``sock_recv''/``sock_sendall''
+and friends are here, which is what a hand-written server or a stream-based one
+needs, and the protocol / transport / StreamReader CLASSES are CPython's, but
+the loop has no create_server / create_connection / subprocess_exec yet, so an
+ASGI server cannot be pointed at this loop unmodified.  See
 docs/Support_FastAPI.md.
+
+THREADS.  call_soon_threadsafe is real: the loop's wait (select._select_waking)
+also ends when another green thread releases the loop's waker lock, which is
+what run_in_executor, asyncio.to_thread and anyio's worker threads and blocking
+portal rely on.
 
 WHY A PURE-PYTHON LOOP RATHER THAN A SMALLTALK ONE.  The scheduling primitives
 are GemStone's, but the thing being scheduled is a Python coroutine, and driving
 one is ``coro.send(None)'' -- which is ordinary Python now that await
 propagates suspensions.  Writing the loop in Python keeps it readable, keeps it
-testable against CPython's own asyncio tests, and leaves two Smalltalk
-dependencies, both of which suspend only the calling green thread: time.sleep
-(a GemStone Delay) and select.
+testable against CPython's own asyncio tests, and leaves one Smalltalk
+dependency, which suspends only the calling green thread: select, in its
+Grail-only waking form (select._select_waking), so that call_soon_threadsafe
+from another green thread can end the wait.
 """
 
 import contextvars as _contextvars
 import errno as _errno
 import heapq
+import _thread
 import select as _select
 import time as _time
 import weakref
@@ -123,6 +131,14 @@ class EventLoop(AbstractEventLoop):
         # while a suspended generator could never be collected -- its parked
         # process was a GC root -- and the sweep was the only closing point.)
         self._asyncgens = weakref.WeakSet()
+        # The self-pipe, Grail-style: a lock the loop HOLDS, which
+        # call_soon_threadsafe releases to end the loop's wait.  See
+        # _write_to_self and select._select_waking.
+        self._waker = _thread.allocate_lock()
+        self._waker.acquire()
+        # run_in_executor(None, ...)'s pool, made on first use as CPython's.
+        self._default_executor = None
+        self._executor_shutdown_called = False
 
     # --- clock ------------------------------------------------------------
 
@@ -137,10 +153,21 @@ class EventLoop(AbstractEventLoop):
         self._ready.append(handle)
         return handle
 
-    # A loop is single-threaded here (one gem, cooperative green threads), so
-    # the threadsafe variant is the same call.  Named so cross-thread callers
-    # from vendored code still work.
-    call_soon_threadsafe = call_soon
+    def call_soon_threadsafe(self, callback, *args, context=None):
+        """call_soon, plus a wake-up: the caller is another green thread
+        (anyio's worker threads, concurrent.futures, a blocking portal), and
+        the loop may be waiting with nothing else due to wake it.  Green
+        threads switch only at blocking points, so the append cannot interleave
+        with the loop's own handling of _ready."""
+        handle = self.call_soon(callback, *args, context=context)
+        self._write_to_self()
+        return handle
+
+    def _write_to_self(self):
+        # Release only a held waker: one already released has a wake-up
+        # pending, and a second release would leave a stray signal behind.
+        if self._waker.locked():
+            self._waker.release()
 
     def call_later(self, delay, callback, *args, context=None):
         return self.call_at(self.time() + delay, callback, *args, context=context)
@@ -235,7 +262,8 @@ class EventLoop(AbstractEventLoop):
             writers.append(watchable)
             w_of[id(watchable)] = fd
 
-        ready_r, ready_w, _x = _select.select(readers, writers, [], timeout)
+        ready_r, ready_w = _select._select_waking(
+            readers, writers, timeout, self._waker)
 
         for obj in ready_r:
             entry = self._readers.get(r_of.get(id(obj)))
@@ -292,11 +320,86 @@ class EventLoop(AbstractEventLoop):
     def close(self):
         if self.is_running():
             raise RuntimeError('Cannot close a running event loop')
+        if self._closed:
+            return
         self._closed = True
         self._ready = []
         self._scheduled = []
         self._readers = {}
         self._writers = {}
+        executor = self._default_executor
+        if executor is not None:
+            self._default_executor = None
+            executor.shutdown(wait=False)
+
+    # --- executors (CPython's) --------------------------------------------
+
+    def _check_default_executor(self):
+        if self._executor_shutdown_called:
+            raise RuntimeError('Executor shutdown has been called')
+
+    def run_in_executor(self, executor, func, *args):
+        """Run func(*args) on executor -- a worker green thread of the default
+        ThreadPoolExecutor when None -- and answer an asyncio future for it.
+        The worker hands its result back through call_soon_threadsafe."""
+        import concurrent.futures
+        from asyncio import futures
+        self._check_closed()
+        if executor is None:
+            executor = self._default_executor
+            # Only check when the default executor is being used
+            self._check_default_executor()
+            if executor is None:
+                executor = concurrent.futures.ThreadPoolExecutor(
+                    thread_name_prefix='asyncio'
+                )
+                self._default_executor = executor
+        return futures.wrap_future(
+            executor.submit(func, *args), loop=self)
+
+    def set_default_executor(self, executor):
+        import concurrent.futures
+        if not isinstance(executor, concurrent.futures.ThreadPoolExecutor):
+            raise TypeError('executor must be ThreadPoolExecutor')
+        self._default_executor = executor
+
+    async def shutdown_default_executor(self, timeout=None):
+        """Schedule the shutdown of the default executor.
+
+        The timeout parameter specifies the amount of time the executor will
+        be given to finish joining. The default value is None, which means
+        that the executor will be given an unlimited amount of time.
+        """
+        import threading
+        from asyncio import timeouts
+        self._executor_shutdown_called = True
+        if self._default_executor is None:
+            return
+        future = self.create_future()
+        thread = threading.Thread(target=self._do_shutdown, args=(future,))
+        thread.start()
+        try:
+            async with timeouts.timeout(timeout):
+                await future
+        except TimeoutError:
+            import warnings
+            warnings.warn("The executor did not finishing joining "
+                          f"its threads within {timeout} seconds.",
+                          RuntimeWarning, stacklevel=2)
+            self._default_executor.shutdown(wait=False)
+        else:
+            thread.join()
+
+    def _do_shutdown(self, future):
+        from asyncio import futures
+        try:
+            self._default_executor.shutdown(wait=True)
+            if not self.is_closed():
+                self.call_soon_threadsafe(futures._set_result_unless_cancelled,
+                                          future, None)
+        except Exception as ex:
+            if not self.is_closed() and not future.cancelled():
+                self.call_soon_threadsafe(future.set_exception, ex)
 
     def run_forever(self):
         global _running_loop
@@ -331,20 +434,20 @@ class EventLoop(AbstractEventLoop):
         ``loop.run_until_complete(main())`` work at all -- a bare coroutine has
         nothing to drive it.
         """
-        from asyncio import tasks
+        from asyncio import base_events, tasks
         self._check_closed()
         future = tasks.ensure_future(future, loop=self)
-        future.add_done_callback(self._on_complete_stop)
+        # base_events._run_until_complete_cb, by IDENTITY, as CPython adds it:
+        # anyio recognises the root task by finding that very function among
+        # a task's done callbacks (_backends._asyncio.find_root_task).
+        future.add_done_callback(base_events._run_until_complete_cb)
         try:
             self.run_forever()
         finally:
-            future.remove_done_callback(self._on_complete_stop)
+            future.remove_done_callback(base_events._run_until_complete_cb)
         if not future.done():
             raise RuntimeError('Event loop stopped before Future completed.')
         return future.result()
-
-    def _on_complete_stop(self, fut):
-        self.stop()
 
     def _run_once(self):
         """One turn: wait for whatever is next, promote it, run what is ready.
@@ -354,11 +457,11 @@ class EventLoop(AbstractEventLoop):
         ``asyncio.sleep(0)`` never sleeps and a busy loop never waits -- the
         first timer's deadline if there is one, and otherwise unbounded.
 
-        WHERE it waits is decided by whether any socket is registered.  With
-        one, the wait happens inside select, so the loop wakes on readiness OR
-        on the timer, whichever comes first; with none, it is a plain sleep.
-        Both suspend only this green thread (select arms GemStone's readiness
-        events, time.sleep is a Delay), so waiting here does not freeze the gem.
+        It always waits inside select, on the registered sockets (if any) AND
+        the waker lock, so the loop wakes on readiness, on the timer, or on a
+        call_soon_threadsafe from another green thread, whichever comes first.
+        That suspends only this green thread (select arms GemStone's readiness
+        events), so waiting here does not freeze the gem.
 
         Only ONE ready item's worth of work is promoted per turn (the snapshot
         below), because a callback that calls call_soon must not have its own
@@ -371,14 +474,12 @@ class EventLoop(AbstractEventLoop):
 
         if self._readers or self._writers:
             self._poll_io(timeout)
-        elif timeout is None:
-            # Nothing queued, no timer, nothing to watch: whatever this loop is
-            # waiting for cannot arrive from inside it.  run_until_complete
-            # always has at least its own task, so this is run_forever() on an
-            # empty loop, which spins in CPython too.
-            pass
-        elif timeout > 0:
-            _time.sleep(timeout)
+        elif timeout is None or timeout > 0:
+            # Nothing to watch: wait for the first timer, or -- with none --
+            # for call_soon_threadsafe, which is the only way work can arrive
+            # from outside (a worker green thread finishing, a blocking portal
+            # submitting).  A loop with neither waits forever, as CPython's.
+            _select._select_waking((), (), timeout, self._waker)
 
         now = self.time()
         while self._scheduled and self._scheduled[0]._when <= now:

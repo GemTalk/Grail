@@ -36,6 +36,11 @@ FastapiWallsTestCase category: 'Grail-SUnit'
 !     ModuleDefRebindingTestCase; the signal_signal_* checks here are its
 !     consequence).
 !
+! Phase 4 (plain def endpoints and TestClient, on green threads) added checks
+! for del self, asyncio's (callback, context) pairs, classmethod overrides
+! and keyword calls, real Condition / Semaphore / queue / concurrent.futures,
+! call_soon_threadsafe waking the loop, and per-thread contextvars.
+!
 ! tests/python/fastapi_walls.py holds the checks, run under CPython 3.14 by
 ! scripts/check_python_fixtures.sh; run here on the default path and forced
 ! onto IR.
@@ -75,17 +80,27 @@ method: FastapiWallsTestCase
 ___names___
 	"Listed rather than iterated so that a check DISAPPEARING fails too."
 
-	^ #('class_body_del_dunder'
+	^ #('asyncio_callback_pairs'
+	    'asyncio_threads'
+	    'asyncio_vendored_names'
+	    'bounded_semaphore_over_release'
+	    'class_body_del_dunder'
 	    'class_body_readback_dunders'
 	    'class_eq_assigned'
 	    'class_eq_assigned_in_dict'
 	    'class_eq_assigned_unchanged'
 	    'class_hash_assigned'
 	    'classmethod_defaults'
+	    'classmethod_keyword_errors'
+	    'classmethod_keywords'
+	    'classmethod_override_four_args'
 	    'closure_defaults_per_def'
 	    'closure_kwdefaults'
 	    'closure_mutable_default_shared'
 	    'closure_signature'
+	    'condition_over_rlock_releases_all'
+	    'condition_waits'
+	    'contextvars_per_thread'
 	    'dataclass_frozen_hash'
 	    'dataclass_frozen_refuses'
 	    'dataclass_order_kw_only'
@@ -93,8 +108,13 @@ ___names___
 	    'dataclass_repr_eq'
 	    'dataclass_signature'
 	    'dataclass_slots'
+	    'del_self'
 	    'fastapi_shape_depends'
+	    'future_result_waits'
+	    'futures_timeout_is_builtin'
+	    'get_ident_in_generator'
 	    'hash_none'
+	    'idle_loop_woken_by_thread'
 	    'init_signature'
 	    'init_signature_value'
 	    'instance_eq_assigned'
@@ -116,8 +136,14 @@ ___names___
 	    'no_defaults'
 	    'object_eq_over_inherited_def'
 	    'object_lt_assigned_raises'
+	    'os_process_cpu_count'
+	    'process_pool_name_resolves'
+	    'queue_ping_pong'
+	    'queue_simple_and_shutdown'
+	    'rlock_owner_across_generator'
 	    'runpy_all'
 	    'runtime_object_repr'
+	    'semaphore_acquire'
 	    'shlex_join_quote'
 	    'shlex_lexer_comma_separated'
 	    'shlex_lexer_tokens'
@@ -133,6 +159,9 @@ ___names___
 	    'signal_signals_lookup'
 	    'signal_signals_name'
 	    'signal_valid_signals_are_members'
+	    'staticmethod_keywords'
+	    'staticmethod_override_five_args'
+	    'thread_pool_executor'
 	    'type_made_class_init'
 	    'type_made_class_no_init_refuses_args')
 %

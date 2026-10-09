@@ -11,6 +11,7 @@ import contextvars as _contextvars
 from asyncio import events as _events
 from asyncio import exceptions as _exceptions
 from asyncio import tasks as _tasks
+from asyncio.constants import THREAD_JOIN_TIMEOUT as _THREAD_JOIN_TIMEOUT
 
 
 def run(main, debug=None):
@@ -26,6 +27,8 @@ def run(main, debug=None):
         try:
             _cancel_all_tasks(loop)
             loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.run_until_complete(
+                loop.shutdown_default_executor(_THREAD_JOIN_TIMEOUT))
         finally:
             _events.set_event_loop(None)
             loop.close()
@@ -131,6 +134,10 @@ class Runner:
             return
         try:
             _cancel_all_tasks(self._loop)
+            # As CPython's: join run_in_executor's worker threads, so a
+            # Runner that used asyncio.to_thread does not leave them parked.
+            self._loop.run_until_complete(
+                self._loop.shutdown_default_executor(_THREAD_JOIN_TIMEOUT))
         finally:
             if self._set_event_loop:
                 _events.set_event_loop(None)
