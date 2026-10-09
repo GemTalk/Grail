@@ -406,7 +406,12 @@ _exec: positional kw: kwargs
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
-		ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec
+		"A code object compiled in ``single'' mode shows the value of each
+		expression statement through sys.displayhook, as the REPL does and
+		doctest relies on; everything else runs as plain exec."
+		ModuleAst @env0:evaluateSource: source usingModuleScope: scope
+			as: (((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
+					@env0:= #'single') ifTrue: [#single] ifFalse: [#exec])
 			globalNamesInto: globalNames
 	] @env0:ensure: [
 		CallAst @env0:sourcePath: savedPath.
@@ -502,7 +507,7 @@ ___doitStarImport___: aModule into: aScope
 	copies it to the caller's mapping from there.
 
 	A module-level star import is expanded at PARSE time from a literal
-	``__all__'' and topped up by module >> ___mergePublicAttrsFrom:.  A doit
+	``__all__'' and topped up by module >> ___mergePublicAttrsFrom___:.  A doit
 	had only the parse-time half, so a module whose __all__ is not a literal
 	bound nothing at all: ``exec('from _collections_abc import *', ns)'' left
 	ns empty, because Grail's _collections_abc takes its __all__ from
@@ -2761,6 +2766,10 @@ len: anObject
 			''' object cannot be interpreted as an integer')].
 	result @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: '__len__() should return >= 0'].
+	"Only a LargeInteger can be too big: sys.maxsize is 2^60-1, the largest
+	SmallInteger.  Reading it is an attribute load inside a handler, which
+	was most of the cost of every len() (#1214)."
+	(result @env0:class @env0:== SmallInteger) ifTrue: [^ result].
 	result @env0:> (self ___maxIndexSize___) ifTrue: [
 		^ OverflowError ___signal___:
 			'cannot fit ''int'' into an index-sized integer'].

@@ -319,6 +319,15 @@ ___getslice___: lower _: upper _: step
 			ifFalse: [upr @env0:min:
 				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
 
+	"A contiguous slice is one block copy into an exact-size tuple (#1385);
+	an empty one is THE empty tuple, as tuple withAll: answers it."
+	st @env0:= 1 ifTrue: [| n inst |
+		lo @env0:>= hi ifTrue: [^ tuple @env0:new].
+		n := hi @env0:- lo.
+		inst := tuple @env0:new: n.
+		inst @env0:replaceFrom: 1 to: n with: self startingAt: lo @env0:+ 1.
+		^ tuple @env0:___frozenInstance: inst].
+
 	accumulator := OrderedCollection @env0:new.
 	i := lo.
 	st @env0:> 0

@@ -320,6 +320,12 @@ class xmlparser:
         else:
             self._scan(isfinal)
         self._note_consumed()
+        # Drop what has been consumed.  Nothing looks behind self._pos once a
+        # Parse returns, and a long ParseFile otherwise kept -- and recopied on
+        # every ``+='' -- the whole document read so far (#1214).
+        if self._pos:
+            self._buf = self._buf[self._pos:]
+            self._pos = 0
         # CPython's pyexpat flushes buffer_text's held text at the end of
         # every Parse call, not only when another event arrives.
         self._flush_text()
@@ -781,7 +787,12 @@ class xmlparser:
 
     def _scan_markup(self, isfinal):
         buf, i = self._buf, self._pos
-        rest = buf[i:]
+        # Only ever tested against the markup openers, the longest of which is
+        # ``<![CDATA['' (9), so a 9-character window answers every test below
+        # exactly as the whole remainder did -- including the partial-opener
+        # test, since a window shorter than 9 IS the whole remainder.  Copying
+        # the remainder at every tag made parsing quadratic (#1214).
+        rest = buf[i:i + 9]
         # A chunk can end partway into ``<!--'', ``<![CDATA['' or
         # ``<!DOCTYPE'': that is not yet anything, so wait for the next one
         # rather than judging ``<!'' an invalid token (XMLPullParser fed one

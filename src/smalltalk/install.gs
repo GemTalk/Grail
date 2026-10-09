@@ -853,6 +853,7 @@ run
 	at: #'CompileAndEvalArgumentsTestCase' put: nil;
 	at: #'CompileCodeObjectTestCase' put: nil;
 	at: #'CompileOptimizeTestCase' put: nil;
+	at: #'CompileSingleModeTestCase' put: nil;
 	at: #'CompileTopLevelAwaitTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
 	at: #'CompoundStatementExtentTestCase' put: nil;
@@ -954,6 +955,7 @@ run
 	at: #'EnumSecondaryMixinTestCase' put: nil;
 	at: #'EnumTestCase' put: nil;
 	at: #'EnumTupleStorageTestCase' put: nil;
+	at: #'Env1PlumbingSendsTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
 	at: #'EOFErrorTestCase' put: nil;
@@ -1347,6 +1349,7 @@ run
 	at: #'SingleDispatchMethodTestCase' put: nil;
 	at: #'SingleDispatchRegisterTestCase' put: nil;
 	at: #'SliceAndLoopsTestCase' put: nil;
+	at: #'SliceBlockCopyTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
 	at: #'SmalltalkForwarderTestCase' put: nil;
@@ -2348,6 +2351,7 @@ input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
 input src/smalltalk/PythonTests/CompileAndEvalArgumentsTestCase.gs
 input src/smalltalk/PythonTests/CompileCodeObjectTestCase.gs
 input src/smalltalk/PythonTests/CompileOptimizeTestCase.gs
+input src/smalltalk/PythonTests/CompileSingleModeTestCase.gs
 input src/smalltalk/PythonTests/CompileTopLevelAwaitTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
 input src/smalltalk/PythonTests/CompoundStatementExtentTestCase.gs
@@ -2449,6 +2453,7 @@ input src/smalltalk/PythonTests/EnumRootPickleIdentityTestCase.gs
 input src/smalltalk/PythonTests/EnumSecondaryMixinTestCase.gs
 input src/smalltalk/PythonTests/EnumTestCase.gs
 input src/smalltalk/PythonTests/EnumTupleStorageTestCase.gs
+input src/smalltalk/PythonTests/Env1PlumbingSendsTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
 input src/smalltalk/PythonTests/EOFErrorTestCase.gs
@@ -2846,6 +2851,7 @@ input src/smalltalk/PythonTests/SignatureOfAClassTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
 input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
+input src/smalltalk/PythonTests/SliceBlockCopyTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs

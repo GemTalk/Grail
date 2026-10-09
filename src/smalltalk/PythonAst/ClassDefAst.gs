@@ -1427,7 +1427,7 @@ printSmalltalkRuntimeOn: aStream
 			here from ``self __qualname__'' would run BEFORE this class's qualname
 			was stamped (that happens after the attribute section), so a doubly
 			nested class read the short answer."
-			aStream nextPutAll: ' ] value.'; lf.
+			aStream nextPutAll: ' ] @env0:value.'; lf.
 	].
 	"Class-side ``___methodCodeTable___'' (method name -> PyCode), the __code__
 	twin of the doc / signature / annotations tables.  A class-body def compiles
@@ -1526,7 +1526,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
 		self ___readsModuleNameAtRunTime___
 			ifTrue: [aStream nextPutAll:
-				'(((Python @env0:at: #builtins) instance) ___doitModuleName___: ___pyGlobals___)']
+				'(((Python @env0:at: #builtins) @env0:___instance___) ___doitModuleName___: ___pyGlobals___)']
 			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
 		aStream nextPutAll: '.'; lf.
 	].
@@ -2215,7 +2215,7 @@ printSmalltalkRuntimeOn: aStream
 	need nothing -- their methods resolve __globals__ through __module__."
 	self ___readsModuleNameAtRunTime___ ifTrue: [
 		aStream nextPutAll: self ___stVarName___;
-			nextPutAll: ' @env1:___classHolderAttrStore___: #''___grailDoitGlobals___'' put: (((Python @env0:at: #builtins) instance) ___doitGlobalsView___: ___pyGlobals___).';
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''___grailDoitGlobals___'' put: (((Python @env0:at: #builtins) @env0:___instance___) ___doitGlobalsView___: ___pyGlobals___).';
 			lf].
 
 	"For each @property (and @cached_property) method, compile a 1-arg
@@ -3012,12 +3012,12 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: ' @env0:dynamicInstVarAt: #''';
 			nextPutAll: name;
 			nextPutAll: ''' put: '; nextPutAll: self ___stVarName___;
-			nextPutAll: '.] value.'; lf.
+			nextPutAll: '.] @env0:value.'; lf.
 	] ifFalse: [
 		"No module binding, but the block was still opened above to declare
 		this body's codegen helper temps -- close it."
 		self ___classBlockNeedsTemps___ ifTrue: [
-			aStream nextPutAll: '] value.'; lf].
+			aStream nextPutAll: '] @env0:value.'; lf].
 	].
 %
 
@@ -3493,8 +3493,9 @@ ___printDecoratedProperty___: aName on: aStream siblingNames: siblingNames
 		on: aStream siblingNames: siblingNames.
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass].'; lf;
 		nextPutAll: '	'.
+	self ___printDecoratorHandlerPassOn___: aStream.
+	aStream nextPutAll: '.'; lf; nextPutAll: '	'.
 	self ___printPropertyStore___: aName accessors: byKind decorated: false
 		on: aStream siblingNames: siblingNames.
 	aStream nextPutAll: '].'; lf
@@ -5339,7 +5340,7 @@ emitClassBodyIfDef: aDef on: aStream
 		ifNil: [aStream nextPutAll: fname]
 		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
 			nextPutAll: ' value: { '; nextPutAll: fname; nextPutAll: ' } value: nil)'].
-	aStream nextPutAll: '. ] value.'; lf
+	aStream nextPutAll: '. ] @env0:value.'; lf
 %
 
 category: 'Grail-Class Compilation'
@@ -6578,7 +6579,7 @@ printClassKeywordsDictOn: aStream withholding: someNames
 					nextPutAll: ''' put: '; nextPutAll: (self ___hdrTempForKeyword___: kw).
 				aStream nextPut: $;]
 			ifNil: [
-				aStream nextPutAll: ' @env1:update: '; nextPutAll: (self ___hdrTempForKeyword___: kw).
+				aStream nextPutAll: ' @env1:___pyUpdate___: '; nextPutAll: (self ___hdrTempForKeyword___: kw).
 				aStream nextPut: $;]].
 	aStream nextPutAll: ' yourself)'.
 %

@@ -694,7 +694,7 @@ ___collectModuleScopeStarImportsInto___: aCollection
 	``*'' alias and ImportFromAst >> printSmalltalkOn: emitted a per-name
 	binding for it -- a Smalltalk variable literally NAMED ``*'':
 
-	    * := ((((Python @env0:at: #builtins) instance) ___import__: ...
+	    * := ((((Python @env0:at: #builtins) @env0:___instance___) ___import__: ...
 
 	which is a CompileError (``expected a right bracket''), uncatchable, and
 	takes the session with it.  ``try: from .cyaml import * / except
@@ -1849,7 +1849,7 @@ ___printCompTargetLocalsOn___: aStream names: compNames
 	of the comprehension's emitted block, so the bare identifier reads it, and
 	___buildLocals___: drops any still holding Smalltalk nil (unbound)."
 
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___buildLocals___: { '.
 	compNames do: [:each |
 		aStream
 			nextPutAll: '{ '''; nextPutAll: each asString;
@@ -1954,7 +1954,7 @@ ___globalsOnlyViewReceiverExpr___
 	nothing about whether the caller will pass one mapping or two."
 
 	^ ModuleAst compilingDoitScope notNil
-		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitGlobalsView___: ___pyGlobals___)']
+		ifTrue: ['(((Python @env0:at: #builtins) @env0:___instance___) ___doitGlobalsView___: ___pyGlobals___)']
 		ifFalse: [self ___moduleStoreReceiverExpr___]
 %
 
@@ -1969,7 +1969,7 @@ ___localsOnlyViewExpr___
 	and the existing emit is already right."
 
 	^ ModuleAst compilingDoitScope notNil
-		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitLocalsView___: ___pyGlobals___)']
+		ifTrue: ['(((Python @env0:at: #builtins) @env0:___instance___) ___doitLocalsView___: ___pyGlobals___)']
 		ifFalse: [nil]
 %
 
@@ -2547,7 +2547,7 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		aStream nextPutAll: '[| '; nextPutAll: nestedHolder; nextPutAll: ' | ';
 			nextPutAll: nestedHolder; nextPutAll: ' := ('; nextPutAll: rhs; nextPutAll: ')'.
 		self emitUnpackCoercionAndStoresOn: aStream elts: aTarget elts holder: nestedHolder.
-		aStream nextPutAll: '] value. '.
+		aStream nextPutAll: '] @env0:value. '.
 		^ self
 	].
 	"Default: NameAst / starred wrapper.  Routed through
@@ -2746,6 +2746,33 @@ ___defaultSourceString___
 	^ self ___annotationSourceString___
 %
 
+
+category: 'Grail-code generation'
+method: AbstractNode
+___printDecoratorHandlerPassOn___: aStream
+	"The one statement every decorator-application handler opens with: re-signal
+	what must never be absorbed, as ``((cond)) ifTrue: [___de pass]'' with no
+	terminator.  The handlers themselves -- printModuleDecoratorsOn:,
+	printMethodDecoratorsOn:, printMarkingDecoratorsOn: and ClassDefAst's
+	___printDecoratedProperty___: -- catch AbstractException so that a
+	decorator which cannot be applied leaves the def undecorated (issue #1369
+	is about whether they should).  Two kinds of signal pass through:
+
+	  PythonReturn / PythonBreak / PythonContinue -- control flow, not failure.
+	  Stack exhaustion -- AlmostOutOfStack, AlmostOutOfStackError, or the
+	    RecursionError Grail converts them into (BaseException class>>
+	    ___isStackExhaustion___:, since generated code cannot name the kernel
+	    classes).  Absorbing it turned a decorator that recursed into a SILENTLY
+	    DROPPED decorator where CPython raises RecursionError -- measured at the
+	    module, method and property-setter sites on both codegen paths -- and
+	    absorbing the raw warning consumes the VM's only notice of the
+	    overflow.  A decorator that runs out of stack is not one that cannot be
+	    applied.
+
+	One emitter so the four sites cannot drift apart again."
+
+	aStream nextPutAll: '((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [(___de isKindOf: PythonContinue) @env0:or: [BaseException @env0:___isStackExhaustion___: ___de]]]) ifTrue: [___de @env0:pass]'
+%
 
 category: 'Grail-code generation'
 method: AbstractNode

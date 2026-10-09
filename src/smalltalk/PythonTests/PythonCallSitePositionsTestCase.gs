@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'PythonCallSitePositionsTestCase'
-  instVarNames: #(textModule irModule registrySnapshot)
+  instVarNames: #(textModule irModule stmtModule registrySnapshot)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -25,6 +25,9 @@ PythonCallSitePositionsTestCase category: 'Grail-SUnit'
 ! (issue #883):
 !     BaseException class >> pythonPositionsForMethod:
 !     BaseException class >> pythonPositionKindForMethod:
+! and their source-index companions (issue #1137):
+!     BaseException class >> pythonPositionForMethod:atSourceIndex:
+!     BaseException class >> pythonSendSitesIn:selector:
 !
 ! The property under test is that BOTH codegen paths answer, since the whole
 ! complaint is that a text scan reads nothing under GRAIL_IR_CODEGEN.  So the
@@ -66,11 +69,14 @@ setUp
 	mods := importlib @env1:modules.
 	mods removeKey: #'callsite_pos_text' ifAbsent: [].
 	mods removeKey: #'callsite_pos_ir' ifAbsent: [].
+	mods removeKey: #'callsite_pos_module' ifAbsent: [].
 	self ___forgetCanonicalModule___: 'callsite_pos_text'.
 	self ___forgetCanonicalModule___: 'callsite_pos_ir'.
+	self ___forgetCanonicalModule___: 'callsite_pos_module'.
 	registrySnapshot := importlib ___canonicalRegistrySnapshot___.
 	textModule := nil.
 	irModule := nil.
+	stmtModule := nil.
 %
 
 category: 'Grail-Private'
@@ -107,13 +113,16 @@ tearDown
 	mods := importlib @env1:modules.
 	mods removeKey: #'callsite_pos_text' ifAbsent: [].
 	mods removeKey: #'callsite_pos_ir' ifAbsent: [].
+	mods removeKey: #'callsite_pos_module' ifAbsent: [].
 	registrySnapshot ifNotNil: [:snap |
 		importlib ___canonicalRegistryRestore___: snap.
 		registrySnapshot := nil].
 	self ___forgetCanonicalModule___: 'callsite_pos_text'.
 	self ___forgetCanonicalModule___: 'callsite_pos_ir'.
+	self ___forgetCanonicalModule___: 'callsite_pos_module'.
 	textModule := nil.
 	irModule := nil.
+	stmtModule := nil.
 %
 
 category: 'Grail-Private'
@@ -127,6 +136,74 @@ ___fixtureSource___
 	src := file contentsAsUtf8 decodeToUnicode.
 	file close.
 	^ src
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
+___stmtModuleInit___
+	"The module body of tests/python/frame_line_in_module_statement.py.  The
+	module defines classes and functions, so its body embeds the source of each
+	method it compiles as a string literal, stores and all -- the shape issue
+	#1137 is about.  A module body is text-compiled on both codegen paths, so
+	the seam is left as the worker has it."
+
+	stmtModule ifNil: [
+		stmtModule := importlib
+			loadModuleFromPath:
+				(importlib grailDir , '/tests/python/frame_line_in_module_statement.py')
+			name: 'callsite_pos_module'].
+	^ stmtModule class compiledMethodAt: #initialize environmentId: 1
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
+___stmtFixtureLines___
+	| file src |
+	file := GsFile
+		open: importlib grailDir , '/tests/python/frame_line_in_module_statement.py'
+		mode: 'rb' onClient: false.
+	src := file contentsAsUtf8 decodeToUnicode.
+	file close.
+	^ BaseException ___splitLinesOf___: src
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
+___defBodyLinesIn___: srcLines
+	"The line numbers of srcLines that lie inside a def body, at any depth --
+	found by indentation, the way Python does: a line is in a body while some
+	enclosing def line is indented less than it.  Blank and comment lines are
+	ignored, so they neither open nor close anything."
+
+	| out stack |
+	out := Set new.
+	stack := OrderedCollection new.
+	1 to: srcLines size do: [:i |
+		| ln t indent |
+		ln := srcLines at: i.
+		t := ln trimSeparators.
+		(t isEmpty or: [(t at: 1) == $#]) ifFalse: [
+			indent := 0.
+			[indent < ln size and: [(ln at: indent + 1) isSeparator]]
+				whileTrue: [indent := indent + 1].
+			[stack notEmpty and: [stack last >= indent]] whileTrue: [stack removeLast].
+			stack notEmpty ifTrue: [out add: i].
+			(t indexOfSubCollection: 'def ') = 1 ifTrue: [stack addLast: indent]]].
+	^ out
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
+___plainCountOf___: aPattern in: aString
+	"How often aPattern occurs in aString, literals and all -- what the readers
+	USED to count, kept here as the positive control."
+
+	| n i |
+	n := 0.
+	i := 1.
+	[i := aString indexOfSubCollection: aPattern startingAt: i.
+	 i > 0] whileTrue: [n := n + 1. i := i + 1].
+	^ n
 %
 
 category: 'Grail-Private'
@@ -355,4 +432,221 @@ test_decodes_a_nil_source_line
 	self assert: p notNil.
 	self assert: (p at: 1) equals: 7.
 	self assert: (p at: 5) equals: nil.
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_a_module_body_answers_only_its_own_positions
+	"Issue #1137.  A module body embeds the source of every method it compiles
+	as a string literal, with that method's ___curPos___ stores in it, and the
+	reader searched the whole text.  On _grail_session's module body it
+	answered 17 positions where 2 are its own, the last of them line 81, inside
+	SessionDict.items().
+
+	The positive control comes first: the stores really are embedded, or a
+	reader that never looked would pass too."
+
+	| m src own pos bodies |
+	m := self ___stmtModuleInit___.
+	src := m sourceString.
+	own := BaseException ___ownCurPosStoresIn___: src.
+	self assert: own notEmpty description: 'the module body carries no stores'.
+	self assert: (self ___plainCountOf___: '___curPos___ := ' in: src) > own size
+		description: 'the module body embeds no stores, so this proves nothing'.
+	self assert: (BaseException pythonPositionKindForMethod: m) equals: #curPos.
+	pos := BaseException pythonPositionsForMethod: m.
+	self assert: pos size equals: own size.
+	bodies := self ___defBodyLinesIn___: self ___stmtFixtureLines___.
+	self assert: bodies notEmpty.
+	pos do: [:p |
+		self deny: (bodies includes: (p at: 1))
+			description: 'a module-body position is inside a def body: ' , p printString].
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_send_sites_of_a_module_body_are_its_own
+	"The sends come from the compiled method, so a send that appears only in an
+	embedded method's source is not one of the module body's.  Every site lands
+	on a module-level line, in source order, and the plain call on the module's
+	last statement is among them."
+
+	| m sites srcLines bodies prev controlLine sel only |
+	m := self ___stmtModuleInit___.
+	sites := BaseException pythonSendSitesIn: m selector: nil.
+	self assert: sites notEmpty description: 'the module body made no sends'.
+	srcLines := self ___stmtFixtureLines___.
+	controlLine := (1 to: srcLines size)
+		detect: [:i |
+			((srcLines at: i) indexOfSubCollection: 'caller_line(''plain_call_control''') = 1]
+		ifNone: [nil].
+	self assert: controlLine notNil description: 'the fixture lost its control call'.
+	bodies := self ___defBodyLinesIn___: srcLines.
+	prev := 0.
+	sites do: [:s |
+		self assert: s size equals: 4.
+		self assert: (s at: 2) >= prev description: 'sites are not in source order'.
+		prev := s at: 2.
+		self assert: (s at: 3) notNil
+			description: 'a module-body send has no position: ' , s printString.
+		self deny: (bodies includes: ((s at: 3) at: 1))
+			description: 'a module-body send is placed in a def body: ' , s printString].
+	self assert: (sites detect: [:s | ((s at: 3) at: 1) = controlLine] ifNone: [nil]) notNil
+		description: 'no send on the control call''s line ' , controlLine printString.
+	"Filtering by selector answers exactly that selector's sites, and a String
+	names the same selector as a Symbol."
+	sel := (sites at: 1) at: 1.
+	only := BaseException pythonSendSitesIn: m selector: sel.
+	self assert: only size equals: (sites select: [:s | (s at: 1) == sel]) size.
+	only do: [:s | self assert: (s at: 1) == sel].
+	self assert: (BaseException pythonSendSitesIn: m selector: sel asString) size
+		equals: only size.
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_send_sites_on_the_ir_path
+	"What a text search cannot do at all: an IR method's source is the user's
+	Python, so there is no generated Smalltalk to search -- yet its sends still
+	have positions, with columns from the map, on the def's own lines."
+
+	importlib ___irCodegenSupported___ ifFalse: [^ self].
+	self ___assertSendSitesOf___: #'poly_local:' named: 'poly_local'
+		in: self ___irModule___ kind: #irSource
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_send_sites_on_the_text_path
+	self ___assertSendSitesOf___: #'poly_local:' named: 'poly_local'
+		in: self ___textModule___ kind: #curPos
+%
+
+category: 'Grail-Private'
+method: PythonCallSitePositionsTestCase
+___assertSendSitesOf___: aSelector named: aName in: aModule kind: aKind
+	"Every send site of the fixture's def aName has a position on one of the
+	def's own lines that agrees with pythonPositionForMethod:atSourceIndex:,
+	its node range holds it, and at least one site carries columns."
+
+	| m sites defLines first last |
+	m := aModule class compiledMethodAt: aSelector environmentId: 1.
+	self assert: (BaseException pythonPositionKindForMethod: m) equals: aKind.
+	sites := BaseException pythonSendSitesIn: m selector: nil.
+	self assert: sites notEmpty description: aName , ' made no sends'.
+	defLines := self ___fixtureLinesOfDef___: aName
+		in: (BaseException ___splitLinesOf___: self ___fixtureSource___).
+	first := (defLines at: 1) at: 1.
+	last := (defLines at: defLines size) at: 1.
+	sites do: [:s |
+		| pos range |
+		pos := s at: 3.
+		self assert: pos notNil description: 'a site without a position: ' , s printString.
+		self assert: ((pos at: 1) between: first and: last)
+			description: 'a site outside def ' , aName , ': ' , s printString.
+		self assert: (BaseException pythonPositionForMethod: m atSourceIndex: (s at: 2))
+			equals: pos.
+		range := s at: 4.
+		range ifNotNil: [
+			self assert: ((s at: 2) between: (range at: 1) and: (range at: 2))
+				description: 'a node range does not hold its send: ' , s printString]].
+	self assert: (sites detect: [:s | ((s at: 3) at: 2) notNil] ifNone: [nil]) notNil
+		description: 'no site of ' , aName , ' carried columns: ' , sites printString.
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_code_occurrences_skip_literals_comments_and_characters
+	"The lexer the own-store readers stand on.  Only the two stores in CODE
+	count: not one in a string (behind a doubled quote, which must not end the
+	string), not one in a comment, not one in a symbol, and a $' character
+	literal must not open a string that swallows the store after it."
+
+	| m src got |
+	m := '___curPos___ := '.
+	src := 'a := 1. ' , m , '5. s := ''it''''s ' , m , '8''. ' ,
+		(String with: $") , m , '7' , (String with: $") ,
+		' c := $''. ' , m , '6. d := $' , (String with: $") , '. e := #''' , m , '9''.'.
+	got := BaseException ___codeOccurrencesOf___: m in: src.
+	self assert: got size equals: 2.
+	self assert: ((BaseException ___parsePositionAt___: (got at: 1) + 16 in: src) at: 1)
+		equals: 5.
+	self assert: ((BaseException ___parsePositionAt___: (got at: 2) + 16 in: src) at: 1)
+		equals: 6.
+	"An unterminated string hides everything after it."
+	self assert: (BaseException ___codeOccurrencesOf___: m in: 'x := ''' , m , '1.') isEmpty.
+	"A pattern that itself contains a quote is lexed through, not skipped."
+	self assert: (BaseException ___codeOccurrencesOf___: 'f: '''
+			in: 'f: ''a''. ''f: ''''b''''''. f: ''c''') size
+		equals: 2.
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_the_source_index_api_does_not_over_claim
+	"nil and an empty Array, never a guess: for a method that is not generated
+	Python, and for an index outside the method's source."
+
+	| m |
+	m := Object compiledMethodAt: #printString otherwise: nil.
+	self assert: (BaseException pythonPositionForMethod: m atSourceIndex: 1) equals: nil.
+	self assert: (BaseException pythonSendSitesIn: m selector: nil) equals: #().
+	self assert: (BaseException pythonPositionForMethod: nil atSourceIndex: 1) equals: nil.
+	self assert: (BaseException pythonSendSitesIn: nil selector: nil) equals: #().
+	m := self ___textMethod___.
+	self assert: (BaseException pythonPositionForMethod: m atSourceIndex: 0) equals: nil.
+	self assert: (BaseException pythonPositionForMethod: m
+			atSourceIndex: m sourceString size + 1)
+		equals: nil.
+%
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_one_python_call_is_one_span_not_one_node_range
+	"Which Python call a send is comes from its position's PEP 657 span.  On the
+	text path ``iter(self._dict())'' sends _dict: twice -- the global-shadow
+	probe prints a builtin call's arguments once per branch -- from two
+	different node ranges, with one span.  ``self._dict().update(self._dict())''
+	is two calls, with two spans.  pythonSendSitesIn:selector:'s comment tells
+	consumers to key on the span; this holds it to that, on both paths.
+
+	The text arm's twin count is the positive control: if codegen stops
+	printing the probe twice there is nothing left to tell apart, and this
+	should be revisited rather than pass."
+
+	| arms |
+	arms := importlib ___irCodegenSupported___
+		ifTrue: [#(false true)]
+		ifFalse: [#(false)].
+	arms do: [:ir |
+		| name mod cls spansOf twins twoCalls |
+		name := ir ifTrue: ['send_site_twins_ir'] ifFalse: ['send_site_twins_text'].
+		[importlib @env1:modules removeKey: name asSymbol ifAbsent: [].
+		 self ___forgetCanonicalModule___: name.
+		 importlib ___irCodegenForce___: ir.
+		 mod := importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/send_site_twins.py')
+			name: name.
+		 cls := mod @env1:___pyAttrLoad___: #'SessionLike'.
+		 spansOf := [:sel | | sites |
+			sites := BaseException
+				pythonSendSitesIn: (cls compiledMethodAt: sel environmentId: 1)
+				selector: #'_dict'.
+			sites do: [:s |
+				self assert: (s at: 3) notNil
+					description: name , ' ' , sel , ': a site has no position'].
+			sites collect: [:s | (s at: 3) copyFrom: 1 to: 4]].
+		 twins := spansOf value: #'twins'.
+		 twoCalls := spansOf value: #'two_calls'.
+		 ir ifFalse: [
+			self assert: twins size >= 2
+				description: 'text codegen no longer prints the probe twin, so this proves nothing'].
+		 self assert: twins asSet size equals: 1
+			description: name , ': one call answered ' , twins printString.
+		 self assert: twoCalls asSet size equals: 2
+			description: name , ': two calls answered ' , twoCalls printString]
+			ensure: [
+				importlib ___irCodegenEnabledInvalidate___.
+				importlib @env1:modules removeKey: name asSymbol ifAbsent: [].
+				self ___forgetCanonicalModule___: name]].
 %

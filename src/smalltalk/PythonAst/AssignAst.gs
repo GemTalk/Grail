@@ -385,7 +385,7 @@ printSmalltalkOn: aStream
 			]
 		]
 	].
-	aStream nextPutAll: '] value.'.
+	aStream nextPutAll: '] @env0:value.'.
 %
 
 
@@ -448,7 +448,7 @@ printSmalltalkTupleStoreOn: aStream target: tgt
 	aStream nextPutAll: '[| '; nextPutAll: holder; nextPutAll: ' | '; nextPutAll: holder; nextPutAll: ' := '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	self emitUnpackCoercionAndStoresOn: aStream elts: tgt elts holder: holder.
-	aStream nextPutAll: '] value.'
+	aStream nextPutAll: '] @env0:value.'
 %
 
 
