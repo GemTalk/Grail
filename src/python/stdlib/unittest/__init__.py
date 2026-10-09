@@ -1223,8 +1223,31 @@ class TestSuite:
 
 # ---- loader ----------------------------------------------------------------
 
+class _FailedLoadTests(TestCase):
+    """CPython's _FailedTest, for a module whose load_tests raised: one test,
+    named after the module, whose run re-raises what load_tests did.  So a
+    broken hook is scored as an error rather than as a module with no tests."""
+
+    def __init__(self, module_name, exception):
+        TestCase.__init__(self, "runTest")
+        self._module_name = module_name
+        self._exception = exception
+
+    def runTest(self):
+        raise self._exception
+
+    def id(self):
+        return "unittest.loader._FailedTest." + self._module_name
+
+
 class TestLoader:
     testMethodPrefix = "test"
+    suiteClass = TestSuite
+
+    def __init__(self):
+        # What CPython's loader records about modules it could not load: the
+        # message of a load_tests that raised, for one.
+        self.errors = []
 
     def getTestCaseNames(self, testCaseClass):
         probe = testCaseClass("setUp")
@@ -1244,7 +1267,7 @@ class TestLoader:
             tests.append(testCaseClass(name))
         return TestSuite(tests)
 
-    def loadTestsFromModule(self, module):
+    def loadTestsFromModule(self, module, *, pattern=None):
         suite = TestSuite()
         for name in dir(module):
             # Skip dunders: a TestCase subclass never has a dunder
@@ -1268,6 +1291,20 @@ class TestLoader:
                 continue
             if issubclass(obj, TestCase):
                 suite.addTests(self.loadTestsFromTestCase(obj))
+        # The load_tests protocol, as CPython's loader runs it: the module gets
+        # the suite found so far and answers the suite to run.  This is how a
+        # module adds its doctests (``tests.addTest(doctest.DocTestSuite())'').
+        # Without it every such module was scored on its TestCase methods
+        # alone, and a pure doctest module scored SKIP with no tests.
+        load_tests = getattr(module, "load_tests", None)
+        if load_tests is not None:
+            try:
+                return load_tests(self, suite, pattern)
+            except Exception as e:
+                import traceback
+                self.errors.append("Failed to call load_tests:\n%s"
+                                   % (traceback.format_exc(),))
+                return TestSuite([_FailedLoadTests(module.__name__, e)])
         return suite
 
 

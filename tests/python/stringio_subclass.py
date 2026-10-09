@@ -109,6 +109,59 @@ def _gh130163():
 
 r['gh130163'] = outcome(_gh130163)
 
+# --- an override that calls the base ------------------------------------------
+#
+# read/readline/truncate/seek have a short form that supplies the default.
+# Grail's used to supply it by self-sending the long form, which a Python
+# override of the method ALSO replaces -- so an override that calls the base
+# unbound, as doctest's _SpoofOut.truncate does, re-entered itself until
+# RecursionError.  Each override here tags what it returns, so the result
+# shows the override ran exactly once and the base did the work.
+
+
+class CallsBase(io.StringIO):
+    def read(self, size=-1):
+        return ('read', io.StringIO.read(self))
+
+    def readline(self, size=-1):
+        return ('readline', io.StringIO.readline(self))
+
+    def truncate(self, size=None):
+        return ('truncate', io.StringIO.truncate(self))
+
+    def seek(self, pos, whence=0):
+        return ('seek', io.StringIO.seek(self, pos))
+
+
+class CallsBaseBytes(io.BytesIO):
+    def read(self, size=-1):
+        return ('read', io.BytesIO.read(self))
+
+    def readline(self, size=-1):
+        return ('readline', io.BytesIO.readline(self))
+
+    def truncate(self, size=None):
+        return ('truncate', io.BytesIO.truncate(self))
+
+    def seek(self, pos, whence=0):
+        return ('seek', io.BytesIO.seek(self, pos))
+
+
+def _truncated(cls, data):
+    s = cls(data)
+    s.seek(2)
+    return s.truncate(), s.getvalue()
+
+
+r['override_read'] = outcome(lambda: CallsBase('ab\ncd').read())
+r['override_readline'] = outcome(lambda: CallsBase('ab\ncd').readline())
+r['override_truncate'] = outcome(lambda: _truncated(CallsBase, 'abcdef'))
+r['override_seek'] = outcome(lambda: CallsBase('abcdef').seek(3))
+r['override_bytes_read'] = outcome(lambda: CallsBaseBytes(b'ab\ncd').read())
+r['override_bytes_readline'] = outcome(lambda: CallsBaseBytes(b'ab\ncd').readline())
+r['override_bytes_truncate'] = outcome(lambda: _truncated(CallsBaseBytes, b'abcdef'))
+r['override_bytes_seek'] = outcome(lambda: CallsBaseBytes(b'abcdef').seek(3))
+
 # --- controls ------------------------------------------------------------------
 #
 # The routing must not disturb the base classes, and a subclass that DOES
@@ -132,6 +185,14 @@ EXPECTED = {
     'gh130163': "ok -> 'input'",
     'isinstance_of_base': 'ok -> True',
     'one_argument_is_enough': "ok -> 'm'",
+    'override_bytes_read': "ok -> ('read', b'ab\\ncd')",
+    'override_bytes_readline': "ok -> ('readline', b'ab\\n')",
+    'override_bytes_seek': "ok -> ('seek', 3)",
+    'override_bytes_truncate': "ok -> (('truncate', 2), b'ab')",
+    'override_read': "ok -> ('read', 'ab\\ncd')",
+    'override_readline': "ok -> ('readline', 'ab\\n')",
+    'override_seek': "ok -> ('seek', 3)",
+    'override_truncate': "ok -> (('truncate', 2), 'ab')",
     'plain_bytesio': "ok -> b'k'",
     'plain_stringio': "ok -> 'j\\n'",
     'str_closed_flag': 'ok -> False',

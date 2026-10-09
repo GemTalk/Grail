@@ -406,7 +406,12 @@ _exec: positional kw: kwargs
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
-		ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec
+		"A code object compiled in ``single'' mode shows the value of each
+		expression statement through sys.displayhook, as the REPL does and
+		doctest relies on; everything else runs as plain exec."
+		ModuleAst @env0:evaluateSource: source usingModuleScope: scope
+			as: (((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
+					@env0:= #'single') ifTrue: [#single] ifFalse: [#exec])
 			globalNamesInto: globalNames
 	] @env0:ensure: [
 		CallAst @env0:sourcePath: savedPath.
