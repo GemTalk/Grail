@@ -77,20 +77,22 @@ testNoDefault
 
 category: 'Grail-Tests - Session-Local State'
 method: ContextVarsTestCase
-testCurrentContextLivesInSessionTempsNotCommitted
-	"Regression: the current Context must live in SessionTemps, not in the
-	committed contextvars module.  It used to be a module global, so every gem
-	shared one Context and one _data dict: two sessions that each set a
-	ContextVar -- or did decimal arithmetic, whose context is a ContextVar --
-	collided on commit.  The two-session half is
-	tests/scripts/run_contextvars_session_test.sh; this checks the storage."
+testCurrentContextLivesOnTheThreadNotCommitted
+	"Regression: the current Context must live with the calling THREAD, not
+	in the committed contextvars module.  It used to be a module
+	global, so every gem shared one Context and one _data dict: two sessions
+	that each set a ContextVar -- or did decimal arithmetic, whose context is a
+	ContextVar -- collided on commit.  The two-session half is
+	tests/scripts/run_contextvars_session_test.sh; this checks the storage.
 
-	| cv ctx store |
+	Per THREAD now, as CPython's (see _thread >> _get_context): a thread
+	started by start_new_thread keeps it on its GsProcess, and the main thread
+	-- this test's -- in SessionTemps, since successive GCI calls need not run
+	on the same process."
+
+	| cv ctx |
 	cv := (importlib ___instance___) @env1:import_module: 'contextvars'.
 	ctx := cv @env1:_get_current_context.
-	store := SessionTemps current
-		at: #'___GrailSessionDict___contextvars' otherwise: nil.
-	self assert: store notNil.
-	self assert: (store @env1:__getitem__: 'current') == ctx.
+	self assert: (SessionTemps current at: #'GrailPyMainContext' otherwise: nil) == ctx.
 	self deny: ctx isCommitted.
 %

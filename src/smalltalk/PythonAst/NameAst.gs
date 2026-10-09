@@ -768,6 +768,17 @@ ___emitSmalltalkOn___: aStream
 	((self ___enclosingFuncDeclaresReservedParam___: id)
 		and: [self ___readsThroughClassCell___ not])
 		ifTrue: [
+		"A READ after ``del self'' is UnboundLocalError, as for any deleted
+		local -- the same guard the ordinary local branch below emits, so the
+		nilled transport temp is never handed out as None."
+		((ctx isKindOf: LoadAst) and: [self ___guardedLocalNeedsCheck___: id]) ifTrue: [
+			aStream
+				nextPut: $(;
+				nextPutAll: (NameAst ___transportIdentifierFor___: id);
+				nextPutAll: ' ifNil: [UnboundLocalError ___signalUnbound___: #';
+				nextPutAll: id;
+				nextPutAll: '])'.
+			^ self].
 		aStream nextPutAll: (NameAst ___transportIdentifierFor___: id).
 		^ self
 	].

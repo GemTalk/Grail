@@ -36,10 +36,9 @@
 # wrote the same Context._data dict -- a Write-Write on the first ContextVar.set
 # two sessions committed, and with decimal (whose context is a ContextVar and
 # whose every rounding op mutates its flags) on ordinary arithmetic.  It lives
-# in SessionTemps instead, behind _current() / _set_current(), and each session
-# makes its own top context on first use (docs/Concurrency.md).
-
-from _grail_session import SessionDict
+# on the calling thread's GsProcess instead, behind _current() / _set_current(),
+# and each thread makes its own top context on first use (docs/Concurrency.md;
+# see _current below for why per thread rather than per session).
 
 
 class _Missing:
@@ -225,24 +224,33 @@ class ContextVar:
         return '<ContextVar name=%r>' % (self._name,)
 
 
-# The current context, per session.  When nothing has been entered it is this
-# session's TOP context, made on first use -- writes outside any run() land
-# there and stay for the life of the session, which is what non-async callers
-# (werkzeug's proxy storage) saw from the old single-slot stub.  Nothing here
-# is committed, so a fresh session starts with an empty top context.
-_state = SessionDict("contextvars")
+# The current context, per THREAD, as CPython's.  When nothing has been
+# entered it is the thread's TOP context, made on first use -- writes outside
+# any run() land there and stay for the life of the thread (for the main thread,
+# the session), which is what non-async callers (werkzeug's proxy storage) saw
+# from the old single-slot stub.  It lives on the thread's GsProcess (see
+# _thread._get_context), so nothing is committed, a fresh session starts with
+# an empty top context, and a new thread starts with an empty one too -- the
+# default CPython documents (sys.flags.thread_inherit_context off).
+#
+# It was one slot per SESSION, and with real threads that was wrong both ways:
+# a worker green thread that ran while a task was inside Context.run saw the
+# task's context as its own (and wrote into it), and a new thread inherited its
+# creator's.  anyio and asyncio.to_thread run a worker in a COPY via
+# Context.run, which only works when the worker's "current" is its own.
+from _thread import _get_context, _set_context
 
 
 def _current():
-    ctx = _state.get("current")
+    ctx = _get_context()
     if ctx is None:
         ctx = Context()
-        _state["current"] = ctx
+        _set_context(ctx)
     return ctx
 
 
 def _set_current(ctx):
-    _state["current"] = ctx
+    _set_context(ctx)
 
 
 def copy_context():

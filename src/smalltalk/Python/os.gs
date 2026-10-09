@@ -798,6 +798,17 @@ cpu_count
 
 category: 'Grail-Built-in Functions'
 method: os
+process_cpu_count
+	"os.process_cpu_count() (3.13) — the CPUs THIS process may use.  CPython
+	reads the affinity mask where the OS has one and otherwise answers
+	cpu_count(); a gem has no affinity mask, so it is cpu_count().
+	concurrent.futures' ThreadPoolExecutor sizes its default pool from it."
+
+	^ self cpu_count
+%
+
+category: 'Grail-Built-in Functions'
+method: os
 getpid
 	"os.getpid() — the current process id, i.e. this gem's OS process.
 

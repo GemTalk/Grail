@@ -590,3 +590,29 @@ async def wait(fs, *, timeout=None, return_when=ALL_COMPLETED):
         else:
             pending.add(f)
     return done, pending
+
+
+def run_coroutine_threadsafe(coro, loop):
+    """Submit a coroutine object to a given event loop.
+
+    Return a concurrent.futures.Future to access the result.  CPython's: the
+    caller is another (green) thread, so the coroutine is scheduled with
+    call_soon_threadsafe, which wakes the loop if it is waiting.
+    """
+    import concurrent.futures
+    if not _inspect.iscoroutine(coro):
+        raise TypeError('A coroutine object is required')
+    future = concurrent.futures.Future()
+
+    def callback():
+        try:
+            _futures._chain_future(ensure_future(coro, loop=loop), future)
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except BaseException as exc:
+            if future.set_running_or_notify_cancel():
+                future.set_exception(exc)
+            raise
+
+    loop.call_soon_threadsafe(callback)
+    return future

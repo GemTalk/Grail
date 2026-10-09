@@ -138,6 +138,19 @@ keeps its context in a `ContextVar` whose `flags` every rounding op mutates.
 (`_current()` / `_set_current()`); each session makes its own top context on
 first use, so nothing a library stores in a `ContextVar` is committed.
 
+**Since moved to the thread (2026-10-08).** One slot per session was still
+shared by every green thread in it, which CPython's per-thread rule forbids: a
+worker that ran while a task was inside `Context.run` saw the task's context
+as its own and wrote into it, and a new thread inherited its creator's
+context instead of starting empty. The current context is now per thread
+(`_thread._get_context` / `_set_context`): a thread started by
+`start_new_thread` keeps it on its own GsProcess (`environmentAt:
+#GrailPyContext`), and the MAIN thread keeps it in SessionTemps
+(`#GrailPyMainContext`), because successive GCI calls need not run on the same
+process and its context must last the session. Both resolve through
+`importlib ___pythonThreadOf___:`, so a generator body shares its resumer's.
+Neither is committed, so the fix above stands.
+
 **A committed `SrePattern`'s recompiled pointer.** A committed pattern faults
 into a new session with a NULL `cPointer` and recompiles on first use
 (`SrePattern >> cPtrAddress`), which used to store the new pointer back into
@@ -149,7 +162,7 @@ collided. **Fixed:** the recompiled pointer goes into a SessionTemps map
 **Regression tests:** `tests/scripts/run_contextvars_session_test.sh` (two RPC
 sessions, overlapping transactions: one shared `ContextVar`, then `Decimal`
 arithmetic; every commit must succeed and a fresh session must see neither
-value nor flags), `ContextVarsTestCase >> testCurrentContextLivesInSessionTempsNotCommitted`,
+value nor flags), `ContextVarsTestCase >> testCurrentContextLivesOnTheThreadNotCommitted`,
 `SreTestCase >> testCommittedPatternRecompileIsSessionLocal`.
 
 ### Tier 3 — Acceptable as committed state
@@ -203,7 +216,7 @@ use a shorter `GrailXxx` form. Keys as of the 2026-06-08 audit:
 | `#'___GrailSecretsGenerator___'` | `secrets` | Per-session CSPRNG state |
 | `#PythonStoreRootsMap` | `PythonStore` | IncRef'd PyObject roots map |
 | `#'___GrailSessionDict___*'` | `gemstone` | Per-session `SessionDict` backing stores (one key per dict) |
-| `#'___GrailSessionDict___contextvars'` | `contextvars` | This session's current `Context` (key `"current"`) |
+| `#GrailPyMainContext` | `contextvars` (`_thread._get_context`) | The main thread's current `Context`; a started thread's lives on its GsProcess |
 | `#GrailSrePatternPointers` | `SrePattern` | Per-session recompiled C pointers for committed regex patterns |
 | `#'___ExecBlockAttrsTable___'` | `ExecBlockAttrs` | Per-session exec-block `__dict__` (user attributes) |
 | `#'___ExecBlockSlotsTable___'` | `ExecBlockAttrs` | Per-session exec-block SLOTS (`__name__`, `__qualname__`, `__module__`, `__doc__`, `__annotations__`, `__type_params__`) — kept out of `__dict__` so `functools.update_wrapper`'s `__dict__` merge doesn't copy Grail's def-time stamps |
