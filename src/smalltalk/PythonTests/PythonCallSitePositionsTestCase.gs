@@ -599,3 +599,54 @@ test_the_source_index_api_does_not_over_claim
 			atSourceIndex: m sourceString size + 1)
 		equals: nil.
 %
+
+category: 'Grail-Tests-CallSitePositions'
+method: PythonCallSitePositionsTestCase
+test_one_python_call_is_one_span_not_one_node_range
+	"Which Python call a send is comes from its position's PEP 657 span.  On the
+	text path ``iter(self._dict())'' sends _dict: twice -- the global-shadow
+	probe prints a builtin call's arguments once per branch -- from two
+	different node ranges, with one span.  ``self._dict().update(self._dict())''
+	is two calls, with two spans.  pythonSendSitesIn:selector:'s comment tells
+	consumers to key on the span; this holds it to that, on both paths.
+
+	The text arm's twin count is the positive control: if codegen stops
+	printing the probe twice there is nothing left to tell apart, and this
+	should be revisited rather than pass."
+
+	| arms |
+	arms := importlib ___irCodegenSupported___
+		ifTrue: [#(false true)]
+		ifFalse: [#(false)].
+	arms do: [:ir |
+		| name mod cls spansOf twins twoCalls |
+		name := ir ifTrue: ['send_site_twins_ir'] ifFalse: ['send_site_twins_text'].
+		[importlib @env1:modules removeKey: name asSymbol ifAbsent: [].
+		 self ___forgetCanonicalModule___: name.
+		 importlib ___irCodegenForce___: ir.
+		 mod := importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/send_site_twins.py')
+			name: name.
+		 cls := mod @env1:___pyAttrLoad___: #'SessionLike'.
+		 spansOf := [:sel | | sites |
+			sites := BaseException
+				pythonSendSitesIn: (cls compiledMethodAt: sel environmentId: 1)
+				selector: #'_dict'.
+			sites do: [:s |
+				self assert: (s at: 3) notNil
+					description: name , ' ' , sel , ': a site has no position'].
+			sites collect: [:s | (s at: 3) copyFrom: 1 to: 4]].
+		 twins := spansOf value: #'twins'.
+		 twoCalls := spansOf value: #'two_calls'.
+		 ir ifFalse: [
+			self assert: twins size >= 2
+				description: 'text codegen no longer prints the probe twin, so this proves nothing'].
+		 self assert: twins asSet size equals: 1
+			description: name , ': one call answered ' , twins printString.
+		 self assert: twoCalls asSet size equals: 2
+			description: name , ': two calls answered ' , twoCalls printString]
+			ensure: [
+				importlib ___irCodegenEnabledInvalidate___.
+				importlib @env1:modules removeKey: name asSymbol ifAbsent: [].
+				self ___forgetCanonicalModule___: name]].
+%

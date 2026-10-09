@@ -7712,10 +7712,17 @@ pythonSendSitesIn: aMethod selector: aSelectorOrNil
 	  position     pythonPositionForMethod: aMethod atSourceIndex: sourceIndex,
 	               the 5-element Array, or nil.
 	  nodeRange    { start. end } of the innermost position-map range holding
-	               the send, or nil.  The range of the PYTHON NODE the send
-	               belongs to, so two sends with equal ranges compile one Python
-	               expression -- the global-shadow probe, for one, prints a
-	               builtin call's arguments once per branch.
+	               the send, or nil -- in aMethod's own source coordinates.
+
+	WHICH PYTHON CALL A SEND IS: compare the first four elements of position
+	(beginLine. colno. endLine. endColno), NOT nodeRange.  The text path can
+	compile one Python call more than once: the global-shadow probe prints a
+	builtin call's arguments once per branch, so ``iter(self._dict())'' sends
+	_dict: twice, from two DIFFERENT node ranges (measured: 245-256 and
+	364-375), with one span (6:20-6:32).  Two genuine calls in one statement,
+	``self._dict().update(self._dict())'', differ in their columns.  Equal
+	nodeRanges do mean one node, but one node need not mean equal nodeRanges.
+	PythonCallSitePositionsTestCase pins both cases on both paths.
 
 	Answers an empty Array for a method that is not generated Python.
 
