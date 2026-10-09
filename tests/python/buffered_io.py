@@ -288,6 +288,15 @@ def a_split_multibyte_character():
     return [''.join(out) == text, max(raw.read_sizes) <= 4]
 
 
+def newline_decoder_holds_a_split_crlf():
+    # io.IncrementalNewlineDecoder is what TextIOWrapper reads through, and
+    # doctest imports it by name.  The case only it gets right is a '\r\n'
+    # split across two decode calls: the '\r' must be held back, or it is
+    # translated to '\n' on its own and the '\n' after it doubles the line.
+    d = io.IncrementalNewlineDecoder(None, translate=True)
+    return [d.decode('a\r'), d.decode('\nb\rc', final=True), d.newlines]
+
+
 r = {
     'abcs_are_real_classes': abcs_are_real_classes(),
     'iobase_protocol': iobase_protocol(),
@@ -309,6 +318,7 @@ r = {
     'text_encoding_is_there': text_encoding_is_there(),
     'text_over_a_buffer': text_over_a_buffer(),
     'a_split_multibyte_character': a_split_multibyte_character(),
+    'newline_decoder_holds_a_split_crlf': newline_decoder_holds_a_split_crlf(),
 }
 
 
@@ -334,6 +344,7 @@ EXPECTED = {
     'text_encoding_is_there': [True, 'latin-1'],
     'text_over_a_buffer': ['GET /x HTTP/1.1\n', True, '\n'],
     'a_split_multibyte_character': [True, True],
+    'newline_decoder_holds_a_split_crlf': ['a', '\nb\nc', ('\r', '\r\n')],
 }
 
 

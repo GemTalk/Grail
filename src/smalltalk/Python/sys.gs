@@ -1261,13 +1261,21 @@ settrace: tracefunc
 category: 'Grail-Built-in Functions'
 method: sys
 displayhook: value
-	"displayhook(value) - print value to stdout."
-	| stdoutStream |
-	value == None ifFalse: [
-		stdoutStream := GsFile @env0:stdout.
-		stdoutStream @env0:nextPutAll: value printString.
-		stdoutStream @env0:lf.
-	].
+	"displayhook(value) -- CPython's: nothing for None; otherwise builtins._
+	is cleared, repr(value) and a newline go to sys.stdout, and builtins._ is
+	set to the value.
+
+	It used to write the Smalltalk printString straight to the gem's stdout,
+	so a REDIRECTED sys.stdout -- doctest's _SpoofOut, captured_stdout() --
+	never saw anything, and the text was not the repr anyway.  Writing through
+	print() is what fixes the first: print resolves sys.stdout at call time."
+
+	| b |
+	value == None ifTrue: [^ None].
+	b := builtins @env1:instance.
+	b @env1:___pyAttrStore___: #'_' put: None.
+	b @env1:_print: { b @env1:repr: value } kw: nil.
+	b @env1:___pyAttrStore___: #'_' put: value.
 	^ None
 %
 

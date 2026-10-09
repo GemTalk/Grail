@@ -69,7 +69,7 @@ BufferedIoTestCase category: 'Grail-SUnit'
 ! and text-mode makefile works.  The last three tests are that stack.
 !
 ! Fixture: tests/python/buffered_io.py (self-verifying under CPython 3.14.6 --
-! all 20 checks pass there unchanged, which is what makes them evidence; there
+! all 21 checks pass there unchanged, which is what makes them evidence; there
 ! is no XFAIL left).
 ! ===============================================================================
 
@@ -333,4 +333,18 @@ testAMultibyteCharacterSplitAcrossFills
 
 	self assert: (self reprAt: 'a_split_multibyte_character')
 		equals: '[True, True]'.
+%
+
+! ---- io.IncrementalNewlineDecoder ---------------------------------------------
+
+category: 'Grail-Tests'
+method: BufferedIoTestCase
+testNewlineDecoderHoldsASplitCrlf
+	"io.IncrementalNewlineDecoder is _pyio's, through a type accessor like the
+	ABCs above.  doctest imports it by name, so without it ``import doctest''
+	failed.  The case only a real one gets right is a CRLF split across two
+	decode calls: the CR is held back rather than translated on its own."
+
+	self assert: (self reprAt: 'newline_decoder_holds_a_split_crlf')
+		equals: '[''a'', ''\nb\nc'', (''\r'', ''\r\n'')]'.
 %

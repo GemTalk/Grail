@@ -188,7 +188,7 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind globa
 	exactly that split.  aSetOrNil is nil for the callers that do not care,
 	which skips the walk entirely."
 
-	| module symbolList |
+	| module |
 	"Re-raise a PARSER SyntaxError so the Python ``str(e)'' carries its
 	message.  The env-0 parser can set only GemStone's messageText;
 	___signal___: populates the ``args'' tuple BaseException>>__str__ reads.
@@ -205,6 +205,23 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind globa
 	module := [self parseSource: sourceString]
 		on: SyntaxError
 		do: [:ex | self ___resignalSyntaxError___: ex].
+	"compile(src, f, 'single'): every expression statement shows its value.
+	Otherwise it is an exec, which is how it is compiled and run below."
+	aKind == #single ifTrue: [
+		module ___displayInteractiveExpressions___.
+		^ self evaluateParsed: module usingModuleScope: aSymbolDictionary
+			as: #exec globalNamesInto: aSetOrNil].
+	^ self evaluateParsed: module usingModuleScope: aSymbolDictionary
+		as: aKind globalNamesInto: aSetOrNil
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+evaluateParsed: module usingModuleScope: aSymbolDictionary as: aKind globalNamesInto: aSetOrNil
+	"The rest of evaluateSource:usingModuleScope:as:globalNamesInto:, from
+	the parsed module on."
+
+	| symbolList |
 	module useTempsForBlock: false.
 	"EXPAND ``from X import *'' BEFORE the scope is built, because the expansion
 	DECLARES the names it found and ensureModuleScope: is what turns declared
@@ -1393,6 +1410,59 @@ isSingleExpressionBody
 	| statements |
 	statements := body body.
 	^ statements size = 1 and: [statements first isKindOf: ExprAst]
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+___displayInteractiveExpressions___
+	"What compile(src, f, 'single') means: each EXPRESSION STATEMENT in the
+	interactive statement shows its value, through sys.displayhook -- which is
+	how the REPL echoes ``>>> 1 + 1'' and how doctest sees an example's output.
+	It reaches statements nested in compound ones (``for i in range(3): i''
+	shows three values) but not a def's or a class's body, which runs later in
+	a scope of its own.
+
+	Done by rewriting each such statement's value to
+	``__import__('sys').displayhook(value)'' before codegen, so neither the
+	text nor the IR emitter has to know about the mode."
+
+	self ___displayExpressionsIn___: body
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+___displayExpressionsIn___: node
+	"Same walk as ModuleAst class >> collectGlobalNamesFrom:into:, stopping at
+	a def, a class and any expression -- an ExprAst is a statement, so none
+	sits below an expression."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___displayExpressionsIn___: each].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	((node isKindOf: FunctionDefAst) or: [(node isKindOf: ClassDefAst)
+		or: [node isKindOf: ExpressionAst]]) ifTrue: [^ self].
+	(node isKindOf: ExprAst) ifTrue: [^ self ___displayValueOf___: node].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___displayExpressionsIn___: (node instVarAt: i)]]
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+___displayValueOf___: anExprAst
+	"anExprAst's value becomes the argument of a displayhook call, parsed from
+	a template so the node is built exactly as the parser builds one.  The
+	value keeps its own positions, so an error in it still reports its line."
+
+	| call |
+	call := (ModuleAst parseSource: '__import__(''sys'').displayhook(None)')
+		body body first value.
+	call arguments at: 1 put: anExprAst value.
+	anExprAst value: call.
+	call setParent: anExprAst
 %
 
 category: 'Grail-accessors'

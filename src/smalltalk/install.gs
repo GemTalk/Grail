@@ -853,6 +853,7 @@ run
 	at: #'CompileAndEvalArgumentsTestCase' put: nil;
 	at: #'CompileCodeObjectTestCase' put: nil;
 	at: #'CompileOptimizeTestCase' put: nil;
+	at: #'CompileSingleModeTestCase' put: nil;
 	at: #'CompileTopLevelAwaitTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
 	at: #'CompoundStatementExtentTestCase' put: nil;
@@ -2350,6 +2351,7 @@ input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
 input src/smalltalk/PythonTests/CompileAndEvalArgumentsTestCase.gs
 input src/smalltalk/PythonTests/CompileCodeObjectTestCase.gs
 input src/smalltalk/PythonTests/CompileOptimizeTestCase.gs
+input src/smalltalk/PythonTests/CompileSingleModeTestCase.gs
 input src/smalltalk/PythonTests/CompileTopLevelAwaitTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
 input src/smalltalk/PythonTests/CompoundStatementExtentTestCase.gs
