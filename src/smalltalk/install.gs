@@ -1041,6 +1041,7 @@ run
 	at: #'GenericClassSubscriptTestCase' put: nil;
 	at: #'GenexpLazinessTestCase' put: nil;
 	at: #'GetattributeHookTestCase' put: nil;
+	at: #'GetattrProbeTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
 	at: #'GetpassTestCase' put: nil;
 	at: #'GlobalBindingFormsTestCase' put: nil;
@@ -2540,6 +2541,7 @@ input src/smalltalk/PythonTests/GenericAndAbcBasesTestCase.gs
 input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
 input src/smalltalk/PythonTests/GenexpLazinessTestCase.gs
 input src/smalltalk/PythonTests/GetattributeHookTestCase.gs
+input src/smalltalk/PythonTests/GetattrProbeTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs
 input src/smalltalk/PythonTests/GetpassTestCase.gs
 input src/smalltalk/PythonTests/GlobalBindingFormsTestCase.gs

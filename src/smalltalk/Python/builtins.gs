@@ -5551,7 +5551,7 @@ hasattr: anObject _: aName
 	___requireAttrName___:."
 	self ___requireAttrName___: aName.
 
-	^ [[(self ___attrLoad___: anObject named: aName).
+	^ [[(self ___probingAttr___: anObject named: aName).
 	    true]
 		@env0:on: AttributeError do: [:___ex___ | false]]
 		@env0:on: Error do: [:___ex___ | false]
@@ -5579,6 +5579,24 @@ ___attrLoad___: anObject named: aName
 					ex @env0:return: (anObject ___pyAttrLoad___:
 						(self ___attrNameSymbol___: aName for: anObject))]]].
 	^ anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___probingAttr___: anObject named: aName
+	"___attrLoad___:named: for a caller that will CATCH the miss -- getattr with a
+	default, hasattr.  Publishes the (object, name) pair for the duration, so the
+	AttributeError for exactly that miss skips the raise-time frame snapshot,
+	which nothing will ever render (BaseException>>___captureFrameLocalsIfSuggestible___).
+	The previous pair is restored on the way out, so a probe nested inside a
+	property getter or a __getattr__ hook leaves the outer one intact."
+
+	| temps prev |
+	temps := SessionTemps @env0:current.
+	prev := temps @env0:at: #'GrailAttrProbe' otherwise: nil.
+	temps @env0:at: #'GrailAttrProbe' put: { anObject. aName }.
+	^ [self ___attrLoad___: anObject named: aName]
+		@env0:ensure: [temps @env0:at: #'GrailAttrProbe' put: prev]
 %
 
 category: 'Grail-Built-in Functions'
@@ -5625,7 +5643,7 @@ _getattr: positional kw: kwargs
 	(positional @env0:size) @env0:>= 3 ifTrue: [
 		| default |
 		default := positional @env0:at: 3.
-		^ [(self ___attrLoad___: anObject named: aName)]
+		^ [(self ___probingAttr___: anObject named: aName)]
 			@env0:on: AttributeError do: [:ex | ex @env0:return: default]
 	].
 	^ (self ___attrLoad___: anObject named: aName)
