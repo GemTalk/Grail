@@ -2761,6 +2761,10 @@ len: anObject
 			''' object cannot be interpreted as an integer')].
 	result @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: '__len__() should return >= 0'].
+	"Only a LargeInteger can be too big: sys.maxsize is 2^60-1, the largest
+	SmallInteger.  Reading it is an attribute load inside a handler, which
+	was most of the cost of every len() (#1214)."
+	(result @env0:class @env0:== SmallInteger) ifTrue: [^ result].
 	result @env0:> (self ___maxIndexSize___) ifTrue: [
 		^ OverflowError ___signal___:
 			'cannot fit ''int'' into an index-sized integer'].
