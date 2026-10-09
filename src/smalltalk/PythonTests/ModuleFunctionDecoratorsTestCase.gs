@@ -103,3 +103,39 @@ testInstanceDecoratorIsApplied
 	self assert: (testModule @env1:___pyAttrLoad___: #'tagged_result')
 		equals: '[t] go'.
 %
+
+category: 'Grail-Tests'
+method: ModuleFunctionDecoratorsTestCase
+testARecursingDecoratorRaisesRecursionError
+	"A decorator is applied inside a handler that catches everything, so that a
+	decorator Grail cannot apply leaves the def undecorated (issue #1369).  The
+	handler also caught the stack running out, both as the VM's raw warning and
+	as the RecursionError it becomes, so a decorator that recursed was silently
+	dropped where CPython raises RecursionError.  This was measured at the
+	module-level, class-body method and property-setter sites, on both codegen
+	paths.  The class decorator and a decorated nested def were already right
+	and are controls.
+
+	See tests/python/decorator_recursion_error.py (CPython 3.14's values) and
+	its helper, which holds the top-level def, since only a top-level def
+	reaches the module-level emitter."
+
+	| mod results expected b |
+	importlib @env1:modules removeKey: #'decorator_recursion_error' ifAbsent: [].
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/decorator_recursion_error.py')
+		name: 'decorator_recursion_error'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 b := (Python at: #'builtins') @env1:instance.
+	 #( 'module_level' 'method_decorator' 'property_setter_decorator'
+	    'class_decorator' 'nested_def_decorator' 'plain_recursion_after' ) do: [:k |
+		| got want |
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'decorator_recursion_error' ifAbsent: [].
+			importlib @env1:modules removeKey: #'decorator_recursion_helper' ifAbsent: []]
+%

@@ -3493,8 +3493,9 @@ ___printDecoratedProperty___: aName on: aStream siblingNames: siblingNames
 		on: aStream siblingNames: siblingNames.
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass].'; lf;
 		nextPutAll: '	'.
+	self ___printDecoratorHandlerPassOn___: aStream.
+	aStream nextPutAll: '.'; lf; nextPutAll: '	'.
 	self ___printPropertyStore___: aName accessors: byKind decorated: false
 		on: aStream siblingNames: siblingNames.
 	aStream nextPutAll: '].'; lf
