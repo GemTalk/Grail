@@ -135,6 +135,22 @@ testTheGh130163Shape
 	self assertMatchesCPythonAt: 'gh130163'.
 %
 
+category: 'Grail-Tests - an override that calls the base'
+method: StringIOSubclassTestCase
+testAnOverrideThatCallsTheBaseRunsOnce
+	"read/readline/truncate/seek supply their default argument in a short
+	form, and Grail's used to do it by self-sending the long form -- which a
+	Python override replaces too.  So ``io.StringIO.truncate(self)'' inside an
+	override of truncate re-entered the override until RecursionError; that is
+	what doctest's _SpoofOut does.  Each override tags its result, so a match
+	shows it ran once and the base did the work."
+
+	#('override_read' 'override_readline' 'override_truncate' 'override_seek'
+	  'override_bytes_read' 'override_bytes_readline' 'override_bytes_truncate'
+	  'override_bytes_seek')
+		do: [:key | self assertMatchesCPythonAt: key].
+%
+
 category: 'Grail-Tests - Controls'
 method: StringIOSubclassTestCase
 testTheBaseClassesAreUndisturbed
@@ -156,5 +172,5 @@ testEveryCheckIsPresentAndAgreesWithCPython
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '16 checks, 0 disagreeing [], keys match: True'
+		equals: '24 checks, 0 disagreeing [], keys match: True'
 %
