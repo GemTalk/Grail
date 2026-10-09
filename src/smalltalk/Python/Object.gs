@@ -18104,7 +18104,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	operator, or an explicit ``k.m()''.  Reason about new branches here
 	from that, not from the sentence above."
 
-	| s md cls binOp clsMeth metaMeth varargsSel |
+	| s has cls binOp clsMeth metaMeth varargsSel |
 	envId = 1 ifFalse: [
      ^ MessageNotUnderstood new
          receiver: self selector: aSelector args: anArray envId: envId ; 
@@ -18112,7 +18112,13 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	[:rec | rec == #'___noRecover___' ifFalse: [^ rec]] value: (self ___pyattrRecover___: aSelector args: anArray).
 	s := aSelector asString.
 	cls := self class.
-	md := cls methodDictForEnv: 1.
+	"Whether the class's OWN env-1 methods hold a selector.  Asked of the class,
+	not of ``cls methodDictForEnv: 1'': that builds a merged COPY of the whole
+	method dictionary, and this handler runs on every env-1 miss -- every
+	``if x:'' on an object without __bool__ took it, and in an ElementTree
+	parse the copies were a fifth of the time (#1214).  A String probe also
+	interns nothing: includesSelector: looks the Symbol up, never creates it."
+	has := [:sel | cls includesSelector: sel environmentId: 1].
 	"A missing BINARY-OPERATOR dunder takes the Python protocol tail:
 	reflected dunder on the operand, else catchable TypeError.  Handled
 	HERE at dispatch-failure time (not as object-level default methods,
@@ -18310,7 +18316,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		colonIdx := s indexOf: $:.
 		baseName := s copyFrom: 1 to: colonIdx - 1.
 		varargsSel := ('_' , baseName , ':kw:') asSymbol.
-		(md includesKey: varargsSel) ifTrue: [
+		(has value: varargsSel) ifTrue: [
 			| wrapped |
 			wrapped := Array new: 2.
 			wrapped at: 1 put: anArray.
@@ -18354,15 +18360,15 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	with only ``foo:'' cannot satisfy a 0-arg call at all, so there is no
 	call to prefer."
 	varargsSel := ('_' , s , ':kw:') asSymbol.
-	(md includesKey: varargsSel) ifTrue: [
+	(has value: varargsSel) ifTrue: [
 		| wrapped |
 		wrapped := Array new: 2.
 		wrapped at: 1 put: anArray.
 		wrapped at: 2 put: nil.
 		^ self perform: varargsSel env: 1 withArguments: wrapped].
-	((md includesKey: (s , ':') asSymbol)
-		or: [(md includesKey: (s , ':_:') asSymbol)
-			or: [md includesKey: (s , ':_:_:') asSymbol]])
+	((has value: s , ':')
+		or: [(has value: s , ':_:')
+			or: [has value: s , ':_:_:']])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSelector].
 	"A 0-arg @classmethod called through an instance (``self.cm()'').
 	Grail resolves the ``obj.m'' / ``obj.m()'' ambiguity in favour of
