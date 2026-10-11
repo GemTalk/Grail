@@ -1103,6 +1103,7 @@ run
 	at: #'IntFloatOverflowTestCase' put: nil;
 	at: #'IntFromBytesIterableTestCase' put: nil;
 	at: #'IntNePuntsOnNotImplementedTestCase' put: nil;
+	at: #'IntOperandNotIndexTestCase' put: nil;
 	at: #'IntToBytesDefaultsTestCase' put: nil;
 	at: #'IpaddressFullModuleTestCase' put: nil;
 	at: #'IPv6AddressTestCase' put: nil;
@@ -2600,6 +2601,7 @@ input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
 input src/smalltalk/PythonTests/IntFloatOverflowTestCase.gs
 input src/smalltalk/PythonTests/IntFromBytesIterableTestCase.gs
 input src/smalltalk/PythonTests/IntNePuntsOnNotImplementedTestCase.gs
+input src/smalltalk/PythonTests/IntOperandNotIndexTestCase.gs
 input src/smalltalk/PythonTests/IntToBytesDefaultsTestCase.gs
 input src/smalltalk/PythonTests/IpaddressFullModuleTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs

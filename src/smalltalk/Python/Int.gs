@@ -711,8 +711,7 @@ __add__: other
 		pri := self ___numericReflectedFirst___: other selector: #'__radd__:'.
 		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:+ other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:+ (other __index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
@@ -722,8 +721,12 @@ __and__: other
 	"Bitwise AND."
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitAnd: other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitAnd: (other __index__)].
+	"An int subclass that overrides __rand__ answers first, as CPython's
+	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rand__:'.
+		pri == nil ifFalse: [^ pri]].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:bitAnd: (other __index__)].
 	^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'
 %
 
@@ -802,8 +805,7 @@ __divmod__: other
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := other]
 	ifFalse: [
-		((other @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+		(self ___isPyIntOperand___: other) ifTrue: [d := other __index__]].
 	d == nil ifTrue: [
 		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
 	^ tuple @env0:with: (self __floordiv__: d) with: (self __mod__: d)
@@ -834,10 +836,12 @@ category: 'Grail-Comparison'
 method: int
 __eq__: other
 	"Return self == other.  Compares as Smalltalk integers first;
-	on mismatch, if other declares itself integer-like via
-	``__index__`` (PEP 357 — e.g. NamedIntConstant from re._constants),
-	unwrap and re-compare.  This makes the reverse direction
-	``16 == LITERAL`` agree with ``LITERAL == 16``."
+	on mismatch, if other is a Python int in another shape -- a bool or an
+	int subclass's instance (e.g. NamedIntConstant from re._constants) --
+	unwrap it and re-compare.  This makes the reverse direction
+	``16 == LITERAL`` agree with ``LITERAL == 16''.  An object that merely
+	implements ``__index__'' is not an int and compares unequal, as in
+	CPython (object >> ___isPyIntOperand___:)."
 
 	| refOwner |
 	"complex first: kernel env-0 = would try GemStone Number coercion
@@ -846,8 +850,7 @@ __eq__: other
 	(other isKindOf: complex) ifTrue: [^ other __eq__: self].
 	(self @env0:= other) ifTrue: [^ true].
 	(other isKindOf: SmallInteger) ifTrue: [^ false].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:= (other __index__)
 	].
 	"A Python object carrying its OWN __eq__ (Fraction/Decimal/user Rational)
@@ -913,8 +916,7 @@ __floordiv__: other
 		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 			ZeroDivisionError ___signal___: 'division by zero'].
 		^ self ___floorQuotientOf___: self by: other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 			"The __index__ result is the real divisor, so it is what gets
 			checked: ``1 // False'' indexes to zero, and reached the kernel's
 			UNCATCHABLE ZeroDivide."
@@ -939,13 +941,12 @@ __format__: formatSpec
 category: 'Grail-Comparison'
 method: int
 __ge__: other
-	"Return self >= other.  Mirrors the __eq__: __index__ fallback
-	so the reverse direction ``10 >= MAXREPEAT`` works when
-	MAXREPEAT is a NamedIntConstant (or any other PEP 357 wrapper)."
+	"Return self >= other.  Mirrors the __eq__: unwrapping of a bool or an
+	int subclass's instance, so the reverse direction ``10 >= MAXREPEAT''
+	works when MAXREPEAT is a NamedIntConstant."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:>= other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:>= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
@@ -954,11 +955,10 @@ __ge__: other
 category: 'Grail-Comparison'
 method: int
 __gt__: other
-	"Return self > other.  Same __index__ fallback as __ge__:."
+	"Return self > other.  Same int unwrapping as __ge__:."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:> other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:> (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
@@ -1027,11 +1027,10 @@ __invert__
 category: 'Grail-Comparison'
 method: int
 __le__: other
-	"Return self <= other.  Same __index__ fallback as __ge__:."
+	"Return self <= other.  Same int unwrapping as __ge__:."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:<= other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:<= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
@@ -1055,8 +1054,12 @@ __lshift__: other
 				@env0:on: NumericError
 				do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity']].
 		^ self @env0:bitShift: other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [ | idx |
+	"An int subclass that overrides __rlshift__ answers first, as CPython's
+	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rlshift__:'.
+		pri == nil ifFalse: [^ pri]].
+	(self ___isPyIntOperand___: other) ifTrue: [ | idx |
 		idx := other __index__.
 		(idx @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
 		^ self @env0:bitShift: idx].
@@ -1066,11 +1069,10 @@ __lshift__: other
 category: 'Grail-Comparison'
 method: int
 __lt__: other
-	"Return self < other.  Same __index__ fallback as __ge__:."
+	"Return self < other.  Same int unwrapping as __ge__:."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:< other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:< (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
@@ -1101,8 +1103,7 @@ __mod__: other
 		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 			ZeroDivisionError ___signal___: 'division by zero'].
 		^ self @env0:\\ other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 			| idx |
 			idx := other __index__.
 			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [
@@ -1122,8 +1123,7 @@ __mul__: other
 		pri := self ___numericReflectedFirst___: other selector: #'__rmul__:'.
 		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:* other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:* (other __index__)].
 	"Sequence repetition is commutative: ``2 * 'ab''' / ``2 * [1]''
 	delegate to the sequence's own __mul__ (CPython reaches the
 	same result via NotImplemented -> str.__rmul__)."
@@ -1173,8 +1173,12 @@ __or__: other
 	"Bitwise OR."
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitOr: other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitOr: (other __index__)].
+	"An int subclass that overrides __ror__ answers first, as CPython's
+	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__ror__:'.
+		pri == nil ifFalse: [^ pri]].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:bitOr: (other __index__)].
 	^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'
 %
 
@@ -1198,6 +1202,10 @@ __pow__: other
 	(other @env0:isSpecial) ifFalse: [ | pri |
 		pri := self ___numericReflectedFirst___: other selector: #'__rpow__:'.
 		pri == nil ifFalse: [^ pri]].
+	"An int subclass's instance is a Number but not an Integer, so the branch
+	below took it for a non-integral exponent and answered a float:
+	``2 ** IntEnum.X'' was 8.0.  It is an int; raise to its value."
+	(other @env0:isKindOf: AbstractPyInt) ifTrue: [^ self __pow__: other __index__].
 	(other isKindOf: Number) ifTrue: [
 		"CPython: 0 raised to a NEGATIVE power is a ZeroDivisionError (an int
 		exponent coerces to float, so it is 0.0 ** -n -> division by zero),
@@ -1238,8 +1246,7 @@ __pow__: other
 			@env0:on: NumericError
 			do: [:ex |
 				OverflowError ___signal___: 'result exceeds Grail integer capacity']].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:raisedTo: (other __index__)].
 	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
 %
 
@@ -1249,6 +1256,12 @@ __pow__: other _: mod
 	"Raise to power with modulo."
 
 	| result |
+	"A bool or an int subclass's instance is an int here too: ``pow(2, True,
+	5)'' is 2.  The kernel's raisedTo: and \\ take neither."
+	((other @env0:isKindOf: Integer) not and: [self ___isPyIntOperand___: other])
+		ifTrue: [^ self __pow__: other __index__ _: mod].
+	((mod @env0:isKindOf: Integer) not and: [self ___isPyIntOperand___: mod])
+		ifTrue: [^ self __pow__: other _: mod __index__].
 	result := self @env0:raisedTo: other.
 	mod ifNotNil: [
 		result := result @env0:\\ mod.
@@ -1262,8 +1275,7 @@ __radd__: other
 	"Reverse add (other + self)."
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:+ self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:+ self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:+ self].
 	^ self ___rbinOpFallback___: other op: '+'
 %
 
@@ -1273,8 +1285,7 @@ __rand__: other
 	"Reverse bitwise AND (other & self)."
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitAnd: self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitAnd: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitAnd: self].
 	^ self ___rbinOpFallback___: other op: '&'
 %
 
@@ -1291,8 +1302,7 @@ __rdivmod__: other
 	n := nil.
 	(other isKindOf: Number) ifTrue: [n := other]
 	ifFalse: [
-		((other @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__') ifTrue: [n := other __index__]].
+		(self ___isPyIntOperand___: other) ifTrue: [n := other __index__]].
 	n == nil ifTrue: [^ self ___rbinOpFallback___: other op: 'divmod()'].
 	^ tuple @env0:with: (self __rfloordiv__: n) with: (self __rmod__: n)
 %
@@ -1315,8 +1325,7 @@ __rfloordiv__: other
 		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Number) ifTrue: [^ self ___floorQuotientOf___: other by: self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 			^ self ___floorQuotientOf___: (other __index__) by: self].
 	^ self ___rbinOpFallback___: other op: '//'
 %
@@ -1328,8 +1337,7 @@ __rlshift__: other
 
 	(self @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitShift: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitShift: self].
 	^ self ___rbinOpFallback___: other op: '<<'
 %
 
@@ -1342,8 +1350,7 @@ __rmod__: other
 		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:\\ self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:\\ self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:\\ self].
 	^ self ___rbinOpFallback___: other op: '%'
 %
 
@@ -1353,8 +1360,7 @@ __rmul__: other
 	"Reverse multiply (other * self)."
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:* self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:* self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:* self].
 	^ self ___rbinOpFallback___: other op: '*'
 %
 
@@ -1364,8 +1370,7 @@ __ror__: other
 	"Reverse bitwise OR (other | self)."
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitOr: self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitOr: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitOr: self].
 	^ self ___rbinOpFallback___: other op: '|'
 %
 
@@ -1412,8 +1417,7 @@ __rpow__: other
 	"Reverse power (other ** self)."
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:raisedTo: self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:raisedTo: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:raisedTo: self].
 	^ self ___rbinOpFallback___: other op: '**'
 %
 
@@ -1424,8 +1428,7 @@ __rrshift__: other
 
 	(self @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: (self @env0:negated)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitShift: (self @env0:negated)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitShift: (self @env0:negated)].
 	^ self ___rbinOpFallback___: other op: '>>'
 %
 
@@ -1437,8 +1440,12 @@ __rshift__: other
 	(other isKindOf: Integer) ifTrue: [
 		(other @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
 		^ self @env0:bitShift: (other @env0:negated)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [ | idx |
+	"An int subclass that overrides __rrshift__ answers first, as CPython's
+	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rrshift__:'.
+		pri == nil ifFalse: [^ pri]].
+	(self ___isPyIntOperand___: other) ifTrue: [ | idx |
 		idx := other __index__.
 		(idx @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
 		^ self @env0:bitShift: (idx @env0:negated)].
@@ -1451,8 +1458,7 @@ __rsub__: other
 	"Reverse subtract (other - self)."
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:- (self)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:- (self)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:- (self)].
 	^ self ___rbinOpFallback___: other op: '-'
 %
 
@@ -1467,8 +1473,7 @@ __rtruediv__: other
 
 	(other isKindOf: Integer) ifTrue: [^ other ___intTrueDivFloat___: self].
 	(other isKindOf: Number) ifTrue: [^ other @env0:/ self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 			^ (other __index__) ___intTrueDivFloat___: self].
 	^ self ___rbinOpFallback___: other op: '/'
 %
@@ -1502,8 +1507,7 @@ __rxor__: other
 	"Reverse bitwise XOR (other ^ self)."
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitXor: self].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitXor: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitXor: self].
 	^ self ___rbinOpFallback___: other op: '^'
 %
 
@@ -1550,8 +1554,7 @@ __sub__: other
 		pri := self ___numericReflectedFirst___: other selector: #'__rsub__:'.
 		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:- (other)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
@@ -1578,8 +1581,7 @@ __truediv__: other
 	Smalltalk Fraction -- ``1 / MyInt(2)'' printed 1/2."
 	(other isKindOf: AbstractPyInt) ifTrue: [^ self ___intTrueDivFloat___: other @env0:value].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:/ other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 			^ self ___intTrueDivFloat___: (other __index__)].
 	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
@@ -1598,8 +1600,12 @@ __xor__: other
 	"Bitwise XOR."
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitXor: other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitXor: (other __index__)].
+	"An int subclass that overrides __rxor__ answers first, as CPython's
+	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
+	(other @env0:isSpecial) ifFalse: [ | pri |
+		pri := self ___numericReflectedFirst___: other selector: #'__rxor__:'.
+		pri == nil ifFalse: [^ pri]].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:bitXor: (other __index__)].
 	^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'
 %
 

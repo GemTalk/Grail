@@ -7070,10 +7070,26 @@ _pow: positional kw: kwargs
 		^ x __pow__: y
 	].
 	(nargs == 3) ifTrue: [
-		| tn ni r |
+		| tn ni r unwrap |
 		x := args @env0:at: 1.
 		y := args @env0:at: 2.
 		z := args @env0:at: 3.
+		"A bool or an int subclass's instance is an int: ``pow(2, True, 5)'' is
+		2 and ``pow(2, IntEnum.X, 5)'' uses X's value.  Both reached the
+		TypeError below, because the fast path takes Integers only.  An operand
+		whose class defines its own 3-argument __pow__/__rpow__ (the varargs
+		form the dispatch below probes) stays wrapped, so that override runs."
+		unwrap := [:v |
+			((v @env0:isKindOf: Integer) @env0:not
+				@env0:and: [(self ___isPyIntOperand___: v)
+				@env0:and: [(v @env0:class @env0:whichClassIncludesSelector: #'___pow__:kw:'
+						environmentId: 1) @env0:isNil
+				@env0:and: [(v @env0:class @env0:whichClassIncludesSelector: #'___rpow__:kw:'
+						environmentId: 1) @env0:isNil]]])
+				ifTrue: [v __index__] ifFalse: [v]].
+		x := unwrap @env0:value: x.
+		y := unwrap @env0:value: y.
+		z := unwrap @env0:value: z.
 		"3-arg pow is modular exponentiation, defined only for integers.  Any
 		non-int operand raises CPython's TypeError naming all three types
 		(test_fractions test_three_argument_pow), rather than silently doing

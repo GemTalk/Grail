@@ -14175,6 +14175,26 @@ ___rbinOpFallback___: other op: opString
 
 category: 'Grail-Arithmetic'
 method: object
+___isPyIntOperand___: other
+	"Is ``other'' a Python int -- an Integer, a bool, or an instance of a
+	Python subclass of int (an AbstractPyInt) -- so that int's and float's
+	binary operators take it as one, by its ``__index__'' value?
+
+	It replaces a probe for an ``__index__'' compiled into other's OWN class.
+	That is not CPython's rule: ``int.__add__'' answers NotImplemented for any
+	object that is not an int, whatever it implements, so ``1 + o'' with only
+	an ``__index__'' is a TypeError and ``3 == o'' is False.  The probe made
+	Grail compute them, and it missed the cases it was for -- an int
+	subclass's ``__index__'' is inherited from AbstractPyInt, never its own,
+	so ``7 & MyInt(3)'' and ``1 << IntEnum.X'' raised TypeError."
+
+	^ (other @env0:isKindOf: Integer)
+		or: [(other == true or: [other == false])
+		or: [other @env0:isKindOf: AbstractPyInt]]
+%
+
+category: 'Grail-Arithmetic'
+method: object
 ___numericReflectedFirst___: other selector: refSelector
 	"The answer of ``other''s REFLECTED method (__radd__ & co.) when CPython
 	would call it BEFORE the receiver's forward one, else nil.  The receiver is
