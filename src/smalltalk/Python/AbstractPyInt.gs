@@ -650,7 +650,9 @@ classmethod: AbstractPyInt
 ___pythonValueAttrs___
 	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__ --
 	and so are int's four number properties, as on int itself
-	(int class >> ___pythonValueAttrs___)."
+	(int class >> ___pythonValueAttrs___).  A Python subclass that defines one
+	of these names itself is left to the ordinary attribute path; see object >>
+	___valueAttrOverridden___:."
 
 	^ IdentitySet new
 		add: #'__dict__';

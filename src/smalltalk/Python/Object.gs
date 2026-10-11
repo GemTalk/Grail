@@ -10571,7 +10571,10 @@ ___subclassAttrShadowing___: aSym
 	abstract), and an ABC with an abstractproperty could be instantiated
 	(test_abc test_abstractproperty_basics).  Only the classes BELOW the one
 	that implements the method can shadow it, so the walk stops there; for an
-	instance of a built-in itself it is one class and no holder."
+	instance of a built-in itself it is one class and no holder.
+
+	Not an ENUM MEMBER, an instance of the very class that holds it: see
+	___valueAttrOverridden___:."
 
 	| implementor walker holder v |
 	implementor := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
@@ -10581,9 +10584,50 @@ ___subclassAttrShadowing___: aSym
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				v := holder @env0:dynamicInstVarAt: aSym.
-				v == nil ifFalse: [^ v]]].
+				(v == nil or: [v @env0:isKindOf: walker]) ifFalse: [^ v]]].
 		walker := walker @env0:superClass].
 	^ nil
+%
+
+category: 'Grail-Attribute Protocol'
+method: object
+___valueAttrOverridden___: aSym
+	"Has a PYTHON class redefined the built-in value attribute aSym, so that
+	___pyAttrLoad___: must take its ordinary path rather than perform the
+	built-in's method?
+
+	Two ways, both found from the receiver's class down to the implementor:
+	  * the implementor itself is a Python class -- a ``def numerator(self)''
+	    in an int subclass is a method, read as a bound method;
+	  * a class below the implementor holds aSym as a class-body attribute, an
+	    accessor on its metaclass: ``class C(int): imag = 'cls''' reads 'cls'.
+
+	EXCEPT AN ENUM MEMBER, which is a class attribute holding an instance of
+	its own class.  test_enum's test_shadowed_attr:
+
+	    class Number(IntEnum):
+	        divisor = 1
+	        numerator = 2
+
+	``Number.divisor.numerator'' is 1: CPython's enum wraps a member whose name
+	shadows an attribute of the data type in an enum.property, which hands an
+	INSTANCE back to int's own property.  Grail stores the member itself, so
+	that rule is applied here, and the built-in's value attribute answers.
+	A holder entry is ___subclassAttrShadowing___:'s, which runs first."
+
+	| implementor walker |
+	implementor := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	implementor == nil ifTrue: [^ false].
+	(implementor @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifTrue: [^ true].
+	walker := self @env0:class.
+	[walker ~~ nil and: [walker ~~ implementor]] whileTrue: [
+		((walker @env0:class @env0:includesSelector: aSym environmentId: 1)
+			and: [([(walker @env0:perform: aSym env: 1) @env0:isKindOf: walker]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: false]) not])
+					ifTrue: [^ true].
+		walker := walker @env0:superClass].
+	^ false
 %
 
 category: 'Grail-Attribute Protocol'
@@ -11695,7 +11739,8 @@ ___pyAttrLoad___: aSym
 		and: [(self @env0:class @env0:___pythonValueAttrs___) @env0:includes: aSym])
 		ifTrue: [
 			(self ___subclassAttrShadowing___: aSym) @env0:ifNotNil: [:___sv | ^ ___sv].
-			^ self @env0:perform: aSym env: 1].
+			(self ___valueAttrOverridden___: aSym) ifFalse: [
+				^ self @env0:perform: aSym env: 1]].
 	"``str.strip'' / ``str.split'' etc.: the str builtin is a BoundMethod, not
 	a class (there is no single `str' class -- strings span Unicode7 /
 	Unicode16 / ... under CharacterCollection), so a str METHOD name accessed

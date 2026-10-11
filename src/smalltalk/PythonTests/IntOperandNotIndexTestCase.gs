@@ -118,10 +118,20 @@ testBoolIsAnInt
 
 category: 'Grail-Tests'
 method: IntOperandNotIndexTestCase
+testASubclassKeepsItsOwnNumberProperty
+	"A def, a property or a class attribute named ``numerator''/``real''/...
+	in an int subclass wins over int's property; an enum member of that name
+	does not (test_enum's test_shadowed_attr)."
+
+	self assertOperandMatchesCPython: 'shadow'
+%
+
+category: 'Grail-Tests'
+method: IntOperandNotIndexTestCase
 testEveryRowIsExpected
 	| r expected |
 	r := testModule @env1:___pyAttrLoad___: #r.
 	expected := testModule @env1:___pyAttrLoad___: #EXPECTED.
 	self assert: (r @env1:__len__) = (expected @env1:__len__).
-	self assert: (expected @env1:__len__) >= 151
+	self assert: (expected @env1:__len__) >= 155
 %

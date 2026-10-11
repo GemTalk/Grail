@@ -111,7 +111,42 @@ for name, mk in [('A', lambda: A(2)), ('E', lambda: E.X), ('bool', lambda: True)
     t(name + ' parts type', lambda: type(o.real).__name__)
 
 
+# A Python subclass that redefines one of int's number properties keeps its
+# own: a member of an enum is the exception, as enum makes it hand an
+# instance back to int's property (test_enum's test_shadowed_attr).
+class Number(enum.IntEnum):
+    divisor = 1
+    numerator = 2
+
+
+class DefNum(int):
+    def numerator(self):
+        return 'meth'
+
+
+class PropReal(int):
+    @property
+    def real(self):
+        return 'prop'
+
+
+class ClsImag(int):
+    imag = 'cls'
+
+
+t('shadow enum member', lambda: (Number.divisor.numerator, Number.numerator.numerator,
+                                 Number.numerator.divisor is Number.divisor))
+t('shadow def', lambda: (callable(DefNum(3).numerator), DefNum(3).numerator(),
+                         DefNum(3).denominator))
+t('shadow property', lambda: (PropReal(3).real, PropReal(3).imag))
+t('shadow class attr', lambda: (ClsImag(3).imag, ClsImag(3).real))
+
+
 EXPECTED = {
+    'shadow enum member': '(1, 2, True)',
+    'shadow def': "(True, 'meth', 1)",
+    'shadow property': "('prop', 0)",
+    'shadow class attr': "('cls', 3)",
     'I 1+o': "'TypeError'",
     'I 7&o': "'TypeError'",
     'I 7//o': "'TypeError'",
