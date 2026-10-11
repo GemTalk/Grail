@@ -3475,37 +3475,26 @@ ___printDecoratedProperty___: aName on: aStream siblingNames: siblingNames
 	method it compiled to -- the getter under the plain name, the setter and
 	deleter under their private ones.  An absent accessor is None.
 
-	Guarded like printMethodDecoratorsOn:'s rebinding, with one difference.
-	There a decorator that raises leaves the compiled method in place, which
-	is still the undecorated method.  Here it would leave nothing usable --
-	no pair was compiled, and the setter is under its private name -- so the
-	handler stores the property over the UNDECORATED accessors instead: the
-	property works as it did before, just without the decorators, which is
-	what a failed decorator has always meant."
+	A decorator that raises propagates out of the class statement, as in
+	CPython.  It used to be applied inside ``on: AbstractException do:'',
+	whose handler stored the property over the UNDECORATED accessors instead
+	(issue #1369)."
 
 	| byKind |
 	byKind := Dictionary new.
 	self ___allFunctionDefs___ do: [:def |
 		def name asSymbol == aName ifTrue: [
 			byKind at: def ___propertyAccessorKind___ put: def]].
-	aStream nextPutAll: '['.
-	self ___printPropertyStore___: aName accessors: byKind decorated: true
+	self ___printPropertyStore___: aName accessors: byKind
 		on: aStream siblingNames: siblingNames.
-	aStream
-		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	'.
-	self ___printDecoratorHandlerPassOn___: aStream.
-	aStream nextPutAll: '.'; lf; nextPutAll: '	'.
-	self ___printPropertyStore___: aName accessors: byKind decorated: false
-		on: aStream siblingNames: siblingNames.
-	aStream nextPutAll: '].'; lf
+	aStream nextPutAll: '.'; lf
 %
 
 category: 'Grail-code generation'
 method: ClassDefAst
-___printPropertyStore___: aName accessors: byKind decorated: aBoolean on: aStream siblingNames: siblingNames
+___printPropertyStore___: aName accessors: byKind on: aStream siblingNames: siblingNames
 	"The holder store ___printDecoratedProperty___:on:siblingNames: emits, with
-	each accessor's decorator chain (aBoolean) or bare."
+	each accessor's decorator chain."
 
 	| className |
 	className := self ___stVarName___.
@@ -3523,20 +3512,11 @@ ___printPropertyStore___: aName accessors: byKind decorated: aBoolean on: aStrea
 				baseName := kind == #getter
 					ifTrue: [def name asString]
 					ifFalse: [self ___redirectedAccessorNameFor___: def].
-				aBoolean
-					ifTrue: [
-						def
-							printPropertyAccessorOn: aStream
-							className: className
-							siblingNames: siblingNames
-							baseName: baseName]
-					ifFalse: [
-						aStream
-							nextPutAll: '(UnboundMethod definingClass: ';
-							nextPutAll: className;
-							nextPutAll: ' selector: #''';
-							nextPutAll: baseName;
-							nextPutAll: ''')']]].
+				def
+					printPropertyAccessorOn: aStream
+					className: className
+					siblingNames: siblingNames
+					baseName: baseName]].
 	aStream nextPutAll: ')'
 %
 

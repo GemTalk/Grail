@@ -130,11 +130,13 @@ testUnboundMethodReportsItsOwnMetadata
 
 category: 'Grail-Tests-ClassBodyMethodDecorator'
 method: ClassBodyMethodDecoratorTestCase
-testFailingDecoratorLeavesTheMethodIntact
-	"Strictly additive.  A decorator that raises leaves the compiled method in
-	place -- the old behaviour of dropping it -- instead of breaking the class."
+testAFailingDecoratorPropagates
+	"A decorator that raises makes the class statement raise, as in CPython.
+	This test used to assert the opposite -- that the compiled method survived
+	undecorated -- which is what hid a stub getfullargspec and missing
+	test.support decorators (issue #1369)."
 
-	self assert: self loadFixture @env1:failing_decorator_leaves_the_method_intact
+	self assert: self loadFixture @env1:a_failing_decorator_propagates
 		equals: true
 %
 
