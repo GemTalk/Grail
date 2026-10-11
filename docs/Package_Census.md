@@ -13,7 +13,94 @@ This is that measurement, done so someone else can repeat it. Its real output
 is not the headline fraction — it is the **ranked gap list** at the bottom,
 which says which single fix unblocks the most packages.
 
-## Headline
+## Re-measured 2026-10-11
+
+Same 50 names (`scripts/pypi_census_packages.txt`, unchanged), same harness,
+same method as below. GemStone 4.0 (build 2026-09-23), Grail `main` at
+`5ee7aa1d`, CPython 3.14.8, Darwin arm64. `./install.sh` then
+`./scripts/run_tests.sh` (7793/7793) then the census, so this is the
+post-deploy image state the method section describes. pip resolved each name
+afresh, so **versions moved** (boto3 1.43.56 → 1.43.106, pydantic 2.13.5 →
+2.14.0, iniconfig 2.3.0 → 2.3.1, …). Two of the changes below come from that,
+not from Grail, and say so.
+
+Controls: `nosuchmodule_xyz` reports `ModuleNotFoundError`. `numpy` no longer
+reports `CRASH`: it is now `FAILS ImportError`, because G4 (a failed `dlopen`
+killing the session) is fixed. That control's expected answer moved for a good
+reason.
+
+| Denominator | 2026-08-30 | **2026-10-11** |
+| --- | --- | --- |
+| **pure-Python projects** | 17 / 32 | **20 / 32** |
+| depending on a C-extension project | 2 / 6 | 2 / 6 |
+| shipping a C extension | 3 / 12 | 6 / 12 |
+| everything measured | 22 / 50 | **28 / 50** |
+
+SHADOWED is unchanged (requests, click, jinja2, markupsafe).
+
+### Every row that moved
+
+| # | Project | Aug | **Oct** | Now stops at | Why it moved |
+| --- | --- | --- | --- | --- | --- |
+| 1 | boto3 | FAILS | FAILS | `type object 'tzutc' has no attribute '_TzSingleton__instance'` (dateutil.tz) | G7 fixed; next wall is **#1411** |
+| 3 | typing-extensions | FAILS | **IMPORTS** | | G2, G3a fixed |
+| 12 | cffi | FAILS | **IMPORTS** | | G6 fixed |
+| 15 | pyyaml | CRASH | **IMPORTS** | | G1 fixed |
+| 19 | numpy | CRASH | FAILS | catchable `ImportError` | G4 fixed (out of scope either way) |
+| 21 | pydantic | IMPORTS | FAILS | `cannot import name 'ArgsKwargs'` | **package moved**: pydantic-core 2.50 needs multi-phase init, **#1414**; `pydantic==2.13.5` still imports |
+| 22 | pytest | FAILS | FAILS | `cannot import name 'PathFinder' from 'importlib.machinery'` | G8 fixed; G5 is now first, and iniconfig (below) is behind it |
+| 24 | iniconfig | IMPORTS | FAILS | bare `SyntaxError` | **package moved**: 2.3.1 uses `"\N{BYTE ORDER MARK}"`, a Unicode name alias Grail lacks, **#1412** |
+| 25 | anyio | FAILS | **IMPORTS** | | G2, G9 fixed |
+| 26 | pydantic-core | IMPORTS | FAILS | as pydantic | **package moved**, #1414 |
+| 29 | s3transfer | FAILS | FAILS | as boto3 | G7 fixed; #1411 |
+| 30 | h11 | FAILS | **CRASH** | G12 `__class__` assignment, then a fatal `InternalError 2261` | G2 fixed, so it reaches G12; see G12 below |
+| 31 | fsspec | FAILS | FAILS | `No module named 'ctypes'` | G3b fixed; it now stops at **#1413** before reaching G13, which is unverified |
+| 32 | annotated-types | FAILS | **IMPORTS** | | G14 fixed |
+| 36 | httpcore | FAILS | **CRASH** | as h11 | as h11 |
+| 38 | pandas | CRASH | FAILS | numpy's `ImportError` | G4 fixed |
+| 40 | pathspec | FAILS | **IMPORTS** | | G2, G3a fixed |
+| 43 | filelock | FAILS | FAILS | `No module named 'ctypes'` | G3a fixed; #1413 |
+| 44 | pyjwt | FAILS | FAILS | `cannot import name 'exceptions' from 'cryptography.hazmat.bindings._rust'` | G3a fixed; next wall is cryptography's Rust extension |
+| 45 | s3fs | FAILS | FAILS | `No module named 'ctypes'` | #1413 |
+| 46 | litellm | FAILS | FAILS | as pydantic | #1414 |
+| 49 | aiohttp | CRASH | FAILS | attrs' `FrozenInstanceError` | G4 fixed; now blocked by G11 through attrs |
+| 50 | yarl | CRASH | **IMPORTS** | | G4 fixed (pure-Python fallback) |
+
+Unchanged rows: setuptools (G5), attrs (G11), cryptography, botocore and the
+other packages that already imported.
+
+Each "fixed" claim above was checked directly on this build, not inferred from
+the package getting further: `EnvironmentError is OSError`, `errno.ESPIPE`,
+`typing.AnyStr`/`typing._Final`, `__init_subclass__` keywords (both the
+`type(...)` and class-statement forms), `signal.Signals`, and
+`_thread.allocate_lock()` returning a fresh lock each call all hold. G5 does
+not: `importlib.abc` is still absent, and `importlib.machinery` has no
+`PathFinder`.
+
+### The gap list now, ranked by packages blocked
+
+| Gap | Blocks (first wall) | Notes |
+| --- | --- | --- |
+| **#1413** no `ctypes` | filelock, fsspec, s3fs | **3** |
+| **#1414** multi-phase module init (`PyModule_FromDefAndSpec2`/`PyModule_ExecDef`) | pydantic, pydantic-core, litellm | **3**; likely every recent PyO3 extension |
+| **#1411** metaclass `__init__` attribute under `six.add_metaclass` in an imported module | boto3, s3transfer | **2**, PyPI's #1 among them |
+| G5 `importlib.abc` (absent) / `importlib.machinery.PathFinder` (module exists, class does not) | setuptools, pytest | 2; pytest also needs #1412 next |
+| G12 `__class__` assignment, plus a fatal 2261 | h11, httpcore | 2; see below |
+| G11 dunder reassignment on a class | attrs, aiohttp | 2 |
+| **#1412** `\N{}` name aliases (and the detail-less SyntaxError) | iniconfig | 1, and behind G5 for pytest |
+| cryptography's Rust extension | pyjwt | 1, out of scope as a C extension |
+
+**G12 now ends in a CRASH, not a FAILS.** h11's `Sentinel` metaclass assigns
+`v.__class__ = v`. Grail refuses that with the catchable `TypeError: __class__
+assignment: 'CLIENT' object layout differs from 'CLIENT class'`, and a minimal
+copy of the pattern, even four imports deep, is caught by `except
+BaseException` exactly as it should be. Inside h11's real import the same
+TypeError instead takes the session down with `InternalError 2261 ... process
+switch not allowed in protected mode`, which no `except` survives. That second
+failure is not yet isolated. Fixing G12 would make it moot for these two
+packages, but the 2261 deserves its own repro.
+
+## Headline (first measurement, 2026-08-30)
 
 Measured 2026-08-30, GemStone 3.7.5 (build 2026-03-11), Grail at `main`
 commit `edb26dd9`, Darwin arm64.
@@ -106,7 +193,7 @@ describing nothing.
 `except BaseException` sees it and the process dies with no result line. The
 harness reads a missing line as `CRASH` and says so.
 
-## Results
+## Results (first measurement, 2026-08-30)
 
 `scope`: `pure` / `ext-dep` / `ext` as defined above. Full per-package output
 lands in `out/pypi/<project>.out` (gitignored).
@@ -198,7 +285,7 @@ The load-bearing result is the second row: **G3 blocks five packages, not two.**
 The clean run could only see two of them, because `typing` failed first. That
 is the reconnaissance argument in one line.
 
-## The ranked gap list
+## The ranked gap list (first measurement, 2026-08-30)
 
 Ranked by packages unblocked, counting only what the evidence supports.
 "Blocks" means the package's import stops there; "behind" means a stubbed probe
