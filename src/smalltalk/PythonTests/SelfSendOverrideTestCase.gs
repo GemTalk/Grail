@@ -145,3 +145,26 @@ testAFunctionFromTheClassIgnoresAnInstanceOverride
 		ensure: [
 			importlib @env1:modules removeKey: #'bound_method_runs_class_function' ifAbsent: []]
 %
+
+category: 'Grail-Tests - Object Model'
+method: SelfSendOverrideTestCase
+testTheSelectorMatcherAcceptsASymbolName
+	"object class >> ___grailSelectorMatchesPythonName___:name: answers the same
+	for a Symbol name as for a String one.  The dispatcher's guard against the
+	receiver's own bound method passes a Symbol, and ``'f' = #f'' is false in
+	GemStone, so the guard never matched anything (#1226).  Since the handle fix
+	the restore shape no longer depends on the guard, so it is checked here
+	directly; the String cases are controls."
+
+	#( #( #f #f true ) #( #'f:' #f true ) #( #'f:_:' #f true ) #( #'_f:kw:' #f true )
+	   #( #'_f:kw:' #'_f' false ) #( #g #f false ) ) do: [:row |
+		| sel want |
+		sel := row at: 1.
+		want := row at: 3.
+		self assert: (object @env0:___grailSelectorMatchesPythonName___: sel name: (row at: 2))
+				== want
+			description: sel printString , ' against the Symbol ' , (row at: 2) printString.
+		self assert: (object @env0:___grailSelectorMatchesPythonName___: sel name: (row at: 2) asString)
+				== want
+			description: sel printString , ' against the String ' , (row at: 2) printString]
+%
