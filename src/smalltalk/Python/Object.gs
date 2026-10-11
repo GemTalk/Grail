@@ -10890,6 +10890,28 @@ ___valueAttrOverridden___: aSym
 
 category: 'Grail-Attribute Protocol'
 method: object
+___importFrom___: aSym
+	"``from M import name'': the name read off what __import__ answered --
+	CPython's IMPORT_FROM, which is what ImportFromAst emits after the import.
+
+	The attribute if there is one.  Otherwise importlib >>
+	___importFromMiss___:of: tries ``sys.modules['M.name']'' and then raises
+	``cannot import name''.  That ImportError used to come from __import__'s
+	fromlist loop, which made a DIRECT __import__ call raise it too, where
+	CPython ignores a fromlist name it cannot find (issue #1223)."
+
+	| missing v |
+	missing := false.
+	v := [self ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError
+		do: [:ex | missing := true. ex @env0:return: nil].
+	missing ifFalse: [^ v].
+	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib)
+		___importFromMiss___: aSym of: self
+%
+
+category: 'Grail-Attribute Protocol'
+method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
 	The presence of an ``attr:`` keyword method is ambiguous: on a

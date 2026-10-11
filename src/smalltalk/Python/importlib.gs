@@ -9532,6 +9532,82 @@ ___emptyModuleNamed___: aName spec: aSpec loader: aLoader
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___isPackageForFromlist___: aModule
+	"Does ``__import__'' consult its fromlist for aModule?  CPython's
+	_handle_fromlist runs only for a module with ``__path__'', a package.
+
+	Read without raising, because every ``from M import x'' asks: a module's
+	__path__ is in its dictionary when the loader set it (module >> __path__:)
+	and a dynamic instVar when the module body assigned it.  Anything not a
+	module -- what a custom __import__ hook may answer -- is asked through the
+	ordinary attribute read."
+
+	| p |
+	(aModule @env0:isKindOf: module) ifFalse: [
+		^ [p := aModule @env1:___pyAttrLoad___: #'__path__'.
+			p ~~ nil and: [p ~~ None]]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: false]].
+	(aModule @env0:includesKey: #'__path__') ifTrue: [
+		p := aModule @env0:at: #'__path__'.
+		^ p ~~ nil and: [p ~~ None]].
+	p := aModule @env0:dynamicInstVarAt: #'__path__'.
+	^ p ~~ nil and: [p ~~ None]
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___isUnimportedSubmodule___: aValue named: aDottedName
+	"Is aValue -- an attribute of a package -- the package's own submodule
+	aDottedName, which THIS SESSION has not imported?
+
+	registerModule:with: binds a submodule onto its package, and a committed
+	package keeps that binding.  So in a fresh gem the attribute is there
+	although nothing imported the submodule, and the staleness check that an
+	import runs (loadModuleFromPath:name:) has not run on it.  CPython's
+	package object is new in every process, so its attribute can only mean
+	the submodule was imported in this process.
+
+	By NAME as well as kind, so a package that re-exports a different module
+	under the name -- ``os.path'' is posixpath -- keeps it.  And only a
+	COMMITTED submodule: within one session CPython counts the attribute
+	however it got there -- ``del sys.modules['pkg.mod']'' and then ``from pkg
+	import mod'' answers the old object -- and so does this."
+
+	| n |
+	(aValue @env0:isKindOf: module) ifFalse: [^ false].
+	aValue @env0:isCommitted ifFalse: [^ false].
+	n := [aValue @env1:__name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(n ~~ nil and: [n ~~ None and: [n @env0:asString @env0:= aDottedName @env0:asString]])
+		ifFalse: [^ false].
+	^ (self modules @env0:at: aDottedName @env0:asString ifAbsent: [nil]) == nil
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___importFromMiss___: aName of: aModule
+	"``from M import aName'' found no attribute aName on M (object >>
+	___importFrom___:).  CPython's IMPORT_FROM then tries the submodule
+	``M.aName'' in sys.modules -- bound there by an import the package's own
+	attribute does not yet reflect -- and otherwise raises ImportError, with
+	the module's __file__ as the path, ``(unknown location)'' when it has none."
+
+	| pkg sub file |
+	pkg := [aModule @env1:___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	pkg == None ifTrue: [pkg := nil].
+	pkg notNil ifTrue: [
+		sub := self lookupModule: (pkg @env0:asString @env0:, '.') @env0:, aName @env0:asString.
+		sub notNil ifTrue: [^ sub]].
+	file := [aModule @env1:___pyAttrLoad___: #'__file__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	file == None ifTrue: [file := nil].
+	^ ImportError @env0:___signalCannotImportName___: aName
+		from: (pkg ifNil: ['<unknown module name>'])
+		path: file
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 lookupModule: aName
 	"Look up a module by name: the session registry first -- a HIT
 	validated against the repository, see ___moduleEntryIsLive___: --
@@ -9891,52 +9967,72 @@ ___import__: positional kw: kwargs
 		]
 	].
 
-	"Parent-binding of the just-loaded module is now handled inside
-	``registerModule:with:`` (which loadModuleFromPath: calls), so
-	the dotted-name binding here is no longer necessary.
+	"Parent-binding of the just-loaded module is handled inside
+	``registerModule:with:'' (which loadModuleFromPath: calls).
 
-	For `from PKG import name1, name2`, ensure each name in fromlist
-	that is an as-yet-unloaded submodule is loaded so the subsequent
-	attribute access in the importer finds something.  Once
-	loadModuleFromPath: returns, the parent-binding has already
-	happened via registerModule:.
+	THE FROMLIST, AS CPython's _handle_fromlist READS IT (issue #1223).  It
+	only ever LOADS SUBMODULES: for each name the package does not already
+	have, import ``PKG.name'' if there is such a module, and otherwise move on.
+	It never raises for a missing name -- ``__import__('json', fromlist=
+	['nope'])'' is json -- because the ``from PKG import name'' STATEMENT
+	raises that ImportError itself, when it reads the name (object >>
+	___importFrom___:, what ImportFromAst emits).  Raising here made every
+	direct __import__ caller fail where CPython succeeds.
 
-	Guard: if the parent module already exposes ``fromName'' as an
-	attribute (re-exported class / function / value), do NOT attempt
-	to load a sibling submodule with the same name.  Case-insensitive
-	filesystems (macOS HFS+) otherwise resolve ``parent.Headers'' to
-	a sibling ``headers.py'' submodule and clobber the re-exported
-	class with the submodule object."
-	fromlist __len__ @env0:> 0 ifTrue: [
+	  - Only for a PACKAGE.  A plain module's fromlist is ignored outright,
+	    whatever it holds.
+	  - A non-str item is CPython's TypeError.
+	  - ``*'' is the star-import marker and the empty name never names a
+	    submodule; both are skipped.  The empty name used to reach
+	    ``dynamicInstVarAt:'' with an empty Symbol -- the kernel's uncatchable
+	    ArgumentError 2718 -- and end the process.
+	  - A name the package already has is bound -- EXCEPT a submodule this
+	    session has not imported.  A committed package carries its submodules
+	    as attributes from whichever session committed it, where CPython's
+	    package is new in every process; counting such an attribute as bound
+	    skipped the import, and with it the staleness check, so ``from PKG
+	    import mod'' answered the committed module after mod.py was edited.
+
+	Guard kept from before: if the package already exposes ``fromName'' as
+	something other than a submodule (a re-exported class / function /
+	value), do NOT load a sibling submodule of the same name.  Case-insensitive
+	filesystems (macOS HFS+) otherwise resolve ``parent.Headers'' to a sibling
+	``headers.py'' and clobber the re-exported class with the module."
+	((fromlist __len__ @env0:> 0)
+		and: [self @env0:class ___isPackageForFromlist___: result]) ifTrue: [
 		fromlist @env0:do: [:fromName |
-			| subName subPath alreadyBound soPath provided |
-			"``*'' is the star-import marker, not a submodule name — the
-			caller does the public-attr merge separately.  And ``import X''
-			passes X's own name in the fromlist as the binding target (so
-			absoluteName = fromName); that is the already-loaded module
-			itself, not a ``X.X'' submodule.  Treat both as already-bound so
-			the submodule-load / missing-name raise below never fires for
-			``from PKG import *'' or plain ``import X''."
+			| subName alreadyBound bound soPath |
+			(fromName @env0:isKindOf: CharacterCollection) ifFalse: [
+				^ TypeError ___signal___: 'Item in ``from list'''' must be str, not '
+					@env0:, (fromName ___pyTypeNameForError___) @env0:asString].
+			subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
+			"``import X'' passes X's own name as the fromlist (the binding
+			target), and that is the module itself, not an ``X.X''."
 			alreadyBound := (fromName @env0:= '*')
-				or: [(fromName @env0:= absoluteName)
-				or: [(result isKindOf: module)
-				ifTrue: [
-					"Check dynamic instVars first (fast path), then env-1
-					methods (varargs _name:kw:, unary name, fixed-arity
-					name:) so that 'from mod import fn' does not try to
-					load mod.fn as a submodule file when fn is already a
-					callable method on the module class.
+				or: [(fromName @env0:isEmpty)
+				or: [fromName @env0:= absoluteName]].
+			alreadyBound ifFalse: [
+				"Check dynamic instVars first (fast path), then env-1 methods
+				(varargs _name:kw:, unary name, fixed-arity name:) so that
+				``from mod import fn'' does not try to load mod.fn as a
+				submodule file when fn is already a callable method on the
+				module class.
 
-					The method probe must only count selectors the MODULE
-					ITSELF owns (its concrete class, or anything below
-					``module`` in the chain).  Modules inherit the whole
-					dict protocol through SymbolDictionary, so a blanket
-					___pyAttrLoad___ probe reports names like ``values'' /
-					``keys'' / ``items'' as bound and skips loading a real
-					sibling submodule — ``from twilio.base import values''
-					bound KeyValueDictionary>>values' OrderedCollection
-					instead of values.py."
-					(result @env0:dynamicInstVarAt: fromName @env0:asSymbol) notNil or: [
+				The method probe must only count selectors the MODULE ITSELF
+				owns (its concrete class, or anything below ``module'' in the
+				chain).  Modules inherit the whole dict protocol through
+				SymbolDictionary, so a blanket ___pyAttrLoad___ probe reports
+				names like ``values'' / ``keys'' / ``items'' as bound and skips
+				loading a real sibling submodule -- ``from twilio.base import
+				values'' bound KeyValueDictionary>>values' OrderedCollection
+				instead of values.py."
+				bound := (result isKindOf: module)
+					ifTrue: [result @env0:dynamicInstVarAt: fromName @env0:asSymbol]
+					ifFalse: [nil].
+				alreadyBound := bound notNil
+					ifTrue: [(self @env0:class ___isUnimportedSubmodule___: bound
+						named: subName) not]
+					ifFalse: [(result isKindOf: module) and: [
 						| mcls s owned |
 						mcls := result @env0:class.
 						s := fromName @env0:asString.
@@ -9954,63 +10050,30 @@ ___import__: positional kw: kwargs
 							"Legacy SymbolDictionary at: storage (built-in
 							modules still keep some constants there)."
 							(result @env0:at: fromName @env0:asSymbol
-								ifAbsent: [nil]) notNil]
-					]
-				]
-				ifFalse: [false]]].
+								ifAbsent: [nil]) notNil]]]].
 			"A name equal to the package's own last component -- ``from a.b
-			import b'' -- used to count as bound OUTRIGHT, before anything
-			looked.  So when a/b/b.py exists, as in test_reprlib's
-			LongReprTest (package, subpackage and module all share one long
-			name), the submodule was never loaded and the attribute read that
-			follows raised ``'a_b' object has no attribute 'b'''.  It still
-			counts as bound -- the old behaviour, which nothing in the vendored
-			tree is known to need but which cost nothing to keep -- unless
-			such a submodule file actually exists; then it is loaded, as
-			CPython's _handle_fromlist would."
+			import b'' -- counts as bound unless such a submodule file actually
+			exists; then it is loaded, as CPython's _handle_fromlist would
+			(test_reprlib's LongReprTest: package, subpackage and module all
+			share one long name)."
 			(alreadyBound not and: [fromName @env0:= (nameParts @env0:last)]) ifTrue: [
-				alreadyBound := (self @env0:class ___moduleNameToPath___:
-					((absoluteName @env0:, '.') @env0:, fromName @env0:asString)) isNil].
+				alreadyBound := (self @env0:class ___moduleNameToPath___: subName) isNil].
 			alreadyBound ifFalse: [
-				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
+				| subPath |
 				((self @env0:class lookupModule: subName)
 					ifNil: [self @env0:class ___findViaMetaPath___: subName]) ifNil: [
 					subPath := self @env0:class ___moduleNameToPath___: subName.
-					subPath notNil ifTrue: [
-						self @env0:class
-							@env0:loadModuleFromPath: subPath name: subName.
-					] ifFalse: [
-						"No attribute and no .py submodule.  Try a .so / builtin
-						submodule; if none, and the package can't provide the
-						name (even via a module-level __getattr__), it is a
-						genuine ``from PKG import name'' miss — raise
-						ModuleNotFoundError (an ImportError), NOT the
-						AttributeError a downstream ___pyAttrLoad___ would
-						produce.  This is what lets numpy's optional
-						``try: from . import _distributor_init_local
-						except ImportError: pass'' hook be caught."
-						soPath := self @env0:class ___moduleNameToSoPath___: subName.
-						soPath notNil
-							ifTrue: [
+					subPath notNil
+						ifTrue: [
+							self @env0:class
+								@env0:loadModuleFromPath: subPath name: subName]
+						ifFalse: [
+							"Not a .py submodule: a .so one, or nothing -- and
+							nothing is not an error here (see above)."
+							soPath := self @env0:class ___moduleNameToSoPath___: subName.
+							soPath notNil ifTrue: [
 								self @env0:class
-									@env0:loadDynamicModuleNamed: subName fromPath: soPath]
-							ifFalse: [
-								provided := [(result ___pyAttrLoad___: fromName @env0:asSymbol). true]
-									@env0:on: AbstractException do: [:ignored | false].
-								provided ifFalse: [
-									"A missing NAME, not a missing module: CPython raises
-									ImportError here, saying ``cannot import name 'x' from
-									'PKG' (path)'' and carrying name / name_from / path.
-									ImportError is ModuleNotFoundError's BASE, so the
-									``try: from . import x except ImportError: pass'' hooks
-									this used to serve keep working."
-									ImportError @env0:___signalCannotImportName___: fromName
-										from: absoluteName
-										path: (self @env0:class ___moduleNameToPath___: absoluteName)]]]
-				]
-			]
-		]
-	].
+									@env0:loadDynamicModuleNamed: subName fromPath: soPath]]]]]].
 
 	"A module body importing: part of its dependency record."
 	self @env0:class @env0:___noteImport___: absoluteName @env0:asString fromlist: fromlist.

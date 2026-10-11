@@ -1071,6 +1071,7 @@ run
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'ImportAndOpenArgsTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
+	at: #'ImportFromlistTestCase' put: nil;
 	at: #'ImportlibFileOpenErrorTestCase' put: nil;
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'ImportlibResourcesTestCase' put: nil;
@@ -2573,6 +2574,7 @@ input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/ImportAndOpenArgsTestCase.gs
 input src/smalltalk/PythonTests/ImportErrorTestCase.gs
+input src/smalltalk/PythonTests/ImportFromlistTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
