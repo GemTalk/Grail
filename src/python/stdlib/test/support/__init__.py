@@ -1298,6 +1298,17 @@ def requires_subprocess():
     return unittest.skipUnless(has_subprocess_support, "requires subprocess support")
 
 
+# Grail has no os.fork; tests that need one skip.  Upstream's shape, so a
+# ``@support.requires_fork()`` decorator skips instead of raising
+# AttributeError -- which Grail's decorator handler used to swallow, leaving
+# the test to RUN (issue #1369).
+has_fork_support = False
+
+
+def requires_fork():
+    return unittest.skipUnless(has_fork_support, "requires working os.fork()")
+
+
 # Sockets DO work here, unlike subprocesses.  CPython gates this on the two
 # WASM platforms whose socket emulation is incomplete, and Grail is neither,
 # so the expression is upstream's verbatim rather than a hardcoded True.
@@ -1439,3 +1450,22 @@ def no_tracing(func):
             sys.settrace(original_trace)
 
     return wrapper
+
+
+def refcount_test(test):
+    """Decorator for tests which involve reference counting.
+
+    Upstream verbatim: not run except on CPython, and any trace function is
+    unset while it runs.  Grail is never CPython, so it always skips.
+    """
+    return no_tracing(cpython_only(test))
+
+
+def nomemtest(f):
+    """Check that we can use this test with ``_testcapi.set_nomemory``.
+
+    Upstream wraps f to import _testcapi and skips Py_TRACE_REFS builds, then
+    applies cpython_only -- which on Grail skips unconditionally, so that is
+    all that is left of it here.
+    """
+    return cpython_only(f)

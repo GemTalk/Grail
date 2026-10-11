@@ -28,7 +28,7 @@
 # functional API's parameters, and enum.FlagBoundary does not exist -- but it
 # fails now on the assertion rather than dying in the comparison.
 
-from inspect import signature, Signature, Parameter
+from inspect import getfullargspec, signature, Signature, Parameter
 
 
 def _f(a, b=1, *args, c, d=None, **kw):
@@ -97,6 +97,37 @@ def the_empty_marker_is_shared():
     return Parameter.empty is Signature.empty
 
 
+def _full(a, b=2, *args, c, d=4, **kw) -> int:
+    pass
+
+
+def _posonly(x: int, y, /, z=3):
+    pass
+
+
+def _none():
+    pass
+
+
+def getfullargspec_is_the_seven_field_namedtuple():
+    """getfullargspec used to answer a stub object with empty fields that could
+    not be unpacked.  Django's @register.simple_tag unpacks it as a 7-tuple,
+    so every such tag raised and was silently never registered (#1369)."""
+    spec = getfullargspec(_full)
+    return (type(spec).__name__ == 'FullArgSpec'
+            and spec._fields == ('args', 'varargs', 'varkw', 'defaults',
+                                 'kwonlyargs', 'kwonlydefaults', 'annotations')
+            and tuple(spec) == (['a', 'b'], 'args', 'kw', (2,), ['c', 'd'],
+                                {'d': 4}, {'return': int}))
+
+
+def getfullargspec_puts_positional_only_first_and_empties_as_none():
+    args, varargs, varkw, defaults, kwonly, kwdefaults, ann = getfullargspec(_posonly)
+    return ((args, varargs, varkw, defaults, kwonly, kwdefaults, ann)
+            == (['x', 'y', 'z'], None, None, (3,), [], None, {'x': int})
+            and tuple(getfullargspec(_none)) == ([], None, None, None, [], None, {}))
+
+
 # scripts/check_python_fixtures.sh runs this under CPython in CI.
 if __name__ == '__main__':
     checks = [
@@ -107,6 +138,8 @@ if __name__ == '__main__':
         an_introspected_signature_still_renders,
         an_introspected_signature_equals_the_same_one_built_by_hand,
         the_empty_marker_is_shared,
+        getfullargspec_is_the_seven_field_namedtuple,
+        getfullargspec_puts_positional_only_first_and_empties_as_none,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

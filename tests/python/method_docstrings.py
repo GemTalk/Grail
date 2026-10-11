@@ -134,6 +134,8 @@ def class_side_handle_metadata():
     This is what a decorator sees when it does ``functools.wraps(func.__func__)''
     over a @classmethod, which is why the wrapper inherited neither.
     """
+    import functools
+
     captured = {}
 
     def snoop(func):
