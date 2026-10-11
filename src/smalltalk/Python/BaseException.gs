@@ -1478,6 +1478,21 @@ ___captureFrameLocalsIfSuggestible___
 	 (System stackDepthHighwater, the neighbouring selector, COREDUMPS the gem on
 	 4.0; it is not used here.)"
 	System @env0:stackDepth @env0:> 512 ifTrue: [^ self].
+	"NOT FOR THE MISS A PROBE IS ASKING ABOUT.  getattr(obj, name, default) and
+	 hasattr(obj, name) raise and catch an AttributeError to find a missing name,
+	 and that exception is consumed before anything can render it -- yet the walk
+	 below was most of its cost: a miss measured 25us, 17 of them here (#1214).
+	 builtins>>___probingAttr___:named: publishes the (object, name) pair it is
+	 asking about; the miss for exactly that pair skips the snapshot and stays an
+	 ordinary AttributeError, so any handler between the two -- a __getattr__
+	 that tries object.__getattribute__ and falls back -- still catches it.
+	 Only courtesy data is lost, and only for an exception the probe swallows."
+	(self @env0:isKindOf: AttributeError) ifTrue: [ | probe |
+		probe := SessionTemps @env0:current @env0:at: #'GrailAttrProbe' otherwise: nil.
+		(probe @env0:notNil
+			and: [(probe @env0:at: 1) @env0:== (self @env0:dynamicInstVarAt: #'obj')
+			and: [(probe @env0:at: 2) @env0:= (self @env0:dynamicInstVarAt: #'name')]])
+				ifTrue: [^ self]].
 	[ | snapshot locals rcvrName names |
 	  snapshot := PyFrame @env0:___innermostPythonFrameSnapshot___.
 	  snapshot @env0:notNil ifTrue: [
