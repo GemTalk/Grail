@@ -264,6 +264,24 @@ ___pyDisplayNameOf___: aSelector forClass: aClass
 	^ nil
 %
 
+category: 'Grail-Calling'
+classmethod: UnboundMethod
+___noReceiver___
+	"The receiver ``Cls.f(...)'' runs a RECEIVERLESS def against: one whose
+	declared parameters do not start with a name Grail strips into the
+	Smalltalk receiver, such as ``def f(*a)'' and ``def f(*, x)''.
+
+	CPython calls ``Cls.f(1, 2)'' as the plain function, so ``a'' is (1, 2).
+	Grail compiles ``def f(*a)'' with ``a := {self} , positional'' -- right
+	for ``obj.f(2)'', where CPython's ``a'' is (obj, 2) -- so the unbound call
+	runs it with this object as the receiver, and the body leaves it out of
+	``a'' (FunctionDefAst's *vararg binding, text and IR alike).
+
+	A literal no Python code can reach, so no argument can be mistaken for it."
+
+	^ #( #'___grailNoReceiver___' )
+%
+
 set compile_env: 1
 
 category: 'Grail-Instance Creation'
@@ -667,13 +685,7 @@ value: positional value: kwargs
 		to the bare Smalltalk receiver and running it against a substitute would
 		answer from the wrong object rather than raise.  See ClassDefAst >>
 		emitReceiverlessMethodTableOn:className:."
-		(self ___isReceiverlessFor___: definingClass) ifTrue: [
-			| m |
-			m := definingClass @env0:compiledMethodAt: selector environmentId: 1.
-			m == nil ifFalse: [^ definingClass @env0:performMethod: m]].
-		^ TypeError ___signal___:
-			('unbound method ''' @env0:, selector @env0:asString
-				@env0:, ''' must be called with an instance as the first argument')
+		^ self ___callReceiverless___: #() kw: kwargs orSignal: nil
 	].
 	obj := positional @env0:at: 1.
 	rest := (positional @env0:size @env0:> 1)
@@ -739,7 +751,7 @@ value: positional value: kwargs
 			[[pyattrload-frame-width-is-load-bearing]] for the same lesson learnt
 			one method over."
 			(resolvedSel @env0:asString @env0:endsWith: ':kw:')
-				ifTrue: [^ self ___signalDescriptorMismatch___: obj].
+				ifTrue: [^ self ___callReceiverless___: positional kw: kwargs orSignal: obj].
 			method := self ___methodForSpecialReceiver___: method
 				class: obj @env0:class.
 			method == nil ifTrue: [
@@ -835,6 +847,60 @@ ___signalDescriptorMismatch___: obj
 			@env0:, ''' for ''' @env0:, definingClass @env1:__name__ @env0:asString
 			@env0:, ''' objects doesn''t apply to a '''
 			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___callReceiverless___: positional kw: kwargs orSignal: obj
+	"``Cls.f(*positional, **kwargs)'' as CPython runs it -- the plain function,
+	every argument its own -- when the defining class published f as
+	RECEIVERLESS: no declared parameter of f is the one Grail strips into the
+	Smalltalk receiver (``def f()'', ``def f(*a)'', ``def f(*, x)'').
+
+	value:value: comes here on its two COLD paths only: no positional argument
+	at all, and a SPECIAL first argument (``M.f(1)'') that the packed
+	``_f:kw:'' form cannot take as a receiver.  Every other call substitutes
+	the first argument as the receiver, which for ``def f(*a)'' already gives
+	CPython's answer, because the body puts the receiver back at a[0].
+
+	The method is whichever form the class compiled.  ``def f()'' compiles to
+	the unary ``f''; anything with a *vararg, a keyword-only parameter or a
+	default compiles to the packed ``_f: positional kw: kwargs''.  This used to
+	ask for the unary form only, so ``Cls.f()'' on ``def f(*a)'' raised the
+	KERNEL's LookupError 2021 from compiledMethodAt:environmentId: -- a
+	Smalltalk error no Python handler matches -- and dropped any kwargs.
+
+	The packed form runs against ``UnboundMethod ___noReceiver___'', which a
+	receiverless *vararg binding leaves out of the tuple, and is handed the
+	positional Array whole, so its own prologue reports a wrong count or an
+	unexpected keyword in CPython's words.
+
+	Not receiverless: obj nil is the Python-2 ``unbound method'' refusal
+	(``def m(self)'' called with nothing), and otherwise the descriptor
+	mismatch value:value: would have raised."
+
+	| method |
+	(self ___isReceiverlessFor___: definingClass) ifTrue: [
+		method := self
+			@env0:_resolveMethodNargs: 0
+			kwOk: (kwargs == nil or: [kwargs @env0:isEmpty])
+			from: definingClass.
+		method == nil ifFalse: [
+			(method @env0:selector @env0:asString @env0:endsWith: ':kw:') ifTrue: [
+				^ UnboundMethod @env0:___noReceiver___
+					@env0:with: positional with: kwargs performMethod: method].
+			(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [
+				^ definingClass @env0:performMethod: method].
+			kwargs @env0:keysDo: [:k |
+				^ TypeError ___signal___:
+					(definingClass @env1:__name__ @env0:asString @env0:, '.'
+						@env0:, selector @env0:asString
+						@env0:, '() got an unexpected keyword argument '''
+						@env0:, k @env0:asString @env0:, '''')]]].
+	obj == nil ifFalse: [^ self ___signalDescriptorMismatch___: obj].
+	^ TypeError ___signal___:
+		('unbound method ''' @env0:, selector @env0:asString
+			@env0:, ''' must be called with an instance as the first argument')
 %
 
 category: 'Grail-Calling'

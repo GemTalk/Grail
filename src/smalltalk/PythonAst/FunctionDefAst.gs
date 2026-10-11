@@ -4199,7 +4199,11 @@ ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames receiverFir
 	Correct on the class side too, which shares this shape: a ``@classmethod
 	def m(*args)'' gets the class as args[0] and there the Smalltalk receiver IS
 	the class.  A @staticmethod never reaches here -- it has no receiver to
-	contribute, and ___irStripsReceiver___ is false for it."
+	contribute, and ___irStripsReceiver___ is false for it.
+
+	``Cls.m(1, 2)'' has no receiver at all: UnboundMethod runs it against its
+	___noReceiver___ object with every argument in positional, and that object
+	is left out of args, as the text path does."
 
 	| tail |
 	args vararg isNil ifTrue: [^ self].
@@ -4207,8 +4211,14 @@ ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames receiverFir
 		ifTrue: [
 			aBuilder
 				send: #','
-				to: (aBuilder send: #with: to: (aBuilder globalNamed: #Array)
-					with: { aBuilder selfNode } env: 0)
+				to: (aBuilder
+					ifValue: (aBuilder send: #== to: aBuilder selfNode
+						with: { aBuilder send: #'___noReceiver___'
+							to: (aBuilder globalNamed: #UnboundMethod) with: { } env: 0 }
+						env: 0)
+					then: [aBuilder add: (aBuilder arrayOf: #())]
+					else: [aBuilder add: (aBuilder send: #with: to: (aBuilder globalNamed: #Array)
+						with: { aBuilder selfNode } env: 0)])
 				with: { aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
 					with: { aBuilder obj: 1.
 						self ___irPosSize___: posLeaf on: aBuilder } env: 0 }
@@ -7329,11 +7339,16 @@ generateMethodSourceOn: aStream
 
 			test_genericclass's test_class_getitem is the corpus case: its
 			hook is written ``def __class_getitem__(*args, **kwargs)'' and
-			has to see the class as args[0]."
+			has to see the class as args[0].
+
+			EXCEPT WHEN THERE IS NO RECEIVER.  ``Cls.m(1, 2)'' calls the plain
+			function, so args is (1, 2); UnboundMethod runs such a call against
+			its ___noReceiver___ object and hands over every argument, and that
+			object is left out here."
 			self allParameterNames isEmpty
 				ifTrue: [
 					aStream
-						nextPutAll: '(Array @env0:with: self) @env0:, (';
+						nextPutAll: '((self == (UnboundMethod @env0:___noReceiver___)) ifTrue: [#()] ifFalse: [Array @env0:with: self]) @env0:, (';
 						nextPutAll: posMethodParam;
 						nextPutAll: ' @env0:copyFrom: 1 to: ';
 						nextPutAll: posMethodParam;

@@ -1299,6 +1299,7 @@ run
 	at: #'RawUnicodeEscapeTestCase' put: nil;
 	at: #'RealPathlibTestCase' put: nil;
 	at: #'RealpathSymlinksTestCase' put: nil;
+	at: #'ReceiverlessClassCallTestCase' put: nil;
 	at: #'ReConstantsTestCase' put: nil;
 	at: #'RecursionErrorTestCase' put: nil;
 	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
@@ -2802,6 +2803,7 @@ input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
 input src/smalltalk/PythonTests/RealPathlibTestCase.gs
 input src/smalltalk/PythonTests/RealpathSymlinksTestCase.gs
+input src/smalltalk/PythonTests/ReceiverlessClassCallTestCase.gs
 input src/smalltalk/PythonTests/ReConstantsTestCase.gs
 input src/smalltalk/PythonTests/RecursionErrorTestCase.gs
 input src/smalltalk/PythonTests/ReduceAndBuiltinBindingTestCase.gs
