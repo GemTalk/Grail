@@ -1274,6 +1274,7 @@ run
 	at: #'PowSemanticsTestCase' put: nil;
 	at: #'PrintableReprAndPrintfTestCase' put: nil;
 	at: #'PrintOutputRoutingTestCase' put: nil;
+	at: #'PrivateMethodKeywordCallTestCase' put: nil;
 	at: #'PrivateNameManglingTestCase' put: nil;
 	at: #'ProcessLookupErrorTestCase' put: nil;
 	at: #'PropertyAndIsinstanceTestCase' put: nil;
@@ -2781,6 +2782,7 @@ input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
 input src/smalltalk/PythonTests/PowSemanticsTestCase.gs
 input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs
 input src/smalltalk/PythonTests/PrintOutputRoutingTestCase.gs
+input src/smalltalk/PythonTests/PrivateMethodKeywordCallTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
 input src/smalltalk/PythonTests/ProcessLookupErrorTestCase.gs
 input src/smalltalk/PythonTests/PropertyAndIsinstanceTestCase.gs
