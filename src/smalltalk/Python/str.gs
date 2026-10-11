@@ -747,6 +747,44 @@ __lt__: other
 %
 
 category: 'Grail-String Operations'
+classmethod: CharacterCollection
+___percentOperandIsMapping___: args forBytes: forBytes
+	"Is the right operand of %-formatting a MAPPING?  CPython's test, which
+	decides both where %(key)s looks and whether leftover arguments are an
+	error: the operand supports subscripting and is not a tuple or a str --
+	nor, for bytes formatting, a bytes or bytearray.  So a list, a range, a
+	ChainMap, a mappingproxy or any class with __getitem__ counts, and
+	``'abc' % [1]'' is 'abc' rather than ``not all arguments converted''.
+
+	Grail used to accept only a dict (KeyValueDictionary), refusing every
+	other mapping with ``format requires a mapping'' (#1220).
+
+	``Has __getitem__'' cannot be asked of hasattr: Grail gives int and None
+	refusal methods that exist only to raise CPython's TypeError, every Python
+	instance inherits PythonInstance's, a builtin function's BoundMethod
+	subscripts as a PEP 585 pass-through, and a module is a SymbolDictionary.
+	None of those is a mapping to CPython, so each is excluded by name."
+
+	| defCls meth |
+	(args @env0:isKindOf: Array) ifTrue: [^ false].
+	(args @env0:isKindOf: CharacterCollection) ifTrue: [^ false].
+	(forBytes @env0:and: [args @env0:isKindOf: ByteArray]) ifTrue: [^ false].
+	((args @env0:isKindOf: BoundMethod) @env0:or: [args @env0:isKindOf: module])
+		ifTrue: [^ false].
+	defCls := (args @env0:class)
+		@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
+	defCls @env0:isNil ifTrue: [
+		defCls := (args @env0:class)
+			@env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1.
+		defCls @env0:isNil ifTrue: [^ false].
+		^ defCls ~~ PythonInstance].
+	defCls == PythonInstance ifTrue: [^ false].
+	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
+	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
+		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
+%
+
+category: 'Grail-String Operations'
 method: CharacterCollection
 __mod__: args
 	"printf-style % formatting: '%[(key)][flags][width][.precision][len]conv'
@@ -762,7 +800,7 @@ __mod__: args
 	n := src @env0:size.
 	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	bi := builtins instance.
-	isMap := args isKindOf: KeyValueDictionary.
+	isMap := CharacterCollection ___percentOperandIsMapping___: args forBytes: false.
 	"Python treats a string on the RHS as a single positional, not a
 	sequence of characters; same for ByteArray.
 

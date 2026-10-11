@@ -1264,6 +1264,7 @@ run
 	at: #'Pep487HooksTestCase' put: nil;
 	at: #'Pep560BasesTestCase' put: nil;
 	at: #'Pep649AnnotationsTestCase' put: nil;
+	at: #'PercentFormatMappingTestCase' put: nil;
 	at: #'PermissionErrorTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'PickleFinalRuntimeGapsTestCase' put: nil;
@@ -2774,6 +2775,7 @@ input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs
 input src/smalltalk/PythonTests/Pep487HooksTestCase.gs
 input src/smalltalk/PythonTests/Pep560BasesTestCase.gs
 input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
+input src/smalltalk/PythonTests/PercentFormatMappingTestCase.gs
 input src/smalltalk/PythonTests/PermissionErrorTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/PickleFinalRuntimeGapsTestCase.gs
