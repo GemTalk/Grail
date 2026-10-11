@@ -9151,6 +9151,12 @@ ___classCell___: aSym
 				chain @env0:detect: [:c |
 					blk := c ___dynamicClassAttr___: aSym.
 					blk @env0:notNil] ifNone: [nil]]]].
+	"A RECEIVER THAT IS NOT AN INSTANCE AT ALL.  ``Holder.f(x)'' calls the
+	plain function, so a closure read inside it must not depend on what x is
+	-- and for a receiverless def (``def f(*a)'') the receiver is
+	UnboundMethod's ___noReceiver___ object, whose chain carries nothing.  The
+	running method's own class does carry the cell; find it from the stack."
+	blk @env0:isNil ifTrue: [blk := self ___grailCellFromReceiverFrames___: aSym].
 	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
 	"MISSED.  For the cell that holds the DEFINING CLASS ITSELF -- what
 	``__class__'' and zero-arg ``super()'' read -- a miss does not mean the name
@@ -9370,6 +9376,45 @@ ___grailClassCellFromFrames___: aSym
 					v := [blk @env0:value]
 						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 					v == nil ifFalse: [^ v]]]].
+		i := i @env0:+ 3].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailCellFromReceiverFrames___: aSym
+	"The closure cell aSym as stored on the class of a method RUNNING ON THIS
+	RECEIVER, found on the live call stack, or nil.
+
+	___classCell___: reads a cell through the receiver's class chain, which is
+	where ClassDefAst stores it, so it misses when the receiver is not an
+	instance of the class whose method is reading it -- ``Holder.f(x)'' with
+	any x, and every receiverless call (UnboundMethod >> ___noReceiver___).
+	The frame that IS that method knows its class (GsNMethod >> inClass); the
+	capture is the one ___grailClassCellFromFrames___: takes, for the same
+	reason and at the same price, paid only on the miss.
+
+	The innermost frame whose receiver is this very object and whose class
+	carries the cell decides, so object's own methods on the way down (this
+	one, ___classCell___:) are passed over, and no class can answer that does
+	not hold the cell itself."
+
+	| probe st i cls blk |
+	BaseException @env0:___ensureStackCapture___.
+	probe := [Error @env0:new @env0:signal: 'grail closure-cell probe']
+		@env0:on: Error do: [:ex | ex @env0:return: ex].
+	st := [probe @env0:_gsStack] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	st == nil ifTrue: [^ nil].
+	"A SmallInteger, then (method, ip, receiver) triples, innermost first."
+	i := 2.
+	[i @env0:+ 2 @env0:<= st @env0:size] @env0:whileTrue: [
+		(st @env0:at: i @env0:+ 2) == self ifTrue: [
+			cls := [(st @env0:at: i) @env0:inClass]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			cls == nil ifFalse: [
+				(cls @env0:isMeta) ifTrue: [cls := cls @env0:thisClass].
+				blk := cls ___dynamicClassAttr___: aSym.
+				blk @env0:isNil ifFalse: [^ blk]]].
 		i := i @env0:+ 3].
 	^ nil
 %
