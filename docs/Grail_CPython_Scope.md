@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 57 | 4 | 29 | 90 |
-| P2 | 21 | 1 | 12 | 34 |
+| P1 | 55 | 6 | 29 | 90 |
+| P2 | 19 | 3 | 12 | 34 |
 | P3 | 15 | 1 | 40 | 56 |
 | P4 | 14 | 2 | 59 | 75 |
-| **In-scope** | **107** | **8** | **140** | **255** |
+| **In-scope** | **103** | **12** | **140** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **107 of those score OK**.
+Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **103 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,11 +136,11 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 61 | 3151 | 375 | 2717 | 12% |
-| P2 | 22 | 4050 | 553 | 3488 | 14% |
-| P3 | 16 | 2565 | 401 | 2162 | 16% |
-| P4 | 19 | 1498 | 56 | 1442 | 4% |
-| **all** | **118** | **11264** | **1385** | **9809** | **12%** |
+| P1 | 61 | 3169 | 375 | 2727 | 12% |
+| P2 | 22 | 4056 | 553 | 3492 | 14% |
+| P3 | 16 | 2583 | 402 | 2179 | 16% |
+| P4 | 20 | 1618 | 127 | 1473 | 8% |
+| **all** | **119** | **11426** | **1457** | **9871** | **13%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_decimal` 200 of 368 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30.
 <!-- /test-tally -->
@@ -250,7 +250,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_richcmp` | Rich comparison operators (language). |
 | ✅ | `test_scope` | Lexical scoping / closures (language). |
 | ✅ | `test_set` | set/frozenset — core type (in harness). |
-| ✅ | `test_setcomps` | Set comprehensions (language). |
+| ❗ | `test_setcomps` | Set comprehensions (language). |
 | ✅ | `test_slice` | slice objects (language). |
 | ✅ | `test_sort` | list.sort / sorted (language/builtin). |
 |  | `test_source_encoding` | Source-file encoding declarations (parser). |
@@ -269,7 +269,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_types` | types module — built-in type objects (language). |
 | ✅ | `test_unary` | Unary operators (language). |
 |  | `test_unicode_identifiers` | Unicode identifier support (language). |
-| ✅ | `test_unpack` | Sequence unpacking (language). |
+| ❗ | `test_unpack` | Sequence unpacking (language). |
 |  | `test_unpack_ex` | Extended (starred) unpacking (language). |
 |  | `test_utf8source` | UTF-8 source files (parser). |
 | ✅ | `test_with` | with statement / context managers (language). |
@@ -300,14 +300,14 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ✅ | `test_heapq` | heapq — core (in harness). |
 | ✅ | `test_itertools` | itertools — core (in harness). |
 |  | `test_keyword` | keyword module — language keyword set. |
-| ✅ | `test_math` | math — core (in harness). |
+| ❗ | `test_math` | math — core (in harness). |
 |  | `test_math_property` | math invariants — pure. |
 |  | `test_numeric_tower` | Numeric coercion tower (language/numbers). |
 | ✅ | `test_operator` | operator — core (in harness). |
 |  | `test_ordered_dict` | OrderedDict. |
 | ❗ | `test_random` | random — Mersenne Twister PRNG. CPython's random.py over a native `_random`; wired 2026-10-04 at 114t 0F/14E. |
 | ✅ | `test_re` | re — core (in harness). |
-| ✅ | `test_statistics` | statistics — pure Python. |
+| ❗ | `test_statistics` | statistics — pure Python. |
 | ✅ | `test_string` | string module (vendored) — Formatter/Template (pure). |
 |  | `test_strtod` | String→double conversion (float parsing). |
 | ✅ | `test_textwrap` | textwrap — core (in harness). |
@@ -775,17 +775,20 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**7 of the 118 rows on the committed board are not OK.**
+**12 of the 119 rows on the committed board are not OK.**
 
+- `test.test_math` FAIL, 89 tests: 1 failed, 0 errors, 5 skipped
+- `test.test_unpack` FAIL, 2 tests: 1 failed, 0 errors, 0 skipped
+- `test.test_setcomps` FAIL, 2 tests: 1 failed, 0 errors, 0 skipped
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
+- `test.test_statistics` FAIL, 375 tests: 1 failed, 0 errors, 6 skipped
 - `test.test_except_star` ERROR, 60 tests: 10 failed, 10 errors, 0 skipped
-- `test.test_generators` ERROR, 50 tests: 10 failed, 10 errors, 1 skipped
+- `test.test_generators` ERROR, 59 tests: 15 failed, 11 errors, 1 skipped
 - `test.test_long` ERROR, 47 tests: 6 failed, 8 errors, 7 skipped
 - `test.test_exception_hierarchy` ERROR, 16 tests: 2 failed, 3 errors, 1 skipped
 - `test.test_copyreg` FAIL, 6 tests: 2 failed, 0 errors, 0 skipped
 - `test.test_random` ERROR, 116 tests: 0 failed, 9 errors, 4 skipped
-
-Wired, but not on the board until the next nightly measures them: `test_uuid`.
+- `test.test_uuid` ERROR, 120 tests: 5 failed, 13 errors, 70 skipped
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
