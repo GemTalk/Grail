@@ -245,12 +245,15 @@ valueSourceFor: anAlias
 		]
 		ifFalse: [
 			"Stored attribute or unconverted module — go through
-			___pyAttrLoad___ so dynamicInstVar entries (the canonical home
-			for module attributes assigned at init time) are read directly
-			without invoking a same-named unary method.  ``from enum import
+			___importFrom___ (object >>), CPython's IMPORT_FROM: the
+			___pyAttrLoad___ read, so dynamicInstVar entries (the canonical
+			home for module attributes assigned at init time) are read directly
+			without invoking a same-named unary method -- ``from enum import
 			auto'' depends on this: ``auto'' is pre-stored as a BoundMethod
 			and a bare unary send would dispatch the env-1 ``auto'' method,
-			returning an integer."
+			returning an integer -- and on a miss the sys.modules retry and
+			the ``cannot import name'' ImportError, which __import__ no longer
+			raises (issue #1223)."
 			stream
 				nextPutAll: '((((Python @env0:at: #builtins) @env0:___instance___) ';
 				nextPutAll: self ___importSelectorPrefix___;
@@ -258,7 +261,7 @@ valueSourceFor: anAlias
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) @env1:___pyAttrLoad___: #''';
+				nextPutAll: ''' }. 0 } kw: nil) @env1:___importFrom___: #''';
 				nextPutAll: attrName;
 				nextPutAll: ''')'.
 		].
@@ -375,7 +378,7 @@ ___emitIRStatementOn___: aBuilder
 	"valueSourceFor:'s two shapes, one statement per alias.  The imported name
 	is the one-element fromlist so the importer answers the LEAF module:
 	  name := ((builtins instance) ___import__: { 'abs.name'. nil. nil. { 'attr' }. 0 } kw: nil)
-	            @env1:___pyAttrLoad___: #attr
+	            @env1:___importFrom___: #attr
 	or, when the module class is known at compile time and ``attr'' is one of
 	its env-1 fast-path methods (a callable on a converted module), the
 	BoundMethod wrap the text emits instead of the attribute load:
@@ -406,7 +409,7 @@ ___emitIRStatementOn___: aBuilder
 					send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
 					with: { imported. aBuilder obj: attrName asSymbol } env: 1]
 				ifFalse: [aBuilder
-					send: #'___pyAttrLoad___:' to: imported
+					send: #'___importFrom___:' to: imported
 					with: { aBuilder obj: attrName asSymbol } env: 1].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
