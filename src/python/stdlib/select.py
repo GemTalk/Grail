@@ -111,3 +111,24 @@ def select(rlist, wlist, xlist, timeout=None):
     ms = None if timeout is None else int(timeout * 1000)
     ridx, widx = _socket._select(rsocks, wsocks, ms)
     return ([rlist[i - 1] for i in ridx], [wlist[i - 1] for i in widx], [])
+
+
+def _select_waking(rlist, wlist, timeout, waker):
+    """Grail-only: select() that another green thread can end early.
+
+    ``waker`` is a ``_thread`` lock the caller HOLDS; releasing it from any
+    other green thread wakes this wait, and a release that lands before the
+    wait makes it return at once.  It comes back held.  The asyncio loop waits
+    here so call_soon_threadsafe can wake it -- CPython does the same with a
+    self-pipe, which GemStone's sockets cannot make (no Unix-domain sockets).
+
+    Unlike select(), no sockets with no timeout is legal: it waits for the
+    waker alone.  Returns (readable, writable)."""
+    rlist = list(rlist)
+    wlist = list(wlist)
+    rsocks = _resolve_all(rlist, "rlist")
+    wsocks = _resolve_all(wlist, "wlist")
+    # Round UP: a sub-millisecond timer must still wait, not poll in a spin.
+    ms = None if timeout is None else -(-int(timeout * 1000000) // 1000)
+    ridx, widx = _socket._select(rsocks, wsocks, ms, waker)
+    return ([rlist[i - 1] for i in ridx], [wlist[i - 1] for i in widx])

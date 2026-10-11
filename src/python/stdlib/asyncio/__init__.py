@@ -41,6 +41,16 @@ from asyncio import runners  # noqa: F401
 from asyncio import taskgroups  # noqa: F401
 from asyncio import tasks  # noqa: F401
 from asyncio import timeouts  # noqa: F401  (submodule, for asyncio.timeouts.*)
+from asyncio import protocols  # noqa: F401  (CPython's, verbatim)
+from asyncio import transports  # noqa: F401  (CPython's, verbatim)
+from asyncio import base_events  # noqa: F401  (Grail's loop under CPython's name)
+# streams and subprocess are CPython's, verbatim.  They IMPORT, which is what
+# anyio needs (its asyncio backend subclasses SubprocessStreamProtocol at module
+# level); opening a connection or a process still needs loop.create_connection
+# / subprocess_exec, which Grail's loop does not have yet.
+from asyncio import streams  # noqa: F401
+from asyncio import subprocess  # noqa: F401
+from asyncio import threads  # noqa: F401  (CPython's to_thread)
 
 from asyncio.exceptions import (
     BrokenBarrierError,
@@ -72,7 +82,38 @@ from asyncio.events import (
     set_event_loop,
     set_event_loop_policy,
 )
-from asyncio.futures import Future, isfuture
+from asyncio.futures import (
+    Future,
+    future_add_to_awaited_by,
+    future_discard_from_awaited_by,
+    isfuture,
+    wrap_future,
+)
+from asyncio.threads import to_thread
+from asyncio.base_events import BaseEventLoop
+from asyncio.streams import (
+    StreamReader,
+    StreamReaderProtocol,
+    StreamWriter,
+    open_connection,
+    start_server,
+)
+from asyncio.subprocess import create_subprocess_exec, create_subprocess_shell
+from asyncio.protocols import (
+    BaseProtocol,
+    BufferedProtocol,
+    DatagramProtocol,
+    Protocol,
+    SubprocessProtocol,
+)
+from asyncio.transports import (
+    BaseTransport,
+    DatagramTransport,
+    ReadTransport,
+    SubprocessTransport,
+    Transport,
+    WriteTransport,
+)
 from asyncio.locks import (
     Barrier,
     BoundedSemaphore,
@@ -122,11 +163,19 @@ from asyncio.timeouts import (
 from asyncio.tasks import (
     create_eager_task_factory,
     eager_task_factory,
+    run_coroutine_threadsafe,
 )
 
 __all__ = [
     'ALL_COMPLETED', 'FIRST_COMPLETED', 'FIRST_EXCEPTION',
-    'AbstractEventLoop', 'Barrier', 'BoundedSemaphore', 'BrokenBarrierError',
+    'AbstractEventLoop', 'BaseEventLoop', 'BaseProtocol', 'BaseTransport',
+    'BufferedProtocol', 'DatagramProtocol', 'DatagramTransport', 'Protocol',
+    'ReadTransport', 'SubprocessProtocol', 'SubprocessTransport', 'Transport',
+    'WriteTransport', 'base_events', 'future_add_to_awaited_by',
+    'future_discard_from_awaited_by', 'protocols', 'transports',
+    'StreamReader', 'StreamReaderProtocol', 'StreamWriter', 'open_connection',
+    'start_server', 'streams', 'subprocess', 'create_subprocess_exec',
+    'create_subprocess_shell', 'Barrier', 'BoundedSemaphore', 'BrokenBarrierError',
     'CancelledError', 'Condition', 'Event', 'EventLoop', 'Future', 'Handle',
     'IncompleteReadError', 'InvalidStateError', 'LifoQueue',
     'LimitOverrunError', 'Lock', 'PriorityQueue', 'Queue', 'QueueEmpty',
@@ -138,8 +187,8 @@ __all__ = [
     'events', 'exceptions', 'futures', 'gather', 'get_event_loop',
     'get_event_loop_policy', 'get_running_loop', 'iscoroutine',
     'iscoroutinefunction', 'isfuture', 'locks', 'new_event_loop', 'queues',
-    'run',
+    'run', 'run_coroutine_threadsafe',
     'runners', 'set_event_loop', 'set_event_loop_policy', 'shield', 'sleep',
-    'taskgroups', 'tasks', 'timeout', 'timeout_at', 'timeouts', 'wait',
-    'wait_for',
+    'taskgroups', 'tasks', 'threads', 'timeout', 'timeout_at', 'timeouts',
+    'to_thread', 'wait', 'wait_for', 'wrap_future',
 ]

@@ -397,9 +397,38 @@ _spawnProcess: function args: args
 
 	| proc |
 	proc := [
-		[function @env1:value: args value: nil] on: Error do: [:e | nil]
+		"Marks this process as a Python THREAD, so its contextvars context is
+		its own (_thread >> _get_context).  Every other process -- the gem's
+		main process, and whichever process a later GCI call runs on -- is the
+		main thread and shares the session's."
+		GsProcess current environmentAt: #'GrailPyThread' put: true.
+		[function @env1:value: args value: nil] on: Error do: [:e |
+			"REPORTED, not swallowed.  threading's bootstrap reports every
+			Python exception through excepthook; what reaches here is a
+			GemStone error below it, and dropping it silently made a thread
+			simply vanish -- a blocking portal's event-loop thread, with its
+			caller left waiting on a future nothing would ever set."
+			[GsFile stderr
+				nextPutAll: 'Exception in thread (uncaught GemStone error): ';
+				nextPutAll: e description asString; lf;
+				nextPutAll: (GsProcess stackReportToLevel: 40); lf]
+					on: Error do: [:e2 | nil].
+			nil]
 	] fork.
 	^ proc asOop
+%
+
+category: 'Grail-Threading'
+classmethod: _thread
+___contextProcess___
+	"The process holding the calling thread's contextvars context, or nil
+	for the main thread (whose context is the session's; see _get_context)."
+
+	| p |
+	p := importlib ___pythonThreadOf___: GsProcess current.
+	^ (p environmentAt: #'GrailPyThread' ifAbsent: [false])
+		ifTrue: [p]
+		ifFalse: [nil]
 %
 
 set compile_env: 1
@@ -431,9 +460,54 @@ allocate_lock
 category: 'Grail-Built-in Functions'
 method: _thread
 get_ident
-	"Identifier of the calling thread (the active GsProcess)."
+	"Identifier of the calling THREAD.  A generator or coroutine body runs on a
+	GsProcess of its own, but in Python it runs on the thread that resumed it,
+	so the answer is that thread's process (importlib class >>
+	___pythonThreadOf___:), as CPython's get_ident() inside a generator is its
+	consumer's.  Answering the body's own process gave every generator a thread
+	identity of its own: a lock owned in a coroutine read as owned elsewhere,
+	and a per-thread table keyed on it -- contextvars' current context -- split
+	one thread's state across its generators."
 
-	^ GsProcess @env0:current @env0:asOop
+	^ (importlib @env0:___pythonThreadOf___: GsProcess @env0:current) @env0:asOop
+%
+
+category: 'Grail-Built-in Functions'
+method: _thread
+_get_context
+	"Grail-only, for contextvars: the calling thread's current Context, or
+	None before it has one.
+
+	PER THREAD, as CPython's.  It was one session-wide slot, which every
+	green thread shared: a worker that ran while a task was inside
+	Context.run saw that task's context as its own (and wrote into it), and a
+	new thread started inside its creator's context where CPython starts it in
+	an empty one.  A thread started by start_new_thread keeps its context on
+	its own GsProcess (environmentAt:), so it dies with the thread.  The MAIN
+	thread keeps it in SessionTemps: it is not one process -- a later GCI call
+	can run on a fresh one -- and its context must last the session.  Neither
+	is committed.  Resolved through ___pythonThreadOf___: like get_ident, so a
+	generator body shares its resumer's context."
+
+	| p |
+	p := _thread @env0:___contextProcess___.
+	p == nil ifTrue: [
+		^ SessionTemps @env0:current @env0:at: #'GrailPyMainContext' otherwise: None].
+	^ p @env0:environmentAt: #'GrailPyContext' ifAbsent: [None]
+%
+
+category: 'Grail-Built-in Functions'
+method: _thread
+_set_context: aContext
+	"Grail-only: make aContext the calling thread's current Context.  See
+	_get_context."
+
+	| p |
+	p := _thread @env0:___contextProcess___.
+	p == nil
+		ifTrue: [SessionTemps @env0:current @env0:at: #'GrailPyMainContext' put: aContext]
+		ifFalse: [p @env0:environmentAt: #'GrailPyContext' put: aContext].
+	^ None
 %
 
 category: 'Grail-Initialization'

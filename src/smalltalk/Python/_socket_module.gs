@@ -2494,6 +2494,38 @@ ___selectGsSocketFor___: anEntry
 category: 'Grail-Select'
 classmethod: PyRawSocket
 ___select___: readSocks _: writeSocks _: timeoutMs
+	"Plain select: a private semaphore nobody else can signal."
+
+	^ self ___select___: readSocks _: writeSocks _: timeoutMs on: Semaphore @env0:new
+%
+
+category: 'Grail-Select'
+classmethod: PyRawSocket
+___select___: readSocks _: writeSocks _: timeoutMs wake: aLock
+	"select that a SECOND green thread can cut short by releasing aLock --
+	the asyncio loop's call_soon_threadsafe wake-up (asyncio/events.py).
+
+	The wait happens on aLock's own semaphore, so a release() that lands while
+	the loop is waiting wakes it, and one that lands BEFORE the wait leaves a
+	signal behind that makes the wait return at once: no lost wake-up, which a
+	flag checked before the wait could not promise.  aLock is held (signal
+	count 0) by its owner while nothing is pending.
+
+	Readiness events signal that semaphore too, so after the wait it may hold
+	stray signals; draining them puts the lock back to held.  Draining also
+	eats a wake-up that raced in, which is safe: the waker queued its callback
+	BEFORE releasing, and the loop reads its ready queue after this returns."
+
+	| sem result |
+	sem := aLock @env0:_sem.
+	result := self ___select___: readSocks _: writeSocks _: timeoutMs on: sem.
+	[sem @env0:tryLock] @env0:whileTrue.
+	^ result
+%
+
+category: 'Grail-Select'
+classmethod: PyRawSocket
+___select___: readSocks _: writeSocks _: timeoutMs on: sem
 	"N-way readiness wait.  Answers a list of two lists holding the 1-based
 	INDICES of the ready sockets in readSocks and writeSocks respectively.
 
@@ -2507,7 +2539,7 @@ ___select___: readSocks _: writeSocks _: timeoutMs
 	ssl.SSLSocket are) or an int descriptor one of them owns; select.py
 	resolves wrappers first."
 
-	| rGs wGs rReady wReady sem armedR armedW waitForever ms |
+	| rGs wGs rReady wReady armedR armedW waitForever ms |
 	rGs := OrderedCollection @env0:new.
 	readSocks @env0:do: [:s | rGs @env0:add: (self ___selectGsSocketFor___: s)].
 	wGs := OrderedCollection @env0:new.
@@ -2532,7 +2564,6 @@ ___select___: readSocks _: writeSocks _: timeoutMs
 	 not theoretical: it broke the Flask HTTPS test, where the client connects
 	 while the server is between the two steps, and the handshake then failed
 	 with a connection reset."
-	sem := Semaphore @env0:new.
 	armedR := PyRawSocket @env0:___registerAll___: rGs forWrite: false on: sem.
 	armedW := PyRawSocket @env0:___registerAll___: wGs forWrite: true on: sem.
 	rReady := PyRawSocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
@@ -2567,6 +2598,15 @@ _select: readSocks _: writeSocks _: timeoutMs
 	the only socket module there was."
 
 	^ PyRawSocket ___select___: readSocks _: writeSocks _: timeoutMs
+%
+
+category: 'Grail-Select'
+method: _socket
+_select: readSocks _: writeSocks _: timeoutMs _: wakeLock
+	"select.py's _select_waking: as above, but releasing wakeLock (a
+	_thread lock its owner holds) from another green thread ends the wait."
+
+	^ PyRawSocket ___select___: readSocks _: writeSocks _: timeoutMs wake: wakeLock
 %
 
 set compile_env: 0

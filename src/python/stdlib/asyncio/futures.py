@@ -133,20 +133,28 @@ class Future:
 
     # --- callbacks --------------------------------------------------------
 
-    def add_done_callback(self, callback):
+    def add_done_callback(self, fn, *, context=None):
         """Callbacks are always scheduled through the loop, never run inline.
 
         Running one inline would let a callback execute in the middle of
         whatever called set_result(), which is how re-entrancy bugs get in --
         CPython is equally strict about it.
-        """
-        if self._state != _PENDING:
-            self._loop.call_soon(callback, self)
-        else:
-            self._callbacks.append(callback)
 
-    def remove_done_callback(self, callback):
-        filtered = [cb for cb in self._callbacks if cb != callback]
+        Stored as CPython stores them, ``(fn, context)`` pairs, and run in that
+        context: anyio walks ``task._callbacks`` unpacking exactly that shape
+        (find_root_task, which every ``to_thread.run_sync`` calls) and passes
+        ``context=`` itself.
+        """
+        if context is None:
+            import contextvars
+            context = contextvars.copy_context()
+        if self._state != _PENDING:
+            self._loop.call_soon(fn, self, context=context)
+        else:
+            self._callbacks.append((fn, context))
+
+    def remove_done_callback(self, fn):
+        filtered = [(f, ctx) for (f, ctx) in self._callbacks if f != fn]
         removed = len(self._callbacks) - len(filtered)
         self._callbacks = filtered
         return removed
@@ -156,8 +164,8 @@ class Future:
         if not callbacks:
             return
         self._callbacks = []
-        for callback in callbacks:
-            self._loop.call_soon(callback, self)
+        for callback, ctx in callbacks:
+            self._loop.call_soon(callback, self, context=ctx)
 
     # --- awaiting ---------------------------------------------------------
 
@@ -237,3 +245,126 @@ def future_discard_from_awaited_by(fut, waiter, /):
                 # Drop the empty set rather than keep it: a long-lived future
                 # that was briefly awaited should not carry the container.
                 fut._Future__asyncio_awaited_by = None
+
+
+# --- bridging to concurrent.futures ----------------------------------------
+#
+# CPython's, nearly verbatim: how a thread-pool result reaches a coroutine
+# (wrap_future, under loop.run_in_executor and asyncio.to_thread) and how a
+# coroutine's result reaches a thread (run_coroutine_threadsafe).  Grail's
+# threads are cooperative green threads, so "another thread" here is another
+# GsProcess in the same gem; the cross-loop hop is still call_soon_threadsafe,
+# which is what wakes a loop that is waiting with nothing else due.
+#
+# concurrent.futures is imported where it is used rather than at the top: it
+# pulls in threading and logging, and most asyncio programs never cross a
+# thread.
+
+
+def _get_loop(fut):
+    return fut.get_loop()
+
+
+def _convert_future_exc(exc):
+    import concurrent.futures
+    exc_class = type(exc)
+    if exc_class is concurrent.futures.CancelledError:
+        return _exceptions.CancelledError(*exc.args).with_traceback(exc.__traceback__)
+    elif exc_class is concurrent.futures.InvalidStateError:
+        return _exceptions.InvalidStateError(*exc.args).with_traceback(exc.__traceback__)
+    else:
+        return exc
+
+
+def _set_concurrent_future_state(concurrent, source):
+    """Copy state from a future to a concurrent.futures.Future."""
+    assert source.done()
+    if source.cancelled():
+        concurrent.cancel()
+    if not concurrent.set_running_or_notify_cancel():
+        return
+    exception = source.exception()
+    if exception is not None:
+        concurrent.set_exception(_convert_future_exc(exception))
+    else:
+        result = source.result()
+        concurrent.set_result(result)
+
+
+def _copy_future_state(source, dest):
+    """Internal helper to copy state from another Future.
+
+    The other Future must be a concurrent.futures.Future.
+    """
+    assert source.done()
+    if dest.cancelled():
+        return
+    assert not dest.done()
+    if source.cancelled():
+        dest.cancel()
+    else:
+        exception = source.exception()
+        if exception is not None:
+            dest.set_exception(_convert_future_exc(exception))
+        else:
+            result = source.result()
+            dest.set_result(result)
+
+
+def _chain_future(source, destination):
+    """Chain two futures so that when one completes, so does the other.
+
+    The result (or exception) of source will be copied to destination.
+    If destination is cancelled, source gets cancelled too.
+    Compatible with both asyncio.Future and concurrent.futures.Future.
+    """
+    import concurrent.futures
+    if not isfuture(source) and not isinstance(source,
+                                               concurrent.futures.Future):
+        raise TypeError('A future is required for source argument')
+    if not isfuture(destination) and not isinstance(destination,
+                                                    concurrent.futures.Future):
+        raise TypeError('A future is required for destination argument')
+    source_loop = _get_loop(source) if isfuture(source) else None
+    dest_loop = _get_loop(destination) if isfuture(destination) else None
+
+    def _set_state(future, other):
+        if isfuture(future):
+            _copy_future_state(other, future)
+        else:
+            _set_concurrent_future_state(future, other)
+
+    def _call_check_cancel(destination):
+        if destination.cancelled():
+            if source_loop is None or source_loop is dest_loop:
+                source.cancel()
+            else:
+                source_loop.call_soon_threadsafe(source.cancel)
+
+    def _call_set_state(source):
+        if (destination.cancelled() and
+                dest_loop is not None and dest_loop.is_closed()):
+            return
+        if dest_loop is None or dest_loop is source_loop:
+            _set_state(destination, source)
+        else:
+            if dest_loop.is_closed():
+                return
+            dest_loop.call_soon_threadsafe(_set_state, destination, source)
+
+    destination.add_done_callback(_call_check_cancel)
+    source.add_done_callback(_call_set_state)
+
+
+def wrap_future(future, *, loop=None):
+    """Wrap concurrent.futures.Future object."""
+    import concurrent.futures
+    if isfuture(future):
+        return future
+    assert isinstance(future, concurrent.futures.Future), \
+        f'concurrent.futures.Future is expected, got {future!r}'
+    if loop is None:
+        loop = _events.get_event_loop()
+    new_future = loop.create_future()
+    _chain_future(future, new_future)
+    return new_future

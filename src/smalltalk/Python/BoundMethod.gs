@@ -913,6 +913,22 @@ value: positional value: kwargs
 				^ (UnboundMethod definingClass: definingClass selector: selector)
 					value: (Array @env0:with: receiver) @env0:, actualArgs
 					value: kwargs].
+			"A fixed-arity method called with KEYWORDS and no ``_name:kw:''
+			companion to bind them -- a class-side one: @classmethod and
+			@staticmethod defs get none (instance methods and module functions
+			do).  anyio's ``backend_class.run_sync_from_thread(func, args,
+			token=...)'' raised here.  Bind the keywords by the compiled
+			method's own argument names instead.  Done HERE, on the path that
+			was a TypeError, rather than by compiling class-side companions:
+			those are found by the instance attribute probe of the metaclass,
+			so a base's classmethod outranked a subclass's instance method of
+			the same name."
+			(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [ | bound |
+				bound := self ___kwBoundArgsFor___: actualReceiver args: actualArgs kw: kwargs.
+				bound == nil ifFalse: [
+					^ actualReceiver
+						perform: (bound @env0:at: 1)
+						env: 1 withArguments: (bound @env0:at: 2)]].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString
@@ -920,6 +936,51 @@ value: positional value: kwargs
 	^ actualReceiver
 		perform: pinnedVarargs
 		env: 1 withArguments: { actualArgs. kwargs }
+%
+
+category: 'Grail-Private'
+method: BoundMethod
+___kwBoundArgsFor___: aReceiver args: posArgs kw: kwargs
+	"{fixedSelector. arguments} for calling aReceiver's fixed-arity method of
+	this name with posArgs and kwargs bound to its parameters BY NAME, or nil
+	when that cannot be done exactly -- no fixed-arity method of the total
+	arity, no recorded signature, or a parameter that is not plain
+	positional-or-keyword.  A simple-positional def has no defaults (one with
+	defaults compiles varargs), so every parameter is required.
+
+	The names come from the class's ___methodSignatureTable___ (what
+	inspect.signature reads), not from the compiled method: the text arm
+	compiles a parameter ``token'' as ``_token'' and the IR arm as ``token'',
+	and the table holds the Python spelling for both.  Binding errors are
+	CPython's TypeErrors."
+
+	| n sel owner pyClass sig names args fname |
+	n := posArgs @env0:size @env0:+ kwargs @env0:size.
+	sel := self @env0:_selectorForArgCount: n.
+	sel == nil ifTrue: [^ nil].
+	owner := aReceiver @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+	owner == nil ifTrue: [^ nil].
+	pyClass := owner @env0:isMeta ifTrue: [owner @env0:thisClass] ifFalse: [owner].
+	sig := self ___methodSignatureForClass___: pyClass name: selector @env0:asString.
+	(sig == nil or: [sig @env0:size @env0:~= n]) ifTrue: [^ nil].
+	(sig @env0:allSatisfy: [:p | (p @env0:at: 2) @env0:= 1]) ifFalse: [^ nil].
+	names := sig @env0:collect: [:p | (p @env0:at: 1) @env0:asString].
+	fname := selector @env0:asString @env0:, '()'.
+	"Every keyword must name a parameter the positionals left unfilled."
+	kwargs @env0:keysDo: [:k | | i |
+		i := names @env0:indexOf: k @env0:asString.
+		i @env0:= 0 ifTrue: [
+			^ TypeError ___signal___: fname @env0:, ' got an unexpected keyword argument '''
+				@env0:, k @env0:asString @env0:, ''''].
+		i @env0:<= posArgs @env0:size ifTrue: [
+			^ TypeError ___signal___: fname @env0:, ' got multiple values for argument '''
+				@env0:, k @env0:asString @env0:, '''']].
+	args := Array @env0:new: n.
+	1 @env0:to: n do: [:i |
+		args @env0:at: i put: (i @env0:<= posArgs @env0:size
+			ifTrue: [posArgs @env0:at: i]
+			ifFalse: [kwargs @env0:at: (names @env0:at: i)])].
+	^ { sel. args }
 %
 
 category: 'Grail-Callable'

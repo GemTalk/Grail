@@ -18,6 +18,8 @@
 # ``_thread`` primitive is reached through a module-level helper below, and the
 # Thread/RLock methods call those helpers instead of touching ``_thread``.
 
+from time import monotonic as _monotonic
+
 TIMEOUT_MAX = 600.0
 
 
@@ -79,6 +81,23 @@ class RLock:
     def _is_owned(self):
         # CPython's private predicate; Condition and test_contextlib use it.
         return self._owner == get_ident()
+
+    # Condition.wait's hooks, as CPython's RLock has them: release EVERY level
+    # of a recursive hold while waiting, and restore it afterwards.  Without
+    # them Condition would fall back to one release(), and a waiter holding
+    # the lock twice would wait while still holding it.
+    def _release_save(self):
+        if self._count == 0:
+            raise RuntimeError("cannot release un-acquired lock")
+        state = (self._count, self._owner)
+        self._count = 0
+        self._owner = None
+        self._block.release()
+        return state
+
+    def _acquire_restore(self, state):
+        self._block.acquire()
+        self._count, self._owner = state
 
     def __enter__(self):
         self.acquire()
@@ -307,6 +326,29 @@ _MainThread.ident = get_ident()
 _active[_MainThread.ident] = _MainThread
 
 
+# threading's own exit hooks, which CPython runs from _shutdown() BEFORE the
+# atexit module's -- concurrent.futures.thread registers its worker-draining
+# _python_exit here at import.  Like atexit (see its docstring), Grail keeps the
+# registry but has no shutdown event to fire it from; _shutdown() fires it for a
+# caller who wants that deliberately.
+_threading_atexits = []
+_SHUTTING_DOWN = False
+
+
+def _register_atexit(func, *arg, **kwargs):
+    """CPython's private hook, as concurrent.futures uses it."""
+    if _SHUTTING_DOWN:
+        raise RuntimeError("can't register atexit after shutdown")
+    _threading_atexits.append(lambda: func(*arg, **kwargs))
+
+
+def _shutdown():
+    global _SHUTTING_DOWN
+    _SHUTTING_DOWN = True
+    for atexit_call in reversed(_threading_atexits):
+        atexit_call()
+
+
 def current_thread():
     """The Thread the caller is running on.
 
@@ -350,51 +392,53 @@ class local:
     pass
 
 
-class Semaphore:
-    def __init__(self, value=1):
-        self._value = value
-
-    def acquire(self, blocking=True, timeout=None):
-        if self._value > 0:
-            self._value -= 1
-            return True
-        if not blocking:
-            return False
-        raise RuntimeError(
-            "Semaphore.acquire would block forever (Grail threads are cooperative)")
-
-    def release(self, n=1):
-        self._value += n
-
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.release()
-        return False
-
-
-class BoundedSemaphore(Semaphore):
-    def __init__(self, value=1):
-        Semaphore.__init__(self, value)
-        self._initial_value = value
-
-    def release(self, n=1):
-        if self._value + n > self._initial_value:
-            raise ValueError("Semaphore released too many times")
-        Semaphore.release(self, n)
-
+# Semaphore, BoundedSemaphore and Condition are CPython's (3.14), over the
+# real locks above.  They were non-blocking stand-ins that raised where CPython
+# waits -- "would block forever (Grail threads are cooperative)" -- which was
+# wrong once threads ran: a waiter parks on a lock and yields, and the thread
+# that will notify it gets to run.  concurrent.futures' ThreadPoolExecutor is
+# what needed them (its idle semaphore and every Future's Condition).
+# Deviation: the waiter queue is a list, not a deque, so importing threading
+# does not pull in collections.
 
 class Condition:
+    """A condition variable: wait() releases the lock and parks until notify(),
+    then re-acquires it."""
+
     def __init__(self, lock=None):
-        self._lock = lock if lock is not None else RLock()
+        if lock is None:
+            lock = RLock()
+        self._lock = lock
+        self._waiters = []
 
     def acquire(self, *args):
         return self._lock.acquire(*args)
 
     def release(self):
         self._lock.release()
+
+    def __enter__(self):
+        return self._lock.__enter__()
+
+    def __exit__(self, *args):
+        return self._lock.__exit__(*args)
+
+    def __repr__(self):
+        return "<Condition(%s, %d)>" % (self._lock, len(self._waiters))
+
+    def _release_save(self):
+        release_save = getattr(self._lock, "_release_save", None)
+        if release_save is not None:
+            return release_save()
+        self._lock.release()
+        return None
+
+    def _acquire_restore(self, state):
+        acquire_restore = getattr(self._lock, "_acquire_restore", None)
+        if acquire_restore is not None:
+            acquire_restore(state)
+        else:
+            self._lock.acquire()
 
     def _is_owned(self):
         # As CPython: ask the lock when it can say (RLock), otherwise probe
@@ -407,23 +451,136 @@ class Condition:
             return False
         return True
 
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.release()
-        return False
-
     def wait(self, timeout=None):
-        raise RuntimeError(
-            "Condition.wait would block forever (Grail threads are cooperative)")
+        if not self._is_owned():
+            raise RuntimeError("cannot wait on un-acquired lock")
+        waiter = _new_lock()
+        waiter.acquire()
+        self._waiters.append(waiter)
+        saved_state = self._release_save()
+        gotit = False
+        try:
+            if timeout is None:
+                waiter.acquire()
+                gotit = True
+            elif timeout > 0:
+                gotit = waiter.acquire(True, timeout)
+            else:
+                gotit = waiter.acquire(False)
+            return gotit
+        finally:
+            self._acquire_restore(saved_state)
+            if not gotit:
+                try:
+                    self._waiters.remove(waiter)
+                except ValueError:
+                    pass
+
+    def wait_for(self, predicate, timeout=None):
+        endtime = None
+        waittime = timeout
+        result = predicate()
+        while not result:
+            if waittime is not None:
+                if endtime is None:
+                    endtime = _monotonic() + waittime
+                else:
+                    waittime = endtime - _monotonic()
+                    if waittime <= 0:
+                        break
+            self.wait(waittime)
+            result = predicate()
+        return result
 
     def notify(self, n=1):
-        pass
+        if not self._is_owned():
+            raise RuntimeError("cannot notify on un-acquired lock")
+        waiters = self._waiters
+        while waiters and n > 0:
+            waiter = waiters[0]
+            try:
+                waiter.release()
+            except RuntimeError:
+                pass
+            else:
+                n -= 1
+            try:
+                waiters.remove(waiter)
+            except ValueError:
+                pass
 
     def notify_all(self):
-        pass
+        self.notify(len(self._waiters))
+
+    def notifyAll(self):
+        self.notify_all()
+
+
+class Semaphore:
+    """A counter of permits: acquire() takes one, waiting while there are none;
+    release() returns n and wakes up to n waiters."""
+
+    def __init__(self, value=1):
+        if value < 0:
+            raise ValueError("semaphore initial value must be >= 0")
+        self._cond = Condition(Lock())
+        self._value = value
+
+    def __repr__(self):
+        return "<%s at %#x: value=%d>" % (type(self).__qualname__, id(self),
+                                         self._value)
+
+    def acquire(self, blocking=True, timeout=None):
+        if not blocking and timeout is not None:
+            raise ValueError("can't specify timeout for non-blocking acquire")
+        rc = False
+        endtime = None
+        with self._cond:
+            while self._value == 0:
+                if not blocking:
+                    break
+                if timeout is not None:
+                    if endtime is None:
+                        endtime = _monotonic() + timeout
+                    else:
+                        timeout = endtime - _monotonic()
+                        if timeout <= 0:
+                            break
+                self._cond.wait(timeout)
+            else:
+                self._value -= 1
+                rc = True
+        return rc
+
+    def __enter__(self):
+        return self.acquire()
+
+    def release(self, n=1):
+        if n < 1:
+            raise ValueError("n must be one or more")
+        with self._cond:
+            self._value += n
+            self._cond.notify(n)
+
+    def __exit__(self, t, v, tb):
+        self.release()
+
+
+class BoundedSemaphore(Semaphore):
+    """A Semaphore that refuses to be released above its initial value."""
+
+    def __init__(self, value=1):
+        Semaphore.__init__(self, value)
+        self._initial_value = value
+
+    def release(self, n=1):
+        if n < 1:
+            raise ValueError("n must be one or more")
+        with self._cond:
+            if self._value + n > self._initial_value:
+                raise ValueError("Semaphore released too many times")
+            self._value += n
+            self._cond.notify(n)
 
 
 class BrokenBarrierError(RuntimeError):

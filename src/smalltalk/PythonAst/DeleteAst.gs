@@ -188,8 +188,19 @@ printSmalltalkOn: aStream
 						``ifNil: [UnboundLocalError
 						___signalUnbound___: #name]'' guard, so a
 						post-del read raises UnboundLocalError naming
-						the variable."
-						aStream nextPutAll: target id; nextPutAll: ' := nil.'
+						the variable.
+
+						A RESERVED name is nilled under its TRANSPORT
+						identifier (``_self''), the temp the parameter lives in
+						once the body rebinds it -- ``self := nil'' is not
+						Smalltalk, and the whole method failed to compile.
+						anyio's TaskHandle._run_coro ends ``del self  # Break the
+						reference cycle'', so no anyio task could be spawned."
+						aStream
+							nextPutAll: ((FunctionDefAst isSmalltalkReservedIdentifier: target id)
+								ifTrue: [NameAst ___transportIdentifierFor___: target id]
+								ifFalse: [target id]);
+							nextPutAll: ' := nil.'
 					]] ifNotNil: [:clsName |
 						aStream nextPutAll: clsName;
 							nextPutAll: ' @env1:___classBodyDefinitionalDelete___: #''';
