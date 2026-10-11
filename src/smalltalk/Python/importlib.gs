@@ -9608,6 +9608,25 @@ ___importFromMiss___: aName of: aModule
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___parentModule___: aParentName of: aDottedName
+	"lookupModule: for a PARENT of the dotted name being imported -- except
+	that None in sys.modules, which blocks the import, raises CPython's
+	``No module named 'a.b'; 'a' is not a package'' rather than reading as a
+	module that is there."
+
+	| m mnfe msg |
+	m := self lookupModule: aParentName.
+	m == None ifFalse: [^ m].
+	msg := 'No module named ''' @env0:, aDottedName @env0:asString
+		@env0:, '''; ''' @env0:, aParentName @env0:asString @env0:, ''' is not a package'.
+	mnfe := ModuleNotFoundError @env1:___new___.
+	mnfe @env1:___args___: { msg }.
+	mnfe @env0:dynamicInstVarAt: #'name' put: aDottedName @env0:asString.
+	^ mnfe @env1:___signal___: msg
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 lookupModule: aName
 	"Look up a module by name: the session registry first -- a HIT
 	validated against the repository, see ___moduleEntryIsLive___: --
@@ -9869,7 +9888,7 @@ ___import__: positional kw: kwargs
 	"Ensure parent packages are loaded for dotted names"
 	isDotted ifTrue: [
 		prefix := nameParts @env0:at: 1.
-		(self @env0:class lookupModule: prefix) ifNil: [
+		(self @env0:class ___parentModule___: prefix of: absoluteName) ifNil: [
 			"sys.meta_path gets its turn on the PARENTS too, not only on the leaf
 			-- ``import six.moves.urllib.parse'' needs three of its four
 			components to come from six's finder, and CPython walks the parents
@@ -9886,7 +9905,7 @@ ___import__: positional kw: kwargs
 		].
 		2 @env0:to: nameParts __len__ - 1 do: [:i |
 			prefix := (prefix @env0:, '.') @env0:, (nameParts @env0:at: i).
-			(self @env0:class lookupModule: prefix) ifNil: [
+			(self @env0:class ___parentModule___: prefix of: absoluteName) ifNil: [
 				(self @env0:class ___findViaMetaPath___: prefix) ifNil: [
 					parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
 					parentFilePath notNil ifTrue: [
@@ -9901,6 +9920,21 @@ ___import__: positional kw: kwargs
 
 	"Look up the module"
 	moduleInstance := self @env0:class lookupModule: absoluteName.
+	"None in sys.modules BLOCKS the import -- CPython's _find_and_load raises
+	``import of X halted; None in sys.modules''.  test.support's
+	import_fresh_module(blocked=) depends on it: statistics.py guards ``from
+	_statistics import _normal_dist_inv_cdf'' with ``except ImportError''.
+	Grail answered None, and the guard only worked because the fromlist loop
+	then raised ``cannot import name'' -- which __import__ no longer does
+	(#1223), so the blocked accelerator was imported anyway."
+	moduleInstance == None ifTrue: [
+		| mnfe msg |
+		msg := 'import of ' @env0:, absoluteName @env0:asString
+			@env0:, ' halted; None in sys.modules'.
+		mnfe := ModuleNotFoundError @env1:___new___.
+		mnfe @env1:___args___: { msg }.
+		mnfe @env0:dynamicInstVarAt: #'name' put: absoluteName @env0:asString.
+		^ mnfe @env1:___signal___: msg].
 	moduleInstance isNil ifTrue: [
 		"``sys.meta_path'' -- CPython's second step, between the sys.modules
 		cache and PathFinder.  Grail's native filesystem search below plays the

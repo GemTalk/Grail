@@ -67,7 +67,7 @@ method: ImportFromlistTestCase
 testFromlistMatchesCPython
 	| expected bad |
 	expected := testModule @env1:___pyAttrLoad___: #EXPECTED.
-	self assert: (expected @env1:__len__) >= 17.
+	self assert: (expected @env1:__len__) >= 20.
 	bad := (testModule @env1:___pyAttrLoad___: #mismatches)
 		@env1:___pyCallValue___: #() kw: nil.
 	self

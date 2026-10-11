@@ -42,6 +42,7 @@ _write(_PKG + '/__init__.py', 'PKG_ATTR = 1\n')
 _write(_PKG + '/test_a.py', 'class TA:\n    pass\n')
 _write(_PKG + '/sub/__init__.py', '')
 _write(_PKG + '/sub/leaf.py', 'V = "old"\n')
+_write(_PKG + '/never.py', '')
 
 
 def _name(m):
@@ -122,6 +123,33 @@ def _in_session_del():
 
 r['in_session_del'] = _in_session_del()
 
+
+def _blocked(names, thunk):
+    """None in sys.modules blocks an import: CPython raises rather than
+    answering None.  test.support's import_fresh_module(blocked=) is built on
+    it, and statistics.py's guarded accelerator import with it."""
+    missing = object()
+    saved = {n: sys.modules.get(n, missing) for n in names}
+    for n in names:
+        sys.modules[n] = None
+    try:
+        return _call(thunk)
+    finally:
+        for n, v in saved.items():
+            if v is missing:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = v
+
+
+r['blocked_module'] = _blocked([P + '.test_a'], lambda: __import__(P + '.test_a'))
+# A submodule nothing has imported: CPython looks the leaf up in sys.modules
+# BEFORE importing parents, so for an already-imported one it answers from
+# the top-level step instead, an ordering Grail does not share.
+r['blocked_parent'] = _blocked([P], lambda: __import__(P + '.never'))
+r['blocked_from_import'] = _blocked(
+    [P + '.test_a'], lambda: exec('from %s.test_a import TA' % P, {}))
+
 sys.path.remove(_DIR)
 shutil.rmtree(_DIR, ignore_errors=True)
 
@@ -144,6 +172,9 @@ EXPECTED = {
     'stmt_attribute': '1',
     'stmt_error_fields': (True, 'nosuch', True, 'ImportError'),
     'in_session_del': ('old', True, False),
+    'blocked_module': 'ModuleNotFoundError: import of PKG.test_a halted; None in sys.modules',
+    'blocked_parent': "ModuleNotFoundError: No module named 'PKG.never'; 'PKG' is not a package",
+    'blocked_from_import': 'ModuleNotFoundError: import of PKG.test_a halted; None in sys.modules',
 }
 
 def mismatches():
