@@ -9702,6 +9702,30 @@ lookupModule: aName
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___runtimeModule___: aName
+	"The module named aName, for Grail's own Smalltalk code to call into: the
+	registered instance when it is already imported, otherwise loaded from the
+	search path (which registers it).  ImportError when there is no such file.
+
+	loadModuleFromPath:name: on its own is the LOADER, not an import: it never
+	consults sys.modules, so a caller that used it per call rebuilt the module
+	every time.  datetime.strptime did, until #1222: each call built a fresh
+	_strptime (~310 ms, and its TimeRE and regex caches with it), the module in
+	sys.modules changed on every call, and the session ran out of temporary
+	object memory after about 200 calls."
+
+	| m path |
+	m := self lookupModule: aName.
+	m == nil ifFalse: [^ m].
+	path := self ___moduleNameToPath___: aName.
+	path == nil ifTrue: [
+		^ ImportError ___signal___:
+			('No module named ' @env0:, aName @env0:printString)].
+	^ self @env0:loadModuleFromPath: path name: aName
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 modules
 	"Return the module registry (delegates to sys.modules).
 	This is a SymbolDictionary mapping module names to module instances."

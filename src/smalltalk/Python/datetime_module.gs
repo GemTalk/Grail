@@ -3197,13 +3197,10 @@ category: 'Grail-Initialization'
 classmethod: PyDateTime
 strptime: dateStr _: fmt
 	"datetime.strptime(date_string, format) delegates to the vendored
-	_strptime module (CPython's C datetime does the same).  The module is
-	cached in sys.modules after first load."
+	_strptime module (CPython's C datetime does the same), imported once
+	and reused from sys.modules (#1222)."
 
-	| path strptimeMod |
-	path := importlib ___moduleNameToPath___: '_strptime'.
-	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
-	^ strptimeMod _strptime_datetime_datetime: self _: dateStr _: fmt
+	^ (importlib ___runtimeModule___: '_strptime') _strptime_datetime_datetime: self _: dateStr _: fmt
 %
 
 ! ------- Arithmetic
@@ -3927,10 +3924,7 @@ strptime: dateStr _: fmt
 	vendored _strptime, exactly as PyDateTime>>strptime:_: does
 	(test_strptime, test_strptime_single_digit, test_strptime_leap_year)."
 
-	| path strptimeMod |
-	path := importlib ___moduleNameToPath___: '_strptime'.
-	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
-	^ strptimeMod _strptime_datetime_date: self _: dateStr _: fmt
+	^ (importlib ___runtimeModule___: '_strptime') _strptime_datetime_date: self _: dateStr _: fmt
 %
 
 category: 'Grail-Initialization'
@@ -4808,10 +4802,7 @@ strptime: dateStr _: fmt
 	vendored _strptime, exactly as PyDateTime>>strptime:_: does
 	(test_strptime, test_strptime_errors, test_strptime_tz)."
 
-	| path strptimeMod |
-	path := importlib ___moduleNameToPath___: '_strptime'.
-	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
-	^ strptimeMod _strptime_datetime_time: self _: dateStr _: fmt
+	^ (importlib ___runtimeModule___: '_strptime') _strptime_datetime_time: self _: dateStr _: fmt
 %
 
 category: 'Grail-Private'
