@@ -641,7 +641,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	recompiles the SAME class in place -- preserving the module instance's
 	identity.  Shared by loadModuleFromPath: and reload:."
 
-	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture |
+	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture previousMethods |
 	"Collect declared variable names from the module body"
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
@@ -689,6 +689,9 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		options: #().
 	"``__transient__'' names: kept per session, never committed (§5.3)."
 	self ___installTransientGlobals___: (self ___transientNamesIn___: moduleAst) on: moduleClass.
+	"What the PREVIOUS build generated, when this is a rebuild -- swept at the
+	end of the build for whatever this one does not compile again (#1219)."
+	previousMethods := self ___moduleGeneratedMethodsOf___: moduleClass.
 
 	"Compile top-level `def` statements as real methods on the
 	module class. Scan for FunctionDefAst nodes, pre-register stubs so
@@ -1061,7 +1064,84 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		CallAst moduleImportNames: nil.
 		CallAst futureAnnotations: savedFuture.
 	].
+	self ___removeStaleModuleMethods___: previousMethods
+		from: moduleClass
+		boundBy: moduleAst
+		functions: functionNames.
 	^ moduleClass
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___moduleGeneratedMethodsOf___: aModuleClass
+	"Every method a module build generates from the source, as it stands now
+	-- a pair of selector -> GsNMethod maps, the instance side's
+	``Grail-Methods'' (the defs, each in one or more call shapes) and the
+	class side's ``Grail-Python Metadata'' (the docstring and PEP 695 tables,
+	emitted only when the source has them).  Empty for a class just created.
+
+	Read from the PERSISTENT method dictionaries, so a session method installed
+	over a selector cannot stand in for the compiled one."
+
+	| out |
+	out := Array with: IdentityDictionary new with: IdentityDictionary new.
+	{ aModuleClass -> 'Grail-Methods'. aModuleClass class -> 'Grail-Python Metadata' }
+		doWithIndex: [:pair :i | | b pmd |
+			b := pair key.
+			pmd := b persistentMethodDictForEnv: 1.
+			pmd ifNotNil: [
+				pmd keysAndValuesDo: [:sel :meth |
+					(b categoryOfSelector: sel environmentId: 1) asString = pair value
+						ifTrue: [(out at: i) at: sel put: meth]]]].
+	^ out
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___removeStaleModuleMethods___: previousMethods from: aModuleClass boundBy: moduleAst functions: functionNames
+	"Remove what the previous build of aModuleClass generated and this one did
+	not compile again (issue #1219).
+
+	A rebuild -- importlib.reload, or a fresh gem rebuilding a stale committed
+	module INTO its instance -- recompiles the module class in place, and a
+	build only ever adds methods.  A def compiles to one selector per call
+	shape: ``def f(a, b)'' to the fixed ``f:_:'' plus ``_f:kw:'', ``def f(a,
+	b=None)'' to ``_f:kw:'' alone.  So after that edit the old ``f:_:'' was
+	still there, BoundMethod tries the fixed form first, and ``f(1, 2)'' ran
+	the OLD body while ``f(1)'' ran the new one -- committed with the rebuild,
+	for every later gem too.
+
+	A method is stale when the build left it untouched: the same GsNMethod
+	still sits under its selector.  Removed when the new source still BINDS its
+	Python name -- as a def in another shape, a variable, a class or an import
+	-- because then the old body can only be wrong.  A name the new source does
+	not mention at all keeps its old def, as CPython's reload keeps the old
+	function in the module's namespace (and as a committed instance being
+	rebuilt keeps its other globals).
+
+	The class side's metadata is regenerated whole, so anything there the
+	build did not recompile -- a docstring or a type-parameter table the source
+	no longer has -- is gone."
+
+	| bound sides |
+	bound := IdentitySet new.
+	functionNames do: [:n | bound add: n asSymbol].
+	moduleAst body variables do: [:n | bound add: n asSymbol].
+	moduleAst body body do: [:stmt |
+		(stmt isKindOf: ClassDefAst) ifTrue: [bound add: stmt name asSymbol]].
+	(moduleAst body ___importBoundNamesInto___: IdentitySet new)
+		do: [:n | bound add: n asSymbol].
+	sides := Array with: aModuleClass with: aModuleClass class.
+	1 to: 2 do: [:i | | b pmd |
+		b := sides at: i.
+		pmd := b persistentMethodDictForEnv: 1.
+		(previousMethods at: i) keysAndValuesDo: [:sel :meth |
+			((pmd ~~ nil and: [(pmd at: sel otherwise: nil) == meth])
+				and: [i = 2 or: [ | pyName |
+					pyName := self pythonNameOfSelector: sel.
+					pyName notNil and: [bound includes: pyName asSymbol]]])
+						ifTrue: [b @env1:___removeSelector: sel environmentId: 1]]].
+	^ aModuleClass
 %
 
 category: 'Grail-Canonical Classes'

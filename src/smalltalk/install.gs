@@ -1184,6 +1184,7 @@ run
 	at: #'ModuleGlobalsPast255TestCase' put: nil;
 	at: #'ModuleHigherArityDefTestCase' put: nil;
 	at: #'ModuleNotFoundErrorTestCase' put: nil;
+	at: #'ModuleRebuildStaleMethodsTestCase' put: nil;
 	at: #'ModuleScopeBindingsTestCase' put: nil;
 	at: #'ModuleSpecTestCase' put: nil;
 	at: #'ModuleSubclassAttrTestCase' put: nil;
@@ -2690,6 +2691,7 @@ input src/smalltalk/PythonTests/ModuleGlobalRebindStringsTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalsPast255TestCase.gs
 input src/smalltalk/PythonTests/ModuleHigherArityDefTestCase.gs
 input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs
+input src/smalltalk/PythonTests/ModuleRebuildStaleMethodsTestCase.gs
 input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
 input src/smalltalk/PythonTests/ModuleSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleSubclassAttrTestCase.gs
