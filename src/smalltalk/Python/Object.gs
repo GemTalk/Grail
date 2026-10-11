@@ -6047,118 +6047,141 @@ ___pythonModuleAttrIdentity___
 	so no class-global resolution is needed.  Every pair below is CPython
 	3.14's own answer, read off the running interpreter rather than guessed."
 
+	"ONE LOOKUP, not 42 string compares.  This runs on every class's __name__,
+	 which every TypeError/AttributeError message reads, and the compare chain
+	 it used to be was a tenth of a getattr miss (#1214).  The table is built
+	 once per session by ___moduleAttrIdentityTable___, keyed by the class NAME
+	 (a Symbol) exactly as the chain compared it."
+
 	| n |
-	n := self @env0:name @env0:asString.
+	n := self @env0:name.
+	"Looked up, never interned: a name that is not already a Symbol is in no table."
+	n @env0:isSymbol ifFalse: [
+		n := Symbol @env0:_existingWithAll: n @env0:asString.
+		n == nil ifTrue: [^ nil]].
+	^ object ___moduleAttrIdentityTable___ @env0:at: n otherwise: nil
+%
 
-	"functools.  ``Placeholder'' is an INSTANCE of _PlaceholderType in
-	CPython, and cmp_to_key's return value is a KeyWrapper."
-	(n @env0:= 'functools_partial') ifTrue: [^ #('partial' 'functools')].
-	(n @env0:= 'functools_partialmethod') ifTrue: [^ #('partialmethod' 'functools')].
-	(n @env0:= 'functools_cached_property') ifTrue: [^ #('cached_property' 'functools')].
-	(n @env0:= 'functools_CacheInfo') ifTrue: [^ #('CacheInfo' 'functools')].
-	(n @env0:= 'functools_Placeholder') ifTrue: [^ #('_PlaceholderType' 'functools')].
-	(n @env0:= 'functools_cmpkey') ifTrue: [^ #('KeyWrapper' 'functools')].
+category: 'Grail-Introspection'
+classmethod: object
+___moduleAttrIdentityTable___
+	"The { pythonName. moduleName } pairs ___pythonModuleAttrIdentity___ answers,
+	 by Smalltalk class name.  Session-local (SessionTemps), so it pins nothing
+	 and a reinstall that edits it is seen by the next session."
 
-	"numbers -- the numeric tower ABCs."
-	(n @env0:= 'numbers_Number') ifTrue: [^ #('Number' 'numbers')].
-	(n @env0:= 'numbers_Complex') ifTrue: [^ #('Complex' 'numbers')].
-	(n @env0:= 'numbers_Real') ifTrue: [^ #('Real' 'numbers')].
-	(n @env0:= 'numbers_Rational') ifTrue: [^ #('Rational' 'numbers')].
-	(n @env0:= 'numbers_Integral') ifTrue: [^ #('Integral' 'numbers')].
+	^ SessionTemps @env0:current @env0:at: #'GrailModuleAttrIdentities' ifAbsentPut: [
+		| t |
+		t := IdentityKeyValueDictionary @env0:new.
 
-	"The traceback object.  CPython's is a BUILTIN type spelled ``traceback''
-	(``<class 'traceback'>'', __module__ 'builtins'), reachable from Python only
-	as types.TracebackType -- so Grail's ``PyTraceback'' spelling leaked into
-	every repr and every ``type(tb).__name__''."
-	(n @env0:= 'PyTraceback') ifTrue: [^ #('traceback' 'builtins')].
+		"functools.  ``Placeholder'' is an INSTANCE of _PlaceholderType in
+		CPython, and cmp_to_key's return value is a KeyWrapper."
+		t @env0:at: #'functools_partial' put: #('partial' 'functools').
+		t @env0:at: #'functools_partialmethod' put: #('partialmethod' 'functools').
+		t @env0:at: #'functools_cached_property' put: #('cached_property' 'functools').
+		t @env0:at: #'functools_CacheInfo' put: #('CacheInfo' 'functools').
+		t @env0:at: #'functools_Placeholder' put: #('_PlaceholderType' 'functools').
+		t @env0:at: #'functools_cmpkey' put: #('KeyWrapper' 'functools').
 
-	"``list[int]'' and ``int | str''.  CPython's are ``types.GenericAlias'' and
-	``types.UnionType'' -- reprs, pickling (``Can't pickle <class
-	'PyUnionType'>'') and every TypeError built from the type name leaked the
-	Smalltalk spellings, which test_typing reads in a dozen places."
-	(n @env0:= 'PyGenericAlias') ifTrue: [^ #('GenericAlias' 'types')].
-	(n @env0:= 'PyUnionType') ifTrue: [^ #('Union' 'typing')].
+		"numbers -- the numeric tower ABCs."
+		t @env0:at: #'numbers_Number' put: #('Number' 'numbers').
+		t @env0:at: #'numbers_Complex' put: #('Complex' 'numbers').
+		t @env0:at: #'numbers_Real' put: #('Real' 'numbers').
+		t @env0:at: #'numbers_Rational' put: #('Rational' 'numbers').
+		t @env0:at: #'numbers_Integral' put: #('Integral' 'numbers').
 
-	"The code object.  CPython's is a BUILTIN type spelled ``code''
-	(``<class 'code'>'', __module__ 'builtins'), reachable from Python only as
-	types.CodeType -- so Grail's ``PyCode'' spelling leaked into every repr and
-	every ``type(f.__code__).__name__'' (test_funcattrs' test___code__ compares
-	the two directly).  Same treatment, and for the same reason, as PyTraceback
-	above: Grail HAS the object, only the NAME was wrong."
-	(n @env0:= 'PyCode') ifTrue: [^ #('code' 'builtins')].
-	"The property type.  ``builtins.property'' IS this class, so only its
-	spelling was wrong: ``type(property(f)).__name__'' answered
-	'PropertyDescriptor' and ``property.__module__'' raised."
-	(n @env0:= 'PropertyDescriptor') ifTrue: [^ #('property' 'builtins')].
-	"PyCell already answers ``cell'' from ___pythonName___; it needs the module
-	half too, so ``type(c).__module__'' is 'builtins' rather than the Python
-	dictionary it happens to live in."
-	(n @env0:= 'PyCell') ifTrue: [^ #('cell' 'builtins')].
+		"The traceback object.  CPython's is a BUILTIN type spelled ``traceback''
+		(``<class 'traceback'>'', __module__ 'builtins'), reachable from Python only
+		as types.TracebackType -- so Grail's ``PyTraceback'' spelling leaked into
+		every repr and every ``type(tb).__name__''."
+		t @env0:at: #'PyTraceback' put: #('traceback' 'builtins').
 
-	"os / string / time."
-	(n @env0:= 'os_PathLike') ifTrue: [^ #('PathLike' 'os')].
-	"scandir's two types report ``posix'' as their module in CPython, not
-	``os'' -- they are implemented in the posix extension and only re-exported
-	by os, which os.DirEntry's own __module__ shows."
-	(n @env0:= 'os_DirEntry') ifTrue: [^ #('DirEntry' 'posix')].
-	(n @env0:= 'os_ScandirIterator') ifTrue: [^ #('ScandirIterator' 'posix')].
-	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
-	"os.stat_result -- a structseq CPython defines in posixmodule and publishes
-	from os; pickle saves it by that name."
-	(n @env0:= 'PyStatResult') ifTrue: [^ #('stat_result' 'os')].
+		"``list[int]'' and ``int | str''.  CPython's are ``types.GenericAlias'' and
+		``types.UnionType'' -- reprs, pickling (``Can't pickle <class
+		'PyUnionType'>'') and every TypeError built from the type name leaked the
+		Smalltalk spellings, which test_typing reads in a dozen places."
+		t @env0:at: #'PyGenericAlias' put: #('GenericAlias' 'types').
+		t @env0:at: #'PyUnionType' put: #('Union' 'typing').
 
-	"struct.  ``error'' and ``Struct'' are too generic to claim as
-	top-level names in the flat Python dictionary, so the Smalltalk
-	classes are StructError/PyStruct; CPython reaches both only through
-	the module.  Struct's __module__ really is the C accelerator
-	'_struct', not 'struct' -- struct.py does ``from _struct import *''."
-	(n @env0:= 'StructError') ifTrue: [^ #('error' 'struct')].
-	(n @env0:= 'PyStruct') ifTrue: [^ #('Struct' '_struct')].
-	(n @env0:= 'unpack_iterator') ifTrue: [^ #('unpack_iterator' '_struct')].
+		"The code object.  CPython's is a BUILTIN type spelled ``code''
+		(``<class 'code'>'', __module__ 'builtins'), reachable from Python only as
+		types.CodeType -- so Grail's ``PyCode'' spelling leaked into every repr and
+		every ``type(f.__code__).__name__'' (test_funcattrs' test___code__ compares
+		the two directly).  Same treatment, and for the same reason, as PyTraceback
+		above: Grail HAS the object, only the NAME was wrong."
+		t @env0:at: #'PyCode' put: #('code' 'builtins').
+		"The property type.  ``builtins.property'' IS this class, so only its
+		spelling was wrong: ``type(property(f)).__name__'' answered
+		'PropertyDescriptor' and ``property.__module__'' raised."
+		t @env0:at: #'PropertyDescriptor' put: #('property' 'builtins').
+		"PyCell already answers ``cell'' from ___pythonName___; it needs the module
+		half too, so ``type(c).__module__'' is 'builtins' rather than the Python
+		dictionary it happens to live in."
+		t @env0:at: #'PyCell' put: #('cell' 'builtins').
 
-	"sys.  ``sys.implementation'' is a plain types.SimpleNamespace in
-	CPython, not a bespoke type, so that is what it must report."
-	(n @env0:= 'sys_flags') ifTrue: [^ #('flags' 'sys')].
-	(n @env0:= 'sys_float_info') ifTrue: [^ #('float_info' 'sys')].
-	(n @env0:= 'sys_hash_info') ifTrue: [^ #('hash_info' 'sys')].
-	(n @env0:= 'sys_int_info') ifTrue: [^ #('int_info' 'sys')].
-	(n @env0:= 'sys_implementation') ifTrue: [^ #('SimpleNamespace' 'types')].
+		"os / string / time."
+		t @env0:at: #'os_PathLike' put: #('PathLike' 'os').
+		"scandir's two types report ``posix'' as their module in CPython, not
+		``os'' -- they are implemented in the posix extension and only re-exported
+		by os, which os.DirEntry's own __module__ shows."
+		t @env0:at: #'os_DirEntry' put: #('DirEntry' 'posix').
+		t @env0:at: #'os_ScandirIterator' put: #('ScandirIterator' 'posix').
+		t @env0:at: #'struct_time' put: #('struct_time' 'time').
+		"os.stat_result -- a structseq CPython defines in posixmodule and publishes
+		from os; pickle saves it by that name."
+		t @env0:at: #'PyStatResult' put: #('stat_result' 'os').
 
-	"json.  CPython defines JSONDecodeError in the json.decoder SUBMODULE and
-	re-exports it from json, so its __module__ is 'json.decoder' even though
-	``json.JSONDecodeError'' is how most code names it."
-	(n @env0:= 'JSONDecodeError') ifTrue: [^ #('JSONDecodeError' 'json.decoder')].
-	"JSONEncoder likewise lives in json.encoder upstream.  json>>initialize
-	builds it with PythonInstance ___subclass___:, so nothing else gives it a
-	module, and it answered AttributeError."
-	(n @env0:= 'JSONEncoder') ifTrue: [^ #('JSONEncoder' 'json.encoder')].
+		"struct.  ``error'' and ``Struct'' are too generic to claim as
+		top-level names in the flat Python dictionary, so the Smalltalk
+		classes are StructError/PyStruct; CPython reaches both only through
+		the module.  Struct's __module__ really is the C accelerator
+		'_struct', not 'struct' -- struct.py does ``from _struct import *''."
+		t @env0:at: #'StructError' put: #('error' 'struct').
+		t @env0:at: #'PyStruct' put: #('Struct' '_struct').
+		t @env0:at: #'unpack_iterator' put: #('unpack_iterator' '_struct').
 
-	"enum.  These keep their CPython NAME already (the Smalltalk class is spelled
-	the same), and are here purely for __module__: they are defined in enum
-	upstream, so ``enum.Enum.__module__'' is 'enum' and not nothing.  It is also
-	what gives the METACLASS an answer -- ``type(Color).__module__'' asks
-	``Enum class'', which has no identity of its own and defers to the class it
-	is the metaclass of.
+		"sys.  ``sys.implementation'' is a plain types.SimpleNamespace in
+		CPython, not a bespoke type, so that is what it must report."
+		t @env0:at: #'sys_flags' put: #('flags' 'sys').
+		t @env0:at: #'sys_float_info' put: #('float_info' 'sys').
+		t @env0:at: #'sys_hash_info' put: #('hash_info' 'sys').
+		t @env0:at: #'sys_int_info' put: #('int_info' 'sys').
+		t @env0:at: #'sys_implementation' put: #('SimpleNamespace' 'types').
 
-	Only the classes enum DEFINES are listed.  ``enum.property'' is deliberately
-	absent: it has a class of its own (DynamicClassAttribute) and install.gs
-	stamps its __module__/__qualname__ directly, so a name-keyed entry here would
-	be a second, weaker answer to a question already settled."
-	(n @env0:= 'Enum') ifTrue: [^ #('Enum' 'enum')].
-	(n @env0:= 'IntEnum') ifTrue: [^ #('IntEnum' 'enum')].
-	(n @env0:= 'StrEnum') ifTrue: [^ #('StrEnum' 'enum')].
-	(n @env0:= 'ReprEnum') ifTrue: [^ #('ReprEnum' 'enum')].
-	(n @env0:= 'Flag') ifTrue: [^ #('Flag' 'enum')].
-	(n @env0:= 'IntFlag') ifTrue: [^ #('IntFlag' 'enum')].
-	(n @env0:= 'EnumDict') ifTrue: [^ #('EnumDict' 'enum')].
+		"json.  CPython defines JSONDecodeError in the json.decoder SUBMODULE and
+		re-exports it from json, so its __module__ is 'json.decoder' even though
+		``json.JSONDecodeError'' is how most code names it."
+		t @env0:at: #'JSONDecodeError' put: #('JSONDecodeError' 'json.decoder').
+		"JSONEncoder likewise lives in json.encoder upstream.  json>>initialize
+		builds it with PythonInstance ___subclass___:, so nothing else gives it a
+		module, and it answered AttributeError."
+		t @env0:at: #'JSONEncoder' put: #('JSONEncoder' 'json.encoder').
 
-	"MODULES, not classes -- __name__ only.  ``os.path'' IS the posixpath
-	module in CPython, so that is the name it reports."
-	(n @env0:= 'os_path') ifTrue: [^ #('posixpath' nil)].
-	(n @env0:= 'html_entities') ifTrue: [^ #('html.entities' nil)].
-	(n @env0:= 'json_decoder') ifTrue: [^ #('json.decoder' nil)].
+		"enum.  These keep their CPython NAME already (the Smalltalk class is spelled
+		the same), and are here purely for __module__: they are defined in enum
+		upstream, so ``enum.Enum.__module__'' is 'enum' and not nothing.  It is also
+		what gives the METACLASS an answer -- ``type(Color).__module__'' asks
+		``Enum class'', which has no identity of its own and defers to the class it
+		is the metaclass of.
 
-	^ nil
+		Only the classes enum DEFINES are listed.  ``enum.property'' is deliberately
+		absent: it has a class of its own (DynamicClassAttribute) and install.gs
+		stamps its __module__/__qualname__ directly, so a name-keyed entry here would
+		be a second, weaker answer to a question already settled."
+		t @env0:at: #'Enum' put: #('Enum' 'enum').
+		t @env0:at: #'IntEnum' put: #('IntEnum' 'enum').
+		t @env0:at: #'StrEnum' put: #('StrEnum' 'enum').
+		t @env0:at: #'ReprEnum' put: #('ReprEnum' 'enum').
+		t @env0:at: #'Flag' put: #('Flag' 'enum').
+		t @env0:at: #'IntFlag' put: #('IntFlag' 'enum').
+		t @env0:at: #'EnumDict' put: #('EnumDict' 'enum').
+
+		"MODULES, not classes -- __name__ only.  ``os.path'' IS the posixpath
+		module in CPython, so that is the name it reports."
+		t @env0:at: #'os_path' put: #('posixpath' nil).
+		t @env0:at: #'html_entities' put: #('html.entities' nil).
+		t @env0:at: #'json_decoder' put: #('json.decoder' nil).
+
+		t]
 %
 
 category: 'Grail-Introspection'
