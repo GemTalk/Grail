@@ -7,7 +7,13 @@ result under this interpreter to record EXPECTED.  Run it with CPython 3.14,
 never with Grail: EXPECTED is CPython's answer, and a table written by the
 implementation under test would only pin its current behaviour.
 
-Usage: python3 scripts/generate_class_attr_dunder_fixture.py [output.py]
+With --type it writes tests/python/type_built_class_dunders.py instead: the
+same values stored through the namespace of a three-argument ``type()'' call,
+both on a fresh class and on a subclass of an ordinary one, for a subset of
+the protocols chosen to cover each lookup path once.  A class built that way
+takes neither the class-body path nor the setattr one.
+
+Usage: python3 scripts/generate_class_attr_dunder_fixture.py [--type] [output.py]
 """
 import json
 import os
@@ -16,8 +22,11 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-    ROOT, 'tests', 'python', 'class_attr_dunder_binding.py')
+TYPE_MODE = '--type' in sys.argv[1:]
+ARGS = [a for a in sys.argv[1:] if a != '--type']
+OUT = ARGS[0] if ARGS else os.path.join(
+    ROOT, 'tests', 'python',
+    'type_built_class_dunders.py' if TYPE_MODE else 'class_attr_dunder_binding.py')
 
 protos = [
     ("__add__", "o + 1", "'v'"), ("__radd__", "1 + o", "'v'"), ("__lt__", "o < 1", "'v'"),
@@ -133,14 +142,27 @@ def run(label, thunk):
     RESULTS[label] = repr(r)
 
 '''
+# One protocol per lookup path for --type: compiled object defaults (__iter__,
+# __next__, __getitem__, __contains__, __str__), the doesNotUnderstand: recovery
+# (__len__, __bool__, __index__), the operator and comparison fallbacks
+# (__add__, __eq__), __call__ and __hash__.
+TYPE_PROTOS = ('__len__', '__bool__', '__iter__', '__next__', '__getitem__',
+               '__contains__', '__call__', '__add__', '__eq__', '__index__',
+               '__str__', '__hash__')
 body = []
 n = 0
 for d, use, r in protos:
+    if TYPE_MODE and d not in TYPE_PROTOS:
+        continue
     for k, expr in kinds:
         n += 1
         v = expr.format(r=r, n=n)
         if k == "plainfn":
             body.append(f"class H{n}:\n    def f(*a):\n        return enc({r}, len(a))\n")
+        if TYPE_MODE:
+            body.append(f"T{n} = type('T{n}', (), {{'{d}': {v}}})\nrun('type    {d} {k}', lambda: (lambda o: {use})(T{n}()))\n")
+            body.append(f"class P{n}:\n    pass\nU{n} = type('U{n}', (P{n},), {{'{d}': {v}}})\nrun('typesub {d} {k}', lambda: (lambda o: {use})(U{n}()))\n")
+            continue
         extra = "\n    __exit__ = lambda *a: False" if d == "__enter__" else ""
         body.append(f"class B{n}:\n    {d} = {v}{extra}\nrun('body    {d} {k}', lambda: (lambda o: {use})(B{n}()))\n")
         sx = f"\n    __exit__ = lambda *a: False" if d == "__enter__" else "\n    pass"
@@ -176,6 +198,15 @@ run('setattr str object.default', lambda: str(ObjStrSet()))
 run('setattr format object.default', lambda: format(ObjStrSet()))
 
 '''
+if TYPE_MODE:
+    head = head.replace('''"""Issue #1218: a callable stored as a CLASS ATTRIBUTE under a protocol dunder''',
+                        '''"""Issue #1218, for classes built by three-argument ``type()'': a callable stored
+in the namespace dict under a protocol dunder''', 1)
+    head = head.replace('''once in the class body and
+once with setattr after the class exists.''', '''once in the namespace of
+``type(name, (), ns)'' and once in that of ``type(name, (Base,),
+ns)''.''', 1)
+    tail_issue = ''
 fixture = head + "\n# ---- generated cases ----\n" + "".join(body) + tail_issue
 with tempfile.TemporaryDirectory() as tmp:
     stage = os.path.join(tmp, 'stage.py')
