@@ -636,7 +636,7 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	variable.  A program that pins nothing pays one identity compare and one
 	class-variable read."
 
-	| pinned shadow pinnedAt |
+	| pinned shadow pinnedAt cls owner |
 	(actualReceiver == (builtins @env0:___instance___)) ifTrue: [
 		pinned := SessionTemps @env0:current
 			@env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
@@ -662,20 +662,32 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	GrailPinnedSelectors == nil ifTrue: [^ aSelector].
 	pinnedAt := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
 	pinnedAt == nil ifTrue: [^ aSelector].
-	"ONLY A CAPTURE OLDER THAN THE PIN REDIRECTS.  A lookup made AFTER the change
-	is entitled to see the change -- after ``del D.m'', ``d.m'' must find the
-	inherited method, and it carries the very selector the capture does.  The
-	generation stamped at construction is what separates them."
-	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
-		and: [pinGeneration @env0:<= GrailPinGeneration]])
-			ifTrue: [^ aSelector].
 	"A selector pinned on ONE class must not redirect a same-named send to an
 	unrelated one; the shadow existing is the proof that this receiver is the
 	one that was pinned.  Only pinned selectors pay for the check."
 	shadow := ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol.
-	(actualReceiver @env0:class @env0:whichClassIncludesSelector: shadow
-		environmentId: 1) == nil ifTrue: [^ aSelector].
-	^ shadow
+	cls := actualReceiver @env0:class.
+	owner := cls @env0:whichClassIncludesSelector: shadow environmentId: 1.
+	owner == nil ifTrue: [^ aSelector].
+	"A CAPTURE OLDER THAN THE PIN REDIRECTS, whatever the change was."
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= GrailPinGeneration]])
+			ifFalse: [^ shadow].
+	"A LATER LOOKUP SEES A CHANGE TO THE CLASS, but not a store on an instance
+	(#1226).  The two leave different marks.  ``del D.m'' removes D's method and
+	keeps the shadow, so the selector now resolves ABOVE the shadow's owner, and
+	a fresh ``d.m'' must find that inherited method.  A self-send dispatcher
+	(object class >> ___grailInstallOneDispatcher___:definedIn:name:) sits on
+	the SAME class as its shadow -- and no lookup answers a handle on it when an
+	override exists, because a lookup that finds an instance or class override
+	answers the override itself.  So a handle that resolves to a dispatcher was
+	looked up when nothing overrode the name, and is the class's function: it
+	runs the original, like CPython's bound method holding its function.  Sent
+	to the dispatcher instead it ran whatever the instance stored LATER, so a
+	wrapper calling its saved ``obj.m'' called itself."
+	(cls @env0:whichClassIncludesSelector: aSelector environmentId: 1) == owner
+		ifTrue: [^ shadow].
+	^ aSelector
 %
 
 category: 'Grail-Dynamic Rebinding'

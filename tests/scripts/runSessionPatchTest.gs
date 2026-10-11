@@ -22,6 +22,11 @@ output pushnew runSessionPatchTest.out
 !   original, and the COMMITTED instance's own self-send still reaches its
 !   committed override: an override stored on an object that is committed is
 !   data, and the session re-installs its dispatcher from the record.
+!   And wrapping a method of a FRESH instance with a function that calls its
+!   saved bound method gives the wrapped answer on every instance (#1226):
+!   the record installs the dispatcher before any handle is taken, and a
+!   handle still has to run the class's function, not the instance's wrapper
+!   that calls it again.
 iferr 1 where
 iferr 2 output pop
 iferr 3 where
@@ -65,6 +70,15 @@ def patch():
 
 def probe(g):
     return repr((g.greet(), Greeter().greet()))
+
+def wrap_fresh():
+    out = []
+    for _ in (1, 2):
+        g = Greeter()
+        saved = g.word
+        g.word = lambda saved=saved: "wrapped(" + saved() + ")"
+        out.append(g.greet())
+    return repr(out)
 '.
 f close.
 UserGlobals at: #'Grail_patch_dir' put: dir.
@@ -106,7 +120,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out failures b len cls probe |
+| out failures b len cls probe wrapped |
 out := GsFile stdout.
 failures := OrderedCollection withAll: (UserGlobals at: #'Grail_patch_failures' ifAbsent: [#('session A recorded nothing')]).
 b := (Python at: #builtins) ___instance___.
@@ -122,6 +136,12 @@ probe := ((UserGlobals at: #'Grail_patch_mod') @env1:___pyAttrLoad___: #probe)
 out nextPutAll: 'sessionB: committed instance and a fresh one greet: '; nextPutAll: probe asString; cr.
 (probe asString = '(''patched'', ''hello'')')
   ifFalse: [failures add: 'B: the committed override reaches its own self-send, and only its own'].
+wrapped := [((UserGlobals at: #'Grail_patch_mod') @env1:___pyAttrLoad___: #wrap_fresh)
+    @env1:___pyCallValue___: #() kw: nil]
+  on: Error, BaseException do: [:e | e return: 'raised ' , e class name , ': ' , e messageText asString].
+out nextPutAll: 'sessionB: wrapping two fresh instances: '; nextPutAll: wrapped asString; cr.
+(wrapped asString = '[''wrapped(hello)'', ''wrapped(hello)'']')
+  ifFalse: [failures add: 'B: a wrapper calling its saved bound method runs the class function on every instance (#1226)'].
 (UserGlobals at: #'GrailCommittedSelfSendOverrides' ifAbsent: [nil])
   ifNotNil: [:reg | reg removeKey: cls ifAbsent: []].
 GsFile removeServerFile: (UserGlobals at: #'Grail_patch_dir') , '/grail_session_patch.py'.
