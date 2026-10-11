@@ -3519,10 +3519,17 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	        ifFalse: [kwargs...'p1'... ifAbsent default/TypeError].
 	  ...
 	  ^ self name: p1 _: p2 ...       (module: bare selector)
-	  ^ self <sel>                    (instance: env-1 fixed selector)"
+	  ^ self <sel>                    (instance: env-1 fixed selector)
 
-	| stream callParams allParams defaults firstDefault posonlyNames |
+	An instance method's selectors are built from its MANGLED name, as the
+	method itself and every call site are: ``def __m(self, x)'' in class C
+	compiles to ``_C__m:'', and ``self.__m(x=1)'' sends ``__C__m:kw:''.  The
+	raw name here gave the companion ``___m:kw:'' forwarding to ``__m:'', so
+	a keyword call to a private method was an uncatchable DNU (#1422)."
+
+	| stream callParams allParams defaults firstDefault posonlyNames stem |
 	stream := AppendStream on: Unicode7 new.
+	stem := stripSelf ifTrue: [self ___mangledName___ asString] ifFalse: [name].
 	allParams := self allParameterNames.
 	callParams := stripSelf
 		ifTrue: [allParams copyFrom: 2 to: allParams size]
@@ -3539,7 +3546,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	firstDefault := (args posonlyargs size + args args size)
 		- (defaults isNil ifTrue: [0] ifFalse: [defaults size]).
 
-	stream nextPut: $_; nextPutAll: name; nextPutAll: ': ___pos___ kw: ___kw___'; lf.
+	stream nextPut: $_; nextPutAll: stem; nextPutAll: ': ___pos___ kw: ___kw___'; lf.
 	callParams isEmpty ifFalse: [
 		stream nextPutAll: '| '.
 		callParams do: [:p | stream nextPutAll: (self transportParamName: p); space].
@@ -3629,9 +3636,9 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	stripSelf
 		ifTrue: [
 			callParams isEmpty
-				ifTrue: [stream nextPutAll: name]
+				ifTrue: [stream nextPutAll: stem]
 				ifFalse: [
-					stream nextPutAll: name; nextPutAll: ': '; nextPutAll: (self transportParamName: (callParams at: 1)).
+					stream nextPutAll: stem; nextPutAll: ': '; nextPutAll: (self transportParamName: (callParams at: 1)).
 					2 to: callParams size do: [:i |
 						stream nextPutAll: ' _: '; nextPutAll: (self transportParamName: (callParams at: i))]] ]
 		ifFalse: [
