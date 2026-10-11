@@ -2024,8 +2024,15 @@ ___hasIndexDunder___
 	question, so it gets its own predicate -- one semantic, one name, and
 	every consumer asks it the same way."
 
+	"A third shape is a CLASS ATTRIBUTE -- ``__index__ = f'' in the body or
+	``Cls.__index__ = f'' later -- which no selector test sees; the __index__
+	send then reaches PythonInstance >> doesNotUnderstand:, which calls it the
+	way CPython's slot lookup does (issue #1218).  Asked last, and only of a
+	PythonInstance, so an int or str index pays nothing for it."
 	^ (self ___respondsTo___: #'__index__')
-		or: [self ___respondsTo___: #'___index__:kw:']
+		or: [(self ___respondsTo___: #'___index__:kw:')
+		or: [(self @env0:isKindOf: PythonInstance)
+			and: [(self ___typeDunder___: #'__index__') ~~ nil]]]
 %
 
 category: 'Grail-Hashability'
@@ -5552,9 +5559,13 @@ ___grailInstallAttrMethodShadows___: attrNames
 			"A callable that binds self, or one that is ALREADY bound -- a
 			BoundMethod on a non-module receiver or a MethodBinding, which
 			___grailAttrMethodShadow___ hands back unbound and the forwarder
-			calls with just the arguments (``__next__ = gen.__next__'')."
+			calls with just the arguments (``__next__ = gen.__next__'') -- or a
+			callable INSTANCE, which CPython calls with the arguments alone
+			(``__getitem__ = Lookup()''; issue #1218)."
 			((self ___isDescriptorCallable___: val)
-				or: [(val isKindOf: BoundMethod) or: [val isKindOf: MethodBinding]]) ifTrue: [
+				or: [(val isKindOf: BoundMethod) or: [(val isKindOf: MethodBinding)
+				or: [(val isKindOf: PythonInstance)
+					and: [((Python @env0:at: #builtins) @env0:___instance___ callable: val) == true]]]]) ifTrue: [
 				shadowed @env0:do: [:pair |
 					self
 						___compileMethod: (self ___grailShadowSourceFor___: s
@@ -6892,6 +6903,16 @@ ___grailAttrMethodShadow___: aSym
 	v == nil ifTrue: [^ nil].
 	((v isKindOf: BoundMethod) and: [(v @env0:receiver) == self]) ifTrue: [^ nil].
 	(v isKindOf: MethodBinding) ifTrue: [^ v].
+	"Bind by what the CLASS holds, not by what the read answered.  The read
+	has already applied the descriptor protocol -- a staticmethod comes back
+	as its bare function -- so binding its answer again passed the instance
+	to a staticmethod (``__getitem__ = staticmethod(f)'' ran f(self, key)).
+	Asked only when the instance's own store does not hold the name, which
+	is the read's other source."
+	([self @env0:dynamicInstVarAt: aSym] @env0:on: Error do: [:___e | ___e @env0:return: nil])
+			== nil ifTrue: [
+		(self ___typeDunder___: aSym) @env0:ifNotNil: [:raw |
+			^ self ___typeAttrBound___: raw]].
 	(self ___isDescriptorCallable___: v)
 		ifTrue: [^ MethodBinding instance: self callable: v].
 	^ v
@@ -7891,6 +7912,7 @@ ___classHolderAttrStore___: aName put: aValue
 	Returns aValue, so it can be used as an expression."
 
 	| holder |
+	self ___noteClassDunderStore___: aName.
 	holder := self @env0:perform: #___dynInstVars___ env: 1.
 	holder == nil ifTrue: [
 		holder := GrailClassAttrHolder @env0:new.
@@ -8189,6 +8211,7 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 		inner := KeyValueDictionary @env0:new.
 		ov @env0:at: aClass put: inner].
 	inner @env0:at: aSym put: aValue.
+	self ___noteClassDunderStore___: aSym.
 	"A module BODY's store is part of what importing the module means, and a
 	session that binds the deployed module will not run the body -- record it
 	for replay (importlib >> ___recordBodyClassAttr___:name:value:)."
@@ -9524,6 +9547,169 @@ ___classAttrDunder___: baseSym
 			(walker @env0:includesSelector: baseSym environmentId: 1) ifTrue: [^ nil].
 			walker := walker @env0:superclass]] @env0:value.
 	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___typeAttrBound___: aValue
+	"aValue -- a value found on self's TYPE, typically by ___classAttrDunder___:
+	-- as CPython's special-method lookup hands it to the call: the callable to
+	invoke with the operation's arguments alone.
+
+	CPython looks an implicit dunder up on the type and then applies the
+	descriptor protocol to what it finds, so the answer depends on the VALUE,
+	not on how it got onto the class (issue #1218):
+
+	  * a descriptor object -- staticmethod, classmethod, a user class with
+	    __get__ -- is asked for the value: a staticmethod's function, a
+	    classmethod's function bound to the class;
+	  * a function -- a def, lambda, nested def, Cls.m -- binds self, which is
+	    ___isDescriptorCallable___:'s question;
+	  * anything else is not a descriptor and is called as it is: a method
+	    ALREADY bound (``__next__ = gen.__next__'', ``__len__ = lst.__len__''),
+	    a builtin function, a callable instance.
+
+	Every implicit-protocol path that finds a dunder stored as a class
+	attribute used to prepend self unconditionally, so all of the last group
+	received the instance as an extra first argument."
+
+	(self ___isValueDescriptor___: aValue) ifTrue: [^ self ___descriptorGet___: aValue].
+	(self ___isDescriptorCallable___: aValue)
+		ifTrue: [^ MethodBinding instance: self callable: aValue].
+	^ aValue
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___callTypeAttr___: aValue with: args
+	"Call aValue, found on self's type, with args -- CPython's implicit
+	special-method call.  See ___typeAttrBound___: for when self is passed."
+
+	^ (self ___typeAttrBound___: aValue) ___pyCallValue___: args kw: nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___noteClassDunderStore___: aName
+	"Record, for this session, that a PROTOCOL dunder was stored as a class
+	attribute -- into a class's holder or the canonical overlay -- so
+	___typeDunder___: knows the holder walk can find something.  Not hot: a
+	class-attribute store, a class build, a deployed module's replay."
+
+	(object ___grailIsProtocolDunderName___: aName) ifTrue: [
+		(SessionTemps @env0:current @env0:at: #'GrailClassDunderStores'
+			ifAbsentPut: [IdentitySet @env0:new])
+				@env0:add: aName @env0:asString @env0:asSymbol]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___typeDunder___: baseSym
+	"The value a CLASS ATTRIBUTE -- not a compiled def -- holds under the
+	dunder baseSym on self's type, or nil when there is none.  None counts as
+	absent: ``__iter__ = None'' is CPython's way of blocking a protocol, and
+	the caller's own refusal is the right error for it.
+
+	GATED, because the callers are hot -- str() and format() of every
+	instance without __str__, bool() of every instance without __bool__ --
+	and the full ___classAttrDunder___: costs about a microsecond on a MISS,
+	which is the overwhelmingly common answer.  It is asked only when one of
+	its sources can possibly hold the name:
+
+	  * a setattr or holder store in THIS SESSION, or a canonical overlay
+	    store -- including a deployed module body's, which importlib replays
+	    into the overlay when a session binds the module: each records the
+	    dunder (___noteClassDunderStore___:);
+	  * a class-body assignment: the accessor pair on the metaclass chain;
+	  * a class-body assignment in a SECONDARY base: the class chain has a
+	    multiple-inheritance record.
+
+	What the gate cannot see is a holder entry committed by an EARLIER
+	session (a module body run at deploy time that setattr'd a dunder onto a
+	class).  Such a protocol then behaves as it did before #1218 -- the
+	compiled default -- rather than paying the walk on every miss."
+
+	| cls stored reg walker |
+	cls := self @env0:class.
+	stored := SessionTemps @env0:current @env0:at: #'GrailClassDunderStores' otherwise: nil.
+	(stored ~~ nil and: [stored @env0:includes: baseSym])
+		ifTrue: [^ self ___typeDunderFull___: baseSym].
+	"A class-body accessor PAIR, tested by its unary half alone -- except for
+	the few names every class already answers class-side (__str__, __iter__,
+	__repr__, __enter__, __aenter__), where the unary half proves nothing.  Those
+	are exactly the names with a compiled default on PythonInstance or object,
+	so a class-body value under one gets a shadow forwarder
+	(___grailInstallAttrMethodShadows___:) and never reaches here."
+	((cls ___respondsTo___: baseSym)
+		and: [(PythonInstance ___respondsTo___: baseSym) not])
+			ifTrue: [^ self ___typeDunderFull___: baseSym].
+	reg := (Python @env0:at: #importlib) @env0:___miRegistry___.
+	walker := cls.
+	[walker @env0:notNil and: [walker ~~ PythonInstance and: [walker ~~ object]]]
+		@env0:whileTrue: [
+			(reg @env0:at: walker otherwise: nil) @env0:ifNotNil: [:___rec |
+				^ self ___typeDunderFull___: baseSym].
+			walker := walker @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___typeDunderFull___: baseSym
+	"___typeDunder___:'s answer once its gate has passed.
+
+	object's OWN method under its own name -- ``__str__ = object.__str__'' --
+	is the default, not an override: the callers ARE that default, so calling
+	it would re-enter them forever (test_enum's test_object_str_override took
+	the session down that way).  ___dynamicClassAttr___: discards it the same
+	way."
+
+	| v |
+	v := self ___classAttrDunder___: baseSym.
+	v == None ifTrue: [^ nil].
+	(self ___isObjectDefault___: v for: baseSym) ifTrue: [^ nil].
+	"...and PythonInstance's, for the same reason: ``__next__ = Other.__next__''
+	where Other defines none resolves to the default that is asking."
+	((v @env0:isKindOf: UnboundMethod)
+		and: [(v @env0:definingClass) == PythonInstance
+		and: [(self ___typeDunderBaseOf___: v @env0:selector) == baseSym]]) ifTrue: [^ nil].
+	^ v
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___typeDunderBaseOf___: aSelector
+	"The protocol dunder a fixed-arity send of aSelector stands for -- #__neg__
+	for #__neg__, #__getitem__ for #__getitem__:, #__setitem__ for
+	#__setitem__:_: -- or nil when aSelector is not one.
+
+	ONLY CPython's implicitly-looked-up slots.  A unary send of a DATA dunder
+	(__doc__, __wrapped__, __module__) is an attribute read, and calling what
+	the class holds under that name would turn the read into a call.  Binary
+	and comparison operators are absent because ___tryBinaryDunderDNU___
+	answers them first; the varargs form (#___x__:kw:) is Grail-internal."
+
+	| names s n base |
+	names := #( #'__neg__' #'__pos__' #'__invert__' #'__abs__' #'__len__' #'__bool__'
+			#'__index__' #'__int__' #'__float__' #'__complex__' #'__round__'
+			#'__trunc__' #'__floor__' #'__ceil__' #'__iter__' #'__next__'
+			#'__reversed__' #'__contains__' #'__getitem__' #'__setitem__'
+			#'__delitem__' #'__missing__' #'__call__' #'__str__' #'__repr__'
+			#'__format__' #'__bytes__' #'__fspath__' #'__length_hint__'
+			#'__enter__' #'__exit__' #'__aenter__' #'__aexit__' #'__await__'
+			#'__aiter__' #'__anext__').
+	"A unary send is its own name: an identity test, no string work -- this
+	runs on every doesNotUnderstand: of a PythonInstance."
+	(names @env0:includesIdentical: aSelector) ifTrue: [^ aSelector].
+	s := aSelector @env0:asString.
+	(s @env0:size @env0:< 6 or: [(s @env0:at: s @env0:size) ~~ $:]) ifTrue: [^ nil].
+	((s @env0:at: 1) == $_ and: [(s @env0:at: 2) == $_ and: [(s @env0:at: 3) ~~ $_]])
+		ifFalse: [^ nil].
+	n := s @env0:indexOf: $:.
+	base := (s @env0:copyFrom: 1 to: n @env0:- 1) @env0:asSymbol.
+	^ (names @env0:includesIdentical: base)
+		ifTrue: [base]
+		ifFalse: [nil]
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -12644,7 +12830,7 @@ __eq__: other
 
 	| fn r |
 	fn := self ___dynamicInstanceDunder___: #'__eq__'.
-	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
+	fn == nil ifFalse: [^ self ___callTypeAttr___: fn with: { other }].
 	"A ``def __eq__(*args)'' compiles only the varargs form, so the fixed
 	``__eq__:'' send lands here.  Probed HERE, on the virtual path, and not in
 	___grailObjectEq___:, which is also what an EXPLICIT ``object.__eq__(a, b)''
@@ -12728,8 +12914,15 @@ category: 'Grail-String Representation'
 method: object
 __format__: formatSpec
 	"Default Python object.__format__: empty spec returns str(self),
-	non-empty spec raises TypeError (per CPython 3.4+)."
+	non-empty spec raises TypeError (per CPython 3.4+).
 
+	A __format__ the type holds as a CLASS ATTRIBUTE -- ``Cls.__format__ = f''
+	after the class exists -- comes first (issue #1218); asked of a
+	PythonInstance only, so formatting a number or a str pays nothing."
+
+	(self @env0:isKindOf: PythonInstance) ifTrue: [
+		(self ___typeDunder___: #'__format__') @env0:ifNotNil: [:___fn |
+			^ self ___callTypeAttr___: ___fn with: { formatSpec }]].
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [
 		^ self __str__ @env0:___strResult___
 	].
@@ -13314,6 +13507,11 @@ __contains__: item
 	compare fallback rather than supplementing it."
 	(self ___grailMetaclassMethodFor___: #'__contains__:') @env0:ifNotNil: [:___m |
 		^ self @env0:with: item performMethod: ___m].
+	"A class attribute under the name -- ``Cls.__contains__ = v'' after the
+	class exists, or a callable instance no forwarder stands for -- is the
+	protocol (issue #1218)."
+	(self ___typeDunder___: #'__contains__') @env0:ifNotNil: [:___fn |
+		^ self ___callTypeAttr___: ___fn with: { item }].
 	"No real iteration protocol -- neither __iter__ nor the legacy
 	__getitem__ sequence protocol.  ___respondsTo___ would see the
 	PythonInstance fallback __iter__ (which itself raises the ITERATION
@@ -13674,7 +13872,7 @@ ___pyAttrCallGetattr___: s
 					getattrFn := [self @env0:class @env0:perform: #'__getattr__' env: 1]
 						@env0:on: Error do: [:e | nil]]].
 		(getattrFn == nil or: [getattrFn == None]) ifFalse: [
-			^ [getattrFn value: { self. s } value: nil]
+			^ [(self ___typeAttrBound___: getattrFn) value: { s } value: nil]
 				@env0:on: AttributeError
 				do: [:ex |
 					AttributeError @env0:___stampContextOn___: ex name: s obj: self.
@@ -13855,7 +14053,7 @@ __hash__
 		ifTrue: [
 			dyn := self ___dynamicInstanceDunder___: #'__hash__'.
 			dyn == nil ifFalse: [
-				^ dyn @env1:___pyCallValue___: { self } kw: nil]].
+				^ self ___callTypeAttr___: dyn with: #()]].
 	^ self @env0:hash
 %
 
@@ -14107,12 +14305,12 @@ ___binOpFallback___: other op: opString reflected: refSelector
 		to: refBase @env0:asString @env0:size)) @env0:asSymbol.
 	fn := self ___classAttrDunder___: fwdBase.
 	fn == nil ifFalse: [
-		result := fn ___pyCallValue___: { self. other } kw: nil.
+		result := self ___callTypeAttr___: fn with: { other }.
 		result == (Python @env0:at: #NotImplemented otherwise: nil)
 			ifFalse: [^ result]].
 	fn := other ___classAttrDunder___: refBase.
 	fn == nil ifFalse: [
-		result := fn ___pyCallValue___: { other. self } kw: nil.
+		result := other ___callTypeAttr___: fn with: { self }.
 		result == (Python @env0:at: #NotImplemented otherwise: nil)
 			ifFalse: [^ result]].
 	"Unlike ___cmpFallback___ (whose lt<->gt selector symmetry could
@@ -14221,7 +14419,7 @@ ___numericReflectedFirst___: other selector: refSelector
 				to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
 			fn := other ___classAttrDunder___: refBase.
 			fn == nil ifTrue: [^ nil].
-			result := fn ___pyCallValue___: { other. self } kw: nil].
+			result := other ___callTypeAttr___: fn with: { self }].
 	result == NotImplemented ifTrue: [^ nil].
 	^ result
 %
@@ -14457,7 +14655,7 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	unrelated or same-typed operands never pays for it."
 	attrDunder := other ___classAttrDunder___: refBase.
 	attrDunder == nil ifFalse: [
-		^ attrDunder ___pyCallValue___: { other . self } kw: nil].
+		^ other ___callTypeAttr___: attrDunder with: { self }].
 	^ nil
 %
 
@@ -14659,7 +14857,7 @@ ___classAttrCmp___: baseSym with: other
 	TypeError CPython raises."
 	((fn @env0:isKindOf: UnboundMethod) and: [(fn @env0:definingClass) == object])
 		ifTrue: [^ nil].
-	r := fn ___pyCallValue___: { self. other } kw: nil.
+	r := self ___callTypeAttr___: fn with: { other }.
 	(r == (Python @env0:at: #NotImplemented otherwise: nil)
 		or: [r @env0:== NotImplemented]) ifTrue: [^ nil].
 	^ r
@@ -15050,7 +15248,7 @@ ___grailMetaclassCmp___: baseSym with: other
 			(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1)
 				== nil ifTrue: [^ nil].
 		fn := UnboundMethod definingClass: meta selector: baseSym].
-	r := fn ___pyCallValue___: { self. other } kw: nil.
+	r := self ___callTypeAttr___: fn with: { other }.
 	(r == (Python @env0:at: #NotImplemented otherwise: nil)
 		or: [r @env0:== NotImplemented]) ifTrue: [^ nil].
 	^ r
@@ -15127,7 +15325,7 @@ ___cmpFallback___: other op: opString reflected: refSelector
 			to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
 		fn := other ___classAttrDunder___: refBase.
 		fn == nil ifFalse: [
-			rr := fn ___pyCallValue___: { other. self } kw: nil.
+			rr := other ___callTypeAttr___: fn with: { self }.
 			(rr == (Python @env0:at: #NotImplemented otherwise: nil)) ifFalse: [^ rr]]].
 	^ self ___cmpUnorderable___: other op: opString
 %
@@ -15165,7 +15363,7 @@ __ne__: other
 
 	| fn eqOwner eqr |
 	fn := self ___dynamicInstanceDunder___: #'__ne__'.
-	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
+	fn == nil ifFalse: [^ self ___callTypeAttr___: fn with: { other }].
 	"``def __ne__(*args)'' compiles to ___ne__:kw: with no __ne__: alias."
 	eqr := self ___varargsDunder___: #'___ne__:kw:' with: other.
 	eqr == nil ifFalse: [^ eqr].
@@ -15174,7 +15372,7 @@ __ne__: other
 		"A NotImplemented __eq__ must NOT be negated (``NI not'' is an
 		uncatchable Symbol DNU); return it so ___cmpNe___ / the caller runs
 		the reflected-op / identity fallback."
-		eqr := fn ___pyCallValue___: { self. other } kw: nil.
+		eqr := self ___callTypeAttr___: fn with: { other }.
 		(eqr @env0:== NotImplemented) ifTrue: [^ eqr].
 		^ eqr @env0:not].
 	eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
@@ -15348,7 +15546,7 @@ __repr__
 	__module__."
 	(self @env0:isKindOf: Behavior) ifTrue: [^ self ___typeReprString___].
 	fn := self ___dynamicClassAttr___: #'__repr__'.
-	fn == nil ifFalse: [^ fn ___pyCallValue___: { self } kw: nil].
+	fn == nil ifFalse: [^ self ___callTypeAttr___: fn with: #()].
 	"A ``@staticmethod def __repr__()'' (a dunder with no self) defined in the
 	class body lands on the class's OWN metaclass (class side); CPython
 	invokes it as the instance repr.  Reached here only when there is no
@@ -17512,6 +17710,13 @@ __str__
 	defined to route through __repr__) rendered the Smalltalk printString
 	instead of the Python repr (test_enum's test_object_str_override)."
 
+	"...unless the type holds __str__ as a class attribute that no compiled
+	forwarder stands for -- ``Cls.__str__ = f'' after the class exists (issue
+	#1218).  Asked of a PythonInstance only: a kernel-backed type cannot
+	carry one, and str() of those must not pay for the lookup."
+	(self @env0:isKindOf: PythonInstance) ifTrue: [
+		(self ___typeDunder___: #'__str__') @env0:ifNotNil: [:___fn |
+			^ self ___callTypeAttr___: ___fn with: #()]].
 	^ self __repr__
 %
 

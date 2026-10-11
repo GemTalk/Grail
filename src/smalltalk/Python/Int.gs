@@ -179,6 +179,12 @@ __new__: obj
 	((obj @env0:class @env0:whichClassIncludesSelector: #__int__ environmentId: 1) @env0:notNil) ifTrue: [
 		^ self ___coerceIntResult___: obj __int__ from: '__int__'
 	].
+	"...or held as a CLASS ATTRIBUTE (``__int__ = f'', ``Cls.__int__ = f''): the send
+	reaches PythonInstance >> doesNotUnderstand:, which calls it as CPython's
+	slot lookup does (issue #1218)."
+	((obj @env0:isKindOf: PythonInstance) and: [(obj ___typeDunder___: #'__int__') ~~ nil]) ifTrue: [
+		^ self ___coerceIntResult___: obj __int__ from: '__int__'
+	].
 
 	"No __int__: fall back to __index__ (PEP 357) -- e.g. a class that
 	implements only __index__ (test_int.py's BadIndex)."
