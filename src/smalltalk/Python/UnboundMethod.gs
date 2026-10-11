@@ -817,14 +817,26 @@ ___grailPinnedMethodFor___: aMethod receiver: obj
 		ifTrue: [^ Object @env0:compiledMethodAt: #'___grailObjectEq___:' environmentId: 1].
 	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
 	pinnedAt == nil ifTrue: [^ aMethod].
-	"A stamp above this session's current generation was made by another
-	session (BoundMethod class >> ___grailSessionPinHolder___): it predates
-	every pin here as far as this session can know, so it redirects."
-	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
-		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
-			ifTrue: [^ aMethod].
 	shadow := ('___grailOrig_' @env0:, aMethod @env0:selector @env0:asString)
 		@env0:asSymbol.
+	"A stamp above this session's current generation was made by another
+	session (BoundMethod class >> ___grailSessionPinHolder___): it predates
+	every pin here as far as this session can know, so it redirects.
+
+	A HANDLE MINTED AFTER THE PIN still runs the original when aMethod is a
+	self-send dispatcher, which sits on the same class as its shadow (a
+	``del'' leaves the shadow on a class that no longer has the method).  A
+	store on an instance changes later lookups on that instance, never what
+	``A.f(obj)'' runs (#1226) -- see BoundMethod >>
+	___pinnedSelectorFor___:receiver:, which makes the same call."
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
+			ifTrue: [
+				owner := aMethod @env0:inClass.
+				(owner ~~ nil and: [(owner @env0:whichClassIncludesSelector: shadow
+						environmentId: 1) == owner])
+					ifFalse: [^ aMethod].
+				^ owner @env0:compiledMethodAt: shadow environmentId: 1].
 	"Resolved from the same root the method itself came from, so a shadow on an
 	unrelated class carrying the same selector cannot be picked up."
 	owner := (self @env0:_resolutionRootFor: obj)

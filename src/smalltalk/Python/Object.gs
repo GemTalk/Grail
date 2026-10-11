@@ -16513,12 +16513,17 @@ ___grailSelectorMatchesPythonName___: aSelector name: pyName
 	be ``_'' separates them: ``_tag:kw:'' ends in ``kw'', so only the explicit
 	varargs spelling above accepts it."
 
-	| s keywords |
+	| s keywords pyStr |
 	s := aSelector @env0:asString.
-	(s @env0:= ('_' @env0:, pyName @env0:, ':kw:')) ifTrue: [^ true].
+	"A STRING, whichever the caller passed.  ``'f' = #f'' is false in GemStone,
+	so a Symbol pyName matched nothing, and the dispatcher's guard against the
+	receiver's own bound method -- which passes one -- never fired: storing
+	``obj.f = saved'' back after a patch recursed (#1226)."
+	pyStr := pyName @env0:asString.
+	(s @env0:= ('_' @env0:, pyStr @env0:, ':kw:')) ifTrue: [^ true].
 	keywords := s @env0:subStrings: $:.
 	keywords @env0:isEmpty ifTrue: [^ false].
-	((keywords @env0:at: 1) @env0:= pyName) ifFalse: [^ false].
+	((keywords @env0:at: 1) @env0:= pyStr) ifFalse: [^ false].
 	"A colonless selector answers one part; a fixed-arity one answers the name
 	followed by an ``_'' per extra argument -- AND A TRAILING EMPTY ONE, because
 	``subStrings:'' does not drop it: ``k4:_:_:_:'' answers

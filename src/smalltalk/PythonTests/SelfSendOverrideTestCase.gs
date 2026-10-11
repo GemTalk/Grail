@@ -101,3 +101,47 @@ testASelfSendHonoursAnOverriddenMethod
 			description: 'self-send override check failed: ' , k , ' -> '
 				, answer printString]
 %
+
+category: 'Grail-Tests - Object Model'
+method: SelfSendOverrideTestCase
+testAFunctionFromTheClassIgnoresAnInstanceOverride
+	"``A.f(obj)'', and a bound method captured from any instance, runs the
+	class's function whatever an instance stores over ``f'' -- CPython lets a
+	store on an instance change only later LOOKUPS on it (issue #1226).
+
+	A handle holds a SELECTOR, and the dispatcher answering to it probes the
+	receiver for an override at call time.  The pin that redirects a handle to
+	the original used to cover only handles older than the first store on ANY
+	instance, so ``A.f(obj)'' ran the instance attribute, and the wrap-a-method
+	idiom and ``mock.patch.object(obj, ''f'', wraps=obj.f)'' recursed from the
+	second instance on.  Putting a saved bound method back recursed too: the
+	dispatcher's guard against the receiver's own bound method compared a
+	String with a Symbol and never matched.
+
+	CONTROLS: ``self.f()'' still sees the instance override, a CLASS patch
+	still reaches every later lookup, and ``del D.m'' still leaves a fresh
+	lookup finding the inherited method.
+
+	See tests/python/bound_method_runs_class_function.py (CPython 3.14's
+	values)."
+
+	| mod results expected b keys |
+	importlib @env1:modules removeKey: #'bound_method_runs_class_function' ifAbsent: [].
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/bound_method_runs_class_function.py')
+		name: 'bound_method_runs_class_function'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 b := (Python at: #'builtins') @env1:instance.
+	 keys := mod @env1:___pyAttrLoad___: #'KEYS'.
+	 self assert: (keys @env1:__len__) equals: 16.
+	 0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k asString , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'bound_method_runs_class_function' ifAbsent: []]
+%
