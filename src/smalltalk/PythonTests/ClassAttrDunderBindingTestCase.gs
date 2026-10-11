@@ -33,6 +33,14 @@ ClassAttrDunderBindingTestCase category: 'Grail-SUnit'
 ! One test per value KIND, because the kind is what decides the binding:
 ! object >> ___typeAttrBound___: is the single rule, and a regression in it
 ! shows up as a whole kind failing across every protocol.
+!
+! tests/python/type_built_class_dunders.py (the generator's --type mode) stores
+! the same values through a three-argument type() call's namespace, a third
+! path; testTypeBuiltClasses checks every kind there.
+!
+! EACH FIXTURE IS LOADED ONCE PER SESSION (fixtureNamed:).  The cases run at
+! import, and the binding fixture takes about 25 s to import; loaded in setUp it
+! cost this class 154 s of a shard's run.  The tests only read the results.
 ! ===============================================================================
 
 set compile_env: 0
@@ -47,19 +55,31 @@ set compile_env: 0
 
 category: 'Grail-Setup'
 method: ClassAttrDunderBindingTestCase
+fixtureNamed: aName
+	"The fixture module tests/python/<aName>.py, imported once per session.
+	A fresh import replaces any earlier one of that name, so a session that
+	imported it some other way still gets this one."
+
+	| key |
+	key := ('GrailClassAttrDunderFixture_' , aName) asSymbol.
+	^ SessionTemps current at: key ifAbsent: [ | m |
+		(importlib @env1:modules) removeKey: aName asSymbol ifAbsent: [].
+		m := importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/' , aName , '.py')
+			name: aName.
+		SessionTemps current at: key put: m.
+		m]
+%
+
+category: 'Grail-Setup'
+method: ClassAttrDunderBindingTestCase
 setUp
-	| mods |
-	mods := importlib @env1:modules.
-	mods removeKey: #'class_attr_dunder_binding' ifAbsent: [].
-	testModule := importlib
-		loadModuleFromPath: (importlib grailDir , '/tests/python/class_attr_dunder_binding.py')
-		name: 'class_attr_dunder_binding'.
+	testModule := self fixtureNamed: 'class_attr_dunder_binding'
 %
 
 category: 'Grail-Setup'
 method: ClassAttrDunderBindingTestCase
 tearDown
-	(importlib @env1:modules) removeKey: #'class_attr_dunder_binding' ifAbsent: [].
 	testModule := nil
 %
 
@@ -69,8 +89,14 @@ assertKindMatchesCPython: aKind
 	"Every case of aKind agrees with CPython; the failure lists the ones that
 	do not, with both answers."
 
+	self assertKind: aKind matchesCPythonIn: testModule
+%
+
+category: 'Grail-Private'
+method: ClassAttrDunderBindingTestCase
+assertKind: aKind matchesCPythonIn: aModule
 	| bad |
-	bad := (testModule @env1:___pyAttrLoad___: #mismatches)
+	bad := (aModule @env1:___pyAttrLoad___: #mismatches)
 		@env1:___pyCallValue___: { aKind } kw: nil.
 	self
 		assert: (bad @env1:__len__) = 0
@@ -126,6 +152,22 @@ category: 'Grail-Tests'
 method: ClassAttrDunderBindingTestCase
 testCallableInstanceIsNotBound
 	self assertKindMatchesCPython: 'callobj'
+%
+
+category: 'Grail-Tests'
+method: ClassAttrDunderBindingTestCase
+testTypeBuiltClasses
+	"``type('T', (), {'__len__': f})'' and ``type('U', (Base,), {...})'':
+	every value kind, on one protocol per lookup path.  On main before #1396
+	merged, 304 of a full 378-case run of these disagreed with CPython."
+
+	| m expected |
+	m := self fixtureNamed: 'type_built_class_dunders'.
+	expected := m @env1:___pyAttrLoad___: #EXPECTED.
+	self assert: (expected @env1:__len__) >= 168.
+	self assert: ((m @env1:___pyAttrLoad___: #RESULTS) @env1:__len__) = (expected @env1:__len__).
+	#('func' 'lambda' 'plainfn' 'classm' 'static' 'bound' 'callobj') do: [:k |
+		self assertKind: k matchesCPythonIn: m]
 %
 
 category: 'Grail-Tests'
