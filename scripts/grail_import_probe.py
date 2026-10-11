@@ -11,6 +11,14 @@ so no `except BaseException' can see it and no line is printed.  The driver
 reads a missing line as CRASH rather than as missing data.
 
     ./grail scripts/grail_import_probe.py yaml
+    ./grail scripts/grail_import_probe.py --list modules.txt
+
+With --list it imports every name in the file, one per line and in order, in
+ONE session, printing a result line per name and flushing after each.  That is
+the submodule level of the census: the driver reads the lines as they arrive,
+so when the session dies it knows exactly which module was being imported,
+and it resumes from the next one in a fresh process.  The same file is run
+under the venv's CPython first, which is what decides the denominator.
 """
 import sys
 
@@ -50,19 +58,24 @@ def one_line(text):
     return " ".join(str(text).split())[:400]
 
 
-def main():
-    name = sys.argv[1]
+def leaf(top, name):
+    """The module object for a dotted name, given what __import__ answered.
+
+    __import__ answers the TOP package for a dotted name, so walk down.
+    sys.modules is not used for this: its keys are Symbols under Grail, and a
+    str lookup can miss.
+    """
+    mod = top
+    for part in name.split(".")[1:]:
+        mod = getattr(mod, part, None)
+        if mod is None:
+            return top
+    return mod
+
+
+def probe_one(name, check_location):
     try:
-        top = __import__(name)
-        # __import__ answers the TOP package for a dotted name, so walk down.
-        # sys.modules is not used for this: its keys are Symbols under Grail,
-        # and a str lookup can miss.
-        mod = top
-        for part in name.split(".")[1:]:
-            mod = getattr(mod, part, None)
-            if mod is None:
-                mod = top
-                break
+        mod = leaf(__import__(name), name)
     except BaseException as exc:
         try:
             msg = one_line(exc)
@@ -75,15 +88,29 @@ def main():
         # root-causing a failure needs the frames, ranking the gaps does not.
         print(text)
         return
-    # WHERE it imported from is as load-bearing as whether it did: Grail's
-    # bundled src/python/stdlib beats sys.path by design, so it ships its own
-    # `requests', `click', `jinja2' and `markupsafe'.  Reporting those as the
-    # pip package importing cleanly would be a straight falsehood.
-    where = getattr(mod, "__file__", "") or ""
-    if not where:                     # a namespace package has __path__ only
-        path = list(getattr(mod, "__path__", []) or [])
-        where = path[0] if path else "<no __file__>"
+    where = ""
+    if check_location:
+        # WHERE it imported from is as load-bearing as whether it did: Grail's
+        # bundled src/python/stdlib beats sys.path by design, so it ships its
+        # own `requests', `click', `jinja2' and `markupsafe'.  Reporting those
+        # as the pip package importing cleanly would be a straight falsehood.
+        where = getattr(mod, "__file__", "") or ""
+        if not where:                 # a namespace package has __path__ only
+            path = list(getattr(mod, "__path__", []) or [])
+            where = path[0] if path else "<no __file__>"
     print("CENSUS|%s|IMPORTS|||%s" % (name, where))
+
+
+def main():
+    if sys.argv[1] == "--list":
+        with open(sys.argv[2]) as fh:
+            names = [ln.strip() for ln in fh if ln.strip()]
+        for name in names:
+            probe_one(name, False)
+            sys.stdout.flush()
+        print("CENSUS-END")
+        return
+    probe_one(sys.argv[1], True)
 
 
 main()
