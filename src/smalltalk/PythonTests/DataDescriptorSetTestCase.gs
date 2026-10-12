@@ -311,3 +311,44 @@ testEveryCheckPasses
 		description: 'fixture checks failed: '
 			, (bad @env0:inject: '' into: [:acc :each | acc , ' ' , each @env0:asString]).
 %
+
+category: 'Grail-Tests - Stored Property'
+method: DataDescriptorSetTestCase
+testAStoredPropertyNearerThanTheCompiledOneTakesTheStore
+	"A store on an instance is decided by the NEAREST class in the MRO that
+	has the name, as in CPython (#1407).  A subclass's property STORED as a
+	class attribute -- under a class-body ``if'', or ``Sub.p = property(...)''
+	at run time -- used to lose every store to the inherited @property's
+	compiled setter: the subclass setter never ran and a read-only one did not
+	raise.  The same holds for ``self.p = v'' inside a method, whose inferred
+	slot pair wrote the instance directly, and for setattr() and
+	object.__setattr__.  A nearer plain value or non-data descriptor sends the
+	store to the instance dict.
+
+	Controls: the base itself, a DECLARED subclass @property, and a compiled
+	pair nearer than a FARTHER stored property, all unchanged.  On main's code
+	9 of the 12 checks fail.
+
+	See tests/python/stored_property_over_inherited_property.py (CPython
+	3.14's values)."
+
+	| fixture answers expected b keys |
+	importlib @env1:modules removeKey: #'stored_property_over_inherited_property' ifAbsent: [].
+	[fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/stored_property_over_inherited_property.py')
+		name: 'stored_property_over_inherited_property'.
+	 answers := fixture @env1:___pyAttrLoad___: #'r'.
+	 expected := fixture @env1:___pyAttrLoad___: #'EXPECTED'.
+	 b := (Python at: #'builtins') @env1:instance.
+	 keys := fixture @env1:___pyAttrLoad___: #'KEYS'.
+	 self assert: (keys @env1:__len__) equals: 12.
+	 0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		got := (b @env1:repr: (answers @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k asString , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'stored_property_over_inherited_property' ifAbsent: []]
+%
