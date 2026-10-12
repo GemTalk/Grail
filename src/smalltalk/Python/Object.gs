@@ -18603,14 +18603,32 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	(jinja2's ``Token.test_any'' calls ``self.test(expr)'') is a plain
 	Smalltalk self-send, and the namedtuple class does not understand it.
 	CPython finds the function in the class's __dict__; so does this, by
-	loading the attribute (which binds it) and calling that."
-	((self isKindOf: Behavior) not and: [(s @env0:indexOf: $:) @env0:> 0]) ifTrue: [
+	loading the attribute (which binds it) and calling that.
+
+	A CLASS receiver takes the same route, looking in its OWN dict rather than
+	its metaclass's: a @classmethod moved that way calls its siblings as
+	``cls.three(x, 2, 3)'', a send to the namedtuple class, whose metaclass
+	compiled nothing of the sort -- an uncatchable MessageNotUnderstood
+	(#1455; pytest's ParameterSet is a NamedTuple whose classmethods call each
+	other).  The compiled-name test below still asks ``cls'', which for a
+	class is its metaclass, where a class's own @classmethods live.
+
+	A class also takes the ZERO-argument form, ``cls.zero()'', which an
+	instance does not: unary sends to instances are how Grail's own code
+	probes for an optional protocol, and a held attribute answering one would
+	change what the probe sees.  Names starting ``__'' -- dunders and Grail's
+	``___'' internals -- stay out for a class too."
+	(((s @env0:indexOf: $:) @env0:> 0)
+		or: [(self isKindOf: Behavior)
+			and: [s @env0:size @env0:< 2 or: [(s @env0:copyFrom: 1 to: 2) @env0:~= '__']]]) ifTrue: [
 		| varargs pyName held |
 		varargs := (s @env0:size @env0:> 4) and: [(s @env0:endsWith: ':kw:')
 			and: [(s @env0:at: 1) == $_]].
 		pyName := varargs
 			ifTrue: [s @env0:copyFrom: 2 to: s @env0:size @env0:- 4]
-			ifFalse: [s @env0:copyFrom: 1 to: (s @env0:indexOf: $:) @env0:- 1].
+			ifFalse: [(s @env0:indexOf: $:) @env0:= 0
+				ifTrue: [s]
+				ifFalse: [s @env0:copyFrom: 1 to: (s @env0:indexOf: $:) @env0:- 1]].
 		"Only for a name the class does NOT compile in any arity.  A class that
 		defines ``register'' and was sent the wrong arity of it must still get
 		the ordinary refusal: the attribute read finds its own method, whose
@@ -18620,7 +18638,18 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 				@env0:anySatisfy: [:sel |
 					(cls @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:notNil])
 			ifTrue: [nil]
-			ifFalse: [[cls @env1:___classChainAttrLookup___: pyName @env0:asSymbol]
+			ifFalse: [[ | root |
+					root := (self isKindOf: Behavior) ifTrue: [self] ifFalse: [cls].
+					"BOTH HOMES of a class attribute.  A runtime store on a
+					CANONICAL class -- every class of an imported module, which
+					is what typing.NamedTuple's setattr() runs against -- lands
+					in the session overlay, not the committed holder
+					___classChainAttrLookup___: reads.  Only a __main__ class
+					kept it in the holder, so this branch worked in a script and
+					not in the module that imported it (#1455)."
+					(root @env1:___classChainAttrLookup___: pyName @env0:asSymbol)
+						@env0:ifNil: [self @env1:___classAttrOverlayLookup___: root
+							name: pyName @env0:asSymbol]]
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 		held @env0:notNil ifTrue: [ | fn |
 			fn := self @env1:___pyAttrLoad___: pyName @env0:asSymbol.

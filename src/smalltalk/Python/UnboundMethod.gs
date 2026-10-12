@@ -733,11 +733,7 @@ value: positional value: kwargs
 		@env0:_resolveMethodNargs: nargs
 		kwOk: kwOk
 		from: (self @env0:_resolutionRootFor: obj).
-	method ifNil: [
-		^ AttributeError ___signal___:
-			('type object ''' @env0:, definingClass @env0:name @env0:asString
-				@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')
-	].
+	method ifNil: [^ self ___callKeywordsBound___: obj rest: rest kw: kwargs].
 	"A CAPTURE KEEPS MEANING THE FUNCTION IT CAPTURED, exactly as a BoundMethod
 	does since PR #835.  Reassigns ``method'' rather than taking a temp: this
 	method's frame WIDTH is load-bearing (see the comment further down, and
@@ -814,9 +810,115 @@ value: positional value: kwargs
 			with: (rest @env0:at: 3)
 			with: (rest @env0:at: 4)
 			performMethod: method].
-	"5+ args: no performMethod primitive variant — fall through to plain
-	perform (works unless the parent method itself calls super())."
-	^ obj @env0:perform: resolvedSel env: 1 withArguments: rest
+	"5+ args: no performMethod primitive variant.  See there."
+	^ self ___performMethod___: method on: obj args: rest
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___callKeywordsBound___: obj rest: rest kw: kwargs
+	"value:value: found no method to take this call.  With keywords, that is a
+	fixed-arity def with no ``_name:kw:'' companion to bind them -- which is
+	every @classmethod, since ClassDefAst gives the companion to instance
+	methods only.  Bind the keywords to their parameters by name and call
+	again with positionals alone, which resolves the fixed form.
+
+	The way in was ``Src.__dict__['three'].__func__(Dst, 1, 2, c=3)'', and the
+	way typing.NamedTuple takes it: ``Dst.three(1, 2, c=3)'' for a
+	classmethod the namedtuple class holds as an attribute (#1455).  Called
+	on its own class the same classmethod already bound by name, through
+	BoundMethod >> ___kwBoundArgsFor___:args:kw:; this is the same binding,
+	with the same TypeErrors, for the unbound handle.
+
+	The names come from ___methodSignatureTable___, which is bound-shaped --
+	``self''/``cls'' left out -- and so lines up with ``rest''.  Anything that
+	cannot be bound exactly (no table, a parameter that is not plain
+	positional-or-keyword, the wrong total) keeps the AttributeError this
+	answered before."
+
+	| pyClass sig names n args code fname |
+	(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		pyClass := definingClass @env0:isMeta
+			ifTrue: [definingClass @env0:thisClass]
+			ifFalse: [definingClass].
+		sig := self ___signatureSpecForClass___: pyClass.
+		n := rest @env0:size @env0:+ kwargs @env0:size.
+		(sig ~~ nil and: [sig @env0:size @env0:= n
+			and: [sig @env0:allSatisfy: [:p | (p @env0:at: 2) @env0:= 1]]]) ifTrue: [
+			names := sig @env0:collect: [:p | (p @env0:at: 1) @env0:asString].
+			"CPython names the function by its __qualname__ -- ``Src.three()''."
+			code := self ___codeForClass___: pyClass.
+			fname := ((code ~~ nil
+					and: [(code @env0:dynamicInstVarAt: #'co_qualname') ~~ nil])
+				ifTrue: [(code @env0:dynamicInstVarAt: #'co_qualname') @env0:asString]
+				ifFalse: [selector @env0:asString]) @env0:, '()'.
+			kwargs @env0:keysDo: [:k | | i |
+				i := names @env0:indexOf: k @env0:asString.
+				i @env0:= 0 ifTrue: [
+					^ TypeError ___signal___: fname @env0:, ' got an unexpected keyword argument '''
+						@env0:, k @env0:asString @env0:, ''''].
+				i @env0:<= rest @env0:size ifTrue: [
+					^ TypeError ___signal___: fname @env0:, ' got multiple values for argument '''
+						@env0:, k @env0:asString @env0:, '''']].
+			args := Array @env0:new: n @env0:+ 1.
+			args @env0:at: 1 put: obj.
+			1 @env0:to: n do: [:i |
+				args @env0:at: i @env0:+ 1 put: (i @env0:<= rest @env0:size
+					ifTrue: [rest @env0:at: i]
+					ifFalse: [kwargs @env0:at: (names @env0:at: i)])].
+			^ self value: args value: nil]].
+	^ AttributeError ___signal___:
+		('type object ''' @env0:, definingClass @env0:name @env0:asString
+			@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___performMethod___: aMethod on: obj args: args
+	"Run aMethod with obj as receiver and five or more arguments -- the arity
+	the kernel has no ``with:...performMethod:'' primitive for.
+
+	A plain ``perform:'' is only the same thing when obj's own lookup reaches
+	aMethod.  When it does not, the send went somewhere else entirely:
+
+	  * a METHOD MOVED ONTO ANOTHER CLASS -- typing.NamedTuple setattr()s the
+	    class body's methods onto the class collections.namedtuple built, so
+	    ``Dst.five(1, 2, 3, 4, 5)'' sent ``five:_:_:_:_:'' to a class that never
+	    compiled it.  A class receiver died with an uncatchable
+	    MessageNotUnderstood (#1455); an instance receiver went round object's
+	    held-attribute fallback, back here, until RecursionError.
+	  * an OVERRIDE -- ``Base.m5(sub, ...)'' from inside Sub's m5 ran Sub's m5
+	    again.
+
+	So the method is installed, once per session, under a selector private to
+	this compiled method (its oop is in the name) and sent under that: a
+	virtual send, but to a name only aMethod answers to.  On the class that
+	owns it the method object is shared as is; onto an unrelated class it is
+	recompiled from source, the self-send dispatcher's own route
+	(importlib >> ___copySessionMethod___:from:to:prefix:).  Session methods
+	are transient and private to this session.  If the install fails the old
+	send is kept, so nothing that worked before can stop working."
+
+	| sel home target direct |
+	sel := aMethod @env0:selector.
+	home := aMethod @env0:inClass.
+	(obj @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1) == home
+		ifTrue: [^ obj @env0:perform: sel env: 1 withArguments: args].
+	direct := ('___grailDirect' @env0:, aMethod @env0:asOop @env0:printString @env0:, '_'
+		@env0:, sel @env0:asString) @env0:asSymbol.
+	target := (obj @env0:isKindOf: home) ifTrue: [home] ifFalse: [obj @env0:class].
+	(target @env0:includesSelector: direct environmentId: 1) ifFalse: [
+		[(obj @env0:isKindOf: home)
+			ifTrue: [home ___installSessionMethod: aMethod as: direct]
+			ifFalse: [(Python @env0:at: #importlib)
+				@env0:___copySessionMethod___: sel
+				from: home
+				to: target
+				prefix: '___grailDirect' @env0:, aMethod @env0:asOop @env0:printString @env0:, '_']]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
+	(target @env0:includesSelector: direct environmentId: 1)
+		ifFalse: [^ obj @env0:perform: sel env: 1 withArguments: args].
+	^ obj @env0:perform: direct env: 1 withArguments: args
 %
 
 category: 'Grail-Calling'
