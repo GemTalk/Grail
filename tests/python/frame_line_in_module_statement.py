@@ -76,28 +76,17 @@ def decorated(a, *, k=1):
 caller_line('plain_call_control', depth=1)
 
 
-# A decorated statement has two header lines.  CPython reports the decorator
-# line while the decorator runs, and Grail reports the class or def line.  That
-# is a separate difference, older than this fixture and not what it is about.
-# So these two checks ask only that the line belongs to the statement's header
-# and not to a method body it compiles, which is where the bug put it.
-HEADERS = {
-    'class_decorator': (58, 59),
-    'function_decorator': (70, 71),
-}
-
+# A decorator runs at its own line, as CPython reports it (#1406); Grail used
+# to report the class or def line, so these two accepted either until then.
 EXPECTED = {
     'init_subclass': 44,
     'init_subclass_stack': 44,
-    'class_decorator': True,
-    'function_decorator': True,
+    'class_decorator': 58,
+    'function_decorator': 70,
     'plain_call_control': 76,
 }
 
 r = dict(seen)
-for _k, _lines in HEADERS.items():
-    r[_k] = r[_k] in _lines
-
 
 if __name__ == '__main__':
     for k in EXPECTED:

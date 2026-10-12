@@ -270,6 +270,21 @@ ___setFlags___: anInteger
 	^ self
 %
 
+category: 'Instance Creation'
+method: PyCode
+___setDecoratedLine___: aLine
+	"A decorated def's ``co_firstlineno'': its FIRST DECORATOR's line, as in
+	CPython, where the ``firstlineno:'' the constructor took is the ``def''
+	line (#1406).  Set afterwards, not passed to the constructor, because the
+	traceback walk reads that constructor text to find which nested def a
+	line belongs to (BaseException class >> ___firstlinenoAfter___:from:), and
+	a decorator line is not in the def's body.  Answers self, like the other
+	setters chained onto the constructor."
+
+	self dynamicInstVarAt: #'co_firstlineno' put: aLine.
+	^ self
+%
+
 category: 'Grail-Attribute Access'
 method: PyCode
 ___codeKindBits___
