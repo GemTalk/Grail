@@ -55,6 +55,15 @@ __new__: source
 	test_bytes_blocking), which is a TypeError even for a bytes subclass."
 	hook := [source @env1:___pyAttrLoad___: #'__bytes__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"...on the TYPE (#1481): an instance attribute named __bytes__ is not the
+	hook, and the ``source __bytes__'' send below would not find it either --
+	so a stored one must not route there."
+	(hook @env0:notNil and: [(source @env0:dynamicInstVarAt: #'__bytes__') @env0:== hook])
+		ifTrue: [
+			hook := ((sourceClass @env0:whichClassIncludesSelector: #'__bytes__' environmentId: 1) @env0:notNil
+					or: [(source @env1:___typeDunder___: #'__bytes__') @env0:notNil])
+				ifTrue: [true]
+				ifFalse: [nil]].
 	hook @env0:== None ifTrue: [
 		TypeError ___signal___: ('cannot convert '''
 			@env0:, (bytes ___pyTypeNameOf___: source)

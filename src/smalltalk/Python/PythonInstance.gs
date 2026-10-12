@@ -250,7 +250,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	signature compiles to `_foo:kw:``).  Without this redirect, every
 	such call would be misinterpreted as a setter."
 
-	| s metaOwner binOp |
+	| s metaOwner binOp dunderBase |
 	envId = 1 ifFalse: [
 		"NOTE: an env-0 arithmetic bridge here is DEAD CODE -- env-0
 		misses route through the kernel's 4-arg
@@ -274,7 +274,8 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	CPython's slot lookup does (issue #1218).  The callers that treat a miss as
 	``protocol absent'' -- bool() trying __bool__ then __len__ -- still see the
 	MessageNotUnderstood when the type holds nothing."
-	(self @env1:___typeDunderBaseOf___: aSelector) ifNotNil: [:___base |
+	dunderBase := self @env1:___typeDunderBaseOf___: aSelector.
+	dunderBase ifNotNil: [:___base |
 		(self @env1:___typeDunder___: ___base) ifNotNil: [:___fn |
 			^ self @env1:___callTypeAttr___: ___fn with: anArray asArray]].
 	"GRAIL_DIRECT_CALLS: a direct ``obj foo: a'' / ``obj foo'' that missed is a
@@ -371,8 +372,22 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 			]
 		] ifFalse: [
 			"Unary getter.  Phase B: probe dynamic-instVar storage
-			(the canonical home for instance attributes)."
-			anArray size = 0 ifTrue: [
+			(the canonical home for instance attributes).
+
+			NOT for a protocol dunder (#1481).  A unary send of #__len__,
+			#__neg__ or #__bool__ that reaches here is len(o), -o or a truth
+			test, and CPython looks those up on the TYPE: ``o.__len__ = f''
+			on the instance is ignored.  Answering the stored value handed
+			the function itself back, uncalled -- ``-o'' evaluated to a
+			lambda, ``bool(o)'' raised ``__bool__ should return bool''.  The
+			test reuses dunderBase, which the class-attribute branch above
+			already computed.
+
+			(``__slots__ = ('__len__',)'' is the one shape CPython DOES honour,
+			through the slot's member descriptor on the type.  It raises the
+			ordinary missing-protocol TypeError here rather than calling it.)"
+			(anArray size = 0
+				and: [dunderBase isNil]) ifTrue: [
 				| val idx |
 				val := self dynamicInstVarAt: aSelector.
 				val == nil ifFalse: [^ val].
