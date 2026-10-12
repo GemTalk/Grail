@@ -193,9 +193,11 @@ check('a_deprecated_function_is_still_a_function',
 # quote it -- and CPython says 'function' for a nested def, a lambda, and a
 # method read through its class alike.  Grail leaked its Smalltalk spellings
 # ('ExecBlock', 'UnboundMethod') until the type-name correction.  BoundMethod
-# is the honest residual: one Smalltalk class carries both CPython 'function'
-# (module-level def) and 'method' (instance-bound), so its name stays
-# unmapped and module-level defs still report it.
+# was the residual: one Smalltalk class carries CPython's 'function'
+# (module-level def), 'method' (instance-bound) and 'builtin_function_or_method'
+# (len, [].append), and a name keyed by class cannot split them.  Since issue
+# #1436 its __class__ reports the types module's class for each, so type() is
+# the CPython type itself, not just its name.
 
 check('a_nested_defs_type_name_is_function',
       lambda: type(nested_fn).__name__, 'function')
@@ -203,6 +205,44 @@ check('a_lambdas_type_name_is_function',
       lambda: type(lambda: None).__name__, 'function')
 check('a_class_read_methods_type_name_is_function',
       lambda: type(Hooked.m).__name__, 'function')
+
+
+check('a_module_defs_type_name_is_function',
+      lambda: type(module_fn).__name__, 'function')
+check('a_module_defs_type_is_functiontype',
+      lambda: type(module_fn) is types.FunctionType, True)
+check('a_bound_methods_type_name_is_method',
+      lambda: type(hooked.m).__name__, 'method')
+check('a_bound_methods_type_is_methodtype',
+      lambda: type(hooked.m) is types.MethodType, True)
+check('a_classmethod_reads_type_is_methodtype',
+      lambda: type(Hooked.cm) is types.MethodType, True)
+check('the_method_types_module_is_builtins',
+      lambda: (type(hooked.m).__module__, type(module_fn).__module__), ('builtins', 'builtins'))
+check('the_method_types_repr',
+      lambda: (repr(type(hooked.m)), repr(type(module_fn)), repr(type(len))),
+      ("<class 'method'>", "<class 'function'>", "<class 'builtin_function_or_method'>"))
+check('a_builtin_functions_type_name',
+      lambda: (type(len).__name__, type([].append).__name__),
+      ('builtin_function_or_method', 'builtin_function_or_method'))
+check('a_builtin_is_builtinfunctiontype',
+      lambda: (type(len) is types.BuiltinFunctionType,
+               isinstance(len, types.BuiltinFunctionType),
+               isinstance([].append, types.BuiltinMethodType),
+               types.BuiltinMethodType is types.BuiltinFunctionType),
+      (True, True, True, True))
+check('a_builtin_is_neither_function_nor_method',
+      lambda: (isinstance(len, types.FunctionType), isinstance(len, types.MethodType),
+               isinstance([].append, types.FunctionType), isinstance([].append, types.MethodType)),
+      (False, False, False, False))
+check('python_callables_are_not_builtins',
+      lambda: (isinstance(module_fn, types.BuiltinFunctionType),
+               isinstance(hooked.m, types.BuiltinFunctionType)),
+      (False, False))
+check('class_and_type_agree',
+      lambda: (hooked.m.__class__ is type(hooked.m), len.__class__ is type(len),
+               module_fn.__class__ is type(module_fn)),
+      (True, True, True))
 
 
 def _deprecated_misuse_quotes_function():

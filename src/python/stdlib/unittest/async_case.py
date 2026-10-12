@@ -75,7 +75,7 @@ def _grail_iscoroutinefunction(func):
     # _has_code_flag does.  ``__code__`` is readable directly off a BoundMethod
     # here, so this is belt and braces.
     for _ in range(4):
-        if type(f).__name__ != 'BoundMethod':
+        if type(f).__name__ not in ('BoundMethod', 'method'):
             break
         try:
             f = f.__func__

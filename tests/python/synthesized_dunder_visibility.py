@@ -181,6 +181,27 @@ def _a_metaclass_supplied_dunder_is_visible():
     return (_reads(lambda: Color.__contains__), Color.RED in Color)
 
 
+def _a_bare_metaclass_supplies_none():
+    """The other side of the guard above: a metaclass that DEFINES none of
+    them supplies none.  Meta subclasses type, whose chain ends at object, so
+    asking Meta found object's synthesized defaults and every class with a
+    hand-written metaclass answered all of them -- types.FunctionType among
+    them, which made ``type(f).__exit__'' an attribute once type(f) was it."""
+    class Meta(type):
+        pass
+
+    class Unowned(metaclass=Meta):
+        pass
+
+    return (_reads(lambda: Unowned.__exit__),
+            _reads(lambda: Unowned.__aenter__),
+            _reads(lambda: Unowned.__iter__),
+            _reads(lambda: Unowned.__contains__),
+            _reads(lambda: Unowned.__getitem__))
+
+
+check('a_bare_metaclass_supplies_none', _a_bare_metaclass_supplies_none(),
+      ('AttributeError',) * 5)
 check('a_metaclass_supplied_dunder_is_visible',
       _a_metaclass_supplied_dunder_is_visible(), ('ok', True))
 check('a_hand_written_metaclass_too', _a_hand_written_metaclass_too(), 'ok')

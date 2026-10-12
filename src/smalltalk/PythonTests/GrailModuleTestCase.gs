@@ -180,23 +180,25 @@ testModuleFunctionIsFirstClass
 	while leaving value accessors (``__name__'') performed."
 
 	"random is a first-class callable; calling it yields a float in [0, 1)."
+	"A callable's type is one of CPython's three (issue #1436), never the
+	value it would have answered if performed."
 	self assert: (self eval: 'from random import random
-type(random).__name__') equals: 'BoundMethod'.
+type(random).__name__ in (''method'', ''builtin_function_or_method'')') equals: true.
 	self assert: (self eval: 'from random import random
 0.0 <= random() < 1.0') equals: true.
 	"Multi-arg functions were already callable -- keep them regressed."
 	self assert: (self eval: 'from random import gauss, shuffle
-type(gauss).__name__ == ''BoundMethod'' and type(shuffle).__name__ == ''BoundMethod''') equals: true.
+type(gauss).__name__ == ''method'' and type(shuffle).__name__ == ''method''') equals: true.
 	"The fix generalises to other native module functions (time.time)."
 	self assert: (self eval: 'import time
-type(time.time).__name__') equals: 'BoundMethod'.
+type(time.time).__name__') equals: 'builtin_function_or_method'.
 	"getstate raises NotImplementedError when CALLED; before the fix,
 	merely importing it auto-invoked it and the import blew up.  Now it is
 	a first-class BoundMethod that only raises on an actual call."
 	self assert: (self eval: 'from random import getstate
-type(getstate).__name__') equals: 'BoundMethod'.
+type(getstate).__name__') equals: 'method'.
 	"A value accessor (category ``Grail-Accessors'', e.g. sys.stdout) STILL
 	reads as its value, not a BoundMethod -- the default stays perform."
 	self assert: (self eval: 'import sys
-type(sys.stdout).__name__ != ''BoundMethod''') equals: true.
+type(sys.stdout).__name__ not in (''method'', ''builtin_function_or_method'', ''BoundMethod'')') equals: true.
 %

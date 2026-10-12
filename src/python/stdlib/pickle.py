@@ -559,8 +559,28 @@ def _is_python_subclass(obj):
     test alone is wrong the other way, since Symbol calls itself 'str' too.
     ClassDefAst stamps every class it builds with ___pyDefinedClass___, which
     is exactly the question being asked.
+
+    Except for the three types a Grail callable REPORTS (issue #1436):
+    types.FunctionType, MethodType and BuiltinFunctionType are written in
+    Python, but what reports them is Grail's BoundMethod, a function or a
+    builtin as far as pickling is concerned.
     """
-    return hasattr(type(obj), '___pyDefinedClass___')
+    t = type(obj)
+    if t in _grail_callable_types():
+        return False
+    return hasattr(t, '___pyDefinedClass___')
+
+
+_GRAIL_CALLABLE_TYPES = None
+
+
+def _grail_callable_types():
+    global _GRAIL_CALLABLE_TYPES
+    if _GRAIL_CALLABLE_TYPES is None:
+        import types
+        _GRAIL_CALLABLE_TYPES = (types.FunctionType, types.MethodType,
+                                 types.BuiltinFunctionType)
+    return _GRAIL_CALLABLE_TYPES
 
 
 # The builtins whose Python type Grail backs with more than one GemStone
@@ -617,7 +637,7 @@ def _is_function_like(obj):
     objects, never types.FunctionType, so CPython's
     ``dispatch[FunctionType] = save_global'' entry never fires for them."""
     return (not _is_python_subclass(obj)
-            and type(obj).__name__ in ('function', 'BoundMethod',
+            and type(obj).__name__ in ('function', 'BoundMethod', 'method',
                                        'builtin_function_or_method',
                                        'MethodBinding', 'ExecBlock'))
 
@@ -1246,10 +1266,19 @@ class _Pickler:
         # is a BoundMethod on its MODULE in Grail, and that one is a global.
         # A plain ``function'' (a class-body def read off its class) is not
         # bound, whatever its __self__ reads as, and is a global like any def.
+        # A BoundMethod reports 'method', 'function' or
+        # 'builtin_function_or_method' (issue #1436), 'BoundMethod' only
+        # before the types module is reachable.
         receiver = (getattr(obj, '__self__', None)
-                    if type(obj).__name__ == 'BoundMethod' else None)
+                    if type(obj).__name__ in ('BoundMethod', 'method',
+                                              'builtin_function_or_method')
+                    else None)
         if receiver is not None and not isinstance(receiver, _ModuleType):
+            # CPython's method.__reduce__ names __func__; a types.MethodType
+            # built by hand carries no __name__ of its own.
             name = getattr(obj, '__name__', None)
+            if not isinstance(name, str):
+                name = getattr(getattr(obj, '__func__', None), '__name__', None)
             if isinstance(name, str):
                 return getattr, (receiver, name)
         if _is_function_like(obj):

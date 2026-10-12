@@ -289,7 +289,11 @@ def getasyncgenstate(agen):
 
 
 def isbuiltin(obj):
-    return False
+    """CPython's test, ``isinstance(obj, types.BuiltinFunctionType)``.  Grail's
+    builtin callables report that type since #1436 (BoundMethod >> __class__);
+    before, this answered False for everything, and pydoc reached the same
+    answers through ismethod(), which matched every BoundMethod."""
+    return isinstance(obj, _types.BuiltinFunctionType)
 
 
 def isawaitable(obj):
