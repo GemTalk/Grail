@@ -71,9 +71,12 @@ class CloseAfterResponseHandler(WSGIRequestHandler):
     """A dev-server request handler that serves ONE request per connection
     (no keep-alive).
 
-    Werkzeug's default handler speaks HTTP/1.1, so a connection stays open
-    after the response and the server loops waiting to read the next
-    request on it.  On the single-threaded dev server that's a trap: while
+    Grail's Werkzeug handler used to speak HTTP/1.1 even on a single-threaded
+    server, so a connection stayed open after the response and the server
+    looped waiting to read the next request on it.  Since #1227 the default
+    closes after each request there, as upstream's does, so this handler is
+    now belt and braces, kept so the demo does not rely on that default.  On
+    the single-threaded dev server a kept connection is a trap: while
     the server is parked reading a kept-alive connection, it can't accept a
     new one -- so the moment a browser opens a second connection (a second
     tab, a favicon fetch, the next click) everything hangs.  This app has

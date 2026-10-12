@@ -1068,6 +1068,7 @@ run
 	at: #'HttpClientTestCase' put: nil;
 	at: #'HttpCookiejarTestCase' put: nil;
 	at: #'HttpCookiesTestCase' put: nil;
+	at: #'HttpKeepAliveStallTestCase' put: nil;
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'ImportAndOpenArgsTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
@@ -2574,6 +2575,7 @@ input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/HttpClientTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiejarTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
+input src/smalltalk/PythonTests/HttpKeepAliveStallTestCase.gs
 input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/ImportAndOpenArgsTestCase.gs
 input src/smalltalk/PythonTests/ImportErrorTestCase.gs

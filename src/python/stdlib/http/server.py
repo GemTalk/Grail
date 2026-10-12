@@ -8,6 +8,7 @@
 # the stdlib's ``email`` machinery, but the ``HTTPMessage`` it produces
 # exposes the same ``get`` / ``get_all`` / ``items`` interface.
 
+import html as _html
 import socketserver
 
 __all__ = ["HTTPServer", "BaseHTTPRequestHandler", "HTTPMessage",
@@ -29,12 +30,28 @@ DEFAULT_ERROR_CONTENT_TYPE = "text/html;charset=utf-8"
 # Minimal status-phrase table (the common ones; werkzeug supplies its own
 # phrases via send_response anyway).
 _RESPONSES = {
+    100: "Continue",
     200: "OK", 201: "Created", 204: "No Content", 301: "Moved Permanently",
     302: "Found", 304: "Not Modified", 400: "Bad Request", 401: "Unauthorized",
     403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed",
+    414: "URI Too Long", 431: "Request Header Fields Too Large",
     500: "Internal Server Error", 501: "Not Implemented",
-    503: "Service Unavailable",
+    503: "Service Unavailable", 505: "HTTP Version Not Supported",
 }
+
+# http.client's limits, which CPython's parse_request inherits through
+# http.client.parse_headers.
+_MAXLINE = 65536
+_MAXHEADERS = 100
+
+
+class _HeaderLimitError(Exception):
+    """A header block over http.client's limits; parse_request answers 431."""
+
+    def __init__(self, message, explain):
+        Exception.__init__(self, message)
+        self.message = message
+        self.explain = explain
 
 
 class HTTPMessage:
@@ -77,8 +94,17 @@ class HTTPMessage:
 
 def _parse_headers(rfile):
     msg = HTTPMessage()
+    count = 0
     while True:
-        line = rfile.readline(65537)
+        line = rfile.readline(_MAXLINE + 1)
+        if len(line) > _MAXLINE:
+            raise _HeaderLimitError(
+                "Line too long",
+                "got more than %d bytes when reading header line" % _MAXLINE)
+        count += 1
+        if count > _MAXHEADERS:
+            raise _HeaderLimitError(
+                "Too many headers", "got more than %d headers" % _MAXHEADERS)
         if not line or line in (b"\r\n", b"\n", b""):
             break
         text = line.decode("latin-1").rstrip("\r\n")
@@ -114,6 +140,12 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
     def handle_one_request(self):
         try:
             self.raw_requestline = self.rfile.readline(65537)
+            if len(self.raw_requestline) > 65536:
+                self.requestline = ""
+                self.request_version = ""
+                self.command = ""
+                self.send_error(414)
+                return
             if not self.raw_requestline:
                 self.close_connection = True
                 return
@@ -129,28 +161,107 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
             self.close_connection = True
 
     def parse_request(self):
-        self.command = None
+        """Parse self.raw_requestline and the headers after it (CPython 3.14's
+        method, with Grail's header parser in place of http.client's).
+
+        Answer True on success.  On failure the error response has already
+        been sent: 400 for a malformed version or request line, 505 for a
+        major version of 2 or more, 431 for oversized headers.
+
+        The connection is kept open only when BOTH sides speak HTTP/1.1 --
+        the request's version and this handler's protocol_version.  Grail used
+        to keep it for any 1.1 request, so a handler at the default
+        protocol_version HTTP/1.0 answered ``HTTP/1.0 200 OK'' (which tells
+        the client the connection will close) and then waited on the socket
+        for a second request, stalling a single-threaded server (#1227)."""
+        is_http_0_9 = False
+        self.command = None  # set in case of error on the first line
         self.request_version = version = self.default_request_version
         self.close_connection = True
-        self.requestline = self.raw_requestline.decode("latin-1").rstrip("\r\n")
-        words = self.requestline.split()
+        requestline = str(self.raw_requestline, "iso-8859-1")
+        requestline = requestline.rstrip("\r\n")
+        self.requestline = requestline
+        words = requestline.split()
         if len(words) == 0:
             return False
-        if len(words) >= 3:
+
+        if len(words) >= 3:  # Enough to determine protocol version
             version = words[-1]
+            try:
+                if not version.startswith("HTTP/"):
+                    raise ValueError
+                base_version_number = version.split("/", 1)[1]
+                version_number = base_version_number.split(".")
+                # RFC 2145 section 3.1: exactly one ".", the major and minor
+                # numbers are separate integers, and leading zeros are ignored.
+                if len(version_number) != 2:
+                    raise ValueError
+                if any(not component.isdigit() for component in version_number):
+                    raise ValueError("non digit in http version")
+                if any(len(component) > 10 for component in version_number):
+                    raise ValueError("unreasonable length http version")
+                version_number = int(version_number[0]), int(version_number[1])
+            except (ValueError, IndexError):
+                self.request_version = ""
+                self.send_error(400, "Bad request version (%r)" % version)
+                return False
             self.request_version = version
-            if version.startswith("HTTP/1.1"):
+            if version_number >= (1, 1) and self.protocol_version >= "HTTP/1.1":
                 self.close_connection = False
-        if len(words) >= 2:
-            self.command, self.path = words[0], words[1]
-        else:
-            self.command, self.path = words[0], "/"
-        self.headers = _parse_headers(self.rfile)
-        conn = self.headers.get("Connection", "")
-        if conn.lower() == "close":
+            if version_number >= (2, 0):
+                self.send_error(
+                    505, "Invalid HTTP version (%s)" % base_version_number)
+                return False
+
+        if not 2 <= len(words) <= 3:
+            self.request_version = ""
+            self.send_error(400, "Bad request syntax (%r)" % requestline)
+            return False
+        command, path = words[:2]
+        if len(words) == 2:
             self.close_connection = True
-        elif conn.lower() == "keep-alive" and self.protocol_version >= "HTTP/1.1":
+            if command != "GET":
+                self.request_version = ""
+                self.send_error(400, "Bad HTTP/0.9 request type (%r)" % command)
+                return False
+            is_http_0_9 = True
+        self.command, self.path = command, path
+
+        # gh-87389: a path starting with '//' reads to a client as a
+        # scheme-less absolute URI, an open-redirect vector.
+        if self.path.startswith("//"):
+            self.path = "/" + self.path.lstrip("/")  # Reduce to a single /
+
+        # For HTTP/0.9, headers are not expected at all.
+        if is_http_0_9:
+            self.headers = HTTPMessage()
+            return True
+
+        try:
+            self.headers = _parse_headers(self.rfile)
+        except _HeaderLimitError as err:
+            self.send_error(431, err.message, err.explain)
+            return False
+
+        conntype = self.headers.get("Connection", "")
+        if conntype.lower() == "close":
+            self.close_connection = True
+        elif (conntype.lower() == "keep-alive" and
+              self.protocol_version >= "HTTP/1.1"):
             self.close_connection = False
+        expect = self.headers.get("Expect", "")
+        if (expect.lower() == "100-continue" and
+                self.protocol_version >= "HTTP/1.1" and
+                self.request_version >= "HTTP/1.1"):
+            if not self.handle_expect_100():
+                return False
+        return True
+
+    def handle_expect_100(self):
+        """Answer ``Expect: 100-continue'' with 100 Continue before the body
+        is read.  Override to refuse (send an error and return False)."""
+        self.send_response_only(100)
+        self.end_headers()
         return True
 
     def send_error(self, code, message=None, explain=None):
@@ -164,8 +275,10 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
         self.send_header("Connection", "close")
         body = None
         if code >= 200 and code not in (204, 205, 304):
+            # HTML-escaped, as CPython does: the message can echo the
+            # request line (bug #1100201).
             body = (DEFAULT_ERROR_MESSAGE % {
-                "code": code, "message": message,
+                "code": code, "message": _html.escape(message, quote=False),
             }).encode("UTF-8", "replace")
             self.send_header("Content-Type", DEFAULT_ERROR_CONTENT_TYPE)
             self.send_header("Content-Length", str(len(body)))
@@ -197,6 +310,15 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
             self._headers_buffer.append(
                 ("%s: %s\r\n" % (keyword, value)).encode("latin-1", "strict")
             )
+
+        # A Connection header decides the connection, as in CPython: that is
+        # what makes send_error's ``Connection: close'' end a keep-alive
+        # connection after a 505.
+        if keyword.lower() == "connection":
+            if value.lower() == "close":
+                self.close_connection = True
+            elif value.lower() == "keep-alive":
+                self.close_connection = False
 
     def end_headers(self):
         if self.request_version != "HTTP/0.9":
