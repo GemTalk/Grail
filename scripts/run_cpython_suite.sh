@@ -294,6 +294,14 @@ LAUNCH_MODULES=$(launch_order)
 # Phase 1 -- launch modules with bounded concurrency.  Track PIDs and count the
 # live ones with `kill -0` (portable to bash 3.2, which lacks `wait -n`; and
 # unlike `jobs` in a $(...) subshell it sees the real job set).
+#
+# Each launch also passes the machine-wide load gate (scripts/launch_gate.sh):
+# a free slot here says only that THIS run is under its own concurrency, not
+# that the machine has room, and other worktrees' suites share the CPU.  The
+# gate is checked before a module starts, so a hold never counts against its
+# PER_MODULE_TIMEOUT.
+. "$PROJECT_ROOT/scripts/launch_gate.sh"
+launch_gate_init "$CONCURRENCY"
 echo "Launching (${CONCURRENCY} concurrent, heaviest-first)..."
 launch_pids=()
 for mod in $LAUNCH_MODULES; do
@@ -303,10 +311,12 @@ for mod in $LAUNCH_MODULES; do
         [ "$live" -lt "$CONCURRENCY" ] && break
         sleep 1
     done
+    launch_gate "$mod" "$live"
     run_module "$mod" &
     launch_pids+=("$!")
 done
 wait
+launch_gate_summary
 
 # Phase 2 -- parse results serially, in manifest order (deterministic scoreboard).
 for mod in $MODULES; do

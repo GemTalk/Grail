@@ -352,10 +352,7 @@ GRAIL_TEST_COLD=1 ./scripts/run_tests.sh
 ```
 
 The lock remains for a stone whose key caps it near eight usable sessions,
-where a stray login can cost a shard its login. Concurrent suites do compete
-for CPU (one suite already saturates the performance cores), so a TIMEOUT in
-the gate on a module the change cannot reach is usually contention: re-run
-just that module on its own rather than reading it as a regression.
+where a stray login can cost a shard its login.
 
 **`GRAIL_IR_CODEGEN` is ON by default since PR #1087, and the variable now
 DISABLES the IR path.** The text path is `GRAIL_IR_CODEGEN=0`; setting it to
@@ -373,6 +370,40 @@ it. Whether or not a lock is in use,
 grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l   # must equal the worker count
 grep -l 'Login failed' out/shard_*.out               # must be empty
 ```
+
+### The CPU is the shared resource now: the launch gate
+
+Sessions stopped being scarce; the CPU did not. This machine has 18 cores of
+which 6 are performance cores, one suite already saturates those, and four
+worktrees each starting a suite drove the load high enough for tests to fail
+on TIMEOUT. Neither runner could see it, because each counts only its own
+sessions.
+
+So both runners pass a machine-wide **launch gate** (`scripts/launch_gate.sh`)
+before each SUnit shard and each CPython-suite module. A launch is held while
+the 1-minute load average is over `GRAIL_MAX_LOAD` (default: two thirds of the
+CPUs, **12** here) **or** the Grail test gems running on the machine, from
+every worktree, number `GRAIL_MAX_TEST_GEMS` or more (default CPUs − 2,
+**16** here). Both signals, because the load average lags by a minute (four
+suites started together all read a quiet machine) while the gem count is
+instant but blind to everything that is not Grail. A hold lasts at most
+`GRAIL_LAUNCH_WAIT_MAX` (600s), then launches anyway; a run alone on the
+machine is never held back by its own limits.
+
+**A suite printing `load gate: … waiting` lines is waiting for CPU, not hung.**
+Each hold is one line naming the load, the gem count, the limits and the off
+switch, and the run ends with `load gate: held N launch(es) for Ns in total`,
+so a slow run is attributable to the machine rather than to the change.
+`GRAIL_MAX_LOAD=0` turns the gate off; under CI (`CI=true`) it is off unless
+`GRAIL_MAX_LOAD` is set, because CI runners are not shared.
+`tests/scripts/run_launch_gate_test.sh` guards its rules and needs no stone.
+
+The gate holds LAUNCHES, not running gems: a module or shard already running
+when another worktree starts a suite still shares the CPU with it. So a
+TIMEOUT in the gate on a module the change cannot reach is still usually
+contention: re-run just that module on its own rather than reading it as a
+regression. Running SUnit and the CPython suite concurrently in one worktree
+is still fine; under load the gate simply serializes part of it.
 
 ### The limit counts the stone's OWN gems
 
