@@ -1300,6 +1300,7 @@ run
 	at: #'PydocTextRendererTestCase' put: nil;
 	at: #'PyexpatDocumentEncodingTestCase' put: nil;
 	at: #'PyexpatDtdEventsTestCase' put: nil;
+	at: #'PyexpatEventPositionsTestCase' put: nil;
 	at: #'PythonCallSitePositionsTestCase' put: nil;
 	at: #'PythonClassEnumerationTestCase' put: nil;
 	at: #'PythonOffsetMapTestCase' put: nil;
@@ -2830,6 +2831,7 @@ input src/smalltalk/PythonTests/PyDictTestCase.gs
 input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
 input src/smalltalk/PythonTests/PyexpatDocumentEncodingTestCase.gs
 input src/smalltalk/PythonTests/PyexpatDtdEventsTestCase.gs
+input src/smalltalk/PythonTests/PyexpatEventPositionsTestCase.gs
 input src/smalltalk/PythonTests/PythonCallSitePositionsTestCase.gs
 input src/smalltalk/PythonTests/PythonClassEnumerationTestCase.gs
 input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs
