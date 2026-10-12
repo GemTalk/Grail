@@ -18122,8 +18122,14 @@ ___pyAttrStore___: aName put: aValue
 	``super().<name>()'' correct -- so the cost lands here, once, instead of on
 	every intra-object call in the corpus.  Callables only: the shape this
 	serves is monkey-patching, and it keeps every ordinary ``self.x = 1'' out of
-	the probe."
-	(object @env0:___grailIsPatchableCallable___: aValue) ifTrue: [
+	the probe.
+
+	NOT a protocol dunder (#1481): len(o), -o and bool(o) send #__len__,
+	#__neg__ and #__bool__ too, and CPython looks those up on the TYPE, so an
+	instance's own ``o.__len__ = f'' must not reach them.  An explicit
+	``o.__len__()'' still finds it: that is an attribute load, not this send."
+	((object @env0:___grailIsPatchableCallable___: aValue)
+		and: [(self ___typeDunderBaseOf___: aName @env0:asSymbol) == nil]) ifTrue: [
 		[self @env0:class @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	^ aValue

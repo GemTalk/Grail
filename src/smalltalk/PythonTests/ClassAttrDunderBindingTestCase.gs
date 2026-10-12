@@ -105,6 +105,33 @@ assertKind: aKind matchesCPythonIn: aModule
 
 category: 'Grail-Tests'
 method: ClassAttrDunderBindingTestCase
+testInstanceAttributesAreNotTheProtocol
+	"The other half of the type lookup these tests pin: a protocol dunder
+	stored on an INSTANCE is ignored by len(), bool(), -o, abs(), bytes() and
+	the rest, and loses to one the class defines, while an explicit
+	``o.__len__()'' still finds it (#1481).
+
+	See tests/python/instance_dunder_ignored.py (CPython 3.14's values)."
+
+	| mod results expected b keys |
+	mod := self fixtureNamed: 'instance_dunder_ignored'.
+	results := mod @env1:___pyAttrLoad___: #'r'.
+	expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	keys := mod @env1:___pyAttrLoad___: #'KEYS'.
+	b := builtins @env1:instance.
+	self assert: (keys @env1:__len__) equals: 20.
+	self assert: (results @env1:__len__) equals: 20.
+	0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k asString , ': got ' , got , ' want ' , want]
+%
+
+category: 'Grail-Tests'
+method: ClassAttrDunderBindingTestCase
 testEveryCaseRan
 	"The table is the CPython run's: as many results as expectations, and
 	enough of them that a generator change cannot empty the test quietly."
