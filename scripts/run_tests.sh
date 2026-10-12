@@ -496,6 +496,14 @@ timed "module-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runM
 # writes nothing.
 timed "module-coherence" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleCoherenceTest.gs < /dev/null || EXIT=$?
 
+# A deployed package's carried submodules (issue #1223): a submodule bound on
+# a committed package is reachable as ``pkg.mod'' without an import, so binding
+# the package judges it.  Edits two submodules the package body never imports
+# (one nested) and checks that binding the package alone rebuilds both in place,
+# leaves an unchanged one unimported, writes nothing when nothing changed, and
+# leaves a broken one to fail its own import.
+timed "carried-submodule" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCarriedSubmoduleTest.gs < /dev/null || EXIT=$?
+
 # A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
 # D8): patching builtins.len and a class's method writes no persistent object,
 # and after a commit a fresh session sees both originals -- where persistent

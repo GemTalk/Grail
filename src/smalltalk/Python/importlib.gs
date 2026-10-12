@@ -4588,6 +4588,82 @@ ___runSessionInit___: moduleInstance
 	^ moduleInstance
 %
 
+category: 'Grail-Module Loading'
+classmethod: importlib
+___refreshCarriedSubmodulesOf___: aPackage named: aName
+	"Bring up to date the submodules a committed package CARRIES that this
+	session has not imported (issue #1223).  Called where a session acquires a
+	committed package -- the warm bind, and the rebuild of a stale one into its
+	committed instance.
+
+	registerModule:with: binds a submodule onto its package, and a committed
+	package keeps the binding, so in a fresh gem ``import pkg; pkg.mod''
+	answers whatever ``pkg.mod'' was when some session committed it.  No import
+	asks for it, so the staleness check an import makes never runs on it.  Its
+	package's own check covers it only when the package BODY imported it, as a
+	dependency (___isCurrentModule___:); a submodule bound by an import made
+	elsewhere -- ``import pkg.mod'' in the session that deployed -- is
+	recorded nowhere but on the package.
+
+	So each such submodule is judged here, as a dependency would be.  A stale
+	one is loaded through the ordinary path, which rebuilds it into the same
+	committed instance and registers it; that rebuild calls back here for the
+	submodules it carries in turn.  A current one is left as it is, but what IT
+	carries is judged too, because ``pkg.sub.mod'' reaches through it.
+
+	HERE AND NOT ON THE READ.  CPython's answer for a submodule nothing
+	imported is AttributeError, and only a check on every module attribute
+	read could give it: ``os.path.join'' in a loop would pay for it on each
+	pass.  Judged once per session per package instead, a current submodule
+	stays bound -- as though the import that bound it had run in this session
+	-- and a stale one is never served.  The verdicts and the source hashes
+	behind them are memoised per session (___generationNowOf___:), so a
+	package's dependency check has usually paid for them already.
+
+	A rebuild that fails is not this import's error: the program asked for the
+	package, and CPython would not have touched the submodule.  The failure is
+	left for the import that does ask for it, which retries (a failed rebuild
+	puts the old hash back) and raises.  Notifications pass, as in the loader."
+
+	(self @env1:___isPackageForFromlist___: aPackage) ifFalse: [^ self].
+	aPackage dynamicInstanceVariables do: [:leaf | | child sub gen |
+		child := aPackage dynamicInstVarAt: leaf.
+		sub := aName asString , '.' , leaf asString.
+		(self @env1:___isUnimportedSubmodule___: child named: sub) ifTrue: [
+			gen := self ___recordedGenerationOf___: sub.
+			gen isNil ifFalse: [
+				(self ___generationNowOf___: sub) = gen
+					ifTrue: [self ___refreshCarriedSubmodulesOf___: child named: sub]
+					ifFalse: [self ___rebuildCarriedSubmodule___: sub]]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___rebuildCarriedSubmodule___: aDottedName
+	"Load the stale carried submodule aDottedName through the ordinary path --
+	see ___refreshCarriedSubmodulesOf___:named:, which says why a failure is
+	dropped here.
+
+	Parents first, as an import of the dotted name would: a stale ``pkg.sub.mod''
+	reached through a current ``pkg.sub'' that this session has not imported
+	binds ``pkg.sub'' too, rather than registering a module whose package is
+	missing from sys.modules.  Binding a parent judges what it carries, so the
+	leaf may be loaded by then; each step looks first."
+
+	| prefix subPath |
+	[prefix := nil.
+	($. split: aDottedName) do: [:part |
+		prefix := prefix isNil ifTrue: [part] ifFalse: [prefix , '.' , part].
+		(self @env1:lookupModule: prefix) isNil ifTrue: [
+			subPath := self @env1:___moduleNameToPath___: prefix.
+			subPath isNil ifTrue: [^ self].
+			self loadModuleFromPath: subPath name: prefix]]]
+		on: AbstractException do: [:ex |
+			((ex isKindOf: Notification) or: [ex isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex pass].
+			ex return: nil]
+%
+
 category: 'Private'
 classmethod: importlib
 _stateMap
@@ -4794,6 +4870,7 @@ ___loadModuleFromPath___: pathString name: moduleName
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
+			self ___refreshCarriedSubmodulesOf___: committedInstance named: moduleName.
 			^ committedInstance]].
 	"Record #stale REGARDLESS of the hash verdict: this load is about to
 	RE-RUN the module body (only the warm-bind branch above skips it),
@@ -5008,6 +5085,10 @@ ___loadModuleFromPath___: pathString name: moduleName
 	body ran to completion (a raise above unloaded the module and
 	re-signalled), so the registry never holds a half-built instance."
 	self ___canonicalModules___ at: moduleName put: moduleInstance.
+	"A committed package rebuilt in place still carries the submodules bound on
+	it before; its body re-imported only the ones it imports itself."
+	rebuiltInPlace ifTrue: [
+		self ___refreshCarriedSubmodulesOf___: moduleInstance named: moduleName].
 	^ moduleInstance
 %
 
