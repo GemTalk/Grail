@@ -1054,10 +1054,11 @@ ___constructText___: posArgs kw: kwArgs
 	stub whose lookup raised LookupError for every name.  With a real
 	registry behind it, it works.
 
-	A SUBCLASS always takes the GsFile path.  Delegating would answer an
-	instance of _pyio's class, not of the subclass -- the silent kind of
-	wrong -- and a subclass of Grail's TextIOWrapper is by construction
-	asking for the GsFile one."
+	A SUBCLASS takes the GsFile path here, because the only subclasses that
+	reach this method are Grail's own Smalltalk ones.  A Python ``class
+	C(io.TextIOWrapper)'' is rooted at _pyio's TextIOWrapper instead (Class >>
+	___subclass___:instVarNames:classInstVarNames:, #1459), so it wraps a
+	buffer as CPython's does and never arrives here."
 
 	| first |
 	posArgs @env0:size @env0:< 1 ifTrue: [
@@ -1068,6 +1069,40 @@ ___constructText___: posArgs kw: kwArgs
 		ifTrue: [^ super _new: posArgs kw: kwArgs].
 	^ ((io instance) ___pyioClass___: #'TextIOWrapper')
 		@env1:value: posArgs value: kwArgs
+%
+
+category: 'Grail-Class Methods'
+classmethod: TextIOWrapper
+__instancecheck__: anObject
+	"isinstance(x, io.TextIOWrapper) for a TextIOWrapper over a BUFFER.
+
+	Those are _pyio's class, not this one: a plain ``io.TextIOWrapper(buffer)''
+	answers _pyio's (___constructText___:kw:), and a Python ``class
+	C(io.TextIOWrapper)'' is rooted there (Class >> ___subclass___:...), so
+	isKindOf: says no where CPython says yes -- for pytest's CaptureIO among
+	others (#1459).  Consulted only after isKindOf: has failed, and only for
+	TextIOWrapper itself, not for Grail's Smalltalk subclasses of it."
+
+	| pyio |
+	self == TextIOWrapper ifFalse: [^ false].
+	pyio := [(io instance) ___pyioClass___: #'TextIOWrapper']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ (pyio @env0:isKindOf: Behavior) and: [anObject @env0:isKindOf: pyio]
+%
+
+category: 'Grail-Class Methods'
+classmethod: TextIOWrapper
+__subclasscheck__: aClass
+	"issubclass(C, io.TextIOWrapper), the class-level twin of
+	__instancecheck__: above."
+
+	| pyio |
+	self == TextIOWrapper ifFalse: [^ false].
+	(aClass @env0:isKindOf: Behavior) ifFalse: [^ false].
+	pyio := [(io instance) ___pyioClass___: #'TextIOWrapper']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ (pyio @env0:isKindOf: Behavior)
+		and: [aClass == pyio or: [aClass @env0:inheritsFrom: pyio]]
 %
 
 category: 'Grail-Opening'
