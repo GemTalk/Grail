@@ -405,6 +405,48 @@ _unforwarded: aMethod
 
 category: 'Grail-Private'
 method: Super
+___classesAfterCls___
+	"The classes after ``cls'' in the receiver's C3 MRO, in order -- what
+	super() searches -- or, when the receiver's class has no linearization
+	that lists cls, cls's superclass chain (identical under single
+	inheritance).  The same choice _lookupMethodAndSideFirstOf:metaSelectors:
+	makes for compiled methods."
+
+	| il receiverCls mro idx out walker |
+	il := Python at: #importlib otherwise: nil.
+	receiverCls := (obj isKindOf: Behavior) ifTrue: [obj] ifFalse: [obj class].
+	il == nil ifFalse: [
+		mro := [il ___mroOf___: receiverCls] on: Error do: [:e | e return: nil].
+		mro == nil ifFalse: [
+			idx := mro indexOf: cls.
+			idx > 0 ifTrue: [^ mro copyFrom: idx + 1 to: mro size]]].
+	out := OrderedCollection new.
+	walker := cls superClass.
+	[walker == nil] whileFalse: [out add: walker. walker := walker superClass].
+	^ out
+%
+
+category: 'Grail-Private'
+method: Super
+___definesAnyFormOf___: aSym in: aClass
+	"Does aClass's OWN instance-side method dictionary compile the Python name
+	aSym at any arity -- unary, fixed, or the varargs ``_name:kw:''?  Own
+	dictionary only: an inherited method is the next class's business, which
+	is what lets ___pyAttrLoad___:'s holder walk stop at exactly the class
+	CPython's MRO walk would."
+
+	| s |
+	s := aSym asString.
+	(aClass includesSelector: aSym asSymbol environmentId: 1) ifTrue: [^ true].
+	(aClass includesSelector: ('_' , s , ':kw:') asSymbol environmentId: 1) ifTrue: [^ true].
+	1 to: 6 do: [:n |
+		(aClass includesSelector: (self _fixedSelectorFor: s nargs: n) environmentId: 1)
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Private'
+method: Super
 _isPythonClassMethod: aSelector on: aClass
 	"Is this class-side method a Python @classmethod, rather than one of
 	Grail's own metaclass internals?
@@ -695,8 +737,14 @@ ___pyAttrLoad___: aSym
 		^ AttributeError ___signal___:
 			('''super'' object has no attribute ''' @env0:, aSym @env0:asString
 				@env0:, '''')].
-	walker := cls @env0:superClass.
-	[walker == nil] whileFalse: [
+	"IN MRO ORDER, the receiver's C3 linearization after cls -- the order
+	_lookupMethodAndSideFirstOf:metaSelectors: already searches -- and not the
+	Smalltalk superclass chain, which under multiple inheritance runs through
+	the PRIMARY base alone.  pytest's ``Module(nodes.File, PyCollector)''
+	reaches Collector along that chain without ever passing PyCollector, whose
+	own collect the MRO puts first."
+	(self @env0:___classesAfterCls___) @env0:do: [:each |
+		walker := each.
 		(walker @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifTrue: [
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
@@ -704,8 +752,27 @@ ___pyAttrLoad___: aSym
 				v == nil ifFalse: [^ self ___bindHolderValue___: v]
 			]
 		].
-		walker := walker @env0:superClass
-	].
+		"THE NEAREST CLASS DEFINING THE NAME ENDS THE WALK.  A class that
+		compiles aSym as an ordinary method -- and stored no decorated value
+		over it, which the probe just above would have answered -- is where
+		CPython's MRO walk stops, so an ANCESTOR's stored value must not be
+		reached past it.  It was: ``super().collect()'' from pytest's Class
+		skipped PyCollector's own collect and answered Collector's
+		@abc.abstractmethod -- a decorated def, so its value sits in the
+		holder -- and every test file failed to collect with ``abstract''.
+		The compiled-method lookup below answers the nearer method."
+		(self @env0:___definesAnyFormOf___: aSym in: walker) ifTrue: [
+			^ self ___pyAttrLoadCompiled___: aSym]].
+	^ self ___pyAttrLoadCompiled___: aSym
+%
+
+category: 'Grail-Attribute'
+method: Super
+___pyAttrLoadCompiled___: aSym
+	"The compiled-method half of ___pyAttrLoad___:, reached once the holder
+	walk has found no stored value nearer than the nearest defining class."
+
+	| s symVA pickMethod v |
 	s := aSym @env0:asString.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	pickMethod := [:nargs :kwOk |

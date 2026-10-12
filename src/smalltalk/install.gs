@@ -1427,6 +1427,7 @@ run
 	at: #'SuperPreconditionErrorsTestCase' put: nil;
 	at: #'SuperProxyAttrsTestCase' put: nil;
 	at: #'SuperShadowingTestCase' put: nil;
+	at: #'SuperStopsAtNearestDefinitionTestCase' put: nil;
 	at: #'SuperTwoArgCheckTestCase' put: nil;
 	at: #'SuperTwoArgLocalTestCase' put: nil;
 	at: #'SuperValueAttributeTestCase' put: nil;
@@ -2955,6 +2956,7 @@ input src/smalltalk/PythonTests/SuperNotRewrittenTestCase.gs
 input src/smalltalk/PythonTests/SuperPreconditionErrorsTestCase.gs
 input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
 input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
+input src/smalltalk/PythonTests/SuperStopsAtNearestDefinitionTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs
 input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
