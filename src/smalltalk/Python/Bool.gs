@@ -451,9 +451,21 @@ ___truthOf___: obj
 	"Python truth-value testing for an arbitrary object: the shared body
 	of ``bool(x)`` and object>>___isTruthy___, so ``if x:'' and
 	``bool(x)'' can never disagree.  Follows CPython's protocol order —
-	__bool__, then __len__, then the built-in type defaults."
+	__bool__, then __len__, then the built-in type defaults.
 
-	| result |
+	ASK THE CLASS BEFORE SENDING (#1438).  The protocol used to be probed by
+	sending __bool__ and then __len__ and catching the MessageNotUnderstood,
+	and an env-1 miss runs Grail's doesNotUnderstand handler: about 2 us per
+	miss on an instance, so ``if obj:'' cost 1.6 us for a str or a list and
+	7-13 us for an instance with neither method, where CPython reads a slot.
+	When the class chain answers the question exactly (___truthIsDecidedBy___:
+	class:), the compiled method is sent directly or the built-in default is
+	used, and nothing is caught.  The send-and-catch below remains for what a
+	chain lookup cannot see: a class, another doesNotUnderstand handler (a
+	CPython proxy, str subclasses), the varargs spelling, a class-side
+	method, and a dunder held as a class attribute."
+
+	| result cls |
 	"None is falsy. Smalltalk nil (undefined) is treated the same here for
 	bridge robustness."
 	(obj == nil or: [obj == None]) ifTrue: [ ^ false ].
@@ -463,6 +475,14 @@ ___truthOf___: obj
 		^ obj
 	].
 
+	cls := obj @env0:class.
+	(self ___truthIsDecidedBy___: obj class: cls) ifTrue: [
+		(cls @env0:whichClassIncludesSelector: #'__bool__' environmentId: 1) == nil
+			ifFalse: [^ self ___checkedBool___: obj __bool__].
+		(cls @env0:whichClassIncludesSelector: #'__len__' environmentId: 1) == nil
+			ifFalse: [^ self ___checkedLen___: obj __len__].
+		^ self ___defaultTruthOf___: obj].
+
 	"Try to call __bool__ on the object via env-1 dispatch.  env-0
 	``respondsTo:`` only inspects env-0 method dictionaries; Python's
 	``__bool__`` is compiled in env 1 on user classes (e.g. Grail's
@@ -471,17 +491,7 @@ ___truthOf___: obj
 	container truthy."
 	result := [obj __bool__]
 		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noBool__].
-	result == #__noBool__ ifFalse: [
-		"CPython requires __bool__ to return a REAL bool, not merely
-		something truthy: returning self, a str or an int is a TypeError
-		(test_bool.py test_convert_to_bool).  Grail previously handed the
-		raw value back, so ``bool(x)'' could answer a non-bool and every
-		``if x:'' downstream of ___isTruthy___ then hit a Smalltalk
-		must-be-boolean error instead of a catchable Python one."
-		(result isKindOf: bool) ifFalse: [
-			TypeError ___signal___: '__bool__ should return bool, returned '
-				@env0:, (result @env0:class @env1:__name__) @env0:asString].
-		^ result].
+	result == #__noBool__ ifFalse: [^ self ___checkedBool___: result].
 
 	"CPython sentinel: ``__bool__ = None'' in a class body BLOCKS the
 	protocol — the object is not interpretable as a boolean even when it
@@ -503,16 +513,88 @@ ___truthOf___: obj
 	__bool__ is absent — matches CPython's PEP-3119 fallback."
 	result := [obj __len__]
 		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noLen__].
-	result == #__noLen__ ifFalse: [
-		"CPython: a negative __len__ is a ValueError, not a truthy length
-		(test_bool.py test_convert_to_bool's Eggs).  Guarded on int so a
-		__len__ returning a non-integer keeps Grail's existing lenient
-		behaviour rather than dying in an uncatchable comparison —
-		builtins>>len: does not validate either, and test_sane_len only
-		requires the two to agree when BOTH raise."
-		((result isKindOf: int) and: [result @env0:< 0]) ifTrue: [
-			ValueError ___signal___: '__len__() should return >= 0'].
-		^ result @env0:~= 0].
+	result == #__noLen__ ifFalse: [^ self ___checkedLen___: result].
+	^ self ___defaultTruthOf___: obj
+%
+
+category: 'Grail-Initialization'
+classmethod: bool
+___truthIsDecidedBy___: obj class: cls
+	"Whether cls's method chain alone settles ``bool(obj)'': no __bool__ or
+	__len__ can reach obj except as a compiled env-1 method of that exact
+	name.  Each condition below is a way the doesNotUnderstand path could
+	still answer one of the two sends, and sends the test down the old
+	send-and-catch route instead.
+
+	* a CLASS receiver: its __bool__ is the metaclass's, reached by the
+	  handler's metaclass branch, not by the Smalltalk chain;
+	* a doesNotUnderstand handler other than object's or PythonInstance's:
+	  str subclasses, CPython proxies, modules and wrappers forward misses;
+	* the varargs spelling ``___bool__:kw:'' (a def with defaults), which
+	  the handler calls for the bare send;
+	* a class-side method (@classmethod, a metaclass def), which the
+	  handler forwards to;
+	* a dunder held as a CLASS ATTRIBUTE -- a callable the handler calls
+	  (#1218) or the ``None'' blocker -- when object >>
+	  ___typeDunderMayHold___: cannot rule it out.
+
+	An instance attribute named __bool__ no longer counts, as in CPython,
+	which looks the slot up on the type."
+
+	| handler |
+	(obj @env0:isKindOf: Behavior) ifTrue: [^ false].
+	handler := cls @env0:whichClassIncludesSelector: #'doesNotUnderstand:args:envId:'
+		environmentId: 0.
+	(handler == object or: [handler == PythonInstance]) ifFalse: [^ false].
+	#( #( #'__bool__' #'___bool__:kw:' ) #( #'__len__' #'___len__:kw:' ) ) @env0:do: [:pair |
+		| base |
+		base := pair @env0:at: 1.
+		(cls @env0:whichClassIncludesSelector: (pair @env0:at: 2) environmentId: 1) == nil
+			ifFalse: [^ false].
+		(cls @env0:class @env0:whichClassIncludesSelector: base environmentId: 1) == nil
+			ifFalse: [^ false].
+		(cls @env0:class @env0:whichClassIncludesSelector: (pair @env0:at: 2) environmentId: 1) == nil
+			ifFalse: [^ false].
+		(handler == PythonInstance and: [obj ___typeDunderMayHold___: base])
+			ifTrue: [^ false]].
+	^ true
+%
+
+category: 'Grail-Initialization'
+classmethod: bool
+___checkedBool___: result
+	"What __bool__ answered, as CPython requires it: a REAL bool, not merely
+	something truthy -- returning self, a str or an int is a TypeError
+	(test_bool.py test_convert_to_bool).  Grail previously handed the raw
+	value back, so ``bool(x)'' could answer a non-bool and every ``if x:''
+	downstream of ___isTruthy___ then hit a Smalltalk must-be-boolean error
+	instead of a catchable Python one."
+
+	(result isKindOf: bool) ifFalse: [
+		TypeError ___signal___: '__bool__ should return bool, returned '
+			@env0:, (result @env0:class @env1:__name__) @env0:asString].
+	^ result
+%
+
+category: 'Grail-Initialization'
+classmethod: bool
+___checkedLen___: result
+	"What __len__ answered, as a truth value.  CPython: a negative __len__ is
+	a ValueError, not a truthy length (test_bool.py test_convert_to_bool's
+	Eggs).  Guarded on int so a __len__ returning a non-integer keeps
+	Grail's existing lenient behaviour rather than dying in an uncatchable
+	comparison -- builtins>>len: does not validate either, and test_sane_len
+	only requires the two to agree when BOTH raise."
+
+	((result isKindOf: int) and: [result @env0:< 0]) ifTrue: [
+		ValueError ___signal___: '__len__() should return >= 0'].
+	^ result @env0:~= 0
+%
+
+category: 'Grail-Initialization'
+classmethod: bool
+___defaultTruthOf___: obj
+	"The built-in types' truth when neither __bool__ nor __len__ answered."
 
 	"For integers, 0 is False, everything else is True"
 	(obj isKindOf: int) ifTrue: [
