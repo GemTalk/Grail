@@ -270,7 +270,7 @@ _lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
 					metaSel := metaSelectors at: k.
 					sel ifNotNil: [
 						((mro at: i) compiledMethodAt: sel environmentId: 1 otherwise: nil)
-							ifNotNil: [:m | ^ { m. false }]].
+							ifNotNil: [:m | ^ { self _unforwarded: m. false }]].
 					(metaSel notNil and: [alsoMeta]) ifTrue: [
 						((mro at: i) class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
 							ifNotNil: [:m |
@@ -285,7 +285,7 @@ _lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
 			metaSel := metaSelectors at: k.
 			sel ifNotNil: [
 				(walker compiledMethodAt: sel environmentId: 1 otherwise: nil)
-					ifNotNil: [:m | ^ { m. false }]].
+					ifNotNil: [:m | ^ { self _unforwarded: m. false }]].
 			(metaSel notNil and: [alsoMeta]) ifTrue: [
 				(walker class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
 					ifNotNil: [:m |
@@ -366,6 +366,41 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		^ obj perform: aSelector env: 1 withArguments: anArray
 	].
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId
+%
+
+category: 'Grail-Private'
+method: Super
+_unforwarded: aMethod
+	"The method super() should RUN for a hit on aMethod: aMethod itself, unless
+	it is a fixed-arity forwarder (ClassDefAst's 'Grail-Fixed Arity
+	Forwarders'), in which case the varargs body it forwards to, in the SAME
+	class.
+
+	A forwarder is an entry point, not the def: ``__exit__: a _: b _: c'' on a
+	class whose ``def __exit__(self, *exc_info)'' compiled as ``___exit__:kw:''
+	is just ``^ self ___exit__: {a. b. c} kw: nil''.  That send is VIRTUAL,
+	which is right for a direct call -- the receiver's own class always carries
+	both selectors -- and wrong when super() reached the forwarder: the
+	receiver is the SUBCLASS, whose simple-positional ``def __exit__(self, a,
+	b, c)'' has a keyword companion ``___exit__:kw:'' that forwards straight
+	back into the override.  super().__exit__(a, b, c) therefore recursed until
+	the stack ran out (#1457) -- inside a ``with'', uncatchably.  It needs
+	object's default __exit__:_:_: to exist, which is why __exit__ was the name
+	that showed it: the forwarder is only emitted when the superclass already
+	implements the selector.
+
+	Answering the body instead is what the forwarder would have reached had it
+	not dispatched through the receiver, and both callers already invoke a
+	``:kw:'' hit as (positional, kwargs)."
+
+	| owner s colon vsel |
+	owner := aMethod inClass.
+	((owner categoryOfSelector: aMethod selector environmentId: 1) asString = 'Grail-Fixed Arity Forwarders')
+		ifFalse: [^ aMethod].
+	s := aMethod selector asString.
+	colon := s indexOf: $:.
+	vsel := ('_' , (colon = 0 ifTrue: [s] ifFalse: [s copyFrom: 1 to: colon - 1]) , ':kw:') asSymbol.
+	^ (owner compiledMethodAt: vsel environmentId: 1 otherwise: nil) ifNil: [aMethod]
 %
 
 category: 'Grail-Private'

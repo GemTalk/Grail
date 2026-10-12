@@ -1406,6 +1406,7 @@ run
 	at: #'SubprocessAndCopytreeErrnoTestCase' put: nil;
 	at: #'SubprocessTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
+	at: #'SuperExitVarargsTestCase' put: nil;
 	at: #'SuperForeignReceiverTestCase' put: nil;
 	at: #'SuperLookupTestCase' put: nil;
 	at: #'SuperMethodLocalTestCase' put: nil;
@@ -2918,6 +2919,7 @@ input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
 input src/smalltalk/PythonTests/SubprocessAndCopytreeErrnoTestCase.gs
 input src/smalltalk/PythonTests/SubprocessTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
+input src/smalltalk/PythonTests/SuperExitVarargsTestCase.gs
 input src/smalltalk/PythonTests/SuperForeignReceiverTestCase.gs
 input src/smalltalk/PythonTests/SuperLookupTestCase.gs
 input src/smalltalk/PythonTests/SuperMethodLocalTestCase.gs
