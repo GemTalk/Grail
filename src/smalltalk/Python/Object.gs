@@ -13881,16 +13881,51 @@ __getattribute__: name
 	receiver is the instance and the method is object's, with no lookup in
 	between.
 
-	STILL NARROWED for __getattr__: object's ___pyAttrLoad___: applies the
-	__getattr__ fallback at its end, and CPython's unbound object.__getattribute__
-	does not.  A class with a __getattr__ that synthesises a name will answer it
-	here where CPython raises.  Splitting that out means moving the fallback out
-	of the default lookup, which is a separate change; the two agree for the
-	__doc__ question pydoc asks, and no class in the corpus distinguishes them."
+	ONE LOOKUP WITHOUT __getattr__ (#1395).  object's ___pyAttrLoad___: applies
+	the __getattr__ fallback at its miss, and CPython's object.__getattribute__
+	does not: it is the generic getattr alone.  The difference is not cosmetic.
+	``def __getattr__(self, name): try: return object.__getattribute__(self,
+	name) except AttributeError: ...'' -- the standard way to defer to normal
+	lookup first -- called the hook back from its own miss and recursed until
+	the stack overflowed, which no Python except can catch.  So while this
+	lookup runs, its (process, receiver, name) is marked, and
+	___pyAttrCallGetattr___: answers the terminal AttributeError for exactly
+	that miss instead of calling the hook.  ___pyAttrLoad___: itself is left
+	alone: its frame width is load-bearing for recursion depth.  The mark is
+	removed on the way out, so a __getattribute__ hook whose inner
+	object.__getattribute__ misses still gets __getattr__ from the router
+	(___pyAttrLoadViaHook___:), as CPython applies it to the hook's
+	AttributeError.  A class without __getattr__ pays nothing for this."
 
-	^ self @env0:with: (name @env0:asString @env0:asSymbol)
-		@env0:performMethod: (object @env0:compiledMethodAt: #'___pyAttrLoad___:'
-			environmentId: 1)
+	| sym method marks mark |
+	sym := name @env0:asString @env0:asSymbol.
+	method := object @env0:compiledMethodAt: #'___pyAttrLoad___:' environmentId: 1.
+	self ___pyAttrHasGetattr___ ifFalse: [^ self @env0:with: sym @env0:performMethod: method].
+	marks := SessionTemps @env0:current @env0:at: #'GrailLookupsWithoutGetattr' otherwise: nil.
+	marks == nil ifTrue: [
+		marks := OrderedCollection @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailLookupsWithoutGetattr' put: marks].
+	mark := { GsProcess @env0:_current. self. sym }.
+	marks @env0:addLast: mark.
+	^ [self @env0:with: sym @env0:performMethod: method]
+		@env0:ensure: [marks @env0:removeIdentical: mark ifAbsent: [nil]]
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyAttrGetattrSuppressedFor___: s
+	"Whether the miss of s on self belongs to an explicit object.__getattribute__
+	running in this process, which must not call __getattr__ (see
+	object >> __getattribute__:).  Asked only on the __getattr__ path, which a
+	miss already makes slow."
+
+	| marks proc sym |
+	marks := SessionTemps @env0:current @env0:at: #'GrailLookupsWithoutGetattr' otherwise: nil.
+	(marks == nil or: [marks @env0:isEmpty]) ifTrue: [^ false].
+	proc := GsProcess @env0:_current.
+	sym := s @env0:asString @env0:asSymbol.
+	^ marks @env0:anySatisfy: [:m |
+		(m @env0:at: 1) == proc and: [(m @env0:at: 2) == self and: [(m @env0:at: 3) == sym]]]
 %
 
 category: 'Grail-Attribute Access'
@@ -13992,6 +14027,10 @@ ___pyAttrCallGetattr___: s
 	unaffected."
 
 	| getattrFn metaCls |
+	"An explicit object.__getattribute__ is looking this name up: its miss is
+	AttributeError, not a call of the hook (#1395)."
+	(self ___pyAttrGetattrSuppressedFor___: s)
+		ifTrue: [^ AttributeError @env0:___signalMissing___: s on: self].
 	((self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:'
 		environmentId: 1) @env0:notNil
 		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:'
