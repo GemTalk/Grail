@@ -51,6 +51,13 @@ XML_PARAM_ENTITY_PARSING_UNLESS_STANDALONE = 1
 XML_PARAM_ENTITY_PARSING_ALWAYS = 2
 
 
+def _utf8_len(text):
+    """The UTF-8 length of `text`."""
+    if text.isascii():
+        return len(text)
+    return len(text.encode('utf-8', 'surrogatepass'))
+
+
 class ExpatError(Exception):
     """Expat's error type. `code`, `lineno` and `offset` are read by callers."""
 
@@ -234,14 +241,17 @@ class xmlparser:
         self.returns_unicode = True
         for name in _HANDLER_NAMES:
             setattr(self, name, None)
-        # position reporting
+        # position reporting: see CurrentLineNumber below
         self.ErrorCode = 0
-        self.ErrorLineNumber = 1
-        self.ErrorColumnNumber = 0
-        self.ErrorByteIndex = 0
-        self.CurrentLineNumber = 1
-        self.CurrentColumnNumber = 0
-        self.CurrentByteIndex = 0
+        self._ev = (1, 0, None)   # the event pointer: (line, col, stream offset)
+        self._err = None          # (line, col, byte index) a failure pinned
+        self._frozen = None       # the reference's, during an entity expansion
+        self._ck = (0, 0)         # (stream offset, bytes before it), at a drop
+        self._rd = (0, 0)         # the same, for the last offset read
+        self._crlf = []           # stream offsets of each LF that was a CRLF
+        self._abs = 0             # characters dropped from the front of _buf
+        self._byte_len_enc = None
+        self._byte_len_fn = _utf8_len
         # parse state
         self._buf = ''
         self._pos = 0
@@ -319,11 +329,17 @@ class xmlparser:
             self._advance(self._subset(self._buf[self._pos:], isfinal, True))
         else:
             self._scan(isfinal)
-        self._note_consumed()
+        # After a Parse call the position is where expat stopped -- which is
+        # past a text run this scanner still holds for want of a ``<''.
+        held = self._buf[self._pos:self._pos + self._note_consumed()]
+        self._ev = self._position_after(self._line, self._col, held) + (
+            self._abs + self._pos + len(held),)
         # Drop what has been consumed.  Nothing looks behind self._pos once a
         # Parse returns, and a long ParseFile otherwise kept -- and recopied on
         # every ``+='' -- the whole document read so far (#1214).
         if self._pos:
+            self._checkpoint()
+            self._abs += self._pos
             self._buf = self._buf[self._pos:]
             self._pos = 0
         # CPython's pyexpat flushes buffer_text's held text at the end of
@@ -353,6 +369,15 @@ class xmlparser:
             data = data[:-1]
             self._pending_cr = True
         if '\r' in data:
+            if '\r\n' in data:
+                # Where each CRLF's LF lands in the stream, so the byte index
+                # can still count its CR (#1386).  The caller appends the
+                # result to _buf.
+                off = self._abs + len(self._buf)
+                for part in data.split('\r\n')[:-1]:
+                    off += len(part)
+                    self._crlf.append(off)
+                    off += 1
             data = data.replace('\r\n', '\n').replace('\r', '\n')
         return data
 
@@ -433,8 +458,8 @@ class xmlparser:
         -- from the first ``<'', or ``&'' without its ``;'', on -- plus a
         trailing CR and any bytes not yet decoded."""
         rest = self._buf[self._pos:]
+        i = 0
         if not self._dtd_mode:
-            i = 0
             while True:
                 lt, amp = rest.find('<', i), rest.find('&', i)
                 if amp < 0 or 0 <= lt < amp:
@@ -467,6 +492,7 @@ class xmlparser:
         have_now = self._xend - self._xptr
         self._partial_before = have_now if left >= have_now else 0
         self._xptr = max(self._xptr, self._xend - left)
+        return i
 
     def _text_bytes(self, text):
         """len(text) in the bytes it arrived as: UTF-8 for str input, as
@@ -557,9 +583,11 @@ class xmlparser:
             # without the mark ``utf-16'' reads it in the machine's order.
             if raw.startswith(b'\xef\xbb\xbf'):
                 self._bom = 1
+                self._ck = self._rd = (0, 3)   # the byte index counts the mark
             elif (enc.lower().replace('_', '-') in ('utf-16', 'utf16')
                     and raw[:2] in (b'\xff\xfe', b'\xfe\xff')):
                 self._bom = 1
+                self._ck = self._rd = (0, 2)
                 enc = 'utf-16-le' if raw[:2] == b'\xff\xfe' else 'utf-16-be'
                 raw = raw[2:]
             # An unknown encoding is a LookupError, not an ExpatError: CPython's
@@ -659,16 +687,160 @@ class xmlparser:
             # Inside an internal entity's replacement text, positions are
             # in that text; expat blames the reference in the document.
             lineno, offset = self._ref_pos
+        if self._frozen is not None:
+            nbytes = self._frozen[2]
+        else:
+            nbytes = self._byte_index(self._offset_at(lineno, offset))
         if lineno == 1:
             offset += self._bom
         self.ErrorCode = code
-        self.ErrorLineNumber = lineno
-        self.ErrorColumnNumber = offset
+        # Current and Error positions both become the failure's, as in expat.
+        self._err = (lineno, offset, nbytes)
         raise ExpatError('%s: line %d, column %d' % (message, lineno, offset),
                          code, lineno, offset)
 
+    # ---------------------------------------------------------- positions
+    #
+    # expat's CurrentLineNumber, CurrentColumnNumber and CurrentByteIndex
+    # read its EVENT POINTER: the start of the token being dispatched, so a
+    # handler sees where its event begins (#1386).  Its error-position getters
+    # are the same getters, until a failure pins them.
+    #
+    # Each event records one tuple, (line, col, stream offset), and these
+    # compute the rest when read -- the byte index by counting forward from a
+    # checkpoint, in the input's own encoding, a CRLF the buffer has turned
+    # into an LF still counting two.  Most programs never read a position, and
+    # a parse made eager stores for every token.
+
+    @property
+    def CurrentLineNumber(self):
+        if self._err is not None:
+            return self._err[0]
+        return (self._frozen or self._ev)[0]
+
+    @property
+    def CurrentColumnNumber(self):
+        if self._err is not None:
+            return self._err[1]
+        line, col = (self._frozen or self._ev)[:2]
+        return col + self._bom if line == 1 else col
+
+    @property
+    def CurrentByteIndex(self):
+        if self._err is not None:
+            return self._err[2]
+        if self._frozen is not None:
+            return self._frozen[2]
+        return self._byte_index(self._ev[2])
+
+    ErrorLineNumber = CurrentLineNumber
+    ErrorColumnNumber = CurrentColumnNumber
+    ErrorByteIndex = CurrentByteIndex
+
+    def _byte_index(self, off):
+        """The byte index of stream offset `off`, or -1 before any input.
+
+        Counted forward from the nearest of two checkpoints at or behind it:
+        the one taken where the buffer was last trimmed, and the last offset
+        read -- so a handler reading every event's index costs linear time."""
+        if off is None:
+            return -1
+        ck_off, ck_bytes = self._rd
+        if off < ck_off:
+            ck_off, ck_bytes = self._ck
+        if off < ck_off:
+            return ck_bytes
+        nbytes = ck_bytes + self._bytes_between(ck_off, off)
+        self._rd = (off, nbytes)
+        return nbytes
+
+    def _bytes_between(self, a, b):
+        """Input bytes in stream offsets [a, b), which _buf still holds."""
+        text = self._buf[a - self._abs:b - self._abs]
+        nbytes = self._byte_len(text)
+        crlf = self._crlf
+        if crlf and '\n' in text:
+            lo, hi = 0, len(crlf)
+            while lo < hi:
+                mid = (lo + hi) // 2
+                if crlf[mid] < a:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            k = lo
+            while k < len(crlf) and crlf[k] < b:
+                k += 1
+            nbytes += (k - lo) * self._byte_len('\r')
+        return nbytes
+
+    def _byte_len(self, text):
+        """len(text) in the bytes expat counts: the input's own encoding, and
+        UTF-8 for str input, which CPython's pyexpat encodes so."""
+        enc = self._encoding_used
+        if enc is not self._byte_len_enc:
+            self._byte_len_enc = enc
+            try:
+                name = codecs.lookup(enc).name if enc else 'utf-8'
+            except LookupError:
+                name = 'utf-8'
+            self._byte_len_fn = (_utf8_len if name in ('utf-8', 'utf-8-sig')
+                                 else self._text_bytes)
+        return self._byte_len_fn(text)
+
+    def _checkpoint(self):
+        """Before _buf drops what has been consumed: remember the byte index
+        where it ends, and forget the CRLFs behind it."""
+        off = self._abs + self._pos
+        self._ck = self._rd = (off, self._byte_index(off))
+        crlf = self._crlf
+        if crlf:
+            k = 0
+            while k < len(crlf) and crlf[k] < off:
+                k += 1
+            if k:
+                del crlf[:k]
+
+    def _offset_at(self, line, col):
+        """The stream offset of document position (line, col), counted forward
+        from the scan position or the event pointer, whichever is the nearer
+        one at or before it.  For errors and skipped references only."""
+        refs = [(self._line, self._col, self._abs + self._pos)]
+        if self._ev[2] is not None:
+            refs.append(self._ev)
+        best = None
+        for ref in refs:
+            if (ref[0], ref[1]) <= (line, col) and (
+                    best is None or ref[2] > best[2]):
+                best = ref
+        if best is None:
+            return min(r[2] for r in refs)
+        L, C, off = best
+        buf, k = self._buf, off - self._abs
+        while (L, C) < (line, col) and 0 <= k < len(buf):
+            if buf[k] == '\n':
+                L, C = L + 1, 0
+            else:
+                C += 1
+            k += 1
+        return self._abs + k
+
+    @staticmethod
+    def _position_after(line, col, text):
+        """(line, col) once `text` has been read from (line, col)."""
+        nl = text.count('\n')
+        if nl:
+            return line + nl, len(text) - text.rfind('\n') - 1
+        return line, col + len(text)
+
     def _advance(self, n):
-        """Consume n characters, tracking line/column the way expat does."""
+        """Consume n characters, tracking line/column the way expat does.
+
+        The token consumed is the event being dispatched, so its START is
+        the reported position (see CurrentLineNumber): a handler runs after
+        the token has been consumed here, and reporting the position after it
+        put a start tag's handler at its ``>''."""
+        if self._frozen is None:
+            self._ev = (self._line, self._col, self._abs + self._pos)
         chunk = self._buf[self._pos:self._pos + n]
         nl = chunk.count('\n')
         if nl:
@@ -677,13 +849,6 @@ class xmlparser:
         else:
             self._col += len(chunk)
         self._pos += n
-        col = self._col + self._bom if self._line == 1 else self._col
-        self.CurrentLineNumber = self._line
-        self.CurrentColumnNumber = col
-        # expat's error-position getters ARE its current-position getters;
-        # only a failure (_fail) pins them.
-        self.ErrorLineNumber = self._line
-        self.ErrorColumnNumber = col
 
     def _offset_pos(self, base_line, base_col, text, index):
         """(line, col) of `index` within `text`, given where `text` started.
@@ -720,8 +885,12 @@ class xmlparser:
             self._flush_text()
             h(text)
 
-    def _emit_chars(self, text):
+    def _emit_chars(self, text, at=None):
         """Character data, in expat's pieces.
+
+        Given `at`, the text's (line, col, stream offset), each piece is
+        reported at its own start, as expat does (#1386), and the position
+        after the text is answered.
 
         Without buffer_text expat hands a text run over a piece at a time,
         and callers see the pieces: every newline is a call of its own, as is
@@ -730,27 +899,39 @@ class xmlparser:
         newlines.  With buffer_text the pieces are held and joined, and go
         out as one call before the next other event or at the end of Parse --
         which is what ElementTree and minidom, both of which set it, see."""
+        if at is not None:
+            line, col, off = at
+            after = self._position_after(line, col, text) + (off + len(text),)
         if not text:
-            return
+            return at
         h = self.CharacterDataHandler
         if h is None:
             # expat's reportDefault gets the same tokens: each newline apart.
             h = self._dflt
             if h is None:
-                return
+                return None if at is None else after
             self._flush_text()
         elif self.buffer_text:
             self._textbuf.append(text)
-            return
+            return None if at is None else after
         start = 0
         while True:
             nl = text.find('\n', start)
             if nl < 0:
                 if start < len(text):
+                    if at is not None:
+                        self._ev = (line, col, off)
                     h(text[start:])
-                return
+                return None if at is None else after
             if nl > start:
+                if at is not None:
+                    self._ev = (line, col, off)
+                    col += nl - start
+                    off += nl - start
                 h(text[start:nl])
+            if at is not None:
+                self._ev = (line, col, off)
+                line, col, off = line + 1, 0, off + 1
             h('\n')
             start = nl + 1
 
@@ -818,9 +999,14 @@ class xmlparser:
                     self._fail(errors.XML_ERROR_UNCLOSED_CDATA_SECTION)
                 return False
             text = buf[i + 9:end]
+            line, col, off = self._line, self._col, self._abs + i
             self._advance(end + 3 - i)
             self._markup('StartCdataSectionHandler', '<![CDATA[')
-            self._emit_chars(text)
+            # Three tokens to expat, each reported where it begins (#1386).
+            if self._frozen is None:
+                self._ev = self._emit_chars(text, (line, col + 9, off + 9))
+            else:
+                self._emit_chars(text)
             self._markup('EndCdataSectionHandler', ']]>')
             return True
         if rest.startswith('<?'):
@@ -908,7 +1094,7 @@ class xmlparser:
         tline, tcol = self._line, self._col
         self._advance(end - i)
         if self._stack or self._fragment:
-            self._content(raw, tline, tcol)
+            self._content(raw, tline, tcol, self._abs + i)
         else:
             self._default(raw)
         return True
@@ -942,25 +1128,37 @@ class xmlparser:
         self._fail(errors.XML_ERROR_INVALID_TOKEN, *self._offset_pos(
             self._line, self._col, raw, k))
 
-    def _content(self, raw, line, col):
+    def _content(self, raw, line, col, off=None):
         """A text run inside an element: its character data, and what each
         reference in it stands for.  Every reference ends the piece before
         it, as in expat; an entity reference can stand for markup, or for an
-        external entity a handler has to fetch."""
+        external entity a handler has to fetch.
+
+        `off`, the run's stream offset when it is the document's own text,
+        puts each piece and reference at its own start, as expat reports it
+        (#1386)."""
         i, n = 0, len(raw)
+        # Held by buffer_text, the pieces go out joined before the next
+        # event, whose position is the one reported then: none to track here.
+        at = (None if off is None or self._frozen is not None
+              or (self.buffer_text and self.CharacterDataHandler is not None)
+              else (line, col, off))
         while i < n:
             amp = raw.find('&', i)
             if amp < 0:
-                self._emit_chars(raw[i:])
+                self._emit_chars(raw[i:], at)
                 return
             if amp > i:
-                self._emit_chars(raw[i:amp])
+                at = self._emit_chars(raw[i:amp], at)
             eline, ecol = self._offset_pos(line, col, raw, amp)
             end = raw.find(';', amp)
             if end < 0:
                 self._fail(errors.XML_ERROR_INVALID_TOKEN, eline, ecol)
             ref = raw[amp + 1:end]
             i = end + 1
+            if at is not None:
+                self._ev = at
+                at = (at[0], at[1] + (i - amp), at[2] + (i - amp))
             if ref.startswith('#'):
                 ch = self._char_ref(ref, eline, ecol)
                 if self.CharacterDataHandler is None:
@@ -1023,19 +1221,16 @@ class xmlparser:
         `skipped` and one is set) or else to the default handler as the
         reference text, with the parser's position at the ``&'' for the
         duration of the call -- where expat reports it."""
-        saved = (self.CurrentLineNumber, self.CurrentColumnNumber,
-                 self.ErrorLineNumber, self.ErrorColumnNumber)
-        if line is not None:
-            self.CurrentLineNumber = self.ErrorLineNumber = line
-            self.CurrentColumnNumber = self.ErrorColumnNumber = col
+        saved = self._ev
+        if line is not None and self._frozen is None:
+            self._ev = (line, col, self._offset_at(line, col))
         try:
             if skipped and self.SkippedEntityHandler is not None:
                 self._call('SkippedEntityHandler', name, 0)
             else:
                 self._default('&%s;' % name)
         finally:
-            (self.CurrentLineNumber, self.CurrentColumnNumber,
-             self.ErrorLineNumber, self.ErrorColumnNumber) = saved
+            self._ev = saved
 
     def _skips_undefined(self):
         """expat's rule for a reference to an entity nobody declared: an
@@ -1051,24 +1246,33 @@ class xmlparser:
         elements to balance within it."""
         if name in self._open_entities:
             self._fail(errors.XML_ERROR_RECURSIVE_ENTITY_REF, line, col)
-        saved = (self._buf, self._pos, self._line, self._col)
+        saved = (self._buf, self._pos, self._line, self._col, self._abs,
+                 self._frozen)
         depth = len(self._stack)
         outer = self._ref_pos is None
         if outer:
             self._ref_pos = (line, col)
         self._open_entities.append(name)
+        # Every event inside the expansion is reported at the reference, as
+        # expat does (#1386); the entity text's own offsets are no position
+        # in the document.
+        if self._frozen is None:
+            ev = self._ev
+            self._frozen = (ev[0], ev[1], self._byte_index(ev[2]))
         try:
             self._buf, self._pos = text, 0
+            self._abs = 0
             self._scan(True)
             if len(self._stack) != depth:
                 self._fail(errors.XML_ERROR_ASYNC_ENTITY)
         finally:
             self._open_entities.pop()
-            self._buf, self._pos, self._line, self._col = saved
-            self.CurrentLineNumber = self._line
-            self.CurrentColumnNumber = self._col
+            (self._buf, self._pos, self._line, self._col, self._abs,
+             self._frozen) = saved
             if outer:
                 self._ref_pos = None
+        if self._frozen is None:
+            self._ev = (self._line, self._col, self._abs + self._pos)
 
     # ----------------------------------------------------- pieces of markup
 
@@ -1647,6 +1851,9 @@ class xmlparser:
         elif not selfclose:
             self._default(raw_tag)
         if selfclose:
+            # expat reports the end of an empty-element tag AFTER it (#1386).
+            if self._frozen is None:
+                self._ev = (self._line, self._col, self._abs + self._pos)
             self._end_element(raw_name, synthetic=True, raw=raw_tag)
 
     def _parse_attrs(self, body, i):

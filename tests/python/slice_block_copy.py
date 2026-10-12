@@ -130,9 +130,9 @@ def joined_text(log):
 WHOLE = joined_text(events(None))
 RESULTS['chunked_parse_matches_whole_parse'] = all(
     joined_text(events(n)) == WHOLE for n in (1, 2, 3, 7, 10))
-# Positions are left out here: inside a handler Grail reports the position
-# AFTER the event where expat reports its start (#1386).  The chunked
-# comparison above keeps them, since both sides of it come from one parser.
+# Positions are left out here; pyexpat_event_positions.py compares them with
+# expat's (#1386).  The chunked comparison above keeps them, since both sides
+# of it come from one parser.
 RESULTS['whole_parse_events'] = [e[:3] if e[0] == 'start' else e[:2]
                                  for e in WHOLE] == [
     ('start', 'root', {'a': '1'}), ('text', '\n  '), ('comment', ' a comment '),
