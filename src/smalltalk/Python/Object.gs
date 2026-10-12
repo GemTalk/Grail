@@ -17026,9 +17026,11 @@ ___grailCommittedSelfSendOverrides___
 	commit ``g.word = f'', and a later session's ``g.word()'' answered the
 	override while ``g.greet()'' -- ``self.word()'' -- ran the original.  The
 	same holds for a class-body store over a method in a deployed module,
-	whose body never re-runs.  So the NAME is recorded, in the transaction
-	that stored it (it commits only if that session does), and each session
-	re-installs the recorded dispatchers (___grailInstallRecordedSelfSendOverrides___).
+	whose body never re-runs.  So the NAME is recorded -- noted at the store
+	and written by the session's next commit (___grailRecordSelfSendOverride___:,
+	GrailCommitCoordinator), so a session that never commits writes nothing --
+	and each session re-installs the recorded dispatchers
+	(___grailInstallRecordedSelfSendOverrides___).
 	Reduced-conflict throughout, so two sessions recording different names
 	merge; a name already recorded is not written again."
 
@@ -17040,10 +17042,86 @@ classmethod: object
 ___grailRecordSelfSendOverride___: aSymbol
 	"Note that this class needed a dispatcher for aSymbol (see
 	___grailCommittedSelfSendOverrides___).  Not for a native module: its
-	instance state is session state and is never committed."
+	instance state is session state and is never committed.
+
+	NOTED NOW, WRITTEN AT COMMIT (#1466).  Writing the record here made a
+	store on a throwaway local -- ``obj.m = wrapper'' on an object nobody
+	commits -- dirty the session: ``needsCommit'' turned true, and a refusal
+	to start a transaction while dirty, or a later unrelated commit, took
+	the entry along.  The record only matters to a session that commits, so
+	the pair waits in session state and GrailCommitCoordinator writes it as
+	part of the commit, whichever route the commit takes.  When some other
+	commit coordinator owns the session, the record is written here as it
+	always was, rather than risk losing it."
+
+	| pending names |
+	(NativeModule ~~ nil and: [self @env0:inheritsFrom: NativeModule]) ifTrue: [^ self].
+	(self ___grailSelfSendOverrideIsRecorded___: aSymbol) ifTrue: [^ self].
+	GrailCommitCoordinator @env0:ensureInstalled
+		ifFalse: [^ self ___grailWriteSelfSendOverride___: aSymbol].
+	pending := SessionTemps @env0:current
+		@env0:at: #'GrailPendingSelfSendOverrides' otherwise: nil.
+	pending == nil ifTrue: [
+		pending := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailPendingSelfSendOverrides' put: pending].
+	names := pending @env0:at: self otherwise: nil.
+	names == nil ifTrue: [
+		names := IdentitySet @env0:new.
+		pending @env0:at: self put: names].
+	names @env0:add: aSymbol @env0:asSymbol.
+	^ self
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailSelfSendOverrideIsRecorded___: aSymbol
+	"Whether the committed record already names this class and aSymbol.  A
+	read: it never creates the record."
 
 	| reg names |
-	(NativeModule ~~ nil and: [self @env0:inheritsFrom: NativeModule]) ifTrue: [^ self].
+	reg := self ___grailCommittedSelfSendOverrides___.
+	reg == nil ifTrue: [^ false].
+	names := reg @env0:at: self otherwise: nil.
+	^ names ~~ nil and: [names @env0:includes: aSymbol @env0:asSymbol]
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailFlushPendingSelfSendOverrides___
+	"Write every pair this session noted into the committed record, just
+	before a commit (GrailCommitCoordinator >> commit:, and the Python-visible
+	commit in System.gs).  The pending set is kept: it is emptied only once a
+	commit has succeeded (___grailForgetPendingSelfSendOverrides___), so a
+	commit that fails on a conflict and is then aborted writes the pairs again
+	on the next attempt.  Writing a pair twice is a no-op."
+
+	| pending |
+	pending := SessionTemps @env0:current
+		@env0:at: #'GrailPendingSelfSendOverrides' otherwise: nil.
+	pending == nil ifTrue: [^ self].
+	pending @env0:keysAndValuesDo: [:cls :names |
+		names @env0:do: [:sym | cls ___grailWriteSelfSendOverride___: sym]].
+	^ self
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailForgetPendingSelfSendOverrides___
+	"A commit carried the pending pairs; drop them."
+
+	SessionTemps @env0:current
+		@env0:removeKey: #'GrailPendingSelfSendOverrides' otherwise: nil.
+	^ self
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailWriteSelfSendOverride___: aSymbol
+	"Add this class and aSymbol to the committed record, creating it on first
+	use.  Reduced-conflict throughout, so two sessions recording different
+	names merge; a name already recorded is not written again."
+
+	| reg names |
 	reg := self ___grailCommittedSelfSendOverrides___.
 	names := reg == nil ifTrue: [nil] ifFalse: [reg @env0:at: self otherwise: nil].
 	(names ~~ nil and: [names @env0:includes: aSymbol @env0:asSymbol]) ifTrue: [^ self].

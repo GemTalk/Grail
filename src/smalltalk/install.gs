@@ -369,6 +369,7 @@ run
 	at: #'grail' put: nil;
 	at: #'GrailBuiltinImporter' put: nil;
 	at: #'GrailClassAttrHolder' put: nil;
+	at: #'GrailCommitCoordinator' put: nil;
 	at: #'GrailShimError' put: nil;
 	at: #'Hash' put: nil;
 	at: #'hashlib' put: nil;
@@ -1671,6 +1672,7 @@ input src/smalltalk/Python/NativeModule.gs
 input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/PyInstanceDict.gs
 input src/smalltalk/Python/GrailClassAttrHolder.gs
+input src/smalltalk/Python/GrailCommitCoordinator.gs
 input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs

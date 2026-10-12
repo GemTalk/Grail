@@ -56,9 +56,14 @@ commit
 	Smalltalk error tore through Python instead.  gemdb's ConflictError
 	handling (src/python/stdlib/gemdb/) depends on the Boolean."
 
-	| imp |
+	| imp obj |
 	imp := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'importlib'.
 	imp == nil ifFalse: [imp @env0:___flushPersistentState___].
+	"The self-send override record waits for a commit (#1466).
+	GrailCommitCoordinator writes it on every route; this covers a session
+	where something replaced the coordinator.  Writing it twice is a no-op."
+	obj := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'object'.
+	obj == nil ifFalse: [obj @env0:___grailFlushPendingSelfSendOverrides___].
 	^ System @env0:commitTransaction
 %
 
