@@ -227,6 +227,12 @@ class BuiltinFunctionType(metaclass=_BuiltinFunctionTypeMeta):
     def __new__(cls, *args, **kwargs):
         raise TypeError("cannot create 'builtin_function_or_method' instances")
 
+    # As FunctionType's: Callable's __subclasshook__ reads ``__call__`` off
+    # ``type(len)``'s MRO, so without it ``isinstance(len, Callable)`` is False.
+    # Never invoked -- every real builtin is a BoundMethod that reports this.
+    def __call__(self, /, *args, **kwargs):
+        raise TypeError("'builtin_function_or_method' object is not callable")
+
 
 BuiltinFunctionType.__name__ = 'builtin_function_or_method'
 BuiltinFunctionType.__qualname__ = 'builtin_function_or_method'

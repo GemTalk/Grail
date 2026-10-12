@@ -6829,16 +6829,17 @@ ___grailClassLacksSynthesizedDunder___: aSym
 	``Cls.__aexit__ = fn'', so that store is consulted first -- the same two
 	places ___definesProtocolMethod___:selectors: looks, for the same reason."
 
-	| sels owner metaOwner meta |
+	| sels owner metaOwner meta isReal |
 	sels := self ___grailSynthesizedDunderSelectors___: aSym @env0:asString.
 	sels @env0:isNil ifTrue: [^ false].
 	(self ___dynamicClassAttr___: aSym) @env0:notNil ifTrue: [^ false].
+	isReal := [:anOwner |
+		anOwner @env0:notNil
+			@env0:and: [(anOwner @env0:== object) @env0:not
+			@env0:and: [(anOwner @env0:name @env0:asString @env0:= 'PythonInstance') @env0:not]]].
 	sels @env0:do: [:sel |
 		owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
-		(owner @env0:notNil
-			@env0:and: [(owner @env0:== object) @env0:not
-			@env0:and: [(owner @env0:name @env0:asString @env0:= 'PythonInstance') @env0:not]])
-				ifTrue: [^ false].
+		(isReal @env0:value: owner) ifTrue: [^ false].
 		"A METACLASS MAY SUPPLY IT FOR THE CLASS ITSELF.  ``x in Color'' is
 		EnumType >> __contains__:, which makes Color.__contains__ a real
 		attribute even though no Enum INSTANCE defines one -- CPython answers
@@ -6863,11 +6864,16 @@ ___grailClassLacksSynthesizedDunder___: aSym
 		This guard runs BEFORE that block, so without asking the same
 		question it hid what that block was about to answer: ``Meta''
 		defining __contains__ made Owned.__contains__ a real attribute, and
-		it raised AttributeError instead."
+		it raised AttributeError instead.
+
+		The owner it finds is judged like the class's own: Meta subclasses
+		type, whose chain ends at object, so a bare ``class Meta(type)''
+		found object's DEFAULT here and every class using it -- types'
+		FunctionType among them, so ``type(f).__exit__'' -- answered every default."
 		meta := self ___grailMetaclass___.
 		(meta @env0:notNil
-			@env0:and: [(meta @env0:whichClassIncludesSelector: sel
-				environmentId: 1) @env0:notNil])
+			@env0:and: [isReal @env0:value: (meta @env0:whichClassIncludesSelector: sel
+				environmentId: 1)])
 					ifTrue: [^ false]].
 	^ true
 %
