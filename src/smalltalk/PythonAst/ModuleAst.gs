@@ -617,6 +617,12 @@ ___validateContext___: node fn: fnSym loop: inLoop scopes: scopes
 		node targets do: [:each | self ___validateStarredTarget___: each].
 		(node value isKindOf: StarredAst) ifTrue: [
 			^ self ___syntaxError___: 'can''t use starred expression here' node: node value]].
+	"The annotated and augmented forms parse their value as star_expressions
+	too (#1419), so a LONE starred value -- ``x: int = *a'', ``t += *a'' --
+	needs the same refusal; with a comma it is a tuple and fine."
+	((node isKindOf: AnnAssignAst) or: [node isKindOf: AugAssignAst]) ifTrue: [
+		(node value isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'can''t use starred expression here' node: node value]].
 	(node isKindOf: ExprAst) ifTrue: [
 		(node value isKindOf: StarredAst) ifTrue: [
 			^ self ___syntaxError___: 'can''t use starred expression here' node: node value]].

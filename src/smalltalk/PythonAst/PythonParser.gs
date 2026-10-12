@@ -2584,7 +2584,10 @@ parseExpressionOrAssignment
 		opTok := self advance.
 		opStr := opTok value copyFrom: 1 to: opTok value size - 1. "Remove the '='"
 		opClass := self operatorClassFor: opStr.
-		value := self parseExpression.
+		"CPython: augassign ~ (yield_expr | star_expressions), so
+		``t += 1, 2'' adds a tuple -- the same right-hand side as the
+		annotated form below (#1419)."
+		value := self parseStarExpressions.
 		"CPython: an augmented-assignment target must be a single Name,
 		Attribute, or Subscript.  A tuple/list/starred target (``x, b += 3'')
 		is a SyntaxError, not an unpacking assignment."
@@ -2610,8 +2613,12 @@ parseExpressionOrAssignment
 		((aTok := self peek) notNil and: [ aTok isOp: '=']) ifFalse: [
 			annotation := self parseExpression.
 			value := nil.
+			"CPython's annotated_rhs is yield_expr | star_expressions: a bare
+			tuple, starred items included (``x: tuple = -1, None'', valid
+			since 3.8).  A single expression made the comma a SyntaxError,
+			which was the first thing keeping pyparsing from importing (#1419)."
 			(self matchOp: '=') ifTrue: [
-				value := self parseExpression.
+				value := self parseStarExpressions.
 			].
 			self ___checkAnnotationTarget___: expr.
 			self setStoreCtx: expr.
