@@ -1102,6 +1102,7 @@ run
 	at: #'InspectAsyncPredicatesTestCase' put: nil;
 	at: #'InspectClassifyClassAttrsTestCase' put: nil;
 	at: #'InspectGetmembersTestCase' put: nil;
+	at: #'InspectMethodPredicatesTestCase' put: nil;
 	at: #'InspectSignatureObjectsTestCase' put: nil;
 	at: #'InstanceDocstringTestCase' put: nil;
 	at: #'IntegerTestCase' put: nil;
@@ -2615,6 +2616,7 @@ input src/smalltalk/PythonTests/InputBuiltinTestCase.gs
 input src/smalltalk/PythonTests/InspectAsyncPredicatesTestCase.gs
 input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
+input src/smalltalk/PythonTests/InspectMethodPredicatesTestCase.gs
 input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
 input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
