@@ -1197,6 +1197,7 @@ run
 	at: #'ModuleTypeConstructionTestCase' put: nil;
 	at: #'MoreCodecsTestCase' put: nil;
 	at: #'MroEntriesTestCase' put: nil;
+	at: #'MroThroughLaterBaseTestCase' put: nil;
 	at: #'MultipleInheritanceTestCase' put: nil;
 	at: #'MultiprocessingModuleTestCase' put: nil;
 	at: #'NamedIntConstantTestCase' put: nil;
@@ -2714,6 +2715,7 @@ input src/smalltalk/PythonTests/ModuleTestCase.gs
 input src/smalltalk/PythonTests/ModuleTypeConstructionTestCase.gs
 input src/smalltalk/PythonTests/MoreCodecsTestCase.gs
 input src/smalltalk/PythonTests/MroEntriesTestCase.gs
+input src/smalltalk/PythonTests/MroThroughLaterBaseTestCase.gs
 input src/smalltalk/PythonTests/MultipleInheritanceTestCase.gs
 input src/smalltalk/PythonTests/MultiprocessingModuleTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs

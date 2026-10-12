@@ -8292,7 +8292,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					| cat |
 					cat := [walker class categoryOfSelector: sel environmentId: 1]
 						on: Error do: [:e | nil].
-					((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
+					((self ___metaChainProvides___: sel forClass: aClass mergingFrom: walker) not
 						and: [(kernelSlots includes: sel) not
 						and: [cat ~~ #'Grail-Class Attrs'
 						"A base's ___pySlotLayout___ numbers ITS indexed slots; copying
@@ -8472,10 +8472,40 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 	aClass's own dictionary is asked EXACTLY: it is where this merge is writing
 	its copies, one selector at a time, and asked by name the first arity
 	copied (``_register:kw:'') refused the rest -- the varargs forwarder then
-	performed a fixed selector that never arrived."
+	performed a fixed selector that never arrived.
 
-	| walker family |
+	AND ONLY AN ANCESTOR THE MRO PUTS BEFORE aSource COUNTS AT ALL.  The shared-
+	ancestor rule above went from ``by name'' to ``by exact selector'' and no
+	further, so an ancestor that comes after aSource in aClass's MRO still
+	blocked a copy of the very same selector.  pytest's collectors are that
+	shape:
+
+	    class PyCollector(Mixin, Collector): def collect(self) ...
+	    class Module(File, PyCollector)    -- File -> FSCollector -> Collector
+
+	The MRO is Module, File, FSCollector, PyCollector, Mixin, Collector, ...,
+	so ``Module().collect()'' is PyCollector's.  But the primary chain reaches
+	Collector, which defines ``collect'' too, so the copy was refused and the
+	abstract Collector.collect answered (#1454).  The C3 linearization is
+	registered before this merge runs (___registerBases___:), so ask it: a
+	primary-chain ancestor positioned AFTER aSource does not provide the name as
+	far as aClass is concerned.  When either class is missing from the
+	linearization the rules above decide, as before.
+
+	Only for an ancestor written in PYTHON (ClassDefAst's ___pyDefinedClass___
+	marker, on the class itself).  The linearization is exact for those, being
+	built from class statements; for Grail's Smalltalk-written stand-ins it is
+	not -- ``class HelloEnum(EnumMixin, StrEnum)'' linearizes as HelloEnum,
+	EnumMixin, Enum, StrEnum, str where CPython has StrEnum, str, ReprEnum,
+	Enum -- and trusting it there copied Enum's __eq__ over str's, so
+	``HelloEnum.eight == '8''' went False (test_enum test_strenum)."
+
+	| walker family mro sourceIdx |
 	family := self ___pythonNameFamilyOf___: aSelector.
+	mro := (aSource isKindOf: Behavior)
+		ifTrue: [[self ___mroOf___: aClass] on: Error do: [:e | e return: #()]]
+		ifFalse: [#()].
+	sourceIdx := mro indexOf: aSource.
 	walker := aClass.
 	[(walker ~~ nil) and: [(walker ~~ PythonInstance) and: [walker ~~ Object]]]
 		whileTrue: [
@@ -8494,14 +8524,48 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 			(walker == aClass
 				ifTrue: [md includesKey: aSelector]
 				ifFalse: [
-					((aSource isKindOf: Behavior)
-						and: [aSource == walker or: [aSource inheritsFrom: walker]])
-						ifTrue: [has value: aSelector]
-						ifFalse: [family anySatisfy: [:sel | has value: sel]]])
+					(sourceIdx > 0
+						and: [(mro indexOf: walker) > sourceIdx
+						and: [walker includesSelector: #'___pyDefinedClass___' environmentId: 1]])
+						ifTrue: [false]
+						ifFalse: [
+							((aSource isKindOf: Behavior)
+								and: [aSource == walker or: [aSource inheritsFrom: walker]])
+								ifTrue: [has value: aSelector]
+								ifFalse: [family anySatisfy: [:sel | has value: sel]]]])
 					ifTrue: [^ true]].
 		walker := walker superClass
 	].
 	^ false
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___metaChainProvides___: aSelector forClass: aClass mergingFrom: aSource
+	"The class-side twin of ___primaryChainProvides___:forClass:mergingFrom:'s
+	MRO rule, for the merge's @classmethod / @staticmethod pass: does aClass's
+	metaclass chain already answer aSelector from somewhere the MRO puts AHEAD
+	of aSource?
+
+	It used to be the bare ``whichClassIncludesSelector:'' test, so a primary-
+	chain ancestor's classmethod beat a secondary base the MRO puts first:
+	``class Q(P, Y)'' with P(Base), Y(Base) and both Base and Y defining
+	``cm'' answered Base.cm for ``Q.cm()'' where CPython answers Y.cm (#1454,
+	the class-side half).  An owner the linearization does not list -- the
+	universal roots, kernel metaclasses -- still counts, as before, and so does
+	one not written in Python, for the reason the instance-side twin gives."
+
+	| owner mro sourceIdx ownerIdx |
+	owner := aClass class whichClassIncludesSelector: aSelector environmentId: 1.
+	owner isNil ifTrue: [^ false].
+	owner == aClass class ifTrue: [^ true].
+	owner isMeta ifFalse: [^ true].
+	(owner thisClass includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifFalse: [^ true].
+	mro := [self ___mroOf___: aClass] on: Error do: [:e | e return: #()].
+	sourceIdx := mro indexOf: aSource.
+	ownerIdx := mro indexOf: owner thisClass.
+	^ (sourceIdx > 0 and: [ownerIdx > sourceIdx]) not
 %
 
 category: 'Grail-Module Loading'
