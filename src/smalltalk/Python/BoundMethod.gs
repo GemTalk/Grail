@@ -822,7 +822,7 @@ value: positional value: kwargs
 	function semantics: ``C.__dict__['f'](instance, ...)''."
 
 	| actualReceiver actualArgs nargs fixedSel rcvrClass fixedClass varargsClass
-	  pinnedVarargs |
+	  pinnedVarargs arityMsg |
 	receiver @env0:isNil
 		ifTrue: [
 			actualReceiver := positional @env0:at: 1.
@@ -941,6 +941,13 @@ value: positional value: kwargs
 					^ actualReceiver
 						perform: (bound @env0:at: 1)
 						env: 1 withArguments: (bound @env0:at: 2)]].
+			"A class-side Python def called with the wrong count: CPython's
+			message, from its recorded signature (#1484).  Only the cases
+			nothing above can describe -- a Smalltalk-native method has no
+			signature to read and keeps the generic one below."
+			arityMsg := self ___classSideArityMessageFor___: actualReceiver
+				given: actualArgs @env0:size.
+			arityMsg == nil ifFalse: [^ TypeError ___signal___: arityMsg].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString
@@ -993,6 +1000,68 @@ ___kwBoundArgsFor___: aReceiver args: posArgs kw: kwargs
 			ifTrue: [posArgs @env0:at: i]
 			ifFalse: [kwargs @env0:at: (names @env0:at: i)])].
 	^ { sel. args }
+%
+
+category: 'Grail-Private'
+method: BoundMethod
+___classSideArityMessageFor___: aReceiver given: nGiven
+	"CPython's TypeError text for calling this class-side Python def --
+	a @classmethod or @staticmethod -- with nGiven positional arguments it
+	cannot take, or nil when that cannot be said exactly.
+
+	Such a def, when its parameters are all plain and required, compiles to a
+	single fixed-arity method and NO keyword forwarder, so the generated arity
+	check that gives every other def CPython's message never runs, and the call
+	reached value:value:'s generic ``takes a different number of arguments''
+	(#1484).  The facts are all recorded: the signature table names the
+	parameters (bound-shaped, so without cls; a parameterless staticmethod has
+	no entry), ___staticMethodNames___ says which kind it is, and the
+	fixed-arity method's class gives the qualified name.
+
+	    C.cm() takes 2 positional arguments but 3 were given     (cls counted)
+	    C.sm() takes 1 positional argument but 2 were given
+	    C.cm() missing 1 required positional argument: 'a'
+
+	nil -- leaving the generic message -- for anything else: no signature (a
+	Smalltalk-native method), a parameter that is not plain positional, or no
+	fixed-arity method of that arity on the class side."
+
+	| cls sig names sel owner qname off accepted given |
+	cls := (aReceiver @env0:isKindOf: Behavior)
+		ifTrue: [aReceiver]
+		ifFalse: [aReceiver @env0:class].
+	sig := self ___methodSignatureForClass___: cls name: selector @env0:asString.
+	"The table holds only defs that declare a parameter, and a classmethod
+	always declares cls -- so a recorded @staticmethod with no entry is one
+	with no parameters at all.  Anything else without an entry is not a
+	Python def this can describe."
+	sig == nil ifTrue: [
+		(self ___isStaticMethodOnClass___: cls name: selector @env0:asString)
+			ifFalse: [^ nil].
+		sig := #()].
+	(sig @env0:allSatisfy: [:p | (p @env0:at: 2) @env0:<= 1]) ifFalse: [^ nil].
+	names := sig @env0:collect: [:p | (p @env0:at: 1) @env0:asString].
+	nGiven @env0:= names @env0:size ifTrue: [^ nil].
+	sel := self @env0:_selectorForArgCount: names @env0:size.
+	sel == nil ifTrue: [^ nil].
+	owner := cls @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+	(owner == nil or: [owner @env0:isMeta @env0:not]) ifTrue: [^ nil].
+	qname := (owner @env0:thisClass @env1:__qualname__) @env0:asString
+		@env0:, '.' @env0:, selector @env0:asString.
+	nGiven @env0:< names @env0:size ifTrue: [
+		^ BaseException ___missingArgumentsText___:
+				(names @env0:copyFrom: nGiven @env0:+ 1 to: names @env0:size)
+			kind: 'positional'
+			qualifiedName: qname].
+	off := (self ___isStaticMethodOnClass___: cls name: selector @env0:asString)
+		ifTrue: [0]
+		ifFalse: [1].
+	accepted := names @env0:size @env0:+ off.
+	given := nGiven @env0:+ off.
+	^ qname @env0:, '() takes ' @env0:, accepted @env0:printString
+		@env0:, ' positional argument' @env0:, ((accepted @env0:= 1) ifTrue: [''] ifFalse: ['s'])
+		@env0:, ' but ' @env0:, given @env0:printString
+		@env0:, ((given @env0:= 1) ifTrue: [' was given'] ifFalse: [' were given'])
 %
 
 category: 'Grail-Callable'
