@@ -333,6 +333,40 @@ def _is_builtin_method_read_through_type(obj):
             and hasattr(obj, '__objclass__') and not hasattr(obj, '__code__'))
 
 
+Arguments = _namedtuple('Arguments', 'args, varargs, varkw')
+
+
+def getargs(co):
+    """Get information about the arguments accepted by a code object.
+
+    Three things are returned: (args, varargs, varkw), where
+    'args' is the list of argument names. Keyword-only arguments are
+    appended. 'varargs' and 'varkw' are the names of the * and **
+    arguments or None.
+
+    CPython's, unchanged.  It reads co_varnames, which Grail's code objects
+    carry for a def's parameters (#1460); pytest's failure report calls it
+    through FormattedExcinfo.repr_args."""
+    if not iscode(co):
+        raise TypeError('{!r} is not a code object'.format(co))
+
+    names = co.co_varnames
+    nargs = co.co_argcount
+    nkwargs = co.co_kwonlyargcount
+    args = list(names[:nargs])
+    kwonlyargs = list(names[nargs:nargs+nkwargs])
+
+    nargs += nkwargs
+    varargs = None
+    if co.co_flags & CO_VARARGS:
+        varargs = co.co_varnames[nargs]
+        nargs = nargs + 1
+    varkw = None
+    if co.co_flags & CO_VARKEYWORDS:
+        varkw = co.co_varnames[nargs]
+    return Arguments(args + kwonlyargs, varargs, varkw)
+
+
 FullArgSpec = _namedtuple(
     'FullArgSpec',
     'args, varargs, varkw, defaults, kwonlyargs, kwonlydefaults, annotations')
