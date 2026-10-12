@@ -84,12 +84,11 @@ for name, mk in OPERANDS:
     t(name + ' 1.5+o', lambda: 1.5 + o)
     t(name + ' 1.5<o', lambda: 1.5 < o)
     t(name + ' D+o', lambda: decimal.Decimal(1) + o)
-    # Where __index__ IS the protocol.  Not for CA: a setattr'd __index__ is
-    # found there by issue #1218's class-attribute lookup, not by anything here.
-    if name != 'CA':
-        t(name + ' [..][o]', lambda: [0, 1, 2, 3, 4][o])
-        t(name + ' range', lambda: list(range(o)))
-        t(name + ' hex', lambda: hex(o))
+    # Where __index__ IS the protocol.  For CA, a setattr'd __index__, it is
+    # found by issue #1218's class-attribute lookup.
+    t(name + ' [..][o]', lambda: [0, 1, 2, 3, 4][o])
+    t(name + ' range', lambda: list(range(o)))
+    t(name + ' hex', lambda: hex(o))
     t(name + ' 2**o', lambda: 2 ** o)
     t(name + ' 1<<o', lambda: 1 << o)
 
@@ -240,6 +239,9 @@ EXPECTED = {
     'CA 1.5+o': "'TypeError'",
     'CA 1.5<o': "'TypeError'",
     'CA D+o': "'TypeError'",
+    'CA [..][o]': '3',
+    'CA range': '[0, 1, 2]',
+    'CA hex': "'0x3'",
     'CA 2**o': "'TypeError'",
     'CA 1<<o': "'TypeError'",
     'bool 1+o': '2',
