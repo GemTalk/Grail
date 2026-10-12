@@ -387,3 +387,23 @@ testStartStopStepAreValuesNotBoundMethods
 	self assert: (self eval: 'range(2, 20, 3).stop - range(2, 20, 3).start') equals: 18.
 	self assert: (self eval: 'range(0, 10, 2).step * 5') equals: 10
 %
+
+category: 'Grail-Tests'
+method: RangeTestCase
+testMembershipIsArithmeticForAnIntAndRichEqualityOtherwise
+	"``in'', count and index answer an exact int or a bool by arithmetic, so a
+	range of 2**99 elements with step 2 answers at once (#1380); anything else
+	is searched with Python ==.  range_iterator.__setstate__ restores a
+	pickled iterator's position.  tests/python/range_arithmetic_membership.py
+	holds the checks and agrees with CPython 3.14; a regression in the
+	arithmetic shows as a hang there, not a wrong answer."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'range_arithmetic_membership' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/range_arithmetic_membership.py')
+		name: 'range_arithmetic_membership'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '22 checks, 0 disagreeing [], keys match: True'
+%

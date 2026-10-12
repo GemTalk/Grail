@@ -108,9 +108,49 @@ __bool__
 category: 'Grail-Sequence Protocol'
 method: range
 __contains__: value
-	"Test if value is in the range"
+	"``value in range'' -- CPython's range_contains: ARITHMETIC for an exact
+	int or a bool, so ``2**87 in range(1, 2**100, 2)'' answers at once (#1380);
+	anything else (a float, an int subclass, an object with its own __eq__)
+	is searched element by element with Python rich equality, the inherited
+	SequenceableCollection scan.  This used to be Smalltalk ``includes:'',
+	which walked the range for any step but 1 and compared by ``='', so an
+	ALWAYS_EQ object was never found."
 
-	^ self @env0:includes: value
+	(self ___isArithmeticMember___: value) ifTrue: [
+		^ self ___containsInt___: value].
+	^ super __contains__: value
+%
+
+category: 'Grail-Sequence Protocol'
+method: range
+___isArithmeticMember___: value
+	"Whether range answers count/index/``in'' for value arithmetically: an
+	exact int or a bool, the PyLong_CheckExact || PyBool_Check test of
+	CPython's rangeobject.c.  A Python int subclass is not an Integer here,
+	so it takes the element-by-element path, as in CPython."
+
+	^ (value @env0:isKindOf: Integer)
+		@env0:or: [value == true @env0:or: [value == false]]
+%
+
+category: 'Grail-Sequence Protocol'
+method: range
+___containsInt___: value
+	"range_contains_long: value lies between start and stop on the step's
+	side, and (value - start) is a multiple of step.  Smalltalk's ``\\'' is
+	floored, so the remainder test is right for a negative step too."
+
+	| n startVal stepVal stopVal |
+	n := value == true
+		ifTrue: [1]
+		ifFalse: [value == false ifTrue: [0] ifFalse: [value]].
+	startVal := self @env0:_from.
+	stepVal := self @env0:increment.
+	stopVal := self stop.
+	(stepVal @env0:> 0)
+		ifTrue: [((n @env0:>= startVal) @env0:and: [n @env0:< stopVal]) ifFalse: [^ false]]
+		ifFalse: [((n @env0:<= startVal) @env0:and: [n @env0:> stopVal]) ifFalse: [^ false]].
+	^ ((n @env0:- startVal) @env0:\\ stepVal) @env0:= 0
 %
 
 category: 'Grail-Comparison'
@@ -306,30 +346,37 @@ __reversed__
 category: 'Grail-Sequence Methods'
 method: range
 count: value
-	"Return the number of times value appears in the range (0 or 1)"
+	"range.count(value): 0 or 1 by arithmetic for an exact int or a bool;
+	otherwise the number of elements equal to value by Python rich equality
+	-- ``range(10).count(ALWAYS_EQ)'' is 10 (test_range test_count)."
 
-	| contains |
-	contains := self __contains__: value.
-	^ contains ifTrue: [1] ifFalse: [0]
+	(self ___isArithmeticMember___: value) ifTrue: [
+		^ (self ___containsInt___: value) ifTrue: [1] ifFalse: [0]].
+	^ super count: value
 %
 
 category: 'Grail-Sequence Methods'
 method: range
 index: value
-	"Return the index of value in the range. Raises ValueError if not found."
+	"range.index(value): (value - start) // step for an exact int or a bool
+	in the range; otherwise the first element equal to value by Python rich
+	equality.  CPython's two misses read differently, and both are pinned:
+	``range.index(x): x not in range'' and ``sequence.index(x): x not in
+	sequence''."
 
-	| fromVal byVal idx |
-	fromVal := self @env0:_from.
-	byVal := self @env0:increment.
-
-	"Check if value is in range"
-	(self __contains__: value) ifFalse: [
-		ValueError ___signal___: ((value @env0:printString) @env0:, ' is not in range')
-	].
-
-	"Calculate index: (value - start) / step"
-	idx := (value @env0:- fromVal) @env0:// byVal.
-	^ idx
+	| i n |
+	(self ___isArithmeticMember___: value) ifTrue: [
+		(self ___containsInt___: value) ifFalse: [
+			^ ValueError ___signal___: 'range.index(x): x not in range'].
+		n := value == true
+			ifTrue: [1]
+			ifFalse: [value == false ifTrue: [0] ifFalse: [value]].
+		^ (n @env0:- self @env0:_from) @env0:// self @env0:increment].
+	i := 1.
+	[i @env0:<= self @env0:size] @env0:whileTrue: [
+		((self @env0:at: i) ___pyRichEqBool___: value) ifTrue: [^ i @env0:- 1].
+		i := i @env0:+ 1].
+	^ ValueError ___signal___: 'sequence.index(x): x not in sequence'
 %
 
 category: 'Grail-Attributes'
