@@ -1129,6 +1129,7 @@ run
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'KwargSplatMergeTestCase' put: nil;
 	at: #'KwargsSplatTestCase' put: nil;
+	at: #'LambdaArityMessageTestCase' put: nil;
 	at: #'LambdaDefaultsTestCase' put: nil;
 	at: #'LambdaFrameNameTestCase' put: nil;
 	at: #'LambdaFrameTestCase' put: nil;
@@ -2653,6 +2654,7 @@ input src/smalltalk/PythonTests/KeyErrorTestCase.gs
 input src/smalltalk/PythonTests/KeywordOnlyParamsTestCase.gs
 input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
 input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
+input src/smalltalk/PythonTests/LambdaArityMessageTestCase.gs
 input src/smalltalk/PythonTests/LambdaDefaultsTestCase.gs
 input src/smalltalk/PythonTests/LambdaFrameNameTestCase.gs
 input src/smalltalk/PythonTests/LambdaFrameTestCase.gs
