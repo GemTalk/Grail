@@ -116,23 +116,48 @@ set compile_env: 1
 ! ===============================================================================
 ! Instance methods - accessors (env-1 so Python attribute syntax works)
 ! ===============================================================================
+! A slice built by CODEGEN (``x[1:3]'', SubscriptAst) stores Smalltalk nil for an
+! omitted bound, which the Smalltalk slicing paths rely on.  The Python view has
+! to say None.  It did not: ___pyAttrLoad___ treats a nil dynamic instVar as
+! absent and fell through to these accessors as METHODS, so ``key.step'' in a
+! user __getitem__ answered a bound method, repr printed
+! ``slice(1, 3, <UndefinedObject ...>)'', and ``x[1:3] == slice(1, 3)'' was
+! False.  pytest's Source.__getitem__ raised ``cannot slice a Source with a
+! step'' on every failure report.  So the accessors answer None for nil, and
+! the class side lists all three as VALUE attributes so a Python read performs
+! them (see ___pythonValueAttrs___ below).
 
 category: 'Python-Attribute Access'
 method: slice
 start
-	^ self @env0:dynamicInstVarAt: #start
+	"None for an omitted bound -- see the section comment."
+
+	| v |
+	v := self @env0:dynamicInstVarAt: #start.
+	v == nil ifTrue: [^ None].
+	^ v
 %
 
 category: 'Python-Attribute Access'
 method: slice
 stop
-	^ self @env0:dynamicInstVarAt: #stop
+	"None for an omitted bound -- see the section comment."
+
+	| v |
+	v := self @env0:dynamicInstVarAt: #stop.
+	v == nil ifTrue: [^ None].
+	^ v
 %
 
 category: 'Python-Attribute Access'
 method: slice
 step
-	^ self @env0:dynamicInstVarAt: #step
+	"None for an omitted bound -- see the section comment."
+
+	| v |
+	v := self @env0:dynamicInstVarAt: #step.
+	v == nil ifTrue: [^ None].
+	^ v
 %
 
 ! ===============================================================================
@@ -292,3 +317,20 @@ ___unpackedSlice___
 %
 
 set compile_env: 0
+
+! ___pythonValueAttrs___ MUST be env 0 and class side: object>>___pyAttrLoad___
+! asks for it through an env-0 respondsTo: (see PyCode).
+
+category: 'Grail-Python Attribute Hook'
+classmethod: slice
+___pythonValueAttrs___
+	"start, stop and step are VALUE attributes: a Python read performs the
+	accessor, which answers None for an omitted bound.  A slice made by
+	slice(...) stores None and was always read correctly; one made by
+	codegen stores nil, and a read of it answered the accessor itself.
+
+	A literal, not a fresh set: ___pyAttrLoad___ asks on every slice read."
+
+	^ #(#'start' #'stop' #'step')
+%
+
