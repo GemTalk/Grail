@@ -51,20 +51,35 @@ CO_METHOD = 0x8000000
 
 
 def ismethod(obj):
-    """True if obj is a bound method."""
-    # Grail's BoundMethod is the closest analogue; treat the
-    # Smalltalk class name as a heuristic so we don't have to
-    # import the Smalltalk side.
-    return type(obj).__name__ == 'BoundMethod'
+    """True if obj is a bound method -- CPython's own test,
+    ``isinstance(obj, types.MethodType)``.
+
+    It used to be ``type(obj).__name__ == 'BoundMethod'``, and Grail's type
+    names do not line up with CPython's function/method split (#1458):
+
+      * a MODULE-LEVEL def is a BoundMethod bound to its module, so it read as
+        a method.  pluggy strips the first parameter of anything ismethod
+        accepts, as ``self'' -- every pytest hookspec is a module function, so
+        each lost its first argument and PytestPluginManager() refused its own
+        hookimpls;
+      * a DECORATED method read through an instance is a MethodBinding, so it
+        read as neither method nor routine, and pluggy silently registered no
+        @hookimpl on a plugin class.
+
+    types.MethodType's metaclass draws CPython's line from what the binding is
+    FOR (see types._MethodTypeMeta), and FunctionType's from what the callable
+    is; asking them keeps one classification rather than two."""
+    return isinstance(obj, _types.MethodType)
 
 
 def isfunction(obj):
-    # ``UnboundMethod`` is what a CLASS hands back where CPython hands back a
-    # plain function -- ``C.meth`` is an UnboundMethod, ``C().meth`` a
-    # BoundMethod, which is exactly CPython's function/method split.  Leaving it
-    # out made isroutine() False for every method reached through its class, so
-    # classify_class_attrs called them all "data" and getmembers/pydoc agreed.
-    return type(obj).__name__ in ('function', 'ExecBlock', 'UnboundMethod')
+    """True if obj is a Python function -- CPython's
+    ``isinstance(obj, types.FunctionType)``.  That covers Grail's three
+    spellings of one: a module-level def (a BoundMethod on its module), a
+    nested def or lambda (an ExecBlock), and a method read through its class
+    (an UnboundMethod, which classify_class_attrs needs counted or every such
+    method reads as "data").  See types._FunctionTypeMeta."""
+    return isinstance(obj, _types.FunctionType)
 
 
 def isclass(obj):
@@ -297,7 +312,25 @@ def isawaitable(obj):
 
 
 def isroutine(obj):
-    return ismethod(obj) or isfunction(obj)
+    """CPython's definition, plus the one case its ismethoddescriptor term
+    covers that Grail's stub does not: a BUILT-IN type's method read through
+    the type (``str.upper'', ``object.__hash__'').  CPython reports those as
+    method descriptors; Grail reports a callable carrying ``__objclass__'' and
+    no ``__code__'' -- the line types._FunctionTypeMeta draws to keep them out
+    of FunctionType.  Without it they read as "data" to classify_class_attrs
+    and pydoc.  A method now includes a decorated one read through an
+    instance (#1458)."""
+    return (isbuiltin(obj)
+            or isfunction(obj)
+            or ismethod(obj)
+            or ismethoddescriptor(obj)
+            or ismethodwrapper(obj)
+            or _is_builtin_method_read_through_type(obj))
+
+
+def _is_builtin_method_read_through_type(obj):
+    return (not isinstance(obj, type) and callable(obj)
+            and hasattr(obj, '__objclass__') and not hasattr(obj, '__code__'))
 
 
 FullArgSpec = _namedtuple(
