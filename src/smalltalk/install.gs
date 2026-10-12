@@ -1160,6 +1160,7 @@ run
 	at: #'MetaclassPythonNameTestCase' put: nil;
 	at: #'MetaclassWithAndNextTestCase' put: nil;
 	at: #'MetaPathFindersTestCase' put: nil;
+	at: #'MethodArityMessageTestCase' put: nil;
 	at: #'MethodClassCellClosureTestCase' put: nil;
 	at: #'MethodClosureFrameCaptureTestCase' put: nil;
 	at: #'MethodDocstringTestCase' put: nil;
@@ -2680,6 +2681,7 @@ input src/smalltalk/PythonTests/MetaclassProtocolsTestCase.gs
 input src/smalltalk/PythonTests/MetaclassPythonNameTestCase.gs
 input src/smalltalk/PythonTests/MetaclassWithAndNextTestCase.gs
 input src/smalltalk/PythonTests/MetaPathFindersTestCase.gs
+input src/smalltalk/PythonTests/MethodArityMessageTestCase.gs
 input src/smalltalk/PythonTests/MethodClassCellClosureTestCase.gs
 input src/smalltalk/PythonTests/MethodClosureFrameCaptureTestCase.gs
 input src/smalltalk/PythonTests/MethodDefaultSharingTestCase.gs
