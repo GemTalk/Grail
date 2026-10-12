@@ -522,12 +522,26 @@ session's `g.word()` answered `f` while `g.greet()` ran the original. The same
 holds for a class-body store over a method in a deployed module, whose body never
 re-runs. So the *names* are recorded persistently
 (`object class >> ___grailCommittedSelfSendOverrides___`, a reduced-conflict
-class → names record written in the storing transaction, only the first time a
-pair is seen) and each session installs the recorded dispatchers once, from
-importlib's per-session generation check and from its first native-module
+class → names record) and each session installs the recorded dispatchers once,
+from importlib's per-session generation check and from its first native-module
 singleton (`___grailInstallRecordedSelfSendOverrides___`). The dispatchers stay
-session methods; only the record is committed, and only if that session commits.
-A generation bump wipes it with the other registries.
+session methods; only the record is committed. A generation bump wipes it with
+the other registries.
+
+**The store notes a pair; the commit writes it (#1466).** Writing the record
+at the store made a patch of a throwaway local dirty the session (`needsCommit`
+true) for an entry nobody asked to keep. The store now notes the pair in
+session state, and `GrailCommitCoordinator` writes it as part of the session's
+next commit. The kernel's `System class >> _commit:` hands every commit —
+`System commit`, `commitTransaction`, a GCI or topaz commit, gemdb — to
+`System _commitCoordinator` (session state) when one is set, so the record
+travels with whichever commit the session makes, and a session that never
+commits writes nothing. The coordinator is installed by a session's first note
+and only into an empty slot; under someone else's coordinator the record is
+written at the store, as before. The remaining over-approximation: a session
+that patches a throwaway instance and later commits something else still
+records the pair — since #1465 that costs a dispatcher in later sessions and
+nothing in behaviour.
 
 A class carrying session methods also changes what the kernel can do to it:
 `removeSelector:environmentId:` looks the selector up in the (protected)
