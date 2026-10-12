@@ -326,7 +326,7 @@ method: PythonTokenizer
 isIdentifierPart: aChar
 
 	aChar ifNil: [^false].
-	^aChar isLetter or: [aChar isDigit or: [aChar == $_]]
+	^ PythonTokenizer ___isIdentifierPart___: aChar
 %
 
 category: 'Grail-private'
@@ -334,7 +334,62 @@ method: PythonTokenizer
 isIdentifierStart: aChar
 
 	aChar ifNil: [^false].
-	^aChar isLetter or: [aChar == $_]
+	^ PythonTokenizer ___isIdentifierStart___: aChar
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___isIdentifierStart___: aChar
+	"May aChar begin a Python identifier: XID_Start, or ``_'' (PEP 3131).
+
+	This was ``isLetter or _'', which agrees for every letter GemStone's
+	Unicode tables know -- but those tables are older than CPython's, so a
+	letter assigned since was refused (#1378).  The answer now comes from
+	ranges generated from CPython itself (PythonTokenizerIdentifiers.gs, by
+	scripts/gen_identifier_tables.py).  ASCII, the whole of most source,
+	never reaches the search."
+
+	| cp |
+	cp := aChar codePoint.
+	cp < 128 ifTrue: [^ aChar isLetter or: [aChar == $_]].
+	^ self ___ranges___: self ___xidStartRanges___ include: cp
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___isIdentifierPart___: aChar
+	"May aChar continue a Python identifier: XID_Continue.
+
+	This was ``isLetter, isDigit or _'', which refused every combining mark
+	(Mn, Mc) and connector (Pc) -- the Hebrew vowel points (U+05B4) in
+	pyparsing's unicode.py identifiers -- along with Other_ID_Continue (U+00B7) and every
+	character newer than GemStone's tables (#1378).  Ranges generated from
+	CPython, as for ___isIdentifierStart___:."
+
+	| cp |
+	cp := aChar codePoint.
+	cp < 128 ifTrue: [^ aChar isLetter or: [aChar isDigit or: [aChar == $_]]].
+	^ self ___ranges___: self ___xidContinueRanges___ include: cp
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___ranges___: ranges include: cp
+	"Binary search of a flattened, ascending (first last first last ...) range
+	table for code point cp."
+
+	| lo hi mid |
+	lo := 1.
+	hi := ranges size // 2.
+	[lo <= hi] whileTrue: [
+		mid := (lo + hi) // 2.
+		cp < (ranges at: mid * 2 - 1)
+			ifTrue: [hi := mid - 1]
+			ifFalse: [
+				cp > (ranges at: mid * 2)
+					ifTrue: [lo := mid + 1]
+					ifFalse: [^ true]]].
+	^ false
 %
 
 category: 'Grail-tokenizing'

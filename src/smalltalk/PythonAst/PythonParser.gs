@@ -6819,9 +6819,11 @@ ___synth: aString like: refTok into: out
 			ifFalse: [
 				| j type value |
 				j := i + 1.
-				(c isLetter or: [c == $_])
+				"The names here are the user's own, so PEP 3131's rule, as the
+				tokenizer applies it."
+				(PythonTokenizer ___isIdentifierStart___: c)
 					ifTrue: [
-						[j <= n and: [(aString at: j) isAlphaNumeric or: [(aString at: j) == $_]]]
+						[j <= n and: [PythonTokenizer ___isIdentifierPart___: (aString at: j)]]
 							whileTrue: [j := j + 1].
 						value := aString copyFrom: i to: j - 1.
 						type := (keywords includes: value) ifTrue: [#KEYWORD] ifFalse: [#NAME]]

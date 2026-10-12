@@ -2811,22 +2811,22 @@ isdigit
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isidentifier
-	"Return True if string is a valid Python identifier."
+	"True if the string is a valid Python identifier: XID_Start or ``_'',
+	then XID_Continue (PEP 3131) -- the same rule, from the same
+	CPython-generated tables, as the tokenizer that decides what source may
+	name (PythonTokenizer class >> ___isIdentifierStart___:).  This used to
+	be letters, digits and ``_'', which refused combining marks and every
+	character newer than GemStone's own Unicode tables (#1378)."
 
-	| isEmpty firstChar |
-	isEmpty := self @env0:isEmpty.
-	isEmpty ifTrue: [ ^ false ].
-
-	"First character must be letter or underscore"
-	firstChar := self @env0:first.
-	((firstChar @env0:isLetter) @env0:| (firstChar == $_)) ifFalse: [ ^ false ].
-
-	"Rest must be letters, digits, or underscores"
-	(self @env0:allButFirst) @env0:do: [:char |
-		| valid |
-		valid := ((char @env0:isAlphaNumeric) @env0:| (char == $_)).
-		valid ifFalse: [ ^ false ].
-	].
+	| first |
+	self @env0:isEmpty ifTrue: [ ^ false ].
+	first := true.
+	self @env0:do: [:char |
+		(first
+			ifTrue: [PythonTokenizer @env0:___isIdentifierStart___: char]
+			ifFalse: [PythonTokenizer @env0:___isIdentifierPart___: char])
+				ifFalse: [ ^ false ].
+		first := false].
 	^ true
 %
 
