@@ -374,6 +374,41 @@ ___isIdentifierPart___: aChar
 
 category: 'Grail-Identifiers'
 classmethod: PythonTokenizer
+___mayChangeUnderNfkc___: aChar
+	"Can aChar, in an identifier, make the name change under NFKC: on its
+	own (U+00B5 MICRO SIGN is U+03BC), by canonical reordering, or by
+	composing with the character before it (U+0301 after ``e'').  Ranges
+	generated from CPython (scripts/gen_identifier_tables.py)."
+
+	| cp |
+	cp := aChar codePoint.
+	cp < 128 ifTrue: [^ false].
+	^ self ___ranges___: self ___nfkcUnstableRanges___ include: cp
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___nfkcName___: aName
+	"aName as CPython binds it: NFKC-normalized (PEP 3131), so U+00B5 and
+	U+03BC, or U+1D518 and ``U'', spell one name (#1502).  Applied to NAME
+	tokens only, after the keyword test, as CPython does: a keyword is
+	matched as written, and a name that normalizes to one (U+1D422 U+1D41F)
+	binds ``if''.
+
+	NFKC is unicodedata.normalize, which is pure Python and builds its tables
+	(~0.6s) on first use in a session.  So it is called only for a name with
+	a character that can change: any other name, ASCII above all, is already
+	in NFKC form and is returned as it is.  str.isidentifier and getattr do
+	not normalize, in CPython either."
+
+	(aName detect: [:c | self ___mayChangeUnderNfkc___: c] ifNone: [nil])
+		ifNil: [^ aName].
+	^ (importlib @env1:___runtimeModule___: 'unicodedata')
+		@env1:normalize: 'NFKC' _: aName
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
 ___ranges___: ranges include: cp
 	"Binary search of a flattened, ascending (first last first last ...) range
 	table for code point cp."
@@ -572,7 +607,7 @@ tokenizeIdentifier
 	].
 	(self isKeyword: name)
 		ifTrue: [ self addToken: #KEYWORD value: name line: startLine position: startPos ]
-		ifFalse: [self addToken: #NAME value: name line: startLine position: startPos ].
+		ifFalse: [self addToken: #NAME value: (PythonTokenizer ___nfkcName___: name) line: startLine position: startPos ].
 %
 
 category: 'Grail-tokenizing'
