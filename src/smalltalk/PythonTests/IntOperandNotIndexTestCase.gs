@@ -133,5 +133,5 @@ testEveryRowIsExpected
 	r := testModule @env1:___pyAttrLoad___: #r.
 	expected := testModule @env1:___pyAttrLoad___: #EXPECTED.
 	self assert: (r @env1:__len__) = (expected @env1:__len__).
-	self assert: (expected @env1:__len__) >= 155
+	self assert: (expected @env1:__len__) >= 158
 %
