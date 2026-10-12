@@ -3751,6 +3751,18 @@ allParameterNames
 	^ result asArray
 %
 
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+___arityReceiverOffset___: nPos
+	"How many declared positional parameters an arity check's ``nPos'' leaves
+	out: 1 when the receiver (self, or cls) was stripped because it is the
+	Smalltalk receiver, 0 for a module def or a @staticmethod.  CPython counts
+	that parameter in ``takes N positional arguments but M were given'', on
+	both sides, so the messages add it back (#1472)."
+
+	^ (self allParameterNames size - nPos) max: 0
+%
+
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irEligible___
@@ -4170,7 +4182,7 @@ ___emitIRKeywordOnlyBindingOn___: aBuilder kw: kwLeaf
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: prefix
+___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: prefix given: given
 	"printArgCountChecksOn:'s too-many-positional body when the def declares
 	keyword-only parameters (and no *vararg): CPython's too_many_positional()
 	appends ``(and N keyword-only arguments)'' when the call also bound some, so
@@ -4188,7 +4200,9 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 	        , (positional size > 1 ifTrue: [' were given'] ifFalse: [' was given']))
 
 	Emitted inside the caller's ``ifTrue:'' block; ``___kg___'' is the text's
-	inlined-block temp, declared as a method temp by the prologue."
+	inlined-block temp, declared as a method temp by the prologue.  ``given''
+	is a block answering a fresh node for the positional count the message
+	reports -- the receiver included for a method (#1472)."
 
 	| kg plural |
 	kg := aBuilder leafFor: #'___kg___'.
@@ -4215,9 +4229,9 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 	aBuilder if: (aBuilder send: #> to: (aBuilder var: kg) with: { aBuilder obj: 0 } env: 0) then: [
 		aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
 				aBuilder obj: prefix.
-				aBuilder send: #printString to: (self ___irPosSize___: posLeaf on: aBuilder) with: { } env: 0.
+				aBuilder send: #printString to: given value with: { } env: 0.
 				aBuilder obj: ' positional argument'.
-				plural value: (self ___irPosSize___: posLeaf on: aBuilder).
+				plural value: given value.
 				aBuilder obj: ' (and '.
 				aBuilder send: #printString to: (aBuilder var: kg) with: { } env: 0.
 				aBuilder obj: ' keyword-only argument'.
@@ -4226,12 +4240,24 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 			on: aBuilder)].
 	aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
 			aBuilder obj: prefix.
-			aBuilder send: #printString to: (self ___irPosSize___: posLeaf on: aBuilder) with: { } env: 0.
-			aBuilder ifValue: (aBuilder send: #> to: (self ___irPosSize___: posLeaf on: aBuilder)
+			aBuilder send: #printString to: given value with: { } env: 0.
+			aBuilder ifValue: (aBuilder send: #> to: given value
 					with: { aBuilder obj: 1 } env: 0)
 				then: [aBuilder add: (aBuilder obj: ' were given')]
 				else: [aBuilder add: (aBuilder obj: ' was given')] } on: aBuilder)
 		on: aBuilder)
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irGivenCount___: posLeaf offset: off on: aBuilder
+	"A fresh node for the positional count an arity message reports: the
+	positional Array's size, plus the stripped receiver for a method (#1472).
+	Plain ___irPosSize___:on: when there is no receiver to add back."
+
+	off = 0 ifTrue: [^ self ___irPosSize___: posLeaf on: aBuilder].
+	^ aBuilder send: #+ to: (self ___irPosSize___: posLeaf on: aBuilder)
+		with: { aBuilder obj: off } env: 0
 %
 
 category: 'Grail-IR Codegen'
@@ -4369,15 +4395,20 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	| qname |
 	qname := self ___qualifiedNameFor___: name.
 	args vararg isNil ifTrue: [
-		| defcount sig plural prefix cond |
+		| defcount sig plural prefix cond off total given |
+		"A method counts its receiver on both sides, as the text's
+		printArgCountChecksOn: explains (#1472)."
+		off := self ___arityReceiverOffset___: nPos.
+		total := nPos + off.
+		given := [self ___irGivenCount___: posLeaf offset: off on: aBuilder].
 		defcount := (args defaults ifNil: [#()]) size.
 		defcount > 0
 			ifTrue: [
-				sig := 'from ' , ((nPos - defcount) max: 0) printString , ' to ' , nPos printString.
+				sig := 'from ' , ((total - defcount) max: 0) printString , ' to ' , total printString.
 				plural := 's']
 			ifFalse: [
-				sig := nPos printString.
-				plural := nPos = 1 ifTrue: [''] ifFalse: ['s']].
+				sig := total printString.
+				plural := total = 1 ifTrue: [''] ifFalse: ['s']].
 		prefix := qname , '() takes ' , sig , ' positional argument' , plural , ' but '.
 		cond := aBuilder send: #> to: (self ___irPosSize___: posLeaf on: aBuilder)
 			with: { aBuilder obj: nPos } env: 0.
@@ -4385,18 +4416,18 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 			(args kwonlyargs ifNil: [#()]) isEmpty
 				ifFalse: [
 					self ___emitIRTooManyWithKeywordOnlyOn___: aBuilder
-						pos: posLeaf kw: kwLeaf prefix: prefix]
+						pos: posLeaf kw: kwLeaf prefix: prefix given: given]
 				ifTrue: [
 					| suffix |
 					suffix := aBuilder
-						ifValue: (aBuilder send: #> to: (self ___irPosSize___: posLeaf on: aBuilder)
+						ifValue: (aBuilder send: #> to: given value
 							with: { aBuilder obj: 1 } env: 0)
 						then: [aBuilder add: (aBuilder obj: ' were given')]
 						else: [aBuilder add: (aBuilder obj: ' was given')].
 					aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
 							aBuilder obj: prefix.
 							aBuilder send: #printString
-								to: (self ___irPosSize___: posLeaf on: aBuilder) with: { } env: 0.
+								to: given value with: { } env: 0.
 							suffix } on: aBuilder)
 						on: aBuilder)]]].
 	args kwarg isNil ifTrue: [
@@ -5774,29 +5805,40 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	    ``from <required> to <nPos>'' (plural always);
 	  * with none it is the single ``<nPos>'' (singular only when nPos = 1).
 	``given'' and the was/were suffix are runtime (given = posName size); the
-	suffix is ``was'' only for a lone extra arg (given = 1, i.e. nPos = 0)."
-	args vararg isNil ifTrue: [ | defcount sig plural prefix |
+	suffix is ``was'' only for a lone extra arg (given = 1, i.e. nPos = 0).
+
+	A METHOD COUNTS ITS RECEIVER, on both sides, as CPython's does: ``def
+	m(self, a)'' called ``C().m(1, 2)'' takes 2 and was given 3.  ``nPos'' and
+	posName arrive with self already stripped, so both numbers were one short
+	(#1472); ___arityReceiverOffset___: puts it back, and is 0 for a module def
+	or a @staticmethod, whose messages are unchanged."
+	args vararg isNil ifTrue: [ | defcount sig plural prefix off total given |
+		off := self ___arityReceiverOffset___: nPos.
+		total := nPos + off.
+		given := off = 0
+			ifTrue: ['(' , posName , ' @env0:size)']
+			ifFalse: ['((' , posName , ' @env0:size) @env0:+ ' , off printString , ')'].
 		defcount := (args defaults ifNil: [#()]) size.
 		defcount > 0
 			ifTrue: [
-				sig := 'from ' , ((nPos - defcount) max: 0) printString , ' to ' , nPos printString.
+				sig := 'from ' , ((total - defcount) max: 0) printString , ' to ' , total printString.
 				plural := 's']
 			ifFalse: [
-				sig := nPos printString.
-				plural := nPos = 1 ifTrue: [''] ifFalse: ['s']].
+				sig := total printString.
+				plural := total = 1 ifTrue: [''] ifFalse: ['s']].
 		prefix := (self ___qualifiedNameFor___: name)
 			, '() takes ' , sig , ' positional argument' , plural , ' but '.
 		args kwonlyargs isEmpty
 			ifTrue: [
-				"No keyword-only section: the historical emission, byte-identical."
+				"No keyword-only section."
 				aStream
 					nextPutAll: '(('; nextPutAll: posName;
 					nextPutAll: ' @env0:size) @env0:> '; print: nPos;
 					nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
 					nextPutAll: prefix;
-					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ]
+					nextPutAll: ''' @env0:, '; nextPutAll: given;
+					nextPutAll: ' @env0:printString @env0:, ('; nextPutAll: given;
+					nextPutAll: ' @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ]
 			ifFalse: [
 				"CPython's too_many_positional() grows a parenthetical when the
 				call ALSO bound keyword-only parameters: ``takes 3 positional
@@ -5819,15 +5861,15 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 					nextPutAll: ' @env0:keysDo: [:___k___ | (___k___ @env0:asString) @env0:= ___n___ ifTrue: [___kg___ := ___kg___ @env0:+ 1]]]].'; lf;
 					nextPutAll: '  ___kg___ @env0:> 0 ifTrue: [TypeError ___signal___: (''';
 					nextPutAll: prefix;
-					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:printString @env0:, '' positional argument'' @env0:, ((';
-					nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '' (and '' @env0:, ___kg___ @env0:printString @env0:, '' keyword-only argument'' @env0:, (___kg___ @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '') were given'')].'; lf;
+					nextPutAll: ''' @env0:, '; nextPutAll: given;
+					nextPutAll: ' @env0:printString @env0:, '' positional argument'' @env0:, (';
+					nextPutAll: given;
+					nextPutAll: ' @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '' (and '' @env0:, ___kg___ @env0:printString @env0:, '' keyword-only argument'' @env0:, (___kg___ @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '') were given'')].'; lf;
 					nextPutAll: '  TypeError ___signal___: (''';
 					nextPutAll: prefix;
-					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ] ].
+					nextPutAll: ''' @env0:, '; nextPutAll: given;
+					nextPutAll: ' @env0:printString @env0:, ('; nextPutAll: given;
+					nextPutAll: ' @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ] ].
 	"2. Unexpected keyword -- skipped when **kwargs collects the extras.
 
 	A POSITIONAL-ONLY name is not bindable by keyword, which is the whole
