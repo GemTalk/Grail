@@ -212,3 +212,24 @@ testEveryCheckIsPresentAndAgreesWithCPython
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
 		equals: '32 checks, 0 disagreeing [], keys match: True'
 %
+
+category: 'Grail-Tests'
+method: AugmentedAssignmentTestCase
+testAnnotatedAndAugmentedValuesTakeABareTuple
+	"``x: tuple = -1, None'' and ``t += 1, 2'': both right-hand sides are
+	star_expressions in CPython's grammar, and Grail parsed a single
+	expression, so the comma was a SyntaxError -- the first thing keeping pyparsing
+	from importing (#1419).  tests/python/annassign_bare_tuple.py holds the
+	checks (module, function and class scope, starred items, yield values,
+	augmented forms, and a lone starred value still refused) and agrees with
+	CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'annassign_bare_tuple' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/annassign_bare_tuple.py')
+		name: 'annassign_bare_tuple'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '8 checks, 0 disagreeing [], keys match: True'
+%
