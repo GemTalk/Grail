@@ -203,3 +203,23 @@ testConcatenationQuotingAndDegenerateShapes
 		'raw_fstring_literal_part' 'empty_fstring' 'no_fields'
 		'adjacent_fields')
 %
+
+category: 'Grail-Tests'
+method: FStringPep701TestCase
+testABackslashDoesNotEscapeABrace
+	"``rf'\{{''' is a backslash and an escaped brace, ``rf'\{x}''' a backslash
+	and a field: a backslash never escapes a brace in an f-string.  The
+	tokenizer took the brace into the backslash, so the next brace opened a
+	field that never closed -- unterminated string literal (#1427, pygments).
+	tests/python/fstring_backslash_brace.py holds the checks, including the
+	non-raw form's invalid-escape warning, and agrees with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'fstring_backslash_brace' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/fstring_backslash_brace.py')
+		name: 'fstring_backslash_brace'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '4 checks, 0 disagreeing [], keys match: True'
+%
