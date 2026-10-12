@@ -51,6 +51,25 @@ loadFixture
 
 category: 'Grail-Tests-Threading'
 method: ThreadingModuleTestCase
+testThreadTakesCPythonsConstructorArguments
+	"Thread(target=f, kwargs={...}) reaches the target, and daemon is
+	keyword-only.  The parameter used to be named kwds, after a Grail
+	limitation that no longer reproduces, so kwargs= was a TypeError.
+	tests/python/thread_constructor_args.py holds the checks and agrees with
+	CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'thread_constructor_args' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/thread_constructor_args.py')
+		name: 'thread_constructor_args'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '8 checks, 0 disagreeing [], keys match: True'
+%
+
+category: 'Grail-Tests-Threading'
+method: ThreadingModuleTestCase
 testThreadRoundtrip
 	"A worker thread mutates shared state; join() waits for it to finish."
 

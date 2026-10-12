@@ -114,15 +114,14 @@ class Thread:
     background workers: target/args/kwargs, start/run/join/is_alive, daemon."""
 
     def __init__(self, group=None, target=None, name=None, args=(),
-                 kwds=None, daemon=None, context=None):
-        # NB: the keyword-args parameter is named ``kwds`` rather than CPython's
-        # ``kwargs`` because Grail treats a parameter literally named ``kwargs``
-        # as a ``**kwargs`` catch-all, which would swallow ``target=``/``args=``
-        # at call time.  Callers therefore can't pass ``Thread(kwargs=...)``;
-        # they pass ``args=`` (and, if needed, ``kwds=``).
+                 kwargs=None, *, daemon=None, context=None):
+        # CPython's signature.  The parameter used to be ``kwds``, after a
+        # Grail limitation -- a parameter literally named ``kwargs'' acting
+        # as a ``**kwargs'' catch-all -- that no longer reproduces, so
+        # ``Thread(target=f, kwargs={...})'' was a TypeError for nothing.
         self._target = target
         self._args = args
-        self._kwargs = kwds if kwds is not None else {}
+        self._kwargs = kwargs if kwargs is not None else {}
         self.name = name if name is not None else "Thread"
         self.daemon = bool(daemon)
         # 3.14's ``context=``: the contextvars.Context the thread's activity
