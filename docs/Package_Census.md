@@ -21,6 +21,14 @@ things changed from the measurement just below it. The list is now the top
 Method) scores every module each importing project installed, not just
 `import X`.
 
+**Updated 2026-10-12 for G5 only.** #1467 added `importlib.abc` and
+`importlib.machinery.PathFinder`, and the three projects G5 blocked were
+re-measured at the same versions, on `main` at `ddb1fdab` plus the #1523 fix.
+importlib-metadata now imports (submodules 10 / 11). setuptools and pytest
+still fail, at new first walls: #1523 and #1452. The rows, the gap tables and
+the project totals below include this. The submodule totals do not, and
+nothing else was re-measured.
+
 Setup: GemStone 4.0 (build 2026-09-23), Grail `main` at `322a9092`, CPython
 3.14.8, Darwin arm64. `./install.sh`, then `./scripts/run_tests.sh` (7803/7803,
 8 of 8 shards), then
@@ -35,10 +43,10 @@ them `CRASH` and `TIMEOUT` and resumed with the rest.
 
 | Denominator | Import |
 | --- | --- |
-| **pure-Python projects** | **40 / 58** (+1 shadowed: click) |
+| **pure-Python projects** | **41 / 58** (+1 shadowed: click) |
 | depending on a C-extension project | 4 / 15 (+2 shadowed: requests, jinja2) |
 | shipping a C extension | 13 / 27 (+1 shadowed: markupsafe) |
-| everything measured | **57 / 100** |
+| everything measured | **58 / 100** |
 | **submodules, of those CPython imports** | **1,311 / 2,000** (65.6%) |
 
 **Continuity with the top 50.** Of the 49 names carried over, 28 import:
@@ -83,7 +91,7 @@ top-level import.
 | 7 | requests | 2.34.2 | ext-dep | SHADOWED |  | Grail's bundled copy answers (G10) |
 | 8 | charset-normalizer | 3.5.2 | ext | IMPORTS | 9 / 9 |  |
 | 9 | cryptography | 50.0.2 | ext | IMPORTS | 17 / 77 |  |
-| 10 | setuptools | 84.0.0 | pure | FAILS |  | G5 |
+| 10 | setuptools | 84.0.0 | pure | FAILS |  | #1523, then four stdlib gaps |
 | 11 | cffi | 2.1.1 | ext | IMPORTS | 16 / 19 |  |
 | 12 | pygments | 2.21.0 | pure | IMPORTS | 311 / 340 |  |
 | 13 | pyyaml | 6.0.3 | ext | IMPORTS | 15 / 17 |  |
@@ -97,7 +105,7 @@ top-level import.
 | 21 | pydantic-core | 2.50.0 | ext | FAILS |  | #1414 (pydantic-core extension) |
 | 22 | anyio | 4.15.1 | pure | IMPORTS | 43 / 44 |  |
 | 23 | numpy | 2.5.4 | ext | FAILS |  | C extension (numpy) |
-| 24 | pytest | 9.1.1 | pure | FAILS |  | G5 |
+| 24 | pytest | 9.1.1 | pure | FAILS |  | #1452, then #1412 (via iniconfig) |
 | 25 | iniconfig | 2.3.1 | pure | FAILS |  | #1412 |
 | 26 | annotated-types | 0.8.0 | pure | IMPORTS | 1 / 1 |  |
 | 27 | h11 | 0.16.0 | pure | CRASH |  | InternalError 2261, not isolated |
@@ -151,7 +159,7 @@ top-level import.
 | 75 | google-auth | 2.61.0 | ext-dep | IMPORTS | 47 / 75 |  |
 | 76 | zipp | 4.1.1 | pure | IMPORTS | 6 / 6 |  |
 | 77 | greenlet | 3.5.6 | ext | FAILS |  | C extension |
-| 78 | importlib-metadata | 9.0.1 | pure | FAILS |  | G5 |
+| 78 | importlib-metadata | 9.0.1 | pure | IMPORTS | 10 / 11 |  |
 | 79 | pydantic-settings | 2.15.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
 | 80 | wheel | 0.48.0 | pure | IMPORTS | 9 / 13 |  |
 | 81 | tenacity | 9.2.1 | pure | IMPORTS | 11 / 11 |  |
@@ -185,12 +193,13 @@ excluded):
 | #1414 pydantic-core's extension needs PEP 489 multi-phase init | pydantic, fastapi, pydantic-settings, openai (and pydantic-core itself) |
 | #1418 `object.__setattr__.__get__(obj)` re-dispatches to the override (attrs) | attrs, jsonschema, referencing, jsonschema-specifications (and aiohttp) |
 | #1413 no `ctypes` | fsspec, filelock, s3fs |
-| G5 no `importlib.abc` / `importlib.machinery.PathFinder` | setuptools, pytest, importlib-metadata |
+| #1523 a submodule is not found through its parent's `__path__` (setuptools' `distutils` alias); after it, `_osx_support`, `email.message_from_file`, `tarfile.data_filter` and `importlib.util.module_from_spec` | setuptools |
+| #1452 `os.path` lacks `expandvars` and seven more `posixpath` names | pytest |
 | #1411 metaclass `__init__` attribute under `six.add_metaclass` | boto3, s3transfer |
 | InternalError 2261, not isolated | h11, httpcore |
 | #1420 `sys.version_info` is a plain tuple | beautifulsoup4, soupsieve |
 | #1428 three object-model gaps | googleapis-common-protos (and wrapt, sqlalchemy) |
-| #1412 `\N{}` aliases | iniconfig |
+| #1412 `\N{}` aliases | iniconfig (and pytest, behind #1452) |
 | #1419 `x: T = a, b` is a SyntaxError | pyparsing |
 | #1424 class inside `__new__`, IR arm | pytz |
 | #1429 no `multiprocessing.context` | uvicorn |
@@ -211,7 +220,6 @@ excluded):
 | #1413 `ctypes` | 7 | pip, cffi, wheel |
 | #1419 `x: T = a, b` | 3 | pillow |
 | #1428 `__weakref__` slot check | 3 | protobuf, grpcio-status |
-| G5 | 3 | anyio, platformdirs, pip |
 | #1427 `rf'\{{'` is a SyntaxError | 2 | pygments |
 
 The remaining failures fall into two groups. Some are C extensions:
@@ -639,6 +647,9 @@ falls through to the named-import path and emits a *variable named `*`*
 import *` idiom is common, so expect more than these two in a wider census.
 
 ### G5 — `importlib.abc` and `importlib.machinery` do not exist
+
+**Fixed by #1467 (2026-10-12).** See the top section for where the two
+packages stop now.
 
 **2 packages**: `setuptools` (`importlib.abc`) and, once G8 and G3b are
 stubbed, `pytest` (`importlib.machinery`).
