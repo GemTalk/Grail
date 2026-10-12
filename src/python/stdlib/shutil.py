@@ -184,8 +184,17 @@ def move(src, dst):
     return dst
 
 
-def _rmtree_inner(path):
-    for name in os.listdir(path):
+def _rmtree_inner(path, onexc):
+    # A directory that went away under us is CPython's FileNotFoundError
+    # ``continue'': someone else removed it, which is what was wanted.
+    try:
+        names = os.listdir(path)
+    except FileNotFoundError:
+        return
+    except OSError as err:
+        onexc(os.scandir, path, err)
+        names = ()
+    for name in names:
         full = os.path.join(path, name)
         # islink BEFORE isdir, because isdir FOLLOWS a link.  A link to a
         # directory used to be recursed into, which deleted what it pointed
@@ -193,38 +202,78 @@ def _rmtree_inner(path):
         # entries it had already taken away.  CPython never looks through a
         # link here: it unlinks the link itself and leaves the target alone.
         if os.path.isdir(full) and not os.path.islink(full):
-            _rmtree_inner(full)
+            _rmtree_inner(full, onexc)
         else:
-            os.remove(full)
-    os.rmdir(path)
+            try:
+                os.unlink(full)
+            except FileNotFoundError:
+                continue
+            except OSError as err:
+                onexc(os.unlink, full, err)
+    try:
+        os.rmdir(path)
+    except FileNotFoundError:
+        pass
+    except OSError as err:
+        onexc(os.rmdir, path, err)
 
 
-def _rmtree(path):
+def _rmtree(path, onexc):
+    try:
+        os.lstat(path)
+    except OSError as err:
+        onexc(os.lstat, path, err)
+        return
     # A SYMLINK AT THE TOP IS REFUSED, not followed and not unlinked (CPython
     # GH-46010: rmtree(link) once emptied the directory the link named).  The
     # exception is CPython's own odd shape, measured rather than invented: an
     # OSError with errno and strerror both None and the path as filename,
     # which prints as "[Errno None] None: '<path>'".
     #
-    # The stat comes first because a DANGLING link is ENOENT to CPython -- it
-    # opens the target, and reports what that open said -- rather than the
-    # refusal below.
+    # A DANGLING link is ENOENT to CPython instead -- it opens the target, and
+    # reports what that open said -- so the stat comes first.
     if os.path.islink(path):
-        os.stat(path)
-        raise OSError(None, None, path)
-    _rmtree_inner(path)
-
-
-def rmtree(path, ignore_errors=False):
-    """Recursively delete a directory tree."""
-    if ignore_errors:
         try:
-            _rmtree(path)
-        except OSError:
+            os.stat(path)
+        except OSError as err:
+            onexc(os.open, path, err)
+            return
+        try:
+            raise OSError(None, None, path)
+        except OSError as err:
+            onexc(os.path.islink, path, err)
+            return
+    _rmtree_inner(path, onexc)
+
+
+def rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):
+    """Recursively delete a directory tree.
+
+    CPython's signature and error protocol: with ignore_errors every failure
+    is skipped and the rest of the tree still goes; otherwise onexc (or the
+    older onerror, which onexc overrides) is called as (func, path, exc) --
+    onerror with sys.exc_info()'s triple in place of exc -- and with neither
+    the first failure is raised.  The func passed is the one CPython 3.14
+    names on Darwin/Linux for each step.  dir_fd is not supported.
+    """
+    if dir_fd is not None:
+        raise NotImplementedError("dir_fd unavailable on this platform")
+    if ignore_errors:
+        def onexc(*args):
             pass
-        return None
-    _rmtree(path)
-    return None
+    elif onexc is None:
+        if onerror is None:
+            def onexc(*args):
+                raise args[2]
+        else:
+            def onexc(*args):
+                func, path, exc = args
+                if exc is None:
+                    exc_info = None, None, None
+                else:
+                    exc_info = type(exc), exc, exc.__traceback__
+                return onerror(func, path, exc_info)
+    _rmtree(path, onexc)
 
 
 # CPython's os.terminal_size is a struct sequence built by the posix module.

@@ -1303,7 +1303,8 @@ ___signalDirectoryNotRemoved: path
 	| errno |
 
 	errno := self ___errnoPreventingRemovalOfDirectory: path.
-	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotRemovedMessage: path)].
+	errno == 0 ifTrue: [errno := self ___errnoOfLibc: #rmdir onPath: path].
+	errno == 0 ifTrue: [^ None].
 	^ self ___signalErrno: errno filename: path
 %
 
@@ -1343,13 +1344,6 @@ ___isEmptyDirectory: path
 		(name @env0:= '.') @env0:or: [name @env0:= '..']]) @env0:isEmpty
 %
 
-category: 'Grail-Error Messages'
-classmethod: os
-___directoryNotRemovedMessage: path
-
-	^ 'Cannot remove directory: ' @env0:, path @env0:printString
-%
-
 category: 'Grail-File and Directory Operations'
 method: os
 remove: aPath
@@ -1385,8 +1379,24 @@ ___signalFileNotRemoved: path
 	| errno |
 
 	errno := self ___errnoPreventingUnlinkOf: path.
-	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___fileNotRemovedMessage: path)].
+	errno == 0 ifTrue: [errno := self ___errnoOfLibc: #unlink onPath: path].
+	errno == 0 ifTrue: [^ None].
 	^ self ___signalErrno: errno filename: path
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoOfLibc: aName onPath: path
+	"When reading the filesystem back cannot say why a removal failed --
+	permission on the PARENT directory is the case it misses, and the one
+	pytest's and shutil.rmtree's handlers test for -- ask the kernel: repeat the
+	removal through libc and answer its errno.  0 means the repeat succeeded,
+	so what was asked for is done.
+
+	The primitive answers only nil, and this used to raise a bare OSError with
+	no errno, which ``except PermissionError'' never catches."
+
+	^ self ___libc: aName with: { self ___cPathFor: path } ifFail: [:errno | ^ errno].
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1403,13 +1413,6 @@ ___errnoPreventingUnlinkOf: path
 	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory])
 		ifTrue: [^ self @env0:class ___errnoOfUnlinkingADirectory].
 	^ 0
-%
-
-category: 'Grail-Error Messages'
-classmethod: os
-___fileNotRemovedMessage: path
-
-	^ 'Cannot remove file: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -2871,6 +2874,10 @@ ___fdCallouts
 				result: #'int32' args: #(#'int32' #'int64')).
 			d @env0:at: #isatty put: (CCallout @env0:library: lib name: 'isatty'
 				result: #'int32' args: #(#'int32')).
+			d @env0:at: #unlink put: (CCallout @env0:library: lib name: 'unlink'
+				result: #'int32' args: #(#'ptr')).
+			d @env0:at: #rmdir put: (CCallout @env0:library: lib name: 'rmdir'
+				result: #'int32' args: #(#'ptr')).
 			d]
 %
 
