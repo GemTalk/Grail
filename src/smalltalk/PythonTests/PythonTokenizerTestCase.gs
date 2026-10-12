@@ -675,3 +675,45 @@ test_translateNewlines_does_not_copy_when_there_is_no_cr
 	s := 'x = 1', (String with: Character lf), 'y = 2'.
 	self assert: (PythonTokenizer translateNewlines: s) == s.
 %
+
+category: 'Grail-Tests'
+method: PythonTokenizerTestCase
+testIdentifiersAreXidStartThenXidContinue
+	"PEP 3131's rule, for the tokenizer and str.isidentifier alike: combining
+	marks, connectors, U+00B7, supplementary-plane U+E0100 (#1378) and
+	letters newer than GemStone's own Unicode tables all continue an
+	identifier; pyparsing names one with Hebrew vowel points.
+	tests/python/identifier_xid.py holds the checks and agrees with CPython
+	3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'identifier_xid' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/identifier_xid.py')
+		name: 'identifier_xid'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '5 checks, 0 disagreeing [], keys match: True'
+%
+
+category: 'Grail-Tests'
+method: PythonTokenizerTestCase
+testTheIdentifierTablesAreWellFormed
+	"The generated tables are ascending first/last pairs that never overlap,
+	or the binary search in ___ranges___:include: answers wrong; and the
+	ASCII fast path agrees with them, so the two cannot drift apart."
+
+	{ PythonTokenizer ___xidStartRanges___. PythonTokenizer ___xidContinueRanges___ } do: [:ranges |
+		self assert: ranges size even.
+		1 to: ranges size by: 2 do: [:i |
+			self assert: (ranges at: i) <= (ranges at: i + 1).
+			i > 1 ifTrue: [self assert: (ranges at: i - 1) < (ranges at: i)]]].
+	0 to: 127 do: [:cp | | c |
+		c := Character codePoint: cp.
+		self
+			assert: (PythonTokenizer ___isIdentifierStart___: c)
+			equals: (PythonTokenizer ___ranges___: PythonTokenizer ___xidStartRanges___ include: cp).
+		self
+			assert: (PythonTokenizer ___isIdentifierPart___: c)
+			equals: (PythonTokenizer ___ranges___: PythonTokenizer ___xidContinueRanges___ include: cp)]
+%
