@@ -1141,6 +1141,21 @@ tokenizeString
 			here as a parallel case to the non-raw escape branch below —
 			both consume their characters in a single block so the
 			default-fallthrough consumer at the bottom doesn't run."
+			"...EXCEPT before a brace in an f-string.  A backslash never escapes
+			a brace there, raw or not: the backslash is a literal character and
+			the brace keeps its job, so ``rf'\{{''' is backslash + an escaped
+			``{'' and ``rf'\{x}''' is backslash + a field.  Taking the brace
+			into the backslash unit left the NEXT brace to open a field that
+			never closed -- ``unterminated string literal'' for common regex
+			code (#1427, pygments).  A non-raw f-string also warns, as CPython
+			does for the invalid escape ``\{''."
+			(char == $\ and: [isFString and: [(self peekAt: 1) == ${ or: [(self peekAt: 1) == $}]]])
+				ifTrue: [
+					isRaw ifFalse: [
+						self ___warnInvalidEscape___: (self peekAt: 1) asString octal: false at: position].
+					self advance.
+					str add: $\]
+				ifFalse: [
 			(char == $\ and:[ isRaw ]) ifTrue: [
 				| nextCh |
 				self advance.
@@ -1282,7 +1297,7 @@ tokenizeString
 							fieldStarts add: { str size + 2. position + 1. line }.
 							fields add: (Array with: 0 with: false)]].
 				str add: self advance.
-			]].
+			]]].
 		].
 		true
 	] whileTrue.
