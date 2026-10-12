@@ -142,7 +142,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_long | ERROR | 47 | 6 | 8 | 7 |  |
 | test.test_exception_hierarchy | ERROR | 16 | 2 | 3 | 1 |  |
 | test.test_copyreg | FAIL | 6 | 2 | 0 | 0 |  |
-| test.test_random | ERROR | 116 | 0 | 9 | 4 |  |
+| test.test_random | ERROR | 116 | 0 | 8 | 5 |  |
 | test.test_string.test_string | OK | 42 | 0 | 0 | 1 |  |
 | test.test_shlex | OK | 45 | 0 | 0 | 1 |  |
-| test.test_uuid | ERROR | 120 | 5 | 13 | 70 |  |
+| test.test_uuid | ERROR | 120 | 5 | 12 | 71 |  |
