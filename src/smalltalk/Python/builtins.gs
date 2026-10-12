@@ -171,6 +171,13 @@ __dir__
 						@env0:ifTrue: [
 							names @env0:remove: base @env0:ifAbsent: [nil].
 							names @env0:add: (base @env0:copyFrom: 2 to: (base @env0:size))]]]].
+	"This method is not a builtin: CPython's builtins has no ``__dir__''.
+	super lists it because it is one of the class's env-1 selectors.  The
+	same leak in module >> ___globalNames___ put it in builtins.__dict__,
+	where test_pickle's test_builtin_functions -- whose BuiltinFunctionType
+	filter matched nothing before #1436 -- found it as a builtin to pickle by
+	name, and loading ``builtins.__dir__'' PERFORMS it, answering this list."
+	names @env0:remove: '__dir__' @env0:ifAbsent: [nil].
 	^ (names @env0:asSortedCollection: [:a :b | a @env0:<= b]) @env0:asArray
 %
 

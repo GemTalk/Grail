@@ -41,6 +41,10 @@ class _FunctionTypeMeta(type):
     def __instancecheck__(cls, obj):
         if type(obj) is cls:
             return True
+        # A BoundMethod reports the CPython type it stands for (issue #1436),
+        # so a bound method or a builtin is decided by its type alone.
+        if type(obj) in (MethodType, BuiltinFunctionType):
+            return False
         if isinstance(obj, type):
             return False
         if not callable(obj):
@@ -99,6 +103,13 @@ class FunctionType(metaclass=_FunctionTypeMeta):
         raise TypeError("'function' object is not callable")
 
 
+# CPython's names for the type: ``type(f)`` answers this class for every Grail
+# function that reports it (BoundMethod >> __class__), and its repr, __name__
+# and __module__ are what CPython prints for ``type(f)`` -- not 'FunctionType'.
+FunctionType.__name__ = FunctionType.__qualname__ = 'function'
+FunctionType.__module__ = 'builtins'
+
+
 # CPython's LambdaType IS FunctionType -- the same object under two names, a
 # lambda being nothing but an anonymous function.  A separate stub here made
 # ``isinstance(lam, types.LambdaType)`` disagree with
@@ -137,6 +148,11 @@ class _MethodTypeMeta(type):
     def __instancecheck__(cls, obj):
         if type(obj) is cls:
             return True
+        # A BoundMethod reports the CPython type it stands for (issue #1436):
+        # one that reports a function or a builtin is not a method, whatever
+        # attributes it carries -- ``[].append'' has __func__ and __self__.
+        if type(obj) in (FunctionType, BuiltinFunctionType):
+            return False
         func = getattr(obj, '__func__', None)
         if func is None or not hasattr(obj, '__self__'):
             return False
@@ -188,12 +204,36 @@ class MethodType(metaclass=_MethodTypeMeta):
         return '<bound method of %r>' % (self.__self__,)
 
 
-class BuiltinFunctionType:
-    pass
+MethodType.__name__ = MethodType.__qualname__ = 'method'
+MethodType.__module__ = 'builtins'
 
 
-class BuiltinMethodType:
-    pass
+class _BuiltinFunctionTypeMeta(type):
+    """isinstance support for BuiltinFunctionType: a Grail callable is one when
+    its type says so.  BoundMethod >> __class__ reports this class for a callable
+    Grail implements in Smalltalk -- a builtins or native-module function, a
+    method bound to a builtin-typed object or class -- which is where CPython's
+    line between builtin_function_or_method and a Python function or method
+    falls."""
+
+    def __instancecheck__(cls, obj):
+        return type(obj) is cls
+
+
+class BuiltinFunctionType(metaclass=_BuiltinFunctionTypeMeta):
+    """``type(len)'', ``type([].append)'' (issue #1436).  Not constructible, as
+    in CPython: Grail's builtin callables are BoundMethods that report it."""
+
+    def __new__(cls, *args, **kwargs):
+        raise TypeError("cannot create 'builtin_function_or_method' instances")
+
+
+BuiltinFunctionType.__name__ = 'builtin_function_or_method'
+BuiltinFunctionType.__qualname__ = 'builtin_function_or_method'
+BuiltinFunctionType.__module__ = 'builtins'
+
+# One type in CPython, under two names.
+BuiltinMethodType = BuiltinFunctionType
 
 
 class WrapperDescriptorType:

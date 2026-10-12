@@ -2151,14 +2151,74 @@ ___pyTypeNameForError___
 	(receiver @env0:isKindOf: Class) ifTrue: [
 		(self ___isStaticMethodOnClass___: receiver name: (self __name__))
 			ifTrue: [^ 'function'].
-		^ ((receiver @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
-				environmentId: 1) @env0:isNil)
+		"By the METHOD, not the class: a Python class reaches the kernel's own
+		``Object class >> __init_subclass__'' when it defines none, and CPython
+		calls that a builtin however the class was written.  A def compiled from
+		Python has a code object (__code__ reads the same table), and only one
+		does -- a @classmethod, or the implicit one a class-defined
+		__init_subclass__ is."
+		^ ((self ___methodCodeForClass___: receiver name: selector @env0:asString) == nil)
 			ifTrue: ['builtin_function_or_method']
 			ifFalse: ['method']].
 	^ ([receiver @env0:class ___pythonBuiltinTypeName___]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
 		ifTrue: ['builtin_function_or_method']
 		ifFalse: ['method']
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__class__
+	"``type(m)'' and ``m.__class__'' (object >> ___pyMetaclass___ asks this):
+	the CPython type this callable stands for -- types.FunctionType,
+	types.MethodType or types.BuiltinFunctionType, named 'function', 'method'
+	and 'builtin_function_or_method' -- split by ___pyTypeNameForError___ as
+	the error messages and __repr__ already split it (issue #1436).
+
+	One Smalltalk class backs all three, so its own name was what type()
+	reported for every one: ``type(C().m)'', ``type(len)'' and a module-level
+	def all answered ``<class 'BoundMethod'>'', and ``type(m) is
+	types.MethodType'' was False for a real bound method.
+
+	The types are types.py's, the classes Python code already compares
+	against, rather than three more Smalltalk classes the module would have to
+	re-export.  Before types is importable -- early in a session, or while its
+	own body runs -- the answer is the Smalltalk class, as it always was."
+
+	^ (BoundMethod ___callableTypeNamed___: self ___pyTypeNameForError___)
+		ifNil: [self @env0:class]
+%
+
+category: 'Grail-Attribute Access'
+classmethod: BoundMethod
+___callableTypeNamed___: aTypeName
+	"types.FunctionType, types.MethodType or types.BuiltinFunctionType for
+	CPython's type name, or nil when the types module cannot supply it (see
+	BoundMethod >> __class__).  The module is imported if this session has not:
+	type() must not depend on whether something imported types first.  An
+	import already in progress -- this asked from inside types' own body --
+	answers nil rather than recursing."
+
+	| attr mod temps |
+	attr := (aTypeName @env0:= 'function')
+		ifTrue: [#FunctionType]
+		ifFalse: [(aTypeName @env0:= 'method')
+			ifTrue: [#MethodType]
+			ifFalse: [#BuiltinFunctionType]].
+	mod := importlib lookupModule: 'types'.
+	mod == nil ifTrue: [
+		temps := SessionTemps @env0:current.
+		(temps @env0:at: #GrailCallableTypesImporting otherwise: false) ifTrue: [^ nil].
+		temps @env0:at: #GrailCallableTypesImporting put: true.
+		mod := [[((Python @env0:at: #builtins) @env1:instance)
+				@env1:___import__: { 'types' } kw: nil]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: Notification) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil]]
+			@env0:ensure: [temps @env0:removeKey: #GrailCallableTypesImporting ifAbsent: []]].
+	mod == nil ifTrue: [^ nil].
+	^ [mod @env0:dynamicInstVarAt: attr]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Printing'
