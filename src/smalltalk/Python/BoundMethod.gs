@@ -947,6 +947,9 @@ value: positional value: kwargs
 			signature to read and keeps the generic one below."
 			arityMsg := self ___classSideArityMessageFor___: actualReceiver
 				given: actualArgs @env0:size.
+			arityMsg == nil ifTrue: [
+				arityMsg := self ___instanceSideArityMessageFor___: actualReceiver
+					given: actualArgs @env0:size].
 			arityMsg == nil ifFalse: [^ TypeError ___signal___: arityMsg].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
@@ -955,6 +958,47 @@ value: positional value: kwargs
 	^ actualReceiver
 		perform: pinnedVarargs
 		env: 1 withArguments: { actualArgs. kwargs }
+%
+
+category: 'Grail-Private'
+method: BoundMethod
+___instanceSideArityMessageFor___: aReceiver given: nGiven
+	"CPython's TypeError text for calling this INSTANCE-bound Python def with
+	nGiven positional arguments when it takes fewer, or nil when that cannot be
+	said exactly.
+
+	The instance-side twin of ___classSideArityMessageFor___:given:, for the one
+	shape that reaches value:value:'s fallback from an instance: a def that
+	declares no parameter at all (``def h()'').  It compiles to the unary ``h''
+	and no keyword forwarder -- every def with a parameter gets one, and its
+	generated arity check answers -- so ``C().h(1)'' found no ``h:'' and said
+	``h() takes a different number of arguments (1 given)''.  CPython calls the
+	function with the instance first, so the instance is counted as given:
+
+	    C.h() takes 0 positional arguments but 2 were given
+
+	The accepted count is the def's own co_argcount, which counts a receiver
+	parameter when there is one, so the text is right for any Python def that
+	gets here; one with no code object (a Smalltalk-native method) answers
+	nil and keeps the generic message."
+
+	| code argc qname given |
+	((aReceiver @env0:isKindOf: Behavior) or: [aReceiver @env0:isKindOf: module])
+		ifTrue: [^ nil].
+	code := [self __code__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	code == nil ifTrue: [^ nil].
+	argc := [code @env1:___pyAttrLoad___: #'co_argcount']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	qname := [code @env1:___pyAttrLoad___: #'co_qualname']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((argc @env0:isKindOf: SmallInteger) and: [qname @env0:isKindOf: CharacterCollection])
+		ifFalse: [^ nil].
+	given := nGiven @env0:+ 1.
+	given @env0:> argc ifFalse: [^ nil].
+	^ qname @env0:asString @env0:, '() takes ' @env0:, argc @env0:printString
+		@env0:, ' positional argument' @env0:, ((argc @env0:= 1) ifTrue: [''] ifFalse: ['s'])
+		@env0:, ' but ' @env0:, given @env0:printString
+		@env0:, ((given @env0:= 1) ifTrue: [' was given'] ifFalse: [' were given'])
 %
 
 category: 'Grail-Private'
