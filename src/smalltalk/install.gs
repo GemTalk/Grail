@@ -1073,6 +1073,7 @@ run
 	at: #'ImportErrorTestCase' put: nil;
 	at: #'ImportFromlistTestCase' put: nil;
 	at: #'ImportlibFileOpenErrorTestCase' put: nil;
+	at: #'ImportlibFinderSurfaceTestCase' put: nil;
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'ImportlibResourcesTestCase' put: nil;
 	at: #'ImportlibRunArgumentsTestCase' put: nil;
@@ -2579,6 +2580,7 @@ input src/smalltalk/PythonTests/ImportAndOpenArgsTestCase.gs
 input src/smalltalk/PythonTests/ImportErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportFromlistTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
+input src/smalltalk/PythonTests/ImportlibFinderSurfaceTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
 input src/smalltalk/PythonTests/ImportlibRunArgumentsTestCase.gs

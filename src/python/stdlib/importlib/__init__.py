@@ -97,8 +97,9 @@ class _UtilStub:
     def find_spec(self, name, package=None, target=None):
         return find_spec(name, package, target)
 
-    def spec_from_file_location(self, name, location, **kwargs):
-        return _ModuleSpec(name, _Loader(location), location)
+    def spec_from_file_location(self, name, location=None, **kwargs):
+        from .util import spec_from_file_location
+        return spec_from_file_location(name, location, **kwargs)
 
     def spec_from_loader(self, name, loader, origin=None, is_package=None):
         return spec_from_loader(name, loader, origin=origin,
