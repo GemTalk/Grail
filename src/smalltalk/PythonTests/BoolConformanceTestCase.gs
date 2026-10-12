@@ -351,3 +351,45 @@ testIsspaceNegatives
 		self deny: (r @env1:__getitem__: i)
 			description: 'isspace_negatives element ' , i printString , ' should be false'].
 %
+
+category: 'Grail-Tests - Truth Protocol'
+method: BoolConformanceTestCase
+testTruthProtocolShapes
+	"Every shape a truth test can take answers as in CPython (#1438): plain
+	instances, __bool__ before __len__, the varargs spelling of a defaulted
+	def, a class-attribute __bool__ and the ``None'' blockers, a dunder set
+	on the class after it exists, CPython's TypeError and ValueError for a
+	bad __bool__ or __len__, a metaclass __bool__ on a class receiver, str
+	and list subclasses, and the built-in types.
+
+	bool class >> ___truthOf___: now asks the class chain before sending
+	__bool__/__len__ instead of catching a failed send, and falls back to
+	the send for every shape the chain cannot decide; this pins those
+	shapes.  The one key left out, ``instance_attribute_is_ignored'', is an
+	older divergence that the change does not touch (an instance attribute
+	named __bool__ is called, where CPython ignores it), #1481.
+
+	See tests/python/truth_protocol_shapes.py (CPython 3.14's values)."
+
+	| mod results expected b keys skipped |
+	importlib @env1:modules removeKey: #'truth_protocol_shapes' ifAbsent: [].
+	skipped := #('instance_attribute_is_ignored').
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/truth_protocol_shapes.py')
+		name: 'truth_protocol_shapes'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 b := (Python at: #'builtins') @env1:instance.
+	 keys := mod @env1:___pyAttrLoad___: #'KEYS'.
+	 self assert: (keys @env1:__len__) equals: 24.
+	 0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		(skipped includes: k asString) ifFalse: [
+			got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+			want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+			self assert: got equals: want
+				description: k asString , ': got ' , got , ' want ' , want]]]
+		ensure: [
+			importlib @env1:modules removeKey: #'truth_protocol_shapes' ifAbsent: []]
+%

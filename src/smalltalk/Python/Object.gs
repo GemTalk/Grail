@@ -9701,11 +9701,26 @@ ___typeDunder___: baseSym
 	class).  Such a protocol then behaves as it did before #1218 -- the
 	compiled default -- rather than paying the walk on every miss."
 
+	^ (self ___typeDunderMayHold___: baseSym)
+		ifTrue: [self ___typeDunderFull___: baseSym]
+		ifFalse: [nil]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___typeDunderMayHold___: baseSym
+	"Whether a class attribute under the dunder baseSym can exist on self's
+	type at all -- ___typeDunder___:'s gate, shared with bool class >>
+	___truthOf___:, which skips its failed __bool__/__len__ sends when the
+	answer is no (#1438).  False means neither a callable nor a ``None''
+	blocker is there; true only means the full walk has to be asked.  See
+	___typeDunder___: for the sources and the one it cannot see."
+
 	| cls stored reg walker |
 	cls := self @env0:class.
 	stored := SessionTemps @env0:current @env0:at: #'GrailClassDunderStores' otherwise: nil.
 	(stored ~~ nil and: [stored @env0:includes: baseSym])
-		ifTrue: [^ self ___typeDunderFull___: baseSym].
+		ifTrue: [^ true].
 	"A class-body accessor PAIR, tested by its unary half alone -- except for
 	the few names every class already answers class-side (__str__, __iter__,
 	__repr__, __enter__, __aenter__), where the unary half proves nothing.  Those
@@ -9714,15 +9729,15 @@ ___typeDunder___: baseSym
 	(___grailInstallAttrMethodShadows___:) and never reaches here."
 	((cls ___respondsTo___: baseSym)
 		and: [(PythonInstance ___respondsTo___: baseSym) not])
-			ifTrue: [^ self ___typeDunderFull___: baseSym].
+			ifTrue: [^ true].
 	reg := (Python @env0:at: #importlib) @env0:___miRegistry___.
 	walker := cls.
 	[walker @env0:notNil and: [walker ~~ PythonInstance and: [walker ~~ object]]]
 		@env0:whileTrue: [
 			(reg @env0:at: walker otherwise: nil) @env0:ifNotNil: [:___rec |
-				^ self ___typeDunderFull___: baseSym].
+				^ true].
 			walker := walker @env0:superclass].
-	^ nil
+	^ false
 %
 
 category: 'Grail-Convenience Methods - Attribute'
