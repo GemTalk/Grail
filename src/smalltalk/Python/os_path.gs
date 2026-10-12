@@ -595,50 +595,20 @@ lexists: path
 category: 'Grail-Path Manipulation'
 method: os_path
 commonpath: somePaths
-	"os.path.commonpath(paths) — longest common sub-path."
+	"os.path.commonpath(paths) -- CPython's posixpath.commonpath, which Grail
+	ships and which answers exactly what CPython does.
 
-	| allParts firstSize minSize commonParts allPartsSize i firstPart allMatch paths |
-	paths := somePaths @env0:collect: [:p | (os instance) ___fsPath___: p].
-	(paths @env0:isEmpty) ifTrue: [
-		ValueError ___signal___: 'commonpath() arg is an empty sequence'
-	].
-	allParts := list ___new___.
-	paths @env0:do: [:p |
-		| normalized parts |
-		normalized := self normpath: p.
-		parts := $/ @env0:split: normalized.
-		parts := parts @env0:select: [:each | each @env0:notEmpty].
-		allParts append: parts
-	].
-	firstSize := (allParts @env0:first) @env0:size.
-	minSize := allParts @env0:inject: firstSize into: [:min :parts |
-		(min @env0:min: (parts @env0:size))
-	].
-	commonParts := list ___new___.
-	allPartsSize := allParts @env0:size.
-	i := 1.
-	[(i @env0:<= minSize)] @env0:whileTrue: [
-		firstPart := (allParts @env0:first) @env0:at: i.
-		allMatch := true.
-		1 @env0:to: allPartsSize do: [:j |
-			| parts |
-			parts := allParts @env0:at: j.
-			((parts @env0:at: i) @env0:= firstPart) ifFalse: [allMatch := false]
-		].
-		allMatch ifTrue: [
-			commonParts append: firstPart.
-			i := i @env0:+ 1
-		] ifFalse: [
-			(i == 1) ifTrue: [
-				ValueError ___signal___: 'Paths do not start from a common point'
-			].
-			i := minSize @env0:+ 1
-		]
-	].
-	(commonParts @env0:isEmpty) ifTrue: [^ '/'].
-	^ '/' @env0:, (commonParts @env0:inject: '' into: [:acc :each |
-		(acc @env0:isEmpty) ifTrue: [each] ifFalse: [((acc @env0:, '/') @env0:, each)]
-	])
+	This used to be its own Smalltalk walk, wrong four ways: two absolute
+	paths with only the root in common raised ``Paths do not start from a
+	common point'' (CPython answers '/'), a RELATIVE pair came back absolute
+	('a/b', 'a/c' -> '/a'), mixing absolute and relative gave that same wrong
+	message, and bytes failed with an uncatchable ArgumentTypeError.  The first
+	one sent pytest's rootdir to the invocation directory whenever the tests
+	lived under an unrelated tree -- a common ancestor of '/' is the case pytest
+	tests for (is_fs_root) -- so collection walked down from '/' through every
+	entry of /private/tmp: 264 of a 270s run, for 14 tests."
+
+	^ self ___posixpathModule @env1:commonpath: somePaths
 %
 
 category: 'Grail-Path Manipulation'
