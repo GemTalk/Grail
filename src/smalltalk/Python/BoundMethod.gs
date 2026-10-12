@@ -1179,16 +1179,26 @@ __dict__
 	a flat AttributeError, so that write was simply invisible from the method.
 
 	A BoundMethod that is NOT a Python bound method (a module-level def, a
-	class-side handle) is a FUNCTION and keeps its own storage; a bound method
-	with nowhere to delegate still raises."
+	class-side handle) is a FUNCTION and keeps its own storage: ``f.x = 1''
+	lands in this handle's dynamic instVars (object >> __setattr__:_:), and the
+	module answers the same handle on every read.  Its __dict__ is the LIVE
+	view of that storage, the one an instance's __dict__ is -- so
+	``f.__dict__['y'] = 2'' and ``f.y'' agree, and functools.update_wrapper's
+	``wrapper.__dict__.update(...)'' writes through.  It raised AttributeError,
+	which pytest hits for every collected test: Function.__init__ does
+	``self.keywords.update(self.obj.__dict__)'' (#1460).
 
-	| bcls |
+	A bound method with nowhere to delegate still raises."
+
+	| bcls view |
 	bcls := Python @env0:at: #builtins otherwise: nil.
 	(bcls @env0:notNil
 		and: [selector @env0:== #'type'
 		and: [receiver @env0:isKindOf: bcls]]) ifTrue: [
 			^ mappingproxy ___on: (dict ___new___)].
 	self ___isPythonBoundMethod___ ifTrue: [^ self __func__ __dict__].
+	view := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #PyInstanceDict.
+	view @env0:notNil ifTrue: [^ view @env0:on: self].
 	^ AttributeError ___signal___: 'BoundMethod object has no attribute ''__dict__'''
 %
 

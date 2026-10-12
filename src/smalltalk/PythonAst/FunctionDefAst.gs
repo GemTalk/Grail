@@ -2597,6 +2597,29 @@ ___coFlags___: isNested
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___coVarnames___
+	"The names ``co_varnames'' reports, as Strings: the PARAMETERS in CPython's
+	order -- positional-only and positional (the receiver included), then
+	keyword-only, then *args, then **kwargs.
+
+	CPython continues with the body's locals in order of first use.  They are
+	left off rather than guessed at: the parser keeps a scope's names in an
+	IdentitySet, unordered and with scope hints mixed in, so any order given
+	here would be invented.  The parameters are what ``inspect.getargs'' reads,
+	and that is what pytest's failure report needs (#1460)."
+
+	| out |
+	out := OrderedCollection new.
+	self allParameterNames do: [:p | out add: p asString].
+	args isNil ifTrue: [^ out asArray].
+	(args kwonlyargs ifNil: [#()]) do: [:a | out add: a name asString].
+	args vararg ifNotNil: [:v | out add: v name asString].
+	args kwarg ifNotNil: [:k | out add: k name asString].
+	^ out asArray
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 emitCodeExtrasOpenOn: aStream nested: isNested
 	"One opening parenthesis per setter emitCodeExtrasOn:nested: will apply.
 
@@ -2609,6 +2632,8 @@ emitCodeExtrasOpenOn: aStream nested: isNested
 
 	aStream nextPutAll: '('.
 	(CallAst ___freeVariableNamesFor___: self) isEmpty ifFalse: [
+		aStream nextPutAll: '('].
+	self ___coVarnames___ isEmpty ifFalse: [
 		aStream nextPutAll: '('].
 	self ___codeConstScopes___ isEmpty ifFalse: [
 		aStream nextPutAll: '('].
@@ -2627,7 +2652,7 @@ emitCodeExtrasOn: aStream nested: isNested
 	code object, so ``((code setFlags: n) setFreevars: names)'' reads back as
 	the code object without a trailing ``yourself''."
 
-	| freeNames |
+	| freeNames varNames |
 	aStream
 		nextPutAll: ' @env0:___setFlags___: ';
 		nextPutAll: (self ___coFlags___: isNested) printString;
@@ -2637,6 +2662,12 @@ emitCodeExtrasOn: aStream nested: isNested
 		aStream nextPutAll: ' @env0:___setFreevars___: #( '.
 		freeNames do: [:each |
 			aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
+		aStream nextPutAll: '))'].
+	varNames := self ___coVarnames___.
+	varNames isEmpty ifFalse: [
+		aStream nextPutAll: ' @env0:___setVarnames___: #( '.
+		varNames do: [:each |
+			aStream nextPutAll: ''''; nextPutAll: each; nextPutAll: ''' '].
 		aStream nextPutAll: '))'].
 	self emitCodeConstsOn: aStream.
 	self emitCodeBodySourceOn: aStream
@@ -8834,7 +8865,7 @@ ___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
 	___codeConstScopes___ and ___emitsBodySource___ decide here exactly as
 	they decide there."
 
-	| code freeNames scopes consts text |
+	| code freeNames varNames scopes consts text |
 	code := aBuilder send: #'___setFlags___:' to: codeNode
 		with: { aBuilder obj: (self ___coFlags___: isNested) } env: 0.
 	freeNames := CallAst ___freeVariableNamesFor___: self.
@@ -8842,6 +8873,10 @@ ___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
 		code := aBuilder send: #'___setFreevars___:' to: code
 			with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray }
 			env: 0].
+	varNames := self ___coVarnames___.
+	varNames isEmpty ifFalse: [
+		code := aBuilder send: #'___setVarnames___:' to: code
+			with: { aBuilder obj: varNames } env: 0].
 	scopes := self ___codeConstScopes___.
 	scopes isEmpty ifFalse: [
 		"PyCode objects are built at RUN time, as the text builds them -- a code

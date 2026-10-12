@@ -195,6 +195,11 @@ ___pythonValueAttrs___
 	^ IdentitySet new
 		add: #'co_freevars';
 		add: #'co_consts';
+		add: #'co_varnames';
+		add: #'co_argcount';
+		add: #'co_posonlyargcount';
+		add: #'co_kwonlyargcount';
+		add: #'co_flags';
 		yourself
 %
 
@@ -371,6 +376,18 @@ ___setFreevars___: anArrayOfNames
 	^ self
 %
 
+category: 'Instance Creation'
+method: PyCode
+___setVarnames___: anArrayOfNames
+	"Record the def's PARAMETER names for ``co_varnames'', in CPython's order,
+	and answer self for the emitters' chain (FunctionDefAst >> ___coVarnames___
+	says what is and is not in it)."
+
+	anArrayOfNames isNil ifTrue: [^ self].
+	self dynamicInstVarAt: #'___varnames___' put: anArrayOfNames.
+	^ self
+%
+
 set compile_env: 1
 
 category: 'Grail-Python Protocol'
@@ -437,7 +454,7 @@ _replace: positional kw: kwargs
 		'co_consts').
 	copy := self @env0:class @env0:new.
 	#('co_name' 'co_qualname' 'co_filename' 'co_firstlineno' 'co_flags'
-	  'co_consts' '___grailSource___' '___grailMode___') @env0:do: [:n |
+	  'co_consts' '___grailSource___' '___grailMode___' '___varnames___') @env0:do: [:n |
 		| v |
 		v := [self @env0:dynamicInstVarAt: n @env0:asSymbol]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
@@ -451,6 +468,114 @@ _replace: positional kw: kwargs
 			copy @env0:dynamicInstVarAt: k @env0:asString @env0:asSymbol put: v]].
 	^ copy
 %
+category: 'Grail-Attribute Access'
+method: PyCode
+co_varnames
+	"``code.co_varnames'' -- the def's parameter names, in CPython's order.
+
+	CPython continues the tuple with the body's locals; Grail records the
+	parameters only (FunctionDefAst >> ___coVarnames___ says why), which is the
+	part ``inspect.getargs'' -- and pytest's failure report through it -- reads
+	(#1460).
+
+	A code object that recorded nothing and DECLARES NO PARAMETERS answers the
+	empty tuple: a module's, a class body's, the frames try/with build for a
+	traceback.  CPython's is () there too, and pytest reads co_varnames off
+	every frame of a traceback it renders with funcargs -- which it does for
+	the interrupted session a collection error ends in, so an AttributeError
+	here turned a reported error into a crash.  One that recorded nothing but
+	does take parameters (a lambda's) still has no such attribute, rather than
+	a tuple that would be wrong."
+
+	| names |
+	names := [self @env0:dynamicInstVarAt: #'___varnames___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	names @env0:isNil ifTrue: [
+		self ___declaresParameters___ ifFalse: [names := #()]].
+	names @env0:isNil ifTrue: [
+		^ AttributeError ___signal___: '''code'' object has no attribute ''co_varnames'''].
+	^ (ExecBlock @env0:___pyTupleClass___)
+		@env0:perform: #'withAll:' env: 0
+		withArguments: { names }
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+co_argcount
+	"``code.co_argcount'' -- the positional parameter count, or 0 for a code object built without
+	one.  A def's and a lambda's carry it as a dynamic instVar, which the
+	attribute read answers before reaching this; the frames try/with build for
+	a traceback are made with a name, a file and a line only, and CPython's
+	code objects always have the field -- pytest's getargs reads it off every
+	frame it renders (#1460)."
+
+	^ ([self @env0:dynamicInstVarAt: #'co_argcount']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:ifNil: [0]
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+co_posonlyargcount
+	"``code.co_posonlyargcount'' -- the positional-only parameter count, or 0 for a code object built without
+	one.  A def's and a lambda's carry it as a dynamic instVar, which the
+	attribute read answers before reaching this; the frames try/with build for
+	a traceback are made with a name, a file and a line only, and CPython's
+	code objects always have the field -- pytest's getargs reads it off every
+	frame it renders (#1460)."
+
+	^ ([self @env0:dynamicInstVarAt: #'co_posonlyargcount']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:ifNil: [0]
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+co_kwonlyargcount
+	"``code.co_kwonlyargcount'' -- the keyword-only parameter count, or 0 for a code object built without
+	one.  A def's and a lambda's carry it as a dynamic instVar, which the
+	attribute read answers before reaching this; the frames try/with build for
+	a traceback are made with a name, a file and a line only, and CPython's
+	code objects always have the field -- pytest's getargs reads it off every
+	frame it renders (#1460)."
+
+	^ ([self @env0:dynamicInstVarAt: #'co_kwonlyargcount']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:ifNil: [0]
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+co_flags
+	"``code.co_flags'' -- the flags word, or 0 for a code object built without
+	one.  A def's and a lambda's carry it as a dynamic instVar, which the
+	attribute read answers before reaching this; the frames try/with build for
+	a traceback are made with a name, a file and a line only, and CPython's
+	code objects always have the field -- pytest's getargs reads it off every
+	frame it renders (#1460)."
+
+	^ ([self @env0:dynamicInstVarAt: #'co_flags']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:ifNil: [0]
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___declaresParameters___
+	"Does this code object take any parameter -- positional, keyword-only, or
+	the *args / **kwargs that co_flags' VARARGS (4) and VARKEYWORDS (8) bits
+	record?  An unset count or flags word reads as zero: the traceback frames
+	are built with a name, a file and a line and nothing else."
+
+	| n |
+	n := 0.
+	#( #'co_argcount' #'co_kwonlyargcount' ) @env0:do: [:k | | v |
+		v := [self @env0:dynamicInstVarAt: k]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(v @env0:isKindOf: Integer) ifTrue: [n := n @env0:+ v]].
+	n @env0:> 0 ifTrue: [^ true].
+	n := [self @env0:dynamicInstVarAt: #'co_flags']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(n @env0:isKindOf: Integer) ifFalse: [^ false].
+	^ (n @env0:bitAnd: 12) @env0:~= 0
+%
+
 category: 'Grail-Attribute Access'
 method: PyCode
 co_freevars
