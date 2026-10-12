@@ -1495,7 +1495,7 @@ ___grailTransientAttrNames___
 
 category: 'Grail-Slots'
 classmethod: object
-___grailInstallInferredSlots___: rawInferredNames declared: declaredNames properties: propertyNames indexed: wantIndexed
+___grailInstallInferredSlots___: rawInferredNames declared: declaredNames properties: rawPropertyNames indexed: wantIndexed
 	"Compile the accessor pairs for this class's slots: the DECLARED __slots__
 	names (always) and the INFERRED ones (GRAIL_INFERRED_SLOTS; see ClassDefAst
 	>> ___inferredSlotNames___).  Emitted by ClassDefAst as one line at the
@@ -1579,7 +1579,7 @@ ___grailInstallInferredSlots___: rawInferredNames declared: declaredNames proper
 	survives in the layout and the pair is what serves it
 	(docs/Schema_Evolution_Design.md)."
 
-	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain setattrHookOwner setattrHookInChain layout hadLayout parentLayout layoutNames inferredNames transient |
+	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain setattrHookOwner setattrHookInChain layout hadLayout parentLayout layoutNames inferredNames transient propertyNames storedProps |
 	"Class-level __transient__ names (___grailInstallTransientAttrs___, run
 	just before this) never get a position: they are kept out of the
 	inferred names, and below get the DYNAMIC pair, whose storage the
@@ -1588,6 +1588,21 @@ ___grailInstallInferredSlots___: rawInferredNames declared: declaredNames proper
 	conflicts with a class variable."
 	transient := self ___grailTransientAttrNames___.
 	inferredNames := rawInferredNames.
+	"A PROPERTY THE BODY STORED rather than declared -- a @property under an
+	``if'', or ``p = property(...)'' -- is a data descriptor in this class's
+	own dict, and CPython's ``self.p = v'' must reach its __set__ (#1407).
+	ClassDefAst sees only top-level decorated properties, so it inferred p as
+	a plain attribute; the body has run by now, so ask the class.  Such a name
+	gets no raw pair (its sends fall back to ___pyAttrStore___:put:, which
+	honours the descriptor) and is treated as one of this body's properties
+	below (step 3), so an ancestor's inferred pair is forwarded."
+	storedProps := inferredNames @env0:select: [:n |
+		self ___isDataDescriptorValue___:
+			(self ___nearestStoredClassAttrFrom___: self through: self name: n @env0:asSymbol)].
+	propertyNames := storedProps @env0:isEmpty
+		ifTrue: [rawPropertyNames]
+		ifFalse: [rawPropertyNames @env0:, storedProps @env0:asArray].
+	inferredNames := inferredNames @env0:reject: [:n | storedProps @env0:includes: n].
 	transient @env0:isEmpty ifFalse: [
 		declaredNames @env0:do: [:n |
 			(transient @env0:includes: n @env0:asSymbol) ifTrue: [
@@ -15937,7 +15952,18 @@ __setattr__: name _: value
 		and: [(self ___mayDispatchToSetter___: sym)
 		and: [(self ___respondsTo___: sym)
 		and: [self ___respondsTo___: setterSym]]])
-		ifTrue: ["Through the marked helper: on a CLASS receiver the setter is a
+		ifTrue: [
+			"On an INSTANCE, a data descriptor stored on a class nearer than the
+			pair's owner -- or on that class, over its methods -- is what
+			CPython's MRO meets first (#1407): ___pyAttrStore___: decides it, through
+			___pyInstanceDescriptorStore___:."
+			((self @env0:isKindOf: Behavior) not
+				and: [(self ___nearestStoredClassAttrFrom___: self @env0:class
+					through: (self @env0:class @env0:whichClassIncludesSelector: setterSym
+						environmentId: 1)
+					name: sym) ~~ nil])
+				ifTrue: [^ self ___pyAttrStore___: name put: value].
+			"Through the marked helper: on a CLASS receiver the setter is a
 			'Grail-Class Attrs' accessor that, under GRAIL_DIRECT_CALLS, reads an
 			unmarked send as a Python call (___grailClassAttrSetterDiverts___)."
 			^ object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: value].
@@ -16349,6 +16375,22 @@ ___pyInstanceDescriptorStore___: aName put: aValue
 		and: [(self ___respondsTo___: getterSym)
 			and: [self ___respondsTo___: setterSym]])
 		ifTrue: [
+			"A DATA DESCRIPTOR STORED NEARER THE RECEIVER than the class that
+			compiled the pair is what CPython's MRO meets first, so it takes the
+			store (#1407): a subclass's ``if ...: @property'' or a runtime
+			``Sub.p = property(...)'' over a base's @property.  The pair's own
+			class counts as nearer too -- a property stored on it was assigned
+			over its methods, and the class dict holds the new one."
+			descr := self ___nearestStoredClassAttrFrom___: self @env0:class
+				through: (self @env0:class @env0:whichClassIncludesSelector: setterSym
+					environmentId: 1)
+				name: getterSym.
+			descr ~~ nil ifTrue: [
+				"A nearer plain value or non-data descriptor: CPython stores
+				into the instance dict, which is the caller's next step."
+				(self ___isDataDescriptorValue___: descr) ifFalse: [^ false].
+				self ___descriptorSet___: descr value: aValue.
+				^ true].
 			"Marked as a STORE: a synthesized read-only / cached_property setter
 			reads an unmarked ``prop:'' send as a Python call under
 			GRAIL_DIRECT_CALLS (___grailClassAttrSetterDiverts___)."
@@ -16359,6 +16401,54 @@ ___pyInstanceDescriptorStore___: aName put: aValue
 		self ___descriptorSet___: descr value: aValue.
 		^ true].
 	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___nearestStoredClassAttrFrom___: startClass through: lastClass name: aSym
+	"The value STORED as a class attribute aSym on the nearest class from
+	startClass up to and INCLUDING lastClass -- or nil.  Any kind of value:
+	CPython's MRO stops at the first class whose dict has the name, so a plain
+	value or a non-data descriptor there decides the store as surely as a data
+	descriptor does (it sends the store to the instance dict).
+
+	Each class is asked about its OWN entries only: the session overlay and
+	the ___dynInstVars___ holder for a runtime store, and an accessor pair on
+	its own metaclass ('Grail-Class Attrs') for a class-body binding such as
+	one made under an ``if''.  Asking through the chain, as
+	object class >> ___grailStoredClassAttrIn___:named:overlay: does for the
+	metaclass pair, would report an ancestor's descriptor at every subclass
+	and let one farther than lastClass win.
+
+	Only reached when a compiled property pair is about to take a store, so
+	ordinary attribute stores never pay for the walk."
+
+	| ov walker raw |
+	lastClass == nil ifTrue: [^ nil].
+	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	walker := startClass.
+	[walker == nil] @env0:whileFalse: [
+		| inner holder |
+		raw := nil.
+		ov == nil ifFalse: [
+			inner := ov @env0:at: walker otherwise: nil.
+			inner == nil ifFalse: [raw := inner @env0:at: aSym otherwise: nil]].
+		raw == nil ifTrue: [
+			(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+				holder := [walker @env0:perform: #___dynInstVars___ env: 1]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				holder == nil ifFalse: [
+					raw := holder @env0:dynamicInstVarAt: aSym]]].
+		(raw == nil
+			and: [(walker @env0:class @env0:includesSelector: aSym environmentId: 1)
+			and: [(walker @env0:class @env0:categoryOfSelector: aSym environmentId: 1)
+				@env0:= #'Grail-Class Attrs']]) ifTrue: [
+			raw := [walker @env0:perform: aSym env: 1]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		raw == nil ifFalse: [^ raw].
+		walker == lastClass ifTrue: [^ nil].
+		walker := walker @env0:superClass].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'
