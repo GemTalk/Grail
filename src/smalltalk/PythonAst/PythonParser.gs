@@ -1986,14 +1986,28 @@ parseClassDefWithDecorators: decorators
 		reads: (scope at: 5);
 		nonlocalNames: (scope at: 6);
 		yourself.
-	^ClassDefAst new
+	^ self ___recordDecoratorLines___: decorators on: (ClassDefAst new
 		name: nameTok value asSymbol;
 		bases: bases;
 		keywords: keywords;
 		body: block;
 		decorator_list: decorators;
 		type_params: (classTypeParams ifNil: [Array new]);
-		from: tok to: self lastSpanToken ; yourself
+		from: tok to: self lastSpanToken ; yourself)
+%
+
+category: 'Grail-parsing - compound statements'
+method: PythonParser
+___recordDecoratorLines___: decorators on: aNode
+	"Keep each decorator's expression node on the def or class it decorates,
+	and answer aNode (#1406).  CPython runs a decorator at its own line and
+	starts a decorated def's code object at the first one; the def's decorator
+	list cannot say, because a bare ``@name'' is reduced to a Symbol.  The
+	nodes, not just their lines: the IR arm positions a send at a node."
+
+	decorators isEmpty ifFalse: [
+		aNode dynamicInstVarAt: #decoratorNodes put: decorators asArray].
+	^ aNode
 %
 
 category: 'Grail-parsing - expressions'
@@ -2937,6 +2951,7 @@ parseFunctionDefWithDecorators: decorators
 				and: [(each value isKindOf: NameAst)
 				and: [#('builtins' 'bltns') includes: each value id asString]]]]])
 		ifTrue: [funcNode dynamicInstVarAt: #builtinProperty put: true].
+	self ___recordDecoratorLines___: decorators on: funcNode.
 	^funcNode
 %
 

@@ -2924,10 +2924,16 @@ printSmalltalkRuntimeOn: aStream
 	to the next one out (A).  Iterating decorator_list in REVERSE
 	order yields that semantics: each iteration evaluates one
 	decorator and re-assigns the result to the class name."
-	decorator_list reverseDo: [:deco |
+	decorator_list size to: 1 by: -1 do: [:___i | | deco |
+		deco := decorator_list at: ___i.
+		"At the decorator's own line (#1406) -- the class line was used."
+		(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineAt___: ___i]) ifNotNil: [:___line |
+			aStream nextPutAll: '___curPos___ := '; nextPutAll: ___line printString; nextPutAll: '.'; lf].
 		aStream nextPutAll: self ___stVarName___; nextPutAll: ' := '.
-		deco printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ' value: { '; nextPutAll: self ___stVarName___; nextPutAll: ' } value: nil.'; lf.
+		self ___mapDecorator___: (self ___decoratorNodeAt___: ___i) on: aStream do: [
+			deco printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ' value: { '; nextPutAll: self ___stVarName___; nextPutAll: ' } value: nil'].
+		aStream nextPutAll: '.'; lf.
 	]
 	] ensure: [CallAst inDecoratorEmit: (savedDecoFlag == true)]] value.
 	"CLOSURE CELLS (second emit).  See ___emitClosureCellStoresOn:className:saved:savedWrite:
@@ -7628,10 +7634,16 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 
 	| out emitted stream shift |
 	emitted := self ___irWithCaptureCellMap___: carriedNames do: [
-		self ___irEmitClassBodyAsTextDo___: [
-			stream := PrettyWriteStream on: Unicode7 new.
-			self printSmalltalkOn: stream.
-			stream contents]].
+		self ___irEmitClassBodyAsTextDo___: [ | savedCurPos |
+			"Whether the helper declares ``___curPos___'' (see below): the
+			decorator emits ask before storing one (#1406)."
+			savedCurPos := SessionTemps current at: #'___grailIRHelperHasCurPos___' otherwise: nil.
+			SessionTemps current at: #'___grailIRHelperHasCurPos___'
+				put: self ___irClassBodyStatementsAreSimple___ not.
+			[stream := PrettyWriteStream on: Unicode7 new.
+			 self printSmalltalkOn: stream.
+			 stream contents]
+				ensure: [SessionTemps current at: #'___grailIRHelperHasCurPos___' put: savedCurPos]]].
 	"The helper deliberately declares NO ``___curPos___''.  The class emit does
 	not store one for the shapes ___irMethodLocalClassReason___: admits -- the
 	enclosing statement's stamp is the enclosing method's -- and declaring the
