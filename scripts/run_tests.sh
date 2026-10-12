@@ -244,11 +244,18 @@ if [ -z "${GRAIL_ALLOW_TIGHT_SESSIONS:-}" ]; then
   fi
 fi
 
+# Hold each shard's launch while the MACHINE is busy -- other worktrees'
+# suites included -- rather than piling on until tests time out
+# (scripts/launch_gate.sh says when and why; GRAIL_MAX_LOAD=0 turns it off).
+. "$PROJECT_ROOT/scripts/launch_gate.sh"
+launch_gate_init "$N_SHARDS"
+
 SHARD_T0=$SECONDS
 mkdir -p "$PROJECT_ROOT/out"
 rm -f "$PROJECT_ROOT"/out/shard_*.out
 SHARD_PIDS=()
 for i in $SHARDS; do
+  launch_gate "shard $i" "${#SHARD_PIDS[@]}"
   # Head each log with every GRAIL_* variable the shard inherits, so it can be
   # re-run by hand with the same switches (#1039): runTestsShard.gs prints the
   # two this loop sets, but not the modes taken from the caller's environment
@@ -265,6 +272,7 @@ done
 for pid in "${SHARD_PIDS[@]}"; do
   wait "$pid" || EXIT=$?
 done
+launch_gate_summary
 # Aggregate shard results into one summary line (portable: no gawk-isms) and
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
@@ -535,6 +543,10 @@ timed "grail-launcher" ./tests/scripts/test_grail_launcher.sh || EXIT=$?
 # live holder launches a second run's sessions into a stone that has none left,
 # and the losing shards produce a green total rather than an error.
 timed "stone-lock" ./tests/scripts/run_stone_lock_test.sh || EXIT=$?
+
+# The launch gate's hold/release/cap rules.  Needs no stone: it fakes the load
+# average and the gem count.
+timed "launch-gate" ./tests/scripts/run_launch_gate_test.sh || EXIT=$?
 
 printf 'TIMING | %-26s | %4ds\n' "TOTAL run_tests.sh" "$((SECONDS - SUITE_T0))"
 exit $EXIT
