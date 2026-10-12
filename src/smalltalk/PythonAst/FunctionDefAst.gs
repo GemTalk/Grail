@@ -2551,14 +2551,58 @@ ___namesEnclosingReceiver___: aSymbolOrNil
 	class is being emitted into, which is what the enclosing def actually called
 	it.  A name that is genuinely local to this def would also match -- a false
 	positive that costs a call the ability to run receiverless and changes no
-	answer, which is the direction the error has to fall."
+	answer, which is the direction the error has to fall.
+
+	ONE false positive is ruled out: the body of a NESTED def or lambda that
+	takes the name as a PARAMETER.  There the name is that function's own, and
+	cannot be the captured receiver.  pygments' RubyLexer builds its token
+	table with exactly that shape (#1426) --
+
+	    def gen_rubystrings_rules():
+	        def intp_regex_callback(self, match, ctx): ...
+
+	-- and the whole lexer, with the nine modules that import it, failed on
+	``unbound method ... must be called with an instance''.  Only the nested
+	BODY is skipped: its defaults, annotations and decorators run in this
+	def's scope, so a ``self'' there is still the captured one."
 
 	body ifNil: [^ false].
-	^ body ___anyDescendantSatisfies___: [:n |
-		(n isKindOf: NameAst)
-			and: [n id asSymbol == #'self'
-				or: [aSymbolOrNil notNil
-					and: [n id asSymbol == aSymbolOrNil asSymbol]]]]
+	(self ___node: body namesFree: #'self') ifTrue: [^ true].
+	^ aSymbolOrNil notNil
+		and: [aSymbolOrNil asSymbol ~~ #'self'
+		and: [self ___node: body namesFree: aSymbolOrNil asSymbol]]
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+___node: aNode namesFree: aSymbol
+	"Does aNode's subtree read or write the name aSymbol anywhere it is not
+	the parameter of a nested def or lambda?  The walk is
+	___anyDescendantSatisfies___:'s -- every instance variable but ``parent'',
+	every node in a collection -- except that a nested def or lambda that
+	takes aSymbol as a parameter is entered WITHOUT its body (see
+	___namesEnclosingReceiver___:)."
+
+	| ivars skipBody |
+	(aNode isKindOf: NameAst) ifTrue: [^ aNode id asSymbol == aSymbol].
+	skipBody := ((aNode isKindOf: FunctionDefAst) or: [aNode isKindOf: LambdaAst])
+		and: [aNode args notNil and: [aNode args ___bindsParameterNamed___: aSymbol]].
+	ivars := aNode class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| ivar v |
+		ivar := ivars at: i.
+		(ivar == #'parent' or: [skipBody and: [ivar == #'body']]) ifFalse: [
+			v := aNode instVarAt: i.
+			(v isKindOf: AbstractNode)
+				ifTrue: [(self ___node: v namesFree: aSymbol) ifTrue: [^ true]]
+				ifFalse: [
+					((v isKindOf: Collection) and: [(v isKindOf: CharacterCollection) not])
+						ifTrue: [
+							v do: [:e |
+								((e isKindOf: AbstractNode)
+									and: [self ___node: e namesFree: aSymbol])
+										ifTrue: [^ true]]]]]].
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -3737,7 +3781,12 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	method itself and every call site are: ``def __m(self, x)'' in class C
 	compiles to ``_C__m:'', and ``self.__m(x=1)'' sends ``__C__m:kw:''.  The
 	raw name here gave the companion ``___m:kw:'' forwarding to ``__m:'', so
-	a keyword call to a private method was an uncatchable DNU (#1422)."
+	a keyword call to a private method was an uncatchable DNU (#1422).
+
+	The parameter NAMES ``___pos___'' and ``___kw___'' are read at run time:
+	UnboundMethod >> ___callPacked___:onSpecial:positional:kw: tells this
+	forwarder from a packed method that holds the body by its first argument
+	name, because only the latter can be recompiled for a special receiver."
 
 	| stream callParams allParams defaults firstDefault posonlyNames stem |
 	stream := AppendStream on: Unicode7 new.

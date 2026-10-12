@@ -19301,9 +19301,19 @@ ___grailClassDefault___: aSymbol
 	"This object's stored class-body default for one parameter, or nil when there
 	is none -- the signal for the caller to fall back to the inline expression.
 	Sent to ``self'' from inside the method, which is a Smalltalk pseudo-variable
-	and so cannot be shadowed by a Python local; see ___grailClassDefaultPut___:."
+	and so cannot be shadowed by a Python local; see ___grailClassDefaultPut___:.
 
-	^ module @env0:___classDefaultOwnedBy: self at: aSymbol
+	When the receiver is not an instance of the method's class -- UnboundMethod
+	ran the method on a foreign or special first argument -- the walk from it
+	misses, and the class UnboundMethod >> ___run:withDefaultOwner: recorded is
+	tried instead (#1426)."
+
+	| owner |
+	^ (module @env0:___classDefaultOwnedBy: self at: aSymbol) ifNil: [
+		owner := SessionTemps current at: #'GrailDefaultOwner' otherwise: nil.
+		owner isNil
+			ifTrue: [nil]
+			ifFalse: [module @env0:___classDefaultOwnedBy: owner at: aSymbol]]
 %
 
 set compile_env: 0
