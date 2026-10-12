@@ -104,6 +104,20 @@ def _recv_all(sock):
     return b"".join(chunks)
 
 
+def _keep_alive_handler():
+    # A handler that opts in to HTTP/1.1.  Since #1227 a single-threaded
+    # server's default handler speaks HTTP/1.0 and closes after each request,
+    # as upstream Werkzeug's does -- a kept connection would stall every other
+    # client.  Setting protocol_version on the handler class is the opt-in
+    # upstream honours, and it is what keep-alive and chunking need here.
+    from werkzeug.serving import WSGIRequestHandler
+
+    class KeepAliveHandler(WSGIRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+    return KeepAliveHandler
+
+
 def serve_keep_alive_two_requests():
     # Persistent HTTP/1.1 connection: two requests pipelined onto ONE socket,
     # served by a SINGLE handle_request() (one accept).  The first request asks
@@ -125,7 +139,8 @@ def serve_keep_alive_two_requests():
     def b():
         return "BBB"
 
-    server = make_server("127.0.0.1", 0, app)
+    server = make_server("127.0.0.1", 0, app,
+                         request_handler=_keep_alive_handler())
     port = server.server_port
 
     c = socket.socket()
@@ -179,7 +194,8 @@ def serve_chunked_response():
         # Three separate byte strings, no Content-Length -> three chunks.
         return [b"one;", b"two;", b"three"]
 
-    server = make_server("127.0.0.1", 0, app)
+    server = make_server("127.0.0.1", 0, app,
+                         request_handler=_keep_alive_handler())
     port = server.server_port
 
     c = socket.socket()
