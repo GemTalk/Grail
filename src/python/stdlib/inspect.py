@@ -1180,8 +1180,173 @@ def getsource(obj):
     return ''
 
 
-def getfile(obj):
-    return '<unknown>'
+def getfile(object):
+    """Work out which source or compiled file an object was defined in.
+
+    CPython's, line for line.  It used to answer '<unknown>' for everything,
+    so pytest -- which names every traceback entry's file through
+    ``inspect.getfile(code)'' -- printed ``<unknown>:361'' for each frame of a
+    failure report.  A Grail module with no __file__ (most deployed stdlib
+    modules) answers the TypeError CPython gives a built-in one.
+    """
+    if ismodule(object):
+        if getattr(object, '__file__', None):
+            return object.__file__
+        raise TypeError('{!r} is a built-in module'.format(object))
+    if isclass(object):
+        if hasattr(object, '__module__'):
+            module = _sys.modules.get(object.__module__)
+            if getattr(module, '__file__', None):
+                return module.__file__
+            if object.__module__ == '__main__':
+                raise OSError('source code not available')
+        raise TypeError('{!r} is a built-in class'.format(object))
+    if ismethod(object):
+        object = object.__func__
+    if isfunction(object):
+        object = object.__code__
+    if istraceback(object):
+        object = object.tb_frame
+    if isframe(object):
+        object = object.f_code
+    if iscode(object):
+        return object.co_filename
+    raise TypeError('module, class, method, function, traceback, frame, or '
+                    'code object was expected, got {}'.format(
+                    type(object).__name__))
+
+
+class EndOfBlock(Exception): pass
+
+
+class BlockFinder:
+    """Provide a tokeneater() method to detect the end of a code block.
+
+    CPython's, verbatim.  pytest's getstatementrange_ast constructs one to
+    find where a failing statement ends, then feeds it tokenize's tokens
+    inside ``except Exception: pass''.  Grail's tokenize is a stub with no
+    generate_tokens, so that feeding fails and pytest keeps the range the AST
+    gave it -- but the construction is outside the try, and a missing class
+    ended the run with an INTERNALERROR.  tokenize is imported per call, as
+    the class only reads its token-type constants once it is fed.
+    """
+    def __init__(self):
+        self.indent = 0
+        self.singleline = False
+        self.started = False
+        self.passline = False
+        self.indecorator = False
+        self.last = 1
+        self.body_col0 = None
+
+    def tokeneater(self, type, token, srowcol, erowcol, line):
+        import tokenize
+        if not self.started and not self.indecorator:
+            if type in (tokenize.INDENT, tokenize.COMMENT, tokenize.NL):
+                pass
+            elif token == "async":
+                pass
+            # skip any decorators
+            elif token == "@":
+                self.indecorator = True
+            else:
+                # For "def" and "class" scan to the end of the block.
+                # For "lambda" and generator expression scan to
+                # the end of the logical line.
+                self.singleline = token not in ("def", "class")
+                self.started = True
+            self.passline = True    # skip to the end of the line
+        elif type == tokenize.NEWLINE:
+            self.passline = False   # stop skipping when a NEWLINE is seen
+            self.last = srowcol[0]
+            if self.singleline:
+                raise EndOfBlock
+            # hitting a NEWLINE when in a decorator without args
+            # ends the decorator
+            if self.indecorator:
+                self.indecorator = False
+        elif self.passline:
+            pass
+        elif type == tokenize.INDENT:
+            if self.body_col0 is None and self.started:
+                self.body_col0 = erowcol[1]
+            self.indent = self.indent + 1
+            self.passline = True
+        elif type == tokenize.DEDENT:
+            self.indent = self.indent - 1
+            # the end of matching indent/dedent pairs end a block
+            # (note that this only works for "def"/"class" blocks,
+            #  not e.g. for "if: else:" or "try: finally:" blocks)
+            if self.indent <= 0:
+                raise EndOfBlock
+        elif type == tokenize.COMMENT:
+            if self.body_col0 is not None and srowcol[1] >= self.body_col0:
+                # Include comments if indented at least as much as the block
+                self.last = srowcol[0]
+        elif self.indent == 0 and type not in (tokenize.COMMENT, tokenize.NL):
+            # any other token on the same indentation level end the previous
+            # block as well, except the pseudo-tokens COMMENT and NL.
+            raise EndOfBlock
+
+
+def findsource(object):
+    """Return the entire source file and starting line number for an object.
+
+    CPython's, line for line: the lines come from linecache, and a code
+    object's start is its co_firstlineno.  Missing before, so pytest -- whose
+    own findsource calls this and shows ``???'' when it raises -- printed no
+    source line for any frame of a failure report.
+    """
+    import linecache
+
+    file = getsourcefile(object)
+    if file:
+        # Invalidate cache if needed.
+        linecache.checkcache(file)
+    else:
+        file = getfile(object)
+        # Allow filenames in form of "<something>" to pass through.
+        # `doctest` monkeypatches `linecache` module to enable
+        # inspection, so let `linecache.getlines` to be called.
+        if not (file.startswith('<') and file.endswith('>')):
+            raise OSError('source code not available')
+
+    module = getmodule(object, file)
+    if module:
+        lines = linecache.getlines(file, module.__dict__)
+    else:
+        lines = linecache.getlines(file)
+    if not lines:
+        raise OSError('could not get source code')
+
+    if ismodule(object):
+        return lines, 0
+
+    if isclass(object):
+        try:
+            lnum = vars(object)['__firstlineno__'] - 1
+        except (TypeError, KeyError):
+            raise OSError('source code not available')
+        if lnum >= len(lines):
+            raise OSError('lineno is out of bounds')
+        return lines, lnum
+
+    if ismethod(object):
+        object = object.__func__
+    if isfunction(object):
+        object = object.__code__
+    if istraceback(object):
+        object = object.tb_frame
+    if isframe(object):
+        object = object.f_code
+    if iscode(object):
+        if not hasattr(object, 'co_firstlineno'):
+            raise OSError('could not find function definition')
+        lnum = object.co_firstlineno - 1
+        if lnum >= len(lines):
+            raise OSError('lineno is out of bounds')
+        return lines, lnum
+    raise OSError('could not find code object')
 
 
 FrameInfo = _namedtuple(
@@ -1483,9 +1648,9 @@ def getmodule(object, _filename=None):
 
     CPython also falls back to matching the object's FILE against every loaded
     module's file, for objects whose __module__ is wrong or missing.  That path
-    needs getabsfile of a real source file and is not reproduced -- Grail's
-    getfile is itself a stub -- so an object with no usable __module__ answers
-    None here, as it did before.
+    is not reproduced -- most of Grail's deployed modules carry no __file__ to
+    match against -- so an object with no usable __module__ answers None here,
+    as it did before.
     """
 
     if ismodule(object):
@@ -1898,18 +2063,38 @@ def ismethodwrapper(object):
 
 
 def getsourcefile(object):
-    """Return the filename of the source file the object was defined in.
+    """Return the filename that can be used to locate an object's source.
+    Return None if no way can be identified to get the source.
 
-    Grail's getfile is a stub, so this answers None for everything rather than
-    inventing a path.  Present because getabsfile and CPython's getmodule both
-    reach for it, and a caller asking "is there source for this?" deserves a
-    truthful no.
+    CPython's, line for line, now that getfile is real.
     """
+    import importlib.machinery
+    import linecache
+    import os
 
     filename = getfile(object)
-    if not filename or filename.startswith('<') and filename.endswith('>'):
+    all_bytecode_suffixes = importlib.machinery.BYTECODE_SUFFIXES[:]
+    if any(filename.endswith(s) for s in all_bytecode_suffixes):
+        filename = (os.path.splitext(filename)[0] +
+                    importlib.machinery.SOURCE_SUFFIXES[0])
+    elif any(filename.endswith(s) for s in
+                 importlib.machinery.EXTENSION_SUFFIXES):
         return None
-    return filename
+    elif filename.endswith(".fwork"):
+        # Apple mobile framework markers are another type of non-source file
+        return None
+
+    # return a filename found in the linecache even if it doesn't exist on disk
+    if filename in linecache.cache:
+        return filename
+    if os.path.exists(filename):
+        return filename
+    # only return a non-existent filename if the module has a PEP 302 loader
+    module = getmodule(object, filename)
+    if getattr(module, '__loader__', None) is not None:
+        return filename
+    elif getattr(getattr(module, "__spec__", None), "loader", None) is not None:
+        return filename
 
 
 def getabsfile(object, _filename=None):

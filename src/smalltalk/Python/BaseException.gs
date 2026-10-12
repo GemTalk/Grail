@@ -4950,7 +4950,48 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 			and: [own isNil or: [own @env0:= filename]])
 			ifTrue: [^ catchCode]].
 	own notNil ifTrue: [filename := own].
+	"The function's OWN PyCode when it has one in a code table, so the frame's
+	f_code is its __code__ and co_firstlineno is the def's line, not 0.  pytest
+	reads the source of every traceback entry from co_firstlineno through
+	inspect.findsource, and a 0 put its window one line BEFORE the file.  Only
+	when the files agree: a frame whose file was worked out differently keeps
+	the answer it always had."
+	(BaseException ___realCodeForMethod___: aMethod name: aName) ifNotNil: [:real |
+		((real @env0:dynamicInstVarAt: #'co_filename') @env0:= filename)
+			ifTrue: [^ real]].
 	^ PyCode @env0:name: aName filename: filename firstlineno: 0
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___realCodeForMethod___: aMethod name: aName
+	"The PyCode behind ``aMethod'' -- the one its function's __code__ answers,
+	from the code table of the class (or module class) it was defined in -- when
+	the frame reporting it is named aName; nil otherwise.
+
+	The name has to agree because a nested def or a comprehension runs as a
+	BLOCK of its home method and reports under its own name: the home method's
+	code is not that frame's code.  Every step is guarded, as in
+	___liveFrameFilenameFor___, which walks the same route for the filename:
+	this runs while a stack is being reported."
+
+	| cls pyName code |
+	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	cls isNil ifTrue: [^ nil].
+	"A @classmethod/@staticmethod is a class-side method: its table is reached
+	 from the class, not the metaclass (see ___liveFrameFilenameFor___)."
+	(([cls @env0:isMeta] @env0:on: AbstractException do: [:ex | ex @env0:return: false])
+		== true) ifTrue: [
+			cls := [cls @env0:thisClass]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: cls]].
+	pyName := [self ___pythonFrameNameFor___: aMethod @env0:selector]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(pyName notNil and: [pyName @env0:= aName]) ifFalse: [^ nil].
+	code := self ___liveFrameCodeFor___: cls name: pyName.
+	code isNil ifTrue: [^ nil].
+	(([code @env0:dynamicInstVarAt: #'co_name'] @env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]) @env0:= aName) ifFalse: [^ nil].
+	^ code
 %
 
 category: 'Grail-Traceback Building'
@@ -6753,9 +6794,12 @@ ___liveFrameChainFromPairs___: pairs
 		a method frame derives it from its own ip."
 		line := (pair @env0:at: 4)
 			ifNil: [self ___pythonLineForMethod___: meth ip: ip].
-		code := PyCode @env0:name: name
-			filename: (self ___liveFrameFilenameFor___: meth)
-			firstlineno: 0.
+		"The function's own PyCode where it has one, for its co_firstlineno and so
+		that f_code is __code__ -- see ___codeForMethod___:name:ip:aCode:."
+		code := (self ___realCodeForMethod___: meth name: name) ifNil: [
+			PyCode @env0:name: name
+				filename: (self ___liveFrameFilenameFor___: meth)
+				firstlineno: 0].
 		"f_globals for a frame the FILENAME cannot identify.  PyFrame
 		derives globals from co_filename by finding the module whose
 		__file__ matches, and a doit has no file -- so a function built by
