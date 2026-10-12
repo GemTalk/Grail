@@ -216,6 +216,15 @@ initialize
 	self @env0:at: #extsep put: '.'.
 	self @env0:at: #altsep put: None.
 	self @env0:at: #devnull put: '/dev/null'.
+	"The default executable search path, as os.path (posixpath) has it.
+	uuid's getters pass it to shutil.which, so without it every one of them
+	raised AttributeError (#1511)."
+	self @env0:at: #defpath put: '/bin:/usr/bin'.
+	"access(2) modes; Darwin and Linux number them alike."
+	self @env0:at: #F_OK put: 0.
+	self @env0:at: #X_OK put: 1.
+	self @env0:at: #W_OK put: 2.
+	self @env0:at: #R_OK put: 4.
 	"open(2) flag constants -- THIS platform's numbers, because os.open hands
 	them straight to libc.  Only the access modes agree across platforms: the
 	set used to be Darwin's alone, which on Linux made O_CREAT (512) mean
@@ -2871,6 +2880,8 @@ ___fdCallouts
 				result: #'int32' args: #(#'int32' #'int64')).
 			d @env0:at: #isatty put: (CCallout @env0:library: lib name: 'isatty'
 				result: #'int32' args: #(#'int32')).
+			d @env0:at: #access put: (CCallout @env0:library: lib name: 'access'
+				result: #'int32' args: #(#'ptr' #'int32')).
 			d]
 %
 
@@ -2960,6 +2971,48 @@ ___cPathFor: aPath
 	(encoded @env0:includes: 0) ifTrue: [
 		^ ValueError ___signal___: 'open: embedded null character in path'].
 	^ CByteArray @env0:withAll: encoded nullTerminate: true
+%
+
+category: 'Grail-File Descriptors'
+method: os
+access: aPath _: mode
+
+	^ self _access: { aPath. mode } kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+_access: positional kw: kwargs
+	"os.access(path, mode, *, dir_fd=None, effective_ids=False,
+	follow_symlinks=True) -- access(2): may the REAL user reach path in mode
+	(F_OK, or any of R_OK, W_OK and X_OK)?  True or False, never an OSError,
+	as in CPython: a missing file is simply False.
+
+	The keyword-only arguments are refused rather than ignored when they ask
+	for anything but the default, as os.stat refuses dir_fd: CPython honours
+	each of them through faccessat(2), and answering for the wrong directory,
+	the effective ids or the link's target would be a wrong answer rather than
+	a missing feature.  os.supports_dir_fd, supports_effective_ids and
+	supports_follow_symlinks stay empty, so code that checks them first (as
+	the stdlib does) never asks.
+
+	shutil.which is the reason it exists: it tests each candidate with
+	``os.access(name, os.F_OK | os.X_OK)'' (#1511)."
+
+	| path mode |
+	path := self ___requiredArgument: 'path' at: 1 in: positional kw: kwargs for: 'access'.
+	mode := self ___requiredArgument: 'mode' at: 2 in: positional kw: kwargs for: 'access'.
+	kwargs notNil ifTrue: [
+		(kwargs @env0:at: 'dir_fd' ifAbsent: [None]) ~~ None
+			ifTrue: [^ NotImplementedError ___signal___: (self @env0:class ___dirFdUnavailableMessage: 'access')].
+		(kwargs @env0:at: 'effective_ids' ifAbsent: [false]) ___isTruthy___
+			ifTrue: [^ NotImplementedError ___signal___: 'access: effective_ids unavailable on this platform'].
+		(kwargs @env0:at: 'follow_symlinks' ifAbsent: [true]) ___isTruthy___
+			ifFalse: [^ NotImplementedError ___signal___: 'access: follow_symlinks unavailable on this platform']].
+	mode := self ___asCInt: mode.
+	^ (self ___libc: #access
+		with: { self ___cPathFor: path. mode }
+		ifFail: [:errno | ^ false]) @env0:= 0
 %
 
 category: 'Grail-File Descriptors'
