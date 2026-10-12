@@ -9429,10 +9429,16 @@ ___classCellSetter___: aSym
 	REFERENCE, so a mutation from the method is visible to the enclosing
 	scope (CPython by-reference cells).  Answers the block; the caller sends
 	it ``value: <newValue>''.  A missing setter cell means codegen failed to
-	register the write -- a NameError (catchable) beats a bare DNU."
+	register the write -- a NameError (catchable) beats a bare DNU.
+
+	A miss through the receiver's class is retried through the running method's
+	own class, as ___classCell___: retries a read: a receiverless call
+	(``Cls.__dict__['f']()'' on ``def f(): nonlocal x'') runs the def against
+	UnboundMethod >> ___noReceiver___, whose class chain carries no cell."
 
 	| blk |
 	blk := self ___dynamicClassAttr___: aSym.
+	blk @env0:isNil ifTrue: [blk := self ___grailCellFromReceiverFrames___: aSym].
 	blk @env0:isNil ifTrue: [
 		NameError ___signal___: ('free variable '''
 			@env0:, (aSym @env0:asString @env0:copyFrom: 15 to: aSym @env0:asString @env0:size - 3)

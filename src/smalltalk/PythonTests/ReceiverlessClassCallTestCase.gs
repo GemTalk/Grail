@@ -96,7 +96,7 @@ testEveryResultIsChecked
 	expected := testModule @env1:___pyAttrLoad___: #EXPECTED.
 	known := testModule @env1:___pyAttrLoad___: #KNOWN_DIVERGENCES.
 	self assert: (r @env1:__len__) = ((expected @env1:__len__) + (known @env1:__len__)).
-	self assert: (expected @env1:__len__) >= 18
+	self assert: (expected @env1:__len__) >= 19
 %
 
 category: 'Grail-Tests'
@@ -135,7 +135,9 @@ testKeywordArgumentsReachTheBody
 	self assertMatchesCPython: 'kwonly_missing'.
 	self assertMatchesCPython: 'kwonly_positional'.
 	self assertMatchesCPython: 'no_params'.
-	self assertMatchesCPython: 'no_params_kwarg'
+	self assertMatchesCPython: 'no_params_kwarg'.
+	"Through an instance the instance is an argument too many (#1434)."
+	self assertMatchesCPython: 'instance_extra_arg'
 %
 
 category: 'Grail-Tests'
@@ -153,7 +155,7 @@ testKnownDivergencesStillDiverge
 
 	| known |
 	known := testModule @env1:___pyAttrLoad___: #KNOWN_DIVERGENCES.
-	#('receiver_default' 'packed_int_receiver' 'instance_extra_arg') do: [:k |
+	#('receiver_default' 'packed_int_receiver') do: [:k |
 		self
 			deny: ((self result: k) @env1:__eq__: (known @env1:__getitem__: k)) == true
 			description: k , ' now matches CPython; move it to EXPECTED']

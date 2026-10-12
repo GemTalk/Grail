@@ -2361,6 +2361,69 @@ ___receiverParamName___
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___refusesReceiver___
+	"Asked of a def compiled as a METHOD (an instance method or a @classmethod,
+	never a @staticmethod): does it take no positional argument at all, so that
+	the instance -- or the class -- a call through one supplies is an argument
+	too many?  ``def h()'' and ``def ko(*, x=3)'' do; ``def m(*args)'' does not,
+	since the receiver is args[0] (issue #1434).  Such a method opens with
+	UnboundMethod >> ___refuseReceiver___:positional:kw:kwonly:qualifiedName:."
+
+	^ self ___receiverParamName___ isNil
+		and: [args isNil or: [args vararg isNil]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___kwonlyParamNameStrings___
+	"The keyword-only parameter names, as Strings."
+
+	args isNil ifTrue: [^ #()].
+	^ ((args kwonlyargs ifNil: [#()]) collect: [:a | a name asString]) asArray
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___printReceiverRefusalOn___: aStream positional: posName kw: kwName
+	"The text form of the opening check ___refusesReceiver___ describes.
+	posName and kwName are the packed form's two arguments, nil for the unary
+	form, which has neither."
+
+	aStream
+		nextPutAll: 'UnboundMethod @env0:___refuseReceiver___: self positional: ';
+		nextPutAll: (posName ifNil: ['nil']);
+		nextPutAll: ' kw: ';
+		nextPutAll: (kwName ifNil: ['nil']);
+		nextPutAll: ' kwonly: #('.
+	self ___kwonlyParamNameStrings___ do: [:n |
+		aStream space; nextPutAll: n printString].
+	aStream
+		nextPutAll: ' ) qualifiedName: ';
+		nextPutAll: (self ___qualifiedNameFor___: name) printString;
+		nextPut: $.;
+		lf
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRReceiverRefusalOn___: aBuilder pos: posLeaf kw: kwLeaf
+	"___printReceiverRefusalOn___:positional:kw:, as IR.  posLeaf and kwLeaf
+	are nil for the unary form."
+
+	aBuilder add: (aBuilder
+		send: #'___refuseReceiver___:positional:kw:kwonly:qualifiedName:'
+		to: (aBuilder globalNamed: #UnboundMethod)
+		with: {
+			aBuilder selfNode.
+			posLeaf isNil ifTrue: [aBuilder nilLit] ifFalse: [aBuilder var: posLeaf].
+			kwLeaf isNil ifTrue: [aBuilder nilLit] ifFalse: [aBuilder var: kwLeaf].
+			aBuilder obj: self ___kwonlyParamNameStrings___.
+			aBuilder obj: (self ___qualifiedNameFor___: name) }
+		env: 0)
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 ___namesEnclosingReceiver___: aSymbolOrNil
 	"Does this def's body mention a name that compiles to the bare Smalltalk
 	receiver?
@@ -4043,6 +4106,10 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	instanceMethodParameterNames, so ``positional at: 1'' is the first
 	parameter AFTER self and the arity messages count as the text's do."
 	paramNames := self ___irBuildParamNames___ collect: [:p | p asString].
+	"``def ko(*, x=3)'': the receiver is an argument it does not take, and the
+	arity check below counts only ``positional'' (#1434)."
+	(self ___irStripsReceiver___ and: [self ___refusesReceiver___]) ifTrue: [
+		self ___emitIRReceiverRefusalOn___: aBuilder pos: posLeaf kw: kwLeaf].
 	self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
 		nPositional: paramNames size.
 	self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
@@ -4763,7 +4830,11 @@ ___irMethodBodyCoreOn___: aClass install: installBool
 			transports do: [:assoc |
 				builder add: (builder
 					assign: (builder leafFor: assoc key asSymbol)
-					from: (builder localVar: assoc value asSymbol))]]
+					from: (builder localVar: assoc value asSymbol))].
+			"``def h()'': the receiver is an argument it does not take (#1434)."
+			(self ___irStripsReceiver___ and: [self ___refusesReceiver___]) ifTrue: [
+				builder atNode: self.
+				self ___emitIRReceiverRefusalOn___: builder pos: nil kw: nil]]
 		ifFalse: [
 			"The varargs ``_name:kw:'' form (defaults, *args, **kwargs, keyword-only
 			parameters): the method's two arguments are the positional Array and
@@ -7212,6 +7283,9 @@ generateMethodSourceOn: aStream
 			allLocals do: [:each | aStream nextPutAll: each; space].
 			aStream nextPut: $|; lf.
 		].
+		"``def h()'': the receiver is an argument it does not take (#1434)."
+		self ___refusesReceiver___ ifTrue: [
+			self ___printReceiverRefusalOn___: aStream positional: nil kw: nil].
 		1 to: paramNames size do: [:i |
 			aStream
 				nextPutAll: (NameAst ___transportIdentifierFor___: (paramNames at: i));
@@ -7302,6 +7376,11 @@ generateMethodSourceOn: aStream
 			aStream nextPut: $|; lf.
 		].
 
+		"``def ko(*, x=3)'': the receiver is an argument it does not take, and
+		the arity check below counts only ``positional'' (#1434)."
+		self ___refusesReceiver___ ifTrue: [
+			self ___printReceiverRefusalOn___: aStream
+				positional: posMethodParam kw: kwMethodParam].
 		"Positional / kwargs / default unpacking for the named params."
 		self printPositionalUnpackingOn: aStream
 			paramNames: paramNames
