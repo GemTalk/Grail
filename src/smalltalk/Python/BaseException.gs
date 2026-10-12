@@ -4250,7 +4250,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending frameSpan flushPending |
+	| st catchName catchIdx pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending frameSpan flushPending |
 	st := walkable @env0:at: 1.
 	"Record the frame just pushed, against the capture triple it came from.
 	Read back off ``tracebackObj'' rather than returned by the push, because
@@ -4310,6 +4310,17 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 	catchName := aCode isNil
 		ifTrue: [nil]
 		ifFalse: [aCode @env0:dynamicInstVarAt: #'co_name'].
+	"WHICH ACTIVATION is catching, not only which name (#1401).  A frame between
+	the raise and the catch can carry the catcher's name -- a recursive call of
+	the catching function, another module's body (``<module>'', imported inside
+	a module's ``try''), a same-named function in exec'd code -- and the name test
+	alone took the first such frame for the catcher: it got the catcher's line,
+	the catcher's file, and the walk stopped there.  The index of the on:do: frame
+	that caught bounds it: the catcher lies outside it.  Nil when that cannot be
+	determined, and the name test then decides alone, as before."
+	catchIdx := catchName isNil
+		ifTrue: [nil]
+		ifFalse: [BaseException ___catchingHandlerIndexIn___: st for: self].
 	pushed := 0.
 	2 to: st @env0:size by: 3 do: [:i |
 		| meth ip name home isDoitFrame |
@@ -4411,7 +4422,8 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 					line := (pendingHome @env0:== home and: [pendingLine notNil])
 						ifTrue: [pendingLine]
 						ifFalse: [blockLine].
-					isCatcher := catchName notNil and: ['<module>' @env0:= catchName].
+					isCatcher := (catchName notNil and: ['<module>' @env0:= catchName])
+						and: [catchIdx isNil or: [i @env0:> catchIdx]].
 					frameCode := self ___codeForMethod___: meth name: '<module>' ip: ip
 						aCode: nil.
 					"The PEP 657 span, on the same terms the method branch takes it: from
@@ -4470,7 +4482,8 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 							block: meth.
 						fnLine isNil ifTrue: [fnLine := 0].
 						(BaseException ___isGeneratedPythonMethod___: home) ifTrue: [
-							isCatcher := catchName notNil and: [fnName @env0:= catchName].
+							isCatcher := (catchName notNil and: [fnName @env0:= catchName])
+								and: [catchIdx isNil or: [i @env0:> catchIdx]].
 							frameCode := self ___codeForMethod___: home name: fnName ip: 0
 								aCode: aCode.
 							"A nested function that CATCHES gets codegen's recorded span,
@@ -4645,7 +4658,8 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 					pendingParts := nil].
 				pyLine notNil ifTrue: [
 					| isCatcher frameCode |
-					isCatcher := catchName notNil and: [name @env0:= catchName].
+					isCatcher := (catchName notNil and: [name @env0:= catchName])
+						and: [catchIdx isNil or: [i @env0:> catchIdx]].
 					frameCode := self ___codeForMethod___: meth name: name ip: ip
 						aCode: aCode.
 					"The CATCHING frame takes the position CODEGEN recorded, never the one
@@ -6167,6 +6181,98 @@ ___liveFrameChain___
 				@env0:do: [:each | pairs @env0:add: each].
 		isFirstSection := false].
 	^ self ___liveFrameChainFromPairs___: pairs
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___catchingHandlerIndexIn___: st for: anException
+	"The index in the capture ``st'' of the on:do: (or onException:do:) frame
+	whose handler is running now, catching anException -- or nil when that
+	cannot be established, which leaves the caller on its name test (#1401).
+
+	Asked at the catch, from inside the handler.  A handler runs ON TOP of the
+	frames that signalled, so the frame that caught is still live below us, and
+	the live stack says which one it is: the topmost
+	``AbstractException >> _executeHandler:'' frame is running the handler, its
+	argument is the block it runs, and the catching frame is the one holding that
+	same block as its ``handlerBlock'' argument -- on:do: itself for an exception
+	class or set, onException:do: for the general form Grail's PyLazyExceptSelector
+	takes.  Measured on 4.0: _frameContentsAt: answers the arguments from index
+	11, so _executeHandler:'s block is at 11 and handlerBlock, the second argument
+	of both, at 12.
+
+	The capture names frames by triple and the live stack by level, and the two
+	differ by one constant, derived here by identity on the capture's two
+	innermost methods (as ___attachFrameLocalsWork___ derives it) and re-checked
+	on every frame read.  Only the capture's own on:do: frames are read, innermost
+	first, and the first match wins: for a fresh raise that is one or two reads.
+
+	EVERY LEVEL READ IS IN ONE FRAME -- the protected block's; the loops inside
+	it are all inlined -- because a level counts from whatever calls the
+	primitive, and reads from two different frames would disagree by one.
+
+	Nil when the topmost handler is not handling anException (a traceback built
+	outside a handler), when no alignment is found (a capture from another
+	stack: a generator section, a re-raise across processes), or on any error."
+
+	| execMeth onDoMeth onExcMeth lvl fc aBlock execLvl anchor1 anchor2 offset limit i meth |
+	(st isNil or: [st size < 5]) ifTrue: [^ nil].
+	anchor1 := st at: 2.
+	anchor2 := st at: 5.
+	(anchor1 isNil or: [anchor2 isNil]) ifTrue: [^ nil].
+	^ [
+		execMeth := AbstractException compiledMethodAt: #'_executeHandler:'.
+		onDoMeth := ExecBlock compiledMethodAt: #'on:do:'.
+		onExcMeth := ExecBlock compiledMethodAt: #'onException:do:'.
+		"1. The handler running now."
+		lvl := 1.
+		execLvl := nil.
+		[execLvl isNil and: [lvl <= 40]] whileTrue: [
+			fc := GsProcess _frameContentsAt: lvl.
+			fc isNil ifTrue: [lvl := 41] ifFalse: [
+				(fc at: 1) == execMeth ifTrue: [execLvl := lvl. aBlock := fc atOrNil: 11]].
+			lvl := lvl + 1].
+		execLvl isNil
+			ifTrue: [nil]
+			ifFalse: [ | rcv payload |
+				rcv := (GsProcess _frameContentsAt: execLvl) atOrNil: 10.
+				payload := rcv == anException
+					ifTrue: [anException]
+					ifFalse: [rcv dynamicInstVarAt: #'___grailPayload___'].
+				(payload ~~ anException or: [aBlock isNil])
+					ifTrue: [nil]
+					ifFalse: [
+						"2. The alignment: capture triple k is live level k + offset.
+						The capture is entirely below the handler, so the search
+						starts there."
+						offset := nil.
+						lvl := execLvl.
+						limit := execLvl + 512.
+						[offset isNil and: [lvl < limit]] whileTrue: [
+							fc := GsProcess _frameContentsAt: lvl.
+							fc isNil ifTrue: [lvl := limit] ifFalse: [
+								(fc at: 1) == anchor1 ifTrue: [ | fc2 |
+									fc2 := GsProcess _frameContentsAt: lvl + 1.
+									(fc2 notNil and: [(fc2 at: 1) == anchor2])
+										ifTrue: [offset := lvl - 1]]].
+							lvl := lvl + 1].
+						offset isNil
+							ifTrue: [nil]
+							ifFalse: [ | found |
+								"3. The capture's on:do: frames, innermost first."
+								found := nil.
+								i := 2.
+								[found isNil and: [i <= st size and: [(meth := st at: i) notNil]]] whileTrue: [
+									(meth == onDoMeth or: [meth == onExcMeth]) ifTrue: [
+										fc := GsProcess _frameContentsAt: (i + 1) // 3 + offset.
+										(fc notNil and: [(fc at: 1) == meth
+											and: [(fc atOrNil: 12) == aBlock]])
+												ifTrue: [found := i]].
+									i := i + 3].
+								found]]]]
+		on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError) ifTrue: [e pass].
+			e return: nil]
 %
 
 category: 'Grail-Live Frames'
