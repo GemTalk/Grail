@@ -703,7 +703,8 @@ testTheIdentifierTablesAreWellFormed
 	or the binary search in ___ranges___:include: answers wrong; and the
 	ASCII fast path agrees with them, so the two cannot drift apart."
 
-	{ PythonTokenizer ___xidStartRanges___. PythonTokenizer ___xidContinueRanges___ } do: [:ranges |
+	{ PythonTokenizer ___xidStartRanges___. PythonTokenizer ___xidContinueRanges___.
+	  PythonTokenizer ___nfkcUnstableRanges___ } do: [:ranges |
 		self assert: ranges size even.
 		1 to: ranges size by: 2 do: [:i |
 			self assert: (ranges at: i) <= (ranges at: i + 1).
@@ -715,5 +716,51 @@ testTheIdentifierTablesAreWellFormed
 			equals: (PythonTokenizer ___ranges___: PythonTokenizer ___xidStartRanges___ include: cp).
 		self
 			assert: (PythonTokenizer ___isIdentifierPart___: c)
-			equals: (PythonTokenizer ___ranges___: PythonTokenizer ___xidContinueRanges___ include: cp)]
+			equals: (PythonTokenizer ___ranges___: PythonTokenizer ___xidContinueRanges___ include: cp).
+		self deny: (PythonTokenizer ___ranges___: PythonTokenizer ___nfkcUnstableRanges___ include: cp)]
+%
+
+category: 'Grail-Tests'
+method: PythonTokenizerTestCase
+testIdentifiersAreNfkcNormalized
+	"PEP 3131: U+00B5 and U+03BC, Fraktur and ASCII, ``e'' plus U+0301 and
+	U+00E9 each spell one name (#1502), for names, attributes, parameters
+	and keyword arguments; str.isidentifier and getattr do not normalize.
+	tests/python/identifier_nfkc.py holds the checks and agrees with CPython
+	3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'identifier_nfkc' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/identifier_nfkc.py')
+		name: 'identifier_nfkc'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '13 checks, 0 disagreeing [], keys match: True'
+%
+
+category: 'Grail-Tests'
+method: PythonTokenizerTestCase
+testOnlyANameNfkcCanChangeIsNormalized
+	"A non-ASCII identifier is NFKC-normalized as CPython binds it (#1502),
+	but only a name with a character NFKC can change goes to
+	unicodedata.normalize -- any other name is answered as it is, the same
+	object, so ASCII source never pays for the import or the table build.
+	Names are built as the tokenizer builds them, a character at a time."
+
+	| name ascii greek |
+	name := [:codePoints | | n |
+		n := Unicode7 new.
+		codePoints do: [:cp | n add: (Character codePoint: cp)].
+		n].
+	ascii := 'plain_name2'.
+	self assert: (PythonTokenizer ___nfkcName___: ascii) == ascii.
+	greek := name value: #(16r3BC 16r78).
+	self assert: (PythonTokenizer ___nfkcName___: greek) == greek.
+	self
+		assert: ((PythonTokenizer ___nfkcName___: (name value: #(16rB5))) asArray collect: [:c | c codePoint])
+		equals: #(16r3BC).
+	self
+		assert: ((PythonTokenizer ___nfkcName___: (name value: #(16r65 16r301))) asArray collect: [:c | c codePoint])
+		equals: #(16rE9)
 %
