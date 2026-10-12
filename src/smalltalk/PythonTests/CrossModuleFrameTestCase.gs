@@ -74,3 +74,37 @@ testCrossModuleFrameFilenames
 		self assert: (answer = true)
 			description: 'cross-module frame check failed: ' , k , ' -> ' , answer printString]
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: CrossModuleFrameTestCase
+testTracebackEndsAtTheCatchingActivation
+	"A traceback ends at the frame that CAUGHT, not at the first frame on the way
+	out that carries the catcher's name (#1401): a module body imported inside a
+	module-level try (both are <module>), a recursive call of the catching
+	function, a same-named function defined by exec.  The walk took the first
+	such frame for the catcher, gave it the catcher's line and file, and stopped.
+
+	See tests/python/catching_frame_identity.py (CPython 3.14's values)."
+
+	| mod results expected b keys |
+	importlib @env1:modules removeKey: #'catching_frame_identity' ifAbsent: [].
+	importlib @env1:modules removeKey: #'catching_frame_module_helper' ifAbsent: [].
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/catching_frame_identity.py')
+		name: 'catching_frame_identity'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 keys := mod @env1:___pyAttrLoad___: #'KEYS'.
+	 b := builtins @env1:instance.
+	 self assert: (keys @env1:__len__) equals: 7.
+	 0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k asString , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'catching_frame_identity' ifAbsent: [].
+			importlib @env1:modules removeKey: #'catching_frame_module_helper' ifAbsent: []]
+%

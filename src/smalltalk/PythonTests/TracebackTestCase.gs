@@ -2259,7 +2259,12 @@ method: TracebackTestCase
 testEvalHonoursTheFilenameCompileWasGiven
 	"exec() has passed compile()'s second argument through to codegen since the
 	filename registry existed; eval() dropped it, so the same source reported
-	'sums.py' one way and '<grail>' the other.  Both now answer the name."
+	'sums.py' one way and '<grail>' the other.  Both now answer the name.
+
+	TWO frames, as in CPython: this doit's own, which catches, and the eval'd
+	code's.  Both are <module>, and until #1401 the walk took the inner one for
+	the catcher and stopped there, so this test read one frame.  The doit's
+	file is the '<grail>' placeholder where CPython says '<string>'."
 
 	self assert: ((self eval: 'try:
     eval(compile("1/0", "sums.py", "eval"))
@@ -2267,14 +2272,14 @@ except ZeroDivisionError as e:
     import traceback
     r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
 r
-') asArray collect: [:each | each asString]) = #( 'sums.py' ).
+') asArray collect: [:each | each asString]) = #( '<grail>' 'sums.py' ).
 	self assert: ((self eval: 'try:
     exec(compile("1/0", "sums.py", "exec"))
 except ZeroDivisionError as e:
     import traceback
     r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
 r
-') asArray collect: [:each | each asString]) = #( 'sums.py' ).
+') asArray collect: [:each | each asString]) = #( '<grail>' 'sums.py' ).
 	"A bare string keeps the placeholder, as it always did."
 	self assert: ((self eval: 'try:
     eval("1/0")
@@ -2282,7 +2287,7 @@ except ZeroDivisionError as e:
     import traceback
     r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
 r
-') asArray collect: [:each | each asString]) = #( '<grail>' )
+') asArray collect: [:each | each asString]) = #( '<grail>' '<grail>' )
 %
 
 category: 'Grail-Tests - Embedding'
