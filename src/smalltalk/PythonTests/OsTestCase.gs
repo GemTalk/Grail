@@ -954,6 +954,28 @@ testGetpid
 	self assert: pid > 0
 %
 
+category: 'Grail-Tests - Process Management'
+method: OsTestCase
+testGetuidMatchesAFileThisGemCreated
+	"os.getuid()/getgid() and their effective twins.  pytest's tmp_path calls
+	getuid unguarded and compares it with os.stat's st_uid of the directory it
+	made, so the ids have to be the ones the file system records for this gem's
+	own files -- checked the same way here."
+
+	| o testFile f st |
+	o := os @env1:instance.
+	testFile := 'grail_getuid_test.txt'.
+	f := GsFile openWriteOnServer: testFile.
+	f notNil ifTrue: [f nextPutAll: 'x'; close].
+	[st := o @env1:stat: testFile.
+	 self assert: (o @env1:getuid) equals: (st @env1:st_uid).
+	 self assert: (o @env1:geteuid) equals: (st @env1:st_uid).
+	 self assert: (o @env1:getgid isKindOf: Integer).
+	 self assert: (o @env1:getegid isKindOf: Integer).
+	 self assert: (o @env1:getgid) >= 0]
+		ensure: [GsFile removeServerFile: testFile]
+%
+
 category: 'Grail-Tests - File Operations'
 method: OsTestCase
 testUnlink

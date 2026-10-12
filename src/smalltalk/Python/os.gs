@@ -823,6 +823,71 @@ getpid
 
 category: 'Grail-Built-in Functions'
 method: os
+getuid
+	"os.getuid() — the gem process's real user id.
+
+	pytest's tmp_path fixture calls it unguarded on every POSIX platform, to
+	check that the base temporary directory belongs to the user running the
+	tests (comparing it with os.stat's st_uid), so the fixture errored without
+	it."
+
+	^ self ___idCall: 'getuid'
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+geteuid
+	"os.geteuid() — the gem process's effective user id."
+
+	^ self ___idCall: 'geteuid'
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+getgid
+	"os.getgid() — the gem process's real group id."
+
+	^ self ___idCall: 'getgid'
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+getegid
+	"os.getegid() — the gem process's effective group id."
+
+	^ self ___idCall: 'getegid'
+%
+
+category: 'Grail-Process Ids'
+method: os
+___idCall: aName
+	"Call one of libc's four process-id getters.  They take no arguments and
+	cannot fail (POSIX: ``always successful''), so there is no errno to read."
+
+	^ (self @env0:class ___idCallouts @env0:at: aName @env0:asSymbol) @env0:callWith: #()
+%
+
+category: 'Grail-Process Ids'
+classmethod: os
+___idCallouts
+	"getuid, geteuid, getgid and getegid.  A CCallout wraps per-process C state,
+	so the table lives in SessionTemps, as the descriptor callouts' does.
+	uid_t and gid_t are unsigned 32-bit on both Darwin and Linux."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_id_callouts'
+		ifAbsentPut: [ | lib d |
+			lib := CLibrary @env0:named: self ___libcName.
+			d := SymbolKeyValueDictionary @env0:new.
+			#('getuid' 'geteuid' 'getgid' 'getegid') @env0:do: [:each |
+				d @env0:at: each @env0:asSymbol
+					put: (CCallout @env0:library: lib name: each
+						result: #'uint32' args: #())].
+			d]
+%
+
+category: 'Grail-Built-in Functions'
+method: os
 urandom: size
 	"os.urandom(size) — size bytes from the OS CSPRNG.
 
