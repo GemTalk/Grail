@@ -42,7 +42,7 @@ WAIT = 3.0   # seconds a check waits before calling a socket "open" / a client "
 # --- plumbing -------------------------------------------------------------------
 
 def _serve(server):
-    t = threading.Thread(target=lambda: server.serve_forever(0.05))
+    t = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.05})
     t.daemon = True
     t.start()
     return t
