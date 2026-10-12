@@ -9629,6 +9629,31 @@ ___classAttrDunder___: baseSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___isPropertyGetterSelector___: aSym
+	"Is the receiver's instance-side unary aSym a @property GETTER -- a def
+	compiled into the class body's own category -- rather than a synthesized
+	accessor?
+
+	___pyAttrLoad___:'s accessor-pair branch passes what the getter answers
+	through ___descriptorGet___:, which is right for an accessor answering a
+	stored CLASS-LEVEL value (Django's LocaleRegexDescriptor is why it is
+	there) and wrong for a property: a property's value is the getter's
+	result, used as it is.  So a getter returning a plain function --
+	``return self._obj'' holding ``TestClass.test_method'' -- came back BOUND
+	to the property's own instance (#1456).  A @property getter is the one
+	member of an instance-side pair compiled as a def: 'Grail-Class Methods',
+	with its setter there too or in 'Grail-Property-ReadOnly'.  Kept out of
+	___pyAttrLoad___: itself, whose frame width is load-bearing."
+
+	| owner |
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [^ false].
+	^ (owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:asString
+		@env0:= 'Grail-Class Methods'
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___typeAttrBound___: aValue
 	"aValue -- a value found on self's TYPE, typically by ___classAttrDunder___:
 	-- as CPython's special-method lookup hands it to the call: the callable to
@@ -11896,6 +11921,12 @@ ___pyAttrLoad___: aSym
 					and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil])
 					ifTrue: [^ self ___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)].
 			].
+			"A PROPERTY's value is what its getter returned -- CPython never
+			runs __get__ on it.  Binding it turned a property that hands back
+			a function into a method bound to the property's OWN instance
+			(#1456; pytest's FunctionDefinition.obj).  See
+			___isPropertyGetterSelector___:."
+			(self ___isPropertyGetterSelector___: aSym) ifTrue: [^ instVal].
 			^ self ___descriptorGet___: instVal
 	].
 	"Instance falling through to a class-side attribute.  When the

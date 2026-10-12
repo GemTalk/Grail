@@ -1288,6 +1288,7 @@ run
 	at: #'ProcessLookupErrorTestCase' put: nil;
 	at: #'PropertyAndIsinstanceTestCase' put: nil;
 	at: #'PropertyNotDynamicClassAttributeTestCase' put: nil;
+	at: #'PropertyReturnsFunctionTestCase' put: nil;
 	at: #'Py2PrintStatementTestCase' put: nil;
 	at: #'PydanticPhase6WallsTestCase' put: nil;
 	at: #'PyDictTestCase' put: nil;
@@ -2807,6 +2808,7 @@ input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
 input src/smalltalk/PythonTests/ProcessLookupErrorTestCase.gs
 input src/smalltalk/PythonTests/PropertyAndIsinstanceTestCase.gs
 input src/smalltalk/PythonTests/PropertyNotDynamicClassAttributeTestCase.gs
+input src/smalltalk/PythonTests/PropertyReturnsFunctionTestCase.gs
 input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
 input src/smalltalk/PythonTests/PydanticPhase6WallsTestCase.gs
 input src/smalltalk/PythonTests/PyDictTestCase.gs
