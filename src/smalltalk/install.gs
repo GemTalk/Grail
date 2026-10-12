@@ -1229,6 +1229,7 @@ run
 	at: #'NonlocalInMethodLocalClassTestCase' put: nil;
 	at: #'NonlocalParamWriteTestCase' put: nil;
 	at: #'NonlocalThroughClassCellTestCase' put: nil;
+	at: #'NoPositionalDefTestCase' put: nil;
 	at: #'NoSelfParameterTestCase' put: nil;
 	at: #'NotADirectoryErrorTestCase' put: nil;
 	at: #'NotImplementedErrorTestCase' put: nil;
@@ -2743,6 +2744,7 @@ input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInMethodLocalClassTestCase.gs
 input src/smalltalk/PythonTests/NonlocalParamWriteTestCase.gs
 input src/smalltalk/PythonTests/NonlocalThroughClassCellTestCase.gs
+input src/smalltalk/PythonTests/NoPositionalDefTestCase.gs
 input src/smalltalk/PythonTests/NoSelfParameterTestCase.gs
 input src/smalltalk/PythonTests/NotADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedErrorTestCase.gs

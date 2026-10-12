@@ -24,10 +24,10 @@ which the body's ``*args`` binding leaves out, and a closure cell missed
 through the receiver is found through the running method's own class.
 
 KNOWN_DIVERGENCES are refusals that remain, each a catchable TypeError:
-the receiver parameter's own default (``def g(x=7)`` called as ``C.g()``),
-a packed def with an int first argument (``def k(self, *a)`` called as
-``C.k(1)``), and the extra argument CPython counts when a no-parameter def is
-called on an instance.
+the receiver parameter's own default (``def g(x=7)`` called as ``C.g()``)
+and a packed def with an int first argument (``def k(self, *a)`` called as
+``C.k(1)``).  The extra argument CPython counts when a no-parameter def is
+called on an instance is counted since issue #1434 (instance_extra_arg).
 """
 
 r = {}
@@ -152,6 +152,7 @@ EXPECTED = {
     'closure_instance': ((9, 1), 9),
     'closure_called_inside': (4, 0),
     'uncaught_used_to_escape': (1, 0),
+    'instance_extra_arg': 'TypeError',
 }
 
 KNOWN_DIVERGENCES = {
@@ -161,9 +162,6 @@ KNOWN_DIVERGENCES = {
     # CPython binds self = 1; the packed _k:kw: form cannot take a special
     # receiver, so Grail raises the descriptor TypeError.
     'packed_int_receiver': 0,
-    # CPython: "ko() takes 0 positional arguments but 1 was given"; Grail
-    # drops the instance and answers 3.
-    'instance_extra_arg': 'TypeError',
 }
 
 

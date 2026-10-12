@@ -282,6 +282,42 @@ ___noReceiver___
 	^ #( #'___grailNoReceiver___' )
 %
 
+category: 'Grail-Calling'
+classmethod: UnboundMethod
+___refuseReceiver___: aReceiver positional: positional kw: kwargs kwonly: kwonlyNames qualifiedName: aName
+	"The opening statement of a class-body def that declares no positional
+	parameter and no *vararg -- ``def h()'', ``def ko(*, x=3)'', or such a
+	@classmethod (issue #1434).
+
+	Grail strips a def's first declared parameter into the Smalltalk receiver,
+	and such a def has none to strip, so the receiver used to be dropped:
+	``C().h()'' answered where CPython raises, because the instance is a
+	positional argument the def does not take.  The receiver is what tells the
+	two calls apart.  A call with no receiver at all, ``C.h()'', runs the def
+	against ___noReceiver___ (UnboundMethod >> ___callReceiverless___:kw:orSignal:);
+	ANY other receiver is an instance -- or, for a @classmethod, the class --
+	that CPython would have passed as the first argument.
+
+	The count includes that receiver, which the def's own arity check cannot see:
+	``positional'' is what the packed form was handed besides it, and the unary
+	form has neither argument, so both are nil there.  The wording is CPython's,
+	the keyword-only clause included."
+
+	| given kg |
+	aReceiver == self ___noReceiver___ ifTrue: [^ self].
+	given := 1 + (positional == nil ifTrue: [0] ifFalse: [positional size]).
+	kg := 0.
+	kwargs == nil ifFalse: [
+		kwargs keysDo: [:k |
+			(kwonlyNames includes: k asString) ifTrue: [kg := kg + 1]]].
+	^ TypeError @env1:___signal___: aName , '() takes 0 positional arguments but ' , given printString ,
+		(kg > 0
+			ifTrue: [' positional argument' , (given > 1 ifTrue: ['s'] ifFalse: ['']) ,
+				' (and ' , kg printString , ' keyword-only argument' , (kg > 1 ifTrue: ['s'] ifFalse: ['']) ,
+				') were given']
+			ifFalse: [given > 1 ifTrue: [' were given'] ifFalse: [' was given']])
+%
+
 set compile_env: 1
 
 category: 'Grail-Instance Creation'
@@ -901,8 +937,11 @@ ___callReceiverless___: positional kw: kwargs orSignal: obj
 			(method @env0:selector @env0:asString @env0:endsWith: ':kw:') ifTrue: [
 				^ UnboundMethod @env0:___noReceiver___
 					@env0:with: positional with: kwargs performMethod: method].
+			"Against ___noReceiver___ like the packed form: the def's opening
+			___refuseReceiver___:... check takes any other receiver for an
+			instance passed as an argument (issue #1434)."
 			(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [
-				^ definingClass @env0:performMethod: method].
+				^ UnboundMethod @env0:___noReceiver___ @env0:performMethod: method].
 			kwargs @env0:keysDo: [:k |
 				^ TypeError ___signal___:
 					(definingClass @env1:__name__ @env0:asString @env0:, '.'

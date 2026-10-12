@@ -6138,8 +6138,9 @@ emitReceiverlessMethodTableOn: aStream className: aClassName
 
 	Grail compiles such a def to a ZERO-ARGUMENT Smalltalk method, so the call
 	works -- performMethod: runs it against whatever receiver it is given, and a
-	def with no parameters has no name bound to one.  The defining class is what
-	UnboundMethod hands it.
+	def with no parameters has no name bound to one.  UnboundMethod hands it
+	___noReceiver___, the one receiver its opening check (FunctionDefAst >>
+	___refusesReceiver___) does not refuse as an instance passed by mistake.
 
 	NOT EVERY ZERO-PARAMETER DEF QUALIFIES, and the exclusion is the reason this
 	table exists rather than a plain argcount test at the call site.  A
