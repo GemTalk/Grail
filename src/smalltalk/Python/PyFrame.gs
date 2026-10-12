@@ -194,7 +194,7 @@ f_locals
 	there is nothing to re-read it from."
 	([self @env0:dynamicInstVarAt: #'___liveMethod___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil]) isNil
-			ifTrue: [^ self ___liveLocalsSnapshotOrRaise___].
+			ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
 	"NO TEMPS TO SHOW: fall back to this frame's GLOBALS, which for a module-level
 	frame is not a fallback at all but the right answer -- CPython's module frame
 	has no fast locals, so its f_locals IS its globals mapping.  Measured against
@@ -209,27 +209,22 @@ f_locals
 	and no snapshot means the namespace.
 
 	Scoped to LIVE frames (``___liveMethod___'' is set only by the live walk), so a
-	traceback frame with no readable locals keeps answering absent -- which is what
-	traceback.py's ``getattr(frame, 'f_locals', None)'' expects and what keeps a
-	rendered traceback from growing a module's whole namespace."
+	traceback frame with no readable locals answers an empty mapping rather than
+	growing a rendered traceback by a module's whole namespace."
 	([self @env0:dynamicInstVarAt: #'___liveLocals___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil]) isNil
 			ifTrue: [
 				| g nm |
 				"MODULE-LEVEL FRAMES ONLY.  A function frame with no bound locals
-				must keep answering ABSENT: that is what
-				frame_f_locals.py's a_frame_with_no_locals_reports_none and
-				TracebackTestCase's a_frame_with_no_bound_locals_has_no_f_locals
-				pin, and handing it the module namespace instead is not a
-				widening but a wrong answer -- an unrelated mapping under the
-				name of that function's variables.  (CPython gives such a frame
-				an empty proxy rather than nothing; that gap is older than this
-				change and stays as it is.)"
+				answers an EMPTY mapping, as CPython's does (see
+				___liveLocalsSnapshotOrEmpty___); handing it the module
+				namespace instead would be a wrong answer -- an unrelated
+				mapping under the name of that function's variables."
 				nm := [(self @env0:dynamicInstVarAt: #'f_code')
 					@env0:dynamicInstVarAt: #'co_name']
 					@env0:on: AbstractException do: [:e | e @env0:return: nil].
 				(nm @env0:= '<module>') == true ifFalse: [
-					^ self ___liveLocalsSnapshotOrRaise___].
+					^ self ___liveLocalsSnapshotOrEmpty___].
 				"THE STORED SLOT FIRST.  A doit's namespace is handed to the
 				constructor and parked in the dynamic instVar (see BaseException
 				class >> ___doitGlobalsFor___); the f_globals METHOD derives one from
@@ -242,13 +237,13 @@ f_locals
 						@env0:on: Error do: [:e |
 							(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
 							e @env0:return: None]].
-				(g isNil or: [g == None]) ifTrue: [^ self ___liveLocalsSnapshotOrRaise___].
+				(g isNil or: [g == None]) ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
 				^ g].
 	proxy := [(Python @env0:at: #'PyFrameLocals') @env0:onFrame: self]
 		@env0:on: Error do: [:e |
 			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
 			e @env0:return: nil].
-	proxy isNil ifTrue: [^ self ___liveLocalsSnapshotOrRaise___].
+	proxy isNil ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
 	self @env0:dynamicInstVarAt: #'___liveLocalsView___' put: proxy.
 	^ proxy
 %
@@ -450,21 +445,36 @@ ___liveLocalsSnapshot___
 
 category: 'Grail-Tracebacks'
 method: PyFrame
-___liveLocalsSnapshotOrRaise___
-	"The snapshot taken when this frame was built, or the AttributeError a frame
-	with no locals to report has always raised.
+___liveLocalsSnapshotOrEmpty___
+	"The snapshot taken when this frame was built, or -- when there is none -- an
+	EMPTY dict, made once and kept so ``f.f_locals is f.f_locals'' holds.
 
-	``getattr(frame, 'f_locals', None)'' is how traceback.py asks, and an absent
-	attribute is the shape it already handles -- see PyFrame class >>
-	___pyLocalsFromFrameContentsList___ for why an empty dict is a worse answer
-	than none."
+	This used to raise AttributeError instead, deliberately: absent kept ``this
+	frame has no variables'' apart from ``Grail could not read them'', and
+	traceback.py asks ``getattr(frame, 'f_locals', None)'', so absent was a
+	shape it handled.  pytest does not ask that way.  TracebackEntry.ishidden
+	reads ``frame.f_locals'' directly on EVERY entry of a failure's traceback --
+	looking for __tracebackhide__ -- and Grail snapshots locals only for the
+	innermost frame, so every failing test whose traceback had an outer frame,
+	or whose own frame bound nothing, ended pytest with an INTERNALERROR.
+	CPython's frames always have the mapping, so the distinction is given up in
+	favour of the shape (decided 2026-10-12).  What it costs: a frame Grail could
+	not read reports no variables, and pytest cannot see a __tracebackhide__
+	set in an outer frame."
 
-	| snap |
+	| snap empty dictClass |
 	snap := [self @env0:dynamicInstVarAt: #'___liveLocals___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	snap isNil ifFalse: [^ snap].
-	^ AttributeError ___signal___:
-		'''PyFrame'' object has no attribute ''f_locals'''
+	empty := [self @env0:dynamicInstVarAt: #'___emptyLocals___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	empty isNil ifFalse: [^ empty].
+	"Looked up at run time: PyDict is filed after this class (see
+	___pyLocalsFromFrameContentsList___)."
+	dictClass := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #PyDict.
+	empty := dictClass @env0:new.
+	self @env0:dynamicInstVarAt: #'___emptyLocals___' put: empty.
+	^ empty
 %
 
 category: 'Grail-Tracebacks'

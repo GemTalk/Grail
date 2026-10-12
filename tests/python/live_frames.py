@@ -304,14 +304,14 @@ def a_live_frame_has_f_locals():
 
 
 # ---------------------------------------------- deliberate Grail-only limits
-def a_frame_with_no_bound_locals_has_no_f_locals():
-    """GRAIL-SPECIFIC (CPython answers an empty dict).  Absent rather than empty,
-    so ``this frame has no variables'' and ``this frame cannot say'' stay
-    distinguishable -- the second is the honest answer for a traceback frame, for a
-    suspended consumer process, and for a gem where the temporaries could not be
-    read.  traceback.py reads it as ``getattr(frame, 'f_locals', None)'', so
-    absent is a shape every consumer already handles."""
-    return not hasattr(sys._getframe(), 'f_locals')
+def a_frame_with_no_bound_locals_has_empty_f_locals():
+    """A frame that binds nothing has an EMPTY f_locals, as CPython's does.
+
+    This was a deliberate Grail-only limit -- absent rather than empty, to keep
+    "no variables" apart from "cannot say" -- until pytest, which reads
+    ``frame.f_locals'' directly on every traceback entry, crashed on it.  Grail
+    now answers an empty mapping wherever it has no locals to report."""
+    return len(sys._getframe().f_locals) == 0
 
 
 def a_traceback_frame_has_f_locals():
@@ -688,9 +688,9 @@ if __name__ == '__main__':
         a_traceback_frame_has_f_locals,
         a_traceback_frame_declines_another_frames_locals,
         clear_frames_empties_a_traceback_frame,
+        a_frame_with_no_bound_locals_has_empty_f_locals,
     ]
     grail_only = [
-        a_frame_with_no_bound_locals_has_no_f_locals,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
