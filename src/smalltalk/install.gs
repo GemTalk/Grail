@@ -1408,6 +1408,7 @@ run
 	at: #'StructBuffersAndHalfInitTestCase' put: nil;
 	at: #'StructGapsTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
+	at: #'SubclassableIoAndWarningsTestCase' put: nil;
 	at: #'SubclassAttrShadowTestCase' put: nil;
 	at: #'SubclassNameAttrTestCase' put: nil;
 	at: #'SubmoduleAutoBindTestCase' put: nil;
@@ -2928,6 +2929,7 @@ input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/StructBuffersAndHalfInitTestCase.gs
 input src/smalltalk/PythonTests/StructGapsTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
+input src/smalltalk/PythonTests/SubclassableIoAndWarningsTestCase.gs
 input src/smalltalk/PythonTests/SubclassAttrShadowTestCase.gs
 input src/smalltalk/PythonTests/SubclassCopyPickleTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs

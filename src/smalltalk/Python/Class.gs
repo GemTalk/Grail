@@ -96,6 +96,25 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	expects (test_bool.py test_subclass)."
 	(self == Boolean) ifTrue: [
 		^ TypeError ___signal___: 'type ''bool'' is not an acceptable base type'].
+	"``class CaptureIO(io.TextIOWrapper)'': CPython's TextIOWrapper wraps a
+	BUFFER, and wrapping one is the ordinary reason to subclass it -- pytest's
+	CaptureIO / TeeCaptureIO / EncodedFile all ``super().__init__(io.BytesIO(),
+	encoding=...)''.  Grail's TextIOWrapper is a FileIO over a GsFile, so a
+	subclass of it was never initialised over the buffer: ``write'' raised
+	``not writable'' and ``.buffer'' was missing (#1459).  A plain
+	``io.TextIOWrapper(buffer)'' already answers _pyio's buffer-wrapping class
+	(TextIOWrapper class >> ___constructText___:kw:), so a Python subclass is
+	rooted there too, the way int's is rooted at AbstractPyInt.  Only a class
+	STATEMENT comes through here; Grail's own Smalltalk subclasses of
+	TextIOWrapper keep the GsFile one."
+	(self == (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #TextIOWrapper)) ifTrue: [ | pyio |
+		pyio := [((System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #io) instance)
+				@env1:___pyioClass___: #'TextIOWrapper']
+			@env0:on: Error do: [:ex | ex @env0:return: nil].
+		(pyio @env0:isKindOf: Behavior) ifTrue: [
+			^ pyio ___subclass___: aSymbol
+				instVarNames: ivarNames
+				classInstVarNames: classIvarNames]].
 	((self == Integer)
 		or: [self == SmallInteger or: [self == LargeInteger]]) ifTrue: [
 		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyInt)
