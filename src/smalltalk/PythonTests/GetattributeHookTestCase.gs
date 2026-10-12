@@ -203,3 +203,43 @@ testShadowedMethodWithoutHook
 
 	self assertCheck: 'shadowed_method_without_hook'.
 %
+
+category: 'Grail-Tests - object.__getattribute__'
+method: GetattributeHookTestCase
+testObjectGetattributeNeverCallsGetattr
+	"An explicit ``object.__getattribute__(obj, name)'' is the generic lookup
+	alone, as in CPython: its miss raises AttributeError and never calls
+	__getattr__ (#1395).  The standard idiom -- a __getattr__ that tries
+	object.__getattribute__ first and falls back in ``except AttributeError''
+	-- called itself from its own miss and overflowed the stack, which no
+	Python except can catch; on main this fixture dies at its first check.
+
+	Controls: an ordinary miss still reaches __getattr__ afterwards, a
+	__getattribute__ hook whose inner object.__getattribute__ misses still
+	gets __getattr__ applied (the router), the class-attribute spelling
+	``__getattr__ = fn'' behaves the same, and existing attributes of every
+	kind are still found.
+
+	See tests/python/object_getattribute_skips_getattr.py (CPython 3.14's
+	values)."
+
+	| fixture answers expected b keys |
+	importlib @env1:modules removeKey: #'object_getattribute_skips_getattr' ifAbsent: [].
+	[fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/object_getattribute_skips_getattr.py')
+		name: 'object_getattribute_skips_getattr'.
+	 answers := fixture @env1:___pyAttrLoad___: #'r'.
+	 expected := fixture @env1:___pyAttrLoad___: #'EXPECTED'.
+	 b := (Python at: #'builtins') @env1:instance.
+	 keys := fixture @env1:___pyAttrLoad___: #'KEYS'.
+	 self assert: (keys @env1:__len__) equals: 11.
+	 0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		got := (b @env1:repr: (answers @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k asString , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'object_getattribute_skips_getattr' ifAbsent: []]
+%
