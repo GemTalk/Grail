@@ -1229,6 +1229,7 @@ run
 	at: #'NestedDefNameTestCase' put: nil;
 	at: #'NestedFunctionFramesTestCase' put: nil;
 	at: #'NestedKeywordOnlyTestCase' put: nil;
+	at: #'NestedLambdaQualnameTestCase' put: nil;
 	at: #'NestedOperandSpanTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'NestedStarImportTestCase' put: nil;
@@ -2776,6 +2777,7 @@ input src/smalltalk/PythonTests/NestedDefModuleTargetTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
 input src/smalltalk/PythonTests/NestedKeywordOnlyTestCase.gs
+input src/smalltalk/PythonTests/NestedLambdaQualnameTestCase.gs
 input src/smalltalk/PythonTests/NestedOperandSpanTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/NestedStarImportTestCase.gs

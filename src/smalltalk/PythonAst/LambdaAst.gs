@@ -246,7 +246,7 @@ printSmalltalkOn: aStream
 
 	| posArgs transport kwonlyNames varargName kwargName
 	  defaults kwDefaults firstWithDefault suffix hasOuter requiredKwonly
-	  qualified bodyLocals bodyLit outerLit |
+	  qualified bodyLocals bodyLit outerLit savedScopeDepth |
 	"The lambda's BODY is its frame's ``current statement'': CPython underlines
 	``foo(*args)'' in ``(lambda *args: foo(*args))(1,2,3,4)'' for the <lambda>
 	frame and the whole call for the frame that made it.  Grail emitted no store
@@ -530,12 +530,17 @@ printSmalltalkOn: aStream
 	declared.  It used to be emitted bare, and the module failed to compile
 	with ``undefined symbol ___gen___''.  (The IR path already refuses such a
 	lambda, so this is the only emit.)"
-	(self ___irBodyHasYieldOrAwait___: body)
+	"The body is emitted INSIDE this lambda's scope frame, so a lambda or genexpr
+	nested in it is named through it -- ``<lambda>.<locals>.<lambda>'' (#1522).
+	The defaults above are not: CPython evaluates them in the enclosing scope."
+	savedScopeDepth := CallAst ___pushScope___: self kind: #function name: '<lambda>'.
+	[(self ___irBodyHasYieldOrAwait___: body)
 		ifTrue: [
 			aStream nextPutAll: 'PythonGenerator @env1:___withBlock___: [:___gen___ |'; lf.
 			body printSmalltalkOn: aStream.
 			aStream nextPutAll: ']']
-		ifFalse: [body printSmalltalkOn: aStream].
+		ifFalse: [body printSmalltalkOn: aStream]]
+		ensure: [CallAst ___restoreScopeDepth___: savedScopeDepth].
 
 	"A LINE BREAK before the closing bracket, so the restore below cannot share a
 	line with the body.  The scan that recovers a position works at LINE
@@ -580,13 +585,14 @@ printSmalltalkOn: aStream
 	is simply ``<lambda>'' in CPython, and ExecBlock >> __qualname__ already falls
 	back to __name__, so emitting it would only restate what the name says.
 
-	THE PREFIX COMES FROM THE SCOPE STACK, and a lambda never pushes onto it --
-	which is not an oversight to work around but exactly what makes this correct:
-	the walk stops at its argument's own frame, finds none, and so consumes every
-	enclosing scope, which IS a lambda's prefix.  Verified against CPython 3.14.6
-	for the four shapes: '<lambda>' at module level, 'f.<locals>.<lambda>' inside
-	a function, 'K.<lambda>' in a class body (no ``<locals>'' -- a class body is
-	not a function scope), and two lambdas in one scope sharing one qualname."
+	THE PREFIX COMES FROM THE SCOPE STACK.  ``qualified'' is computed before this
+	lambda pushes its own frame (around the body, above), and the walk would stop
+	at that frame anyway, so it consumes exactly the enclosing scopes -- which IS
+	a lambda's prefix.  Verified against CPython 3.14 for: '<lambda>' at module
+	level, 'f.<locals>.<lambda>' inside a function, 'K.<lambda>' in a class body
+	(no ``<locals>'' -- a class body is not a function scope), two lambdas in one
+	scope sharing one qualname, and '<lambda>.<locals>.<lambda>' for one lambda
+	inside another (#1522), which needs the push."
 	aStream nextPutAll: ' @env0:___pyNamed___: ''<lambda>'''.
 	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
 		aStream
@@ -917,7 +923,7 @@ ___emitIRLambdaBlockOn___: aBuilder
 		do: [:argLeaves :tempLeaves |
 			aBuilder nestedFunctionDo: [
 				aBuilder withLocals: ((1 to: tempNames size) collect: [:i | (tempNames at: i) -> (tempLeaves at: i)]) do: [
-					| posLeaf kwLeaf savedGen |
+					| posLeaf kwLeaf savedGen savedDepth |
 					posLeaf := argLeaves at: 1.
 					kwLeaf := argLeaves at: 2.
 					aBuilder atNode: self.
@@ -928,8 +934,12 @@ ___emitIRLambdaBlockOn___: aBuilder
 					self ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf.
 					savedGen := aBuilder genLeaf.
 					aBuilder genLeaf: nil.
+					"Inside this lambda's scope frame, as the text path emits it."
+					savedDepth := CallAst ___pushScope___: self kind: #function name: '<lambda>'.
 					[aBuilder add: (body ___emitIRValueOn___: aBuilder)]
-						ensure: [aBuilder genLeaf: savedGen]]]].
+						ensure: [
+							CallAst ___restoreScopeDepth___: savedDepth.
+							aBuilder genLeaf: savedGen]]]].
 	aBuilder atNode: self.
 	specs := OrderedCollection new.
 	specs add: { #'___pyNamed___:'. { aBuilder obj: '<lambda>' }. 0 }.
