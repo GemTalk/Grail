@@ -3973,10 +3973,7 @@ category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
 ___multipleValuesNamesLiteral___: pairs
 	"The names the duplicate-argument guard covers, as the source of ONE
-	literal Array -- ``#('a' 'b')'' -- which the emitted loop indexes.  A loop
-	over one literal rather than a check per parameter, because a def can
-	declare hundreds: test_call's TestFunctionWithManyArgs builds one with
-	1000, and an unrolled guard made a method too large to run."
+	literal Array -- ``#('a' 'b')'' -- handed to the runtime check."
 
 	| ws |
 	ws := WriteStream on: String new.
@@ -4635,34 +4632,19 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	"0. The duplicate-argument guard, as the text emits it (#1477)."
 	dups := self ___multipleValuesParams___: nPos.
 	dups isEmpty ifFalse: [
-		| names limit loop |
-		names := (dups collect: [:pair | pair at: 2]) asArray.
 		aBuilder
 			unless: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
 			then: [
-				limit := aBuilder send: #min:
-					to: (aBuilder send: #-
-						to: (self ___irPosSize___: posLeaf on: aBuilder)
-						with: { aBuilder obj: (dups first at: 1) - 1 } env: 0)
-					with: { aBuilder obj: names size } env: 0.
-				loop := aBuilder blockWithArg: #'___i___' do: [:iLeaf |
-					| nameAt |
-					nameAt := [aBuilder send: #at: to: (aBuilder obj: names)
-						with: { aBuilder var: iLeaf } env: 0].
-					aBuilder
-						if: (aBuilder send: #includesKey: to: (aBuilder var: kwLeaf)
-							with: { nameAt value } env: 0)
-						then: [
-							aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
-									aBuilder obj: qname , '() got multiple values for argument '''.
-									nameAt value.
-									aBuilder obj: '''' } on: aBuilder)
-								on: aBuilder)]].
-				"``(1 to: limit) do:'' -- two ordinary sends: the IR generator
-				compiles only an INLINED to:do:, which it builds itself."
-				aBuilder add: (aBuilder send: #do:
-					to: (aBuilder send: #to: to: (aBuilder obj: 1) with: { limit } env: 0)
-					with: { loop } env: 0)]].
+				aBuilder add: (aBuilder
+					send: #'___grailCheckMultipleValues___:pos:kw:skip:name:'
+					to: (aBuilder globalNamed: #TypeError)
+					with: {
+						aBuilder obj: (dups collect: [:pair | pair at: 2]) asArray.
+						aBuilder var: posLeaf.
+						aBuilder var: kwLeaf.
+						aBuilder obj: (dups first at: 1) - 1.
+						aBuilder obj: qname asString }
+					env: 0)]].
 	args vararg isNil ifTrue: [
 		| defcount sig plural prefix cond off total given |
 		"A method counts its receiver on both sides, as the text's
@@ -6087,25 +6069,22 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	First, as in CPython, which raises it while binding keywords -- before it
 	counts the positional arguments -- and checked whether or not the def
 	collects **kwargs, since a name that IS a parameter never goes there.
-	Only when the call passed keywords, and only as far as the positional
-	Array reaches: a loop over the covered names, in parameter order (see
-	___multipleValuesNamesLiteral___:)."
+	Only when the call passed keywords; the check itself is one runtime send
+	(TypeError class >> ___grailCheckMultipleValues___:pos:kw:skip:name:,
+	which says why it is not emitted inline)."
 	(self ___multipleValuesParams___: nPos) isEmpty ifFalse: [ | pairs skip lit |
 		pairs := self ___multipleValuesParams___: nPos.
 		skip := (pairs first at: 1) - 1.
 		lit := self ___multipleValuesNamesLiteral___: pairs.
 		aStream
 			nextPutAll: '('; nextPutAll: kwName;
-			nextPutAll: ' @env0:isNil) ifFalse: [1 to: ((('; nextPutAll: posName;
-			nextPutAll: ' @env0:size) @env0:- '; print: skip;
-			nextPutAll: ') @env0:min: '; print: pairs size;
-			nextPutAll: ') do: [:___i___ | ('; nextPutAll: kwName;
-			nextPutAll: ' @env0:includesKey: ('; nextPutAll: lit;
-			nextPutAll: ' @env0:at: ___i___)) ifTrue: [TypeError ___signal___: (''';
-			nextPutAll: (self ___qualifiedNameFor___: name);
-			nextPutAll: '() got multiple values for argument '''''' @env0:, (';
+			nextPutAll: ' @env0:isNil) ifFalse: [TypeError @env0:___grailCheckMultipleValues___: ';
 			nextPutAll: lit;
-			nextPutAll: ' @env0:at: ___i___) @env0:, '''''''')]]].'; lf].
+			nextPutAll: ' pos: '; nextPutAll: posName;
+			nextPutAll: ' kw: '; nextPutAll: kwName;
+			nextPutAll: ' skip: '; print: skip;
+			nextPutAll: ' name: '; print: (self ___qualifiedNameFor___: name) asString;
+			nextPutAll: '].'; lf].
 	args vararg isNil ifTrue: [ | defcount sig plural prefix off total given |
 		off := self ___arityReceiverOffset___: nPos.
 		total := nPos + off.
