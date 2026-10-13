@@ -14438,11 +14438,27 @@ __le__: other
 ! internal ___binOpFallback___), then checks the result: built-ins never return
 ! the singleton, so for them the check is a no-op and behavior is unchanged
 ! (ComparisonProtocolTestCase invariants preserved).
+!
+! Each first gives a SUBCLASS on the right its turn, when its reflected method
+! is its own (___reflectedArithFirst___:reflected:).  Skipped
+! outright, before any send, when the operands share a class or the right one
+! is a KERNEL class (Behavior >> _isKernel, ~7ns) -- a kernel class has no
+! reflected method of its own, and that covers the hot mixed cases: int +
+! float, a Unicode7 + a Unicode16, list + tuple.  Measured: a first version
+! that sent to the helper for every mixed pair added ~135ns to 'ab' + 'c\u00e9'.
 
 category: 'Grail-Arithmetic'
 method: object
 ___binOpAdd___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__radd__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __add__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '+'].
+			^ r]].
 	r := self __add__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
@@ -14453,6 +14469,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpSub___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rsub__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __sub__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '-'].
+			^ r]].
 	r := self __sub__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'].
@@ -14463,6 +14487,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpMul___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rmul__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __mul__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '*'].
+			^ r]].
 	r := self __mul__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'].
@@ -14473,6 +14505,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpTrueDiv___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rtruediv__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __truediv__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '/'].
+			^ r]].
 	r := self __truediv__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'].
@@ -14483,6 +14523,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpFloorDiv___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rfloordiv__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __floordiv__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '//'].
+			^ r]].
 	r := self __floordiv__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
@@ -14505,6 +14553,14 @@ ___binOpDivMod___: other
 	matches what the complex guard in divmod:_: was already raising."
 
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rdivmod__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __divmod__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: 'divmod()'].
+			^ r]].
 	r := self __divmod__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
@@ -14515,6 +14571,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpMod___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rmod__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __mod__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '%'].
+			^ r]].
 	r := self __mod__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
@@ -14525,6 +14589,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpPow___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rpow__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __pow__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '**'].
+			^ r]].
 	r := self __pow__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'].
@@ -14535,6 +14607,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpLShift___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rlshift__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __lshift__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '<<'].
+			^ r]].
 	r := self __lshift__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'].
@@ -14545,6 +14625,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpRShift___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rrshift__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __rshift__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '>>'].
+			^ r]].
 	r := self __rshift__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'].
@@ -14555,6 +14643,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpAnd___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rand__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __and__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '&'].
+			^ r]].
 	r := self __and__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'].
@@ -14565,6 +14661,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpOr___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__ror__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __or__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '|'].
+			^ r]].
 	r := self __or__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'].
@@ -14575,6 +14679,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpXor___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rxor__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __xor__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '^'].
+			^ r]].
 	r := self __xor__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'].
@@ -14585,6 +14697,14 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpMatMul___: other
 	| r |
+	((other @env0:class @env0:== self @env0:class)
+			or: [other @env0:class @env0:_isKernel]) ifFalse: [
+		r := self ___reflectedArithFirst___: other reflected: #'__rmatmul__:'.
+		r @env0:== nil ifFalse: [
+			r @env0:== #'___grailReflectedDeclined___' ifFalse: [^ r].
+			r := self __matmul__: other.
+			r @env0:== NotImplemented ifTrue: [^ self ___binOpTypeError___: other op: '@'].
+			^ r]].
 	r := self __matmul__: other.
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '@' reflected: #'__rmatmul__:'].
@@ -14661,9 +14781,80 @@ ___binOpFallback___: other op: opString reflected: refSelector
 	Derived rather than a second table: type(x).__name__ is what CPython
 	prints from and Grail already answers it for every built-in and every
 	user class.  Fixture: tests/python/binop_operand_typeerror.py."
-	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
+	^ self ___binOpTypeError___: other op: opString
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpTypeError___: other op: opString
+	"CPython's ``unsupported operand type(s) for +: 'A' and 'B''' -- see
+	___binOpFallback___ for why the names come from ___pyTypeNameForError___."
+
+	^ TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
 		@env0:, ': ''' @env0:, (self ___pyTypeNameForError___)
 		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___reflectedArithFirst___: other reflected: refSelector
+	"CPython's priority rule for a binary operator, the arithmetic half of
+	___reflectedFirst___: when type(other) is a proper subtype of type(self)
+	AND its reflected method is its OWN -- not the one self's type has --
+	that reflected method is called before self's forward one.  ``'a' +
+	S('b')'' calls S.__radd__ when S defines one, and ``Base() + Sub()'' calls
+	Sub.__radd__ (#1545).  Grail always tried the forward method first, so
+	those answered 'ab' and Base.__add__'s result.
+
+	OVERRIDDEN, not merely inherited -- unlike a comparison.  CPython's
+	slot_nb_* asks method_is_overloaded for the arithmetic operators, so a
+	subclass that only inherits Base.__radd__ gets no priority, and
+	``Base() + SubInherits()'' still runs Base.__add__.  Compiled methods, the
+	varargs ``_name:kw:'' form and a class-dict attribute (fractions'
+	``__add__, __radd__ = _operator_fallbacks(...)'') are each compared with
+	what self's class has.
+
+	Answer nil when the rule does not apply, so the caller takes its ordinary
+	path, and otherwise the reflected result -- or ___grailReflectedDeclined___
+	when it answered NotImplemented.  The caller then runs its forward method
+	ONCE, by its own direct send, and raises TypeError if that declines too:
+	the reflected method has had its turn, and CPython does not call it again.
+	The forward call is the caller's, not a perform: here, because only a
+	direct send takes the doesNotUnderstand route that turns a missing forward
+	method into TypeError -- ``object() % bytearray(b'abc')'', bytearray being
+	a subtype of object, escaped as a raw MessageNotUnderstood
+	(test_bytes test_rmod)."
+
+	| myClass otherClass refOwner myOwner vaSel refBase fn r |
+	"A NUMBER on the left already does this, inside its own forward method
+	(___numericReflectedFirst___:selector:, int's, bool's and float's), so
+	running it here too would call the reflected method twice when it
+	declines.  Tested first: mixed numeric arithmetic (int + float) is the
+	common way here, and this keeps it to one isKindOf:."
+	((self @env0:isKindOf: Number) or: [self @env0:isKindOf: Boolean]) ifTrue: [^ nil].
+	(self ___rightOperandIsSubtype___: other) ifFalse: [^ nil].
+	myClass := self @env0:class.
+	otherClass := other @env0:class.
+	refOwner := otherClass @env0:whichClassIncludesSelector: refSelector environmentId: 1.
+	myOwner := myClass @env0:whichClassIncludesSelector: refSelector environmentId: 1.
+	(refOwner @env0:notNil and: [refOwner ~~ myOwner and: [refOwner ~~ object]])
+		ifTrue: [r := other @env0:perform: refSelector env: 1 withArguments: { self }]
+		ifFalse: [
+			vaSel := ('_' @env0:, (refSelector @env0:asString @env0:copyFrom: 1
+				to: refSelector @env0:asString @env0:size - 1) @env0:, ':kw:') @env0:asSymbol.
+			refOwner := otherClass @env0:whichClassIncludesSelector: vaSel environmentId: 1.
+			myOwner := myClass @env0:whichClassIncludesSelector: vaSel environmentId: 1.
+			(refOwner @env0:notNil and: [refOwner ~~ myOwner and: [refOwner ~~ object]])
+				ifTrue: [r := other @env0:perform: vaSel env: 1 withArguments: { { self }. nil }]
+				ifFalse: [
+					refBase := (refSelector @env0:asString @env0:copyFrom: 1
+						to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
+					fn := other ___classAttrDunder___: refBase.
+					(fn == nil or: [fn == (self ___classAttrDunder___: refBase)])
+						ifTrue: [^ nil].
+					r := other ___callTypeAttr___: fn with: { self }]].
+	r @env0:== NotImplemented ifTrue: [^ #'___grailReflectedDeclined___'].
+	^ r
 %
 
 category: 'Grail-Arithmetic'
@@ -14729,7 +14920,7 @@ ___numericReflectedFirst___: other selector: refSelector
 	left alone.  test_statistics TestHarmonicMean.test_types_conserved:
 	harmonic_mean of float-subclass data computes ``1 / x''."
 
-	| root owner refBase fn result |
+	| root owner refBase fn result vaSel |
 	(other @env0:isKindOf: AbstractPyFloat)
 		ifTrue: [root := AbstractPyFloat]
 		ifFalse: [
@@ -14738,17 +14929,28 @@ ___numericReflectedFirst___: other selector: refSelector
 			root := AbstractPyInt].
 	owner := other @env0:class
 		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+	refBase := (refSelector @env0:asString @env0:copyFrom: 1
+		to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
 	(owner @env0:notNil and: [owner @env0:inheritsFrom: root])
 		ifTrue: [result := other @env0:perform: refSelector env: 1 withArguments: { self }]
 		ifFalse: [
-			"A class-body alias -- ``__radd__ = __add__'' -- is a class
-			attribute, not a compiled method; ___binOpFallback___ asks the
-			same way."
-			refBase := (refSelector @env0:asString @env0:copyFrom: 1
-				to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
-			fn := other ___classAttrDunder___: refBase.
-			fn == nil ifTrue: [^ nil].
-			result := other ___callTypeAttr___: fn with: { self }].
+			"A reflected method with a DEFAULT -- ``def __rpow__(self, other,
+			mod=None)'', the usual spelling, since pow() is ternary -- compiles
+			only to the varargs ``_name:kw:'' form, which the probe above
+			cannot see; ``2 ** MyInt(3)'' then never asked MyInt (#1545)."
+			vaSel := ('_' @env0:, refBase @env0:asString @env0:, ':kw:') @env0:asSymbol.
+			owner := other @env0:class
+				@env0:whichClassIncludesSelector: vaSel environmentId: 1.
+			(owner @env0:notNil and: [owner @env0:inheritsFrom: root])
+				ifTrue: [result := other @env0:perform: vaSel env: 1
+					withArguments: { { self }. nil }]
+				ifFalse: [
+					"A class-body alias -- ``__radd__ = __add__'' -- is a class
+					attribute, not a compiled method; ___binOpFallback___ asks
+					the same way."
+					fn := other ___classAttrDunder___: refBase.
+					fn == nil ifTrue: [^ nil].
+					result := other ___callTypeAttr___: fn with: { self }]].
 	result == NotImplemented ifTrue: [^ nil].
 	^ result
 %
@@ -14920,7 +15122,7 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	NotImplemented sentinel and means ``tried, declined'' -- the caller must
 	then NOT try that same reflected method again."
 
-	| myClass otherClass owner refBase varargsResult attrDunder |
+	| otherClass owner refBase varargsResult attrDunder |
 	"Two CLASSES are compared by their Python metaclass, which is not what
 	``@env0:class'' answers for them: Smalltalk metaclasses mirror the class
 	hierarchy, so ``D class inheritsFrom: Generic class'' holds for every
@@ -14933,32 +15135,8 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	dunder before they get here."
 	((self @env0:isKindOf: Behavior) and: [other @env0:isKindOf: Behavior])
 		ifTrue: [^ nil].
-	myClass := self @env0:class.
+	(self ___rightOperandIsSubtype___: other) ifFalse: [^ nil].
 	otherClass := other @env0:class.
-	(otherClass @env0:== myClass) ifTrue: [^ nil].
-	"A Python subclass of int, float or str does not inherit from the kernel
-	class of the builtin's values -- C3(int) is an AbstractPyInt, 0 a
-	SmallInteger -- so inheritsFrom: alone never saw ``0 == C3(11)'' as a
-	subclass on the right, and C3's __eq__ was never consulted: ``C3(11) in
-	range(10)'', ``[0].count(C3(11))'' and ``0 == C3(11)'' all answered False
-	where CPython answers True (#1495).  Such a subclass's root names the
-	kernel class (___builtinValueClass___); every other class answers nil."
-	(otherClass @env0:inheritsFrom: myClass) ifFalse: [
-		| valueClass |
-		"A CLASS on the right has a metaclass for its class, which answers no
-		such question -- and no class is an instance of a subclass of int,
-		float or str (an Enum class compared with an int, as Enum's value
-		lookup does)."
-		(other @env0:isKindOf: Behavior) ifTrue: [^ nil].
-		"A KERNEL class is never a Python subclass of int, float or str, and it
-		is the common case here -- two kernel strings of different classes,
-		'ab' == 'c\u00e9' -- so it is ruled out before the send below:
-		_isKernel costs ~7ns, and the send and the str subclass test cost 'ab' ==
-		'c\u00e9' 89ns more than before this rule, measured."
-		otherClass @env0:_isKernel ifTrue: [^ nil].
-		valueClass := otherClass @env0:___builtinValueClass___.
-		(valueClass @env0:notNil and: [self @env0:isKindOf: valueClass])
-			ifFalse: [^ nil]].
 	"A subclass that BLOCKS the reflected method with None counts as overriding
 	it -- CPython reaches the block through exactly this priority rule, so
 	``SupEq() == S()'' raises rather than answering from SupEq.__eq__.  Tested
@@ -15008,6 +15186,36 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	attrDunder == nil ifFalse: [
 		^ other ___callTypeAttr___: attrDunder with: { self }].
 	^ nil
+%
+
+category: 'Grail-Comparison'
+method: object
+___rightOperandIsSubtype___: other
+	"Is type(other) a PROPER subtype of type(self) -- the condition under which
+	CPython lets the right operand's reflected method go first, for comparisons
+	(___reflectedFirst___) and arithmetic (___reflectedArithFirst___)?
+
+	Usually that is Smalltalk inheritance.  A Python subclass of int, float or
+	str does not inherit from the kernel class of the builtin's values, though
+	-- C3(int) is an AbstractPyInt and 0 a SmallInteger; S(str) is rooted at
+	Unicode32 and 'a' a Unicode7 -- so such a subclass's class names that kernel
+	class (___builtinValueClass___), and everything else answers nil (#1495).
+	A CLASS on the right is never such a subtype, and its own class is a
+	metaclass, which answers no such question (an Enum class compared with an
+	int, as Enum's value lookup does)."
+
+	| myClass otherClass valueClass |
+	myClass := self @env0:class.
+	otherClass := other @env0:class.
+	otherClass @env0:== myClass ifTrue: [^ false].
+	(otherClass @env0:inheritsFrom: myClass) ifTrue: [^ true].
+	"A KERNEL class cannot be a Python subclass of int, float or str, and it is
+	by far the common case here (two kernel strings, an int and a float), so
+	it is ruled out before the sends below: _isKernel costs ~7ns, the rest ~90."
+	otherClass @env0:_isKernel ifTrue: [^ false].
+	(other @env0:isKindOf: Behavior) ifTrue: [^ false].
+	valueClass := otherClass @env0:___builtinValueClass___.
+	^ valueClass @env0:notNil and: [self @env0:isKindOf: valueClass]
 %
 
 category: 'Grail-Comparison'
