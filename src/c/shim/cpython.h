@@ -18,6 +18,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <string.h>
 #include <assert.h>
 #include <math.h>
@@ -628,6 +629,7 @@ extern PyObject *PyExc_NotImplementedError;
 extern PyObject *PyExc_OSError;
 extern PyObject *PyExc_IOError;          /* alias of OSError in CPython */
 extern PyObject *PyExc_ImportError;
+extern PyObject *PyExc_ModuleNotFoundError;
 extern PyObject *PyExc_NameError;
 extern PyObject *PyExc_StopAsyncIteration;
 extern PyObject *PyExc_BufferError;
@@ -779,6 +781,7 @@ _PyArg_UnpackKeywords(PyObject *const *args, Py_ssize_t nargs,
 PyObject *PyModuleDef_Init(PyModuleDef *def);
 int       PyModule_AddObjectRef(PyObject *module, const char *name,
                                 PyObject *value);
+PyObject  *PyModule_GetDict(PyObject *module);
 int       PyModule_Add(PyObject *module, const char *name,
                        PyObject *value);
 int       PyModule_AddIntConstant(PyObject *module, const char *name,
@@ -877,6 +880,10 @@ Py_ssize_t  PySequence_Length(PyObject *seq);
 PyObject *PyObject_GetItem(PyObject *obj, PyObject *key);
 int       PyObject_SetItem(PyObject *obj, PyObject *key, PyObject *value);
 PyObject *PyObject_Call(PyObject *callable, PyObject *args, PyObject *kwargs);
+PyObject *PyObject_CallFunction(PyObject *callable, const char *format, ...);
+PyObject *PyImport_ImportModule(const char *name);
+PyObject *PyDescr_NewMethod(PyTypeObject *type, PyMethodDef *ml);
+PyObject *PyDescr_NewGetSet(PyTypeObject *type, PyGetSetDef *gs);
 PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg);
 int       PyObject_SetAttrString(PyObject *obj, const char *name,
                                  PyObject *value);
@@ -1077,6 +1084,8 @@ int PyErr_ExceptionMatches(PyObject *exc);
 /* Unicode (additional) */
 #define PyUnicode_CheckExact(op) PyUnicode_Check(op)
 PyObject   *PyUnicode_FromFormat(const char *format, ...);
+PyObject   *PyUnicode_FromFormatV(const char *format, va_list vargs);
+PyObject   *PyUnicode_FromObject(PyObject *obj);
 PyObject   *PyUnicode_Join(PyObject *separator, PyObject *seq);
 Py_ssize_t  PyUnicode_FindChar(PyObject *str, Py_UCS4 ch,
                                 Py_ssize_t start, Py_ssize_t end, int dir);
@@ -1246,6 +1255,9 @@ int       PyDict_Update(PyObject *dict, PyObject *other);
 int       PyDict_Merge(PyObject *dict, PyObject *other, int override);
 PyObject *PyDict_SetDefault(PyObject *dict, PyObject *key,
                             PyObject *defaultobj);
+int       PyDict_SetDefaultRef(PyObject *dict, PyObject *key,
+                               PyObject *defaultobj, PyObject **result);
+void      PyType_Modified(PyTypeObject *type);
 
 /* ========== List / Tuple (additional) ========== */
 
