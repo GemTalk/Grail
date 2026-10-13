@@ -326,7 +326,7 @@ method: PythonTokenizer
 isIdentifierPart: aChar
 
 	aChar ifNil: [^false].
-	^aChar isLetter or: [aChar isDigit or: [aChar == $_]]
+	^ PythonTokenizer ___isIdentifierPart___: aChar
 %
 
 category: 'Grail-private'
@@ -334,7 +334,97 @@ method: PythonTokenizer
 isIdentifierStart: aChar
 
 	aChar ifNil: [^false].
-	^aChar isLetter or: [aChar == $_]
+	^ PythonTokenizer ___isIdentifierStart___: aChar
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___isIdentifierStart___: aChar
+	"May aChar begin a Python identifier: XID_Start, or ``_'' (PEP 3131).
+
+	This was ``isLetter or _'', which agrees for every letter GemStone's
+	Unicode tables know -- but those tables are older than CPython's, so a
+	letter assigned since was refused (#1378).  The answer now comes from
+	ranges generated from CPython itself (PythonTokenizerIdentifiers.gs, by
+	scripts/gen_identifier_tables.py).  ASCII, the whole of most source,
+	never reaches the search."
+
+	| cp |
+	cp := aChar codePoint.
+	cp < 128 ifTrue: [^ aChar isLetter or: [aChar == $_]].
+	^ self ___ranges___: self ___xidStartRanges___ include: cp
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___isIdentifierPart___: aChar
+	"May aChar continue a Python identifier: XID_Continue.
+
+	This was ``isLetter, isDigit or _'', which refused every combining mark
+	(Mn, Mc) and connector (Pc) -- the Hebrew vowel points (U+05B4) in
+	pyparsing's unicode.py identifiers -- along with Other_ID_Continue (U+00B7) and every
+	character newer than GemStone's tables (#1378).  Ranges generated from
+	CPython, as for ___isIdentifierStart___:."
+
+	| cp |
+	cp := aChar codePoint.
+	cp < 128 ifTrue: [^ aChar isLetter or: [aChar isDigit or: [aChar == $_]]].
+	^ self ___ranges___: self ___xidContinueRanges___ include: cp
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___mayChangeUnderNfkc___: aChar
+	"Can aChar, in an identifier, make the name change under NFKC: on its
+	own (U+00B5 MICRO SIGN is U+03BC), by canonical reordering, or by
+	composing with the character before it (U+0301 after ``e'').  Ranges
+	generated from CPython (scripts/gen_identifier_tables.py)."
+
+	| cp |
+	cp := aChar codePoint.
+	cp < 128 ifTrue: [^ false].
+	^ self ___ranges___: self ___nfkcUnstableRanges___ include: cp
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___nfkcName___: aName
+	"aName as CPython binds it: NFKC-normalized (PEP 3131), so U+00B5 and
+	U+03BC, or U+1D518 and ``U'', spell one name (#1502).  Applied to NAME
+	tokens only, after the keyword test, as CPython does: a keyword is
+	matched as written, and a name that normalizes to one (U+1D422 U+1D41F)
+	binds ``if''.
+
+	NFKC is unicodedata.normalize, which is pure Python and builds its tables
+	(~0.6s) on first use in a session.  So it is called only for a name with
+	a character that can change: any other name, ASCII above all, is already
+	in NFKC form and is returned as it is.  str.isidentifier and getattr do
+	not normalize, in CPython either."
+
+	(aName detect: [:c | self ___mayChangeUnderNfkc___: c] ifNone: [nil])
+		ifNil: [^ aName].
+	^ (importlib @env1:___runtimeModule___: 'unicodedata')
+		@env1:normalize: 'NFKC' _: aName
+%
+
+category: 'Grail-Identifiers'
+classmethod: PythonTokenizer
+___ranges___: ranges include: cp
+	"Binary search of a flattened, ascending (first last first last ...) range
+	table for code point cp."
+
+	| lo hi mid |
+	lo := 1.
+	hi := ranges size // 2.
+	[lo <= hi] whileTrue: [
+		mid := (lo + hi) // 2.
+		cp < (ranges at: mid * 2 - 1)
+			ifTrue: [hi := mid - 1]
+			ifFalse: [
+				cp > (ranges at: mid * 2)
+					ifTrue: [lo := mid + 1]
+					ifFalse: [^ true]]].
+	^ false
 %
 
 category: 'Grail-tokenizing'
@@ -517,7 +607,7 @@ tokenizeIdentifier
 	].
 	(self isKeyword: name)
 		ifTrue: [ self addToken: #KEYWORD value: name line: startLine position: startPos ]
-		ifFalse: [self addToken: #NAME value: name line: startLine position: startPos ].
+		ifFalse: [self addToken: #NAME value: (PythonTokenizer ___nfkcName___: name) line: startLine position: startPos ].
 %
 
 category: 'Grail-tokenizing'
@@ -1141,6 +1231,21 @@ tokenizeString
 			here as a parallel case to the non-raw escape branch below —
 			both consume their characters in a single block so the
 			default-fallthrough consumer at the bottom doesn't run."
+			"...EXCEPT before a brace in an f-string.  A backslash never escapes
+			a brace there, raw or not: the backslash is a literal character and
+			the brace keeps its job, so ``rf'\{{''' is backslash + an escaped
+			``{'' and ``rf'\{x}''' is backslash + a field.  Taking the brace
+			into the backslash unit left the NEXT brace to open a field that
+			never closed -- ``unterminated string literal'' for common regex
+			code (#1427, pygments).  A non-raw f-string also warns, as CPython
+			does for the invalid escape ``\{''."
+			(char == $\ and: [isFString and: [(self peekAt: 1) == ${ or: [(self peekAt: 1) == $}]]])
+				ifTrue: [
+					isRaw ifFalse: [
+						self ___warnInvalidEscape___: (self peekAt: 1) asString octal: false at: position].
+					self advance.
+					str add: $\]
+				ifFalse: [
 			(char == $\ and:[ isRaw ]) ifTrue: [
 				| nextCh |
 				self advance.
@@ -1282,7 +1387,7 @@ tokenizeString
 							fieldStarts add: { str size + 2. position + 1. line }.
 							fields add: (Array with: 0 with: false)]].
 				str add: self advance.
-			]].
+			]]].
 		].
 		true
 	] whileTrue.

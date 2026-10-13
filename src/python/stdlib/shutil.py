@@ -22,7 +22,7 @@
 #     the CONTENT); copystat/copymode do honour it, see copystat below;
 #   * copytree() takes no symlinks/ignore/copy_function arguments -- it always
 #     behaves as CPython's default, copy2 per file plus copystat per directory;
-#   * disk_usage / chown / which are not provided;
+#   * disk_usage / chown are not provided;
 #   * get_terminal_size answers a collections.namedtuple rather than an
 #     os.terminal_size -- see get_terminal_size below.
 
@@ -32,7 +32,7 @@ import stat as _stat
 
 __all__ = ["Error", "SameFileError", "copyfile", "copy", "copy2",
            "copymode", "copystat", "copytree", "move", "rmtree",
-           "get_terminal_size"]
+           "get_terminal_size", "which"]
 
 
 # CPython's value, and its own copyfileobj below verbatim.  Grail is posix, so
@@ -184,8 +184,17 @@ def move(src, dst):
     return dst
 
 
-def _rmtree_inner(path):
-    for name in os.listdir(path):
+def _rmtree_inner(path, onexc):
+    # A directory that went away under us is CPython's FileNotFoundError
+    # ``continue'': someone else removed it, which is what was wanted.
+    try:
+        names = os.listdir(path)
+    except FileNotFoundError:
+        return
+    except OSError as err:
+        onexc(os.scandir, path, err)
+        names = ()
+    for name in names:
         full = os.path.join(path, name)
         # islink BEFORE isdir, because isdir FOLLOWS a link.  A link to a
         # directory used to be recursed into, which deleted what it pointed
@@ -193,38 +202,78 @@ def _rmtree_inner(path):
         # entries it had already taken away.  CPython never looks through a
         # link here: it unlinks the link itself and leaves the target alone.
         if os.path.isdir(full) and not os.path.islink(full):
-            _rmtree_inner(full)
+            _rmtree_inner(full, onexc)
         else:
-            os.remove(full)
-    os.rmdir(path)
+            try:
+                os.unlink(full)
+            except FileNotFoundError:
+                continue
+            except OSError as err:
+                onexc(os.unlink, full, err)
+    try:
+        os.rmdir(path)
+    except FileNotFoundError:
+        pass
+    except OSError as err:
+        onexc(os.rmdir, path, err)
 
 
-def _rmtree(path):
+def _rmtree(path, onexc):
+    try:
+        os.lstat(path)
+    except OSError as err:
+        onexc(os.lstat, path, err)
+        return
     # A SYMLINK AT THE TOP IS REFUSED, not followed and not unlinked (CPython
     # GH-46010: rmtree(link) once emptied the directory the link named).  The
     # exception is CPython's own odd shape, measured rather than invented: an
     # OSError with errno and strerror both None and the path as filename,
     # which prints as "[Errno None] None: '<path>'".
     #
-    # The stat comes first because a DANGLING link is ENOENT to CPython -- it
-    # opens the target, and reports what that open said -- rather than the
-    # refusal below.
+    # A DANGLING link is ENOENT to CPython instead -- it opens the target, and
+    # reports what that open said -- so the stat comes first.
     if os.path.islink(path):
-        os.stat(path)
-        raise OSError(None, None, path)
-    _rmtree_inner(path)
-
-
-def rmtree(path, ignore_errors=False):
-    """Recursively delete a directory tree."""
-    if ignore_errors:
         try:
-            _rmtree(path)
-        except OSError:
+            os.stat(path)
+        except OSError as err:
+            onexc(os.open, path, err)
+            return
+        try:
+            raise OSError(None, None, path)
+        except OSError as err:
+            onexc(os.path.islink, path, err)
+            return
+    _rmtree_inner(path, onexc)
+
+
+def rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None):
+    """Recursively delete a directory tree.
+
+    CPython's signature and error protocol: with ignore_errors every failure
+    is skipped and the rest of the tree still goes; otherwise onexc (or the
+    older onerror, which onexc overrides) is called as (func, path, exc) --
+    onerror with sys.exc_info()'s triple in place of exc -- and with neither
+    the first failure is raised.  The func passed is the one CPython 3.14
+    names on Darwin/Linux for each step.  dir_fd is not supported.
+    """
+    if dir_fd is not None:
+        raise NotImplementedError("dir_fd unavailable on this platform")
+    if ignore_errors:
+        def onexc(*args):
             pass
-        return None
-    _rmtree(path)
-    return None
+    elif onexc is None:
+        if onerror is None:
+            def onexc(*args):
+                raise args[2]
+        else:
+            def onexc(*args):
+                func, path, exc = args
+                if exc is None:
+                    exc_info = None, None, None
+                else:
+                    exc_info = type(exc), exc, exc.__traceback__
+                return onerror(func, path, exc_info)
+    _rmtree(path, onexc)
 
 
 # CPython's os.terminal_size is a struct sequence built by the posix module.
@@ -264,3 +313,73 @@ def get_terminal_size(fallback=(80, 24)):
     if lines <= 0:
         lines = fallback[1]
     return terminal_size(columns, lines)
+
+
+# which() is CPython 3.14's, with the Windows-only branches (PATHEXT, the
+# implicit current directory) removed: Grail is posix, where CPython takes
+# neither.  Its os.confstr lookup is kept, though Grail's os has no confstr:
+# CPython itself catches the AttributeError and falls back to os.defpath, and
+# so does this.  uuid's _ifconfig/_arp/_netstat getters find their commands
+# with it (#1511).
+
+def _access_check(fn, mode):
+    return (os.path.exists(fn) and os.access(fn, mode)
+            and not os.path.isdir(fn))
+
+
+def which(cmd, mode=os.F_OK | os.X_OK, path=None):
+    """Given a command, mode, and a PATH string, return the path which
+    conforms to the given mode on the PATH, or None if there is no such
+    file.
+
+    `mode` defaults to os.F_OK | os.X_OK. `path` defaults to the result
+    of os.environ.get("PATH"), or can be overridden with a custom search
+    path.
+
+    """
+    use_bytes = isinstance(cmd, bytes)
+
+    # If we're given a path with a directory part, look it up directly rather
+    # than referring to PATH directories. This includes checking relative to
+    # the current directory, e.g. ./script
+    dirname, cmd = os.path.split(cmd)
+    if dirname:
+        path = [dirname]
+    else:
+        if path is None:
+            path = os.environ.get("PATH", None)
+            if path is None:
+                try:
+                    path = os.confstr("CS_PATH")
+                except (AttributeError, ValueError):
+                    # os.confstr() or CS_PATH is not available
+                    path = os.defpath
+            # bpo-35755: Don't use os.defpath if the PATH environment variable
+            # is set to an empty string
+
+        # PATH='' doesn't match, whereas PATH=':' looks in the current
+        # directory
+        if not path:
+            return None
+
+        if use_bytes:
+            path = os.fsencode(path)
+            path = path.split(os.fsencode(os.pathsep))
+        else:
+            path = os.fsdecode(path)
+            path = path.split(os.pathsep)
+
+    # On other platforms you don't have things like PATHEXT to tell you
+    # what file suffixes are executable, so just pass on cmd as-is.
+    files = [cmd]
+
+    seen = set()
+    for dir in path:
+        normdir = os.path.normcase(dir)
+        if normdir not in seen:
+            seen.add(normdir)
+            for thefile in files:
+                name = os.path.join(dir, thefile)
+                if _access_check(name, mode):
+                    return name
+    return None

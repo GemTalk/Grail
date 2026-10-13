@@ -86,7 +86,9 @@ testImportPackage
 category: 'Grail-Tests - Import Package'
 method: PackageImportTestCase
 testPackageHasPath
-	"Package module should have __path__ set to a list"
+	"Package module should have __path__ set to a list -- a Python one, as in
+	CPython, so a package can append to its own __path__ (#1523).  This
+	pinned Array until then."
 
 	| imp pkg path |
 	imp := importlib @env1:instance.
@@ -94,7 +96,7 @@ testPackageHasPath
 	pkg := importlib ___lookupModule___: 'src.python.mypkg'.
 
 	path := pkg @env1:__path__.
-	self assert: path class equals: Array.
+	self assert: path class equals: list.
 	self assert: path size equals: 1.
 	self assert: (path first endsWith: 'src/python/mypkg')
 %

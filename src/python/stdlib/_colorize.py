@@ -95,24 +95,79 @@ def get_theme(*, tty_file=None, force_color=False, force_no_color=False):
     return default_theme if can_colorize(file=tty_file) else no_colour_theme
 
 
-# CPython builds ColorCodes by walking ANSIColors.__dict__; the set is what
-# decolor() strips.  Spelled out here because Grail has no ANSIColors class to
-# walk -- nothing reads the named constants -- and because the SET is the whole
-# contract: decolor's job is to measure a coloured string's PRINTED width, and
-# a code it does not know about is a column argparse then miscounts.
-#
-# The bold/plain foreground codes below are every code the two theme sections
-# above can emit, plus RESET.  CPython's fuller list (backgrounds, intense
-# variants) has no source in Grail, and adding entries decolor can never meet
-# would be decoration.
-ColorCodes = frozenset([
-    '\x1b[0m',
-    '\x1b[30m', '\x1b[31m', '\x1b[32m', '\x1b[33m',
-    '\x1b[34m', '\x1b[35m', '\x1b[36m', '\x1b[37m', '\x1b[90m',
-    '\x1b[1m',
-    '\x1b[1;30m', '\x1b[1;31m', '\x1b[1;32m', '\x1b[1;33m',
-    '\x1b[1;34m', '\x1b[1;35m', '\x1b[1;36m', '\x1b[1;37m',
-])
+# CPython's ANSIColors, verbatim.  doctest reads the named constants
+# (ANSIColors.RED and RESET for a failure's divider, get_colors() for its
+# summary), which is what brought the class in; before that nothing did, and
+# ColorCodes below was spelled out by hand.
+class ANSIColors:
+    RESET = "\x1b[0m"
+
+    BLACK = "\x1b[30m"
+    BLUE = "\x1b[34m"
+    CYAN = "\x1b[36m"
+    GREEN = "\x1b[32m"
+    GREY = "\x1b[90m"
+    MAGENTA = "\x1b[35m"
+    RED = "\x1b[31m"
+    WHITE = "\x1b[37m"  # more like LIGHT GRAY
+    YELLOW = "\x1b[33m"
+
+    BOLD = "\x1b[1m"
+    BOLD_BLACK = "\x1b[1;30m"  # DARK GRAY
+    BOLD_BLUE = "\x1b[1;34m"
+    BOLD_CYAN = "\x1b[1;36m"
+    BOLD_GREEN = "\x1b[1;32m"
+    BOLD_MAGENTA = "\x1b[1;35m"
+    BOLD_RED = "\x1b[1;31m"
+    BOLD_WHITE = "\x1b[1;37m"  # actual WHITE
+    BOLD_YELLOW = "\x1b[1;33m"
+
+    # intense = like bold but without being bold
+    INTENSE_BLACK = "\x1b[90m"
+    INTENSE_BLUE = "\x1b[94m"
+    INTENSE_CYAN = "\x1b[96m"
+    INTENSE_GREEN = "\x1b[92m"
+    INTENSE_MAGENTA = "\x1b[95m"
+    INTENSE_RED = "\x1b[91m"
+    INTENSE_WHITE = "\x1b[97m"
+    INTENSE_YELLOW = "\x1b[93m"
+
+    BACKGROUND_BLACK = "\x1b[40m"
+    BACKGROUND_BLUE = "\x1b[44m"
+    BACKGROUND_CYAN = "\x1b[46m"
+    BACKGROUND_GREEN = "\x1b[42m"
+    BACKGROUND_MAGENTA = "\x1b[45m"
+    BACKGROUND_RED = "\x1b[41m"
+    BACKGROUND_WHITE = "\x1b[47m"
+    BACKGROUND_YELLOW = "\x1b[43m"
+
+    INTENSE_BACKGROUND_BLACK = "\x1b[100m"
+    INTENSE_BACKGROUND_BLUE = "\x1b[104m"
+    INTENSE_BACKGROUND_CYAN = "\x1b[106m"
+    INTENSE_BACKGROUND_GREEN = "\x1b[102m"
+    INTENSE_BACKGROUND_MAGENTA = "\x1b[105m"
+    INTENSE_BACKGROUND_RED = "\x1b[101m"
+    INTENSE_BACKGROUND_WHITE = "\x1b[107m"
+    INTENSE_BACKGROUND_YELLOW = "\x1b[103m"
+
+
+# CPython builds NoColors and ColorCodes by walking ANSIColors.__dict__.  A
+# class's __dict__ is not where Grail keeps its class attributes, so walk the
+# names instead: the result is the same set of codes, every one of them.
+NoColors = ANSIColors()
+ColorCodes = set()
+for attr in dir(ANSIColors):
+    if not attr.startswith("__"):
+        ColorCodes.add(getattr(ANSIColors, attr))
+        setattr(NoColors, attr, "")
+ColorCodes = frozenset(ColorCodes)
+
+
+def get_colors(colorize=False, *, file=None):
+    """CPython's get_colors: the real codes when colouring, else NoColors."""
+    if colorize or can_colorize(file=file):
+        return ANSIColors()
+    return NoColors
 
 
 def decolor(text):

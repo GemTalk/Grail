@@ -2563,19 +2563,53 @@ _resetwarnings: positional kw: kwargs
 
 category: 'Grail-Catch warnings'
 method: warnings
-catch_warnings
-	"catch_warnings() - context manager that snapshots filter state
-	on __enter__ and restores it on __exit__.  Returns a small
-	wrapper whose __enter__ saves the current filter list and __exit__
-	puts it back."
+__getattr__: aName
+	"PEP 562, for one name: ``catch_warnings'', the CLASS -- CPython's,
+	vendored as _grail_catch_warnings and imported on first use, as
+	_py_warnings is.
 
-	^ (CatchWarnings @env0:new) @env0:_owner: self
+	It was a METHOD of this module, the context manager's constructor
+	answering a CatchWarnings (below).  That served ``with
+	catch_warnings(record=True)'' and nothing that uses catch_warnings as the
+	class it is: ``class W(warnings.catch_warnings)'' raised ``cannot subclass
+	a non-class base'', which is how pytest's WarningsRecorder (pytest.warns,
+	recwarn) stopped ``import pytest'' (#1459).  The class keeps CatchWarnings
+	as its engine, through _catch_warnings_impl below.
+
+	WHY A __getattr__ AND NOT A UNARY METHOD.  A unary method on a native
+	module serves two spellings at once, and they need different answers here:
+	an attribute READ performs it, and a zero-argument CALL compiles to a bare
+	send of it (codegen emits that whenever the module implements the
+	selector).  ``warnings.catch_warnings'' must be the class and
+	``warnings.catch_warnings()'' an instance of it.  With no such method the
+	call compiles to load-then-call, and the load ends here: the module
+	attribute read consults __getattr__ only after the ordinary lookup fails.
+
+	Not cached in the module: a native module is committed, and writing it
+	from a read is what issue #851 forbids.  importlib's own module registry
+	holds the vendored module, so a repeat read is a lookup."
+
+	| m path |
+	aName @env0:asString @env0:= 'catch_warnings' ifFalse: [
+		^ AttributeError ___signal___:
+			'module ''warnings'' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
+	m := importlib @env1:lookupModule: '_grail_catch_warnings'.
+	m == nil ifTrue: [
+		path := importlib @env1:___moduleNameToPath___: '_grail_catch_warnings'.
+		path == nil ifTrue: [
+			^ ImportError ___signal___:
+				'cannot import name ''catch_warnings'' from ''warnings'': _grail_catch_warnings is not on the search path'].
+		m := importlib @env0:loadModuleFromPath: path name: '_grail_catch_warnings'].
+	^ m @env1:___pyAttrLoad___: #'catch_warnings'
 %
 
 category: 'Grail-Catch warnings'
 method: warnings
-_catch_warnings: positional kw: kwargs
-	"catch_warnings(record=..., ...) -- the kwargs form.
+__catch_warnings_impl: positional kw: kwargs
+	"_catch_warnings_impl(record=..., ...) -- the engine under the
+	catch_warnings class (_grail_catch_warnings), which makes one per
+	__enter__.  This was catch_warnings' own kwargs form until that became a
+	class (#1459); the body is unchanged.
 
 	``record'' is now honoured: with it true, __enter__ answers a live list of
 	WarningMessage records rather than the context manager.  Other keywords

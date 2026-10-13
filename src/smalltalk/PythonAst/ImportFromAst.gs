@@ -7,7 +7,7 @@ StatementAst ifNil: [self error: 'StatementAst is not defined. Check file orderi
 expectvalue /Class
 doit
 StatementAst subclass: 'ImportFromAst'
-  instVarNames: #( module names level wasStarImport)
+  instVarNames: #( module names level wasStarImport starNamesGuessed)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -142,6 +142,27 @@ resolvedModuleName
 		]
 %
 
+category: 'Grail-accessing'
+method: ImportFromAst
+starNamesGuessed: aBoolean
+	"Set by importlib >> expandStarImports: when a star import's names were
+	GUESSED from the module's top-level variables because it has no literal
+	__all__.  A guessed name may never be bound -- a ``global'' only declared
+	inside a function -- so it is bound only if present (#1416).  Names from
+	an __all__ stay strict: CPython raises when __all__ lists a missing one."
+
+	starNamesGuessed := aBoolean
+%
+
+category: 'Grail-accessing'
+method: ImportFromAst
+___starNameMayBeAbsent___
+	"True for the names of an expanded star import that were guessed, not
+	listed in an __all__ (see starNamesGuessed:)."
+
+	^ self wasStarImport and: [starNamesGuessed == true]
+%
+
 category: 'Grail-other'
 method: ImportFromAst
 printSmalltalkOn: aStream
@@ -166,7 +187,7 @@ printSmalltalkOn: aStream
 	nothing."
 	(self wasStarImport and: [ModuleAst compilingDoitScope notNil]) ifTrue: [
 		aStream
-			nextPutAll: '(((Python @env0:at: #builtins) instance) ___doitStarImport___: (((Python @env0:at: #builtins) instance) ';
+			nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___doitStarImport___: (((Python @env0:at: #builtins) @env0:___instance___) ';
 			nextPutAll: self ___importSelectorPrefix___;
 			nextPutAll: ': { ''';
 			nextPutAll: self resolvedModuleName;
@@ -175,12 +196,23 @@ printSmalltalkOn: aStream
 	names doWithIndex: [:each :index |
 		| targetName needsClose |
 		targetName := self boundNameFor: each.
+		"A STAR-EXPANDED name is bound only if the module has it (#1416):
+		valueSourceFor: reads it with ___importFromStar___:, which answers a
+		marker rather than raising, and the binding is skipped on the marker.
+		The parse-time list can name something the module never binds -- a
+		``global'' declared only inside a function -- and CPython's import-all
+		simply does not see it.  Only GUESSED names: an __all__'s stay strict."
+		self ___starNameMayBeAbsent___ ifTrue: [aStream nextPutAll: '[:___starValue___ | ___starValue___ == #''___starNameMissing___'' ifFalse: ['].
 		"Where the binding LANDS -- module dynamic-instVar storage, a
 		class-body definitional store, or a plain temp -- is
 		printImportBindingOpenOn:name:'s decision, shared with ImportAst."
 		needsClose := self printImportBindingOpenOn: aStream name: targetName.
-		aStream nextPutAll: (self valueSourceFor: each).
+		aStream nextPutAll: (self ___starNameMayBeAbsent___
+			ifTrue: ['___starValue___']
+			ifFalse: [self valueSourceFor: each]).
 		needsClose ifTrue: [aStream nextPut: $)].
+		self ___starNameMayBeAbsent___ ifTrue: [
+			aStream nextPutAll: ']] value: '; nextPutAll: (self valueSourceFor: each)].
 		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
 	].
@@ -199,7 +231,7 @@ printSmalltalkOn: aStream
 		rather than the top-level package, which is what an empty
 		fromlist on a dotted name would yield."
 		aStream
-			nextPutAll: 'self @env1:___mergePublicAttrsFrom: (((Python @env0:at: #builtins) instance) ';
+			nextPutAll: 'self @env1:___mergePublicAttrsFrom___: (((Python @env0:at: #builtins) @env0:___instance___) ';
 			nextPutAll: self ___importSelectorPrefix___;
 			nextPutAll: ': { ''';
 			nextPutAll: absoluteName;
@@ -233,7 +265,7 @@ valueSourceFor: anAlias
 		ifTrue: [
 			"Callable on a converted module — wrap in BoundMethod."
 			stream
-				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) instance) ';
+				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) @env0:___instance___) ';
 				nextPutAll: self ___importSelectorPrefix___;
 				nextPutAll: ': { ''';
 				nextPutAll: absoluteName;
@@ -245,20 +277,34 @@ valueSourceFor: anAlias
 		]
 		ifFalse: [
 			"Stored attribute or unconverted module — go through
-			___pyAttrLoad___ so dynamicInstVar entries (the canonical home
-			for module attributes assigned at init time) are read directly
-			without invoking a same-named unary method.  ``from enum import
+			___importFrom___ (object >>), CPython's IMPORT_FROM: the
+			___pyAttrLoad___ read, so dynamicInstVar entries (the canonical
+			home for module attributes assigned at init time) are read directly
+			without invoking a same-named unary method -- ``from enum import
 			auto'' depends on this: ``auto'' is pre-stored as a BoundMethod
 			and a bare unary send would dispatch the env-1 ``auto'' method,
-			returning an integer."
+			returning an integer -- and on a miss the sys.modules retry and
+			the ``cannot import name'' ImportError, which __import__ no longer
+			raises (issue #1223)."
 			stream
-				nextPutAll: '((((Python @env0:at: #builtins) instance) ';
+				nextPutAll: '((((Python @env0:at: #builtins) @env0:___instance___) ';
 				nextPutAll: self ___importSelectorPrefix___;
 				nextPutAll: ': { ''';
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) @env1:___pyAttrLoad___: #''';
+				nextPutAll: ''' }. 0 } kw: nil) @env1:';
+				"A star import reads M's namespace, as CPython's import-all does,
+				never sys.modules.  A GUESSED name may be absent (see
+				printSmalltalkOn:); one an __all__ lists raises CPython's
+				``module 'M' has no attribute 'x''' when it is, which is the
+				plain attribute read's own error -- not IMPORT_FROM's
+				``cannot import name''."
+				nextPutAll: (self ___starNameMayBeAbsent___
+					ifTrue: ['___importFromStar___: #''']
+					ifFalse: [self wasStarImport
+						ifTrue: ['___pyAttrLoad___: #''']
+						ifFalse: ['___importFrom___: #''']]);
 				nextPutAll: attrName;
 				nextPutAll: ''')'.
 		].
@@ -296,7 +342,7 @@ ___storesModuleSlot___: aSymbol
 	"A STAR import may store ANY module slot, so a later top-level def of any
 	name has to clear its slot (FunctionDefAst >>
 	___rebindsAnEarlierModuleBinding___).  Which names it binds is decided by
-	the runtime merge (module >> ___mergePublicAttrsFrom:), from X's __all__ or
+	the runtime merge (module >> ___mergePublicAttrsFrom___:), from X's __all__ or
 	its public names, and parse time cannot know them.
 
 	    from _signal import *       # binds signal, getsignal, ...
@@ -375,7 +421,7 @@ ___emitIRStatementOn___: aBuilder
 	"valueSourceFor:'s two shapes, one statement per alias.  The imported name
 	is the one-element fromlist so the importer answers the LEAF module:
 	  name := ((builtins instance) ___import__: { 'abs.name'. nil. nil. { 'attr' }. 0 } kw: nil)
-	            @env1:___pyAttrLoad___: #attr
+	            @env1:___importFrom___: #attr
 	or, when the module class is known at compile time and ``attr'' is one of
 	its env-1 fast-path methods (a callable on a converted module), the
 	BoundMethod wrap the text emits instead of the attribute load:
@@ -406,7 +452,7 @@ ___emitIRStatementOn___: aBuilder
 					send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
 					with: { imported. aBuilder obj: attrName asSymbol } env: 1]
 				ifFalse: [aBuilder
-					send: #'___pyAttrLoad___:' to: imported
+					send: #'___importFrom___:' to: imported
 					with: { aBuilder obj: attrName asSymbol } env: 1].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder

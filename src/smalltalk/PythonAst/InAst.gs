@@ -76,9 +76,9 @@ printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: 
 		"Non-final ``in'' in a chain (`a in B < c`): the container was
 		staged in lhsName; after the membership test, copy it into the
 		shared chain temp rhsName for the next comparison, then discard
-		that assignment's value via ___ignore: so the expression still
+		that assignment's value via ___ignore___: so the expression still
 		yields the membership result.  The trailing `)` closes the extra
 		`(` opened by the `(((` container prefix above."
-		aStream nextPutAll: ') ___ignore: (' , rhsName , ' := ' , lhsName , '))'.
+		aStream nextPutAll: ') ___ignore___: (' , rhsName , ' := ' , lhsName , '))'.
 	]
 %

@@ -352,6 +352,7 @@ static PyTypeObject _exc_ArithmeticError;
 static PyTypeObject _exc_NotImplementedError;
 static PyTypeObject _exc_OSError;
 static PyTypeObject _exc_ImportError;
+static PyTypeObject _exc_ModuleNotFoundError;
 static PyTypeObject _exc_NameError;
 static PyTypeObject _exc_StopAsyncIteration;
 static PyTypeObject _exc_BufferError;
@@ -387,6 +388,7 @@ PyObject *PyExc_NotImplementedError = (PyObject *)&_exc_NotImplementedError;
 PyObject *PyExc_OSError           = (PyObject *)&_exc_OSError;
 PyObject *PyExc_IOError           = (PyObject *)&_exc_OSError;  /* alias, as in CPython */
 PyObject *PyExc_ImportError       = (PyObject *)&_exc_ImportError;
+PyObject *PyExc_ModuleNotFoundError = (PyObject *)&_exc_ModuleNotFoundError;
 PyObject *PyExc_NameError         = (PyObject *)&_exc_NameError;
 PyObject *PyExc_StopAsyncIteration = (PyObject *)&_exc_StopAsyncIteration;
 PyObject *PyExc_BufferError       = (PyObject *)&_exc_BufferError;
@@ -425,6 +427,7 @@ static PyTypeObject *const exc_parent_table[][2] = {
     { &_exc_StopAsyncIteration, &_exc_Exception },
     { &_exc_SystemError,        &_exc_Exception },
     { &_exc_OSError,            &_exc_Exception },
+    { &_exc_ModuleNotFoundError, &_exc_ImportError },
     { &_exc_ImportError,        &_exc_Exception },
     { &_exc_NameError,          &_exc_Exception },
     { &_exc_BufferError,        &_exc_Exception },
@@ -512,6 +515,7 @@ static void init_exception_types(void) {
     init_exc_type(&_exc_NotImplementedError, "NotImplementedError");
     init_exc_type(&_exc_OSError, "OSError");
     init_exc_type(&_exc_ImportError, "ImportError");
+    init_exc_type(&_exc_ModuleNotFoundError, "ModuleNotFoundError");
     init_exc_type(&_exc_NameError, "NameError");
     init_exc_type(&_exc_StopAsyncIteration, "StopAsyncIteration");
     init_exc_type(&_exc_BufferError, "BufferError");
@@ -548,6 +552,7 @@ static void init_exception_types(void) {
         &_exc_NotImplementedError,
         &_exc_OSError,
         &_exc_ImportError,
+        &_exc_ModuleNotFoundError,
         &_exc_NameError,
         &_exc_StopAsyncIteration,
         &_exc_BufferError,
@@ -778,6 +783,7 @@ static const char *name_for_exc_type(PyObject *current_error_type) {
     if (current_error_type == PyExc_NotImplementedError) return "NotImplementedError";
     if (current_error_type == PyExc_OSError)           return "OSError";
     if (current_error_type == PyExc_ImportError)       return "ImportError";
+    if (current_error_type == PyExc_ModuleNotFoundError) return "ModuleNotFoundError";
     if (current_error_type == PyExc_NameError)         return "NameError";
     if (current_error_type == PyExc_StopAsyncIteration) return "StopAsyncIteration";
     if (current_error_type == PyExc_BufferError)       return "BufferError";
@@ -1144,6 +1150,21 @@ static void take_callback_error(void) {
     int64 ptr = GciOopToI64(GciFetchOop(arr, GciOopToI64(i3)));
     GciErr(&e);
     PyObject *inst = (PyObject *)(intptr_t)ptr;
+    /* The check_gci_error diagnostic covers a GemStone error; a callback
+       that RAISED arrives here instead and was silent, so an empty message
+       (numpy's exec slot ending on a bare ImportError) named no call site. */
+    if (getenv("GRAIL_SHIM_DIAG")) {
+        fprintf(stderr, "SHIM-DIAG callback raised %s: '%s'\n", base, msg);
+        void *bt[16];
+        int n = backtrace(bt, 16);
+        char **syms = backtrace_symbols(bt, n);
+        if (syms) {
+            for (int i = 0; i < n; i++)
+                fprintf(stderr, "    bt[%d] %s\n", i, syms[i]);
+            free(syms);
+        }
+        fflush(stderr);
+    }
     if (ptr != 0 && plausible_pyobj(inst) && plausible_pyobj(inst->ob_type)) {
         PyErr_SetString((PyObject *)inst->ob_type, msg);
         current_error_instance = inst;
@@ -1498,13 +1519,34 @@ extern "C" PyObject *PyBytes_FromStringAndSize(const char *data, Py_ssize_t len)
     return addr_to_pyobj(GciPerform(server, "PyBytes_FromStringAndSize:", &oop, 1));
 }
 
-extern "C" char *PyBytes_AsString(PyObject *obj) {
+/* The bytes of any byte-indexable Grail object (bytes, bytearray, a buffer),
+   with no type check: what the shim's own bytes-like paths need --
+   PyByteArray_AsString and the PyArg "y#"/"s#" parsers. */
+static char *grail_buffer_of(PyObject *obj) {
     if (obj == NULL) return NULL;
     OopType oop = pyobj_oop(obj);
     char *cached = buffer_cache_get(oop);
     if (cached) return cached;
     int64 size = GciFetchSize_(oop);
     return buffer_cache_add(oop, size);
+}
+
+/* CPython's contract: NULL and TypeError for anything that is not bytes.
+   It answered the fetched bytes of WHATEVER it was given, and numpy relies on
+   the refusal: string_to_long_double tries PyBytes_AsString on a non-string
+   first and falls back to the number on NULL.  Given a float -- the -inf
+   identity of the logaddexp ufunc -- the shim answered "", strtold parsed
+   nothing, and numpy's init failed with "invalid literal for long double: "
+   (docs/Shim_NumPy.md, wall 11). */
+extern "C" char *PyBytes_AsString(PyObject *obj) {
+    if (obj == NULL) return NULL;
+    if (!PyBytes_Check(obj)) {
+        PyTypeObject *t = Py_TYPE(obj);
+        PyErr_Format(PyExc_TypeError, "expected bytes, %.200s found",
+                     (t && t->tp_name) ? t->tp_name : "object");
+        return NULL;
+    }
+    return grail_buffer_of(obj);
 }
 
 extern "C" Py_ssize_t PyBytes_Size(PyObject *obj) {
@@ -1839,7 +1881,13 @@ static OopType real_obj_to_oop(PyObject *obj) {
                                 el ? pyobj_oop(el) : none_oop };
             GciPerform(server, "PyTuple_SetItem:at:put:", args, 3);
         }
-        return pyobj_oop(gt);
+        /* The Grail copy goes back to C as THIS object, so a wheel that reads
+           it with PyTuple_GET_ITEM finds its own layout again
+           (CPythonShim>>___noteRealTuple:origin:). */
+        OopType gtOop = pyobj_oop(gt);
+        OopType note[2] = { gtOop, GciI64ToOop((int64)(intptr_t)obj) };
+        GciPerform(server, "___noteRealTuple:origin:", note, 2);
+        return gtOop;
     }
     ShimListObject *op = (ShimListObject *)obj;
     OopType zero = GciI64ToOop(0);
@@ -2245,6 +2293,9 @@ extern "C" PyObject *PyContextVar_New(const char *name, PyObject *default_value)
     OopType args[2] = { GciNewString(name),
                         default_value ? pyobj_oop(default_value) : OOP_NIL };
     OopType r = GciPerform(server, "PyContextVar_New:default:", args, 2);
+    /* A Python exception from ContextVar() itself: the guarded server method
+       recorded it, and check_gci_error makes it C's pending error. */
+    if (g_cb_error_flag) { check_gci_error(); return NULL; }
     if (GciErr(&e)) {
         if (!default_value) {
             fprintf(stderr, "SHIM-DIAG: PyContextVar_New('%s') failed: [%d] %s\n",
@@ -2260,6 +2311,7 @@ extern "C" PyObject *PyContextVar_New(const char *name, PyObject *default_value)
            during use), which beats failing module init. */
         OopType retry[2] = { GciNewString(name), OOP_NIL };
         r = GciPerform(server, "PyContextVar_New:default:", retry, 2);
+        if (g_cb_error_flag) { check_gci_error(); return NULL; }
         if (GciErr(&e)) {
             fprintf(stderr, "SHIM-DIAG: PyContextVar_New('%s') retry failed: [%d] %s\n",
                     name, e.number, e.message);
@@ -2277,7 +2329,9 @@ extern "C" int PyContextVar_Get(PyObject *var, PyObject *default_value,
     OopType args[2] = { pyobj_oop(var),
                         default_value ? pyobj_oop(default_value) : OOP_NIL };
     OopType r = GciPerform(server, "PyContextVar_Get:default:", args, 2);
-    if (GciErr(&e)) return -1;
+    /* check_gci_error, not a bare GciErr: it also takes a raised callback,
+       and it leaves C a pending error -- the -1 used to come with none. */
+    if (check_gci_error()) return -1;
     *value = addr_to_pyobj(r);
     return 0;
 }
@@ -2287,7 +2341,7 @@ extern "C" PyObject *PyContextVar_Set(PyObject *var, PyObject *value) {
     GciErrSType e; GciErr(&e);
     OopType args[2] = { pyobj_oop(var), pyobj_oop(value) };
     OopType r = GciPerform(server, "PyContextVar_Set:value:", args, 2);
-    if (GciErr(&e)) return NULL;
+    if (check_gci_error()) return NULL;
     return addr_to_pyobj(r);
 }
 
@@ -2327,6 +2381,20 @@ static PyObject *foreign_type_dict_lookup(PyTypeObject *t, const char *name) {
    may still try elsewhere. */
 extern "C" PyObject *PyCMethod_New(PyMethodDef *, PyObject *, PyObject *, PyTypeObject *);
 
+/* A descriptor made for a TYPE read, kept in the defining type's tp_dict --
+   where CPython's PyType_Ready put it -- so foreign_type_dict_lookup answers
+   the same object on every later read. */
+static PyObject *cache_type_descr(PyTypeObject *owner, const char *name,
+                                  PyObject *descr) {
+    if (descr == NULL) return NULL;
+    if (owner->tp_dict == NULL && (owner->tp_dict = PyDict_New()) == NULL) {
+        PyErr_Clear();
+        return descr;
+    }
+    if (PyDict_SetItemString(owner->tp_dict, name, descr) < 0) PyErr_Clear();
+    return descr;
+}
+
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     int is_type = is_foreign_type(obj);
     PyTypeObject *start = is_type ? (PyTypeObject *)obj : obj->ob_type;
@@ -2339,13 +2407,14 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
                 return PyCMethod_New(ml, NULL, NULL, t);
             if (ml->ml_flags & METH_CLASS)
                 return PyCMethod_New(ml, (PyObject *)start, NULL, t);
-            if (is_type) break;    /* an instance method read off the class */
+            /* An instance method read off the class: its descriptor. */
+            if (is_type) return cache_type_descr(t, name, PyDescr_NewMethod(t, ml));
             return PyCMethod_New(ml, obj, NULL, t);
         }
-        if (!is_type) {
-            for (PyGetSetDef *gs = t->tp_getset; gs && gs->name; gs++)
-                if (strcmp(gs->name, name) == 0 && gs->get)
-                    return gs->get(obj, gs->closure);
+        for (PyGetSetDef *gs = t->tp_getset; gs && gs->name; gs++) {
+            if (strcmp(gs->name, name) != 0) continue;
+            if (is_type) return cache_type_descr(t, name, PyDescr_NewGetSet(t, gs));
+            if (gs->get) return gs->get(obj, gs->closure);
         }
     }
     return NULL;
@@ -2678,6 +2747,16 @@ static PyObject *shim_module_getattr(PyObject *module, const char *name) {
             case ModuleAttr::ATTR_STRING: return PyUnicode_FromString(a->str_val);
             case ModuleAttr::ATTR_OBJECT: Py_XINCREF(a->obj_val); return a->obj_val;
             }
+        }
+        /* ...then the module's __dict__, which in CPython IS the namespace.
+           numpy's generated InitOperators stores every ufunc with
+           PyDict_SetItemString(PyModule_GetDict(m), ...), and
+           init_real_imag_ufuncs then reads ``imag'' back off the module:
+           without this it was an AttributeError and module exec failed. */
+        if (module_attrs[idx].dict != NULL) {
+            PyObject *v = PyDict_GetItemString(module_attrs[idx].dict, name);
+            if (v != NULL) { Py_INCREF(v); return v; }
+            if (PyErr_Occurred()) return NULL;
         }
     }
     PyErr_Format(PyExc_AttributeError, "module '%s' has no attribute '%s'",
@@ -3141,6 +3220,18 @@ extern "C" int PyCallable_Check(PyObject *obj) {
     if (t == &PyList_Type) return 0;
     if (t == &PyTuple_Type) return 0;
     if (t == &PyDict_Type) return 0;
+    /* A wheel's own object is callable when its type has a tp_call, as in
+       CPython -- its Grail proxy answers no to everything, and numpy's
+       _PyArray_SetNumericOps returns -1 with no error set when a ufunc
+       (whose type is numpy's own PyUFunc_Type) is refused here.  A wheel's
+       TYPE object is called through the shim's type_call emulation
+       (call_foreign), so it is callable whatever its metatype says. */
+    if (is_foreign(obj)) {
+        if (is_foreign_type(obj)) return 1;
+        for (PyTypeObject *b = t; b != NULL; b = b->tp_base)
+            if (b->tp_call != NULL) return 1;
+        return 0;
+    }
     /* Anything else: ask the server. */
     OopType arg = pyobj_oop(obj);
     OopType result = GciPerform(server, "PyCallable_Check:", &arg, 1);
@@ -3509,10 +3600,10 @@ static int parse_one_unit(PyObject *item, const char **pf, va_list *va,
             } else if (f[1] == '#') {
                 const char **o = va_arg(*va, const char **);
                 Py_ssize_t *len = va_arg(*va, Py_ssize_t *);
-                *o = PyBytes_AsString(item); *len = PyBytes_Size(item); f++;
+                *o = grail_buffer_of(item); *len = PyBytes_Size(item); f++;
             } else {
                 const char **o = va_arg(*va, const char **);
-                *o = PyBytes_AsString(item);
+                *o = grail_buffer_of(item);
             }
             break;
         }
@@ -3789,13 +3880,13 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
                     } else {
                         const char **out = va_arg(vargs, const char **);
                         Py_ssize_t *len = va_arg(vargs, Py_ssize_t *);
-                        *out = PyBytes_AsString(item);
+                        *out = grail_buffer_of(item);
                         *len = PyBytes_Size(item);
                     }
                     f++;  /* consume '#' or '*' */
                 } else {
                     const char **out = va_arg(vargs, const char **);
-                    *out = PyBytes_AsString(item);
+                    *out = grail_buffer_of(item);
                 }
                 break;
             }
@@ -4233,7 +4324,14 @@ static OopType shimCall(OopType modOop, OopType methOop,
        as the first call argument, giving us 6 arg slots instead of 5. */
     fetch_string(modOop, modName, sizeof(modName));
     char *dot = strchr(modName, '.');
-    int combined = (dot != NULL);
+    /* A dot alone does not mean the combined form: a dynamically loaded
+       extension inside a package is NAMED with dots (markupsafe._speedups,
+       numpy._core._multiarray_umath), and splitting it looked up module
+       "numpy" -- "Module not found: numpy" on every positional call (#1433).
+       The combined form passes its first ARGUMENT in the meth slot, a
+       SmallInteger (an address, or 0); the plain form passes the method NAME
+       there, a String.  So the slot's kind decides. */
+    int combined = (dot != NULL) && GCI_OOP_IS_SMALL_INT(methOop);
     if (combined) {
         *dot = '\0';
         snprintf(methName, sizeof(methName), "%s", dot + 1);
@@ -4469,7 +4567,8 @@ static PyObject *static_exc_named(const char *name) {
         PyExc_OverflowError, PyExc_ZeroDivisionError, PyExc_ArithmeticError,
         PyExc_RuntimeError, PyExc_RecursionError, PyExc_NotImplementedError,
         PyExc_MemoryError, PyExc_StopIteration, PyExc_StopAsyncIteration,
-        PyExc_SystemError, PyExc_OSError, PyExc_ImportError, PyExc_NameError,
+        PyExc_SystemError, PyExc_OSError, PyExc_ImportError,
+        PyExc_ModuleNotFoundError, PyExc_NameError,
         PyExc_BufferError, PyExc_EOFError, PyExc_KeyboardInterrupt,
         PyExc_UnicodeError, PyExc_UnicodeDecodeError, PyExc_UnicodeEncodeError,
         PyExc_AssertionError, PyExc_BaseExceptionGroup, PyExc_DeprecationWarning,
@@ -5016,6 +5115,13 @@ static OopType shimModuleAttrs(OopType modOop)
             continue;
         exportable++;
     }
+    /* ...plus the module's __dict__, as ONE marked pair that
+       CPythonShim>>moduleAttrs: expands.  numpy publishes most of its names
+       (_ArrayFunctionDispatcher, every ufunc) with PyDict_SetItemString into
+       PyModule_GetDict, never through PyModule_AddObject, so without it
+       ``from numpy._core._multiarray_umath import ...'' found nothing. */
+    PyObject *modDict = (idx < 0) ? NULL : module_attrs[idx].dict;
+    if (modDict != NULL) exportable++;
 
     OopType sizeOop = GciI64ToOop(exportable * 2);
     OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
@@ -5039,6 +5145,10 @@ static OopType shimModuleAttrs(OopType modOop)
         }
         GciStoreOop(arr, slot++, GciNewString(a->name));
         GciStoreOop(arr, slot++, valOop);
+    }
+    if (modDict != NULL) {
+        GciStoreOop(arr, slot++, GciNewString("___grailShimModuleDict___"));
+        GciStoreOop(arr, slot++, pyobj_oop(modDict));
     }
     check_and_raise_error();
     return arr;
@@ -5787,6 +5897,34 @@ PyObject *PyUnicode_FromFormat(const char *format, ...) {
     return PyUnicode_FromString(buf);
 }
 
+/* The va_list form, which numpy's _multiarray_umath imports (its own
+   error-message helpers take a va_list).  Missing, it bound to nothing and
+   the dlopen of numpy 2.5 failed outright. */
+extern "C" PyObject *PyUnicode_FromFormatV(const char *format, va_list vargs) {
+    char buf[4096];
+    va_list ap;
+    va_copy(ap, vargs);
+    shim_format_into(buf, sizeof(buf), format, ap);
+    va_end(ap);
+    return PyUnicode_FromString(buf);
+}
+
+/* CPython's str-only conversion: a str comes back as a new reference, and
+   anything else is a TypeError -- unlike PyObject_Str, it never calls
+   __str__. */
+extern "C" PyObject *PyUnicode_FromObject(PyObject *obj) {
+    if (obj == NULL) {
+        PyErr_SetString(PyExc_SystemError, "PyUnicode_FromObject: NULL object");
+        return NULL;
+    }
+    if (PyUnicode_Check(obj)) {
+        Py_INCREF(obj);
+        return obj;
+    }
+    PyErr_SetString(PyExc_TypeError, "Can't convert object to str implicitly");
+    return NULL;
+}
+
 PyObject *PyUnicode_Join(PyObject *separator, PyObject *seq) {
     if (!separator || !seq) return NULL;
     Py_ssize_t len = PyList_Size(seq);
@@ -5962,6 +6100,11 @@ PyObject *_PyImport_GetModuleAttrString(const char *modname,
 static PyObject *build_value_item(const char **pf, va_list *ap) {
     const char *f = *pf;
     PyObject *result = NULL;
+    /* CPython's do_mkvalue skips separators before ANY unit, so a dict may
+       separate key from value with ", " as well as ":" -- numpy builds
+       "{s, [(i), (i, i), (i)]}" during module init, and the dict case here
+       only stepped over a single ':'. */
+    while (*f == ' ' || *f == '\t' || *f == ',' || *f == ':') f++;
     switch (*f) {
         case 'i': case 'b': case 'h':
             result = PyLong_FromLong((long)va_arg(*ap, int)); f++; break;
@@ -6624,7 +6767,7 @@ extern "C" PyObject *PyByteArray_FromStringAndSize(const char *data,
 }
 
 extern "C" char *PyByteArray_AsString(PyObject *obj) {
-    return PyBytes_AsString(obj);
+    return grail_buffer_of(obj);
 }
 
 extern "C" Py_ssize_t PyByteArray_Size(PyObject *obj) {
@@ -6648,7 +6791,12 @@ typedef struct {
     PyCapsule_Destructor destructor;
 } GrailCapsule;
 
-static PyTypeObject GrailCapsule_Type;  /* zero-initialized; identity only */
+/* Capsules carry the EXPORTED PyCapsule_Type (defined, zero-initialized, in
+   shim_numpy.cc): a prebuilt wheel inlines PyCapsule_CheckExact as an ob_type
+   compare against that symbol.  A private type here made every capsule the
+   shim built fail it -- numpy's PyUFunc_AddPromoter refused its own promoter
+   with "promoter must (currently) be a PyCapsule." */
+extern "C" PyTypeObject PyCapsule_Type;
 
 extern "C" PyObject *PyCapsule_New(void *pointer, const char *name,
                                    PyCapsule_Destructor destructor) {
@@ -6656,14 +6804,14 @@ extern "C" PyObject *PyCapsule_New(void *pointer, const char *name,
         PyErr_SetString(PyExc_ValueError, "PyCapsule_New called with null pointer");
         return NULL;
     }
-    if (GrailCapsule_Type.tp_name == NULL) {
-        GrailCapsule_Type.tp_name = "PyCapsule";
-        register_shim_type(&GrailCapsule_Type);
+    if (PyCapsule_Type.tp_name == NULL) {
+        PyCapsule_Type.tp_name = "PyCapsule";
+        register_shim_type(&PyCapsule_Type);
     }
     GrailCapsule *cap = (GrailCapsule *)calloc(1, sizeof(GrailCapsule));
     if (!cap) return PyErr_NoMemory();
     cap->ob_base.ob_refcnt = 1;
-    cap->ob_base.ob_type = &GrailCapsule_Type;
+    cap->ob_base.ob_type = &PyCapsule_Type;
     cap->pointer = pointer;
     cap->name = name;
     cap->destructor = destructor;
@@ -6671,7 +6819,7 @@ extern "C" PyObject *PyCapsule_New(void *pointer, const char *name,
 }
 
 extern "C" int PyCapsule_CheckExact(PyObject *op) {
-    return op != NULL && Py_TYPE(op) == &GrailCapsule_Type;
+    return op != NULL && Py_TYPE(op) == &PyCapsule_Type;
 }
 
 static int capsule_name_matches(GrailCapsule *cap, const char *name) {

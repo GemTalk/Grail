@@ -299,6 +299,11 @@ jobs:
             exit 1
           fi
           cp "$src" "$board"
+          # The scope doc is derived from the board, and ci.yml's scripts job
+          # fails a PR whose doc does not match it -- this one included, in the
+          # merge queue.
+          scope=docs/Grail_CPython_Scope.md
+          python3 scripts/sync_scope_status.py
           if git diff --quiet -- "$board"; then
             echo "CI-measured board is identical to the committed baseline -- nothing to do."
             exit 0
@@ -338,7 +343,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add "$board"
+          git add "$board" "$scope"
           git commit -F commit-msg.txt
           git push origin "$branch"
           gh pr create \

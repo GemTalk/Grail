@@ -79,12 +79,10 @@ ___emitSmalltalkOn___: aStream
 	].
 	hasStar := elts anySatisfy: [:each | each isKindOf: StarredAst].
 	hasStar ifFalse: [
-		aStream nextPutAll: '({'.
-		elts doWithIndex: [:each :i |
-			i > 1 ifTrue: [aStream nextPutAll: '. '].
-			each printSmalltalkOn: aStream.
-		].
-		aStream nextPutAll: '} perform: #asOrderedCollection env: 0)'.
+		"Chunked when it is too big for one brace array (#1423)."
+		aStream nextPut: $(.
+		self ___printElementsArrayOf___: elts on: aStream.
+		aStream nextPutAll: ' perform: #asOrderedCollection env: 0)'.
 		^ self.
 	].
 	"Splat path: ``[a, *b, c]'' → concatenate run-arrays around each

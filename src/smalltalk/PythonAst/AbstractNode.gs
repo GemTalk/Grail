@@ -534,8 +534,80 @@ ___copyAstFieldsInto___: pyNode
 			and: [(self ___astDeclares___: declared field: mapped)])
 				ifTrue: [
 					pyNode @env1:___pyAttrStore___: mapped asSymbol
-						put: (self ___translatedAstValue___: (self instVarAt: i))]].
+						put: (mapped = 'decorator_list'
+							ifTrue: [self ___translatedDecoratorList___: (self instVarAt: i)]
+							ifFalse: [self ___translatedAstValue___: (self instVarAt: i)])]].
+	self ___defaultMissingAstFields___: declared into: pyNode.
 	self ___copyAstPositionInto___: pyNode
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___defaultMissingAstFields___: declaredFields into: pyNode
+	"None for every declared field the Grail node had nothing for.
+
+	CPython's parser sets EVERY field of the nodes it builds, an absent optional
+	one to None -- Assign.type_comment, FunctionDef.returns -- so
+	``ast.iter_fields(node)'' names them all and ``node.type_comment'' answers
+	None.  Grail's nodes carry no slot for several of those, so the translated
+	node simply lacked the attribute: iter_fields skipped it and a plain read
+	raised AttributeError.  List fields are not affected; Grail always has
+	those."
+
+	| d n |
+	declaredFields isNil ifTrue: [^ self].
+	d := [pyNode @env1:___pyAttrLoad___: #'__dict__']
+		on: AbstractException do: [:ex | ex return: nil].
+	d isNil ifTrue: [^ self].
+	n := [declaredFields @env1:__len__] on: AbstractException do: [:ex | ex return: 0].
+	1 to: n do: [:k |
+		| f |
+		f := declaredFields @env1:__getitem__: k - 1.
+		((d @env1:__contains__: f) == true) ifFalse: [
+			pyNode @env1:___pyAttrStore___: f asSymbol put: None]]
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___translatedDecoratorList___: aValue
+	"A def's or class's decorator_list, where a BARE decorator name is a Name.
+
+	The parser keeps ``@property'' / ``@classmethod'' / ``@overload'' as a
+	Symbol (FunctionDefAst's decorator tests read it that way), and the generic
+	translation turns a Symbol into a str -- so decorator_list held strings
+	where CPython has Name(id=..., ctx=Load()).  pytest's
+	get_statement_startend2 reads ``d.lineno'' off every decorator and raised
+	AttributeError on the first @property in the file being reported.
+
+	The parser keeps no position for a bare name, so the line is inferred:
+	the decorators as the lines directly above the def, one each, which is how
+	they are written.  Columns are left out rather than guessed."
+
+	| astMod out n line |
+	aValue isNil ifTrue: [^ self ___translatedAstValue___: aValue].
+	((aValue isKindOf: Array) or: [aValue isKindOf: OrderedCollection])
+		ifFalse: [^ self ___translatedAstValue___: aValue].
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ self ___translatedAstValue___: aValue].
+	n := aValue size.
+	line := [self beginLine] on: AbstractException do: [:ex | ex return: nil].
+	out := OrderedCollection new.
+	aValue doWithIndex: [:each :i |
+		each isSymbol
+			ifTrue: [
+				| nameNode |
+				nameNode := (astMod @env1:___pyAttrLoad___: #'Name')
+					@env1:___pyCallValue___: #() kw: nil.
+				nameNode @env1:___pyAttrStore___: #'id' put: each asString.
+				nameNode @env1:___pyAttrStore___: #'ctx'
+					put: ((astMod @env1:___pyAttrLoad___: #'Load')
+						@env1:___pyCallValue___: #() kw: nil).
+				(line isKindOf: Integer) ifTrue: [
+					nameNode @env1:___pyAttrStore___: #'lineno' put: line - n + i - 1.
+					nameNode @env1:___pyAttrStore___: #'end_lineno' put: line - n + i - 1].
+				out add: nameNode]
+			ifFalse: [out add: (self ___translatedAstValue___: each)]].
+	^ list @env1:__new__: out asArray
 %
 
 category: 'Grail-AST export'
@@ -694,7 +766,7 @@ ___collectModuleScopeStarImportsInto___: aCollection
 	``*'' alias and ImportFromAst >> printSmalltalkOn: emitted a per-name
 	binding for it -- a Smalltalk variable literally NAMED ``*'':
 
-	    * := ((((Python @env0:at: #builtins) instance) ___import__: ...
+	    * := ((((Python @env0:at: #builtins) @env0:___instance___) ___import__: ...
 
 	which is a CompileError (``expected a right bracket''), uncatchable, and
 	takes the session with it.  ``try: from .cyaml import * / except
@@ -1849,7 +1921,7 @@ ___printCompTargetLocalsOn___: aStream names: compNames
 	of the comprehension's emitted block, so the bare identifier reads it, and
 	___buildLocals___: drops any still holding Smalltalk nil (unbound)."
 
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___buildLocals___: { '.
 	compNames do: [:each |
 		aStream
 			nextPutAll: '{ '''; nextPutAll: each asString;
@@ -1954,7 +2026,7 @@ ___globalsOnlyViewReceiverExpr___
 	nothing about whether the caller will pass one mapping or two."
 
 	^ ModuleAst compilingDoitScope notNil
-		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitGlobalsView___: ___pyGlobals___)']
+		ifTrue: ['(((Python @env0:at: #builtins) @env0:___instance___) ___doitGlobalsView___: ___pyGlobals___)']
 		ifFalse: [self ___moduleStoreReceiverExpr___]
 %
 
@@ -1969,7 +2041,7 @@ ___localsOnlyViewExpr___
 	and the existing emit is already right."
 
 	^ ModuleAst compilingDoitScope notNil
-		ifTrue: ['(((Python @env0:at: #builtins) instance) ___doitLocalsView___: ___pyGlobals___)']
+		ifTrue: ['(((Python @env0:at: #builtins) @env0:___instance___) ___doitLocalsView___: ___pyGlobals___)']
 		ifFalse: [nil]
 %
 
@@ -2547,7 +2619,7 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		aStream nextPutAll: '[| '; nextPutAll: nestedHolder; nextPutAll: ' | ';
 			nextPutAll: nestedHolder; nextPutAll: ' := ('; nextPutAll: rhs; nextPutAll: ')'.
 		self emitUnpackCoercionAndStoresOn: aStream elts: aTarget elts holder: nestedHolder.
-		aStream nextPutAll: '] value. '.
+		aStream nextPutAll: '] @env0:value. '.
 		^ self
 	].
 	"Default: NameAst / starred wrapper.  Routed through
@@ -2681,6 +2753,82 @@ ___irEligibleValueLocals___: localNames
 	^ false
 %
 
+category: 'Grail-code generation'
+method: AbstractNode
+___braceChunkSize___
+	"The most elements one Smalltalk brace array ``{a. b. ...}'' is given, and
+	the most parts one ``,'' chain joins (that one is half of this).
+
+	GemStone's compiler refuses a brace array of about 1,800 elements --
+	``CompileError 1001, expression nesting too deep'' -- whatever the elements
+	are: measured on 4.0, 1,700 integers, pairs or message sends compile and
+	1,900 integers or 2,000 of either other kind do not.  A left-associated
+	``a , b , c ...'' chain nests one level per part and fails between 500 and
+	1,000 parts.  A Python display of 2,000 elements was therefore an
+	uncatchable CompileError that ended the session (#1423): pygments' lexer
+	builtin tables and idna.uts46data, a single 17,000-line tuple, among others.
+
+	256 is far enough under both limits that element shape cannot matter, and
+	every display Grail compiled before is at or under it, so their emitted
+	code is unchanged."
+
+	^ 256
+%
+
+category: 'Grail-code generation'
+method: AbstractNode
+___printElementsArrayOf___: elements on: aStream
+	"Print an expression answering the Array of elements' values, evaluated
+	left to right: the brace literal ``{a. b. ...}'' when there are at most
+	___braceChunkSize___ of them, else brace chunks joined with ``,'' --
+	``({...} @env0:, {...} @env0:, ...)'' -- at most half that many parts to a
+	chain, each part itself chunked the same way when it is still too big.
+	Two levels cover 32,768 elements, three 4 million, and no brace or chain
+	comes near the compiler's limits (#1423)."
+
+	| chunk part |
+	chunk := self ___braceChunkSize___.
+	elements size <= chunk ifTrue: [
+		aStream nextPut: ${.
+		elements doWithIndex: [:each :i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			each printSmalltalkOn: aStream].
+		aStream nextPut: $}.
+		^ self].
+	part := ((elements size + (chunk // 2) - 1) // (chunk // 2)) max: chunk.
+	aStream nextPut: $(.
+	1 to: elements size by: part do: [:start |
+		start > 1 ifTrue: [aStream nextPutAll: ' @env0:, '].
+		self
+			___printElementsArrayOf___: (elements copyFrom: start to: ((start + part - 1) min: elements size))
+			on: aStream].
+	aStream nextPut: $)
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRChunkedArrayOf___: irValues on: aBuilder
+	"The IR twin of ___printElementsArrayOf___:on: -- one array node when there
+	are at most ___braceChunkSize___ values, else array nodes of that size
+	joined by env-0 ``,'' sends, chunked again when a part is still too big.
+	An IR array node compiles to the same brace the text does, with the same
+	limit (#1423)."
+
+	| chunk part acc |
+	chunk := self ___braceChunkSize___.
+	irValues size <= chunk ifTrue: [^ aBuilder arrayOf: irValues].
+	part := ((irValues size + (chunk // 2) - 1) // (chunk // 2)) max: chunk.
+	1 to: irValues size by: part do: [:start |
+		| sub |
+		sub := self
+			___emitIRChunkedArrayOf___: (irValues copyFrom: start to: ((start + part - 1) min: irValues size))
+			on: aBuilder.
+		acc := acc isNil
+			ifTrue: [sub]
+			ifFalse: [aBuilder send: #, to: acc with: { sub } env: 0]].
+	^ acc
+%
+
 category: 'Grail-IR Codegen'
 method: AbstractNode
 ___emitIRElementsArrayOn___: aBuilder elts: aCollection
@@ -2693,7 +2841,9 @@ ___emitIRElementsArrayOn___: aBuilder elts: aCollection
 
 	| acc |
 	(aCollection anySatisfy: [:e | e isKindOf: StarredAst]) ifFalse: [
-		^ aBuilder arrayOf: (aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])].
+		^ self ___emitIRChunkedArrayOf___:
+			(aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])
+			on: aBuilder].
 	acc := aBuilder arrayOf: #().
 	aCollection do: [:e |
 		| run |

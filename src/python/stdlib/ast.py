@@ -235,6 +235,12 @@ def parse(source, filename='<unknown>', mode='exec', *,
     # through it here means one place builds the tree rather than two that can
     # drift.
     tree = compile(source, filename, mode, PyCF_ONLY_AST)
+    # mode='eval' parses an expression, and CPython answers an Expression
+    # holding it; Grail's translation answers the Module it parsed into.
+    if (mode == 'eval' and type(tree).__name__ == 'Module'
+            and len(getattr(tree, 'body', ())) == 1
+            and type(tree.body[0]).__name__ == 'Expr'):
+        tree = Expression(body=tree.body[0].value)
     if optimize is not None and optimize >= 0:
         tree = __grail_fold_debug__(tree)
     return tree
@@ -267,89 +273,6 @@ def __grail_fold_debug__(node):
             elif isinstance(value, list):
                 setattr(node, name, [__grail_fold_debug__(v) for v in value])
     return node
-
-
-# AST node classes — minimal stubs so werkzeug.routing's converter
-# parser can reference ast.AST / ast.Expr / ast.Name / etc. as type
-# tags.  Actual ast.parse() returns _ParsedExpr (above) which isn't
-# one of these; routing's runtime walks will fail until ast.parse
-# is implemented.
-
-class AST:
-    pass
-
-
-class Expression(AST):
-    pass
-
-
-class Module(AST):
-    pass
-
-
-class Expr(AST):
-    pass
-
-
-class Call(AST):
-    pass
-
-
-class Name(AST):
-    pass
-
-
-class Constant(AST):
-    pass
-
-
-class Attribute(AST):
-    pass
-
-
-class keyword(AST):
-    pass
-
-
-class Load(AST):
-    pass
-
-
-class Store(AST):
-    pass
-
-
-class If(AST):
-    pass
-
-
-class For(AST):
-    pass
-
-
-class FunctionDef(AST):
-    pass
-
-
-def walk(node):
-    """Recursively yield every node descendant.  Empty for the stub."""
-    return iter([])
-
-
-def iter_child_nodes(node):
-    return iter([])
-
-
-class NodeVisitor:
-    def visit(self, node):
-        return self.generic_visit(node)
-
-    def generic_visit(self, node):
-        return None
-
-
-class NodeTransformer(NodeVisitor):
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +320,7 @@ class AST:
     """Base of every node.  ``_fields'' names the children, in source order."""
 
     _fields = ()
+    _attributes = ()
 
     def __init__(self, *args, **kwargs):
         for name, value in zip(self._fields, args):
@@ -412,8 +336,63 @@ class AST:
         return '%s(%s)' % (type(self).__name__, ', '.join(shown))
 
 
+# CPython's abstract node categories, with the location attributes each
+# carries.  ``isinstance(node, ast.stmt)'' is how a reader tells statements
+# from expressions -- pytest's get_statement_startend2 collects every stmt and
+# excepthandler line to find where a failing statement ends -- and without
+# these every such test was an AttributeError or matched nothing.
+_LOCATION = ('lineno', 'col_offset', 'end_lineno', 'end_col_offset')
+
+
+def _make_category(name, attributes=()):
+    cls = type(name, (AST,), {'_fields': (), '_attributes': attributes})
+    globals()[name] = cls
+    return cls
+
+
+for _n in ('mod', 'expr_context', 'boolop', 'operator', 'unaryop', 'cmpop',
+           'type_ignore'):
+    _make_category(_n)
+for _n in ('stmt', 'expr', 'excepthandler', 'pattern', 'type_param'):
+    _make_category(_n, _LOCATION)
+
+# Which category each concrete node belongs to, as in CPython.  A node not
+# named here derives from AST directly, as CPython's arguments/comprehension/
+# withitem/match_case do.
+_CATEGORY = {}
+for _cat, _names in (
+        ('mod', 'Module Interactive Expression FunctionType'),
+        ('stmt', 'FunctionDef AsyncFunctionDef ClassDef Return Delete Assign '
+                 'TypeAlias AugAssign AnnAssign For AsyncFor While If With '
+                 'AsyncWith Match Raise Try TryStar Assert Import ImportFrom '
+                 'Global Nonlocal Expr Pass Break Continue'),
+        ('expr', 'BoolOp NamedExpr BinOp UnaryOp Lambda IfExp Dict Set ListComp '
+                 'SetComp DictComp GeneratorExp Await Yield YieldFrom Compare '
+                 'Call FormattedValue Interpolation JoinedStr TemplateStr '
+                 'Constant Attribute Subscript Starred Name List Tuple Slice'),
+        ('expr_context', 'Load Store Del'),
+        ('boolop', 'And Or'),
+        ('operator', 'Add Sub Mult MatMult Div Mod Pow LShift RShift BitOr '
+                     'BitXor BitAnd FloorDiv'),
+        ('unaryop', 'Invert Not UAdd USub'),
+        ('cmpop', 'Eq NotEq Lt LtE Gt GtE Is IsNot In NotIn'),
+        ('excepthandler', 'ExceptHandler'),
+        ('pattern', 'MatchValue MatchSingleton MatchSequence MatchMapping '
+                    'MatchClass MatchStar MatchAs MatchOr'),
+        ('type_ignore', 'TypeIgnore'),
+        ('type_param', 'TypeVar ParamSpec TypeVarTuple')):
+    for _n in _names.split():
+        _CATEGORY[_n] = _cat
+# Leaf nodes outside the categories that still carry a location in CPython.
+_LOCATED_LEAVES = ('arg', 'keyword', 'Alias')
+
+
 def _make_node(name, fields):
-    cls = type(name, (AST,), {'_fields': fields})
+    base = globals()[_CATEGORY[name]] if name in _CATEGORY else AST
+    attrs = {'_fields': fields}
+    if name in _LOCATED_LEAVES:
+        attrs['_attributes'] = _LOCATION
+    cls = type(name, (base,), attrs)
     globals()[name] = cls
     return cls
 
@@ -529,3 +508,215 @@ for _n in ('Block', 'Suite', 'RawSmalltalk', 'Keywords', 'TypeAliasValue',
     if _n not in globals():
         _make_node(_n, ())
 del _n
+
+
+# ---------------------------------------------------------------------------
+# HELPERS -- CPython 3.14's, verbatim.  They read nothing but ``_fields'' and
+# ``_attributes'', which the classes above declare, so they work on the tree
+# AbstractNode>>___asPythonAst___ builds.  walk and iter_child_nodes used to be
+# stubs answering nothing and NodeVisitor visited nothing, so every reader that
+# walked a parse saw an empty tree.  (dump, unparse and compile() of a tree are
+# still missing: #1513.)
+
+def copy_location(new_node, old_node):
+    """
+    Copy source location (`lineno`, `col_offset`, `end_lineno`, and `end_col_offset`
+    attributes) from *old_node* to *new_node* if possible, and return *new_node*.
+    """
+    for attr in 'lineno', 'col_offset', 'end_lineno', 'end_col_offset':
+        if attr in old_node._attributes and attr in new_node._attributes:
+            value = getattr(old_node, attr, None)
+            # end_lineno and end_col_offset are optional attributes, and they
+            # should be copied whether the value is None or not.
+            if value is not None or (
+                hasattr(old_node, attr) and attr.startswith("end_")
+            ):
+                setattr(new_node, attr, value)
+    return new_node
+
+def fix_missing_locations(node):
+    """
+    When you compile a node tree with compile(), the compiler expects lineno and
+    col_offset attributes for every node that supports them.  This is rather
+    tedious to fill in for generated nodes, so this helper adds these attributes
+    recursively where not already set, by setting them to the values of the
+    parent node.  It works recursively starting at *node*.
+    """
+    def _fix(node, lineno, col_offset, end_lineno, end_col_offset):
+        if 'lineno' in node._attributes:
+            if not hasattr(node, 'lineno'):
+                node.lineno = lineno
+            else:
+                lineno = node.lineno
+        if 'end_lineno' in node._attributes:
+            if getattr(node, 'end_lineno', None) is None:
+                node.end_lineno = end_lineno
+            else:
+                end_lineno = node.end_lineno
+        if 'col_offset' in node._attributes:
+            if not hasattr(node, 'col_offset'):
+                node.col_offset = col_offset
+            else:
+                col_offset = node.col_offset
+        if 'end_col_offset' in node._attributes:
+            if getattr(node, 'end_col_offset', None) is None:
+                node.end_col_offset = end_col_offset
+            else:
+                end_col_offset = node.end_col_offset
+        for child in iter_child_nodes(node):
+            _fix(child, lineno, col_offset, end_lineno, end_col_offset)
+    _fix(node, 1, 0, 1, 0)
+    return node
+
+def increment_lineno(node, n=1):
+    """
+    Increment the line number and end line number of each node in the tree
+    starting at *node* by *n*. This is useful to "move code" to a different
+    location in a file.
+    """
+    for child in walk(node):
+        # TypeIgnore is a special case where lineno is not an attribute
+        # but rather a field of the node itself.
+        if isinstance(child, TypeIgnore):
+            child.lineno = getattr(child, 'lineno', 0) + n
+            continue
+
+        if 'lineno' in child._attributes:
+            child.lineno = getattr(child, 'lineno', 0) + n
+        if (
+            "end_lineno" in child._attributes
+            and (end_lineno := getattr(child, "end_lineno", 0)) is not None
+        ):
+            child.end_lineno = end_lineno + n
+    return node
+
+def iter_fields(node):
+    """
+    Yield a tuple of ``(fieldname, value)`` for each field in ``node._fields``
+    that is present on *node*.
+    """
+    for field in node._fields:
+        try:
+            yield field, getattr(node, field)
+        except AttributeError:
+            pass
+
+def iter_child_nodes(node):
+    """
+    Yield all direct child nodes of *node*, that is, all fields that are nodes
+    and all items of fields that are lists of nodes.
+    """
+    for name, field in iter_fields(node):
+        if isinstance(field, AST):
+            yield field
+        elif isinstance(field, list):
+            for item in field:
+                if isinstance(item, AST):
+                    yield item
+
+def walk(node):
+    """
+    Recursively yield all descendant nodes in the tree starting at *node*
+    (including *node* itself), in no specified order.  This is useful if you
+    only want to modify nodes in place and don't care about the context.
+    """
+    from collections import deque
+    todo = deque([node])
+    while todo:
+        node = todo.popleft()
+        todo.extend(iter_child_nodes(node))
+        yield node
+
+class NodeVisitor(object):
+    """
+    A node visitor base class that walks the abstract syntax tree and calls a
+    visitor function for every node found.  This function may return a value
+    which is forwarded by the `visit` method.
+
+    This class is meant to be subclassed, with the subclass adding visitor
+    methods.
+
+    Per default the visitor functions for the nodes are ``'visit_'`` +
+    class name of the node.  So a `TryFinally` node visit function would
+    be `visit_TryFinally`.  This behavior can be changed by overriding
+    the `visit` method.  If no visitor function exists for a node
+    (return value `None`) the `generic_visit` visitor is used instead.
+
+    Don't use the `NodeVisitor` if you want to apply changes to nodes during
+    traversing.  For this a special visitor exists (`NodeTransformer`) that
+    allows modifications.
+    """
+
+    def visit(self, node):
+        """Visit a node."""
+        method = 'visit_' + node.__class__.__name__
+        visitor = getattr(self, method, self.generic_visit)
+        return visitor(node)
+
+    def generic_visit(self, node):
+        """Called if no explicit visitor function exists for a node."""
+        for field, value in iter_fields(node):
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, AST):
+                        self.visit(item)
+            elif isinstance(value, AST):
+                self.visit(value)
+
+class NodeTransformer(NodeVisitor):
+    """
+    A :class:`NodeVisitor` subclass that walks the abstract syntax tree and
+    allows modification of nodes.
+
+    The `NodeTransformer` will walk the AST and use the return value of the
+    visitor methods to replace or remove the old node.  If the return value of
+    the visitor method is ``None``, the node will be removed from its location,
+    otherwise it is replaced with the return value.  The return value may be the
+    original node in which case no replacement takes place.
+
+    Here is an example transformer that rewrites all occurrences of name lookups
+    (``foo``) to ``data['foo']``::
+
+       class RewriteName(NodeTransformer):
+
+           def visit_Name(self, node):
+               return Subscript(
+                   value=Name(id='data', ctx=Load()),
+                   slice=Constant(value=node.id),
+                   ctx=node.ctx
+               )
+
+    Keep in mind that if the node you're operating on has child nodes you must
+    either transform the child nodes yourself or call the :meth:`generic_visit`
+    method for the node first.
+
+    For nodes that were part of a collection of statements (that applies to all
+    statement nodes), the visitor may also return a list of nodes rather than
+    just a single node.
+
+    Usually you use the transformer like this::
+
+       node = YourTransformer().visit(node)
+    """
+
+    def generic_visit(self, node):
+        for field, old_value in iter_fields(node):
+            if isinstance(old_value, list):
+                new_values = []
+                for value in old_value:
+                    if isinstance(value, AST):
+                        value = self.visit(value)
+                        if value is None:
+                            continue
+                        elif not isinstance(value, AST):
+                            new_values.extend(value)
+                            continue
+                    new_values.append(value)
+                old_value[:] = new_values
+            elif isinstance(old_value, AST):
+                new_node = self.visit(old_value)
+                if new_node is None:
+                    delattr(node, field)
+                else:
+                    setattr(node, field, new_node)
+        return node

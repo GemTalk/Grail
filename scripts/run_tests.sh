@@ -244,19 +244,35 @@ if [ -z "${GRAIL_ALLOW_TIGHT_SESSIONS:-}" ]; then
   fi
 fi
 
+# Hold each shard's launch while the MACHINE is busy -- other worktrees'
+# suites included -- rather than piling on until tests time out
+# (scripts/launch_gate.sh says when and why; GRAIL_MAX_LOAD=0 turns it off).
+. "$PROJECT_ROOT/scripts/launch_gate.sh"
+launch_gate_init "$N_SHARDS"
+
 SHARD_T0=$SECONDS
 mkdir -p "$PROJECT_ROOT/out"
 rm -f "$PROJECT_ROOT"/out/shard_*.out
 SHARD_PIDS=()
 for i in $SHARDS; do
-  GRAIL_TEST_WORKERS="$WORKERS" GRAIL_TEST_SHARD="$i" \
-    LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTestsShard.gs < /dev/null \
-    > "$PROJECT_ROOT/out/shard_$i.out" 2>&1 &
+  launch_gate "shard $i" "${#SHARD_PIDS[@]}"
+  # Head each log with every GRAIL_* variable the shard inherits, so it can be
+  # re-run by hand with the same switches (#1039): runTestsShard.gs prints the
+  # two this loop sets, but not the modes taken from the caller's environment
+  # (GRAIL_IR_CODEGEN=0 and friends), and re-running without one silently
+  # tests the other arm. A name not listed is unset, i.e. at its default.
+  # `exec` keeps $! the topaz PID, as it was before the subshell.
+  ( export GRAIL_TEST_WORKERS="$WORKERS" GRAIL_TEST_SHARD="$i"
+    echo "GRAIL_* environment (unlisted = unset):"
+    env | grep '^GRAIL_' | sort | sed 's/^/  /'
+    LC_ALL=C exec topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTestsShard.gs < /dev/null
+  ) > "$PROJECT_ROOT/out/shard_$i.out" 2>&1 &
   SHARD_PIDS+=("$!")
 done
 for pid in "${SHARD_PIDS[@]}"; do
   wait "$pid" || EXIT=$?
 done
+launch_gate_summary
 # Aggregate shard results into one summary line (portable: no gawk-isms) and
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
@@ -360,6 +376,11 @@ timed "durable" tests/scripts/run_durable_test.sh || EXIT=$?
 # in its session (Persistent_Modules D14): one gem patches and commits, the
 # next must see the modules as shipped.  Two gems, so a shell driver.
 timed "module-globals" tests/scripts/run_module_globals_test.sh || EXIT=$?
+# unicodedata's databases are deployed built (#1508): a fresh gem finds both
+# in the committed cache, answers from them, and has nothing to commit.  It
+# deploys first (scripts/deployUnicodedata.gs, idempotent), then a second gem
+# checks, so a shell driver.
+timed "unicodedata-deploy" tests/scripts/run_unicodedata_deploy_test.sh || EXIT=$?
 
 # Functional test for gemdb.schema (layout/report/drop/rename/compact, the
 # public surface for deliberate schema change). Every operation but layout()
@@ -488,6 +509,14 @@ timed "module-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runM
 # writes nothing.
 timed "module-coherence" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleCoherenceTest.gs < /dev/null || EXIT=$?
 
+# A deployed package's carried submodules (issue #1223): a submodule bound on
+# a committed package is reachable as ``pkg.mod'' without an import, so binding
+# the package judges it.  Edits two submodules the package body never imports
+# (one nested) and checks that binding the package alone rebuilds both in place,
+# leaves an unchanged one unimported, writes nothing when nothing changed, and
+# leaves a broken one to fail its own import.
+timed "carried-submodule" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCarriedSubmoduleTest.gs < /dev/null || EXIT=$?
+
 # A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
 # D8): patching builtins.len and a class's method writes no persistent object,
 # and after a commit a fresh session sees both originals -- where persistent
@@ -519,6 +548,10 @@ timed "grail-launcher" ./tests/scripts/test_grail_launcher.sh || EXIT=$?
 # live holder launches a second run's sessions into a stone that has none left,
 # and the losing shards produce a green total rather than an error.
 timed "stone-lock" ./tests/scripts/run_stone_lock_test.sh || EXIT=$?
+
+# The launch gate's hold/release/cap rules.  Needs no stone: it fakes the load
+# average and the gem count.
+timed "launch-gate" ./tests/scripts/run_launch_gate_test.sh || EXIT=$?
 
 printf 'TIMING | %-26s | %4ds\n' "TOTAL run_tests.sh" "$((SECONDS - SUITE_T0))"
 exit $EXIT

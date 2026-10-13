@@ -5,8 +5,38 @@
 from . import find_spec, spec_from_loader, ModuleSpec, _ModuleSpec, _Loader
 
 
-def spec_from_file_location(name, location, **kwargs):
-    return _ModuleSpec(name, _Loader(location), location)
+# CPython 3.14's bytecode magic.  Grail writes no bytecode; pytest writes this
+# into its assertion-rewrite cache headers, and only compares it with itself.
+MAGIC_NUMBER = (3627).to_bytes(2, 'little') + b'\r\n'
+
+
+_POPULATE = object()
+
+
+def spec_from_file_location(name, location=None, *, loader=None,
+                            submodule_search_locations=_POPULATE):
+    """A spec for a module at ``location``, as CPython builds it: the caller's
+    ``loader`` is KEPT (pytest's assertion-rewriting hook passes itself, and
+    must be the one asked to exec the module), and a package's search
+    locations default to the file's directory when the loader says it is
+    one."""
+    import os
+    if location is not None:
+        location = os.fspath(location)
+    if loader is None:
+        loader = _Loader(location)
+    if submodule_search_locations is _POPULATE:
+        is_package = getattr(loader, 'is_package', None)
+        search = None
+        if is_package is not None:
+            try:
+                if is_package(name):
+                    search = [os.path.dirname(location)]
+            except ImportError:
+                pass
+    else:
+        search = submodule_search_locations
+    return _ModuleSpec(name, loader, location, search)
 
 
 def cache_from_source(path, debug_override=None, *, optimization=None):

@@ -133,6 +133,27 @@ _getstate
 	^ tuple @env0:withAll: { collection start. collection stop. collection step. position }
 %
 
+category: 'Grail-Pickle Protocol'
+method: range_iterator
+__setstate__: state
+	"CPython's rangeiter_setstate: skip ``state'' more items, clipped to what
+	is left -- it is RELATIVE to the current position (``next(it);
+	it.__setstate__(2)'' leaves the iterator 3 items in), a negative value
+	skips nothing, and a value past the end exhausts it.  ``state'' goes
+	through __index__, so a float or str is CPython's TypeError.
+
+	Unpickling an iterator is a BUILD with this state; without the method the
+	state was dropped, and test_range's test_iterator_unpickle_compat, whose
+	ranges start at -2**65, then walked ~2**65 items and timed out (#1380)."
+
+	| n remaining |
+	n := state ___asIndex___.
+	remaining := (collection @env0:size @env0:- position) @env0:max: 0.
+	n := (n @env0:max: 0) @env0:min: remaining.
+	position := position @env0:+ n.
+	^ None
+%
+
 category: 'Grail-Instance Creation'
 classmethod: range_iterator
 _new_from: aRange _: pos

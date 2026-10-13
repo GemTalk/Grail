@@ -1652,6 +1652,41 @@ testABulletedDocstringDoesNotMoveTheReportedLine
 			description: 'frame line for ' , k , ': got ' , got , ' want ' , want].
 %
 
+category: 'Grail-Tests - Frame Lines'
+method: TracebackTestCase
+testAModuleFrameInAStatementReportsThatStatement
+	"A module body embeds the source of every method it compiles as a string
+	literal, ___curPos___ stores and all, and ___derivePythonLineForMethod___:ip:
+	took the last store at or above the caret by searching the text -- so it
+	found the embedded ones.  While a class or def statement was still running
+	(__init_subclass__, a class decorator, a function decorator) the module
+	frame reported the last line of the last method embedded before the caret:
+	``class Sub(Base):'' on line 44 read as line 50, ``return args'', on both
+	codegen paths, because a module body is text-compiled either way.  The scan
+	now reads the method's OWN stores only (issue #1137).
+
+	See tests/python/frame_line_in_module_statement.py, whose expected values
+	are CPython 3.14's."
+
+	| mod results expected b |
+	importlib @env1:modules removeKey: #'frame_line_in_module_statement' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath:
+			(importlib grailDir , '/tests/python/frame_line_in_module_statement.py')
+		name: 'frame_line_in_module_statement'.
+	results := mod @env1:___pyAttrLoad___: #'r'.
+	expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	b := (Python at: #'builtins') @env1:instance.
+	#( 'init_subclass' 'init_subclass_stack' 'class_decorator'
+	   'function_decorator' 'plain_call_control' ) do: [:k |
+		| got want |
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: 'frame line for ' , k , ': got ' , got , ' want ' , want].
+	importlib @env1:modules removeKey: #'frame_line_in_module_statement' ifAbsent: [].
+%
+
 category: 'Grail-Tests - Cache Keys Must Not Recycle'
 method: TracebackTestCase
 testTheLineCacheIsNotPoisonedByRecycledMethodOops
@@ -2224,7 +2259,12 @@ method: TracebackTestCase
 testEvalHonoursTheFilenameCompileWasGiven
 	"exec() has passed compile()'s second argument through to codegen since the
 	filename registry existed; eval() dropped it, so the same source reported
-	'sums.py' one way and '<grail>' the other.  Both now answer the name."
+	'sums.py' one way and '<grail>' the other.  Both now answer the name.
+
+	TWO frames, as in CPython: this doit's own, which catches, and the eval'd
+	code's.  Both are <module>, and until #1401 the walk took the inner one for
+	the catcher and stopped there, so this test read one frame.  The doit's
+	file is the '<grail>' placeholder where CPython says '<string>'."
 
 	self assert: ((self eval: 'try:
     eval(compile("1/0", "sums.py", "eval"))
@@ -2232,14 +2272,14 @@ except ZeroDivisionError as e:
     import traceback
     r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
 r
-') asArray collect: [:each | each asString]) = #( 'sums.py' ).
+') asArray collect: [:each | each asString]) = #( '<grail>' 'sums.py' ).
 	self assert: ((self eval: 'try:
     exec(compile("1/0", "sums.py", "exec"))
 except ZeroDivisionError as e:
     import traceback
     r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
 r
-') asArray collect: [:each | each asString]) = #( 'sums.py' ).
+') asArray collect: [:each | each asString]) = #( '<grail>' 'sums.py' ).
 	"A bare string keeps the placeholder, as it always did."
 	self assert: ((self eval: 'try:
     eval("1/0")
@@ -2247,7 +2287,7 @@ except ZeroDivisionError as e:
     import traceback
     r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
 r
-') asArray collect: [:each | each asString]) = #( '<grail>' )
+') asArray collect: [:each | each asString]) = #( '<grail>' '<grail>' )
 %
 
 category: 'Grail-Tests - Embedding'

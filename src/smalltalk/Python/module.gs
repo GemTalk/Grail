@@ -1551,7 +1551,7 @@ update: other
 
 category: 'Python-Mutation Methods'
 method: module
-___mergePublicAttrsFrom: aModule
+___mergePublicAttrsFrom___: aModule
 	"Copy every public (non-underscore-prefixed) attribute from
 	aModule's namespace into self.  Used by `from X import *`
 	codegen to pick up dynamically-injected names that parse-time
@@ -2137,7 +2137,14 @@ ___globalNames___
 			| cat |
 			cat := self @env0:class @env0:categoryOfSelector: sel environmentId: 1.
 			skip := (cat @env0:= #'Grail-Module Body')
-				@env0:or: [cat @env0:= #'Grail-Initialization']].
+				@env0:or: [cat @env0:= #'Grail-Initialization'].
+			"A module written in Smalltalk that implements dir() for itself
+			(builtins does) has a ``__dir__'' method, and that is protocol, not
+			a global: CPython's builtins.__dict__ has no such key.  A Python
+			module's own ``def __dir__()'' compiles into 'Grail-Methods' and
+			stays."
+			(sel == #'__dir__' and: [cat @env0:~= #'Grail-Methods'])
+				ifTrue: [skip := true]].
 		skip ifFalse: [
 			index := s @env0:indexOf: $:.
 			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].

@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos deferredInstVars instVarsResolvedFor deferredClassHelpers classHelpersInstalledFor)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos deferredInstVars instVarsResolvedFor deferredClassHelpers classHelpersInstalledFor sendCensus)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -99,6 +99,9 @@ initClass: aClass selector: aSelector env: anEnvId
 	genLeaf := nil.
 	nestedFnDepth := 0.
 	closureStack := OrderedCollection new.
+	sendCensus := importlib ___irSendCensus___ ifNotNil: [:census |
+		census add: { aClass. aSelector. OrderedCollection new }.
+		census last at: 3].
 	self ___emitPythonIdentityMarker___.
 	^ self
 %
@@ -806,6 +809,7 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
 	spell value:/value:value: here, but the kernel setter handles either way."
 
 	| sendNode isOptimized |
+	sendCensus ifNotNil: [:c | c add: { aSelector. anEnvId }].
 	sendNode := GsComSendNode new.
 	sendNode rcvr: rcvrNode ;
     selector: aSelector env: anEnvId .  "includes special selectors optimization"
@@ -903,13 +907,14 @@ method: PyMethodIRBuilder
 cascade: rcvrNode specs: sendSpecs
 	"cascade:sends:env: with a per-send environment: each spec is
 	{ selector. args Array. envId }.  A keyword dict with a ``**splat'' mixes
-	env-0 ``at:put:'' with the env-1 ``update:'' the text emits for the splat
+	env-0 ``at:put:'' with the env-1 ``___pyUpdate___:'' the text emits for the splat
 	(cut 56)."
 
 	| casc |
 	casc := GsComCascadeNode new.
 	casc rcvr: rcvrNode.
 	sendSpecs do: [:spec | | snd |
+		sendCensus ifNotNil: [:c | c add: { spec at: 1. spec at: 3 }].
 		snd := GsComSendNode new.
 		snd rcvr: nil.
 		snd selector: (spec at: 1) env: (spec at: 3).

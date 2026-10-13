@@ -305,15 +305,13 @@ def a_live_frame_has_f_locals():
 
 # ---------------------------------------------- deliberate Grail-only limits
 def a_frame_with_no_bound_locals_has_empty_f_locals():
-    """A live frame with nothing bound answers an EMPTY mapping, as CPython's
-    proxy does.  This was a documented Grail-only limit -- the attribute was
-    ABSENT, to keep "no variables" apart from "cannot say" -- and pydantic is
-    why it is not one any more: it reads ``sys._getframe(n).f_locals'' for every
-    model a function defines, and the AttributeError failed each one
-    (docs/Support_FastAPI.md, Phase 5).  A TRACEBACK frame still answers absent
-    when it has no snapshot; traceback.py's ``getattr(frame, 'f_locals', None)''
-    handles both."""
-    return sys._getframe().f_locals == {}
+    """A frame that binds nothing has an EMPTY f_locals, as CPython's does.
+
+    This was a deliberate Grail-only limit -- absent rather than empty, to keep
+    "no variables" apart from "cannot say" -- until pytest, which reads
+    ``frame.f_locals'' directly on every traceback entry, crashed on it.  Grail
+    now answers an empty mapping wherever it has no locals to report."""
+    return len(sys._getframe().f_locals) == 0
 
 
 def a_traceback_frame_has_f_locals():

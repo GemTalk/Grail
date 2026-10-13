@@ -98,7 +98,8 @@ testATypeWithoutTheDunderHasNoSuchAttribute
 	"Including the read ExitStack.push actually performs -- the dunder off
 	the type of a plain function."
 
-	self assertAll: #('a_class_without_it' 'a_plain_function')
+	self assertAll: #('a_class_without_it' 'a_plain_function'
+		'a_bare_metaclass_supplies_none')
 %
 
 category: 'Grail-Tests'

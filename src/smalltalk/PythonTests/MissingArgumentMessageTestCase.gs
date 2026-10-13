@@ -286,3 +286,22 @@ testTooManyPositionalOutranksMissing
 	self assert: testModule @env1:too_many_positional_outranks_missing
 		equals: 'f2() takes 2 positional arguments but 3 were given'.
 %
+
+category: 'Grail-Tests'
+method: MissingArgumentMessageTestCase
+testTooManyPositionalCountsAMethodsReceiver
+	"CPython counts self (or cls) on both sides of ``takes N positional
+	arguments but M were given''; Grail's were one short for every method
+	(#1472).  tests/python/method_arity_message.py holds the checks -- methods,
+	__init__, keyword-only and positional-only methods, a classmethod, and
+	receiver-less controls -- and agrees with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'method_arity_message' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/method_arity_message.py')
+		name: 'method_arity_message'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '12 checks, 0 disagreeing [], keys match: True'
+%

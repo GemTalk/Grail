@@ -590,6 +590,10 @@ expandStarImports: aModuleAst
 			top-level variable that isn't underscore-prefixed."
 			expandedNames := self ___starExportNamesFor___: subAst.
 			expandedNames isNil ifTrue: [
+				"GUESSED, so a name may never be bound at import time --
+				one a function only declares ``global'' (#1416); codegen
+				binds such a name only if the module has it."
+				stmt starNamesGuessed: true.
 				expandedNames := subAst body variables asArray
 					select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
 			newAliases := expandedNames collect: [:n |
@@ -641,7 +645,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	recompiles the SAME class in place -- preserving the module instance's
 	identity.  Shared by loadModuleFromPath: and reload:."
 
-	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture |
+	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture previousMethods |
 	"Collect declared variable names from the module body"
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
@@ -689,6 +693,9 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		options: #().
 	"``__transient__'' names: kept per session, never committed (§5.3)."
 	self ___installTransientGlobals___: (self ___transientNamesIn___: moduleAst) on: moduleClass.
+	"What the PREVIOUS build generated, when this is a rebuild -- swept at the
+	end of the build for whatever this one does not compile again (#1219)."
+	previousMethods := self ___moduleGeneratedMethodsOf___: moduleClass.
 
 	"Compile top-level `def` statements as real methods on the
 	module class. Scan for FunctionDefAst nodes, pre-register stubs so
@@ -1061,7 +1068,84 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		CallAst moduleImportNames: nil.
 		CallAst futureAnnotations: savedFuture.
 	].
+	self ___removeStaleModuleMethods___: previousMethods
+		from: moduleClass
+		boundBy: moduleAst
+		functions: functionNames.
 	^ moduleClass
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___moduleGeneratedMethodsOf___: aModuleClass
+	"Every method a module build generates from the source, as it stands now
+	-- a pair of selector -> GsNMethod maps, the instance side's
+	``Grail-Methods'' (the defs, each in one or more call shapes) and the
+	class side's ``Grail-Python Metadata'' (the docstring and PEP 695 tables,
+	emitted only when the source has them).  Empty for a class just created.
+
+	Read from the PERSISTENT method dictionaries, so a session method installed
+	over a selector cannot stand in for the compiled one."
+
+	| out |
+	out := Array with: IdentityDictionary new with: IdentityDictionary new.
+	{ aModuleClass -> 'Grail-Methods'. aModuleClass class -> 'Grail-Python Metadata' }
+		doWithIndex: [:pair :i | | b pmd |
+			b := pair key.
+			pmd := b persistentMethodDictForEnv: 1.
+			pmd ifNotNil: [
+				pmd keysAndValuesDo: [:sel :meth |
+					(b categoryOfSelector: sel environmentId: 1) asString = pair value
+						ifTrue: [(out at: i) at: sel put: meth]]]].
+	^ out
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___removeStaleModuleMethods___: previousMethods from: aModuleClass boundBy: moduleAst functions: functionNames
+	"Remove what the previous build of aModuleClass generated and this one did
+	not compile again (issue #1219).
+
+	A rebuild -- importlib.reload, or a fresh gem rebuilding a stale committed
+	module INTO its instance -- recompiles the module class in place, and a
+	build only ever adds methods.  A def compiles to one selector per call
+	shape: ``def f(a, b)'' to the fixed ``f:_:'' plus ``_f:kw:'', ``def f(a,
+	b=None)'' to ``_f:kw:'' alone.  So after that edit the old ``f:_:'' was
+	still there, BoundMethod tries the fixed form first, and ``f(1, 2)'' ran
+	the OLD body while ``f(1)'' ran the new one -- committed with the rebuild,
+	for every later gem too.
+
+	A method is stale when the build left it untouched: the same GsNMethod
+	still sits under its selector.  Removed when the new source still BINDS its
+	Python name -- as a def in another shape, a variable, a class or an import
+	-- because then the old body can only be wrong.  A name the new source does
+	not mention at all keeps its old def, as CPython's reload keeps the old
+	function in the module's namespace (and as a committed instance being
+	rebuilt keeps its other globals).
+
+	The class side's metadata is regenerated whole, so anything there the
+	build did not recompile -- a docstring or a type-parameter table the source
+	no longer has -- is gone."
+
+	| bound sides |
+	bound := IdentitySet new.
+	functionNames do: [:n | bound add: n asSymbol].
+	moduleAst body variables do: [:n | bound add: n asSymbol].
+	moduleAst body body do: [:stmt |
+		(stmt isKindOf: ClassDefAst) ifTrue: [bound add: stmt name asSymbol]].
+	(moduleAst body ___importBoundNamesInto___: IdentitySet new)
+		do: [:n | bound add: n asSymbol].
+	sides := Array with: aModuleClass with: aModuleClass class.
+	1 to: 2 do: [:i | | b pmd |
+		b := sides at: i.
+		pmd := b persistentMethodDictForEnv: 1.
+		(previousMethods at: i) keysAndValuesDo: [:sel :meth |
+			((pmd ~~ nil and: [(pmd at: sel otherwise: nil) == meth])
+				and: [i = 2 or: [ | pyName |
+					pyName := self pythonNameOfSelector: sel.
+					pyName notNil and: [bound includes: pyName asSymbol]]])
+						ifTrue: [b @env1:___removeSelector: sel environmentId: 1]]].
+	^ aModuleClass
 %
 
 category: 'Grail-Canonical Classes'
@@ -4166,7 +4250,8 @@ ___restoreAllBodyClassAttrsIn___: ns
 						slot isNil ifTrue: [
 							slot := KeyValueDictionary new.
 							ov at: cls put: slot].
-						(slot includesKey: sym) ifFalse: [slot at: sym put: val]]]]]].
+						(slot includesKey: sym) ifFalse: [slot at: sym put: val].
+						cls @env1:___noteClassDunderStore___: sym]]]]].
 	^ self
 %
 
@@ -4507,6 +4592,82 @@ ___runSessionInit___: moduleInstance
 	^ moduleInstance
 %
 
+category: 'Grail-Module Loading'
+classmethod: importlib
+___refreshCarriedSubmodulesOf___: aPackage named: aName
+	"Bring up to date the submodules a committed package CARRIES that this
+	session has not imported (issue #1223).  Called where a session acquires a
+	committed package -- the warm bind, and the rebuild of a stale one into its
+	committed instance.
+
+	registerModule:with: binds a submodule onto its package, and a committed
+	package keeps the binding, so in a fresh gem ``import pkg; pkg.mod''
+	answers whatever ``pkg.mod'' was when some session committed it.  No import
+	asks for it, so the staleness check an import makes never runs on it.  Its
+	package's own check covers it only when the package BODY imported it, as a
+	dependency (___isCurrentModule___:); a submodule bound by an import made
+	elsewhere -- ``import pkg.mod'' in the session that deployed -- is
+	recorded nowhere but on the package.
+
+	So each such submodule is judged here, as a dependency would be.  A stale
+	one is loaded through the ordinary path, which rebuilds it into the same
+	committed instance and registers it; that rebuild calls back here for the
+	submodules it carries in turn.  A current one is left as it is, but what IT
+	carries is judged too, because ``pkg.sub.mod'' reaches through it.
+
+	HERE AND NOT ON THE READ.  CPython's answer for a submodule nothing
+	imported is AttributeError, and only a check on every module attribute
+	read could give it: ``os.path.join'' in a loop would pay for it on each
+	pass.  Judged once per session per package instead, a current submodule
+	stays bound -- as though the import that bound it had run in this session
+	-- and a stale one is never served.  The verdicts and the source hashes
+	behind them are memoised per session (___generationNowOf___:), so a
+	package's dependency check has usually paid for them already.
+
+	A rebuild that fails is not this import's error: the program asked for the
+	package, and CPython would not have touched the submodule.  The failure is
+	left for the import that does ask for it, which retries (a failed rebuild
+	puts the old hash back) and raises.  Notifications pass, as in the loader."
+
+	(self @env1:___isPackageForFromlist___: aPackage) ifFalse: [^ self].
+	aPackage dynamicInstanceVariables do: [:leaf | | child sub gen |
+		child := aPackage dynamicInstVarAt: leaf.
+		sub := aName asString , '.' , leaf asString.
+		(self @env1:___isUnimportedSubmodule___: child named: sub) ifTrue: [
+			gen := self ___recordedGenerationOf___: sub.
+			gen isNil ifFalse: [
+				(self ___generationNowOf___: sub) = gen
+					ifTrue: [self ___refreshCarriedSubmodulesOf___: child named: sub]
+					ifFalse: [self ___rebuildCarriedSubmodule___: sub]]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___rebuildCarriedSubmodule___: aDottedName
+	"Load the stale carried submodule aDottedName through the ordinary path --
+	see ___refreshCarriedSubmodulesOf___:named:, which says why a failure is
+	dropped here.
+
+	Parents first, as an import of the dotted name would: a stale ``pkg.sub.mod''
+	reached through a current ``pkg.sub'' that this session has not imported
+	binds ``pkg.sub'' too, rather than registering a module whose package is
+	missing from sys.modules.  Binding a parent judges what it carries, so the
+	leaf may be loaded by then; each step looks first."
+
+	| prefix subPath |
+	[prefix := nil.
+	($. split: aDottedName) do: [:part |
+		prefix := prefix isNil ifTrue: [part] ifFalse: [prefix , '.' , part].
+		(self @env1:lookupModule: prefix) isNil ifTrue: [
+			subPath := self @env1:___moduleNameToPath___: prefix.
+			subPath isNil ifTrue: [^ self].
+			self loadModuleFromPath: subPath name: prefix]]]
+		on: AbstractException do: [:ex |
+			((ex isKindOf: Notification) or: [ex isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex pass].
+			ex return: nil]
+%
+
 category: 'Private'
 classmethod: importlib
 _stateMap
@@ -4713,6 +4874,7 @@ ___loadModuleFromPath___: pathString name: moduleName
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
+			self ___refreshCarriedSubmodulesOf___: committedInstance named: moduleName.
 			^ committedInstance]].
 	"Record #stale REGARDLESS of the hash verdict: this load is about to
 	RE-RUN the module body (only the warm-bind branch above skips it),
@@ -4927,6 +5089,10 @@ ___loadModuleFromPath___: pathString name: moduleName
 	body ran to completion (a raise above unloaded the module and
 	re-signalled), so the registry never holds a half-built instance."
 	self ___canonicalModules___ at: moduleName put: moduleInstance.
+	"A committed package rebuilt in place still carries the submodules bound on
+	it before; its body re-imported only the ones it imports itself."
+	rebuiltInPlace ifTrue: [
+		self ___refreshCarriedSubmodulesOf___: moduleInstance named: moduleName].
 	^ moduleInstance
 %
 
@@ -5263,8 +5429,10 @@ ___initModuleAttrsFrom___: aSpec on: aModule
 		ifTrue: [aModule @env0:dynamicInstVarAt: #'__file__' put: origin]
 		ifFalse: [aModule @env0:dynamicInstVarAt: #'__file__' put: none].
 	locs := self @env1:___specAttr___: aSpec named: #'submodule_search_locations'.
+	"A Python list, as CPython's is: a package's __init__.py may append to its
+	own __path__ (pkgutil.extend_path's idiom), and an Array has no append."
 	(locs notNil and: [locs ~~ none]) ifTrue: [
-		aModule @env1:__path__: (self @env1:___stringListFrom___: locs)].
+		aModule @env1:__path__: (list withAll: (self @env1:___stringListFrom___: locs))].
 	^ aModule
 %
 
@@ -8130,7 +8298,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					| cat |
 					cat := [walker class categoryOfSelector: sel environmentId: 1]
 						on: Error do: [:e | nil].
-					((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
+					((self ___metaChainProvides___: sel forClass: aClass mergingFrom: walker) not
 						and: [(kernelSlots includes: sel) not
 						and: [cat ~~ #'Grail-Class Attrs'
 						"A base's ___pySlotLayout___ numbers ITS indexed slots; copying
@@ -8310,10 +8478,40 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 	aClass's own dictionary is asked EXACTLY: it is where this merge is writing
 	its copies, one selector at a time, and asked by name the first arity
 	copied (``_register:kw:'') refused the rest -- the varargs forwarder then
-	performed a fixed selector that never arrived."
+	performed a fixed selector that never arrived.
 
-	| walker family |
+	AND ONLY AN ANCESTOR THE MRO PUTS BEFORE aSource COUNTS AT ALL.  The shared-
+	ancestor rule above went from ``by name'' to ``by exact selector'' and no
+	further, so an ancestor that comes after aSource in aClass's MRO still
+	blocked a copy of the very same selector.  pytest's collectors are that
+	shape:
+
+	    class PyCollector(Mixin, Collector): def collect(self) ...
+	    class Module(File, PyCollector)    -- File -> FSCollector -> Collector
+
+	The MRO is Module, File, FSCollector, PyCollector, Mixin, Collector, ...,
+	so ``Module().collect()'' is PyCollector's.  But the primary chain reaches
+	Collector, which defines ``collect'' too, so the copy was refused and the
+	abstract Collector.collect answered (#1454).  The C3 linearization is
+	registered before this merge runs (___registerBases___:), so ask it: a
+	primary-chain ancestor positioned AFTER aSource does not provide the name as
+	far as aClass is concerned.  When either class is missing from the
+	linearization the rules above decide, as before.
+
+	Only for an ancestor written in PYTHON (ClassDefAst's ___pyDefinedClass___
+	marker, on the class itself).  The linearization is exact for those, being
+	built from class statements; for Grail's Smalltalk-written stand-ins it is
+	not -- ``class HelloEnum(EnumMixin, StrEnum)'' linearizes as HelloEnum,
+	EnumMixin, Enum, StrEnum, str where CPython has StrEnum, str, ReprEnum,
+	Enum -- and trusting it there copied Enum's __eq__ over str's, so
+	``HelloEnum.eight == '8''' went False (test_enum test_strenum)."
+
+	| walker family mro sourceIdx |
 	family := self ___pythonNameFamilyOf___: aSelector.
+	mro := (aSource isKindOf: Behavior)
+		ifTrue: [[self ___mroOf___: aClass] on: Error do: [:e | e return: #()]]
+		ifFalse: [#()].
+	sourceIdx := mro indexOf: aSource.
 	walker := aClass.
 	[(walker ~~ nil) and: [(walker ~~ PythonInstance) and: [walker ~~ Object]]]
 		whileTrue: [
@@ -8332,14 +8530,48 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 			(walker == aClass
 				ifTrue: [md includesKey: aSelector]
 				ifFalse: [
-					((aSource isKindOf: Behavior)
-						and: [aSource == walker or: [aSource inheritsFrom: walker]])
-						ifTrue: [has value: aSelector]
-						ifFalse: [family anySatisfy: [:sel | has value: sel]]])
+					(sourceIdx > 0
+						and: [(mro indexOf: walker) > sourceIdx
+						and: [walker includesSelector: #'___pyDefinedClass___' environmentId: 1]])
+						ifTrue: [false]
+						ifFalse: [
+							((aSource isKindOf: Behavior)
+								and: [aSource == walker or: [aSource inheritsFrom: walker]])
+								ifTrue: [has value: aSelector]
+								ifFalse: [family anySatisfy: [:sel | has value: sel]]]])
 					ifTrue: [^ true]].
 		walker := walker superClass
 	].
 	^ false
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___metaChainProvides___: aSelector forClass: aClass mergingFrom: aSource
+	"The class-side twin of ___primaryChainProvides___:forClass:mergingFrom:'s
+	MRO rule, for the merge's @classmethod / @staticmethod pass: does aClass's
+	metaclass chain already answer aSelector from somewhere the MRO puts AHEAD
+	of aSource?
+
+	It used to be the bare ``whichClassIncludesSelector:'' test, so a primary-
+	chain ancestor's classmethod beat a secondary base the MRO puts first:
+	``class Q(P, Y)'' with P(Base), Y(Base) and both Base and Y defining
+	``cm'' answered Base.cm for ``Q.cm()'' where CPython answers Y.cm (#1454,
+	the class-side half).  An owner the linearization does not list -- the
+	universal roots, kernel metaclasses -- still counts, as before, and so does
+	one not written in Python, for the reason the instance-side twin gives."
+
+	| owner mro sourceIdx ownerIdx |
+	owner := aClass class whichClassIncludesSelector: aSelector environmentId: 1.
+	owner isNil ifTrue: [^ false].
+	owner == aClass class ifTrue: [^ true].
+	owner isMeta ifFalse: [^ true].
+	(owner thisClass includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifFalse: [^ true].
+	mro := [self ___mroOf___: aClass] on: Error do: [:e | e return: #()].
+	sourceIdx := mro indexOf: aSource.
+	ownerIdx := mro indexOf: owner thisClass.
+	^ (sourceIdx > 0 and: [ownerIdx > sourceIdx]) not
 %
 
 category: 'Grail-Module Loading'
@@ -8731,9 +8963,48 @@ ___moduleNameToPath___: aName
 	___grailOwnedPathFor___:.  That is what the pinned GrailBuiltinImporter at
 	sys.meta_path[0] answers from, so a user-installed finder cannot shadow a
 	module Grail ships (CPython protects its builtin and frozen modules the same
-	way, by putting their finders ahead of PathFinder)."
+	way, by putting their finders ahead of PathFinder).
 
+	A DOTTED name is looked for first in its parent's __path__, which is the
+	only place CPython looks.  Joining the parts onto each root finds the same
+	file whenever the parent is the directory its name spells, which is the
+	usual case.  It finds nothing when a package's __path__ points somewhere
+	else.  setuptools is the census case: its meta-path finder puts
+	setuptools._distutils into sys.modules as ``distutils'', and then imports
+	``distutils.core'', which exists only under setuptools/_distutils.  The
+	root search is kept after it, so a name it used to find is still found."
+
+	| fromParent |
+	fromParent := self ___probeParentPathFor___: aName.
+	fromParent == nil ifFalse: [^ fromParent].
 	^ self ___probeSourcePathFor___: aName roots: self ___importSearchRoots___
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___probeParentPathFor___: aName
+	"``<entry>/<leaf>.py'' or ``<entry>/<leaf>/__init__.py'' for the first
+	entry of the loaded parent's __path__ that has one, or nil.  Nil also for
+	a top-level name, and for a parent that is not loaded or has no __path__."
+
+	| entries |
+	entries := self ___parentPathEntriesFor___: aName.
+	entries @env0:isEmpty ifTrue: [^ nil].
+	^ self ___probeSourcePathFor___: (($. @env0:split: aName) @env0:last) roots: entries
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___parentPathEntriesFor___: aName
+	"The loaded parent's __path__ as an Array of strings, for a dotted name.
+	Empty for a top-level name and for a parent that is not loaded or has no
+	__path__."
+
+	| parentPath |
+	(aName @env0:includes: $.) ifFalse: [^ #()].
+	parentPath := self ___parentSearchPathFor___: aName.
+	(parentPath == nil or: [parentPath == None]) ifTrue: [^ #()].
+	^ self ___stringListFrom___: parentPath
 %
 
 category: 'Grail-Module Loading'
@@ -8880,6 +9151,15 @@ ___namespacePortionsFor___: aName
 	joined := '/' @env0:join: pathParts.
 	searchRoots := self ___importSearchRoots___.
 	portions := OrderedCollection @env0:new.
+	"The parent's __path__ first, for the reason ___moduleNameToPath___: gives:
+	it is where CPython looks, and it can name directories the joined name
+	does not.  setuptools' ``distutils.compilers.C'' is two namespace levels
+	under an aliased parent."
+	(self ___parentPathEntriesFor___: aName) @env0:do: [:entry | | dir |
+		dir := (entry @env0:, '/') @env0:, pathParts @env0:last.
+		((GsFile @env0:isServerDirectory: dir) == true)
+			ifTrue: [(portions @env0:includes: dir)
+				ifFalse: [portions @env0:add: dir]]].
 	searchRoots @env0:do: [:root | | dir |
 		dir := (root @env0:, '/') @env0:, joined.
 		"isServerDirectory: answers NIL for a path that does not exist, so
@@ -9565,6 +9845,101 @@ ___emptyModuleNamed___: aName spec: aSpec loader: aLoader
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___isPackageForFromlist___: aModule
+	"Does ``__import__'' consult its fromlist for aModule?  CPython's
+	_handle_fromlist runs only for a module with ``__path__'', a package.
+
+	Read without raising, because every ``from M import x'' asks: a module's
+	__path__ is in its dictionary when the loader set it (module >> __path__:)
+	and a dynamic instVar when the module body assigned it.  Anything not a
+	module -- what a custom __import__ hook may answer -- is asked through the
+	ordinary attribute read."
+
+	| p |
+	(aModule @env0:isKindOf: module) ifFalse: [
+		^ [p := aModule @env1:___pyAttrLoad___: #'__path__'.
+			p ~~ nil and: [p ~~ None]]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: false]].
+	(aModule @env0:includesKey: #'__path__') ifTrue: [
+		p := aModule @env0:at: #'__path__'.
+		^ p ~~ nil and: [p ~~ None]].
+	p := aModule @env0:dynamicInstVarAt: #'__path__'.
+	^ p ~~ nil and: [p ~~ None]
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___isUnimportedSubmodule___: aValue named: aDottedName
+	"Is aValue -- an attribute of a package -- the package's own submodule
+	aDottedName, which THIS SESSION has not imported?
+
+	registerModule:with: binds a submodule onto its package, and a committed
+	package keeps that binding.  So in a fresh gem the attribute is there
+	although nothing imported the submodule, and the staleness check that an
+	import runs (loadModuleFromPath:name:) has not run on it.  CPython's
+	package object is new in every process, so its attribute can only mean
+	the submodule was imported in this process.
+
+	By NAME as well as kind, so a package that re-exports a different module
+	under the name -- ``os.path'' is posixpath -- keeps it.  And only a
+	COMMITTED submodule: within one session CPython counts the attribute
+	however it got there -- ``del sys.modules['pkg.mod']'' and then ``from pkg
+	import mod'' answers the old object -- and so does this."
+
+	| n |
+	(aValue @env0:isKindOf: module) ifFalse: [^ false].
+	aValue @env0:isCommitted ifFalse: [^ false].
+	n := [aValue @env1:__name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(n ~~ nil and: [n ~~ None and: [n @env0:asString @env0:= aDottedName @env0:asString]])
+		ifFalse: [^ false].
+	^ (self modules @env0:at: aDottedName @env0:asString ifAbsent: [nil]) == nil
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___importFromMiss___: aName of: aModule
+	"``from M import aName'' found no attribute aName on M (object >>
+	___importFrom___:).  CPython's IMPORT_FROM then tries the submodule
+	``M.aName'' in sys.modules -- bound there by an import the package's own
+	attribute does not yet reflect -- and otherwise raises ImportError, with
+	the module's __file__ as the path, ``(unknown location)'' when it has none."
+
+	| pkg sub file |
+	pkg := [aModule @env1:___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	pkg == None ifTrue: [pkg := nil].
+	pkg notNil ifTrue: [
+		sub := self lookupModule: (pkg @env0:asString @env0:, '.') @env0:, aName @env0:asString.
+		sub notNil ifTrue: [^ sub]].
+	file := [aModule @env1:___pyAttrLoad___: #'__file__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	file == None ifTrue: [file := nil].
+	^ ImportError @env0:___signalCannotImportName___: aName
+		from: (pkg ifNil: ['<unknown module name>'])
+		path: file
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___parentModule___: aParentName of: aDottedName
+	"lookupModule: for a PARENT of the dotted name being imported -- except
+	that None in sys.modules, which blocks the import, raises CPython's
+	``No module named 'a.b'; 'a' is not a package'' rather than reading as a
+	module that is there."
+
+	| m mnfe msg |
+	m := self lookupModule: aParentName.
+	m == None ifFalse: [^ m].
+	msg := 'No module named ''' @env0:, aDottedName @env0:asString
+		@env0:, '''; ''' @env0:, aParentName @env0:asString @env0:, ''' is not a package'.
+	mnfe := ModuleNotFoundError @env1:___new___.
+	mnfe @env1:___args___: { msg }.
+	mnfe @env0:dynamicInstVarAt: #'name' put: aDottedName @env0:asString.
+	^ mnfe @env1:___signal___: msg
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 lookupModule: aName
 	"Look up a module by name: the session registry first -- a HIT
 	validated against the repository, see ___moduleEntryIsLive___: --
@@ -9651,6 +10026,30 @@ lookupModule: aName
 		self @env0:registerModule: aName with: inst.
 		^ inst].
 	^ nil
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___runtimeModule___: aName
+	"The module named aName, for Grail's own Smalltalk code to call into: the
+	registered instance when it is already imported, otherwise loaded from the
+	search path (which registers it).  ImportError when there is no such file.
+
+	loadModuleFromPath:name: on its own is the LOADER, not an import: it never
+	consults sys.modules, so a caller that used it per call rebuilt the module
+	every time.  datetime.strptime did, until #1222: each call built a fresh
+	_strptime (~310 ms, and its TimeRE and regex caches with it), the module in
+	sys.modules changed on every call, and the session ran out of temporary
+	object memory after about 200 calls."
+
+	| m path |
+	m := self lookupModule: aName.
+	m == nil ifFalse: [^ m].
+	path := self ___moduleNameToPath___: aName.
+	path == nil ifTrue: [
+		^ ImportError ___signal___:
+			('No module named ' @env0:, aName @env0:printString)].
+	^ self @env0:loadModuleFromPath: path name: aName
 %
 
 category: 'Grail-Module Registry'
@@ -9826,7 +10225,7 @@ ___import__: positional kw: kwargs
 	"Ensure parent packages are loaded for dotted names"
 	isDotted ifTrue: [
 		prefix := nameParts @env0:at: 1.
-		(self @env0:class lookupModule: prefix) ifNil: [
+		(self @env0:class ___parentModule___: prefix of: absoluteName) ifNil: [
 			"sys.meta_path gets its turn on the PARENTS too, not only on the leaf
 			-- ``import six.moves.urllib.parse'' needs three of its four
 			components to come from six's finder, and CPython walks the parents
@@ -9843,7 +10242,7 @@ ___import__: positional kw: kwargs
 		].
 		2 @env0:to: nameParts __len__ - 1 do: [:i |
 			prefix := (prefix @env0:, '.') @env0:, (nameParts @env0:at: i).
-			(self @env0:class lookupModule: prefix) ifNil: [
+			(self @env0:class ___parentModule___: prefix of: absoluteName) ifNil: [
 				(self @env0:class ___findViaMetaPath___: prefix) ifNil: [
 					parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
 					parentFilePath notNil ifTrue: [
@@ -9858,6 +10257,21 @@ ___import__: positional kw: kwargs
 
 	"Look up the module"
 	moduleInstance := self @env0:class lookupModule: absoluteName.
+	"None in sys.modules BLOCKS the import -- CPython's _find_and_load raises
+	``import of X halted; None in sys.modules''.  test.support's
+	import_fresh_module(blocked=) depends on it: statistics.py guards ``from
+	_statistics import _normal_dist_inv_cdf'' with ``except ImportError''.
+	Grail answered None, and the guard only worked because the fromlist loop
+	then raised ``cannot import name'' -- which __import__ no longer does
+	(#1223), so the blocked accelerator was imported anyway."
+	moduleInstance == None ifTrue: [
+		| mnfe msg |
+		msg := 'import of ' @env0:, absoluteName @env0:asString
+			@env0:, ' halted; None in sys.modules'.
+		mnfe := ModuleNotFoundError @env1:___new___.
+		mnfe @env1:___args___: { msg }.
+		mnfe @env0:dynamicInstVarAt: #'name' put: absoluteName @env0:asString.
+		^ mnfe @env1:___signal___: msg].
 	moduleInstance isNil ifTrue: [
 		"``sys.meta_path'' -- CPython's second step, between the sys.modules
 		cache and PathFinder.  Grail's native filesystem search below plays the
@@ -9924,52 +10338,72 @@ ___import__: positional kw: kwargs
 		]
 	].
 
-	"Parent-binding of the just-loaded module is now handled inside
-	``registerModule:with:`` (which loadModuleFromPath: calls), so
-	the dotted-name binding here is no longer necessary.
+	"Parent-binding of the just-loaded module is handled inside
+	``registerModule:with:'' (which loadModuleFromPath: calls).
 
-	For `from PKG import name1, name2`, ensure each name in fromlist
-	that is an as-yet-unloaded submodule is loaded so the subsequent
-	attribute access in the importer finds something.  Once
-	loadModuleFromPath: returns, the parent-binding has already
-	happened via registerModule:.
+	THE FROMLIST, AS CPython's _handle_fromlist READS IT (issue #1223).  It
+	only ever LOADS SUBMODULES: for each name the package does not already
+	have, import ``PKG.name'' if there is such a module, and otherwise move on.
+	It never raises for a missing name -- ``__import__('json', fromlist=
+	['nope'])'' is json -- because the ``from PKG import name'' STATEMENT
+	raises that ImportError itself, when it reads the name (object >>
+	___importFrom___:, what ImportFromAst emits).  Raising here made every
+	direct __import__ caller fail where CPython succeeds.
 
-	Guard: if the parent module already exposes ``fromName'' as an
-	attribute (re-exported class / function / value), do NOT attempt
-	to load a sibling submodule with the same name.  Case-insensitive
-	filesystems (macOS HFS+) otherwise resolve ``parent.Headers'' to
-	a sibling ``headers.py'' submodule and clobber the re-exported
-	class with the submodule object."
-	fromlist __len__ @env0:> 0 ifTrue: [
+	  - Only for a PACKAGE.  A plain module's fromlist is ignored outright,
+	    whatever it holds.
+	  - A non-str item is CPython's TypeError.
+	  - ``*'' is the star-import marker and the empty name never names a
+	    submodule; both are skipped.  The empty name used to reach
+	    ``dynamicInstVarAt:'' with an empty Symbol -- the kernel's uncatchable
+	    ArgumentError 2718 -- and end the process.
+	  - A name the package already has is bound -- EXCEPT a submodule this
+	    session has not imported.  A committed package carries its submodules
+	    as attributes from whichever session committed it, where CPython's
+	    package is new in every process; counting such an attribute as bound
+	    skipped the import, and with it the staleness check, so ``from PKG
+	    import mod'' answered the committed module after mod.py was edited.
+
+	Guard kept from before: if the package already exposes ``fromName'' as
+	something other than a submodule (a re-exported class / function /
+	value), do NOT load a sibling submodule of the same name.  Case-insensitive
+	filesystems (macOS HFS+) otherwise resolve ``parent.Headers'' to a sibling
+	``headers.py'' and clobber the re-exported class with the module."
+	((fromlist __len__ @env0:> 0)
+		and: [self @env0:class ___isPackageForFromlist___: result]) ifTrue: [
 		fromlist @env0:do: [:fromName |
-			| subName subPath alreadyBound soPath provided |
-			"``*'' is the star-import marker, not a submodule name — the
-			caller does the public-attr merge separately.  And ``import X''
-			passes X's own name in the fromlist as the binding target (so
-			absoluteName = fromName); that is the already-loaded module
-			itself, not a ``X.X'' submodule.  Treat both as already-bound so
-			the submodule-load / missing-name raise below never fires for
-			``from PKG import *'' or plain ``import X''."
+			| subName alreadyBound bound soPath |
+			(fromName @env0:isKindOf: CharacterCollection) ifFalse: [
+				^ TypeError ___signal___: 'Item in ``from list'''' must be str, not '
+					@env0:, (fromName ___pyTypeNameForError___) @env0:asString].
+			subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
+			"``import X'' passes X's own name as the fromlist (the binding
+			target), and that is the module itself, not an ``X.X''."
 			alreadyBound := (fromName @env0:= '*')
-				or: [(fromName @env0:= absoluteName)
-				or: [(result isKindOf: module)
-				ifTrue: [
-					"Check dynamic instVars first (fast path), then env-1
-					methods (varargs _name:kw:, unary name, fixed-arity
-					name:) so that 'from mod import fn' does not try to
-					load mod.fn as a submodule file when fn is already a
-					callable method on the module class.
+				or: [(fromName @env0:isEmpty)
+				or: [fromName @env0:= absoluteName]].
+			alreadyBound ifFalse: [
+				"Check dynamic instVars first (fast path), then env-1 methods
+				(varargs _name:kw:, unary name, fixed-arity name:) so that
+				``from mod import fn'' does not try to load mod.fn as a
+				submodule file when fn is already a callable method on the
+				module class.
 
-					The method probe must only count selectors the MODULE
-					ITSELF owns (its concrete class, or anything below
-					``module`` in the chain).  Modules inherit the whole
-					dict protocol through SymbolDictionary, so a blanket
-					___pyAttrLoad___ probe reports names like ``values'' /
-					``keys'' / ``items'' as bound and skips loading a real
-					sibling submodule — ``from twilio.base import values''
-					bound KeyValueDictionary>>values' OrderedCollection
-					instead of values.py."
-					(result @env0:dynamicInstVarAt: fromName @env0:asSymbol) notNil or: [
+				The method probe must only count selectors the MODULE ITSELF
+				owns (its concrete class, or anything below ``module'' in the
+				chain).  Modules inherit the whole dict protocol through
+				SymbolDictionary, so a blanket ___pyAttrLoad___ probe reports
+				names like ``values'' / ``keys'' / ``items'' as bound and skips
+				loading a real sibling submodule -- ``from twilio.base import
+				values'' bound KeyValueDictionary>>values' OrderedCollection
+				instead of values.py."
+				bound := (result isKindOf: module)
+					ifTrue: [result @env0:dynamicInstVarAt: fromName @env0:asSymbol]
+					ifFalse: [nil].
+				alreadyBound := bound notNil
+					ifTrue: [(self @env0:class ___isUnimportedSubmodule___: bound
+						named: subName) not]
+					ifFalse: [(result isKindOf: module) and: [
 						| mcls s owned |
 						mcls := result @env0:class.
 						s := fromName @env0:asString.
@@ -9987,63 +10421,30 @@ ___import__: positional kw: kwargs
 							"Legacy SymbolDictionary at: storage (built-in
 							modules still keep some constants there)."
 							(result @env0:at: fromName @env0:asSymbol
-								ifAbsent: [nil]) notNil]
-					]
-				]
-				ifFalse: [false]]].
+								ifAbsent: [nil]) notNil]]]].
 			"A name equal to the package's own last component -- ``from a.b
-			import b'' -- used to count as bound OUTRIGHT, before anything
-			looked.  So when a/b/b.py exists, as in test_reprlib's
-			LongReprTest (package, subpackage and module all share one long
-			name), the submodule was never loaded and the attribute read that
-			follows raised ``'a_b' object has no attribute 'b'''.  It still
-			counts as bound -- the old behaviour, which nothing in the vendored
-			tree is known to need but which cost nothing to keep -- unless
-			such a submodule file actually exists; then it is loaded, as
-			CPython's _handle_fromlist would."
+			import b'' -- counts as bound unless such a submodule file actually
+			exists; then it is loaded, as CPython's _handle_fromlist would
+			(test_reprlib's LongReprTest: package, subpackage and module all
+			share one long name)."
 			(alreadyBound not and: [fromName @env0:= (nameParts @env0:last)]) ifTrue: [
-				alreadyBound := (self @env0:class ___moduleNameToPath___:
-					((absoluteName @env0:, '.') @env0:, fromName @env0:asString)) isNil].
+				alreadyBound := (self @env0:class ___moduleNameToPath___: subName) isNil].
 			alreadyBound ifFalse: [
-				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
+				| subPath |
 				((self @env0:class lookupModule: subName)
 					ifNil: [self @env0:class ___findViaMetaPath___: subName]) ifNil: [
 					subPath := self @env0:class ___moduleNameToPath___: subName.
-					subPath notNil ifTrue: [
-						self @env0:class
-							@env0:loadModuleFromPath: subPath name: subName.
-					] ifFalse: [
-						"No attribute and no .py submodule.  Try a .so / builtin
-						submodule; if none, and the package can't provide the
-						name (even via a module-level __getattr__), it is a
-						genuine ``from PKG import name'' miss — raise
-						ModuleNotFoundError (an ImportError), NOT the
-						AttributeError a downstream ___pyAttrLoad___ would
-						produce.  This is what lets numpy's optional
-						``try: from . import _distributor_init_local
-						except ImportError: pass'' hook be caught."
-						soPath := self @env0:class ___moduleNameToSoPath___: subName.
-						soPath notNil
-							ifTrue: [
+					subPath notNil
+						ifTrue: [
+							self @env0:class
+								@env0:loadModuleFromPath: subPath name: subName]
+						ifFalse: [
+							"Not a .py submodule: a .so one, or nothing -- and
+							nothing is not an error here (see above)."
+							soPath := self @env0:class ___moduleNameToSoPath___: subName.
+							soPath notNil ifTrue: [
 								self @env0:class
-									@env0:loadDynamicModuleNamed: subName fromPath: soPath]
-							ifFalse: [
-								provided := [(result ___pyAttrLoad___: fromName @env0:asSymbol). true]
-									@env0:on: AbstractException do: [:ignored | false].
-								provided ifFalse: [
-									"A missing NAME, not a missing module: CPython raises
-									ImportError here, saying ``cannot import name 'x' from
-									'PKG' (path)'' and carrying name / name_from / path.
-									ImportError is ModuleNotFoundError's BASE, so the
-									``try: from . import x except ImportError: pass'' hooks
-									this used to serve keep working."
-									ImportError @env0:___signalCannotImportName___: fromName
-										from: absoluteName
-										path: (self @env0:class ___moduleNameToPath___: absoluteName)]]]
-				]
-			]
-		]
-	].
+									@env0:loadDynamicModuleNamed: subName fromPath: soPath]]]]]].
 
 	"A module body importing: part of its dependency record."
 	self @env0:class @env0:___noteImport___: absoluteName @env0:asString fromlist: fromlist.
@@ -10159,6 +10560,10 @@ reload: aModule
 	moduleAst @env0:setParent: nil.
 	importlib @env0:expandStarImports: moduleAst.
 	importlib @env0:___buildModuleClass: moduleAst name: name.
+	"The rebuild REPLACED the module's methods, and the session's method-keyed
+	caches still hold the old ones -- each pinning its whole generated source,
+	so a session that reloads in a loop ran out of memory (#1463)."
+	BaseException @env0:___forgetMethodCaches___.
 	"Re-parenting the class can reset its adopted singleton; re-adopt the live
 	instance so it stays the module's canonical object before re-running body."
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.
@@ -10248,6 +10653,38 @@ category: 'Grail-Class Compilation'
 classmethod: importlib
 ___irCensusReset___
 	SessionTemps current removeKey: #'___grailIRCensus___' ifAbsent: []
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irSendCensus___
+	"The IR send census (issue #1155): nil while off, else an OrderedCollection
+	of { targetClass. methodSelector. sends } with one entry per IR method
+	build, where sends is an OrderedCollection of { selector. envId } -- every
+	send node PyMethodIRBuilder built for that method, in build order.
+
+	It exists because an IR-compiled method has no generated text to read, and
+	GsNMethod>>_selectorPool merges both environments, so nothing in the
+	compiled method says which of its sends are env 1.  The census records what
+	the BUILDER asked for, which is what a guard needs to keep Grail's own
+	plumbing out of env 1 under a Python-shaped selector.  When the kernel can
+	answer the environment of each send (_selectorIdPool, proposed on #1155),
+	ask the method instead.
+
+	Off by default, and off costs one SessionTemps probe per method build:
+	the builder captures the collection once, in initClass:selector:env:."
+
+	^ SessionTemps current at: #'___grailIRSendCensus___' otherwise: nil
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irSendCensusOn: aBoolean
+	"Start (with an empty census) or stop recording ___irSendCensus___."
+
+	aBoolean
+		ifTrue: [SessionTemps current at: #'___grailIRSendCensus___' put: OrderedCollection new]
+		ifFalse: [SessionTemps current removeKey: #'___grailIRSendCensus___' ifAbsent: []]
 %
 
 category: 'Grail-Class Compilation'

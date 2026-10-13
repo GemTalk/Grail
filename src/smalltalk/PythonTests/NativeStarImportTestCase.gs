@@ -27,7 +27,7 @@ NativeStarImportTestCase category: 'Grail-SUnit'
 !
 ! A Grail native module keeps its constants as namespace entries but implements
 ! its FUNCTIONS as methods on the backing Smalltalk class.  module >>
-! ___mergePublicAttrsFrom: walked the dynamic-instVar store and the
+! ___mergePublicAttrsFrom___: walked the dynamic-instVar store and the
 ! SymbolDictionary -- both of which hold data -- and never looked at the METHOD
 ! dictionary.  So a star-import copied across every constant and every class and
 ! silently omitted every function.

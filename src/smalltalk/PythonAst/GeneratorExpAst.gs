@@ -103,8 +103,13 @@ printSmalltalkOn: aStream
 	generator, and for the async case that is exactly right: an await in
 	the expression's own clauses must suspend the GENERATOR, and its
 	consumer awaits the generator in turn."
-	| gxTemp depth p |
-	"Depth-named because nested genexps nest these wrappers and Smalltalk
+	| gxTemp depth p savedScopeDepth |
+	"The clauses and the element are emitted inside this genexpr's scope frame,
+	so a lambda or genexpr nested in them is named through it --
+	``<genexpr>.<lambda>'' (#1522).  The outermost iterable is not: it is
+	evaluated in the enclosing scope, and emitted outside the frame.
+
+	Depth-named because nested genexps nest these wrappers and Smalltalk
 	blocks may not shadow an outer block's parameter."
 	depth := 0.
 	p := parent.
@@ -127,16 +132,18 @@ printSmalltalkOn: aStream
 		is depth-named -- see above."
 		aStream nextPutAll: '([:'; nextPutAll: gxTemp; nextPutAll: ' |'; lf; increaseIndent.
 		aStream nextPutAll: '(PythonAsyncGenerator @env1:withBlock: [:___gen___ |'; lf; increaseIndent.
-		ComprehensionAst
-			emitGenerators: generators
-			from: 1
-			on: aStream
-			innerBody: [
-				aStream nextPutAll: '___gen___ @env1:___asyncYield___: ('.
-				elt printSmalltalkOn: aStream.
-				aStream nextPutAll: ').'; lf.
-			]
-			outerSource: gxTemp.
+		savedScopeDepth := CallAst ___pushScope___: self kind: #genexpr name: '<genexpr>'.
+		[ComprehensionAst
+				emitGenerators: generators
+				from: 1
+				on: aStream
+				innerBody: [
+					aStream nextPutAll: '___gen___ @env1:___asyncYield___: ('.
+					elt printSmalltalkOn: aStream.
+					aStream nextPutAll: ').'; lf.
+				]
+				outerSource: gxTemp]
+			ensure: [CallAst ___restoreScopeDepth___: savedScopeDepth].
 		aStream nextPutAll: 'None'; lf.
 		aStream decreaseIndent; nextPutAll: '] name: ''<genexpr>'' qualname: '''.
 		aStream nextPutAll: (CallAst ___qualnameFor___: self name: '<genexpr>').
@@ -168,16 +175,18 @@ printSmalltalkOn: aStream
 	itself, so the second send is free."
 	aStream nextPutAll: '([:'; nextPutAll: gxTemp; nextPutAll: ' |'; lf; increaseIndent.
 	aStream nextPutAll: '(PythonGenerator @env1:withBlock: [:___gen___ |'; lf; increaseIndent.
-	ComprehensionAst
-		emitGenerators: generators
-		from: 1
-		on: aStream
-		innerBody: [
-			aStream nextPutAll: '___gen___ @env1:___yield___: ('.
-			elt printSmalltalkOn: aStream.
-			aStream nextPutAll: ').'; lf.
-		]
-		outerSource: gxTemp.
+	savedScopeDepth := CallAst ___pushScope___: self kind: #genexpr name: '<genexpr>'.
+	[ComprehensionAst
+			emitGenerators: generators
+			from: 1
+			on: aStream
+			innerBody: [
+				aStream nextPutAll: '___gen___ @env1:___yield___: ('.
+				elt printSmalltalkOn: aStream.
+				aStream nextPutAll: ').'; lf.
+			]
+			outerSource: gxTemp]
+		ensure: [CallAst ___restoreScopeDepth___: savedScopeDepth].
 	aStream nextPutAll: 'None'; lf.
 	aStream decreaseIndent; nextPutAll: '] name: ''<genexpr>'' qualname: '''.
 	aStream nextPutAll: (CallAst ___qualnameFor___: self name: '<genexpr>').
@@ -314,9 +323,11 @@ ___emitIRValueOn___: aBuilder
 	outer := aBuilder blockWithArg: gxSym do: [:gxLeaf |
 		| genBlk |
 		genBlk := aBuilder blockWithArg: #'___gen___' do: [:gLeaf |
-			| saved |
+			| saved savedDepth |
 			saved := aBuilder genLeaf.
 			aBuilder genLeaf: gLeaf.
+			"Inside this genexpr's scope frame, as the text path emits it."
+			savedDepth := CallAst ___pushScope___: self kind: #genexpr name: '<genexpr>'.
 			[
 				ComprehensionAst ___emitIRGenerators___: generators from: 1 on: aBuilder
 					innerBody: [
@@ -330,7 +341,9 @@ ___emitIRValueOn___: aBuilder
 					outerSource: [aBuilder var: gxLeaf].
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder globalNamed: #None)
-			] ensure: [aBuilder genLeaf: saved]].
+			] ensure: [
+				CallAst ___restoreScopeDepth___: savedDepth.
+				aBuilder genLeaf: saved]].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #withBlock:name:qualname:code:

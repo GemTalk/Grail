@@ -438,6 +438,15 @@ ___getslice___: lower _: upper _: step
 	result := (builtin @env0:== self @env0:class
 		ifTrue: [self @env0:species]
 		ifFalse: [builtin]) @env0:new.
+	"A contiguous slice of a built-in is one block copy.  copyFrom:to: answers
+	the same species the loop below builds (Unicode7, Unicode16, ByteArray,
+	OrderedCollection, Array; a Symbol's is String), and it is the difference
+	between 0.5us and 400us for x[16000:] of 32000 (#1385) -- the loop made
+	every ``buf[i:]'' in a scanner quadratic (#1214).  A subclass still walks,
+	since its slice must be an instance of the built-in it derives from."
+	(st @env0:= 1 and: [builtin @env0:== self @env0:class]) ifTrue: [
+		lo @env0:>= hi ifTrue: [^ result].
+		^ self @env0:copyFrom: lo @env0:+ 1 to: hi].
 	i := lo.
 	st @env0:> 0
 		ifTrue: [[i @env0:< hi] whileTrue: [

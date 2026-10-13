@@ -147,9 +147,10 @@ def serving_over_socket():
     # redirects, and GET / then shows it.
     #
     # Crucially, the requests are sent WITHOUT "Connection: close" (the way a
-    # browser sends HTTP/1.1 keep-alive).  With werkzeug's default handler the
-    # single-threaded server would park reading the kept-alive connection and
-    # the next request -- on its own fresh connection -- would hang forever.
+    # browser sends HTTP/1.1 keep-alive).  Before #1227, werkzeug's default
+    # handler made the single-threaded server park reading the kept-alive
+    # connection, and the next request -- on its own fresh connection -- would
+    # hang forever.  The default now closes too; the demo keeps its handler.
     # CloseAfterResponseHandler serves one request per connection, so the
     # recv() loop terminating here IS the proof that the connection was
     # closed.  The GET / response must also advertise "Connection: close".

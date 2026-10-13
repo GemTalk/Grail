@@ -54,9 +54,14 @@ def missing_argument_is_a_catchable_typeerror():
         _catch(lambda a: a),
         _catch(lambda a, b=2: (a, b)),
         _catch(lambda *, k: k),
-    ] == ["TypeError: <lambda>() missing 1 required positional argument: 'a'",
-          "TypeError: <lambda>() missing 1 required positional argument: 'a'",
-          "TypeError: <lambda>() missing 1 required keyword-only argument: 'k'"]
+    ] == ["TypeError: " + _Q + "() missing 1 required positional argument: 'a'",
+          "TypeError: " + _Q + "() missing 1 required positional argument: 'a'",
+          "TypeError: " + _Q + "() missing 1 required keyword-only argument: 'k'"]
+
+
+# The lambdas above are defined inside that function, so CPython names them by
+# their qualified name (#1493); Grail's messages used to say a bare '<lambda>'.
+_Q = 'missing_argument_is_a_catchable_typeerror.<locals>.<lambda>'
 
 
 # --------------------------------------------------------- 2. keyword-only args

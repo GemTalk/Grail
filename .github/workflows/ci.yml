@@ -123,6 +123,13 @@ jobs:
       - name: install.gs lists are sorted
         run: python3 scripts/sort_install_gs.py --check
 
+      # docs/Grail_CPython_Scope.md's Status column, tallies and not-OK list
+      # are derived from the manifest and the committed board.  Nothing
+      # checked them, so the doc drifted a week behind the board.  Fix with
+      # python3 scripts/sync_scope_status.py.
+      - name: CPython scope doc matches the board
+        run: python3 scripts/sync_scope_status.py --check
+
   test-main:
     name: test-main ${{ matrix.arm }} (${{ matrix.name }}, ${{ matrix.shards }})
     runs-on: ubuntu-22.04

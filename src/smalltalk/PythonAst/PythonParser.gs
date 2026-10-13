@@ -1986,14 +1986,28 @@ parseClassDefWithDecorators: decorators
 		reads: (scope at: 5);
 		nonlocalNames: (scope at: 6);
 		yourself.
-	^ClassDefAst new
+	^ self ___recordDecoratorLines___: decorators on: (ClassDefAst new
 		name: nameTok value asSymbol;
 		bases: bases;
 		keywords: keywords;
 		body: block;
 		decorator_list: decorators;
 		type_params: (classTypeParams ifNil: [Array new]);
-		from: tok to: self lastSpanToken ; yourself
+		from: tok to: self lastSpanToken ; yourself)
+%
+
+category: 'Grail-parsing - compound statements'
+method: PythonParser
+___recordDecoratorLines___: decorators on: aNode
+	"Keep each decorator's expression node on the def or class it decorates,
+	and answer aNode (#1406).  CPython runs a decorator at its own line and
+	starts a decorated def's code object at the first one; the def's decorator
+	list cannot say, because a bare ``@name'' is reduced to a Symbol.  The
+	nodes, not just their lines: the IR arm positions a send at a node."
+
+	decorators isEmpty ifFalse: [
+		aNode dynamicInstVarAt: #decoratorNodes put: decorators asArray].
+	^ aNode
 %
 
 category: 'Grail-parsing - expressions'
@@ -2584,7 +2598,10 @@ parseExpressionOrAssignment
 		opTok := self advance.
 		opStr := opTok value copyFrom: 1 to: opTok value size - 1. "Remove the '='"
 		opClass := self operatorClassFor: opStr.
-		value := self parseExpression.
+		"CPython: augassign ~ (yield_expr | star_expressions), so
+		``t += 1, 2'' adds a tuple -- the same right-hand side as the
+		annotated form below (#1419)."
+		value := self parseStarExpressions.
 		"CPython: an augmented-assignment target must be a single Name,
 		Attribute, or Subscript.  A tuple/list/starred target (``x, b += 3'')
 		is a SyntaxError, not an unpacking assignment."
@@ -2610,8 +2627,12 @@ parseExpressionOrAssignment
 		((aTok := self peek) notNil and: [ aTok isOp: '=']) ifFalse: [
 			annotation := self parseExpression.
 			value := nil.
+			"CPython's annotated_rhs is yield_expr | star_expressions: a bare
+			tuple, starred items included (``x: tuple = -1, None'', valid
+			since 3.8).  A single expression made the comma a SyntaxError,
+			which was the first thing keeping pyparsing from importing (#1419)."
 			(self matchOp: '=') ifTrue: [
-				value := self parseExpression.
+				value := self parseStarExpressions.
 			].
 			self ___checkAnnotationTarget___: expr.
 			self setStoreCtx: expr.
@@ -2930,6 +2951,7 @@ parseFunctionDefWithDecorators: decorators
 				and: [(each value isKindOf: NameAst)
 				and: [#('builtins' 'bltns') includes: each value id asString]]]]])
 		ifTrue: [funcNode dynamicInstVarAt: #builtinProperty put: true].
+	self ___recordDecoratorLines___: decorators on: funcNode.
 	^funcNode
 %
 
@@ -6812,9 +6834,11 @@ ___synth: aString like: refTok into: out
 			ifFalse: [
 				| j type value |
 				j := i + 1.
-				(c isLetter or: [c == $_])
+				"The names here are the user's own, so PEP 3131's rule, as the
+				tokenizer applies it."
+				(PythonTokenizer ___isIdentifierStart___: c)
 					ifTrue: [
-						[j <= n and: [(aString at: j) isAlphaNumeric or: [(aString at: j) == $_]]]
+						[j <= n and: [PythonTokenizer ___isIdentifierPart___: (aString at: j)]]
 							whileTrue: [j := j + 1].
 						value := aString copyFrom: i to: j - 1.
 						type := (keywords includes: value) ifTrue: [#KEYWORD] ifFalse: [#NAME]]

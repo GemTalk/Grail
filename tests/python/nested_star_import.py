@@ -10,7 +10,7 @@ top-level statement list, so a nested star import was never expanded.  It kept
 its lone ``*'' alias into codegen, where ImportFromAst emitted a per-name
 binding for it -- a Smalltalk variable literally NAMED ``*'':
 
-    * := ((((Python @env0:at: #builtins) instance) ___import__: ...
+    * := ((((Python @env0:at: #builtins) @env0:___instance___) ___import__: ...
 
 which is ``a CompileError occurred (error 1001), expected a right bracket'',
 uncatchable, taking the session with it.  ``try: from ._speedups import * /

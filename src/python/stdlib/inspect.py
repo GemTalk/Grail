@@ -51,20 +51,35 @@ CO_METHOD = 0x8000000
 
 
 def ismethod(obj):
-    """True if obj is a bound method."""
-    # Grail's BoundMethod is the closest analogue; treat the
-    # Smalltalk class name as a heuristic so we don't have to
-    # import the Smalltalk side.
-    return type(obj).__name__ == 'BoundMethod'
+    """True if obj is a bound method -- CPython's own test,
+    ``isinstance(obj, types.MethodType)``.
+
+    It used to be ``type(obj).__name__ == 'BoundMethod'``, and Grail's type
+    names do not line up with CPython's function/method split (#1458):
+
+      * a MODULE-LEVEL def is a BoundMethod bound to its module, so it read as
+        a method.  pluggy strips the first parameter of anything ismethod
+        accepts, as ``self'' -- every pytest hookspec is a module function, so
+        each lost its first argument and PytestPluginManager() refused its own
+        hookimpls;
+      * a DECORATED method read through an instance is a MethodBinding, so it
+        read as neither method nor routine, and pluggy silently registered no
+        @hookimpl on a plugin class.
+
+    types.MethodType's metaclass draws CPython's line from what the binding is
+    FOR (see types._MethodTypeMeta), and FunctionType's from what the callable
+    is; asking them keeps one classification rather than two."""
+    return isinstance(obj, _types.MethodType)
 
 
 def isfunction(obj):
-    # ``UnboundMethod`` is what a CLASS hands back where CPython hands back a
-    # plain function -- ``C.meth`` is an UnboundMethod, ``C().meth`` a
-    # BoundMethod, which is exactly CPython's function/method split.  Leaving it
-    # out made isroutine() False for every method reached through its class, so
-    # classify_class_attrs called them all "data" and getmembers/pydoc agreed.
-    return type(obj).__name__ in ('function', 'ExecBlock', 'UnboundMethod')
+    """True if obj is a Python function -- CPython's
+    ``isinstance(obj, types.FunctionType)``.  That covers Grail's three
+    spellings of one: a module-level def (a BoundMethod on its module), a
+    nested def or lambda (an ExecBlock), and a method read through its class
+    (an UnboundMethod, which classify_class_attrs needs counted or every such
+    method reads as "data").  See types._FunctionTypeMeta."""
+    return isinstance(obj, _types.FunctionType)
 
 
 def isclass(obj):
@@ -274,7 +289,11 @@ def getasyncgenstate(agen):
 
 
 def isbuiltin(obj):
-    return False
+    """CPython's test, ``isinstance(obj, types.BuiltinFunctionType)``.  Grail's
+    builtin callables report that type since #1436 (BoundMethod >> __class__);
+    before, this answered False for everything, and pydoc reached the same
+    answers through ismethod(), which matched every BoundMethod."""
+    return isinstance(obj, _types.BuiltinFunctionType)
 
 
 def isawaitable(obj):
@@ -297,20 +316,88 @@ def isawaitable(obj):
 
 
 def isroutine(obj):
-    return ismethod(obj) or isfunction(obj)
+    """CPython's definition, plus the one case its ismethoddescriptor term
+    covers that Grail's stub does not: a BUILT-IN type's method read through
+    the type (``str.upper'', ``object.__hash__'').  CPython reports those as
+    method descriptors; Grail reports a callable carrying ``__objclass__'' and
+    no ``__code__'' -- the line types._FunctionTypeMeta draws to keep them out
+    of FunctionType.  Without it they read as "data" to classify_class_attrs
+    and pydoc.  A method now includes a decorated one read through an
+    instance (#1458)."""
+    return (isbuiltin(obj)
+            or isfunction(obj)
+            or ismethod(obj)
+            or ismethoddescriptor(obj)
+            or ismethodwrapper(obj)
+            or _is_builtin_method_read_through_type(obj))
+
+
+def _is_builtin_method_read_through_type(obj):
+    return (not isinstance(obj, type) and callable(obj)
+            and hasattr(obj, '__objclass__') and not hasattr(obj, '__code__'))
+
+
+Arguments = _namedtuple('Arguments', 'args, varargs, varkw')
+
+
+def getargs(co):
+    """Get information about the arguments accepted by a code object.
+
+    Three things are returned: (args, varargs, varkw), where
+    'args' is the list of argument names. Keyword-only arguments are
+    appended. 'varargs' and 'varkw' are the names of the * and **
+    arguments or None.
+
+    CPython's, unchanged.  It reads co_varnames, which Grail's code objects
+    carry for a def's parameters (#1460); pytest's failure report calls it
+    through FormattedExcinfo.repr_args."""
+    if not iscode(co):
+        raise TypeError('{!r} is not a code object'.format(co))
+
+    names = co.co_varnames
+    nargs = co.co_argcount
+    nkwargs = co.co_kwonlyargcount
+    args = list(names[:nargs])
+    kwonlyargs = list(names[nargs:nargs+nkwargs])
+
+    nargs += nkwargs
+    varargs = None
+    if co.co_flags & CO_VARARGS:
+        varargs = co.co_varnames[nargs]
+        nargs = nargs + 1
+    varkw = None
+    if co.co_flags & CO_VARKEYWORDS:
+        varkw = co.co_varnames[nargs]
+    return Arguments(args + kwonlyargs, varargs, varkw)
+
+
+FullArgSpec = _namedtuple(
+    'FullArgSpec',
+    'args, varargs, varkw, defaults, kwonlyargs, kwonlydefaults, annotations')
 
 
 def getfullargspec(func):
-    """CPython's: the signature as a FullArgSpec named tuple, read off
-    signature().  It was a stub answering an empty, NON-iterable object --
-    unnoticed while a decorator's exception was swallowed, and then the first
-    thing Django's ``@register.simple_tag`` met: it unpacks the seven fields.
+    """Get the names and default values of a callable object's parameters.
 
-    Positional-only parameters lead ``args``, as CPython reports them."""
+    CPython's algorithm over signature(), as CPython itself implements it:
+    the 7-field FullArgSpec namedtuple, positional-only names first in
+    ``args``, ``defaults`` / ``kwonlydefaults`` None when empty, and the
+    ``__wrapped__`` chain NOT followed.
+
+    This used to be a stub answering an object with empty fields that could
+    not be unpacked.  Django's ``@register.simple_tag`` (and inclusion_tag,
+    simple_block_tag) unpack it as a 7-tuple, so every such decorator raised,
+    and Grail's decorator handler (issue #1369) silently left the function
+    undecorated and the tag unregistered.
+
+    One known difference: for a BOUND method CPython keeps the bound argument
+    (skip_bound_arg=False), while Grail's signature() drops it.
+    """
     try:
         sig = signature(func, follow_wrapped=False)
     except Exception as ex:
         raise TypeError('unsupported callable') from ex
+
     args = []
     varargs = None
     varkw = None
@@ -319,8 +406,10 @@ def getfullargspec(func):
     annotations = {}
     defaults = ()
     kwdefaults = {}
+
     if sig.return_annotation is not sig.empty:
         annotations['return'] = sig.return_annotation
+
     for param in sig.parameters.values():
         kind = param.kind
         name = param.name
@@ -342,17 +431,14 @@ def getfullargspec(func):
             varkw = name
         if param.annotation is not param.empty:
             annotations[name] = param.annotation
-    return FullArgSpec(posonlyargs + args, varargs, varkw, defaults or None,
-                       kwonlyargs, kwdefaults or None, annotations)
 
+    if not kwdefaults:
+        kwdefaults = None
+    if not defaults:
+        defaults = None
 
-def _make_full_arg_spec():
-    from collections import namedtuple
-    return namedtuple('FullArgSpec', 'args, varargs, varkw, defaults, '
-                                     'kwonlyargs, kwonlydefaults, annotations')
-
-
-FullArgSpec = _make_full_arg_spec()
+    return FullArgSpec(posonlyargs + args, varargs, varkw, defaults,
+                       kwonlyargs, kwdefaults, annotations)
 
 
 class _FullArgSpec:
@@ -929,30 +1015,51 @@ def signature(obj, *args, **kwargs):
             return sig
         text = getattr(obj, '__text_signature__', None)
     else:
-        # A callable INSTANCE: CPython reads its type's user-defined __call__
-        # and drops ``self``.  Without this every one answered ``()`` -- and
-        # FastAPI finds a dependency's parameters this way, so its security
-        # classes (``async def __call__(self, request: Request)'') were called
-        # with no request at all.
-        # An explicit ``__call_signature__'' wins: it is a declaration
-        # (operator.attrgetter's ``(obj, /)'' has a positional-only marker its
-        # def cannot carry here).
         text = getattr(obj, '__call_signature__', None)
         if not isinstance(text, str):
-            call = _signature_get_user_defined_method(type(obj), '__call__')
-            if call is not None:
-                sig = _drop_leading_parameter(signature(call))
-                if sig is not None:
-                    return sig
             call = getattr(type(obj), '__call__', None)
             text = getattr(call, '__text_signature__', None) if call is not None else None
+        if not isinstance(text, str):
+            sig = _signature_from_call_method(obj)
+            if sig is not None:
+                return sig
     if isinstance(text, str):
         return Signature(text=text)
-    return Signature()
+    sig = Signature()
+    sig._unknown = True
+    return sig
+
+
+def _signature_from_call_method(obj):
+    """A callable INSTANCE's signature: its class's Python ``__call__`` with
+    the bound ``self`` dropped, which is CPython's rule.  None when the class
+    defines none.
+
+    Without it every such object answered ``()``, so getfullargspec reported
+    no ``**kwargs`` -- and botocore checks each event handler with exactly
+    that, so it refused its own ClientMethodAlias and ``boto3.client()``
+    raised ValueError.
+
+    Grail's stand-ins for CPython's callable types are skipped: they live in
+    types.py with ``__module__`` 'builtins', and the ``__call__`` they declare
+    only answers Callable's structural check, describing no real call.  A
+    function or method never gets here -- its own parameter spec has already
+    answered."""
+    cls = type(obj)
+    if getattr(cls, '__module__', None) == 'builtins':
+        return None
+    call = _signature_get_user_defined_method(cls, '__call__')
+    if call is None:
+        return None
+    return _drop_leading_parameter(signature(call))
 
 
 class Signature:
     empty = Parameter.empty
+
+    # True for signature()'s last resort, which knows nothing of the
+    # parameters; _bind must not read its empty list as "takes none".
+    _unknown = False
 
     def __init__(self, parameters=None, *, return_annotation=_empty, text=None):
         """CPython's first positional argument is PARAMETERS, and this took
@@ -1094,11 +1201,139 @@ class Signature:
     def __hash__(self):
         return hash(str(self))
 
-    def bind(self, *args, **kwargs):
-        return _BoundArguments()
+    def _bind(self, args, kwargs, *, partial=False):
+        """Map *args* and *kwargs* onto the parameters, as a call would.
 
-    def bind_partial(self, *args, **kwargs):
-        return _BoundArguments()
+        CPython's, step for step, including its TypeError messages.  bind and
+        bind_partial used to return an EMPTY BoundArguments whatever they were
+        given and never raised, so a call that validated with bind passed
+        whatever was wrong with it, and anything reading ``ba.arguments`` saw
+        nothing (Django's BaseExpression.identity is one: every Value() had the
+        same identity).
+
+        A signature whose parameters Grail does not know -- the text-only form,
+        or the empty fallback for a callable with no recoverable signature --
+        still binds to nothing rather than refusing a call it cannot judge.
+        CPython has no such signature to bind: it raises ValueError from
+        signature() instead."""
+        if self._unknown_parameters():
+            return BoundArguments(self, {})
+
+        arguments = {}
+
+        parameters = iter(self.parameters.values())
+        parameters_ex = ()
+        arg_vals = iter(args)
+
+        pos_only_param_in_kwargs = []
+
+        while True:
+            try:
+                arg_val = next(arg_vals)
+            except StopIteration:
+                try:
+                    param = next(parameters)
+                except StopIteration:
+                    break
+                else:
+                    if param.kind is _VAR_POSITIONAL:
+                        break
+                    elif param.name in kwargs:
+                        if param.kind is _POSITIONAL_ONLY:
+                            if param.default is _empty:
+                                msg = ('missing a required positional-only '
+                                       'argument: %r' % (param.name,))
+                                raise TypeError(msg)
+                            # Raise only once it is sure there is no **kwargs
+                            # parameter later to take it.
+                            pos_only_param_in_kwargs.append(param)
+                            continue
+                        parameters_ex = (param,)
+                        break
+                    elif (param.kind is _VAR_KEYWORD
+                          or param.default is not _empty):
+                        parameters_ex = (param,)
+                        break
+                    else:
+                        if partial:
+                            parameters_ex = (param,)
+                            break
+                        if param.kind is _KEYWORD_ONLY:
+                            argtype = ' keyword-only'
+                        else:
+                            argtype = ''
+                        raise TypeError('missing a required%s argument: %r'
+                                        % (argtype, param.name)) from None
+            else:
+                try:
+                    param = next(parameters)
+                except StopIteration:
+                    raise TypeError('too many positional arguments') from None
+                else:
+                    if param.kind is _VAR_KEYWORD or param.kind is _KEYWORD_ONLY:
+                        raise TypeError(
+                            'too many positional arguments') from None
+
+                    if param.kind is _VAR_POSITIONAL:
+                        values = [arg_val]
+                        values.extend(arg_vals)
+                        arguments[param.name] = tuple(values)
+                        break
+
+                    if param.name in kwargs and param.kind is not _POSITIONAL_ONLY:
+                        raise TypeError('multiple values for argument %r'
+                                        % (param.name,)) from None
+
+                    arguments[param.name] = arg_val
+
+        # The remaining parameters take keyword arguments.
+        kwargs_param = None
+        for param in list(parameters_ex) + list(parameters):
+            if param.kind is _VAR_KEYWORD:
+                kwargs_param = param
+                continue
+
+            if param.kind is _VAR_POSITIONAL:
+                # Reached only when the positional arguments ran out before
+                # the parameter ahead of *args; keywords never name it.
+                continue
+
+            param_name = param.name
+            try:
+                arg_val = kwargs.pop(param_name)
+            except KeyError:
+                if (not partial and param.kind is not _VAR_POSITIONAL
+                        and param.default is _empty):
+                    raise TypeError('missing a required argument: %r'
+                                    % (param_name,)) from None
+            else:
+                arguments[param_name] = arg_val
+
+        if kwargs:
+            if kwargs_param is not None:
+                arguments[kwargs_param.name] = kwargs
+            elif pos_only_param_in_kwargs:
+                raise TypeError(
+                    'got some positional-only arguments passed as '
+                    'keyword arguments: %r'
+                    % (', '.join(p.name for p in pos_only_param_in_kwargs),))
+            else:
+                raise TypeError('got an unexpected keyword argument %r'
+                                % (next(iter(kwargs)),))
+
+        return self._bound_arguments_cls(self, arguments)
+
+    def _unknown_parameters(self):
+        return self._unknown or (self._text is not None and not self._params)
+
+    def bind(self, /, *args, **kwargs):
+        """A BoundArguments mapping *args* and *kwargs* to the parameters.
+        Raises TypeError if they cannot be bound."""
+        return self._bind(args, kwargs)
+
+    def bind_partial(self, /, *args, **kwargs):
+        """As bind, except that required parameters may be left unbound."""
+        return self._bind(args, kwargs, partial=True)
 
     def replace(self, parameters=_void, return_annotation=_void):
         """A copy of this Signature with the parameter list or the return
@@ -1129,21 +1364,298 @@ class Signature:
 _Signature = Signature
 
 
-class _BoundArguments:
-    args = ()
-    kwargs = {}
-    arguments = {}
+_POSITIONAL_ONLY = Parameter.POSITIONAL_ONLY
+_POSITIONAL_OR_KEYWORD = Parameter.POSITIONAL_OR_KEYWORD
+_VAR_POSITIONAL = Parameter.VAR_POSITIONAL
+_KEYWORD_ONLY = Parameter.KEYWORD_ONLY
+_VAR_KEYWORD = Parameter.VAR_KEYWORD
+
+
+class BoundArguments:
+    """The result of Signature.bind: the parameters' names mapped to the
+    arguments bound to them.  CPython's.
+
+    * arguments -- an ordered, mutable dict of name to value; defaults are
+      not in it until apply_defaults() puts them there;
+    * signature -- the Signature that made it;
+    * args, kwargs -- the call rebuilt from ``arguments``.
+    """
+
+    __slots__ = ('arguments', '_signature', '__weakref__')
+
+    def __init__(self, signature, arguments):
+        self.arguments = arguments
+        self._signature = signature
+
+    @property
+    def signature(self):
+        return self._signature
+
+    @property
+    def args(self):
+        args = []
+        for param_name, param in self._signature.parameters.items():
+            if param.kind is _VAR_KEYWORD or param.kind is _KEYWORD_ONLY:
+                break
+            try:
+                arg = self.arguments[param_name]
+            except KeyError:
+                # The rest go to kwargs.
+                break
+            else:
+                if param.kind is _VAR_POSITIONAL:
+                    args.extend(arg)
+                else:
+                    args.append(arg)
+        return tuple(args)
+
+    @property
+    def kwargs(self):
+        kwargs = {}
+        kwargs_started = False
+        for param_name, param in self._signature.parameters.items():
+            if not kwargs_started:
+                if param.kind is _VAR_KEYWORD or param.kind is _KEYWORD_ONLY:
+                    kwargs_started = True
+                elif param_name not in self.arguments:
+                    kwargs_started = True
+                    continue
+
+            if not kwargs_started:
+                continue
+
+            try:
+                arg = self.arguments[param_name]
+            except KeyError:
+                pass
+            else:
+                if param.kind is _VAR_KEYWORD:
+                    kwargs.update(arg)
+                else:
+                    kwargs[param_name] = arg
+        return kwargs
 
     def apply_defaults(self):
-        pass
+        """Fill in the defaults of the parameters left unbound: the declared
+        default, ``()`` for *args and ``{}`` for **kwargs.  A required
+        parameter bind_partial left unbound stays unbound."""
+        arguments = self.arguments
+        new_arguments = []
+        for name, param in self._signature.parameters.items():
+            try:
+                new_arguments.append((name, arguments[name]))
+            except KeyError:
+                if param.default is not _empty:
+                    val = param.default
+                elif param.kind is _VAR_POSITIONAL:
+                    val = ()
+                elif param.kind is _VAR_KEYWORD:
+                    val = {}
+                else:
+                    continue
+                new_arguments.append((name, val))
+        self.arguments = dict(new_arguments)
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        if not isinstance(other, BoundArguments):
+            return NotImplemented
+        return (self.signature == other.signature
+                and self.arguments == other.arguments)
+
+    __hash__ = None
+
+    def __setstate__(self, state):
+        self._signature = state['_signature']
+        self.arguments = state['arguments']
+
+    def __getstate__(self):
+        return {'_signature': self._signature, 'arguments': self.arguments}
+
+    def __repr__(self):
+        args = []
+        for arg, value in self.arguments.items():
+            args.append('{}={!r}'.format(arg, value))
+        return '<{} ({})>'.format(self.__class__.__name__, ', '.join(args))
+
+
+# The old private name.
+_BoundArguments = BoundArguments
+Signature._bound_arguments_cls = BoundArguments
 
 
 def getsource(obj):
     return ''
 
 
-def getfile(obj):
-    return '<unknown>'
+def getfile(object):
+    """Work out which source or compiled file an object was defined in.
+
+    CPython's, line for line.  It used to answer '<unknown>' for everything,
+    so pytest -- which names every traceback entry's file through
+    ``inspect.getfile(code)'' -- printed ``<unknown>:361'' for each frame of a
+    failure report.  A Grail module with no __file__ (most deployed stdlib
+    modules) answers the TypeError CPython gives a built-in one.
+    """
+    if ismodule(object):
+        if getattr(object, '__file__', None):
+            return object.__file__
+        raise TypeError('{!r} is a built-in module'.format(object))
+    if isclass(object):
+        if hasattr(object, '__module__'):
+            module = _sys.modules.get(object.__module__)
+            if getattr(module, '__file__', None):
+                return module.__file__
+            if object.__module__ == '__main__':
+                raise OSError('source code not available')
+        raise TypeError('{!r} is a built-in class'.format(object))
+    if ismethod(object):
+        object = object.__func__
+    if isfunction(object):
+        object = object.__code__
+    if istraceback(object):
+        object = object.tb_frame
+    if isframe(object):
+        object = object.f_code
+    if iscode(object):
+        return object.co_filename
+    raise TypeError('module, class, method, function, traceback, frame, or '
+                    'code object was expected, got {}'.format(
+                    type(object).__name__))
+
+
+class EndOfBlock(Exception): pass
+
+
+class BlockFinder:
+    """Provide a tokeneater() method to detect the end of a code block.
+
+    CPython's, verbatim.  pytest's getstatementrange_ast constructs one to
+    find where a failing statement ends, then feeds it tokenize's tokens
+    inside ``except Exception: pass''.  Grail's tokenize is a stub with no
+    generate_tokens, so that feeding fails and pytest keeps the range the AST
+    gave it -- but the construction is outside the try, and a missing class
+    ended the run with an INTERNALERROR.  tokenize is imported per call, as
+    the class only reads its token-type constants once it is fed.
+    """
+    def __init__(self):
+        self.indent = 0
+        self.singleline = False
+        self.started = False
+        self.passline = False
+        self.indecorator = False
+        self.last = 1
+        self.body_col0 = None
+
+    def tokeneater(self, type, token, srowcol, erowcol, line):
+        import tokenize
+        if not self.started and not self.indecorator:
+            if type in (tokenize.INDENT, tokenize.COMMENT, tokenize.NL):
+                pass
+            elif token == "async":
+                pass
+            # skip any decorators
+            elif token == "@":
+                self.indecorator = True
+            else:
+                # For "def" and "class" scan to the end of the block.
+                # For "lambda" and generator expression scan to
+                # the end of the logical line.
+                self.singleline = token not in ("def", "class")
+                self.started = True
+            self.passline = True    # skip to the end of the line
+        elif type == tokenize.NEWLINE:
+            self.passline = False   # stop skipping when a NEWLINE is seen
+            self.last = srowcol[0]
+            if self.singleline:
+                raise EndOfBlock
+            # hitting a NEWLINE when in a decorator without args
+            # ends the decorator
+            if self.indecorator:
+                self.indecorator = False
+        elif self.passline:
+            pass
+        elif type == tokenize.INDENT:
+            if self.body_col0 is None and self.started:
+                self.body_col0 = erowcol[1]
+            self.indent = self.indent + 1
+            self.passline = True
+        elif type == tokenize.DEDENT:
+            self.indent = self.indent - 1
+            # the end of matching indent/dedent pairs end a block
+            # (note that this only works for "def"/"class" blocks,
+            #  not e.g. for "if: else:" or "try: finally:" blocks)
+            if self.indent <= 0:
+                raise EndOfBlock
+        elif type == tokenize.COMMENT:
+            if self.body_col0 is not None and srowcol[1] >= self.body_col0:
+                # Include comments if indented at least as much as the block
+                self.last = srowcol[0]
+        elif self.indent == 0 and type not in (tokenize.COMMENT, tokenize.NL):
+            # any other token on the same indentation level end the previous
+            # block as well, except the pseudo-tokens COMMENT and NL.
+            raise EndOfBlock
+
+
+def findsource(object):
+    """Return the entire source file and starting line number for an object.
+
+    CPython's, line for line: the lines come from linecache, and a code
+    object's start is its co_firstlineno.  Missing before, so pytest -- whose
+    own findsource calls this and shows ``???'' when it raises -- printed no
+    source line for any frame of a failure report.
+    """
+    import linecache
+
+    file = getsourcefile(object)
+    if file:
+        # Invalidate cache if needed.
+        linecache.checkcache(file)
+    else:
+        file = getfile(object)
+        # Allow filenames in form of "<something>" to pass through.
+        # `doctest` monkeypatches `linecache` module to enable
+        # inspection, so let `linecache.getlines` to be called.
+        if not (file.startswith('<') and file.endswith('>')):
+            raise OSError('source code not available')
+
+    module = getmodule(object, file)
+    if module:
+        lines = linecache.getlines(file, module.__dict__)
+    else:
+        lines = linecache.getlines(file)
+    if not lines:
+        raise OSError('could not get source code')
+
+    if ismodule(object):
+        return lines, 0
+
+    if isclass(object):
+        try:
+            lnum = vars(object)['__firstlineno__'] - 1
+        except (TypeError, KeyError):
+            raise OSError('source code not available')
+        if lnum >= len(lines):
+            raise OSError('lineno is out of bounds')
+        return lines, lnum
+
+    if ismethod(object):
+        object = object.__func__
+    if isfunction(object):
+        object = object.__code__
+    if istraceback(object):
+        object = object.tb_frame
+    if isframe(object):
+        object = object.f_code
+    if iscode(object):
+        if not hasattr(object, 'co_firstlineno'):
+            raise OSError('could not find function definition')
+        lnum = object.co_firstlineno - 1
+        if lnum >= len(lines):
+            raise OSError('lineno is out of bounds')
+        return lines, lnum
+    raise OSError('could not find code object')
 
 
 FrameInfo = _namedtuple(
@@ -1445,9 +1957,9 @@ def getmodule(object, _filename=None):
 
     CPython also falls back to matching the object's FILE against every loaded
     module's file, for objects whose __module__ is wrong or missing.  That path
-    needs getabsfile of a real source file and is not reproduced -- Grail's
-    getfile is itself a stub -- so an object with no usable __module__ answers
-    None here, as it did before.
+    is not reproduced -- most of Grail's deployed modules carry no __file__ to
+    match against -- so an object with no usable __module__ answers None here,
+    as it did before.
     """
 
     if ismodule(object):
@@ -1860,18 +2372,38 @@ def ismethodwrapper(object):
 
 
 def getsourcefile(object):
-    """Return the filename of the source file the object was defined in.
+    """Return the filename that can be used to locate an object's source.
+    Return None if no way can be identified to get the source.
 
-    Grail's getfile is a stub, so this answers None for everything rather than
-    inventing a path.  Present because getabsfile and CPython's getmodule both
-    reach for it, and a caller asking "is there source for this?" deserves a
-    truthful no.
+    CPython's, line for line, now that getfile is real.
     """
+    import importlib.machinery
+    import linecache
+    import os
 
     filename = getfile(object)
-    if not filename or filename.startswith('<') and filename.endswith('>'):
+    all_bytecode_suffixes = importlib.machinery.BYTECODE_SUFFIXES[:]
+    if any(filename.endswith(s) for s in all_bytecode_suffixes):
+        filename = (os.path.splitext(filename)[0] +
+                    importlib.machinery.SOURCE_SUFFIXES[0])
+    elif any(filename.endswith(s) for s in
+                 importlib.machinery.EXTENSION_SUFFIXES):
         return None
-    return filename
+    elif filename.endswith(".fwork"):
+        # Apple mobile framework markers are another type of non-source file
+        return None
+
+    # return a filename found in the linecache even if it doesn't exist on disk
+    if filename in linecache.cache:
+        return filename
+    if os.path.exists(filename):
+        return filename
+    # only return a non-existent filename if the module has a PEP 302 loader
+    module = getmodule(object, filename)
+    if getattr(module, '__loader__', None) is not None:
+        return filename
+    elif getattr(getattr(module, "__spec__", None), "loader", None) is not None:
+        return filename
 
 
 def getabsfile(object, _filename=None):

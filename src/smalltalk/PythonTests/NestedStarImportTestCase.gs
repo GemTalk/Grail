@@ -32,7 +32,7 @@ NestedStarImportTestCase category: 'Grail-SUnit'
 ! lone ``*'' alias into codegen, where ImportFromAst >> printSmalltalkOn: emitted
 ! a per-name binding for it: a Smalltalk variable literally NAMED ``*''.
 !
-!     * := ((((Python @env0:at: #builtins) instance) ___import__: { 'yaml.cyaml'.
+!     * := ((((Python @env0:at: #builtins) @env0:___instance___) ___import__: { 'yaml.cyaml'.
 !            nil. nil. { '*' }. 0 } kw: nil) @env1:___pyAttrLoad___: #'*').
 !
 ! That is ``a CompileError occurred (error 1001), expected a right bracket'' --

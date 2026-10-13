@@ -259,6 +259,19 @@ set compile_env: 1
 
 category: 'Grail-Instance Creation'
 classmethod: PythonGenerator
+___withBlock___: aBlock
+	"withBlock: under a Grail-internal selector, for the generated code that
+	wraps a generator / coroutine body without a def to name (generator
+	expressions, a generator lambda, a closure-form def).  Generated code must
+	not send its own plumbing in env 1 under a selector that decodes as a
+	Python name (issue #1155).  Sent to self, so PythonCoroutine's and
+	PythonAsyncGenerator's own withBlock: still apply."
+
+	^ self withBlock: aBlock
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PythonGenerator
 withBlock: aBlock
 	"Wrap aBlock as a fresh generator.  No work happens until the
 	first advance — Python semantics."
@@ -680,6 +693,37 @@ _raiseThrown: ex
 
 category: 'Grail-Private'
 method: PythonGenerator
+___raiseThrownOnTop___: ex
+	"Raise ex where gen.throw() injects it -- at the suspended yield, or in the
+	caller of a generator that never started -- adding this raise's frames ON
+	TOP of the traceback ex already has.
+
+	That is CPython's rule for throw(), the same as for ``raise exc'': the
+	exception arrives with the frames of wherever it was first raised and
+	caught, and each frame it unwinds through from here is prepended.  So it
+	takes the same road as ___pyRaise___:cause:'s re-raise of an instance with
+	a traceback: the mark tells the next catch to prepend, and the earlier
+	capture and generator stash are dropped so that the carrier's capture --
+	taken HERE, on this process -- is the one that catch walks.
+
+	Without it the next catch read the chain as a partial unwind record (its
+	head names the function that first caught it, not the catcher) and rebuilt
+	it from the earlier capture.  That capture was taken on ANOTHER process --
+	the consumer's -- so the catcher inside the body was never on it: the walk
+	ran on to the consumer's outermost frame, and the next catch out could not
+	find where to put the earlier chain back and dropped it.  pytest throws
+	every test's exception into its hook wrappers this way, and lost the
+	failing test's own frames from every report (#1539)."
+
+	((ex @env0:isKindOf: BaseException) and: [ex __traceback__ ~~ None]) ifTrue: [
+		ex @env0:dynamicInstVarAt: #'___tbUserAttached___' put: true.
+		ex @env0:_gsStack: nil.
+		BaseException @env0:___dropGeneratorStack___: ex].
+	^ self _raiseThrown: ex
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
 _resignalable: ex
 	"``ex'' if it can be signaled again, else a clean copy of it.
 
@@ -830,7 +874,7 @@ throw: anException
 		"Throwing on a not-yet-started generator just raises in the
 		caller — the body hasn''t reached a yield point to inject at."
 		done := true.
-		^ self _raiseThrown: ___exc___
+		^ self ___raiseThrownOnTop___: ___exc___
 	].
 	done ifTrue: [^ self ___resumeFinishedWith___: ___exc___].
 	___savedState___ := self ___captureConsumerState___.
@@ -1099,7 +1143,7 @@ ___yield___: aValue
 		ex := injectedException.
 		injectedException := nil.
 		sentValue := nil.
-		^ self _raiseThrown: ex
+		^ self ___raiseThrownOnTop___: ex
 	].
 	sent := sentValue ifNil: [None].
 	sentValue := nil.

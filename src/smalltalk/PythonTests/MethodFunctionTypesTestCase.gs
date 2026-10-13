@@ -181,3 +181,19 @@ testDeprecatedMisuseQuotesTheName
 
 	self assertAll: #('deprecated_misuse_quotes_function')
 %
+
+category: 'Grail-Tests - Type Names'
+method: MethodFunctionTypesTestCase
+testTypeIsTheCPythonType
+	"type() of a module-level def, a bound method and a builtin is
+	types.FunctionType, types.MethodType and types.BuiltinFunctionType,
+	named as CPython names them -- not Grail's BoundMethod (issue #1436)."
+
+	self assertAll: #('a_module_defs_type_name_is_function'
+		'a_module_defs_type_is_functiontype' 'a_bound_methods_type_name_is_method'
+		'a_bound_methods_type_is_methodtype' 'a_classmethod_reads_type_is_methodtype'
+		'the_method_types_module_is_builtins' 'the_method_types_repr'
+		'a_builtin_functions_type_name' 'a_builtin_is_builtinfunctiontype'
+		'a_builtin_is_neither_function_nor_method' 'python_callables_are_not_builtins'
+		'class_and_type_agree')
+%

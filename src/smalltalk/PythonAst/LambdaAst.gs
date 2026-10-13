@@ -171,6 +171,23 @@ transportNamesFor: argNodes
 
 category: 'Grail-other'
 method: LambdaAst
+___argCountCheckDef___
+	"A FunctionDefAst carrying this lambda's arguments, whose arity-guard
+	emitters (printArgCountChecksOn:... and ___emitIRArgCountChecksOn___:...)
+	then write the lambda's guards -- the def's own code, so the two cannot
+	drift, the way the ___pySig___: stamp is already built (#1493).
+
+	Its messages come out as CPython's for a lambda.  The qualified name is the
+	lambda's, because neither node is on CallAst's scope stack, so both prefixes
+	consume every enclosing scope.  The receiver offset is 0, because the guards
+	are asked about every declared positional parameter and a lambda strips
+	none."
+
+	^ FunctionDefAst new args: args; name: '<lambda>'; yourself
+%
+
+category: 'Grail-other'
+method: LambdaAst
 printSmalltalkOn: aStream
 	"Generate Smalltalk for a lambda expression.
 
@@ -219,14 +236,17 @@ printSmalltalkOn: aStream
 	default on the module instance, ``self isModuleLevelDef''), none of which
 	a lambda has.  The two must stay in step.
 
-	STILL NOT DONE, pre-existing and unrelated to the crash: the
-	too-many-positional / unexpected-keyword arg-count guards FunctionDefAst
-	emits, so a lambda still silently ignores extra arguments.  Adding them
-	makes every lambda call site stricter, which is its own change."
+	ARITY GUARDS (#1493).  The too-many-positional and unexpected-keyword
+	checks are FunctionDefAst's own, emitted by a stand-in def carrying this
+	lambda's arguments (see ___argCountCheckDef___), ahead of the binding as in
+	a def.  Without them a lambda silently dropped extra positional arguments
+	and unknown keywords: ``(lambda a: a)(1, 2)'' answered 1.  Every message
+	names the lambda by its QUALIFIED name, as CPython's do --
+	``f.<locals>.<lambda>() takes 1 positional argument but 2 were given''."
 
 	| posArgs transport kwonlyNames varargName kwargName
 	  defaults kwDefaults firstWithDefault suffix hasOuter requiredKwonly
-	  qualified bodyLocals bodyLit outerLit |
+	  qualified bodyLocals bodyLit outerLit savedScopeDepth |
 	"The lambda's BODY is its frame's ``current statement'': CPython underlines
 	``foo(*args)'' in ``(lambda *args: foo(*args))(1,2,3,4)'' for the <lambda>
 	frame and the whole call for the frame that made it.  Grail emitted no store
@@ -246,6 +266,7 @@ printSmalltalkOn: aStream
 			bodyLit := [body ___pyPositionLiteralArray]
 				on: Error do: [:ex | ex return: nil]].
 	posArgs := args posonlyargs , args args.
+	qualified := CallAst ___qualnameFor___: self name: '<lambda>'.
 	transport := self transportNamesFor: posArgs.
 	kwonlyNames := self transportNamesFor: args kwonlyargs.
 	varargName := args vararg ifNotNil: [:v | v name asString].
@@ -349,6 +370,14 @@ printSmalltalkOn: aStream
 		].
 	aStream lf.
 
+	"The call is validated before anything is bound, as a def's is: CPython
+	reports an unknown keyword ahead of a missing parameter."
+	self ___argCountCheckDef___
+		printArgCountChecksOn: aStream
+		positionalName: '___positional___'
+		kwargsName: '___kwargs___'
+		nPositional: posArgs size.
+
 	"Bind each named positional: the positional slot, else the same-named
 	keyword, else the def-time default, else a catchable TypeError.  The
 	keyword LOOKUP uses the Python name while the temp uses the transport
@@ -370,22 +399,31 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: ') posonly: ';
 			nextPutAll: ((args posonlyargs size) min: firstWithDefault - 1) printString;
-			nextPutAll: ' qualifiedName: ''<lambda>''].'; lf].
+			nextPutAll: ' qualifiedName: '''; nextPutAll: qualified; nextPutAll: '''].'; lf].
+	"A POSITIONAL-ONLY parameter is never filled by keyword.  Without **kwargs
+	the guard above has already refused such a call; with it, the keyword
+	belongs to **kwargs and the parameter keeps its default --
+	``(lambda a=1, /, **kw: (a, kw))(a=2)'' is (1, {'a': 2}) -- so its binding
+	has no keyword lookup."
 	transport doWithIndex: [:n :i |
-		| pyName |
+		| pyName byKeyword |
 		pyName := (posArgs at: i) name asString.
+		byKeyword := i > args posonlyargs size.
 		aStream
 			nextPutAll: n;
 			nextPutAll: ' := (___positional___ @env0:size @env0:>= ';
 			nextPutAll: i printString;
 			nextPutAll: ') ifTrue: [___positional___ @env0:at: ';
 			nextPutAll: i printString;
-			nextPutAll: '] ifFalse: [(___kwargs___ @env0:isNil @env0:not and: [';
-			nextPutAll: '___kwargs___ @env0:includesKey: ''';
-			nextPutAll: pyName;
-			nextPutAll: ''']) ifTrue: [___kwargs___ @env0:at: ''';
-			nextPutAll: pyName;
-			nextPutAll: '''] ifFalse: ['.
+			nextPutAll: '] ifFalse: ['.
+		byKeyword ifTrue: [
+			aStream
+				nextPutAll: '(___kwargs___ @env0:isNil @env0:not and: [';
+				nextPutAll: '___kwargs___ @env0:includesKey: ''';
+				nextPutAll: pyName;
+				nextPutAll: ''']) ifTrue: [___kwargs___ @env0:at: ''';
+				nextPutAll: pyName;
+				nextPutAll: '''] ifFalse: ['].
 		i >= firstWithDefault
 			ifTrue: [
 				aStream nextPutAll: '___lamdef_'; nextPutAll: n;
@@ -396,8 +434,9 @@ printSmalltalkOn: aStream
 				aStream
 					nextPutAll: 'TypeError ___signalMissingArguments___: #( ''';
 					nextPutAll: pyName;
-					nextPutAll: ''' ) kind: ''positional'' qualifiedName: ''<lambda>'''].
-		aStream nextPutAll: ']].'; lf.
+					nextPutAll: ''' ) kind: ''positional'' qualifiedName: ''';
+					nextPutAll: qualified; nextPut: $'].
+		aStream nextPutAll: (byKeyword ifTrue: [']].'] ifFalse: ['].']); lf.
 	].
 
 	"Bind *args to the remaining positional tail, wrapped as a TUPLE — the
@@ -428,7 +467,7 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: 'TypeError ___checkMissingKeywordOnly___: ___kwargs___ defaults: nil names: #( '.
 		requiredKwonly do: [:each |
 			aStream nextPut: $'; nextPutAll: each; nextPutAll: ''' '].
-		aStream nextPutAll: ') qualifiedName: ''<lambda>''.'; lf].
+		aStream nextPutAll: ') qualifiedName: '''; nextPutAll: qualified; nextPutAll: '''.'; lf].
 	kwonlyNames doWithIndex: [:n :i |
 		| pyName def |
 		pyName := (args kwonlyargs at: i) name asString.
@@ -446,7 +485,8 @@ printSmalltalkOn: aStream
 				aStream
 					nextPutAll: 'TypeError ___signalMissingArguments___: #( ''';
 					nextPutAll: pyName;
-					nextPutAll: ''' ) kind: ''keyword-only'' qualifiedName: ''<lambda>''']
+					nextPutAll: ''' ) kind: ''keyword-only'' qualifiedName: ''';
+					nextPutAll: qualified; nextPut: $']
 			ifFalse: [
 				aStream nextPutAll: '___lamdef_'; nextPutAll: n;
 					nextPutAll: suffix].
@@ -490,12 +530,17 @@ printSmalltalkOn: aStream
 	declared.  It used to be emitted bare, and the module failed to compile
 	with ``undefined symbol ___gen___''.  (The IR path already refuses such a
 	lambda, so this is the only emit.)"
-	(self ___irBodyHasYieldOrAwait___: body)
+	"The body is emitted INSIDE this lambda's scope frame, so a lambda or genexpr
+	nested in it is named through it -- ``<lambda>.<locals>.<lambda>'' (#1522).
+	The defaults above are not: CPython evaluates them in the enclosing scope."
+	savedScopeDepth := CallAst ___pushScope___: self kind: #function name: '<lambda>'.
+	[(self ___irBodyHasYieldOrAwait___: body)
 		ifTrue: [
-			aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
+			aStream nextPutAll: 'PythonGenerator @env1:___withBlock___: [:___gen___ |'; lf.
 			body printSmalltalkOn: aStream.
 			aStream nextPutAll: ']']
-		ifFalse: [body printSmalltalkOn: aStream].
+		ifFalse: [body printSmalltalkOn: aStream]]
+		ensure: [CallAst ___restoreScopeDepth___: savedScopeDepth].
 
 	"A LINE BREAK before the closing bracket, so the restore below cannot share a
 	line with the body.  The scan that recovers a position works at LINE
@@ -540,20 +585,20 @@ printSmalltalkOn: aStream
 	is simply ``<lambda>'' in CPython, and ExecBlock >> __qualname__ already falls
 	back to __name__, so emitting it would only restate what the name says.
 
-	THE PREFIX COMES FROM THE SCOPE STACK, and a lambda never pushes onto it --
-	which is not an oversight to work around but exactly what makes this correct:
-	the walk stops at its argument's own frame, finds none, and so consumes every
-	enclosing scope, which IS a lambda's prefix.  Verified against CPython 3.14.6
-	for the four shapes: '<lambda>' at module level, 'f.<locals>.<lambda>' inside
-	a function, 'K.<lambda>' in a class body (no ``<locals>'' -- a class body is
-	not a function scope), and two lambdas in one scope sharing one qualname."
+	THE PREFIX COMES FROM THE SCOPE STACK.  ``qualified'' is computed before this
+	lambda pushes its own frame (around the body, above), and the walk would stop
+	at that frame anyway, so it consumes exactly the enclosing scopes -- which IS
+	a lambda's prefix.  Verified against CPython 3.14 for: '<lambda>' at module
+	level, 'f.<locals>.<lambda>' inside a function, 'K.<lambda>' in a class body
+	(no ``<locals>'' -- a class body is not a function scope), two lambdas in one
+	scope sharing one qualname, and '<lambda>.<locals>.<lambda>' for one lambda
+	inside another (#1522), which needs the push."
 	aStream nextPutAll: ' @env0:___pyNamed___: ''<lambda>'''.
 	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
 		aStream
 			nextPutAll: '; @env0:___pyModuleNamed___: ''';
 			nextPutAll: modName asString;
 			nextPutAll: ''''].
-	qualified := CallAst ___qualnameFor___: self name: '<lambda>'.
 	qualified = '<lambda>' ifFalse: [
 		aStream
 			nextPutAll: '; @env0:___pyQualname___: ''';
@@ -580,7 +625,7 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '; @env0:___pySig___: '.
 		specDef emitSignatureSpecOn: aStream]] value.
 	hasOuter
-		ifTrue: [aStream nextPutAll: '] value)']
+		ifTrue: [aStream nextPutAll: '] @env0:value)']
 		ifFalse: [aStream nextPut: $)].
 %
 method: LambdaAst
@@ -854,6 +899,16 @@ ___emitIRLambdaBlockOn___: aBuilder
 	"Declared under the transport spelling, registered under the Python one
 	(cut 75) -- the two lists are equal but for a pseudo-variable parameter."
 	tempLeafNames := (self ___irOwnLeafNames___ collect: [:n | n asSymbol]) asArray.
+	"The arity guards' temps, which a nested def's block declares the same way
+	(FunctionDefAst>>___emitIRNestedBlockOn___:) -- the collectors of the
+	unexpected-keyword guard when positional-only parameters are declared, and
+	the keyword-only counter of the too-many-positional one (#1493)."
+	(args kwarg isNil and: [(args posonlyargs ifNil: [#()]) notEmpty]) ifTrue: [
+		tempNames := tempNames , #(#'___po___' #'___unk___').
+		tempLeafNames := tempLeafNames , #(#'___po___' #'___unk___')].
+	(args vararg isNil and: [(args kwonlyargs ifNil: [#()]) notEmpty]) ifTrue: [
+		tempNames := tempNames copyWith: #'___kg___'.
+		tempLeafNames := tempLeafNames copyWith: #'___kg___'].
 	"The frame marker, for the reason a nested def's block carries one
 	(FunctionDefAst>>___emitIRNestedBlockOn___:): a walk looking for ``the
 	innermost generated-Python frame'' stops at the first frame whose temps
@@ -868,7 +923,7 @@ ___emitIRLambdaBlockOn___: aBuilder
 		do: [:argLeaves :tempLeaves |
 			aBuilder nestedFunctionDo: [
 				aBuilder withLocals: ((1 to: tempNames size) collect: [:i | (tempNames at: i) -> (tempLeaves at: i)]) do: [
-					| posLeaf kwLeaf savedGen |
+					| posLeaf kwLeaf savedGen savedDepth |
 					posLeaf := argLeaves at: 1.
 					kwLeaf := argLeaves at: 2.
 					aBuilder atNode: self.
@@ -879,8 +934,12 @@ ___emitIRLambdaBlockOn___: aBuilder
 					self ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf.
 					savedGen := aBuilder genLeaf.
 					aBuilder genLeaf: nil.
+					"Inside this lambda's scope frame, as the text path emits it."
+					savedDepth := CallAst ___pushScope___: self kind: #function name: '<lambda>'.
 					[aBuilder add: (body ___emitIRValueOn___: aBuilder)]
-						ensure: [aBuilder genLeaf: savedGen]]]].
+						ensure: [
+							CallAst ___restoreScopeDepth___: savedDepth.
+							aBuilder genLeaf: savedGen]]]].
 	aBuilder atNode: self.
 	specs := OrderedCollection new.
 	specs add: { #'___pyNamed___:'. { aBuilder obj: '<lambda>' }. 0 }.
@@ -936,16 +995,23 @@ ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf
 	    kw := kwargs isNil ifTrue: [PyDict new] ifFalse: [kwargs copy].
 	    kw removeKey: 'a' ifAbsent: [].  ...                         (args + kwonly)
 
-	Unlike a def's closure, every positional parameter -- positional-only
-	included -- takes the kwargs gate, and there are no arg-count guards."
+	preceded by the def's two arity guards (___argCountCheckDef___, #1493), and
+	with every message naming the lambda's qualified name.  A positional-only
+	parameter takes no kwargs gate: a keyword spelled like one is refused by the
+	guard, or belongs to **kwargs when there is one."
 
-	| posArgs posNames defaults kwDefaults firstWithDefault suffix posSize kwGate raise |
+	| posArgs posNames defaults kwDefaults firstWithDefault suffix posSize kwGate raise qual nPosonly |
 	posArgs := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
 	posNames := posArgs collect: [:a | a name asString].
 	defaults := args defaults ifNil: [#()].
 	kwDefaults := args kw_defaults ifNil: [#()].
 	firstWithDefault := posNames size - defaults size + 1.
 	suffix := self defaultTempSuffix.
+	qual := CallAst ___qualnameFor___: self name: '<lambda>'.
+	nPosonly := (args posonlyargs ifNil: [#()]) size.
+	self ___argCountCheckDef___ ___emitIRArgCountChecksOn___: aBuilder
+		pos: posLeaf kw: kwLeaf nPositional: posNames size.
+	aBuilder atNode: self.
 	posSize := [aBuilder send: #size to: (aBuilder var: posLeaf) with: { } env: 0].
 	kwGate := [:pname |
 		aBuilder
@@ -957,7 +1023,7 @@ ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf
 	raise := [:pname :kind |
 		aBuilder send: #'___signalMissingArguments___:kind:qualifiedName:'
 			to: (aBuilder globalNamed: #TypeError)
-			with: { aBuilder obj: (Array with: pname). aBuilder obj: kind. aBuilder obj: '<lambda>' }].
+			with: { aBuilder obj: (Array with: pname). aBuilder obj: kind. aBuilder obj: qual }].
 	firstWithDefault > 1 ifTrue: [
 		aBuilder if: (aBuilder send: #< to: posSize value with: { aBuilder obj: firstWithDefault - 1 } env: 0)
 			then: [
@@ -968,8 +1034,8 @@ ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf
 						aBuilder var: posLeaf.
 						aBuilder var: kwLeaf.
 						aBuilder obj: (posNames copyFrom: 1 to: firstWithDefault - 1) asArray.
-						aBuilder obj: ((args posonlyargs ifNil: [#()]) size min: firstWithDefault - 1).
-						aBuilder obj: '<lambda>' })]].
+						aBuilder obj: (nPosonly min: firstWithDefault - 1).
+						aBuilder obj: qual })]].
 	posNames doWithIndex: [:pname :i |
 		| fallback gate |
 		fallback := [i >= firstWithDefault
@@ -979,11 +1045,13 @@ ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf
 			ifValue: (aBuilder send: #>= to: posSize value with: { aBuilder obj: i } env: 0)
 			then: [aBuilder add: (aBuilder send: #at: to: (aBuilder var: posLeaf)
 				with: { aBuilder obj: i } env: 0)]
-			else: [aBuilder add: (aBuilder
-				ifValue: (kwGate value: pname)
-				then: [aBuilder add: (aBuilder send: #at: to: (aBuilder var: kwLeaf)
-					with: { aBuilder obj: pname } env: 0)]
-				else: [aBuilder add: fallback value])].
+			else: [aBuilder add: (i > nPosonly
+				ifTrue: [aBuilder
+					ifValue: (kwGate value: pname)
+					then: [aBuilder add: (aBuilder send: #at: to: (aBuilder var: kwLeaf)
+						with: { aBuilder obj: pname } env: 0)]
+					else: [aBuilder add: fallback value]]
+				ifFalse: [fallback value])].
 		aBuilder add: (aBuilder assign: (aBuilder leafFor: pname asSymbol) from: gate)].
 	args vararg ifNotNil: [:v |
 		| tail |
@@ -1002,7 +1070,7 @@ ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf
 			aBuilder add: (aBuilder
 				send: #'___checkMissingKeywordOnly___:defaults:names:qualifiedName:'
 				to: (aBuilder globalNamed: #TypeError)
-				with: { aBuilder var: kwLeaf. aBuilder nilLit. aBuilder obj: required asArray. aBuilder obj: '<lambda>' })].
+				with: { aBuilder var: kwLeaf. aBuilder nilLit. aBuilder obj: required asArray. aBuilder obj: qual })].
 		(args kwonlyargs ifNil: [#()]) doWithIndex: [:k :i |
 			| pname def |
 			pname := k name asString.

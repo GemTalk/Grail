@@ -747,6 +747,44 @@ __lt__: other
 %
 
 category: 'Grail-String Operations'
+classmethod: CharacterCollection
+___percentOperandIsMapping___: args forBytes: forBytes
+	"Is the right operand of %-formatting a MAPPING?  CPython's test, which
+	decides both where %(key)s looks and whether leftover arguments are an
+	error: the operand supports subscripting and is not a tuple or a str --
+	nor, for bytes formatting, a bytes or bytearray.  So a list, a range, a
+	ChainMap, a mappingproxy or any class with __getitem__ counts, and
+	``'abc' % [1]'' is 'abc' rather than ``not all arguments converted''.
+
+	Grail used to accept only a dict (KeyValueDictionary), refusing every
+	other mapping with ``format requires a mapping'' (#1220).
+
+	``Has __getitem__'' cannot be asked of hasattr: Grail gives int and None
+	refusal methods that exist only to raise CPython's TypeError, every Python
+	instance inherits PythonInstance's, a builtin function's BoundMethod
+	subscripts as a PEP 585 pass-through, and a module is a SymbolDictionary.
+	None of those is a mapping to CPython, so each is excluded by name."
+
+	| defCls meth |
+	(args @env0:isKindOf: Array) ifTrue: [^ false].
+	(args @env0:isKindOf: CharacterCollection) ifTrue: [^ false].
+	(forBytes @env0:and: [args @env0:isKindOf: ByteArray]) ifTrue: [^ false].
+	((args @env0:isKindOf: BoundMethod) @env0:or: [args @env0:isKindOf: module])
+		ifTrue: [^ false].
+	defCls := (args @env0:class)
+		@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
+	defCls @env0:isNil ifTrue: [
+		defCls := (args @env0:class)
+			@env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1.
+		defCls @env0:isNil ifTrue: [^ false].
+		^ defCls ~~ PythonInstance].
+	defCls == PythonInstance ifTrue: [^ false].
+	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
+	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
+		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
+%
+
+category: 'Grail-String Operations'
 method: CharacterCollection
 __mod__: args
 	"printf-style % formatting: '%[(key)][flags][width][.precision][len]conv'
@@ -762,7 +800,7 @@ __mod__: args
 	n := src @env0:size.
 	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	bi := builtins instance.
-	isMap := args isKindOf: KeyValueDictionary.
+	isMap := CharacterCollection ___percentOperandIsMapping___: args forBytes: false.
 	"Python treats a string on the RHS as a single positional, not a
 	sequence of characters; same for ByteArray.
 
@@ -2773,22 +2811,22 @@ isdigit
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isidentifier
-	"Return True if string is a valid Python identifier."
+	"True if the string is a valid Python identifier: XID_Start or ``_'',
+	then XID_Continue (PEP 3131) -- the same rule, from the same
+	CPython-generated tables, as the tokenizer that decides what source may
+	name (PythonTokenizer class >> ___isIdentifierStart___:).  This used to
+	be letters, digits and ``_'', which refused combining marks and every
+	character newer than GemStone's own Unicode tables (#1378)."
 
-	| isEmpty firstChar |
-	isEmpty := self @env0:isEmpty.
-	isEmpty ifTrue: [ ^ false ].
-
-	"First character must be letter or underscore"
-	firstChar := self @env0:first.
-	((firstChar @env0:isLetter) @env0:| (firstChar == $_)) ifFalse: [ ^ false ].
-
-	"Rest must be letters, digits, or underscores"
-	(self @env0:allButFirst) @env0:do: [:char |
-		| valid |
-		valid := ((char @env0:isAlphaNumeric) @env0:| (char == $_)).
-		valid ifFalse: [ ^ false ].
-	].
+	| first |
+	self @env0:isEmpty ifTrue: [ ^ false ].
+	first := true.
+	self @env0:do: [:char |
+		(first
+			ifTrue: [PythonTokenizer @env0:___isIdentifierStart___: char]
+			ifFalse: [PythonTokenizer @env0:___isIdentifierPart___: char])
+				ifFalse: [ ^ false ].
+		first := false].
 	^ true
 %
 
@@ -4476,4 +4514,25 @@ ___pythonValueAttrs___
 	^ IdentitySet new
 		add: #'__dict__';
 		yourself
+%
+
+category: 'Grail-Comparison'
+classmethod: CharacterCollection
+___builtinValueClass___
+	"CharacterCollection for a PYTHON subclass of str, nil for a kernel string
+	class.  A plain ``class S(str)'' is rooted at Unicode32 (see Class >>
+	___widenStrBase___), not at AbstractPyStr, so it inherits this rather than
+	AbstractPyStr's answer; the ___pyDefinedClass___ marker every Python class
+	compiles into itself is what tells it from Unicode32 holding an ordinary
+	str value.  Object >> ___reflectedFirst___ asks it so that ``'a' ==
+	S('b')'' tries S's reflected method first, as CPython does (#1495)."
+
+	"A Python str subclass is widened onto Unicode32 or Unicode16, so a class
+	under neither is not one -- decided before the method-dictionary lookup,
+	which is the expensive part."
+	((self inheritsFrom: Unicode32) or: [self inheritsFrom: Unicode16])
+		ifFalse: [^ nil].
+	^ (self includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifTrue: [CharacterCollection]
+		ifFalse: [nil]
 %

@@ -216,6 +216,15 @@ initialize
 	self @env0:at: #extsep put: '.'.
 	self @env0:at: #altsep put: None.
 	self @env0:at: #devnull put: '/dev/null'.
+	"The default executable search path, as os.path (posixpath) has it.
+	uuid's getters pass it to shutil.which, so without it every one of them
+	raised AttributeError (#1511)."
+	self @env0:at: #defpath put: '/bin:/usr/bin'.
+	"access(2) modes; Darwin and Linux number them alike."
+	self @env0:at: #F_OK put: 0.
+	self @env0:at: #X_OK put: 1.
+	self @env0:at: #W_OK put: 2.
+	self @env0:at: #R_OK put: 4.
 	"open(2) flag constants -- THIS platform's numbers, because os.open hands
 	them straight to libc.  Only the access modes agree across platforms: the
 	set used to be Darwin's alone, which on Linux made O_CREAT (512) mean
@@ -257,6 +266,12 @@ initialize
 	self @env0:at: #'_walk_symlinks_as_files' put: (object ___new___).
 	self @env0:at: #path put: (os_path instance).
 	self @env0:at: #PathLike put: os_PathLike.
+	"``os._Environ'' is the TYPE of os.environ.  Private by name, and still
+	used as a type: rich's pretty printer lists it among the mapping
+	containers it knows (``_MAPPING_CONTAINERS = (dict, os._Environ, ...)''),
+	and without it every rich module failed at import -- 17 of pip's
+	submodules in the package census."
+	self @env0:at: #'_Environ' put: os_Environ.
 	"``os.DirEntry'' is a real module attribute in CPython -- code type-tests
 	scandir results against it -- even though nothing can construct one."
 	self @env0:at: #DirEntry put: os_DirEntry.
@@ -682,11 +697,94 @@ setdefault: key
 category: 'Grail-Access Methods'
 method: os_Environ
 update: other
-	"environ.update(mapping) — each entry written through putenv."
+	"environ.update(mapping) — each entry written through putenv.
 
-	(other keys) @env0:do: [:k |
-		self __setitem__: k _: (other __getitem__: k) ].
+	The argument is read by a scratch dict, so everything dict.update
+	accepts works here too: a mapping, or an iterable of pairs.  This used
+	to send ``keys'' to it, which a list of pairs does not answer."
+
+	^ self ___updateFrom___: (dict ___new___ update: other; @env0:yourself)
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+_update: positional kw: kwargs
+	"environ.update(mapping, **kwargs), and update() with no argument.
+	MutableMapping's update takes both; without this form a keyword call
+	matched no selector."
+
+	| scratch |
+	scratch := dict ___new___.
+	scratch _update: positional kw: kwargs.
+	^ self ___updateFrom___: scratch
+%
+
+category: 'Grail-Private'
+method: os_Environ
+___updateFrom___: aDict
+	"Write every entry of aDict through putenv."
+
+	aDict @env0:keysAndValuesDo: [:k :v | self __setitem__: k _: v].
 	^ None
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+popitem
+	"environ.popitem() — MutableMapping's: the first name iteration reports,
+	unset, as a (name, value) pair.  KeyError when there is none."
+
+	| names name value |
+	names := self ___liveNames___.
+	names @env0:isEmpty ifTrue: [^ KeyError ___signal___: 'popitem(): environ is empty'].
+	name := names @env0:first.
+	value := self __getitem__: name.
+	self __delitem__: name.
+	^ tuple @env0:with: name with: value
+%
+
+category: 'Grail-Comparison'
+method: os_Environ
+__eq__: other
+	"Mapping's __eq__: equal to any mapping with the same items.  It was
+	identity, so ``os.environ == dict(os.environ)'' was False.  A non-mapping
+	declines, and the operator layer decides."
+
+	(self @env0:== other) ifTrue: [^ true].
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	^ self copy __eq__: other
+%
+
+category: 'Grail-Merge Operators'
+method: os_Environ
+__or__: other
+	"PEP 584, as CPython's _Environ: ``environ | mapping'' is a new PLAIN
+	dict, other winning on conflicts; the process is untouched."
+
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	^ self copy update: other; @env0:yourself
+%
+
+category: 'Grail-Merge Operators'
+method: os_Environ
+__ror__: other
+	"``mapping | environ'' — a new plain dict, environ winning on conflicts.
+	dict's own __or__ declines a non-dict, which is what lands here."
+
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	^ dict ___new___ update: other; update: self copy; @env0:yourself
+%
+
+category: 'Grail-Merge Operators'
+method: os_Environ
+__ior__: other
+	"``os.environ |= mapping'' — written through putenv, as update is."
+
+	self update: other.
+	^ self
 %
 
 category: 'Grail-Access Methods'
@@ -819,6 +917,71 @@ getpid
 	single scratch file."
 
 	^ System @env0:gemProcessId
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+getuid
+	"os.getuid() — the gem process's real user id.
+
+	pytest's tmp_path fixture calls it unguarded on every POSIX platform, to
+	check that the base temporary directory belongs to the user running the
+	tests (comparing it with os.stat's st_uid), so the fixture errored without
+	it."
+
+	^ self ___idCall: 'getuid'
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+geteuid
+	"os.geteuid() — the gem process's effective user id."
+
+	^ self ___idCall: 'geteuid'
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+getgid
+	"os.getgid() — the gem process's real group id."
+
+	^ self ___idCall: 'getgid'
+%
+
+category: 'Grail-Built-in Functions'
+method: os
+getegid
+	"os.getegid() — the gem process's effective group id."
+
+	^ self ___idCall: 'getegid'
+%
+
+category: 'Grail-Process Ids'
+method: os
+___idCall: aName
+	"Call one of libc's four process-id getters.  They take no arguments and
+	cannot fail (POSIX: ``always successful''), so there is no errno to read."
+
+	^ (self @env0:class ___idCallouts @env0:at: aName @env0:asSymbol) @env0:callWith: #()
+%
+
+category: 'Grail-Process Ids'
+classmethod: os
+___idCallouts
+	"getuid, geteuid, getgid and getegid.  A CCallout wraps per-process C state,
+	so the table lives in SessionTemps, as the descriptor callouts' does.
+	uid_t and gid_t are unsigned 32-bit on both Darwin and Linux."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_os_id_callouts'
+		ifAbsentPut: [ | lib d |
+			lib := CLibrary @env0:named: self ___libcName.
+			d := SymbolKeyValueDictionary @env0:new.
+			#('getuid' 'geteuid' 'getgid' 'getegid') @env0:do: [:each |
+				d @env0:at: each @env0:asSymbol
+					put: (CCallout @env0:library: lib name: each
+						result: #'uint32' args: #())].
+			d]
 %
 
 category: 'Grail-Built-in Functions'
@@ -1303,7 +1466,8 @@ ___signalDirectoryNotRemoved: path
 	| errno |
 
 	errno := self ___errnoPreventingRemovalOfDirectory: path.
-	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotRemovedMessage: path)].
+	errno == 0 ifTrue: [errno := self ___errnoOfLibc: #rmdir onPath: path].
+	errno == 0 ifTrue: [^ None].
 	^ self ___signalErrno: errno filename: path
 %
 
@@ -1343,13 +1507,6 @@ ___isEmptyDirectory: path
 		(name @env0:= '.') @env0:or: [name @env0:= '..']]) @env0:isEmpty
 %
 
-category: 'Grail-Error Messages'
-classmethod: os
-___directoryNotRemovedMessage: path
-
-	^ 'Cannot remove directory: ' @env0:, path @env0:printString
-%
-
 category: 'Grail-File and Directory Operations'
 method: os
 remove: aPath
@@ -1385,8 +1542,24 @@ ___signalFileNotRemoved: path
 	| errno |
 
 	errno := self ___errnoPreventingUnlinkOf: path.
-	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___fileNotRemovedMessage: path)].
+	errno == 0 ifTrue: [errno := self ___errnoOfLibc: #unlink onPath: path].
+	errno == 0 ifTrue: [^ None].
 	^ self ___signalErrno: errno filename: path
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoOfLibc: aName onPath: path
+	"When reading the filesystem back cannot say why a removal failed --
+	permission on the PARENT directory is the case it misses, and the one
+	pytest's and shutil.rmtree's handlers test for -- ask the kernel: repeat the
+	removal through libc and answer its errno.  0 means the repeat succeeded,
+	so what was asked for is done.
+
+	The primitive answers only nil, and this used to raise a bare OSError with
+	no errno, which ``except PermissionError'' never catches."
+
+	^ self ___libc: aName with: { self ___cPathFor: path } ifFail: [:errno | ^ errno].
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1403,13 +1576,6 @@ ___errnoPreventingUnlinkOf: path
 	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory])
 		ifTrue: [^ self @env0:class ___errnoOfUnlinkingADirectory].
 	^ 0
-%
-
-category: 'Grail-Error Messages'
-classmethod: os
-___fileNotRemovedMessage: path
-
-	^ 'Cannot remove file: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -2871,6 +3037,12 @@ ___fdCallouts
 				result: #'int32' args: #(#'int32' #'int64')).
 			d @env0:at: #isatty put: (CCallout @env0:library: lib name: 'isatty'
 				result: #'int32' args: #(#'int32')).
+			d @env0:at: #unlink put: (CCallout @env0:library: lib name: 'unlink'
+				result: #'int32' args: #(#'ptr')).
+			d @env0:at: #rmdir put: (CCallout @env0:library: lib name: 'rmdir'
+				result: #'int32' args: #(#'ptr')).
+			d @env0:at: #access put: (CCallout @env0:library: lib name: 'access'
+				result: #'int32' args: #(#'ptr' #'int32')).
 			d]
 %
 
@@ -2960,6 +3132,48 @@ ___cPathFor: aPath
 	(encoded @env0:includes: 0) ifTrue: [
 		^ ValueError ___signal___: 'open: embedded null character in path'].
 	^ CByteArray @env0:withAll: encoded nullTerminate: true
+%
+
+category: 'Grail-File Descriptors'
+method: os
+access: aPath _: mode
+
+	^ self _access: { aPath. mode } kw: nil
+%
+
+category: 'Grail-File Descriptors'
+method: os
+_access: positional kw: kwargs
+	"os.access(path, mode, *, dir_fd=None, effective_ids=False,
+	follow_symlinks=True) -- access(2): may the REAL user reach path in mode
+	(F_OK, or any of R_OK, W_OK and X_OK)?  True or False, never an OSError,
+	as in CPython: a missing file is simply False.
+
+	The keyword-only arguments are refused rather than ignored when they ask
+	for anything but the default, as os.stat refuses dir_fd: CPython honours
+	each of them through faccessat(2), and answering for the wrong directory,
+	the effective ids or the link's target would be a wrong answer rather than
+	a missing feature.  os.supports_dir_fd, supports_effective_ids and
+	supports_follow_symlinks stay empty, so code that checks them first (as
+	the stdlib does) never asks.
+
+	shutil.which is the reason it exists: it tests each candidate with
+	``os.access(name, os.F_OK | os.X_OK)'' (#1511)."
+
+	| path mode |
+	path := self ___requiredArgument: 'path' at: 1 in: positional kw: kwargs for: 'access'.
+	mode := self ___requiredArgument: 'mode' at: 2 in: positional kw: kwargs for: 'access'.
+	kwargs notNil ifTrue: [
+		(kwargs @env0:at: 'dir_fd' ifAbsent: [None]) ~~ None
+			ifTrue: [^ NotImplementedError ___signal___: (self @env0:class ___dirFdUnavailableMessage: 'access')].
+		(kwargs @env0:at: 'effective_ids' ifAbsent: [false]) ___isTruthy___
+			ifTrue: [^ NotImplementedError ___signal___: 'access: effective_ids unavailable on this platform'].
+		(kwargs @env0:at: 'follow_symlinks' ifAbsent: [true]) ___isTruthy___
+			ifFalse: [^ NotImplementedError ___signal___: 'access: follow_symlinks unavailable on this platform']].
+	mode := self ___asCInt: mode.
+	^ (self ___libc: #access
+		with: { self ___cPathFor: path. mode }
+		ifFail: [:errno | ^ false]) @env0:= 0
 %
 
 category: 'Grail-File Descriptors'

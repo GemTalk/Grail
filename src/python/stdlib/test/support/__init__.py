@@ -992,10 +992,12 @@ def _module_base_types():
     take it from sys and keep types.ModuleType alongside for the day the stub
     becomes real.
     """
-    # types.ModuleType IS Grail's ``module'' now, and type(sys) answers it as
-    # CPython's does, so the one type covers every module.  (The old second
-    # entry, type(sys).__mro__[1:2], would now be ``object''.)
-    return (types.ModuleType,)
+    bases = [types.ModuleType]
+    try:
+        bases.extend(type(sys).__mro__[1:2])
+    except BaseException:
+        pass
+    return tuple(bases)
 
 
 def _is_module_object(obj):
@@ -1296,27 +1298,15 @@ def requires_subprocess():
     return unittest.skipUnless(has_subprocess_support, "requires subprocess support")
 
 
-# No os.fork() in a gem either.  CPython's helper, so a test class decorated
-# with it builds -- a decorator that is MISSING is an AttributeError at the def,
-# now that a decorator's exception propagates (it used to be swallowed and the
-# decorator dropped, which is how these three names went unnoticed).
+# Grail has no os.fork; tests that need one skip.  Upstream's shape, so a
+# ``@support.requires_fork()`` decorator skips instead of raising
+# AttributeError -- which Grail's decorator handler used to swallow, leaving
+# the test to RUN (issue #1369).
 has_fork_support = False
 
 
 def requires_fork():
     return unittest.skipUnless(has_fork_support, "requires working os.fork()")
-
-
-def nomemtest(f):
-    """CPython's: a test that drives _testcapi.set_nomemory -- a CPython
-    implementation detail, so it skips here as cpython_only does."""
-    return cpython_only(f)
-
-
-def refcount_test(test):
-    """CPython's: a test of reference counts, which a non-refcounting VM
-    cannot run -- cpython_only, with tracing off as CPython has it."""
-    return no_tracing(cpython_only(test))
 
 
 # Sockets DO work here, unlike subprocesses.  CPython gates this on the two
@@ -1460,3 +1450,22 @@ def no_tracing(func):
             sys.settrace(original_trace)
 
     return wrapper
+
+
+def refcount_test(test):
+    """Decorator for tests which involve reference counting.
+
+    Upstream verbatim: not run except on CPython, and any trace function is
+    unset while it runs.  Grail is never CPython, so it always skips.
+    """
+    return no_tracing(cpython_only(test))
+
+
+def nomemtest(f):
+    """Check that we can use this test with ``_testcapi.set_nomemory``.
+
+    Upstream wraps f to import _testcapi and skips Py_TRACE_REFS builds, then
+    applies cpython_only -- which on Grail skips unconditionally, so that is
+    all that is left of it here.
+    """
+    return cpython_only(f)

@@ -130,12 +130,13 @@ testUnboundMethodReportsItsOwnMetadata
 
 category: 'Grail-Tests-ClassBodyMethodDecorator'
 method: ClassBodyMethodDecoratorTestCase
-testAFailingDecoratorRaisesAtTheDef
-	"A decorator that raises a Python exception makes the class statement
-	raise, as in CPython.  It used to be swallowed (the method kept, the
-	decorator dropped); only a GemStone error still is."
+testAFailingDecoratorPropagates
+	"A decorator that raises makes the class statement raise, as in CPython.
+	This test used to assert the opposite -- that the compiled method survived
+	undecorated -- which is what hid a stub getfullargspec and missing
+	test.support decorators (issue #1369)."
 
-	self assert: self loadFixture @env1:a_failing_decorator_raises_at_the_def
+	self assert: self loadFixture @env1:a_failing_decorator_propagates
 		equals: true
 %
 

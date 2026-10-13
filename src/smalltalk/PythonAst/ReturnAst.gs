@@ -110,7 +110,7 @@ ___emitIRStatementOn___: aBuilder
 	method answered the wrapper long before the body runs, on another process.
 	So it is the text's #exception mode instead, ``PythonReturn ___signal___:
 	value'' (env 1), caught by the wrapper's ``on: PythonReturn do: [:___ex___ |
-	___ex___ returnValue]'' and handed to the runtime as the generator's return
+	___ex___ @env0:returnValue]'' and handed to the runtime as the generator's return
 	value (StopIteration.value / the coroutine's result).  INSIDE A NESTED
 	DEF'S closure block (aBuilder inNestedFunction, cut 64) the same: the block
 	IS the Python function, so a home return would leave the enclosing method;

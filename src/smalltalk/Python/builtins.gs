@@ -171,6 +171,13 @@ __dir__
 						@env0:ifTrue: [
 							names @env0:remove: base @env0:ifAbsent: [nil].
 							names @env0:add: (base @env0:copyFrom: 2 to: (base @env0:size))]]]].
+	"This method is not a builtin: CPython's builtins has no ``__dir__''.
+	super lists it because it is one of the class's env-1 selectors.  The
+	same leak in module >> ___globalNames___ put it in builtins.__dict__,
+	where test_pickle's test_builtin_functions -- whose BuiltinFunctionType
+	filter matched nothing before #1436 -- found it as a builtin to pickle by
+	name, and loading ``builtins.__dir__'' PERFORMS it, answering this list."
+	names @env0:remove: '__dir__' @env0:ifAbsent: [nil].
 	^ (names @env0:asSortedCollection: [:a :b | a @env0:<= b]) @env0:asArray
 %
 
@@ -248,7 +255,7 @@ _exec: positional kw: kwargs
 
 	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
 	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
-	  optLevel savedOpt |
+	  optLevel savedOpt suppliedGlobals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -316,6 +323,7 @@ _exec: positional kw: kwargs
 	writes into whatever it is handed.  See ___grailCallerExecNamespaces___,
 	which also supplies a function frame's locals for the shapes CallAst's bare
 	rewrite does not reach."
+	suppliedGlobals := globalsDict.
 	globalsDict @env0:isNil ifTrue: [
 		| callerNs |
 		callerNs := self ___grailCallerExecNamespaces___.
@@ -339,6 +347,7 @@ _exec: positional kw: kwargs
 	Leaving such a mapping UNSEEDED is what makes the live read happen: every
 	name then misses the doit scope, and a miss is what reaches the resolver."
 	self ___requireDictGlobals___: globalsDict.
+	suppliedGlobals @env0:notNil ifTrue: [self ___insertBuiltinsInto___: suppliedGlobals].
 	live := (self ___isPlainCopyableMapping___: localsDict)
 		ifTrue: [nil]
 		ifFalse: [self ___requireMappingLocals___: localsDict].
@@ -406,7 +415,12 @@ _exec: positional kw: kwargs
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
-		ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec
+		"A code object compiled in ``single'' mode shows the value of each
+		expression statement through sys.displayhook, as the REPL does and
+		doctest relies on; everything else runs as plain exec."
+		ModuleAst @env0:evaluateSource: source usingModuleScope: scope
+			as: (((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
+					@env0:= #'single') ifTrue: [#single] ifFalse: [#exec])
 			globalNamesInto: globalNames
 	] @env0:ensure: [
 		CallAst @env0:sourcePath: savedPath.
@@ -502,7 +516,7 @@ ___doitStarImport___: aModule into: aScope
 	copies it to the caller's mapping from there.
 
 	A module-level star import is expanded at PARSE time from a literal
-	``__all__'' and topped up by module >> ___mergePublicAttrsFrom:.  A doit
+	``__all__'' and topped up by module >> ___mergePublicAttrsFrom___:.  A doit
 	had only the parse-time half, so a module whose __all__ is not a literal
 	bound nothing at all: ``exec('from _collections_abc import *', ns)'' left
 	ns empty, because Grail's _collections_abc takes its __all__ from
@@ -674,7 +688,7 @@ _eval: positional kw: kwargs
 
 	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins
 	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
-	  optLevel savedOpt |
+	  optLevel savedOpt suppliedGlobals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -783,6 +797,7 @@ _eval: positional kw: kwargs
 	with a namespace already and never reaches this fallback.  The rewrite
 	cannot help here: it is gated on the argument SHAPE, and ``eval(e, g, l)''
 	says nothing at compile time about what g and l will hold."
+	suppliedGlobals := globalsDict.
 	globalsDict @env0:isNil ifTrue: [
 		globalsDict := self ___grailCallerNamespace___].
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
@@ -798,6 +813,7 @@ _eval: positional kw: kwargs
 	Leaving such a mapping UNSEEDED is what makes the live read happen: every
 	name then misses the doit scope, and a miss is what reaches the resolver."
 	self ___requireDictGlobals___: globalsDict.
+	suppliedGlobals @env0:notNil ifTrue: [self ___insertBuiltinsInto___: suppliedGlobals].
 	live := (self ___isPlainCopyableMapping___: localsDict)
 		ifTrue: [nil]
 		ifFalse: [self ___requireMappingLocals___: localsDict].
@@ -2067,9 +2083,49 @@ ___builtinsOverrideIn___: globalsDict
 	eagerly would both raise where CPython does not and replace three accurate
 	messages with one invented one."
 
+	| entry |
 	globalsDict @env0:isNil ifTrue: [^ nil].
 	(globalsDict @env0:isKindOf: KeyValueDictionary) ifFalse: [^ nil].
-	^ globalsDict @env0:at: '__builtins__' otherwise: nil
+	entry := globalsDict @env0:at: '__builtins__' otherwise: nil.
+	"THE REAL BUILTINS RESTRICT NOTHING.  exec() and eval() now insert
+	builtins.__dict__ into a globals dict that lacks the name, as CPython does
+	(___insertBuiltinsInto___:), and a module's own globals carry the same
+	view; the builtins module itself is what __main__'s carry in CPython.
+	Treating any of them as an override would send every builtin lookup in the
+	code through the mapping for the same answers, so they are no override."
+	(entry @env0:== self @env0:or: [entry @env0:== self ___realBuiltinsView___])
+		ifTrue: [^ nil].
+	^ entry
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___realBuiltinsView___
+	"builtins.__dict__: the one memoised view, the object every module's
+	``__builtins__'' is (importlib class >> ___stampBuiltinsOn___:)."
+
+	^ (Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins'
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___insertBuiltinsInto___: globalsDict
+	"CPython's exec() and eval() insert ``__builtins__'', a reference to the
+	builtins module's dict, into the globals dict they are given when it has no
+	such key -- so after ``ns = {}; exec(src, ns)'' the key is there, and
+	``del ns['__builtins__']'', a common way to keep only what the source
+	defined, works (#1507).  Grail left the dict untouched, so that del raised
+	KeyError.
+
+	Only a dict the CALLER supplied: with no globals argument the code runs in
+	the caller's own namespace, which already has its builtins.  A key that is
+	present is left alone whatever it holds -- ``{'__builtins__': {}}'' is how
+	source is run with no builtins.  Stored with the env-0 mutator, as
+	CPython's PyDict_SetItem bypasses a dict subclass's __setitem__."
+
+	(globalsDict @env0:isKindOf: KeyValueDictionary) ifFalse: [^ self].
+	(globalsDict @env0:includesKey: '__builtins__') ifTrue: [^ self].
+	globalsDict @env0:at: '__builtins__' put: self ___realBuiltinsView___
 %
 
 
@@ -2761,6 +2817,10 @@ len: anObject
 			''' object cannot be interpreted as an integer')].
 	result @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: '__len__() should return >= 0'].
+	"Only a LargeInteger can be too big: sys.maxsize is 2^60-1, the largest
+	SmallInteger.  Reading it is an attribute load inside a handler, which
+	was most of the cost of every len() (#1214)."
+	(result @env0:class @env0:== SmallInteger) ifTrue: [^ result].
 	result @env0:> (self ___maxIndexSize___) ifTrue: [
 		^ OverflowError ___signal___:
 			'cannot fit ''int'' into an index-sized integer'].
@@ -4299,7 +4359,9 @@ reversed: aSequence
 	prevent (test_enumerate's TestReversed.test_objmethods)."
 	(self ___reversedBlocked___: aSequence)
 		ifTrue: [^ self ___notReversible___: aSequence].
-	(aSequence ___respondsTo___: #'__reversed__')
+	((aSequence ___respondsTo___: #'__reversed__')
+		or: [(aSequence @env0:isKindOf: PythonInstance)
+			and: [(aSequence ___typeDunder___: #'__reversed__') ~~ nil]])
 		ifTrue: [^ aSequence __reversed__].
 	"A string reversed must yield 1-char STRINGS, matching forward str
 	iteration -- the ``reverseDo:'' fallback yields Characters, so
@@ -5557,7 +5619,7 @@ hasattr: anObject _: aName
 	___requireAttrName___:."
 	self ___requireAttrName___: aName.
 
-	^ [[(self ___attrLoad___: anObject named: aName).
+	^ [[(self ___probingAttr___: anObject named: aName).
 	    true]
 		@env0:on: AttributeError do: [:___ex___ | false]]
 		@env0:on: Error do: [:___ex___ | false]
@@ -5585,6 +5647,24 @@ ___attrLoad___: anObject named: aName
 					ex @env0:return: (anObject ___pyAttrLoad___:
 						(self ___attrNameSymbol___: aName for: anObject))]]].
 	^ anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___probingAttr___: anObject named: aName
+	"___attrLoad___:named: for a caller that will CATCH the miss -- getattr with a
+	default, hasattr.  Publishes the (object, name) pair for the duration, so the
+	AttributeError for exactly that miss skips the raise-time frame snapshot,
+	which nothing will ever render (BaseException>>___captureFrameLocalsIfSuggestible___).
+	The previous pair is restored on the way out, so a probe nested inside a
+	property getter or a __getattr__ hook leaves the outer one intact."
+
+	| temps prev |
+	temps := SessionTemps @env0:current.
+	prev := temps @env0:at: #'GrailAttrProbe' otherwise: nil.
+	temps @env0:at: #'GrailAttrProbe' put: { anObject. aName }.
+	^ [self ___attrLoad___: anObject named: aName]
+		@env0:ensure: [temps @env0:at: #'GrailAttrProbe' put: prev]
 %
 
 category: 'Grail-Built-in Functions'
@@ -5631,7 +5711,7 @@ _getattr: positional kw: kwargs
 	(positional @env0:size) @env0:>= 3 ifTrue: [
 		| default |
 		default := positional @env0:at: 3.
-		^ [(self ___attrLoad___: anObject named: aName)]
+		^ [(self ___probingAttr___: anObject named: aName)]
 			@env0:on: AttributeError do: [:ex | ex @env0:return: default]
 	].
 	^ (self ___attrLoad___: anObject named: aName)
@@ -6538,12 +6618,12 @@ type: className _: bases _: namespace kw: classKeywords
 	descriptor in the namespace never learned its own name.
 
 	The class statement reaches these through ___pyClassDefined___:, the
-	METACLASS hook, which is deliberately not sent here: its other two steps
-	belong to a class statement (an __orig_bases__ stash left in SessionTemps
-	by the PEP 560 sole-base path, which type() refuses to take, and the
-	attr-method shadow install).  Sending it would let a stash belonging to
-	some earlier class statement land on this class.  So the two PEP 487 halves
-	are sent directly, which is what was missing.
+	METACLASS hook, which is deliberately not sent here: one of its steps
+	belongs to a class statement (an __orig_bases__ stash left in SessionTemps
+	by the PEP 560 sole-base path, which type() refuses to take).  Sending it
+	would let a stash belonging to some earlier class statement land on this
+	class.  So the steps type() does need -- the two PEP 487 halves and the
+	attr-method shadow install -- are sent directly.
 
 	``classKeywords'' are CPython's ``type(name, bases, ns, **kwds)'' -- the
 	3.6+ form, forwarded to __init_subclass__ exactly as a class header's
@@ -6558,6 +6638,17 @@ type: className _: bases _: namespace kw: classKeywords
 		@env0:ifNotNil: [:m |
 			SessionTemps @env0:current @env0:removeKey: #'GrailTypeBuildMetaclass'.
 			newClass @env1:___grailSetMetaclass___: m].
+	"THE ATTR-METHOD SHADOWS, the third step of ___pyClassDefined___: and the
+	one this did need (#1526).  type() stores the WHOLE namespace as class
+	attributes -- a def a class statement would compile to a method arrives here
+	as a function value -- so a builtin base's own implementation, which sends
+	its method directly, never saw the override: datetime ran tzinfo's default
+	utcoffset under a tz class built by six.add_metaclass, as every
+	python-dateutil one is.  ___grailInstallAttrMethodShadows___: compiles a
+	forwarder for each inherited selector a callable here shadows, exactly as
+	it does for a class body's assignments.  Sent directly, like the two PEP
+	487 halves below and for the reason given above."
+	newClass @env1:___grailInstallAttrMethodShadows___: ownAttrNames @env0:asArray.
 	newClass @env1:___invokeSetNameHooks___: ownAttrNames @env0:asArray.
 	newClass @env1:___grailInitSubclass___: classKeywords.
 	^ newClass
@@ -7071,10 +7162,26 @@ _pow: positional kw: kwargs
 		^ x __pow__: y
 	].
 	(nargs == 3) ifTrue: [
-		| tn ni r |
+		| tn ni r unwrap |
 		x := args @env0:at: 1.
 		y := args @env0:at: 2.
 		z := args @env0:at: 3.
+		"A bool or an int subclass's instance is an int: ``pow(2, True, 5)'' is
+		2 and ``pow(2, IntEnum.X, 5)'' uses X's value.  Both reached the
+		TypeError below, because the fast path takes Integers only.  An operand
+		whose class defines its own 3-argument __pow__/__rpow__ (the varargs
+		form the dispatch below probes) stays wrapped, so that override runs."
+		unwrap := [:v |
+			((v @env0:isKindOf: Integer) @env0:not
+				@env0:and: [(self ___isPyIntOperand___: v)
+				@env0:and: [(v @env0:class @env0:whichClassIncludesSelector: #'___pow__:kw:'
+						environmentId: 1) @env0:isNil
+				@env0:and: [(v @env0:class @env0:whichClassIncludesSelector: #'___rpow__:kw:'
+						environmentId: 1) @env0:isNil]]])
+				ifTrue: [v __index__] ifFalse: [v]].
+		x := unwrap @env0:value: x.
+		y := unwrap @env0:value: y.
+		z := unwrap @env0:value: z.
 		"3-arg pow is modular exponentiation, defined only for integers.  Any
 		non-int operand raises CPython's TypeError naming all three types
 		(test_fractions test_three_argument_pow), rather than silently doing

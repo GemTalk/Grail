@@ -192,7 +192,7 @@ ___emitSmalltalkOn___: aStream
 		and: [function id = #'dir'
 			and: [arguments isEmpty and: [keywords isEmpty]]])
 				ifTrue: [
-					aStream nextPutAll: '((Python @env0:at: #builtins) instance) @env1:___dirOfNamespace___: ('.
+					aStream nextPutAll: '((Python @env0:at: #builtins) @env0:___instance___) @env1:___dirOfNamespace___: ('.
 					self printLocalsCallOn: aStream.
 					aStream nextPutAll: ')'.
 					^ self].
@@ -1635,7 +1635,7 @@ printLocalsCallOn: aStream
 		GlobalsTestCase pins."
 		compNames isEmpty ifFalse: [
 			aStream
-				nextPutAll: '(((Python @env0:at: #builtins) instance) ___evalScopeFor___: ';
+				nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___evalScopeFor___: ';
 				nextPutAll: self ___globalsViewReceiverExpr___;
 				nextPutAll: ' locals: '.
 			self ___printCompTargetLocalsOn___: aStream names: compNames.
@@ -1681,12 +1681,12 @@ printBareEvalExecOn: aStream
 
 	| fn |
 	fn := CallAst functionBeingCompiled.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) _'.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) _'.
 	aStream nextPutAll: function id asString.
 	aStream nextPutAll: ': { '.
 	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: '. '.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___evalScopeFor___: '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___evalScopeFor___: '.
 	"MODULE SCOPE reaches here only from inside a comprehension (the caller's
 	guard), where there is no function snapshot to take -- the scope is the
 	globals plus the comprehension's own targets.  ___globalsViewReceiverExpr___
@@ -1919,7 +1919,7 @@ printClassBodyLocalsOn: aStream
 
 	| bound |
 	bound := CallAst classBodyBoundNames.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildClassBodyLocals___: { '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___buildClassBodyLocals___: { '.
 	bound ifNotNil: [
 		bound do: [:each |
 			aStream nextPutAll: '{ '''; nextPutAll: each asString; nextPutAll: '''. '.
@@ -1947,7 +1947,7 @@ printFunctionLocalsSnapshotOn: aStream
 	fn := CallAst functionBeingCompiled.
 	names := fn body variables asSortedCollection: [:a :b | a asString <= b asString].
 	paramNames := fn allParameterNames.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___buildLocals___: { '.
 	"FREE VARIABLES first -- CPython's locals() reports a function's free
 	variables alongside its own locals, and Grail listed only the locals, so
 	``locals()'' in a closure dropped every name inherited from an enclosing
@@ -2137,7 +2137,7 @@ printBareCallDirectOn: aStream selector: aSelector
 
 	| funcName |
 	funcName := function id asString.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) '.
 	aStream nextPutAll: funcName; nextPut: $:; space.
 	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
 	2 to: arguments size do: [:i |
@@ -2175,7 +2175,7 @@ printBareCallVarargsDirectOn: aStream selector: aSelector
 
 	| funcName |
 	funcName := function id asString.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) _'.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) _'.
 	aStream nextPutAll: funcName; nextPutAll: ': '.
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
@@ -2238,10 +2238,10 @@ printKeywordsDictOn: aStream
 			]
 			ifNil: [
 				"``**splat'' mixed with named kwargs — merge the mapping's
-				items via update: (source order, later entries win).
+				items via ___pyUpdate___: (source order, later entries win).
 				flask's ``Rule(rule, methods=methods, **options)'' dropped
 				the ``**options'' here, so the rule endpoint came back nil."
-				aStream nextPutAll: ' @env1:update: ('.
+				aStream nextPutAll: ' @env1:___pyUpdate___: ('.
 				kwAst value printSmalltalkWithParenthesisOn: aStream.
 				self printKwargsSplatCheckOn: aStream.
 				aStream nextPutAll: ');'.
@@ -2916,8 +2916,8 @@ category: 'Grail-Lexical Scope Stack'
 classmethod: CallAst
 ___scopeStack___
 	"The chain of PYTHON LEXICAL SCOPES enclosing the node being emitted,
-	outermost first, as { node. kind. name } triples whose kind is #class or
-	#function.  nil until the first push.
+	outermost first, as { node. kind. name } triples whose kind is #class,
+	#function or #genexpr.  nil until the first push.
 
 	``classBeingCompiled'' and ``functionBeingCompiled'' hold ONE value each, so
 	between them they can name at most the nearest enclosing class and the
@@ -2934,9 +2934,12 @@ ___scopeStack___
 	Pushed exactly where those two slots are already saved and restored --
 	ClassDefAst around both of its emit regions, FunctionDefAst around each body
 	emit -- so the stack cannot come to disagree with them about what is in
-	scope.  Lambdas and comprehensions are NOT pushed: CPython does give them
-	scopes (``f.<locals>.<lambda>''), but neither can lexically contain a def or
-	a class, so no qualname is ever computed inside one."
+	scope.  A LAMBDA pushes a #function frame around its body and a GENEXPR a
+	#genexpr frame around its clauses, so a lambda or genexpr nested in one is
+	named through it: ``<lambda>.<locals>.<lambda>'', ``<genexpr>.<lambda>''
+	(#1522).  A #genexpr frame adds its name but no ``<locals>'', which is
+	CPython's rule for a comprehension scope.  List, set and dict comprehensions
+	push nothing: CPython 3.12+ inlines them (PEP 709), so they name nothing."
 
 	^ self ___compileContext___ at: #'scopeStack' otherwise: nil
 %
@@ -4314,7 +4317,7 @@ printModuleSelfSendOn: aStream selector: aSelector
 	].
 	aStream nextPutAll: '] ifFalse: [___f___ @env1:___pyCallValue___: '.
 	self printArgumentsArrayOn: aStream.
-	aStream nextPutAll: ' kw: nil]] value: (self @env0:dynamicInstVarAt: #'.
+	aStream nextPutAll: ' kw: nil]] @env0:value: (self @env0:dynamicInstVarAt: #'.
 	aStream nextPutAll: funcName.
 	aStream nextPutAll: '))'
 %
@@ -4337,7 +4340,7 @@ printModuleSelfSendVarargsOn: aStream selector: aSelector
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
 	self printKeywordsDictOn: aStream.
-	aStream nextPutAll: ']] value: (self @env0:dynamicInstVarAt: #'.
+	aStream nextPutAll: ']] @env0:value: (self @env0:dynamicInstVarAt: #'.
 	aStream nextPutAll: funcName.
 	aStream nextPutAll: '))'
 %
@@ -4684,9 +4687,9 @@ ___emitIRKeywordsOn___: aBuilder
 	specs := keywords collect: [:k |
 		k name isNil
 			ifTrue: [
-				"``**m'' among named keywords: the text's env-1 ``update:'' of the
-				mapping, in source order (later entries win)."
-				{ #'update:'. { self ___emitIRKwargsSplat___: k value on: aBuilder }. 1 }]
+				"``**m'' among named keywords: the text's env-1 ``___pyUpdate___:''
+				of the mapping, in source order (later entries win)."
+				{ #'___pyUpdate___:'. { self ___emitIRKwargsSplat___: k value on: aBuilder }. 1 }]
 			ifFalse: [
 				{ #'at:put:'. { aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder }. 0 }]].
 	specs := specs asOrderedCollection.
@@ -4841,7 +4844,7 @@ ___emitIRBuiltinShadowProbeOn___: aBuilder varargs: isVarargs name: aName
 
 	  ___bs<d>___ := <module> dynamicInstVarAt: #name.
 	  ___bs<d>___ == nil
-	      ifTrue:  [((Python at: #builtins) instance) name: a _: b]   -- or _name:kw:
+	      ifTrue:  [((Python at: #builtins) @env0:___instance___) name: a _: b]   -- or _name:kw:
 	      ifFalse: [___bs<d>___ ___pyCallValue___: { args } kw: kw]
 
 	THE PROBE GOES IN A TEMP, NOT A BLOCK PARAMETER, for the reason
@@ -5338,14 +5341,16 @@ ___emitIRSuperExplicitOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: CallAst
 ___emitIRBuiltinsInstanceOn___: aBuilder
-	"(((Python @env0:at: #builtins) instance)) -- at: dispatches in env 0, the
-	rest in env 1, as printBareCallFastPathOn: spells it."
+	"(((Python @env0:at: #builtins) @env0:___instance___)) -- both sends in
+	env 0, as printBareCallFastPathOn: spells it.  ___instance___ is module's
+	env-0 entry to the env-1 singleton accessor ``instance''; sending that
+	directly would put a Python-shaped selector in env 1 (issue #1155)."
 
 	| builtinsCls |
 	builtinsCls := aBuilder
 		send: #at: to: (aBuilder globalNamed: #Python)
 		with: { aBuilder obj: #builtins } env: 0.
-	^ aBuilder send: #instance to: builtinsCls with: { } env: 1
+	^ aBuilder send: #'___instance___' to: builtinsCls with: { } env: 0
 %
 
 category: 'Grail-IR Codegen'
@@ -5443,7 +5448,7 @@ ___emitIRScopeNamespaceOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: CallAst
 ___emitIRDirOfScopeOn___: aBuilder
-	"``((Python @env0:at: #builtins) instance) @env1:___dirOfNamespace___: (<ns>)''
+	"``((Python @env0:at: #builtins) @env0:___instance___) @env1:___dirOfNamespace___: (<ns>)''
 	-- the IR twin of printSmalltalkOn:'s step 0b' rewrite of a bare dir().
 	Python defines dir() with no argument as the names in the current scope,
 	so the text routes it through the SAME machinery locals() uses rather than

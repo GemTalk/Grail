@@ -193,21 +193,17 @@ class Plain:
         return x
 
 
-def a_failing_decorator_raises_at_the_def():
-    """A decorator that raises makes the class statement raise, as in CPython.
-
-    This checked the opposite -- that the compiled method SURVIVED, the
-    decorator silently dropped -- which is how Grail behaved for any error.  It
-    hid real program errors: FastAPI validates a route in its decorator, and a
-    refused route simply did not exist (docs/Support_FastAPI.md, Phase 5).
-    Only a GemStone-level error still gets the old fallback."""
+def a_failing_decorator_propagates():
+    """A decorator that raises makes the class statement raise, as in
+    CPython.  Grail used to swallow it and keep the undecorated method
+    (issue #1369), which is what this check asserted until then."""
     try:
         class Failing:
             @boom
             def m(self):
                 return 'survived'
-    except RuntimeError as exc:
-        return str(exc) == 'this decorator always fails'
+    except RuntimeError as e:
+        return str(e) == 'this decorator always fails'
     return False
 
 

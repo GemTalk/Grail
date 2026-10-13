@@ -433,7 +433,7 @@ printSmalltalkClassBodyRuntimeDefOn: aStream
 		ifNil: [aStream nextPutAll: self ___mangledName___]
 		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
 			nextPutAll: ' value: { '; nextPutAll: self ___mangledName___; nextPutAll: ' } value: nil)'].
-	aStream nextPutAll: '. ] value.'; lf
+	aStream nextPutAll: '. ] @env0:value.'; lf
 %
 
 category: 'Grail-other'
@@ -767,14 +767,14 @@ printSmalltalkOn: aStream
 		CallAst ___restoreScopeDepth___: savedScopeDepth].
 	aStream
 		decreaseIndent;
-		nextPutAll: '] value.';
+		nextPutAll: '] @env0:value.';
 		lf.
 	"Implicit fall-off return value is Python ``None``. Explicit ``return``
 	signals PythonReturn (caught by the outer handler) and bypasses this."
 	aStream nextPutAll: 'None.'; lf.
 	aStream
 		decreaseIndent;
-		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]';
+		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]';
 		lf.
 	"nested: true matches the def-time ___pyCode___: cascade a few lines
 	below, which stamps this closure-form def's own __code__ with
@@ -797,9 +797,9 @@ printSmalltalkOn: aStream
 	then cascade onto the block the wrapper returns."
 	hasKwonly ifTrue: [
 		aStream nextPutAll: ') @env0:shallowCopy @env0:___pyKwDefaults___: ___kwdefaults___'; lf.
-		aStream nextPutAll: '] value)'.
+		aStream nextPutAll: '] @env0:value)'.
 	] ifFalse: [
-		hasPosDefaults ifTrue: [aStream nextPutAll: '] value'].
+		hasPosDefaults ifTrue: [aStream nextPutAll: '] @env0:value'].
 	].
 	"Every execution of a ``def'' must yield a DISTINCT function object -- that
 	is what CPython does, and Python code depends on it.  GemStone reuses a
@@ -969,6 +969,11 @@ printSmalltalkOn: aStream
 			^ self].
 		applicable reverseDo: [:deco |
 			(self ___decoratorRealisedByReclass___: deco) not ifTrue: [
+				"At the decorator's own line (#1406): this is a statement, so
+				one store before it covers both making and calling it."
+				(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: applicable index: 1]) ifNotNil: [:___line |
+					aStream lf; nextPutAll: '___curPos___ := '; nextPutAll: ___line printString;
+						nextPutAll: '.'].
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
 				the target name is module-scope (parser-declared in module
 				body and not shadowed by an enclosing function)."
@@ -1592,7 +1597,9 @@ printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName sib
 	for a deleter -- so an abstract setter marks the property's fset, as
 	CPython's property(fget, fset).__isabstractmethod__ requires.  (A
 	metaclass's namespace gets the property from ClassDefAst's re-read after
-	___grailOwnPropertyNames___ is compiled.)"
+	___grailOwnPropertyNames___ is compiled.)
+
+	A decorator that raises propagates, as in CPython (issue #1369)."
 
 	| saved kind base |
 	kind := self ___propertyAccessorKind___.
@@ -1601,7 +1608,6 @@ printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName sib
 		ifFalse: [kind == #deleter
 			ifTrue: ['___propDeleter_' , name asString]
 			ifFalse: [name asString]].
-	aStream nextPutAll: '['.
 	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
 	saved := CallAst inDecoratorEmit.
 	CallAst inDecoratorEmit: true.
@@ -1614,10 +1620,7 @@ printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName sib
 			ensure: [
 				CallAst classBodyDecoratorScope: nil.
 				CallAst inDecoratorEmit: saved].
-	aStream
-		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
-		lf
+	aStream nextPutAll: '.'; lf
 %
 
 category: 'Grail-code generation'
@@ -1647,15 +1650,11 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	chain threads correctly even when an inner decorator returns a fresh
 	wrapper.
 
-	Wrapped in a handler, like the module-scope path: if applying a decorator
-	fails with a GemStone error, the store never runs and the compiled method
-	stays in place -- exactly the previous behaviour of dropping the
-	decorator.  Python control-flow signals are re-raised rather than
-	swallowed, and so is a Python exception, as CPython raises it at the def
-	(see printModuleDecoratorsOn:decorators:)."
+	A decorator that raises propagates out of the class statement, as in
+	CPython.  It used to be applied inside ``on: AbstractException do:'',
+	leaving the compiled method silently undecorated (issue #1369)."
 
 	aStream
-		nextPutAll: '[';
 		nextPutAll: aClassName;
 		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 		nextPutAll: name;
@@ -1677,7 +1676,7 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	which was wrong twice over at this position: the cell store is emitted
 	AFTER the decorator loop, and ``self'' here is the ENCLOSING receiver,
 	not the class holding the cells.  The read raised, the application
-	handler below swallowed it as designed, and the decorator silently never
+	handler then in place swallowed it, and the decorator silently never
 	applied (the probe matrix lives in docs/Issues.md; test_asyncgen's
 	test_python_async_iterator_types_coroutine_anext was the sighting)."
 	___savedDecoEmit___ := CallAst inDecoratorEmit.
@@ -1701,10 +1700,7 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	(self ___decoratorBaseIsClassMethod___
 		and: [self ___classMethodIsOutermost___])
 		ifTrue: [aStream nextPutAll: ')'].
-	aStream
-		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [(___de isKindOf: PythonContinue) @env0:or: [___de isKindOf: BaseException]]]) ifTrue: [___de @env0:pass]].';
-		lf.
+	aStream nextPutAll: '.'; lf.
 	"The namespace a metaclass is handed must hold the DECORATED object; see
 	object class >> ___grailNsRebind___:."
 	aStream
@@ -1894,16 +1890,29 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 					nextPutAll: baseName;
 					nextPutAll: ''')']].
 		^ self].
-	aStream nextPutAll: '(('.
-	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
-	aStream nextPutAll: ') @env1:___pyCallValue___: { '.
-	self
-		printMethodDecoratorChainOn: aStream
-		decorators: decoList
-		index: i + 1
-		className: aClassName
-		baseName: baseName.
-	aStream nextPutAll: ' } kw: nil)'
+	"At the decorator's own line (#1406) -- the class statement's was used."
+	^ self ___mapDecorator___: (self ___decoratorNodeFor___: decoList index: i) on: aStream do: [
+		(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: decoList index: i])
+			ifNil: [
+				aStream nextPutAll: '(('.
+				self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+				aStream nextPutAll: ') @env1:___pyCallValue___: { '.
+				self
+					printMethodDecoratorChainOn: aStream
+					decorators: decoList
+					index: i + 1
+					className: aClassName
+					baseName: baseName.
+				aStream nextPutAll: ' } kw: nil)']
+			ifNotNil: [:___line |
+				self printDecoratorCallOn: aStream line: ___line
+					receiver: [self printDecoratorReceiverOn: aStream deco: (decoList at: i)]
+					argument: [self
+						printMethodDecoratorChainOn: aStream
+						decorators: decoList
+						index: i + 1
+						className: aClassName
+						baseName: baseName]]]
 %
 
 category: 'Grail-code generation'
@@ -1918,29 +1927,20 @@ printModuleDecoratorsOn: aStream decorators: decoList
 	nest around it — so a chain threads correctly even when an inner
 	decorator returns a fresh wrapper rather than the original.
 
-	The application is wrapped in a handler: if applying any decorator
-	fails with a GEMSTONE error (e.g. werkzeug's ``@LocalProxy'', a class
-	that isn't callable through the Grail call path), the store never runs
-	and the slot is left ABSENT — exactly the pre-fix behaviour (decorator
-	dropped, bare call uses the fast self-send of the real method).
-	Control-flow signals (Python return / break / continue) are re-raised.
-
-	A PYTHON exception is re-raised too, as CPython raises it at the def.  It
-	was swallowed like the rest, which hid real program errors: FastAPI
-	validates a route as its decorator runs and raises on an invalid one, and
-	a route whose registration failed for any reason simply did not exist --
-	its requests answered 404 with nothing to say why
-	(docs/Support_FastAPI.md, Phase 5)."
+	A decorator that raises propagates, as in CPython: the module stops at
+	that def.  It used to be applied inside ``on: AbstractException do:'',
+	leaving the def silently undecorated -- added for werkzeug's
+	``@LocalProxy'', which applies cleanly now -- and that hid real defects
+	(issue #1369): a stub getfullargspec unregistered every Django template
+	tag, and missing test.support decorators ran tests meant to be skipped."
 
 	aStream
 		lf;
-		nextPutAll: '[self @env0:dynamicInstVarAt: #''';
+		nextPutAll: 'self @env0:dynamicInstVarAt: #''';
 		nextPutAll: name;
 		nextPutAll: ''' put: '.
 	self printDecoratorChainOn: aStream decorators: decoList index: 1.
-	aStream
-		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [(___de isKindOf: PythonContinue) @env0:or: [___de isKindOf: BaseException]]]) ifTrue: [___de @env0:pass]].'
+	aStream nextPutAll: '.'
 %
 
 category: 'Grail-code generation'
@@ -1962,11 +1962,82 @@ printDecoratorChainOn: aStream decorators: decoList index: i
 			nextPutAll: name;
 			nextPutAll: ''')'.
 		^ self].
-	aStream nextPutAll: '(('.
-	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
-	aStream nextPutAll: ') @env1:___pyCallValue___: { '.
-	self printDecoratorChainOn: aStream decorators: decoList index: i + 1.
-	aStream nextPutAll: ' } kw: nil)'
+	^ self ___mapDecorator___: (self ___decoratorNodeFor___: decoList index: i) on: aStream do: [
+		(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: decoList index: i])
+			ifNil: [
+				aStream nextPutAll: '(('.
+				self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+				aStream nextPutAll: ') @env1:___pyCallValue___: { '.
+				self printDecoratorChainOn: aStream decorators: decoList index: i + 1.
+				aStream nextPutAll: ' } kw: nil)']
+			ifNotNil: [:___line |
+				self printDecoratorCallOn: aStream line: ___line
+					receiver: [self printDecoratorReceiverOn: aStream deco: (decoList at: i)]
+					argument: [self printDecoratorChainOn: aStream decorators: decoList index: i + 1]]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printDecoratorCallOn: aStream line: aLine receiver: receiverBlock argument: argumentBlock
+	"One decorator's application, at the decorator's OWN line (#1406): CPython
+	evaluates ``@A'' at A's line and calls it there, so that is the line a
+	traceback through it -- and sys._getframe(1).f_lineno inside it -- reports.
+	The def line was reported instead.
+
+	    (((___curPos___ := LA) @env0:-> (A)) @env0:value
+	        @env1:___pyCallValue___: {
+	        ((<inner chain>) @env0:-> (___curPos___ := LA)) @env0:key } kw: nil)
+
+	TWO stores, for the two readers of a position.  A frame's LINE comes from
+	a text scan -- the last ``___curPos___ := '' at or above the line its send
+	is on -- so the call's keyword gets a line of its own directly under A's
+	store, and the inner chain starts on the next line, where its own store
+	is.  The running VALUE is what a catching frame reads, and the inner
+	chain leaves it at the inner decorator's line, so it is put back after the
+	inner chain answers and before A is called: an Association evaluates its
+	key and then its value, which is the one way to order two expressions
+	inside a Smalltalk expression."
+
+	aStream nextPutAll: '(((___curPos___ := '; nextPutAll: aLine printString; nextPutAll: ') @env0:-> ('.
+	receiverBlock value.
+	aStream nextPutAll: ')) @env0:value'; lf; tab;
+		nextPutAll: '@env1:___pyCallValue___: {'; lf; tab;
+		nextPutAll: '(('.
+	argumentBlock value.
+	aStream nextPutAll: ') @env0:-> (___curPos___ := '; nextPutAll: aLine printString;
+		nextPutAll: ')) @env0:key } kw: nil)'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorLineFor___: decoList index: anIndex
+	"The source line of decoList's anIndex-th decorator, or nil.  decoList is
+	decorator_list or an order-preserving selection of it (the method
+	decorators drop the ones Grail realises some other way), so its entries
+	are found in decorator_list in order, by identity -- a repeated ``@name''
+	is the same Symbol, and the order tells the occurrences apart."
+
+	| node |
+	node := self ___decoratorNodeFor___: decoList index: anIndex.
+	(node isNil or: [(node respondsTo: #beginLine) not]) ifTrue: [^ nil].
+	^ node beginLine
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorNodeFor___: decoList index: anIndex
+	"___decoratorLineFor___:index:'s node rather than its line, for the IR arm."
+
+	| j |
+	decorator_list isNil ifTrue: [^ nil].
+	j := 0.
+	1 to: anIndex do: [:k | | target |
+		target := decoList at: k.
+		j := j + 1.
+		[j <= decorator_list size and: [(decorator_list at: j) ~~ target]]
+			whileTrue: [j := j + 1]].
+	j > decorator_list size ifTrue: [^ nil].
+	^ self ___decoratorNodeAt___: j
 %
 
 category: 'Grail-code generation'
@@ -2124,8 +2195,12 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 	applied.  The block then nests the applications the other way up, so the
 	decorator nearest the def is called first."
 
-	| n |
+	| n lines |
 	n := decoList size.
+	"Each decorator's own line, for its evaluation and its call (#1406); see
+	printDecoratorCallOn:line:receiver:argument: for the two stores."
+	lines := (1 to: n) collect: [:i |
+		self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: decoList index: i]].
 	aStream lf.
 	(self isModuleScopeNestedDefTarget)
 		ifTrue: [
@@ -2139,11 +2214,18 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 				nextPutAll: self ___mangledName___;
 				nextPutAll: ' := ['].
 	aStream nextPutAll: ':___grailDecoFns___ |'; lf.
-	self emitOrderedLocalDecoratorApplicationOn: aStream index: 1 count: n.
+	self emitOrderedLocalDecoratorApplicationOn: aStream index: 1 count: n lines: lines.
 	aStream nextPutAll: '] @env0:value: { '.
 	1 to: n do: [:i |
 		i > 1 ifTrue: [aStream nextPutAll: '. '].
-		self printDecoratorReceiverOn: aStream deco: (decoList at: i)].
+		(lines at: i)
+			ifNil: [self printDecoratorReceiverOn: aStream deco: (decoList at: i)]
+			ifNotNil: [:___line |
+				"One line each: an error making decorator i is at its line."
+				aStream lf; tab; nextPutAll: '((___curPos___ := '; nextPutAll: ___line printString;
+					nextPutAll: ') @env0:-> ('.
+				self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+				aStream nextPutAll: ')) @env0:value']].
 	aStream nextPutAll: ' }'.
 	(self isModuleScopeNestedDefTarget)
 		ifTrue: [aStream nextPutAll: ').']
@@ -2152,19 +2234,30 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-emitOrderedLocalDecoratorApplicationOn: aStream index: i count: n
+emitOrderedLocalDecoratorApplicationOn: aStream index: i count: n lines: lines
 	"The nested application expression, reading the ALREADY-EVALUATED
 	decorators out of the block's array argument.  i is the 1-based index into
 	that array; 1 is the outermost decorator, which CPython applies LAST, so it
 	is the outermost call here.  At the base case emit the undecorated
-	function."
+	function.  Each call is made at its decorator's line when that is known
+	(#1406), as printDecoratorCallOn:line:receiver:argument: lays it out."
 
 	i > n ifTrue: [^ self emitOrderedLocalDecoratorBaseOn: aStream].
+	(lines at: i) ifNotNil: [:___line |
+		aStream nextPutAll: '(((___curPos___ := '; nextPutAll: ___line printString;
+			nextPutAll: ') @env0:-> (___grailDecoFns___ @env0:at: '; nextPutAll: i printString;
+			nextPutAll: ')) @env0:value'; lf; tab;
+			nextPutAll: 'value: {'; lf; tab;
+			nextPutAll: '(('.
+		self emitOrderedLocalDecoratorApplicationOn: aStream index: i + 1 count: n lines: lines.
+		aStream nextPutAll: ') @env0:-> (___curPos___ := '; nextPutAll: ___line printString;
+			nextPutAll: ')) @env0:key } value: nil)'.
+		^ self].
 	aStream
 		nextPutAll: '((___grailDecoFns___ @env0:at: ';
 		nextPutAll: i printString;
 		nextPutAll: ') value: { '.
-	self emitOrderedLocalDecoratorApplicationOn: aStream index: i + 1 count: n.
+	self emitOrderedLocalDecoratorApplicationOn: aStream index: i + 1 count: n lines: lines.
 	aStream nextPutAll: ' } value: nil)'
 %
 
@@ -2379,6 +2472,69 @@ ___receiverParamName___
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___refusesReceiver___
+	"Asked of a def compiled as a METHOD (an instance method or a @classmethod,
+	never a @staticmethod): does it take no positional argument at all, so that
+	the instance -- or the class -- a call through one supplies is an argument
+	too many?  ``def h()'' and ``def ko(*, x=3)'' do; ``def m(*args)'' does not,
+	since the receiver is args[0] (issue #1434).  Such a method opens with
+	UnboundMethod >> ___refuseReceiver___:positional:kw:kwonly:qualifiedName:."
+
+	^ self ___receiverParamName___ isNil
+		and: [args isNil or: [args vararg isNil]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___kwonlyParamNameStrings___
+	"The keyword-only parameter names, as Strings."
+
+	args isNil ifTrue: [^ #()].
+	^ ((args kwonlyargs ifNil: [#()]) collect: [:a | a name asString]) asArray
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___printReceiverRefusalOn___: aStream positional: posName kw: kwName
+	"The text form of the opening check ___refusesReceiver___ describes.
+	posName and kwName are the packed form's two arguments, nil for the unary
+	form, which has neither."
+
+	aStream
+		nextPutAll: 'UnboundMethod @env0:___refuseReceiver___: self positional: ';
+		nextPutAll: (posName ifNil: ['nil']);
+		nextPutAll: ' kw: ';
+		nextPutAll: (kwName ifNil: ['nil']);
+		nextPutAll: ' kwonly: #('.
+	self ___kwonlyParamNameStrings___ do: [:n |
+		aStream space; nextPutAll: n printString].
+	aStream
+		nextPutAll: ' ) qualifiedName: ';
+		nextPutAll: (self ___qualifiedNameFor___: name) printString;
+		nextPut: $.;
+		lf
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRReceiverRefusalOn___: aBuilder pos: posLeaf kw: kwLeaf
+	"___printReceiverRefusalOn___:positional:kw:, as IR.  posLeaf and kwLeaf
+	are nil for the unary form."
+
+	aBuilder add: (aBuilder
+		send: #'___refuseReceiver___:positional:kw:kwonly:qualifiedName:'
+		to: (aBuilder globalNamed: #UnboundMethod)
+		with: {
+			aBuilder selfNode.
+			posLeaf isNil ifTrue: [aBuilder nilLit] ifFalse: [aBuilder var: posLeaf].
+			kwLeaf isNil ifTrue: [aBuilder nilLit] ifFalse: [aBuilder var: kwLeaf].
+			aBuilder obj: self ___kwonlyParamNameStrings___.
+			aBuilder obj: (self ___qualifiedNameFor___: name) }
+		env: 0)
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 ___namesEnclosingReceiver___: aSymbolOrNil
 	"Does this def's body mention a name that compiles to the bare Smalltalk
 	receiver?
@@ -2395,14 +2551,58 @@ ___namesEnclosingReceiver___: aSymbolOrNil
 	class is being emitted into, which is what the enclosing def actually called
 	it.  A name that is genuinely local to this def would also match -- a false
 	positive that costs a call the ability to run receiverless and changes no
-	answer, which is the direction the error has to fall."
+	answer, which is the direction the error has to fall.
+
+	ONE false positive is ruled out: the body of a NESTED def or lambda that
+	takes the name as a PARAMETER.  There the name is that function's own, and
+	cannot be the captured receiver.  pygments' RubyLexer builds its token
+	table with exactly that shape (#1426) --
+
+	    def gen_rubystrings_rules():
+	        def intp_regex_callback(self, match, ctx): ...
+
+	-- and the whole lexer, with the nine modules that import it, failed on
+	``unbound method ... must be called with an instance''.  Only the nested
+	BODY is skipped: its defaults, annotations and decorators run in this
+	def's scope, so a ``self'' there is still the captured one."
 
 	body ifNil: [^ false].
-	^ body ___anyDescendantSatisfies___: [:n |
-		(n isKindOf: NameAst)
-			and: [n id asSymbol == #'self'
-				or: [aSymbolOrNil notNil
-					and: [n id asSymbol == aSymbolOrNil asSymbol]]]]
+	(self ___node: body namesFree: #'self') ifTrue: [^ true].
+	^ aSymbolOrNil notNil
+		and: [aSymbolOrNil asSymbol ~~ #'self'
+		and: [self ___node: body namesFree: aSymbolOrNil asSymbol]]
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+___node: aNode namesFree: aSymbol
+	"Does aNode's subtree read or write the name aSymbol anywhere it is not
+	the parameter of a nested def or lambda?  The walk is
+	___anyDescendantSatisfies___:'s -- every instance variable but ``parent'',
+	every node in a collection -- except that a nested def or lambda that
+	takes aSymbol as a parameter is entered WITHOUT its body (see
+	___namesEnclosingReceiver___:)."
+
+	| ivars skipBody |
+	(aNode isKindOf: NameAst) ifTrue: [^ aNode id asSymbol == aSymbol].
+	skipBody := ((aNode isKindOf: FunctionDefAst) or: [aNode isKindOf: LambdaAst])
+		and: [aNode args notNil and: [aNode args ___bindsParameterNamed___: aSymbol]].
+	ivars := aNode class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| ivar v |
+		ivar := ivars at: i.
+		(ivar == #'parent' or: [skipBody and: [ivar == #'body']]) ifFalse: [
+			v := aNode instVarAt: i.
+			(v isKindOf: AbstractNode)
+				ifTrue: [(self ___node: v namesFree: aSymbol) ifTrue: [^ true]]
+				ifFalse: [
+					((v isKindOf: Collection) and: [(v isKindOf: CharacterCollection) not])
+						ifTrue: [
+							v do: [:e |
+								((e isKindOf: AbstractNode)
+									and: [self ___node: e namesFree: aSymbol])
+										ifTrue: [^ true]]]]]].
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -2552,6 +2752,29 @@ ___coFlags___: isNested
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___coVarnames___
+	"The names ``co_varnames'' reports, as Strings: the PARAMETERS in CPython's
+	order -- positional-only and positional (the receiver included), then
+	keyword-only, then *args, then **kwargs.
+
+	CPython continues with the body's locals in order of first use.  They are
+	left off rather than guessed at: the parser keeps a scope's names in an
+	IdentitySet, unordered and with scope hints mixed in, so any order given
+	here would be invented.  The parameters are what ``inspect.getargs'' reads,
+	and that is what pytest's failure report needs (#1460)."
+
+	| out |
+	out := OrderedCollection new.
+	self allParameterNames do: [:p | out add: p asString].
+	args isNil ifTrue: [^ out asArray].
+	(args kwonlyargs ifNil: [#()]) do: [:a | out add: a name asString].
+	args vararg ifNotNil: [:v | out add: v name asString].
+	args kwarg ifNotNil: [:k | out add: k name asString].
+	^ out asArray
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 emitCodeExtrasOpenOn: aStream nested: isNested
 	"One opening parenthesis per setter emitCodeExtrasOn:nested: will apply.
 
@@ -2565,12 +2788,16 @@ emitCodeExtrasOpenOn: aStream nested: isNested
 	aStream nextPutAll: '('.
 	(CallAst ___freeVariableNamesFor___: self) isEmpty ifFalse: [
 		aStream nextPutAll: '('].
+	self ___coVarnames___ isEmpty ifFalse: [
+		aStream nextPutAll: '('].
 	self ___codeConstScopes___ isEmpty ifFalse: [
 		aStream nextPutAll: '('].
 	"One more for the body-source setter, on the same rule as the others: each
 	cascaded setter needs the constructor parenthesised before it, or the
 	parser reads one long keyword selector ending in the setter's own name."
 	self ___emitsBodySource___ ifTrue: [
+		aStream nextPutAll: '('].
+	self ___decoratedFirstLine___ ifNotNil: [:___l |
 		aStream nextPutAll: '(']
 %
 
@@ -2582,7 +2809,7 @@ emitCodeExtrasOn: aStream nested: isNested
 	code object, so ``((code setFlags: n) setFreevars: names)'' reads back as
 	the code object without a trailing ``yourself''."
 
-	| freeNames |
+	| freeNames varNames |
 	aStream
 		nextPutAll: ' @env0:___setFlags___: ';
 		nextPutAll: (self ___coFlags___: isNested) printString;
@@ -2593,8 +2820,19 @@ emitCodeExtrasOn: aStream nested: isNested
 		freeNames do: [:each |
 			aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
 		aStream nextPutAll: '))'].
+	varNames := self ___coVarnames___.
+	varNames isEmpty ifFalse: [
+		aStream nextPutAll: ' @env0:___setVarnames___: #( '.
+		varNames do: [:each |
+			aStream nextPutAll: ''''; nextPutAll: each; nextPutAll: ''' '].
+		aStream nextPutAll: '))'].
 	self emitCodeConstsOn: aStream.
-	self emitCodeBodySourceOn: aStream
+	self emitCodeBodySourceOn: aStream.
+	"A decorated def starts at its first decorator, as in CPython (#1406);
+	the constructor's ``firstlineno:'' stays the def line -- see
+	PyCode >> ___setDecoratedLine___:."
+	self ___decoratedFirstLine___ ifNotNil: [:___l |
+		aStream nextPutAll: ' @env0:___setDecoratedLine___: '; nextPutAll: ___l printString; nextPutAll: ')']
 %
 
 category: 'Grail-code generation'
@@ -3537,10 +3775,22 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	        ifFalse: [kwargs...'p1'... ifAbsent default/TypeError].
 	  ...
 	  ^ self name: p1 _: p2 ...       (module: bare selector)
-	  ^ self <sel>                    (instance: env-1 fixed selector)"
+	  ^ self <sel>                    (instance: env-1 fixed selector)
 
-	| stream callParams allParams defaults firstDefault posonlyNames |
+	An instance method's selectors are built from its MANGLED name, as the
+	method itself and every call site are: ``def __m(self, x)'' in class C
+	compiles to ``_C__m:'', and ``self.__m(x=1)'' sends ``__C__m:kw:''.  The
+	raw name here gave the companion ``___m:kw:'' forwarding to ``__m:'', so
+	a keyword call to a private method was an uncatchable DNU (#1422).
+
+	The parameter NAMES ``___pos___'' and ``___kw___'' are read at run time:
+	UnboundMethod >> ___callPacked___:onSpecial:positional:kw: tells this
+	forwarder from a packed method that holds the body by its first argument
+	name, because only the latter can be recompiled for a special receiver."
+
+	| stream callParams allParams defaults firstDefault posonlyNames stem |
 	stream := AppendStream on: Unicode7 new.
+	stem := stripSelf ifTrue: [self ___mangledName___ asString] ifFalse: [name].
 	allParams := self allParameterNames.
 	callParams := stripSelf
 		ifTrue: [allParams copyFrom: 2 to: allParams size]
@@ -3557,7 +3807,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	firstDefault := (args posonlyargs size + args args size)
 		- (defaults isNil ifTrue: [0] ifFalse: [defaults size]).
 
-	stream nextPut: $_; nextPutAll: name; nextPutAll: ': ___pos___ kw: ___kw___'; lf.
+	stream nextPut: $_; nextPutAll: stem; nextPutAll: ': ___pos___ kw: ___kw___'; lf.
 	callParams isEmpty ifFalse: [
 		stream nextPutAll: '| '.
 		callParams do: [:p | stream nextPutAll: (self transportParamName: p); space].
@@ -3647,9 +3897,9 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	stripSelf
 		ifTrue: [
 			callParams isEmpty
-				ifTrue: [stream nextPutAll: name]
+				ifTrue: [stream nextPutAll: stem]
 				ifFalse: [
-					stream nextPutAll: name; nextPutAll: ': '; nextPutAll: (self transportParamName: (callParams at: 1)).
+					stream nextPutAll: stem; nextPutAll: ': '; nextPutAll: (self transportParamName: (callParams at: 1)).
 					2 to: callParams size do: [:i |
 						stream nextPutAll: ' _: '; nextPutAll: (self transportParamName: (callParams at: i))]] ]
 		ifFalse: [
@@ -3697,6 +3947,18 @@ allParameterNames
 	args posonlyargs do: [:each | result add: each name].
 	args args do: [:each | result add: each name].
 	^ result asArray
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+___arityReceiverOffset___: nPos
+	"How many declared positional parameters an arity check's ``nPos'' leaves
+	out: 1 when the receiver (self, or cls) was stripped because it is the
+	Smalltalk receiver, 0 for a module def or a @staticmethod.  CPython counts
+	that parameter in ``takes N positional arguments but M were given'', on
+	both sides, so the messages add it back (#1472)."
+
+	^ (self allParameterNames size - nPos) max: 0
 %
 
 category: 'Grail-IR Codegen'
@@ -4054,6 +4316,10 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	instanceMethodParameterNames, so ``positional at: 1'' is the first
 	parameter AFTER self and the arity messages count as the text's do."
 	paramNames := self ___irBuildParamNames___ collect: [:p | p asString].
+	"``def ko(*, x=3)'': the receiver is an argument it does not take, and the
+	arity check below counts only ``positional'' (#1434)."
+	(self ___irStripsReceiver___ and: [self ___refusesReceiver___]) ifTrue: [
+		self ___emitIRReceiverRefusalOn___: aBuilder pos: posLeaf kw: kwLeaf].
 	self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
 		nPositional: paramNames size.
 	self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
@@ -4114,7 +4380,7 @@ ___emitIRKeywordOnlyBindingOn___: aBuilder kw: kwLeaf
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: prefix
+___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: prefix given: given
 	"printArgCountChecksOn:'s too-many-positional body when the def declares
 	keyword-only parameters (and no *vararg): CPython's too_many_positional()
 	appends ``(and N keyword-only arguments)'' when the call also bound some, so
@@ -4132,7 +4398,9 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 	        , (positional size > 1 ifTrue: [' were given'] ifFalse: [' was given']))
 
 	Emitted inside the caller's ``ifTrue:'' block; ``___kg___'' is the text's
-	inlined-block temp, declared as a method temp by the prologue."
+	inlined-block temp, declared as a method temp by the prologue.  ``given''
+	is a block answering a fresh node for the positional count the message
+	reports -- the receiver included for a method (#1472)."
 
 	| kg plural |
 	kg := aBuilder leafFor: #'___kg___'.
@@ -4159,9 +4427,9 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 	aBuilder if: (aBuilder send: #> to: (aBuilder var: kg) with: { aBuilder obj: 0 } env: 0) then: [
 		aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
 				aBuilder obj: prefix.
-				aBuilder send: #printString to: (self ___irPosSize___: posLeaf on: aBuilder) with: { } env: 0.
+				aBuilder send: #printString to: given value with: { } env: 0.
 				aBuilder obj: ' positional argument'.
-				plural value: (self ___irPosSize___: posLeaf on: aBuilder).
+				plural value: given value.
 				aBuilder obj: ' (and '.
 				aBuilder send: #printString to: (aBuilder var: kg) with: { } env: 0.
 				aBuilder obj: ' keyword-only argument'.
@@ -4170,12 +4438,24 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 			on: aBuilder)].
 	aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
 			aBuilder obj: prefix.
-			aBuilder send: #printString to: (self ___irPosSize___: posLeaf on: aBuilder) with: { } env: 0.
-			aBuilder ifValue: (aBuilder send: #> to: (self ___irPosSize___: posLeaf on: aBuilder)
+			aBuilder send: #printString to: given value with: { } env: 0.
+			aBuilder ifValue: (aBuilder send: #> to: given value
 					with: { aBuilder obj: 1 } env: 0)
 				then: [aBuilder add: (aBuilder obj: ' were given')]
 				else: [aBuilder add: (aBuilder obj: ' was given')] } on: aBuilder)
 		on: aBuilder)
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irGivenCount___: posLeaf offset: off on: aBuilder
+	"A fresh node for the positional count an arity message reports: the
+	positional Array's size, plus the stripped receiver for a method (#1472).
+	Plain ___irPosSize___:on: when there is no receiver to add back."
+
+	off = 0 ifTrue: [^ self ___irPosSize___: posLeaf on: aBuilder].
+	^ aBuilder send: #+ to: (self ___irPosSize___: posLeaf on: aBuilder)
+		with: { aBuilder obj: off } env: 0
 %
 
 category: 'Grail-IR Codegen'
@@ -4200,7 +4480,11 @@ ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames receiverFir
 	Correct on the class side too, which shares this shape: a ``@classmethod
 	def m(*args)'' gets the class as args[0] and there the Smalltalk receiver IS
 	the class.  A @staticmethod never reaches here -- it has no receiver to
-	contribute, and ___irStripsReceiver___ is false for it."
+	contribute, and ___irStripsReceiver___ is false for it.
+
+	``Cls.m(1, 2)'' has no receiver at all: UnboundMethod runs it against its
+	___noReceiver___ object with every argument in positional, and that object
+	is left out of args, as the text path does."
 
 	| tail |
 	args vararg isNil ifTrue: [^ self].
@@ -4208,8 +4492,14 @@ ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames receiverFir
 		ifTrue: [
 			aBuilder
 				send: #','
-				to: (aBuilder send: #with: to: (aBuilder globalNamed: #Array)
-					with: { aBuilder selfNode } env: 0)
+				to: (aBuilder
+					ifValue: (aBuilder send: #== to: aBuilder selfNode
+						with: { aBuilder send: #'___noReceiver___'
+							to: (aBuilder globalNamed: #UnboundMethod) with: { } env: 0 }
+						env: 0)
+					then: [aBuilder add: (aBuilder arrayOf: #())]
+					else: [aBuilder add: (aBuilder send: #with: to: (aBuilder globalNamed: #Array)
+						with: { aBuilder selfNode } env: 0)])
 				with: { aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
 					with: { aBuilder obj: 1.
 						self ___irPosSize___: posLeaf on: aBuilder } env: 0 }
@@ -4303,15 +4593,20 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	| qname |
 	qname := self ___qualifiedNameFor___: name.
 	args vararg isNil ifTrue: [
-		| defcount sig plural prefix cond |
+		| defcount sig plural prefix cond off total given |
+		"A method counts its receiver on both sides, as the text's
+		printArgCountChecksOn: explains (#1472)."
+		off := self ___arityReceiverOffset___: nPos.
+		total := nPos + off.
+		given := [self ___irGivenCount___: posLeaf offset: off on: aBuilder].
 		defcount := (args defaults ifNil: [#()]) size.
 		defcount > 0
 			ifTrue: [
-				sig := 'from ' , ((nPos - defcount) max: 0) printString , ' to ' , nPos printString.
+				sig := 'from ' , ((total - defcount) max: 0) printString , ' to ' , total printString.
 				plural := 's']
 			ifFalse: [
-				sig := nPos printString.
-				plural := nPos = 1 ifTrue: [''] ifFalse: ['s']].
+				sig := total printString.
+				plural := total = 1 ifTrue: [''] ifFalse: ['s']].
 		prefix := qname , '() takes ' , sig , ' positional argument' , plural , ' but '.
 		cond := aBuilder send: #> to: (self ___irPosSize___: posLeaf on: aBuilder)
 			with: { aBuilder obj: nPos } env: 0.
@@ -4319,18 +4614,18 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 			(args kwonlyargs ifNil: [#()]) isEmpty
 				ifFalse: [
 					self ___emitIRTooManyWithKeywordOnlyOn___: aBuilder
-						pos: posLeaf kw: kwLeaf prefix: prefix]
+						pos: posLeaf kw: kwLeaf prefix: prefix given: given]
 				ifTrue: [
 					| suffix |
 					suffix := aBuilder
-						ifValue: (aBuilder send: #> to: (self ___irPosSize___: posLeaf on: aBuilder)
+						ifValue: (aBuilder send: #> to: given value
 							with: { aBuilder obj: 1 } env: 0)
 						then: [aBuilder add: (aBuilder obj: ' were given')]
 						else: [aBuilder add: (aBuilder obj: ' was given')].
 					aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
 							aBuilder obj: prefix.
 							aBuilder send: #printString
-								to: (self ___irPosSize___: posLeaf on: aBuilder) with: { } env: 0.
+								to: given value with: { } env: 0.
 							suffix } on: aBuilder)
 						on: aBuilder)]]].
 	args kwarg isNil ifTrue: [
@@ -4764,7 +5059,11 @@ ___irMethodBodyCoreOn___: aClass install: installBool
 			transports do: [:assoc |
 				builder add: (builder
 					assign: (builder leafFor: assoc key asSymbol)
-					from: (builder localVar: assoc value asSymbol))]]
+					from: (builder localVar: assoc value asSymbol))].
+			"``def h()'': the receiver is an argument it does not take (#1434)."
+			(self ___irStripsReceiver___ and: [self ___refusesReceiver___]) ifTrue: [
+				builder atNode: self.
+				self ___emitIRReceiverRefusalOn___: builder pos: nil kw: nil]]
 		ifFalse: [
 			"The varargs ``_name:kw:'' form (defaults, *args, **kwargs, keyword-only
 			parameters): the method's two arguments are the positional Array and
@@ -4813,7 +5112,7 @@ ___emitIRWrappedBodyOn___: aBuilder
 	    ^ <PythonGenerator | PythonCoroutine | PythonAsyncGenerator>
 	        @env1:withBlock: [:___gen___ |
 	            [ stmt. stmt. ... None ]
-	                @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]]
+	                @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]]
 	        name: 'f' qualname: 'C.f'
 	        code: [((PyCode @env0:name:qualname:filename:firstlineno:argcount:
 	                    posonlyargcount:kwonlyargcount:) @env0:___setFlags___: n)]
@@ -4849,7 +5148,7 @@ ___emitIRWrappedBodyOn___: aBuilder
 				aBuilder add: (aBuilder globalNamed: #None)].
 			handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
 				aBuilder add: (aBuilder
-					send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
+					send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 0)].
 			aBuilder atNode: self.
 			aBuilder add: (aBuilder
 				send: #on:do: to: bodyBlk
@@ -5704,29 +6003,40 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	    ``from <required> to <nPos>'' (plural always);
 	  * with none it is the single ``<nPos>'' (singular only when nPos = 1).
 	``given'' and the was/were suffix are runtime (given = posName size); the
-	suffix is ``was'' only for a lone extra arg (given = 1, i.e. nPos = 0)."
-	args vararg isNil ifTrue: [ | defcount sig plural prefix |
+	suffix is ``was'' only for a lone extra arg (given = 1, i.e. nPos = 0).
+
+	A METHOD COUNTS ITS RECEIVER, on both sides, as CPython's does: ``def
+	m(self, a)'' called ``C().m(1, 2)'' takes 2 and was given 3.  ``nPos'' and
+	posName arrive with self already stripped, so both numbers were one short
+	(#1472); ___arityReceiverOffset___: puts it back, and is 0 for a module def
+	or a @staticmethod, whose messages are unchanged."
+	args vararg isNil ifTrue: [ | defcount sig plural prefix off total given |
+		off := self ___arityReceiverOffset___: nPos.
+		total := nPos + off.
+		given := off = 0
+			ifTrue: ['(' , posName , ' @env0:size)']
+			ifFalse: ['((' , posName , ' @env0:size) @env0:+ ' , off printString , ')'].
 		defcount := (args defaults ifNil: [#()]) size.
 		defcount > 0
 			ifTrue: [
-				sig := 'from ' , ((nPos - defcount) max: 0) printString , ' to ' , nPos printString.
+				sig := 'from ' , ((total - defcount) max: 0) printString , ' to ' , total printString.
 				plural := 's']
 			ifFalse: [
-				sig := nPos printString.
-				plural := nPos = 1 ifTrue: [''] ifFalse: ['s']].
+				sig := total printString.
+				plural := total = 1 ifTrue: [''] ifFalse: ['s']].
 		prefix := (self ___qualifiedNameFor___: name)
 			, '() takes ' , sig , ' positional argument' , plural , ' but '.
 		args kwonlyargs isEmpty
 			ifTrue: [
-				"No keyword-only section: the historical emission, byte-identical."
+				"No keyword-only section."
 				aStream
 					nextPutAll: '(('; nextPutAll: posName;
 					nextPutAll: ' @env0:size) @env0:> '; print: nPos;
 					nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
 					nextPutAll: prefix;
-					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ]
+					nextPutAll: ''' @env0:, '; nextPutAll: given;
+					nextPutAll: ' @env0:printString @env0:, ('; nextPutAll: given;
+					nextPutAll: ' @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ]
 			ifFalse: [
 				"CPython's too_many_positional() grows a parenthetical when the
 				call ALSO bound keyword-only parameters: ``takes 3 positional
@@ -5749,15 +6059,15 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 					nextPutAll: ' @env0:keysDo: [:___k___ | (___k___ @env0:asString) @env0:= ___n___ ifTrue: [___kg___ := ___kg___ @env0:+ 1]]]].'; lf;
 					nextPutAll: '  ___kg___ @env0:> 0 ifTrue: [TypeError ___signal___: (''';
 					nextPutAll: prefix;
-					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:printString @env0:, '' positional argument'' @env0:, ((';
-					nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '' (and '' @env0:, ___kg___ @env0:printString @env0:, '' keyword-only argument'' @env0:, (___kg___ @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '') were given'')].'; lf;
+					nextPutAll: ''' @env0:, '; nextPutAll: given;
+					nextPutAll: ' @env0:printString @env0:, '' positional argument'' @env0:, (';
+					nextPutAll: given;
+					nextPutAll: ' @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '' (and '' @env0:, ___kg___ @env0:printString @env0:, '' keyword-only argument'' @env0:, (___kg___ @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '') were given'')].'; lf;
 					nextPutAll: '  TypeError ___signal___: (''';
 					nextPutAll: prefix;
-					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
-					nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ] ].
+					nextPutAll: ''' @env0:, '; nextPutAll: given;
+					nextPutAll: ' @env0:printString @env0:, ('; nextPutAll: given;
+					nextPutAll: ' @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ] ].
 	"2. Unexpected keyword -- skipped when **kwargs collects the extras.
 
 	A POSITIONAL-ONLY name is not bindable by keyword, which is the whole
@@ -5926,7 +6236,7 @@ generateModuleMethodSourceOn: aStream
 			[
 			<body statements>
 			] value.
-			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue].
 
 	For varargs (has *args, **kwargs, or defaults):
 		_name: positional kw: kwargs
@@ -5937,7 +6247,7 @@ generateModuleMethodSourceOn: aStream
 			[
 			<body statements>
 			] value.
-			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]."
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]."
 
 	| paramNames bodyVars allLocals assignedNames needsTemp instVarNames canOptimise
 	  savedReturnMode useDirectReturn useMethodTemps |
@@ -6369,7 +6679,7 @@ generateModuleMethodSourceOn: aStream
 		self printBodyOn: aStream.
 	] ensure: [CallAst returnEmitMode: savedReturnMode].
 	"Close the outer block only when we opened one."
-	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
+	useMethodTemps == true ifFalse: [aStream nextPutAll: '] @env0:value'].
 %
 
 category: 'Grail-Module Method Compilation'
@@ -6786,7 +7096,7 @@ printBodyOn: aStream
 			ifFalse: [aStream nextPutAll: 'None.'; lf].
 	].
 	(useDirect or: [useMethod]) ifFalse: [
-		aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
+		aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]'.
 	].
 	"nested: false matches the method form's def-time stamp: this def compiles
 	to a real Smalltalk method (class body or module top level), which the
@@ -7056,7 +7366,7 @@ generateMethodSourceOn: aStream
 			a := ___1. b := ___2.
 			[
 			[<body>] value.
-			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue].
+			] @env0:on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue].
 			] value
 
 	For varargs:
@@ -7213,6 +7523,9 @@ generateMethodSourceOn: aStream
 			allLocals do: [:each | aStream nextPutAll: each; space].
 			aStream nextPut: $|; lf.
 		].
+		"``def h()'': the receiver is an argument it does not take (#1434)."
+		self ___refusesReceiver___ ifTrue: [
+			self ___printReceiverRefusalOn___: aStream positional: nil kw: nil].
 		1 to: paramNames size do: [:i |
 			aStream
 				nextPutAll: (NameAst ___transportIdentifierFor___: (paramNames at: i));
@@ -7303,6 +7616,11 @@ generateMethodSourceOn: aStream
 			aStream nextPut: $|; lf.
 		].
 
+		"``def ko(*, x=3)'': the receiver is an argument it does not take, and
+		the arity check below counts only ``positional'' (#1434)."
+		self ___refusesReceiver___ ifTrue: [
+			self ___printReceiverRefusalOn___: aStream
+				positional: posMethodParam kw: kwMethodParam].
 		"Positional / kwargs / default unpacking for the named params."
 		self printPositionalUnpackingOn: aStream
 			paramNames: paramNames
@@ -7330,11 +7648,16 @@ generateMethodSourceOn: aStream
 
 			test_genericclass's test_class_getitem is the corpus case: its
 			hook is written ``def __class_getitem__(*args, **kwargs)'' and
-			has to see the class as args[0]."
+			has to see the class as args[0].
+
+			EXCEPT WHEN THERE IS NO RECEIVER.  ``Cls.m(1, 2)'' calls the plain
+			function, so args is (1, 2); UnboundMethod runs such a call against
+			its ___noReceiver___ object and hands over every argument, and that
+			object is left out here."
 			self allParameterNames isEmpty
 				ifTrue: [
 					aStream
-						nextPutAll: '(Array @env0:with: self) @env0:, (';
+						nextPutAll: '((self == (UnboundMethod @env0:___noReceiver___)) ifTrue: [#()] ifFalse: [Array @env0:with: self]) @env0:, (';
 						nextPutAll: posMethodParam;
 						nextPutAll: ' @env0:copyFrom: 1 to: ';
 						nextPutAll: posMethodParam;
@@ -7417,7 +7740,7 @@ generateMethodSourceOn: aStream
 		CallAst returnEmitMode: savedReturnMode.
 		CallAst selfParameterRebound: savedSelfRebound].
 	"Close the outer block only when one was opened."
-	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
+	useMethodTemps == true ifFalse: [aStream nextPutAll: '] @env0:value'].
 %
 
 category: 'Grail-printing'
@@ -7845,7 +8168,7 @@ ___irNestedDefReasonUnguarded___: localNames
 	    <name> := ([| ___default_p___ | ___default_p___ := <expr>.     (defaults only)
 	        [:___positional___ :___kwargs___ | | <params> <locals> |
 	            <arg-count / missing checks; p := positional[i] / kwargs['p'] / default>
-	            [ [ stmts ] value. None ] on: PythonReturn do: [:___ex___ | ___ex___ returnValue]
+	            [ [ stmts ] value. None ] on: PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]
 	        ]] value) shallowCopy
 	            ___pyNamed___: 'name' [doc: '...']; ___pyModuleNamed___: 'mod';
 	            ___pyQualname___: 'outer.<locals>.name'; ___pyCode___: (...);
@@ -8612,7 +8935,7 @@ category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___emitIRNestedBodyOn___: aBuilder
 	"The closure block's body statement: ``[ [ stmts ] value. None ] on:
-	PythonReturn do: [:___ex___ | ___ex___ returnValue]'' -- the text's
+	PythonReturn do: [:___ex___ | ___ex___ @env0:returnValue]'' -- the text's
 	#exception return mode, ReturnAst signalling inside (inNestedFunction) --
 	or, for a generator / coroutine def, that same shape inside the lazy
 	wrapper, ``<PythonGenerator> withBlock: [:___gen___ | ...] name:qualname:
@@ -8630,7 +8953,7 @@ ___emitIRNestedBodyOn___: aBuilder
 			aBuilder add: (aBuilder send: #value to: inner with: { } env: 0).
 			aBuilder add: (aBuilder globalNamed: #None)].
 		handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
-			aBuilder add: (aBuilder send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
+			aBuilder add: (aBuilder send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 0)].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #on:do: to: bodyBlk
@@ -8709,7 +9032,7 @@ ___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
 	___codeConstScopes___ and ___emitsBodySource___ decide here exactly as
 	they decide there."
 
-	| code freeNames scopes consts text |
+	| code freeNames varNames scopes consts text |
 	code := aBuilder send: #'___setFlags___:' to: codeNode
 		with: { aBuilder obj: (self ___coFlags___: isNested) } env: 0.
 	freeNames := CallAst ___freeVariableNamesFor___: self.
@@ -8717,6 +9040,10 @@ ___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
 		code := aBuilder send: #'___setFreevars___:' to: code
 			with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray }
 			env: 0].
+	varNames := self ___coVarnames___.
+	varNames isEmpty ifFalse: [
+		code := aBuilder send: #'___setVarnames___:' to: code
+			with: { aBuilder obj: varNames } env: 0].
 	scopes := self ___codeConstScopes___.
 	scopes isEmpty ifFalse: [
 		"PyCode objects are built at RUN time, as the text builds them -- a code
@@ -8746,6 +9073,9 @@ ___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
 		text := self ___grailBodySourceText___.
 		code := aBuilder send: #'___setBodySource___:' to: code
 			with: { aBuilder obj: text } env: 0].
+	self ___decoratedFirstLine___ ifNotNil: [:___l |
+		code := aBuilder send: #'___setDecoratedLine___:' to: code
+			with: { aBuilder obj: ___l } env: 0].
 	^ code
 %
 
@@ -8869,10 +9199,12 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 	applicable := (decorator_list ifNil: [#()]) reject: [:deco |
 		self ___decoratorRealisedByReclass___: deco].
 	applicable isEmpty ifTrue: [^ self].
+	"Each decorator is made and called at its OWN node (#1406), as CPython
+	reports it; the def's node was used for all of them."
 	applicable size = 1 ifTrue: [
 		| dv |
+		aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: 1) ifNil: [self]).
 		dv := self ___emitIRDecoratorValue___: applicable first on: aBuilder.
-		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
 			send: #'value:value:' to: dv
 			with: { aBuilder arrayOf: { aBuilder var: leaf }. aBuilder nilLit } env: 1)).
@@ -8881,8 +9213,10 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 		| blk vals |
 		blk := aBuilder blockWithArg: #'___grailDecoFns___' do: [:fl |
 			aBuilder add: (self ___emitIRDecoratorApply___: 1 count: applicable size
-				fns: fl leaf: leaf on: aBuilder)].
-		vals := applicable collect: [:d | self ___emitIRDecoratorValue___: d on: aBuilder].
+				fns: fl leaf: leaf on: aBuilder applicable: applicable)].
+		vals := (1 to: applicable size) collect: [:i |
+			aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: i) ifNil: [self]).
+			self ___emitIRDecoratorValue___: (applicable at: i) on: aBuilder].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
 			send: #'value:' to: blk with: { aBuilder arrayOf: vals asArray } env: 0))
@@ -8892,16 +9226,21 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder
-	"emitOrderedLocalDecoratorApplicationOn:index:count:: ``((fns at: i)
-	value: { <apply i+1> } value: nil)'', the undecorated function at the base."
+___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder applicable: applicable
+	"emitOrderedLocalDecoratorApplicationOn:index:count:lines:: ``((fns at: i)
+	value: { <apply i+1> } value: nil)'', the undecorated function at the base.
+	The inner application is built FIRST so that this call can be positioned
+	at its own decorator afterwards (#1406)."
 
+	| inner |
 	i > n ifTrue: [^ aBuilder var: leaf].
+	inner := self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf
+		on: aBuilder applicable: applicable.
+	aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: i) ifNil: [self]).
 	^ aBuilder
 		send: #'value:value:'
 		to: (aBuilder send: #at: to: (aBuilder var: fnsLeaf) with: { aBuilder obj: i } env: 0)
-		with: { aBuilder arrayOf: { self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf on: aBuilder }.
-			aBuilder nilLit }
+		with: { aBuilder arrayOf: { inner }. aBuilder nilLit }
 		env: 1
 %
 

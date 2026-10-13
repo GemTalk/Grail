@@ -1178,10 +1178,7 @@ strptime: aString _: format
 	does.  ssl.cert_time_to_seconds is a caller: ``from time import
 	strptime''."
 
-	| path strptimeMod |
-	path := importlib ___moduleNameToPath___: '_strptime'.
-	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
-	^ strptimeMod _strptime_time: aString _: format
+	^ (importlib ___runtimeModule___: '_strptime') _strptime_time: aString _: format
 %
 
 category: 'Grail-Formatting'

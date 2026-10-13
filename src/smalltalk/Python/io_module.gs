@@ -150,15 +150,34 @@ ___construct___: initialValue newline: newlineArg
 	^ inst
 %
 
+! read/readline/truncate/seek each come in two arities, ``read()'' and
+! ``read(n)'', and the short one supplies the default.  It must NOT do that by
+! self-sending the long one: a Python subclass that defines read() overrides
+! BOTH selectors, so the forward lands in the override -- and an override that
+! calls ``StringIO.read(self)'' (doctest's _SpoofOut does, for truncate) then
+! recurses until RecursionError.  So both arities call one private helper,
+! ___ioRead___: and friends, which no Python class can override.  The same holds
+! for BytesIO and FileIO below.  A SMALLTALK subclass specialises the helper,
+! not the Python selector: TextIOWrapper overrides ___ioRead___: and
+! ___ioReadline___: to decode, and FileIO's read/readline reach them by
+! ordinary dispatch.  Overriding read: there instead would be skipped by the
+! short form and hand back bytes from a text file.
+
 category: 'Grail-Reading'
 method: StringIO
 read
-	^ self read: -1
+	^ self ___ioRead___: -1
 %
 
 category: 'Grail-Reading'
 method: StringIO
 read: n
+	^ self ___ioRead___: n
+%
+
+category: 'Grail-Private'
+method: StringIO
+___ioRead___: n
 	"read(size=-1) - read up to size chars from the current position;
 	-1 / None means read until EOF."
 
@@ -180,12 +199,18 @@ read: n
 category: 'Grail-Reading'
 method: StringIO
 readline
-	^ self readline: -1
+	^ self ___ioReadline___: -1
 %
 
 category: 'Grail-Reading'
 method: StringIO
 readline: limit
+	^ self ___ioReadline___: limit
+%
+
+category: 'Grail-Private'
+method: StringIO
+___ioReadline___: limit
 	"readline(size=-1) - read up to and including the next \\n, or
 	up to `size` chars (whichever first), or to EOF."
 
@@ -260,12 +285,18 @@ writelines: lines
 category: 'Grail-Position'
 method: StringIO
 seek: pos
-	^ self seek: pos _: 0
+	^ self ___ioSeek___: pos whence: 0
 %
 
 category: 'Grail-Position'
 method: StringIO
 seek: pos _: whence
+	^ self ___ioSeek___: pos whence: whence
+%
+
+category: 'Grail-Private'
+method: StringIO
+___ioSeek___: pos whence: whence
 	"seek(pos, whence=0): 0=set, 1=cur, 2=end."
 
 	self _checkOpen.
@@ -289,12 +320,18 @@ tell
 category: 'Grail-Position'
 method: StringIO
 truncate
-	^ self truncate: (self @env0:dynamicInstVarAt: #_pos)
+	^ self ___ioTruncate___: (self @env0:dynamicInstVarAt: #_pos)
 %
 
 category: 'Grail-Position'
 method: StringIO
 truncate: size
+	^ self ___ioTruncate___: size
+%
+
+category: 'Grail-Private'
+method: StringIO
+___ioTruncate___: size
 	self _checkOpen.
 	size @env0:< (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
 		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: 1 to: size)].
@@ -494,7 +531,7 @@ __new__: initial
 category: 'Grail-Reading'
 method: BytesIO
 read
-	^ self read: -1
+	^ self ___ioRead___: -1
 %
 
 category: 'Grail-Writing'
@@ -519,6 +556,12 @@ flush
 category: 'Grail-Reading'
 method: BytesIO
 read: n
+	^ self ___ioRead___: n
+%
+
+category: 'Grail-Private'
+method: BytesIO
+___ioRead___: n
 	"read(size=-1) - read up to size bytes from the current position."
 
 	| size remaining take result |
@@ -554,12 +597,18 @@ readinto: b
 category: 'Grail-Reading'
 method: BytesIO
 readline
-	^ self readline: -1
+	^ self ___ioReadline___: -1
 %
 
 category: 'Grail-Reading'
 method: BytesIO
 readline: limit
+	^ self ___ioReadline___: limit
+%
+
+category: 'Grail-Private'
+method: BytesIO
+___ioReadline___: limit
 	"readline(size=-1) - read up to next \\n byte (0x0A)."
 
 	| n start max |
@@ -630,12 +679,18 @@ writelines: lines
 category: 'Grail-Position'
 method: BytesIO
 seek: pos
-	^ self seek: pos _: 0
+	^ self ___ioSeek___: pos whence: 0
 %
 
 category: 'Grail-Position'
 method: BytesIO
 seek: pos _: whence
+	^ self ___ioSeek___: pos whence: whence
+%
+
+category: 'Grail-Private'
+method: BytesIO
+___ioSeek___: pos whence: whence
 	self _checkOpen.
 	whence @env0:= 0 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: (pos)]
 	ifFalse: [whence @env0:= 1 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ pos)]
@@ -657,12 +712,18 @@ tell
 category: 'Grail-Position'
 method: BytesIO
 truncate
-	^ self truncate: (self @env0:dynamicInstVarAt: #_pos)
+	^ self ___ioTruncate___: (self @env0:dynamicInstVarAt: #_pos)
 %
 
 category: 'Grail-Position'
 method: BytesIO
 truncate: size
+	^ self ___ioTruncate___: size
+%
+
+category: 'Grail-Private'
+method: BytesIO
+___ioTruncate___: size
 	self _checkOpen.
 	size @env0:< (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
 		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: 1 to: size)].
@@ -993,10 +1054,11 @@ ___constructText___: posArgs kw: kwArgs
 	stub whose lookup raised LookupError for every name.  With a real
 	registry behind it, it works.
 
-	A SUBCLASS always takes the GsFile path.  Delegating would answer an
-	instance of _pyio's class, not of the subclass -- the silent kind of
-	wrong -- and a subclass of Grail's TextIOWrapper is by construction
-	asking for the GsFile one."
+	A SUBCLASS takes the GsFile path here, because the only subclasses that
+	reach this method are Grail's own Smalltalk ones.  A Python ``class
+	C(io.TextIOWrapper)'' is rooted at _pyio's TextIOWrapper instead (Class >>
+	___subclass___:instVarNames:classInstVarNames:, #1459), so it wraps a
+	buffer as CPython's does and never arrives here."
 
 	| first |
 	posArgs @env0:size @env0:< 1 ifTrue: [
@@ -1007,6 +1069,40 @@ ___constructText___: posArgs kw: kwArgs
 		ifTrue: [^ super _new: posArgs kw: kwArgs].
 	^ ((io instance) ___pyioClass___: #'TextIOWrapper')
 		@env1:value: posArgs value: kwArgs
+%
+
+category: 'Grail-Class Methods'
+classmethod: TextIOWrapper
+__instancecheck__: anObject
+	"isinstance(x, io.TextIOWrapper) for a TextIOWrapper over a BUFFER.
+
+	Those are _pyio's class, not this one: a plain ``io.TextIOWrapper(buffer)''
+	answers _pyio's (___constructText___:kw:), and a Python ``class
+	C(io.TextIOWrapper)'' is rooted there (Class >> ___subclass___:...), so
+	isKindOf: says no where CPython says yes -- for pytest's CaptureIO among
+	others (#1459).  Consulted only after isKindOf: has failed, and only for
+	TextIOWrapper itself, not for Grail's Smalltalk subclasses of it."
+
+	| pyio |
+	self == TextIOWrapper ifFalse: [^ false].
+	pyio := [(io instance) ___pyioClass___: #'TextIOWrapper']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ (pyio @env0:isKindOf: Behavior) and: [anObject @env0:isKindOf: pyio]
+%
+
+category: 'Grail-Class Methods'
+classmethod: TextIOWrapper
+__subclasscheck__: aClass
+	"issubclass(C, io.TextIOWrapper), the class-level twin of
+	__instancecheck__: above."
+
+	| pyio |
+	self == TextIOWrapper ifFalse: [^ false].
+	(aClass @env0:isKindOf: Behavior) ifFalse: [^ false].
+	pyio := [(io instance) ___pyioClass___: #'TextIOWrapper']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ (pyio @env0:isKindOf: Behavior)
+		and: [aClass == pyio or: [aClass @env0:inheritsFrom: pyio]]
 %
 
 category: 'Grail-Opening'
@@ -1587,12 +1683,18 @@ _readToEnd
 category: 'Grail-Reading'
 method: FileIO
 read
-	^ self read: -1
+	^ self ___ioRead___: -1
 %
 
 category: 'Grail-Reading'
 method: FileIO
 read: n
+	^ self ___ioRead___: n
+%
+
+category: 'Grail-Private'
+method: FileIO
+___ioRead___: n
 	"read(size=-1) - read up to size bytes; -1 / None means to EOF."
 
 	self _checkReadable.
@@ -1604,12 +1706,18 @@ read: n
 category: 'Grail-Reading'
 method: FileIO
 readline
-	^ self readline: -1
+	^ self ___ioReadline___: -1
 %
 
 category: 'Grail-Reading'
 method: FileIO
 readline: limit
+	^ self ___ioReadline___: limit
+%
+
+category: 'Grail-Private'
+method: FileIO
+___ioReadline___: limit
 	self _checkReadable.
 	^ (self _rawReadline: limit) @env0:asByteArray
 %
@@ -1669,12 +1777,18 @@ writelines: lines
 category: 'Grail-Position'
 method: FileIO
 seek: pos
-	^ self seek: pos _: 0
+	^ self ___ioSeek___: pos whence: 0
 %
 
 category: 'Grail-Position'
 method: FileIO
 seek: pos _: whence
+	^ self ___ioSeek___: pos whence: whence
+%
+
+category: 'Grail-Private'
+method: FileIO
+___ioSeek___: pos whence: whence
 	"seek(pos, whence=0): 0=set, 1=cur, 2=end.  Byte offsets."
 
 	| f |
@@ -1705,12 +1819,18 @@ tell
 category: 'Grail-Position'
 method: FileIO
 truncate
-	^ self truncate: nil
+	^ self ___ioTruncate___: nil
 %
 
 category: 'Grail-Position'
 method: FileIO
 truncate: size
+	^ self ___ioTruncate___: size
+%
+
+category: 'Grail-Private'
+method: FileIO
+___ioTruncate___: size
 	OSError ___signal___: 'truncate() is not supported in Grail'
 %
 
@@ -1898,7 +2018,7 @@ _completeUtf8Tail: raw
 
 category: 'Grail-Reading'
 method: TextIOWrapper
-read: n
+___ioRead___: n
 	"read(size=-1) - read up to size characters (approximated as bytes,
 	then completed to a whole trailing UTF-8 sequence); -1 / None means
 	read to EOF."
@@ -1914,7 +2034,7 @@ read: n
 
 category: 'Grail-Reading'
 method: TextIOWrapper
-readline: limit
+___ioReadline___: limit
 	self _checkReadable.
 	^ self _decode: (self _rawReadline: limit)
 %
@@ -2165,6 +2285,15 @@ category: 'Grail-Type Accessors'
 method: io
 TextIOBase
 	^ self ___pyioClass___: #'TextIOBase'
+%
+
+category: 'Grail-Type Accessors'
+method: io
+IncrementalNewlineDecoder
+	"The universal-newlines decoder TextIOWrapper reads through, public in
+	CPython's io and imported from there by doctest."
+
+	^ self ___pyioClass___: #'IncrementalNewlineDecoder'
 %
 
 category: 'Grail-Type Accessors'

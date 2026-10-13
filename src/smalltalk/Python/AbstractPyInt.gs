@@ -610,6 +610,36 @@ __dict__
 	^ PyInstanceDict @env0:on: self
 %
 
+category: 'Grail-Python Protocol'
+method: AbstractPyInt
+numerator
+	"int's ``numerator'' property: the plain int value, as CPython answers it
+	for a subclass's instance.  Listed in ___pythonValueAttrs___ below, so
+	``x.numerator'' reads the value; without them it answered a bound method,
+	and _pydecimal's comparison of a Decimal with an IntEnum member multiplied
+	by it (``Decimal(1) < Color.RED'' raised TypeError)."
+
+	^ self @env0:value
+%
+
+category: 'Grail-Python Protocol'
+method: AbstractPyInt
+denominator
+	^ 1
+%
+
+category: 'Grail-Python Protocol'
+method: AbstractPyInt
+real
+	^ self @env0:value
+%
+
+category: 'Grail-Python Protocol'
+method: AbstractPyInt
+imag
+	^ 0
+%
+
 set compile_env: 0
 
 ! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
@@ -618,9 +648,29 @@ set compile_env: 0
 category: 'Grail-Introspection'
 classmethod: AbstractPyInt
 ___pythonValueAttrs___
-	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."
+	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__ --
+	and so are int's four number properties, as on int itself
+	(int class >> ___pythonValueAttrs___).  A Python subclass that defines one
+	of these names itself is left to the ordinary attribute path; see object >>
+	___valueAttrOverridden___:."
 
 	^ IdentitySet new
 		add: #'__dict__';
+		add: #numerator;
+		add: #denominator;
+		add: #real;
+		add: #imag;
 		yourself
+%
+
+category: 'Grail-Comparison'
+classmethod: AbstractPyInt
+___builtinValueClass___
+	"The kernel class the builtin's own VALUES belong to (an int is a SmallInteger or LargeInteger), which
+	this class -- the root of every Python subclass of the builtin -- does not
+	inherit from.  Object >> ___reflectedFirst___ asks it, so that ``0 ==
+	C3(11)'' for ``class C3(int)'' sees C3 as a proper subclass of int and tries
+	C3's reflected method first, as CPython does (#1495)."
+
+	^ Integer
 %

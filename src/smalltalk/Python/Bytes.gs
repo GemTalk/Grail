@@ -55,6 +55,15 @@ __new__: source
 	test_bytes_blocking), which is a TypeError even for a bytes subclass."
 	hook := [source @env1:___pyAttrLoad___: #'__bytes__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"...on the TYPE (#1481): an instance attribute named __bytes__ is not the
+	hook, and the ``source __bytes__'' send below would not find it either --
+	so a stored one must not route there."
+	(hook @env0:notNil and: [(source @env0:dynamicInstVarAt: #'__bytes__') @env0:== hook])
+		ifTrue: [
+			hook := ((sourceClass @env0:whichClassIncludesSelector: #'__bytes__' environmentId: 1) @env0:notNil
+					or: [(source @env1:___typeDunder___: #'__bytes__') @env0:notNil])
+				ifTrue: [true]
+				ifFalse: [nil]].
 	hook @env0:== None ifTrue: [
 		TypeError ___signal___: ('cannot convert '''
 			@env0:, (bytes ___pyTypeNameOf___: source)
@@ -548,16 +557,19 @@ __mod__: args
 			BufferError ___signal___:
 				'Existing exports of data: object cannot be re-sized']].
 	out := AppendStream @env0:on: ByteArray @env0:new.
-	isMap := args isKindOf: KeyValueDictionary.
+	"CPython's mapping test, shared with str's -- see CharacterCollection
+	class >> ___percentOperandIsMapping___:forBytes:.  Bytes and bytearray are
+	not mappings HERE, though str's % treats them as one."
+	isMap := CharacterCollection ___percentOperandIsMapping___: args forBytes: true.
 	"Only a TUPLE unpacks into positional arguments; a list is a single value
 	(tuple is an Array subclass, so one test covers both).  See the fuller note
 	in CharacterCollection>>__mod__: -- unpacking OrderedCollection too meant a
-	list operand formatted only its first element."
+	list operand formatted only its first element.  A MAPPING is a single
+	positional value too, as in str's: ``b'%r' % {}'' is b'{}'."
 	(isMap @env0:not @env0:and: [args isKindOf: Array]) ifTrue: [argSeq := args]
-		ifFalse: [isMap ifTrue: [argSeq := nil] ifFalse: [argSeq := Array @env0:with: args]].
+		ifFalse: [argSeq := Array @env0:with: args].
 	argIdx := 1.
 	nextArg := [ | v |
-		argSeq @env0:isNil ifTrue: [TypeError ___signal___: 'format requires a mapping'].
 		argIdx @env0:> argSeq @env0:size ifTrue: [
 			TypeError ___signal___: 'not enough arguments for format string'].
 		v := argSeq @env0:at: argIdx. argIdx := argIdx @env0:+ 1. v ].
@@ -644,7 +656,11 @@ __mod__: args
 							showRadix: false) @env0:asLowercase
 						@env0:, ') at index ' @env0:, (i @env0:- 2) @env0:printString)].
 				key @env0:notNil
-					ifTrue: [value := args @env1:__getitem__: key]
+					ifTrue: [
+						"A keyed specifier needs a mapping, as in str's __mod__:."
+						isMap ifFalse: [
+							TypeError ___signal___: 'format requires a mapping'].
+						value := args @env1:__getitem__: key]
 					ifFalse: [value := nextArg @env0:value].
 				self ___modEmit___: value conv: conv flags: flags width: width
 					precision: precision into: out.
@@ -654,8 +670,8 @@ __mod__: args
 	"Every positional argument must be consumed: ``b'no format' % 7'' is a
 	TypeError, where Grail silently returned the format string.  Note the
 	wording -- ``bytes formatting'', not str's ``string formatting'' -- and that
-	a MAPPING right-hand side (argSeq nil) may leave keys unreferenced."
-	(argSeq @env0:notNil @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
+	a MAPPING right-hand side may leave keys, and itself, unreferenced."
+	(isMap @env0:not @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
 		TypeError ___signal___:
 			'not all arguments converted during bytes formatting'].
 	content := out @env0:contents.

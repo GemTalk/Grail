@@ -381,8 +381,7 @@ ___arithOperand___: other
 
 	(other _isScaledDecimal) ifTrue: [^ other].
 	(other isKindOf: Integer) ifTrue: [^ other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ other __index__].
+	(self ___isPyIntOperand___: other) ifTrue: [^ other __index__].
 	^ nil
 %
 
@@ -1146,13 +1145,14 @@ ___cmpRatio___: other
 		^ Array @env0:with: (other @env0:mantissa)
 			with: (10 @env0:raisedTo: (other @env0:scale))].
 	(other isKindOf: Integer) ifTrue: [^ Array @env0:with: other with: 1].
+	"Ahead of Number: an int subclass's instance is one, and has no
+	asFraction (``Decimal(1) < IntEnum.X'' raised TypeError)."
+	(self ___isPyIntOperand___: other) ifTrue: [
+			^ Array @env0:with: (other __index__) with: 1].
 	(other isKindOf: Number) ifTrue: [
 		r := other @env0:asFraction.
 		(r isKindOf: Integer) ifTrue: [^ Array @env0:with: r with: 1].
 		^ Array @env0:with: (r @env0:numerator) with: (r @env0:denominator)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
-			^ Array @env0:with: (other __index__) with: 1].
 	(other isKindOf: PythonInstance) ifFalse: [^ nil].
 	n := [other @env1:___pyAttrLoad___: #'numerator']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].

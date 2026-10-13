@@ -636,7 +636,7 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	variable.  A program that pins nothing pays one identity compare and one
 	class-variable read."
 
-	| pinned shadow pinnedAt |
+	| pinned shadow pinnedAt cls owner |
 	(actualReceiver == (builtins @env0:___instance___)) ifTrue: [
 		pinned := SessionTemps @env0:current
 			@env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
@@ -662,20 +662,32 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	GrailPinnedSelectors == nil ifTrue: [^ aSelector].
 	pinnedAt := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
 	pinnedAt == nil ifTrue: [^ aSelector].
-	"ONLY A CAPTURE OLDER THAN THE PIN REDIRECTS.  A lookup made AFTER the change
-	is entitled to see the change -- after ``del D.m'', ``d.m'' must find the
-	inherited method, and it carries the very selector the capture does.  The
-	generation stamped at construction is what separates them."
-	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
-		and: [pinGeneration @env0:<= GrailPinGeneration]])
-			ifTrue: [^ aSelector].
 	"A selector pinned on ONE class must not redirect a same-named send to an
 	unrelated one; the shadow existing is the proof that this receiver is the
 	one that was pinned.  Only pinned selectors pay for the check."
 	shadow := ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol.
-	(actualReceiver @env0:class @env0:whichClassIncludesSelector: shadow
-		environmentId: 1) == nil ifTrue: [^ aSelector].
-	^ shadow
+	cls := actualReceiver @env0:class.
+	owner := cls @env0:whichClassIncludesSelector: shadow environmentId: 1.
+	owner == nil ifTrue: [^ aSelector].
+	"A CAPTURE OLDER THAN THE PIN REDIRECTS, whatever the change was."
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= GrailPinGeneration]])
+			ifFalse: [^ shadow].
+	"A LATER LOOKUP SEES A CHANGE TO THE CLASS, but not a store on an instance
+	(#1226).  The two leave different marks.  ``del D.m'' removes D's method and
+	keeps the shadow, so the selector now resolves ABOVE the shadow's owner, and
+	a fresh ``d.m'' must find that inherited method.  A self-send dispatcher
+	(object class >> ___grailInstallOneDispatcher___:definedIn:name:) sits on
+	the SAME class as its shadow -- and no lookup answers a handle on it when an
+	override exists, because a lookup that finds an instance or class override
+	answers the override itself.  So a handle that resolves to a dispatcher was
+	looked up when nothing overrode the name, and is the class's function: it
+	runs the original, like CPython's bound method holding its function.  Sent
+	to the dispatcher instead it ran whatever the instance stored LATER, so a
+	wrapper calling its saved ``obj.m'' called itself."
+	(cls @env0:whichClassIncludesSelector: aSelector environmentId: 1) == owner
+		ifTrue: [^ shadow].
+	^ aSelector
 %
 
 category: 'Grail-Dynamic Rebinding'
@@ -810,7 +822,7 @@ value: positional value: kwargs
 	function semantics: ``C.__dict__['f'](instance, ...)''."
 
 	| actualReceiver actualArgs nargs fixedSel rcvrClass fixedClass varargsClass
-	  pinnedVarargs |
+	  pinnedVarargs arityMsg |
 	receiver @env0:isNil
 		ifTrue: [
 			actualReceiver := positional @env0:at: 1.
@@ -929,6 +941,16 @@ value: positional value: kwargs
 					^ actualReceiver
 						perform: (bound @env0:at: 1)
 						env: 1 withArguments: (bound @env0:at: 2)]].
+			"A class-side Python def called with the wrong count: CPython's
+			message, from its recorded signature (#1484).  Only the cases
+			nothing above can describe -- a Smalltalk-native method has no
+			signature to read and keeps the generic one below."
+			arityMsg := self ___classSideArityMessageFor___: actualReceiver
+				given: actualArgs @env0:size.
+			arityMsg == nil ifTrue: [
+				arityMsg := self ___instanceSideArityMessageFor___: actualReceiver
+					given: actualArgs @env0:size].
+			arityMsg == nil ifFalse: [^ TypeError ___signal___: arityMsg].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString
@@ -936,6 +958,47 @@ value: positional value: kwargs
 	^ actualReceiver
 		perform: pinnedVarargs
 		env: 1 withArguments: { actualArgs. kwargs }
+%
+
+category: 'Grail-Private'
+method: BoundMethod
+___instanceSideArityMessageFor___: aReceiver given: nGiven
+	"CPython's TypeError text for calling this INSTANCE-bound Python def with
+	nGiven positional arguments when it takes fewer, or nil when that cannot be
+	said exactly.
+
+	The instance-side twin of ___classSideArityMessageFor___:given:, for the one
+	shape that reaches value:value:'s fallback from an instance: a def that
+	declares no parameter at all (``def h()'').  It compiles to the unary ``h''
+	and no keyword forwarder -- every def with a parameter gets one, and its
+	generated arity check answers -- so ``C().h(1)'' found no ``h:'' and said
+	``h() takes a different number of arguments (1 given)''.  CPython calls the
+	function with the instance first, so the instance is counted as given:
+
+	    C.h() takes 0 positional arguments but 2 were given
+
+	The accepted count is the def's own co_argcount, which counts a receiver
+	parameter when there is one, so the text is right for any Python def that
+	gets here; one with no code object (a Smalltalk-native method) answers
+	nil and keeps the generic message."
+
+	| code argc qname given |
+	((aReceiver @env0:isKindOf: Behavior) or: [aReceiver @env0:isKindOf: module])
+		ifTrue: [^ nil].
+	code := [self __code__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	code == nil ifTrue: [^ nil].
+	argc := [code @env1:___pyAttrLoad___: #'co_argcount']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	qname := [code @env1:___pyAttrLoad___: #'co_qualname']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((argc @env0:isKindOf: SmallInteger) and: [qname @env0:isKindOf: CharacterCollection])
+		ifFalse: [^ nil].
+	given := nGiven @env0:+ 1.
+	given @env0:> argc ifFalse: [^ nil].
+	^ qname @env0:asString @env0:, '() takes ' @env0:, argc @env0:printString
+		@env0:, ' positional argument' @env0:, ((argc @env0:= 1) ifTrue: [''] ifFalse: ['s'])
+		@env0:, ' but ' @env0:, given @env0:printString
+		@env0:, ((given @env0:= 1) ifTrue: [' was given'] ifFalse: [' were given'])
 %
 
 category: 'Grail-Private'
@@ -981,6 +1044,68 @@ ___kwBoundArgsFor___: aReceiver args: posArgs kw: kwargs
 			ifTrue: [posArgs @env0:at: i]
 			ifFalse: [kwargs @env0:at: (names @env0:at: i)])].
 	^ { sel. args }
+%
+
+category: 'Grail-Private'
+method: BoundMethod
+___classSideArityMessageFor___: aReceiver given: nGiven
+	"CPython's TypeError text for calling this class-side Python def --
+	a @classmethod or @staticmethod -- with nGiven positional arguments it
+	cannot take, or nil when that cannot be said exactly.
+
+	Such a def, when its parameters are all plain and required, compiles to a
+	single fixed-arity method and NO keyword forwarder, so the generated arity
+	check that gives every other def CPython's message never runs, and the call
+	reached value:value:'s generic ``takes a different number of arguments''
+	(#1484).  The facts are all recorded: the signature table names the
+	parameters (bound-shaped, so without cls; a parameterless staticmethod has
+	no entry), ___staticMethodNames___ says which kind it is, and the
+	fixed-arity method's class gives the qualified name.
+
+	    C.cm() takes 2 positional arguments but 3 were given     (cls counted)
+	    C.sm() takes 1 positional argument but 2 were given
+	    C.cm() missing 1 required positional argument: 'a'
+
+	nil -- leaving the generic message -- for anything else: no signature (a
+	Smalltalk-native method), a parameter that is not plain positional, or no
+	fixed-arity method of that arity on the class side."
+
+	| cls sig names sel owner qname off accepted given |
+	cls := (aReceiver @env0:isKindOf: Behavior)
+		ifTrue: [aReceiver]
+		ifFalse: [aReceiver @env0:class].
+	sig := self ___methodSignatureForClass___: cls name: selector @env0:asString.
+	"The table holds only defs that declare a parameter, and a classmethod
+	always declares cls -- so a recorded @staticmethod with no entry is one
+	with no parameters at all.  Anything else without an entry is not a
+	Python def this can describe."
+	sig == nil ifTrue: [
+		(self ___isStaticMethodOnClass___: cls name: selector @env0:asString)
+			ifFalse: [^ nil].
+		sig := #()].
+	(sig @env0:allSatisfy: [:p | (p @env0:at: 2) @env0:<= 1]) ifFalse: [^ nil].
+	names := sig @env0:collect: [:p | (p @env0:at: 1) @env0:asString].
+	nGiven @env0:= names @env0:size ifTrue: [^ nil].
+	sel := self @env0:_selectorForArgCount: names @env0:size.
+	sel == nil ifTrue: [^ nil].
+	owner := cls @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+	(owner == nil or: [owner @env0:isMeta @env0:not]) ifTrue: [^ nil].
+	qname := (owner @env0:thisClass @env1:__qualname__) @env0:asString
+		@env0:, '.' @env0:, selector @env0:asString.
+	nGiven @env0:< names @env0:size ifTrue: [
+		^ BaseException ___missingArgumentsText___:
+				(names @env0:copyFrom: nGiven @env0:+ 1 to: names @env0:size)
+			kind: 'positional'
+			qualifiedName: qname].
+	off := (self ___isStaticMethodOnClass___: cls name: selector @env0:asString)
+		ifTrue: [0]
+		ifFalse: [1].
+	accepted := names @env0:size @env0:+ off.
+	given := nGiven @env0:+ off.
+	^ qname @env0:, '() takes ' @env0:, accepted @env0:printString
+		@env0:, ' positional argument' @env0:, ((accepted @env0:= 1) ifTrue: [''] ifFalse: ['s'])
+		@env0:, ' but ' @env0:, given @env0:printString
+		@env0:, ((given @env0:= 1) ifTrue: [' was given'] ifFalse: [' were given'])
 %
 
 category: 'Grail-Callable'
@@ -1054,16 +1179,26 @@ __dict__
 	a flat AttributeError, so that write was simply invisible from the method.
 
 	A BoundMethod that is NOT a Python bound method (a module-level def, a
-	class-side handle) is a FUNCTION and keeps its own storage; a bound method
-	with nowhere to delegate still raises."
+	class-side handle) is a FUNCTION and keeps its own storage: ``f.x = 1''
+	lands in this handle's dynamic instVars (object >> __setattr__:_:), and the
+	module answers the same handle on every read.  Its __dict__ is the LIVE
+	view of that storage, the one an instance's __dict__ is -- so
+	``f.__dict__['y'] = 2'' and ``f.y'' agree, and functools.update_wrapper's
+	``wrapper.__dict__.update(...)'' writes through.  It raised AttributeError,
+	which pytest hits for every collected test: Function.__init__ does
+	``self.keywords.update(self.obj.__dict__)'' (#1460).
 
-	| bcls |
+	A bound method with nowhere to delegate still raises."
+
+	| bcls view |
 	bcls := Python @env0:at: #builtins otherwise: nil.
 	(bcls @env0:notNil
 		and: [selector @env0:== #'type'
 		and: [receiver @env0:isKindOf: bcls]]) ifTrue: [
 			^ mappingproxy ___on: (dict ___new___)].
 	self ___isPythonBoundMethod___ ifTrue: [^ self __func__ __dict__].
+	view := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #PyInstanceDict.
+	view @env0:notNil ifTrue: [^ view @env0:on: self].
 	^ AttributeError ___signal___: 'BoundMethod object has no attribute ''__dict__'''
 %
 
@@ -2070,14 +2205,74 @@ ___pyTypeNameForError___
 	(receiver @env0:isKindOf: Class) ifTrue: [
 		(self ___isStaticMethodOnClass___: receiver name: (self __name__))
 			ifTrue: [^ 'function'].
-		^ ((receiver @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
-				environmentId: 1) @env0:isNil)
+		"By the METHOD, not the class: a Python class reaches the kernel's own
+		``Object class >> __init_subclass__'' when it defines none, and CPython
+		calls that a builtin however the class was written.  A def compiled from
+		Python has a code object (__code__ reads the same table), and only one
+		does -- a @classmethod, or the implicit one a class-defined
+		__init_subclass__ is."
+		^ ((self ___methodCodeForClass___: receiver name: selector @env0:asString) == nil)
 			ifTrue: ['builtin_function_or_method']
 			ifFalse: ['method']].
 	^ ([receiver @env0:class ___pythonBuiltinTypeName___]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
 		ifTrue: ['builtin_function_or_method']
 		ifFalse: ['method']
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__class__
+	"``type(m)'' and ``m.__class__'' (object >> ___pyMetaclass___ asks this):
+	the CPython type this callable stands for -- types.FunctionType,
+	types.MethodType or types.BuiltinFunctionType, named 'function', 'method'
+	and 'builtin_function_or_method' -- split by ___pyTypeNameForError___ as
+	the error messages and __repr__ already split it (issue #1436).
+
+	One Smalltalk class backs all three, so its own name was what type()
+	reported for every one: ``type(C().m)'', ``type(len)'' and a module-level
+	def all answered ``<class 'BoundMethod'>'', and ``type(m) is
+	types.MethodType'' was False for a real bound method.
+
+	The types are types.py's, the classes Python code already compares
+	against, rather than three more Smalltalk classes the module would have to
+	re-export.  Before types is importable -- early in a session, or while its
+	own body runs -- the answer is the Smalltalk class, as it always was."
+
+	^ (BoundMethod ___callableTypeNamed___: self ___pyTypeNameForError___)
+		ifNil: [self @env0:class]
+%
+
+category: 'Grail-Attribute Access'
+classmethod: BoundMethod
+___callableTypeNamed___: aTypeName
+	"types.FunctionType, types.MethodType or types.BuiltinFunctionType for
+	CPython's type name, or nil when the types module cannot supply it (see
+	BoundMethod >> __class__).  The module is imported if this session has not:
+	type() must not depend on whether something imported types first.  An
+	import already in progress -- this asked from inside types' own body --
+	answers nil rather than recursing."
+
+	| attr mod temps |
+	attr := (aTypeName @env0:= 'function')
+		ifTrue: [#FunctionType]
+		ifFalse: [(aTypeName @env0:= 'method')
+			ifTrue: [#MethodType]
+			ifFalse: [#BuiltinFunctionType]].
+	mod := importlib lookupModule: 'types'.
+	mod == nil ifTrue: [
+		temps := SessionTemps @env0:current.
+		(temps @env0:at: #GrailCallableTypesImporting otherwise: false) ifTrue: [^ nil].
+		temps @env0:at: #GrailCallableTypesImporting put: true.
+		mod := [[((Python @env0:at: #builtins) @env1:instance)
+				@env1:___import__: { 'types' } kw: nil]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: Notification) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil]]
+			@env0:ensure: [temps @env0:removeKey: #GrailCallableTypesImporting ifAbsent: []]].
+	mod == nil ifTrue: [^ nil].
+	^ [mod @env0:dynamicInstVarAt: attr]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Printing'

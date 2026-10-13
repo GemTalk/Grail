@@ -314,5 +314,33 @@ else
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Deploy unicodedata with its databases built (#1508).
+# ---------------------------------------------------------------------------
+# The first normalize/category/... call parses the Unicode tables into an
+# _ucd.Database (~0.55s, ~0.42s more for the 3.2.0 one stringprep and IDNA
+# use), cached in a module global -- so every session paid it again, and was
+# left with something to commit.  Built and committed here, a fresh session's
+# first call costs milliseconds and writes nothing.  After install.gs for the
+# same reason as gemdb above; idempotent likewise.
+#
+# A failure here is a WARNING, not an install failure: Grail works without
+# it, only slower on first use.  tests/scripts/run_unicodedata_deploy_test.sh
+# runs the same script, so the defect behind a failure still fails the suite.
+if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ]; then
+    DEPLOY_T0=$SECONDS
+    if LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/deployUnicodedata.gs" < /dev/null \
+         | grep -E 'deployUnicodedata: both databases built'; then
+        printf 'TIMING | %-26s | %4ds\n' "deploy-unicodedata" "$((SECONDS - DEPLOY_T0))"
+    else
+        echo ""
+        echo "Warning: deploying unicodedata's databases failed."
+        echo "  Grail is installed, but each session's first unicodedata call"
+        echo "  (normalize, category, ...) rebuilds them, about 0.5s, and leaves"
+        echo "  that session with something to commit."
+        echo "  Re-run ./scripts/deployUnicodedata.gs to see the error."
+    fi
+fi
+
 echo ""
 echo "Successful install of Grail!"

@@ -410,3 +410,25 @@ testHashHonoursACustomMemberHash
 	self assert: m @env1:custom_member_hash_is_honoured equals: true.
 	self assert: m @env1:custom_member_in_a_set equals: true
 %
+
+category: 'Grail-Tests - Displays'
+method: TupleTestCase
+testALargeDisplayCompiles
+	"A list or tuple display of thousands of elements -- generated tables such
+	as pygments' lexer builtins and idna.uts46data -- was an uncatchable
+	CompileError 1001 (``expression nesting too deep'') from about 1,800
+	elements, because it was emitted as one brace array (#1423).  It is now
+	chunked.  tests/python/large_literal_displays.py holds the checks --
+	sizes across the chunk boundaries, three levels of chunks, a display in a
+	function, left-to-right evaluation across chunks -- and agrees with
+	CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'large_literal_displays' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/large_literal_displays.py')
+		name: 'large_literal_displays'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '9 checks, 0 disagreeing [], keys match: True'
+%

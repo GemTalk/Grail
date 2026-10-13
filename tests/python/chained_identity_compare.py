@@ -12,7 +12,7 @@ shared temp.  ``in'' needs a SECOND temp because it reverses the operands -- the
 container is the Smalltalk receiver -- so a non-final ``in'' stages its container
 in that temp, runs the membership test, and then copies the container into the
 shared temp for the next comparison, discarding the copy's value with
-``___ignore:'' so the expression still yields the membership result.
+``___ignore___:'' so the expression still yields the membership result.
 
 The shapes below pin the three things a chain must get right whatever the ops
 are: the VALUE, the SHORT-CIRCUIT (nothing after the first false is evaluated),

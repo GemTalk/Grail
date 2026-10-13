@@ -76,6 +76,12 @@ __new__: obj
 	((obj @env0:class @env0:whichClassIncludesSelector: #__float__ environmentId: 1) @env0:notNil) ifTrue: [
 		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
 	].
+	"...or held as a CLASS ATTRIBUTE (``__float__ = f'', ``Cls.__float__ = f''): the send
+	reaches PythonInstance >> doesNotUnderstand:, which calls it as CPython's
+	slot lookup does (issue #1218)."
+	((obj @env0:isKindOf: PythonInstance) and: [(obj ___typeDunder___: #'__float__') ~~ nil]) ifTrue: [
+		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
+	].
 
 	"Try to convert from integer"
 	(obj isKindOf: Integer) ifTrue: [
@@ -503,6 +509,12 @@ ___fromNumberValue___: obj
 	((obj @env0:class @env0:whichClassIncludesSelector: #__float__ environmentId: 1) @env0:notNil) ifTrue: [
 		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
 	].
+	"...or held as a CLASS ATTRIBUTE (``__float__ = f'', ``Cls.__float__ = f''): the send
+	reaches PythonInstance >> doesNotUnderstand:, which calls it as CPython's
+	slot lookup does (issue #1218)."
+	((obj @env0:isKindOf: PythonInstance) and: [(obj ___typeDunder___: #'__float__') ~~ nil]) ifTrue: [
+		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
+	].
 	(obj isKindOf: Integer) ifTrue: [^ obj @env0:asFloat].
 	(obj ___hasIndexDunder___) ifTrue: [
 		^ (obj __index__) @env0:asFloat
@@ -623,8 +635,7 @@ __add__: other
 		pri := self ___numericReflectedFirst___: other selector: #'__radd__:'.
 		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ self @env0:+ (self ___checkedOperand___: other)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:+ (other __index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
@@ -672,8 +683,7 @@ __divmod__: other
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := other]
 	ifFalse: [
-		((other @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+		(self ___isPyIntOperand___: other) ifTrue: [d := other __index__]].
 	d == nil ifTrue: [
 		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
 	(ZeroDivisionError @env0:___isZeroDivisor___: d) ifTrue: [
@@ -861,8 +871,7 @@ __floordiv__: other
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := self ___checkedOperand___: other]
 	ifFalse: [
-		((other @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+		(self ___isPyIntOperand___: other) ifTrue: [d := other __index__]].
 	d == nil ifTrue: [
 		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
 	(ZeroDivisionError @env0:___isZeroDivisor___: d) ifTrue: [
@@ -876,8 +885,7 @@ __ge__: other
 	"Greater than or equal comparison."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:>= other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:>= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
@@ -889,8 +897,7 @@ __gt__: other
 	"Greater than comparison."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:> other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:> (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
@@ -910,8 +917,7 @@ __le__: other
 	"Less than or equal comparison."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:<= other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:<= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
@@ -923,8 +929,7 @@ __lt__: other
 	"Less than comparison."
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:< other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 		^ self @env0:< (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
@@ -955,8 +960,7 @@ __mod__: other
 	d := nil.
 	(other isKindOf: Number) ifTrue: [d := self ___checkedOperand___: other]
 	ifFalse: [
-		((other @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+		(self ___isPyIntOperand___: other) ifTrue: [d := other __index__]].
 	d == nil ifTrue: [
 		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
 	(ZeroDivisionError @env0:___isZeroDivisor___: d) ifTrue: [
@@ -975,8 +979,7 @@ __mul__: other
 		pri := self ___numericReflectedFirst___: other selector: #'__rmul__:'.
 		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ self @env0:* (self ___checkedOperand___: other)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:* (other __index__)].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 
@@ -1053,8 +1056,7 @@ __pow__: other
 				^ complex __new__: (mag @env0:* (angle @env0:cos))
 					_: (mag @env0:* (angle @env0:sin))].
 		^ self @env0:raisedTo: other].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:raisedTo: (other __index__)].
 	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
 %
 
@@ -1223,8 +1225,7 @@ __sub__: other
 		pri := self ___numericReflectedFirst___: other selector: #'__rsub__:'.
 		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ self @env0:- (self ___checkedOperand___: other)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
@@ -1362,8 +1363,7 @@ __truediv__: other
 	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 		ZeroDivisionError ___signal___: 'division by zero'].
 	(other isKindOf: Number) ifTrue: [^ self @env0:/ (self ___checkedOperand___: other)].
-	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [
+	(self ___isPyIntOperand___: other) ifTrue: [
 			| idx |
 			idx := other __index__.
 			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [

@@ -195,7 +195,8 @@ is no third verb.
   module built but unpublished; an import that is *aborted* is discarded, and
   the session stops finding it by name (D9).
 - [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
-  [deployGemdb.gs](../scripts/deployGemdb.gs) are not that second verb. They are
+  [deployGemdb.gs](../scripts/deployGemdb.gs) /
+  [deployUnicodedata.gs](../scripts/deployUnicodedata.gs) are not that second verb. They are
   a **preload**: one session imports a known list — building each module
   once, however many names on the list its closure covers — and commits once, so
   application sessions start warm, compile nothing, and cannot conflict with one
@@ -338,6 +339,26 @@ instead of binding the half-built instance.
 module rebuilds the two modules above it, each into its committed instance, with
 both kinds of capture updated, and the session after that binds warm with zero
 persistent objects modified.
+
+A package also **carries** its submodules. `registerModule:with:` binds each
+submodule onto its package, as CPython's import machinery does, and a committed
+package keeps those bindings, so in a fresh session `import pkg; pkg.mod` reaches
+whatever `pkg.mod` was when the package was committed. Nothing imports it, so no
+staleness check runs on it. The dependency record covers it only when the
+package's own body imported it (issue #1223). So each session judges a package's
+carried submodules where it acquires the package: at the warm bind, and after a
+rebuild into the committed instance. It judges each one by the same generation test as
+a dependency. A stale one is loaded through the ordinary path, parents first, which
+rebuilds it in place and registers it. A current one stays bound and unimported,
+and what it carries is judged in turn. A rebuild that fails is left for the import
+that asks for the submodule, which raises; the package import succeeds, as it would in
+CPython.
+
+The difference from CPython that remains is the binding itself. A fresh CPython
+process has no `pkg.mod` until something imports it, while a current carried
+submodule here reads as though the import that bound it had run in this session.
+Matching CPython exactly would need a check on every module attribute read.
+`runCarriedSubmoduleTest.gs` drives it across commits.
 
 ---
 
@@ -522,12 +543,26 @@ session's `g.word()` answered `f` while `g.greet()` ran the original. The same
 holds for a class-body store over a method in a deployed module, whose body never
 re-runs. So the *names* are recorded persistently
 (`object class >> ___grailCommittedSelfSendOverrides___`, a reduced-conflict
-class → names record written in the storing transaction, only the first time a
-pair is seen) and each session installs the recorded dispatchers once, from
-importlib's per-session generation check and from its first native-module
+class → names record) and each session installs the recorded dispatchers once,
+from importlib's per-session generation check and from its first native-module
 singleton (`___grailInstallRecordedSelfSendOverrides___`). The dispatchers stay
-session methods; only the record is committed, and only if that session commits.
-A generation bump wipes it with the other registries.
+session methods; only the record is committed. A generation bump wipes it with
+the other registries.
+
+**The store notes a pair; the commit writes it (#1466).** Writing the record
+at the store made a patch of a throwaway local dirty the session (`needsCommit`
+true) for an entry nobody asked to keep. The store now notes the pair in
+session state, and `GrailCommitCoordinator` writes it as part of the session's
+next commit. The kernel's `System class >> _commit:` hands every commit —
+`System commit`, `commitTransaction`, a GCI or topaz commit, gemdb — to
+`System _commitCoordinator` (session state) when one is set, so the record
+travels with whichever commit the session makes, and a session that never
+commits writes nothing. The coordinator is installed by a session's first note
+and only into an empty slot; under someone else's coordinator the record is
+written at the store, as before. The remaining over-approximation: a session
+that patches a throwaway instance and later commits something else still
+records the pair — since #1465 that costs a dispatcher in later sessions and
+nothing in behaviour.
 
 A class carrying session methods also changes what the kernel can do to it:
 `removeSelector:environmentId:` looks the selector up in the (protected)
@@ -948,13 +983,19 @@ Measured on a fresh 3.7.5 session, counting distinct committed objects via
 module modifies 6 objects for a small fixture and 54 for a larger one.
 
 Which modules are committed is largely a property of the *extent*, not of the
-install. `install.sh` commits Grail's Smalltalk runtime and, as its last step,
-deploys **gemdb** (`scripts/deployGemdb.gs`) — so a freshly installed extent
-binds gemdb and its two submodules, and every *other* `.py` import is cold.
-gemdb is deployed because it is the module whose own entry check reports the
-dirt: measured on gs40, a fresh session's `import gemdb` modified **14** objects
-undeployed and **0** deployed. The deploy runs after `install.gs`, since the
-generation bump (D7) would otherwise discard it. A commit
+install. `install.sh` commits Grail's Smalltalk runtime and, as its last steps,
+deploys **gemdb** (`scripts/deployGemdb.gs`) and **unicodedata**
+(`scripts/deployUnicodedata.gs`) — so a freshly installed extent binds gemdb and
+its two submodules, and unicodedata with `_ucd`, its two table modules and
+`bisect`, and every *other* `.py` import is cold. gemdb is deployed because it
+is the module whose own entry check reports the dirt: measured on gs40, a fresh
+session's `import gemdb` modified **14** objects undeployed and **0** deployed.
+unicodedata is deployed for its CACHE rather than its code: the deploy session
+builds both Unicode databases, so the module global `_ucd._databases` is
+committed already filled, and a fresh session's first `normalize` goes from
+~550 ms (plus ~420 ms for the 3.2.0 database) and 22 written objects to ~4 ms
+and none (#1508). Both deploys run after `install.gs`, since the generation
+bump (D7) would otherwise discard them. A commit
 is what changes that — a preload run, or a developer's own — and it carries its
 transitive closure with it: `deployFrameworks.gs` names 16 modules and commits
 **147**, because
@@ -1163,13 +1204,17 @@ regress silently.
    below it rebuilds it into its committed instance, and the next session binds
    warm with zero persistent objects modified. Guarded by
    `runModuleCoherenceTest.gs`.
+13. **A deployed package's carried submodules are current** (§4.4): binding the
+   package rebuilds a stale one in place, leaves a current one unimported, and
+   writes nothing when nothing changed. Guarded by `runCarriedSubmoduleTest.gs`.
 
 Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
 `runFlaskDeployTest.gs` (a real framework closure), `runOverlayReuseTest.gs`
 (D3), `runPersistentStateTest.gs` (D4), `runAbortReimportTest.gs` (D9),
 `runEphemeronCommitTest.gs` (commit-safety), `runModuleCoherenceTest.gs`
-(dependency staleness, rebuild in place), `run_concurrent_import_test.sh`
+(dependency staleness, rebuild in place), `runCarriedSubmoduleTest.gs`
+(a package's carried submodules), `run_concurrent_import_test.sh`
 (two interleaved sessions: disjoint modules, then the same module).
 The sharded SUnit suite runs against the deployed framework closure, so warm
 binding is exercised by every run.

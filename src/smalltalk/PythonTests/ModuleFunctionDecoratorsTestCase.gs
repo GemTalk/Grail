@@ -103,3 +103,103 @@ testInstanceDecoratorIsApplied
 	self assert: (testModule @env1:___pyAttrLoad___: #'tagged_result')
 		equals: '[t] go'.
 %
+
+category: 'Grail-Tests'
+method: ModuleFunctionDecoratorsTestCase
+testARecursingDecoratorRaisesRecursionError
+	"A decorator is applied inside a handler that catches everything, so that a
+	decorator Grail cannot apply leaves the def undecorated (issue #1369).  The
+	handler also caught the stack running out, both as the VM's raw warning and
+	as the RecursionError it becomes, so a decorator that recursed was silently
+	dropped where CPython raises RecursionError.  This was measured at the
+	module-level, class-body method and property-setter sites, on both codegen
+	paths.  The class decorator and a decorated nested def were already right
+	and are controls.
+
+	See tests/python/decorator_recursion_error.py (CPython 3.14's values) and
+	its helper, which holds the top-level def, since only a top-level def
+	reaches the module-level emitter."
+
+	| mod results expected b |
+	importlib @env1:modules removeKey: #'decorator_recursion_error' ifAbsent: [].
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/decorator_recursion_error.py')
+		name: 'decorator_recursion_error'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 b := (Python at: #'builtins') @env1:instance.
+	 #( 'module_level' 'method_decorator' 'property_setter_decorator'
+	    'class_decorator' 'nested_def_decorator' 'plain_recursion_after' ) do: [:k |
+		| got want |
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'decorator_recursion_error' ifAbsent: [].
+			importlib @env1:modules removeKey: #'decorator_recursion_helper' ifAbsent: []]
+%
+
+category: 'Grail-Tests'
+method: ModuleFunctionDecoratorsTestCase
+testADecoratorsExceptionPropagates
+	"An exception a decorator raises propagates at every site, as in CPython
+	(issue #1369).  The module-level, class-body method and property-setter
+	sites used to apply the decorator inside a handler that caught everything,
+	leaving the def silently undecorated.  The class decorator and a decorated
+	nested def were already right and are controls.
+
+	See tests/python/decorator_exceptions_propagate.py (CPython 3.14's values)
+	and its helper, which holds the top-level def."
+
+	| mod results expected b |
+	importlib @env1:modules removeKey: #'decorator_exceptions_propagate' ifAbsent: [].
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/decorator_exceptions_propagate.py')
+		name: 'decorator_exceptions_propagate'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 b := (Python at: #'builtins') @env1:instance.
+	 #( 'module_level' 'method_decorator' 'property_setter_decorator'
+	    'class_decorator' 'nested_def_decorator' ) do: [:k |
+		| got want |
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'decorator_exceptions_propagate' ifAbsent: [].
+			importlib @env1:modules removeKey: #'decorator_raising_helper' ifAbsent: []]
+%
+
+category: 'Grail-Tests'
+method: ModuleFunctionDecoratorsTestCase
+testDecoratorsRunAtTheirOwnLine
+	"A decorator is made and called at its OWN line, and a decorated def's
+	co_firstlineno is its first decorator's, as in CPython (#1406): module
+	defs, stacked decorators, class decorators, class-body methods (with
+	staticmethod / classmethod / property around them), defs inside a
+	function or a try, and a raising decorator's traceback.
+
+	See tests/python/decorator_lines.py (CPython 3.14's values)."
+
+	| mod results expected b keys |
+	importlib @env1:modules removeKey: #'decorator_lines' ifAbsent: [].
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/decorator_lines.py')
+		name: 'decorator_lines'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 keys := mod @env1:___pyAttrLoad___: #'KEYS'.
+	 b := builtins @env1:instance.
+	 self assert: (keys @env1:__len__) equals: 11.
+	 0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k asString , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'decorator_lines' ifAbsent: []]
+%
