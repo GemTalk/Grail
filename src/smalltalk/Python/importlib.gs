@@ -5425,8 +5425,10 @@ ___initModuleAttrsFrom___: aSpec on: aModule
 		ifTrue: [aModule @env0:dynamicInstVarAt: #'__file__' put: origin]
 		ifFalse: [aModule @env0:dynamicInstVarAt: #'__file__' put: none].
 	locs := self @env1:___specAttr___: aSpec named: #'submodule_search_locations'.
+	"A Python list, as CPython's is: a package's __init__.py may append to its
+	own __path__ (pkgutil.extend_path's idiom), and an Array has no append."
 	(locs notNil and: [locs ~~ none]) ifTrue: [
-		aModule @env1:__path__: (self @env1:___stringListFrom___: locs)].
+		aModule @env1:__path__: (list withAll: (self @env1:___stringListFrom___: locs))].
 	^ aModule
 %
 
@@ -8957,9 +8959,48 @@ ___moduleNameToPath___: aName
 	___grailOwnedPathFor___:.  That is what the pinned GrailBuiltinImporter at
 	sys.meta_path[0] answers from, so a user-installed finder cannot shadow a
 	module Grail ships (CPython protects its builtin and frozen modules the same
-	way, by putting their finders ahead of PathFinder)."
+	way, by putting their finders ahead of PathFinder).
 
+	A DOTTED name is looked for first in its parent's __path__, which is the
+	only place CPython looks.  Joining the parts onto each root finds the same
+	file whenever the parent is the directory its name spells, which is the
+	usual case.  It finds nothing when a package's __path__ points somewhere
+	else.  setuptools is the census case: its meta-path finder puts
+	setuptools._distutils into sys.modules as ``distutils'', and then imports
+	``distutils.core'', which exists only under setuptools/_distutils.  The
+	root search is kept after it, so a name it used to find is still found."
+
+	| fromParent |
+	fromParent := self ___probeParentPathFor___: aName.
+	fromParent == nil ifFalse: [^ fromParent].
 	^ self ___probeSourcePathFor___: aName roots: self ___importSearchRoots___
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___probeParentPathFor___: aName
+	"``<entry>/<leaf>.py'' or ``<entry>/<leaf>/__init__.py'' for the first
+	entry of the loaded parent's __path__ that has one, or nil.  Nil also for
+	a top-level name, and for a parent that is not loaded or has no __path__."
+
+	| entries |
+	entries := self ___parentPathEntriesFor___: aName.
+	entries @env0:isEmpty ifTrue: [^ nil].
+	^ self ___probeSourcePathFor___: (($. @env0:split: aName) @env0:last) roots: entries
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___parentPathEntriesFor___: aName
+	"The loaded parent's __path__ as an Array of strings, for a dotted name.
+	Empty for a top-level name and for a parent that is not loaded or has no
+	__path__."
+
+	| parentPath |
+	(aName @env0:includes: $.) ifFalse: [^ #()].
+	parentPath := self ___parentSearchPathFor___: aName.
+	(parentPath == nil or: [parentPath == None]) ifTrue: [^ #()].
+	^ self ___stringListFrom___: parentPath
 %
 
 category: 'Grail-Module Loading'
@@ -9072,6 +9113,15 @@ ___namespacePortionsFor___: aName
 	joined := '/' @env0:join: pathParts.
 	searchRoots := self ___importSearchRoots___.
 	portions := OrderedCollection @env0:new.
+	"The parent's __path__ first, for the reason ___moduleNameToPath___: gives:
+	it is where CPython looks, and it can name directories the joined name
+	does not.  setuptools' ``distutils.compilers.C'' is two namespace levels
+	under an aliased parent."
+	(self ___parentPathEntriesFor___: aName) @env0:do: [:entry | | dir |
+		dir := (entry @env0:, '/') @env0:, pathParts @env0:last.
+		((GsFile @env0:isServerDirectory: dir) == true)
+			ifTrue: [(portions @env0:includes: dir)
+				ifFalse: [portions @env0:add: dir]]].
 	searchRoots @env0:do: [:root | | dir |
 		dir := (root @env0:, '/') @env0:, joined.
 		"isServerDirectory: answers NIL for a path that does not exist, so
