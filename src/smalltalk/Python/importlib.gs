@@ -11378,9 +11378,9 @@ pythonSelectorMaxSearchedArity
 	"PUBLIC.  The highest fixed arity ``pythonSelectorsForName:arity:'' enumerates
 	when asked for every plausible shape (a nil arity).
 
-	There is no upper bound in the encoding itself -- BoundMethod>>_selectorForArgCount:
-	builds one for any arity -- so a search over candidate selectors has to choose a
-	horizon.  16 matches the range that method documents as worth precomputing
+	The encoding's only upper bound is GemStone's 1,024-character Symbol, near 512
+	arguments (BoundMethod>>_selectorForArgCount: answers nil past it, #1540) -- so
+	a search over candidate selectors has to choose a horizon.  16 matches the range that method documents as worth precomputing
 	(``4..16 are built lazily here; higher arities are rare enough'').  A caller that
 	wants to report what it searched should read this rather than hard-coding 16."
 
@@ -11425,11 +11425,14 @@ pythonSelectorsForName: aString arity: anIntegerOrNil
 		ifTrue: [
 			out add: (CallAst varargsSelectorForName: aString).
 			1 to: self pythonSelectorMaxSearchedArity do: [:n |
-				out add: (CallAst fastPathSelectorForName: aString arity: n)]]
+				(CallAst fastPathSelectorForName: aString arity: n)
+					ifNotNil: [:sel | out add: sel]]]
 		ifFalse: [
 			anIntegerOrNil < 0 ifTrue: [^ #()].
+			"Past the Symbol limit there is no fixed-arity selector (#1540)."
 			anIntegerOrNil >= 1 ifTrue: [
-				out add: (CallAst fastPathSelectorForName: aString arity: anIntegerOrNil)].
+				(CallAst fastPathSelectorForName: aString arity: anIntegerOrNil)
+					ifNotNil: [:sel | out add: sel]].
 			out add: (CallAst varargsSelectorForName: aString)].
 	^ out asArray
 %

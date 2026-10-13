@@ -146,7 +146,13 @@ _selectorForArgCount: nargs
 	the per-call string concatenation cost is fine — and the lookup
 	path tries the varargs form first when defaults are present, so
 	this only fires for true fixed-arity calls (Python ``def f(a, b,
-	c, d, e, f, g, h, i):'' compiles to ``f:_:_:_:_:_:_:_:_:'')."
+	c, d, e, f, g, h, i):'' compiles to ``f:_:_:_:_:_:_:_:_:'').
+
+	NIL past GemStone's 1,024-character Symbol limit, near 512 arguments: no
+	method can have that selector, and building it raised an uncatchable
+	ImproperOperation (#1540).  Every caller already treats nil as ``no
+	fixed-arity form'' and goes on to the varargs one.  The same limit as
+	CallAst class >> ___fixedAritySelectorFits___:arity: at compile time."
 
 	| s |
 	nargs == 0 ifTrue: [^ sel0].
@@ -154,6 +160,7 @@ _selectorForArgCount: nargs
 	nargs == 2 ifTrue: [^ sel2].
 	nargs == 3 ifTrue: [^ sel3].
 	nargs < 0 ifTrue: [^ nil].
+	selector asString size + 1 + (2 * (nargs - 1)) > 1024 ifTrue: [^ nil].
 	"Build ``name:'' followed by ``_:'' repeated (nargs - 1) times."
 	s := selector asString , ':'.
 	2 to: nargs do: [:_ | s := s , '_:'].

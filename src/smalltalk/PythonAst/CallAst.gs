@@ -1009,10 +1009,14 @@ fastPathSelectorForAttr: anAttrName arity: nargs
 	  0 args  →  #attr             (unary)
 	  1 arg   →  #attr:
 	  2 args  →  #attr:_:
-	  N args  →  #attr: followed by (N-1) `_:` keywords."
+	  N args  →  #attr: followed by (N-1) `_:` keywords.
+
+	NIL when that selector cannot exist -- see
+	___fixedAritySelectorFits___:arity:."
 
 	| sb |
 	nargs = 0 ifTrue: [^ anAttrName asSymbol].
+	(self ___fixedAritySelectorFits___: anAttrName arity: nargs) ifFalse: [^ nil].
 	sb := AppendStream on: String new.
 	sb nextPutAll: anAttrName asString; nextPut: $:.
 	2 to: nargs do: [:i | sb nextPutAll: '_:'].
@@ -1543,13 +1547,34 @@ fastPathSelectorForName: aName arity: nargs
 	  1 arg   →  #aName:
 	  2 args  →  #aName:_:
 	  3 args  →  #aName:_:_:
-	(0 args is not handled by the fast path — see bareCallFastPathSelector.)"
+	(0 args is not handled by the fast path — see bareCallFastPathSelector.)
+
+	NIL when that selector cannot exist -- see
+	___fixedAritySelectorFits___:arity:."
 
 	| sb |
+	(self ___fixedAritySelectorFits___: aName arity: nargs) ifFalse: [^ nil].
 	sb := AppendStream on: String new.
 	sb nextPutAll: aName asString; nextPut: $:.
 	2 to: nargs do: [:i | sb nextPutAll: '_:'].
 	^ sb contents asSymbol
+%
+
+category: 'Grail-other'
+classmethod: CallAst
+___fixedAritySelectorFits___: aName arity: nargs
+	"Whether the fixed-arity selector for ``aName'' with nargs arguments --
+	``aName:'' then a ``_:'' per further argument -- fits in a Symbol, which
+	GemStone caps at 1,024 characters.  It stops fitting near 512 arguments, and
+	building it anyway raised an uncatchable ImproperOperation (error 2402) at
+	compile time: ``f(0, 1, ..., 599)'' killed the session (#1540).
+
+	Past the limit no method can have that selector, so there is no fixed-arity
+	send to make: the builders answer nil and every fast path declines, which
+	leaves the call to the array form (``value: {args} value: kw''), the one
+	that already handles a call of any size."
+
+	^ aName asString size + 1 + (2 * (nargs - 1)) <= 1024
 %
 
 category: 'Grail-other'
@@ -2277,37 +2302,39 @@ printArgumentsArrayOn: aStream
 	(grouping consecutive non-starred args into sub-array literals
 	to keep the output compact).  Without this the StarredAst stub
 	emitted a runtime TypeError that fired the moment Python source
-	used ``f(*args)`` — pervasive in the jinja2 visitor pattern."
+	used ``f(*args)`` — pervasive in the jinja2 visitor pattern.
 
-	| hasStar |
+	Both go through ___printElementsArrayOf___:on:, which chunks a brace
+	past the compiler's limits as a list display's does: a call of 2,500
+	arguments was ``CompileError 1001, expression nesting too deep'' (#1540).
+	For the same reason a RUN of plain arguments between splats is one array,
+	not one ``,'' link per argument."
+
+	| hasStar run |
 	hasStar := arguments anySatisfy: [:each | each isKindOf: StarredAst].
-	hasStar ifFalse: [
-		aStream nextPutAll: '{ '.
-		arguments do: [:each |
-			each printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $.; space.
-		].
-		aStream nextPutAll: '}'.
-		^ self
-	].
-	"Splat path: emit ``({a. b.} @env0:, (splat @env0:asArray) @env0:, {c.})``.
+	hasStar ifFalse: [^ self ___printElementsArrayOf___: arguments on: aStream].
+	"Splat path: emit ``({} @env0:, {a. b.} @env0:, (splat @env0:___pyStarToArray___) ...)``.
 	Inject an empty seed so the result is always parenthesized.
 	``@env0:,`` dispatches the env-0 Array concatenation; bare ``,``
 	would resolve to env-1 where Array has no comma method."
 	aStream nextPutAll: '({} '.
+	run := OrderedCollection new.
 	arguments do: [:each |
-		aStream nextPutAll: '@env0:, '.
 		(each isKindOf: StarredAst)
 			ifTrue: [
-				aStream nextPut: $(.
+				run isEmpty ifFalse: [
+					aStream nextPutAll: '@env0:, '.
+					self ___printElementsArrayOf___: run asArray on: aStream.
+					aStream space.
+					run := OrderedCollection new].
+				aStream nextPutAll: '@env0:, ('.
 				each value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ' @env0:___pyStarToArray___) '.
-			] ifFalse: [
-				aStream nextPutAll: '{ '.
-				each printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: '. } '.
-			].
-	].
+				aStream nextPutAll: ' @env0:___pyStarToArray___) ']
+			ifFalse: [run add: each]].
+	run isEmpty ifFalse: [
+		aStream nextPutAll: '@env0:, '.
+		self ___printElementsArrayOf___: run asArray on: aStream.
+		aStream space].
 	aStream nextPut: $).
 %
 
