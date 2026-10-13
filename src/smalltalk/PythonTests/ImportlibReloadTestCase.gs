@@ -154,6 +154,51 @@ testReloadPreservesIdentity
 
 category: 'Grail-Tests-Reload'
 method: ImportlibReloadTestCase
+cachedMethodsAmong: methods
+	"The keys of the session's method-keyed caches (BaseException
+	___forgetMethodCaches___) that are one of methods, or a block of one."
+
+	| found |
+	found := IdentitySet new.
+	#(#'GrailIpLineCache' #'GrailIpTbLineCache' #'GrailIpSpanCache'
+	  #'GrailIRMethodCache' #'GrailMethodFileCache' #'___GrailReceiverNameCache___') do: [:k |
+		(SessionTemps current at: k otherwise: KeyValueDictionary new) keysDo: [:key | | m |
+			m := (key isKindOf: Array) ifTrue: [key first] ifFalse: [key].
+			((m isKindOf: GsNMethod)
+				and: [(methods includes: m) or: [methods includes: m homeMethod]])
+					ifTrue: [found add: m]]].
+	^ found
+%
+
+category: 'Grail-Tests-Reload'
+method: ImportlibReloadTestCase
+testReloadReleasesReplacedMethodsFromCaches
+	"#1463: the traceback caches key on the METHOD object and hold it strongly,
+	so after a reload every entry for a replaced method kept the old method
+	alive -- and through it the module body's whole generated source.  A
+	session reloading in a loop grew ~1 MB a reload and died.  The reload
+	must leave none of the replaced methods in those caches."
+
+	| probe fixture old |
+	probe := self loadProbe: 'import traceback
+def boom():
+    try:
+        1 / 0
+    except ZeroDivisionError:
+        return traceback.format_exc()
+TB = boom()
+'.
+	fixture := self loadFixture.
+	old := IdentitySet withAll: (probe class methodDictForEnv: 1) values.
+	"Precondition: formatting the traceback cached some of this module's
+	methods -- otherwise the check below passes vacuously."
+	self deny: (self cachedMethodsAmong: old) isEmpty.
+	fixture @env1:reload_mod: probe.
+	self assert: (self cachedMethodsAmong: old) isEmpty
+%
+
+category: 'Grail-Tests-Reload'
+method: ImportlibReloadTestCase
 testStatReloaderDetectsChange
 	"werkzeug._reloader.StatReloader (the auto-reloader's file watcher) reports
 	a watched module as changed once its source mtime moves — the trigger the

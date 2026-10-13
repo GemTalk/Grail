@@ -2292,6 +2292,33 @@ ___pythonLineForMethod___: aMethod ip: anIp
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___forgetMethodCaches___
+	"Drop every session cache keyed by a METHOD OBJECT (#1463).
+
+	Each holds its methods strongly, on purpose (see
+	___pythonLineForMethod___:ip:), and none is ever pruned.  That is bounded
+	while methods are only added, but a recompile REPLACES them: every entry
+	for a replaced method then keeps the old GsNMethod alive, and with it the
+	whole generated source of its home method -- for a module body, hundreds
+	of KB.  Measured on importlib.reload of _strptime: ~1 MB of every reload
+	stayed live, every old ``initialize'' source survived code compaction,
+	and the session died near reload 25 of a 37 MB temp space.  Dropping
+	these six after the rebuild kept one copy and live memory flat.
+
+	They are pure memo tables -- each answer is re-derived from the method on
+	the next miss -- so dropping them whole is always safe and costs only
+	that.  NOT the def-site table (ExecBlockAttrs staticSlotTable): it is
+	state an old function object still reads, not a cache."
+
+	| st |
+	st := SessionTemps current.
+	#(#'GrailIpLineCache' #'GrailIpTbLineCache' #'GrailIpSpanCache'
+	  #'GrailIRMethodCache' #'GrailMethodFileCache' #'___GrailReceiverNameCache___')
+		do: [:k | st removeKey: k otherwise: nil]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___tracebackLineForMethod___: aMethod ip: anIp
 	"___pythonLineForMethod___:ip:, narrowed onto the OPERATION in flight when
 	the method carries a position map -- the line half of what
