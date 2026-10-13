@@ -34,6 +34,41 @@ needs the same thing. pandas is the obvious next one: its `Timestamp`,
 `Timedelta` and `Period` are Python subclasses of Cython extension types. lxml's
 `ElementBase` is another.
 
+### How much this matters: plain arrays can stay opaque
+
+Measured under CPython 3.14 with numpy 2.5.4, by tracing method calls on numpy
+objects and the numpy Python functions that run.
+
+* **Python code uses arrays all the time, but only through the Python
+  protocol:** attributes, methods, operators, indexing, iteration and
+  conversions. It never reads their memory. numpy's own Python layer reads
+  `.dtype` 904 times, `.shape` 747 and `.ndim` 466 (non-test sources), and
+  most public functions (`np.std`, `np.where`, `np.concatenate`, ...) are
+  Python wrappers.
+* **`import numpy` itself runs array code**: 19 method calls on numpy objects,
+  in `function_base`, `numeric`, `linalg` and `lib`. It ends with
+  `_sanity_check()`: `x = ones(2, dtype=float32)`, then
+  `abs(x.dot(x) - float32(2.0)) < 1e-5`. That needs method calls *and*
+  operators on numpy scalars.
+* **A program is expected to do the same.** The sample `a.mean()`, `np.std(a)`,
+  `a.sum(axis=0).tolist()`, `float(a[1, 2])`, `a * 2 + 1`, `a.T`,
+  `np.where(a > 5, a, 0)` made eight method calls into C. The operators,
+  indexing and `.T` do not even show up as calls: they go through C slots.
+  Results come back either as numpy objects (an array, a numpy scalar) or as
+  Grail values (`tolist()`, `float()`).
+
+So for `ndarray`, `dtype`, the scalar types and `ufunc`, Grail can treat the
+objects as **opaque handles**. It never needs their layout or a Grail-side
+class, as long as every operation is forwarded to numpy's C code. That is the
+`ShimForeignObject` model already in place. What it lacks is operator and
+subscript forwarding (step 2 below), and `import numpy` needs that itself.
+
+**Subclasses are the exception**, because their methods are Python code that
+must run on the instance, and numpy's C calls back into them. They are also the
+minority: `import numpy` defines four and creates none, and the sample program
+used none. Real instances are needed only by programs that use `np.ma`,
+`np.matrix`, `np.memmap` or `np.recarray`, and later by pandas.
+
 ## 2. What CPython does, and what numpy relies on
 
 In CPython, `class memmap(ndarray)` makes a **heap type**:
@@ -275,8 +310,12 @@ the last word; a header before the object would also work.
 | 3 | **Subtype mirrors (A).** The C type, the synthetic Grail base, the Grail-aware `tp_alloc`, and the `tp_getattro` trampoline. | `type(np.memmap(f, dtype='u1', shape=3)[1:]) is np.memmap`; `np.rec.array(...)` field access; `np.matrix([[1,2],[3,4]]) * np.matrix(...)` |
 | 4 | **Slot trampolines for the dunders subclasses override**, and `numpy.ma` | `np.ma.masked_array([1, 2, 3], mask=[0, 1, 0]).sum() == 4`; numpy's own `ma` tests, as a subset |
 
-Step 2 comes before step 3 because the ndarray half of a subclass instance *is*
-a foreign object. Without the protocol it cannot do arithmetic either, and step
+Steps 1 and 2 are the main path: with them, plain numpy is opaque handles plus
+forwarding, which is what most programs need. Steps 3 and 4 are for the
+subclasses, and can wait until a target needs them.
+
+Step 2 also comes before step 3 because the ndarray half of a subclass instance
+*is* a foreign object. Without the protocol it cannot do arithmetic either, and step
 2 is also what makes ordinary numpy usable. Step 1 is independent and cheap. It
 mainly gives information: how much of `import numpy` remains beyond this wall.
 
