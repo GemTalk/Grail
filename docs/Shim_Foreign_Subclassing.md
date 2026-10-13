@@ -54,6 +54,7 @@ numpy's C code depends on that in specific places. Each was confirmed in the
 | What numpy does | Where | What it needs |
 | --- | --- | --- |
 | Allocates through the subtype: `subtype->tp_alloc(subtype, 0)` | `ctors.c:681` | the subtype's type object decides size and layout |
+| Sets no `tp_alloc` of its own on `PyArray_Type`, so it inherits object's, and under the shim that is the shim's `PyType_GenericAlloc` | `arrayobject.c` (`PyArray_Type`), `cpython.cc` | the array *object* is allocated by a call into the shim. Only its *data buffer* bypasses the shim: numpy's default handler calls libc `malloc` directly |
 | Asks the **type** for `__array_finalize__` and calls it if it is not ndarray's own | `ctors.c:898-904` | a type-level attribute read that finds the Python function |
 | Asks the type for `__array_ufunc__`, `__array_wrap__`, `__array_priority__`, ... | `PyArray_LookupSpecial`, `get_attr_string.h:51` | the same |
 | Makes views and results in the caller's type (`Py_TYPE(self)`) | throughout | C **creates** subclass instances by itself, with no Python constructor involved |
@@ -111,6 +112,13 @@ Most of the pieces exist. They need to be connected.
 
   What mirrors cannot do yet: instances of a mirrored class are 32-byte Grail
   wrappers (`tp_basicsize` 32), not bodies in a base type's layout.
+* **C-to-Grail references.** A Grail value reaches C as a *wrapper*: a 32-byte
+  `CByteArray` made with `gcMalloc:`, so its bytes are C memory, holding the
+  value's OOP at offset 16 (`CPythonShim>>wrap:`). The session's wrapper map
+  (`GrailShimWrapperMap`, Grail value to wrapper) keeps both alive while C's
+  reference count is above zero, and `sweep` lets them go once it reaches zero.
+  Type mirrors carry their class's OOP the same way, in `tp_weaklist`. This is
+  exactly what a subclass instance needs between its two halves.
 * **Foreign proxies** (`ShimForeignObject`). A wheel's object crosses into
   Grail as a proxy. The proxy forwards:
   * attribute reads, calls, `str` and `repr` to C;
@@ -151,21 +159,35 @@ Do what CPython does, with the instance split across the two worlds.
   * Python sees memmap's base as the `ndarray` proxy itself: `__bases__`,
     `__mro__` and `issubclass(memmap, np.ndarray)`, the last answered in C by
     `PyType_IsSubtype`.
-* **An instance** is a Grail object of class memmap holding `cPtr`, its C body.
-  Since `basicNew` runs no `__init__`, the Grail half can be made at any time.
-  * **Python-created.** `memmap(...)` runs `memmap.__new__`, which calls
-    `ndarray.__new__(memmap, ...)`. C receives the subtype mirror and allocates
-    with its `tp_alloc`, so the body is laid out and typed correctly.
-  * **C-created.** `m[1:]`, a ufunc result: the first time a body typed by a
-    subtype mirror crosses into Grail, the shim makes its Grail half with
-    `basicNew`, records it, and hands it out.
-  * Either way the C body's type decides the Grail class, so `type(m[1:]) is
-    memmap` holds.
-* **Identity.** One registry, body address to Grail half, held in session
-  state. It is also the garbage-collection root that keeps the Grail half (and
-  its attributes) alive while C holds the body. The extra word in the body's
-  layout can hold the Grail OOP for a fast reverse lookup. The registry, not
-  that word, is what keeps the object alive.
+* **An instance** is two objects **born together**, in the subtype mirror's
+  `tp_alloc`. numpy allocates every instance through `subtype->tp_alloc`, and
+  the shim supplies that allocator, so every subclass instance, whoever asked
+  for it, passes through code we write. The allocator calls back into Grail,
+  which:
+  * makes the **Grail half** with `cls basicNew`: an instance of memmap, with no
+    `__init__` run, as CPython runs none at allocation;
+  * makes the **C body** as a `CByteArray` with `gcMalloc:`, sized `tp_basicsize`
+    (the base's size plus one word) and zeroed, with `ob_type` set to the subtype
+    mirror;
+  * stores the Grail half's OOP in the body's last word, as a wrapper stores it
+    at offset 16;
+  * points the Grail half at the body, and enters the pair in the wrapper map.
+
+  So `memmap(...)`, which runs `memmap.__new__`, then `ndarray.__new__(memmap,
+  ...)`, then numpy's `array_new` and `tp_alloc`, and `m[1:]`, which numpy makes
+  by itself, produce the same thing. There is no special case for C-created
+  instances, and `type(m[1:]) is memmap` holds because the body's type is
+  memmap's mirror.
+* **Identity.** Body to Grail half is the OOP in the body's last word, which
+  `pyobj_oop` reads when the body's `ob_type` is a subtype mirror. The mirror
+  records the offset. Grail half to body is the reference the half holds. No
+  new registry: the wrapper map already does this job.
+* **Why not one object?** A `CByteArray` subclass can be made with `gcMalloc:`
+  and takes dynamic instance variables (probed in topaz), so its own bytes
+  could *be* the body. But every Grail Python class descends from
+  `PythonInstance`, and Grail's attribute machinery tests `isKindOf:
+  PythonInstance` in 39 places (property reads, class-attribute fallbacks).
+  Smalltalk has single inheritance, so one object cannot be both.
 * **Attribute storage.** On the Grail half, as for any Grail object. C reaches
   attributes through the `tp_getattro` trampoline, so the C-side instance dict
   (`tp_dictoffset`) is not needed for this design.
@@ -174,11 +196,16 @@ Do what CPython does, with the instance split across the two worlds.
   the subtype mirror's: that slot is the trampoline back into memmap, and calling
   it would recurse forever. Forwarding always names the foreign type that
   defines the slot, never `Py_TYPE(self)`.
-* **Lifetime.** First cut: bodies are never freed, as with every other C object
-  today, and the registry lives as long as the session. Later, the subtype's
-  `tp_dealloc` trampoline drops the registry entry once C's reference count
-  reaches zero. That needs `_Py_Dealloc` to stop being a no-op, for these types
-  at least.
+* **Lifetime** comes from the wrapper rules, unchanged.
+  * While C holds a reference (count above zero), the wrapper map keeps the
+    Grail half, and through it the body, alive.
+  * While Python holds the Grail half, the half keeps the body alive.
+  * When both have let go, GemStone collects the half, and the `gcMalloc`'d body
+    with it.
+
+  What this does not cover is numpy's own cleanup. Its `array_dealloc`, which
+  frees the data buffer, never runs, because the shim's `_Py_Dealloc` is a
+  no-op. That is already true of every plain ndarray today.
 * **Persistence.** The Grail class can be committed. Its synthetic superclass
   is stateless and found by the foreign type's `tp_name`, and the subtype
   mirror is rebuilt per session, as mirrors already are. *Instances* are
@@ -191,9 +218,9 @@ Do what CPython does, with the instance split across the two worlds.
   conflict".
 
 **Cost.** It is the largest of the options, but nearly every part is an
-extension of something that exists: mirrors, proxies, guarded callbacks,
-`PyType_Ready` inheritance. The genuinely new parts are the slot-trampoline
-table and the registry. A dozen slots covers what numpy's subclasses override:
+extension of something that exists: mirrors, wrappers and their map, proxies,
+guarded callbacks, `PyType_Ready` inheritance. The genuinely new parts are the
+Grail-aware `tp_alloc` and the slot-trampoline table. A dozen slots covers what numpy's subclasses override:
 `tp_getattro`, `tp_setattro`, `mp_subscript`, `mp_ass_subscript`, `sq_length`,
 the arithmetic `nb_*`, `tp_richcompare`, `tp_repr`, `tp_str`, `tp_iter`,
 `tp_call`, `tp_hash`.
@@ -235,9 +262,9 @@ still fail at `MaskedConstant()`, and any use of `np.memmap`, `np.matrix` or
 `Shim_Object_Model.md` §2 proposes moving the GemStone OOP into a header before
 every object the shim hands out. It is about *Grail's* objects having real
 layouts, and does not decide how a subclass instance is created or dispatched.
-It would offer a neat home for Option A's reverse lookup, though: the subtype's
-`tp_alloc` is the shim's own, so it can put a header in front of each body.
-That is a detail to choose when building A, not a separate path.
+Option A gets the same benefit locally: the subtype's `tp_alloc` is the
+shim's, so it lays out the body and puts the OOP where it likes. Option A uses
+the last word; a header before the object would also work.
 
 ## 6. Recommended order
 
@@ -245,7 +272,7 @@ That is a detail to choose when building A, not a separate path.
 | --- | --- | --- |
 | 1 | **Stopgap (C).** The class statement succeeds and instantiation refuses clearly. | `import numpy` completes, or names its next wall |
 | 2 | **Foreign operator protocol.** `ShimForeignObject` forwards operators, subscripts, `len`, `iter`, `bool` and comparisons to the object's C slots. | `np.arange(5) * 2 + 1`, `a[1:3]`, `len(a)`, `a.sum()`, `a == a` |
-| 3 | **Subtype mirrors (A).** The C type, the synthetic Grail base, the registry, and the `tp_getattro` trampoline. | `type(np.memmap(f, dtype='u1', shape=3)[1:]) is np.memmap`; `np.rec.array(...)` field access; `np.matrix([[1,2],[3,4]]) * np.matrix(...)` |
+| 3 | **Subtype mirrors (A).** The C type, the synthetic Grail base, the Grail-aware `tp_alloc`, and the `tp_getattro` trampoline. | `type(np.memmap(f, dtype='u1', shape=3)[1:]) is np.memmap`; `np.rec.array(...)` field access; `np.matrix([[1,2],[3,4]]) * np.matrix(...)` |
 | 4 | **Slot trampolines for the dunders subclasses override**, and `numpy.ma` | `np.ma.masked_array([1, 2, 3], mask=[0, 1, 0]).sum() == 4`; numpy's own `ma` tests, as a subset |
 
 Step 2 comes before step 3 because the ndarray half of a subclass instance *is*
@@ -265,9 +292,14 @@ mainly gives information: how much of `import numpy` remains beyond this wall.
   dict would normally have `HAVE_GC` and `tp_traverse`. The shim does no cyclic
   GC (numpy's GC path is already neutered), so this should be harmless, but it
   is unverified.
-* **Deallocation.** `_Py_Dealloc` is a no-op. Freeing subclass bodies, and
-  letting go of their Grail halves, needs it to call `tp_dealloc` at least for
-  subtype mirrors. That brings in numpy's own `array_dealloc` and its base and
-  buffer handling, which has never run under the shim.
+* **Deallocation.** `_Py_Dealloc` is a no-op, so numpy's `array_dealloc` never
+  runs, and an array's data buffer is never freed. That is true of every
+  ndarray today, not only subclasses. Making it run brings in numpy's base and
+  buffer handling, which has never run under the shim. The body itself is
+  `gcMalloc`'d and collected by GemStone, which `tp_free` must therefore not
+  `free()`.
+* **Borrowed references.** `sweep` drops a pair once C's count reaches zero. A
+  body C still uses through a *borrowed* pointer, which it never counted, would
+  then be collectable. Wrappers carry the same risk today.
 * **Cython types (pandas).** Cython extension types are ordinary static types,
   so the same model should apply. It has not been tried.
