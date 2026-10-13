@@ -4527,6 +4527,11 @@ ___builtinValueClass___
 	str value.  Object >> ___reflectedFirst___ asks it so that ``'a' ==
 	S('b')'' tries S's reflected method first, as CPython does (#1495)."
 
+	"A Python str subclass is widened onto Unicode32 or Unicode16, so a class
+	under neither is not one -- decided before the method-dictionary lookup,
+	which is the expensive part."
+	((self inheritsFrom: Unicode32) or: [self inheritsFrom: Unicode16])
+		ifFalse: [^ nil].
 	^ (self includesSelector: #'___pyDefinedClass___' environmentId: 1)
 		ifTrue: [CharacterCollection]
 		ifFalse: [nil]
