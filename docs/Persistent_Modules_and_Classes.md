@@ -195,7 +195,8 @@ is no third verb.
   module built but unpublished; an import that is *aborted* is discarded, and
   the session stops finding it by name (D9).
 - [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
-  [deployGemdb.gs](../scripts/deployGemdb.gs) are not that second verb. They are
+  [deployGemdb.gs](../scripts/deployGemdb.gs) /
+  [deployUnicodedata.gs](../scripts/deployUnicodedata.gs) are not that second verb. They are
   a **preload**: one session imports a known list — building each module
   once, however many names on the list its closure covers — and commits once, so
   application sessions start warm, compile nothing, and cannot conflict with one
@@ -982,13 +983,19 @@ Measured on a fresh 3.7.5 session, counting distinct committed objects via
 module modifies 6 objects for a small fixture and 54 for a larger one.
 
 Which modules are committed is largely a property of the *extent*, not of the
-install. `install.sh` commits Grail's Smalltalk runtime and, as its last step,
-deploys **gemdb** (`scripts/deployGemdb.gs`) — so a freshly installed extent
-binds gemdb and its two submodules, and every *other* `.py` import is cold.
-gemdb is deployed because it is the module whose own entry check reports the
-dirt: measured on gs40, a fresh session's `import gemdb` modified **14** objects
-undeployed and **0** deployed. The deploy runs after `install.gs`, since the
-generation bump (D7) would otherwise discard it. A commit
+install. `install.sh` commits Grail's Smalltalk runtime and, as its last steps,
+deploys **gemdb** (`scripts/deployGemdb.gs`) and **unicodedata**
+(`scripts/deployUnicodedata.gs`) — so a freshly installed extent binds gemdb and
+its two submodules, and unicodedata with `_ucd`, its two table modules and
+`bisect`, and every *other* `.py` import is cold. gemdb is deployed because it
+is the module whose own entry check reports the dirt: measured on gs40, a fresh
+session's `import gemdb` modified **14** objects undeployed and **0** deployed.
+unicodedata is deployed for its CACHE rather than its code: the deploy session
+builds both Unicode databases, so the module global `_ucd._databases` is
+committed already filled, and a fresh session's first `normalize` goes from
+~550 ms (plus ~420 ms for the 3.2.0 database) and 22 written objects to ~4 ms
+and none (#1508). Both deploys run after `install.gs`, since the generation
+bump (D7) would otherwise discard them. A commit
 is what changes that — a preload run, or a developer's own — and it carries its
 transitive closure with it: `deployFrameworks.gs` names 16 modules and commits
 **147**, because

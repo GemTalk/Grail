@@ -376,6 +376,11 @@ timed "durable" tests/scripts/run_durable_test.sh || EXIT=$?
 # in its session (Persistent_Modules D14): one gem patches and commits, the
 # next must see the modules as shipped.  Two gems, so a shell driver.
 timed "module-globals" tests/scripts/run_module_globals_test.sh || EXIT=$?
+# unicodedata's databases are deployed built (#1508): a fresh gem finds both
+# in the committed cache, answers from them, and has nothing to commit.  It
+# deploys first (scripts/deployUnicodedata.gs, idempotent), then a second gem
+# checks, so a shell driver.
+timed "unicodedata-deploy" tests/scripts/run_unicodedata_deploy_test.sh || EXIT=$?
 
 # Functional test for gemdb.schema (layout/report/drop/rename/compact, the
 # public surface for deliberate schema change). Every operation but layout()
