@@ -7,7 +7,7 @@ StatementAst ifNil: [self error: 'StatementAst is not defined. Check file orderi
 expectvalue /Class
 doit
 StatementAst subclass: 'ImportFromAst'
-  instVarNames: #( module names level wasStarImport)
+  instVarNames: #( module names level wasStarImport starNamesGuessed)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -142,6 +142,27 @@ resolvedModuleName
 		]
 %
 
+category: 'Grail-accessing'
+method: ImportFromAst
+starNamesGuessed: aBoolean
+	"Set by importlib >> expandStarImports: when a star import's names were
+	GUESSED from the module's top-level variables because it has no literal
+	__all__.  A guessed name may never be bound -- a ``global'' only declared
+	inside a function -- so it is bound only if present (#1416).  Names from
+	an __all__ stay strict: CPython raises when __all__ lists a missing one."
+
+	starNamesGuessed := aBoolean
+%
+
+category: 'Grail-accessing'
+method: ImportFromAst
+___starNameMayBeAbsent___
+	"True for the names of an expanded star import that were guessed, not
+	listed in an __all__ (see starNamesGuessed:)."
+
+	^ self wasStarImport and: [starNamesGuessed == true]
+%
+
 category: 'Grail-other'
 method: ImportFromAst
 printSmalltalkOn: aStream
@@ -175,12 +196,23 @@ printSmalltalkOn: aStream
 	names doWithIndex: [:each :index |
 		| targetName needsClose |
 		targetName := self boundNameFor: each.
+		"A STAR-EXPANDED name is bound only if the module has it (#1416):
+		valueSourceFor: reads it with ___importFromStar___:, which answers a
+		marker rather than raising, and the binding is skipped on the marker.
+		The parse-time list can name something the module never binds -- a
+		``global'' declared only inside a function -- and CPython's import-all
+		simply does not see it.  Only GUESSED names: an __all__'s stay strict."
+		self ___starNameMayBeAbsent___ ifTrue: [aStream nextPutAll: '[:___starValue___ | ___starValue___ == #''___starNameMissing___'' ifFalse: ['].
 		"Where the binding LANDS -- module dynamic-instVar storage, a
 		class-body definitional store, or a plain temp -- is
 		printImportBindingOpenOn:name:'s decision, shared with ImportAst."
 		needsClose := self printImportBindingOpenOn: aStream name: targetName.
-		aStream nextPutAll: (self valueSourceFor: each).
+		aStream nextPutAll: (self ___starNameMayBeAbsent___
+			ifTrue: ['___starValue___']
+			ifFalse: [self valueSourceFor: each]).
 		needsClose ifTrue: [aStream nextPut: $)].
+		self ___starNameMayBeAbsent___ ifTrue: [
+			aStream nextPutAll: ']] value: '; nextPutAll: (self valueSourceFor: each)].
 		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
 	].
@@ -261,7 +293,18 @@ valueSourceFor: anAlias
 				nextPutAll: absoluteName;
 				nextPutAll: '''. nil. nil. { ''';
 				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) @env1:___importFrom___: #''';
+				nextPutAll: ''' }. 0 } kw: nil) @env1:';
+				"A star import reads M's namespace, as CPython's import-all does,
+				never sys.modules.  A GUESSED name may be absent (see
+				printSmalltalkOn:); one an __all__ lists raises CPython's
+				``module 'M' has no attribute 'x''' when it is, which is the
+				plain attribute read's own error -- not IMPORT_FROM's
+				``cannot import name''."
+				nextPutAll: (self ___starNameMayBeAbsent___
+					ifTrue: ['___importFromStar___: #''']
+					ifFalse: [self wasStarImport
+						ifTrue: ['___pyAttrLoad___: #''']
+						ifFalse: ['___importFrom___: #''']]);
 				nextPutAll: attrName;
 				nextPutAll: ''')'.
 		].

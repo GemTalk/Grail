@@ -590,6 +590,10 @@ expandStarImports: aModuleAst
 			top-level variable that isn't underscore-prefixed."
 			expandedNames := self ___starExportNamesFor___: subAst.
 			expandedNames isNil ifTrue: [
+				"GUESSED, so a name may never be bound at import time --
+				one a function only declares ``global'' (#1416); codegen
+				binds such a name only if the module has it."
+				stmt starNamesGuessed: true.
 				expandedNames := subAst body variables asArray
 					select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
 			newAliases := expandedNames collect: [:n |
