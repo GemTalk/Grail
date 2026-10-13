@@ -1380,6 +1380,7 @@ run
 	at: #'SslModuleTestCase' put: nil;
 	at: #'SslRuntimeGapsTestCase' put: nil;
 	at: #'StarImportDynamicNamesTestCase' put: nil;
+	at: #'StarImportUnboundGlobalTestCase' put: nil;
 	at: #'StarUnpackIteratorTestCase' put: nil;
 	at: #'StaticmethodOverridesBaseMethodTestCase' put: nil;
 	at: #'StaticmethodShadowingTestCase' put: nil;
@@ -2909,6 +2910,7 @@ input src/smalltalk/PythonTests/SslCallbacksTestCase.gs
 input src/smalltalk/PythonTests/SslModuleTestCase.gs
 input src/smalltalk/PythonTests/SslRuntimeGapsTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
+input src/smalltalk/PythonTests/StarImportUnboundGlobalTestCase.gs
 input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodOverridesBaseMethodTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs

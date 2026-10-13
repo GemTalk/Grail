@@ -10979,6 +10979,31 @@ ___importFrom___: aSym
 
 category: 'Grail-Attribute Protocol'
 method: object
+___importFromStar___: aSym
+	"One name of an expanded ``from M import *'': the attribute, or the
+	marker #'___starNameMissing___' when M has none, which tells the binding
+	ImportFromAst emits to skip the name (#1416).
+
+	With no __all__, the names are expanded at PARSE time from M's top-level
+	variables, and that list includes a name a function only declares
+	``global'' -- dateutil's tz.py has ``global parser'' in a method.  CPython
+	never creates such a name until the function runs, so its import-all, which
+	walks M's __dict__, does not see it.  ___importFrom___: raised ``cannot
+	import name'' for it instead, failing the whole import.
+
+	No sys.modules retry, unlike ___importFrom___:.  A star import binds what M's
+	namespace holds, never a submodule M has not itself bound."
+
+	| missing v |
+	missing := false.
+	v := [self ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError
+		do: [:ex | missing := true. ex @env0:return: nil].
+	^ missing ifTrue: [#'___starNameMissing___'] ifFalse: [v]
+%
+
+category: 'Grail-Attribute Protocol'
+method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
 	The presence of an ``attr:`` keyword method is ambiguous: on a
