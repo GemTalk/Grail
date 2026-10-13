@@ -986,11 +986,17 @@ def signature(obj, *args, **kwargs):
             text = getattr(call, '__text_signature__', None) if call is not None else None
     if isinstance(text, str):
         return Signature(text=text)
-    return Signature()
+    sig = Signature()
+    sig._unknown = True
+    return sig
 
 
 class Signature:
     empty = Parameter.empty
+
+    # True for signature()'s last resort, which knows nothing of the
+    # parameters; _bind must not read its empty list as "takes none".
+    _unknown = False
 
     def __init__(self, parameters=None, *, return_annotation=_empty, text=None):
         """CPython's first positional argument is PARAMETERS, and this took
@@ -1132,11 +1138,139 @@ class Signature:
     def __hash__(self):
         return hash(str(self))
 
-    def bind(self, *args, **kwargs):
-        return _BoundArguments()
+    def _bind(self, args, kwargs, *, partial=False):
+        """Map *args* and *kwargs* onto the parameters, as a call would.
 
-    def bind_partial(self, *args, **kwargs):
-        return _BoundArguments()
+        CPython's, step for step, including its TypeError messages.  bind and
+        bind_partial used to return an EMPTY BoundArguments whatever they were
+        given and never raised, so a call that validated with bind passed
+        whatever was wrong with it, and anything reading ``ba.arguments`` saw
+        nothing (Django's BaseExpression.identity is one: every Value() had the
+        same identity).
+
+        A signature whose parameters Grail does not know -- the text-only form,
+        or the empty fallback for a callable with no recoverable signature --
+        still binds to nothing rather than refusing a call it cannot judge.
+        CPython has no such signature to bind: it raises ValueError from
+        signature() instead."""
+        if self._unknown_parameters():
+            return BoundArguments(self, {})
+
+        arguments = {}
+
+        parameters = iter(self.parameters.values())
+        parameters_ex = ()
+        arg_vals = iter(args)
+
+        pos_only_param_in_kwargs = []
+
+        while True:
+            try:
+                arg_val = next(arg_vals)
+            except StopIteration:
+                try:
+                    param = next(parameters)
+                except StopIteration:
+                    break
+                else:
+                    if param.kind is _VAR_POSITIONAL:
+                        break
+                    elif param.name in kwargs:
+                        if param.kind is _POSITIONAL_ONLY:
+                            if param.default is _empty:
+                                msg = ('missing a required positional-only '
+                                       'argument: %r' % (param.name,))
+                                raise TypeError(msg)
+                            # Raise only once it is sure there is no **kwargs
+                            # parameter later to take it.
+                            pos_only_param_in_kwargs.append(param)
+                            continue
+                        parameters_ex = (param,)
+                        break
+                    elif (param.kind is _VAR_KEYWORD
+                          or param.default is not _empty):
+                        parameters_ex = (param,)
+                        break
+                    else:
+                        if partial:
+                            parameters_ex = (param,)
+                            break
+                        if param.kind is _KEYWORD_ONLY:
+                            argtype = ' keyword-only'
+                        else:
+                            argtype = ''
+                        raise TypeError('missing a required%s argument: %r'
+                                        % (argtype, param.name)) from None
+            else:
+                try:
+                    param = next(parameters)
+                except StopIteration:
+                    raise TypeError('too many positional arguments') from None
+                else:
+                    if param.kind is _VAR_KEYWORD or param.kind is _KEYWORD_ONLY:
+                        raise TypeError(
+                            'too many positional arguments') from None
+
+                    if param.kind is _VAR_POSITIONAL:
+                        values = [arg_val]
+                        values.extend(arg_vals)
+                        arguments[param.name] = tuple(values)
+                        break
+
+                    if param.name in kwargs and param.kind is not _POSITIONAL_ONLY:
+                        raise TypeError('multiple values for argument %r'
+                                        % (param.name,)) from None
+
+                    arguments[param.name] = arg_val
+
+        # The remaining parameters take keyword arguments.
+        kwargs_param = None
+        for param in list(parameters_ex) + list(parameters):
+            if param.kind is _VAR_KEYWORD:
+                kwargs_param = param
+                continue
+
+            if param.kind is _VAR_POSITIONAL:
+                # Reached only when the positional arguments ran out before
+                # the parameter ahead of *args; keywords never name it.
+                continue
+
+            param_name = param.name
+            try:
+                arg_val = kwargs.pop(param_name)
+            except KeyError:
+                if (not partial and param.kind is not _VAR_POSITIONAL
+                        and param.default is _empty):
+                    raise TypeError('missing a required argument: %r'
+                                    % (param_name,)) from None
+            else:
+                arguments[param_name] = arg_val
+
+        if kwargs:
+            if kwargs_param is not None:
+                arguments[kwargs_param.name] = kwargs
+            elif pos_only_param_in_kwargs:
+                raise TypeError(
+                    'got some positional-only arguments passed as '
+                    'keyword arguments: %r'
+                    % (', '.join(p.name for p in pos_only_param_in_kwargs),))
+            else:
+                raise TypeError('got an unexpected keyword argument %r'
+                                % (next(iter(kwargs)),))
+
+        return self._bound_arguments_cls(self, arguments)
+
+    def _unknown_parameters(self):
+        return self._unknown or (self._text is not None and not self._params)
+
+    def bind(self, /, *args, **kwargs):
+        """A BoundArguments mapping *args* and *kwargs* to the parameters.
+        Raises TypeError if they cannot be bound."""
+        return self._bind(args, kwargs)
+
+    def bind_partial(self, /, *args, **kwargs):
+        """As bind, except that required parameters may be left unbound."""
+        return self._bind(args, kwargs, partial=True)
 
     def replace(self, parameters=_void, return_annotation=_void):
         """A copy of this Signature with the parameter list or the return
@@ -1167,13 +1301,125 @@ class Signature:
 _Signature = Signature
 
 
-class _BoundArguments:
-    args = ()
-    kwargs = {}
-    arguments = {}
+_POSITIONAL_ONLY = Parameter.POSITIONAL_ONLY
+_POSITIONAL_OR_KEYWORD = Parameter.POSITIONAL_OR_KEYWORD
+_VAR_POSITIONAL = Parameter.VAR_POSITIONAL
+_KEYWORD_ONLY = Parameter.KEYWORD_ONLY
+_VAR_KEYWORD = Parameter.VAR_KEYWORD
+
+
+class BoundArguments:
+    """The result of Signature.bind: the parameters' names mapped to the
+    arguments bound to them.  CPython's.
+
+    * arguments -- an ordered, mutable dict of name to value; defaults are
+      not in it until apply_defaults() puts them there;
+    * signature -- the Signature that made it;
+    * args, kwargs -- the call rebuilt from ``arguments``.
+    """
+
+    __slots__ = ('arguments', '_signature', '__weakref__')
+
+    def __init__(self, signature, arguments):
+        self.arguments = arguments
+        self._signature = signature
+
+    @property
+    def signature(self):
+        return self._signature
+
+    @property
+    def args(self):
+        args = []
+        for param_name, param in self._signature.parameters.items():
+            if param.kind is _VAR_KEYWORD or param.kind is _KEYWORD_ONLY:
+                break
+            try:
+                arg = self.arguments[param_name]
+            except KeyError:
+                # The rest go to kwargs.
+                break
+            else:
+                if param.kind is _VAR_POSITIONAL:
+                    args.extend(arg)
+                else:
+                    args.append(arg)
+        return tuple(args)
+
+    @property
+    def kwargs(self):
+        kwargs = {}
+        kwargs_started = False
+        for param_name, param in self._signature.parameters.items():
+            if not kwargs_started:
+                if param.kind is _VAR_KEYWORD or param.kind is _KEYWORD_ONLY:
+                    kwargs_started = True
+                elif param_name not in self.arguments:
+                    kwargs_started = True
+                    continue
+
+            if not kwargs_started:
+                continue
+
+            try:
+                arg = self.arguments[param_name]
+            except KeyError:
+                pass
+            else:
+                if param.kind is _VAR_KEYWORD:
+                    kwargs.update(arg)
+                else:
+                    kwargs[param_name] = arg
+        return kwargs
 
     def apply_defaults(self):
-        pass
+        """Fill in the defaults of the parameters left unbound: the declared
+        default, ``()`` for *args and ``{}`` for **kwargs.  A required
+        parameter bind_partial left unbound stays unbound."""
+        arguments = self.arguments
+        new_arguments = []
+        for name, param in self._signature.parameters.items():
+            try:
+                new_arguments.append((name, arguments[name]))
+            except KeyError:
+                if param.default is not _empty:
+                    val = param.default
+                elif param.kind is _VAR_POSITIONAL:
+                    val = ()
+                elif param.kind is _VAR_KEYWORD:
+                    val = {}
+                else:
+                    continue
+                new_arguments.append((name, val))
+        self.arguments = dict(new_arguments)
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        if not isinstance(other, BoundArguments):
+            return NotImplemented
+        return (self.signature == other.signature
+                and self.arguments == other.arguments)
+
+    __hash__ = None
+
+    def __setstate__(self, state):
+        self._signature = state['_signature']
+        self.arguments = state['arguments']
+
+    def __getstate__(self):
+        return {'_signature': self._signature, 'arguments': self.arguments}
+
+    def __repr__(self):
+        args = []
+        for arg, value in self.arguments.items():
+            args.append('{}={!r}'.format(arg, value))
+        return '<{} ({})>'.format(self.__class__.__name__, ', '.join(args))
+
+
+# The old private name.
+_BoundArguments = BoundArguments
+Signature._bound_arguments_cls = BoundArguments
 
 
 def getsource(obj):
