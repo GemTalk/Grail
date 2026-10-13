@@ -1152,6 +1152,7 @@ run
 	at: #'MetaclassBaseTestCase' put: nil;
 	at: #'MetaclassCallTestCase' put: nil;
 	at: #'MetaclassClassAttrTestCase' put: nil;
+	at: #'MetaclassDirectCallInitTestCase' put: nil;
 	at: #'MetaclassDispatchTestCase' put: nil;
 	at: #'MetaclassInstancecheckTestCase' put: nil;
 	at: #'MetaclassLookupOrderTestCase' put: nil;
@@ -2681,6 +2682,7 @@ input src/smalltalk/PythonTests/MemoryViewTestCase.gs
 input src/smalltalk/PythonTests/MetaclassBaseTestCase.gs
 input src/smalltalk/PythonTests/MetaclassCallTestCase.gs
 input src/smalltalk/PythonTests/MetaclassClassAttrTestCase.gs
+input src/smalltalk/PythonTests/MetaclassDirectCallInitTestCase.gs
 input src/smalltalk/PythonTests/MetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/MetaclassInstancecheckTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs

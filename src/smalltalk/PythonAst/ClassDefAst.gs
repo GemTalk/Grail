@@ -3728,6 +3728,14 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					___allocateInstance___:kw: (vendored fractions.py's
 					Fraction.__new__ carries ALL of its construction)."
 					src nextPutAll: 'instance := self @env1:___allocateInstance___: ___pos___ kw: ___kw___.'; nextPutAll: lf.
+					"A CLASS came back -- this is a metaclass called directly,
+					``Meta(name, bases, ns)'', which is how six.add_metaclass
+					builds (#1411) -- and its __init__ cannot be reached by
+					the sends below: they go to the CLASS, whose own chain is
+					the Smalltalk metaclass's and ends at object's no-op, not
+					to the Python metaclass that built it.  See
+					object class >> ___grailInitBuiltClass___:pos:kw:."
+					src nextPutAll: '(instance @env0:isBehavior) ifTrue: [^ self @env1:___grailInitBuiltClass___: instance pos: ___pos___ kw: ___kw___].'; nextPutAll: lf.
 					"A subclass of a built-in COLLECTION (list, ...) with no
 					__init__ of its own inherits population from the built-in
 					__init__.  Detected at RUNTIME (isKindOf) so DYNAMIC bases --

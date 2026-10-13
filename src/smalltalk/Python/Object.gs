@@ -2794,6 +2794,37 @@ ___isUndrivenCoroutine___
 
 category: 'Grail-Instantiation'
 method: object
+___grailInitBuiltClass___: aClass pos: positional kw: keywords
+	"Finish ``self(*positional, **keywords)'' when construction handed back a
+	CLASS -- a metaclass called directly, ``Meta(name, bases, ns)''.  This is
+	how six.add_metaclass builds, and with it python-dateutil's tz singletons
+	(#1411).
+
+	CPython's type.__call__ runs ``type(obj).__init__(obj, *args, **kw)'' when
+	obj is an instance of the class called, and skips it otherwise.  For a
+	class, obj's type is the PYTHON metaclass recorded for it, and that
+	metaclass's __init__ lives on its instance side.  The generated constructor
+	sends ___init__:kw: to obj itself, which for a class follows the Smalltalk
+	metaclass chain to object's no-op, so the metaclass __init__ never ran: a
+	``cls.attr = ...'' it made was simply missing.  The class statement never
+	hit this, because ___grailDispatchMetaclass___ runs the metaclass over the
+	class in this same way -- reading __init__ off the metaclass and calling it
+	with the class first.  So does this, and the answer is the class, since
+	__init__'s result is discarded."
+
+	| meta fn |
+	meta := aClass ___grailMetaclass___.
+	(meta notNil and: [meta == self or: [meta @env0:inheritsFrom: self]])
+		ifFalse: [^ aClass].
+	fn := [meta ___pyAttrLoad___: #'__init__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	fn @env0:notNil ifTrue: [
+		fn @env1:___pyCallValue___: ({ aClass } @env0:, positional) kw: keywords].
+	^ aClass
+%
+
+category: 'Grail-Instantiation'
+method: object
 ___allocateInstance___: positional kw: keywords
 	"Allocate an instance of self (a class) for ``Cls(*args, **kw)``.
 	A class-body ``def __new__(cls, ...)`` compiles as an INSTANCE-side
