@@ -306,6 +306,11 @@ wrap: aValue
 	"A reverse proxy round-trips straight back to its original foreign
 	PyObject* — numpy must get its own DType pointer again, not a wrapper."
 	(aValue isKindOf: ShimForeignObject) ifTrue: [ ^ aValue pyObjectView ].
+	"A function of a C module goes back as its builtin_function_or_method,
+	not as a wrapper of the BoundMethod Grail reads it as."
+	aValue class == BoundMethod ifTrue: [
+		pyObj := self ___functionObjectFor: aValue.
+		pyObj notNil ifTrue: [ ^ pyObj ]].
 	"A tuple that C built in CPython's own layout goes back as that object,
 	not as a wrapper -- see ___noteRealTuple:origin:.  Only an exact tuple
 	can have such an origin, so every other value pays one class compare."
@@ -825,6 +830,43 @@ ___noteForeignException: instPtr type: typePtr typeName: nameStr
 
 category: 'Grail-Wrapping'
 method: CPythonShim
+___functionObjectFor: aBoundMethod
+	"C's builtin_function_or_method for aBoundMethod, as a CByteArray, when it
+	is a function of a dynamically loaded C module; nil for any other
+	BoundMethod, which crosses as an ordinary wrapper.
+
+	Such a module's functions are methods of its module class
+	(loadDynamicModule:fromPath:), so ``mod.f'' is a BoundMethod, and C code
+	that checks the type of what it is handed refused it: numpy's
+	add_docstring writes a module function's ml_doc only when
+	``Py_TYPE(obj) == &PyCFunction_Type'', and ``import numpy'' stopped at
+	the first one (_core/overrides.py).
+
+	The class answers ___shimModuleName___, compiled on it by
+	loadDynamicModule:fromPath: and tested by includesSelector: so that only
+	that class qualifies.  The C name is the selector up to its first colon:
+	``mod.f'' reads as #f, a call site's forwarder is #f: or #f:_:, and the
+	varargs form is #_f:kw:."
+
+	| rcvClass sel name addr |
+	rcvClass := aBoundMethod receiver class.
+	(rcvClass class includesSelector: #'___shimModuleName___') ifFalse: [^ nil].
+	sel := aBoundMethod selector.
+	sel isNil ifTrue: [^ nil].
+	name := sel asString.
+	(name includes: $:) ifTrue: [
+		((name endsWith: ':kw:') and: [(name at: 1) == $_])
+			ifTrue: [name := name copyFrom: 2 to: (name indexOf: $:) - 1]
+			ifFalse: [name := name copyFrom: 1 to: (name indexOf: $:) - 1]].
+	addr := self ___duringCallDo: [
+		System userAction: #shimFunctionObject
+			withArgs: { rcvClass ___shimModuleName___ . name }].
+	addr isNil ifTrue: [^ nil].
+	^ CByteArray fromCPointer: (CPointer forAddress: addr) numBytes: 64
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
 typeAddrFor: aValue
 	"Return the C type address for a Smalltalk value.  Returns 0 if type
 	addresses are not yet initialized or the type is unregistered.
@@ -1267,6 +1309,20 @@ foreignGetAttr: cPtr name: aString
 	error."
 
 	^ self ___shimUserAction: #shimForeignGetAttr withArgs: { cPtr . aString }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+foreignSetAttr: cPtr name: aString value: aValue
+	"Store an attribute on a wheel's own C object in C, as C's own
+	PyObject_SetAttrString would: a type's tp_dict, or an instance's data
+	descriptor, tp_setattro or instance dict.  Answers true when stored, and
+	false when C has nowhere to put it (no such descriptor, no instance dict);
+	a refusal -- a read-only member -- raises, translated like any shim
+	error."
+
+	^ self ___shimUserAction: #shimForeignSetAttr
+		withArgs: { cPtr . aString . (self wrap: aValue) memoryAddress }
 %
 
 category: 'Grail-Calling'
@@ -2454,6 +2510,15 @@ loadDynamicModule: moduleName fromPath: pathString
 	Fixed-arity forwarders delegate to the varargs form so there is one
 	place where the actual C call happens."
 	symbolList := System myUserProfile symbolList.
+	"The C module this class fronts, for wrap: -- a function read off the
+	module is a BoundMethod on it, and goes back to C as that module's
+	function object (___functionObjectFor:)."
+	moduleClass class
+		compileMethod: '___shimModuleName___
+	^ ' , moduleName printString
+		dictionaries: symbolList
+		category: 'Grail-C Extension'
+		environmentId: 0.
 	methodNames do: [:methName |
 		| varargsSrc arity0Src arity1Src arity2Src arity3Src |
 		"Varargs form — actually invokes the C function. Keyword args

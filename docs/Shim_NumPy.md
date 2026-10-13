@@ -580,13 +580,12 @@ completion**: past wall 11, through `InitOperators`, `initumath`,
     method slot, and the plain form passes the method name (a String), so the
     kind of that slot now decides.
 
-### The frontier now
+### The frontier then
 
 The extension loads and the Python side of `import numpy` runs.  The next wall
-is in that Python integration: `numpy/_core/overrides.py` (`add_docstring`
-refusing a Grail object; a Grail `BoundMethod` that cannot take `__doc__`).  It
-is stage 2 of the plan: Grail-side gaps of the kind the package census lists,
-not shim ABI work.
+was in `numpy/_core/overrides.py`: `add_docstring` refused the object Grail
+handed it.  That looked like a Grail-side gap (a `BoundMethod` that cannot take
+`__doc__`), but it was the shim again: see stage 2.
 
 ### Finding a silent failure
 
@@ -610,16 +609,87 @@ Wall 13 onwards were found this way, and it beats guessing:
   `_multiarray_umath_exec` -> `initumath` -> `InitOperators` ->
   `get_info_no_cast`.
 
+## Stage 2 (2026-10-13): `numpy/_core/__init__.py` runs to line 118
+
+`import numpy` used to stop at `_core/__init__.py` line 24 (`from . import
+multiarray`, which imports `overrides`).  It now stops at line 118
+(`from .memmap import *`): `multiarray`, `overrides`, `umath`, `numerictypes`
+and `_type_aliases` all import.  Again every wall was in the shim, not in Grail's
+Python semantics.
+
+23. **A module function crossed into C as a wrapper of a Grail object.**  Grail
+    exposes a dynamically loaded module's functions as methods of its module
+    class, so `mod.f` is a `BoundMethod`, and passed back into C it became a
+    generic wrapper.  numpy's `add_docstring` writes `ml_doc` only when
+    `Py_TYPE(obj) == &PyCFunction_Type`, and fell back to
+    `setattr(obj, '__doc__', ...)`, which a builtin function refuses ("Cannot set
+    a docstring for that object").  Two fixes:
+    * `CPythonShim>>wrap:` now hands C the module's own
+      `builtin_function_or_method` for such a `BoundMethod`.  The new user action
+      `shimFunctionObject` makes it with `PyCMethod_New` over the module's
+      `PyMethodDef`, once per definition.
+    * `PyCMethod_New`'s objects carry the exported `PyCFunction_Type`, which was
+      a zeroed placeholder, not a private type, as the descriptor types already
+      did (wall 21).
+24. **`functools.wraps` on a wheel object never reached C.**  `overrides.py` wraps
+    every public numpy function as an `_ArrayFunctionDispatcher` and runs
+    `functools.wraps` over it, which stores `__name__`, `__doc__`, `__wrapped__`
+    and the rest.  A Grail-side store on a `ShimForeignObject` stayed on the
+    proxy, and the shim knew no `tp_dictoffset` at all.  Now
+    `ShimForeignObject>>___pyAttrStore___:put:` asks C (`shimForeignSetAttr`),
+    which stores the way `object.__setattr__` does: a data descriptor's setter,
+    else the instance dict at `tp_dictoffset`.  Reads check that dict after
+    data descriptors and before the type, as `PyObject_GenericGetAttr` does.
+    C-side `PyObject_SetAttrString` and `PyObject_GenericSetAttr` on a wheel
+    object take the same path; the latter used to raise `TypeError`.  A store C
+    has nowhere to put (no such descriptor, no dict) still lands on the proxy,
+    as before.
+25. **`PyObject_GenericGetDict` recursed until the C stack overflowed.**  It
+    answered `PyObject_GetAttrString(obj, "__dict__")`, which found the type's
+    `__dict__` getset, which is `PyObject_GenericGetDict`.  The gem died with
+    SIGSEGV and no Python traceback.  For a wheel object it now returns the
+    instance dict, making it on first use.
+26. **Struct members were never read on a wheel object.**
+    `_core/_type_aliases.py` reads `dtype.type` for every `typeinfo` entry, and
+    `type` is a `PyMemberDef` field.  The shim now has CPython's
+    `PyMember_GetOne` and `PyMember_SetOne`, and the foreign getattr consults
+    `tp_members`.  A read-only member refuses a store with CPython's "readonly
+    attribute".  `cpython.h` had two member type codes wrong: `_Py_T_OBJECT` was
+    16 (it is 6) and `Py_T_BOOL` was 21 (it is 14).  Only the shim's own modules,
+    built against that header, agreed with them; numpy's `dtype.type` is a 6.
+27. **`PyDict_DelItemString` was a stub that reported success** without
+    deleting anything.  It is now real.  Found on the way, not yet hit.
+
+`_grail_demo.so`, the test extension built against the real `Python.h`, gained a
+`Box` type (struct members, an instance dict, a `__dict__` getset that is
+`PyObject_GenericGetDict`) and three probes.  Seven `CPythonShimTestCase` tests
+in category "NumPy Stage 2" pin walls 23 to 26 against CPython's answers.
+
+### The frontier now
+
+`numpy/_core/memmap.py` line 24, `class memmap(ndarray):` -- "cannot subclass a
+non-class base (ShimForeignObject)".  **This is a different kind of wall.** A
+Python class whose base is a C extension type needs instances that are real C
+objects in that type's layout, allocated by its `tp_alloc`/`tp_new`, with the
+Python class's own attributes and methods on top.  numpy leans on this
+throughout: `memmap`, `matrix`, `recarray`, `numpy.ma`, and any user subclass of
+`ndarray`.  Grail has no such object model yet.  It needs a design (a heap type
+the shim builds per Grail subclass, deriving from the foreign base, with the
+Grail class as its mirror) before more walls can be walked.
+
 ## Repro
 
 ```
-# build the shim
-cd src/c/shim && make
-# install numpy for 3.14 into a venv (one-time)
-python3.14 -m venv /tmp/numpy_probe && /tmp/numpy_probe/bin/pip install numpy
-# probe (drives the load in-gem, prints walls)
-/tmp/probe_numpy.sh    # harness written during the investigation
+# build the shim and _grail_demo.so (install.sh does both)
+./install.sh
+# numpy for 3.14 in a venv (one-time)
+python3.14 -m venv /tmp/npvenv && /tmp/npvenv/bin/pip install numpy==2.5.4
+# a probe: put the venv's site-packages on sys.path, then import numpy
+printf 'import sys\nsys.path.insert(0, "/tmp/npvenv/lib/python3.14/site-packages")\nimport numpy\n' > /tmp/np_probe.py
+./grail /tmp/np_probe.py
 ```
+
+Add `GRAIL_SHIM_DIAG=1` to log foreign crossings and failed callbacks.
 
 The diagnostic stub layer (`shim_numpy.cc`) logs `SHIM-STUB-HIT: <fn>`
 the first time NumPy calls any not-yet-real entry point, so the next
