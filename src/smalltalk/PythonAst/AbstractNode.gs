@@ -2681,6 +2681,82 @@ ___irEligibleValueLocals___: localNames
 	^ false
 %
 
+category: 'Grail-code generation'
+method: AbstractNode
+___braceChunkSize___
+	"The most elements one Smalltalk brace array ``{a. b. ...}'' is given, and
+	the most parts one ``,'' chain joins (that one is half of this).
+
+	GemStone's compiler refuses a brace array of about 1,800 elements --
+	``CompileError 1001, expression nesting too deep'' -- whatever the elements
+	are: measured on 4.0, 1,700 integers, pairs or message sends compile and
+	1,900 integers or 2,000 of either other kind do not.  A left-associated
+	``a , b , c ...'' chain nests one level per part and fails between 500 and
+	1,000 parts.  A Python display of 2,000 elements was therefore an
+	uncatchable CompileError that ended the session (#1423): pygments' lexer
+	builtin tables and idna.uts46data, a single 17,000-line tuple, among others.
+
+	256 is far enough under both limits that element shape cannot matter, and
+	every display Grail compiled before is at or under it, so their emitted
+	code is unchanged."
+
+	^ 256
+%
+
+category: 'Grail-code generation'
+method: AbstractNode
+___printElementsArrayOf___: elements on: aStream
+	"Print an expression answering the Array of elements' values, evaluated
+	left to right: the brace literal ``{a. b. ...}'' when there are at most
+	___braceChunkSize___ of them, else brace chunks joined with ``,'' --
+	``({...} @env0:, {...} @env0:, ...)'' -- at most half that many parts to a
+	chain, each part itself chunked the same way when it is still too big.
+	Two levels cover 32,768 elements, three 4 million, and no brace or chain
+	comes near the compiler's limits (#1423)."
+
+	| chunk part |
+	chunk := self ___braceChunkSize___.
+	elements size <= chunk ifTrue: [
+		aStream nextPut: ${.
+		elements doWithIndex: [:each :i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			each printSmalltalkOn: aStream].
+		aStream nextPut: $}.
+		^ self].
+	part := ((elements size + (chunk // 2) - 1) // (chunk // 2)) max: chunk.
+	aStream nextPut: $(.
+	1 to: elements size by: part do: [:start |
+		start > 1 ifTrue: [aStream nextPutAll: ' @env0:, '].
+		self
+			___printElementsArrayOf___: (elements copyFrom: start to: ((start + part - 1) min: elements size))
+			on: aStream].
+	aStream nextPut: $)
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRChunkedArrayOf___: irValues on: aBuilder
+	"The IR twin of ___printElementsArrayOf___:on: -- one array node when there
+	are at most ___braceChunkSize___ values, else array nodes of that size
+	joined by env-0 ``,'' sends, chunked again when a part is still too big.
+	An IR array node compiles to the same brace the text does, with the same
+	limit (#1423)."
+
+	| chunk part acc |
+	chunk := self ___braceChunkSize___.
+	irValues size <= chunk ifTrue: [^ aBuilder arrayOf: irValues].
+	part := ((irValues size + (chunk // 2) - 1) // (chunk // 2)) max: chunk.
+	1 to: irValues size by: part do: [:start |
+		| sub |
+		sub := self
+			___emitIRChunkedArrayOf___: (irValues copyFrom: start to: ((start + part - 1) min: irValues size))
+			on: aBuilder.
+		acc := acc isNil
+			ifTrue: [sub]
+			ifFalse: [aBuilder send: #, to: acc with: { sub } env: 0]].
+	^ acc
+%
+
 category: 'Grail-IR Codegen'
 method: AbstractNode
 ___emitIRElementsArrayOn___: aBuilder elts: aCollection
@@ -2693,7 +2769,9 @@ ___emitIRElementsArrayOn___: aBuilder elts: aCollection
 
 	| acc |
 	(aCollection anySatisfy: [:e | e isKindOf: StarredAst]) ifFalse: [
-		^ aBuilder arrayOf: (aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])].
+		^ self ___emitIRChunkedArrayOf___:
+			(aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])
+			on: aBuilder].
 	acc := aBuilder arrayOf: #().
 	aCollection do: [:e |
 		| run |
