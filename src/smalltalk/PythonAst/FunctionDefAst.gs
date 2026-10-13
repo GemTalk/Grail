@@ -1648,11 +1648,11 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	wrapper.
 
 	Wrapped in a handler, like the module-scope path: if applying a decorator
-	raises, the store never runs and the compiled method stays in place --
-	exactly the previous behaviour of dropping the decorator.  That keeps this
-	strictly additive; decorators that apply take effect, decorators that
-	cannot are no worse than before.  Python control-flow signals are
-	re-raised rather than swallowed."
+	fails with a GemStone error, the store never runs and the compiled method
+	stays in place -- exactly the previous behaviour of dropping the
+	decorator.  Python control-flow signals are re-raised rather than
+	swallowed, and so is a Python exception, as CPython raises it at the def
+	(see printModuleDecoratorsOn:decorators:)."
 
 	aStream
 		nextPutAll: '[';
@@ -1703,7 +1703,7 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 		ifTrue: [aStream nextPutAll: ')'].
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
+		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [(___de isKindOf: PythonContinue) @env0:or: [___de isKindOf: BaseException]]]) ifTrue: [___de @env0:pass]].';
 		lf.
 	"The namespace a metaclass is handed must hold the DECORATED object; see
 	object class >> ___grailNsRebind___:."
@@ -1919,13 +1919,18 @@ printModuleDecoratorsOn: aStream decorators: decoList
 	decorator returns a fresh wrapper rather than the original.
 
 	The application is wrapped in a handler: if applying any decorator
-	raises (e.g. werkzeug's ``@LocalProxy'', a class that isn't callable
-	through the Grail call path), the store never runs and the slot is
-	left ABSENT — exactly the pre-fix behaviour (decorator dropped, bare
-	call uses the fast self-send of the real method).  This makes the
-	generalisation strictly additive: decorators that apply cleanly take
-	effect, decorators that can't are no worse than before.  Control-flow
-	signals (Python return / break / continue) are re-raised."
+	fails with a GEMSTONE error (e.g. werkzeug's ``@LocalProxy'', a class
+	that isn't callable through the Grail call path), the store never runs
+	and the slot is left ABSENT — exactly the pre-fix behaviour (decorator
+	dropped, bare call uses the fast self-send of the real method).
+	Control-flow signals (Python return / break / continue) are re-raised.
+
+	A PYTHON exception is re-raised too, as CPython raises it at the def.  It
+	was swallowed like the rest, which hid real program errors: FastAPI
+	validates a route as its decorator runs and raises on an invalid one, and
+	a route whose registration failed for any reason simply did not exist --
+	its requests answered 404 with nothing to say why
+	(docs/Support_FastAPI.md, Phase 5)."
 
 	aStream
 		lf;
@@ -1935,7 +1940,7 @@ printModuleDecoratorsOn: aStream decorators: decoList
 	self printDecoratorChainOn: aStream decorators: decoList index: 1.
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].'
+		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [(___de isKindOf: PythonContinue) @env0:or: [___de isKindOf: BaseException]]]) ifTrue: [___de @env0:pass]].'
 %
 
 category: 'Grail-code generation'

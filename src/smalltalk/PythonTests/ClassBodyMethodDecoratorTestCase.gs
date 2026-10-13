@@ -130,11 +130,12 @@ testUnboundMethodReportsItsOwnMetadata
 
 category: 'Grail-Tests-ClassBodyMethodDecorator'
 method: ClassBodyMethodDecoratorTestCase
-testFailingDecoratorLeavesTheMethodIntact
-	"Strictly additive.  A decorator that raises leaves the compiled method in
-	place -- the old behaviour of dropping it -- instead of breaking the class."
+testAFailingDecoratorRaisesAtTheDef
+	"A decorator that raises a Python exception makes the class statement
+	raise, as in CPython.  It used to be swallowed (the method kept, the
+	decorator dropped); only a GemStone error still is."
 
-	self assert: self loadFixture @env1:failing_decorator_leaves_the_method_intact
+	self assert: self loadFixture @env1:a_failing_decorator_raises_at_the_def
 		equals: true
 %
 

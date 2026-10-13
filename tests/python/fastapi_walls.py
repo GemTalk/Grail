@@ -62,6 +62,20 @@ Phase 4 -- plain ``def`` endpoints and TestClient, on cooperative green threads:
 18. contextvars' current context was one per SESSION, shared by every green
     thread, and get_ident() inside a generator was the generator's own.
 
+Phase 5 -- serving over HTTP, and FastAPI's own tests:
+
+19. runpy.run_path did not run: pkgutil.get_importer / read_code and
+    io.open_code were missing, and a module __dict__ refused update(**kw).
+20. type(sys) was the per-module class ``sys`` rather than ``module``, so
+    ``type(sys)(name)`` -- runpy's blank namespace -- copied all of sys; and
+    vars() of a blank module listed module's own methods.
+21. What FastAPI inspects: a callable instance's signature was ``()``; a
+    nested def had no __defaults__ under IR (a lambda under either arm); a
+    decorator's exception was swallowed, so a rejected route silently did not
+    exist; and a decorator named like its own def found the def.
+22. ``from pkg import Json`` loaded pkg/json.py on a case-insensitive disk;
+    tempfile.SpooledTemporaryFile was a stub (every upload).
+
 Every expectation here was measured against CPython 3.14.
 """
 
@@ -782,6 +796,196 @@ check('rlock_owner_across_generator', (_owned, _grl._is_owned()), (True, False))
 import os                                                       # noqa: E402
 
 check('os_process_cpu_count', isinstance(os.process_cpu_count(), int), True)
+
+# --- 19. Phase 5: runpy.run_path ---------------------------------------------------
+#
+# The test runner runs FastAPI's suite through runpy.run_path, which needed
+# pkgutil.get_importer and read_code, io.open_code, a module __dict__ that
+# takes update(**kw), and type(sys) to be the plain module type (runpy makes its
+# namespace with ``ModuleType = type(sys)``).
+
+import io as _io                                                # noqa: E402
+import pkgutil                                                  # noqa: E402
+import runpy                                                    # noqa: E402
+import tempfile as _tempfile                                    # noqa: E402
+import types as _types                                          # noqa: E402
+
+_rp_dir = _tempfile.mkdtemp(prefix='grail_walls_')
+_rp_file = os.path.join(_rp_dir, 'rp_target.py')
+with open(_rp_file, 'w') as _f:
+    _f.write('X = 41 + 1\nNAME = __name__\nSEEN = sorted(k for k in globals() '
+             'if k.startswith("__") and k != "__builtins__")\n')
+_g = runpy.run_path(_rp_file)
+check('run_path_runs_the_file', (_g['X'], _g['NAME']), (42, '<run_path>'))
+check('run_path_namespace', _g['SEEN'],
+      ['__cached__', '__doc__', '__file__', '__loader__', '__name__',
+       '__package__', '__spec__'])
+check('run_path_run_name_and_init_globals',
+      (runpy.run_path(_rp_file, run_name='__main__')['NAME'],
+       runpy.run_path(_rp_file, init_globals={'Y': 7})['Y']), ('__main__', 7))
+check('pkgutil_get_importer_of_a_file', pkgutil.get_importer(_rp_file), None)
+with _io.open_code(_rp_file) as _f:
+    check('io_open_code_reads_bytes', (_f.read(1), pkgutil.read_code(_io.BytesIO(b'x = 1\n'))),
+          (b'X', None))
+
+# --- 20. a module's type, and its __dict__ ------------------------------------
+
+check('type_of_a_module_is_module_type',
+      (type(sys) is _types.ModuleType, type(os) is _types.ModuleType,
+       sys.__class__ is type(sys)), (True, True, True))
+_blank = type(sys)('blank')
+check('a_blank_module_namespace', sorted(vars(_blank)),
+      ['__doc__', '__loader__', '__name__', '__package__', '__spec__'])
+
+
+class _LazyModule(_types.ModuleType):
+    def hello(self):
+        return 'hi ' + self.__name__
+
+
+_lazy = _LazyModule('lazy')
+check('module_type_subclass', (type(_lazy) is _LazyModule, _lazy.hello(),
+                               'hello' in vars(_lazy)), (True, 'hi lazy', False))
+_blank.__dict__.update(a=1)
+_blank.__dict__.update({'b': 2}, c=3)
+_blank.__dict__.update([('d', 4)])
+check('module_dict_update_forms', (_blank.a, _blank.b, _blank.c, _blank.d), (1, 2, 3, 4))
+
+
+class _Plain:
+    pass
+
+
+_pl = _Plain()
+_pl.__dict__.update([('e', 5)], f=6)
+check('instance_dict_update_forms', sorted(vars(_pl).items()), [('e', 5), ('f', 6)])
+check('dict_update_too_many_args', _raises(lambda: _pl.__dict__.update({}, {}), TypeError), True)
+
+# --- 21. FastAPI's own tests: introspecting what a route is built from ---------
+#
+# FastAPI decides what a dependency or endpoint takes by inspecting it.  Each of
+# these made a whole family of its tests fail.
+
+class _CallableDep:
+    async def __call__(self, request: int) -> str:
+        return 'called'
+
+
+check('signature_of_a_callable_instance',
+      (str(inspect.signature(_CallableDep())),
+       list(inspect.signature(_CallableDep()).parameters)),
+      ('(request: int) -> str', ['request']))
+
+
+class _Marker2:
+    def __init__(self, v):
+        self.v = v
+
+
+def _make_nested(n):
+    class Item:
+        pass
+
+    def endpoint(q: list[Item] = _Marker2(n), r: int = 5):
+        return q
+
+    lam = lambda p=n * 10, s=2: (p, s)    # noqa: E731
+    return endpoint, lam
+
+
+_ep, _lam = _make_nested(3)
+check('nested_def_defaults', (type(_ep.__defaults__[0]).__name__, _ep.__defaults__[0].v,
+                              _ep.__defaults__[1],
+                              type(inspect.signature(_ep).parameters['q'].default).__name__),
+      ('_Marker2', 3, 5, '_Marker2'))
+check('lambda_defaults', (_lam.__defaults__, _lam()), ((30, 2), (30, 2)))
+_ep.__defaults__ = (_Marker2(9), 6)
+check('nested_def_defaults_written_through', (_ep().v, _ep.__defaults__[1]), (9, 6))
+check('signature_renders_a_generic_alias',
+      str(inspect.signature(_ep)).startswith('(q: list['), True)
+check('generic_alias_dict_is_the_origins', type(list[int].__dict__) is type(list.__dict__), True)
+
+# A decorator that raises at the def raises, as in CPython -- FastAPI rejects
+# an invalid route there, and a swallowed error left the route missing.
+_deco_src = (
+    'def bad(f):\n'
+    '    raise ValueError("refused")\n'
+    'class C:\n'
+    '    @bad\n'
+    '    def m(self):\n'
+    '        pass\n')
+_deco_dir = _tempfile.mkdtemp(prefix='grail_walls_')
+with open(os.path.join(_deco_dir, 'grail_walls_deco_mod.py'), 'w') as _f:
+    _f.write('def bad(f):\n    raise ValueError("refused")\n@bad\ndef f():\n    pass\n')
+sys.path.insert(0, _deco_dir)
+try:
+    import grail_walls_deco_mod                                 # noqa: F401
+    _got = 'no raise'
+except ValueError as _e:
+    _got = str(_e)
+finally:
+    sys.path.remove(_deco_dir)
+check('a_module_decorator_error_raises', _got, 'refused')
+try:
+    exec(_deco_src, {})
+    _got = 'no raise'
+except ValueError as _e:
+    _got = str(_e)
+check('a_method_decorator_error_raises', _got, 'refused')
+
+
+def computed(f):
+    f.computed = True
+    return f
+
+
+class _SelfNamedDeco:
+    # The decorator is evaluated before the def binds its name, so this is the
+    # module-level ``computed'', not the method being defined (pydantic's
+    # ``@computed_field def computed_field'').
+    @computed
+    def computed(self):
+        return 1
+
+
+check('a_decorator_named_like_its_def', _SelfNamedDeco.computed.computed, True)
+
+# --- 22. imports are case-exact; uploads spool --------------------------------
+
+_case_dir = _tempfile.mkdtemp(prefix='grail_walls_')
+os.mkdir(os.path.join(_case_dir, 'casepkg'))
+with open(os.path.join(_case_dir, 'casepkg', '__init__.py'), 'w') as _f:
+    _f.write('def __getattr__(name):\n'
+             '    if name == "Json":\n'
+             '        return "the Json type"\n'
+             '    raise AttributeError(name)\n')
+with open(os.path.join(_case_dir, 'casepkg', 'json.py'), 'w') as _f:
+    _f.write('KIND = "the json module"\n')
+sys.path.insert(0, _case_dir)
+try:
+    from casepkg import Json as _Json                           # noqa: E402
+    import casepkg.json as _cj                                  # noqa: E402
+finally:
+    sys.path.remove(_case_dir)
+check('from_package_import_is_case_exact', (_Json, _cj.KIND), ('the Json type', 'the json module'))
+
+_sp = _tempfile.SpooledTemporaryFile(max_size=8)
+_sp.write(b'short')
+_rolled_before = _sp._rolled
+_sp.write(b' and now long')
+_sp.seek(0)
+check('spooled_temporary_file', (_rolled_before, _sp._rolled, _sp.read()),
+      (False, True, b'short and now long'))
+_sp.close()
+
+
+class _DictProperty:
+    @property
+    def __dict__(self):
+        raise NotImplementedError('no namespace')
+
+
+check('vars_uses_a_dict_property', _raises(lambda: vars(_DictProperty()), NotImplementedError), True)
 
 if __name__ == '__main__':
     for _name in sorted(RESULTS):

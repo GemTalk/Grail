@@ -872,7 +872,7 @@ builds pydantic_core's error dicts in.
 | 2 | 2, 3, 4 — the general runtime bugs | each a fixture against CPython 3.14; **tier 2** (they are shared machinery) |
 | 3 | 5, and the error-dict key order | shim tests in `CPythonShimTestCase` |
 | 4 | 6, 7 — sync endpoints and `TestClient` | **done** on cooperative green threads, anyio unmodified (below) |
-| 5 | serve over HTTP with `grail_asgi`; a slice of FastAPI's own tests with the pydantic Phase 6 runner, compared test by test; latency and import time | — |
+| 5 | serve over HTTP with `grail_asgi`; a slice of FastAPI's own tests with the pydantic Phase 6 runner, compared test by test; latency and import time | **done** (below) |
 
 
 ### Phases 1 and 2, done *(2026-10-05)*
@@ -1055,7 +1055,8 @@ leaner executor) is optimisation for later.
   temporary object memory: `String >> ,` signals a non-resumable
   `AlmostOutOfMemoryError` rather than fail fatally. The thread died (silently,
   until the reporting above), and the test thread waited forever. A warm run
-  does not compile and does not hit it.
+  does not compile and does not hit it. *(Phase 5: the limit is the `grail`
+  launcher's `-T 400000`; `GRAIL_TEMPOBJ_KB=1500000` lifts it.)*
 * A `@classmethod` / `@staticmethod` of **seven or more** arguments is not
   reachable by attribute load at all — the selector family stops at six, and
   class-side defs get no `_name:kw:` (pre-existing).
@@ -1081,3 +1082,140 @@ fixtures agree with CPython.
 
 **Next:** Phase 5 — serve the app over HTTP with `grail_asgi`, and run a slice of
 FastAPI's own test suite.
+
+### Phase 5, done *(2026-10-09)*
+
+#### Served over HTTP
+
+`tests/fastapi/http/` serves a probe app -- async and sync endpoints and
+dependencies, a pydantic body and its 422s, `HTTPException`, an unhandled error,
+404/405, plain text, a `StreamingResponse`, an `asynccontextmanager` lifespan
+and `request.state`, a background task, `/openapi.json` and `/docs` -- with
+`grail_asgi`, and drives it with `http.client` from CPython. The same server code
+serves the same app under CPython for the comparison:
+
+```bash
+python3 tests/fastapi/http/drive.py cpython 8771 <venv> > out.cpy
+GRAIL_TEMPOBJ_KB=1500000 python3 tests/fastapi/http/drive.py grail 8772 <venv> > out.grail
+diff out.cpy out.grail          # empty: all 20 exchanges byte-identical
+```
+
+`grail_asgi` needed two things for FastAPI:
+
+| wall | fix |
+|---|---|
+| no ASGI lifespan: `lifespan=` never ran, `request.state` was empty | the lifespan protocol, uvicorn-`auto` style -- startup before the first accept, shutdown in `stop()`, its state copied into every request scope; an app that does not speak it is served anyway |
+| every `StreamingResponse` answered 500 | `receive()` answered `http.disconnect` straight after the body, and starlette cancels a stream the moment it hears one. It now parks until the response is finished, as uvicorn's does |
+
+**Latency**, one keep-alive connection, warm (Darwin arm64):
+
+| | Grail | CPython (same server) |
+|---|---|---|
+| `GET /` (async) | 8.0 ms | 0.3 ms |
+| `GET /dep?q=1` (async, two deps) | 11.8 ms | 0.4 ms |
+| `GET /sync` (sync endpoint and dep, two thread hops) | 27.1 ms | 0.6 ms |
+| server up (imports) | ~83 s | 0.5 s |
+
+Over a socket a request costs a third of what it does through `TestClient`
+(~40 ms), which adds its own blocking-portal hops.
+
+#### FastAPI's own tests
+
+`tests/fastapi/run_fastapi_tests.py` runs FastAPI 0.142.2's test modules with the
+pydantic runner (`tests/pydantic/run_pydantic_tests.py`) and `minipytest`, under
+Grail and under CPython alike; `compare_results.py` diffs the two.
+`inline_snapshot` is a stand-in (`tests/fastapi/standins`: with its plugin off
+the real `snapshot(x)` answers `x`); `dirty_equals` and `python-multipart` are
+the real packages, installed in the venv. Several modules run in one gem, so
+FastAPI is imported once:
+
+```bash
+<venv>/bin/python tests/fastapi/run_fastapi_tests.py <sdist>/tests/test_*.py > out.cpy
+GRAIL_TEMPOBJ_KB=1500000 VIRTUAL_ENV=<venv> RUNNER=$PWD/tests/fastapi/run_fastapi_tests.py \
+  tests/pydantic/run_pydantic_slice.sh out.grail -- <sdist>/tests/test_*.py
+python3 tests/pydantic/compare_results.py out.grail out.cpy
+```
+
+The slice is the **core suite**: every top-level `tests/test_*.py` (208 modules,
+1,276 tests) but the CLI and release tooling. `test_tutorial/` (the docs'
+examples, 252 modules) and `test_telemetry/` (needs opentelemetry) are not in it.
+Under CPython the runner passes 1,266 and skips 10.
+
+| run | same outcome as CPython | CPython passes, Grail does not |
+|---|---:|---:|
+| first | 1,003 (79%) | 263 |
+| final | **1,200 (95%)** | 66 |
+
+The runner itself had to grow to run FastAPI's suite under CPython at all --
+fixtures with `params=`, `indirect=` parametrisation, autouse and module-scoped
+fixtures, `async def` tests, keyword-form `parametrize`, `ExceptionInfo.traceback`,
+`monkeypatch.chdir` and the dotted-string `delattr`, a module-level skip, nested
+test packages, several modules per process, and SOURCE order (Grail enumerates a
+module's defs in method-dictionary order, and some tests read state the earlier
+ones leave). These change what the pydantic slice collects as well.
+
+The walls, each a general Grail bug, in the order met:
+
+| wall | symptom in FastAPI's tests | fix |
+|---|---|---|
+| the `grail` launcher's 400 MB of temporary object memory | the portal thread compiling anyio's backend on a cold run died with a non-resumable `AlmostOutOfMemoryError`; the test thread then waited forever | `GRAIL_TEMPOBJ_KB` overrides `-T` (default unchanged); FastAPI with TestClient uses ~300 MB warm |
+| `runpy.run_path` did not run | (the runner uses it) | `pkgutil.get_importer` / `read_code`, `io.open_code`; a module's `__dict__.update(**kw)` / pairs / mapping (`PyInstanceDict >> _update:kw:`) |
+| `type(sys)` was the per-module class `sys`, not `module` | `type(sys)(name)` -- runpy's blank namespace -- copied all of sys, and `exec` into it PERFORMED `sys.breakpoint` | `module >> ___pyMetaclass___` / `__class__` answer `module` for a real module (a bare one, or the one `sys.modules` holds under its `__name__`) and a Python `ModuleType` subclass for its instances; `sys.flags` and the other internal `module` subclasses keep their own class. A blank module's namespace is CPython's five names, and its class's methods are not entries |
+| `inspect.signature` of a callable INSTANCE was `()` | every security scheme (`HTTPBasic`, `OAuth2`, `APIKey*`...) was called with no `request`: ~100 tests | `type(obj).__call__`'s signature, less `self` |
+| a nested def had no `__defaults__` under IR (a lambda had none on either arm) | a route defined inside a test lost its `Query()`/`Depends()` -- FastAPI saw a plain parameter | the defaults reader decodes the IR closure's level-0 offset (`ExecBlockAttrs >> ___defaultSlotFor___:name:`) and a lambda's `___lamdef_` temps |
+| a live function frame with nothing bound answered no `f_locals` | pydantic resolves a model defined in a function through `sys._getframe(n).f_locals`: AttributeError | an empty mapping, as CPython's proxy |
+| `list[float].__dict__` was a bound method | `TypeAdapter(list[float]).json_schema()` iterated it | the origin's `__dict__`, as CPython proxies it |
+| `inspect.formatannotation` printed `list[Item]` as `list` | (rendering only) | a GenericAlias prints as itself; a class outside builtins module-qualified |
+| `from pydantic import Json` loaded `pydantic/json.py` | on macOS's case-insensitive disk, a lazily exported name found a same-named submodule file; `Json[...]` then failed and the route was never registered | module files match case-exactly (`importlib class >> ___exactCaseEntry___:under:path:`), as CPython's finder does |
+| an exception from a module-level or method DECORATOR was swallowed | FastAPI validates a route as its decorator runs; a refused or failed route simply did not exist (404), and the "must raise" tests did not raise | a Python exception propagates, as in CPython; only a GemStone error keeps the old drop-the-decorator fallback |
+| a decorator named like its own def resolved to the def | `@computed_field def computed_field` (pydantic) became `'property' object is not callable` | a class-body decorator sees its def's name only if an EARLIER statement bound it |
+| `tempfile.SpooledTemporaryFile` was a stub | every upload: "There was an error parsing the body" | CPython's |
+| the shim's import cache and `PyModule_AddObjectRef` held pointers without a reference | after enough imports a module's wrapper reached refcount 0 and `CPythonShim>>sweep` freed it under the cache: `'str' object has no attribute 'compile'` from pydantic_core's `re`, or a segfault -- order-dependent, so it hid as "flaky" | the cache owns a reference and a hit answers a new one; `AddObjectRef` increfs (`PyModule_Add` steals) |
+| `vars(obj)` ignored a class-defined `__dict__` | `jsonable_encoder` of an unserialisable object did not raise | a Python class's own `__dict__` is asked through the attribute protocol |
+| *(surfaced by the gates, once decorator errors propagated)* `inspect.getfullargspec` was a stub answering an empty, non-iterable object | Django's `@register.simple_tag` unpacks its seven fields: the WSGI tests errored | CPython's, from `signature()`, as the `FullArgSpec` named tuple; the old `_FullArgSpec` class stays (Django's deployed framework committed instances of it) and unpacks too |
+
+Fixtures that pinned the old behaviour were moved to CPython's:
+`class_body_decorators.py` (a raising decorator now raises at the def),
+`live_frames.py` (a live frame with nothing bound has an empty `f_locals`; it was
+a documented Grail-only limit), `HttpCookiejarTestCase` (`type(m).__name__` is
+`module`; the internal class name is asserted Smalltalk-side), and
+`method_docstrings.py`, which used `functools` without importing it -- a
+`NameError` the decorator swallow had been hiding.
+
+Tests: 23 more checks in `tests/python/fastapi_walls.py` (107 in all, both arms),
+four new `AsgiServerTestCase` probes (lifespan, streaming), and
+`CPythonShimTestCase >> testAnImportedModuleKeepsAReferenceInTheImportCache`
+(`_shimtest.test_import_refcount`).
+
+**Left** (66 tests, ~5% of the slice):
+
+* five tests still crash the gem: `test_custom_schema_fields`, two in
+  `test_response_model_as_return_annotation`, a Rust `capacity overflow` panic in
+  `test_openapi_schema_type`, and `test_multi_body_errors`, whose
+  `condecimal(gt=...)` model's OpenAPI schema, generated inside TestClient's
+  portal (and only there: on a thread, in a coroutine, under `anyio.run` or a
+  bare portal it works), meets a GemStone `MessageNotUnderstood` -- uncatchable,
+  so it ends the thread;
+* `pydantic`'s `field_validator(cls, v, info)` on a model nested in a function is
+  called without `info`;
+* `-> Iterable[Model]` return annotations do not become a response model;
+* OpenAPI schema differences (9 snapshot asserts) and the streaming-JSON
+  validation path;
+* `__import__(name, fromlist=['missing'])` raises where CPython ignores the name
+  (Grail's compiled `from X import y` routes through `__import__`); the
+  stand-in's monkeypatch avoids it.
+
+**Gates** (Darwin arm64, 2026-10-09): `run_tests.sh` **7768 run, 7768
+passed**, 8 of 8 shards, every post-suite script passing; the CPython
+conformance gate **0 regressions** -- of the eight rows its full run flagged,
+four were timeouts beside the SUnit suite (test_math, test_bytes, test_pickle,
+test___all__: OK alone), and four were this phase's, fixed and OK alone
+(test_list, test_property and test_random needed `test.support`'s
+`nomemtest` / `refcount_test` / `requires_fork`, decorators whose ABSENCE had
+been swallowed; test_operator's `(obj, /)` signatures, where an explicit
+`__call_signature__` must outrank a callable instance's `__call__`);
+`check_python_fixtures.sh` 548 fixtures agree with CPython.
+
+**Next:** the second half of the slice (`test_tutorial/`, 252 modules), the
+crashes above, and making a request cheaper -- at ~9 ms for the simplest async
+route over HTTP the cost is ordinary Python execution, not a fixed overhead.

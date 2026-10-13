@@ -2185,6 +2185,14 @@ static PyObject *import_cache_get(const char *name) {
 static void import_cache_put(const char *name, PyObject *mod) {
     if (import_cache_count >= IMPORT_CACHE_MAX) return;
     snprintf(import_cache[import_cache_count].name, 64, "%s", name);
+    /* THE CACHE OWNS A REFERENCE.  Without it the only count on the module's
+       wrapper was the caller's, which PyO3 drops when it is done -- the wrapper
+       reached 0, CPythonShim>>sweep freed it, and this slot kept the dangling
+       pointer.  The next import of the same name handed it out; once a STR
+       wrapper had reused the memory, pydantic_core's ``re.compile'' lookup
+       read ``'str' object has no attribute 'compile''', or the gem
+       segfaulted (docs/Support_FastAPI.md, Phase 5). */
+    Py_INCREF(mod);
     import_cache[import_cache_count].mod = mod;
     import_cache_count++;
 }
@@ -2205,7 +2213,8 @@ static PyObject *do_import_via_server(const char *name) {
 
 extern "C" PyObject *PyImport_ImportModule(const char *name) {
     PyObject *cached = import_cache_get(name);
-    if (cached) return cached;
+    /* A NEW reference, as CPython's is: the caller will decref it. */
+    if (cached) { Py_INCREF(cached); return cached; }
     PyObject *m = do_import_via_server(name);
     if (m == NULL) {
         PyErr_Format(PyExc_ImportError, "No module named '%s'", name);
@@ -2593,6 +2602,11 @@ extern "C" int PyModule_AddObjectRef(PyObject *module, const char *name,
     if (ai >= MAX_MODULE_ATTRS) return -1;
     module_attrs[idx].attrs[ai].name = name;
     module_attrs[idx].attrs[ai].type = ModuleAttr::ATTR_OBJECT;
+    /* CPython's AddObjectRef ADDS a reference (only PyModule_Add steals), and
+       this table keeps the value for the life of the process.  Storing it
+       uncounted let the caller's own decref take the wrapper to 0 and the
+       sweep free it under the table -- see import_cache_put. */
+    Py_XINCREF(value);
     module_attrs[idx].attrs[ai].obj_val = value;
     module_attrs[idx].attr_count++;
     return 0;
@@ -2600,7 +2614,10 @@ extern "C" int PyModule_AddObjectRef(PyObject *module, const char *name,
 
 extern "C" int PyModule_Add(PyObject *module, const char *name,
                             PyObject *value) {
-    return PyModule_AddObjectRef(module, name, value);
+    /* STEALS value, on success or failure alike, as CPython's does. */
+    int r = PyModule_AddObjectRef(module, name, value);
+    Py_XDECREF(value);
+    return r;
 }
 
 extern "C" int PyModule_AddIntConstant(PyObject *module, const char *name,
@@ -6341,7 +6358,10 @@ extern "C" PyObject *PyObject_CallMethodObjArgs(PyObject *obj, PyObject *name, .
 
 extern "C" int PyModule_AddObject(PyObject *module, const char *name,
                                   PyObject *value) {
-    return PyModule_AddObjectRef(module, name, value);
+    /* The legacy API steals value on SUCCESS only (CPython). */
+    int r = PyModule_AddObjectRef(module, name, value);
+    if (r == 0) Py_XDECREF(value);
+    return r;
 }
 
 extern "C" int PyModule_AddType(PyObject *module, PyTypeObject *type) {

@@ -119,6 +119,46 @@ def get_loader(name):
     return None
 
 
+def read_code(stream):
+    """The code object in a compiled (.pyc) stream, or None when the stream
+    is not one.  runpy.run_path asks this first and compiles the file as
+    source on None -- which is every file under Grail, since Grail writes no
+    .pyc; a real one is still read, as CPython's is."""
+    magic = stream.read(4)
+    try:
+        from importlib.util import MAGIC_NUMBER
+    except ImportError:
+        return None
+    if magic != MAGIC_NUMBER:
+        return None
+    import marshal
+    stream.read(12)                # the rest of the header
+    return marshal.load(stream)
+
+
+def get_importer(path_item):
+    """The finder for one sys.path entry, or None when nothing can import
+    from it.
+
+    CPython asks ``sys.path_hooks`` and caches the answer in
+    ``sys.path_importer_cache``; its only file-system hook accepts a DIRECTORY,
+    so a plain file -- ``runpy.run_path('script.py')`` -- answers None, and
+    that None is what sends run_path down its run-the-file branch.  Grail has
+    no path hooks, so the same answers come straight from the file system: a
+    cached entry if there is one, a directory's finder, otherwise None.
+    Without this ``runpy.run_path`` failed on its import of it."""
+    path_item = os.fsdecode(path_item)
+    cache = getattr(sys, 'path_importer_cache', None)
+    if cache is not None:
+        try:
+            return cache[path_item]
+        except KeyError:
+            pass
+    if os.path.isdir(path_item):
+        return _DirectoryFinder(path_item)
+    return None
+
+
 def get_data(package, resource):
     """The bytes of a data file that ships inside ``package``.
 

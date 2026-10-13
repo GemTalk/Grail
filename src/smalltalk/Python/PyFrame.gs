@@ -228,8 +228,14 @@ f_locals
 				nm := [(self @env0:dynamicInstVarAt: #'f_code')
 					@env0:dynamicInstVarAt: #'co_name']
 					@env0:on: AbstractException do: [:e | e @env0:return: nil].
-				(nm @env0:= '<module>') == true ifFalse: [
-					^ self ___liveLocalsSnapshotOrRaise___].
+				"A LIVE function frame with nothing bound yet is an EMPTY mapping
+				-- CPython's proxy for it is empty, not absent.  pydantic reads
+				``sys._getframe(n).f_locals'' for every model a function defines,
+				to resolve its annotations, and the AttributeError failed each one
+				(FastAPI's tests define models inside test functions).  A
+				traceback frame never reaches this branch, so it still answers
+				absent."
+				(nm @env0:= '<module>') == true ifFalse: [^ dict ___new___].
 				"THE STORED SLOT FIRST.  A doit's namespace is handed to the
 				constructor and parked in the dynamic instVar (see BaseException
 				class >> ___doitGlobalsFor___); the f_globals METHOD derives one from

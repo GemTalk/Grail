@@ -128,9 +128,9 @@ testVendoredFileIsTheModuleThatLoads
 	exists ONLY in the vendored file (_open_cookie_file_for_write is Grail's
 	one adaptation and appears in no CPython release).
 
-	The module class name is also asserted: Grail flattens dots, so
-	http.cookiejar becomes the class http_cookiejar, and a fixture or module
-	that took that name first would collide."
+	The module class name is also asserted (Smalltalk-side): Grail flattens
+	dots, so http.cookiejar becomes the class http_cookiejar, and a fixture or
+	module that took that name first would collide."
 
 	self assert: (self eval:
 'import http.cookiejar as m
@@ -140,10 +140,14 @@ m.__file__.endswith(''/src/python/stdlib/http/cookiejar.py'')
 'import http.cookiejar as m
 hasattr(m, ''_open_cookie_file_for_write'')
 ') equals: true.
+	"The CLASS is checked on the Smalltalk side: Python's type(m) is
+	``module'', as in CPython, and no longer shows it."
 	self assert: (self eval:
 'import http.cookiejar as m
 type(m).__name__
-') equals: 'http_cookiejar'.
+') equals: 'module'.
+	self assert: (importlib @env1:lookupModule: 'http.cookiejar') class name asString
+		equals: 'http_cookiejar'.
 	self assert: (self eval:
 'import http.cookiejar as m
 m.__name__

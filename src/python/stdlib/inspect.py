@@ -300,14 +300,67 @@ def isroutine(obj):
     return ismethod(obj) or isfunction(obj)
 
 
-def getfullargspec(obj):
-    """Return a 7-tuple-shaped object describing obj's signature.
-    Stub: empty arg lists, no annotations."""
-    return _FullArgSpec(args=[], varargs=None, varkw=None, defaults=None,
-                        kwonlyargs=[], kwonlydefaults=None, annotations={})
+def getfullargspec(func):
+    """CPython's: the signature as a FullArgSpec named tuple, read off
+    signature().  It was a stub answering an empty, NON-iterable object --
+    unnoticed while a decorator's exception was swallowed, and then the first
+    thing Django's ``@register.simple_tag`` met: it unpacks the seven fields.
+
+    Positional-only parameters lead ``args``, as CPython reports them."""
+    try:
+        sig = signature(func, follow_wrapped=False)
+    except Exception as ex:
+        raise TypeError('unsupported callable') from ex
+    args = []
+    varargs = None
+    varkw = None
+    posonlyargs = []
+    kwonlyargs = []
+    annotations = {}
+    defaults = ()
+    kwdefaults = {}
+    if sig.return_annotation is not sig.empty:
+        annotations['return'] = sig.return_annotation
+    for param in sig.parameters.values():
+        kind = param.kind
+        name = param.name
+        if kind is Parameter.POSITIONAL_ONLY:
+            posonlyargs.append(name)
+            if param.default is not param.empty:
+                defaults += (param.default,)
+        elif kind is Parameter.POSITIONAL_OR_KEYWORD:
+            args.append(name)
+            if param.default is not param.empty:
+                defaults += (param.default,)
+        elif kind is Parameter.VAR_POSITIONAL:
+            varargs = name
+        elif kind is Parameter.KEYWORD_ONLY:
+            kwonlyargs.append(name)
+            if param.default is not param.empty:
+                kwdefaults[name] = param.default
+        elif kind is Parameter.VAR_KEYWORD:
+            varkw = name
+        if param.annotation is not param.empty:
+            annotations[name] = param.annotation
+    return FullArgSpec(posonlyargs + args, varargs, varkw, defaults or None,
+                       kwonlyargs, kwdefaults or None, annotations)
+
+
+def _make_full_arg_spec():
+    from collections import namedtuple
+    return namedtuple('FullArgSpec', 'args, varargs, varkw, defaults, '
+                                     'kwonlyargs, kwonlydefaults, annotations')
+
+
+FullArgSpec = _make_full_arg_spec()
 
 
 class _FullArgSpec:
+    """What the old stub getfullargspec answered.  KEPT because a deployed
+    framework (Django's template library) committed instances of it: Grail
+    refuses to drop a class whose instances live in the repository.  It
+    unpacks now, as the named tuple does, so those instances still serve."""
+
     def __init__(self, args, varargs, varkw, defaults, kwonlyargs,
                  kwonlydefaults, annotations):
         self.args = args
@@ -317,6 +370,10 @@ class _FullArgSpec:
         self.kwonlyargs = kwonlyargs
         self.kwonlydefaults = kwonlydefaults
         self.annotations = annotations
+
+    def __iter__(self):
+        return iter((self.args, self.varargs, self.varkw, self.defaults,
+                     self.kwonlyargs, self.kwonlydefaults, self.annotations))
 
 
 class _ParameterKind:
@@ -484,6 +541,20 @@ def formatannotation(annotation, base_module=None):
         import re
         return re.sub(r'[\w\.]+', lambda m: m.group().removeprefix('typing.'),
                       repr(annotation))
+    # A parameterised builtin generic (``list[Item]``) prints as itself; read
+    # as a class it printed ``list``, dropping the parameters.
+    import types as _types
+    if isinstance(annotation, _types.GenericAlias):
+        return str(annotation)
+    # A class prints bare when it is a builtin (or from base_module), and
+    # module-qualified otherwise -- ``starlette.requests.Request``, as CPython.
+    if isinstance(annotation, type):
+        module = getattr(annotation, '__module__', None)
+        qual = getattr(annotation, '__qualname__', None) or getattr(annotation, '__name__', None)
+        if isinstance(qual, str):
+            if module in ('builtins', base_module) or not isinstance(module, str):
+                return qual
+            return module + '.' + qual
     name = getattr(annotation, '__name__', None)
     if isinstance(name, str):
         return name
@@ -858,8 +929,21 @@ def signature(obj, *args, **kwargs):
             return sig
         text = getattr(obj, '__text_signature__', None)
     else:
+        # A callable INSTANCE: CPython reads its type's user-defined __call__
+        # and drops ``self``.  Without this every one answered ``()`` -- and
+        # FastAPI finds a dependency's parameters this way, so its security
+        # classes (``async def __call__(self, request: Request)'') were called
+        # with no request at all.
+        # An explicit ``__call_signature__'' wins: it is a declaration
+        # (operator.attrgetter's ``(obj, /)'' has a positional-only marker its
+        # def cannot carry here).
         text = getattr(obj, '__call_signature__', None)
         if not isinstance(text, str):
+            call = _signature_get_user_defined_method(type(obj), '__call__')
+            if call is not None:
+                sig = _drop_leading_parameter(signature(call))
+                if sig is not None:
+                    return sig
             call = getattr(type(obj), '__call__', None)
             text = getattr(call, '__text_signature__', None) if call is not None else None
     if isinstance(text, str):

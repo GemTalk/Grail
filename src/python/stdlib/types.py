@@ -218,10 +218,11 @@ def _derive_module_type():
     Derived rather than stubbed, for the same reason TracebackType below is:
     Grail HAS the thing, it just has no Python-visible binding for it.  A module
     is a Smalltalk class instance and each one is an instance of its OWN
-    generated class, so ``type(sys)`` is ``sys`` -- not a single ``module`` type
-    the way CPython has one.  But every one of those classes descends from
-    Grail's ``module``, so that is the class ``isinstance(x, ModuleType)`` should
-    name, and asking a live module for it is the only way to reach it.
+    generated class -- but every one of those classes descends from Grail's
+    ``module``, so that is the class ``isinstance(x, ModuleType)`` should name,
+    and asking a live module for it is the only way to reach it.  (``type(sys)``
+    itself answers ``module`` now, as CPython's does; the MRO walk is kept so
+    this does not depend on that.)
 
     The stub this replaces documented the gap and accepted it ("the check
     returns False; downstream code generally has a hasattr-based fallback").

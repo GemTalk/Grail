@@ -1245,7 +1245,7 @@ testLiveFramesAndGetframe
 	   'a_method_s_live_frame_names_its_real_file'
 	   'the_machinery_keeps_itself_out_of_the_walk'
 	   'a_live_frame_has_f_locals'
-	   'a_frame_with_no_bound_locals_has_no_f_locals'
+	   'a_frame_with_no_bound_locals_has_empty_f_locals'
 	   'a_traceback_frame_has_f_locals'
 	   'a_traceback_frame_declines_another_frames_locals'
 	   'clear_frames_empties_a_traceback_frame'

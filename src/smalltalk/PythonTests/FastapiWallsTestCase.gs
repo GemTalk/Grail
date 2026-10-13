@@ -41,6 +41,11 @@ FastapiWallsTestCase category: 'Grail-SUnit'
 ! and keyword calls, real Condition / Semaphore / queue / concurrent.futures,
 ! call_soon_threadsafe waking the loop, and per-thread contextvars.
 !
+! Phase 5 (serving over HTTP; FastAPI's own tests) added runpy.run_path,
+! module __dict__.update forms, type() of a module being ``module'', what
+! FastAPI introspects (signatures, closure defaults, decorator errors and
+! scope), case-exact imports and SpooledTemporaryFile.
+!
 ! tests/python/fastapi_walls.py holds the checks, run under CPython 3.14 by
 ! scripts/check_python_fixtures.sh; run here on the default path and forced
 ! onto IR.
@@ -80,7 +85,11 @@ method: FastapiWallsTestCase
 ___names___
 	"Listed rather than iterated so that a check DISAPPEARING fails too."
 
-	^ #('asyncio_callback_pairs'
+	^ #('a_blank_module_namespace'
+	    'a_decorator_named_like_its_def'
+	    'a_method_decorator_error_raises'
+	    'a_module_decorator_error_raises'
+	    'asyncio_callback_pairs'
 	    'asyncio_threads'
 	    'asyncio_vendored_names'
 	    'bounded_semaphore_over_release'
@@ -109,38 +118,52 @@ ___names___
 	    'dataclass_signature'
 	    'dataclass_slots'
 	    'del_self'
+	    'dict_update_too_many_args'
 	    'fastapi_shape_depends'
+	    'from_package_import_is_case_exact'
 	    'future_result_waits'
 	    'futures_timeout_is_builtin'
+	    'generic_alias_dict_is_the_origins'
 	    'get_ident_in_generator'
 	    'hash_none'
 	    'idle_loop_woken_by_thread'
 	    'init_signature'
 	    'init_signature_value'
+	    'instance_dict_update_forms'
 	    'instance_eq_assigned'
 	    'interpreters_all'
 	    'interpreters_error_bases'
 	    'interpreters_is_shareable'
+	    'io_open_code_reads_bytes'
 	    'isinstance_none_mapping_after'
 	    'json_dumps_indent_order'
 	    'json_dumps_insertion_order'
 	    'json_dumps_sort_keys'
+	    'lambda_defaults'
 	    'lambda_dunders_instance'
 	    'method_defaults_bound'
 	    'method_defaults_unbound'
 	    'module_default_is_call_value'
 	    'module_defaults'
+	    'module_dict_update_forms'
 	    'module_kwdefaults'
 	    'module_signature_str'
 	    'module_signature_values'
+	    'module_type_subclass'
+	    'nested_def_defaults'
+	    'nested_def_defaults_written_through'
 	    'no_defaults'
 	    'object_eq_over_inherited_def'
 	    'object_lt_assigned_raises'
 	    'os_process_cpu_count'
+	    'pkgutil_get_importer_of_a_file'
 	    'process_pool_name_resolves'
 	    'queue_ping_pong'
 	    'queue_simple_and_shutdown'
 	    'rlock_owner_across_generator'
+	    'run_path_namespace'
+	    'run_path_run_name_and_init_globals'
+	    'run_path_runs_the_file'
 	    'runpy_all'
 	    'runtime_object_repr'
 	    'semaphore_acquire'
@@ -159,11 +182,16 @@ ___names___
 	    'signal_signals_lookup'
 	    'signal_signals_name'
 	    'signal_valid_signals_are_members'
+	    'signature_of_a_callable_instance'
+	    'signature_renders_a_generic_alias'
+	    'spooled_temporary_file'
 	    'staticmethod_keywords'
 	    'staticmethod_override_five_args'
 	    'thread_pool_executor'
 	    'type_made_class_init'
-	    'type_made_class_no_init_refuses_args')
+	    'type_made_class_no_init_refuses_args'
+	    'type_of_a_module_is_module_type'
+	    'vars_uses_a_dict_property')
 %
 
 category: 'Grail-Private'

@@ -49,11 +49,26 @@ def importorskip(modname, minversion=None, reason=None):
 
 # -- raises / warns -------------------------------------------------------------
 
+class _TracebackEntry:
+    # pytest's: ``path`` a Path, ``lineno`` 0-based
+    def __init__(self, filename, lineno, name):
+        from pathlib import Path
+        self.path = Path(filename)
+        self.lineno = lineno - 1
+        self.name = name
+
+
 class ExceptionInfo:
     def __init__(self):
         self.type = None
         self.value = None
         self.tb = None
+
+    @property
+    def traceback(self):
+        import traceback as _tb
+        return [_TracebackEntry(fs.filename, fs.lineno, fs.name)
+                for fs in _tb.extract_tb(self.tb)]
 
     def match(self, regexp):
         assert re.search(regexp, str(self.value)), f'{regexp!r} not found in {str(self.value)!r}'
@@ -218,14 +233,15 @@ def param(*values, marks=(), id=None):
 
 
 class FixtureDef:
-    def __init__(self, func, scope='function', autouse=False, params=None, name=None):
+    def __init__(self, func, scope='function', autouse=False, params=None, name=None, ids=None):
         self.func, self.scope, self.autouse, self.params = func, scope, autouse, params
         self.name = name or func.__name__
+        self.ids = ids
 
 
 def fixture(func=None, *, scope='function', autouse=False, params=None, name=None, ids=None):
     def wrap(f):
-        f.__grail_fixture__ = FixtureDef(f, scope, autouse, params, name)
+        f.__grail_fixture__ = FixtureDef(f, scope, autouse, params, name, ids)
         return f
     return wrap(func) if func is not None else wrap
 
@@ -237,12 +253,21 @@ class MonkeyPatch:
     def setattr(self, target, name, value=None, raising=True):
         if value is None and isinstance(target, str):
             mod, _, attr = target.rpartition('.')
-            target, name, value = __import__(mod, fromlist=['_']), attr, name
+            import importlib; target, name, value = importlib.import_module(mod), attr, name
         old = getattr(target, name, _MISSING)
         self._undo.append((target, name, old))
         setattr(target, name, value)
 
-    def delattr(self, target, name, raising=True):
+    def delattr(self, target, name=None, raising=True):
+        if name is None and isinstance(target, str):
+            # the dotted-string form: "pkg.mod.attr"
+            mod, _, name = target.rpartition('.')
+            try:
+                import importlib; target = importlib.import_module(mod)
+            except ImportError:
+                if raising:
+                    raise
+                return
         old = getattr(target, name, _MISSING)
         if old is _MISSING:
             if raising:
@@ -250,6 +275,16 @@ class MonkeyPatch:
             return
         self._undo.append((target, name, old))
         delattr(target, name)
+
+    def chdir(self, path):
+        import os
+        self._undo.append((None, '__cwd__', os.getcwd(), 'cwd'))
+        os.chdir(path)
+
+    def syspath_prepend(self, path):
+        import sys
+        self._undo.append((None, '__syspath__', list(sys.path), 'syspath'))
+        sys.path.insert(0, str(path))
 
     def setitem(self, d, key, value):
         self._undo.append((d, key, d.get(key, _MISSING), 'item'))
@@ -267,7 +302,13 @@ class MonkeyPatch:
 
     def undo(self):
         for entry in reversed(self._undo):
-            if len(entry) == 4:
+            if len(entry) == 4 and entry[3] == 'cwd':
+                import os
+                os.chdir(entry[2])
+            elif len(entry) == 4 and entry[3] == 'syspath':
+                import sys
+                sys.path[:] = entry[2]
+            elif len(entry) == 4:
                 d, key, old, _ = entry
                 if old is _MISSING:
                     d.pop(key, None)

@@ -266,7 +266,45 @@ testAStreamedResponseArrivesWhole
 category: 'Grail-Tests - Serving'
 method: AsgiServerTestCase
 testReceiveAfterTheBodyReportsDisconnect
+	"After the body, receive() parks until the response is finished and then
+	reports http.disconnect, as uvicorn does.  It used to answer the disconnect
+	at once."
+
 	self assertMatchesCPythonAt: 'receive_after_the_body_reports_disconnect'.
+%
+
+category: 'Grail-Tests - Serving'
+method: AsgiServerTestCase
+testADisconnectListenerDoesNotCutAStreamShort
+	"starlette's StreamingResponse listens for http.disconnect beside the stream
+	and cancels the stream when it hears one; an immediate disconnect made every
+	FastAPI StreamingResponse a 500 (docs/Support_FastAPI.md, Phase 5)."
+
+	self assertMatchesCPythonAt: 'a_disconnect_listener_does_not_cut_a_stream_short'.
+%
+
+category: 'Grail-Tests - Lifespan'
+method: AsgiServerTestCase
+testLifespanStartupAndShutdownRun
+	"Startup before the first request, its state copied into every request
+	scope, shutdown in stop() -- what FastAPI's lifespan= needs."
+
+	self assertMatchesCPythonAt: 'lifespan_startup_and_shutdown_run'.
+%
+
+category: 'Grail-Tests - Lifespan'
+method: AsgiServerTestCase
+testAFailedLifespanStartupStopsTheServer
+	self assertMatchesCPythonAt: 'a_failed_lifespan_startup_stops_the_server'.
+%
+
+category: 'Grail-Tests - Lifespan'
+method: AsgiServerTestCase
+testAnAppWithoutLifespanIsStillServed
+	"uvicorn's lifespan=auto: an app that raises on the lifespan scope is
+	served without it."
+
+	self assertMatchesCPythonAt: 'an_app_without_lifespan_is_still_served'.
 %
 
 ! ------------------- the property a sequential server cannot fake

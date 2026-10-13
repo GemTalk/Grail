@@ -304,14 +304,16 @@ def a_live_frame_has_f_locals():
 
 
 # ---------------------------------------------- deliberate Grail-only limits
-def a_frame_with_no_bound_locals_has_no_f_locals():
-    """GRAIL-SPECIFIC (CPython answers an empty dict).  Absent rather than empty,
-    so ``this frame has no variables'' and ``this frame cannot say'' stay
-    distinguishable -- the second is the honest answer for a traceback frame, for a
-    suspended consumer process, and for a gem where the temporaries could not be
-    read.  traceback.py reads it as ``getattr(frame, 'f_locals', None)'', so
-    absent is a shape every consumer already handles."""
-    return not hasattr(sys._getframe(), 'f_locals')
+def a_frame_with_no_bound_locals_has_empty_f_locals():
+    """A live frame with nothing bound answers an EMPTY mapping, as CPython's
+    proxy does.  This was a documented Grail-only limit -- the attribute was
+    ABSENT, to keep "no variables" apart from "cannot say" -- and pydantic is
+    why it is not one any more: it reads ``sys._getframe(n).f_locals'' for every
+    model a function defines, and the AttributeError failed each one
+    (docs/Support_FastAPI.md, Phase 5).  A TRACEBACK frame still answers absent
+    when it has no snapshot; traceback.py's ``getattr(frame, 'f_locals', None)''
+    handles both."""
+    return sys._getframe().f_locals == {}
 
 
 def a_traceback_frame_has_f_locals():
@@ -688,9 +690,9 @@ if __name__ == '__main__':
         a_traceback_frame_has_f_locals,
         a_traceback_frame_declines_another_frames_locals,
         clear_frames_empties_a_traceback_frame,
+        a_frame_with_no_bound_locals_has_empty_f_locals,
     ]
     grail_only = [
-        a_frame_with_no_bound_locals_has_no_f_locals,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

@@ -4,6 +4,11 @@
 # (docs/Support_Pydantic.md, Phase 6).
 #
 #     tests/pydantic/run_pydantic_slice.sh <pydantic-sdist>/tests/test_main.py <out>
+#     tests/pydantic/run_pydantic_slice.sh <out> -- <test file>...
+#
+# The second form runs several test files in one gem (FastAPI's import is paid
+# once); RUNNER names another runner with the same output, e.g.
+#     RUNNER=tests/fastapi/run_fastapi_tests.py
 #
 # A Smalltalk error that no Python ``except'' sees, or a Rust panic, ends the
 # gem, and with it every test after the one that raised it.  So the run is
@@ -15,15 +20,19 @@
 # Needs pydantic and the abi3 pydantic_core on PYTHONPATH, e.g.
 #     PYTHONPATH=<venv>/lib/python3.14/site-packages
 set -u
-TEST=$1
-OUT=$2
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
+if [ "${2:-}" = "--" ]; then
+    OUT=$1; shift 2; TESTS=("$@")
+else
+    TESTS=("$1"); OUT=$2
+fi
+RUNNER=${RUNNER:-$HERE/run_pydantic_tests.py}
 : > "$OUT"
-for _ in $(seq 1 200); do
-    "$ROOT/grail" "$HERE/run_pydantic_tests.py" "$TEST" --resume "$OUT" > "$OUT.part" 2>&1
+for _ in $(seq 1 500); do
+    (cd "$ROOT" && ./grail "$RUNNER" "${TESTS[@]}" --resume "$OUT") > "$OUT.part" 2>&1
     grep -a -E '^(START|RESULT|TOTAL)\|' "$OUT.part" | grep -v '^START|' >> "$OUT"
-    grep -q -a '^TOTAL|' "$OUT.part" && break
+    grep -q -a '^ALLDONE|' "$OUT.part" && break
     crashed=$(grep -a -E '^(START|RESULT)\|' "$OUT.part" | tail -1)
     case $crashed in
         START\|*) ;;

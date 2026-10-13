@@ -992,12 +992,10 @@ def _module_base_types():
     take it from sys and keep types.ModuleType alongside for the day the stub
     becomes real.
     """
-    bases = [types.ModuleType]
-    try:
-        bases.extend(type(sys).__mro__[1:2])
-    except BaseException:
-        pass
-    return tuple(bases)
+    # types.ModuleType IS Grail's ``module'' now, and type(sys) answers it as
+    # CPython's does, so the one type covers every module.  (The old second
+    # entry, type(sys).__mro__[1:2], would now be ``object''.)
+    return (types.ModuleType,)
 
 
 def _is_module_object(obj):
@@ -1296,6 +1294,29 @@ has_subprocess_support = False
 def requires_subprocess():
     """Skip when subprocess support is unavailable (always so in Grail)."""
     return unittest.skipUnless(has_subprocess_support, "requires subprocess support")
+
+
+# No os.fork() in a gem either.  CPython's helper, so a test class decorated
+# with it builds -- a decorator that is MISSING is an AttributeError at the def,
+# now that a decorator's exception propagates (it used to be swallowed and the
+# decorator dropped, which is how these three names went unnoticed).
+has_fork_support = False
+
+
+def requires_fork():
+    return unittest.skipUnless(has_fork_support, "requires working os.fork()")
+
+
+def nomemtest(f):
+    """CPython's: a test that drives _testcapi.set_nomemory -- a CPython
+    implementation detail, so it skips here as cpython_only does."""
+    return cpython_only(f)
+
+
+def refcount_test(test):
+    """CPython's: a test of reference counts, which a non-refcounting VM
+    cannot run -- cpython_only, with tracing off as CPython has it."""
+    return no_tracing(cpython_only(test))
 
 
 # Sockets DO work here, unlike subprocesses.  CPython gates this on the two
