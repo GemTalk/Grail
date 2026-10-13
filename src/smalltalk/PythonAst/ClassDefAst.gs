@@ -5893,25 +5893,18 @@ emitMethodDocTableOn: aStream className: aClassName
 	No-op when no method has a docstring, so only classes that need it pay
 	for the extra class-side method."
 
-	| documented src |
+	| documented entries |
 	documented := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def ___docString___ notNil]].
 	documented isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodDocTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	documented do: [:def |
+	entries := OrderedCollection new.
+	documented do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitStringLiteral: def ___docString___ on: src.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Docstrings'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodDocTable___' entries: entries category: 'Grail-Docstrings' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -5928,26 +5921,19 @@ emitMethodTypeParamsTableOn: aStream className: aClassName
 
 	No-op when no method is generic."
 
-	| generic src |
+	| generic entries |
 	generic := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not
 			and: [def type_params notNil and: [def type_params notEmpty]]].
 	generic isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodTypeParamsTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	generic do: [:def |
+	entries := OrderedCollection new.
+	generic do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: #('.
 		def type_params do: [:n | src nextPut: $'; nextPutAll: n asString; nextPutAll: ''' '].
-		src nextPutAll: ');'].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Python Metadata'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPutAll: ');'.
+		entries add: src contents].
+	self ___emitTable___: '___methodTypeParamsTable___' entries: entries category: 'Grail-Python Metadata' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -5973,24 +5959,17 @@ emitMethodCodeTableOn: aStream className: aClassName
 	no-defs case): unlike a docstring, EVERY def has a line number, so there is
 	no ``method without one'' to skip."
 
-	| defs src |
+	| defs entries |
 	defs := self ___allFunctionDefs___ reject: [:def | def isOverloadStub].
 	defs isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodCodeTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	defs do: [:def |
+	entries := OrderedCollection new.
+	defs do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
 		def emitPyCodeExprOn: src qualname: aClassName , '.' , def name asString.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Tracebacks'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodCodeTable___' entries: entries category: 'Grail-Tracebacks' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6009,14 +5988,13 @@ emitMethodSignatureTableOn: aStream className: aClassName
 	No-op when no method declares a parameter, so only classes that need it
 	pay for the extra class-side method."
 
-	| withParams src |
+	| withParams entries |
 	withParams := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def hasSignatureSpec]].
 	withParams isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodSignatureTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	withParams do: [:def |
+	entries := OrderedCollection new.
+	withParams do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		"Skip ``self''/``cls'' for an instance method or classmethod: what this
 		table feeds is a BOUND access (``instance.method'', or a classmethod
@@ -6030,15 +6008,9 @@ emitMethodSignatureTableOn: aStream className: aClassName
 		``__wrapped__'' and the raw def's own spec, which keeps ``self''."
 		def emitSignatureSpecOn: src
 			skipReceiver: (def isKindOf: StaticFunctionDefAst) not.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Signatures'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodSignatureTable___' entries: entries category: 'Grail-Signatures' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6060,17 +6032,16 @@ emitMethodDefaultKeysTableOn: aStream className: aClassName
 	Exactly the defs that store does (no static methods, no overload stubs),
 	keyed by the same ___classDefaultKeyFor___:className: spelling."
 
-	| defs src |
+	| defs entries |
 	defs := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not
 			and: [(def isKindOf: StaticFunctionDefAst) not
 			and: [def ___defaultedPositionalParams___ notEmpty
 				or: [def ___defaultedKeywordOnlyParams___ notEmpty]]]].
 	defs isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodDefaultKeysTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	defs do: [:def |
+	entries := OrderedCollection new.
+	defs do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString;
 			nextPutAll: ''' put: #( #('.
 		def ___defaultedPositionalParams___ do: [:pair |
@@ -6081,15 +6052,9 @@ emitMethodDefaultKeysTableOn: aStream className: aClassName
 			src nextPutAll: ' '''; nextPutAll: (pair at: 1) asString; nextPutAll: ''' #''';
 				nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
 				nextPut: $'].
-		src nextPutAll: ' ) );'].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Signatures'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPutAll: ' ) );'.
+		entries add: src contents].
+	self ___emitTable___: '___methodDefaultKeysTable___' entries: entries category: 'Grail-Signatures' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6197,28 +6162,21 @@ emitMethodReceiverTableOn: aStream className: aClassName
 	A @staticmethod has no receiver to record, so it is skipped and its unbound
 	read stays exactly as it is."
 
-	| withReceiver src |
+	| withReceiver entries |
 	withReceiver := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not
 			and: [def hasSignatureSpec
 			and: [(def isKindOf: StaticFunctionDefAst) not
 			and: [def ___receiverParamName___ notNil]]]].
 	withReceiver isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodReceiverTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	withReceiver do: [:def |
+	entries := OrderedCollection new.
+	withReceiver do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString;
 			nextPutAll: ''' put: '''; nextPutAll: def ___receiverParamName___;
-			nextPutAll: ''''; nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Signatures'
-		env: 1
-		classSide: true
-		onStream: aStream
+			nextPutAll: ''''; nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodReceiverTable___' entries: entries category: 'Grail-Signatures' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6308,25 +6266,18 @@ emitMethodAnnotationsTableOn: aStream className: aClassName
 	registration.  Overload stubs stay out, as they do for instanceMethodDefs
 	-- the stub is not the implementation."
 
-	| annotated src |
+	| annotated entries |
 	annotated := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def hasAnnotations]].
 	annotated isEmpty ifTrue: [^ self].
-	src := AppendStream on: String new.
-	src nextPutAll: '___methodAnnotationsTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	annotated do: [:def |
+	entries := OrderedCollection new.
+	annotated do: [:def | | src |
+		src := AppendStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitAnnotateBlockOn: src.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Annotations'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodAnnotationsTable___' entries: entries category: 'Grail-Annotations' onStream: aStream
 %
 
 category: 'Grail-Class Compilation'
@@ -6906,10 +6857,12 @@ emitIRTextSourcesOn: classVarName pairs: pairs onStream: aStream
 category: 'Grail-IR Codegen'
 method: ClassDefAst
 ___irTextSourcesLiteralBudget___
-	"Bytes one twin accessor's literal may occupy in the class-build text.  A
-	fifth of GemStone's 5M-byte limit: the estimate below counts the outer
-	quote doubling and the storage width, but not every byte a literal costs,
-	and the margin is cheap -- a chunk is one more method on the metaclass.
+	"Bytes one table accessor's literal may occupy in the class-build text --
+	the IR text twin's and each per-method table's (___emitTable___:...).  A
+	fifth of GemStone's 5M-byte limit: ___literalChunks___:spelledBy: counts
+	the outer quote doubling and the widest storage, but not every byte a
+	literal costs, and the margin is cheap -- a chunk is one more method on
+	the metaclass.
 
 	A session may lower it (``___grailIRTextSourcesBudget___'' in SessionTemps)
 	so a test can split a SMALL class and check the split loses nothing --
@@ -6923,49 +6876,115 @@ category: 'Grail-IR Codegen'
 method: ClassDefAst
 ___irTextSourceChunks___: pairs
 	"pairs split, in order, into runs whose accessor literal stays inside
-	___irTextSourcesLiteralBudget___.  Each entry's cost is its accessor line
-	after the OUTER quoting ___compileMethod: applies (every quote doubled
-	again), times the widest storage the run needs -- 1, 2 or 4 bytes per
-	character, fixed by the run's highest code point.  An entry too large for
-	any budget still gets a run of its own: it is one method's source, which
-	the text path compiles too."
+	___irTextSourcesLiteralBudget___ (___literalChunks___:spelledBy:), each
+	entry costed as its accessor line."
 
-	| chunks current currentChars currentWidth budget |
-	budget := self ___irTextSourcesLiteralBudget___.
-	chunks := OrderedCollection new.
-	current := OrderedCollection new.
-	currentChars := 0.
-	currentWidth := 1.
-	pairs do: [:assoc |
-		| line chars width |
-		line := self ___irTextSourceLineFor___: assoc.
-		chars := line size + (line occurrencesOf: $').
-		width := self ___storageWidthOf___: line.
-		(current notEmpty and: [
-			(currentChars + chars) * (currentWidth max: width) > budget])
-				ifTrue: [
-					chunks add: current.
-					current := OrderedCollection new.
-					currentChars := 0.
-					currentWidth := 1].
-		current add: assoc.
-		currentChars := currentChars + chars.
-		currentWidth := currentWidth max: width].
-	current notEmpty ifTrue: [chunks add: current].
-	^ chunks
+	^ self ___literalChunks___: pairs
+		spelledBy: [:assoc | self ___irTextSourceLineFor___: assoc]
 %
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
-___storageWidthOf___: aString
-	"Bytes per character GemStone stores aString in: 1, 2, or 4."
+___emitTable___: aSelector entries: entries category: aCategory onStream: aStream
+	"Compile the class-side accessor aSelector answering a KeyValueDictionary
+	filled by entries -- each `` @env0:at: <key> put: <value>;'' -- under
+	GemStone's 5M-byte limit on a string literal.
 
-	| widest |
-	widest := 0.
-	aString do: [:c | widest := widest max: c codePoint].
-	widest > 16rFFFF ifTrue: [^ 4].
-	widest > 16rFF ifTrue: [^ 2].
-	^ 1
+	Every per-method table a class carries (docs, code objects, signatures,
+	default keys, receivers, annotations, type parameters) was ONE accessor
+	whose source is ONE literal in the class-build text, with an entry per
+	method.  A class with thousands of methods -- idna's generated UTS46Tests
+	has 6,329 -- made that literal millions of characters, and the limit is in
+	STORAGE bytes: one character above U+FFFF anywhere in the class, escaped
+	or not, makes the whole build text four bytes a character.  The import then failed with an
+	uncatchable ``string literal too big'' CompileError.
+
+	A table that fits is the single accessor every class used to get, and
+	still does.  One that does not is split exactly as the IR text twin is
+	(emitIRTextSourcesOn:...): chunk accessors ``<stem>_N___:'' each fill the
+	table they are handed, and aSelector threads a fresh one through them, so
+	every reader asks the selector it always asked."
+
+	| chunks src stem main |
+	chunks := self ___literalChunks___: entries spelledBy: [:line | line].
+	chunks size <= 1 ifTrue: [
+		src := WriteStream on: String new.
+		src nextPutAll: aSelector; lf; nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+		entries do: [:each | src nextPutAll: each].
+		src nextPutAll: ' @env0:yourself)'.
+		^ self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: aCategory
+			env: 1
+			classSide: true
+			onStream: aStream].
+	stem := aSelector copyFrom: 1 to: aSelector size - 3.
+	1 to: chunks size do: [:i |
+		src := WriteStream on: String new.
+		src nextPutAll: stem , '_' , i printString , '___: ___d___'; lf;
+			nextPutAll: '	^ ___d___'.
+		(chunks at: i) do: [:each | src nextPutAll: each].
+		src nextPutAll: ' @env0:yourself'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: aCategory
+			env: 1
+			classSide: true
+			onStream: aStream].
+	main := WriteStream on: String new.
+	main nextPutAll: aSelector; lf; nextPutAll: '	^ '.
+	main nextPutAll: ((1 to: chunks size) inject: '(KeyValueDictionary @env0:new)'
+		into: [:acc :i | '(self ' , stem , '_' , i printString , '___: ' , acc , ')']).
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: main contents
+		category: aCategory
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___literalChunks___: entries spelledBy: aBlock
+	"entries split, in order, into runs whose accessor literal stays inside
+	___irTextSourcesLiteralBudget___.  aBlock answers an entry's text as the
+	accessor spells it, and the entry costs that text's length after the
+	OUTER quoting ___compileMethod: applies (every quote doubled again), at
+	four bytes a character.
+
+	FOUR, WHATEVER THE ENTRY HOLDS.  GemStone stores a literal as wide as the
+	TEXT it is compiled from, and the class-build text is as wide as anything
+	in the class needs: one character above U+FFFF anywhere -- even one the
+	source spells as an escape, ``\U0001F600'' -- makes every table four bytes
+	a character, all-ASCII entries included.  The entry's own code points say
+	nothing about that, and the class's other methods are not written yet.
+	Measured on 6,000 trivial methods: they import when the module is ASCII,
+	and fail on the limit with one such character added, raw or escaped.
+
+	An entry too large for any budget still gets a run of its own: it is one
+	method's text, which the class build compiles too."
+
+	| chunks current currentChars budget |
+	budget := self ___irTextSourcesLiteralBudget___.
+	chunks := OrderedCollection new.
+	current := OrderedCollection new.
+	currentChars := 0.
+	entries do: [:each |
+		| line chars |
+		line := aBlock value: each.
+		chars := line size + (line occurrencesOf: $').
+		(current notEmpty and: [(currentChars + chars) * 4 > budget])
+			ifTrue: [
+				chunks add: current.
+				current := OrderedCollection new.
+				currentChars := 0].
+		current add: each.
+		currentChars := currentChars + chars].
+	current notEmpty ifTrue: [chunks add: current].
+	^ chunks
 %
 
 category: 'Grail-IR Codegen'
