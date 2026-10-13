@@ -1216,6 +1216,15 @@ been swallowed; test_operator's `(obj, /)` signatures, where an explicit
 `__call_signature__` must outrank a callable instance's `__call__`);
 `check_python_fixtures.sh` 548 fixtures agree with CPython.
 
+Re-gated after merging `origin/main` (2026-10-12), which had landed overlapping
+fixes of its own (decorator exceptions propagating, #1369; `inspect.signature`
+for callable instances) -- main's versions were kept wherever the two met.
+`run_tests.sh` **7987 run**, 8 of 8 shards, one error: `ImportFromlistTestCase`
+probed an EMPTY name through this phase's case-exact module check, which then
+indexed an empty string; fixed (an empty name or entry is not case-checked) and
+the class passes. CPython gate **0 regressions** (test_pickle timed out beside
+the SUnit suite, OK alone); `check_python_fixtures.sh` 606 fixtures agree.
+
 **Next:** the second half of the slice (`test_tutorial/`, 252 modules), the
 crashes above, and making a request cheaper -- at ~9 ms for the simplest async
 route over HTTP the cost is ordinary Python execution, not a fixed overhead.

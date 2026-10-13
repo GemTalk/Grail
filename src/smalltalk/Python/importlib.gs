@@ -9116,6 +9116,9 @@ ___exactCaseEntry___: anEntry under: root path: joined
 	the old answer, not a refusal."
 
 	| idx dir names |
+	"An empty name (``__import__('')'' reaches here) has no entry to check;
+	findLastSubString:startingAt: 0 would be an uncatchable OffsetError."
+	(joined @env0:size @env0:= 0 or: [anEntry @env0:size @env0:= 0]) ifTrue: [^ true].
 	idx := joined @env0:findLastSubString: '/' startingAt: joined @env0:size.
 	dir := (idx @env0:isNil or: [idx @env0:= 0])
 		ifTrue: [root]
