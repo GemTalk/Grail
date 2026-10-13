@@ -2794,6 +2794,30 @@ ___isUndrivenCoroutine___
 
 category: 'Grail-Instantiation'
 method: object
+___grailNewResultSkipsInit___: anObject
+	"Whether the receiver -- a class being called -- must NOT run __init__ on
+	anObject, what its __new__ answered: true unless anObject is an instance
+	of the receiver.  CPython's type.__call__ (``If __new__() does not return
+	an instance of cls, the new instance's __init__() method will not be
+	invoked''), and by the MRO, as its PyObject_TypeCheck is: a metaclass
+	__instancecheck__ is not asked.
+
+	Grail ran the RETURNED object's __init__ with the original arguments, so
+	``A(1)'' for a __new__ answering ``Other()'' raised ``Other() takes no
+	arguments'' (#1425), and pytz's LazyList ran list.__init__ on the list
+	its __new__ had already filled.
+
+	isKindOf: answers the common case without a lookup.  The MRO is asked
+	only when it fails, for a class that has the receiver as a SECONDARY
+	base, which the Smalltalk chain does not hold."
+
+	(anObject @env0:isKindOf: self) ifTrue: [^ false].
+	^ (((Python @env0:at: #importlib) @env0:___mroOf___: anObject @env0:class)
+		@env0:includesIdentical: self) not
+%
+
+category: 'Grail-Instantiation'
+method: object
 ___grailInitBuiltClass___: aClass pos: positional kw: keywords
 	"Finish ``self(*positional, **keywords)'' when construction handed back a
 	CLASS -- a metaclass called directly, ``Meta(name, bases, ns)''.  This is
