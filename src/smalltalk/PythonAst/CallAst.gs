@@ -2916,8 +2916,8 @@ category: 'Grail-Lexical Scope Stack'
 classmethod: CallAst
 ___scopeStack___
 	"The chain of PYTHON LEXICAL SCOPES enclosing the node being emitted,
-	outermost first, as { node. kind. name } triples whose kind is #class or
-	#function.  nil until the first push.
+	outermost first, as { node. kind. name } triples whose kind is #class,
+	#function or #genexpr.  nil until the first push.
 
 	``classBeingCompiled'' and ``functionBeingCompiled'' hold ONE value each, so
 	between them they can name at most the nearest enclosing class and the
@@ -2934,9 +2934,12 @@ ___scopeStack___
 	Pushed exactly where those two slots are already saved and restored --
 	ClassDefAst around both of its emit regions, FunctionDefAst around each body
 	emit -- so the stack cannot come to disagree with them about what is in
-	scope.  Lambdas and comprehensions are NOT pushed: CPython does give them
-	scopes (``f.<locals>.<lambda>''), but neither can lexically contain a def or
-	a class, so no qualname is ever computed inside one."
+	scope.  A LAMBDA pushes a #function frame around its body and a GENEXPR a
+	#genexpr frame around its clauses, so a lambda or genexpr nested in one is
+	named through it: ``<lambda>.<locals>.<lambda>'', ``<genexpr>.<lambda>''
+	(#1522).  A #genexpr frame adds its name but no ``<locals>'', which is
+	CPython's rule for a comprehension scope.  List, set and dict comprehensions
+	push nothing: CPython 3.12+ inlines them (PEP 709), so they name nothing."
 
 	^ self ___compileContext___ at: #'scopeStack' otherwise: nil
 %
