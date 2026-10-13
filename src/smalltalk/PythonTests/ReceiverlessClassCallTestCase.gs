@@ -142,9 +142,65 @@ testKeywordArgumentsReachTheBody
 
 category: 'Grail-Tests'
 method: ReceiverlessClassCallTestCase
+testAPackedDefTakesASpecialFirstArgument
+	"``def k(self, *a)'' called as ``C.k(1)'': the packed _k:kw: body is
+	recompiled for the special receiver, as the fixed form already was
+	(#1426).  It was a known divergence until then."
+
+	self assertMatchesCPython: 'packed_int_receiver'
+%
+
+category: 'Grail-Tests'
+method: ReceiverlessClassCallTestCase
 testClosureCellsWithoutAnInstance
 	self assertMatchesCPython: 'closure'.
 	self assertMatchesCPython: 'closure_foreign_receiver'
+%
+
+category: 'Grail-Tests'
+method: ReceiverlessClassCallTestCase
+testAClassBodyCallsItsOwnHelpers
+	"pygments' two shapes (#1426) -- a helper with defaults naming class-body
+	variables, called by the body with a bool; a zero-parameter helper whose
+	nested generator takes ``self'' -- plus Cls.f(x) for any x, keywords
+	included, and defaults shared across body and later calls.
+	tests/python/class_body_helper_calls.py holds the checks and agrees with
+	CPython 3.14."
+
+	self
+		assert: (self ___classBodyHelperFixture___ @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '16 checks, 0 disagreeing [], keys match: True'
+%
+
+category: 'Grail-Tests'
+method: ReceiverlessClassCallTestCase
+testAReboundNameInADefaultStillReadsItsLastValue
+	"PINNED: ``v = 1; def f(x, d=v); v = 2'' in a class body.  CPython reads
+	1; Grail emits every store of a rebound class attribute at its LAST
+	assignment and so reads 2 -- the answer it always gave, and since #1426
+	still without raising.  Closing it is welcome; the fixture's
+	KNOWN_DIVERGENCES entry then moves to EXPECTED."
+
+	| fixture actual |
+	fixture := self ___classBodyHelperFixture___.
+	actual := (fixture @env1:___pyAttrLoad___: #r)
+		@env1:__getitem__: 'default_is_fixed_at_the_def'.
+	self
+		deny: (actual @env1:__eq__: ((fixture @env1:___pyAttrLoad___: #KNOWN_DIVERGENCES)
+			@env1:__getitem__: 'default_is_fixed_at_the_def')) == true
+		description: 'default_is_fixed_at_the_def now matches CPython; move it to EXPECTED'.
+	self assert: (actual @env1:__eq__: (self eval: '(2, 2)')) == true
+%
+
+category: 'Grail-Private'
+method: ReceiverlessClassCallTestCase
+___classBodyHelperFixture___
+	"tests/python/class_body_helper_calls.py, loaded once per test."
+
+	importlib @env1:modules removeKey: #'class_body_helper_calls' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/class_body_helper_calls.py')
+		name: 'class_body_helper_calls'
 %
 
 category: 'Grail-Tests'
@@ -155,7 +211,7 @@ testKnownDivergencesStillDiverge
 
 	| known |
 	known := testModule @env1:___pyAttrLoad___: #KNOWN_DIVERGENCES.
-	#('receiver_default' 'packed_int_receiver') do: [:k |
+	#('receiver_default') do: [:k |
 		self
 			deny: ((self result: k) @env1:__eq__: (known @env1:__getitem__: k)) == true
 			description: k , ' now matches CPython; move it to EXPECTED']

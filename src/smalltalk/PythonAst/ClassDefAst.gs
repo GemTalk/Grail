@@ -1709,8 +1709,10 @@ printSmalltalkRuntimeOn: aStream
 		so NameAst falls back to module scope for later siblings
 		(``empty_values = list(validators.EMPTY_VALUES)'' before
 		``def validators'' — django's Field)."
-		| firstBinding attrAssignPos pendingStmts flushPendingBefore |
+		| firstBinding attrAssignPos pendingStmts flushPendingBefore defaultsEmitted
+		  pendingDefaults flushDefaultsBefore |
 		firstBinding := IdentityKeyValueDictionary new.
+		defaultsEmitted := IdentitySet new.
 		attrAssignPos := IdentityKeyValueDictionary new.
 		"Each statement ANNOUNCES what it binds (___boundTargetNames___) and
 		which attribute values it yields (classBodyAttributePairs); this scan
@@ -1756,10 +1758,49 @@ printSmalltalkRuntimeOn: aStream
 		= g'' in a class body must leave y == 2 (test_listcomps
 		test_explicit_global), and with a trailing pass it answered 1."
 		pendingStmts := self ___classBodyOrderedRuntimeStatements___.
+		"PARAMETER DEFAULTS, AT THE DEF -- where CPython evaluates them, once.  A
+		class body that CALLS its own helper needs them stored by then: pygments'
+		``def _make_begin_state(compound, _core_token=_core_token, ...)'' followed
+		by ``root = _make_begin_state(False)'' (#1426).  Stored at the end of the
+		body, as they were, the call found nothing, and the inline fallback --
+		evaluated in the METHOD's scope -- raised NameError for the class-body name.
+
+		Not exactly AT the def, though: a class attribute bound more than once has
+		all its stores emitted together at its LAST assignment (see attrAssignPos),
+		so a default reading ``v'' in ``v = 1; def f(x, d=v); v = 2'' would run
+		before ``v'' existed.  Each def's stores therefore go just after the later of
+		the def and the last store of every class-body name its defaults read --
+		half a position on, so after that statement and before the next.  For that
+		pathological body the default reads 2 where CPython reads 1, which is what
+		Grail always answered; for every other body it is the def's own position.
+		The names a default sees are still the ones bound BEFORE the def."
+		pendingDefaults := OrderedCollection new.
+		body body doWithIndex: [:stmt :pos |
+			(self ___storesDefaultsFor___: stmt) ifTrue: [
+				| at |
+				at := pos.
+				(self ___namesReadByDefaultsOf___: stmt) do: [:nm |
+					(firstBinding at: nm ifAbsent: [pos]) < pos ifTrue: [
+						at := at max: (attrAssignPos at: nm ifAbsent: [pos])]].
+				pendingDefaults add: (at + (1/2)) -> (pos -> stmt)]].
+		pendingDefaults := (pendingDefaults asSortedCollection: [:a :b | a key <= b key])
+			asOrderedCollection.
+		flushDefaultsBefore := [:limit |
+			[pendingDefaults notEmpty and: [pendingDefaults first key < limit]]
+				whileTrue: [
+					| entry bound |
+					entry := pendingDefaults removeFirst.
+					bound := IdentitySet new.
+					firstBinding keysAndValuesDo: [:nm :p |
+						p < entry value key ifTrue: [bound add: nm]].
+					CallAst classBodyBoundNames: bound.
+					self ___emitDefaultStoresFor___: entry value value on: aStream className: name.
+					defaultsEmitted add: entry value value]].
 		flushPendingBefore := [:limit |
 			[pendingStmts notEmpty and: [pendingStmts first key < limit]]
 					whileTrue: [
 						| entry stmt bound savedRuntimeClass |
+						flushDefaultsBefore value: pendingStmts first key.
 						entry := pendingStmts removeFirst.
 						stmt := entry value.
 						bound := IdentitySet new.
@@ -1824,7 +1865,8 @@ printSmalltalkRuntimeOn: aStream
 										ifTrue: [self emitClassBodyIf: stmt on: aStream]
 										ifFalse: [stmt printSmalltalkOn: aStream]]]]
 							ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
-						aStream lf]].
+						aStream lf].
+			flushDefaultsBefore value: limit].
 		[:emittedChainValues |
 		classAttrs do: [:pair |
 			"Any pending statement that stands BEFORE this attribute in the
@@ -1973,12 +2015,18 @@ printSmalltalkRuntimeOn: aStream
 		classBodyRuntimeClass stays nil -- that flag routes bare-name BINDINGS to the
 		per-class store, which a default must not do.
 
-		LAST, because a default may read a class attribute or an earlier body
-		statement's name, and both are already emitted above; CPython evaluates the
-		default at the def's own position, so a body that REBINDS the name between the
-		def and the end of the body would be seen late.  That shape is pathological
-		and the ordering is the same compromise the nonlocal writes above accept."
-		self emitMethodDefaultStoresOn: aStream className: name.
+		ONLY THE DEFS NOT ALREADY DONE.  A def standing directly in the body has its
+		defaults stored at its own source position, by flushPendingBefore above, which
+		is where CPython evaluates them: a class body that CALLS its helper --
+		pygments' ``root = _make_begin_state(False)'' with
+		``def _make_begin_state(compound, _core_token=_core_token, ...)'' (#1426) --
+		used to find nothing stored, and the inline fallback, evaluated in the
+		method's own scope, raised NameError for the class-body name.  What remains
+		for here is a def nested in a class-body ``if'' or ``try'', which the
+		positional flush does not reach; for those the store stays LAST, the old
+		compromise.  Each def is stored once: evaluating a default twice would
+		replace a mutable one the body had already used."
+		self emitMethodDefaultStoresOn: aStream className: name except: defaultsEmitted.
 		"INSIDE the body-emit window, like the default stores above and for the
 		 same reason: the annotate block is built INLINE here, and its names must
 		 resolve through the class-body branches an attribute VALUE uses.  Emitted
@@ -3728,6 +3776,14 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					___allocateInstance___:kw: (vendored fractions.py's
 					Fraction.__new__ carries ALL of its construction)."
 					src nextPutAll: 'instance := self @env1:___allocateInstance___: ___pos___ kw: ___kw___.'; nextPutAll: lf.
+					"A CLASS came back -- this is a metaclass called directly,
+					``Meta(name, bases, ns)'', which is how six.add_metaclass
+					builds (#1411) -- and its __init__ cannot be reached by
+					the sends below: they go to the CLASS, whose own chain is
+					the Smalltalk metaclass's and ends at object's no-op, not
+					to the Python metaclass that built it.  See
+					object class >> ___grailInitBuiltClass___:pos:kw:."
+					src nextPutAll: '(instance @env0:isBehavior) ifTrue: [^ self @env1:___grailInitBuiltClass___: instance pos: ___pos___ kw: ___kw___].'; nextPutAll: lf.
 					"A subclass of a built-in COLLECTION (list, ...) with no
 					__init__ of its own inherits population from the built-in
 					__init__.  Detected at RUNTIME (isKindOf) so DYNAMIC bases --
@@ -6038,7 +6094,7 @@ emitMethodDefaultKeysTableOn: aStream className: aClassName
 
 category: 'Grail-code generation'
 method: ClassDefAst
-emitMethodDefaultStoresOn: aStream className: aClassName
+emitMethodDefaultStoresOn: aStream className: aClassName except: aSet
 	"Evaluate every class-body method's parameter defaults ONCE, in the class body,
 	and stash each on the class it was declared in.  Both kinds: positional AND
 	KEYWORD-ONLY.
@@ -6063,29 +6119,65 @@ emitMethodDefaultStoresOn: aStream className: aClassName
 	agree: a store with no matching read is dead weight, and a read with no store
 	silently recomputes, which is the bug this fixes wearing a disguise."
 
-	| defs |
-	defs := self ___allFunctionDefs___ select: [:def |
-		def isOverloadStub not
-			and: [(def isKindOf: StaticFunctionDefAst) not
-			and: [def ___defaultedPositionalParams___ notEmpty
-				or: [def ___defaultedKeywordOnlyParams___ notEmpty]]]].
-	defs isEmpty ifTrue: [^ self].
-	defs do: [:def |
-		"Two accessors rather than one, because kw_defaults pairs positionally with
-		kwonlyargs while defaults right-aligns against the positional list -- see
-		___defaultedKeywordOnlyParams___.  A parameter name is unique within a def,
-		so the two share one key namespace without colliding."
-		(def ___defaultedPositionalParams___ asArray
-			, def ___defaultedKeywordOnlyParams___ asArray) do: [:pair |
-			aStream
-				nextPutAll: self ___stVarName___;
-				nextPutAll: ' @env0:___grailClassDefaultPut___: #';
-				nextPut: $';
-				nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
-				nextPut: $';
-				nextPutAll: ' compute: ['.
-			(pair at: 2) printSmalltalkOn: aStream.
-			aStream nextPutAll: '].'; lf]]
+	(self ___allFunctionDefs___ select: [:def |
+		(self ___storesDefaultsFor___: def) and: [(aSet includes: def) not]])
+			do: [:def | self ___emitDefaultStoresFor___: def on: aStream className: aClassName]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___storesDefaultsFor___: aStmt
+	"Does this class-body statement get per-class default stores: a def with a
+	positional or keyword-only default that is neither an overload stub nor a
+	staticmethod?  The selection emitMethodDefaultStoresOn:className:except:
+	always made; FunctionDefAst >> ___defaultOwnerClassName___ makes the same
+	exclusions on the read side."
+
+	^ (aStmt isKindOf: FunctionDefAst)
+		and: [aStmt isOverloadStub not
+		and: [(aStmt isKindOf: StaticFunctionDefAst) not
+		and: [aStmt ___defaultedPositionalParams___ notEmpty
+			or: [aStmt ___defaultedKeywordOnlyParams___ notEmpty]]]]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___namesReadByDefaultsOf___: def
+	"Every name any of def's parameter defaults mentions, positional and
+	keyword-only.  An over-approximation -- a name bound inside a lambda in
+	a default counts too -- which can only delay the store, never misplace it."
+
+	| names |
+	names := IdentitySet new.
+	(def ___defaultedPositionalParams___ asArray
+		, def ___defaultedKeywordOnlyParams___ asArray) do: [:pair |
+		(pair at: 2) ___anyDescendantSatisfies___: [:n |
+			(n isKindOf: NameAst) ifTrue: [names add: n id asSymbol].
+			false]].
+	^ names
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___emitDefaultStoresFor___: def on: aStream className: aClassName
+	"One statement per defaulted parameter of def, evaluating its default and
+	storing it on the class.  Two accessors rather than one, because
+	kw_defaults pairs positionally with kwonlyargs while defaults right-aligns
+	against the positional list -- see ___defaultedKeywordOnlyParams___.  A
+	parameter name is unique within a def, so the two share one key namespace
+	without colliding."
+
+	(def ___defaultedPositionalParams___ asArray
+		, def ___defaultedKeywordOnlyParams___ asArray) do: [:pair |
+		aStream
+			nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env0:___grailClassDefaultPut___: #';
+			nextPut: $';
+			nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
+			nextPut: $';
+			nextPutAll: ' compute: ['.
+		(pair at: 2) printSmalltalkOn: aStream.
+		aStream nextPutAll: '].'; lf]
 %
 
 category: 'Grail-code generation'

@@ -255,7 +255,7 @@ _exec: positional kw: kwargs
 
 	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
 	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
-	  optLevel savedOpt |
+	  optLevel savedOpt suppliedGlobals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -323,6 +323,7 @@ _exec: positional kw: kwargs
 	writes into whatever it is handed.  See ___grailCallerExecNamespaces___,
 	which also supplies a function frame's locals for the shapes CallAst's bare
 	rewrite does not reach."
+	suppliedGlobals := globalsDict.
 	globalsDict @env0:isNil ifTrue: [
 		| callerNs |
 		callerNs := self ___grailCallerExecNamespaces___.
@@ -346,6 +347,7 @@ _exec: positional kw: kwargs
 	Leaving such a mapping UNSEEDED is what makes the live read happen: every
 	name then misses the doit scope, and a miss is what reaches the resolver."
 	self ___requireDictGlobals___: globalsDict.
+	suppliedGlobals @env0:notNil ifTrue: [self ___insertBuiltinsInto___: suppliedGlobals].
 	live := (self ___isPlainCopyableMapping___: localsDict)
 		ifTrue: [nil]
 		ifFalse: [self ___requireMappingLocals___: localsDict].
@@ -686,7 +688,7 @@ _eval: positional kw: kwargs
 
 	| source globalsDict localsDict scope seeded result savedScope filename savedBuiltins
 	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
-	  optLevel savedOpt |
+	  optLevel savedOpt suppliedGlobals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -795,6 +797,7 @@ _eval: positional kw: kwargs
 	with a namespace already and never reaches this fallback.  The rewrite
 	cannot help here: it is gated on the argument SHAPE, and ``eval(e, g, l)''
 	says nothing at compile time about what g and l will hold."
+	suppliedGlobals := globalsDict.
 	globalsDict @env0:isNil ifTrue: [
 		globalsDict := self ___grailCallerNamespace___].
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
@@ -810,6 +813,7 @@ _eval: positional kw: kwargs
 	Leaving such a mapping UNSEEDED is what makes the live read happen: every
 	name then misses the doit scope, and a miss is what reaches the resolver."
 	self ___requireDictGlobals___: globalsDict.
+	suppliedGlobals @env0:notNil ifTrue: [self ___insertBuiltinsInto___: suppliedGlobals].
 	live := (self ___isPlainCopyableMapping___: localsDict)
 		ifTrue: [nil]
 		ifFalse: [self ___requireMappingLocals___: localsDict].
@@ -2079,9 +2083,49 @@ ___builtinsOverrideIn___: globalsDict
 	eagerly would both raise where CPython does not and replace three accurate
 	messages with one invented one."
 
+	| entry |
 	globalsDict @env0:isNil ifTrue: [^ nil].
 	(globalsDict @env0:isKindOf: KeyValueDictionary) ifFalse: [^ nil].
-	^ globalsDict @env0:at: '__builtins__' otherwise: nil
+	entry := globalsDict @env0:at: '__builtins__' otherwise: nil.
+	"THE REAL BUILTINS RESTRICT NOTHING.  exec() and eval() now insert
+	builtins.__dict__ into a globals dict that lacks the name, as CPython does
+	(___insertBuiltinsInto___:), and a module's own globals carry the same
+	view; the builtins module itself is what __main__'s carry in CPython.
+	Treating any of them as an override would send every builtin lookup in the
+	code through the mapping for the same answers, so they are no override."
+	(entry @env0:== self @env0:or: [entry @env0:== self ___realBuiltinsView___])
+		ifTrue: [^ nil].
+	^ entry
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___realBuiltinsView___
+	"builtins.__dict__: the one memoised view, the object every module's
+	``__builtins__'' is (importlib class >> ___stampBuiltinsOn___:)."
+
+	^ (Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins'
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___insertBuiltinsInto___: globalsDict
+	"CPython's exec() and eval() insert ``__builtins__'', a reference to the
+	builtins module's dict, into the globals dict they are given when it has no
+	such key -- so after ``ns = {}; exec(src, ns)'' the key is there, and
+	``del ns['__builtins__']'', a common way to keep only what the source
+	defined, works (#1507).  Grail left the dict untouched, so that del raised
+	KeyError.
+
+	Only a dict the CALLER supplied: with no globals argument the code runs in
+	the caller's own namespace, which already has its builtins.  A key that is
+	present is left alone whatever it holds -- ``{'__builtins__': {}}'' is how
+	source is run with no builtins.  Stored with the env-0 mutator, as
+	CPython's PyDict_SetItem bypasses a dict subclass's __setitem__."
+
+	(globalsDict @env0:isKindOf: KeyValueDictionary) ifFalse: [^ self].
+	(globalsDict @env0:includesKey: '__builtins__') ifTrue: [^ self].
+	globalsDict @env0:at: '__builtins__' put: self ___realBuiltinsView___
 %
 
 
