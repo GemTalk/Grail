@@ -6690,12 +6690,12 @@ type: className _: bases _: namespace kw: classKeywords
 	descriptor in the namespace never learned its own name.
 
 	The class statement reaches these through ___pyClassDefined___:, the
-	METACLASS hook, which is deliberately not sent here: its other two steps
-	belong to a class statement (an __orig_bases__ stash left in SessionTemps
-	by the PEP 560 sole-base path, which type() refuses to take, and the
-	attr-method shadow install).  Sending it would let a stash belonging to
-	some earlier class statement land on this class.  So the two PEP 487 halves
-	are sent directly, which is what was missing.
+	METACLASS hook, which is deliberately not sent here: one of its steps
+	belongs to a class statement (an __orig_bases__ stash left in SessionTemps
+	by the PEP 560 sole-base path, which type() refuses to take).  Sending it
+	would let a stash belonging to some earlier class statement land on this
+	class.  So the steps type() does need -- the two PEP 487 halves and the
+	attr-method shadow install -- are sent directly.
 
 	``classKeywords'' are CPython's ``type(name, bases, ns, **kwds)'' -- the
 	3.6+ form, forwarded to __init_subclass__ exactly as a class header's
@@ -6710,6 +6710,17 @@ type: className _: bases _: namespace kw: classKeywords
 		@env0:ifNotNil: [:m |
 			SessionTemps @env0:current @env0:removeKey: #'GrailTypeBuildMetaclass'.
 			newClass @env1:___grailSetMetaclass___: m].
+	"THE ATTR-METHOD SHADOWS, the third step of ___pyClassDefined___: and the
+	one this did need (#1526).  type() stores the WHOLE namespace as class
+	attributes -- a def a class statement would compile to a method arrives here
+	as a function value -- so a builtin base's own implementation, which sends
+	its method directly, never saw the override: datetime ran tzinfo's default
+	utcoffset under a tz class built by six.add_metaclass, as every
+	python-dateutil one is.  ___grailInstallAttrMethodShadows___: compiles a
+	forwarder for each inherited selector a callable here shadows, exactly as
+	it does for a class body's assignments.  Sent directly, like the two PEP
+	487 halves below and for the reason given above."
+	newClass @env1:___grailInstallAttrMethodShadows___: ownAttrNames @env0:asArray.
 	newClass @env1:___invokeSetNameHooks___: ownAttrNames @env0:asArray.
 	newClass @env1:___grailInitSubclass___: classKeywords.
 	^ newClass

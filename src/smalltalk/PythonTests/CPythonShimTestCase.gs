@@ -3032,3 +3032,165 @@ testA128BitIntRoundTripsTheAbi3Way
 	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: n) equals: n.
 	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: 5) equals: 5
 %
+
+! ===============================================================================
+! NumPy stage 1 (docs/Shim_NumPy.md): the shim fixes that took numpy 2.5's
+! _multiarray_umath through its whole module exec, one test each.
+! ===============================================================================
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testBytesAsStringRefusesANonBytes
+	"PyBytes_AsString answered the bytes of whatever it was given.  numpy's
+	string_to_long_double tries it on a float and falls back to the number on
+	NULL, so a float identity read as the empty string and module init failed
+	with 'invalid literal for long double: '."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_bytes_as_string'
+		with: (self eval: 'b"abcd"')) equals: 4.
+	self assert: (shim callModule: '_shimtest' method: 'test_bytes_as_string'
+		with: 1.5) equals: 'TypeError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_bytes_as_string'
+		with: 'abc') equals: 'TypeError'
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testBuildValueSkipsSeparatorsBeforeAnyUnit
+	"numpy builds '{s, [(i), (i, i), (i)]}' -- ', ' between a dict's key and
+	value -- and the dict case only stepped over a ':'."
+
+	| shim result |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	result := shim callModule: '_shimtest' method: 'test_build_value_separators'.
+	"'(i)' is a 1-tuple, as in CPython."
+	self assert: (result @env1:__repr__) asString equals: '{''k'': [(1,), (2, 3)]}'
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testCapsulesCarryTheExportedCapsuleType
+	"A wheel inlines PyCapsule_CheckExact as ob_type == &PyCapsule_Type; the
+	shim's capsules carried a private type, so numpy refused its own promoter."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_capsule_exact') equals: 1
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testUnicodeFromObjectAcceptsOnlyAStr
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_unicode_from_object'
+		with: 'abc') equals: 'abc'.
+	self assert: (shim callModule: '_shimtest' method: 'test_unicode_from_object'
+		with: 5) equals: 'TypeError'
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testDictSetDefaultRef
+	"0 and the default when it inserts, 1 and the existing value when the key
+	is already there."
+
+	| shim d |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	d := self eval: '{}'.
+	self assert: ((shim callModule: '_shimtest' method: 'test_dict_setdefault_ref'
+		with: d with: 'k' with: 'v') @env1:__repr__) asString equals: '(0, ''v'')'.
+	self assert: ((shim callModule: '_shimtest' method: 'test_dict_setdefault_ref'
+		with: d with: 'k' with: 'w') @env1:__repr__) asString equals: '(1, ''v'')'
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testComplexFromDoublesRoundTrips
+	"The complex API was log-once stubs answering 0 with no error set."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: ((shim callModule: '_shimtest' method: 'test_complex_parts'
+		with: 1.5 with: -2.0) @env1:__repr__) asString equals: '(1.5, -2.0)'
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testUnicodeAsUTF8StringEncodes
+	"A stub answering NULL with no error set, which ended numpy's module exec
+	with no pending error at all."
+
+	| shim result |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	result := shim callModule: '_shimtest' method: 'test_utf8_string'
+		with: (Character codePoint: 233) asString.
+	self assert: (result @env1:__repr__) asString equals: 'b''\xc3\xa9'''
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testAModuleDictOnlyNameIsAnAttribute
+	"numpy stores its ufuncs with PyDict_SetItemString into PyModule_GetDict.
+	A module attribute read from C, and the export Grail builds the module
+	from, both looked only at the PyModule_AddObject table."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_module_dict_attr') equals: 7.
+	self assert: ((shim moduleAttrs: '_shimtest') at: #DICT_ONLY otherwise: nil) equals: 7
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testARealLayoutTupleComesBackAsItself
+	"A tuple C built in CPython's layout, stored in a dict and read back, is the
+	same object and readable with an inlined PyTuple_GET_ITEM.  It came back as
+	a wrapper, and numpy's get_info_no_cast read NULL past it."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_real_tuple_roundtrip'
+		with: (self eval: '{}')) equals: 1
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testAMethodReadOffAWheelTypeIsAStableDescriptor
+	"An instance method or a getset read off a wheel's TYPE answered nothing.
+	numpy reads ndarray.__array_finalize__ and four more this way and compares
+	later lookups against them by identity.  31 = an object (1), the same one
+	twice (2), a method_descriptor (4), the property too (8), callable (16)."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_type_descriptors') equals: 31
+%
+
+category: 'Grail-Tests - NumPy Stage 1'
+method: CPythonShimTestCase
+testADottedExtensionNameCallsPositionally
+	"#1433 cause 2: shimCall read any dot in the module name as the combined
+	'module.method' form, so every positional call into an extension loaded
+	inside a package -- markupsafe._speedups, numpy._core._multiarray_umath --
+	looked up the top-level package and failed 'Module not found'."
+
+	| soPath mod |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	mod := CPythonShim loadDynamicModule: 'grailpkg._grail_demo' fromPath: soPath.
+	self assert: (mod @env1:_add: { 3 . 4 } kw: nil) equals: 7
+%

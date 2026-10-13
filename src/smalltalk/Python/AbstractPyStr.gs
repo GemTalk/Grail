@@ -424,3 +424,15 @@ ___pythonValueAttrs___
 		add: #'__dict__';
 		yourself
 %
+
+category: 'Grail-Comparison'
+classmethod: AbstractPyStr
+___builtinValueClass___
+	"The kernel class the builtin's own VALUES belong to (a str is a String, Symbol, Unicode7/16/32 or multi-byte string), which
+	this class -- the root of every Python subclass of the builtin -- does not
+	inherit from.  Object >> ___reflectedFirst___ asks it, so that ``0 ==
+	C3(11)'' for ``class C3(int)'' sees C3 as a proper subclass of int and tries
+	C3's reflected method first, as CPython does (#1495)."
+
+	^ CharacterCollection
+%

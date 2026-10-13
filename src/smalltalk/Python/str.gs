@@ -4515,3 +4515,24 @@ ___pythonValueAttrs___
 		add: #'__dict__';
 		yourself
 %
+
+category: 'Grail-Comparison'
+classmethod: CharacterCollection
+___builtinValueClass___
+	"CharacterCollection for a PYTHON subclass of str, nil for a kernel string
+	class.  A plain ``class S(str)'' is rooted at Unicode32 (see Class >>
+	___widenStrBase___), not at AbstractPyStr, so it inherits this rather than
+	AbstractPyStr's answer; the ___pyDefinedClass___ marker every Python class
+	compiles into itself is what tells it from Unicode32 holding an ordinary
+	str value.  Object >> ___reflectedFirst___ asks it so that ``'a' ==
+	S('b')'' tries S's reflected method first, as CPython does (#1495)."
+
+	"A Python str subclass is widened onto Unicode32 or Unicode16, so a class
+	under neither is not one -- decided before the method-dictionary lookup,
+	which is the expensive part."
+	((self inheritsFrom: Unicode32) or: [self inheritsFrom: Unicode16])
+		ifFalse: [^ nil].
+	^ (self includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifTrue: [CharacterCollection]
+		ifFalse: [nil]
+%

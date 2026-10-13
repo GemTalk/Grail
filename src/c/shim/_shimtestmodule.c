@@ -1744,6 +1744,193 @@ test_u128(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
     return PyNumber_Or(up, lo_o);
 }
 
+/* ---- numpy stage 1 (docs/Shim_NumPy.md): one check per shim fix ---- */
+
+extern PyObject *PyComplex_FromDoubles(double real, double imag);
+extern double PyComplex_RealAsDouble(PyObject *op);
+extern double PyComplex_ImagAsDouble(PyObject *op);
+extern PyObject *PyUnicode_AsUTF8String(PyObject *unicode);
+extern int PyCapsule_CheckExact(PyObject *op);
+extern PyTypeObject PyCapsule_Type;
+extern PyTypeObject PyMethodDescr_Type;
+
+/* The name of the pending error, cleared -- or NULL to propagate it. */
+static PyObject *
+pending_error_name(void) {
+    const char *name = PyErr_ExceptionMatches(PyExc_TypeError) ? "TypeError"
+                     : PyErr_ExceptionMatches(PyExc_AttributeError) ? "AttributeError"
+                     : NULL;
+    if (name == NULL) return NULL;
+    PyErr_Clear();
+    return PyUnicode_FromString(name);
+}
+
+/* test_bytes_as_string(obj) -> len(obj) for bytes, 'TypeError' otherwise.
+   numpy depends on the refusal (string_to_long_double). */
+static PyObject *
+test_bytes_as_string(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_bytes_as_string expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    char *s = PyBytes_AsString(args[0]);
+    if (s == NULL) return pending_error_name();
+    return PyLong_FromSsize_t(PyBytes_Size(args[0]));
+}
+
+/* test_build_value_separators() -> Py_BuildValue("{s, [(i), (i, i)]}") --
+   ", " between a dict's key and value, as numpy's init writes it. */
+static PyObject *
+test_build_value_separators(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    return Py_BuildValue("{s, [(i), (i, i)]}", "k", 1, 2, 3);
+}
+
+/* test_capsule_exact() -> 1 when a capsule the shim made passes BOTH the
+   function and a wheel's inlined check (ob_type == &PyCapsule_Type). */
+static PyObject *
+test_capsule_exact(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    static int payload = 3;
+    PyObject *cap = PyCapsule_New(&payload, "shimtest.exact", NULL);
+    if (cap == NULL) return NULL;
+    return PyLong_FromLong(PyCapsule_CheckExact(cap) && Py_TYPE(cap) == &PyCapsule_Type);
+}
+
+/* test_unicode_from_object(obj) -> obj for a str, 'TypeError' otherwise. */
+static PyObject *
+test_unicode_from_object(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_unicode_from_object expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *r = PyUnicode_FromObject(args[0]);
+    return r ? r : pending_error_name();
+}
+
+/* test_dict_setdefault_ref(d, key, default) -> (code, value now in d). */
+static PyObject *
+test_dict_setdefault_ref(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_dict_setdefault_ref expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *value = NULL;
+    int code = PyDict_SetDefaultRef(args[0], args[1], args[2], &value);
+    if (code < 0) return NULL;
+    return Py_BuildValue("(iO)", code, value);
+}
+
+/* test_complex_parts(re, im) -> (real, imag) of PyComplex_FromDoubles(re, im),
+   read back with PyComplex_RealAsDouble / ImagAsDouble. */
+static PyObject *
+test_complex_parts(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_complex_parts expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *z = PyComplex_FromDoubles(PyFloat_AsDouble(args[0]), PyFloat_AsDouble(args[1]));
+    if (z == NULL) return NULL;
+    double re = PyComplex_RealAsDouble(z);
+    double im = PyComplex_ImagAsDouble(z);
+    if (PyErr_Occurred()) return NULL;
+    return Py_BuildValue("(dd)", re, im);
+}
+
+/* test_utf8_string(s) -> PyUnicode_AsUTF8String(s), bytes. */
+static PyObject *
+test_utf8_string(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_utf8_string expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    return PyUnicode_AsUTF8String(args[0]);
+}
+
+/* test_module_dict_attr() -> getattr(_shimtest, 'DICT_ONLY'), a name the exec
+   slot stored ONLY in PyModule_GetDict -- as numpy stores its ufuncs. */
+static PyObject *
+test_module_dict_attr(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)args; (void)nargs;
+    return PyObject_GetAttrString(module, "DICT_ONLY");
+}
+
+/* test_real_tuple_roundtrip(d) -> 1 when a tuple stored in d comes back as
+   the SAME object, readable with an inlined PyTuple_GET_ITEM (ob_item at
+   offset 32 in 3.14).  numpy keeps its ufunc loop infos this way. */
+static PyObject *
+test_real_tuple_roundtrip(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_real_tuple_roundtrip expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *t = PyTuple_New(2);
+    if (t == NULL) return NULL;
+    PyTuple_SetItem(t, 0, PyLong_FromLong(10));
+    PyTuple_SetItem(t, 1, PyLong_FromLong(20));
+    if (PyDict_SetItemString(args[0], "info", t) < 0) return NULL;
+    PyObject *back = PyDict_GetItemString(args[0], "info");
+    if (back == NULL) return PyLong_FromLong(0);
+    PyObject *second = ((PyObject **)((char *)back + 32))[1];
+    return PyLong_FromLong(back == t && second != NULL && PyLong_AsLong(second) == 20);
+}
+
+/* A static type, readied by the shim but not created by it: what a prebuilt
+   wheel's own types look like (numpy's PyArray_Type). */
+static PyObject *descrprobe_meth(PyObject *self, PyObject *unused) {
+    (void)self; (void)unused;
+    return PyLong_FromLong(5);
+}
+static PyObject *descrprobe_get(PyObject *self, void *closure) {
+    (void)self; (void)closure;
+    return PyLong_FromLong(6);
+}
+static PyMethodDef descrprobe_methods[] = {
+    {"meth", descrprobe_meth, METH_NOARGS, NULL},
+    {NULL, NULL, 0, NULL}
+};
+static PyGetSetDef descrprobe_getset[] = {
+    {"prop", descrprobe_get, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL, NULL}
+};
+static PyTypeObject DescrProbe_Type;
+
+/* test_type_descriptors() -> a bitmask: 1 the method read off the TYPE is an
+   object, 2 a second read is the same object, 4 it is a method_descriptor,
+   8 the property read off the type is an object, 16 PyCallable_Check says
+   the descriptor is callable. */
+static PyObject *
+test_type_descriptors(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    if (DescrProbe_Type.tp_name == NULL) {
+        DescrProbe_Type.tp_name = "_shimtest.DescrProbe";
+        DescrProbe_Type.tp_basicsize = sizeof(PyObject);
+        DescrProbe_Type.tp_flags = Py_TPFLAGS_DEFAULT;
+        DescrProbe_Type.tp_methods = descrprobe_methods;
+        DescrProbe_Type.tp_getset = descrprobe_getset;
+        if (PyType_Ready(&DescrProbe_Type) < 0) return NULL;
+    }
+    long bits = 0;
+    PyObject *m1 = PyObject_GetAttrString((PyObject *)&DescrProbe_Type, "meth");
+    if (m1 == NULL) return NULL;
+    PyObject *m2 = PyObject_GetAttrString((PyObject *)&DescrProbe_Type, "meth");
+    if (m2 == NULL) return NULL;
+    PyObject *p = PyObject_GetAttrString((PyObject *)&DescrProbe_Type, "prop");
+    if (p == NULL) return NULL;
+    bits |= 1;
+    if (m1 == m2) bits |= 2;
+    if (Py_TYPE(m1) == &PyMethodDescr_Type) bits |= 4;
+    bits |= 8;
+    if (PyCallable_Check(m1)) bits |= 16;
+    return PyLong_FromLong(bits);
+}
+
 static PyMethodDef shimtest_methods[] = {
     {"test_kwargs", (PyCFunction)(void *)test_kwargs,
      METH_FASTCALL | METH_KEYWORDS, "test_kwargs(*a, x=0, y=0) -> sum"},
@@ -1925,6 +2112,26 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_dict_next(a, b) -> both walked in lockstep"},
     {"test_u128", (PyCFunction)(void *)test_u128,
      METH_FASTCALL, "test_u128(n) -> n via PyO3's abi3 128-bit path"},
+    {"test_bytes_as_string", (PyCFunction)(void *)test_bytes_as_string,
+     METH_FASTCALL, "test_bytes_as_string(obj) -> len or 'TypeError'"},
+    {"test_build_value_separators", (PyCFunction)(void *)test_build_value_separators,
+     METH_FASTCALL, "test_build_value_separators() -> {'k': [1, (2, 3)]}"},
+    {"test_capsule_exact", (PyCFunction)(void *)test_capsule_exact,
+     METH_FASTCALL, "test_capsule_exact() -> 1"},
+    {"test_unicode_from_object", (PyCFunction)(void *)test_unicode_from_object,
+     METH_FASTCALL, "test_unicode_from_object(obj) -> str or 'TypeError'"},
+    {"test_dict_setdefault_ref", (PyCFunction)(void *)test_dict_setdefault_ref,
+     METH_FASTCALL, "test_dict_setdefault_ref(d, k, v) -> (code, value)"},
+    {"test_complex_parts", (PyCFunction)(void *)test_complex_parts,
+     METH_FASTCALL, "test_complex_parts(re, im) -> (re, im)"},
+    {"test_utf8_string", (PyCFunction)(void *)test_utf8_string,
+     METH_FASTCALL, "test_utf8_string(s) -> bytes"},
+    {"test_module_dict_attr", (PyCFunction)(void *)test_module_dict_attr,
+     METH_FASTCALL, "test_module_dict_attr() -> 7"},
+    {"test_real_tuple_roundtrip", (PyCFunction)(void *)test_real_tuple_roundtrip,
+     METH_FASTCALL, "test_real_tuple_roundtrip(d) -> 1"},
+    {"test_type_descriptors", (PyCFunction)(void *)test_type_descriptors,
+     METH_FASTCALL, "test_type_descriptors() -> 31"},
     {NULL, NULL, 0, NULL}
 };
 
@@ -1942,6 +2149,8 @@ shimtest_exec(PyObject *mod) {
     PyModule_AddObjectRef(mod, "MAGIC_FLOAT", PyFloat_FromDouble(2.5));
     PyModule_AddObjectRef(mod, "SKIPPED_CAPSULE",
         PyCapsule_New(&capsule_payload, "shimtest.skipped", NULL));
+    /* A name in the module __dict__ only, as numpy publishes its ufuncs. */
+    PyDict_SetItemString(PyModule_GetDict(mod), "DICT_ONLY", PyLong_FromLong(7));
     /* Heap type for the typed-object tests (registered against this
        module so shimCallTyped finds it by short name "Counter"). */
     CounterType = PyType_FromModuleAndSpec(mod, &Counter_spec, NULL);

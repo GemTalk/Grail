@@ -119,7 +119,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | OK | 68 | 0 | 0 | 2 |  |
 | test.test_ipaddress | OK | 211 | 0 | 0 | 0 |  |
-| test.test_netrc | OK | 24 | 0 | 0 | 2 |  |
+| test.test_netrc | OK | 24 | 0 | 0 | 1 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
 | test.test_sax | OK | 191 | 0 | 0 | 0 |  |
 | test.test_ssl | OK | 203 | 0 | 0 | 23 |  |
@@ -138,11 +138,11 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_userstring | OK | 71 | 0 | 0 | 2 |  |
 | test.test_exception_group | OK | 53 | 0 | 0 | 0 |  |
 | test.test_except_star | ERROR | 60 | 10 | 10 | 0 |  |
-| test.test_generators | ERROR | 59 | 15 | 11 | 1 |  |
+| test.test_generators | ERROR | 59 | 17 | 9 | 1 |  |
 | test.test_long | ERROR | 47 | 6 | 8 | 7 |  |
 | test.test_exception_hierarchy | ERROR | 16 | 2 | 3 | 1 |  |
 | test.test_copyreg | FAIL | 6 | 2 | 0 | 0 |  |
 | test.test_random | ERROR | 116 | 0 | 8 | 5 |  |
 | test.test_string.test_string | OK | 42 | 0 | 0 | 1 |  |
 | test.test_shlex | OK | 45 | 0 | 0 | 1 |  |
-| test.test_uuid | ERROR | 120 | 5 | 12 | 71 |  |
+| test.test_uuid | ERROR | 120 | 5 | 10 | 73 |  |

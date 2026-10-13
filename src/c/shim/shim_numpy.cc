@@ -72,25 +72,59 @@ extern "C" int PyCapsule_SetName(PyObject *capsule, const char *name) {
     STUBLOG("PyCapsule_SetName");
     return 0;
 }
-extern "C" Py_complex PyComplex_AsCComplex(PyObject *op) {
-    STUBLOG("PyComplex_AsCComplex");
-    Py_complex _z={0.0,0.0}; return _z;
-}
-extern "C" PyObject * PyComplex_FromCComplex(Py_complex) {
-    STUBLOG("PyComplex_FromCComplex");
-    return 0;
-}
-extern "C" PyObject * PyComplex_FromDoubles(double real, double imag) {
-    STUBLOG("PyComplex_FromDoubles");
-    return 0;
-}
-extern "C" double PyComplex_ImagAsDouble(PyObject *op) {
-    STUBLOG("PyComplex_ImagAsDouble");
-    return 0.0;
+/* The complex number API, over Grail's own complex.  Real values come from
+   ``.real'' / ``.imag'', which int, float and complex all answer as CPython's
+   do.  An object without them -- numpy's own scalars cross as foreign
+   proxies -- is read as a real number through PyFloat_AsDouble, which reaches
+   its nb_float slot.  These were log-once stubs answering 0 with no error
+   set, so a caller could not tell a failure from a zero. */
+static int complex_part(PyObject *op, const char *part, double *out) {
+    PyObject *v = PyObject_GetAttrString(op, part);
+    if (v == NULL) { PyErr_Clear(); return 0; }
+    double d = PyFloat_AsDouble(v);
+    Py_DECREF(v);
+    if (d == -1.0 && PyErr_Occurred()) return -1;
+    *out = d;
+    return 1;
 }
 extern "C" double PyComplex_RealAsDouble(PyObject *op) {
-    STUBLOG("PyComplex_RealAsDouble");
-    return 0.0;
+    double d;
+    int got = complex_part(op, "real", &d);
+    if (got < 0) return -1.0;
+    return got ? d : PyFloat_AsDouble(op);
+}
+extern "C" double PyComplex_ImagAsDouble(PyObject *op) {
+    double d;
+    int got = complex_part(op, "imag", &d);
+    if (got < 0) return -1.0;
+    return got ? d : 0.0;
+}
+extern "C" Py_complex PyComplex_AsCComplex(PyObject *op) {
+    Py_complex z = { -1.0, 0.0 };
+    double re, im;
+    int gotRe = complex_part(op, "real", &re);
+    if (gotRe < 0) return z;
+    int gotIm = gotRe ? complex_part(op, "imag", &im) : 0;
+    if (gotIm < 0) return z;
+    if (!gotRe) {
+        re = PyFloat_AsDouble(op);
+        if (re == -1.0 && PyErr_Occurred()) return z;
+    }
+    z.real = re;
+    z.imag = gotIm ? im : 0.0;
+    return z;
+}
+extern "C" PyObject * PyComplex_FromDoubles(double real, double imag) {
+    PyObject *builtins = PyImport_ImportModule("builtins");
+    if (builtins == NULL) return NULL;
+    PyObject *complexType = PyObject_GetAttrString(builtins, "complex");
+    if (complexType == NULL) return NULL;
+    PyObject *z = PyObject_CallFunction(complexType, "dd", real, imag);
+    Py_DECREF(complexType);
+    return z;
+}
+extern "C" PyObject * PyComplex_FromCComplex(Py_complex c) {
+    return PyComplex_FromDoubles(c.real, c.imag);
 }
 /* PyContextVar_New / _Get / _Set are implemented for real in cpython.cc
    (they delegate to the Grail contextvars.ContextVar class) — not stubbed. */
@@ -109,6 +143,24 @@ extern "C" int PyDict_GetItemRef(PyObject *mp, PyObject *key, PyObject **result)
     if (v) { Py_INCREF(v); *result = v; return 1; }
     *result = NULL;
     return PyErr_Occurred() ? -1 : 0;
+}
+/* CPython 3.13+ setdefault with a strong reference: 0 when the default was
+   inserted, 1 when the key was already present, -1 on error.  *result, when
+   asked for, is a new reference to the value now in the dict. */
+extern "C" int PyDict_SetDefaultRef(PyObject *mp, PyObject *key, PyObject *dflt,
+                                    PyObject **result) {
+    if (result) *result = NULL;
+    int present = PyDict_Contains(mp, key);
+    if (present < 0) return -1;
+    PyObject *v = PyDict_SetDefault(mp, key, dflt);
+    if (v == NULL) return -1;
+    if (result) { Py_INCREF(v); *result = v; }
+    return present ? 1 : 0;
+}
+/* CPython invalidates its per-type method cache here.  The shim keeps no
+   such cache, so there is nothing to invalidate. */
+extern "C" void PyType_Modified(PyTypeObject *type) {
+    (void)type;
 }
 extern "C" int PyDict_GetItemStringRef(PyObject *mp, const char *key, PyObject **result) {
     PyObject *v = PyDict_GetItemString(mp, key);
@@ -395,9 +447,13 @@ extern "C" Py_UCS4* PyUnicode_AsUCS4Copy(PyObject *unicode) {
     STUBLOG("PyUnicode_AsUCS4Copy");
     return 0;
 }
+/* A str's UTF-8 encoding as bytes.  It was a stub answering NULL with no
+   error set, which ended numpy's module exec with "no pending error". */
 extern "C" PyObject* PyUnicode_AsUTF8String(PyObject *unicode) {
-    STUBLOG("PyUnicode_AsUTF8String");
-    return 0;
+    Py_ssize_t n = 0;
+    const char *s = PyUnicode_AsUTF8AndSize(unicode, &n);
+    if (s == NULL) return NULL;
+    return PyBytes_FromStringAndSize(s, n);
 }
 extern "C" int PyUnicode_Compare(PyObject *left, PyObject *right) {
     STUBLOG("PyUnicode_Compare");

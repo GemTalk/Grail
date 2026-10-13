@@ -1043,6 +1043,7 @@ run
 	at: #'GeneratorExitTestCase' put: nil;
 	at: #'GeneratorStackFrameTestCase' put: nil;
 	at: #'GeneratorStopTestCase' put: nil;
+	at: #'GeneratorThrowTracebackTestCase' put: nil;
 	at: #'GeneratorUnraisableTestCase' put: nil;
 	at: #'GenericAliasTestCase' put: nil;
 	at: #'GenericAndAbcBasesTestCase' put: nil;
@@ -1105,6 +1106,7 @@ run
 	at: #'InlineSuiteContinuationTestCase' put: nil;
 	at: #'InputBuiltinTestCase' put: nil;
 	at: #'InspectAsyncPredicatesTestCase' put: nil;
+	at: #'InspectCallableInstanceSignatureTestCase' put: nil;
 	at: #'InspectClassifyClassAttrsTestCase' put: nil;
 	at: #'InspectGetmembersTestCase' put: nil;
 	at: #'InspectMethodPredicatesTestCase' put: nil;
@@ -1128,6 +1130,7 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorLengthHintTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
+	at: #'JsonLoadsKeywordsTestCase' put: nil;
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
@@ -1227,6 +1230,7 @@ run
 	at: #'NestedDefNameTestCase' put: nil;
 	at: #'NestedFunctionFramesTestCase' put: nil;
 	at: #'NestedKeywordOnlyTestCase' put: nil;
+	at: #'NestedLambdaQualnameTestCase' put: nil;
 	at: #'NestedOperandSpanTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'NestedStarImportTestCase' put: nil;
@@ -1255,10 +1259,12 @@ run
 	at: #'OpenCodecsAndDescriptorsTestCase' put: nil;
 	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'OsDirectoryErrorsTestCase' put: nil;
+	at: #'OsEnvironMappingTestCase' put: nil;
 	at: #'OsErrorErrnoSubclassTestCase' put: nil;
 	at: #'OsErrorsCarryErrnoTestCase' put: nil;
 	at: #'OSErrorTestCase' put: nil;
 	at: #'OsFileDescriptorsTestCase' put: nil;
+	at: #'OsPathCommonpathTestCase' put: nil;
 	at: #'OsPathPosixpathNamesTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'OsRemoveDollarPathTestCase' put: nil;
@@ -1346,6 +1352,7 @@ run
 	at: #'ResourceWarningTestCase' put: nil;
 	at: #'ReSubCallableTestCase' put: nil;
 	at: #'ReturnTestCase' put: nil;
+	at: #'RmtreeOnexcTestCase' put: nil;
 	at: #'RmtreeSymlinksTestCase' put: nil;
 	at: #'RoundDirFormatTestCase' put: nil;
 	at: #'RuntimeClassCreationTestCase' put: nil;
@@ -1371,6 +1378,7 @@ run
 	at: #'ShlexTestCase' put: nil;
 	at: #'ShortCircuitOperandSpanTestCase' put: nil;
 	at: #'ShutilTestCase' put: nil;
+	at: #'SignatureBindTestCase' put: nil;
 	at: #'SignatureDefaultTextTestCase' put: nil;
 	at: #'SignatureOfAClassTestCase' put: nil;
 	at: #'SingleDispatchMethodTestCase' put: nil;
@@ -1388,6 +1396,7 @@ run
 	at: #'SslModuleTestCase' put: nil;
 	at: #'SslRuntimeGapsTestCase' put: nil;
 	at: #'StarImportDynamicNamesTestCase' put: nil;
+	at: #'StarImportUnboundGlobalTestCase' put: nil;
 	at: #'StarUnpackIteratorTestCase' put: nil;
 	at: #'StaticmethodOverridesBaseMethodTestCase' put: nil;
 	at: #'StaticmethodShadowingTestCase' put: nil;
@@ -1482,6 +1491,7 @@ run
 	at: #'TwilioShapeTestCase' put: nil;
 	at: #'TwilioTier1TestCase' put: nil;
 	at: #'TypeAliasTestCase' put: nil;
+	at: #'TypeBuiltClassOverridesTestCase' put: nil;
 	at: #'TypeCallMroEntriesTestCase' put: nil;
 	at: #'TypedDictTotalTestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
@@ -2579,6 +2589,7 @@ input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
+input src/smalltalk/PythonTests/GeneratorThrowTracebackTestCase.gs
 input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
 input src/smalltalk/PythonTests/GenericAliasTestCase.gs
 input src/smalltalk/PythonTests/GenericAndAbcBasesTestCase.gs
@@ -2638,6 +2649,7 @@ input src/smalltalk/PythonTests/InitSubclassTestCase.gs
 input src/smalltalk/PythonTests/InlineSuiteContinuationTestCase.gs
 input src/smalltalk/PythonTests/InputBuiltinTestCase.gs
 input src/smalltalk/PythonTests/InspectAsyncPredicatesTestCase.gs
+input src/smalltalk/PythonTests/InspectCallableInstanceSignatureTestCase.gs
 input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
 input src/smalltalk/PythonTests/InspectMethodPredicatesTestCase.gs
@@ -2662,6 +2674,7 @@ input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/JsonDecodeErrorTestCase.gs
+input src/smalltalk/PythonTests/JsonLoadsKeywordsTestCase.gs
 input src/smalltalk/PythonTests/KeyboardInterruptTestCase.gs
 input src/smalltalk/PythonTests/KeyErrorTestCase.gs
 input src/smalltalk/PythonTests/KeywordOnlyParamsTestCase.gs
@@ -2766,6 +2779,7 @@ input src/smalltalk/PythonTests/NestedDefModuleTargetTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
 input src/smalltalk/PythonTests/NestedKeywordOnlyTestCase.gs
+input src/smalltalk/PythonTests/NestedLambdaQualnameTestCase.gs
 input src/smalltalk/PythonTests/NestedOperandSpanTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/NestedStarImportTestCase.gs
@@ -2794,10 +2808,12 @@ input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OpenCodecsAndDescriptorsTestCase.gs
 input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/OsDirectoryErrorsTestCase.gs
+input src/smalltalk/PythonTests/OsEnvironMappingTestCase.gs
 input src/smalltalk/PythonTests/OsErrorErrnoSubclassTestCase.gs
 input src/smalltalk/PythonTests/OsErrorsCarryErrnoTestCase.gs
 input src/smalltalk/PythonTests/OSErrorTestCase.gs
 input src/smalltalk/PythonTests/OsFileDescriptorsTestCase.gs
+input src/smalltalk/PythonTests/OsPathCommonpathTestCase.gs
 input src/smalltalk/PythonTests/OsPathPosixpathNamesTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/OsRemoveDollarPathTestCase.gs
@@ -2885,6 +2901,7 @@ input src/smalltalk/PythonTests/ReservedParamDefaultTestCase.gs
 input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
 input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
+input src/smalltalk/PythonTests/RmtreeOnexcTestCase.gs
 input src/smalltalk/PythonTests/RmtreeSymlinksTestCase.gs
 input src/smalltalk/PythonTests/RoundDirFormatTestCase.gs
 input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
@@ -2909,6 +2926,7 @@ input src/smalltalk/PythonTests/ShimForeignObjectTestCase.gs
 input src/smalltalk/PythonTests/ShlexTestCase.gs
 input src/smalltalk/PythonTests/ShortCircuitOperandSpanTestCase.gs
 input src/smalltalk/PythonTests/ShutilTestCase.gs
+input src/smalltalk/PythonTests/SignatureBindTestCase.gs
 input src/smalltalk/PythonTests/SignatureDefaultTextTestCase.gs
 input src/smalltalk/PythonTests/SignatureOfAClassTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
@@ -2926,6 +2944,7 @@ input src/smalltalk/PythonTests/SslCallbacksTestCase.gs
 input src/smalltalk/PythonTests/SslModuleTestCase.gs
 input src/smalltalk/PythonTests/SslRuntimeGapsTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
+input src/smalltalk/PythonTests/StarImportUnboundGlobalTestCase.gs
 input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodOverridesBaseMethodTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs
@@ -3021,6 +3040,7 @@ input src/smalltalk/PythonTests/TwilioClientTestCase.gs
 input src/smalltalk/PythonTests/TwilioShapeTestCase.gs
 input src/smalltalk/PythonTests/TwilioTier1TestCase.gs
 input src/smalltalk/PythonTests/TypeAliasTestCase.gs
+input src/smalltalk/PythonTests/TypeBuiltClassOverridesTestCase.gs
 input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
 input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs

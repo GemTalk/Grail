@@ -156,11 +156,100 @@ loads: s
 	bytes, or bytearray inputs; bytes/bytearray are decoded as UTF-8
 	per CPython 3.6+."
 
+	^ self _loadsText: s hooks: nil strict: true
+%
+
+category: 'Grail-Public'
+method: json
+_loads: positional kw: kwargs
+	"loads(s, *, cls=None, object_hook=None, parse_float=None, parse_int=None,
+	parse_constant=None, object_pairs_hook=None, **kw) -- the keyword form.
+
+	There was only the one-argument loads:, so EVERY keyword failed with
+	``loads() takes a different number of arguments'' -- while dumps took its
+	keywords all along.  botocore loads each service model with
+	``json.loads(payload, object_pairs_hook=OrderedDict)'', so creating any
+	boto3 client stopped there.
+
+	``cls'' is honoured as CPython does it: cls(**kw).decode(s).  Otherwise
+	the hooks ride in the parser state (_decoderHooks:)."
+
+	| s cls rest |
+	positional @env0:size @env0:= 1 ifFalse: [
+		^ TypeError ___signal___: 'loads() takes 1 positional argument but '
+			@env0:, positional @env0:size @env0:printString @env0:, ' were given'].
+	s := positional @env0:at: 1.
+	(kwargs @env0:isNil or: [kwargs @env0:isEmpty]) ifTrue: [^ self loads: s].
+	cls := kwargs @env0:at: 'cls' ifAbsent: [None].
+	cls == nil ifTrue: [cls := None].
+	cls == None ifFalse: [
+		rest := kwargs @env0:copy.
+		rest @env0:removeKey: 'cls'.
+		^ ((cls ___pyCallValue___: #() kw: rest) ___pyAttrLoad___: #decode)
+			___pyCallValue___: { s } kw: nil].
+	^ self _loadsText: s hooks: (self _decoderHooks: kwargs)
+		strict: (kwargs @env0:at: 'strict' ifAbsent: [true]) @env1:___isTruthy___
+%
+
+category: 'Grail-Public'
+method: json
+_load: positional kw: kwargs
+	"load(fp, **kw) -- loads(fp.read(), **kw), as CPython's is."
+
+	positional @env0:size @env0:= 1 ifFalse: [
+		^ TypeError ___signal___: 'load() takes 1 positional argument but '
+			@env0:, positional @env0:size @env0:printString @env0:, ' were given'].
+	^ self _loads: { (positional @env0:at: 1) read } kw: kwargs
+%
+
+category: 'Grail-Private'
+method: json
+_decoderHooks: kwargs
+	"The JSONDecoder keywords as the parser reads them -- an Array of
+	object_hook, object_pairs_hook, parse_float, parse_int, parse_constant,
+	nil for each one absent or None -- or nil when there are none.
+
+	``strict'' is accepted here and read by _loads:kw: itself (see
+	_parseString:).  Any other keyword is CPython's TypeError, which names
+	JSONDecoder because that is where loads() sends the extra keywords."
+
+	| names hooks |
+	names := #( 'object_hook' 'object_pairs_hook' 'parse_float' 'parse_int' 'parse_constant' ).
+	kwargs @env0:keysDo: [:k |
+		((names @env0:includes: k @env0:asString) or: [k @env0:asString @env0:= 'strict'])
+			ifFalse: [^ TypeError ___signal___:
+				'JSONDecoder.__init__() got an unexpected keyword argument '''
+					@env0:, k @env0:asString @env0:, '''']].
+	hooks := names @env0:collect: [:n |
+		| v |
+		v := kwargs @env0:at: n ifAbsent: [nil].
+		v == None ifTrue: [nil] ifFalse: [v]].
+	(hooks @env0:allSatisfy: [:h | h == nil]) ifTrue: [^ nil].
+	^ hooks
+%
+
+category: 'Grail-Private'
+method: json
+_hook: anIndex state: state
+	"One of _decoderHooks:'s callables, or nil."
+
+	| hooks |
+	hooks := state @env0:at: 3.
+	hooks == nil ifTrue: [^ nil].
+	^ hooks @env0:at: anIndex
+%
+
+category: 'Grail-Private'
+method: json
+_loadsText: s hooks: hooks strict: strict
+	"The parse behind loads: and _loads:kw:.  The state is the text, the
+	position, the decoder hooks (nil when there are none) and ``strict''."
+
 	| text state result |
 	text := (s isKindOf: ByteArray)
 		@env0:ifTrue: [s decode: 'utf-8']
 		@env0:ifFalse: [s @env0:asString].
-	state := Array @env0:with: text with: 1.
+	state := Array @env0:with: text with: 1 with: hooks with: strict.
 	self _skipWs: state.
 	result := self _parseValue: state.
 	self _skipWs: state.
@@ -462,6 +551,13 @@ _parseValue: state
 	ch @env0:= $" ifTrue: [^ self _parseString: state].
 	(ch @env0:= $t @env0:or: [ch @env0:= $f]) ifTrue: [^ self _parseBool: state].
 	ch @env0:= $n ifTrue: [^ self _parseNull: state].
+	"NaN, Infinity and -Infinity, which CPython's decoder accepts by default
+	(parse_constant).  Grail answered ``Expecting value'' for all three."
+	ch @env0:= $N ifTrue: [^ self _parseConstant: 'NaN' state: state].
+	ch @env0:= $I ifTrue: [^ self _parseConstant: 'Infinity' state: state].
+	((ch @env0:= $-) @env0:and: [pos @env0:< src @env0:size
+			@env0:and: [(src @env0:at: pos @env0:+ 1) @env0:= $I]])
+		ifTrue: [^ self _parseConstant: '-Infinity' state: state].
 	((ch @env0:= $-) @env0:or: [ch @env0:asInteger @env0:>= $0 @env0:asInteger @env0:and: [ch @env0:asInteger @env0:<= $9 @env0:asInteger]]) ifTrue: [
 		^ self _parseNumber: state
 	].
@@ -556,6 +652,13 @@ _parseNumber: state
 	].
 	tokenStr := src @env0:copyFrom: start to: pos @env0:- 1.
 	state @env0:at: 2 put: pos.
+	"parse_float / parse_int get the token's TEXT, as CPython's do --
+	``parse_float=decimal.Decimal'' is the reason the hook exists."
+	(hasFraction @env0:or: [hasExp])
+		ifTrue: [(self _hook: 3 state: state) @env0:ifNotNil: [:h |
+			^ h ___pyCallValue___: { tokenStr } kw: nil]]
+		ifFalse: [(self _hook: 4 state: state) @env0:ifNotNil: [:h |
+			^ h ___pyCallValue___: { tokenStr } kw: nil]].
 	(hasFraction @env0:or: [hasExp])
 		ifTrue: [value := tokenStr @env0:asNumber @env0:asFloat]
 		ifFalse: [value := tokenStr @env0:asNumber].
@@ -622,6 +725,14 @@ _parseString: state
 				]]]]]]]]].
 				pos := pos @env0:+ 1
 			] ifFalse: [
+				"A RAW control character (below U+0020) is CPython's ``Invalid
+				control character at'' unless strict=False.  Grail took every
+				one silently, as if strict were always False; strict defaults to
+				True."
+				((state @env0:at: 4) == true
+						@env0:and: [ch @env0:codePoint @env0:< 32]) ifTrue: [
+					^ self _decodeError: 'Invalid control character at'
+						state: state at: pos].
 				stream @env0:nextPut: ch.
 				pos := pos @env0:+ 1
 			]
@@ -690,15 +801,18 @@ method: json
 _parseObject: state
 	"Parse {...}; key:value pairs, keys must be strings."
 
-	| src result first key value commaPos |
+	| src result first key value commaPos pairs |
 	src := state @env0:at: 1.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
 	self _skipWs: state.
 	result := dict ___new___.
+	"object_pairs_hook sees the pairs IN ORDER, duplicates included, and
+	takes precedence over object_hook -- CPython's rule."
+	pairs := (self _hook: 2 state: state) @env0:ifNotNil: [:h | list ___new___].
 	(self _atEnd: state) ifFalse: [
 		(src @env0:at: (state @env0:at: 2)) @env0:= $} ifTrue: [
 			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
-			^ result
+			^ self _finishObject: result pairs: pairs state: state
 		]
 	].
 	first := true.
@@ -741,7 +855,9 @@ _parseObject: state
 		].
 		state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
 		value := self _parseValue: state.
-		result __setitem__: key _: value.
+		pairs == nil
+			ifTrue: [result __setitem__: key _: value]
+			ifFalse: [pairs append: (tuple @env0:withAll: { key. value })].
 		self _skipWs: state.
 		(self _atEnd: state) ifTrue: [
 			^ self _decodeError: 'Expecting '','' delimiter'
@@ -749,7 +865,41 @@ _parseObject: state
 		(src @env0:at: (state @env0:at: 2)) @env0:= $}
 	] @env0:whileFalse.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
-	^ result
+	^ self _finishObject: result pairs: pairs state: state
+%
+
+category: 'Grail-Private'
+method: json
+_finishObject: aDict pairs: aPairList state: state
+	"What a parsed object becomes: object_pairs_hook(pairs) when given, else
+	object_hook(dict) when given, else the dict."
+
+	aPairList == nil ifFalse: [
+		^ (self _hook: 2 state: state) ___pyCallValue___: { aPairList } kw: nil].
+	(self _hook: 1 state: state) @env0:ifNotNil: [:h |
+		^ h ___pyCallValue___: { aDict } kw: nil].
+	^ aDict
+%
+
+category: 'Grail-Private'
+method: json
+_parseConstant: aName state: state
+	"NaN, Infinity or -Infinity at the current position: parse_constant(name)
+	when given, else the float CPython's decoder answers."
+
+	| src pos last |
+	src := state @env0:at: 1.
+	pos := state @env0:at: 2.
+	last := pos @env0:+ aName @env0:size @env0:- 1.
+	(last @env0:> src @env0:size
+		@env0:or: [(src @env0:copyFrom: pos to: last) @env0:~= aName]) ifTrue: [
+		^ self _decodeError: 'Expecting value' state: state at: pos].
+	state @env0:at: 2 put: last @env0:+ 1.
+	(self _hook: 5 state: state) @env0:ifNotNil: [:h |
+		^ h ___pyCallValue___: { aName } kw: nil].
+	aName @env0:= 'NaN' ifTrue: [^ PlusQuietNaN].
+	aName @env0:= 'Infinity' ifTrue: [^ PlusInfinity].
+	^ MinusInfinity
 %
 
 set compile_env: 0

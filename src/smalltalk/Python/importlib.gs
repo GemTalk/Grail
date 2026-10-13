@@ -590,6 +590,10 @@ expandStarImports: aModuleAst
 			top-level variable that isn't underscore-prefixed."
 			expandedNames := self ___starExportNamesFor___: subAst.
 			expandedNames isNil ifTrue: [
+				"GUESSED, so a name may never be bound at import time --
+				one a function only declares ``global'' (#1416); codegen
+				binds such a name only if the module has it."
+				stmt starNamesGuessed: true.
 				expandedNames := subAst body variables asArray
 					select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
 			newAliases := expandedNames collect: [:n |
@@ -10522,6 +10526,10 @@ reload: aModule
 	moduleAst @env0:setParent: nil.
 	importlib @env0:expandStarImports: moduleAst.
 	importlib @env0:___buildModuleClass: moduleAst name: name.
+	"The rebuild REPLACED the module's methods, and the session's method-keyed
+	caches still hold the old ones -- each pinning its whole generated source,
+	so a session that reloads in a loop ran out of memory (#1463)."
+	BaseException @env0:___forgetMethodCaches___.
 	"Re-parenting the class can reset its adopted singleton; re-adopt the live
 	instance so it stays the module's canonical object before re-running body."
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.

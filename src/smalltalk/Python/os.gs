@@ -266,6 +266,12 @@ initialize
 	self @env0:at: #'_walk_symlinks_as_files' put: (object ___new___).
 	self @env0:at: #path put: (os_path instance).
 	self @env0:at: #PathLike put: os_PathLike.
+	"``os._Environ'' is the TYPE of os.environ.  Private by name, and still
+	used as a type: rich's pretty printer lists it among the mapping
+	containers it knows (``_MAPPING_CONTAINERS = (dict, os._Environ, ...)''),
+	and without it every rich module failed at import -- 17 of pip's
+	submodules in the package census."
+	self @env0:at: #'_Environ' put: os_Environ.
 	"``os.DirEntry'' is a real module attribute in CPython -- code type-tests
 	scandir results against it -- even though nothing can construct one."
 	self @env0:at: #DirEntry put: os_DirEntry.
@@ -691,11 +697,94 @@ setdefault: key
 category: 'Grail-Access Methods'
 method: os_Environ
 update: other
-	"environ.update(mapping) — each entry written through putenv."
+	"environ.update(mapping) — each entry written through putenv.
 
-	(other keys) @env0:do: [:k |
-		self __setitem__: k _: (other __getitem__: k) ].
+	The argument is read by a scratch dict, so everything dict.update
+	accepts works here too: a mapping, or an iterable of pairs.  This used
+	to send ``keys'' to it, which a list of pairs does not answer."
+
+	^ self ___updateFrom___: (dict ___new___ update: other; @env0:yourself)
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+_update: positional kw: kwargs
+	"environ.update(mapping, **kwargs), and update() with no argument.
+	MutableMapping's update takes both; without this form a keyword call
+	matched no selector."
+
+	| scratch |
+	scratch := dict ___new___.
+	scratch _update: positional kw: kwargs.
+	^ self ___updateFrom___: scratch
+%
+
+category: 'Grail-Private'
+method: os_Environ
+___updateFrom___: aDict
+	"Write every entry of aDict through putenv."
+
+	aDict @env0:keysAndValuesDo: [:k :v | self __setitem__: k _: v].
 	^ None
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+popitem
+	"environ.popitem() — MutableMapping's: the first name iteration reports,
+	unset, as a (name, value) pair.  KeyError when there is none."
+
+	| names name value |
+	names := self ___liveNames___.
+	names @env0:isEmpty ifTrue: [^ KeyError ___signal___: 'popitem(): environ is empty'].
+	name := names @env0:first.
+	value := self __getitem__: name.
+	self __delitem__: name.
+	^ tuple @env0:with: name with: value
+%
+
+category: 'Grail-Comparison'
+method: os_Environ
+__eq__: other
+	"Mapping's __eq__: equal to any mapping with the same items.  It was
+	identity, so ``os.environ == dict(os.environ)'' was False.  A non-mapping
+	declines, and the operator layer decides."
+
+	(self @env0:== other) ifTrue: [^ true].
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	^ self copy __eq__: other
+%
+
+category: 'Grail-Merge Operators'
+method: os_Environ
+__or__: other
+	"PEP 584, as CPython's _Environ: ``environ | mapping'' is a new PLAIN
+	dict, other winning on conflicts; the process is untouched."
+
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	^ self copy update: other; @env0:yourself
+%
+
+category: 'Grail-Merge Operators'
+method: os_Environ
+__ror__: other
+	"``mapping | environ'' — a new plain dict, environ winning on conflicts.
+	dict's own __or__ declines a non-dict, which is what lands here."
+
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	^ dict ___new___ update: other; update: self copy; @env0:yourself
+%
+
+category: 'Grail-Merge Operators'
+method: os_Environ
+__ior__: other
+	"``os.environ |= mapping'' — written through putenv, as update is."
+
+	self update: other.
+	^ self
 %
 
 category: 'Grail-Access Methods'
@@ -1377,7 +1466,8 @@ ___signalDirectoryNotRemoved: path
 	| errno |
 
 	errno := self ___errnoPreventingRemovalOfDirectory: path.
-	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotRemovedMessage: path)].
+	errno == 0 ifTrue: [errno := self ___errnoOfLibc: #rmdir onPath: path].
+	errno == 0 ifTrue: [^ None].
 	^ self ___signalErrno: errno filename: path
 %
 
@@ -1417,13 +1507,6 @@ ___isEmptyDirectory: path
 		(name @env0:= '.') @env0:or: [name @env0:= '..']]) @env0:isEmpty
 %
 
-category: 'Grail-Error Messages'
-classmethod: os
-___directoryNotRemovedMessage: path
-
-	^ 'Cannot remove directory: ' @env0:, path @env0:printString
-%
-
 category: 'Grail-File and Directory Operations'
 method: os
 remove: aPath
@@ -1459,8 +1542,24 @@ ___signalFileNotRemoved: path
 	| errno |
 
 	errno := self ___errnoPreventingUnlinkOf: path.
-	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___fileNotRemovedMessage: path)].
+	errno == 0 ifTrue: [errno := self ___errnoOfLibc: #unlink onPath: path].
+	errno == 0 ifTrue: [^ None].
 	^ self ___signalErrno: errno filename: path
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___errnoOfLibc: aName onPath: path
+	"When reading the filesystem back cannot say why a removal failed --
+	permission on the PARENT directory is the case it misses, and the one
+	pytest's and shutil.rmtree's handlers test for -- ask the kernel: repeat the
+	removal through libc and answer its errno.  0 means the repeat succeeded,
+	so what was asked for is done.
+
+	The primitive answers only nil, and this used to raise a bare OSError with
+	no errno, which ``except PermissionError'' never catches."
+
+	^ self ___libc: aName with: { self ___cPathFor: path } ifFail: [:errno | ^ errno].
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1477,13 +1576,6 @@ ___errnoPreventingUnlinkOf: path
 	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory])
 		ifTrue: [^ self @env0:class ___errnoOfUnlinkingADirectory].
 	^ 0
-%
-
-category: 'Grail-Error Messages'
-classmethod: os
-___fileNotRemovedMessage: path
-
-	^ 'Cannot remove file: ' @env0:, path @env0:printString
 %
 
 category: 'Grail-File and Directory Operations'
@@ -2945,6 +3037,10 @@ ___fdCallouts
 				result: #'int32' args: #(#'int32' #'int64')).
 			d @env0:at: #isatty put: (CCallout @env0:library: lib name: 'isatty'
 				result: #'int32' args: #(#'int32')).
+			d @env0:at: #unlink put: (CCallout @env0:library: lib name: 'unlink'
+				result: #'int32' args: #(#'ptr')).
+			d @env0:at: #rmdir put: (CCallout @env0:library: lib name: 'rmdir'
+				result: #'int32' args: #(#'ptr')).
 			d @env0:at: #access put: (CCallout @env0:library: lib name: 'access'
 				result: #'int32' args: #(#'ptr' #'int32')).
 			d]

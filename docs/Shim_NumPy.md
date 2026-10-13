@@ -472,7 +472,7 @@ two directions:
     (NaN variants end in `"NaN"`; `Plus/MinusInfinity`).  A real CPython-compat
     bug, *independent* of the longdouble wall (verified: it does not clear it).
 
-11. **CURRENT FRONTIER — `LONGDOUBLE_setitem` empty-string parse (logaddexp
+11. **FIXED 2026-10-13 (see "Stage 1 on numpy 2.5.4" below) — `LONGDOUBLE_setitem` empty-string parse (logaddexp
     identity).**  Init reaches numpy setting the longdouble identity of the
     **`logaddexp`** ufunc (`-inf`):
 
@@ -497,6 +497,118 @@ two directions:
     `logaddexp` `get_initial_from_ufunc` and watch how it materializes the
     identity string — likely a numpy longdouble→text path that yields nothing
     on our platform/longdouble handling.
+
+## Stage 1 on numpy 2.5.4 (2026-10-13): module exec completes
+
+Re-measured on `main` with numpy 2.5.4 (cp314, macOS arm64), four months after
+the walls above.  `import numpy` then failed before any numpy code ran:
+`dlopen` refused `_multiarray_umath` on a missing `PyDict_SetDefaultRef`.
+`scripts/shim_symbol_floor.sh` put the floor for a plain `import numpy` at five
+missing symbols across the two extensions it loads (`_multiarray_umath` and
+`linalg._umath_linalg`): four functions and `PyExc_ModuleNotFoundError`.
+`numpy.random`'s Cython modules miss 20 to 48 each, but they load lazily.
+
+Every wall below was a shim defect.  None needed a change to numpy, and none was
+the user-action limitation.  **`_multiarray_umath`'s module exec now runs to
+completion**: past wall 11, through `InitOperators`, `initumath`,
+`set_matmul_flags` and the static-reference reads at its end.
+
+12. **Five missing symbols.**  `PyDict_SetDefaultRef` (3.13), `PyType_Modified`
+    (a no-op: the shim keeps no type cache), `PyUnicode_FromFormatV`,
+    `PyUnicode_FromObject`, and `PyExc_ModuleNotFoundError` (a subclass of
+    `ImportError` in the shim's exception tables).
+13. **An unguarded `PyContextVar_New` unloaded numpy mid-import.**
+    `contextvars.ContextVar` takes `default` as a keyword now, so the server
+    method's positional call was a `TypeError`.  The server method was not
+    wrapped in `___guardCallback:`, so the exception searched Grail's handlers,
+    and the import handlers below the user-action frame ran *on top of* it.
+    Each one unloaded its module: `numpy`, `numpy._core` and
+    `numpy._core.multiarray` left `sys.modules` mid-import.  numpy's next import
+    from C then ran `numpy/_core/__init__.py` a second time, and that run is what
+    printed numpy's "Importing the numpy C-extensions failed" message, with 80
+    error-6011 lines from the refused unwinds.  The fix passes `default=` as a
+    keyword and guards `PyContextVar_New`, `_Get` and `_Set`.  The C side now
+    goes through `check_gci_error`, which leaves C a pending error; `_Get` and
+    `_Set` used to return failure with none.  **Lesson: any server method C
+    calls must be guarded.**  A Smalltalk error such as a DNU is not caught by
+    `___guardCallback:` (it catches Python exceptions only), and it produced the
+    same cascade during this work.
+14. **Stubs that fail with no error set.**  `PyComplex_AsCComplex`,
+    `RealAsDouble`, `ImagAsDouble`, `FromDoubles`, `FromCComplex` and
+    `PyUnicode_AsUTF8String` were log-once stubs answering 0 or NULL.  numpy's
+    exec then failed with "pending error: (none)".  All are real now.
+15. **A real-layout tuple came back as a wrapper.**  numpy keeps each ufunc's
+    loops in a dict of `(DTypes, ArrayMethod)` info tuples, reads one back with
+    `PyDict_GetItemRef`, then reads it with the inlined `PyTuple_GET_ITEM`.  The
+    shim had bridged the stored tuple to a Grail tuple, and handed back a
+    32-byte wrapper, so offset 0x28 read NULL (`get_info_no_cast`).  This is the
+    "identity-stable bridging" listed above as still to do, done for tuples:
+    `real_obj_to_oop` records the original pointer
+    (`CPythonShim>>___noteRealTuple:origin:`), and `wrap:` returns it when the
+    Grail copy crosses back.  Tuples are immutable, and the shim never frees a
+    real-layout object, so the original is always valid.
+16. **Wall 11's actual cause: `PyBytes_AsString` accepted anything.**
+    `string_to_long_double` tries `PyBytes_AsString` on a non-string first and
+    falls back to the number when it gets NULL.  Given the float `-inf` identity
+    of `logaddexp`, the shim answered `""`, and `strtold` parsed nothing.  It now
+    raises CPython's `TypeError` for anything that is not bytes.  The shim's own
+    bytes-like paths (`PyByteArray_AsString`, the `PyArg` `y#`/`s#` parsers) keep
+    the unchecked read, through a helper.
+17. **`PyCallable_Check` asked the Grail proxy about a ufunc.**  For a foreign
+    object it now answers from `tp_call` along the base chain; a foreign type
+    is always callable.  `_PyArray_SetNumericOps` returned -1 with no error.
+18. **`Py_BuildValue("{s, [(i), (i, i), (i)]}")`.**  CPython skips separators
+    before any unit; the shim's dict case stepped over a single `:`.
+19. **A shim module's attribute read ignored its `__dict__`.**  numpy stores
+    every ufunc with `PyDict_SetItemString(PyModule_GetDict(m), ...)` and then
+    reads `imag` back off the module.  The same gap existed on the Grail side:
+    `shimModuleAttrs` exported only the `PyModule_AddObject` table, so
+    `from numpy._core._multiarray_umath import _ArrayFunctionDispatcher` found
+    nothing.  Both now include the dict.
+20. **Capsules carried a private type.**  A wheel inlines `PyCapsule_CheckExact`
+    as `ob_type == &PyCapsule_Type`.  The shim's capsules now carry the exported
+    symbol, and numpy no longer refuses its own promoter.
+21. **An instance method read off a wheel's TYPE answered nothing.**
+    `PyDescr_NewMethod` / `PyDescr_NewGetSet` (in `shim_pyo3.cc`) build
+    `method_descriptor` / `getset_descriptor` objects.  They are cached in the
+    defining type's `tp_dict`, as CPython's `PyType_Ready` caches them, so every
+    read returns the same object; numpy compares
+    `ndarray.__array_finalize__` by identity.
+22. **#1433 cause 2: `shimCall` split a dotted module name.**  Every positional
+    call into `numpy._core._multiarray_umath` looked up module `numpy`.  The
+    combined `"module.method"` form passes an argument (a SmallInteger) in the
+    method slot, and the plain form passes the method name (a String), so the
+    kind of that slot now decides.
+
+### The frontier now
+
+The extension loads and the Python side of `import numpy` runs.  The next wall
+is in that Python integration: `numpy/_core/overrides.py` (`add_docstring`
+refusing a Grail object; a Grail `BoundMethod` that cannot take `__doc__`).  It
+is stage 2 of the plan: Grail-side gaps of the kind the package census lists,
+not shim ABI work.
+
+### Finding a silent failure
+
+Wall 13 onwards were found this way, and it beats guessing:
+
+* `GRAIL_SHIM_DIAG=1` logs every foreign crossing, the exec slot's pending
+  error, a C backtrace for each failed GemStone perform, and, new here, each
+  callback that raised (`take_callback_error`).
+* When the exec slot fails with **no** pending error, some call returned
+  failure without setting one.  Run the gem under lldb **following the fork**
+  (`settings set target.process.follow-fork-mode child`; without it no
+  breakpoint in a dlopen'ed library ever resolves) with stdin from `/dev/null`
+  (`process launch -i /dev/null`, or topaz stops on SIGTTIN).  Pass every
+  signal through.
+* Do not `thread step-out` from a breakpoint command in batch mode: the first
+  stop ends the session.  Instead, disassemble the failing function
+  (`otool -tV`), set an auto-continuing breakpoint on the instruction after
+  each `bl` (`breakpoint set -s <so> -a <file address>`), and log the callee
+  and `x0` from a Python callback.  The last call before the failure is the
+  answer.  Drill down one function at a time:
+  `_multiarray_umath_exec` -> `initumath` -> `InitOperators` ->
+  `get_info_no_cast`.
 
 ## Repro
 
