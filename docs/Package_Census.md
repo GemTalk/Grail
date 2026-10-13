@@ -29,6 +29,20 @@ still fail, at new first walls: #1523 and #1452. The rows, the gap tables and
 the project totals below include this. The submodule totals do not, and
 nothing else was re-measured.
 
+**Updated 2026-10-13 for h11 and httpcore only.** Both CRASHed on
+`InternalError 2261`, which turned out to be two defects stacked (see G12 in
+the history below). h11's `Sentinel` metaclass makes each sentinel its own
+type with `v.__class__ = v`; Grail refused that, and signalled the refusal
+from inside a kernel handler that runs in protected mode, so the `except` that
+caught it died on its first import. Behind that, a tuple holding a class whose
+instances are unhashable (`__hash__ = None`, as h11's event classes are)
+hashed to `None`. With both fixed, h11 0.16.0 and httpcore 1.0.9 import, and
+an h11 client/server exchange matches CPython byte for byte. Their rows, the
+totals and the gap tables below include this. The submodule counts were taken
+in a venv holding only these two (and certifi), where all 11 / 11 and 25 / 25
+that CPython imports also import; the census venv also has anyio, which adds
+httpcore's anyio backend to that denominator. Nothing else was re-measured.
+
 Setup: GemStone 4.0 (build 2026-09-23), Grail `main` at `322a9092`, CPython
 3.14.8, Darwin arm64. `./install.sh`, then `./scripts/run_tests.sh` (7803/7803,
 8 of 8 shards), then
@@ -43,10 +57,10 @@ them `CRASH` and `TIMEOUT` and resumed with the rest.
 
 | Denominator | Import |
 | --- | --- |
-| **pure-Python projects** | **41 / 58** (+1 shadowed: click) |
+| **pure-Python projects** | **43 / 58** (+1 shadowed: click) |
 | depending on a C-extension project | 4 / 15 (+2 shadowed: requests, jinja2) |
 | shipping a C extension | 13 / 27 (+1 shadowed: markupsafe) |
-| everything measured | **58 / 100** |
+| everything measured | **60 / 100** |
 | **submodules, of those CPython imports** | **1,311 / 2,000** (65.6%) |
 
 **Continuity with the top 50.** Of the 49 names carried over, 28 import:
@@ -64,8 +78,8 @@ missing `logging` function) and
 pyasn1-modules (130, one uncatchable crash). Without them the figure is
 1,144 / 1,486 (77%).
 
-**Three projects crash the session at the top level**:
-* `h11` and `httpcore` crash on the InternalError 2261 recorded below.
+**One project crashes the session at the top level** (three did; h11 and
+httpcore were fixed on 2026-10-13, see the note above):
 * `pytz` crashes only on the IR arm (#1424); it imports with `GRAIL_IR_CODEGEN=0`.
 
 **At the submodule level, 156 modules crash**:
@@ -108,7 +122,7 @@ top-level import.
 | 24 | pytest | 9.1.1 | pure | FAILS |  | #1452, then #1412 (via iniconfig) |
 | 25 | iniconfig | 2.3.1 | pure | FAILS |  | #1412 |
 | 26 | annotated-types | 0.8.0 | pure | IMPORTS | 1 / 1 |  |
-| 27 | h11 | 0.16.0 | pure | CRASH |  | InternalError 2261, not isolated |
+| 27 | h11 | 0.16.0 | pure | IMPORTS | 11 / 11 |  |
 | 28 | typing-inspection | 0.4.4 | pure | IMPORTS | 2 / 2 |  |
 | 29 | attrs | 26.1.0 | pure | FAILS |  | #1418 (attrs) |
 | 30 | s3transfer | 0.19.2 | pure | FAILS |  | #1411 (via `dateutil.tz`) |
@@ -116,7 +130,7 @@ top-level import.
 | 32 | protobuf | 7.36.2 | ext | IMPORTS | 37 / 55 |  |
 | 33 | httpx | 0.28.1 | pure | IMPORTS | 21 / 22 |  |
 | 34 | markupsafe | 3.0.4 | ext | SHADOWED |  | Grail's bundled copy answers (G10) |
-| 35 | httpcore | 1.0.9 | pure | CRASH |  | InternalError 2261, not isolated |
+| 35 | httpcore | 1.0.9 | pure | IMPORTS | 25 / 25 (see the 2026-10-13 note) |  |
 | 36 | python-dotenv | 1.2.4 | pure | IMPORTS | 5 / 5 |  |
 | 37 | pyjwt | 2.15.1 | pure | FAILS |  | C extension (cryptography) |
 | 38 | platformdirs | 4.13.0 | pure | IMPORTS | 8 / 10 |  |
@@ -196,7 +210,6 @@ excluded):
 | #1523 a submodule is not found through its parent's `__path__` (setuptools' `distutils` alias); after it, `_osx_support`, `email.message_from_file`, `tarfile.data_filter` and `importlib.util.module_from_spec` | setuptools |
 | #1452 `os.path` lacks `expandvars` and seven more `posixpath` names | pytest |
 | #1411 metaclass `__init__` attribute under `six.add_metaclass` | boto3, s3transfer |
-| InternalError 2261, not isolated | h11, httpcore |
 | #1420 `sys.version_info` is a plain tuple | beautifulsoup4, soupsieve |
 | #1428 three object-model gaps | googleapis-common-protos (and wrapt, sqlalchemy) |
 | #1412 `\N{}` aliases | iniconfig (and pytest, behind #1452) |
