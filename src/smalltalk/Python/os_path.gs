@@ -126,17 +126,27 @@ ___joinComponents___: somedPaths
 	``join(Path(dir), name)'' is the single most common way a Path reaches
 	os.path at all."
 
-	| result sep size paths |
+	| result sep sepElement isBytes size paths |
 	paths := somedPaths @env0:collect: [:p | (os instance) ___fsPath___: p].
 	(paths @env0:isEmpty) ifTrue: [^ ''].
+	"bytes components join as bytes, as in CPython's posixpath (#1511:
+	shutil.which(b'sh', path=b'/bin') joins them), with b'/' between them --
+	so the separator is tested by ELEMENT, a Character or a byte, since a
+	ByteArray has neither beginsWith: nor endsWith:.  Mixing the two kinds
+	is CPython's TypeError."
+	isBytes := paths @env0:first @env0:isKindOf: ByteArray.
+	(paths @env0:detect: [:p | (p @env0:isKindOf: ByteArray) ~~ isBytes] ifNone: [nil]) @env0:notNil
+		ifTrue: [^ TypeError ___signal___: 'Can''t mix strings and bytes in path components'].
 	((paths @env0:size) == 1) ifTrue: [^ paths @env0:first].
-	sep := '/'.
+	isBytes
+		ifTrue: [sepElement := 47. sep := ByteArray @env0:new: 1. sep @env0:at: 1 put: 47]
+		ifFalse: [sepElement := $/. sep := '/'].
 	result := paths @env0:first.
 	size := paths @env0:size.
 	2 @env0:to: size do: [:i |
 		| each |
 		each := paths @env0:at: i.
-		(each @env0:beginsWith: sep) ifTrue: [
+		(each @env0:notEmpty @env0:and: [(each @env0:at: 1) @env0:= sepElement]) ifTrue: [
 			result := each
 		] ifFalse: [
 			"``result isEmpty'' is the arm that was missing.  CPython's rule is
@@ -149,7 +159,7 @@ ___joinComponents___: somedPaths
 			Found through importlib.util >> cache_from_source, whose first
 			component is the empty dirname of a bare filename: it answered
 			'/__pycache__/x.pyc' for 'x.py'."
-			(result @env0:isEmpty @env0:or: [result @env0:endsWith: sep]) ifTrue: [
+			(result @env0:isEmpty @env0:or: [result @env0:last @env0:= sepElement]) ifTrue: [
 				result := result @env0:, each
 			] ifFalse: [
 				result := (result @env0:, sep) @env0:, each
@@ -228,6 +238,36 @@ relpath: path _: start
 
 category: 'Grail-Path Manipulation'
 method: os_path
+_relpath: positional kw: kwargs
+	"os.path.relpath(path, start=...), for a call that passes a keyword.
+	zoneinfo.available_timezones() calls ``relpath(fpath, start=tz_root)'',
+	and without this it matched no selector (#1452)."
+
+	^ self ___posixpathModule @env1:_relpath: positional kw: kwargs
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+__getattr__: aName
+	"PEP 562: every name this module does not define is posixpath's, as it
+	is in CPython, where os.path IS posixpath.
+
+	This module answered only the names it had a method for, so anything
+	never forwarded was an AttributeError: expandvars (which stopped
+	``import pytest''), getsize, getatime, getctime, isdevdrive, samestat,
+	sameopenfile and ALLOW_MISSING (#1452).  Eight forwarders would have
+	fixed those and left the same trap for the next name posixpath gains.
+	The module attribute read consults this only after its own lookup
+	fails, so every method defined here still wins.
+
+	A name posixpath lacks too raises posixpath's own AttributeError, whose
+	message CPython gives for os.path as well."
+
+	^ self ___posixpathModule @env1:___pyAttrLoad___: aName @env0:asSymbol
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
 ___posixpathModule
 	"CPython's posixpath.  A Grail import is a database read, and sys.modules
 	caches it per session, so asking each time costs a dictionary lookup
@@ -253,14 +293,19 @@ _realpath: positional kw: kwargs
 
 	filename := (os instance) ___requiredArgument: 'filename' at: 1 in: positional kw: kwargs for: 'realpath'.
 	(self ___isStrict: kwargs) ifFalse: [^ self realpath: filename].
-	^ self ___posixpathModule @env1:_realpath: { filename } kw: self ___strictKeyword
+	^ self ___posixpathModule @env1:_realpath: { filename } kw: (self ___strictKeyword: kwargs)
 %
 
 category: 'Grail-Path Manipulation'
 method: os_path
-___strictKeyword
+___strictKeyword: kwargs
+	"strict= with the caller's own value.  It used to be ``true'' whatever
+	was passed, which turned 3.14's strict=ALLOW_MISSING into strict=True:
+	a missing component then raised instead of being allowed."
 
-	^ Dictionary @env0:new @env0:at: 'strict' put: true; @env0:yourself
+	^ Dictionary @env0:new
+		@env0:at: 'strict' put: (kwargs @env0:at: 'strict');
+		@env0:yourself
 %
 
 category: 'Grail-Path Manipulation'

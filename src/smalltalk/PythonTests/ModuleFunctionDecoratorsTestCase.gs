@@ -171,3 +171,35 @@ testADecoratorsExceptionPropagates
 			importlib @env1:modules removeKey: #'decorator_exceptions_propagate' ifAbsent: [].
 			importlib @env1:modules removeKey: #'decorator_raising_helper' ifAbsent: []]
 %
+
+category: 'Grail-Tests'
+method: ModuleFunctionDecoratorsTestCase
+testDecoratorsRunAtTheirOwnLine
+	"A decorator is made and called at its OWN line, and a decorated def's
+	co_firstlineno is its first decorator's, as in CPython (#1406): module
+	defs, stacked decorators, class decorators, class-body methods (with
+	staticmethod / classmethod / property around them), defs inside a
+	function or a try, and a raising decorator's traceback.
+
+	See tests/python/decorator_lines.py (CPython 3.14's values)."
+
+	| mod results expected b keys |
+	importlib @env1:modules removeKey: #'decorator_lines' ifAbsent: [].
+	[mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/decorator_lines.py')
+		name: 'decorator_lines'.
+	 results := mod @env1:___pyAttrLoad___: #'r'.
+	 expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	 keys := mod @env1:___pyAttrLoad___: #'KEYS'.
+	 b := builtins @env1:instance.
+	 self assert: (keys @env1:__len__) equals: 11.
+	 0 to: (keys @env1:__len__) - 1 do: [:i |
+		| k got want |
+		k := keys @env1:__getitem__: i.
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: k asString , ': got ' , got , ' want ' , want]]
+		ensure: [
+			importlib @env1:modules removeKey: #'decorator_lines' ifAbsent: []]
+%

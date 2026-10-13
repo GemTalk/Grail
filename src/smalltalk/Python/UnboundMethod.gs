@@ -783,14 +783,19 @@ value: positional value: kwargs
 			[[pyattrload-frame-width-is-load-bearing]] for the same lesson learnt
 			one method over."
 			(resolvedSel @env0:asString @env0:endsWith: ':kw:')
-				ifTrue: [^ self ___callReceiverless___: positional kw: kwargs orSignal: obj].
+				ifTrue: [^ self ___callPacked___: method onSpecial: obj positional: positional kw: kwargs].
 			method := self ___methodForSpecialReceiver___: method
 				class: obj @env0:class.
 			method == nil ifTrue: [
 				^ self ___signalDescriptorMismatch___: obj]
 	].
 	(resolvedSel @env0:asString @env0:endsWith: ':kw:') ifTrue: [
-		^ obj @env0:with: rest with: kwargs performMethod: method
+		"An instance keeps the direct path, and the common call pays one
+		isKindOf: for the others -- see ___callPacked___:onForeign:rest:kw:.  No
+		temp: see the frame-width note above."
+		(obj @env0:isKindOf: method @env0:inClass)
+			ifTrue: [^ obj @env0:with: rest with: kwargs performMethod: method].
+		^ self ___callPacked___: method onForeign: obj rest: rest kw: kwargs
 	].
 	nargs @env0:= 0 ifTrue: [^ obj @env0:performMethod: method].
 	nargs @env0:= 1 ifTrue: [
@@ -816,6 +821,119 @@ value: positional value: kwargs
 
 category: 'Grail-Calling'
 method: UnboundMethod
+___callPacked___: aMethod onSpecial: obj positional: positional kw: kwargs
+	"value:value: resolved the PACKED ``_f: positional kw: kwargs'' form for a
+	SPECIAL first argument (SmallInteger, Character, Boolean, nil, SmallDouble),
+	which performMethod: cannot take as the receiver of a method compiled for
+	the class body.
+
+	Three cases, by what the packed method is:
+
+	  * the def is RECEIVERLESS (``def f(*a)'') -- the first argument is not
+	    the receiver at all; ___callReceiverless___ runs it as before.
+	  * a keyword COMPANION (FunctionDefAst >> printKwargsForwarderOn:..., the
+	    one whose parameters are ``___pos___ kw: ___kw___'') holds no body: it
+	    binds the keywords and re-sends the FIXED form virtually, which a
+	    substituted special receiver cannot follow.  Bind the keywords here
+	    instead and call again with positionals alone -- that resolves the
+	    fixed form, which ___methodForSpecialReceiver___ already recompiles.
+	  * otherwise the packed method IS the body: a def with a default or a
+	    ``*args'' compiles to nothing else.  Recompile it against the
+	    receiver's class, exactly as the fixed form is, and run it.
+
+	The third is #1426: a class body calling its own helper with a default,
+	``def make(flag, extra=3)'' then ``root = make(False)'' -- pygments'
+	BatchLexer, and five lexer modules that import it.  CPython binds
+	flag = False and runs; Grail raised ``descriptor 'make' for 'K' objects
+	doesn't apply to a 'bool' object''.  A def that is not from a Python class
+	body still refuses, as a builtin's descriptor does
+	(___methodForSpecialReceiver___ answers nil for it)."
+
+	| special |
+	(self ___isReceiverlessFor___: definingClass)
+		ifTrue: [^ self ___callReceiverless___: positional kw: kwargs orSignal: obj].
+	(aMethod @env0:argsAndTemps @env0:first) == #'___pos___' ifTrue: [
+		(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+			^ self ___callKeywordsBound___: obj
+				rest: (positional @env0:copyFrom: 2 to: positional @env0:size)
+				kw: kwargs
+				ifUnbindable: [self ___signalDescriptorMismatch___: obj]].
+		^ self ___signalDescriptorMismatch___: obj].
+	special := self ___methodForSpecialReceiver___: aMethod class: obj @env0:class.
+	special == nil ifTrue: [^ self ___signalDescriptorMismatch___: obj].
+	"Its defaults are found through the method's own class, not the receiver's
+	-- see ___run:withDefaultOwner:."
+	^ self
+		___run: [obj
+			@env0:with: (positional @env0:copyFrom: 2 to: positional @env0:size)
+			with: kwargs
+			performMethod: special]
+		withDefaultOwner: aMethod @env0:inClass
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___callPacked___: aMethod onForeign: obj rest: rest kw: kwargs
+	"value:value: resolved the packed ``_f:kw:'' form for a first argument
+	that is not an instance of the method's class (and is not special: that
+	is ___callPacked___:onSpecial:...).  CPython binds the parameter to it
+	and runs, so ``C.m('s', a=1)'' answers ['s', 1].
+
+	A keyword COMPANION re-sends the fixed form VIRTUALLY to its receiver, so
+	with keywords the string reached its own class with ``m:'' and died there,
+	an uncatchable MessageNotUnderstood.  Binding the keywords here instead
+	resolves the fixed form, which takes any receiver.  A call the binding
+	cannot place exactly, and one with no keywords at all, runs the companion
+	as before: what reaches it then is a wrong argument count, and its prologue
+	raises CPython's TypeError for that before it re-sends anything
+	(``Base.find_class('a', 'b')'' -- missing 'n').  A packed method that holds
+	the body runs as it did, but with its defaults found through its own class
+	(___run:withDefaultOwner:)."
+
+	(aMethod @env0:argsAndTemps @env0:first) == #'___pos___' ifTrue: [
+		(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+			^ self ___callKeywordsBound___: obj rest: rest kw: kwargs
+				ifUnbindable: [obj @env0:with: rest with: kwargs performMethod: aMethod]].
+		^ obj @env0:with: rest with: kwargs performMethod: aMethod].
+	^ self
+		___run: [obj @env0:with: rest with: kwargs performMethod: aMethod]
+		withDefaultOwner: aMethod @env0:inClass
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___run: aBlock withDefaultOwner: aClass
+	"Run aBlock -- a class-body method performed on a receiver that is NOT an
+	instance of its class -- with aClass as the place its parameter defaults
+	are looked up.
+
+	A class-body default is evaluated once, in the class body, and kept on the
+	DEFINING class; the method finds it by walking up from its receiver
+	(module >> ___classDefaultOwnedBy:at:).  With a receiver from elsewhere --
+	``C.h('a')'', ``C.make(False)'', a receiverless def's ___noReceiver___ --
+	the walk missed and the method fell back to evaluating the default
+	expression inline, at call time and in the method's own scope.  That gave a
+	FRESH mutable default per call where CPython shares one (``def h(x,
+	y=[])'': CPython ['a'], ['a', 'b']; Grail ['a'], ['b']), and a NameError
+	for a default naming a class-body variable: pygments'
+	``def _make_begin_state(compound, _core_token=_core_token, ...)'', which
+	BatchLexer's body calls with False (#1426).
+
+	Object >> ___grailClassDefault___: consults aClass only when the walk from
+	the receiver misses.  A default's key carries its defining class's name, so
+	the fallback can find nothing but that class's own default; when it does not
+	match, the inline expression runs as before.  Saved and restored, since such
+	a call can make another."
+
+	| st saved |
+	st := SessionTemps @env0:current.
+	saved := st @env0:at: #'GrailDefaultOwner' otherwise: nil.
+	st @env0:at: #'GrailDefaultOwner' put: aClass.
+	^ aBlock @env0:ensure: [st @env0:at: #'GrailDefaultOwner' put: saved]
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
 ___callKeywordsBound___: obj rest: rest kw: kwargs
 	"value:value: found no method to take this call.  With keywords, that is a
 	fixed-arity def with no ``_name:kw:'' companion to bind them -- which is
@@ -835,6 +953,18 @@ ___callKeywordsBound___: obj rest: rest kw: kwargs
 	cannot be bound exactly (no table, a parameter that is not plain
 	positional-or-keyword, the wrong total) keeps the AttributeError this
 	answered before."
+
+	^ self ___callKeywordsBound___: obj rest: rest kw: kwargs ifUnbindable: [
+		AttributeError ___signal___:
+			('type object ''' @env0:, definingClass @env0:name @env0:asString
+				@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')]
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___callKeywordsBound___: obj rest: rest kw: kwargs ifUnbindable: aBlock
+	"___callKeywordsBound___:rest:kw:, answering aBlock's value when the
+	keywords cannot be bound exactly -- see there for what that means."
 
 	| pyClass sig names n args code fname |
 	(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
@@ -867,9 +997,7 @@ ___callKeywordsBound___: obj rest: rest kw: kwargs
 					ifTrue: [rest @env0:at: i]
 					ifFalse: [kwargs @env0:at: (names @env0:at: i)])].
 			^ self value: args value: nil]].
-	^ AttributeError ___signal___:
-		('type object ''' @env0:, definingClass @env0:name @env0:asString
-			@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')
+	^ aBlock value
 %
 
 category: 'Grail-Calling'
@@ -1037,8 +1165,10 @@ ___callReceiverless___: positional kw: kwargs orSignal: obj
 			from: definingClass.
 		method == nil ifFalse: [
 			(method @env0:selector @env0:asString @env0:endsWith: ':kw:') ifTrue: [
-				^ UnboundMethod @env0:___noReceiver___
-					@env0:with: positional with: kwargs performMethod: method].
+				^ self
+					___run: [UnboundMethod @env0:___noReceiver___
+						@env0:with: positional with: kwargs performMethod: method]
+					withDefaultOwner: method @env0:inClass].
 			"Against ___noReceiver___ like the packed form: the def's opening
 			___refuseReceiver___:... check takes any other receiver for an
 			instance passed as an argument (issue #1434)."

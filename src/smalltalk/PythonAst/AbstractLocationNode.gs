@@ -270,3 +270,74 @@ ___rebasePositionsBy: dPos line: dLine
 	self dynamicInstVarAt: #column put: nil.
 	self dynamicInstVarAt: #endColumn put: nil.
 %
+
+category: 'Grail-traceback'
+method: AbstractLocationNode
+___decoratorNodeAt___: anIndex
+	"The expression node of decorator anIndex (1 = the outermost, first in the
+	source) of this def or class, or nil when it is not known -- see
+	PythonParser >> ___recordDecoratorLines___:on: (#1406)."
+
+	| nodes |
+	nodes := self dynamicInstVarAt: #decoratorNodes.
+	(nodes isNil or: [anIndex > nodes size]) ifTrue: [^ nil].
+	^ nodes at: anIndex
+%
+
+category: 'Grail-traceback'
+method: AbstractLocationNode
+___decoratorLineAt___: anIndex
+	"The source line of decorator anIndex, or nil (#1406)."
+
+	| node |
+	node := self ___decoratorNodeAt___: anIndex.
+	(node isNil or: [(node respondsTo: #beginLine) not]) ifTrue: [^ nil].
+	^ node beginLine
+%
+
+category: 'Grail-traceback'
+method: AbstractLocationNode
+___decoratedFirstLine___
+	"The line CPython starts a decorated def's code object at, its first
+	decorator's, or nil when it has none (#1406)."
+
+	^ self ___decoratorLineAt___: 1
+%
+
+category: 'Grail-traceback'
+method: AbstractLocationNode
+___curPosStoreAvailable___
+	"Whether the code being emitted has a ``___curPos___'' temp to store into
+	-- the guard the statement emitters apply -- and, for a class built inside
+	an IR-compiled function, whether its compiled-text helper declares one
+	(ClassDefAst >> ___irHelperSourceWithSelector___:...).  A store with no
+	temp to receive it is an undefined-symbol compile error."
+
+	(SessionTemps current at: #'___grailIRHelperHasCurPos___' otherwise: nil)
+		ifNotNil: [:___declared | ^ ___declared].
+	^ CallAst functionBeingCompiled notNil or: [CallAst moduleBodyBeingCompiled]
+%
+
+category: 'Grail-traceback'
+method: AbstractLocationNode
+___mapDecorator___: aNode on: aStream do: aBlock
+	"Evaluate aBlock, which emits a decorator's application, and record that
+	text against the decorator's node in the method's position map (#1406).
+
+	The map is where a frame's line comes from wherever there is no
+	``___curPos___'' store to scan for -- a class built inside an
+	IR-compiled function travels as a compiled-text helper whose frame
+	reads only its map -- and elsewhere it answers the same line the store
+	does.  The innermost recorded node containing the send wins, so a chain
+	nests correctly: each decorator's range lies inside the next one out."
+
+	| start |
+	start := aStream position.
+	aBlock value.
+	(aNode notNil
+		and: [(aStream isKindOf: PrettyWriteStream)
+		and: [(aNode respondsTo: #___hasFullPositionSpan___)
+		and: [aNode ___hasFullPositionSpan___
+		and: [aNode ___hasFragmentPositions___ not]]]])
+			ifTrue: [aStream mapPythonNode: aNode from: start + 1]
+%

@@ -969,6 +969,11 @@ printSmalltalkOn: aStream
 			^ self].
 		applicable reverseDo: [:deco |
 			(self ___decoratorRealisedByReclass___: deco) not ifTrue: [
+				"At the decorator's own line (#1406): this is a statement, so
+				one store before it covers both making and calling it."
+				(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: applicable index: 1]) ifNotNil: [:___line |
+					aStream lf; nextPutAll: '___curPos___ := '; nextPutAll: ___line printString;
+						nextPutAll: '.'].
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
 				the target name is module-scope (parser-declared in module
 				body and not shadowed by an enclosing function)."
@@ -1885,16 +1890,29 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 					nextPutAll: baseName;
 					nextPutAll: ''')']].
 		^ self].
-	aStream nextPutAll: '(('.
-	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
-	aStream nextPutAll: ') @env1:___pyCallValue___: { '.
-	self
-		printMethodDecoratorChainOn: aStream
-		decorators: decoList
-		index: i + 1
-		className: aClassName
-		baseName: baseName.
-	aStream nextPutAll: ' } kw: nil)'
+	"At the decorator's own line (#1406) -- the class statement's was used."
+	^ self ___mapDecorator___: (self ___decoratorNodeFor___: decoList index: i) on: aStream do: [
+		(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: decoList index: i])
+			ifNil: [
+				aStream nextPutAll: '(('.
+				self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+				aStream nextPutAll: ') @env1:___pyCallValue___: { '.
+				self
+					printMethodDecoratorChainOn: aStream
+					decorators: decoList
+					index: i + 1
+					className: aClassName
+					baseName: baseName.
+				aStream nextPutAll: ' } kw: nil)']
+			ifNotNil: [:___line |
+				self printDecoratorCallOn: aStream line: ___line
+					receiver: [self printDecoratorReceiverOn: aStream deco: (decoList at: i)]
+					argument: [self
+						printMethodDecoratorChainOn: aStream
+						decorators: decoList
+						index: i + 1
+						className: aClassName
+						baseName: baseName]]]
 %
 
 category: 'Grail-code generation'
@@ -1944,11 +1962,82 @@ printDecoratorChainOn: aStream decorators: decoList index: i
 			nextPutAll: name;
 			nextPutAll: ''')'.
 		^ self].
-	aStream nextPutAll: '(('.
-	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
-	aStream nextPutAll: ') @env1:___pyCallValue___: { '.
-	self printDecoratorChainOn: aStream decorators: decoList index: i + 1.
-	aStream nextPutAll: ' } kw: nil)'
+	^ self ___mapDecorator___: (self ___decoratorNodeFor___: decoList index: i) on: aStream do: [
+		(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: decoList index: i])
+			ifNil: [
+				aStream nextPutAll: '(('.
+				self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+				aStream nextPutAll: ') @env1:___pyCallValue___: { '.
+				self printDecoratorChainOn: aStream decorators: decoList index: i + 1.
+				aStream nextPutAll: ' } kw: nil)']
+			ifNotNil: [:___line |
+				self printDecoratorCallOn: aStream line: ___line
+					receiver: [self printDecoratorReceiverOn: aStream deco: (decoList at: i)]
+					argument: [self printDecoratorChainOn: aStream decorators: decoList index: i + 1]]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printDecoratorCallOn: aStream line: aLine receiver: receiverBlock argument: argumentBlock
+	"One decorator's application, at the decorator's OWN line (#1406): CPython
+	evaluates ``@A'' at A's line and calls it there, so that is the line a
+	traceback through it -- and sys._getframe(1).f_lineno inside it -- reports.
+	The def line was reported instead.
+
+	    (((___curPos___ := LA) @env0:-> (A)) @env0:value
+	        @env1:___pyCallValue___: {
+	        ((<inner chain>) @env0:-> (___curPos___ := LA)) @env0:key } kw: nil)
+
+	TWO stores, for the two readers of a position.  A frame's LINE comes from
+	a text scan -- the last ``___curPos___ := '' at or above the line its send
+	is on -- so the call's keyword gets a line of its own directly under A's
+	store, and the inner chain starts on the next line, where its own store
+	is.  The running VALUE is what a catching frame reads, and the inner
+	chain leaves it at the inner decorator's line, so it is put back after the
+	inner chain answers and before A is called: an Association evaluates its
+	key and then its value, which is the one way to order two expressions
+	inside a Smalltalk expression."
+
+	aStream nextPutAll: '(((___curPos___ := '; nextPutAll: aLine printString; nextPutAll: ') @env0:-> ('.
+	receiverBlock value.
+	aStream nextPutAll: ')) @env0:value'; lf; tab;
+		nextPutAll: '@env1:___pyCallValue___: {'; lf; tab;
+		nextPutAll: '(('.
+	argumentBlock value.
+	aStream nextPutAll: ') @env0:-> (___curPos___ := '; nextPutAll: aLine printString;
+		nextPutAll: ')) @env0:key } kw: nil)'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorLineFor___: decoList index: anIndex
+	"The source line of decoList's anIndex-th decorator, or nil.  decoList is
+	decorator_list or an order-preserving selection of it (the method
+	decorators drop the ones Grail realises some other way), so its entries
+	are found in decorator_list in order, by identity -- a repeated ``@name''
+	is the same Symbol, and the order tells the occurrences apart."
+
+	| node |
+	node := self ___decoratorNodeFor___: decoList index: anIndex.
+	(node isNil or: [(node respondsTo: #beginLine) not]) ifTrue: [^ nil].
+	^ node beginLine
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorNodeFor___: decoList index: anIndex
+	"___decoratorLineFor___:index:'s node rather than its line, for the IR arm."
+
+	| j |
+	decorator_list isNil ifTrue: [^ nil].
+	j := 0.
+	1 to: anIndex do: [:k | | target |
+		target := decoList at: k.
+		j := j + 1.
+		[j <= decorator_list size and: [(decorator_list at: j) ~~ target]]
+			whileTrue: [j := j + 1]].
+	j > decorator_list size ifTrue: [^ nil].
+	^ self ___decoratorNodeAt___: j
 %
 
 category: 'Grail-code generation'
@@ -2106,8 +2195,12 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 	applied.  The block then nests the applications the other way up, so the
 	decorator nearest the def is called first."
 
-	| n |
+	| n lines |
 	n := decoList size.
+	"Each decorator's own line, for its evaluation and its call (#1406); see
+	printDecoratorCallOn:line:receiver:argument: for the two stores."
+	lines := (1 to: n) collect: [:i |
+		self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: decoList index: i]].
 	aStream lf.
 	(self isModuleScopeNestedDefTarget)
 		ifTrue: [
@@ -2121,11 +2214,18 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 				nextPutAll: self ___mangledName___;
 				nextPutAll: ' := ['].
 	aStream nextPutAll: ':___grailDecoFns___ |'; lf.
-	self emitOrderedLocalDecoratorApplicationOn: aStream index: 1 count: n.
+	self emitOrderedLocalDecoratorApplicationOn: aStream index: 1 count: n lines: lines.
 	aStream nextPutAll: '] @env0:value: { '.
 	1 to: n do: [:i |
 		i > 1 ifTrue: [aStream nextPutAll: '. '].
-		self printDecoratorReceiverOn: aStream deco: (decoList at: i)].
+		(lines at: i)
+			ifNil: [self printDecoratorReceiverOn: aStream deco: (decoList at: i)]
+			ifNotNil: [:___line |
+				"One line each: an error making decorator i is at its line."
+				aStream lf; tab; nextPutAll: '((___curPos___ := '; nextPutAll: ___line printString;
+					nextPutAll: ') @env0:-> ('.
+				self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+				aStream nextPutAll: ')) @env0:value']].
 	aStream nextPutAll: ' }'.
 	(self isModuleScopeNestedDefTarget)
 		ifTrue: [aStream nextPutAll: ').']
@@ -2134,19 +2234,30 @@ emitOrderedLocalDecoratorsOn: aStream decorators: decoList
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-emitOrderedLocalDecoratorApplicationOn: aStream index: i count: n
+emitOrderedLocalDecoratorApplicationOn: aStream index: i count: n lines: lines
 	"The nested application expression, reading the ALREADY-EVALUATED
 	decorators out of the block's array argument.  i is the 1-based index into
 	that array; 1 is the outermost decorator, which CPython applies LAST, so it
 	is the outermost call here.  At the base case emit the undecorated
-	function."
+	function.  Each call is made at its decorator's line when that is known
+	(#1406), as printDecoratorCallOn:line:receiver:argument: lays it out."
 
 	i > n ifTrue: [^ self emitOrderedLocalDecoratorBaseOn: aStream].
+	(lines at: i) ifNotNil: [:___line |
+		aStream nextPutAll: '(((___curPos___ := '; nextPutAll: ___line printString;
+			nextPutAll: ') @env0:-> (___grailDecoFns___ @env0:at: '; nextPutAll: i printString;
+			nextPutAll: ')) @env0:value'; lf; tab;
+			nextPutAll: 'value: {'; lf; tab;
+			nextPutAll: '(('.
+		self emitOrderedLocalDecoratorApplicationOn: aStream index: i + 1 count: n lines: lines.
+		aStream nextPutAll: ') @env0:-> (___curPos___ := '; nextPutAll: ___line printString;
+			nextPutAll: ')) @env0:key } value: nil)'.
+		^ self].
 	aStream
 		nextPutAll: '((___grailDecoFns___ @env0:at: ';
 		nextPutAll: i printString;
 		nextPutAll: ') value: { '.
-	self emitOrderedLocalDecoratorApplicationOn: aStream index: i + 1 count: n.
+	self emitOrderedLocalDecoratorApplicationOn: aStream index: i + 1 count: n lines: lines.
 	aStream nextPutAll: ' } value: nil)'
 %
 
@@ -2440,14 +2551,58 @@ ___namesEnclosingReceiver___: aSymbolOrNil
 	class is being emitted into, which is what the enclosing def actually called
 	it.  A name that is genuinely local to this def would also match -- a false
 	positive that costs a call the ability to run receiverless and changes no
-	answer, which is the direction the error has to fall."
+	answer, which is the direction the error has to fall.
+
+	ONE false positive is ruled out: the body of a NESTED def or lambda that
+	takes the name as a PARAMETER.  There the name is that function's own, and
+	cannot be the captured receiver.  pygments' RubyLexer builds its token
+	table with exactly that shape (#1426) --
+
+	    def gen_rubystrings_rules():
+	        def intp_regex_callback(self, match, ctx): ...
+
+	-- and the whole lexer, with the nine modules that import it, failed on
+	``unbound method ... must be called with an instance''.  Only the nested
+	BODY is skipped: its defaults, annotations and decorators run in this
+	def's scope, so a ``self'' there is still the captured one."
 
 	body ifNil: [^ false].
-	^ body ___anyDescendantSatisfies___: [:n |
-		(n isKindOf: NameAst)
-			and: [n id asSymbol == #'self'
-				or: [aSymbolOrNil notNil
-					and: [n id asSymbol == aSymbolOrNil asSymbol]]]]
+	(self ___node: body namesFree: #'self') ifTrue: [^ true].
+	^ aSymbolOrNil notNil
+		and: [aSymbolOrNil asSymbol ~~ #'self'
+		and: [self ___node: body namesFree: aSymbolOrNil asSymbol]]
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+___node: aNode namesFree: aSymbol
+	"Does aNode's subtree read or write the name aSymbol anywhere it is not
+	the parameter of a nested def or lambda?  The walk is
+	___anyDescendantSatisfies___:'s -- every instance variable but ``parent'',
+	every node in a collection -- except that a nested def or lambda that
+	takes aSymbol as a parameter is entered WITHOUT its body (see
+	___namesEnclosingReceiver___:)."
+
+	| ivars skipBody |
+	(aNode isKindOf: NameAst) ifTrue: [^ aNode id asSymbol == aSymbol].
+	skipBody := ((aNode isKindOf: FunctionDefAst) or: [aNode isKindOf: LambdaAst])
+		and: [aNode args notNil and: [aNode args ___bindsParameterNamed___: aSymbol]].
+	ivars := aNode class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| ivar v |
+		ivar := ivars at: i.
+		(ivar == #'parent' or: [skipBody and: [ivar == #'body']]) ifFalse: [
+			v := aNode instVarAt: i.
+			(v isKindOf: AbstractNode)
+				ifTrue: [(self ___node: v namesFree: aSymbol) ifTrue: [^ true]]
+				ifFalse: [
+					((v isKindOf: Collection) and: [(v isKindOf: CharacterCollection) not])
+						ifTrue: [
+							v do: [:e |
+								((e isKindOf: AbstractNode)
+									and: [self ___node: e namesFree: aSymbol])
+										ifTrue: [^ true]]]]]].
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -2641,6 +2796,8 @@ emitCodeExtrasOpenOn: aStream nested: isNested
 	cascaded setter needs the constructor parenthesised before it, or the
 	parser reads one long keyword selector ending in the setter's own name."
 	self ___emitsBodySource___ ifTrue: [
+		aStream nextPutAll: '('].
+	self ___decoratedFirstLine___ ifNotNil: [:___l |
 		aStream nextPutAll: '(']
 %
 
@@ -2670,7 +2827,12 @@ emitCodeExtrasOn: aStream nested: isNested
 			aStream nextPutAll: ''''; nextPutAll: each; nextPutAll: ''' '].
 		aStream nextPutAll: '))'].
 	self emitCodeConstsOn: aStream.
-	self emitCodeBodySourceOn: aStream
+	self emitCodeBodySourceOn: aStream.
+	"A decorated def starts at its first decorator, as in CPython (#1406);
+	the constructor's ``firstlineno:'' stays the def line -- see
+	PyCode >> ___setDecoratedLine___:."
+	self ___decoratedFirstLine___ ifNotNil: [:___l |
+		aStream nextPutAll: ' @env0:___setDecoratedLine___: '; nextPutAll: ___l printString; nextPutAll: ')']
 %
 
 category: 'Grail-code generation'
@@ -3619,7 +3781,12 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	method itself and every call site are: ``def __m(self, x)'' in class C
 	compiles to ``_C__m:'', and ``self.__m(x=1)'' sends ``__C__m:kw:''.  The
 	raw name here gave the companion ``___m:kw:'' forwarding to ``__m:'', so
-	a keyword call to a private method was an uncatchable DNU (#1422)."
+	a keyword call to a private method was an uncatchable DNU (#1422).
+
+	The parameter NAMES ``___pos___'' and ``___kw___'' are read at run time:
+	UnboundMethod >> ___callPacked___:onSpecial:positional:kw: tells this
+	forwarder from a packed method that holds the body by its first argument
+	name, because only the latter can be recompiled for a special receiver."
 
 	| stream callParams allParams defaults firstDefault posonlyNames stem |
 	stream := AppendStream on: Unicode7 new.
@@ -8906,6 +9073,9 @@ ___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNested
 		text := self ___grailBodySourceText___.
 		code := aBuilder send: #'___setBodySource___:' to: code
 			with: { aBuilder obj: text } env: 0].
+	self ___decoratedFirstLine___ ifNotNil: [:___l |
+		code := aBuilder send: #'___setDecoratedLine___:' to: code
+			with: { aBuilder obj: ___l } env: 0].
 	^ code
 %
 
@@ -9029,10 +9199,12 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 	applicable := (decorator_list ifNil: [#()]) reject: [:deco |
 		self ___decoratorRealisedByReclass___: deco].
 	applicable isEmpty ifTrue: [^ self].
+	"Each decorator is made and called at its OWN node (#1406), as CPython
+	reports it; the def's node was used for all of them."
 	applicable size = 1 ifTrue: [
 		| dv |
+		aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: 1) ifNil: [self]).
 		dv := self ___emitIRDecoratorValue___: applicable first on: aBuilder.
-		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
 			send: #'value:value:' to: dv
 			with: { aBuilder arrayOf: { aBuilder var: leaf }. aBuilder nilLit } env: 1)).
@@ -9041,8 +9213,10 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 		| blk vals |
 		blk := aBuilder blockWithArg: #'___grailDecoFns___' do: [:fl |
 			aBuilder add: (self ___emitIRDecoratorApply___: 1 count: applicable size
-				fns: fl leaf: leaf on: aBuilder)].
-		vals := applicable collect: [:d | self ___emitIRDecoratorValue___: d on: aBuilder].
+				fns: fl leaf: leaf on: aBuilder applicable: applicable)].
+		vals := (1 to: applicable size) collect: [:i |
+			aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: i) ifNil: [self]).
+			self ___emitIRDecoratorValue___: (applicable at: i) on: aBuilder].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
 			send: #'value:' to: blk with: { aBuilder arrayOf: vals asArray } env: 0))
@@ -9052,16 +9226,21 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder
-	"emitOrderedLocalDecoratorApplicationOn:index:count:: ``((fns at: i)
-	value: { <apply i+1> } value: nil)'', the undecorated function at the base."
+___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder applicable: applicable
+	"emitOrderedLocalDecoratorApplicationOn:index:count:lines:: ``((fns at: i)
+	value: { <apply i+1> } value: nil)'', the undecorated function at the base.
+	The inner application is built FIRST so that this call can be positioned
+	at its own decorator afterwards (#1406)."
 
+	| inner |
 	i > n ifTrue: [^ aBuilder var: leaf].
+	inner := self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf
+		on: aBuilder applicable: applicable.
+	aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: i) ifNil: [self]).
 	^ aBuilder
 		send: #'value:value:'
 		to: (aBuilder send: #at: to: (aBuilder var: fnsLeaf) with: { aBuilder obj: i } env: 0)
-		with: { aBuilder arrayOf: { self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf on: aBuilder }.
-			aBuilder nilLit }
+		with: { aBuilder arrayOf: { inner }. aBuilder nilLit }
 		env: 1
 %
 

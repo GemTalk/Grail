@@ -150,8 +150,8 @@ def an_unbound_local_is_omitted_but_none_is_kept():
 
 
 def a_frame_with_no_locals_reports_none():
-    """Nil rather than an empty mapping, so ``no variables'' and ``cannot say''
-    stay distinguishable; both render as no locals lines."""
+    """None, as CPython's FrameSummary answers for an empty f_locals; either
+    way the frame renders no locals lines."""
     def fn():
         return traceback.StackSummary.extract(
             traceback.walk_stack(None), capture_locals=True, limit=1)[0].locals

@@ -93,6 +93,22 @@ posonlyargs
 	^posonlyargs
 %
 
+category: 'Grail-Accessing'
+method: ArgumentsAst
+___bindsParameterNamed___: aSymbol
+	"Is aSymbol one of these parameters -- positional-only, ordinary,
+	``*args'', keyword-only or ``**kwargs''?"
+
+	| all |
+	all := OrderedCollection new.
+	posonlyargs isNil ifFalse: [all addAll: posonlyargs].
+	args isNil ifFalse: [all addAll: args].
+	vararg isNil ifFalse: [all add: vararg].
+	kwonlyargs isNil ifFalse: [all addAll: kwonlyargs].
+	kwarg isNil ifFalse: [all add: kwarg].
+	^ (all detect: [:a | a name asSymbol == aSymbol] ifNone: [nil]) notNil
+%
+
 category: 'Grail-other'
 method: ArgumentsAst
 vararg
