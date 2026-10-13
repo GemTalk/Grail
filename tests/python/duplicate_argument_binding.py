@@ -8,7 +8,7 @@ value and silently dropped the keyword for every def with a default,
 
 The rows cover module functions, a classmethod, a staticmethod, instance
 methods called bound and unbound, *args, **kwargs (a parameter name never
-lands in **kwargs), a lambda, and the error's precedence over too many
+lands in **kwargs), a lambda, a def with 600 parameters, and the error's precedence over too many
 positional arguments.  The guards: a positional-only name given by keyword
 lands in **kwargs, keywords for parameters the positional arguments did not
 reach bind normally, and a def with no defaults (already right) is unchanged.
@@ -69,6 +69,12 @@ def plain(a, b):
 
 lam = lambda a, b=1: (a, b)
 
+# A def with hundreds of parameters, as test_call's TestFunctionWithManyArgs
+# builds: the guard is a loop, not a check per parameter.
+_ns = {}
+exec('def many(%s, last=0): return a300' % ', '.join('a%d' % i for i in range(600)), _ns)
+many = _ns['many']
+
 t('module def with a default', lambda: f(5, ps=1))
 t('classmethod', lambda: C.cm(5, ps=1))
 t('classmethod through an instance', lambda: C().cm(5, ps=1))
@@ -83,6 +89,8 @@ t('method with everything', lambda: C().many(1, 2, b=3))
 t('lambda', lambda: lam(1, a=2))
 t('before too many positional', lambda: g(1, 2, 3, 4, b=5))
 t('no defaults', lambda: plain(1, a=2))
+t('600 parameters', lambda: many(*range(600), a599=1))
+t('guard: 600 parameters, keyword past the positional ones', lambda: many(*range(300), **{'a%d' % i: -i for i in range(300, 600)}))
 t('guard: positional-only name goes to **kwargs', lambda: po(1, a=2))
 t('guard: keywords past the positional ones', lambda: g(1, c=4, b=2))
 t('guard: all by keyword', lambda: f(ps=1, force=True))
@@ -105,6 +113,8 @@ EXPECTED = {
     'lambda': "TypeError: <lambda>() got multiple values for argument 'a'",
     'before too many positional': "TypeError: g() got multiple values for argument 'b'",
     'no defaults': "TypeError: plain() got multiple values for argument 'a'",
+    '600 parameters': "TypeError: many() got multiple values for argument 'a599'",
+    'guard: 600 parameters, keyword past the positional ones': '-300',
     'guard: positional-only name goes to **kwargs': "(1, 2, {'a': 2})",
     'guard: keywords past the positional ones': '(1, 2, 4)',
     'guard: all by keyword': '1',

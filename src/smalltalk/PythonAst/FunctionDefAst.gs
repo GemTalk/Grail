@@ -3971,6 +3971,26 @@ ___multipleValuesParams___: nPos
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
+___multipleValuesNamesLiteral___: pairs
+	"The names the duplicate-argument guard covers, as the source of ONE
+	literal Array -- ``#('a' 'b')'' -- which the emitted loop indexes.  A loop
+	over one literal rather than a check per parameter, because a def can
+	declare hundreds: test_call's TestFunctionWithManyArgs builds one with
+	1000, and an unrolled guard made a method too large to run."
+
+	| ws |
+	ws := WriteStream on: String new.
+	ws nextPutAll: '#('.
+	pairs do: [:pair |
+		ws nextPut: $'.
+		(pair at: 2) do: [:c | c = $' ifTrue: [ws nextPut: $']. ws nextPut: c].
+		ws nextPut: $'; space].
+	ws nextPut: $).
+	^ ws contents
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
 ___arityReceiverOffset___: nPos
 	"How many declared positional parameters an arity check's ``nPos'' leaves
 	out: 1 when the receiver (self, or cls) was stripped because it is the
@@ -4615,22 +4635,34 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	"0. The duplicate-argument guard, as the text emits it (#1477)."
 	dups := self ___multipleValuesParams___: nPos.
 	dups isEmpty ifFalse: [
+		| names limit loop |
+		names := (dups collect: [:pair | pair at: 2]) asArray.
 		aBuilder
 			unless: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
 			then: [
-				dups do: [:pair |
-					| cond |
-					cond := aBuilder
-						andValue: (aBuilder send: #>=
-							to: (self ___irPosSize___: posLeaf on: aBuilder)
-							with: { aBuilder obj: (pair at: 1) } env: 0)
-						then: [aBuilder add: (aBuilder send: #includesKey:
-							to: (aBuilder var: kwLeaf)
-							with: { aBuilder obj: (pair at: 2) } env: 0)].
-					aBuilder if: cond then: [
-						aBuilder add: (self ___irSignalTypeError___:
-							(aBuilder obj: qname , '() got multiple values for argument ''' , (pair at: 2) , '''')
-							on: aBuilder)]]]].
+				limit := aBuilder send: #min:
+					to: (aBuilder send: #-
+						to: (self ___irPosSize___: posLeaf on: aBuilder)
+						with: { aBuilder obj: (dups first at: 1) - 1 } env: 0)
+					with: { aBuilder obj: names size } env: 0.
+				loop := aBuilder blockWithArg: #'___i___' do: [:iLeaf |
+					| nameAt |
+					nameAt := [aBuilder send: #at: to: (aBuilder obj: names)
+						with: { aBuilder var: iLeaf } env: 0].
+					aBuilder
+						if: (aBuilder send: #includesKey: to: (aBuilder var: kwLeaf)
+							with: { nameAt value } env: 0)
+						then: [
+							aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
+									aBuilder obj: qname , '() got multiple values for argument '''.
+									nameAt value.
+									aBuilder obj: '''' } on: aBuilder)
+								on: aBuilder)]].
+				"``(1 to: limit) do:'' -- two ordinary sends: the IR generator
+				compiles only an INLINED to:do:, which it builds itself."
+				aBuilder add: (aBuilder send: #do:
+					to: (aBuilder send: #to: to: (aBuilder obj: 1) with: { limit } env: 0)
+					with: { loop } env: 0)]].
 	args vararg isNil ifTrue: [
 		| defcount sig plural prefix cond off total given |
 		"A method counts its receiver on both sides, as the text's
@@ -6055,23 +6087,25 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	First, as in CPython, which raises it while binding keywords -- before it
 	counts the positional arguments -- and checked whether or not the def
 	collects **kwargs, since a name that IS a parameter never goes there.
-	Only when the call passed keywords, and per parameter only when the
-	positional Array reaches it."
-	(self ___multipleValuesParams___: nPos) isEmpty ifFalse: [
+	Only when the call passed keywords, and only as far as the positional
+	Array reaches: a loop over the covered names, in parameter order (see
+	___multipleValuesNamesLiteral___:)."
+	(self ___multipleValuesParams___: nPos) isEmpty ifFalse: [ | pairs skip lit |
+		pairs := self ___multipleValuesParams___: nPos.
+		skip := (pairs first at: 1) - 1.
+		lit := self ___multipleValuesNamesLiteral___: pairs.
 		aStream
 			nextPutAll: '('; nextPutAll: kwName;
-			nextPutAll: ' @env0:isNil) ifFalse: ['; lf.
-		(self ___multipleValuesParams___: nPos) do: [:pair |
-			aStream
-				nextPutAll: '  (('; nextPutAll: posName;
-				nextPutAll: ' @env0:size) @env0:>= '; print: (pair at: 1);
-				nextPutAll: ' and: ['; nextPutAll: kwName;
-				nextPutAll: ' @env0:includesKey: '''; nextPutAll: (pair at: 2);
-				nextPutAll: ''']) ifTrue: [TypeError ___signal___: ''';
-				nextPutAll: (self ___qualifiedNameFor___: name);
-				nextPutAll: '() got multiple values for argument '''''; nextPutAll: (pair at: 2);
-				nextPutAll: '''''''].'; lf].
-		aStream nextPutAll: '].'; lf].
+			nextPutAll: ' @env0:isNil) ifFalse: [1 to: ((('; nextPutAll: posName;
+			nextPutAll: ' @env0:size) @env0:- '; print: skip;
+			nextPutAll: ') @env0:min: '; print: pairs size;
+			nextPutAll: ') do: [:___i___ | ('; nextPutAll: kwName;
+			nextPutAll: ' @env0:includesKey: ('; nextPutAll: lit;
+			nextPutAll: ' @env0:at: ___i___)) ifTrue: [TypeError ___signal___: (''';
+			nextPutAll: (self ___qualifiedNameFor___: name);
+			nextPutAll: '() got multiple values for argument '''''' @env0:, (';
+			nextPutAll: lit;
+			nextPutAll: ' @env0:at: ___i___) @env0:, '''''''')]]].'; lf].
 	args vararg isNil ifTrue: [ | defcount sig plural prefix off total given |
 		off := self ___arityReceiverOffset___: nPos.
 		total := nPos + off.

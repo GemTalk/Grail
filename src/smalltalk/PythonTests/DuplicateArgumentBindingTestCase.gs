@@ -104,7 +104,7 @@ method: DuplicateArgumentBindingTestCase
 testEveryRowMatchesCPython
 	| expected bad |
 	expected := testModule @env1:___pyAttrLoad___: #EXPECTED.
-	self assert: (expected @env1:__len__) >= 19.
+	self assert: (expected @env1:__len__) >= 21.
 	bad := self ___mismatchesIn___: testModule.
 	self
 		assert: (bad @env1:__len__) = 0
