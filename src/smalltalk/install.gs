@@ -1040,6 +1040,7 @@ run
 	at: #'GeneratorExitTestCase' put: nil;
 	at: #'GeneratorStackFrameTestCase' put: nil;
 	at: #'GeneratorStopTestCase' put: nil;
+	at: #'GeneratorThrowTracebackTestCase' put: nil;
 	at: #'GeneratorUnraisableTestCase' put: nil;
 	at: #'GenericAliasTestCase' put: nil;
 	at: #'GenericAndAbcBasesTestCase' put: nil;
@@ -2567,6 +2568,7 @@ input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
+input src/smalltalk/PythonTests/GeneratorThrowTracebackTestCase.gs
 input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
 input src/smalltalk/PythonTests/GenericAliasTestCase.gs
 input src/smalltalk/PythonTests/GenericAndAbcBasesTestCase.gs
