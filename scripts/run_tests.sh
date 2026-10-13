@@ -517,6 +517,12 @@ timed "module-coherence" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts
 # leaves a broken one to fail its own import.
 timed "carried-submodule" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCarriedSubmoduleTest.gs < /dev/null || EXIT=$?
 
+# A warm-bound package imports what its body imported (issue #1475): the
+# body does not run on a warm bind, so ``from . import api'' left pkg.api out
+# of sys.modules and its __session_init__ unrun.  Checks the body's
+# submodules, a sibling one of them imported, and an untouched one left alone.
+timed "body-submodule-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runBodySubmoduleBindTest.gs < /dev/null || EXIT=$?
+
 # A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
 # D8): patching builtins.len and a class's method writes no persistent object,
 # and after a commit a fresh session sees both originals -- where persistent
