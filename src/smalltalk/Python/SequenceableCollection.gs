@@ -543,9 +543,34 @@ __repr__
 category: 'Grail-Sequence Operations'
 method: SequenceableCollection
 __rmul__: n
-	"Reverse multiply: n * sequence. Same as __mul__."
+	"Reverse multiply: n * sequence -- the BUILTIN repeat, even for a Python
+	subclass that overrides __mul__ (___builtinRepeat___:)."
 
-	^ self __mul__: n
+	^ self ___builtinRepeat___: n
+%
+
+category: 'Grail-Sequence Operations'
+method: SequenceableCollection
+___builtinRepeat___: n
+	"``n * self'' as CPython's reflected multiply has it for a builtin
+	sequence: the builtin type's own repeat (its sq_repeat), never a Python
+	subclass's __mul__.  With ``class M(str): def __mul__ ...'', ``3 * M('b')''
+	is 'bbb' and ``M('b') * 3'' is M's -- the forward and reflected halves are
+	different slots.  Forwarding to ``self __mul__:'' ran M.__mul__ for both
+	(#1552).
+
+	Runs the __mul__ of the nearest class above the Python-defined ones, so a
+	plain builtin value (the common case) is just the send."
+
+	| cls |
+	cls := self @env0:class.
+	(cls @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifFalse: [^ self __mul__: n].
+	[cls := cls @env0:superclass.
+	 cls @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1] whileTrue.
+	^ self @env0:with: n performMethod:
+		((cls @env0:whichClassIncludesSelector: #'__mul__:' environmentId: 1)
+			@env0:compiledMethodAt: #'__mul__:' environmentId: 1)
 %
 
 category: 'Grail-String Representation'

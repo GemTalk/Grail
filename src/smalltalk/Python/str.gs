@@ -1166,9 +1166,11 @@ __rmod__: other
 category: 'Grail-String Operations'
 method: CharacterCollection
 __rmul__: n
-	"Repeat string n times (reverse). In Python: n * str"
+	"Repeat string n times (reverse). In Python: n * str -- the BUILTIN
+	repeat, even for a subclass that overrides __mul__
+	(SequenceableCollection >> ___builtinRepeat___:)."
 
-	^ self __mul__: n
+	^ self ___builtinRepeat___: n
 %
 
 category: 'Grail-String Representation'
