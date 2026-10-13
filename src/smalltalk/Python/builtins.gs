@@ -255,7 +255,7 @@ _exec: positional kw: kwargs
 
 	| source globalsDict localsDict scope seeded globalNames savedPath savedScope savedBuiltins
 	  live savedLive liveGlobals savedLiveGlobals savedExecGlobals savedExecLocals
-	  optLevel savedOpt suppliedGlobals |
+	  optLevel savedOpt suppliedGlobals lineMap |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -286,6 +286,13 @@ _exec: positional kw: kwargs
 			globals: ((positional @env0:size @env0:>= 2)
 				ifTrue: [positional @env0:at: 2] ifFalse: [nil])
 			closure: (kwargs @env0:at: 'closure')].
+	"A tree compile() UNPARSED carries the map from the unparse's lines back
+	to the tree's own; the parse below applies it.  Read here, while source is
+	still the code object."
+	lineMap := (source @env0:isKindOf: PyCode)
+		ifTrue: [[source @env0:dynamicInstVarAt: #'___grailLineMap___']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+		ifFalse: [nil].
 	source := self ___sourceTextFor___: source what: 'exec'.
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
@@ -415,6 +422,8 @@ _exec: positional kw: kwargs
 		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
 			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
 		self ___grailDoitScope___: scope.
+		lineMap @env0:ifNotNil: [:m |
+			SessionTemps @env0:current @env0:at: #'GrailPendingLineMap' put: m].
 		"A code object compiled in ``single'' mode shows the value of each
 		expression statement through sys.displayhook, as the REPL does and
 		doctest relies on; everything else runs as plain exec."
@@ -423,6 +432,7 @@ _exec: positional kw: kwargs
 					@env0:= #'single') ifTrue: [#single] ifFalse: [#exec])
 			globalNamesInto: globalNames
 	] @env0:ensure: [
+		SessionTemps @env0:current @env0:removeKey: #'GrailPendingLineMap' ifAbsent: [].
 		CallAst @env0:sourcePath: savedPath.
 		self ___grailDoitScope___: savedScope.
 		self ___grailBuiltinsOverride___: savedBuiltins.
@@ -1087,6 +1097,23 @@ ___runClosureBody___: aCode globals: globalsDict freevars: freevars cells: cells
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___astCompileSourceOf___: anObject mode: aMode
+	"(text, lineMapOrNone) for compiling an ast tree, from the ast module's
+	_grail_source_for -- or nil when anObject is not a tree."
+
+	| astMod pair |
+	anObject @env0:isNil ifTrue: [^ nil].
+	(anObject @env0:isKindOf: CharacterCollection) ifTrue: [^ nil].
+	astMod := [self ___import__: { 'ast' } kw: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	astMod @env0:isNil ifTrue: [^ nil].
+	pair := (astMod @env1:___pyAttrLoad___: #'_grail_source_for')
+		@env1:___pyCallValue___: { anObject. aMode @env0:asString } kw: nil.
+	^ pair @env0:== None ifTrue: [nil] ifFalse: [pair]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___astSourceOf___: anObject
 	"The source text an ast tree was parsed from, or nil.
 
@@ -1103,8 +1130,12 @@ ___astSourceOf___: anObject
 
 category: 'Grail-Built-in Functions'
 method: builtins
-___foldAstDebug___: aTree
+___foldAstDebug___: aTree optimize: aLevel
 	"Apply the ast module's ``__debug__'' fold to a tree, and answer it.
+
+	The value follows the optimize level, as CPython's does: True at -1 (the
+	interpreter's own, which here is unoptimised) and 0, False from 1 up --
+	where asserts go too, which is what __debug__ means.
 
 	The walk lives in Python, beside the node classes it rewrites -- a tree
 	walk belongs with the tree -- and this is the one call site outside it.
@@ -1117,13 +1148,13 @@ ___foldAstDebug___: aTree
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	astMod @env0:isNil ifTrue: [^ aTree].
 	^ [(astMod @env1:___pyAttrLoad___: #'__grail_fold_debug__')
-		@env1:___pyCallValue___: { aTree } kw: nil]
+		@env1:___pyCallValue___: { aTree. ((aLevel @env0:isKindOf: Integer) @env0:not) @env0:or: [aLevel @env0:< 1] } kw: nil]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: aTree]
 %
 
 category: 'Grail-Built-in Functions'
 method: builtins
-___astTreeFor___: aSource mode: aMode optimized: wantOptimized
+___astTreeFor___: aSource mode: aMode optimized: wantOptimized level: aLevel
 	"The Python ``ast'' tree for a source, as PyCF_ONLY_AST asks for.
 
 	Grail's parser builds its own node hierarchy;
@@ -1159,7 +1190,7 @@ ___astTreeFor___: aSource mode: aMode optimized: wantOptimized
 	astMod := [self ___import__: { 'ast' } kw: nil]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	astMod @env0:isNil ifTrue: [^ tree].
-	^ self ___foldAstDebug___: tree
+	^ self ___foldAstDebug___: tree optimize: aLevel
 %
 
 category: 'Grail-Built-in Functions'
@@ -1595,7 +1626,8 @@ ModuleAst @env0:___resignalSyntaxError___: ex].
 			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r400) @env0:~= 0]])
 			ifTrue: [^ self ___astTreeFor___: copy mode: mode optimized:
-				(((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0)].
+				(((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0)
+				level: ((args @env0:size @env0:>= 6) ifTrue: [args @env0:at: 6] ifFalse: [-1])].
 		flags := ((args @env0:size @env0:>= 4)
 			@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 				@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])
@@ -1627,16 +1659,28 @@ ModuleAst @env0:___resignalSyntaxError___: ex].
 	((args @env0:size @env0:>= 4)
 		@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 			@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r8000) @env0:~= 0]])
-		ifTrue: [^ self ___foldAstDebug___: source].
-	"AN AST WITHOUT THAT FLAG IS COMPILED, not handed back.  The tree carries
-	the source it was parsed from, so this is the ordinary string compile with
-	the text read back out of it."
-	(self ___astSourceOf___: source) @env0:ifNotNil: [:text |
-		| rest |
+		ifTrue: [^ self ___foldAstDebug___: source
+			optimize: ((args @env0:size @env0:>= 6) ifTrue: [args @env0:at: 6] ifFalse: [-1])].
+	"AN AST WITHOUT THAT FLAG IS COMPILED, not handed back, and Grail compiles
+	from text: the ast module answers the text for the tree.  A tree parsed
+	and left alone is the very source it came from.  One that was BUILT, or
+	changed after the parse -- pytest's assertion rewriting, -k's expression --
+	is unparsed, with a map from each line of the unparse to the line its
+	statement came from; the code object carries the map, and exec() remaps
+	the parse with it, so tracebacks name the tree's own lines.  Before, a
+	built tree had no source and compile() answered the tree itself, and a
+	changed one compiled the text it was parsed from, unchanged."
+	(self ___astCompileSourceOf___: source mode: mode) @env0:ifNotNil: [:pair |
+		| rest code map |
 		self ___requireAstRoot___: source forMode: mode.
 		rest := args @env0:copy.
-		rest @env0:at: 1 put: text.
-		^ self _compile: rest kw: nil].
+		rest @env0:at: 1 put: (pair @env1:__getitem__: 0).
+		code := self _compile: rest kw: nil.
+		map := pair @env1:__getitem__: 1.
+		((map @env0:~~ None) @env0:and: [code @env0:isKindOf: PyCode]) ifTrue: [
+			code @env0:dynamicInstVarAt: #'___grailLineMap___'
+				put: (Array @env0:withAll: map)].
+		^ code].
 	^ source
 %
 
@@ -2061,8 +2105,46 @@ ___lookUpInLiveLocals___: aName ifAbsent: aBlock
 	| live |
 	live := self ___grailLiveLocals___.
 	live @env0:isNil ifTrue: [^ aBlock @env0:value].
-	^ [live @env1:__getitem__: aName @env0:asString]
+	^ [live @env1:__getitem__: (self ___sourceNameFor___: aName @env0:asString)]
 		@env0:on: KeyError do: [:ex | ex @env0:return: aBlock @env0:value]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___sourceNameFor___: aString
+	"The name a tree held, for a name compile() had to spell differently.
+
+	A tree can hold names no source can spell -- pytest's -k makes ``$pass''
+	-- and compile() unparses a tree, so it writes those as ``__grail_''
+	followed by the name with ``_'' doubled and any other character as
+	``_x<hex>_'' (the ast module's _grail_identifier).  A mapping that was
+	handed to eval() is asked by name, and must be asked for the name the
+	tree held.  Anything else is answered unchanged, for the price of one
+	prefix test."
+
+	| out i n c j |
+	((aString @env0:size @env0:> 8)
+		@env0:and: [(aString @env0:copyFrom: 1 to: 8) @env0:= '__grail_'])
+			ifFalse: [^ aString].
+	out := WriteStream @env0:on: String @env0:new.
+	i := 9.
+	n := aString @env0:size.
+	[i @env0:<= n] @env0:whileTrue: [
+		c := aString @env0:at: i.
+		c @env0:= $_
+			ifFalse: [out @env0:nextPut: c. i := i @env0:+ 1]
+			ifTrue: [
+				(i @env0:< n and: [(aString @env0:at: i @env0:+ 1) @env0:= $_])
+					ifTrue: [out @env0:nextPut: $_. i := i @env0:+ 2]
+					ifFalse: [
+						j := aString @env0:indexOf: $_ startingAt: i @env0:+ 1.
+						(j @env0:= 0 or: [(aString @env0:at: i @env0:+ 1) @env0:~= $x])
+							ifTrue: [^ aString].
+						out @env0:nextPut: (Character @env0:codePoint:
+							(Integer @env0:fromHexString: (aString @env0:copyFrom: i @env0:+ 2
+								to: j @env0:- 1))).
+						i := j @env0:+ 1]]].
+	^ out @env0:contents
 %
 
 category: 'Grail-Built-in Functions'

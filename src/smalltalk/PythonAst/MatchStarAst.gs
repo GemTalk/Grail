@@ -72,3 +72,14 @@ method: MatchStarAst
 ___irReadLocalNamesInto___: aSet locals: localSet
 	^ self
 %
+
+set compile_env: 0
+
+category: 'Grail-AST export'
+method: MatchStarAst
+___fixUpPythonAst___: pyNode
+	"CPython keeps this pattern's name as a plain str, not as a node."
+
+	self ___unwrapAstField___: 'name' of: pyNode.
+	^ self
+%

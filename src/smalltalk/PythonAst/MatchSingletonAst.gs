@@ -85,3 +85,14 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
 %
+
+set compile_env: 0
+
+category: 'Grail-AST export'
+method: MatchSingletonAst
+___fixUpPythonAst___: pyNode
+	"CPython keeps this pattern's value as a plain value, not as a node."
+
+	self ___unwrapAstField___: 'value' of: pyNode.
+	^ self
+%
