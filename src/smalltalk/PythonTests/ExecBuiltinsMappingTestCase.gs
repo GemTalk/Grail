@@ -212,3 +212,24 @@ testEveryCheckIsPresentAndAgreesWithCPython
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
 		equals: '19 checks, 0 disagreeing [], keys match: True'
 %
+
+category: 'Grail-Tests'
+method: ExecBuiltinsMappingTestCase
+testBuiltinsHoldsTheModuleDunders
+	"builtins.__dict__ holds __name__, __doc__, __package__ and __loader__ as
+	CPython's does, and a lookup that falls through to builtins finds them:
+	``eval('__name__', {})'' is 'builtins', and a snippet run with
+	``exec(src, {})'' that tests ``if __name__ == '__main__':'' reads it
+	instead of raising NameError (#1527).  tests/python/builtins_dict_dunders.py
+	holds the checks, agreeing with CPython 3.14 except the pinned __loader__
+	(Grail has no BuiltinImporter)."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'builtins_dict_dunders' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/builtins_dict_dunders.py')
+		name: 'builtins_dict_dunders'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '8 checks, 0 disagreeing [], keys match: True'
+%

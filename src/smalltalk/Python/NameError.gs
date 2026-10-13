@@ -110,6 +110,17 @@ ___resolveBuiltinOrSignal___: aName
 	builtins at run time, so the curated list below must not police this arm."
 	v := inst @env0:dynamicInstVarAt: sym ifAbsent: [nil].
 	v == nil ifFalse: [^ v].
+	"The module's own dunders.  CPython's builtins namespace holds them, so a
+	lookup that falls through to builtins finds them: ``eval('__name__', {})''
+	is 'builtins' (#1527).  They live in the module's SLOTS, where builtins >>
+	initialize binds them and the module accessors read them, so neither the
+	arm above nor the gated one below sees them -- ___builtinNamespaceNames___
+	leaves them out on purpose, because in MODULE code they are the module's
+	own and never fall through to here.  (__spec__ is a dynamic instVar and
+	the arm above already answers it.)"
+	((#(#'__name__' #'__doc__' #'__package__' #'__loader__') @env0:includes: sym)
+		and: [inst @env0:includesKey: sym])
+			ifTrue: [^ inst @env0:at: sym].
 	"Then the REAL builtins, through the same chain codegen resolves them
 	with (NameAst >> emitBuiltinFirstClassRead:on:) -- ___globalAt___: wraps
 	a builtins METHOD as a BoundMethod and caches the wrap, so ``all is all''
