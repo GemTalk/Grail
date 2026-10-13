@@ -81,9 +81,16 @@ printSmalltalkOn: aStream
 	must not be evaluated either, which is the point of removing it."
 	self ___grailOptimizeLevel___ >= 1 ifTrue: [^ self].
 
+	"A BARE assert raises the way ``raise AssertionError()'' does, through
+	___signalNew___:kw: in env 1.  It used to send the kernel's env-0 class-side
+	#signal, which skips Grail's raise path, and the traceback of the exception
+	that produced held only the frame that CAUGHT it: ``outer() -> inner():
+	assert 0'' reported <module> alone (until some other AssertionError had been
+	raised the Python way in the session).  pytest's failure report for a plain
+	``assert'' showed none of the test's own frames."
 	test printSmalltalkWithParenthesisOn: aStream.
 	msg ifNil: [
-		aStream nextPutAll: ' ___isTruthy___ ifFalse: [AssertionError perform: #signal env: 0].'.
+		aStream nextPutAll: ' ___isTruthy___ ifFalse: [AssertionError perform: #''___signalNew___:kw:'' env: 1 withArguments: { { }. nil }].'.
 	] ifNotNil: [
 		aStream nextPutAll: ' ___isTruthy___ ifFalse: [AssertionError perform: #''___signal___:'' env: 1 withArguments: {'.
 		msg printSmalltalkOn: aStream.
@@ -122,12 +129,13 @@ ___emitIRStatementOn___: aBuilder
 	"printSmalltalkOn:'s shape: the condition through ___isTruthy___ (Python's
 	assert tests TRUTHINESS, and an inlined ifFalse: statically needs a Boolean
 	receiver), then
-	  (test) ___isTruthy___ ifFalse: [AssertionError perform: #signal env: 0]
+	  (test) ___isTruthy___ ifFalse: [AssertionError perform: #'___signalNew___:kw:'
+	                                     env: 1 withArguments: { {}. nil }]
 	or, with a message,
 	  ... ifFalse: [AssertionError perform: #'___signal___:' env: 1
 	                  withArguments: {msg}].
-	The perform:env: indirections are text-syntax spellings of an env-0 #signal
-	and an env-1 #___signal___: send; the IR sends them directly."
+	The perform:env: indirections are text-syntax spellings of env-1
+	#___signalNew___:kw: and #___signal___: sends; the IR sends them directly."
 
 	| condV |
 	condV := aBuilder
@@ -149,8 +157,12 @@ ___emitIRStatementOn___: aBuilder
 		 before the send it labels."
 		msgV := msg ifNotNil: [:m | m ___emitIRValueOn___: aBuilder].
 		aBuilder atNode: test.
+		"A bare assert raises as ``raise AssertionError()'' does -- see
+		 printSmalltalkOn:."
 		msgV isNil
-			ifTrue: [aBuilder add: (aBuilder send: #signal to: errCls with: { } env: 0)]
+			ifTrue: [aBuilder add: (aBuilder
+				send: #'___signalNew___:kw:' to: errCls
+				with: { aBuilder arrayOf: #(). aBuilder nilLit } env: 1)]
 			ifFalse: [aBuilder add: (aBuilder
 				send: #'___signal___:' to: errCls with: { msgV } env: 1)]].
 	^ self

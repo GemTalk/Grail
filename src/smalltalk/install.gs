@@ -717,6 +717,7 @@ run
 	at: #'AugmentedBinaryFallbackTestCase' put: nil;
 	at: #'AwaitablePlumbingTestCase' put: nil;
 	at: #'AwaitProtocolTestCase' put: nil;
+	at: #'BareAssertTracebackTestCase' put: nil;
 	at: #'BareEvalExecScopeTestCase' put: nil;
 	at: #'BareEvalNestedScopeTestCase' put: nil;
 	at: #'BareNameManglingTestCase' put: nil;
@@ -2244,6 +2245,7 @@ input src/smalltalk/PythonTests/AugmentedAssignmentTestCase.gs
 input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
 input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
 input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
+input src/smalltalk/PythonTests/BareAssertTracebackTestCase.gs
 input src/smalltalk/PythonTests/BareEvalExecScopeTestCase.gs
 input src/smalltalk/PythonTests/BareEvalNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/BareNameManglingTestCase.gs
