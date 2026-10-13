@@ -534,8 +534,80 @@ ___copyAstFieldsInto___: pyNode
 			and: [(self ___astDeclares___: declared field: mapped)])
 				ifTrue: [
 					pyNode @env1:___pyAttrStore___: mapped asSymbol
-						put: (self ___translatedAstValue___: (self instVarAt: i))]].
+						put: (mapped = 'decorator_list'
+							ifTrue: [self ___translatedDecoratorList___: (self instVarAt: i)]
+							ifFalse: [self ___translatedAstValue___: (self instVarAt: i)])]].
+	self ___defaultMissingAstFields___: declared into: pyNode.
 	self ___copyAstPositionInto___: pyNode
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___defaultMissingAstFields___: declaredFields into: pyNode
+	"None for every declared field the Grail node had nothing for.
+
+	CPython's parser sets EVERY field of the nodes it builds, an absent optional
+	one to None -- Assign.type_comment, FunctionDef.returns -- so
+	``ast.iter_fields(node)'' names them all and ``node.type_comment'' answers
+	None.  Grail's nodes carry no slot for several of those, so the translated
+	node simply lacked the attribute: iter_fields skipped it and a plain read
+	raised AttributeError.  List fields are not affected; Grail always has
+	those."
+
+	| d n |
+	declaredFields isNil ifTrue: [^ self].
+	d := [pyNode @env1:___pyAttrLoad___: #'__dict__']
+		on: AbstractException do: [:ex | ex return: nil].
+	d isNil ifTrue: [^ self].
+	n := [declaredFields @env1:__len__] on: AbstractException do: [:ex | ex return: 0].
+	1 to: n do: [:k |
+		| f |
+		f := declaredFields @env1:__getitem__: k - 1.
+		((d @env1:__contains__: f) == true) ifFalse: [
+			pyNode @env1:___pyAttrStore___: f asSymbol put: None]]
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___translatedDecoratorList___: aValue
+	"A def's or class's decorator_list, where a BARE decorator name is a Name.
+
+	The parser keeps ``@property'' / ``@classmethod'' / ``@overload'' as a
+	Symbol (FunctionDefAst's decorator tests read it that way), and the generic
+	translation turns a Symbol into a str -- so decorator_list held strings
+	where CPython has Name(id=..., ctx=Load()).  pytest's
+	get_statement_startend2 reads ``d.lineno'' off every decorator and raised
+	AttributeError on the first @property in the file being reported.
+
+	The parser keeps no position for a bare name, so the line is inferred:
+	the decorators as the lines directly above the def, one each, which is how
+	they are written.  Columns are left out rather than guessed."
+
+	| astMod out n line |
+	aValue isNil ifTrue: [^ self ___translatedAstValue___: aValue].
+	((aValue isKindOf: Array) or: [aValue isKindOf: OrderedCollection])
+		ifFalse: [^ self ___translatedAstValue___: aValue].
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ self ___translatedAstValue___: aValue].
+	n := aValue size.
+	line := [self beginLine] on: AbstractException do: [:ex | ex return: nil].
+	out := OrderedCollection new.
+	aValue doWithIndex: [:each :i |
+		each isSymbol
+			ifTrue: [
+				| nameNode |
+				nameNode := (astMod @env1:___pyAttrLoad___: #'Name')
+					@env1:___pyCallValue___: #() kw: nil.
+				nameNode @env1:___pyAttrStore___: #'id' put: each asString.
+				nameNode @env1:___pyAttrStore___: #'ctx'
+					put: ((astMod @env1:___pyAttrLoad___: #'Load')
+						@env1:___pyCallValue___: #() kw: nil).
+				(line isKindOf: Integer) ifTrue: [
+					nameNode @env1:___pyAttrStore___: #'lineno' put: line - n + i - 1.
+					nameNode @env1:___pyAttrStore___: #'end_lineno' put: line - n + i - 1].
+				out add: nameNode]
+			ifFalse: [out add: (self ___translatedAstValue___: each)]].
+	^ list @env1:__new__: out asArray
 %
 
 category: 'Grail-AST export'

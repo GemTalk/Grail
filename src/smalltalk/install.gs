@@ -685,6 +685,7 @@ run
 	at: #'AssignDunderClassTestCase' put: nil;
 	at: #'AssignedNewTestCase' put: nil;
 	at: #'AstExportTestCase' put: nil;
+	at: #'AstWalkAndCategoriesTestCase' put: nil;
 	at: #'AsyncComprehensionTestCase' put: nil;
 	at: #'AsyncContextManagerTestCase' put: nil;
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
@@ -2206,6 +2207,7 @@ input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/AssignDunderClassTestCase.gs
 input src/smalltalk/PythonTests/AssignedNewTestCase.gs
 input src/smalltalk/PythonTests/AstExportTestCase.gs
+input src/smalltalk/PythonTests/AstWalkAndCategoriesTestCase.gs
 input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
 input src/smalltalk/PythonTests/AsyncContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
