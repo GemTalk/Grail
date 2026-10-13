@@ -3211,6 +3211,8 @@ testAnImportedModuleKeepsAReferenceInTheImportCache
 		with: 'json' with: 5) >= 1.
 	self assert: (shim callModule: '_shimtest' method: 'test_import_refcount'
 		with: 'json' with: 5) >= 1
+%
+
 category: 'Grail-Tests - NumPy Stage 2'
 method: CPythonShimTestCase
 testAModuleFunctionCrossesAsItsBuiltinFunction
