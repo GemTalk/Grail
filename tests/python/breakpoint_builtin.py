@@ -181,6 +181,26 @@ def _default_goes_to_pdb():
 check('default_hook_calls_pdb_set_trace', _default_goes_to_pdb, ['pdb'])
 
 
+# ------------------------------------------------------------- bdb
+#
+# What other code takes from bdb is its exception: pytest's runner and doctest
+# plugins import bdb for ``isinstance(exc, bdb.BdbQuit)'' alone, and with no
+# bdb at all ``import pytest'' failed.  Grail's bdb is that exception, as its
+# pdb is set_trace; the tracing Bdb it does not have is not faked.
+
+def _bdbquit_is_an_exception():
+    import bdb
+    try:
+        raise bdb.BdbQuit('quit')
+    except Exception as exc:
+        return (type(exc).__name__, type(exc).__module__, exc.args,
+                issubclass(bdb.BdbQuit, Exception), 'BdbQuit' in dir(bdb))
+
+
+check('bdb_provides_bdbquit', _bdbquit_is_an_exception,
+      ('BdbQuit', 'bdb', ('quit',), True, True))
+
+
 def _empty_env_probe():
     """PYTHONBREAKPOINT='' behaves exactly as if it were unset."""
     import pdb
