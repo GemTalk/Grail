@@ -158,6 +158,54 @@ def zero_processes_raises():
     return False
 
 
+# --- multiprocessing.managers -----------------------------------------
+#
+# s3transfer -- and so boto3 -- imports BaseManager at import time and
+# subclasses it with register() while its module body runs.  These are the
+# parts that do not need a server process.
+
+
+def managers_import():
+    from multiprocessing.managers import BaseManager, SyncManager
+    return issubclass(SyncManager, BaseManager)
+
+
+def register_records_the_typeid_on_the_subclass_only():
+    """s3transfer.processpool's shape.  CPython copies the registry onto the
+    subclass the first time it registers, so the base is untouched."""
+    from multiprocessing.managers import BaseManager
+
+    class TransferMonitorManager(BaseManager):
+        pass
+
+    TransferMonitorManager.register('TransferMonitor', dict)
+    return ('TransferMonitor' in TransferMonitorManager._registry
+            and 'TransferMonitor' not in BaseManager._registry
+            and callable(getattr(TransferMonitorManager, 'TransferMonitor', None))
+            and TransferMonitorManager.TransferMonitor.__name__ == 'TransferMonitor')
+
+
+def register_without_a_creation_method():
+    from multiprocessing.managers import BaseManager
+
+    class M(BaseManager):
+        pass
+
+    M.register('Quiet', dict, create_method=False)
+    return 'Quiet' in M._registry and not hasattr(M, 'Quiet')
+
+
+def sync_manager_registers_the_shared_types():
+    from multiprocessing.managers import SyncManager
+    return all(callable(getattr(SyncManager, n, None))
+               for n in ('dict', 'list', 'Lock', 'Queue', 'Namespace'))
+
+
+def a_manager_reports_its_address():
+    from multiprocessing.managers import BaseManager
+    return BaseManager(address=('127.0.0.1', 0)).address == ('127.0.0.1', 0)
+
+
 # --- Grail-only deviations -------------------------------------------
 #
 # These assert what Grail does DIFFERENTLY, so they are deliberately kept
@@ -188,6 +236,17 @@ def grail_only_process_pool_raises():
     return False
 
 
+def grail_only_manager_start_raises():
+    """A manager server is a child process; starting one must fail rather
+    than hand back proxies that only look shared."""
+    from multiprocessing.managers import BaseManager
+    try:
+        BaseManager().start()
+    except OSError:
+        return True
+    return False
+
+
 CHECKS = [
     cpu_count_is_positive,
     apply_returns_the_value,
@@ -207,6 +266,11 @@ CHECKS = [
     joining_a_running_pool_raises,
     the_pool_is_a_context_manager,
     zero_processes_raises,
+    managers_import,
+    register_records_the_typeid_on_the_subclass_only,
+    register_without_a_creation_method,
+    sync_manager_registers_the_shared_types,
+    a_manager_reports_its_address,
 ]
 
 
