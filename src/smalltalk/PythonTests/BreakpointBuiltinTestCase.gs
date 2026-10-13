@@ -155,3 +155,13 @@ testTheDefaultReachesPdbSetTrace
 		'default_hook_calls_pdb_set_trace'
 		'empty_envvar_is_the_same_as_unset')
 %
+
+category: 'Grail-Tests - pdb'
+method: BreakpointBuiltinTestCase
+testBdbProvidesBdbQuit
+	"bdb is its exception, as pdb is set_trace: pytest's runner and doctest
+	plugins import it for isinstance(exc, bdb.BdbQuit) alone, and with no bdb
+	at all import pytest failed."
+
+	self assertAll: #('bdb_provides_bdbquit')
+%
