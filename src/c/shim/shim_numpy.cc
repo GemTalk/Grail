@@ -132,9 +132,11 @@ extern "C" int PyDict_ContainsString(PyObject *mp, const char *key) {
     STUBLOG("PyDict_ContainsString");
     return 0;
 }
+/* Was a stub answering success without deleting anything. */
 extern "C" int PyDict_DelItemString(PyObject *dp, const char *key) {
-    STUBLOG("PyDict_DelItemString");
-    return 0;
+    PyObject *k = PyUnicode_FromString(key);
+    if (k == NULL) return -1;
+    return PyDict_DelItem(dp, k);
 }
 /* CPython 3.13+ strong-ref dict lookups: return 1 (found, *result=new ref),
    0 (absent, *result=NULL), or -1 (error). */

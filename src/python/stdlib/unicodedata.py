@@ -96,9 +96,10 @@ def lookup(name):
     those code points have no formal name, so an alias is the only way to
     name them at all.
 
-    Named SEQUENCES (e.g. ``KEYCAP NUMBER SIGN'') remain absent, which is
-    CPython's behaviour for this function too: they resolve to more than
-    one code point, and the escape rejects them too.
+    Every name ALIAS resolves too -- ``BYTE ORDER MARK'', ``BOM'', ``NBSP''
+    -- as in CPython.  Named SEQUENCES (``KEYCAP NUMBER SIGN'') do not, and
+    there Grail differs: CPython's lookup() answers the several characters
+    of a sequence, and only the \\N{} escape refuses them (#1562).
     """
     import unicode_names
     cp = unicode_names.codepoint_for_name(name)

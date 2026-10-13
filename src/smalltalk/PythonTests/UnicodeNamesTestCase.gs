@@ -159,3 +159,20 @@ testNameIsTheInverseAndRoundTrips
 		'name_of_a_control_raises' 'name_takes_a_default'
 		'name_round_trips')
 %
+
+category: 'Grail-Tests - aliases'
+method: UnicodeNamesTestCase
+testEveryAliasCategoryResolvesAndABadEscapeIsLocated
+	"#1412.  CPython's \N{} and lookup() accept every category of Unicode's
+	NameAliases.txt, and only the CONTROL aliases were stored: iniconfig
+	2.3.1 writes ``\N{BYTE ORDER MARK}'', an alternate, and stopped importing
+	-- pytest with it.  An alias is still not a NAME.  And an escape that
+	cannot be decoded is CPython's codec error at the literal, where it was a
+	bare SyntaxError with no location (from eval(), not even a message) --
+	as were the literal's other decoding errors: a truncated hex escape, a
+	bytes literal's bad \x or non-ASCII character."
+
+	self assertAll: #('aliases_of_every_category' 'alias_escapes'
+		'an_alias_is_not_a_name' 'an_unknown_name_is_located'
+		'a_malformed_escape_is_located' 'every_literal_decoding_error_is_located')
+%

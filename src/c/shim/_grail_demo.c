@@ -13,6 +13,15 @@
  *   add(a, b)              — integer addition
  *   dot_product(xs, ys)    — float dot product of two lists
  *   scale(xs, factor)      — multiply each float in a list, return new list
+ *   function_name(obj)     — obj's ml_name if it is a builtin function, else
+ *                            None (CPython build only; see below)
+ *   same_object(a, b)      — whether a and b are one C object (CPython build
+ *                            only)
+ *   make_box(value)        — a Box: an object of this module's own type, with
+ *                            struct members and an instance __dict__ (CPython
+ *                            build only)
+ *   getattr_in_c(obj, name) — PyObject_GetAttrString, asked from C (CPython
+ *                            build only)
  */
 
 #ifdef GRAIL_SHIM
@@ -20,6 +29,7 @@
 #else
 #include <Python.h>
 #endif
+#include <stddef.h>   /* offsetof */
 
 /* ------------------------------------------------------------------ */
 /* add(a, b) -> a + b  (integers)                                      */
@@ -111,6 +121,115 @@ grail_scale(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     return result;
 }
 
+#ifndef GRAIL_SHIM
+/* ------------------------------------------------------------------ */
+/* function_name(obj), same_object(a, b)                               */
+/*                                                                     */
+/* What a wheel sees when Grail hands it one of the module's own       */
+/* functions back.  numpy's add_docstring writes a function's ml_doc   */
+/* only when ``Py_TYPE(obj) == &PyCFunction_Type'', and refused every  */
+/* one Grail passed it (CPythonShim>>___functionObjectFor:).  Built    */
+/* only against the real Python.h: the shim's cpython.h declares no    */
+/* PyCFunctionObject, and the copy compiled into libcpython_ua is not  */
+/* the one these are for.                                              */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+grail_function_name(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 1) {
+        PyErr_SetString(PyExc_TypeError, "function_name() takes 1 argument");
+        return NULL;
+    }
+    if (Py_TYPE(args[0]) != &PyCFunction_Type)
+        Py_RETURN_NONE;
+    return PyUnicode_FromString(((PyCFunctionObject *)args[0])->m_ml->ml_name);
+}
+
+static PyObject *
+grail_same_object(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 2) {
+        PyErr_SetString(PyExc_TypeError, "same_object() takes 2 arguments");
+        return NULL;
+    }
+    return PyBool_FromLong(args[0] == args[1]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Box: the shape of numpy's _ArrayFunctionDispatcher and dtype as     */
+/* Grail sees them -- an object of the wheel's own type, never a Grail */
+/* one.  ``value'', ``count'' and ``tag'' are struct members           */
+/* (tp_members; ``tag'' is a _Py_T_OBJECT, as dtype.type is, and reads */
+/* None while unset); attributes stored on it land in its instance dict*/
+/* at tp_dictoffset, and its ``__dict__'' is PyObject_GenericGetDict,  */
+/* as the dispatcher's is.                                             */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    PyObject_HEAD
+    PyObject *value;
+    int count;
+    PyObject *tag;
+    PyObject *dict;
+} BoxObject;
+
+static PyMemberDef box_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(BoxObject, value), Py_READONLY, NULL},
+    {"count", Py_T_INT, offsetof(BoxObject, count), Py_READONLY, NULL},
+    {"tag", _Py_T_OBJECT, offsetof(BoxObject, tag), 0, NULL},
+    {NULL, 0, 0, 0, NULL}
+};
+
+static PyGetSetDef box_getset[] = {
+    {"__dict__", PyObject_GenericGetDict, PyObject_GenericSetDict, NULL, NULL},
+    {NULL, NULL, NULL, NULL, NULL}
+};
+
+static PyTypeObject Box_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Box",
+    .tp_basicsize = sizeof(BoxObject),
+    .tp_dictoffset = offsetof(BoxObject, dict),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_members = box_members,
+    .tp_getset = box_getset,
+};
+
+static PyObject *
+grail_make_box(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 1) {
+        PyErr_SetString(PyExc_TypeError, "make_box() takes 1 argument");
+        return NULL;
+    }
+    BoxObject *box = PyObject_New(BoxObject, &Box_Type);
+    if (box == NULL) return NULL;
+    Py_INCREF(args[0]);
+    box->value = args[0];
+    box->count = 1;
+    box->tag = NULL;
+    box->dict = NULL;
+    return (PyObject *)box;
+}
+
+static PyObject *
+grail_getattr_in_c(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 2 || !PyUnicode_Check(args[1])) {
+        PyErr_SetString(PyExc_TypeError, "getattr_in_c() takes an object and a str");
+        return NULL;
+    }
+    const char *name = PyUnicode_AsUTF8(args[1]);
+    if (name == NULL) return NULL;
+    return PyObject_GetAttrString(args[0], name);
+}
+#endif
+
 /* ------------------------------------------------------------------ */
 /* Module definition                                                   */
 /* ------------------------------------------------------------------ */
@@ -122,6 +241,16 @@ static PyMethodDef grail_demo_methods[] = {
      METH_FASTCALL, "Dot product of two float lists."},
     {"scale", (PyCFunction)(void *)grail_scale,
      METH_FASTCALL, "Multiply each element of a float list by a factor."},
+#ifndef GRAIL_SHIM
+    {"function_name", (PyCFunction)(void *)grail_function_name,
+     METH_FASTCALL, "ml_name of a builtin function, else None."},
+    {"same_object", (PyCFunction)(void *)grail_same_object,
+     METH_FASTCALL, "Whether two arguments are one C object."},
+    {"make_box", (PyCFunction)(void *)grail_make_box,
+     METH_FASTCALL, "A Box holding a value."},
+    {"getattr_in_c", (PyCFunction)(void *)grail_getattr_in_c,
+     METH_FASTCALL, "PyObject_GetAttrString, from C."},
+#endif
     {NULL, NULL, 0, NULL}
 };
 
@@ -130,6 +259,9 @@ static PyMethodDef grail_demo_methods[] = {
    exports the constants as Python attributes). */
 static int
 grail_demo_exec(PyObject *mod) {
+#ifndef GRAIL_SHIM
+    if (PyType_Ready(&Box_Type) < 0) return -1;
+#endif
     PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
     PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");
     return 0;

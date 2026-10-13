@@ -1130,13 +1130,18 @@ __mul__: other
 		pri == nil ifFalse: [^ pri]].
 	(other isKindOf: Number) ifTrue: [^ (self ___checkedAgainst___: other) @env0:* other].
 	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:* (other __index__)].
-	"Sequence repetition is commutative: ``2 * 'ab''' / ``2 * [1]''
-	delegate to the sequence's own __mul__ (CPython reaches the
-	same result via NotImplemented -> str.__rmul__)."
+	"Sequence repetition: ``2 * 'ab''' / ``2 * [1]'' repeat the sequence.
+	CPython gets there by int answering NotImplemented and the sequence's
+	reflected multiply running, so a PYTHON subclass goes that way too: its
+	own __rmul__ if it defines one (``3 * S('b')''), a TypeError if that
+	declines, else the builtin repeat -- never its __mul__ (#1552).  A builtin
+	sequence is the direct send, as before."
 	((other isKindOf: CharacterCollection)
 		or: [(other isKindOf: SequenceableCollection)
 		or: [other isKindOf: ByteArray]]) ifTrue: [
-		^ other __mul__: self].
+		(other @env0:class @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+			ifFalse: [^ other __mul__: self].
+		^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 

@@ -2395,9 +2395,237 @@ static PyObject *cache_type_descr(PyTypeObject *owner, const char *name,
     return descr;
 }
 
+/* A wheel object's own INSTANCE dict: the PyObject* slot at its type's
+   tp_dictoffset, NULL until something is stored, as in CPython.  numpy's
+   _ArrayFunctionDispatcher has one, and every numpy function is one:
+   overrides.py runs functools.wraps over each, which sets __name__,
+   __qualname__, __doc__, __module__ and __wrapped__ on it and reads its
+   __dict__.  The shim knew no tp_dictoffset at all, and the __dict__ read
+   looped -- PyObject_GenericGetDict asked PyObject_GetAttrString, which found
+   the type's __dict__ getset, which is PyObject_GenericGetDict -- until the
+   C stack ran out.  A type object, a Grail wrapper and a type with no dict
+   have none (NULL). */
+extern "C" int PyObject_GenericSetAttr(PyObject *, PyObject *, PyObject *);
+extern "C" int PyDict_DelItemString(PyObject *, const char *);  /* shim_numpy.cc */
+
+static PyObject **foreign_dict_slot(PyObject *obj) {
+    if (!is_foreign(obj) || is_foreign_type(obj)) return NULL;
+    PyTypeObject *t = obj->ob_type;
+    if (t == NULL || t->tp_dictoffset <= 0) return NULL;
+    return (PyObject **)((char *)obj + t->tp_dictoffset);
+}
+
+static PyObject *foreign_instance_dict(PyObject *obj, int create) {
+    PyObject **slot = foreign_dict_slot(obj);
+    if (slot == NULL) return NULL;
+    if (*slot == NULL && create) *slot = PyDict_New();
+    return *slot;
+}
+
+/* The value of one PyMemberDef field of the object at addr, boxed by its
+   declared type -- CPython's PyMember_GetOne.  A wheel's struct fields
+   reach Python this way: numpy's ``dtype.type'' (the scalar type) is a
+   _Py_T_OBJECT member, read by numpy/_core/_type_aliases.py for every
+   entry of typeinfo. */
+extern "C" PyObject *PyMember_GetOne(const char *addr, PyMemberDef *m) {
+    if (m->flags & Py_RELATIVE_OFFSET) {
+        PyErr_SetString(PyExc_SystemError,
+                        "PyMember_GetOne used with Py_RELATIVE_OFFSET");
+        return NULL;
+    }
+    const char *p = addr + m->offset;
+    switch (m->type) {
+        case Py_T_BOOL:      return PyBool_FromLong(*(const char *)p);
+        case Py_T_BYTE:      return PyLong_FromLong(*(const signed char *)p);
+        case Py_T_UBYTE:     return PyLong_FromUnsignedLong(*(const unsigned char *)p);
+        case Py_T_SHORT:     return PyLong_FromLong(*(const short *)p);
+        case Py_T_USHORT:    return PyLong_FromUnsignedLong(*(const unsigned short *)p);
+        case Py_T_INT:       return PyLong_FromLong(*(const int *)p);
+        case Py_T_UINT:      return PyLong_FromUnsignedLong(*(const unsigned int *)p);
+        case Py_T_LONG:      return PyLong_FromLong(*(const long *)p);
+        case Py_T_ULONG:     return PyLong_FromUnsignedLong(*(const unsigned long *)p);
+        case Py_T_PYSSIZET:  return PyLong_FromSsize_t(*(const Py_ssize_t *)p);
+        case Py_T_LONGLONG:  return PyLong_FromLongLong(*(const long long *)p);
+        case Py_T_ULONGLONG: return PyLong_FromUnsignedLongLong(*(const unsigned long long *)p);
+        case Py_T_FLOAT:     return PyFloat_FromDouble(*(const float *)p);
+        case Py_T_DOUBLE:    return PyFloat_FromDouble(*(const double *)p);
+        case Py_T_CHAR:      return PyUnicode_FromStringAndSize(p, 1);
+        case Py_T_STRING_INPLACE: return PyUnicode_FromString(p);
+        case Py_T_STRING: {
+            const char *str = *(char *const *)p;
+            if (str == NULL) { Py_INCREF(Py_None); return Py_None; }
+            return PyUnicode_FromString(str);
+        }
+        case _Py_T_OBJECT: {
+            PyObject *v = *(PyObject *const *)p;
+            if (v == NULL) v = Py_None;
+            Py_INCREF(v);
+            return v;
+        }
+        case Py_T_OBJECT_EX: {
+            PyObject *v = *(PyObject *const *)p;
+            if (v == NULL) {
+                PyErr_Format(PyExc_AttributeError, "object has no attribute '%s'", m->name);
+                return NULL;
+            }
+            Py_INCREF(v);
+            return v;
+        }
+        case _Py_T_NONE:     Py_INCREF(Py_None); return Py_None;
+        default:
+            PyErr_SetString(PyExc_SystemError, "bad memberdescr type");
+            return NULL;
+    }
+}
+
+/* Store value (NULL deletes) into one PyMemberDef field of the object at
+   addr -- CPython's PyMember_SetOne.  A READONLY member refuses, with
+   CPython's message; so does a non-object field asked to delete. */
+extern "C" int PyMember_SetOne(char *addr, PyMemberDef *m, PyObject *v) {
+    if (m->flags & Py_READONLY) {
+        PyErr_SetString(PyExc_AttributeError, "readonly attribute");
+        return -1;
+    }
+    if (m->flags & Py_RELATIVE_OFFSET) {
+        PyErr_SetString(PyExc_SystemError,
+                        "PyMember_SetOne used with Py_RELATIVE_OFFSET");
+        return -1;
+    }
+    char *p = addr + m->offset;
+    if (v == NULL && m->type != _Py_T_OBJECT && m->type != Py_T_OBJECT_EX) {
+        PyErr_SetString(PyExc_TypeError, "can't delete numeric/char attribute");
+        return -1;
+    }
+    switch (m->type) {
+        case _Py_T_OBJECT:
+        case Py_T_OBJECT_EX: {
+            if (v == NULL && m->type == Py_T_OBJECT_EX && *(PyObject **)p == NULL) {
+                PyErr_SetString(PyExc_AttributeError, m->name);
+                return -1;
+            }
+            PyObject *old = *(PyObject **)p;
+            Py_XINCREF(v);
+            *(PyObject **)p = v;
+            Py_XDECREF(old);
+            return 0;
+        }
+        case Py_T_BOOL: {
+            if (v != Py_True && v != Py_False) {
+                PyErr_SetString(PyExc_TypeError, "attribute value type must be bool");
+                return -1;
+            }
+            *(char *)p = (char)(v == Py_True);
+            return 0;
+        }
+        case Py_T_FLOAT:
+        case Py_T_DOUBLE: {
+            double d = PyFloat_AsDouble(v);
+            if (d == -1.0 && PyErr_Occurred()) return -1;
+            if (m->type == Py_T_FLOAT) *(float *)p = (float)d;
+            else *(double *)p = d;
+            return 0;
+        }
+        case Py_T_BYTE: case Py_T_UBYTE: case Py_T_SHORT: case Py_T_USHORT:
+        case Py_T_INT: case Py_T_UINT: case Py_T_LONG: case Py_T_ULONG:
+        case Py_T_PYSSIZET: case Py_T_LONGLONG: case Py_T_ULONGLONG: {
+            long long n = PyLong_AsLongLong(v);
+            if (n == -1 && PyErr_Occurred()) return -1;
+            switch (m->type) {
+                case Py_T_BYTE:      *(signed char *)p = (signed char)n; break;
+                case Py_T_UBYTE:     *(unsigned char *)p = (unsigned char)n; break;
+                case Py_T_SHORT:     *(short *)p = (short)n; break;
+                case Py_T_USHORT:    *(unsigned short *)p = (unsigned short)n; break;
+                case Py_T_INT:       *(int *)p = (int)n; break;
+                case Py_T_UINT:      *(unsigned int *)p = (unsigned int)n; break;
+                case Py_T_LONG:      *(long *)p = (long)n; break;
+                case Py_T_ULONG:     *(unsigned long *)p = (unsigned long)n; break;
+                case Py_T_PYSSIZET:  *(Py_ssize_t *)p = (Py_ssize_t)n; break;
+                case Py_T_LONGLONG:  *(long long *)p = n; break;
+                default:             *(unsigned long long *)p = (unsigned long long)n; break;
+            }
+            return 0;
+        }
+        default:
+            PyErr_Format(PyExc_SystemError, "bad memberdescr type for %s", m->name);
+            return -1;
+    }
+}
+
+/* The PyMemberDef named ``name'' on t's chain, or NULL. */
+static PyMemberDef *foreign_member_named(PyTypeObject *t, const char *name) {
+    for (; t != NULL; t = t->tp_base)
+        for (PyMemberDef *m = t->tp_members; m && m->name; m++)
+            if (strcmp(m->name, name) == 0) return m;
+    return NULL;
+}
+
+/* A getset entry -- a data descriptor -- named ``name'' on t's chain. */
+static PyGetSetDef *foreign_getset_named(PyTypeObject *t, const char *name) {
+    for (; t != NULL; t = t->tp_base)
+        for (PyGetSetDef *gs = t->tp_getset; gs && gs->name; gs++)
+            if (strcmp(gs->name, name) == 0) return gs;
+    return NULL;
+}
+
+/* Is ``name'' a data descriptor of t -- a getset or a struct member -- and so
+   ahead of the instance dict? */
+static int foreign_has_data_descr(PyTypeObject *t, const char *name) {
+    return foreign_getset_named(t, name) != NULL || foreign_member_named(t, name) != NULL;
+}
+
+/* Store (value) or delete (NULL) an attribute of a wheel's own instance the
+   way object.__setattr__ does: a data descriptor's setter, else the
+   instance dict.  What PyObject_GenericSetAttr means for such an object. */
+static int foreign_generic_setattr(PyObject *obj, const char *name, PyObject *value) {
+    PyTypeObject *t = obj->ob_type;
+    PyGetSetDef *gs = foreign_getset_named(t, name);
+    if (gs != NULL) {
+        if (gs->set == NULL) {
+            PyErr_Format(PyExc_AttributeError,
+                         "attribute '%s' of '%s' objects is not writable", name, t->tp_name);
+            return -1;
+        }
+        return gs->set(obj, value, gs->closure);
+    }
+    PyMemberDef *m = foreign_member_named(t, name);
+    if (m != NULL) return PyMember_SetOne((char *)obj, m, value);
+    PyObject *d = foreign_instance_dict(obj, value != NULL);
+    if (d == NULL) {
+        if (!PyErr_Occurred())
+            PyErr_Format(PyExc_AttributeError,
+                         value != NULL
+                             ? "'%s' object has no attribute '%s' and no __dict__ for setting new attributes"
+                             : "'%s' object has no attribute '%s'",
+                         t->tp_name, name);
+        return -1;
+    }
+    if (value == NULL) return PyDict_DelItemString(d, name);
+    return PyDict_SetItemString(d, name, value);
+}
+
+/* The same through the type's own tp_setattro when it has one. */
+static int foreign_setattr(PyObject *obj, const char *name, PyObject *value) {
+    PyTypeObject *t = obj->ob_type;
+    if (t->tp_setattro != NULL && t->tp_setattro != PyObject_GenericSetAttr) {
+        PyObject *n = PyUnicode_FromString(name);
+        if (n == NULL) return -1;
+        return t->tp_setattro(obj, n, value);
+    }
+    return foreign_generic_setattr(obj, name, value);
+}
+
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     int is_type = is_foreign_type(obj);
     PyTypeObject *start = is_type ? (PyTypeObject *)obj : obj->ob_type;
+    /* The instance dict comes after a data descriptor and before everything
+       else on the type, as in CPython's PyObject_GenericGetAttr. */
+    if (!is_type) {
+        PyObject *d = foreign_instance_dict(obj, 0);
+        if (d != NULL && !foreign_has_data_descr(start, name)) {
+            PyObject *iv = PyDict_GetItemString(d, name);
+            if (iv != NULL) { Py_INCREF(iv); return iv; }
+        }
+    }
     PyObject *v = foreign_type_dict_lookup(start, name);
     if (v != NULL) return v;
     for (PyTypeObject *t = start; t != NULL; t = t->tp_base) {
@@ -2416,6 +2644,11 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
             if (is_type) return cache_type_descr(t, name, PyDescr_NewGetSet(t, gs));
             if (gs->get) return gs->get(obj, gs->closure);
         }
+        /* A struct field (tp_members), read off an instance.  Off the type
+           it would be a member descriptor, which the shim does not make. */
+        if (!is_type)
+            for (PyMemberDef *m = t->tp_members; m && m->name; m++)
+                if (strcmp(m->name, name) == 0) return PyMember_GetOne((const char *)obj, m);
     }
     return NULL;
 }
@@ -3196,6 +3429,9 @@ extern "C" int PyObject_SetAttrString(PyObject *obj, const char *name,
         if (t->tp_dict == NULL && (t->tp_dict = PyDict_New()) == NULL) return -1;
         return PyDict_SetItemString(t->tp_dict, name, value);
     }
+    /* A wheel's own instance has no OOP to store on: its descriptor, its
+       tp_setattro or its instance dict (foreign_setattr). */
+    if (is_foreign(obj)) return foreign_setattr(obj, name, value);
     OopType args[3] = { pyobj_oop(obj), GciNewString(name), pyobj_oop(value) };
     GciPerform(server, "PyObject_SetAttrString:name:value:", args, 3);
     if (check_gci_error()) return -1;
@@ -5155,6 +5391,59 @@ static OopType shimModuleAttrs(OopType modOop)
 }
 
 /* ====================================================================
+ * shimFunctionObject — the builtin_function_or_method for one function of
+ * a dynamically loaded module, as a raw address (or nil if there is none)
+ *
+ * Grail exposes a C module's functions as METHODS of the module class
+ * (CPythonShim class>>loadDynamicModule:fromPath:), so ``mod.f'' is a Grail
+ * BoundMethod, and passed back into C it crossed as a plain wrapper.  C code
+ * that tests the type -- numpy's add_docstring requires
+ * ``Py_TYPE(obj) == &PyCFunction_Type'' before it writes ml_doc -- refused
+ * it.  CPythonShim>>wrap: asks here instead, and hands C the function
+ * object CPython would have, over the module's own PyMethodDef.
+ *
+ * One object per PyMethodDef, made on first request and kept: a docstring
+ * add_docstring writes lands in the shared PyMethodDef either way, and C
+ * that compares function pointers sees the same one every time.
+ * ==================================================================== */
+
+static PyMethodDef **g_fn_defs = NULL;
+static PyObject   **g_fn_objs = NULL;
+static int g_fn_count = 0, g_fn_cap = 0;
+
+static OopType shimFunctionObject(OopType modOop, OopType nameOop) {
+    char modName[256], methName[256];
+    fetch_string(modOop, modName, sizeof(modName));
+    fetch_string(nameOop, methName, sizeof(methName));
+
+    PyObject *module = get_or_load_module(modName);
+    if (module == NULL) return OOP_NIL;
+    int idx = find_method(module, methName);
+    if (idx < 0) return OOP_NIL;
+    PyMethodDef *ml = &((PyModuleDef *)module)->m_methods[idx];
+
+    for (int i = 0; i < g_fn_count; i++)
+        if (g_fn_defs[i] == ml)
+            return GciI64ToOop((int64)(intptr_t)g_fn_objs[i]);
+
+    PyObject *fn = PyCMethod_New(ml, module, PyUnicode_FromString(modName), NULL);
+    if (fn == NULL) { PyErr_Clear(); return OOP_NIL; }
+    if (g_fn_count == g_fn_cap) {
+        int cap = g_fn_cap ? g_fn_cap * 2 : 64;
+        PyMethodDef **defs = (PyMethodDef **)realloc(g_fn_defs, cap * sizeof(*defs));
+        PyObject **objs = (PyObject **)realloc(g_fn_objs, cap * sizeof(*objs));
+        if (defs) g_fn_defs = defs;
+        if (objs) g_fn_objs = objs;
+        if (defs == NULL || objs == NULL)
+            return GciI64ToOop((int64)(intptr_t)fn);   /* uncached, still right */
+        g_fn_cap = cap;
+    }
+    g_fn_defs[g_fn_count] = ml;
+    g_fn_objs[g_fn_count++] = fn;
+    return GciI64ToOop((int64)(intptr_t)fn);
+}
+
+/* ====================================================================
  * shimCallTyped — call a method on a C-allocated typed object
  *
  * Arguments (8 OopType):
@@ -5307,6 +5596,40 @@ static OopType shimForeignGetAttr(OopType ptrOop, OopType nameOop)
     return res;
 }
 
+/* ``proxy.attr = value'' from Grail (ShimForeignObject>>___pyAttrStore___:put:):
+   the value arrives as its wrap: address, and is stored the way
+   PyObject_SetAttrString stores on a wheel's own object -- tp_dict for a
+   type, otherwise its descriptor, tp_setattro or instance dict.  Answers
+   true when stored; a refusal (a read-only member, a setter that raised)
+   raises.  FALSE, with no error, means C has nowhere to put it -- an
+   instance with no descriptor of that name, no tp_setattro and no
+   __dict__ -- and the proxy keeps it itself, which is all a store reached
+   before C was asked. */
+static OopType shimForeignSetAttr(OopType ptrOop, OopType nameOop, OopType valAddrOop)
+{
+    char name[256];
+    fetch_string(nameOop, name, sizeof(name));
+    PyObject *obj = (PyObject *)(intptr_t)GciOopToI64(ptrOop);
+    PyObject *value = (PyObject *)(intptr_t)GciOopToI64(valAddrOop);
+    PyErr_Clear();
+    if (!plausible_pyobj(obj) || !plausible_pyobj(obj->ob_type) || !plausible_pyobj(value)) {
+        PyErr_Format(PyExc_AttributeError, "foreign object has no attribute '%s'", name);
+        check_and_raise_error();
+        return OOP_NIL;
+    }
+    if (is_foreign(obj) && !is_foreign_type(obj) && foreign_dict_slot(obj) == NULL
+            && !foreign_has_data_descr(obj->ob_type, name)
+            && (obj->ob_type->tp_setattro == NULL
+                || obj->ob_type->tp_setattro == PyObject_GenericSetAttr))
+        return OOP_FALSE;
+    int rc = PyObject_SetAttrString(obj, name, value);
+    if (rc < 0 && !PyErr_Occurred())
+        PyErr_Format(PyExc_AttributeError, "cannot set attribute '%s'", name);
+    buffer_cache_clear();
+    check_and_raise_error();
+    return OOP_TRUE;
+}
+
 /* str() / repr() of a wheel's own object, asked by Grail
    (ShimForeignObject>>__str__ / __repr__): its own tp_str / tp_repr, the way
    C's PyObject_Str already reaches it.  nil when the pointer is not a
@@ -5410,9 +5733,9 @@ static OopType shimTypeMirrorLayout(OopType ignored)
 extern "C" int PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *value) {
     if (obj == NULL || name == NULL) return -1;
     if (is_foreign(obj)) {
-        PyErr_SetString(PyExc_TypeError,
-            "PyObject_GenericSetAttr on a C extension's own object is not supported by the Grail shim");
-        return -1;
+        const char *n = PyUnicode_AsUTF8(name);
+        if (n == NULL) return -1;
+        return foreign_generic_setattr(obj, n, value);
     }
     OopType args[3] = { pyobj_oop(obj), pyobj_oop(name), value ? pyobj_oop(value) : OOP_NIL };
     GciPerform(server, "PyObject_GenericSetAttr:name:value:", args, 3);
@@ -5422,6 +5745,21 @@ extern "C" int PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *
 
 extern "C" PyObject *PyObject_GenericGetDict(PyObject *obj, void *context) {
     (void)context;
+    /* A wheel's own instance: the dict at its tp_dictoffset, made on first
+       read as CPython makes it.  Asking PyObject_GetAttrString here found the
+       type's ``__dict__'' getset -- this function -- and recursed until the C
+       stack overflowed (numpy's _ArrayFunctionDispatcher, under
+       functools.wraps). */
+    if (is_foreign(obj)) {
+        PyObject *d = foreign_instance_dict(obj, 1);
+        if (d == NULL) {
+            if (!PyErr_Occurred())
+                PyErr_SetString(PyExc_AttributeError, "This object has no __dict__");
+            return NULL;
+        }
+        Py_INCREF(d);
+        return d;
+    }
     return PyObject_GetAttrString(obj, "__dict__");
 }
 
@@ -6966,10 +7304,12 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimTypeAddr", shimTypeAddr, 1);
     GCI_DECLARE_ACTION("shimDynLoad", shimDynLoad, 2);
     GCI_DECLARE_ACTION("shimModuleAttrs", shimModuleAttrs, 1);
+    GCI_DECLARE_ACTION("shimFunctionObject", shimFunctionObject, 2);
     GCI_DECLARE_ACTION("shimCallKw", shimCallKw, 5);
     GCI_DECLARE_ACTION("shimCallObject", shimCallObject, 4);
     GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
+    GCI_DECLARE_ACTION("shimForeignSetAttr", shimForeignSetAttr, 3);
     GCI_DECLARE_ACTION("shimForeignStr", shimForeignStr, 2);
     GCI_DECLARE_ACTION("shimForeignTypeCheck", shimForeignTypeCheck, 3);
 }
@@ -6977,13 +7317,15 @@ extern "C" void GciUserActionInit(void) {
 /* Drop everything that points at the PREVIOUS session's Grail objects:
    loaded-module bookkeeping (registry modules re-initialise on demand; a
    dynamically loaded one is refused -- g_dyn_ever), module attributes,
-   dict-walk snapshots, the pending error and the callback flag. */
+   dict-walk snapshots, the function-object cache, the pending error and the
+   callback flag. */
 static void new_session_reset(void) {
     g_session_gen++;
     buffer_cache_clear();
     num_modules = 0;
     module_attrs_count = 0;
     for (int i = 0; i < DICT_NEXT_SLOTS; i++) { free(g_dn[i].items); g_dn[i].items = NULL; g_dn[i].dict = NULL; }
+    g_fn_count = 0;   /* each function object's m_module is a Grail str */
     g_cb_error_flag = 0;
     current_error_type = NULL;
     current_error_msg[0] = '\0';

@@ -139,7 +139,29 @@ initialize
 	constNames := #( #'None' #'NotImplemented' #'Ellipsis' ).
 	constNames @env0:do: [:n | | v |
 		v := pd @env0:at: n otherwise: nil.
-		(v @env0:notNil) @env0:ifTrue: [self @env0:dynamicInstVarAt: n put: v]]
+		(v @env0:notNil) @env0:ifTrue: [self @env0:dynamicInstVarAt: n put: v]].
+	"The module's own dunders, which CPython's builtins.__dict__ holds and a
+	name lookup that falls through to builtins therefore finds: code run with
+	``exec(src, {})'' reads ``__name__'' as 'builtins' (``if __name__ ==
+	'__main__':'' in a snippet), where it was a NameError (#1527).  In the
+	module's own slots, where the module accessors (__doc__, __package__,
+	__loader__, __name__) read them.  __loader__ is None as for every other
+	Grail built-in module: there is no BuiltinImporter (sys.__loader__ too).
+	A bare ``__name__'' in a MODULE never comes here -- codegen binds the five
+	module dunders to the enclosing module (___builtinNamespaceNames___)."
+	self @env0:at: #'__name__' put: 'builtins'.
+	self @env0:at: #'__doc__' put: 'Built-in functions, types, exceptions, and other objects.
+
+This module provides direct access to all ''built-in''
+identifiers of Python; for example, builtins.len is
+the full name for the built-in function len().
+
+This module is not normally accessed explicitly by most
+applications, but can be useful in modules that provide
+objects with the same name as a built-in value, but in
+which the built-in of that name is also needed.'.
+	self @env0:at: #'__package__' put: ''.
+	self @env0:at: #'__loader__' put: None
 %
 
 category: 'Grail-Attribute Access'

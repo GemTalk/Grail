@@ -168,6 +168,25 @@ ___pyAttrLoad___: aSym
 
 category: 'Grail-Python Protocol'
 method: ShimForeignObject
+___pyAttrStore___: aName put: aValue
+	"Python ``proxy.attr = value'' (and setattr): stored in C, where
+	___pyAttrLoad___: reads it back (CPythonShim>>foreignSetAttr:name:value:).
+	numpy runs functools.wraps over each _ArrayFunctionDispatcher it makes,
+	setting __name__, __doc__, __wrapped__ and the rest, and those live in the
+	object's own instance dict.
+
+	A store C refuses raises, as in CPython (a read-only member says
+	``readonly attribute'').  One C has nowhere to put -- no descriptor of
+	that name and no instance dict -- keeps object's behaviour, the proxy's
+	own storage, which is where every store went before C was asked."
+
+	((CPythonShim @env0:current) @env0:foreignSetAttr: cPtr
+		name: aName @env0:asString value: aValue) == true ifTrue: [^ aValue].
+	^ super ___pyAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
 ___pyMetaclass___
 	"type(proxy) -- the object's C type (Py_TYPE), as a proxy, not the Smalltalk
 	class ShimForeignObject.  Proxies are canonical per pointer, so

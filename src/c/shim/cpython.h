@@ -223,19 +223,35 @@ typedef struct PyGetSetDef {
     void       *closure;
 } PyGetSetDef;
 
-/* Member type constants */
+/* Member type constants -- CPython's own numbers (descrobject.h), because a
+   prebuilt wheel's PyMemberDef tables carry those and PyMember_GetOne reads
+   both.  _Py_T_OBJECT used to alias Py_T_OBJECT_EX (16) and Py_T_BOOL was 21,
+   which only the shim's own modules, built against this header, agreed with;
+   numpy's ``dtype.type'' is a 6. */
 #define Py_T_SHORT       0
 #define Py_T_INT         1
 #define Py_T_LONG        2
 #define Py_T_FLOAT       3
 #define Py_T_DOUBLE      4
 #define Py_T_STRING      5
+#define _Py_T_OBJECT     6
+#define Py_T_CHAR        7
+#define Py_T_BYTE        8
+#define Py_T_UBYTE       9
+#define Py_T_USHORT     10
+#define Py_T_UINT       11
+#define Py_T_ULONG      12
+#define Py_T_STRING_INPLACE 13
+#define Py_T_BOOL       14
 #define Py_T_OBJECT_EX  16
+#define Py_T_LONGLONG   17
+#define Py_T_ULONGLONG  18
 #define Py_T_PYSSIZET   19
-#define Py_T_BOOL       21
+#define _Py_T_NONE      20
 
 /* Member flags */
 #define Py_READONLY      1
+#define Py_RELATIVE_OFFSET 8
 
 /* PyCFunction and PyMethodDef — needed by _typeobject.tp_methods */
 typedef PyObject *(*PyCFunction)(PyObject *, PyObject *);
@@ -1123,8 +1139,6 @@ PyObject *PyDictProxy_New(PyObject *mapping);
 /* Iterator */
 PyObject *PyCallIter_New(PyObject *callable, PyObject *sentinel);
 
-/* Member type constants (additional) */
-#define _Py_T_OBJECT Py_T_OBJECT_EX
 
 /* Singletons */
 #define _Py_SINGLETON(name) /* unused */
