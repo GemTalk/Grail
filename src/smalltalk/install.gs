@@ -918,6 +918,7 @@ run
 	at: #'DunderClassMethodLocalTestCase' put: nil;
 	at: #'DunderClassTestCase' put: nil;
 	at: #'DunderNewTestCase' put: nil;
+	at: #'DuplicateArgumentBindingTestCase' put: nil;
 	at: #'DynamicClassModuleTestCase' put: nil;
 	at: #'DynamicGlobalsTestCase' put: nil;
 	at: #'DynamicInstanceAttrsTestCase' put: nil;
@@ -2461,6 +2462,7 @@ input src/smalltalk/PythonTests/DunderClassInjectedCellTestCase.gs
 input src/smalltalk/PythonTests/DunderClassMethodLocalTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs
 input src/smalltalk/PythonTests/DunderNewTestCase.gs
+input src/smalltalk/PythonTests/DuplicateArgumentBindingTestCase.gs
 input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
 input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs

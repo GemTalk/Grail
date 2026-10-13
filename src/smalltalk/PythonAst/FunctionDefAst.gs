@@ -3951,6 +3951,26 @@ allParameterNames
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
+___multipleValuesParams___: nPos
+	"The parameters an arity check's duplicate-argument guard covers, as
+	{ index in the positional Array . name } pairs: each positional-OR-keyword
+	parameter this call site binds positionally.  Positional-only ones are
+	left out -- a keyword spelled like one goes to **kwargs or is refused by
+	the unexpected-keyword guard -- and so is a stripped receiver, which is
+	the first ``___arityReceiverOffset___:'' of them."
+
+	| all po off out |
+	all := self allParameterNames.
+	po := (args posonlyargs ifNil: [#()]) size.
+	off := self ___arityReceiverOffset___: nPos.
+	out := OrderedCollection new.
+	off + 1 to: all size do: [:k |
+		k > po ifTrue: [out add: { k - off . (all at: k) asString }]].
+	^ out
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
 ___arityReceiverOffset___: nPos
 	"How many declared positional parameters an arity check's ``nPos'' leaves
 	out: 1 when the receiver (self, or cls) was stripped because it is the
@@ -4590,8 +4610,27 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	positional-only parameters the second's is
 	___emitIRUnexpectedKeywordWithPosonlyOn___:kw:accepted:'s collecting one."
 
-	| qname |
+	| qname dups |
 	qname := self ___qualifiedNameFor___: name.
+	"0. The duplicate-argument guard, as the text emits it (#1477)."
+	dups := self ___multipleValuesParams___: nPos.
+	dups isEmpty ifFalse: [
+		aBuilder
+			unless: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
+			then: [
+				dups do: [:pair |
+					| cond |
+					cond := aBuilder
+						andValue: (aBuilder send: #>=
+							to: (self ___irPosSize___: posLeaf on: aBuilder)
+							with: { aBuilder obj: (pair at: 1) } env: 0)
+						then: [aBuilder add: (aBuilder send: #includesKey:
+							to: (aBuilder var: kwLeaf)
+							with: { aBuilder obj: (pair at: 2) } env: 0)].
+					aBuilder if: cond then: [
+						aBuilder add: (self ___irSignalTypeError___:
+							(aBuilder obj: qname , '() got multiple values for argument ''' , (pair at: 2) , '''')
+							on: aBuilder)]]]].
 	args vararg isNil ifTrue: [
 		| defcount sig plural prefix cond off total given |
 		"A method counts its receiver on both sides, as the text's
@@ -6010,6 +6049,29 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	posName arrive with self already stripped, so both numbers were one short
 	(#1472); ___arityReceiverOffset___: puts it back, and is 0 for a module def
 	or a @staticmethod, whose messages are unchanged."
+	"0. A parameter given both positionally and by keyword (#1477).  The
+	binding takes the positional value, so without this the keyword was
+	silently dropped: ``f(5, ps=1)'' answered 5 for ``def f(ps, force=False)''.
+	First, as in CPython, which raises it while binding keywords -- before it
+	counts the positional arguments -- and checked whether or not the def
+	collects **kwargs, since a name that IS a parameter never goes there.
+	Only when the call passed keywords, and per parameter only when the
+	positional Array reaches it."
+	(self ___multipleValuesParams___: nPos) isEmpty ifFalse: [
+		aStream
+			nextPutAll: '('; nextPutAll: kwName;
+			nextPutAll: ' @env0:isNil) ifFalse: ['; lf.
+		(self ___multipleValuesParams___: nPos) do: [:pair |
+			aStream
+				nextPutAll: '  (('; nextPutAll: posName;
+				nextPutAll: ' @env0:size) @env0:>= '; print: (pair at: 1);
+				nextPutAll: ' and: ['; nextPutAll: kwName;
+				nextPutAll: ' @env0:includesKey: '''; nextPutAll: (pair at: 2);
+				nextPutAll: ''']) ifTrue: [TypeError ___signal___: ''';
+				nextPutAll: (self ___qualifiedNameFor___: name);
+				nextPutAll: '() got multiple values for argument '''''; nextPutAll: (pair at: 2);
+				nextPutAll: '''''''].'; lf].
+		aStream nextPutAll: '].'; lf].
 	args vararg isNil ifTrue: [ | defcount sig plural prefix off total given |
 		off := self ___arityReceiverOffset___: nPos.
 		total := nPos + off.
