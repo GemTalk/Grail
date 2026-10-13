@@ -6177,6 +6177,8 @@ ___moduleAttrIdentityTable___
 
 		"os / string / time."
 		t @env0:at: #'os_PathLike' put: #('PathLike' 'os').
+		"The type of os.environ: CPython's os._Environ, a MutableMapping."
+		t @env0:at: #'os_Environ' put: #('_Environ' 'os').
 		"scandir's two types report ``posix'' as their module in CPython, not
 		``os'' -- they are implemented in the posix extension and only re-exported
 		by os, which os.DirEntry's own __module__ shows."

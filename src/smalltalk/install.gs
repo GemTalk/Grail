@@ -1254,6 +1254,7 @@ run
 	at: #'OpenCodecsAndDescriptorsTestCase' put: nil;
 	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'OsDirectoryErrorsTestCase' put: nil;
+	at: #'OsEnvironMappingTestCase' put: nil;
 	at: #'OsErrorErrnoSubclassTestCase' put: nil;
 	at: #'OsErrorsCarryErrnoTestCase' put: nil;
 	at: #'OSErrorTestCase' put: nil;
@@ -2792,6 +2793,7 @@ input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OpenCodecsAndDescriptorsTestCase.gs
 input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/OsDirectoryErrorsTestCase.gs
+input src/smalltalk/PythonTests/OsEnvironMappingTestCase.gs
 input src/smalltalk/PythonTests/OsErrorErrnoSubclassTestCase.gs
 input src/smalltalk/PythonTests/OsErrorsCarryErrnoTestCase.gs
 input src/smalltalk/PythonTests/OSErrorTestCase.gs

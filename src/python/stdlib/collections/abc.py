@@ -1001,6 +1001,18 @@ class MutableMapping(Mapping):
 MutableMapping.register(dict)
 
 
+def _register_environ():
+    # CPython's os._Environ SUBCLASSES MutableMapping.  Grail's is a Smalltalk
+    # class (os.gs) that implements the protocol itself, so it is registered,
+    # and isinstance(os.environ, Mapping) answers True as it does there.
+    import os
+    MutableMapping.register(os._Environ)
+
+
+_register_environ()
+del _register_environ
+
+
 ### SEQUENCES ###
 
 class Sequence(Reversible, Collection):
