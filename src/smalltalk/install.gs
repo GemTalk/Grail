@@ -1349,6 +1349,7 @@ run
 	at: #'ResourceWarningTestCase' put: nil;
 	at: #'ReSubCallableTestCase' put: nil;
 	at: #'ReturnTestCase' put: nil;
+	at: #'RmtreeOnexcTestCase' put: nil;
 	at: #'RmtreeSymlinksTestCase' put: nil;
 	at: #'RoundDirFormatTestCase' put: nil;
 	at: #'RuntimeClassCreationTestCase' put: nil;
@@ -2893,6 +2894,7 @@ input src/smalltalk/PythonTests/ReservedParamDefaultTestCase.gs
 input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
 input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
+input src/smalltalk/PythonTests/RmtreeOnexcTestCase.gs
 input src/smalltalk/PythonTests/RmtreeSymlinksTestCase.gs
 input src/smalltalk/PythonTests/RoundDirFormatTestCase.gs
 input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
