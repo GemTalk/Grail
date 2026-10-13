@@ -662,3 +662,15 @@ ___pythonValueAttrs___
 		add: #imag;
 		yourself
 %
+
+category: 'Grail-Comparison'
+classmethod: AbstractPyInt
+___builtinValueClass___
+	"The kernel class the builtin's own VALUES belong to (an int is a SmallInteger or LargeInteger), which
+	this class -- the root of every Python subclass of the builtin -- does not
+	inherit from.  Object >> ___reflectedFirst___ asks it, so that ``0 ==
+	C3(11)'' for ``class C3(int)'' sees C3 as a proper subclass of int and tries
+	C3's reflected method first, as CPython does (#1495)."
+
+	^ Integer
+%
