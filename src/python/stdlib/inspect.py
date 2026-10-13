@@ -984,9 +984,37 @@ def signature(obj, *args, **kwargs):
         if not isinstance(text, str):
             call = getattr(type(obj), '__call__', None)
             text = getattr(call, '__text_signature__', None) if call is not None else None
+        if not isinstance(text, str):
+            sig = _signature_from_call_method(obj)
+            if sig is not None:
+                return sig
     if isinstance(text, str):
         return Signature(text=text)
     return Signature()
+
+
+def _signature_from_call_method(obj):
+    """A callable INSTANCE's signature: its class's Python ``__call__`` with
+    the bound ``self`` dropped, which is CPython's rule.  None when the class
+    defines none.
+
+    Without it every such object answered ``()``, so getfullargspec reported
+    no ``**kwargs`` -- and botocore checks each event handler with exactly
+    that, so it refused its own ClientMethodAlias and ``boto3.client()``
+    raised ValueError.
+
+    Grail's stand-ins for CPython's callable types are skipped: they live in
+    types.py with ``__module__`` 'builtins', and the ``__call__`` they declare
+    only answers Callable's structural check, describing no real call.  A
+    function or method never gets here -- its own parameter spec has already
+    answered."""
+    cls = type(obj)
+    if getattr(cls, '__module__', None) == 'builtins':
+        return None
+    call = _signature_get_user_defined_method(cls, '__call__')
+    if call is None:
+        return None
+    return _drop_leading_parameter(signature(call))
 
 
 class Signature:

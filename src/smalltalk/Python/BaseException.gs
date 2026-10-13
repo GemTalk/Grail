@@ -1727,7 +1727,21 @@ ___pyAttrStore___: aName put: aValue
 	non-iterable was accepted.  The slot is set directly, not through
 	___args___:, because CPython's setter only replaces args: an OSError
 	keeps its errno and a SyntaxError its lineno, where ___args___: would
-	parse them again."
+	parse them again.
+
+	``e.__traceback__ = tb'' is a getset the same way, and it is the one
+	contextlib's __exit__ uses to hand the with statement back the exception
+	as it arrived.  Stored as an ordinary attribute it SHADOWED the slot:
+	every later read answered the stored chain, whatever frames the next
+	raise and catch added to ``tracebackObj'' -- so the frame of the function
+	that finally caught it was missing (#1539).  It stores the slot and clears
+	with_traceback:'s prepend mark rather than setting it: what CPython does
+	next depends on the RAISE, not on the store -- ``raise e'' adds its own
+	frame, and marks the exception itself on the way (___pyRaise___:cause:),
+	while a bare ``raise'' in the same function adds nothing.  For that bare
+	``raise'' the head being REPLACED is recorded too: it names the function
+	whose handler is running, which is where the re-raise is, and the next
+	catch keeps the assigned chain under it (___pushCatchingFrameWork___)."
 
 	| n |
 	(aName @env0:size @env0:= 4 and: [aName @env0:asString @env0:= 'args'])
@@ -1752,6 +1766,13 @@ ___pyAttrStore___: aName put: aValue
 		(aValue == true or: [aValue == false]) ifFalse: [
 			^ TypeError ___signal___: 'attribute value type must be bool'].
 		self @env0:dynamicInstVarAt: #'___suppressContext___' put: aValue.
+		^ aValue].
+	n @env0:= '__traceback__' ifTrue: [
+		(aValue == None or: [aValue @env0:isKindOf: PyTraceback]) ifFalse: [
+			^ TypeError ___signal___: '__traceback__ must be a traceback or None'].
+		self @env0:dynamicInstVarAt: #'___tbAssignedOver___' put: self @env0:___headFrameName___.
+		tracebackObj := aValue == None ifTrue: [nil] ifFalse: [aValue].
+		self @env0:dynamicInstVarAt: #'___tbUserAttached___' put: false.
 		^ aValue].
 	^ super ___pyAttrStore___: aName put: aValue
 %
@@ -1786,8 +1807,9 @@ ___pyAttrDelete___: aName
 	(aName @env0:size @env0:between: 9 and: 20) ifFalse: [
 		^ super ___pyAttrDelete___: aName].
 	n := aName @env0:asString.
-	(n @env0:= '__cause__' or: [n @env0:= '__context__']) ifTrue: [
-		^ TypeError ___signal___: n @env0:, ' may not be deleted'].
+	((n @env0:= '__cause__' or: [n @env0:= '__context__'])
+		or: [n @env0:= '__traceback__']) ifTrue: [
+			^ TypeError ___signal___: n @env0:, ' may not be deleted'].
 	n @env0:= '__suppress_context__' ifTrue: [
 		^ TypeError ___signal___: 'can''t delete numeric/char attribute'].
 	^ super ___pyAttrDelete___: aName
@@ -5312,7 +5334,8 @@ ___pushCatchingFrameWork___: aCode pos: posArray
 	Same-name recursion is the one case case 3 cannot see: an exception re-raised
 	in f and caught again in f reads as case 2 and keeps the deeper chain."
 
-	| headName saved |
+	| headName saved assignedOver |
+	assignedOver := self ___tbAssignedOver___.
 	tracebackObj isNil ifTrue: [
 		(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: true)
 			ifTrue: [^ self].
@@ -5348,7 +5371,14 @@ ___pushCatchingFrameWork___: aCode pos: posArray
 	tracebackObj := nil.
 	(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: false)
 		ifTrue: [
-			self ___graftTraceback___: saved under: headName.
+			"A chain ASSIGNED to __traceback__ need not name the function that
+			re-raises it at all -- only the one contextlib restores does -- so
+			when its own head is not in the rebuild, the head it replaced
+			stands in: that names the function whose handler did the assigning,
+			which is where the bare ``raise'' is."
+			((self ___graftTraceback___: saved under: headName) == false
+				and: [assignedOver notNil])
+					ifTrue: [self ___graftTraceback___: saved under: assignedOver].
 			^ self].
 	tracebackObj := saved.
 	^ self ___pushFrameFromPos___: aCode pos: posArray
@@ -5377,24 +5407,48 @@ ___graftTraceback___: oldChain under: oldHeadName
 	rebuilt chain with its name, which is also how that earlier walk found it:
 	a walk stops at the first frame named for its catcher going OUTWARD from
 	the raise, and the chain runs outermost first.  When the rebuilt chain
-	does not name it at all, the rebuild stands as it did before."
+	does not name it at all, the rebuild stands as it did before, and the
+	answer is false.
 
-	| node prev graftAt |
-	(oldChain isNil or: [oldHeadName isNil]) ifTrue: [^ self].
+	When the earlier catcher is the rebuilt chain's HEAD there is nothing above
+	it to keep, and the earlier chain is the whole answer.  That is a re-raise
+	that never left the function: the bare ``raise'' after
+	``e.__traceback__ = tb'', caught again in the same function, where
+	CPython adds no frame."
+
+	| node prev graftAt found |
+	(oldChain isNil or: [oldHeadName isNil]) ifTrue: [^ false].
 	node := tracebackObj.
 	prev := nil.
 	graftAt := nil.
+	found := false.
 	[node notNil and: [node ~~ None]] whileTrue: [
 		| frame code |
 		frame := node @env0:dynamicInstVarAt: #'tb_frame'.
 		code := frame isNil ifTrue: [nil] ifFalse: [frame @env0:dynamicInstVarAt: #'f_code'].
 		(code notNil and: [(code @env0:dynamicInstVarAt: #'co_name') @env0:= oldHeadName])
-			ifTrue: [graftAt := prev].
+			ifTrue: [graftAt := prev. found := true].
 		prev := node.
 		node := node @env0:dynamicInstVarAt: #'tb_next'].
-	graftAt isNil ifTrue: [^ self].
-	graftAt @env0:dynamicInstVarAt: #'tb_next' put: oldChain.
-	^ self
+	found ifFalse: [^ false].
+	graftAt isNil
+		ifTrue: [tracebackObj := oldChain]
+		ifFalse: [graftAt @env0:dynamicInstVarAt: #'tb_next' put: oldChain].
+	^ true
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___tbAssignedOver___
+	"The head frame name ``e.__traceback__ = tb'' replaced, or nil -- consumed
+	here, so it speaks for the one catch that follows the assignment.  Guarded
+	like ___tbUserAttached___: the slot is absent on nearly every exception."
+
+	| name |
+	name := [self @env0:dynamicInstVarAt: #'___tbAssignedOver___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	name isNil ifFalse: [self @env0:dynamicInstVarAt: #'___tbAssignedOver___' put: nil].
+	^ name
 %
 
 category: 'Grail-Traceback Building'

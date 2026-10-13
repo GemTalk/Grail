@@ -6177,6 +6177,8 @@ ___moduleAttrIdentityTable___
 
 		"os / string / time."
 		t @env0:at: #'os_PathLike' put: #('PathLike' 'os').
+		"The type of os.environ: CPython's os._Environ, a MutableMapping."
+		t @env0:at: #'os_Environ' put: #('_Environ' 'os').
 		"scandir's two types report ``posix'' as their module in CPython, not
 		``os'' -- they are implemented in the posix extension and only re-exported
 		by os, which os.DirEntry's own __module__ shows."
@@ -11010,6 +11012,31 @@ ___importFrom___: aSym
 
 category: 'Grail-Attribute Protocol'
 method: object
+___importFromStar___: aSym
+	"One name of an expanded ``from M import *'': the attribute, or the
+	marker #'___starNameMissing___' when M has none, which tells the binding
+	ImportFromAst emits to skip the name (#1416).
+
+	With no __all__, the names are expanded at PARSE time from M's top-level
+	variables, and that list includes a name a function only declares
+	``global'' -- dateutil's tz.py has ``global parser'' in a method.  CPython
+	never creates such a name until the function runs, so its import-all, which
+	walks M's __dict__, does not see it.  ___importFrom___: raised ``cannot
+	import name'' for it instead, failing the whole import.
+
+	No sys.modules retry, unlike ___importFrom___:.  A star import binds what M's
+	namespace holds, never a submodule M has not itself bound."
+
+	| missing v |
+	missing := false.
+	v := [self ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError
+		do: [:ex | missing := true. ex @env0:return: nil].
+	^ missing ifTrue: [#'___starNameMissing___'] ifFalse: [v]
+%
+
+category: 'Grail-Attribute Protocol'
+method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
 	The presence of an ``attr:`` keyword method is ambiguous: on a
@@ -14909,7 +14936,29 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 	(otherClass @env0:== myClass) ifTrue: [^ nil].
-	(otherClass @env0:inheritsFrom: myClass) ifFalse: [^ nil].
+	"A Python subclass of int, float or str does not inherit from the kernel
+	class of the builtin's values -- C3(int) is an AbstractPyInt, 0 a
+	SmallInteger -- so inheritsFrom: alone never saw ``0 == C3(11)'' as a
+	subclass on the right, and C3's __eq__ was never consulted: ``C3(11) in
+	range(10)'', ``[0].count(C3(11))'' and ``0 == C3(11)'' all answered False
+	where CPython answers True (#1495).  Such a subclass's root names the
+	kernel class (___builtinValueClass___); every other class answers nil."
+	(otherClass @env0:inheritsFrom: myClass) ifFalse: [
+		| valueClass |
+		"A CLASS on the right has a metaclass for its class, which answers no
+		such question -- and no class is an instance of a subclass of int,
+		float or str (an Enum class compared with an int, as Enum's value
+		lookup does)."
+		(other @env0:isKindOf: Behavior) ifTrue: [^ nil].
+		"A KERNEL class is never a Python subclass of int, float or str, and it
+		is the common case here -- two kernel strings of different classes,
+		'ab' == 'c\u00e9' -- so it is ruled out before the send below:
+		_isKernel costs ~7ns, and the send and the str subclass test cost 'ab' ==
+		'c\u00e9' 89ns more than before this rule, measured."
+		otherClass @env0:_isKernel ifTrue: [^ nil].
+		valueClass := otherClass @env0:___builtinValueClass___.
+		(valueClass @env0:notNil and: [self @env0:isKindOf: valueClass])
+			ifFalse: [^ nil]].
 	"A subclass that BLOCKS the reflected method with None counts as overriding
 	it -- CPython reaches the block through exactly this priority rule, so
 	``SupEq() == S()'' raises rather than answering from SupEq.__eq__.  Tested
@@ -19307,6 +19356,16 @@ ___matchArgAt___: anIndex of: aClass
 ! generated code reaches these with @env0: sends -- an env-1 method is simply not
 ! found there ("a M class does not understand #___grailClassDefaultPut___:compute:").
 set compile_env: 0
+
+category: 'Grail-Comparison'
+classmethod: Object
+___builtinValueClass___
+	"nil: this class is not the root of a builtin's Python subclasses.
+	AbstractPyInt, AbstractPyFloat and AbstractPyStr answer the kernel class of
+	their builtin's values -- see Object >> ___reflectedFirst___ (#1495)."
+
+	^ nil
+%
 
 category: 'Grail-Method Defaults'
 method: Object

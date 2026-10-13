@@ -667,13 +667,19 @@ class _GeneratorContextManager(
                 # threw in: __exit__() must not swallow that one.
                 return exc is not value
             except RuntimeError as exc:
-                # Don't re-raise the passed-in exception.
+                # Don't re-raise the passed-in exception.  Its traceback goes
+                # back to the one the with statement passed in, here and
+                # below: throw() added the generator's frames and this
+                # __exit__'s on top of it, and the with statement re-raises
+                # the exception as it arrived (CPython does the same).
                 if exc is value:
+                    exc.__traceback__ = traceback
                     return False
                 # Avoid suppressing if a StopIteration exception was passed
                 # to throw() and later wrapped into a RuntimeError (see
                 # PEP 479 / bpo-27122).
                 if isinstance(value, StopIteration) and exc.__cause__ is value:
+                    value.__traceback__ = traceback
                     return False
                 raise
             except BaseException as exc:
@@ -682,6 +688,7 @@ class _GeneratorContextManager(
                 # handle it, so __exit__ must not suppress.
                 if exc is not value:
                     raise
+                exc.__traceback__ = traceback
                 return False
             raise RuntimeError("generator didn't stop after throw()")
 
