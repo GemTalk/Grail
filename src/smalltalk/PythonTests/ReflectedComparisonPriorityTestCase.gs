@@ -120,8 +120,9 @@ testASubclassOfABuiltinOnTheRightIsAskedFirst
 	builtin's values, so the subclass test never saw it, and membership,
 	count and index -- test_range's ``C3(11) in range(10)'' -- answered False.
 	tests/python/reflected_subclass_priority.py holds the checks and agrees
-	with CPython 3.14; its KNOWN_DIVERGENCES are the arithmetic half of the
-	rule, not applied yet."
+	with CPython 3.14, and covers the arithmetic half of the rule too (#1545),
+	where the reflected method must be the subclass's own and a declining one
+	is not called twice."
 
 	| fixture |
 	importlib @env1:modules removeKey: #'reflected_subclass_priority' ifAbsent: [].
@@ -130,5 +131,5 @@ testASubclassOfABuiltinOnTheRightIsAskedFirst
 		name: 'reflected_subclass_priority'.
 	self
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '12 checks, 0 disagreeing [], keys match: True'
+		equals: '21 checks, 0 disagreeing [], keys match: True'
 %

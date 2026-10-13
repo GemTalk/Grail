@@ -11,9 +11,13 @@ the subclass test never saw it.  ``0 == C3(11)'' never called C3.__eq__, and
 neither did ``C3(11) in range(10)'', ``[0].count(C3(11))'' or ``.index'' --
 test_range's test_types asserts the first of those.
 
-KNOWN_DIVERGENCES holds the arithmetic half of the same rule, which Grail does
-not apply yet: ``'a' + S('b')'' and ``Base() + Sub()'' still try the left
-operand's __add__ first.
+The arithmetic half of the rule (#1545) differs in one respect: the right
+operand goes first only when its reflected method is OVERLOADED -- its own,
+not the left type's -- because CPython's slot_nb_* asks method_is_overloaded.
+Grail always tried the left operand's forward method first, so ``'a' +
+S('b')'' and ``Base() + Sub()'' never reached S.__radd__ or Sub.__radd__, and
+``2 ** I(3)'' never reached an __rpow__ with a default.  The call ORDER is
+recorded too: a reflected method that declines is not called again.
 
 Every check here holds under CPython 3.14, which is what makes it evidence.
 """
@@ -111,20 +115,89 @@ r['non_ascii'] = ('é' == NS('é'), 'a' < NS('é'),
                   '\U0001f600' > NS('a'))
 
 
+calls = []
+
+
+def traced(thunk):
+    del calls[:]
+    try:
+        value = thunk()
+    except Exception as e:
+        value = type(e).__name__
+    return (value, list(calls))
+
+
 class SR(str):
-    def __radd__(self, other): return 'SR.radd'
+    def __radd__(self, other):
+        calls.append('SR.radd')
+        return 'SR.radd'
 
 
 class Base:
-    def __add__(self, other): return 'Base.add'
+    def __add__(self, other):
+        calls.append('Base.add')
+        return 'Base.add'
+
+    def __radd__(self, other):
+        calls.append('Base.radd')
+        return 'Base.radd'
+
+    def __sub__(self, other):
+        calls.append('Base.sub')
+        return NotImplemented
 
 
 class Sub(Base):
-    def __radd__(self, other): return 'Sub.radd'
+    def __radd__(self, other):
+        calls.append('Sub.radd')
+        return 'Sub.radd'
+
+    def __rsub__(self, other):
+        calls.append('Sub.rsub')
+        return 'Sub.rsub'
 
 
-r['arithmetic_str'] = 'a' + SR('b')
-r['arithmetic_user'] = Base() + Sub()
+class SubInherits(Base):
+    pass
+
+
+class SubDeclines(Base):
+    def __radd__(self, other):
+        calls.append('SubDeclines.radd')
+        return NotImplemented
+
+
+class IP(int):
+    def __rpow__(self, other, mod=None):
+        calls.append('IP.rpow')
+        return 'IP.rpow'
+
+
+class IDecl(int):
+    def __radd__(self, other):
+        calls.append('IDecl.radd')
+        return NotImplemented
+
+
+class L(list):
+    def __radd__(self, other):
+        calls.append('L.radd')
+        return 'L.radd'
+
+
+r['arithmetic_str'] = traced(lambda: 'a' + SR('b'))
+r['arithmetic_user'] = traced(lambda: Base() + Sub())
+r['arithmetic_inherited_is_no_priority'] = (traced(lambda: Base() + SubInherits()),
+                                            traced(lambda: 'a' + NS('b')))
+r['arithmetic_declined_runs_forward_once'] = (traced(lambda: Base() + SubDeclines()),
+                                              traced(lambda: 1 + IDecl(2)))
+r['arithmetic_reflected_before_a_declining_forward'] = traced(lambda: Base() - Sub())
+r['arithmetic_reflected_with_a_default'] = traced(lambda: 2 ** IP(3))
+r['arithmetic_list'] = traced(lambda: [1] + L([2]))
+r['arithmetic_same_class'] = traced(lambda: Sub() + Sub())
+# bytearray is a subtype of object and its __rmod__ declines; object has no
+# __mod__ at all, so the answer is CPython's TypeError (test_bytes test_rmod).
+r['arithmetic_no_forward_after_a_decline'] = _err(lambda: object() % bytearray(b'abc'))
 
 
 EXPECTED = {
@@ -140,12 +213,20 @@ EXPECTED = {
     'a_class_on_the_right': (False, False, False, True, True),
     'sorting': ([0, 1, 2, 3], 'z'),
     'non_ascii': (True, True, True),
+    'arithmetic_str': ('SR.radd', ['SR.radd']),
+    'arithmetic_user': ('Sub.radd', ['Sub.radd']),
+    'arithmetic_inherited_is_no_priority': (('Base.add', ['Base.add']), ('ab', [])),
+    'arithmetic_declined_runs_forward_once': (
+        ('Base.add', ['SubDeclines.radd', 'Base.add']), (3, ['IDecl.radd'])),
+    'arithmetic_reflected_before_a_declining_forward': ('Sub.rsub', ['Sub.rsub']),
+    'arithmetic_reflected_with_a_default': ('IP.rpow', ['IP.rpow']),
+    'arithmetic_list': ('L.radd', ['L.radd']),
+    'arithmetic_same_class': ('Base.add', ['Base.add']),
+    'arithmetic_no_forward_after_a_decline':
+        "TypeError: unsupported operand type(s) for %: 'object' and 'bytearray'",
 }
 
-KNOWN_DIVERGENCES = {
-    'arithmetic_str': 'SR.radd',
-    'arithmetic_user': 'Sub.radd',
-}
+KNOWN_DIVERGENCES = {}
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, '<missing>') != EXPECTED[k])
 SUMMARY = '%d checks, %d disagreeing %r, keys match: %s' % (
