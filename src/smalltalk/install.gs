@@ -1484,6 +1484,7 @@ run
 	at: #'TwilioShapeTestCase' put: nil;
 	at: #'TwilioTier1TestCase' put: nil;
 	at: #'TypeAliasTestCase' put: nil;
+	at: #'TypeBuiltClassOverridesTestCase' put: nil;
 	at: #'TypeCallMroEntriesTestCase' put: nil;
 	at: #'TypedDictTotalTestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
@@ -3025,6 +3026,7 @@ input src/smalltalk/PythonTests/TwilioClientTestCase.gs
 input src/smalltalk/PythonTests/TwilioShapeTestCase.gs
 input src/smalltalk/PythonTests/TwilioTier1TestCase.gs
 input src/smalltalk/PythonTests/TypeAliasTestCase.gs
+input src/smalltalk/PythonTests/TypeBuiltClassOverridesTestCase.gs
 input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
 input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
