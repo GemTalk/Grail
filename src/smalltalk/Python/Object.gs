@@ -14936,7 +14936,29 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 	(otherClass @env0:== myClass) ifTrue: [^ nil].
-	(otherClass @env0:inheritsFrom: myClass) ifFalse: [^ nil].
+	"A Python subclass of int, float or str does not inherit from the kernel
+	class of the builtin's values -- C3(int) is an AbstractPyInt, 0 a
+	SmallInteger -- so inheritsFrom: alone never saw ``0 == C3(11)'' as a
+	subclass on the right, and C3's __eq__ was never consulted: ``C3(11) in
+	range(10)'', ``[0].count(C3(11))'' and ``0 == C3(11)'' all answered False
+	where CPython answers True (#1495).  Such a subclass's root names the
+	kernel class (___builtinValueClass___); every other class answers nil."
+	(otherClass @env0:inheritsFrom: myClass) ifFalse: [
+		| valueClass |
+		"A CLASS on the right has a metaclass for its class, which answers no
+		such question -- and no class is an instance of a subclass of int,
+		float or str (an Enum class compared with an int, as Enum's value
+		lookup does)."
+		(other @env0:isKindOf: Behavior) ifTrue: [^ nil].
+		"A KERNEL class is never a Python subclass of int, float or str, and it
+		is the common case here -- two kernel strings of different classes,
+		'ab' == 'c\u00e9' -- so it is ruled out before the send below:
+		_isKernel costs ~7ns, and the send and the str subclass test cost 'ab' ==
+		'c\u00e9' 89ns more than before this rule, measured."
+		otherClass @env0:_isKernel ifTrue: [^ nil].
+		valueClass := otherClass @env0:___builtinValueClass___.
+		(valueClass @env0:notNil and: [self @env0:isKindOf: valueClass])
+			ifFalse: [^ nil]].
 	"A subclass that BLOCKS the reflected method with None counts as overriding
 	it -- CPython reaches the block through exactly this priority rule, so
 	``SupEq() == S()'' raises rather than answering from SupEq.__eq__.  Tested
@@ -19334,6 +19356,16 @@ ___matchArgAt___: anIndex of: aClass
 ! generated code reaches these with @env0: sends -- an env-1 method is simply not
 ! found there ("a M class does not understand #___grailClassDefaultPut___:compute:").
 set compile_env: 0
+
+category: 'Grail-Comparison'
+classmethod: Object
+___builtinValueClass___
+	"nil: this class is not the root of a builtin's Python subclasses.
+	AbstractPyInt, AbstractPyFloat and AbstractPyStr answer the kernel class of
+	their builtin's values -- see Object >> ___reflectedFirst___ (#1495)."
+
+	^ nil
+%
 
 category: 'Grail-Method Defaults'
 method: Object
