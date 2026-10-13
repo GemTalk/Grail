@@ -42,8 +42,33 @@ _levelToName = {
 }
 
 
+# CPython's name -> level map; getLevelName answers either way through both.
+_nameToLevel = {
+    'CRITICAL': CRITICAL,
+    'FATAL': FATAL,
+    'ERROR': ERROR,
+    'WARN': WARNING,
+    'WARNING': WARNING,
+    'INFO': INFO,
+    'DEBUG': DEBUG,
+    'NOTSET': NOTSET,
+}
+
+
+def getLevelNamesMapping():
+    return _nameToLevel.copy()
+
+
 def getLevelName(level):
-    return _levelToName.get(level, 'Level ' + str(level))
+    """A level's name, or -- given a name -- its level, as CPython answers
+    both ways (pytest turns ``--log-level=INFO'' into a number with it)."""
+    result = _levelToName.get(level)
+    if result is not None:
+        return result
+    result = _nameToLevel.get(level)
+    if result is not None:
+        return result
+    return 'Level %s' % (level,)
 
 
 def _start_time():
@@ -412,11 +437,64 @@ class StreamHandler(Handler):
             self.handleError(record)
 
 
+class Manager:
+    """CPython's logger registry, ``Logger.manager''.
+
+    Grail keeps its loggers in the module's own dict and its disable level in
+    a box, and this is a view over both rather than a second copy: code that
+    walks ``logging.root.manager.loggerDict'' -- pytest's logging plugin does,
+    on every session -- or saves and restores ``manager.disable'' sees and
+    changes the same state getLogger() and disable() use.  Without it
+    pytest's own logging plugin raised AttributeError at session start.
+
+    It is made BEFORE Logger and assigned in Logger's class body, rather than
+    stored on the class afterwards as CPython does.  logging is deployed at
+    install, and a session that binds a deployed module does not run its
+    body: a class attribute the body stores later is replayed only when it
+    is plain data, and a Manager is not -- so ``Logger.manager = ...'' after
+    the class was there in the installing session and gone in every other.
+    For the same reason there is no ``Logger.root''; ``logging.root'' is the
+    root logger."""
+
+    def __init__(self, rootnode=None):
+        self.root = rootnode
+        self.emittedNoHandlerWarning = False
+        self.loggerClass = None
+        self.logRecordFactory = None
+
+    @property
+    def loggerDict(self):
+        return _loggers
+
+    @property
+    def disable(self):
+        return _disable_box[0]
+
+    @disable.setter
+    def disable(self, value):
+        _disable_box[0] = value
+
+    def getLogger(self, name):
+        return getLogger(name)
+
+    def setLoggerClass(self, klass):
+        _check_logger_class(klass)
+        self.loggerClass = klass
+
+    def _clear_cache(self):
+        pass
+
+
+_manager = Manager()
+
+
 class Logger(Filterer):
     """Logger - the user-facing object, in a parent chain that ends at the
     root logger, as in CPython.  Flask decides whether to install its own
     handler by walking ``.parent'' looking for one, and the chain used to stop
     at None, so it always did -- even after basicConfig."""
+
+    manager = _manager
 
     def __init__(self, name, lvl=NOTSET):
         # Param named `lvl`, not `level` -- see Handler.__init__.
@@ -566,8 +644,11 @@ class RootLogger(Logger):
         Logger.__init__(self, 'root', lvl)
 
 
-# Registry of named loggers - CPython's Logger.manager.loggerDict in spirit.
+# Registry of named loggers -- Logger.manager.loggerDict, which is this very
+# dict.  As in CPython it does not hold the root logger.
 _loggers = {}
+# The class getLogger makes a new logger from (setLoggerClass).
+_logger_class_box = [None]
 # Wrap mutable module state in single-element lists so module-level functions
 # can change it without the `global` keyword.
 _root_level_box = [WARNING]
@@ -585,7 +666,27 @@ def _set_root_level(level):
 # The root logger EXISTS from import, so every logger's chain ends at it, and
 # basicConfig installs into its own handlers.
 root = RootLogger(WARNING)
-_loggers[''] = root
+_logger_class_box[0] = Logger
+_manager.root = root
+
+
+
+
+def _check_logger_class(klass):
+    if klass is not Logger and not issubclass(klass, Logger):
+        raise TypeError('logger not derived from logging.Logger: '
+                        + klass.__name__)
+
+
+def setLoggerClass(klass):
+    """The class getLogger() makes new loggers from -- pip installs its own
+    subclass this way, at import, in nearly every one of its modules."""
+    _check_logger_class(klass)
+    _logger_class_box[0] = klass
+
+
+def getLoggerClass():
+    return _logger_class_box[0]
 
 
 def _resolve_parent(name):
@@ -608,9 +709,12 @@ def getLogger(name=None):
     under 'a', not under root."""
     if name is None or name == '' or name == 'root':
         return root
+    if not isinstance(name, str):
+        raise TypeError('A logger name must be a string')
     if name in _loggers:
         return _loggers[name]
-    logger = Logger(name)
+    cls = Logger.manager.loggerClass or _logger_class_box[0]
+    logger = cls(name)
     logger.parent = _resolve_parent(name)
     # A descendant made earlier hung from a shorter ancestor (or root); this
     # logger now sits between them.
@@ -683,13 +787,39 @@ def disable(level=CRITICAL):
     _disable_box[0] = level
 
 
+def shutdown(handlerList=None):
+    """Flush and close handlers -- the ones given, else every one installed
+    on a logger.  CPython keeps a weak list of every handler ever made for
+    this; Grail keeps no such list (it would be committed state in a deployed
+    module), so it asks the loggers, which is where a live handler is."""
+    if handlerList is None:
+        handlerList = []
+        for logger in [root] + list(_loggers.values()):
+            for h in getattr(logger, 'handlers', ()):
+                if h not in handlerList:
+                    handlerList.append(h)
+    for h in reversed(handlerList):
+        # CPython's list holds weak references, and a caller passing its own
+        # follows that shape; a handler taken from a logger is the object.
+        if not isinstance(h, Handler) and callable(h):
+            h = h()
+        if h is None:
+            continue
+        try:
+            h.flush()
+            h.close()
+        except (OSError, ValueError):
+            pass
+
+
 __all__ = [
     'NOTSET', 'DEBUG', 'INFO', 'WARNING', 'WARN', 'ERROR', 'CRITICAL', 'FATAL',
     'LogRecord', 'Logger', 'Handler', 'NullHandler', 'StreamHandler',
     'Formatter', 'Filter', 'Filterer', 'FileHandler', 'LoggerAdapter',
     'BASIC_FORMAT', 'PercentStyle', 'StrFormatStyle', 'StringTemplateStyle',
     'makeLogRecord', 'root', 'raiseExceptions',
-    'getLogger', 'getLevelName', 'basicConfig', 'disable',
+    'getLogger', 'getLevelName', 'basicConfig', 'disable', 'shutdown',
+    'getLoggerClass', 'setLoggerClass', 'getLevelNamesMapping',
     'debug', 'info', 'warning', 'warn', 'error', 'critical', 'fatal',
     'exception', 'log',
 ]
