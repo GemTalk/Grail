@@ -4643,6 +4643,57 @@ ___refreshCarriedSubmodulesOf___: aPackage named: aName
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___bindBodySubmodulesOf___: aName
+	"Import, through the ordinary path, each module of aName's own PACKAGE TREE
+	its body imported -- the ``top.*'' entries of its dependency record, top
+	being aName's top-level package -- that this session has not imported yet
+	(issue #1475).  Called by the warm bind.
+
+	The warm bind does not run the body, so neither do the body's imports: a
+	package whose ``__init__'' does ``from . import api'' bound with
+	``pkg.api'' reachable as an attribute but missing from sys.modules, and
+	with api's __session_init__ never run -- so the session saw api's
+	committed state without the hook meant to re-bind its files, sockets and
+	environment snapshots.  CPython re-executes the body, so the import
+	happens; this makes it.  Each one is current (the package being current
+	says its dependencies are), so its load is a warm bind of its own, which
+	registers it, adopts it and runs its hook -- and binds what ITS body
+	imported in turn.
+
+	The package TREE and not only aName's children, because a submodule's
+	body imports its siblings: asyncio's __init__ imports asyncio.events,
+	whose ``from . import format_helpers'' is what puts asyncio.format_helpers
+	in sys.modules.  Each module is registered before this runs for it, so a
+	cycle among siblings stops at the lookup.  Modules outside the tree
+	(``import json'') are left to whatever imports them next: an import of one
+	binds it then.
+
+	Parents first, then by name: the record is a set and keeps no order, and
+	``pkg.sub.mod'' needs ``pkg.sub'' registered before it.
+
+	A failure propagates, as the body's own import would have raised it."
+
+	| rec prefix names |
+	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
+	rec isNil ifTrue: [^ self].
+	prefix := (aName asString subStrings: '.') first , '.'.
+	names := ((rec at: 2) collect: [:pair | (pair at: 1) asString])
+		select: [:n | n size > prefix size and: [(n copyFrom: 1 to: prefix size) = prefix]].
+	"Parents first: a dependency outside aName's own subtree can sit at any
+	depth, and binding it binds its parents' body imports too."
+	names := names asSortedCollection: [:x :y |
+		| dx dy |
+		dx := x occurrencesOf: $..
+		dy := y occurrencesOf: $..
+		dx = dy ifTrue: [x <= y] ifFalse: [dx < dy]].
+	names do: [:n | | path |
+		(self @env1:lookupModule: n) isNil ifTrue: [
+			path := self @env1:___moduleNameToPath___: n.
+			path isNil ifFalse: [self loadModuleFromPath: path name: n]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___rebuildCarriedSubmodule___: aDottedName
 	"Load the stale carried submodule aDottedName through the ordinary path --
 	see ___refreshCarriedSubmodulesOf___:named:, which says why a failure is
@@ -4871,6 +4922,9 @@ ___loadModuleFromPath___: pathString name: moduleName
 			same reason -- see ___restoreAllCanonicalMetaclasses___."
 			self ___restoreAllCanonicalMetaclasses___.
 			self ___restoreAllBodyClassAttrs___.
+			"The submodules the body imported, before the package's own hook:
+			in the body those imports ran before its tail did."
+			self ___bindBodySubmodulesOf___: moduleName.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
