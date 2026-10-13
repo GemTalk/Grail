@@ -202,6 +202,80 @@ check('hangul_boundaries', _hangul_boundaries(),
        'ValueError'))
 
 
+# ------------------------------------------------- name aliases (#1412)
+#
+# CPython's \N{} and lookup() accept every category of Unicode's
+# NameAliases.txt.  Only the CONTROL aliases were stored, and iniconfig 2.3.1
+# writes "\N{BYTE ORDER MARK}" -- an alternate -- so it stopped importing,
+# and pytest with it.
+
+def _aliases_of_every_category():
+    return [ord(unicodedata.lookup(n)) for n in (
+        'NULL',                         # control
+        'LATIN CAPITAL LETTER GHA',     # correction
+        'BOM',                          # abbreviation
+        'BYTE ORDER MARK',              # alternate
+        'PADDING CHARACTER',            # figment
+        'nbsp')]                        # and case-insensitively
+
+
+check('aliases_of_every_category', _aliases_of_every_category(),
+      [0x0, 0x1A2, 0xFEFF, 0xFEFF, 0x80, 0xA0])
+check('alias_escapes', "\N{BYTE ORDER MARK}\N{NBSP}\N{ZWJ}", '\ufeff\xa0\u200d')
+check('an_alias_is_not_a_name',
+      (unicodedata.name('\ufeff'), unicodedata.name('\u01a2')),
+      ('ZERO WIDTH NO-BREAK SPACE', 'LATIN CAPITAL LETTER OI'))
+
+
+# A \N{} that cannot be decoded is CPython's codec error, located at the
+# literal.  It was a bare SyntaxError: compile() carried the message and no
+# line, eval() and an import not even the message.
+
+def _bad_escape(how, src, end=False):
+    try:
+        if how == 'eval':
+            eval(src)
+        else:
+            compile(src, 'f.py', 'exec')
+    except SyntaxError as exc:
+        if end:
+            return (exc.msg, exc.lineno, exc.offset, exc.end_lineno, exc.end_offset)
+        return (exc.msg, exc.lineno, exc.offset)
+    return 'no error'
+
+
+check('an_unknown_name_is_located', [
+    _bad_escape('compile', 'x = 1\ny = "ab\\N{NO SUCH NAME}"\n'),
+    _bad_escape('eval', '"\\N{NO SUCH NAME}"')],
+    [("(unicode error) 'unicodeescape' codec can't decode bytes in position "
+      "2-17: unknown Unicode character name", 2, 5),
+     ("(unicode error) 'unicodeescape' codec can't decode bytes in position "
+      "0-15: unknown Unicode character name", 1, 1)])
+check('a_malformed_escape_is_located', _bad_escape('compile', 'y = "\\N{BOM"\n'),
+      ("(unicode error) 'unicodeescape' codec can't decode bytes in position "
+       "0-5: malformed \\N character escape", 1, 5))
+
+
+# The literal's other decoding errors had the same bare SyntaxError, and the
+# span is CPython's: over the token, prefix to closing quote, and counted in
+# the RAW body, where a non-ASCII character counts ten -- CPython rewrites it
+# as a \\UXXXXXXXX escape before decoding.
+_CODEC = "(unicode error) 'unicodeescape' codec can't decode bytes in position "
+check('every_literal_decoding_error_is_located', [
+    _bad_escape('compile', 'y = "\\t\\x4"\n', end=True),
+    _bad_escape('eval', '"\\u12"', end=True),
+    _bad_escape('compile', 'y = "\u00e9\\N{X}"\n', end=True),
+    _bad_escape('compile', 'y = u"\\N{X}"\n', end=True),
+    _bad_escape('compile', 'y = b"a\\x4"\n', end=True),
+    _bad_escape('eval', 'b"\u00e9"', end=True)],
+    [(_CODEC + '2-4: truncated \\xXX escape', 1, 5, 1, 12),
+     (_CODEC + '0-3: truncated \\uXXXX escape', 1, 1, 1, 7),
+     (_CODEC + '10-14: unknown Unicode character name', 1, 5, 1, 13),
+     (_CODEC + '0-4: unknown Unicode character name', 1, 5, 1, 13),
+     ('(value error) invalid \\x escape at position 1', 1, 5, 1, 12),
+     ('bytes can only contain ASCII literal characters', 1, 1, 1, 5)])
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

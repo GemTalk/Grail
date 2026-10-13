@@ -45,59 +45,48 @@ ALGO = re.compile(r'^(.*)-([0-9A-F]{4,6})$')
 HANGUL_BASE, HANGUL_LAST = 0xAC00, 0xD7A3
 
 # ---------------------------------------------------------------------------
-# CONTROL ALIASES.  The only names written down in this file, and not for
-# convenience: a C0/C1 control has NO name at all -- unicodedata.name(chr(0))
-# raises -- so unless its alias is stored the code point is unreachable by
-# name entirely, and \N{NULL} is a spelling CPython accepts that Grail's old
-# curated table already had.  Every OTHER alias category (corrections,
-# abbreviations, figments) names a code point that is reachable under its
-# formal name, so omitting those costs a spelling, not a character.
+# NAME ALIASES.  Unicode's NameAliases.txt, every category: control,
+# correction, abbreviation, alternate and figment.  CPython's \N{} and
+# unicodedata.lookup() accept them all, and code spells them: iniconfig
+# 2.3.1 writes "\N{BYTE ORDER MARK}" (an alternate for U+FEFF), and once
+# only the CONTROL aliases were stored, that one literal stopped iniconfig --
+# and therefore pytest -- from importing at all (#1412).  The earlier reading,
+# that a non-control alias "costs a spelling, not a character", was right
+# about the character and wrong about the cost: a spelling in someone else's
+# source is a SyntaxError.
 #
-# The list is fixed by the Unicode standard and will not grow.  Nothing in it
-# is TRUSTED, though: verified_control_aliases() looks every one up in
-# CPython, keeps only what resolves to the code point claimed, and refuses to
-# generate at all if a name is wrong or if any C0/C1 code point has no alias.
-CONTROL_ALIASES = [
-    (0x00, 'NULL'), (0x01, 'START OF HEADING'), (0x02, 'START OF TEXT'),
-    (0x03, 'END OF TEXT'), (0x04, 'END OF TRANSMISSION'), (0x05, 'ENQUIRY'),
-    (0x06, 'ACKNOWLEDGE'), (0x07, 'ALERT'), (0x08, 'BACKSPACE'),
-    (0x09, 'CHARACTER TABULATION'), (0x0A, 'LINE FEED'),
-    (0x0B, 'LINE TABULATION'), (0x0C, 'FORM FEED'),
-    (0x0D, 'CARRIAGE RETURN'), (0x0E, 'SHIFT OUT'), (0x0F, 'SHIFT IN'),
-    (0x10, 'DATA LINK ESCAPE'), (0x11, 'DEVICE CONTROL ONE'),
-    (0x12, 'DEVICE CONTROL TWO'), (0x13, 'DEVICE CONTROL THREE'),
-    (0x14, 'DEVICE CONTROL FOUR'), (0x15, 'NEGATIVE ACKNOWLEDGE'),
-    (0x16, 'SYNCHRONOUS IDLE'), (0x17, 'END OF TRANSMISSION BLOCK'),
-    (0x18, 'CANCEL'), (0x19, 'END OF MEDIUM'), (0x1A, 'SUBSTITUTE'),
-    (0x1B, 'ESCAPE'), (0x1C, 'INFORMATION SEPARATOR FOUR'),
-    (0x1D, 'INFORMATION SEPARATOR THREE'),
-    (0x1E, 'INFORMATION SEPARATOR TWO'),
-    (0x1F, 'INFORMATION SEPARATOR ONE'), (0x7F, 'DELETE'),
-    (0x80, 'PADDING CHARACTER'), (0x81, 'HIGH OCTET PRESET'),
-    (0x82, 'BREAK PERMITTED HERE'), (0x83, 'NO BREAK HERE'), (0x84, 'INDEX'),
-    (0x85, 'NEXT LINE'), (0x86, 'START OF SELECTED AREA'),
-    (0x87, 'END OF SELECTED AREA'), (0x88, 'CHARACTER TABULATION SET'),
-    (0x89, 'CHARACTER TABULATION WITH JUSTIFICATION'),
-    (0x8A, 'LINE TABULATION SET'), (0x8B, 'PARTIAL LINE FORWARD'),
-    (0x8C, 'PARTIAL LINE BACKWARD'), (0x8D, 'REVERSE LINE FEED'),
-    (0x8E, 'SINGLE SHIFT TWO'), (0x8F, 'SINGLE SHIFT THREE'),
-    (0x90, 'DEVICE CONTROL STRING'), (0x91, 'PRIVATE USE ONE'),
-    (0x92, 'PRIVATE USE TWO'), (0x93, 'SET TRANSMIT STATE'),
-    (0x94, 'CANCEL CHARACTER'), (0x95, 'MESSAGE WAITING'),
-    (0x96, 'START OF GUARDED AREA'), (0x97, 'END OF GUARDED AREA'),
-    (0x98, 'START OF STRING'),
-    (0x99, 'SINGLE GRAPHIC CHARACTER INTRODUCER'),
-    (0x9A, 'SINGLE CHARACTER INTRODUCER'),
-    (0x9B, 'CONTROL SEQUENCE INTRODUCER'), (0x9C, 'STRING TERMINATOR'),
-    (0x9D, 'OPERATING SYSTEM COMMAND'), (0x9E, 'PRIVACY MESSAGE'),
-    (0x9F, 'APPLICATION PROGRAM COMMAND'),
-]
+# CPython exposes no list of them, so the file is read: given with --aliases,
+# or fetched from unicode.org for the UCD version CPython carries.  Nothing in
+# it is TRUSTED, though: every alias is looked up in CPython and must resolve
+# to the code point the file claims, and every C0/C1 control must have one
+# (a control has no name of its own, so its alias is its only name).
+ALIASES_URL = 'https://www.unicode.org/Public/%s/ucd/NameAliases.txt'
 
 
-def verified_control_aliases():
-    """Only the aliases CPython itself confirms, and all of them."""
+def read_aliases(path):
+    """[(alias, code point)] from NameAliases.txt -- fetched when path is None."""
+    if path is None:
+        import urllib.request
+        url = ALIASES_URL % unicodedata.unidata_version
+        with urllib.request.urlopen(url) as resp:
+            text = resp.read().decode('utf-8')
+    else:
+        with open(path, encoding='utf-8') as fh:
+            text = fh.read()
+    out = []
+    for line in text.splitlines():
+        line = line.split('#', 1)[0].strip()
+        if not line:
+            continue
+        cp, alias, _kind = line.split(';')
+        out.append((alias, int(cp, 16)))
+    return out
+
+
+def verified_aliases(path):
+    """Every alias, each one confirmed by CPython itself."""
     good = []
-    for cp, alias in CONTROL_ALIASES:
+    for alias, cp in read_aliases(path):
         try:
             got = ord(unicodedata.lookup(alias))
         except KeyError:
@@ -107,14 +96,13 @@ def verified_control_aliases():
             raise SystemExit('alias %r resolves to U+%04X, not U+%04X'
                              % (alias, got, cp))
         good.append((alias, cp))
-    covered = set(cp for cp, _ in CONTROL_ALIASES)
+    covered = set(cp for _, cp in good)
     missing = [cp for cp in list(range(0x20)) + list(range(0x7F, 0xA0))
                if cp not in covered]
     if missing:
         raise SystemExit('C0/C1 code points with no alias: %s'
                          % ' '.join('U+%04X' % c for c in missing))
-    return good
-
+    return sorted(good)
 
 
 def collect():
@@ -208,9 +196,14 @@ def literal(s):
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--aliases', help='NameAliases.txt for the UCD version '
+                    'CPython carries (default: fetched from unicode.org)')
+    opts = ap.parse_args()
     explicit, algo = collect()
     explicit.sort()
-    aliases = verified_control_aliases()
+    aliases = verified_aliases(opts.aliases)
     lead, vowel, trail = hangul_jamo()
     verify(lead, vowel, trail)
 
@@ -220,12 +213,12 @@ def main():
 
     w("! ------------------- Superclass check\n"
       "run\n"
-      "module ifNil: [self error: 'module is not defined. Check file ordering.'].\n"
+      "NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].\n"
       "%\n\n")
     w("! ------- unicode_names (GENERATED -- see scripts/generate_unicode_names.py)\n"
       "expectvalue /Class\n"
       "doit\n"
-      "module subclass: 'unicode_names'\n"
+      "NativeModule subclass: 'unicode_names'\n"
       "  instVarNames: #()\n"
       "  classVars: #( NameToCp CpToName )\n"
       "  classInstVars: #()\n"
@@ -239,15 +232,15 @@ def main():
       "against a hand-curated table of 33 names kept in TWO places, and a name\n"
       "outside it was a SyntaxError -- so one unremarkable literal,\n"
       "``\"\\N{EMPTY SET}\"'''', cost a whole 5300-line test module.\n\n"
-      "%d names are stored here, plus %d control ALIASES kept apart: a C0/C1\n"
-      "control has no name of its own, so without its alias it cannot be\n"
-      "reached by name at all.  The other %d that the UCD names are\n"
+      "%d names are stored here, plus %d name ALIASES kept apart -- every\n"
+      "category of NameAliases.txt, since CPython accepts them all and code\n"
+      "spells them (\\N{BYTE ORDER MARK}).  The other %d that the UCD names are\n"
       "ALGORITHMIC and computed instead: %d Hangul syllables composed from\n"
       "jamo, and %d code points whose name is a fixed prefix plus their own\n"
       "hex.  CPython does exactly this split, for the same reason -- storing\n"
       "them would quadruple the table to say nothing new.\n\n"
       "Unicode version: %s.'\n%%\n\n"
-      % (len(explicit), len(CONTROL_ALIASES),
+      % (len(explicit), len(aliases),
          sum(len(v) for v in algo.values()) + (HANGUL_LAST - HANGUL_BASE + 1),
          HANGUL_LAST - HANGUL_BASE + 1,
          sum(len(v) for v in algo.values()),
@@ -271,10 +264,11 @@ def main():
     # that HAS no name -- so only the forward map may see these.
     w("category: 'Grail-Generated Data'\nclassmethod: unicode_names\n")
     w("___aliasData\n"
-      "\t\"%d control aliases.  LOOKUP-ONLY: they are merged into the\n"
+      "\t\"%d name aliases.  LOOKUP-ONLY: they are merged into the\n"
       "\tname-to-code-point map and deliberately NOT into its inverse, because\n"
-      "\ta C0/C1 control has no name -- unicodedata.name(chr(0)) raises in\n"
-      "\tCPython, while unicodedata.lookup('NULL') answers 0.\"\n\n\t^ %s\n%%\n\n"
+      "\tan alias is not a name -- unicodedata.name(chr(0)) raises in CPython\n"
+      "\twhile unicodedata.lookup('NULL') answers 0, and name(chr(0xFEFF)) is\n"
+      "\tZERO WIDTH NO-BREAK SPACE, never BYTE ORDER MARK.\"\n\n\t^ %s\n%%\n\n"
       % (len(aliases), literal(';'.join('%s=%X' % (n, cp) for n, cp in aliases))))
 
     w("category: 'Grail-Generated Data'\nclassmethod: unicode_names\n")
