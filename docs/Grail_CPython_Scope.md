@@ -139,8 +139,8 @@ keeps it current:
 | P1 | 61 | 3169 | 375 | 2727 | 12% |
 | P2 | 22 | 4056 | 554 | 3492 | 14% |
 | P3 | 16 | 2583 | 402 | 2179 | 16% |
-| P4 | 20 | 1618 | 128 | 1473 | 8% |
-| **all** | **119** | **11426** | **1459** | **9871** | **13%** |
+| P4 | 20 | 1618 | 129 | 1474 | 8% |
+| **all** | **119** | **11426** | **1460** | **9872** | **13%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_decimal` 200 of 368 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30.
 <!-- /test-tally -->
@@ -783,12 +783,12 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_statistics` FAIL, 375 tests: 1 failed, 0 errors, 6 skipped
 - `test.test_except_star` ERROR, 60 tests: 10 failed, 10 errors, 0 skipped
-- `test.test_generators` ERROR, 59 tests: 15 failed, 11 errors, 1 skipped
+- `test.test_generators` ERROR, 59 tests: 17 failed, 9 errors, 1 skipped
 - `test.test_long` ERROR, 47 tests: 6 failed, 8 errors, 7 skipped
 - `test.test_exception_hierarchy` ERROR, 16 tests: 2 failed, 3 errors, 1 skipped
 - `test.test_copyreg` FAIL, 6 tests: 2 failed, 0 errors, 0 skipped
 - `test.test_random` ERROR, 116 tests: 0 failed, 8 errors, 5 skipped
-- `test.test_uuid` ERROR, 120 tests: 5 failed, 12 errors, 71 skipped
+- `test.test_uuid` ERROR, 120 tests: 5 failed, 10 errors, 73 skipped
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
