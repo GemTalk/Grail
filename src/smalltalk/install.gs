@@ -856,6 +856,7 @@ run
 	at: #'ComparisonProtocolTestCase' put: nil;
 	at: #'CompatPickleAndNetrcTestCase' put: nil;
 	at: #'CompileAndEvalArgumentsTestCase' put: nil;
+	at: #'CompileAstTreeTestCase' put: nil;
 	at: #'CompileCodeObjectTestCase' put: nil;
 	at: #'CompileOptimizeTestCase' put: nil;
 	at: #'CompileSingleModeTestCase' put: nil;
@@ -2399,6 +2400,7 @@ input src/smalltalk/PythonTests/ComparisonProtocolInsideSequencesTestCase.gs
 input src/smalltalk/PythonTests/ComparisonProtocolTestCase.gs
 input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
 input src/smalltalk/PythonTests/CompileAndEvalArgumentsTestCase.gs
+input src/smalltalk/PythonTests/CompileAstTreeTestCase.gs
 input src/smalltalk/PythonTests/CompileCodeObjectTestCase.gs
 input src/smalltalk/PythonTests/CompileOptimizeTestCase.gs
 input src/smalltalk/PythonTests/CompileSingleModeTestCase.gs

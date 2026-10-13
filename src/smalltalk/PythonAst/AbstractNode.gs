@@ -174,6 +174,29 @@ setParent: aNode
 	].
 %
 
+category: 'Grail-line map'
+method: AbstractNode
+___remapLines___: aMap
+	"Renumber this node and everything under it through aMap (ModuleAst >>
+	___applyLineMap___:).  The same child walk as setParent:."
+
+	2 to: self class instSize do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [val ___remapLines___: aMap].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [each ___remapLines___: aMap]]]]
+%
+
+category: 'Grail-line map'
+method: AbstractNode
+___isLineMapped___
+	"Only a ModuleAst can be; see there."
+
+	^ false
+%
+
 category: 'Grail-codegen helpers'
 method: AbstractNode
 ___rejectExceptStarFlowControl___: loopExitAllowed
@@ -460,7 +483,32 @@ ___asPythonAst___
 		ifTrue: [^ self ___asSplitOperatorAst___: 'BoolOp' operandField: 'values'].
 	out := cls @env1:___pyCallValue___: #() kw: nil.
 	self ___copyAstFieldsInto___: out.
+	self ___fixUpPythonAst___: out.
 	^ out
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___fixUpPythonAst___: pyNode
+	"Adjust the translated node where Grail keeps a field in a different form
+	from CPython.  Nothing to do for most nodes; the pattern nodes override."
+
+	^ self
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___unwrapAstField___: aFieldName of: pyNode
+	"Replace a Name in the field with its id and a Constant with its value: the
+	forms CPython keeps a pattern's capture name and singleton in.  Done by the
+	ast module, beside the classes it tests for."
+
+	| astMod |
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ self].
+	[(astMod @env1:___pyAttrLoad___: #'_grail_unwrap')
+		@env1:___pyCallValue___: { pyNode. aFieldName } kw: nil]
+		on: AbstractException do: [:ex | ex return: nil]
 %
 
 category: 'Grail-AST export'
@@ -499,8 +547,23 @@ ___pythonAstClassName___
 	| n |
 	n := self class name asString.
 	(n endsWith: 'Ast') ifTrue: [n := n copyFrom: 1 to: n size - 3].
-	(n = 'ClassFunctionDef' or: [n = 'InstanceFunctionDef' or: [n = 'StaticFunctionDef']])
-		ifTrue: [^ 'FunctionDef'].
+	"An ``async def'' is a FunctionDef node with its flag set, wherever the
+	def sits, and CPython makes it a node of its own: written back as a plain
+	def it would no longer be a coroutine."
+	(#('FunctionDef' 'ClassFunctionDef' 'InstanceFunctionDef' 'StaticFunctionDef') includes: n)
+		ifTrue: [^ (self isAsync == true) ifTrue: ['AsyncFunctionDef'] ifFalse: ['FunctionDef']].
+	"``try: ... except* E:'' is one TryAst whose handlers are star handlers;
+	CPython's TryStar."
+	(n = 'Try' and: [(self handlers notEmpty) and: [(self handlers at: 1) isStar]])
+		ifTrue: [^ 'TryStar'].
+	"CPython spells the nodes that are not statements, expressions or
+	patterns in lower case -- ast.arguments, ast.alias, ast.match_case -- and
+	a visitor dispatches on exactly that name (``visit_arguments''), so the
+	unparser saw none of them under Grail's capitalised class names."
+	#( #('Alias' 'alias') #('Arg' 'arg') #('Arguments' 'arguments')
+		#('Comprehension' 'comprehension') #('Keyword' 'keyword')
+		#('MatchCase' 'match_case') #('WithItem' 'withitem') )
+			do: [:pair | (pair at: 1) = n ifTrue: [^ pair at: 2]].
 	^ n
 %
 
@@ -536,7 +599,9 @@ ___copyAstFieldsInto___: pyNode
 					pyNode @env1:___pyAttrStore___: mapped asSymbol
 						put: (mapped = 'decorator_list'
 							ifTrue: [self ___translatedDecoratorList___: (self instVarAt: i)]
-							ifFalse: [self ___translatedAstValue___: (self instVarAt: i)])]].
+							ifFalse: [mapped = 'type_params'
+								ifTrue: [self ___translatedTypeParams___: (self instVarAt: i)]
+								ifFalse: [self ___translatedAstValue___: (self instVarAt: i)]])]].
 	self ___defaultMissingAstFields___: declared into: pyNode.
 	self ___copyAstPositionInto___: pyNode
 %
@@ -565,6 +630,27 @@ ___defaultMissingAstFields___: declaredFields into: pyNode
 		f := declaredFields @env1:__getitem__: k - 1.
 		((d @env1:__contains__: f) == true) ifFalse: [
 			pyNode @env1:___pyAttrStore___: f asSymbol put: None]]
+%
+
+category: 'Grail-AST export'
+method: AbstractNode
+___translatedTypeParams___: aValue
+	"A def's, class's or type alias's PEP 695 parameters as CPython's TypeVar /
+	ParamSpec / TypeVarTuple nodes.
+
+	The parser keeps each as a STRING -- ``T'', ``*Ts'', ``**P'', with a bound
+	appended as its hex-encoded source (PythonParser >>
+	___recordTypeParamBound___:in:) -- because that is the form the generated
+	code embeds.  The ast module rebuilds the nodes from it."
+
+	| astMod strings |
+	strings := self ___translatedAstValue___: aValue.
+	(aValue isNil or: [aValue isEmpty]) ifTrue: [^ strings].
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ strings].
+	^ [(astMod @env1:___pyAttrLoad___: #'_grail_type_params')
+		@env1:___pyCallValue___: { strings } kw: nil]
+		on: AbstractException do: [:ex | ex return: strings]
 %
 
 category: 'Grail-AST export'
@@ -628,12 +714,18 @@ ___pythonAstFieldName___: aName
 	"The CPython field name for one of Grail's instVars.
 
 	Four disagree, and they are the four a reader reaches for first: a call's
-	callee and arguments, and a comparison's operators and operands."
+	callee and arguments, and a comparison's operators and operands.  The
+	rest were dropped silently, which an unparse turns into different code:
+	an import alias's ``asName'' (``import a as b'' became ``import a'') and
+	a class pattern's keywords (``case P(x=0)'' became ``case P()'')."
 
 	aName = 'function' ifTrue: [^ 'func'].
 	aName = 'arguments' ifTrue: [^ 'args'].
 	aName = 'cmpopList' ifTrue: [^ 'ops'].
 	aName = 'comparatorList' ifTrue: [^ 'comparators'].
+	aName = 'asName' ifTrue: [^ 'asname'].
+	aName = 'kwdAttrs' ifTrue: [^ 'kwd_attrs'].
+	aName = 'kwdPatterns' ifTrue: [^ 'kwd_patterns'].
 	^ aName
 %
 
@@ -686,10 +778,24 @@ ___translatedAstValue___: aValue
 	((aValue isKindOf: BlockAst) or: [aValue isKindOf: SuiteAst]) ifTrue: [
 		^ self ___translatedAstValue___: aValue body].
 	(aValue isKindOf: AbstractNode) ifTrue: [^ aValue ___asPythonAst___].
-	aValue isSymbol ifTrue: [^ aValue asString].
+	"Two Symbols are Grail's own spellings, not names.  ``...'' is the
+	parser's marker for the Ellipsis constant, which a reader compares with
+	``is Ellipsis'' and the unparser writes back as ``...''.  ``___unused___''
+	is how the parser renames the ``_'' wildcard, and the name the source
+	wrote is ``_''."
+	aValue isSymbol ifTrue: [
+		aValue == #'...' ifTrue: [^ Ellipsis].
+		aValue == #'___unused___' ifTrue: [^ '_'].
+		^ aValue asString].
 	((aValue isKindOf: Array) or: [aValue isKindOf: OrderedCollection]) ifTrue: [
+		"An absent element is None, as CPython writes it in kw_defaults and in
+		a Dict's keys for ``**'' -- a Smalltalk nil reached Python as an
+		object Python has no name for."
 		out := OrderedCollection new.
-		aValue do: [:each | out add: (self ___translatedAstValue___: each)].
+		aValue do: [:each |
+			out add: (each isNil
+				ifTrue: [None]
+				ifFalse: [self ___translatedAstValue___: each])].
 		^ list @env1:__new__: out asArray].
 	^ aValue
 %

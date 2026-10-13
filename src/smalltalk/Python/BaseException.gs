@@ -4533,8 +4533,9 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 						(BaseException ___isGeneratedPythonMethod___: home) ifTrue: [
 							isCatcher := (catchName notNil and: [fnName @env0:= catchName])
 								and: [catchIdx isNil or: [i @env0:> catchIdx]].
-							frameCode := self ___codeForMethod___: home name: fnName ip: 0
-								aCode: aCode.
+							frameCode := (BaseException ___codeForBlockMethod___: meth name: fnName)
+								ifNil: [self ___codeForMethod___: home name: fnName ip: 0
+									aCode: aCode].
 							"A nested function that CATCHES gets codegen's recorded span,
 							exactly as the method branch below does -- pendingLine can only
 							ever answer a LINE, so without this a nested ``def'' reported
@@ -5009,6 +5010,42 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 		((real @env0:dynamicInstVarAt: #'co_filename') @env0:= filename)
 			ifTrue: [^ real]].
 	^ PyCode @env0:name: aName filename: filename firstlineno: 0
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___noteCode___: aCode forBlockMethod: aBlockMethod
+	"Record the PyCode stamped on a function BLOCK against the block's compiled
+	method (ExecBlock >> ___pyCode___:), for ___codeForBlockMethod___:name:.
+
+	Session-local, and keyed by the METHOD OBJECT -- an identity table holds it
+	alive, so an entry can never answer for a recycled OOP.  It holds one entry
+	per distinct def site, however many closures that site makes: every
+	closure of one def shares its compiled method, and the latest code wins."
+
+	| table |
+	table := SessionTemps current at: #'GrailBlockMethodCodes' otherwise: nil.
+	table isNil ifTrue: [
+		table := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailBlockMethodCodes' put: table].
+	table at: aBlockMethod put: aCode
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___codeForBlockMethod___: aBlockMethod name: aName
+	"The PyCode of the function whose block aBlockMethod compiles, when one was
+	stamped in this session and it is named aName; nil otherwise."
+
+	| table code |
+	aBlockMethod isNil ifTrue: [^ nil].
+	table := SessionTemps current at: #'GrailBlockMethodCodes' otherwise: nil.
+	table isNil ifTrue: [^ nil].
+	code := table at: aBlockMethod otherwise: nil.
+	code isNil ifTrue: [^ nil].
+	(([code @env0:dynamicInstVarAt: #'co_name'] @env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]) @env0:= aName) ifFalse: [^ nil].
+	^ code
 %
 
 category: 'Grail-Traceback Building'
@@ -6878,9 +6915,13 @@ ___liveFrameChainFromPairs___: pairs
 		"The function's own PyCode where it has one, for its co_firstlineno and so
 		that f_code is __code__ -- see ___codeForMethod___:name:ip:aCode:."
 		code := (self ___realCodeForMethod___: meth name: name) ifNil: [
-			PyCode @env0:name: name
-				filename: (self ___liveFrameFilenameFor___: meth)
-				firstlineno: 0].
+			"A nested or exec()'d def runs as a block; element 7 is that block's
+			method when it differs from the home in element 1."
+			((pair @env0:size @env0:>= 7) ifTrue: [
+				self ___codeForBlockMethod___: (pair @env0:at: 7) name: name]) ifNil: [
+					PyCode @env0:name: name
+						filename: (self ___liveFrameFilenameFor___: meth)
+						firstlineno: 0]].
 		"f_globals for a frame the FILENAME cannot identify.  PyFrame
 		derives globals from co_filename by finding the module whose
 		__file__ matches, and a doit has no file -- so a function built by

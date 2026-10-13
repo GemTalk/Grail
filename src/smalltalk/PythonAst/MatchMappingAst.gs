@@ -180,3 +180,14 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	patterns do: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+set compile_env: 0
+
+category: 'Grail-AST export'
+method: MatchMappingAst
+___fixUpPythonAst___: pyNode
+	"CPython keeps this pattern's rest as a plain str, not as a node."
+
+	self ___unwrapAstField___: 'rest' of: pyNode.
+	^ self
+%

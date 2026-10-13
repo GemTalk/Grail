@@ -135,3 +135,14 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	pattern ifNotNil: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+set compile_env: 0
+
+category: 'Grail-AST export'
+method: MatchAsAst
+___fixUpPythonAst___: pyNode
+	"CPython keeps this pattern's name as a plain str, not as a node."
+
+	self ___unwrapAstField___: 'name' of: pyNode.
+	^ self
+%

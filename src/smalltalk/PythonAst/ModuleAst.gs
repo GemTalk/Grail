@@ -205,6 +205,11 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind globa
 	module := [self parseSource: sourceString]
 		on: SyntaxError
 		do: [:ex | self ___resignalSyntaxError___: ex].
+	"The text of a tree compile() unparsed: put each node back on the line its
+	statement had in the tree (builtins >> _exec:, which parked the map)."
+	(SessionTemps current at: #'GrailPendingLineMap' otherwise: nil) ifNotNil: [:map |
+		SessionTemps current removeKey: #'GrailPendingLineMap'.
+		module ___applyLineMap___: map].
 	"compile(src, f, 'single'): every expression statement shows its value.
 	Otherwise it is an exec, which is how it is compiled and run below."
 	aKind == #single ifTrue: [
@@ -1506,4 +1511,25 @@ type_ignore: newValue
 method: ModuleAst
 useTempsForBlock
 	^useTempsForBlock
+%
+
+set compile_env: 0
+
+category: 'Grail-line map'
+method: ModuleAst
+___applyLineMap___: aMap
+	"Renumber this module's nodes through aMap -- aMap at: n is the line, in
+	the tree compile() was given, of what line n of this source was unparsed
+	from -- and mark the module, so no node reads its source line out of a
+	text that is not the one the line numbers now refer to."
+
+	self dynamicInstVarAt: #'___lineMapped___' put: true.
+	self ___remapLines___: aMap
+%
+
+category: 'Grail-line map'
+method: ModuleAst
+___isLineMapped___
+
+	^ ([self dynamicInstVarAt: #'___lineMapped___'] on: Error do: [:ex | ex return: nil]) == true
 %
