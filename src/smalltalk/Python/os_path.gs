@@ -126,17 +126,27 @@ ___joinComponents___: somedPaths
 	``join(Path(dir), name)'' is the single most common way a Path reaches
 	os.path at all."
 
-	| result sep size paths |
+	| result sep sepElement isBytes size paths |
 	paths := somedPaths @env0:collect: [:p | (os instance) ___fsPath___: p].
 	(paths @env0:isEmpty) ifTrue: [^ ''].
+	"bytes components join as bytes, as in CPython's posixpath (#1511:
+	shutil.which(b'sh', path=b'/bin') joins them), with b'/' between them --
+	so the separator is tested by ELEMENT, a Character or a byte, since a
+	ByteArray has neither beginsWith: nor endsWith:.  Mixing the two kinds
+	is CPython's TypeError."
+	isBytes := paths @env0:first @env0:isKindOf: ByteArray.
+	(paths @env0:detect: [:p | (p @env0:isKindOf: ByteArray) ~~ isBytes] ifNone: [nil]) @env0:notNil
+		ifTrue: [^ TypeError ___signal___: 'Can''t mix strings and bytes in path components'].
 	((paths @env0:size) == 1) ifTrue: [^ paths @env0:first].
-	sep := '/'.
+	isBytes
+		ifTrue: [sepElement := 47. sep := ByteArray @env0:new: 1. sep @env0:at: 1 put: 47]
+		ifFalse: [sepElement := $/. sep := '/'].
 	result := paths @env0:first.
 	size := paths @env0:size.
 	2 @env0:to: size do: [:i |
 		| each |
 		each := paths @env0:at: i.
-		(each @env0:beginsWith: sep) ifTrue: [
+		(each @env0:notEmpty @env0:and: [(each @env0:at: 1) @env0:= sepElement]) ifTrue: [
 			result := each
 		] ifFalse: [
 			"``result isEmpty'' is the arm that was missing.  CPython's rule is
@@ -149,7 +159,7 @@ ___joinComponents___: somedPaths
 			Found through importlib.util >> cache_from_source, whose first
 			component is the empty dirname of a bare filename: it answered
 			'/__pycache__/x.pyc' for 'x.py'."
-			(result @env0:isEmpty @env0:or: [result @env0:endsWith: sep]) ifTrue: [
+			(result @env0:isEmpty @env0:or: [result @env0:last @env0:= sepElement]) ifTrue: [
 				result := result @env0:, each
 			] ifFalse: [
 				result := (result @env0:, sep) @env0:, each

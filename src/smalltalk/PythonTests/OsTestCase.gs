@@ -704,6 +704,26 @@ testPathsep
 	self assert: result equals: ':'
 %
 
+category: 'Grail-Tests - Constants'
+method: OsTestCase
+testAccessWhichAndDefpath
+	"os.defpath, os.access (with F_OK/R_OK/W_OK/X_OK), shutil.which and a
+	bytes os.path.join, which uuid's _ifconfig/_arp/_netstat getters need to
+	find their commands; all were missing (#1511).  On macOS, where all three
+	getters are in uuid._GETTERS, test_uuid read one more error than in CI.
+	tests/python/os_access_which.py holds the checks and agrees with CPython
+	3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'os_access_which' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/os_access_which.py')
+		name: 'os_access_which'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '12 checks, 0 disagreeing [], keys match: True'
+%
+
 category: 'Grail-Tests - Path Manipulation'
 method: OsTestCase
 testPathSplit
