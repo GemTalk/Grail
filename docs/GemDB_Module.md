@@ -359,7 +359,7 @@ as the first statement of a fresh program.
 `scripts/deployGemdb.gs` is the standalone deploy — gemdb alone, no
 frameworks — for installers that want the clean-session contract
 without adding framework megabytes to the image. **Grail's own
-`install.sh` runs it as its last step**, so a normal install already has
+`install.sh` runs it**, so a normal install already has
 it; GemDB's `resources/install-grail.sh` does the same. Measured on gs40:
 a fresh session's `import gemdb` modifies **14** committed objects
 undeployed and **0** deployed, and `with gemdb.transaction():` as the

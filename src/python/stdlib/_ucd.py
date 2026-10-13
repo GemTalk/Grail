@@ -240,9 +240,16 @@ _databases = {}
 def database(data):
     """The one Database for a data module, built on first use and cached
     here: parsing the tables costs a few hundred milliseconds, and most
-    sessions never ask for 3.2.0 at all."""
+    sessions never ask for 3.2.0 at all.
+
+    scripts/deployUnicodedata.gs builds both and commits them, so in an
+    installed image this dict is committed state and a lookup here writes
+    nothing.  A cached Database is used only for the very module it was
+    built from: a table module rebuilt since (its source edited, the
+    deployment not redone) gets a fresh Database rather than the old
+    tables under the same VERSION."""
     db = _databases.get(data.VERSION)
-    if db is None:
+    if db is None or db._data is not data:
         db = Database(data)
         _databases[data.VERSION] = db
     return db
