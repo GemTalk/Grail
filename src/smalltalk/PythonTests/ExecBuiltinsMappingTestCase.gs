@@ -182,6 +182,26 @@ testNothingWithoutAnOverrideChanges
 	self assertMatchesCPythonAt: 'module_scope_unaffected'.
 %
 
+category: 'Grail-Tests - the key is inserted'
+method: ExecBuiltinsMappingTestCase
+testExecAndEvalInsertTheRealBuiltins
+	"exec() and eval() insert builtins.__dict__ as ``__builtins__'' into a
+	supplied globals dict that lacks it, as CPython does, so
+	``del ns['__builtins__']'' works (#1507); a supplied key is kept, and the
+	inserted one is no override -- builtins still resolve, and an empty
+	mapping still restricts.  tests/python/exec_inserts_builtins.py holds the
+	checks and agrees with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'exec_inserts_builtins' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exec_inserts_builtins.py')
+		name: 'exec_inserts_builtins'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '10 checks, 0 disagreeing [], keys match: True'
+%
+
 category: 'Grail-Tests - Controls'
 method: ExecBuiltinsMappingTestCase
 testEveryCheckIsPresentAndAgreesWithCPython
