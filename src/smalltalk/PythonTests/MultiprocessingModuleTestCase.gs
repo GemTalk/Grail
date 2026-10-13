@@ -47,6 +47,7 @@ loadFixture
 	importlib @env1:modules removeKey: #'use_multiprocessing' ifAbsent: [].
 	importlib @env1:modules removeKey: #'multiprocessing' ifAbsent: [].
 	importlib @env1:modules removeKey: #'multiprocessing.pool' ifAbsent: [].
+	importlib @env1:modules removeKey: #'multiprocessing.managers' ifAbsent: [].
 	^ importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/use_multiprocessing.py')
 		name: 'use_multiprocessing'
@@ -68,7 +69,7 @@ testEveryFixtureCheckPasses
 	failed := (results select: [:pair | (pair at: 2) ~~ true])
 		collect: [:pair | pair at: 1].
 	self assert: failed asArray equals: #().
-	self assert: results size equals: 18
+	self assert: results size equals: 23
 %
 
 category: 'Grail-Tests-Multiprocessing'
@@ -92,4 +93,15 @@ testProcessPoolRaisesRatherThanRunningSerially
 	ThreadPool is the supported inline path, and says so in the error."
 
 	self assert: self loadFixture @env1:grail_only_process_pool_raises
+%
+
+category: 'Grail-Tests-Multiprocessing'
+method: MultiprocessingModuleTestCase
+testManagerStartRaisesRatherThanPretending
+	"A manager's server is a child process, so starting one must fail -- not
+	hand back proxies that only look shared.  The CLASSES are importable and
+	register() works (the fixture's CHECKS), because s3transfer, and so boto3,
+	subclasses BaseManager while it imports.  Grail-only: CPython starts it."
+
+	self assert: self loadFixture @env1:grail_only_manager_start_raises
 %
