@@ -23,25 +23,19 @@ ok()  { echo "  ok   - $1"; }
 bad() { echo "  FAIL - $1"; FAILED=1; }
 check() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
 
-# Milliseconds, for the checks that a launch was NOT held.  Not $SECONDS: it
-# counts whole seconds, so a call taking a few milliseconds reads as 1 whenever
-# it straddles a second boundary, and ``-lt 1'' failed at random (a merge-queue
-# run, 2026-10-12).  Widening to ``-le 1'' would not do either: a spaced or held
-# launch can itself last about a second.  $EPOCHREALTIME is bash 5; macOS's
-# /bin/bash is 3.2, hence the fallbacks.
-now_ms() {
-  if [ -n "${EPOCHREALTIME:-}" ]; then
-    local t=${EPOCHREALTIME/[.,]/}
-    echo $(( 10#$t / 1000 ))
-  elif command -v python3 > /dev/null 2>&1; then
-    python3 -c 'import time; print(int(time.time() * 1000))'
-  else
-    perl -MTime::HiRes=time -e 'printf "%d\n", time() * 1000'
-  fi
-}
-# A launch that was not held: well under the 1s poll, the shortest a hold or a
-# spacing wait can last.
-NOT_HELD_MS=700
+# Whether a launch was held or spaced, read from what the gate DID rather than
+# from a clock.  Its only ways to wait are `sleep` calls (the hold's poll and
+# the spacing loop), so this wrapper counts them, and "not held" means "slept
+# zero times".  Both clocks tried before failed on a busy machine -- the one
+# where the suite runs this test: $SECONDS (whole seconds) read a call that
+# straddled a second boundary as 1s, and a 700 ms bound on a few-millisecond
+# call failed late in a full run_tests.sh while four worktrees were testing
+# (2026-10-13).  The test's own background helpers use `command sleep`, so only
+# the gate's waits are counted.
+SLEEPS="$SCRATCH/sleeps"
+: > "$SLEEPS"
+sleep() { echo "$*" >> "$SLEEPS"; command sleep "$@"; }
+sleeps() { wc -l < "$SLEEPS" | tr -d ' '; }
 
 # shellcheck source=../../scripts/launch_gate.sh
 . "$ROOT/scripts/launch_gate.sh"
@@ -69,9 +63,9 @@ echo 99 > "$SCRATCH/load"; echo 99 > "$SCRATCH/gems"
 OUT=$(GRAIL_MAX_LOAD=0 bash -c ". '$ROOT/scripts/launch_gate.sh'; launch_gate_init 8")
 check "GRAIL_MAX_LOAD=0 reports the gate off" '[ "$OUT" = "load gate: off" ]'
 GRAIL_MAX_LOAD=0 launch_gate_init 8 > /dev/null
-T0=$(now_ms); OUT=$(launch_gate "shard 0" 0)
+N0=$(sleeps); OUT=$(launch_gate "shard 0" 0)
 check "a disabled gate never holds, however busy the machine" \
-  '[ -z "$OUT" ] && [ $(( $(now_ms) - T0 )) -lt $NOT_HELD_MS ]'
+  '[ -z "$OUT" ] && [ "$(sleeps)" = "$N0" ]'
 OUT=$(CI=true bash -c ". '$ROOT/scripts/launch_gate.sh'; launch_gate_init 8")
 check "under CI the gate is off by default" '[ "$OUT" = "load gate: off" ]'
 OUT=$(CI=true GRAIL_MAX_LOAD=12 bash -c ". '$ROOT/scripts/launch_gate.sh'; launch_gate_init 8")
@@ -94,13 +88,13 @@ check "GRAIL_MAX_TEST_GEMS overrides the gem limit" '[ "$LAUNCH_GATE_MAX_GEMS" =
 export GRAIL_MAX_LOAD=12 GRAIL_LAUNCH_SPACING=2
 launch_gate_init 8 > /dev/null
 echo 3.20 > "$SCRATCH/load"; echo 0 > "$SCRATCH/gems"
-T0=$(now_ms); OUT=$(launch_gate "shard 0" 0)
+N0=$(sleeps); OUT=$(launch_gate "shard 0" 0)
 check "a quiet machine launches at once, silently" \
-  '[ -z "$OUT" ] && [ $(( $(now_ms) - T0 )) -lt $NOT_HELD_MS ]'
+  '[ -z "$OUT" ] && [ "$(sleeps)" = "$N0" ]'
 
 # --- 4. held on load, released when it drops --------------------------------
 echo 14.50 > "$SCRATCH/load"; echo 2 > "$SCRATCH/gems"
-( sleep 2; echo 6.00 > "$SCRATCH/load" ) &
+( command sleep 2; echo 6.00 > "$SCRATCH/load" ) &
 launch_gate "shard 3" 0 > "$SCRATCH/out4"
 wait
 check "load over the limit holds the launch, and says why" \
@@ -117,7 +111,7 @@ check "a load equal to the limit does not hold" '[ -z "$OUT" ]'
 
 # --- 5. held on gem count, though the load average still reads low ----------
 echo 2.00 > "$SCRATCH/load"; echo 16 > "$SCRATCH/gems"
-( sleep 2; echo 9 > "$SCRATCH/gems" ) &
+( command sleep 2; echo 9 > "$SCRATCH/gems" ) &
 launch_gate "test.test_enum" 0 > "$SCRATCH/out5"
 wait
 check "16 test gems hold a launch while the lagging load average reads 2" \
@@ -142,14 +136,13 @@ launch_gate_init 8 > /dev/null
 echo 1.00 > "$SCRATCH/load"
 echo 3 > "$SCRATCH/gems"           # all three are this run's own
 launch_gate "shard 0" 3 > /dev/null
-T0=$(now_ms); launch_gate "shard 1" 3 > /dev/null
-check "a run alone on the machine is not spaced" \
-  '[ $(( $(now_ms) - T0 )) -lt $NOT_HELD_MS ]'
+N0=$(sleeps); launch_gate "shard 1" 3 > /dev/null
+check "a run alone on the machine is not spaced" '[ "$(sleeps)" = "$N0" ]'
 echo 7 > "$SCRATCH/gems"           # four of them are another run's
 launch_gate "shard 2" 3 > /dev/null
-T0=$SECONDS; launch_gate "shard 3" 3 > /dev/null
+N0=$(sleeps); T0=$SECONDS; launch_gate "shard 3" 3 > /dev/null
 check "with another run's gems present, launches are spaced (>= 1s)" \
-  '[ $((SECONDS - T0)) -ge 1 ]'
+  '[ "$(sleeps)" -gt "$N0" ] && [ $((SECONDS - T0)) -ge 1 ]'
 
 # --- 8. the summary ---------------------------------------------------------
 launch_gate_init 8 > /dev/null
