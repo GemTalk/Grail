@@ -186,7 +186,14 @@ PyObject *_Py_CheckFunctionResult(PyThreadState *tstate, PyObject *callable,
    pyo3-ffi inlines PyCFunction_GET_FUNCTION / GET_SELF against it.  The type
    is deliberately NOT a registered shim type: the object is the wheel's
    side of the boundary, so it crosses into Grail as a foreign proxy, and a
-   Grail-side call comes back through call_foreign -> tp_call. */
+   Grail-side call comes back through call_foreign -> tp_call.
+
+   The type is the EXPORTED PyCFunction_Type (a zeroed placeholder in
+   shim_numpy.cc, filled in here on first use), as the descriptor types below
+   are: numpy's add_docstring tests ``Py_TYPE(obj) == &PyCFunction_Type''
+   before it will write ml_doc, and a private type failed that test for every
+   function, so ``import numpy'' stopped at the first docstring it attached
+   to a module function (_core/overrides.py). */
 typedef PyObject *(*vectorcallfunc_t)(PyObject *, PyObject *const *, size_t, PyObject *);
 
 typedef struct {
@@ -200,7 +207,7 @@ typedef struct {
     PyTypeObject     *mm_class;       /* PyCMethodObject's extra field */
 } GrailCMethodObject;
 
-static PyTypeObject GrailCFunction_Type;
+extern "C" PyTypeObject PyCFunction_Type;   /* shim_numpy.cc */
 
 /* Dispatch on ml_flags with positional args as an array and keyword values
    after them, kwnames naming those (the METH_FASTCALL|METH_KEYWORDS vector
@@ -341,15 +348,15 @@ static void init_cfunction_type(void) {
     static int done = 0;
     if (done) return;
     done = 1;
-    memset(&GrailCFunction_Type, 0, sizeof(GrailCFunction_Type));
-    GrailCFunction_Type.ob_base.ob_base.ob_refcnt = 1;
-    GrailCFunction_Type.ob_base.ob_base.ob_type = &PyType_Type;
-    GrailCFunction_Type.tp_name = "builtin_function_or_method";
-    GrailCFunction_Type.tp_basicsize = sizeof(GrailCMethodObject);
-    GrailCFunction_Type.tp_base = &PyBaseObject_Type;
-    GrailCFunction_Type.tp_call = gcm_call;
-    GrailCFunction_Type.tp_getattro = gcm_getattro;
-    GrailCFunction_Type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
+    memset(&PyCFunction_Type, 0, sizeof(PyCFunction_Type));
+    PyCFunction_Type.ob_base.ob_base.ob_refcnt = 1;
+    PyCFunction_Type.ob_base.ob_base.ob_type = &PyType_Type;
+    PyCFunction_Type.tp_name = "builtin_function_or_method";
+    PyCFunction_Type.tp_basicsize = sizeof(GrailCMethodObject);
+    PyCFunction_Type.tp_base = &PyBaseObject_Type;
+    PyCFunction_Type.tp_call = gcm_call;
+    PyCFunction_Type.tp_getattro = gcm_getattro;
+    PyCFunction_Type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
 }
 
 PyObject *PyCMethod_New(PyMethodDef *ml, PyObject *self, PyObject *module,
@@ -362,7 +369,7 @@ PyObject *PyCMethod_New(PyMethodDef *ml, PyObject *self, PyObject *module,
     GrailCMethodObject *f = (GrailCMethodObject *)calloc(1, sizeof(GrailCMethodObject));
     if (f == NULL) return PyErr_NoMemory();
     f->ob_refcnt = 1;
-    f->ob_type = &GrailCFunction_Type;
+    f->ob_type = &PyCFunction_Type;
     f->m_ml = ml;
     f->m_self = self;
     f->m_module = module;
@@ -383,7 +390,7 @@ PyObject *PyCMethod_New(PyMethodDef *ml, PyObject *self, PyObject *module,
 
    They carry the EXPORTED PyMethodDescr_Type / PyGetSetDescr_Type (zeroed
    placeholders in shim_numpy.cc, filled in here on first use) so a wheel's
-   type checks against those symbols hold.  Like GrailCFunction_Type, neither
+   type checks against those symbols hold.  Like PyCFunction_Type, neither
    is registered as a shim type: a descriptor is the wheel's side of the
    boundary and crosses into Grail as a foreign proxy. */
 extern "C" PyTypeObject PyMethodDescr_Type;

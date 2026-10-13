@@ -1603,10 +1603,8 @@ testDynLoadGrailDemo
 	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
 	methodNames := System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
 	self assert: (methodNames isKindOf: Array).
-	self assert: methodNames size equals: 3.
-	self assert: (methodNames includes: 'add').
-	self assert: (methodNames includes: 'dot_product').
-	self assert: (methodNames includes: 'scale').
+	self assert: methodNames asSortedCollection asArray
+		equals: #('add' 'dot_product' 'function_name' 'getattr_in_c' 'make_box' 'same_object' 'scale').
 %
 
 category: 'Grail-Tests - Dynamic Loading'
@@ -3193,4 +3191,119 @@ testADottedExtensionNameCallsPositionally
 	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
 	mod := CPythonShim loadDynamicModule: 'grailpkg._grail_demo' fromPath: soPath.
 	self assert: (mod @env1:_add: { 3 . 4 } kw: nil) equals: 7
+%
+
+category: 'Grail-Tests - NumPy Stage 2'
+method: CPythonShimTestCase
+testAModuleFunctionCrossesAsItsBuiltinFunction
+	"A function of a dynamically loaded C module reached C as a wrapper of the
+	Grail BoundMethod it is read as, so a type test against PyCFunction_Type
+	failed -- numpy's add_docstring, and ``import numpy'' with it
+	(_core/overrides.py).  It now crosses as the module's own
+	builtin_function_or_method.  The answer is CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.function_name(d.add), d.function_name(d.scale), d.function_name(1)))') equals: '(''add'', ''scale'', None)'
+%
+
+category: 'Grail-Tests - NumPy Stage 2'
+method: CPythonShimTestCase
+testAModuleFunctionCrossesAsOneObject
+	"Each crossing hands C the same function object, so a docstring written
+	into it, or a pointer compared, holds from one call to the next."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.same_object(d.add, d.add))') equals: 'True'
+%
+
+category: 'Grail-Tests - NumPy Stage 2'
+method: CPythonShimTestCase
+testForeignStructMembersRead
+	"A wheel object's struct fields (tp_members) read through
+	PyMember_GetOne: numpy's ``dtype.type'' is one, and
+	_core/_type_aliases.py reads it for every typeinfo entry.  ``tag'' is a
+	_Py_T_OBJECT member (code 6, which the shim's header numbered 16) left
+	unset, so it reads None."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(''v'')
+repr((b.value, b.count, b.tag))') equals: '(''v'', 1, None)'
+%
+
+category: 'Grail-Tests - NumPy Stage 2'
+method: CPythonShimTestCase
+testForeignAttributeStoreLandsInTheInstanceDict
+	"``obj.attr = value'' on a wheel's own object stores in its instance dict
+	(tp_dictoffset), read back from Python and from C alike.  It used to stay
+	on the Grail proxy, invisible to C and to the proxy's own reads."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(1)
+b.label = ''x''
+repr((b.label, d.getattr_in_c(b, ''label''), b.__dict__))') equals: '(''x'', ''x'', {''label'': ''x''})'
+%
+
+category: 'Grail-Tests - NumPy Stage 2'
+method: CPythonShimTestCase
+testForeignDictReadFromC
+	"``__dict__'' asked from C, where the type's getset is
+	PyObject_GenericGetDict.  That answered PyObject_GetAttrString(obj,
+	'__dict__'), which found the same getset, and recursed until the gem's C
+	stack overflowed (numpy's _ArrayFunctionDispatcher under functools.wraps)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(1)
+b.label = ''x''
+repr(d.getattr_in_c(b, ''__dict__''))') equals: '{''label'': ''x''}'
+%
+
+category: 'Grail-Tests - NumPy Stage 2'
+method: CPythonShimTestCase
+testForeignObjectUnderFunctoolsWraps
+	"What numpy/_core/overrides.py does to every dispatcher it makes."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import functools
+import _grail_demo as d
+def impl(a):
+    ''the doc''
+w = functools.wraps(impl)(d.make_box(1))
+repr((w.__name__, w.__doc__, w.__wrapped__ is impl, w.__qualname__.endswith(''impl'')))') equals: '(''impl'', ''the doc'', True, True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 2'
+method: CPythonShimTestCase
+testForeignMemberStores
+	"A writable member stores into the struct, not the dict; a read-only one
+	refuses with CPython's message (PyMember_SetOne)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(1)
+b.tag = ''T''
+try:
+    b.count = 5
+    refused = None
+except AttributeError as e:
+    refused = str(e)
+repr((b.tag, d.getattr_in_c(b, ''tag''), b.__dict__, refused, b.count))') equals: '(''T'', ''T'', {}, ''readonly attribute'', 1)'
 %
