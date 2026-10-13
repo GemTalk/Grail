@@ -10526,6 +10526,10 @@ reload: aModule
 	moduleAst @env0:setParent: nil.
 	importlib @env0:expandStarImports: moduleAst.
 	importlib @env0:___buildModuleClass: moduleAst name: name.
+	"The rebuild REPLACED the module's methods, and the session's method-keyed
+	caches still hold the old ones -- each pinning its whole generated source,
+	so a session that reloads in a loop ran out of memory (#1463)."
+	BaseException @env0:___forgetMethodCaches___.
 	"Re-parenting the class can reset its adopted singleton; re-adopt the live
 	instance so it stays the module's canonical object before re-running body."
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.
