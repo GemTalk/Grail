@@ -306,6 +306,13 @@ wrap: aValue
 	"A reverse proxy round-trips straight back to its original foreign
 	PyObject* — numpy must get its own DType pointer again, not a wrapper."
 	(aValue isKindOf: ShimForeignObject) ifTrue: [ ^ aValue pyObjectView ].
+	"A tuple that C built in CPython's own layout goes back as that object,
+	not as a wrapper -- see ___noteRealTuple:origin:.  Only an exact tuple
+	can have such an origin, so every other value pays one class compare."
+	aValue class == tuple ifTrue: [
+		(SessionTemps current at: #'GrailRealTupleOrigins' otherwise: nil) ifNotNil: [:origins |
+			(origins at: aValue otherwise: nil) ifNotNil: [:ptr |
+				^ CByteArray fromCPointer: (CPointer forAddress: ptr) numBytes: 32]]].
 	"A CLASS crosses as a type object, not a 32-byte wrapper -- a builtin as
 	the shim's own static type, any other as its type mirror.  See
 	typeObjectFor:."
@@ -1735,9 +1742,17 @@ moduleAttrs: moduleName
 	| flat dict |
 	flat := System userAction: #shimModuleAttrs with: moduleName.
 	dict := SymbolDictionary new.
-	1 to: flat size by: 2 do: [:i |
-		dict at: (flat at: i) asSymbol put: (flat at: i + 1).
-	].
+	1 to: flat size by: 2 do: [:i | | name value |
+		name := flat at: i.
+		value := flat at: i + 1.
+		name = '___grailShimModuleDict___'
+			ifTrue: [
+				"The module's __dict__ (PyModule_GetDict), which in CPython IS
+				its namespace.  numpy fills it with PyDict_SetItemString rather
+				than PyModule_AddObject.  Its entries win over the table above,
+				as a later store into one namespace would."
+				value keys do: [:k | dict at: k asString asSymbol put: (value at: k)]]
+			ifFalse: [dict at: name asSymbol put: value]].
 	^ dict
 %
 
@@ -1872,19 +1887,37 @@ method: CPythonShim
 PyContextVar_New: aName default: aDefault
 	"Back PyContextVar_New(name, default): create a Grail
 	contextvars.ContextVar so the C-created var and any Python-created one
-	(numpy._core.printoptions) are the same kind of object.  ContextVar's
-	__init__ is (name, default=_MISSING), so a supplied default is passed
-	positionally; aDefault is nil when C passed no default (NULL)."
+	(numpy._core.printoptions) are the same kind of object.  aDefault is nil
+	when C passed no default (NULL).
 
-	| cvModule cvClass posArgs |
+	Guarded, as every server method C calls should be: numpy calls this
+	while its module is executing, inside the import of numpy itself.  An
+	exception that escaped here was handled by those outer imports on top of
+	the live C frame, and each one unloaded its module -- numpy,
+	numpy._core and numpy._core.multiarray left sys.modules mid-import, and
+	numpy's next import from C ran them all a second time."
+
+	^ self ___guardCallback: [self ___ug_PyContextVar_New: aName default: aDefault]
+%
+
+category: 'Grail-C API - ContextVar'
+method: CPythonShim
+___ug_PyContextVar_New: aName default: aDefault
+	"ContextVar(name, *, default=...): the default is KEYWORD-only, as in
+	CPython.  It was passed positionally, which matched an older Grail
+	ContextVar and is a TypeError against this one."
+
+	| cvModule cvClass kwargs |
 	cvModule := ((Python at: #importlib) ___instance___) @env1:import_module: 'contextvars'.
 	cvClass := cvModule @env1:___pyAttrLoad___: #'ContextVar'.
-	posArgs := aDefault == nil ifTrue: [{ aName }] ifFalse: [{ aName . aDefault }].
+	kwargs := aDefault == nil
+		ifTrue: [nil]
+		ifFalse: [dict @env1:___new___ at: 'default' put: aDefault; yourself].
 	"Instantiate via the class-call entry ``value:value:'' (positional
 	array + kwargs); a Grail Python class is not callable through
 	___pyCallValue___:kw:."
 	^ (self wrap: (cvClass perform: #'value:value:' env: 1
-		withArguments: { posArgs . nil })) memoryAddress
+		withArguments: { { aName } . kwargs })) memoryAddress
 %
 
 category: 'Grail-C API - ContextVar'
@@ -1892,7 +1925,16 @@ method: CPythonShim
 PyContextVar_Get: aVar default: aDefault
 	"Back PyContextVar_Get(var, default, &value): return var.get() — or
 	var.get(default) when C supplied a default (aDefault not nil).  The C
-	side writes the result through *value and returns 0."
+	side writes the result through *value and returns 0.  Guarded: get()
+	with neither a value nor a default raises LookupError, which C must see
+	as its pending error -- see PyContextVar_New:default:."
+
+	^ self ___guardCallback: [self ___ug_PyContextVar_Get: aVar default: aDefault]
+%
+
+category: 'Grail-C API - ContextVar'
+method: CPythonShim
+___ug_PyContextVar_Get: aVar default: aDefault
 
 	| getter posArgs |
 	getter := aVar @env1:___pyAttrLoad___: #'get'.
@@ -1905,7 +1947,14 @@ category: 'Grail-C API - ContextVar'
 method: CPythonShim
 PyContextVar_Set: aVar value: aValue
 	"Back PyContextVar_Set(var, value): var.set(value) answers a Token
-	(passed back to var.reset())."
+	(passed back to var.reset()).  Guarded -- see PyContextVar_New:default:."
+
+	^ self ___guardCallback: [self ___ug_PyContextVar_Set: aVar value: aValue]
+%
+
+category: 'Grail-C API - ContextVar'
+method: CPythonShim
+___ug_PyContextVar_Set: aVar value: aValue
 
 	| setter |
 	setter := aVar @env1:___pyAttrLoad___: #'set'.
@@ -2178,6 +2227,32 @@ PyDict_Size: aDictionary
 %
 
 ! --------------- Tuple API ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+___noteRealTuple: aTuple origin: ptrInt
+	"Remember that aTuple is the Grail copy of the real-layout tuple at ptrInt,
+	so that wrap: hands C that original back.
+
+	A prebuilt wheel reads tuples with CPython's inline macros
+	(PyTuple_GET_ITEM is a load at a fixed offset), so a tuple it built has to
+	come back in that layout.  It used to come back as a 32-byte wrapper:
+	numpy stores (DTypes, ArrayMethod) tuples in each ufunc's _loops dict,
+	reads one back with PyDict_GetItemRef and then PyTuple_GET_ITEM(info, 1)
+	-- which read past the wrapper and found NULL, so numpy's ufunc setup
+	(InitOperators -> get_info_no_cast) failed with no exception set.
+
+	Tuples only: they are immutable, so the original is always an accurate
+	answer.  The shim never frees a real-layout object (_Py_Dealloc is a
+	no-op), so the pointer stays valid.  Session-scoped like the foreign-proxy
+	map, and it holds each bridged tuple for the session."
+
+	(SessionTemps current
+		at: #'GrailRealTupleOrigins'
+		ifAbsentPut: [IdentityKeyValueDictionary new])
+			at: aTuple put: ptrInt.
+	^ 0
+%
 
 category: 'Grail-CPython API'
 method: CPythonShim
