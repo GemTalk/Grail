@@ -1373,6 +1373,7 @@ run
 	at: #'SingleDispatchRegisterTestCase' put: nil;
 	at: #'SliceAndLoopsTestCase' put: nil;
 	at: #'SliceBlockCopyTestCase' put: nil;
+	at: #'SliceOmittedBoundsTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
 	at: #'SmalltalkForwarderTestCase' put: nil;
@@ -2906,6 +2907,7 @@ input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
 input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
 input src/smalltalk/PythonTests/SliceBlockCopyTestCase.gs
+input src/smalltalk/PythonTests/SliceOmittedBoundsTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs
