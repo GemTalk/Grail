@@ -1146,6 +1146,7 @@ run
 	at: #'LiveDictTestCase' put: nil;
 	at: #'LiveFrameProbeResilienceTestCase' put: nil;
 	at: #'LocalsTestCase' put: nil;
+	at: #'LoggingManagerTestCase' put: nil;
 	at: #'LoggingRecordsTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
@@ -2690,6 +2691,7 @@ input src/smalltalk/PythonTests/LiveDictTestCase.gs
 input src/smalltalk/PythonTests/LiveFrameLocalsTestCase.gs
 input src/smalltalk/PythonTests/LiveFrameProbeResilienceTestCase.gs
 input src/smalltalk/PythonTests/LocalsTestCase.gs
+input src/smalltalk/PythonTests/LoggingManagerTestCase.gs
 input src/smalltalk/PythonTests/LoggingRecordsTestCase.gs
 input src/smalltalk/PythonTests/LookupErrorTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
