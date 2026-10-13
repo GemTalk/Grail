@@ -673,9 +673,11 @@ Python class whose base is a C extension type needs instances that are real C
 objects in that type's layout, allocated by its `tp_alloc`/`tp_new`, with the
 Python class's own attributes and methods on top.  numpy leans on this
 throughout: `memmap`, `matrix`, `recarray`, `numpy.ma`, and any user subclass of
-`ndarray`.  Grail has no such object model yet.  It needs a design (a heap type
-the shim builds per Grail subclass, deriving from the foreign base, with the
-Grail class as its mirror) before more walls can be walked.
+`ndarray`.  Grail has no such object model yet.  The problem and the options are in
+[Shim_Foreign_Subclassing.md](Shim_Foreign_Subclassing.md); its recommendation
+is a subtype mirror per Grail subclass (the instance split into a C body in the
+base's layout and a Grail half of the subclass), staged behind a stopgap and the
+foreign operator protocol.
 
 ## Repro
 
