@@ -672,9 +672,39 @@ update: other
 	input is normalised to Symbol before storing — instances use
 	Symbol keys for dynamicInstVarAt: regardless of caller convention."
 
+	| scratch |
+	((other @env0:isKindOf: KeyValueDictionary) or: [other @env0:isKindOf: PyInstanceDict]) ifFalse: [
+		"A user mapping or an iterable of pairs: let dict's update: do the
+		CPython dispatch (keys() + __getitem__, else pairs, else TypeError)
+		into a scratch dict, then copy that in."
+		scratch := dict ___new___.
+		scratch update: other.
+		^ self update: scratch].
 	other @env0:keysAndValuesDo: [:k :v |
 		self @env0:___rawAt___: k put: v
-	]
+	].
+	^ None
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+_update: positional kw: kwargs
+	"``d.update([E], **F)'' -- the varargs form dict has.  A module's or an
+	instance's __dict__ had only the one-argument update:, so
+	``mod.__dict__.update(__name__=..., __file__=...)'' -- runpy's _run_code,
+	on every run_path -- raised ``update() takes a different number of
+	arguments''.  E first, then the keywords, as dict does."
+
+	positional @env0:size @env0:> 1 ifTrue: [
+		^ TypeError ___signal___: 'update expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
+	positional @env0:isEmpty ifFalse: [self update: (positional @env0:at: 1)].
+	(kwargs @env0:isNil not and: [kwargs @env0:isEmpty not]) ifTrue: [
+		kwargs @env0:keysAndValuesDo: [:key :value |
+			(key @env0:isKindOf: CharacterCollection) ifFalse: [
+				TypeError ___signal___: 'keywords must be strings'].
+			self @env0:___rawAt___: key @env0:asString put: value]].
+	^ None
 %
 
 category: 'Grail-Python-Protocol'

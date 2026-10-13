@@ -411,7 +411,7 @@ _spawnProcess: function args: args
 			[GsFile stderr
 				nextPutAll: 'Exception in thread (uncaught GemStone error): ';
 				nextPutAll: e description asString; lf;
-				nextPutAll: (GsProcess stackReportToLevel: 40); lf]
+				nextPutAll: (GsProcess stackReportToLevel: 200); lf]
 					on: Error do: [:e2 | nil].
 			nil]
 	] fork.

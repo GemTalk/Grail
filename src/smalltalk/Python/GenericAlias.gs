@@ -338,6 +338,19 @@ __mro_entries__: bases
 
 category: 'Grail-Reflection'
 method: PyGenericAlias
+__dict__
+	"``list[float].__dict__'' is the ORIGIN's -- CPython proxies it like every
+	other attribute (it is not among the alias's own).  Answered here, and
+	listed in ___pythonValueAttrs___, because the generic object __dict__ was
+	found first and came back as a BOUND METHOD: pydantic's TypeAdapter reads
+	``obj.__dict__[name]'' on the type it adapts and then iterated that method
+	as a core schema (``TypeAdapter(list[float]).json_schema()'')."
+
+	^ (self @env0:dynamicInstVarAt: #'__origin__') @env1:___pyAttrLoad___: #'__dict__'
+%
+
+category: 'Grail-Reflection'
+method: PyGenericAlias
 __getattr__: aName
 	"Unknown attributes read through to the origin -- CPython proxies
 	everything but its own handful, so ``list[int].append'' works.
@@ -391,6 +404,7 @@ ___pythonValueAttrs___
 		add: #'__parameters__';
 		add: #'__unpacked__';
 		add: #'__typing_unpacked_tuple_args__';
+		add: #'__dict__';
 		yourself
 %
 

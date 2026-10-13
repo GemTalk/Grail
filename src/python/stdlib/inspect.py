@@ -441,6 +441,27 @@ def getfullargspec(func):
                        kwonlyargs, kwdefaults, annotations)
 
 
+class _FullArgSpec:
+    """What the old stub getfullargspec answered.  KEPT because a deployed
+    framework (Django's template library) committed instances of it: Grail
+    refuses to drop a class whose instances live in the repository.  It
+    unpacks now, as the named tuple does, so those instances still serve."""
+
+    def __init__(self, args, varargs, varkw, defaults, kwonlyargs,
+                 kwonlydefaults, annotations):
+        self.args = args
+        self.varargs = varargs
+        self.varkw = varkw
+        self.defaults = defaults
+        self.kwonlyargs = kwonlyargs
+        self.kwonlydefaults = kwonlydefaults
+        self.annotations = annotations
+
+    def __iter__(self):
+        return iter((self.args, self.varargs, self.varkw, self.defaults,
+                     self.kwonlyargs, self.kwonlydefaults, self.annotations))
+
+
 class _ParameterKind:
     """Stands in for inspect._ParameterKind enum members - distinct objects
     that compare by identity, which is all `param.kind ==
@@ -606,6 +627,20 @@ def formatannotation(annotation, base_module=None):
         import re
         return re.sub(r'[\w\.]+', lambda m: m.group().removeprefix('typing.'),
                       repr(annotation))
+    # A parameterised builtin generic (``list[Item]``) prints as itself; read
+    # as a class it printed ``list``, dropping the parameters.
+    import types as _types
+    if isinstance(annotation, _types.GenericAlias):
+        return str(annotation)
+    # A class prints bare when it is a builtin (or from base_module), and
+    # module-qualified otherwise -- ``starlette.requests.Request``, as CPython.
+    if isinstance(annotation, type):
+        module = getattr(annotation, '__module__', None)
+        qual = getattr(annotation, '__qualname__', None) or getattr(annotation, '__name__', None)
+        if isinstance(qual, str):
+            if module in ('builtins', base_module) or not isinstance(module, str):
+                return qual
+            return module + '.' + qual
     name = getattr(annotation, '__name__', None)
     if isinstance(name, str):
         return name

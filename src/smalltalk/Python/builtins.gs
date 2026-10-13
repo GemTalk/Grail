@@ -4720,6 +4720,16 @@ vars: anObject
 		or: [(anObject isKindOf: CharacterCollection)
 		or: [(anObject @env0:class @env0:isPointers) @env0:not]]]]]) ifTrue: [
 		TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+	"A Python class that defines __dict__ ITSELF -- a property, typically --
+	is asked for it: CPython's vars() is ``obj.__dict__'' through the
+	attribute protocol, so the property runs (and may raise).  FastAPI's
+	jsonable_encoder tells an unserializable object by exactly that raise
+	(test_jsonable_encoder test_encode_unsupported)."
+	((anObject @env0:isKindOf: Behavior) not and: [(anObject isKindOf: module) not]) ifTrue: [
+		(anObject @env0:class @env0:whichClassIncludesSelector: #'__dict__' environmentId: 1)
+			@env0:ifNotNil: [:owner |
+				(owner @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+					ifTrue: [^ anObject ___pyAttrLoad___: #'__dict__']]].
 	"vars(module) IS the module's __dict__ in CPython -- a LIVE mapping.
 	Return the PyModuleDict view (same object semantics as globals()
 	inside the module) instead of a snapshot that would drop writes."

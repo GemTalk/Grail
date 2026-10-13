@@ -112,15 +112,33 @@ def _resolve(name, ctx, module_fixtures, cache, fparams):
         return cache[name]
     if name in module_fixtures:
         fdef = module_fixtures[name]
-        kwargs = {p: _resolve(p, ctx, module_fixtures, cache, fparams)
-                  for p in inspect.signature(fdef.func).parameters if p != 'self'}
-        if 'request' in kwargs and name in ctx.get('fixture_param', {}):
-            kwargs['request'].param = ctx['fixture_param'][name]
+        fparam = ctx.get('fixture_param', {})
+        # A wider-than-function fixture is made once per (module, param) and
+        # finalised when the module's tests are done, as pytest does --
+        # FastAPI's ``client`` fixtures are module-scoped, and some tests rely
+        # on state they share.
+        wide = fdef.scope in ('module', 'session', 'package', 'class')
+        skey = (name, repr(fparam.get(name, None)))
+        if wide and skey in ctx['scope_cache']:
+            cache[name] = ctx['scope_cache'][skey]
+            return cache[name]
+        params = [p for p in inspect.signature(fdef.func).parameters if p != 'self']
+        kwargs = {}
+        for p in params:
+            if p == 'request':
+                kwargs[p] = pytest.FixtureRequest(ctx['name'])
+            else:
+                kwargs[p] = _resolve(p, ctx, module_fixtures, cache, fparams)
+        if 'request' in kwargs and name in fparam:
+            kwargs['request'].param = fparam[name]
         value = fdef.func(**kwargs)
+        fins = ctx['module_finalizers'] if wide else ctx['finalizers']
         if inspect.isgenerator(value):
             gen = value
             value = next(gen)
-            ctx['finalizers'].append(lambda g=gen: next(g, None))
+            fins.append(lambda g=gen: next(g, None))
+        if wide:
+            ctx['scope_cache'][skey] = value
         cache[name] = value
         return value
     if name in BUILTIN:
@@ -144,15 +162,42 @@ def _idval(val, argname, idx):
     return f'{argname}{idx}'
 
 
-def _expand(func, extra_marks):
-    """[(id_suffix, kwargs, marks)] for every parametrize combination."""
+def _fixture_closure(names, fixtures, seen=None):
+    """Every module fixture reachable from names, in first-use order."""
+    seen = [] if seen is None else seen
+    for n in names:
+        if n in fixtures and n not in seen:
+            seen.append(n)
+            _fixture_closure([p for p in inspect.signature(fixtures[n].func).parameters
+                              if p not in ('self', 'request')], fixtures, seen)
+    return seen
+
+
+def _expand(func, extra_marks, fixtures=None):
+    """[(id_suffix, kwargs, marks)] for every parametrize combination.
+
+    A value for an INDIRECT name, or for a fixture declared with
+    ``params=``, goes under kwargs['__fixture_param__'] -- it is handed to
+    that fixture as ``request.param`` rather than to the test."""
+    fixtures = fixtures or {}
     groups = []
+    direct = set()
     for m in _marks(func):
         if m.name != 'parametrize':
             continue
-        names, values = m.args[0], m.args[1]
+        names = m.args[0] if m.args else m.kwargs['argnames']
+        values = m.args[1] if len(m.args) > 1 else m.kwargs['argvalues']
         if isinstance(names, str):
             names = [n.strip() for n in names.split(',') if n.strip()]
+        names = list(names)
+        direct.update(names)
+        indirect = m.kwargs.get('indirect', False)
+        if indirect is True:
+            indirect = set(names)
+        elif not indirect:
+            indirect = set()
+        else:
+            indirect = set(indirect)
         ids = m.kwargs.get('ids')
         group = []
         for i, v in enumerate(values):
@@ -170,8 +215,36 @@ def _expand(func, extra_marks):
                 # argname+index -- a repr would differ between interpreters
                 # wherever iteration order does (sets)
                 pid = '-'.join(_idval(x, n, i) for x, n in zip(vals, names))
-            group.append((str(pid), dict(zip(names, vals)), list(pm)))
+            kw = {}
+            for n, x in zip(names, vals):
+                if n in indirect:
+                    kw.setdefault('__fixture_param__', {})[n] = x
+                else:
+                    kw[n] = x
+            group.append((str(pid), kw, list(pm)))
         groups.append(group)
+    # a fixture declared with params= parametrises every test that uses it
+    try:
+        test_params = [p for p in inspect.signature(func).parameters if p != 'self']
+    except (TypeError, ValueError):
+        test_params = []
+    autouse = [n for n, f in fixtures.items() if f.autouse]
+    for n in _fixture_closure(test_params + autouse, fixtures):
+        fd = fixtures[n]
+        if fd.params is None or n in direct:
+            continue
+        group = []
+        for i, v in enumerate(fd.params):
+            pm = ()
+            pid = None
+            if isinstance(v, pytest.ParameterSet):
+                pm, pid, v = v.marks, v.id, v.values[0]
+            if fd.ids is not None and not callable(fd.ids) and i < len(fd.ids):
+                pid = fd.ids[i]
+            if pid is None:
+                pid = _idval(v, n, i)
+            group.append((str(pid), {'__fixture_param__': {n: v}}, list(pm)))
+        groups.insert(0, group)
     if not groups:
         return [('', {}, [])]
     out = []
@@ -180,7 +253,11 @@ def _expand(func, extra_marks):
         kw = {}
         mk = []
         for c in combo:
-            kw.update(c[1])
+            for k, v in c[1].items():
+                if k == '__fixture_param__':
+                    kw.setdefault(k, {}).update(v)
+                else:
+                    kw[k] = v
             mk.extend(c[2])
         out.append((sid, kw, mk))
     return out
@@ -204,6 +281,16 @@ def collect(module):
                     meth = getattr(obj, mname)
                     if callable(meth):
                         items.append((f'{name}::{mname}', obj, meth, mod_marks + _marks(obj)))
+    # SOURCE order, as pytest collects: some suites' tests depend on it
+    # (FastAPI's test_dependency_contextmanager reads module state the earlier
+    # tests leave).  vars() is not that order under Grail -- a module's defs
+    # are compiled methods and enumerate in method-dictionary order -- so
+    # sort by line; the sort is stable, so CPython's order is unchanged.
+    def _line(item):
+        code = getattr(item[2], '__code__', None) or getattr(
+            getattr(item[2], '__func__', None), '__code__', None)
+        return getattr(code, 'co_firstlineno', 0) or 0
+    items.sort(key=_line)
     return fixtures, items
 
 
@@ -229,11 +316,16 @@ def _xfail(marks):
     return False
 
 
-def run_one(nodeid, cls, func, marks, kwargs, fixtures):
+def run_one(nodeid, cls, func, marks, kwargs, fixtures, mctx=None):
     reason = _skip_reason(marks)
     if reason is not None:
         return 'skipped', str(reason)[:80]
-    ctx = {'name': nodeid.split('::')[-1], 'finalizers': []}
+    mctx = mctx if mctx is not None else {'scope_cache': {}, 'module_finalizers': []}
+    kwargs = dict(kwargs)
+    ctx = {'name': nodeid.split('::')[-1], 'finalizers': [],
+           'fixture_param': kwargs.pop('__fixture_param__', {}),
+           'scope_cache': mctx['scope_cache'],
+           'module_finalizers': mctx['module_finalizers']}
     xfail = _xfail(marks)
     try:
         target = func
@@ -242,6 +334,9 @@ def run_one(nodeid, cls, func, marks, kwargs, fixtures):
         params = [p for p in inspect.signature(target).parameters]
         cache = {}
         call_kwargs = {}
+        for n, f in fixtures.items():          # autouse fixtures, first
+            if f.autouse:
+                _resolve(n, ctx, fixtures, cache, kwargs)
         for p in params:
             if p in kwargs:
                 call_kwargs[p] = kwargs[p]
@@ -256,7 +351,12 @@ def run_one(nodeid, cls, func, marks, kwargs, fixtures):
             raise
         return 'error', f'setup: {type(e).__name__}: {str(e)[:120]}'
     try:
-        target(**call_kwargs)
+        result = target(**call_kwargs)
+        if inspect.iscoroutine(result):
+            # an ``async def`` test, as pytest's anyio plugin runs one with its
+            # default backend (FastAPI's ``@pytest.mark.anyio`` tests)
+            import asyncio
+            asyncio.run(result)
         outcome = ('xpassed', '') if xfail else ('passed', '')
     except pytest.Skipped as e:
         outcome = ('skipped', str(e)[:80])
@@ -270,7 +370,11 @@ def run_one(nodeid, cls, func, marks, kwargs, fixtures):
         else:
             tb = traceback.extract_tb(e.__traceback__)
             where = f'{os.path.basename(tb[-1].filename)}:{tb[-1].lineno}' if tb else '?'
-            outcome = ('failed', f'{type(e).__name__}: {str(e)[:160]} @{where}'.replace('\n', ' '))
+            detail = str(e)[:160]
+            if not detail and tb and tb[-1].line:
+                # a bare ``assert`` has no message; the statement says which one
+                detail = '[' + tb[-1].line.strip()[:120] + ']'
+            outcome = ('failed', f'{type(e).__name__}: {detail} @{where}'.replace('\n', ' '))
     finally:
         for fin in reversed(ctx['finalizers']):
             try:
@@ -280,7 +384,85 @@ def run_one(nodeid, cls, func, marks, kwargs, fixtures):
     return outcome
 
 
+def _module_name(path):
+    """The dotted name to import a test file by, and the directory to put on
+    sys.path for it: walk up through packages (directories with an
+    __init__.py), so tests/test_tutorial/test_x/test_y.py is
+    tests.test_tutorial.test_x.test_y with the sdist root on the path."""
+    path = os.path.abspath(path)
+    parts = [os.path.splitext(os.path.basename(path))[0]]
+    d = os.path.dirname(path)
+    while os.path.exists(os.path.join(d, '__init__.py')):
+        parts.insert(0, os.path.basename(d))
+        d = os.path.dirname(d)
+    return '.'.join(parts), d
+
+
+def run_module(path, sub, done, prefix):
+    modname, root = _module_name(path)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    t0 = time.time()
+    if modname in done:            # its import crashed an earlier run
+        return
+    # START for the import too, so an import that takes the process down is
+    # recorded against the module and stepped past (run_pydantic_slice.sh)
+    print(f'START|{modname}', flush=True)
+    try:
+        module = importlib.import_module(modname)
+    except pytest.Skipped as e:
+        # a module-level skip / importorskip: pytest reports the module skipped
+        print(f'RESULT|{modname}|skipped|{str(e)[:80]}'.replace('\n', ' '), flush=True)
+        print(f'TOTAL|{modname}|skipped', flush=True)
+        return
+    except BaseException as e:
+        if isinstance(e, KeyboardInterrupt):
+            raise
+        print(f'RESULT|{modname}|import-error|{type(e).__name__}: {str(e)[:200]}'.replace('\n', ' '),
+              flush=True)
+        print(f'TOTAL|{modname}|import-error', flush=True)
+        return
+    try:
+        fixtures, items = collect(module)
+        expanded = [(name, cls, func, marks, _expand(func, marks, fixtures))
+                    for name, cls, func, marks in items]
+    except BaseException as e:
+        if isinstance(e, KeyboardInterrupt):
+            raise
+        print(f'RESULT|{modname}|collect-error|{type(e).__name__}: {str(e)[:200]}'.replace('\n', ' '),
+              flush=True)
+        print(f'TOTAL|{modname}|collect-error', flush=True)
+        return
+    tally = {}
+    mctx = {'scope_cache': {}, 'module_finalizers': []}
+    for name, cls, func, marks, combos in expanded:
+        for sid, kw, pmarks in combos:
+            nodeid = f'{name}[{sid}]' if sid else name
+            if prefix:
+                nodeid = f'{modname}::{nodeid}'
+            # one line per result: a parametrised id may hold a newline or a '|'
+            nodeid = nodeid.replace('\n', '\\n').replace('|', '/')
+            if (sub and sub not in nodeid) or nodeid in done:
+                continue
+            # START first, so a crash that takes the process down still names its test
+            print(f'START|{nodeid}', flush=True)
+            outcome, msg = run_one(nodeid, cls, func, marks + _marks(func) + pmarks, kw,
+                                   fixtures, mctx)
+            tally[outcome] = tally.get(outcome, 0) + 1
+            print(f'RESULT|{nodeid}|{outcome}|{msg}', flush=True)
+    for fin in reversed(mctx['module_finalizers']):
+        try:
+            fin()
+        except Exception:
+            pass
+    print('TOTAL|' + modname + '|' + ' '.join(f'{k}={v}' for k, v in sorted(tally.items()))
+          + f'|{time.time() - t0:.1f}s', flush=True)
+
+
 def main():
+    """One test file, or several (``--`` then the paths, ``-k <substring>``
+    optional): several run in ONE process, so an expensive import (FastAPI's)
+    is paid once, and each node id is then prefixed with its module."""
     args = sys.argv[1:]
     done = set()
     if '--resume' in args:
@@ -289,33 +471,18 @@ def main():
         with open(args[i + 1], encoding='utf-8', errors='replace') as f:
             done = {line.split('|')[1] for line in f if line.startswith('RESULT|')}
         del args[i:i + 2]
-    path = args[0]
-    sub = args[1] if len(args) > 1 else None
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(path))))
-    modname = 'tests.' + os.path.splitext(os.path.basename(path))[0]
-    t0 = time.time()
-    try:
-        module = importlib.import_module(modname)
-    except BaseException as e:
-        print(f'RESULT|{modname}|import-error|{type(e).__name__}: {str(e)[:200]}')
-        print(f'TOTAL|{modname}|import-error')
-        return
-    fixtures, items = collect(module)
-    tally = {}
-    for name, cls, func, marks in items:
-        for sid, kw, pmarks in _expand(func, marks):
-            nodeid = f'{name}[{sid}]' if sid else name
-            # one line per result: a parametrised id may hold a newline or a '|'
-            nodeid = nodeid.replace('\n', '\\n').replace('|', '/')
-            if (sub and sub not in nodeid) or nodeid in done:
-                continue
-            # START first, so a crash that takes the process down still names its test
-            print(f'START|{nodeid}', flush=True)
-            outcome, msg = run_one(nodeid, cls, func, marks + _marks(func) + pmarks, kw, fixtures)
-            tally[outcome] = tally.get(outcome, 0) + 1
-            print(f'RESULT|{nodeid}|{outcome}|{msg}', flush=True)
-    print('TOTAL|' + modname + '|' + ' '.join(f'{k}={v}' for k, v in sorted(tally.items()))
-          + f'|{time.time() - t0:.1f}s', flush=True)
+    sub = None
+    if '-k' in args:
+        i = args.index('-k')
+        sub = args[i + 1]
+        del args[i:i + 2]
+    if len(args) == 2 and not args[1].endswith('.py'):
+        sub = args.pop()           # the original ``<path> [substring]`` form
+    paths = args
+    prefix = len(paths) > 1
+    for path in paths:
+        run_module(path, sub, done, prefix)
+    print('ALLDONE|', flush=True)
 
 
 if __name__ == '__main__':

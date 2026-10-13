@@ -625,17 +625,137 @@ async def a_client_that_hangs_up_costs_nothing():
 
 
 async def receive_after_the_body_reports_disconnect():
+    """After the body, receive() parks until the RESPONSE is finished and then
+    reports http.disconnect -- uvicorn's behaviour.  The app records what each
+    receive answered and the probe reads it back through a second request."""
+    seen = []
+
     async def app(scope, receive, send):
-        first = await receive()
-        second = await receive()
-        body = ('%s,%s' % (first['type'], second['type'])).encode('ascii')
+        if scope['type'] != 'http':
+            return
+        if scope['path'] == '/seen':
+            body = ','.join(seen).encode('ascii')
+        else:
+            seen.append((await receive())['type'])
+            body = b'ok'
         await send({'type': 'http.response.start', 'status': 200,
                     'headers': [(b'content-length',
                                  str(len(body)).encode('ascii'))]})
         await send({'type': 'http.response.body', 'body': body})
+        if scope['path'] != '/seen':
+            seen.append((await receive())['type'])
+
     async def probe(loop, address):
-        _s, _h, body = await _request(loop, address, _get('/'))
+        await _request(loop, address, _get('/'))
+        _s, _h, body = await _request(loop, address, _get('/seen'))
         return body.decode('ascii')
+    return await _with_server(app, probe)
+
+
+async def a_disconnect_listener_does_not_cut_a_stream_short():
+    """starlette's StreamingResponse listens for http.disconnect BESIDE the
+    stream and cancels the stream when it hears one.  When receive() answered
+    the disconnect at once, every streamed response was cut off (FastAPI's
+    StreamingResponse answered 500)."""
+    async def app(scope, receive, send):
+        if scope['type'] != 'http':
+            return
+        await receive()
+        cancelled = []
+
+        async def stream():
+            await send({'type': 'http.response.start', 'status': 200,
+                        'headers': [(b'content-type', b'text/plain')]})
+            for part in (b'one ', b'two ', b'three'):
+                await asyncio.sleep(0.01)
+                await send({'type': 'http.response.body', 'body': part,
+                            'more_body': True})
+            await send({'type': 'http.response.body', 'body': b''})
+
+        streaming = asyncio.ensure_future(stream())
+
+        async def listen():
+            message = await receive()
+            if message['type'] == 'http.disconnect' and not streaming.done():
+                cancelled.append(True)
+                streaming.cancel()
+
+        listener = asyncio.ensure_future(listen())
+        try:
+            await streaming
+        except asyncio.CancelledError:
+            pass
+        await listener
+    async def probe(loop, address):
+        status, _h, body = await _request(loop, address, _get('/'))
+        return status, body
+    return await _with_server(app, probe)
+
+
+def _lifespan_app(log, fail=False):
+    """An app that speaks the lifespan protocol: records the exchange in log,
+    stores into the shared state at startup, and serves that state back."""
+    async def app(scope, receive, send):
+        if scope['type'] == 'lifespan':
+            while True:
+                message = await receive()
+                log.append(message['type'])
+                if message['type'] == 'lifespan.startup':
+                    if fail:
+                        await send({'type': 'lifespan.startup.failed',
+                                    'message': 'no database'})
+                        return
+                    scope['state']['db'] = 'connected'
+                    await send({'type': 'lifespan.startup.complete'})
+                elif message['type'] == 'lifespan.shutdown':
+                    await send({'type': 'lifespan.shutdown.complete'})
+                    return
+        await receive()
+        body = repr(sorted(scope['state'].items())).encode('ascii')
+        scope['state']['scribble'] = 'request-local'
+        await send({'type': 'http.response.start', 'status': 200,
+                    'headers': [(b'content-length',
+                                 str(len(body)).encode('ascii'))]})
+        await send({'type': 'http.response.body', 'body': body})
+    return app
+
+
+async def lifespan_startup_and_shutdown_run():
+    """Startup runs before the first request and its state reaches every
+    request scope as a COPY (a request's own writes do not leak into the
+    next); shutdown runs in stop()."""
+    log = []
+
+    async def probe(loop, address):
+        _s, _h, first = await _request(loop, address, _get('/'))
+        _s, _h, second = await _request(loop, address, _get('/'))
+        return list(log), first, second
+    during = await _with_server(_lifespan_app(log), probe)
+    return during, log
+
+
+async def a_failed_lifespan_startup_stops_the_server():
+    log = []
+    server = Server(_lifespan_app(log, fail=True), host='127.0.0.1', port=0)
+    try:
+        await server.start()
+        return 'started'
+    except RuntimeError as exc:
+        return str(exc), log, server.address
+
+
+async def an_app_without_lifespan_is_still_served():
+    """uvicorn's ``auto'': an app that raises on the lifespan scope is served
+    without it."""
+    async def app(scope, receive, send):
+        assert scope['type'] == 'http', 'no lifespan here'
+        await receive()
+        await send({'type': 'http.response.start', 'status': 200,
+                    'headers': [(b'content-length', b'2')]})
+        await send({'type': 'http.response.body', 'body': b'ok'})
+    async def probe(loop, address):
+        status, _h, body = await _request(loop, address, _get('/'))
+        return status, body
     return await _with_server(app, probe)
 
 
@@ -722,6 +842,13 @@ _PROBES = [
     ('a_client_that_hangs_up_costs_nothing', a_client_that_hangs_up_costs_nothing),
     ('receive_after_the_body_reports_disconnect',
      receive_after_the_body_reports_disconnect),
+    ('a_disconnect_listener_does_not_cut_a_stream_short',
+     a_disconnect_listener_does_not_cut_a_stream_short),
+    ('lifespan_startup_and_shutdown_run', lifespan_startup_and_shutdown_run),
+    ('a_failed_lifespan_startup_stops_the_server',
+     a_failed_lifespan_startup_stops_the_server),
+    ('an_app_without_lifespan_is_still_served',
+     an_app_without_lifespan_is_still_served),
     ('stop_closes_the_listener', stop_closes_the_listener),
     ('stop_cancels_a_parked_keep_alive_connection',
      stop_cancels_a_parked_keep_alive_connection),
@@ -766,6 +893,10 @@ EXPECTED = {
     'a_folded_header_is_refused': 400,
     'a_client_that_hangs_up_costs_nothing': (200, b'hello'),
     'receive_after_the_body_reports_disconnect': 'http.request,http.disconnect',
+    'a_disconnect_listener_does_not_cut_a_stream_short': (200, b'one two three'),
+    'lifespan_startup_and_shutdown_run': ((['lifespan.startup'], b"[('db', 'connected')]", b"[('db', 'connected')]"), ['lifespan.startup', 'lifespan.shutdown']),
+    'a_failed_lifespan_startup_stops_the_server': ('ASGI lifespan startup failed: no database', ['lifespan.startup'], None),
+    'an_app_without_lifespan_is_still_served': (200, b'ok'),
     'stop_closes_the_listener': (200, 'ConnectionRefusedError'),
     'stop_cancels_a_parked_keep_alive_connection': (1, 0),
 }

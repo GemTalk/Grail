@@ -711,8 +711,45 @@ ___defaultSlotFor___: aBlock name: aName
 	o := offs at: idx.
 	(o isKindOf: Integer) ifFalse: [^ nil].
 	o > 0 ifFalse: [^ nil].
-	(o bitAnd: 16rFF) < 1 ifTrue: [^ nil].
+	"LEVEL 0 FROM THE IR ARM.  A text-compiled closure records the wrapper's
+	temp one lexical level up (level 1, so zero hops); an IR-built closure
+	records the SAME place as level 0, with the same slot.  A default temp
+	only ever lives in the def's wrapper -- the closure's immediate
+	staticLink -- on either arm, so level 0 here means zero hops too.  It used
+	to mean nil, and every nested def under IR (the default since #1087) had
+	no __defaults__: FastAPI read a nested endpoint's ``q: list[Item] =
+	Query(...)'' as having no Query at all."
+	(o bitAnd: 16rFF) < 1 ifTrue: [
+		^ { 0. (o bitShift: -8) + 1 - VariableContext instSize }].
 	^ { (o bitAnd: 16rFF) - 1. (o bitShift: -8) + 1 - VariableContext instSize }
+%
+
+category: 'Grail-Defaults'
+classmethod: ExecBlockAttrs
+___defaultSlotFor___: aBlock param: pname
+	"Where parameter pname's evaluated default lives (see
+	___defaultSlotFor___:name:), under either spelling the compiler gives it: a
+	def's ``___default_<name>___'', or a lambda's
+	``___lamdef_<name>_<line>_<col>___'' -- the source position keeps two
+	lambdas in one scope apart.  Lambdas had no __defaults__ at all because
+	only the first spelling was looked for."
+
+	| d meth prefix |
+	d := self ___defaultSlotFor___: aBlock name: '___default_' , pname , '___'.
+	d isNil ifFalse: [^ d].
+	meth := [aBlock method] on: Error do: [:ex | ex return: nil].
+	meth isNil ifTrue: [^ nil].
+	prefix := '___lamdef_' , pname , '_'.
+	(meth argsAndTemps ifNil: [#()]) do: [:n | | s rest |
+		s := n asString.
+		((s size > (prefix size + 3)) and: [(s copyFrom: 1 to: prefix size) = prefix
+			and: [(s copyFrom: s size - 2 to: s size) = '___']]) ifTrue: [
+				"the rest must be exactly <digits>_<digits>, or a parameter named
+				like ``x_3'' would claim x's temp"
+				rest := s copyFrom: prefix size + 1 to: s size - 3.
+				((rest occurrencesOf: $_) = 1 and: [(rest reject: [:c | c isDigit or: [c = $_]]) isEmpty])
+					ifTrue: [^ self ___defaultSlotFor___: aBlock name: s]]].
+	^ nil
 %
 
 category: 'Grail-Defaults'
@@ -771,7 +808,7 @@ ___writeDefaultsFor___: aBlock value: aValue
 	base := [aBlock staticLink] on: Error do: [:ex | ex return: nil].
 	base isNil ifTrue: [^ false].
 	1 to: wanted size do: [:i | | d vc slot |
-		d := self ___defaultSlotFor___: aBlock name: '___default_' , (wanted at: i) , '___'.
+		d := self ___defaultSlotFor___: aBlock param: (wanted at: i).
 		d isNil ifTrue: [^ false].
 		vc := base.
 		(d at: 1) timesRepeat: [vc := vc isNil ifTrue: [nil] ifFalse: [vc parent]].
@@ -813,7 +850,7 @@ ___defaultsFor___: aBlock
 	base isNil ifTrue: [^ nil].
 	values := Array new: wanted size.
 	1 to: wanted size do: [:i | | d vc slot |
-		d := self ___defaultSlotFor___: aBlock name: '___default_' , (wanted at: i) , '___'.
+		d := self ___defaultSlotFor___: aBlock param: (wanted at: i).
 		d isNil ifTrue: [^ nil].
 		vc := base.
 		(d at: 1) timesRepeat: [vc := vc isNil ifTrue: [nil] ifFalse: [vc parent]].

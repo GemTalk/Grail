@@ -9136,13 +9136,50 @@ ___probeSourcePathFor___: aName roots: searchRoots
 			errors -- e.g. <name>/__init__.py where <name> is a plain
 			FILE (the ./grail CLI script when probing 'import grail');
 			compare == true so nil routes to not-found."
-			((GsFile @env0:existsOnServer: pyPath) == true)
+			(((GsFile @env0:existsOnServer: pyPath) == true)
+				and: [self ___exactCaseEntry___: (pathParts @env0:last) @env0:, '.py'
+					under: root path: joined])
 				ifTrue: [result := pyPath]
 				ifFalse: [
 					initPath := base @env0:, '/__init__.py'.
-					((GsFile @env0:existsOnServer: initPath) == true)
+					(((GsFile @env0:existsOnServer: initPath) == true)
+						and: [self ___exactCaseEntry___: (pathParts @env0:last)
+							under: root path: joined])
 						ifTrue: [result := initPath]]]].
 	^ result
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___exactCaseEntry___: anEntry under: root path: joined
+	"Whether anEntry -- ``name.py'' or a package directory's ``name'' -- is in
+	its directory with EXACTLY that case.  ``joined'' is the module's path below
+	root (``pkg/name''); the directory is everything before its last part.
+
+	A case-insensitive filesystem (macOS, by default) answers yes to
+	existsOnServer: for ``pydantic/Json.py'' because ``pydantic/json.py''
+	exists.  CPython's finder matches names case-SENSITIVELY (it compares
+	against the directory's listing), so ``from pydantic import Json'' -- a
+	name pydantic exports lazily, through its module __getattr__ -- reaches
+	the type; Grail loaded the deprecated pydantic.json MODULE under the name
+	``pydantic.Json'' instead, and every ``Json[...]'' annotation then failed
+	(FastAPI's routes using one were silently never registered).
+
+	Asked only once the file is known to exist, so a miss costs nothing and a
+	hit one directory listing.  When the listing cannot be read, answers true:
+	the old answer, not a refusal."
+
+	| idx dir names |
+	"An empty name (``__import__('')'' reaches here) has no entry to check;
+	findLastSubString:startingAt: 0 would be an uncatchable OffsetError."
+	(joined @env0:size @env0:= 0 or: [anEntry @env0:size @env0:= 0]) ifTrue: [^ true].
+	idx := joined @env0:findLastSubString: '/' startingAt: joined @env0:size.
+	dir := (idx @env0:isNil or: [idx @env0:= 0])
+		ifTrue: [root]
+		ifFalse: [(root @env0:, '/') @env0:, (joined @env0:copyFrom: 1 to: idx @env0:- 1)].
+	names := GsFile @env0:_contentsOfServerDirectory: dir expandPath: false utf8Results: false.
+	(names @env0:isKindOf: Array) ifFalse: [^ true].
+	^ names @env0:anySatisfy: [:n | n @env0:asString @env0:= anEntry @env0:asString]
 %
 
 category: 'Grail-Module Loading'

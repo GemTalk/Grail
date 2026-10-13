@@ -38,6 +38,8 @@ it claims and an honest failure for everything else, rather than a lenient
 server that half-supports more:
 
   * no TLS, no HTTP/2, no WebSocket ('websocket' scopes are refused);
+  * lifespan IS run (startup before the first accept, shutdown in ``stop``),
+    uvicorn-``auto`` style: an app that does not speak it is served anyway;
   * no ``Transfer-Encoding: chunked`` REQUEST body -- answered 411, because
     silently treating a chunked body as empty would corrupt the app's input;
   * the request body arrives as ONE ``http.request`` message, so a streaming
@@ -157,13 +159,20 @@ class Server:
         # keep-alive connection is parked in sock_recv indefinitely, so closing
         # the listener alone would leave the loop with work forever.
         self._connections = set()
+        # The ASGI lifespan state shared with every request scope, and the
+        # lifespan exchange itself; see _lifespan_startup.
+        self._state = {}
+        self._lifespan_task = None
+        self._lifespan_running = False
 
     # --- lifecycle ---------------------------------------------------------
 
     async def start(self):
-        """Bind, listen, and start accepting.  Answers once ``address`` is set,
-        so a caller can connect the moment this returns."""
+        """Run the app's lifespan startup, then bind, listen, and start
+        accepting.  Answers once ``address`` is set, so a caller can connect
+        the moment this returns."""
         self._loop = _asyncio.get_event_loop()
+        await self._lifespan_startup()
         sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
         try:
             # Without SO_REUSEADDR a restart on a fixed port fails for as long
@@ -205,6 +214,7 @@ class Server:
         if self._sock is not None:
             self._sock.close()
             self._sock = None
+        await self._lifespan_shutdown()
 
     async def _accept_forever(self):
         while True:
@@ -214,6 +224,74 @@ class Server:
             # Discard on completion, so a long-lived server does not accumulate
             # a task object per request ever served.
             task.add_done_callback(self._connections.discard)
+
+    # --- lifespan ----------------------------------------------------------
+
+    async def _lifespan_startup(self):
+        """Run the ASGI lifespan protocol's startup half, uvicorn-``auto``
+        style: an app that does not speak lifespan -- it raises on the scope,
+        or returns without answering -- is served without it, and only an
+        explicit ``lifespan.startup.failed`` stops the server.
+
+        The app's lifespan coroutine runs as a task for the server's whole
+        life: startup and shutdown are two exchanges with ONE call of the app,
+        which is parked in ``receive`` between them (an
+        ``asynccontextmanager`` lifespan is suspended at its ``yield``).
+
+        ``state`` is the dict the spec shares with every request: the app
+        writes into it during startup (starlette's lifespan stores what its
+        context manager yields), and each request scope gets a shallow copy,
+        which is what ``request.state`` reads."""
+        loop = self._loop
+        self._lifespan_inbox = _asyncio.Queue()
+        self._lifespan_outbox = _asyncio.Queue()
+        scope = {'type': 'lifespan', 'asgi': _ASGI_VERSION,
+                 'state': self._state}
+
+        async def receive():
+            return await self._lifespan_inbox.get()
+
+        async def send(message):
+            await self._lifespan_outbox.put(message)
+
+        async def main():
+            try:
+                await self.app(scope, receive, send)
+            except BaseException as exc:
+                # Before startup completed this is "no lifespan support"; after
+                # it, a shutdown that raised.  Either way the server goes on.
+                await self._lifespan_outbox.put({'type': '_lifespan.error',
+                                                 'exc': exc})
+                if isinstance(exc, (_asyncio.CancelledError, KeyboardInterrupt,
+                                    SystemExit)):
+                    raise
+                return
+            await self._lifespan_outbox.put({'type': '_lifespan.returned'})
+
+        self._lifespan_task = loop.create_task(main())
+        await self._lifespan_inbox.put({'type': 'lifespan.startup'})
+        reply = await self._lifespan_outbox.get()
+        kind = reply['type']
+        if kind == 'lifespan.startup.complete':
+            self._lifespan_running = True
+        elif kind == 'lifespan.startup.failed':
+            raise RuntimeError('ASGI lifespan startup failed: %s'
+                               % (reply.get('message', ''),))
+        # Anything else: the app does not do lifespan; serve without it.
+
+    async def _lifespan_shutdown(self):
+        if self._lifespan_running:
+            self._lifespan_running = False
+            await self._lifespan_inbox.put({'type': 'lifespan.shutdown'})
+            # The reply is .complete, .failed, or the app ending -- all mean
+            # the same thing to a server that is stopping anyway.
+            await self._lifespan_outbox.get()
+        # An app that took the lifespan scope for something else may still be
+        # parked in receive(); it must not outlive the server.
+        task, self._lifespan_task = self._lifespan_task, None
+        if task is not None and not task.done():
+            task.cancel()
+            await _asyncio.sleep(0)
 
     # --- one connection ----------------------------------------------------
 
@@ -349,7 +427,10 @@ class Server:
             'headers': headers,
             'client': (addr[0], addr[1]),
             'server': (self.address[0], self.address[1]),
-            'state': {},
+            # A shallow COPY of the lifespan state, as the spec asks: what
+            # startup stored is visible, what one request stores is not
+            # visible to the next.
+            'state': dict(self._state),
         }
         body = await self._read_body(conn, buf, headers)
         return scope, body
@@ -397,6 +478,9 @@ class Server:
         state = {'started': False, 'head_sent': False, 'keep_alive': False,
                  'body_consumed': False,
                  'body_done': False}
+        # Set when the response is finished (or the app gave up on it); a
+        # receive() after the body parks on it.  See receive.
+        response_done = _asyncio.Event()
 
         async def receive():
             # The whole body in one message.  A streaming app still works --
@@ -406,13 +490,15 @@ class Server:
                 state['body_consumed'] = True
                 return {'type': 'http.request', 'body': body,
                         'more_body': False}
-            # After the body, CPython's servers park here until the client
-            # disconnects.  Reporting the disconnect immediately instead is the
-            # one place this server is less faithful than it could be, and the
-            # reason is that parking needs a second reader on a socket this
-            # coroutine is also about to write to.  An app that loops on
-            # receive terminates either way; one that waits for a disconnect
-            # notification gets it early rather than never.
+            # After the body, park until the response is FINISHED, then
+            # report the disconnect -- what uvicorn does.  Answering
+            # http.disconnect at once (as this server used to) is not merely
+            # early: starlette's StreamingResponse runs a disconnect listener
+            # beside the stream and cancels the stream the moment it hears
+            # one, so every streamed response was cut off and answered 500.
+            # Noticing a client that leaves MID-response would need a second
+            # reader on a socket this coroutine is writing to; not done.
+            await response_done.wait()
             return {'type': 'http.disconnect'}
 
         async def send(message):
@@ -441,11 +527,12 @@ class Server:
                 if chunk:
                     await self._loop.sock_sendall(conn, chunk)
                 if not message.get('more_body'):
-                    # The app has declared the response finished.  Recorded
-                    # rather than acted on: this server does not verify the
-                    # byte count against content-length, so the flag is only
-                    # here to keep `send` honest about what it observed.
+                    # The app has declared the response finished.  This server
+                    # does not verify the byte count against content-length;
+                    # what the flag does is release a receive() parked on the
+                    # end of the response.
                     state['body_done'] = True
+                    response_done.set()
             else:
                 raise RuntimeError('unsupported message type %r' % (kind,))
 
@@ -454,7 +541,11 @@ class Server:
             # real 'websocket' scopes never get here because nothing upgrades.
             raise ValueError('this server serves only http scopes')
         try:
-            await self.app(scope, receive, send)
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                # However the app ends, nothing may stay parked in receive().
+                response_done.set()
         except _asyncio.CancelledError:
             raise
         except Exception:

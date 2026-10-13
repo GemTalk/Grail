@@ -307,6 +307,13 @@ ___moduleValueAt___: key ifAbsent: aBlock
 		"nil is absent, not a value -- see ___doitNamesAndValuesDo___."
 		^ (source @env0:at: (self ___doitSlotFor___: key) otherwise: nil)
 			@env0:ifNil: [aBlock @env0:value]].
+	"A module with no defs of its own (a bare ModuleType, or a ModuleType
+	subclass's instance) holds only what was stored in it: its class's methods
+	are not namespace entries, so ``'hello' in vars(m)'' is False as in CPython
+	-- the same rule ___globalNames___ lists keys by."
+	(source @env1:___grailHasNoOwnDefs___) ifTrue: [
+		^ (source @env0:dynamicInstVarAt: key @env0:asSymbol)
+			@env0:ifNil: [source @env0:at: key @env0:asSymbol ifAbsent: [aBlock @env0:value]]].
 	^ source @env1:___globalAt___: key @env0:asSymbol otherwise: aBlock
 %
 

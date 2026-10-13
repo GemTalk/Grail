@@ -2355,6 +2355,17 @@ open: file _: mode
 
 category: 'Grail-Opening'
 method: io
+open_code: path
+	"io.open_code(path) -- open a file of CODE for reading, as bytes.  CPython's
+	is open(path, 'rb') behind an audit hook that lets an embedder vet what is
+	about to run; Grail has no such hook, so it is the open.  runpy.run_path
+	reads a script through it, and failed on its absence."
+
+	^ FileIO ___open___: path mode: 'rb' encoding: nil
+%
+
+category: 'Grail-Opening'
+method: io
 _open: positional kw: kwargs
 	"Varargs/kwargs form - delegate to the builtins implementation so
 	the argument parsing lives in exactly one place."

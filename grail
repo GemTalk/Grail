@@ -11,6 +11,7 @@
 #
 #  For gem configuration, create a gem.conf in current directory
 #  or edit this script to add a -T or -C  argument before the -S .
+#  GRAIL_TEMPOBJ_KB sets the temporary object memory (default 400000 KB).
 
 # .setenv, when this checkout has one, decides which product and stone we talk
 # to.  The template is only written when there is NOTHING to go on: a caller
@@ -105,4 +106,8 @@ esac
 # with "'.../dir' not found!".  Now that sys.argv carries the script's own
 # arguments through to Python, an argument containing a space has to survive
 # the wrapper for the shape to be worth anything.
-topaz -lq -S scripts/grail.tpz -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -- "${PRE[@]}" "$@"
+# Temporary object memory, in KB.  400 MB suits most programs; a large one
+# needs more -- FastAPI with its TestClient uses ~300 MB warm, and the first
+# run after install.sh, which compiles every module it imports, runs out at
+# 400 MB (docs/Support_FastAPI.md, Phase 5).  GRAIL_TEMPOBJ_KB overrides it.
+topaz -lq -S scripts/grail.tpz -T "${GRAIL_TEMPOBJ_KB:-400000}" -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -- "${PRE[@]}" "$@"

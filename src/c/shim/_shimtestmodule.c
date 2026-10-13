@@ -1718,6 +1718,34 @@ test_dict_next(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
     return out;
 }
 
+/* test_import_refcount(name, n): import `name` n times the way PyO3 does --
+   PyImport_ImportModule for a NEW reference, Py_DECREF when done -- and
+   answer the module's refcount afterwards.  The shim's import cache used to
+   hand out its pointer uncounted and hold none itself, so this fell to zero
+   and below; CPythonShim>>sweep then freed the module's wrapper while the
+   cache still pointed at it (docs/Support_FastAPI.md, Phase 5). */
+PyObject *PyImport_ImportModule(const char *name);   /* the shim's; not in cpython.h */
+
+static PyObject *
+test_import_refcount(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_import_refcount expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    const char *name = PyUnicode_AsUTF8(args[0]);
+    if (name == NULL) return NULL;
+    long n = PyLong_AsLong(args[1]);
+    if (n == -1 && PyErr_Occurred()) return NULL;
+    PyObject *m = NULL;
+    for (long i = 0; i < n; i++) {
+        m = PyImport_ImportModule(name);
+        if (m == NULL) return NULL;
+        Py_DECREF(m);
+    }
+    return PyLong_FromSsize_t(m == NULL ? 0 : m->ob_refcnt);
+}
+
 /* test_u128(n) -> n, taken apart and rebuilt as PyO3's abi3 build does
    for a 128-bit int: PyLong_AsUnsignedLongLongMask for the low half,
    PyNumber_Rshift + PyLong_AsUnsignedLongLong for the high half, then
@@ -2132,6 +2160,8 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_real_tuple_roundtrip(d) -> 1"},
     {"test_type_descriptors", (PyCFunction)(void *)test_type_descriptors,
      METH_FASTCALL, "test_type_descriptors() -> 31"},
+    {"test_import_refcount", (PyCFunction)(void *)test_import_refcount,
+     METH_FASTCALL, "test_import_refcount(name, n) -> the module's refcount after n import/decref cycles"},
     {NULL, NULL, 0, NULL}
 };
 

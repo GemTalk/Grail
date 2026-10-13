@@ -7,6 +7,8 @@ through to Object's own __doc__ and EVERY method claimed to be documented as
 "The base class of the class hierarchy...".
 """
 
+import functools
+
 
 class Documented:
     """class docstring"""

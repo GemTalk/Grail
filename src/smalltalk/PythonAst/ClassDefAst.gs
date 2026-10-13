@@ -2593,13 +2593,13 @@ printSmalltalkRuntimeOn: aStream
 						printMarkingDecoratorsOn: aStream
 						decorators: decos
 						className: self ___stVarName___
-						siblingNames: decoratorScope]
+						siblingNames: (self ___decoratorScopeFor___: def base: decoratorScope)]
 				ifFalse: [
 					def
 						printMethodDecoratorsOn: aStream
 						decorators: decos
 						className: self ___stVarName___
-						siblingNames: decoratorScope]]].
+						siblingNames: (self ___decoratorScopeFor___: def base: decoratorScope)]]].
 	"A DECORATED property's accessors are not rebound one by one: together
 	they are ONE property object -- see ___decoratedPropertyNames___."
 	decoratedProps do: [:n |
@@ -3519,6 +3519,53 @@ ___decoratedPropertyNames___
 			and: [(deleters at: n ifAbsent: [0]) <= 1]]])
 				ifTrue: [answer add: n]].
 	^ answer
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___decoratorScopeFor___: aDef base: aScope
+	"The class-body names aDef's decorators may resolve off the class: aScope,
+	less aDef's OWN name unless an EARLIER statement of the body bound it.
+
+	CPython evaluates a decorator before the def it decorates binds its name,
+	so in
+
+	    from pydantic import computed_field
+	    class M(BaseModel):
+	        @computed_field
+	        @property
+	        def computed_field(self): ...
+
+	the decorator is the imported function.  Grail took it off the class --
+	where, by then, ``computed_field'' was the property itself -- and raised
+	``'property' object is not callable''.  That was swallowed until decorator
+	errors started propagating, so the field was silently missing; FastAPI's
+	test_openapi_separate_input_output_schemas has exactly this class.
+
+	An earlier binding still counts -- ``@x.setter'' after ``def x'' names
+	the getter's property, as it should.  A def that is not a top-level
+	statement of the body (one under an ``if'') keeps aScope as it was."
+
+	| own earlier |
+	own := aDef name asSymbol.
+	(aScope includes: own) ifFalse: [^ aScope].
+	earlier := false.
+	((body ifNil: [nil]) ifNil: [#()] ifNotNil: [:b | b body ifNil: [#()]]) do: [:stmt |
+		stmt == aDef ifTrue: [
+			^ earlier
+				ifTrue: [aScope]
+				ifFalse: [(IdentitySet withAll: aScope) remove: own; yourself]].
+		((stmt isKindOf: FunctionDefAst) and: [stmt name asSymbol == own])
+			ifTrue: [earlier := true].
+		((stmt isKindOf: ClassDefAst) and: [stmt name asSymbol == own])
+			ifTrue: [earlier := true].
+		((stmt isKindOf: AssignAst) and: [(stmt targets ifNil: [#()]) anySatisfy: [:t |
+			(t isKindOf: NameAst) and: [t id asSymbol == own]]])
+				ifTrue: [earlier := true].
+		((stmt isKindOf: AnnAssignAst) and: [(stmt target isKindOf: NameAst)
+			and: [stmt target id asSymbol == own]])
+				ifTrue: [earlier := true]].
+	^ aScope
 %
 
 category: 'Grail-code generation'

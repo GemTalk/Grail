@@ -3193,6 +3193,26 @@ testADottedExtensionNameCallsPositionally
 	self assert: (mod @env1:_add: { 3 . 4 } kw: nil) equals: 7
 %
 
+category: 'Grail-Tests - FastAPI Phase 5'
+method: CPythonShimTestCase
+testAnImportedModuleKeepsAReferenceInTheImportCache
+	"PyImport_ImportModule answers a NEW reference, which PyO3 drops when it is
+	done, and the shim's C-side import cache keeps the pointer for the life of
+	the process.  The cache handed it out uncounted and held no reference of its
+	own, so a few import/decref cycles took the module's wrapper to zero and
+	CPythonShim>>sweep freed it under the cache.  Once that memory held a str,
+	pydantic_core's ``re.compile'' failed with ``'str' object has no attribute
+	'compile''' -- or the gem segfaulted -- after enough other imports."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_import_refcount'
+		with: 'json' with: 5) >= 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_import_refcount'
+		with: 'json' with: 5) >= 1
+%
+
 category: 'Grail-Tests - NumPy Stage 2'
 method: CPythonShimTestCase
 testAModuleFunctionCrossesAsItsBuiltinFunction

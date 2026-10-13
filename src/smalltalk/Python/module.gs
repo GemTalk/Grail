@@ -641,8 +641,7 @@ __new__: aName
 
 	| inst |
 	inst := self @env0:new.
-	inst @env0:at: #__name__ put: aName.
-	inst @env0:at: #__doc__ put: None.
+	inst ___initName___: aName doc: None.
 	^ inst
 %
 
@@ -696,8 +695,7 @@ _new: positional kw: keywords
 		^ TypeError ___signal___:
 			'module() missing required argument ''name'' (pos 1)'].
 	inst := self @env0:new.
-	inst @env0:at: #__name__ put: modName.
-	inst @env0:at: #__doc__ put: doc.
+	inst ___initName___: modName doc: doc.
 	^ inst
 %
 
@@ -708,8 +706,7 @@ __new__: aName _: aDoc
 
 	| inst |
 	inst := self @env0:new.
-	inst @env0:at: #__name__ put: aName.
-	inst @env0:at: #__doc__ put: aDoc.
+	inst ___initName___: aName doc: aDoc.
 	^ inst
 %
 
@@ -768,6 +765,65 @@ new
 	TypeError ___signal___:
 		('Use #''instance'' instead of #''new'' for '
 			@env0:, (self @env0:name @env0:asString @env0:, ' module'))
+%
+
+category: 'Grail-Python-Protocol'
+method: module
+___grailHasNoOwnDefs___
+	"True when this module's class holds no top-level defs of its own: a bare
+	``types.ModuleType(name)'' (an instance of ``module'' itself), or an
+	instance of a ModuleType subclass a program defined, whose methods are
+	that class's, not namespace entries.  Such a module's namespace is only
+	what was stored in it -- see ___globalNames___ and PyModuleDict >>
+	___moduleValueAt___:ifAbsent:, which must agree."
+
+	^ (self @env0:class == module)
+		or: [self @env0:class @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]
+%
+
+category: 'Grail-Python-Protocol'
+method: module
+___pyMetaclass___
+	"type(m) for a module: ``module'', the one type CPython gives every module.
+
+	Each Grail module is an instance of its OWN generated class -- ``sys'',
+	``os'', ``__main__'' -- and that class is an implementation detail, so it
+	must not be what type() answers.  It was, and ``type(sys)(name)'' -- the
+	idiom for a blank module, which runpy uses for run_path's namespace
+	(``ModuleType = type(sys)'') -- made a module carrying every member of
+	sys: exec() then walked that namespace and PERFORMED sys.breakpoint.
+
+	A ModuleType subclass a program defined (``class Lazy(types.ModuleType)'',
+	then ``m.__class__ = Lazy'') is a real Python type, and is answered as one:
+	the nearest class in the chain that Python code defined wins."
+
+	| c name |
+	c := self @env0:class.
+	[c ~~ nil and: [c ~~ module]] whileTrue: [
+		(c @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+			ifTrue: [^ c].
+		c := c @env0:superclass].
+	"ONLY A MODULE.  Some Smalltalk classes under ``module'' are not modules in
+	Python at all -- sys.flags, sys.float_info, sys.implementation are
+	NativeModule subclasses for their namespace plumbing -- and keep their own
+	class, which reports CPython's name for them (``flags'' in ``sys'').  A
+	module is a bare ``module'', or the module sys.modules holds under its
+	__name__."
+	self @env0:class == module ifTrue: [^ module].
+	name := [self ___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	((name @env0:isKindOf: CharacterCollection)
+		and: [(importlib lookupModule: name @env0:asString) == self])
+			ifTrue: [^ module].
+	^ self @env0:class
+%
+
+category: 'Grail-Python-Protocol'
+method: module
+__class__
+	"``m.__class__ is type(m)'', as CPython: see ___pyMetaclass___."
+
+	^ self ___pyMetaclass___
 %
 
 category: 'Grail-Printing'
@@ -996,8 +1052,13 @@ ___mayCacheFunctionHandles___
 	overlay, which every later read of the module would then have to search.
 	The per-session intern serves just as well."
 
+	"And not a module whose class holds no defs of its own -- a bare ModuleType,
+	or a ModuleType subclass's instance.  What its reads find is the CLASS's
+	method, not a namespace entry, and caching it put the method into
+	vars(m), which CPython never shows (``m.hello(); 'hello' in vars(m)'')."
 	^ self @env0:isCommitted @env0:not
-		and: [self @env0:___globalStoreIsSessionLocal___ @env0:not]
+		and: [self @env0:___globalStoreIsSessionLocal___ @env0:not
+		and: [self ___grailHasNoOwnDefs___ not]]
 %
 
 category: 'Grail-Attribute Access'
@@ -1319,6 +1380,24 @@ __name__: aValue
 
 category: 'Grail-Initialization'
 method: module
+___initName___: aName doc: aDoc
+	"What CPython's module.__init__ sets on a module made by
+	``types.ModuleType(name, doc=None)'': __name__ and __doc__, and
+	__package__, __loader__ and __spec__ as None -- the five entries of
+	vars(ModuleType('m')).  The last three were missing, and runpy reads them
+	back off the namespace it builds that way.  One helper for every creation
+	route (class-side __new__:, __new__:_:, _new:kw:; instance-side __init__:,
+	__init__:_:, ___initFrom___:kw:)."
+
+	self @env0:at: #__name__ put: aName.
+	self @env0:at: #__doc__ put: aDoc.
+	self @env0:at: #__package__ put: None.
+	self @env0:at: #__loader__ put: None.
+	self @env0:at: #__spec__ put: None
+%
+
+category: 'Grail-Initialization'
+method: module
 __init__: aName
 	"CPython's ``types.ModuleType(name)'' -- build a fresh, empty module.
 
@@ -1341,8 +1420,7 @@ __init__: aName
 	anyone's singleton -- it is a namespace object, which is exactly what
 	callers of types.ModuleType want."
 
-	self @env0:at: #__name__ put: aName.
-	self @env0:at: #__doc__ put: None.
+	self ___initName___: aName doc: None.
 	^ None
 %
 
@@ -1378,8 +1456,7 @@ ___initFrom___: positional kw: keywords
 	name == nil ifTrue: [
 		^ TypeError ___signal___:
 			'module() missing required argument ''name'' (pos 1)'].
-	self @env0:at: #__name__ put: name.
-	self @env0:at: #__doc__ put: doc.
+	self ___initName___: name doc: doc.
 	^ self
 %
 
@@ -1388,8 +1465,7 @@ method: module
 __init__: aName _: aDoc
 	"Two-argument form: ``types.ModuleType(name, doc)''."
 
-	self @env0:at: #__name__ put: aName.
-	self @env0:at: #__doc__ put: aDoc.
+	self ___initName___: aName doc: aDoc.
 	^ None
 %
 
@@ -2026,6 +2102,13 @@ ___globalNames___
 			names @env0:add: nm]].
 	self @env0:keysDo: [:k | add @env0:value: k @env0:asString].
 	(self @env0:dynamicInstanceVariables) @env0:do: [:k | add @env0:value: k @env0:asString].
+	"Only a module's OWN generated class holds its top-level defs.  A bare
+	``types.ModuleType(name)'' is an instance of ``module'' itself, and a
+	ModuleType subclass a program defined holds that class's METHODS -- in
+	neither case are they namespace entries (CPython: vars(ModuleType('m')) is
+	__name__, __doc__, __package__, __loader__, __spec__), and listing them
+	put ``update'', ``__repr__'' and the rest into runpy's run_path globals."
+	self ___grailHasNoOwnDefs___ ifTrue: [^ names].
 	(self @env0:class @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
 		| s index skip |
 		s := sel @env0:asString.
