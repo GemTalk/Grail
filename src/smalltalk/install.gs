@@ -489,6 +489,7 @@ run
 	at: #'sys' put: nil;
 	at: #'sys_flags' put: nil;
 	at: #'sys_implementation' put: nil;
+	at: #'sys_version_info' put: nil;
 	at: #'SystemError' put: nil;
 	at: #'SystemExit' put: nil;
 	at: #'TabError' put: nil;
@@ -1474,6 +1475,7 @@ run
 	at: #'SystemErrorTestCase' put: nil;
 	at: #'SystemExitTestCase' put: nil;
 	at: #'SysTestCase' put: nil;
+	at: #'SysVersionInfoTestCase' put: nil;
 	at: #'TabErrorTestCase' put: nil;
 	at: #'TarfileTestCase' put: nil;
 	at: #'TernaryTruthinessTestCase' put: nil;
@@ -3029,6 +3031,7 @@ input src/smalltalk/PythonTests/SysStreamSessionResolutionTestCase.gs
 input src/smalltalk/PythonTests/SystemErrorTestCase.gs
 input src/smalltalk/PythonTests/SystemExitTestCase.gs
 input src/smalltalk/PythonTests/SysTestCase.gs
+input src/smalltalk/PythonTests/SysVersionInfoTestCase.gs
 input src/smalltalk/PythonTests/TabErrorTestCase.gs
 input src/smalltalk/PythonTests/TarfileTestCase.gs
 input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs

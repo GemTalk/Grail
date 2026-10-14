@@ -6226,6 +6226,7 @@ ___moduleAttrIdentityTable___
 		CPython, not a bespoke type, so that is what it must report."
 		t @env0:at: #'sys_flags' put: #('flags' 'sys').
 		t @env0:at: #'sys_float_info' put: #('float_info' 'sys').
+		t @env0:at: #'sys_version_info' put: #('version_info' 'sys').
 		t @env0:at: #'sys_hash_info' put: #('hash_info' 'sys').
 		t @env0:at: #'sys_int_info' put: #('int_info' 'sys').
 		t @env0:at: #'sys_implementation' put: #('SimpleNamespace' 'types').

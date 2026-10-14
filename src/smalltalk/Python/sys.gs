@@ -1557,7 +1557,7 @@ initialize_version_info
 	packages (Django's PY310..PY314 gates, typing backports) branch on
 	it, and the pre-3.10 branches assume interpreter features Grail
 	never had.  The Grail release number stays in the version string."
-	self @env0:at: #version_info put: (tuple @env0:withAll: {3. 14. 0. 'final'. 0}).
+	self @env0:at: #version_info put: (sys_version_info @env0:withAll: {3. 14. 0. 'final'. 0}).
 	self @env0:at: #api_version put: 0.
 	self @env0:at: #hexversion put: 16r030E00F0.
 	self @env0:at: #implementation put: (sys_implementation instance).
@@ -2098,6 +2098,156 @@ ___pyAttrStore___: aName put: aValue
 			reg @env0:at: n put: aValue.
 			^ aValue].
 	^ super ___pyAttrStore___: aName put: aValue
+%
+
+set compile_env: 0
+
+! ===============================================================================
+! sys_version_info - Python ``sys.version_info'': a struct sequence, i.e. a
+! tuple subclass with named fields.  It was a plain tuple, so
+! ``sys.version_info.major'' raised AttributeError -- which alone stopped
+! beautifulsoup4 and soupsieve importing (#1420).  Code relies on both halves:
+! the names, and the tuple (``>= (3, 8)'', ``[:2]'', unpacking, hashing equal
+! to the plain tuple).  Reported to Python as sys.version_info (Object.gs's
+! name table), as sys_flags and sys_float_info are.
+! ===============================================================================
+
+expectvalue /Class
+doit
+tuple subclass: 'sys_version_info'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+sys_version_info category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+sys_version_info removeAllMethods: 0.
+sys_version_info removeAllMethods: 1.
+sys_version_info class removeAllMethods: 0.
+sys_version_info class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Introspection'
+classmethod: sys_version_info
+___pythonValueAttrs___
+	"The fields and the struct-sequence counts are DATA attributes, read
+	without a call -- ``v.major'' is 3, not a bound method."
+
+	^ IdentitySet new
+		add: #major; add: #minor; add: #micro; add: #releaselevel; add: #serial;
+		add: #n_fields; add: #n_sequence_fields; add: #n_unnamed_fields;
+		"Inherited from tuple, which lists it -- see struct_time's copy."
+		add: #'__dict__';
+		yourself
+%
+
+set compile_env: 1
+
+category: 'Instance Creation'
+classmethod: sys_version_info
+__new__
+	^ self ___refuseInstances___
+%
+
+category: 'Instance Creation'
+classmethod: sys_version_info
+__new__: anObject
+	^ self ___refuseInstances___
+%
+
+category: 'Instance Creation'
+classmethod: sys_version_info
+__new__: anObject _: another
+	^ self ___refuseInstances___
+%
+
+category: 'Instance Creation'
+classmethod: sys_version_info
+___refuseInstances___
+	"CPython builds the one instance itself and refuses any other."
+
+	^ TypeError ___signal___: 'cannot create ''sys.version_info'' instances'
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+major
+	^ self @env0:at: 1
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+minor
+	^ self @env0:at: 2
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+micro
+	^ self @env0:at: 3
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+releaselevel
+	^ self @env0:at: 4
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+serial
+	^ self @env0:at: 5
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+n_fields
+	^ 5
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+n_sequence_fields
+	^ 5
+%
+
+category: 'Grail-Accessors'
+method: sys_version_info
+n_unnamed_fields
+	^ 0
+%
+
+category: 'Grail-Attributes'
+method: sys_version_info
+___pyAttrStore___: aName put: aValue
+	"The fields are read-only, as a struct sequence's members are; anything
+	else is refused the way a tuple refuses it."
+
+	(#('major' 'minor' 'micro' 'releaselevel' 'serial') @env0:includes: aName @env0:asString)
+		ifTrue: [^ AttributeError ___signal___: 'readonly attribute'].
+	^ super ___pyAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Conversion'
+method: sys_version_info
+__repr__
+	^ 'sys.version_info(major=' @env0:, (self @env0:at: 1) @env0:printString
+		@env0:, ', minor=' @env0:, (self @env0:at: 2) @env0:printString
+		@env0:, ', micro=' @env0:, (self @env0:at: 3) @env0:printString
+		@env0:, ', releaselevel=' @env0:, (builtins @env1:instance @env1:repr: (self @env0:at: 4)) @env0:asString
+		@env0:, ', serial=' @env0:, (self @env0:at: 5) @env0:printString
+		@env0:, ')'
 %
 
 set compile_env: 0
