@@ -1067,11 +1067,14 @@ def _grail_source_for(tree, mode):
     # A tree parsed and left alone is the source it was parsed from, exactly.
     # Checked by parsing that source again, because the tree may have been
     # changed since -- pytest's assertion rewriting does exactly that.
+    # compare() stops at the first difference and writes nothing out: two
+    # dump()s cost 7.7s of a 9.9s compile() of six's 1,054-line test file,
+    # compare() 1.0s on an unchanged tree and nothing on pytest's, which
+    # differs in its first statements.
     source = getattr(tree, '___grailSource___', None)
     if isinstance(source, str):
         try:
-            if (dump(parse(source, mode=mode), include_attributes=True)
-                    == dump(tree, include_attributes=True)):
+            if compare(parse(source, mode=mode), tree, compare_attributes=True):
                 return (source, None)
         except Exception:
             pass
