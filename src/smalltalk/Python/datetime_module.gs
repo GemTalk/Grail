@@ -1085,6 +1085,53 @@ __new__
 	^ TypeError ___signal___: 'timezone() missing required argument ''offset'' (pos 1)'
 %
 
+category: 'Grail-Callable'
+classmethod: PyTimezone
+value: positional value: kwargs
+	"timezone(offset, name=<unset>).  Both are ordinary parameters, so either
+	may come by keyword: annotated-types builds its cases with
+	``timezone(offset=timedelta(hours=1))''.  The class-side call used to
+	dispatch on the positional count alone (the __new__ arities above) and
+	refused any keyword with ``PyTimezone() takes no keyword arguments''.
+	Binds the two, with CPython's messages for a bad call, then hands them to
+	those same constructors."
+
+	| given offset hasOffset tzName hasName |
+	given := positional @env0:size.
+	kwargs @env0:isNil ifFalse: [given := given @env0:+ kwargs @env0:size].
+	given @env0:> 2 ifTrue: [
+		^ TypeError ___signal___: 'timezone() takes at most 2 arguments ('
+			@env0:, given @env0:printString @env0:, ' given)'].
+	hasOffset := positional @env0:size @env0:>= 1.
+	hasOffset ifTrue: [offset := positional @env0:at: 1].
+	hasName := positional @env0:size @env0:>= 2.
+	hasName ifTrue: [tzName := positional @env0:at: 2].
+	kwargs @env0:isNil ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			(key @env0:= 'offset')
+				ifTrue: [
+					hasOffset ifTrue: [
+						^ TypeError ___signal___:
+							'argument for timezone() given by name (''offset'') and position (1)'].
+					hasOffset := true.
+					offset := v]
+				ifFalse: [
+					(key @env0:= 'name') ifFalse: [
+						^ TypeError ___signal___:
+							'timezone() got an unexpected keyword argument '''
+								@env0:, key @env0:, ''''].
+					hasName ifTrue: [
+						^ TypeError ___signal___:
+							'argument for timezone() given by name (''name'') and position (2)'].
+					hasName := true.
+					tzName := v]]].
+	hasOffset ifFalse: [^ self __new__].
+	^ hasName
+		ifTrue: [self __new__: offset _: tzName]
+		ifFalse: [self __new__: offset]
+%
+
 category: 'Grail-Accessors'
 method: PyTimezone
 utcoffset: dt

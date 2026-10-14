@@ -1496,6 +1496,7 @@ run
 	at: #'TimeClockTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'TimeoutErrorTestCase' put: nil;
+	at: #'TimezoneKeywordsTestCase' put: nil;
 	at: #'TomllibTestCase' put: nil;
 	at: #'TotalOrderingTestCase' put: nil;
 	at: #'TracebackExcShorthandsTestCase' put: nil;
@@ -3064,6 +3065,7 @@ input src/smalltalk/PythonTests/ThreadRegistryTestCase.gs
 input src/smalltalk/PythonTests/TimeClockTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/TimeoutErrorTestCase.gs
+input src/smalltalk/PythonTests/TimezoneKeywordsTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/TotalOrderingTestCase.gs
 input src/smalltalk/PythonTests/TracebackExcShorthandsTestCase.gs
