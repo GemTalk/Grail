@@ -149,3 +149,21 @@ copyreg.dispatch_table
 	reg := copyreg @env1:instance.
 	self assert: result identical: (reg @env1:dispatch_table)
 %
+
+category: 'Grail-Tests - Phase 4d Attribute Calls'
+method: CopyregTestCase
+testPickleRefusesANonCallableFunction
+	"copyreg.pickle raises CPython's TypeError for a reduction function or a
+	constructor that is not callable (test_copyreg).  Grail recorded the first
+	and ignored the second.  tests/python/copyreg_callable_checks.py holds the
+	checks, each agreeing with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'copyreg_callable_checks' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/copyreg_callable_checks.py')
+		name: 'copyreg_callable_checks'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '4 checks, 0 disagreeing [], keys match: True'
+%
