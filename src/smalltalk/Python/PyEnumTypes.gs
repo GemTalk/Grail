@@ -6034,7 +6034,7 @@ __and__: other
 	ov := self ___flagOperandOrNil___: other.
 	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '&'].
 	^ Enum ___grailLookupValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: ov)
+		value: ((self @env0:dynamicInstVarAt: #value) ___pyBitAnd___: ov)
 %
 
 category: 'Grail-Flag Member'
@@ -6046,7 +6046,7 @@ __xor__: other
 	ov := self ___flagOperandOrNil___: other.
 	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '^'].
 	^ Enum ___grailLookupValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: ov)
+		value: ((self @env0:dynamicInstVarAt: #value) ___pyBitXor___: ov)
 %
 
 category: 'Grail-Flag Member'

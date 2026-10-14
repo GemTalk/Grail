@@ -674,7 +674,7 @@ __and__: other
 	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:and: [other]
 	].
-	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitAnd: other
+	^ (self ifTrue: [1] ifFalse: [0]) ___pyBitAnd___: other
 %
 
 category: 'Grail-Conversion'
@@ -1150,7 +1150,7 @@ __xor__: other
 	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:xor: other
 	].
-	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitXor: other
+	^ (self ifTrue: [1] ifFalse: [0]) ___pyBitXor___: other
 %
 
 set compile_env: 0
