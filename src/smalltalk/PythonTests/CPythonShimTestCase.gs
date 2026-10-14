@@ -3758,3 +3758,19 @@ testUnicodeCompareAndContainsFromC
 repr([d.unicode_compare(a, b) for a, b in [(''abc'', ''abd''), (''abd'', ''abc''), (''ab'', ''ab''), (''ab'', ''abc''), (''h\u00e9llo'', ''\u00e9''), (''a\u20ac'', ''a''), (''xyz'', ''q''), ('''', '''')]])') equals: '[(-1, False, -1), (1, False, 1), (0, True, 0), (-1, False, -1), (-1, True, -1), (1, True, 1), (1, False, 1), (0, True, 0)]'
 %
 
+category: 'Grail-Tests - NumPy Builtins'
+method: CPythonShimTestCase
+testAWheelModuleFunctionIsABuiltin
+	"A C extension's module function is a builtin_function_or_method, as a native module's
+	is: type(), isinstance with types.BuiltinFunctionType / FunctionType, and repr.  It
+	read as a Python ``function'', so numpy's add_newdoc took its own C functions for pure
+	Python and warned 30 times at import."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import types, math
+import _grail_demo as d
+repr([(type(f).__name__, isinstance(f, types.BuiltinFunctionType), isinstance(f, types.FunctionType), repr(f)) for f in (d.add, math.sqrt, len)])') equals: '[(''builtin_function_or_method'', True, False, ''<built-in function add>''), (''builtin_function_or_method'', True, False, ''<built-in function sqrt>''), (''builtin_function_or_method'', True, False, ''<built-in function len>'')]'
+%
+
