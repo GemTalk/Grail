@@ -5191,6 +5191,42 @@ ___grailNsDescriptorFor___: aSym loaded: aValue
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___classBodySiblingValue___: aSym
+	"What a class-body statement reads for aSym, a sibling ``def'' of the body
+	-- what CPython's class namespace holds for it at that point: the
+	decorator's result once a decorator has stored one (raw, no __get__), the
+	property for a @property def, else the function.
+
+	It answered the function always, so a later statement that reads a
+	decorated sibling saw the undecorated def: numpy's matrixlib does
+	``getT = T.fget'' after ``@property def T'' (#1580)."
+
+	| v |
+	v := self ___grailNsHolderValueFor___: aSym.
+	v isNil ifTrue: [v := self ___grailNsOwnPropertyFor___: aSym].
+	v isNil ifTrue: [v := UnboundMethod definingClass: self selector: aSym].
+	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___classBodyNamespaceValue___: aSym
+	"What a class-body METHOD DECORATOR reads for aSym, a name the body binds:
+	the namespace's value, raw.  A class read ran the value's __get__ --
+	sqlalchemy's ``@_state_dict_inst.classlevel'', where _state_dict_inst is
+	a hybridmethod, got the function its __get__ answers for the class, not
+	the hybridmethod (#1580).  Falls back to that class read for a name the
+	holder does not have and that is no @property -- a plain def."
+
+	| v |
+	v := self ___grailNsHolderValueFor___: aSym.
+	v isNil ifTrue: [v := self ___grailNsOwnPropertyFor___: aSym].
+	v isNil ifTrue: [v := self ___pyAttrLoad___: aSym].
+	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailNsHolderValueFor___: aSym
 	"What the class's ___dynInstVars___ holder stores under aSym, raw -- a
 	decorated def's decorator result -- or nil."
