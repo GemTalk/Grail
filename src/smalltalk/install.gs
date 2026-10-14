@@ -389,6 +389,7 @@ run
 	at: #'json' put: nil;
 	at: #'json_decoder' put: nil;
 	at: #'JSONDecodeError' put: nil;
+	at: #'JSONDecoder' put: nil;
 	at: #'KeyboardInterrupt' put: nil;
 	at: #'KeyError' put: nil;
 	at: #'list_iterator' put: nil;
@@ -1141,6 +1142,7 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorLengthHintTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
+	at: #'JsonDecoderClassTestCase' put: nil;
 	at: #'JsonLoadsKeywordsTestCase' put: nil;
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
@@ -1897,6 +1899,7 @@ input src/smalltalk/Python/PythonFinalizationError.gs
 input src/smalltalk/Python/IndentationError.gs
 input src/smalltalk/Python/IncompleteInputError.gs
 input src/smalltalk/Python/JSONDecodeError.gs
+input src/smalltalk/Python/JSONDecoder.gs
 input src/smalltalk/Python/UnicodeError.gs
 input src/smalltalk/Python/BytesWarning.gs
 input src/smalltalk/Python/DeprecationWarning.gs
@@ -2703,6 +2706,7 @@ input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
 input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/JsonDecodeErrorTestCase.gs
+input src/smalltalk/PythonTests/JsonDecoderClassTestCase.gs
 input src/smalltalk/PythonTests/JsonLoadsKeywordsTestCase.gs
 input src/smalltalk/PythonTests/KeyboardInterruptTestCase.gs
 input src/smalltalk/PythonTests/KeyErrorTestCase.gs

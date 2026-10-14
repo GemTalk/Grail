@@ -28,9 +28,10 @@ Surface targeted at Flask / Werkzeug / itsdangerous:
         ensure_ascii=True, default=None)
   loads(s)
 
-JSONEncoder / JSONDecoder classes are not implemented; subclassing
-the encoder is rarely used outside framework internals.  Use the
-`default` callback on dumps() to customize a single type instead.
+JSONEncoder is an empty class (dumps does not route through encoder
+instances); use the `default` callback on dumps() to customize a single
+type.  JSONDecoder is real (JSONDecoder.gs): decode / raw_decode over this
+module''s parser, honouring its keyword hooks.
 
 Supported value types:
   None         -> null
@@ -75,6 +76,7 @@ initialize
 	``json.decoder.JSONDecodeError'' names the same class."
 	self @env0:at: #JSONEncoder put: (PythonInstance ___subclass___: #JSONEncoder instVarNames: #() classInstVarNames: #()).
 	self @env0:at: #JSONDecodeError put: JSONDecodeError.
+	self @env0:at: #JSONDecoder put: JSONDecoder.
 	self @env0:at: #decoder put: (json_decoder instance)
 %
 

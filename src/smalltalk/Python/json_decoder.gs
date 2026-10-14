@@ -24,7 +24,8 @@ json_decoder comment:
 
 CPython defines JSONDecodeError here, and json/__init__.py re-exports it, so
 ``json.decoder.JSONDecodeError is json.JSONDecodeError'' -- and the class''s
-own __module__ is ''json.decoder'', not ''json''.  Both spellings appear in
+own __module__ is ''json.decoder'', not ''json''.  JSONDecoder likewise.
+Both spellings appear in
 real code, so both must resolve to the SAME class or ``except'' clauses
 silently stop matching.
 
@@ -55,7 +56,17 @@ initialize
 	json.decoder.JSONDecodeError'' and an ``except json.JSONDecodeError''
 	must catch the same thing."
 
-	self @env0:at: #JSONDecodeError put: JSONDecodeError
+	| constants |
+	self @env0:at: #JSONDecodeError put: JSONDecodeError.
+	self @env0:at: #JSONDecoder put: JSONDecoder.
+	"CPython's _CONSTANTS: JSONDecoder's default parse_constant is its
+	__getitem__.  PyDict by name: it is filed in after this file, with no
+	forward reference."
+	constants := (Python @env0:at: #PyDict) @env0:new.
+	constants @env0:at: '-Infinity' put: MinusInfinity.
+	constants @env0:at: 'Infinity' put: PlusInfinity.
+	constants @env0:at: 'NaN' put: PlusQuietNaN.
+	self @env0:at: #'_CONSTANTS' put: constants
 %
 
 set compile_env: 0
