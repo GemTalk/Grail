@@ -999,6 +999,7 @@ run
 	at: #'ExecStarImportTestCase' put: nil;
 	at: #'ExecWithClosureIRTestCase' put: nil;
 	at: #'ExecWithClosureTestCase' put: nil;
+	at: #'ExecZeroArgSuperTestCase' put: nil;
 	at: #'ExitStackProtocolTestCase' put: nil;
 	at: #'ExitStackUsageTestCase' put: nil;
 	at: #'FastapiWallsTestCase' put: nil;
@@ -2554,6 +2555,7 @@ input src/smalltalk/PythonTests/ExecMethodCopiesTestCase.gs
 input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
 input src/smalltalk/PythonTests/ExecWithClosureIRTestCase.gs
 input src/smalltalk/PythonTests/ExecWithClosureTestCase.gs
+input src/smalltalk/PythonTests/ExecZeroArgSuperTestCase.gs
 input src/smalltalk/PythonTests/ExitStackProtocolTestCase.gs
 input src/smalltalk/PythonTests/ExitStackUsageTestCase.gs
 input src/smalltalk/PythonTests/FastapiWallsTestCase.gs

@@ -314,7 +314,8 @@ ___emitSmalltalkOn___: aStream
 				and: [keywords isEmpty
 					and: [self ___superNameIsShadowed___ not
 						and: [CallAst classBeingCompiled notNil
-							and: [CallAst moduleClassBeingCompiled notNil]]]]]])
+							and: [CallAst moduleClassBeingCompiled notNil
+								or: [ModuleAst compilingDoitScope notNil]]]]]]])
 		ifTrue: [
 			"A METHOD-LOCAL class (defined in a function body) is not a
 			module attribute, so the module-instance-by-name lookup below
@@ -388,7 +389,15 @@ ___emitSmalltalkOn___: aStream
 			CallAst ___printClassCellReadOn___: aStream
 				selector: '___grailClassCellValueForSuper___'
 				around: [
-				(CallAst classDefIsModuleScope == false)
+				"A class an exec'd source defines is no module's attribute either:
+				a doit compiles with no module class at all, so this arm used to
+				be skipped and every zero-argument super() in exec'd code reached
+				the run-time ``super(): no arguments''.  pytest imports test
+				modules and conftests through exec, so each test class and
+				conftest class that called super() failed (pygments' 1,508
+				collection errors).  The cell knows the class without a module."
+				(CallAst classDefIsModuleScope == false
+						or: [CallAst moduleClassBeingCompiled isNil])
 					ifTrue: [
 						CallAst addCapturedClassName: CallAst classBeingCompiled.
 						aStream
@@ -3266,8 +3275,14 @@ ___printShadowableSuperOn___: aStream arm: aBlock
 	Shared by all four emits -- the proxy and the three precondition errors --
 	because a replacement ``super'' is entitled to take the call even where the
 	builtin would have refused it.  Raising past the probe would make patching
-	work only for the calls that were going to succeed anyway."
+	work only for the calls that were going to succeed anyway.
 
+	Not inside a doit, which has no module to probe: exec'd source compiles
+	with no module class, so the probe's receiver was nil and the compile died
+	with an uncatchable MessageNotUnderstood.  The compile-time half --
+	___superNameIsShadowed___, a ``super'' the source binds -- still applies."
+
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ aBlock value].
 	aStream nextPutAll: '([:___sup___ | ___sup___ == nil ifTrue: ['.
 	aBlock value.
 	aStream
@@ -4049,9 +4064,12 @@ ___printClassObjectOn___: aStream cellSelector: aCellSelector
 	Split out because ``del __class__'' needs the class in order to empty its
 	cell, and going through the wrapper would READ the cell first: on a second
 	delete that read raises, turning a repeat of a legal statement into an
-	error.  The delete targets the container, not the contents."
+	error.  The delete targets the container, not the contents.
 
-	(self classDefIsModuleScope == false)
+	A class an exec'd source defines takes the cell route too: a doit has no
+	module class to read it from."
+
+	(self classDefIsModuleScope == false or: [self moduleClassBeingCompiled isNil])
 		ifTrue: [
 			self addCapturedClassName: self classBeingCompiled.
 			aStream

@@ -852,10 +852,14 @@ ___emitSmalltalkOn___: aStream
 						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ' @env1:___grailClassDictCell___)'].
 			^ self].
+	"Inside a doit too: an exec'd class has no module class, and its methods
+	reach the class through the cell (CallAst >> ___printClassObjectOn___:
+	cellSelector:)."
 	((ctx isKindOf: LoadAst)
 		and: [id asSymbol == #'__class__'
 		and: [CallAst classBeingCompiled notNil
-		and: [CallAst moduleClassBeingCompiled notNil
+		and: [(CallAst moduleClassBeingCompiled notNil
+			or: [ModuleAst compilingDoitScope notNil])
 		and: [(CallAst inClassBodyValueEmit ~~ true
 			or: [CallAst classBodyValueDefNode notNil])
 		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
