@@ -286,6 +286,46 @@ __new__: arg1 _: arg2 _: arg3
 
 category: 'Grail-Initialization'
 classmethod: BaseException
+_new: positional kw: kwargs
+	"``ExceptionClass(*args)'' for any arity its fixed forms do not cover.
+	CPython's BaseException takes ANY number of positional arguments and keeps
+	them all in ``args''; Grail had forms for 0, 1, 2, 3 and 5 only, so
+	``ValueError(0, 1, 2, 3)'', ``OSError(2, 's', 'f', None)'' and every
+	six-or-more argument exception were ``takes wrong number of arguments''
+	(test_exception_hierarchy's BlockingIOError cases).  Through
+	___classForArgs___: like the fixed forms, so OSError's errno mapping
+	applies whatever the arity.
+
+	Keywords are CPython's TypeError, as they always were here; the built-in
+	exceptions that take them (NameError, AttributeError, ImportError) answer
+	their own ``_new:kw:''."
+
+	| instance args |
+	((kwargs @env0:notNil) and: [kwargs @env0:notEmpty]) ifTrue: [
+		^ TypeError ___signal___: (self @env0:name @env0:asString
+			@env0:, '() takes no keyword arguments')].
+	args := positional @env0:isNil ifTrue: [#()] ifFalse: [positional @env0:asArray].
+	instance := (self ___classForArgs___: args) ___new___.
+	instance ___args___: args.
+	^ instance
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+__new__: arg1 _: arg2 _: arg3 _: arg4
+	"``ExceptionClass(a, b, c, d)'' as an expression -- OSError's
+	(errno, strerror, filename, winerror) form among others.  Through
+	___classForArgs___: for the reason the two-argument form gives."
+
+	| instance args |
+	args := { arg1. arg2. arg3. arg4 }.
+	instance := (self ___classForArgs___: args) ___new___.
+	instance ___args___: args.
+	^ instance
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
 __new__: arg1 _: arg2 _: arg3 _: arg4 _: arg5
 	"``ExceptionClass(a, b, c, d, e)`` as an expression —
 	UnicodeDecodeError / UnicodeEncodeError take five arguments, and so does

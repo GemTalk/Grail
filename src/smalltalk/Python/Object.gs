@@ -6667,6 +6667,14 @@ value: positional value: kwargs
 	"__new__:_:_:… are CLASSMETHODs, so probe the metaclass (self class), not
 	self's instance-side method dict."
 	(self @env0:class @env0:whichClassIncludesSelector: selSym environmentId: 1) == nil ifTrue: [
+		"A class with a VARARGS entry takes every arity its fixed forms do not:
+		``ValueError(0, 1, 2, 3)'' has no ``__new__:_:_:_:'' but BaseException
+		answers ``_new:kw:'', and CPython's BaseException takes any number of
+		positionals.  Only a class with neither is the TypeError below."
+		"An EMPTY mapping, never nil: a ``_new:kw:'' reads its keywords
+		(str's does ``keysDo:''), and this branch is reached only without any."
+		(self @env0:class @env0:whichClassIncludesSelector: #'_new:kw:' environmentId: 1) == nil
+			ifFalse: [^ self _new: positional kw: (kwargs @env0:ifNil: [KeyValueDictionary @env0:new])].
 		^ TypeError ___signal___: (self @env0:name @env0:asString
 			@env0:, '() takes wrong number of arguments (' @env0:, nargs @env0:printString
 			@env0:, ' positional, 0 keyword) - no matching method')].

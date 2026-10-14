@@ -245,21 +245,38 @@ testEmitterHonorsChosenSelector
 category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
 testCodegenArityMismatchEmitsTypeError
-	"`bool(1, 2, 3, 4)` has no matching `__new__:_:_:_:` on Boolean, so the
-	codegen emits a TypeError-raising expression instead of falling through
-	to the broken legacy `bool value: { ... } value: nil` form.
+	"`slice(1, 2, 3, 4)` has no matching `__new__:_:_:_:` on slice and no
+	varargs `_new:kw:` either, so the codegen emits a TypeError-raising
+	expression instead of falling through to the broken legacy
+	`slice value: { ... } value: nil` form.
 
-	Uses 4 arguments rather than 2: Boolean now carries `__new__:_:` and
-	`__new__:_:_:` so that `bool(42, 42)` raises the CATCHABLE TypeError
-	CPython does, at runtime, instead of an uncatchable MNU on the kernel
-	Boolean metaclass.  Those arities therefore resolve here, and only a
-	genuinely unmatched one still exercises this codegen path."
+	This used `bool(1, 2, 3, 4)`.  A class WITH a varargs `_new:kw:` -- bool
+	has one -- now takes the runtime call instead, because that entry accepts
+	any arity (CallAst >> knownClassName), and bool's answers CPython's own
+	``bool expected at most 1 argument, got 4''; see
+	testVarargsClassCallReachesItsOwnArityMessage."
+
+	| src |
+	src := self generatedSourceFor: 'slice(1, 2, 3, 4)'.
+	self assert: (src includesString: 'TypeError ___signal___:').
+	self assert: (src includesString: 'slice()').
+	self deny: (src includesString: 'value: { ')
+%
+
+category: 'Grail-Tests'
+method: ClassCallFastPathTestCase
+testVarargsClassCallReachesItsOwnArityMessage
+	"A class whose metaclass answers a varargs `_new:kw:` is not an arity
+	mismatch at compile time: the call is emitted as the runtime class call,
+	which hands `_new:kw:` the arity its fixed forms lack.  So `bool(1, 2, 3,
+	4)` raises bool's own message, which is CPython's, and an exception takes
+	any number of arguments, as CPython's BaseException does."
 
 	| src |
 	src := self generatedSourceFor: 'bool(1, 2, 3, 4)'.
-	self assert: (src includesString: 'TypeError ___signal___:').
-	self assert: (src includesString: 'bool()').
-	self deny: (src includesString: 'value: { ')
+	self deny: (src includesString: 'takes wrong number of arguments').
+	src := self generatedSourceFor: 'ValueError(1, 2, 3, 4)'.
+	self deny: (src includesString: 'takes wrong number of arguments')
 %
 
 ! ===============================================================================
