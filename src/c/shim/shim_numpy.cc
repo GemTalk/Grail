@@ -469,17 +469,37 @@ extern "C" PyObject* PyUnicode_AsUTF8String(PyObject *unicode) {
     if (s == NULL) return NULL;
     return PyBytes_FromStringAndSize(s, n);
 }
+/* Comparing UTF-8 bytes orders strings as comparing their code points does
+   (a property of UTF-8), and a match of one UTF-8 string inside another
+   starts on a character boundary.  These were stubs answering "equal" and
+   "absent"; numpy's dtype naming reached PyUnicode_Compare. */
+static int utf8_compare(const char *a, Py_ssize_t na, const char *b, Py_ssize_t nb) {
+    int c = memcmp(a, b, (size_t)(na < nb ? na : nb));
+    if (c != 0) return c < 0 ? -1 : 1;
+    return na < nb ? -1 : (na > nb ? 1 : 0);
+}
 extern "C" int PyUnicode_Compare(PyObject *left, PyObject *right) {
-    STUBLOG("PyUnicode_Compare");
-    return 0;
+    Py_ssize_t na = 0, nb = 0;
+    const char *a = PyUnicode_AsUTF8AndSize(left, &na);
+    if (a == NULL) return -1;
+    const char *b = PyUnicode_AsUTF8AndSize(right, &nb);
+    if (b == NULL) return -1;
+    return utf8_compare(a, na, b, nb);
 }
 extern "C" int PyUnicode_CompareWithASCIIString(PyObject *left, const char *right) {
-    STUBLOG("PyUnicode_CompareWithASCIIString");
-    return 0;
+    Py_ssize_t na = 0;
+    const char *a = PyUnicode_AsUTF8AndSize(left, &na);
+    if (a == NULL) { PyErr_Clear(); return -1; }
+    return utf8_compare(a, na, right, (Py_ssize_t)strlen(right));
 }
 extern "C" int PyUnicode_Contains(PyObject *container, PyObject *element) {
-    STUBLOG("PyUnicode_Contains");
-    return 0;
+    Py_ssize_t nc = 0, ne = 0;
+    const char *c = PyUnicode_AsUTF8AndSize(container, &nc);
+    if (c == NULL) return -1;
+    const char *e = PyUnicode_AsUTF8AndSize(element, &ne);
+    if (e == NULL) return -1;
+    if (ne == 0) return 1;
+    return memmem(c, (size_t)nc, e, (size_t)ne) != NULL;
 }
 extern "C" PyObject * PyUnicode_Format(PyObject *format, PyObject *args) {
     STUBLOG("PyUnicode_Format");
