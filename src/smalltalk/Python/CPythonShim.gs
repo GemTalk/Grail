@@ -1407,6 +1407,26 @@ foreignTypeCheck: objPtr type: typePtr subclass: aBoolean
 
 category: 'Grail-Calling'
 method: CPythonShim
+arrayDispatcherParts: cPtr
+	"{ dispatcher. implementation } of numpy's _ArrayFunctionDispatcher at
+	cPtr -- the Python function that picks out the relevant arguments and the
+	one that does the work -- or nil when cPtr is not one Grail can read.  See
+	shimArrayDispatcherParts in cpython.cc."
+
+	^ self ___shimUserAction: #shimArrayDispatcherParts withArgs: { cPtr }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+arrayFunctionKind: cPtr
+	"0 when the wheel object at cPtr has no __array_function__, 1 when it has
+	ndarray's, 2 for any other.  See shimArrayFunctionKind in cpython.cc."
+
+	^ self ___shimUserAction: #shimArrayFunctionKind withArgs: { cPtr }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 foreignStr: cPtr repr: aBoolean
 	"str() -- or repr() when aBoolean -- of a wheel's own C object, through its
 	tp_str / tp_repr; nil when C has nothing to offer."
@@ -2851,10 +2871,14 @@ PyObject_SetAttrString: obj name: nameString value: aValue
 category: 'Grail-CPython API'
 method: CPythonShim
 ___ug_PyObject_SetAttrString: obj name: nameString value: aValue
-	"setattr(obj, name, value) — Grail compiles attribute stores as a
-	`name:` setter in env 1."
+	"setattr(obj, name, value), through the builtin, so a __setattr__
+	override intercepts and a NEW attribute is stored.  This used to send the
+	env-1 setter ``name:'', which exists only for an attribute the class
+	declares: on anything else it was taken for a call of a method ``name''
+	and raised AttributeError.  numpy's finfo fills an empty instance this way
+	(_populate_finfo_constants), and np.polyfit needs it."
 
-	obj perform: (nameString , ':') asSymbol env: 1 withArguments: { aValue }.
+	(builtins @env1:instance) @env1:setattr: obj _: nameString _: aValue.
 %
 
 category: 'Grail-CPython API'

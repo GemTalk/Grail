@@ -768,7 +768,7 @@ A sample of everyday use -- `arange`, `reshape`, arithmetic, `.T`, `mean`,
 lists, `dot`, `@`, `std`, `concatenate`, `where`, iteration, item assignment
 -- prints what CPython prints in 18 of 22 lines.
 
-### The frontier now
+### The frontier then
 
 1. **GemStone's user-action nesting limit.**  `INT_MAX_USER_ACTION = 2`
    (`src/interp.ht`): the interpreter may be re-entered through a user action
@@ -793,6 +793,80 @@ lists, `dot`, `@`, `std`, `concatenate`, `where`, iteration, item assignment
    cheaper than finding them that way.
 5. **A Grail generator cannot be iterated from C** (its body runs on its own
    GsProcess, and a user action cannot switch process).
+
+## Stage 4 (2026-10-14): numpy's dispatchers run in Grail; `import numpy` completes on macOS
+
+Before: the nesting limit (frontier item 1 above) stopped `np.linspace`, and
+with it `_mac_os_check`'s `polyfit`, which `import numpy` runs on macOS.
+After: with numpy's own `__init__.py`, unpatched, `import numpy` completes on
+macOS and `np.polyfit([0, 1, 2], [1, 3, 5], 1)` answers CPython's
+`[1.9999999999999996, 1.0000000000000016]` to the last bit.  The
+everyday-use sample now matches CPython on 19 of 22 lines; the three left are
+`str(dtype)`, `repr(array)` and `str(array)` (item 2 below).
+
+**Wall 40 -- the nesting limit, resolved on the Grail side.**  A numpy public
+function is an `_ArrayFunctionDispatcher`.  Its C `tp_call` calls the Python
+dispatcher for the relevant arguments, asks each one for
+`__array_function__`, and when none overrides it (none has one, or the one it
+has is ndarray's) calls the Python implementation.  Through C that is two
+user-action re-entries per call; called from Grail it is now none:
+`ShimForeignObject>>___callArrayDispatch:args:kwargs:` does the same work in
+Grail.  It needs two things only C can see, answered by two user actions that
+do not call back:
+
+* `shimArrayDispatcherParts` -- the dispatcher and implementation, which numpy
+  keeps at offsets 32 and 40 of the object and exposes only the second of (the
+  `_implementation` getset).  The layout is checked against that getset and
+  `tp_dictoffset` before it is trusted; a mismatch answers nil and the call
+  goes to C as before.
+* `shimArrayFunctionKind` -- for a wheel object passed as a relevant
+  argument: no `__array_function__`, ndarray's, or another.
+
+Anything else goes to C unchanged: an override (C hands the call to that
+`__array_function__`), a `like=` dispatcher (no dispatcher function), and a
+call the dispatcher rejects -- it runs again in C, which raises with the public
+function's name, as numpy words it.  A dispatcher is argument plumbing, so
+running it twice changes nothing.  A dispatcher that is a GENERATOR (several
+of numpy's are) now works too: Grail iterates it, where C could not (item 5
+below).
+
+The VM limit itself is unchanged, and a C extension that calls back into
+Python three deep still meets it; a VM issue is being filed for it.
+
+**Wall 41 -- `PyObject_SetAttrString` on a Grail object.**  The server sent
+the env-1 setter `name:`, which exists only for an attribute the class
+declares; for a new one it was taken for a call of a method `name` and raised
+AttributeError.  numpy's `finfo` fills an empty instance from C
+(`_populate_finfo_constants`), so `polyfit`'s `finfo(x.dtype).eps` failed.  It
+is now `setattr()`, so a `__setattr__` override sees the store too.
+
+Tests: six in `CPythonShimTestCase`, "Grail-Tests - NumPy Dispatch", on the
+demo extension's miniature of numpy's dispatcher (`Dispatcher`, with numpy's
+`tp_name` and layout; `NdLike`, named `numpy.ndarray`; `OverLike`).  Each
+expected value is what CPython answers for the same source.  With the two
+fixes reverted, the four that cover them error (nesting, ndarray-default
+arguments, a generator dispatcher, the C setattr) and the two that cover
+what still goes to C pass.
+
+### The frontier now
+
+1. **The VM's nesting limit** still applies to any other path that re-enters
+   three deep: an override's `__array_function__`, a ufunc calling a Python
+   `__array_ufunc__`, numpy's printing (item 2).
+2. **`str()` / `repr()` of numpy objects.**  numpy formats in Python, called
+   back from C, and the callback ends in error 2758 ("return from on:do:
+   block would cross frame of ... user action"); the proxy then prints
+   itself.
+3. **A C builtin function reads as a Python function.**  `import numpy` warns
+   30 times "add_newdoc was used on a pure-python object <function array>":
+   numpy's `_needs_add_docstring` finds `isinstance(obj, types.FunctionType)`
+   true for its own C functions.
+4. **#1580**: a class-body statement that reads a sibling `@property` sees
+   the function (`numpy/matrixlib/defmatrix.py:1009`).
+5. **55 more stubs** in `shim_numpy.cc` answer as if they succeeded.
+6. **A Grail generator cannot be iterated from C** (its body runs on its own
+   GsProcess, and a user action cannot switch process).  numpy's dispatchers
+   no longer need it.
 
 ## Repro
 
