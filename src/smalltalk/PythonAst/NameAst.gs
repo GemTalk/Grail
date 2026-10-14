@@ -701,7 +701,7 @@ ___emitSmalltalkOn___: aStream
 			aStream
 				nextPutAll: '(';
 				nextPutAll: CallAst classBodyDecoratorScope key;
-				nextPutAll: ' @env1:___pyAttrLoad___: #''';
+				nextPutAll: ' @env1:___classBodyNamespaceValue___: #''';
 				nextPutAll: id;
 				nextPutAll: ''')'.
 			^ self
@@ -2871,12 +2871,16 @@ ___printSiblingFunctionOn___: aStream
 	``f = __repr__'' and ``recursive_repr()(__repr__)'' in one class body held
 	two different objects where CPython holds one (test_reprlib's
 	test__wrapped__), and it printed as ``<bound method
-	UndefinedObject.__repr__ of None>''."
+	UndefinedObject.__repr__ of None>''.
+
+	Through object class >> ___classBodySiblingValue___:, which answers the
+	same function for a plain def, and what CPython's namespace holds for a
+	decorated one or a @property (#1580)."
 
 	aStream
-		nextPutAll: '(UnboundMethod @env1:definingClass: ';
+		nextPutAll: '(';
 		nextPutAll: CallAst ___classBeingCompiledVar___;
-		nextPutAll: ' selector: #''';
+		nextPutAll: ' @env1:___classBodySiblingValue___: #''';
 		nextPutAll: self ___mangledId___;
 		nextPutAll: ''')'
 %

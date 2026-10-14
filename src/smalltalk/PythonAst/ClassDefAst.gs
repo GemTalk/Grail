@@ -131,8 +131,9 @@ printSmalltalkRuntimeOn: aStream
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedNeedsClassDict savedCellMethodNames
 	  savedCellRebindable
 	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody
-	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder |
+	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder earlyDecorated |
 	methodDefs := self instanceMethodDefs.
+	earlyDecorated := IdentitySet new.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
 	selfParam := self selfParameterName.
@@ -1758,6 +1759,9 @@ printSmalltalkRuntimeOn: aStream
 		= g'' in a class body must leave y == 2 (test_listcomps
 		test_explicit_global), and with a trailing pass it answered 1."
 		pendingStmts := self ___classBodyOrderedRuntimeStatements___.
+		"Defs whose decorators run AT THE DEF, below -- see
+		___defsDecoratedAtTheirPosition___."
+		earlyDecorated := self ___defsDecoratedAtTheirPosition___.
 		"PARAMETER DEFAULTS, AT THE DEF -- where CPython evaluates them, once.  A
 		class body that CALLS its own helper needs them stored by then: pygments'
 		``def _make_begin_state(compound, _core_token=_core_token, ...)'' followed
@@ -1860,7 +1864,17 @@ printSmalltalkRuntimeOn: aStream
 										aStream nextPutAll: self ___stVarName___;
 											nextPutAll: ' @env1:___grailNsBind___: ''';
 											nextPutAll: stmt name asString;
-											nextPutAll: '''.']
+											nextPutAll: '''.'.
+										"A def a later statement reads gets its decorators
+										here, as CPython applies them at the def (#1580)."
+										(earlyDecorated includes: stmt) ifTrue: [
+											aStream lf.
+											stmt
+												printMethodDecoratorsOn: aStream
+												decorators: stmt applicableMethodDecorators
+												className: self ___stVarName___
+												siblingNames: (self ___decoratorScopeFor___: stmt
+													base: (self ___classBodyDecoratorScopeWith___: classAttrs))]]
 									ifFalse: [(stmt isKindOf: IfAst)
 										ifTrue: [self emitClassBodyIf: stmt on: aStream]
 										ifFalse: [stmt printSmalltalkOn: aStream]]]]
@@ -2586,7 +2600,8 @@ printSmalltalkRuntimeOn: aStream
 			and: [def ___wrapsPropertyAccessor___ not].
 		(decos isEmpty not
 			and: [(decoratedProps includes: def name asSymbol) not
-			and: [marking or: [(self ___isRebindLaterInBody___: def) not]]]) ifTrue: [
+			and: [(earlyDecorated includes: def) not
+			and: [marking or: [(self ___isRebindLaterInBody___: def) not]]]]) ifTrue: [
 			marking
 				ifTrue: [
 					def
@@ -4891,6 +4906,66 @@ ___classBodyOrderedRuntimeStatements___
 			or: [(self ___isClassBodyNamespaceBinding___: stmt)
 			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]]])
 				ifTrue: [result add: pos -> stmt]].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyDecoratorScopeWith___: classAttrs
+	"The names a class-body method decorator may read off the class: every def
+	and every attribute the body binds.  The decorator pass in
+	printSmalltalkRuntimeOn: builds the same set (decoratorScope) and says why."
+
+	| scope |
+	scope := IdentitySet new.
+	self ___allFunctionDefs___ do: [:d | scope add: d name asSymbol].
+	classAttrs do: [:pair | scope add: pair key asSymbol].
+	^ scope
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___decoratorStoresOver___: aDef decoratedProps: decoratedProps
+	"Will aDef's method decorators store their result over the compiled
+	method?  The condition the method-decorator pass in printSmalltalkRuntimeOn:
+	applies, for the non-marking branch: it has applicable decorators, it is
+	not one accessor of a decorated property, it does not merely mark a
+	property accessor, and no later statement rebinds its name."
+
+	| decos kind |
+	decos := aDef applicableMethodDecorators.
+	decos isEmpty ifTrue: [^ false].
+	(decoratedProps includes: aDef name asSymbol) ifTrue: [^ false].
+	kind := aDef ___propertyAccessorKind___.
+	((kind == #getter or: [kind == #setter or: [kind == #deleter]])
+		and: [aDef ___wrapsPropertyAccessor___ not]) ifTrue: [^ false].
+	^ (self ___isRebindLaterInBody___: aDef) not
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___defsDecoratedAtTheirPosition___
+	"The top-level defs whose method decorators are applied AT THE DEF, in the
+	ordered flush of the class body -- CPython's order -- rather than in the
+	decorator pass after it: every def whose decorators store their result over
+	the compiled method.
+
+	The pass after the body made a later statement read the UNDECORATED def:
+	``getT = T.fget'' after ``@property def T'' (numpy's matrixlib), ``btag =
+	b.tag'' after ``@tagging def b'', and a decorator's side effects ran after
+	every statement below it (#1580).  What stays in that pass: a decorator that
+	only MARKS a property accessor, a decorated property's accessors (one
+	property object, built once all of them exist), and a def a later
+	statement rebinds (___isRebindLaterInBody___:)."
+
+	| result decoratedProps |
+	result := IdentitySet new.
+	body isNil ifTrue: [^ result].
+	decoratedProps := self ___decoratedPropertyNames___.
+	body body do: [:stmt |
+		((stmt isKindOf: FunctionDefAst)
+			and: [self ___decoratorStoresOver___: stmt decoratedProps: decoratedProps])
+				ifTrue: [result add: stmt]].
 	^ result
 %
 

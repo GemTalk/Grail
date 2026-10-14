@@ -655,6 +655,14 @@ ___grailForgetInterned___: aSelector
 
 category: 'Grail-Descriptor Protocol'
 method: UnboundMethod
+__get__: instance
+	"``f.__get__(obj)'' -- the owner is optional, as in CPython."
+
+	^ self __get__: instance _: None
+%
+
+category: 'Grail-Descriptor Protocol'
+method: UnboundMethod
 __get__: instance _: owner
 	"Function-descriptor binding.  In Python a plain function is a descriptor,
 	so lifting one off a class and storing it in ANOTHER class body produces an
@@ -667,7 +675,7 @@ __get__: instance _: owner
 	it with no arguments and got ``unbound method 'test_repr_deep' must be
 	called with an instance as the first argument''.
 
-	Binding is skipped for CLASS access, matching CPython's
+	Binding is skipped for CLASS access (instance None), matching CPython's
 	``function.__get__(None, owner) is function'': that is what keeps the
 	right-hand side of the assignment above unbound in the first place, and a
 	BoundMethod on the class would send the selector to the class object.
@@ -692,7 +700,10 @@ __get__: instance _: owner
 	path an exception instance, among others, takes to the same place."
 
 	(instance == nil or: [instance == None]) ifTrue: [^ self].
-	(instance @env0:isKindOf: Behavior) ifTrue: [^ self].
+	"A CLASS as the instance binds, as any object does: ``f.__get__(C, type(C))''
+	is how a descriptor binds a function to its owner -- sqlalchemy's
+	hybridmethod answers ``self.clslevel.__get__(owner, owner.__class__)'' for
+	a class read (#1580).  Class ACCESS passes None, above."
 	^ MethodBinding instance: instance callable: self
 %
 
