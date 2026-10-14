@@ -456,12 +456,13 @@ category: 'Grail-Calling'
 method: CPythonShim
 ___takeCallbackError
 	"{ Python name of the nearest shim exception type. message. the C instance
-	of a wheel's own exception it carries, or 0 } for the exception
+	of a wheel's own exception it carries, or 0. the C type object of its own
+	class, or 0 } for the exception
 	___guardCallback: recorded -- the shim's take_callback_error installs it as
 	C's pending error.  The exception itself is kept, should C hand the error
 	back unhandled (___noteReraiseCallbackException)."
 
-	| ex base cls text fo ptr |
+	| ex base cls text fo ptr typ |
 	ex := SessionTemps current at: #'GrailShimCallbackException' otherwise: nil.
 	SessionTemps current removeKey: #'GrailShimCallbackException' ifAbsent: [nil].
 	ex isNil ifTrue: [^ { 'RuntimeError'. 'a Grail callback raised'. 0 }].
@@ -475,7 +476,13 @@ ___takeCallbackError
 	text := [(ex @env1:__str__) asString] on: Error do: [:e | e return: ''].
 	fo := [ex dynamicInstVarAt: #'___grailForeign___'] on: Error do: [:e | e return: nil].
 	ptr := (fo isKindOf: ShimForeignObject) ifTrue: [fo cPtr] ifFalse: [0].
-	^ { base ifNil: ['Exception']. text. ptr }
+	"The exception's OWN class as C sees it -- a builtin's static type, any
+	other class's type mirror -- so C can match it.  The nearest builtin alone
+	made ``decimal.InvalidOperation'' an ArithmeticError: pydantic_core's
+	decimal validator, which catches InvalidOperation to report
+	decimal_parsing, let ``Decimal('five')'''s escape instead."
+	typ := [(self typeObjectFor: ex class) memoryAddress] on: Error do: [:e | e return: 0].
+	^ { base ifNil: ['Exception']. text. ptr. typ }
 %
 
 category: 'Grail-Calling'
@@ -1138,6 +1145,27 @@ ___noteShimEntry
 	(shimEntryProcess isNil
 		or: [shimEntryProcess ~~ p or: [d <= shimEntryDepth]])
 			ifTrue: [shimEntryProcess := p. shimEntryDepth := d]
+%
+
+category: 'Grail-Management'
+classmethod: CPythonShim
+___userActionActiveHere
+	"Is the running process on top of C frames -- inside a user action, an FFI
+	call or an IntRecur -- where the VM refuses a process switch (``GsProcess
+	switch not allowed while FFI, UserAction or IntRecur call is active'',
+	uncontinuable)?  A Python generator started there cannot fork its body
+	(PythonGenerator >> ___mustRunInline___).
+
+	The VM's OWN test, read directly: it refuses the switch when the current
+	stack's entry count is above 1 (intloopsup.c, IntLpSupProcessSwitch), and
+	``System _vmStEntryCount'' answers that count.  The first two cuts kept a
+	record of user actions instead: by depth alone, a user action an exception
+	unwound past left an entry that made every later generator in the gem run
+	inline; checked against the entering frame with ``GsProcess
+	_frameContentsAt:'', it read every live entry as stale under native code
+	(Linux x86_64, CI), where frames are not introspectable that way."
+
+	^ System _vmStEntryCount > 1
 %
 
 category: 'Grail-Management'
@@ -2350,6 +2378,18 @@ PyDict_SetItemString: aDictionary key: aString value: aValue
 category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_GetItem: aDictionary key: aKey
+	"Guarded: an unhashable key raises TypeError, which must become C's
+	pending error -- see ___guardCallback:.  Unguarded, the TypeError searched
+	Grail's handlers from inside pydantic_core's Literal validator (which
+	tolerates it as a miss): a script's own ``except'' caught it on top of the
+	C frames and the unwind was refused."
+
+	^ self ___guardCallback: [self ___ug_PyDict_GetItem: aDictionary key: aKey]
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+___ug_PyDict_GetItem: aDictionary key: aKey
 	(aDictionary includesKey: aKey) ifFalse: [ ^ 0 ].
 	^ (self wrap: (aDictionary at: aKey)) memoryAddress
 %
@@ -2363,7 +2403,9 @@ PyDict_GetItemString: aDictionary key: aString
 category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_Contains: aDictionary key: aKey
-	^ aDictionary includesKey: aKey
+	"Guarded, as PyDict_GetItem:key: is: an unhashable key is C's TypeError."
+
+	^ self ___guardCallback: [aDictionary includesKey: aKey]
 %
 
 category: 'Grail-CPython API'
@@ -2531,7 +2573,13 @@ PyObject_Length: obj
 category: 'Grail-CPython API'
 method: CPythonShim
 ___ug_PyObject_Length: obj
-	^ obj @env1:__len__
+	"Python's len(), not a bare __len__ send: an object with none -- a wheel's
+	own iterator, which pydantic_core asks for a length hint while serialising
+	an ``Iterable[Model]'' -- is CPython's TypeError, which the guard makes
+	C's error.  The bare send was an uncatchable MessageNotUnderstood inside
+	the callback."
+
+	^ (builtins @env0:___instance___) @env1:len: obj
 %
 
 ! --------------- Dynamic module loading ---------------

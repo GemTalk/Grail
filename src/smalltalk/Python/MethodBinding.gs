@@ -204,7 +204,10 @@ classmethod: MethodBinding
 ___pythonValueAttrs___
 	"``__self__'' / ``__func__'' are the bound receiver and function, values
 	rather than callables; without this the attribute read wraps the accessor
-	in a BoundMethod and ``m.__self__ is obj'' compares the wrapper."
+	in a BoundMethod and ``m.__self__ is obj'' compares the wrapper.
+	``__signature_spec__'' too: read as a method, inspect.signature tried to
+	iterate it, so every pydantic validator taking ``info'' was called without
+	it (FastAPI's test_filter_pydantic_sub_model_pv2)."
 
 	^ IdentitySet new
 		add: #'__self__';
@@ -216,6 +219,7 @@ ___pythonValueAttrs___
 		add: #'__annotations__';
 		add: #'__defaults__';
 		add: #'__kwdefaults__';
+		add: #'__signature_spec__';
 		yourself
 %
 

@@ -77,6 +77,25 @@ Phase 5 -- serving over HTTP, and FastAPI's own tests:
     tempfile.SpooledTemporaryFile was a stub (every upload).
 
 Every expectation here was measured against CPython 3.14.
+
+Phase 6 -- the rest of FastAPI's core tests:
+
+23. ``(X | Y).__dict__`` answered a bound method where CPython has none, so
+    pydantic's TypeAdapter took a function for the validator of every union.
+24. ``inspect.signature`` lost a zero-parameter def's return annotation and
+    ignored ``eval_str``: FastAPI built no response model from ``-> User``.
+25. Rebinding a method name on ONE class (asyncio's ``Future.__iter__ =
+    __await__``) re-dated every captured method of that name on every other
+    class, so annotated_types' ``Interval.__iter__`` ran its base's
+    ``def __iter__(self): ...`` and answered None -- and ``yield from`` the
+    None it answered was an uncatchable MessageNotUnderstood, not TypeError.
+26. ``inspect.getsourcelines`` did not exist and ``getsource`` answered '':
+    FastAPI's validation errors lost the endpoint they name.
+27. A module ``__getattr__`` STORED into the namespace (anyio's lazy importer
+    writes it through ``sys._getframe(1).f_globals``) was never consulted --
+    hidden while getsource answered '', which kept anyio on its eager path.
+28. ``inspect.signature`` of a classmethod bound through ``__get__`` tried to
+    iterate a method: pydantic called a validator taking ``info`` without it.
 """
 
 import sys
@@ -986,6 +1005,133 @@ class _DictProperty:
 
 
 check('vars_uses_a_dict_property', _raises(lambda: vars(_DictProperty()), NotImplementedError), True)
+
+# --- 23. Phase 6: a union has no __dict__ -----------------------------------------
+
+check('union_has_no_dict', (_raises(lambda: (int | str).__dict__, AttributeError),
+                            hasattr(int | None, '__dict__')), (True, False))
+
+
+# --- 24. Phase 6: a zero-parameter def keeps its return annotation ------------------
+
+class _RUser:
+    pass
+
+
+def _ret_user() -> _RUser:
+    return _RUser()
+
+
+def _ret_str_user(x: int) -> '_RUser':
+    return _RUser()
+
+
+check('signature_keeps_a_zero_arg_return_annotation',
+      inspect.signature(_ret_user).return_annotation is _RUser, True)
+check('signature_eval_str_evaluates_string_annotations',
+      inspect.signature(_ret_str_user, eval_str=True).return_annotation is _RUser, True)
+
+
+# --- 25. Phase 6: a rebinding on one class leaves another's captures alone -----------
+
+from typing import TYPE_CHECKING as _TC                          # noqa: E402
+
+
+class _Grouped:
+    def __iter__(self): ...
+
+    if not _TC:
+        def __iter__(self):
+            raise NotImplementedError
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _Interval(_Grouped):
+    gt: int = 1
+
+    def __iter__(self):
+        yield self.gt
+
+
+_before = list(_Interval())
+
+
+class _FutureLike:
+    def __await__(self):
+        yield self
+
+    __iter__ = __await__
+
+
+check('rebinding_one_class_leaves_another_alone', (_before, list(_Interval(gt=2))), ([1], [2]))
+
+
+def _yield_from(x):
+    yield from x
+
+
+class _NonIterator:
+    def __iter__(self):
+        return None
+
+
+check('yield_from_checks_its_operand',
+      (_raises(lambda: list(_yield_from(None)), TypeError),
+       _raises(lambda: list(_yield_from(_NonIterator())), TypeError),
+       list(_yield_from(iter([1, 2])))),
+      (True, True, [1, 2]))
+
+
+# --- 26. Phase 6: getsourcelines / getsource -----------------------------------------
+
+def _endpoint(
+    item_id: int,
+    q: str = (
+        'x'),
+):
+    return item_id
+
+
+_src_lines, _src_start = inspect.getsourcelines(_endpoint)
+check('getsourcelines_finds_the_block',
+      (len(_src_lines), _src_lines[0].strip(), _src_lines[-1].strip(),
+       inspect.getsource(_endpoint) == ''.join(_src_lines)),
+      (6, 'def _endpoint(', 'return item_id', True))
+
+
+# --- 27. Phase 6: a module __getattr__ stored as data ---------------------------------
+
+_lazy_dir = _tempfile.mkdtemp(prefix='grail_walls_lazy_')
+with open(os.path.join(_lazy_dir, 'walls_lazymod.py'), 'w') as _f:
+    _f.write('import sys\n'
+             'def _install():\n'
+             '    g = sys._getframe(1).f_globals\n'
+             '    def __getattr__(name):\n'
+             '        if name == "lazy":\n'
+             '            return "lazy value"\n'
+             '        raise AttributeError(name)\n'
+             '    g["__getattr__"] = __getattr__\n'
+             '_install()\n')
+sys.path.insert(0, _lazy_dir)
+try:
+    from walls_lazymod import lazy as _lazy                    # noqa: E402
+finally:
+    sys.path.remove(_lazy_dir)
+check('module_getattr_stored_through_a_frame', _lazy, 'lazy value')
+
+
+# --- 28. Phase 6: signature of a classmethod bound through __get__ -------------------
+
+class _Validated:
+    @classmethod
+    def check(cls, value, info):
+        return value
+
+
+_bound_check = _Validated.__dict__['check'].__get__(None, _Validated)
+check('signature_of_a_classmethod_bound_through_get', str(inspect.signature(_bound_check)),
+      '(value, info)')
+
 
 if __name__ == '__main__':
     for _name in sorted(RESULTS):

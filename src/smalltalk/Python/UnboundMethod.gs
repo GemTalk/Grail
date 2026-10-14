@@ -1092,10 +1092,18 @@ ___grailPinnedMethodFor___: aMethod receiver: obj
 	___grailObjectEq___:."
 	((aMethod @env0:selector == #'__eq__:') and: [aMethod @env0:inClass == Object])
 		ifTrue: [^ Object @env0:compiledMethodAt: #'___grailObjectEq___:' environmentId: 1].
-	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
-	pinnedAt == nil ifTrue: [^ aMethod].
+	(BoundMethod ___grailPinnedAt___: aMethod @env0:selector) == nil ifTrue: [^ aMethod].
 	shadow := ('___grailOrig_' @env0:, aMethod @env0:selector @env0:asString)
 		@env0:asSymbol.
+	"Resolved from the same root the method itself came from, so a shadow on an
+	unrelated class carrying the same selector cannot be picked up -- and the
+	stamp is compared with THAT class's pin, not the selector's latest on any
+	class (see BoundMethod >> ___pinnedSelectorFor___:receiver:)."
+	owner := (self @env0:_resolutionRootFor: obj)
+		@env0:whichClassIncludesSelector: shadow environmentId: 1.
+	owner == nil ifTrue: [^ aMethod].
+	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector in: owner.
+	pinnedAt == nil ifTrue: [^ aMethod].
 	"A stamp above this session's current generation was made by another
 	session (BoundMethod class >> ___grailSessionPinHolder___): it predates
 	every pin here as far as this session can know, so it redirects.
@@ -1108,17 +1116,12 @@ ___grailPinnedMethodFor___: aMethod receiver: obj
 	___pinnedSelectorFor___:receiver:, which makes the same call."
 	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
 		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
-			ifTrue: [
-				owner := aMethod @env0:inClass.
-				(owner ~~ nil and: [(owner @env0:whichClassIncludesSelector: shadow
-						environmentId: 1) == owner])
+			ifTrue: [ | home |
+				home := aMethod @env0:inClass.
+				(home ~~ nil and: [(home @env0:whichClassIncludesSelector: shadow
+						environmentId: 1) == home])
 					ifFalse: [^ aMethod].
-				^ owner @env0:compiledMethodAt: shadow environmentId: 1].
-	"Resolved from the same root the method itself came from, so a shadow on an
-	unrelated class carrying the same selector cannot be picked up."
-	owner := (self @env0:_resolutionRootFor: obj)
-		@env0:whichClassIncludesSelector: shadow environmentId: 1.
-	owner == nil ifTrue: [^ aMethod].
+				^ home @env0:compiledMethodAt: shadow environmentId: 1].
 	^ owner @env0:compiledMethodAt: shadow environmentId: 1
 %
 

@@ -1242,6 +1242,9 @@ static void take_callback_error(void) {
     fetch_string(GciFetchOop(arr, GciOopToI64(i1)), base, sizeof(base));
     fetch_string(GciFetchOop(arr, GciOopToI64(i2)), msg, sizeof(msg));
     int64 ptr = GciOopToI64(GciFetchOop(arr, GciOopToI64(i3)));
+    int64 typ = 0;
+    if (GciFetchSize_(arr) >= 4)
+        typ = GciOopToI64(GciFetchOop(arr, GciOopToI64(GciI64ToOop(4))));
     GciErr(&e);
     PyObject *inst = (PyObject *)(intptr_t)ptr;
     /* The check_gci_error diagnostic covers a GemStone error; a callback
@@ -1262,6 +1265,11 @@ static void take_callback_error(void) {
     if (ptr != 0 && plausible_pyobj(inst) && plausible_pyobj(inst->ob_type)) {
         PyErr_SetString((PyObject *)inst->ob_type, msg);
         current_error_instance = inst;
+    } else if (typ != 0 && is_type_mirror((PyObject *)(intptr_t)typ)) {
+        /* The class's own type object (a mirror, for a class Python defined),
+           so PyErr_GivenExceptionMatches can tell decimal.InvalidOperation
+           from any other ArithmeticError. */
+        PyErr_SetString((PyObject *)(intptr_t)typ, msg);
     } else {
         PyObject *t = static_exc_named(base);
         PyErr_SetString(t ? t : PyExc_Exception, msg);
@@ -2268,31 +2276,69 @@ extern "C" int PyDict_SetItemString(PyObject *dict, const char *key, PyObject *v
     return 0;
 }
 
+/* ONE dict lookup, the failure REPORTED: 1 found (*out borrowed), 0 absent,
+   -1 with the Python error set.  A lookup fails for an unhashable key --
+   pydantic_core's Literal validator looks every input up in a dict of the
+   expected values and takes the TypeError a list raises as a miss.
+
+   The error-suppressing variants below are built on this rather than on a
+   perform left unchecked: an unchecked GciPerform error is not dropped, it
+   stays PENDING in GciErr(), and the next check_gci_error() -- after some
+   unrelated call -- reported it.  So PyDict_GetItemRef answered "absent"
+   while the TypeError surfaced later from a call that had succeeded, and
+   PyO3 unwound mid-validation into a Rust ``capacity overflow'' panic
+   (FastAPI's ``Schema(type=["string", "null"])'', whose field is
+   ``Literal[...] | list[Literal[...]]''). */
+static int dict_lookup(PyObject *dict, OopType keyOop, PyObject **out) {
+    OopType args[2] = { pyobj_oop(dict), keyOop };
+    OopType addrOop = GciPerform(server, "PyDict_GetItem:key:", args, 2);
+    *out = NULL;
+    if (check_gci_error()) return -1;
+    int64 addr = GciOopToI64(addrOop);
+    if (addr == 0) return 0;
+    *out = (PyObject *)(intptr_t)addr;
+    return 1;
+}
+
+/* CPython's PyDict_GetItem / PyDict_GetItemString are the error-SUPPRESSING
+   lookups: "absent" and "failed" both answer NULL, and an error that was
+   already set when they were called survives them. */
+static PyObject *dict_lookup_suppressing(PyObject *dict, OopType keyOop) {
+    PyObject *t = NULL, *v = NULL, *tb = NULL;
+    int had = PyErr_Occurred() != NULL;
+    if (had) PyErr_Fetch(&t, &v, &tb);
+    PyObject *found;
+    if (dict_lookup(dict, keyOop, &found) < 0) PyErr_Clear();
+    if (had) PyErr_Restore(t, v, tb);
+    return found;
+}
+
 extern "C" PyObject *PyDict_GetItem(PyObject *dict, PyObject *key) {
     CHECK_pyObj(dict, "PyDict_GetItem dict");
     CHECK_pyObj(key, "PyDict_GetItem key");
-    OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
-    /* NO check_gci_error() here, deliberately: CPython specifies PyDict_GetItem as the
-       error-SUPPRESSING lookup (PyDict_GetItemWithError is the variant that
-       reports).  Callers rely on "absent" and "failed" both answering NULL,
-       so checking here would raise where CPython returns NULL. */
-    OopType addrOop = GciPerform(server, "PyDict_GetItem:key:", args, 2);
-    int64 addr = GciOopToI64(addrOop);
-    if (addr == 0) return NULL;
-    return (PyObject *)(intptr_t)addr;
+    return dict_lookup_suppressing(dict, pyobj_oop(key));
 }
 
 extern "C" PyObject *PyDict_GetItemString(PyObject *dict, const char *key) {
     CHECK_pyObj(dict, "PyDict_GetItemString dict");
-    OopType args[2] = { pyobj_oop(dict), GciNewString(key) };
-    /* NO check_gci_error() here, deliberately: CPython specifies PyDict_GetItemString as the
-       error-SUPPRESSING lookup (PyDict_GetItemWithError is the variant that
-       reports).  Callers rely on "absent" and "failed" both answering NULL,
-       so checking here would raise where CPython returns NULL. */
-    OopType addrOop = GciPerform(server, "PyDict_GetItemString:key:", args, 2);
-    int64 addr = GciOopToI64(addrOop);
-    if (addr == 0) return NULL;
-    return (PyObject *)(intptr_t)addr;
+    return dict_lookup_suppressing(dict, GciNewString(key));
+}
+
+/* CPython 3.13+ strong-ref lookups: 1 (found, *result a new reference), 0
+   (absent, *result NULL) or -1 (error set). */
+extern "C" int PyDict_GetItemRef(PyObject *dict, PyObject *key, PyObject **result) {
+    CHECK_pyObj(dict, "PyDict_GetItemRef dict");
+    CHECK_pyObj(key, "PyDict_GetItemRef key");
+    int r = dict_lookup(dict, pyobj_oop(key), result);
+    if (r > 0) Py_INCREF(*result);
+    return r;
+}
+
+extern "C" int PyDict_GetItemStringRef(PyObject *dict, const char *key, PyObject **result) {
+    CHECK_pyObj(dict, "PyDict_GetItemStringRef dict");
+    int r = dict_lookup(dict, GciNewString(key), result);
+    if (r > 0) Py_INCREF(*result);
+    return r;
 }
 
 extern "C" int PyDict_Contains(PyObject *dict, PyObject *key) {
@@ -2884,8 +2930,23 @@ static void *foreign_sq_item(PyTypeObject *t)      { return FOREIGN_SLOT(t, T->t
 static void *foreign_sq_ass_item(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_ass_item : NULL); }
 static void *foreign_sq_contains(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_contains : NULL); }
 static void *foreign_tp_richcompare(PyTypeObject *t) { return FOREIGN_SLOT(t, (void *)T->tp_richcompare); }
-static void *foreign_tp_iter(PyTypeObject *t)      { return FOREIGN_SLOT(t, (void *)T->tp_iter); }
-static void *foreign_tp_iternext(PyTypeObject *t)  { return FOREIGN_SLOT(t, (void *)T->tp_iternext); }
+/* Iteration searches HEAP types too.  The shim's PyType_FromSpec registers
+   every type it builds as a shim type, and every PyO3 class is built that way
+   -- pydantic_core's ValidatorIterator, what an ``Iterable[Model]'' validates
+   to -- so stopping at the first shim type found no tp_iter and the iterator
+   answered ``not iterable''.  Only iteration: the compare / hash slots keep
+   FOREIGN_SLOT's stop, so a PyO3 object's == and hash stay consistent. */
+#define FOREIGN_ITER_STOP(t) (is_shim_type(t) && !((t)->tp_flags & Py_TPFLAGS_HEAPTYPE))
+static void *foreign_tp_iter(PyTypeObject *t) {
+    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+        if (t->tp_iter) return (void *)t->tp_iter;
+    return NULL;
+}
+static void *foreign_tp_iternext(PyTypeObject *t) {
+    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+        if (t->tp_iternext) return (void *)t->tp_iternext;
+    return NULL;
+}
 
 /* tp_hash and tp_richcompare go together, as CPython inherits them: the first
    type defining either decides.  Comparison without a hash is CPython's
@@ -4551,8 +4612,14 @@ extern "C" int PyDict_Next(PyObject *dict, Py_ssize_t *ppos, PyObject **pkey,
     return 1;
 }
 
+/* The REPORTING lookup: NULL with the error set when the lookup failed, NULL
+   with none when the key is absent. */
 extern "C" PyObject *PyDict_GetItemWithError(PyObject *dict, PyObject *key) {
-    return PyDict_GetItem(dict, key);
+    CHECK_pyObj(dict, "PyDict_GetItemWithError dict");
+    CHECK_pyObj(key, "PyDict_GetItemWithError key");
+    PyObject *found;
+    dict_lookup(dict, pyobj_oop(key), &found);
+    return found;
 }
 
 /* ====================================================================
@@ -7001,6 +7068,14 @@ int PyErr_GivenExceptionMatches(PyObject *given, PyObject *exc) {
             return PyErr_GivenExceptionMatches(base, exc);
         }
     }
+    /* A type MIRROR -- the C face of an exception class Python defined --
+       matches its own tp_base chain, which ends in the static types:
+       decimal.InvalidOperation -> DecimalException -> ArithmeticError. */
+    if (is_type_mirror(given)) {
+        PyObject *base = (PyObject *)((PyTypeObject *)given)->tp_base;
+        if (base != NULL && base != given)
+            return PyErr_GivenExceptionMatches(base, exc);
+    }
     return 0;
 }
 
@@ -7689,8 +7764,26 @@ PyObject *PyCallIter_New(PyObject *callable, PyObject *sentinel) {
 
 /* --- Iteration protocol --- */
 
+/* A wheel's own object iterates through its own type's tp_iter / tp_iternext,
+   along the base chain (the shim's PyType_FromSpec does no slot inheritance),
+   or NULL when it has none.  pydantic_core's ValidatorIterator -- what an
+   ``Iterable[Model]'' validates to -- is one: serialising it round-tripped
+   through Grail, which knew no iteration for a foreign proxy, and FastAPI's
+   ``-> Iterable[Model]'' routes failed with ``Error serializing to JSON''. */
+static getiterfunc foreign_obj_iter(PyObject *obj) {
+    if (!is_foreign(obj) || is_foreign_type(obj)) return NULL;
+    return (getiterfunc)foreign_tp_iter(obj->ob_type);
+}
+
+static iternextfunc foreign_obj_iternext(PyObject *obj) {
+    if (!is_foreign(obj) || is_foreign_type(obj)) return NULL;
+    return (iternextfunc)foreign_tp_iternext(obj->ob_type);
+}
+
 extern "C" PyObject *PyObject_GetIter(PyObject *obj) {
     if (obj == NULL) return NULL;
+    getiterfunc fi = foreign_obj_iter(obj);
+    if (fi) return fi(obj);
     OopType arg = pyobj_oop(obj);
     OopType result = GciPerform(server, "PyObject_GetIter:", &arg, 1);
     if (check_gci_error()) return NULL;
@@ -7699,6 +7792,15 @@ extern "C" PyObject *PyObject_GetIter(PyObject *obj) {
 
 extern "C" PyObject *PyIter_Next(PyObject *iterator) {
     if (iterator == NULL) return NULL;
+    iternextfunc fn = foreign_obj_iternext(iterator);
+    if (fn) {
+        PyObject *r = fn(iterator);
+        /* CPython's PyIter_Next: an exhausted iterator's StopIteration is
+           not an error. */
+        if (r == NULL && PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
+            PyErr_Clear();
+        return r;
+    }
     OopType arg = pyobj_oop(iterator);
     OopType result = GciPerform(server, "PyIter_Next:", &arg, 1);
     if (check_gci_error()) return NULL;

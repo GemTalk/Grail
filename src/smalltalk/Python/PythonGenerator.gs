@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'PythonGenerator'
-  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject delegationTarget )
+  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject delegationTarget inlineYields )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -72,6 +72,11 @@ State:
   * frameObject        — the PyFrame gi_frame answers while the body has
                          not finished; dropped when it does, because
                          CPython''s gi_frame is None after completion.
+  * inlineYields       — the values still to hand out when the body ran
+                         INLINE, to completion, because it was started
+                         inside a C extension''s callback (see
+                         ___mustRunInline___); nil otherwise, and once they
+                         are all handed out.
 
 __name__ / __qualname__ are DYNAMIC instVars, stamped at creation by
 withBlock:name:qualname:code: and freely reassignable afterwards — which
@@ -542,12 +547,14 @@ send: aValue
 	whatever close() had released -- ElementTree's iterparse read a closed
 	file (test_xml_etree's IterparseTest.test_close_not_exhausted)."
 	(started not and: [done]) ifTrue: [^ self ___resumeFinishedWith___: nil].
+	inlineYields @env0:notNil ifTrue: [^ self ___nextInline___].
 	started ifFalse: [
 		aValue == None ifFalse: [
 			TypeError ___signal___:
 				('can''t send non-None value to a just-started '
 					@env0:, self ___pyKindWords___)
 		].
+		self ___mustRunInline___ ifTrue: [^ self ___runInline___].
 		running := true.
 		self @env0:_forkBody.
 	] ifTrue: [
@@ -563,6 +570,84 @@ send: aValue
 		escapedException == nil ifFalse: [^ self _signalEscapedException].
 		^ self ___signalExhausted___].
 	^ value
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___mustRunInline___
+	"Must this generator's body run INLINE rather than on a forked process?
+	Yes when it is started inside a C extension's callback -- pydantic_core
+	calling a model's __repr__, whose ``''.join(... for ...)'' is a generator.
+	The body cannot fork there: the VM refuses any process switch while a user
+	action is active, uncontinuably, so the first next() ended the thread
+	(FastAPI's ResponseValidationError, whose message reprs the model).
+
+	Plain generators only.  A coroutine or async generator is driven by an
+	event loop, which cannot run inside a callback either, so it keeps its
+	process and its error."
+
+	^ self @env0:class == PythonGenerator
+		and: [CPythonShim @env0:___userActionActiveHere]
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___runInline___
+	"Run the whole body now, on this process, buffering what it yields, and
+	answer the first value -- see ___mustRunInline___.
+
+	The approximation is CPython-visible only to a body that relies on being
+	suspended: its side effects all happen at the first next(), a value sent
+	in is not seen (yield answers None), and throw()/close() find it finished.
+	The consumer in a callback is a join, a list() or a for loop, for which
+	none of that is observable.  An exception the body raises is held back
+	until the values before it have been handed out, which IS what CPython
+	does.  A body that never finishes is stopped -- see ___yieldInline___:."
+
+	| savedState |
+	started := true.
+	inlineYields := OrderedCollection @env0:new.
+	consumerProcess := GsProcess @env0:current.
+	savedState := self ___captureConsumerState___.
+	running := true.
+	"No unwind can leave this block -- every exception is caught and held --
+	so the ensure: never runs across the user action's C frames."
+	[[returnValue := block @env0:value: self]
+		@env0:on: AbstractException
+		do: [:ex | escapedException := ex. ex @env0:return: nil]]
+			@env0:ensure: [
+				running := false.
+				done := true.
+				self ___restoreConsumerState___: savedState].
+	^ self ___nextInline___
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___yieldInline___: aValue
+	"``yield aValue'' in a body running inline: buffer it and carry on, as if
+	resumed by next().  A body that yields without end would never return, so
+	past a bound it is stopped with RuntimeError -- raised in the body, so the
+	values before it still reach the consumer first."
+
+	(inlineYields @env0:size) @env0:>= 1000000 ifTrue: [
+		^ RuntimeError ___signal___:
+			'a generator started inside a C extension''s callback runs to completion at once (no process switch is possible there), and this one yielded more than 1000000 values'].
+	inlineYields @env0:addLast: aValue.
+	^ None
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___nextInline___
+	"The next value an inline-run body yielded; once they are spent, what it
+	ended with -- its exception, or StopIteration with its return value -- and
+	from then on the ordinary finished-generator answers."
+
+	inlineYields @env0:isEmpty ifFalse: [^ inlineYields @env0:removeFirst].
+	inlineYields := nil.
+	escapedException == nil ifFalse: [^ self _signalEscapedException].
+	^ self ___signalExhausted___
 %
 
 category: 'Grail-Private'
@@ -1116,6 +1201,7 @@ ___yield___: aValue
 	  * otherwise → return None (the implicit value for plain next)."
 
 	| sent bodyExc bodyHandlers |
+	inlineYields @env0:notNil ifTrue: [^ self ___yieldInline___: aValue].
 	value := aValue.
 	"The body's own exception bookkeeping, kept across the suspension -- the
 	mirror of ___captureConsumerState___.  A generator may yield from inside an
@@ -1237,9 +1323,15 @@ ___yieldFrom___: anIterable
 	underneath that refusal -- it is what ``await'' and the @types.coroutine
 	``yield from coro'' pattern run on.  ___subIterAdvance___: makes the same
 	distinction for each advance."
+	"Anything else goes through iter()'s checks (GET_YIELD_FROM_ITER): a
+	non-iterable is ``'NoneType' object is not iterable'', an __iter__ that
+	answers a non-iterator is ``iter() returned non-iterator''.  A bare
+	__iter__ send let both through, and the first advance sent __next__ to
+	whatever came back -- an uncatchable MessageNotUnderstood (FastAPI's
+	test_multi_body_errors, when a misdispatched __iter__ answered None)."
 	it := (anIterable @env0:isKindOf: PythonGenerator)
 		ifTrue: [anIterable]
-		ifFalse: [anIterable @env1:__iter__].
+		ifFalse: [(builtins @env0:___instance___) @env1:___pyIter___: anIterable].
 	"The delegation TARGET, recorded for introspection: cr_await /
 	gi_yieldfrom / ag_await read it back, gated on the generator being
 	PARKED (or, for ag_await, merely unfinished) -- CPython's cr_await is

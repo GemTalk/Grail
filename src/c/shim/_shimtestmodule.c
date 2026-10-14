@@ -9,6 +9,7 @@
 
 #include "cpython.h"
 #include <string.h>
+#include <stdio.h>
 
 /* ------------------------------------------------------------------ */
 /* test_float(x) -> x * 2.0                                           */
@@ -1314,6 +1315,43 @@ Counter_getbuffer(PyObject *self, Py_buffer *view, int flags) {
     return 0;
 }
 
+/* Counter is its own iterator: next() counts its value up to 3 and stops.
+   A wheel's own iterator type -- pydantic_core's ValidatorIterator is one --
+   is iterated through these slots, by C (PyObject_GetIter / PyIter_Next) and
+   by Grail (ShimForeignObject >> __iter__ / __next__). */
+static PyObject *
+Counter_iter(PyObject *self) {
+    Py_INCREF(self);
+    return self;
+}
+
+static PyObject *
+Counter_iternext(PyObject *self) {
+    CounterObject *c = (CounterObject *)self;
+    if (c->value >= 3) return NULL;     /* exhausted: NULL, no error */
+    c->value++;
+    return PyLong_FromSsize_t(c->value);
+}
+
+static PyObject *CounterType;  /* created in shimtest_exec; defined below */
+
+/* test_iterate_counter() -> [1, 2, 3], iterating a fresh Counter through
+   PyObject_GetIter / PyIter_Next, as a Rust serialiser does. */
+static PyObject *
+test_iterate_counter(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    PyObject *obj = PyType_GenericNew((PyTypeObject *)CounterType, NULL, NULL);
+    if (!obj) return NULL;
+    PyObject *it = PyObject_GetIter(obj);
+    if (!it) return NULL;
+    PyObject *out = PyList_New(0);
+    PyObject *x;
+    while ((x = PyIter_Next(it)) != NULL)
+        if (PyList_Append(out, x) < 0) return NULL;
+    if (PyErr_Occurred()) return NULL;
+    return out;
+}
+
 static PyMethodDef Counter_methods[] = {
     {"incr", (PyCFunction)Counter_incr, METH_NOARGS, "increment, return value"},
     {NULL, NULL, 0, NULL}
@@ -1328,6 +1366,8 @@ static PyType_Slot Counter_slots[] = {
     {Py_tp_methods, Counter_methods},
     {Py_tp_getset, Counter_getset},
     {Py_bf_getbuffer, (void *)Counter_getbuffer},
+    {Py_tp_iter, (void *)Counter_iter},
+    {Py_tp_iternext, (void *)Counter_iternext},
     {0, NULL}
 };
 
@@ -1746,6 +1786,58 @@ test_import_refcount(PyObject *module, PyObject *const *args, Py_ssize_t nargs) 
     return PyLong_FromSsize_t(m == NULL ? 0 : m->ob_refcnt);
 }
 
+/* test_dict_unhashable(d, bad, good) -> a report of each dict lookup on an
+   UNHASHABLE key `bad', then one on a present key `good'.  pydantic_core's
+   Literal validator looks every input up in a dict and takes the TypeError
+   as a miss.  PyDict_GetItem left that error PENDING rather than dropping
+   it, PyDict_GetItemRef answered "absent" on top of it, and the next
+   unrelated call reported the stale TypeError: PyO3 unwound mid-validation
+   into a Rust ``capacity overflow'' panic (docs/Support_FastAPI.md,
+   Phase 6).  CPython's answer is
+   "GetItem:NULL+none Ref:-1+TypeError WithError:NULL+TypeError
+    Contains:-1+TypeError Preserved:yes Good:1+none". */
+int PyDict_GetItemRef(PyObject *mp, PyObject *key, PyObject **result);  /* the shim's */
+
+static const char *err_name(void) {
+    if (!PyErr_Occurred()) return "none";
+    const char *n = PyErr_ExceptionMatches(PyExc_TypeError) ? "TypeError" : "other";
+    PyErr_Clear();
+    return n;
+}
+
+static PyObject *
+test_dict_unhashable(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_dict_unhashable expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *d = args[0], *bad = args[1], *good = args[2], *r = NULL;
+    char out[512];
+    const char *e1, *e2, *e3, *e4, *e6;
+    PyObject *v1 = PyDict_GetItem(d, bad);
+    e1 = err_name();
+    int r2 = PyDict_GetItemRef(d, bad, &r);
+    e2 = err_name();
+    PyObject *v3 = PyDict_GetItemWithError(d, bad);
+    e3 = err_name();
+    int r4 = PyDict_Contains(d, bad);
+    e4 = err_name();
+    /* An error already set survives the suppressing lookup. */
+    PyErr_SetString(PyExc_ValueError, "kept");
+    (void)PyDict_GetItem(d, bad);
+    int kept = PyErr_ExceptionMatches(PyExc_ValueError);
+    PyErr_Clear();
+    int r6 = PyDict_GetItemRef(d, good, &r);
+    e6 = err_name();
+    if (r6 > 0) Py_DECREF(r);
+    snprintf(out, sizeof out,
+             "GetItem:%s+%s Ref:%d+%s WithError:%s+%s Contains:%d+%s Preserved:%s Good:%d+%s",
+             v1 ? "found" : "NULL", e1, r2, e2, v3 ? "found" : "NULL", e3,
+             r4, e4, kept ? "yes" : "no", r6, e6);
+    return PyUnicode_FromString(out);
+}
+
 /* test_u128(n) -> n, taken apart and rebuilt as PyO3's abi3 build does
    for a 128-bit int: PyLong_AsUnsignedLongLongMask for the low half,
    PyNumber_Rshift + PyLong_AsUnsignedLongLong for the high half, then
@@ -2160,6 +2252,10 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_real_tuple_roundtrip(d) -> 1"},
     {"test_type_descriptors", (PyCFunction)(void *)test_type_descriptors,
      METH_FASTCALL, "test_type_descriptors() -> 31"},
+    {"test_dict_unhashable", (PyCFunction)(void *)test_dict_unhashable,
+     METH_FASTCALL, "test_dict_unhashable(d, bad, good) -> a report of lookups on an unhashable key"},
+    {"test_iterate_counter", (PyCFunction)(void *)test_iterate_counter,
+     METH_FASTCALL, "test_iterate_counter() -> a fresh Counter iterated from C"},
     {"test_import_refcount", (PyCFunction)(void *)test_import_refcount,
      METH_FASTCALL, "test_import_refcount(name, n) -> the module's refcount after n import/decref cycles"},
     {NULL, NULL, 0, NULL}

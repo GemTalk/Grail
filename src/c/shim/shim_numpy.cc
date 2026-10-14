@@ -274,14 +274,6 @@ extern "C" int PyDict_DelItemString(PyObject *dp, const char *key) {
     if (k == NULL) return -1;
     return PyDict_DelItem(dp, k);
 }
-/* CPython 3.13+ strong-ref dict lookups: return 1 (found, *result=new ref),
-   0 (absent, *result=NULL), or -1 (error). */
-extern "C" int PyDict_GetItemRef(PyObject *mp, PyObject *key, PyObject **result) {
-    PyObject *v = PyDict_GetItem(mp, key);
-    if (v) { Py_INCREF(v); *result = v; return 1; }
-    *result = NULL;
-    return PyErr_Occurred() ? -1 : 0;
-}
 /* CPython 3.13+ setdefault with a strong reference: 0 when the default was
    inserted, 1 when the key was already present, -1 on error.  *result, when
    asked for, is a new reference to the value now in the dict. */
@@ -299,12 +291,6 @@ extern "C" int PyDict_SetDefaultRef(PyObject *mp, PyObject *key, PyObject *dflt,
    such cache, so there is nothing to invalidate. */
 extern "C" void PyType_Modified(PyTypeObject *type) {
     (void)type;
-}
-extern "C" int PyDict_GetItemStringRef(PyObject *mp, const char *key, PyObject **result) {
-    PyObject *v = PyDict_GetItemString(mp, key);
-    if (v) { Py_INCREF(v); *result = v; return 1; }
-    *result = NULL;
-    return PyErr_Occurred() ? -1 : 0;
 }
 extern "C" int PyErr_CheckSignals(void) {
     return 0;
