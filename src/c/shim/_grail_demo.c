@@ -22,6 +22,10 @@
  *                            build only)
  *   getattr_in_c(obj, name) — PyObject_GetAttrString, asked from C (CPython
  *                            build only)
+ *   setattr_in_c(obj, name, value) — PyObject_SetAttrString, from C (CPython
+ *                            build only)
+ *   Dispatcher, NdLike, OverLike — numpy's _ArrayFunctionDispatcher in
+ *                            miniature (CPython build only; see below)
  */
 
 #ifdef GRAIL_SHIM
@@ -463,6 +467,146 @@ grail_getattr_in_c(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     if (name == NULL) return NULL;
     return PyObject_GetAttrString(args[0], name);
 }
+
+/* PyObject_SetAttrString, asked from C (numpy's finfo fills an empty
+   instance this way, _populate_finfo_constants). */
+static PyObject *
+grail_setattr_in_c(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 3 || !PyUnicode_Check(args[1])) {
+        PyErr_SetString(PyExc_TypeError, "setattr_in_c() takes an object, a str and a value");
+        return NULL;
+    }
+    const char *name = PyUnicode_AsUTF8(args[1]);
+    if (name == NULL || PyObject_SetAttrString(args[0], name, args[2]) < 0) return NULL;
+    Py_RETURN_NONE;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dispatcher: numpy's _ArrayFunctionDispatcher in miniature -- its    */
+/* tp_name and struct layout, which is what Grail recognises it by     */
+/* (shimArrayDispatcherParts), and a tp_call that does what numpy's    */
+/* does: call the dispatcher for the relevant arguments, hand the call */
+/* to an argument's __array_function__ when one overrides it, and      */
+/* otherwise call the implementation.  NdLike stands for ndarray (its  */
+/* tp_name, and an __array_function__ that is the default); OverLike   */
+/* has one of its own.  Dispatcher(None, impl) is numpy's like=        */
+/* dispatcher, which has no relevant_arg_func.                         */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    PyObject_HEAD
+    void *vectorcall;              /* numpy's vectorcallfunc; unused here */
+    PyObject *dict;
+    PyObject *relevant_arg_func;
+    PyObject *default_impl;
+    PyObject *dispatcher_name;
+    PyObject *public_name;
+} DispatcherObject;
+
+typedef struct { PyObject_HEAD } NdLikeObject;
+
+static PyObject *ndlike_array_function(PyObject *self, PyObject *args) {
+    (void)self; (void)args;
+    Py_RETURN_NOTIMPLEMENTED;
+}
+static PyMethodDef ndlike_methods[] = {
+    {"__array_function__", ndlike_array_function, METH_VARARGS, NULL},
+    {NULL, NULL, 0, NULL}
+};
+static PyTypeObject NdLike_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "numpy.ndarray",
+    .tp_basicsize = sizeof(NdLikeObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_methods = ndlike_methods,
+    .tp_new = PyType_GenericNew,
+};
+
+static PyObject *overlike_array_function(PyObject *self, PyObject *args) {
+    (void)self;
+    PyObject *func, *types, *fargs, *fkwargs;
+    if (!PyArg_ParseTuple(args, "OOOO", &func, &types, &fargs, &fkwargs)) return NULL;
+    return Py_BuildValue("(sO)", "overridden", fargs);
+}
+static PyMethodDef overlike_methods[] = {
+    {"__array_function__", overlike_array_function, METH_VARARGS, NULL},
+    {NULL, NULL, 0, NULL}
+};
+static PyTypeObject OverLike_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.OverLike",
+    .tp_basicsize = sizeof(NdLikeObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_methods = overlike_methods,
+    .tp_new = PyType_GenericNew,
+};
+
+static PyObject *dispatcher_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    (void)kwds;
+    PyObject *rel, *impl;
+    if (!PyArg_ParseTuple(args, "OO", &rel, &impl)) return NULL;
+    DispatcherObject *d = (DispatcherObject *)type->tp_alloc(type, 0);
+    if (d == NULL) return NULL;
+    if (rel != Py_None) { Py_INCREF(rel); d->relevant_arg_func = rel; }
+    Py_INCREF(impl);
+    d->default_impl = impl;
+    return (PyObject *)d;
+}
+
+static PyObject *dispatcher_call(PyObject *self, PyObject *args, PyObject *kwargs) {
+    DispatcherObject *d = (DispatcherObject *)self;
+    if (d->relevant_arg_func == NULL)
+        return PyObject_Call(d->default_impl, args, kwargs);
+    PyObject *relevant = PyObject_Call(d->relevant_arg_func, args, kwargs);
+    if (relevant == NULL) return NULL;
+    PyObject *seq = PySequence_Fast(relevant, "dispatcher did not return an iterable");
+    Py_DECREF(relevant);
+    if (seq == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < PySequence_Fast_GET_SIZE(seq); i++) {
+        PyObject *a = PySequence_Fast_GET_ITEM(seq, i);
+        if (PyObject_TypeCheck(a, &NdLike_Type)) continue;
+        PyObject *af = NULL, *name = PyUnicode_FromString("__array_function__");
+        int found = name == NULL ? -1 : PyObject_GetOptionalAttr(a, name, &af);
+        Py_XDECREF(name);
+        if (found < 0) {
+            Py_DECREF(seq);
+            return NULL;
+        }
+        if (af == NULL) continue;
+        PyObject *kw = kwargs != NULL ? kwargs : PyDict_New();
+        PyObject *r = PyObject_CallFunction(af, "O(O)OO", self, (PyObject *)Py_TYPE(a), args, kw);
+        if (kw != kwargs) Py_DECREF(kw);
+        Py_DECREF(af);
+        Py_DECREF(seq);
+        return r;
+    }
+    Py_DECREF(seq);
+    return PyObject_Call(d->default_impl, args, kwargs);
+}
+
+static PyObject *dispatcher_get_implementation(PyObject *self, void *closure) {
+    (void)closure;
+    PyObject *impl = ((DispatcherObject *)self)->default_impl;
+    Py_INCREF(impl);
+    return impl;
+}
+static PyGetSetDef dispatcher_getset[] = {
+    {"__dict__", PyObject_GenericGetDict, PyObject_GenericSetDict, NULL, NULL},
+    {"_implementation", dispatcher_get_implementation, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL, NULL}
+};
+static PyTypeObject Dispatcher_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "numpy._ArrayFunctionDispatcher",
+    .tp_basicsize = sizeof(DispatcherObject),
+    .tp_dictoffset = offsetof(DispatcherObject, dict),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_getset = dispatcher_getset,
+    .tp_new = dispatcher_new,
+    .tp_call = dispatcher_call,
+};
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -497,6 +641,7 @@ static PyMethodDef grail_demo_methods[] = {
     {"interp_matches", (PyCFunction)(void *)grail_interp_matches, METH_FASTCALL, NULL},
     {"optional_attr", (PyCFunction)(void *)grail_optional_attr, METH_FASTCALL, NULL},
     {"dict_values_inline", (PyCFunction)(void *)grail_dict_values_inline, METH_FASTCALL, NULL},
+    {"setattr_in_c", (PyCFunction)(void *)grail_setattr_in_c, METH_FASTCALL, NULL},
 #endif
     {NULL, NULL, 0, NULL}
 };
@@ -518,6 +663,13 @@ grail_demo_exec(PyObject *mod) {
     Py_SET_TYPE(&WithMeta_Type, &Meta_Type);
     if (PyType_Ready(&WithMeta_Type) < 0) return -1;
     if (PyModule_AddObjectRef(mod, "WithMeta", (PyObject *)&WithMeta_Type) < 0) return -1;
+    if (PyType_Ready(&Dispatcher_Type) < 0 || PyType_Ready(&NdLike_Type) < 0
+            || PyType_Ready(&OverLike_Type) < 0)
+        return -1;
+    if (PyModule_AddObjectRef(mod, "Dispatcher", (PyObject *)&Dispatcher_Type) < 0
+            || PyModule_AddObjectRef(mod, "NdLike", (PyObject *)&NdLike_Type) < 0
+            || PyModule_AddObjectRef(mod, "OverLike", (PyObject *)&OverLike_Type) < 0)
+        return -1;
 #endif
     PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
     PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");

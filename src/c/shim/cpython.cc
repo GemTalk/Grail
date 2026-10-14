@@ -6491,6 +6491,82 @@ static OopType shimForeignTypeCheck(OopType objOop, OopType typeOop, OopType wan
     return PyType_IsSubtype(sub, (PyTypeObject *)t) ? OOP_TRUE : OOP_FALSE;
 }
 
+/* numpy's public functions are _ArrayFunctionDispatcher objects, and calling
+   one from Grail cost two user-action re-entries: C calls the Python
+   dispatcher back for the relevant arguments, then the Python implementation.
+   A numpy function written in Python that calls another numpy function needs a
+   third, which GemStone refuses (INT_MAX_USER_ACTION, error 2138), so
+   np.linspace failed.  Grail now does the dispatcher's work itself
+   (ShimForeignObject>>___callArrayDispatch:args:kwargs:), and these two
+   answer what it needs from C.
+
+   shimArrayDispatcherParts: { relevant_arg_func. default_impl } of a
+   dispatcher, or nil.  numpy keeps both in the object, at offsets 32 and 40
+   (arrayfunction_override.c, PyArray_ArrayFunctionDispatcherObject: HEAD,
+   vectorcall, dict, relevant_arg_func, default_impl), and exposes only the
+   second, as the _implementation getset.  The layout is checked against that
+   getset and the dict offset before it is trusted.  nil also for a like=
+   dispatcher, which has no relevant_arg_func. */
+static OopType shimArrayDispatcherParts(OopType objOop)
+{
+    PyObject *o = (PyObject *)(intptr_t)GciOopToI64(objOop);
+    if (!plausible_pyobj(o) || !plausible_pyobj(o->ob_type) || !is_foreign(o)) return OOP_NIL;
+    PyTypeObject *t = o->ob_type;
+    if (t->tp_name == NULL || strcmp(t->tp_name, "numpy._ArrayFunctionDispatcher") != 0
+            || t->tp_basicsize < 48 || t->tp_dictoffset != 24)
+        return OOP_NIL;
+    PyObject *rel = *(PyObject **)((char *)o + 32);
+    PyObject *impl = *(PyObject **)((char *)o + 40);
+    if (rel == NULL || impl == NULL || !plausible_pyobj(rel) || !plausible_pyobj(impl))
+        return OOP_NIL;
+    PyObject *viaGetset = NULL;
+    for (PyGetSetDef *g = t->tp_getset; g != NULL && g->name != NULL; g++)
+        if (strcmp(g->name, "_implementation") == 0 && g->get != NULL) {
+            viaGetset = g->get(o, g->closure);
+            break;
+        }
+    if (viaGetset == NULL) { PyErr_Clear(); return OOP_NIL; }
+    int same = viaGetset == impl;
+    Py_DECREF(viaGetset);
+    if (!same) return OOP_NIL;
+    OopType sizeOop = GciI64ToOop(2);
+    OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
+    GciStoreOop(arr, 1, pyobj_oop(rel));
+    GciStoreOop(arr, 2, pyobj_oop(impl));
+    check_and_raise_error();
+    return arr;
+}
+
+/* Whether t itself (not a base) defines name: in its dict, its method table,
+   its getsets or its members. */
+static int type_defines_name(PyTypeObject *t, const char *name)
+{
+    if (t->tp_dict != NULL && PyDict_GetItemString(t->tp_dict, name) != NULL) return 1;
+    for (PyMethodDef *m = t->tp_methods; m != NULL && m->ml_name != NULL; m++)
+        if (strcmp(m->ml_name, name) == 0) return 1;
+    for (PyGetSetDef *g = t->tp_getset; g != NULL && g->name != NULL; g++)
+        if (strcmp(g->name, name) == 0) return 1;
+    for (PyMemberDef *d = t->tp_members; d != NULL && d->name != NULL; d++)
+        if (strcmp(d->name, name) == 0) return 1;
+    return 0;
+}
+
+/* shimArrayFunctionKind: how numpy's dispatcher treats a wheel object passed
+   as a relevant argument (arrayfunction_override.c, get_array_function): 0
+   when its type has no __array_function__, 1 when the one it inherits is
+   ndarray's -- the default, which lets the dispatcher call the
+   implementation directly -- and 2 for any other, which must go to C.  An
+   object that cannot be read answers 2, so the C path decides. */
+static OopType shimArrayFunctionKind(OopType objOop)
+{
+    PyObject *o = (PyObject *)(intptr_t)GciOopToI64(objOop);
+    if (!plausible_pyobj(o) || !plausible_pyobj(o->ob_type)) return GciI64ToOop(2);
+    for (PyTypeObject *t = o->ob_type; t != NULL; t = t->tp_base)
+        if (type_defines_name(t, "__array_function__"))
+            return GciI64ToOop(t->tp_name != NULL && strcmp(t->tp_name, "numpy.ndarray") == 0 ? 1 : 2);
+    return GciI64ToOop(0);
+}
+
 /* tp_new of a Grail class's type mirror: ``cls.__new__(cls)'' in Grail
    (CPythonShim>>PyType_GenericNew:).  pydantic_core builds a model
    instance this way when the model has no custom __init__ -- it reads the
@@ -8302,6 +8378,8 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimForeignOp", shimForeignOp, 4);
     GCI_DECLARE_ACTION("shimForeignStr", shimForeignStr, 2);
     GCI_DECLARE_ACTION("shimForeignTypeCheck", shimForeignTypeCheck, 3);
+    GCI_DECLARE_ACTION("shimArrayDispatcherParts", shimArrayDispatcherParts, 1);
+    GCI_DECLARE_ACTION("shimArrayFunctionKind", shimArrayFunctionKind, 1);
 }
 
 /* Drop everything that points at the PREVIOUS session's Grail objects:

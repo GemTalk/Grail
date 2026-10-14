@@ -24,7 +24,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'ShimForeignObject'
-  instVarNames: #(cPtr typeName view compareHash)
+  instVarNames: #(cPtr typeName view compareHash arrayDispatch)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -369,11 +369,67 @@ value: positional value: kwargs
 	builtin function, a bound method answered by ___pyAttrLoad___: -- goes
 	back to C: CPythonShim>>callForeign:args:kwargs:.  This used to fall
 	through to object's, which raised ``'ShimForeignObject' object is not
-	callable''."
+	callable''.
 
-	^ (CPythonShim @env0:current) @env0:callForeign: cPtr
-		args: (positional ifNil: [#()])
-		kwargs: kwargs
+	A numpy function (an _ArrayFunctionDispatcher) is the exception: Grail
+	does its dispatching itself, ___callArrayDispatch:args:kwargs:."
+
+	| args |
+	args := positional ifNil: [#()].
+	self ___arrayDispatchParts @env0:ifNotNil: [:parts |
+		(self ___callArrayDispatch: parts args: args kwargs: kwargs)
+			@env0:ifNotNil: [:boxed | ^ boxed @env0:at: 1]].
+	^ (CPythonShim @env0:current) @env0:callForeign: cPtr args: args kwargs: kwargs
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+___arrayDispatchParts
+	"{ dispatcher. implementation } when the receiver is one of numpy's
+	public functions, else nil.  Asked of C once per proxy (proxies are
+	canonical per pointer); false records a no."
+
+	arrayDispatch == nil ifTrue: [
+		arrayDispatch := false.
+		(typeName @env0:= 'numpy._ArrayFunctionDispatcher') ifTrue: [
+			((CPythonShim @env0:current) @env0:arrayDispatcherParts: cPtr)
+				@env0:ifNotNil: [:parts | arrayDispatch := parts]]].
+	^ arrayDispatch == false ifTrue: [nil] ifFalse: [arrayDispatch]
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+___callArrayDispatch: parts args: args kwargs: kwargs
+	"A numpy public function, called the way its C type
+	(arrayfunction_override.c, dispatcher_vectorcall) calls it, but from
+	Grail: the dispatcher picks out the relevant arguments, and when none of
+	them overrides __array_function__ -- none has one, or the one it has is
+	ndarray's -- the implementation is called with the original arguments.
+	Answers { result }, or nil to leave the call to C.
+
+	Doing it in C cost two user-action re-entries (the dispatcher, then the
+	implementation), so a numpy function written in Python that calls another
+	-- np.linspace, which calls np.ndim -- needed three, and GemStone allows
+	two (INT_MAX_USER_ACTION, error 2138).  Here neither costs one.  A
+	dispatcher also may be a generator, which C cannot iterate in a callback.
+
+	Any override goes to C, which hands the call to that __array_function__.
+	So does an error from the dispatcher: it runs again there and raises with
+	the public function's name, as numpy words it.  The dispatcher is only
+	argument plumbing, so running it twice changes nothing."
+
+	| relevant shim |
+	relevant := [((parts @env0:at: 1) value: args value: kwargs) @env0:___pyStarToArray___]
+		@env0:on: Error @env0:, BaseException do: [:ex | ex @env0:return: nil].
+	relevant == nil ifTrue: [^ nil].
+	shim := CPythonShim @env0:current.
+	relevant @env0:do: [:a |
+		(a @env0:isKindOf: ShimForeignObject)
+			ifTrue: [(shim @env0:arrayFunctionKind: a @env0:cPtr) == 2 ifTrue: [^ nil]]
+			ifFalse: [
+				(((builtins @env1:instance) @env1:hasattr: ((builtins @env1:instance) @env1:type: a)
+					_: '__array_function__') @env1:___isTruthy___) ifTrue: [^ nil]]].
+	^ Array @env0:with: ((parts @env0:at: 2) value: args value: kwargs)
 %
 
 category: 'Grail-Python Operators'

@@ -1607,7 +1607,7 @@ testDynLoadGrailDemo
 		equals: #('add' 'as_long_overflow' 'descr_def_name' 'dict_values_inline' 'dot_product'
 			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
 			'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
-			'seq_fast_len' 'singletons' 'sum_inline').
+			'seq_fast_len' 'setattr_in_c' 'singletons' 'sum_inline').
 %
 
 category: 'Grail-Tests - Dynamic Loading'
@@ -3604,5 +3604,129 @@ testATypeWhoseMetatypeSubclassesTypeKeepsItsName
 	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
 	self assert: (self eval: 'import _grail_demo as d
 repr((d.WithMeta.__name__,))') equals: '(''WithMeta'',)'
+%
+
+
+category: 'Grail-Tests - NumPy Dispatch'
+method: CPythonShimTestCase
+testANumpyFunctionCallsItsImplementationFromGrail
+	"A numpy public function (an _ArrayFunctionDispatcher, here the demo's miniature of one)
+	called from Grail runs its dispatcher and implementation in Grail
+	(ShimForeignObject>>___callArrayDispatch:args:kwargs:).  Through C each call cost two
+	user-action re-entries, so a Python-written numpy function calling another needed a
+	third, which GemStone refuses (INT_MAX_USER_ACTION, error 2138): np.linspace failed.
+	Four levels deep here."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+D = d.Dispatcher
+def _disp(x):
+    return (x,)
+inner = D(_disp, lambda x: x + 1)
+mid = D(_disp, lambda x: inner(x) * 2)
+outer = D(_disp, lambda x: mid(x) + 100)
+top = D(_disp, lambda x: outer(x) - 1)
+repr((top(3), top._implementation(3), inner._implementation is not None))') equals: '(107, 107, True)'
+%
+
+category: 'Grail-Tests - NumPy Dispatch'
+method: CPythonShimTestCase
+testAnArgumentWithNdarraysArrayFunctionIsNotAnOverride
+	"An argument whose __array_function__ is ndarray's -- the default -- or that has none
+	(a wheel object without one, a Grail int) lets Grail call the implementation itself,
+	as numpy's C does; nested four deep, so a wrong answer would reach the nesting limit."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+D = d.Dispatcher
+def _disp(x):
+    return (x,)
+def nest(depth, f):
+    for _ in range(depth):
+        f = (lambda g: D(_disp, lambda x: g(x)))(f)
+    return f
+def _impl(x):
+    return ''impl''
+repr((nest(4, D(_disp, _impl))(d.NdLike()), nest(4, D(_disp, _impl))(d.make_box(1)), nest(4, D(_disp, _impl))(7)))') equals: '(''impl'', ''impl'', ''impl'')'
+%
+
+category: 'Grail-Tests - NumPy Dispatch'
+method: CPythonShimTestCase
+testAGeneratorDispatcherIsIteratedInGrail
+	"Some of numpy's dispatchers are generators.  C cannot iterate a Grail generator from a
+	callback (its body runs on its own GsProcess); Grail can."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def _gdisp(*xs):
+    yield from xs
+repr(d.Dispatcher(_gdisp, lambda *xs: sum(xs))(1, 2, 3))') equals: '6'
+%
+
+category: 'Grail-Tests - NumPy Dispatch'
+method: CPythonShimTestCase
+testAnArrayFunctionOverrideStillReceivesTheCall
+	"An argument with an __array_function__ of its own -- a Grail class's, or a wheel type's
+	other than ndarray's -- is left to C, which hands it the call."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Over:
+    def __array_function__(self, func, types, args, kwargs):
+        return (''python override'', func is f, len(args), sorted(kwargs))
+f = d.Dispatcher(lambda a, b=None: (a, b), lambda a, b=None: ''impl'')
+repr((f(Over(), b=2), f(d.OverLike(), 5)[0], f(d.OverLike(), 5)[1][1], f(d.NdLike(), 5)))') equals: '((''python override'', True, 1, [''b'']), ''overridden'', 5, ''impl'')'
+%
+
+category: 'Grail-Tests - NumPy Dispatch'
+method: CPythonShimTestCase
+testALikeDispatcherAndADispatcherErrorGoThroughC
+	"A like= dispatcher (no relevant_arg_func) is left to C, and so is a call its dispatcher
+	rejects: it runs again there and raises as numpy would."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def _disp(x):
+    return (x,)
+f = d.Dispatcher(_disp, lambda x: x)
+def err():
+    try:
+        f(1, 2)
+    except TypeError as e:
+        return str(e)
+repr((d.Dispatcher(None, lambda x: x * 3)(5), err()))') equals: '(15, ''_disp() takes 1 positional argument but 2 were given'')'
+%
+
+category: 'Grail-Tests - NumPy Dispatch'
+method: CPythonShimTestCase
+testSetattrFromCStoresANewAttribute
+	"PyObject_SetAttrString on a Grail object is setattr(): a new attribute is stored and a
+	__setattr__ override sees it.  It sent the env-1 setter, which exists only for a
+	declared attribute, and raised AttributeError (numpy's finfo, so np.polyfit)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Seen:
+    def __setattr__(self, k, v):
+        object.__setattr__(self, k, (''seen'', v))
+class Plain:
+    pass
+o = Plain()
+s = Seen()
+d.setattr_in_c(o, ''fresh'', 1)
+d.setattr_in_c(s, ''x'', 2)
+repr((o.fresh, s.x))') equals: '(1, (''seen'', 2))'
 %
 
