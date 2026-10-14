@@ -292,11 +292,8 @@ rec('str_falls_back_outside_the_errno_form', str_falls_back_outside_the_errno_fo
 
 def more_than_five_arguments():
     """CPython does no unpacking at all above five arguments and keeps args
-    whole, so str() is the tuple.  GRAIL DIFFERS: its exception constructors
-    accept at most five positional arguments, so this raises TypeError before
-    the question of unpacking arises -- which makes the `> 5` branch of
-    OSError >> ___args___: unreachable from Python today.  Pinned rather than
-    quietly worked around; the Smalltalk test records Grail's answer."""
+    whole, so str() is the tuple.  Grail's exception constructors used to stop
+    at five arguments and raise TypeError here; they take any number now."""
     return str(OSError(1, 2, 3, 4, 5, 6))
 
 

@@ -1604,7 +1604,7 @@ testDynLoadGrailDemo
 	methodNames := System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
 	self assert: (methodNames isKindOf: Array).
 	self assert: methodNames asSortedCollection asArray
-		equals: #('add' 'as_long_overflow' 'descr_def_name' 'dict_values_inline' 'dot_product'
+		equals: #('add' 'as_long_overflow' 'capi' 'descr_def_name' 'dict_values_inline' 'dot_product'
 			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
 			'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
 			'seq_fast_len' 'setattr_in_c' 'singletons' 'sum_inline' 'unicode_compare').
@@ -3889,5 +3889,282 @@ testAWheelModuleFunctionIsABuiltin
 	self assert: (self eval: 'import types, math
 import _grail_demo as d
 repr([(type(f).__name__, isinstance(f, types.BuiltinFunctionType), isinstance(f, types.FunctionType), repr(f)) for f in (d.add, math.sqrt, len)])') equals: '[(''builtin_function_or_method'', True, False, ''<built-in function add>''), (''builtin_function_or_method'', True, False, ''<built-in function sqrt>''), (''builtin_function_or_method'', True, False, ''<built-in function len>'')]'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
+testCApiBytes
+	"PyBytes_FromString and PyBytes_AsStringAndSize (with and without a length; an embedded
+	null refused without one).
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii((t(''bytes_from_string'', ''h\u00e9llo''), t(''bytes_as_string_and_size'', b''ab\x00cd''), t(''bytes_as_string_no_len'', b''ab\x00cd''), t(''bytes_as_string_no_len'', b''abcd''),))') equals: '(b''h\xc3\xa9llo'', (5, b''ab\x00cd''), (''raised'', ''ValueError'', ''embedded null byte''), b''abcd'')'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
+testCApiErrors
+	"PyErr_FormatV, PyErr_NormalizeException (Fetch answers the text; normalizing builds the
+	instance), PyErr_SetFromErrno (OSError(errno, text), so a FileNotFoundError), PyErr_WarnFormat
+	and PyErr_WarnEx (through warnings.warn -- WarnEx was a silent no-op), PyErr_Print and
+	PyErr_WriteUnraisable (they report and clear), PyException_SetCause/Context/Traceback.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii((t(''err_formatv''), t(''normalize''), t(''set_from_errno''), t(''warn_format''), t(''print_clears''), t(''unraisable_clears'', o), (r is e1, e1.__cause__ is e2, e1.__suppress_context__, e1.__context__ is e3, e1.__traceback__),))') equals: '((''raised'', ''ValueError'', ''x=5 y=abc''), (True, KeyError(''k'')), (''raised'', ''FileNotFoundError'', ''[Errno 2] No such file or directory''), (''warned'', ''UserWarning'', ''warned 7 times''), True, True, (True, True, True, True, None))'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
+testCApiNumbers
+	"PyFloat_FromString, PyLong_FromUnicodeObject (through int(), which C could not call: the
+	shim's PyLong_Type had no tp_new), PyLong_As/FromVoidPtr, PyLong_IsZero.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''float_from_string'', ''1.5''), t(''float_from_string'', ''x'')), (t(''long_from_unicode'', ''ff'', 16), t(''long_from_unicode'', '' 12 '', 10), t(''long_from_unicode'', ''zz'', 10)), (t(''void_ptr_roundtrip'', 123456789), t(''void_ptr_roundtrip'', 0)), (t(''long_is_zero'', 0), t(''long_is_zero'', 5), t(''long_is_zero'', 2 ** 80)),))') equals: '((1.5, (''raised'', ''ValueError'', "could not convert string to float: ''x''")), (255, 12, (''raised'', ''ValueError'', "invalid literal for int() with base 10: ''zz''")), (123456789, 0), (1, 0, 0))'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
+testCApiObjects
+	"PyEval_GetBuiltins, PyDict_ContainsString, PyMapping_GetItemString, PyMemoryView_FromObject,
+	PyMethod_New, PyObject_AsFileDescriptor, PyObject_Bytes, PyObject_Format, PyObject_GenericGetAttr,
+	PyObject_LengthHint, PyObject_Not, PyObject_Print.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii((t(''builtins_len'')([1, 2, 3]), (t(''dict_contains_string'', {''k'': 1}, ''k''), t(''dict_contains_string'', {''k'': 1}, ''z'')), (t(''mapping_get_item_string'', {''k'': ''v''}, ''k''), t(''mapping_get_item_string'', {}, ''k'')), t(''memoryview_bytes'', b''xyz''), t(''method_new_call'', meth, o), (t(''as_fd'', 3), t(''as_fd'', Fd()), t(''as_fd'', -1), t(''as_fd'', ''x'')), (t(''object_bytes'', [104, 105]), t(''object_bytes'', b''q'')), (t(''object_format'', 3.14159, ''.2f''), t(''object_format'', 42, ''>5'')), (t(''generic_getattr'', o, ''x''), t(''generic_getattr'', o, ''nope'')[:2]), (t(''length_hint'', [1, 2, 3], 0), t(''length_hint'', Hint(), 0), t(''length_hint'', Obj(), 4)), (t(''object_not'', 0), t(''object_not'', [1]), t(''object_not'', '''')), t(''object_print'', ''q''),))') equals: '(3, (True, False), (''v'', (''raised'', ''KeyError'', "''k''")), b''xyz'', (''bound to'', ''Obj''), (3, 5, (''raised'', ''ValueError'', ''file descriptor cannot be a negative integer (-1)''), (''raised'', ''TypeError'', ''argument must be an int, or have a fileno() method.'')), (b''hi'', b''q''), (''3.14'', ''   42''), (''xv'', (''raised'', ''AttributeError'')), (3, 9, 4), (1, 0, 1), "''q''q")'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
+testCApiSequences
+	"PySequence_Concat / Repeat and the in-place forms (a list reaches C as a copy, so only the
+	result is compared, not the identity).
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''seq_concat'', [1], [2]), t(''seq_concat'', (1,), (2,)), t(''seq_concat'', ''a'', ''b'')), (t(''seq_repeat'', [0], 3), t(''seq_repeat'', ''ab'', 2)), t(''seq_inplace_concat'', lst, [3])[0], t(''seq_inplace_repeat'', [7], 2)[0],))') equals: '(([1, 2], (1, 2), ''ab''), ([0, 0, 0], ''abab''), [1, 2, 3], [7, 7])'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
+testCApiUnicode
+	"Encoding, UCS4 in and out, PyUnicode_FromKindAndData, PyUnicode_Format, FromEncodedObject,
+	Replace, Tailmatch, and the _PyUnicode_Is* character classes (titlecase is category Lt, not
+	str.istitle).
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''as_ascii'', ''abc''), t(''as_ascii'', ''\u00e9'')[:2], t(''as_latin1'', ''\u00e9''), t(''as_encoded'', ''\u00e9'', ''utf-8'')), (t(''as_ucs4'', ''a\u00e9\u20ac\U0001f600''), t(''as_ucs4_copy'', ''xy\u20ac''), t(''as_ucs4_short_buffer'', ''abcd'')), (t(''from_kind_and_data'', 1, [104, 233]), t(''from_kind_and_data'', 2, [8364, 65]), t(''from_kind_and_data'', 4, [128512, 66])), t(''unicode_format'', ''%s-%d'', (''a'', 3)), (t(''from_encoded'', b''h\xc3\xa9'', ''utf-8''), t(''from_encoded'', b''\xff'', ''utf-8'')[:2]), (t(''unicode_replace'', ''aaaa'', ''a'', ''b''), t(''unicode_replace'', ''aaaa'', ''a'', ''b'', 2)), (t(''tailmatch'', ''hello'', ''he''), t(''tailmatch'', ''hello'', ''lo'')), [t(''char_classes'', ord(ch)) for ch in ''aZ5 \u0663\u2155\u01c5\u00e9''],))') equals: '((b''abc'', (''raised'', ''UnicodeEncodeError''), b''\xe9'', b''\xc3\xa9''), ([97, 233, 8364, 128512], [120, 121, 8364], (''raised'', ''SystemError'', ''string is longer than the buffer'')), (''h\xe9'', ''\u20acA'', ''\U0001f600B''), ''a-3'', (''h\xe9'', (''raised'', ''UnicodeDecodeError'')), (''bbbb'', ''bbaa''), ((1, 0), (0, 1)), [(1, 0, 0, 1, 0, 0, 0, 0), (1, 0, 0, 0, 0, 0, 1, 0), (0, 1, 1, 0, 1, 0, 0, 0), (0, 0, 0, 0, 0, 0, 0, 1), (0, 1, 1, 0, 1, 0, 0, 0), (0, 0, 0, 0, 1, 0, 0, 0), (1, 0, 0, 0, 0, 1, 0, 0), (1, 0, 0, 1, 0, 0, 0, 0)])'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
+testCApiHashCapsuleAndUniqueness
+	"_Py_HashDouble and PyObject_Hash agree with hash() (PyObject_Hash sent Smalltalk's #hash), a
+	capsule's context and name, and IsUniqueReferencedTemporary's always-safe 0.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''hash_double'', 1.5) == hash(1.5), t(''hash_double'', 2.0) == hash(2.0)), t(''capsule''), t(''unique_temporary'', [1]),))') equals: '((True, True), (1, 42, 7), 0)'
 %
 

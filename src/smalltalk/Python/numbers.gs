@@ -368,14 +368,22 @@ __abstractmethods__
 	(#1592).  The ABCs answer CPython's sets; a Python subclass answers the
 	set computed when it was defined (___pyClassDefined___:), as CPython's
 	ABCMeta does -- or computes it, for a class defined before this
-	existed."
+	existed.
 
-	| own cached |
+	The definition-time set is stored as the class's own
+	``__abstractmethods__'', where CPython keeps it too, so an explicit
+	``C.__abstractmethods__ = ...'' -- abc.update_abstractmethods does it --
+	replaces it.  The session overlay is read first: a store on a canonical
+	class lands there."
+
+	| own stored |
 	own := self ___numbersAbcAbstractNames___.
 	own @env0:notNil ifTrue: [
 		^ frozenset @env0:withAll: (own @env0:collect: [:n | n @env0:asString])].
-	cached := self ___classBodyDynamicRead___: #'___grailNumbersAbstract___'.
-	cached @env0:notNil ifTrue: [^ cached].
+	stored := self ___classAttrOverlayLookup___: self name: #'__abstractmethods__'.
+	stored @env0:notNil ifTrue: [^ stored].
+	stored := self ___classBodyDynamicRead___: #'__abstractmethods__'.
+	stored @env0:notNil ifTrue: [^ stored].
 	^ self ___numbersComputeAbstract___
 %
 
@@ -397,7 +405,7 @@ ___grailAbstractInstantiationError___
 	on every arithmetic result -- has an empty set, read from the holder
 	without formatting anything."
 
-	(self __abstractmethods__ @env1:__len__) @env0:= 0 ifTrue: [^ nil].
+	(self __abstractmethods__ @env0:size) @env0:= 0 ifTrue: [^ nil].
 	^ super ___grailAbstractInstantiationError___
 %
 
@@ -410,7 +418,7 @@ ___pyClassDefined___: attrNames
 
 	| result |
 	result := super ___pyClassDefined___: attrNames.
-	self ___classHolderAttrStore___: #'___grailNumbersAbstract___'
+	self ___classHolderAttrStore___: #'__abstractmethods__'
 		put: self ___numbersComputeAbstract___.
 	^ result
 %

@@ -336,3 +336,24 @@ test_mutual_recursion_raises_recursion_error
 	self assert: ((results @env1:__getitem__: 'mutual') = true)
 		description: 'recursion-limit check failed: mutual'
 %
+
+category: 'Grail-Tests-BaseException'
+method: BaseExceptionTestCase
+testExceptionsTakeAnyNumberOfArguments
+	"CPython's BaseException keeps any number of positionals in args.  Grail's
+	class call had forms for 0, 1, 2, 3 and 5 only, so ``ValueError(0, 1, 2,
+	3)'' and every six-or-more argument exception were ``takes wrong number of
+	arguments''; and an integer third argument to BlockingIOError is
+	characters_written.  tests/python/exception_any_arity.py holds the checks,
+	agreeing with CPython 3.14 except the pinned message for a deleted
+	characters_written."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'exception_any_arity' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_any_arity.py')
+		name: 'exception_any_arity'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '8 checks, 0 disagreeing [], keys match: True'
+%
