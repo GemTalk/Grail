@@ -16032,8 +16032,14 @@ ___typeReprString___
 	meta := [self @env1:___pyAttrLoad___: #'__class__']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	active := SessionTemps @env0:current @env0:at: #GrailMetaReprActive otherwise: nil.
-	(meta @env0:notNil and: [(meta @env0:isKindOf: Behavior) and: [meta @env0:~~ self
-		and: [active @env0:isNil or: [(active @env0:includesIdentical: self) @env0:not]]]])
+	"A class that is ITS OWN metaclass is dispatched too.  h11's sentinels are
+	(``v.__class__ = v'', object >> ___pyChangeMetaclassOf:to:), and CPython
+	reprs one through the __repr__ it inherits from Sentinel -- ``CLIENT'',
+	not ``<class 'h11._state.CLIENT'>''.  ``type'' is the only other such
+	class, and the owner test below already sends it to the plain form; the
+	per-receiver guard above stops any recursion."
+	(meta @env0:notNil and: [(meta @env0:isKindOf: Behavior)
+		and: [active @env0:isNil or: [(active @env0:includesIdentical: self) @env0:not]]])
 		ifTrue: [
 			owner := meta @env0:whichClassIncludesSelector: #'__repr__' environmentId: 1.
 			(owner @env0:notNil
@@ -16407,15 +16413,71 @@ ___pyChangeClassOf: anObject to: newClass
 	(newClass isKindOf: Behavior) ifFalse: [
 		^ TypeError ___signal___:
 			'__class__ must be set to a class, not ''' @env0:,
-			(newClass @env0:class @env0:name @env0:asString) @env0:, ''' object'].
-	[anObject @env0:changeClassTo: newClass]
+			newClass ___pyTypeNameForError___ @env0:, ''' object'].
+	(anObject isKindOf: Behavior) ifTrue: [
+		^ self ___pyChangeMetaclassOf: anObject to: newClass].
+	"The TypeError is signalled AFTER the handler has returned, never from
+	inside it.  A handler block runs on top of the signalling context, so a
+	signal from in here left changeClassTo:'s frames under the TypeError and
+	under every Python ``except'' that caught it.  For a CLASS receiver those
+	frames run in protected mode, and the first thing such a handler did that
+	could switch process (``import traceback'', in the package census's probe)
+	killed the session with InternalError 2261, ``process switch not allowed
+	in protected mode'', which nothing can catch -- h11 and httpcore crashed
+	that way on h11's ``v.__class__ = v''.  A class receiver no longer gets
+	here (___pyChangeMetaclassOf:to: above), and an instance one did not
+	reproduce it (measured: ``C().__class__ = int'' then an import survives
+	the old handler), so this is defence: a kernel error is answered, not
+	re-raised from under the kernel."
+	([anObject @env0:changeClassTo: newClass. true]
 		@env0:on: Error
-		do: [:ex |
+		do: [:ex | ex @env0:return: false]) ifFalse: [
 			^ TypeError ___signal___:
 				'__class__ assignment: ''' @env0:,
 				(newClass @env0:name @env0:asString) @env0:,
 				''' object layout differs from ''' @env0:,
 				(anObject @env0:class @env0:name @env0:asString) @env0:, ''''].
+	^ None
+%
+
+category: 'Grail-Attribute Access'
+classmethod: object
+___pyChangeMetaclassOf: aClass to: newClass
+	"``aClass.__class__ = newClass'' for a CLASS: give it a new metaclass.
+
+	A GemStone class's own class is its Smalltalk metaclass and cannot be
+	changed, but Grail already keeps a class's PYTHON type as a record
+	(___grailSetMetaclass___:), which type(C), C.__class__ and isinstance all
+	read -- so this rewrites the record.  A class statement's build persists
+	the record it finishes with (importlib ___canonicalClassRegister___), so an
+	assignment made by the metaclass while building it survives a warm bind.
+
+	h11 depends on it: its Sentinel metaclass ends __new__ with ``v.__class__ =
+	v'', making every sentinel its own type so that ``type(event)'' dispatches
+	uniformly over events and sentinels.  Grail refused it as a layout
+	mismatch, so h11 and httpcore did not import (#G12, docs/Package_Census.md).
+
+	CPython's rules, measured on 3.14: a builtin class cannot be changed;
+	neither the old nor the new type may be ``type'' itself (both must be
+	mutable heap types); and the new one must be a metaclass, or the layouts
+	differ."
+
+	| old |
+	(aClass @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1) ifFalse: [
+		^ TypeError ___signal___:
+			'cannot set ''__class__'' attribute of immutable type ''' @env0:,
+			aClass @env0:___pyClassNameForError___ @env0:, ''''].
+	old := aClass ___pyMetaclass___.
+	(old == type or: [newClass == type]) ifTrue: [
+		^ TypeError ___signal___:
+			'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+	(newClass @env0:inheritsFrom: type) ifFalse: [
+		^ TypeError ___signal___:
+			'__class__ assignment: ''' @env0:,
+			(newClass @env0:name @env0:asString) @env0:,
+			''' object layout differs from ''' @env0:,
+			(old @env0:name @env0:asString) @env0:, ''''].
+	aClass @env1:___grailSetMetaclass___: newClass.
 	^ None
 %
 
