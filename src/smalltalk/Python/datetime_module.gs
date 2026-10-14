@@ -4541,8 +4541,15 @@ _replace: positional kw: kwargs
 	routes through a subclass-overridden __new__ (see PyDate>>_replace:kw:
 	for why ___allocateInstance___:kw: replaces the old ___fromFields___:
 	bypass -- a custom __new__'s stashed attribute must survive replace())."
+	"The call a subclass's own __new__ sees, so it is CPython's
+	call_subclass_fold: fold= only when it is 1 (tomlkit's Time and DateTime
+	take no fold, and every replace() of theirs raised TypeError), the
+	keywords in a Python dict, and None, not nil, for no tzinfo."
 	^ self @env0:class @env1:___allocateInstance___:
-		{ y. mo. d. h. mi. s. us. tz } kw: (Dictionary @env0:new @env0:at: 'fold' put: fold; @env0:yourself)
+		{ y. mo. d. h. mi. s. us. (tz @env0:isNil ifTrue: [None] ifFalse: [tz]) }
+		kw: (fold @env0:= 0
+			ifTrue: [nil]
+			ifFalse: [((Python @env0:at: #PyDict) @env0:new) @env0:at: 'fold' put: fold; @env0:yourself])
 %
 
 ! ------- Private formatting helpers
@@ -5224,8 +5231,15 @@ _replace: positional kw: kwargs
 	"type(self), not PyTime — replace() preserves the subclass, AND (see
 	PyDate>>_replace:kw:) routes through a subclass-overridden __new__ so
 	a stashed attribute survives replace() too."
+	"The call a subclass's own __new__ sees, so it is CPython's
+	call_subclass_fold: fold= only when it is 1 (tomlkit's Time and DateTime
+	take no fold, and every replace() of theirs raised TypeError), the
+	keywords in a Python dict, and None, not nil, for no tzinfo."
 	^ self @env0:class @env1:___allocateInstance___:
-		{ h. mi. s. us. tz } kw: (Dictionary @env0:new @env0:at: 'fold' put: fold; @env0:yourself)
+		{ h. mi. s. us. (tz @env0:isNil ifTrue: [None] ifFalse: [tz]) }
+		kw: (fold @env0:= 0
+			ifTrue: [nil]
+			ifFalse: [((Python @env0:at: #PyDict) @env0:new) @env0:at: 'fold' put: fold; @env0:yourself])
 %
 
 category: 'Grail-Conversion'

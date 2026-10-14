@@ -892,6 +892,7 @@ run
 	at: #'DataDescriptorSetTestCase' put: nil;
 	at: #'DatetimeIsADateTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
+	at: #'DatetimeSecondBaseTestCase' put: nil;
 	at: #'DecimalTestCase' put: nil;
 	at: #'DecodeErrorHandlersTestCase' put: nil;
 	at: #'DecoratedMethodSelfCallTestCase' put: nil;
@@ -2454,6 +2455,7 @@ input src/smalltalk/PythonTests/DataclassesTestCase.gs
 input src/smalltalk/PythonTests/DataDescriptorSetTestCase.gs
 input src/smalltalk/PythonTests/DatetimeIsADateTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
+input src/smalltalk/PythonTests/DatetimeSecondBaseTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
 input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
 input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
