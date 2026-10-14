@@ -1429,6 +1429,7 @@ run
 	at: #'StrSurrogateShimTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
 	at: #'StructBuffersAndHalfInitTestCase' put: nil;
+	at: #'StructFormatWhitespaceTestCase' put: nil;
 	at: #'StructGapsTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
 	at: #'SubclassableIoAndWarningsTestCase' put: nil;
@@ -2979,6 +2980,7 @@ input src/smalltalk/PythonTests/StrSurrogateProtocolTestCase.gs
 input src/smalltalk/PythonTests/StrSurrogateShimTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/StructBuffersAndHalfInitTestCase.gs
+input src/smalltalk/PythonTests/StructFormatWhitespaceTestCase.gs
 input src/smalltalk/PythonTests/StructGapsTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
 input src/smalltalk/PythonTests/SubclassableIoAndWarningsTestCase.gs
