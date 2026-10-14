@@ -86,3 +86,16 @@ testEveryRowMatchesCPython
 		description: (builtins @env1:instance @env1:repr: bad) asString
 %
 
+category: 'Grail-Tests'
+method: NumbersAbcAbstractTestCase
+testEveryRowMatchesCPythonWhenRunByPath
+	"The same rows from a copy run by runpy.run_path, not imported: the
+	explicit __abstractmethods__ row only shows its bug in that role."
+
+	| bad |
+	bad := (testModule @env1:___pyAttrLoad___: #mismatches_when_run_by_path)
+		@env1:___pyCallValue___: #() kw: nil.
+	self
+		assert: (bad @env1:__len__) = 0
+		description: (builtins @env1:instance @env1:repr: bad) asString
+%
