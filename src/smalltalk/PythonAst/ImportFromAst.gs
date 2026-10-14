@@ -189,9 +189,9 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___doitStarImport___: (((Python @env0:at: #builtins) @env0:___instance___) ';
 			nextPutAll: self ___importSelectorPrefix___;
-			nextPutAll: ': { ''';
-			nextPutAll: self resolvedModuleName;
-			nextPutAll: '''. nil. nil. { ''*'' }. 0 } kw: nil) into: ___pyGlobals___).'.
+			nextPutAll: ': ';
+			nextPutAll: (self ___importArgsSourceFor___: '{ ''*'' }');
+			nextPutAll: ' kw: nil) into: ___pyGlobals___).'.
 		^ self].
 	names doWithIndex: [:each :index |
 		| targetName needsClose |
@@ -221,8 +221,6 @@ printSmalltalkOn: aStream
 	into self.  Catches dynamic names that parse-time expansion
 	missed (e.g. opcodes injected via globals().update())."
 	self wasStarImport ifTrue: [
-		| absoluteName |
-		absoluteName := self resolvedModuleName.
 		"A doit never gets here: it has no module instance to send this to, and
 		its star import returned above with a merge of its own."
 		names isEmpty ifFalse: [aStream lf].
@@ -233,10 +231,43 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: 'self @env1:___mergePublicAttrsFrom___: (((Python @env0:at: #builtins) @env0:___instance___) ';
 			nextPutAll: self ___importSelectorPrefix___;
-			nextPutAll: ': { ''';
-			nextPutAll: absoluteName;
-			nextPutAll: '''. nil. nil. { ''*'' }. 0 } kw: nil).'.
+			nextPutAll: ': ';
+			nextPutAll: (self ___importArgsSourceFor___: '{ ''*'' }');
+			nextPutAll: ' kw: nil).'.
 	].
+%
+
+category: 'Grail-code generation'
+method: ImportFromAst
+___isRelativeInDoit___
+	"A relative import (``from .. import util'') compiled as a DOIT -- exec'd
+	source.  See ___importArgsSourceFor___:."
+
+	^ (level notNil and: [level > 0]) and: [ModuleAst compilingDoitScope notNil]
+%
+
+category: 'Grail-code generation'
+method: ImportFromAst
+___importArgsSourceFor___: fromlistSource
+	"Smalltalk source for the argument array of the __import__ call this
+	statement compiles to: { name. globals. locals. fromlist. level }.
+
+	Ordinarily the name is resolved here, at compile time, against the
+	enclosing ModuleAst (resolvedModuleName), and passed with level 0.  A
+	relative import in a DOIT cannot be: exec'd source has no module name of
+	its own, so ``from .. import util'' resolved to '' and died with
+	``ValueError: Empty module name''.  pytest execs every test module whose
+	asserts it rewrites, so a test package's relative imports failed
+	(soupsieve, python-multipart).  There the name goes UNRESOLVED, with the
+	doit's globals and the level, and __import__ resolves it at run time from
+	their __package__ / __spec__ / __name__, as CPython's IMPORT_NAME always
+	does."
+
+	self ___isRelativeInDoit___ ifTrue: [
+		^ '{ ''' , (module isNil ifTrue: [''] ifFalse: [module asString])
+			, '''. (PyModuleDict @env0:on: ' , self ___globalsViewReceiverExpr___
+			, '). nil. ' , fromlistSource , '. ' , level printString , ' }'].
+	^ '{ ''' , self resolvedModuleName , '''. nil. nil. ' , fromlistSource , '. 0 }'
 %
 
 category: 'Grail-code generation'
@@ -253,9 +284,8 @@ valueSourceFor: anAlias
 	Shared by printSmalltalkOn: and by the class-body attribute path so the
 	two cannot drift."
 
-	| absoluteName moduleClass attrName stream |
-	absoluteName := self resolvedModuleName.
-	moduleClass := module isNil
+	| moduleClass attrName stream |
+	moduleClass := (module isNil or: [self ___isRelativeInDoit___])
 		ifTrue: [nil]
 		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
 	attrName := anAlias name asString.
@@ -267,11 +297,9 @@ valueSourceFor: anAlias
 			stream
 				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) @env0:___instance___) ';
 				nextPutAll: self ___importSelectorPrefix___;
-				nextPutAll: ': { ''';
-				nextPutAll: absoluteName;
-				nextPutAll: '''. nil. nil. { ''';
-				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) selector: #';
+				nextPutAll: ': ';
+				nextPutAll: (self ___importArgsSourceFor___: '{ ''' , attrName , ''' }');
+				nextPutAll: ' kw: nil) selector: #';
 				nextPutAll: attrName;
 				nextPutAll: ')'.
 		]
@@ -289,11 +317,9 @@ valueSourceFor: anAlias
 			stream
 				nextPutAll: '((((Python @env0:at: #builtins) @env0:___instance___) ';
 				nextPutAll: self ___importSelectorPrefix___;
-				nextPutAll: ': { ''';
-				nextPutAll: absoluteName;
-				nextPutAll: '''. nil. nil. { ''';
-				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) @env1:';
+				nextPutAll: ': ';
+				nextPutAll: (self ___importArgsSourceFor___: '{ ''' , attrName , ''' }');
+				nextPutAll: ' kw: nil) @env1:';
 				"A star import reads M's namespace, as CPython's import-all does,
 				never sys.modules.  A GUESSED name may be absent (see
 				printSmalltalkOn:); one an __all__ lists raises CPython's
@@ -409,6 +435,9 @@ ___irEligibleStatementLocals___: localNames
 	for a relative import; guarded, since eligibility must never raise."
 
 	self wasStarImport ifTrue: [^ false].
+	"A relative import in exec'd source resolves at run time -- see
+	___importArgsSourceFor___: -- which only the text emit does."
+	self ___isRelativeInDoit___ ifTrue: [^ false].
 	(names isNil or: [names isEmpty]) ifTrue: [^ false].
 	(self ___irBoundNames___ allSatisfy: [:n | localNames includes: n])
 		ifFalse: [^ false].

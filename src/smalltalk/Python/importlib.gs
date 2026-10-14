@@ -10120,34 +10120,40 @@ modules
 category: 'Grail-Private'
 method: importlib
 ___resolve_name___: name package: package
-	"Resolve a relative module name to an absolute name"
-	| dots remaining parentParts |
+	"import_module's relative form: ``name'' starts with one dot per level
+	(``..util'' is level 2).  Counts them and resolves the rest."
+
+	| s dots |
+	s := name @env0:asString.
 	dots := 0.
-	name do: [:c | c = $. ifTrue: [dots := dots + 1] ifFalse: [^ self error: 'Invalid relative import']].
-	remaining := name copyFrom: dots + 1 to: name size.
-	parentParts := $. @env0:split: package.
-	(dots > parentParts __len__) ifTrue: [
-		ImportError ___signal___: 'attempted relative import beyond top-level package'
-	].
-	parentParts := parentParts __getitem__: (0 @env0:to: (parentParts __len__ - dots)).
-	remaining isEmpty
-		ifTrue: ['.' join: parentParts]
-		ifFalse: [('.' join: parentParts parentParts) @env0:, '.' @env0:, remaining]
+	[dots @env0:< s @env0:size @env0:and: [(s @env0:at: dots @env0:+ 1) @env0:== $.]]
+		@env0:whileTrue: [dots := dots @env0:+ 1].
+	^ self ___resolve_name___: (s @env0:copyFrom: dots @env0:+ 1 to: s @env0:size)
+		package: package level: dots
 %
 
 category: 'Grail-Private'
 method: importlib
 ___resolve_name___: name package: package level: level
-	"Resolve a relative module name to an absolute name with explicit level"
-	| parentParts |
-	parentParts := $. @env0:split: package.
-	(level > parentParts __len__) ifTrue: [
-		ImportError ___signal___: 'attempted relative import beyond top-level package'
-	].
-	parentParts := parentParts __getitem__: (0 @env0:to: (parentParts __len__ - level + 1)).
-	name isEmpty
-		ifTrue: ['.' join: parentParts parentParts]
-		ifFalse: [('.' join: parentParts parentParts) @env0:, '.' @env0:, name]
+	"CPython's importlib._bootstrap._resolve_name: ``package'' less its last
+	level - 1 components, then ``.name'' when there is a name.
+
+	It answered the importlib instance instead -- the method had no return --
+	and before that it sent an env-1 ``>'' to the level, an uncatchable
+	MessageNotUnderstood.  So every relative __import__ died
+	(``__import__('', globals, None, ('util',), 2)''), and so did
+	import_module('.x', 'pkg'): nothing had reached this path, because a
+	module's own ``from . import x'' is resolved at compile time."
+
+	| parts keep base |
+	parts := package @env0:asString @env0:subStrings: '.'.
+	keep := parts @env0:size @env0:- (level @env0:- 1).
+	keep @env0:< 1 ifTrue: [
+		^ ImportError ___signal___: 'attempted relative import beyond top-level package'].
+	base := parts @env0:at: 1.
+	2 @env0:to: keep do: [:i | base := (base @env0:, '.') @env0:, (parts @env0:at: i)].
+	(name @env0:isNil @env0:or: [name @env0:asString @env0:isEmpty]) ifTrue: [^ base].
+	^ (base @env0:, '.') @env0:, name @env0:asString
 %
 
 
