@@ -5128,17 +5128,6 @@ __iter__
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
-___unpackSequence___
-	"``R, W, X = Perm'': the unpack codegen indexes with __getitem__:,
-	which on an enum CLASS is name lookup (Perm[0] -> KeyError: 0).
-	Materialize the canonical members in definition order instead --
-	CPython unpacks the class via __iter__."
-
-	^ list @env0:withAll: (Enum ___grailMembers: self)
-%
-
-category: 'Grail-Enum Metaclass'
-classmethod: Enum
 __len__
 	^ (Enum ___grailMembers: self) @env0:size
 %
@@ -5543,16 +5532,6 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __iter__
 	^ (Enum ___grailMembers: self) __iter__
-%
-
-category: 'Grail-Enum Metaclass'
-classmethod: IntEnum
-___unpackSequence___
-	"Duplicate of Enum class>>___unpackSequence___ -- the IntEnum
-	metaclass chain is AbstractPyInt-rooted and never passes Enum's
-	class side (the established duplicate-onto-int-chain idiom)."
-
-	^ list @env0:withAll: (Enum ___grailMembers: self)
 %
 
 category: 'Grail-Enum Metaclass'
@@ -6601,12 +6580,6 @@ category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 __iter__
 	^ (Enum ___grailMembers: self) __iter__
-%
-
-category: 'Grail-Enum Metaclass'
-classmethod: StrEnum
-___unpackSequence___
-	^ list @env0:withAll: (Enum ___grailMembers: self)
 %
 
 category: 'Grail-Enum Metaclass'

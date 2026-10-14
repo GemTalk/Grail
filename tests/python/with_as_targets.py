@@ -99,15 +99,10 @@ def wrong_count():
         with CM((1, 2, 3)) as (a, b):
             return 'no error'
     except ValueError as e:
-        # CPython 3.14 appends ``, got 3'' when the source is a sized
-        # sequence and omits it when the values came from an iterator it
-        # cannot measure.  Grail omits it in both cases -- a separate,
-        # pre-existing gap in the shared unpack check (matching it needs
-        # ___unpackSequence___ to tell ___unpackCheck___ whether it had to
-        # materialise), and not what this case is here to show.  Normalise
-        # it away so both sides compare on the part that matters: that a
-        # with-target gets the value-count check at all.
-        return 'ValueError: %s' % str(e).replace(', got 3', '')
+        # CPython 3.14 appends ``, got 3'' for an exact tuple, list or dict
+        # and omits it for anything it would have to iterate further to
+        # measure.  Grail's shared unpack check does the same.
+        return 'ValueError: %s' % e
 
 
 r['wrong_count'] = wrong_count()
