@@ -367,7 +367,7 @@ registeredTypes
 	^ mine
 %
 
-category: 'Grail-Attributes'
+category: 'Grail-Type Accessors'
 method: numbers
 Complex
 	"Return the Complex ABC."
@@ -424,7 +424,7 @@ initialize_Real
 	self @env0:at: #Real put: numbers_Real
 %
 
-category: 'Grail-Attributes'
+category: 'Grail-Type Accessors'
 method: numbers
 Integral
 	"Return the Integral ABC."
@@ -432,7 +432,7 @@ Integral
 %
 
 
-category: 'Grail-Attributes'
+category: 'Grail-Type Accessors'
 method: numbers
 Number
 	"Return the Number ABC."
@@ -440,7 +440,7 @@ Number
 %
 
 
-category: 'Grail-Attributes'
+category: 'Grail-Type Accessors'
 method: numbers
 Rational
 	"Return the Rational ABC."
@@ -448,7 +448,7 @@ Rational
 %
 
 
-category: 'Grail-Attributes'
+category: 'Grail-Type Accessors'
 method: numbers
 Real
 	"Return the Real ABC."

@@ -1075,6 +1075,16 @@ __new__: tdelta _: aName _: extra
 	^ TypeError ___signal___: 'timezone() takes at most 2 arguments'
 %
 
+category: 'Grail-Initialization'
+classmethod: PyTimezone
+__new__
+	"timezone() with no argument: the offset is required.  Reachable since
+	``datetime.timezone()'' became a call (#1448) -- it answered the class
+	before -- and through an alias it built a timezone whose offset was nil."
+
+	^ TypeError ___signal___: 'timezone() missing required argument ''offset'' (pos 1)'
+%
+
 category: 'Grail-Accessors'
 method: PyTimezone
 utcoffset: dt
@@ -5613,19 +5623,19 @@ ___pythonValueAttrs___
 
 set compile_env: 1
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 date
 	^ PyDate
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 time
 	^ PyTime
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 datetime
 	"Resolves to the PyDateTime class so Python `datetime.datetime`
@@ -5634,37 +5644,37 @@ datetime
 	^ PyDateTime
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 timedelta
 	^ PyTimedelta
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 tzinfo
 	^ PyTzinfo
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 timezone
 	^ PyTimezone
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 MINYEAR
 	^ 1
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 MAXYEAR
 	^ 9999
 %
 
-category: 'Grail-Accessors'
+category: 'Grail-Type Accessors'
 method: datetime
 UTC
 	"datetime.UTC — alias for timezone.utc (added in CPython 3.11)."
