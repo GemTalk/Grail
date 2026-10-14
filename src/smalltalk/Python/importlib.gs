@@ -11331,8 +11331,12 @@ ___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCate
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	src notNil ifTrue: [
 		src := self ___unshadowInstVarsIn___: src for: aClass.
-		^ [aClass perform: #'___compileMethod:category:' env: 1
-			withArguments: { aPrefix , src. aCategory }] on: Error do: [:e | e return: nil]].
+		"With the scope the original was compiled with: a method from exec'd
+		source reads the exec's globals through it (Behavior >>
+		___grailRememberCompileScope___:)."
+		^ [aClass perform: #'___compileMethod:category:scope:' env: 1
+			withArguments: { aPrefix , src. aCategory. aProvider @env1:___grailCompileScope___ }]
+				on: Error do: [:e | e return: nil]].
 	"No text source to recompile (an IR method of a class built before the
 	text table existed): share the method object -- sound for what method
 	mode admits (no super, no instVar references)."
@@ -11374,8 +11378,10 @@ ___copySessionMethod___: sel from: aProvider to: aClass prefix: aPrefix
 	meth isNil ifTrue: [^ self].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	src notNil ifTrue: [
-		^ [aClass perform: #'___compileSessionMethod:category:' env: 1
-			withArguments: { aPrefix , src. 'Grail-Dynamic Rebinding Originals' }]
+		"With the original's scope, as ___copyMethod___:from:to:prefix:category:."
+		^ [aClass perform: #'___compileSessionMethod:category:scope:' env: 1
+			withArguments: { aPrefix , src. 'Grail-Dynamic Rebinding Originals'.
+				aProvider @env1:___grailCompileScope___ }]
 				on: Error do: [:e | e return: nil]].
 	[aClass perform: #'___installSessionMethod:as:' env: 1
 		withArguments: { meth. (aPrefix , sel asString) asSymbol }]

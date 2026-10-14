@@ -17802,7 +17802,10 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 					or: [(src @env0:at: last @env0:+ marker @env0:size) @env0:isAlphaNumeric @env0:not]]) ifTrue: [
 				src := (src @env0:copyFrom: 1 to: last @env0:+ 6) @env0:, '___grailOrig_'
 					@env0:, (src @env0:copyFrom: last @env0:+ 7 to: src @env0:size).
-				self @env1:___compileSessionMethod: src category: 'Grail-Dynamic Rebinding Originals']]].
+				"With the original's scope: a method from exec'd source reads the
+				exec's globals through it (Behavior >> ___grailRememberCompileScope___:)."
+				self @env1:___compileSessionMethod: src category: 'Grail-Dynamic Rebinding Originals'
+					scope: definingClass @env1:___grailCompileScope___]]].
 	keywords := aSelector @env0:asString @env0:subStrings: $:.
 	nargs := aSelector @env0:asString @env0:occurrencesOf: $:.
 	argNames := Array @env0:new: nargs.

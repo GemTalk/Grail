@@ -994,6 +994,7 @@ run
 	at: #'ExecClassMethodScopeTestCase' put: nil;
 	at: #'ExecFrameGlobalsTestCase' put: nil;
 	at: #'ExecLocalsTestCase' put: nil;
+	at: #'ExecMethodCopiesTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
 	at: #'ExecWithClosureIRTestCase' put: nil;
 	at: #'ExecWithClosureTestCase' put: nil;
@@ -2545,6 +2546,7 @@ input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
 input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
 input src/smalltalk/PythonTests/ExecFrameGlobalsTestCase.gs
 input src/smalltalk/PythonTests/ExecLocalsTestCase.gs
+input src/smalltalk/PythonTests/ExecMethodCopiesTestCase.gs
 input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
 input src/smalltalk/PythonTests/ExecWithClosureIRTestCase.gs
 input src/smalltalk/PythonTests/ExecWithClosureTestCase.gs

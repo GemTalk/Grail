@@ -3673,9 +3673,11 @@ emitCompileMethodOn: classVarName source: sourceString category: categoryString 
 	classdef survived only through the raising stub Grail installs for a
 	method it cannot compile.  The handle ensureModuleScope: parks in the
 	scope is what names it here; outside a doit there is no scope to pass
-	and the plain two-keyword form stands."
+	and the plain two-keyword form stands.  ``globals:'' and not ``scope:''
+	so the class notes it: a method copied later (an instance attribute over
+	it, ``del'', the MI merge) is recompiled with it too."
 	ModuleAst compilingDoitScope ifNotNil: [
-		aStream nextPutAll: ' scope: ___pyGlobals___'].
+		aStream nextPutAll: ' globals: ___pyGlobals___'].
 	aStream nextPutAll: '.'; lf.
 %
 
