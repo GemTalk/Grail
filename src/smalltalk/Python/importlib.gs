@@ -6876,6 +6876,41 @@ ___hasBuiltinStorage___: b
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___isDatetimeValueClass___: b
+	"Is b one of the datetime value classes -- PyDate (and PyDateTime under
+	it), PyTime, PyTimedelta, PyTzinfo -- or a subclass?
+
+	Each sits DIRECTLY under Object, so the chain-depth fallback in
+	___selectStorageBase___: ranks it below a plain Python mixin (two deep
+	against three), and each builds its instances in a class-side
+	___fromFields___: and checks its operands with isKindOf:.  Merged as a
+	secondary base it keeps its Python methods but neither of those, so
+	tomlkit's ``class Time(Item, time)'' -- Item first -- died in
+	``time.__new__(cls, ...)'' with an uncatchable ``Time class does not
+	understand ___fromFields___:...'', and the same for its Date and
+	DateTime.  CPython agrees: each is a C type with its own fields, the
+	solid base a subclass must extend."
+
+	(b isKindOf: Behavior) ifFalse: [^ false].
+	^ #(#'PyDate' #'PyTime' #'PyTimedelta' #'PyTzinfo') anySatisfy: [:rootName |
+		| root |
+		root := Python at: rootName otherwise: nil.
+		root ~~ nil and: [(b == root) or: [b inheritsFrom: root]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___isEnumClass___: b
+	"Is b Enum or a subclass (Grail's Enum is a Smalltalk class)?"
+
+	| root |
+	(b isKindOf: Behavior) ifFalse: [^ false].
+	root := Python at: #'Enum' otherwise: nil.
+	^ root ~~ nil and: [(b == root) or: [b inheritsFrom: root]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___selectStorageBase___: rawBases
 	"Pick the Smalltalk superclass for a multi-base Python class.
 	Return the LEFTMOST base whose class chain reaches a built-in
@@ -6920,6 +6955,15 @@ ___selectStorageBase___: rawBases
 		(self ___hasBuiltinStorage___: b)
 			ifTrue: [^ self ___widenStrBase___: b]
 	].
+	"A DATETIME base is the solid base too -- see ___isDatetimeValueClass___:
+	-- except in an enum, which must stay on Enum's chain: ``class
+	Period(timedelta, Enum)'' builds its members through
+	___grailValueMixinFor:, and rooting it at PyTimedelta took it off that
+	chain (test_enum's 52 date-mixin tests).  Not part of
+	___hasBuiltinStorage___:, which 3-arg type() asks as well."
+	(bases anySatisfy: [:b | self ___isEnumClass___: b]) ifFalse: [
+		bases do: [:b |
+			(self ___isDatetimeValueClass___: b) ifTrue: [^ b]]].
 	"A base carrying SLOTS carries storage too -- CPython's ``solid base'',
 	the one whose instance layout the new class must extend -- so it wins
 	over chain depth.  Slots are positions in the Smalltalk class's indexed
