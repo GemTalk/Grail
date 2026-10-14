@@ -873,6 +873,8 @@ builds pydantic_core's error dicts in.
 | 3 | 5, and the error-dict key order | shim tests in `CPythonShimTestCase` |
 | 4 | 6, 7 — sync endpoints and `TestClient` | **done** on cooperative green threads, anyio unmodified (below) |
 | 5 | serve over HTTP with `grail_asgi`; a slice of FastAPI's own tests with the pydantic Phase 6 runner, compared test by test; latency and import time | **done** (below) |
+| 6 | the rest of the core slice -- the five crashes first -- then `test_tutorial/` | in progress (below) |
+| 7 | request cost | |
 
 
 ### Phases 1 and 2, done *(2026-10-05)*
@@ -1228,3 +1230,61 @@ the SUnit suite, OK alone); `check_python_fixtures.sh` 606 fixtures agree.
 **Next:** the second half of the slice (`test_tutorial/`, 252 modules), the
 crashes above, and making a request cheaper -- at ~9 ms for the simplest async
 route over HTTP the cost is ordinary Python execution, not a fixed overhead.
+
+
+### Phase 6 -- the rest of FastAPI's core tests *(in progress, 2026-10-13)*
+
+The probe venv and sdist moved to `~/.cache/grail-fastapi/` (`venv/`,
+`sdist/fastapi-0.142.2/`): macOS deletes `/private/tmp` files nobody has read
+for three days, which emptied the session-scratchpad copy's packages while
+leaving their directories, and an emptied package imports as a NAMESPACE
+package -- ``cannot import name 'status' from 'starlette' (unknown location)''
+on every module, which looks like a Grail import bug and is not.
+
+The walls, in the order met:
+
+| wall | symptom in FastAPI's tests | fix |
+|---|---|---|
+| `(X | Y).__dict__` answered a bound method; CPython has none | pydantic's `TypeAdapter` reads `obj.__dict__[name]` on the type it adapts (`_getattr_no_parents`), subscripted the method, and used what came back as its validator: every `TypeAdapter(X | Y)` failed with `'function' object has no attribute 'validate_python'` | `PyUnionType >> __dict__` raises AttributeError, as a value attr |
+| a dict lookup on an unhashable key left its TypeError PENDING in GCI | pydantic_core's Literal validator looks every input up in a dict and takes the TypeError as a miss; `PyDict_GetItemRef` answered "absent" on top of it, the next unrelated call raised the stale error, and PyO3 unwound into a Rust `capacity overflow` panic -- `Schema(type=["string", "null"])` (`test_openapi_schema_type`, `test_custom_schema_fields`), uncatchable, so it ended the portal thread and the test thread deadlocked | one `dict_lookup` in the shim answering found / absent / error: `PyDict_GetItem` suppresses (keeping an error already set), `PyDict_GetItemRef` / `WithError` / `Contains` report; the Smalltalk side is guarded, so the TypeError becomes C's error instead of searching Grail's handlers from inside the C call |
+| `inspect.signature` of a def with NO parameters lost its return annotation, and `eval_str=True` was ignored | `def route() -> User` built no response model, so nothing was filtered or validated (9 tests); `-> "User"` stayed a string | a def with no parameter spec but a `return` annotation is `() -> T`; `eval_str` evaluates string annotations in the function's globals, NameError propagating as FastAPI expects |
+| a generator started inside a C extension's CALLBACK ended the thread | pydantic_core repring a model for a ValidationError message (`''.join(... for ...)` in `__repr__`): the body forks a GsProcess, and the VM refuses a process switch while a user action is active -- uncontinuably (`ResponseValidationError`, 3 crashes) | such a generator runs INLINE, buffering what it yields; the shim keeps a per-process record of active user actions to tell (`CPythonShim >> ___userActionActiveHere`), and an entry counts only while the frame that entered is still on the stack -- the first cut trusted depth alone, and a user action an exception unwound past left a stale entry that made every later generator in the gem run inline (the SUnit gate's `os.walk` pruning test) |
+| a Python exception raised in a callback reached C as its nearest BUILTIN type | pydantic_core's decimal validator catches `decimal.InvalidOperation` to report `decimal_parsing`; it arrived as a plain ArithmeticError, so `Decimal('five')`'s escaped the validator -- a 500 where FastAPI answers 422 | `___takeCallbackError` also hands C the class's own type object (its mirror), and `PyErr_GivenExceptionMatches` walks a mirror's `tp_base` chain |
+| a pin was per SELECTOR | rebinding a name on one class (asyncio's `Future.__iter__ = __await__`, a self-send dispatcher) re-dated every captured handle of that name on every other class: annotated_types' `Interval.__iter__` -- a `slots=True` dataclass, so its methods are captured handles -- ran its base's shadow, `def __iter__(self): ...`, and answered None; `yield from None` then sent `__next__` raw, an uncatchable MNU that ended TestClient's portal (`test_multi_body_errors`, whose condecimal is an Interval). It only happened once asyncio was imported AFTER annotated_types, which is why it looked thread-dependent | the pin generation is kept per (selector, class), and a handle is judged against the pin of the class whose shadow it would run (`BoundMethod >> ___pinnedSelectorFor___:receiver:`, `UnboundMethod >> ___grailPinnedMethodFor___:receiver:`) |
+| `yield from` sent `__iter__` and then `__next__` raw | a non-iterable, or an `__iter__` answering a non-iterator (the misdispatch above), was an uncatchable MessageNotUnderstood | the operand goes through `iter()`'s checks (`builtins >> ___pyIter___:`): CPython's TypeError |
+| `inspect.getsourcelines` did not exist; `getsource` answered `''` | FastAPI names the endpoint behind a validation error through it, inside `except Exception`: every error message lost its function, file and line (5 tests) | CPython's `getsourcelines` / `getsource`; `getblock` finds the block's end with the parser, since Grail's `tokenize` is a stub |
+| a module `__getattr__` STORED as data (`globals()[...]`, a frame's `f_globals`) was never consulted | exposed by the line above: with a real `getsource` anyio's lazy importer engages, and `from anyio.abc import ObjectReceiveStream` -- so `import fastapi` -- failed | PEP 562's hook is also read from the module's dynamic instVar, where such a store lands |
+| a bound classmethod's (`MethodBinding`) `__signature_spec__` read as a METHOD | `inspect.signature` iterated it and failed; pydantic then called a `field_validator(cls, v, info)` without `info` | it is a value attr |
+| `eval_str` / `annotation_format` reached only a plain def's signature | `from __future__ import annotations` on a callable class's `__call__` stayed a string (`Depends(Dep())`), and FastAPI's FORWARDREF retry for a `TYPE_CHECKING`-only name was ignored | both are passed through the class and callable-instance paths, and `annotation_format` reads the annotations in that format |
+| a wheel's own ITERATOR was not iterable | `-> Iterable[Model]`: pydantic_core's `ValidatorIterator` is a PyO3 iterator; the shim's `PyObject_GetIter` / `PyIter_Next` sent it round through Grail, whose proxy knew no iteration (3 tests), and its length hint was a raw `__len__` send -- an uncatchable MessageNotUnderstood in the callback | a foreign object iterates through its own `tp_iter` / `tp_iternext`, from C and through the proxy's `__iter__` / `__next__`; `PyObject_Length` is `len()` |
+
+**Where it stands** (same slice, runner and CPython reference run as Phase 5).
+`compare_results.py` counts 1,270 tests in that reference -- 1,260 CPython
+passes and 10 skips -- and its "same outcome" includes the 10 skips; the Phase
+5 row is as Phase 5 reported it, against 1,266 passes, so the two are not
+counted identically:
+
+| run | same outcome as CPython | CPython passes, Grail does not | crashes |
+|---|---:|---:|---:|
+| Phase 5 final | 1,200 | 66 | 5 |
+| after the five crashes | 1,241 | 29 | 0 |
+| now | **1,252 (98.6%)** | 18 | 0 |
+
+**Left** (18): three OpenAPI snapshot differences and two description
+form-feed trims; `test_schema_compat_pydantic_v2`'s `class E(str, Enum): ...`
+(an Ellipsis reaches `cleandoc`); `test_sse`'s keep-alive pings; the
+FORWARDREF case above, where a name only an ANNOTATION reads lives in the
+annotate function's closure, which Grail does not model (a per-name resolver
+on the marker would need codegen on both arms); and singletons --
+`functools.partial` endpoints, `lru_cache` hit counts, `__dict__`-less
+dataclasses, `mock` on `json.dumps`, a traceback frame's path, `asyncpg`'s
+UUID subclass, a relative server URL, and `git init` in a temp dir.
+
+**Gates** (Darwin arm64, 2026-10-13): `run_tests.sh` **7991 run, 7991
+passed**, 8 of 8 shards; the CPython conformance gate **0 regressions** --
+three rows timed out beside the SUnit suite (test_math, test_pickle,
+test___all__) and each is its baseline row exactly when run alone;
+`check_python_fixtures.sh` 606 fixtures agree with CPython.  An earlier SUnit
+run caught the stale user-action entry (above): 6 errors and 1 failure, all
+from generators made inline outside any callback.
+

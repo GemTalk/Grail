@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'CPythonShim'
-  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep callDepth shimEntryProcess shimEntryDepth)
+  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep callDepth shimEntryProcess shimEntryDepth uaProcess uaDepths)
   classVars: #()
   classInstVars: #( libraryPath)
   poolDictionaries: #()
@@ -414,12 +414,13 @@ category: 'Grail-Calling'
 method: CPythonShim
 ___takeCallbackError
 	"{ Python name of the nearest shim exception type. message. the C instance
-	of a wheel's own exception it carries, or 0 } for the exception
+	of a wheel's own exception it carries, or 0. the C type object of its own
+	class, or 0 } for the exception
 	___guardCallback: recorded -- the shim's take_callback_error installs it as
 	C's pending error.  The exception itself is kept, should C hand the error
 	back unhandled (___noteReraiseCallbackException)."
 
-	| ex base cls text fo ptr |
+	| ex base cls text fo ptr typ |
 	ex := SessionTemps current at: #'GrailShimCallbackException' otherwise: nil.
 	SessionTemps current removeKey: #'GrailShimCallbackException' ifAbsent: [nil].
 	ex isNil ifTrue: [^ { 'RuntimeError'. 'a Grail callback raised'. 0 }].
@@ -433,7 +434,13 @@ ___takeCallbackError
 	text := [(ex @env1:__str__) asString] on: Error do: [:e | e return: ''].
 	fo := [ex dynamicInstVarAt: #'___grailForeign___'] on: Error do: [:e | e return: nil].
 	ptr := (fo isKindOf: ShimForeignObject) ifTrue: [fo cPtr] ifFalse: [0].
-	^ { base ifNil: ['Exception']. text. ptr }
+	"The exception's OWN class as C sees it -- a builtin's static type, any
+	other class's type mirror -- so C can match it.  The nearest builtin alone
+	made ``decimal.InvalidOperation'' an ArithmeticError: pydantic_core's
+	decimal validator, which catches InvalidOperation to report
+	decimal_parsing, let ``Decimal('five')'''s escape instead."
+	typ := [(self typeObjectFor: ex class) memoryAddress] on: Error do: [:e | e return: 0].
+	^ { base ifNil: ['Exception']. text. ptr. typ }
 %
 
 category: 'Grail-Calling'
@@ -1034,6 +1041,95 @@ ___noteShimEntry
 
 category: 'Grail-Management'
 method: CPythonShim
+___enterUserAction
+	"Record that a user action -- C code that may call back into Smalltalk --
+	is starting on this process, at this stack depth.  Paired with
+	___exitUserAction; read by ___userActionActiveHere.
+
+	NOT callDepth / shimEntryDepth: those serve the sweep, are allowed to be
+	wrong (see ___betweenShimCalls) and in doubt say ``in a call''.  This one
+	must be EXACT both ways, because a yes changes how a generator runs.  So it
+	is a stack of entry depths, and an entry an exception unwound past is
+	pruned the moment anything is asked from at or above its depth: a LIVE
+	entry is always shallower than the frame asking.
+
+	One process at a time: nothing switches process while a user action is
+	active (the VM refuses), so entries recorded on another process are
+	stale."
+
+	| d p |
+	"The CALLER's depth -- the frame that sends ``System userAction:'' and
+	stays on the stack for as long as the user action is active, which is
+	what ___userActionActiveHere checks for."
+	d := System stackDepth - 1.
+	p := Processor activeProcess.
+	(uaProcess ~~ p or: [uaDepths isNil]) ifTrue: [
+		uaProcess := p.
+		uaDepths := OrderedCollection new].
+	[uaDepths notEmpty and: [uaDepths last >= d]] whileTrue: [uaDepths removeLast].
+	uaDepths addLast: d
+%
+
+category: 'Grail-Management'
+method: CPythonShim
+___exitUserAction
+	"The user action ___enterUserAction recorded has returned."
+
+	(uaDepths notNil and: [uaDepths notEmpty]) ifTrue: [uaDepths removeLast]
+%
+
+category: 'Grail-Management'
+method: CPythonShim
+___userActionActiveHere
+	"Is the running process inside a user action -- on top of C frames, where
+	the VM refuses a process switch (``GsProcess switch not allowed while FFI,
+	UserAction or IntRecur call is active'', uncontinuable)?"
+
+	"AN ENTRY IS LIVE ONLY WHILE ITS FRAME IS.  An exception that unwinds
+	past the entering method skips its ___exitUserAction, and pruning by depth
+	alone cannot see that once the stack has grown back past the entry: the
+	stale entry then read as a live user action, and every generator started
+	afterwards ran inline -- os.walk could no longer be pruned between yields
+	(PathWalkAndMountTestCase).  So the frame at the entry's depth must still
+	be one of the methods that enter: ___shimUserAction:withArgs:,
+	loadModule:, or loadDynamicModule:fromPath:'s block.  Checked only when
+	an entry exists, which outside a shim call is never."
+
+	| d entry level fc meth home |
+	(uaDepths isNil or: [uaDepths isEmpty]) ifTrue: [^ false].
+	uaProcess == Processor activeProcess ifFalse: [^ false].
+	d := System stackDepth.
+	[uaDepths notEmpty] whileTrue: [
+		entry := uaDepths last.
+		entry >= d
+			ifTrue: [uaDepths removeLast]
+			ifFalse: [
+				level := d - entry + 1.
+				fc := GsProcess _frameContentsAt: level.
+				meth := fc ifNotNil: [fc at: 1].
+				home := fc ifNotNil: [(fc at: 7) ifNil: [meth]].
+				(home notNil and: [#(#'___shimUserAction:withArgs:' #'loadModule:'
+						#'loadDynamicModule:fromPath:') includes: home selector])
+					ifTrue: [^ true].
+				uaDepths removeLast]].
+	^ false
+%
+
+category: 'Grail-Management'
+classmethod: CPythonShim
+___userActionActiveHere
+	"Whether this process is inside a CPython-shim user action -- false, at the
+	cost of one SessionTemps probe, when no shim was ever loaded.  A Python
+	generator started there cannot fork its body (PythonGenerator >>
+	___mustRunInline___)."
+
+	^ (SessionTemps current at: #CPythonShim ifAbsent: [nil])
+		ifNil: [false]
+		ifNotNil: [:shim | shim ___userActionActiveHere]
+%
+
+category: 'Grail-Management'
+method: CPythonShim
 ___betweenShimCalls
 	"Is it safe to sweep -- i.e. is no shim call in progress?
 
@@ -1291,6 +1387,16 @@ foreignStr: cPtr repr: aBoolean
 
 category: 'Grail-Calling'
 method: CPythonShim
+foreignIter: cPtr next: aBoolean
+	"iter() -- or next() when aBoolean -- of a wheel's own C object, through
+	its tp_iter / tp_iternext: { value }, or nil when the type has no such slot
+	or (for next) the iterator is exhausted."
+
+	^ self ___shimUserAction: #shimForeignIter withArgs: { cPtr . aBoolean == true }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 callModuleReturnCPtr: moduleName method: methodName
 	"Call a no-arg module method that returns a raw C pointer
 	(SmallInteger address) instead of a Smalltalk value."
@@ -1481,9 +1587,16 @@ ___shimUserAction: selector withArgs: argsArray
 	| r |
 	callDepth := (callDepth ifNil: [0]) + 1.
 	self ___noteShimEntry.
+	self ___enterUserAction.
 	r := [ System userAction: selector withArgs: argsArray ]
 		on: GrailShimError
-		do: [:ex | self ___translateShimError: ex].
+		do: [:ex |
+			"The C frames are gone by now (see above), so the user action is
+			over: retire its entry before the translated exception unwinds past
+			this frame and skips the line below."
+			self ___exitUserAction.
+			self ___translateShimError: ex].
+	self ___exitUserAction.
 	callDepth := callDepth - 1.
 	^ r
 %
@@ -1726,7 +1839,9 @@ loadModule: moduleName
 	| r |
 	callDepth := (callDepth ifNil: [0]) + 1.
 	self ___noteShimEntry.
+	self ___enterUserAction.
 	r := System userAction: #shimLoadModule with: moduleName.
+	self ___exitUserAction.
 	callDepth := callDepth - 1.
 	^ r
 %
@@ -2192,6 +2307,18 @@ PyDict_SetItemString: aDictionary key: aString value: aValue
 category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_GetItem: aDictionary key: aKey
+	"Guarded: an unhashable key raises TypeError, which must become C's
+	pending error -- see ___guardCallback:.  Unguarded, the TypeError searched
+	Grail's handlers from inside pydantic_core's Literal validator (which
+	tolerates it as a miss): a script's own ``except'' caught it on top of the
+	C frames and the unwind was refused."
+
+	^ self ___guardCallback: [self ___ug_PyDict_GetItem: aDictionary key: aKey]
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+___ug_PyDict_GetItem: aDictionary key: aKey
 	(aDictionary includesKey: aKey) ifFalse: [ ^ 0 ].
 	^ (self wrap: (aDictionary at: aKey)) memoryAddress
 %
@@ -2205,7 +2332,9 @@ PyDict_GetItemString: aDictionary key: aString
 category: 'Grail-CPython API'
 method: CPythonShim
 PyDict_Contains: aDictionary key: aKey
-	^ aDictionary includesKey: aKey
+	"Guarded, as PyDict_GetItem:key: is: an unhashable key is C's TypeError."
+
+	^ self ___guardCallback: [aDictionary includesKey: aKey]
 %
 
 category: 'Grail-CPython API'
@@ -2373,7 +2502,13 @@ PyObject_Length: obj
 category: 'Grail-CPython API'
 method: CPythonShim
 ___ug_PyObject_Length: obj
-	^ obj @env1:__len__
+	"Python's len(), not a bare __len__ send: an object with none -- a wheel's
+	own iterator, which pydantic_core asks for a length hint while serialising
+	an ``Iterable[Model]'' -- is CPython's TypeError, which the guard makes
+	C's error.  The bare send was an uncatchable MessageNotUnderstood inside
+	the callback."
+
+	^ (builtins @env0:___instance___) @env1:len: obj
 %
 
 ! --------------- Dynamic module loading ---------------
@@ -2428,8 +2563,11 @@ loadDynamicModule: moduleName fromPath: pathString
 	"Depth-track like ___shimUserAction:withArgs: -- a dynamic module's
 	init exec re-enters wrap: via server callbacks; a sweep mid-load
 	could reap in-flight wrappers (see wrap:)."
-	methodNames := self current ___duringCallDo: [
-		System userAction: #shimDynLoad withArgs: { pathString . moduleName }].
+	methodNames := self current ___duringCallDo: [ | names |
+		self current ___enterUserAction.
+		names := System userAction: #shimDynLoad withArgs: { pathString . moduleName }.
+		self current ___exitUserAction.
+		names].
 	"Create a module subclass for this C extension.  Named by a legal
 	IDENTIFIER derived from the module name, not by the name itself: an
 	in-package extension arrives dotted (pydantic_core._pydantic_core,

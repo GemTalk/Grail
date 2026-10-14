@@ -3195,6 +3195,123 @@ testADottedExtensionNameCallsPositionally
 	self assert: (mod @env1:_add: { 3 . 4 } kw: nil) equals: 7
 %
 
+category: 'Grail-Tests - FastAPI Phase 6'
+method: CPythonShimTestCase
+testADictLookupOnAnUnhashableKeyReportsOrSuppressesItsError
+	"A dict lookup on an unhashable key raises TypeError.  PyDict_GetItem must
+	SUPPRESS it (and keep an error already set); PyDict_GetItemRef,
+	PyDict_GetItemWithError and PyDict_Contains must REPORT it.  The shim left
+	it pending in GCI instead, PyDict_GetItemRef answered absent on top of it,
+	and a later unrelated call raised the stale TypeError -- pydantic_core's
+	Literal validator, which takes the TypeError as a miss, then panicked with
+	a Rust ``capacity overflow'' (FastAPI's ``Schema(type=[...])'').  The
+	TypeError also searched Grail's handlers from inside the C call, so a
+	script's own ``except'' caught it on top of C frames."
+
+	| shim d |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	d := dict new.
+	d at: 'string' put: 1.
+	self
+		assert: (shim callModule: '_shimtest' method: 'test_dict_unhashable'
+			with: d with: (list withAll: #('string')) with: 'string')
+		equals: 'GetItem:NULL+none Ref:-1+TypeError WithError:NULL+TypeError Contains:-1+TypeError Preserved:yes Good:1+none'
+%
+
+category: 'Grail-Tests - FastAPI Phase 6'
+method: CPythonShimTestCase
+testAGeneratorStartedInsideACallbackRuns
+	"A generator's body runs on a forked GsProcess, and the VM refuses a
+	process switch while a user action is active -- uncontinuably.  So a
+	generator started inside a C extension's callback ended the thread at its
+	first next(): pydantic_core repring a model (``''.join(... for ...)'') for
+	a ValidationError message, FastAPI's ResponseValidationError.  Such a
+	generator now runs inline; what it yields, returns and raises reaches the
+	consumer in CPython's order."
+
+	| shim fn |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	fn := self eval: 'def f(xs):
+    def gen():
+        for x in xs:
+            yield str(x)
+    def failing():
+        yield 1
+        yield 2
+        raise KeyError("k")
+    out = []
+    try:
+        for v in failing():
+            out.append(v)
+    except KeyError:
+        out.append("caught")
+    return "-".join(gen()) + "|" + "".join(c for c in "ab") + "|" + repr(out)
+f'.
+	self
+		assert: (shim callModule: '_shimtest' method: 'test_call_one'
+			with: fn with: (list withAll: #(1 2 3)))
+		equals: '1-2-3|ab|[1, 2, ''caught'']'
+%
+
+category: 'Grail-Tests - FastAPI Phase 6'
+method: CPythonShimTestCase
+testAStaleUserActionEntryIsNotActive
+	"A user action recorded and never exited -- what an exception unwinding
+	past the entering method leaves -- must not read as active once its frame
+	is gone.  It did: every generator started afterwards ran INLINE, so a
+	consumer could no longer act between yields (os.walk pruned by mutating
+	dirnames, PathWalkAndMountTestCase)."
+
+	| shim gen |
+	shim := CPythonShim current.
+	shim ___enterUserAction.
+	self deny: CPythonShim ___userActionActiveHere.
+	gen := self eval: 'def f():
+    seen = []
+    def g():
+        for i in range(3):
+            seen.append(i)
+            yield i
+    it = g()
+    first = next(it)
+    return (first, list(seen))
+f()'.
+	self assert: (gen @env1:__repr__) equals: '(0, [0])'
+%
+
+category: 'Grail-Tests - FastAPI Phase 6'
+method: CPythonShimTestCase
+testAWheelsOwnIteratorIterates
+	"A wheel's own iterator type -- pydantic_core's ValidatorIterator, what
+	``Iterable[Model]'' validates to -- iterates through its tp_iter /
+	tp_iternext, from C and from Python.  The shim's PyObject_GetIter /
+	PyIter_Next sent it round through Grail, whose proxy knew no iteration, so
+	serialising one failed (``Error serializing to JSON'') and ``list(v)'' was
+	``'ShimForeignObject' object is not iterable''.  A length hint asked of it
+	is CPython's TypeError, not an uncatchable MessageNotUnderstood."
+
+	| shim obj fn |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self
+		assert: (shim callModule: '_shimtest' method: 'test_iterate_counter') asArray
+		equals: #(1 2 3).
+	obj := shim callModule: '_shimtest' method: 'test_make_counter'.
+	fn := self eval: 'def f(c):
+    try:
+        len(c)
+        has_len = True
+    except TypeError:
+        has_len = False
+    return repr((list(c), list(c), has_len))
+f'.
+	self
+		assert: (fn @env1:___pyCallValue___: { obj } kw: nil)
+		equals: '([1, 2, 3], [], False)'
+%
+
 category: 'Grail-Tests - FastAPI Phase 5'
 method: CPythonShimTestCase
 testAnImportedModuleKeepsAReferenceInTheImportCache

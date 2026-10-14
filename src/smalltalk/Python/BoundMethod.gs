@@ -636,7 +636,7 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	variable.  A program that pins nothing pays one identity compare and one
 	class-variable read."
 
-	| pinned shadow pinnedAt cls owner |
+	| pinned shadow pinnedAt cls owner pins |
 	(actualReceiver == (builtins @env0:___instance___)) ifTrue: [
 		pinned := SessionTemps @env0:current
 			@env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
@@ -660,8 +660,8 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	alongside compiling a shadow method onto a class, and neither should outlive
 	the session that did it."
 	GrailPinnedSelectors == nil ifTrue: [^ aSelector].
-	pinnedAt := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
-	pinnedAt == nil ifTrue: [^ aSelector].
+	pins := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
+	pins == nil ifTrue: [^ aSelector].
 	"A selector pinned on ONE class must not redirect a same-named send to an
 	unrelated one; the shadow existing is the proof that this receiver is the
 	one that was pinned.  Only pinned selectors pay for the check."
@@ -669,6 +669,15 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	cls := actualReceiver @env0:class.
 	owner := cls @env0:whichClassIncludesSelector: shadow environmentId: 1.
 	owner == nil ifTrue: [^ aSelector].
+	"THE GENERATION OF THE SHADOW'S OWN PIN, not the selector's latest.  A pin
+	was per SELECTOR, so pinning ``__iter__'' on one class re-dated every
+	capture of ``__iter__'' everywhere: asyncio's ``Future.__iter__ =
+	__await__'' made pydantic's captured ``Interval.__iter__'' predate a pin,
+	and it ran the shadow its base class had -- annotated_types'
+	``def __iter__(self): ...'', answering None (FastAPI's
+	test_multi_body_errors)."
+	pinnedAt := pins @env0:at: owner otherwise: nil.
+	pinnedAt == nil ifTrue: [^ aSelector].
 	"A CAPTURE OLDER THAN THE PIN REDIRECTS, whatever the change was."
 	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
 		and: [pinGeneration @env0:<= GrailPinGeneration]])
@@ -693,12 +702,30 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 category: 'Grail-Dynamic Rebinding'
 classmethod: BoundMethod
 ___grailPinnedAt___: aSelector
-	"The generation aSelector was pinned at, or nil when it was never pinned.
-	For UnboundMethod, which carries the same stamp and needs the same answer
-	but cannot see this class's class variables."
+	"The generation aSelector was most recently pinned at, on any class, or nil
+	when it was never pinned."
 
+	| pins latest |
 	GrailPinnedSelectors == nil ifTrue: [^ nil].
-	^ GrailPinnedSelectors @env0:at: aSelector otherwise: nil
+	pins := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
+	pins == nil ifTrue: [^ nil].
+	pins @env0:do: [:g | (latest == nil or: [g @env0:> latest]) ifTrue: [latest := g]].
+	^ latest
+%
+
+category: 'Grail-Dynamic Rebinding'
+classmethod: BoundMethod
+___grailPinnedAt___: aSelector in: aClass
+	"The generation aSelector was pinned at ON aClass -- the class owning its
+	``___grailOrig_'' shadow -- or nil.  For UnboundMethod, which carries the
+	same stamp and needs the same answer but cannot see this class's class
+	variables."
+
+	| pins |
+	GrailPinnedSelectors == nil ifTrue: [^ nil].
+	pins := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
+	pins == nil ifTrue: [^ nil].
+	^ pins @env0:at: aClass otherwise: nil
 %
 
 category: 'Grail-Dynamic Rebinding'
@@ -712,9 +739,14 @@ ___grailPinGeneration___
 
 category: 'Grail-Dynamic Rebinding'
 classmethod: BoundMethod
-___grailPinSelector___: aSelector
-	"Record that aSelector has a ``___grailOrig_'' shadow, so a BoundMethod
-	handed out before the change still reaches the original.
+___grailPinSelector___: aSelector in: aClass
+	"Record that aSelector has a ``___grailOrig_'' shadow on aClass, so a
+	BoundMethod handed out before the change still reaches the original.
+
+	PER CLASS: the generation is kept per (selector, class), and a reader
+	compares a handle's stamp with the pin of the class whose shadow it would
+	run.  One generation per selector let a pin on any class re-date every
+	capture of that selector on every other (___pinnedSelectorFor___:receiver:).
 
 	PER SESSION.  A pin goes with a shadow, and the shadows are transient
 	session methods (Behavior >> ___compileSessionMethod:category:), so the
@@ -732,14 +764,19 @@ ___grailPinSelector___: aSelector
 	persistent readers, whose class variables are now never set -- nothing is
 	pinned, at the cost of one nil test."
 
-	| holder gen |
+	| holder gen pins byClass |
 	holder := self ___grailSessionPinHolder___.
 	gen := (holder @env0:at: #'___grailSessionPinGeneration___') @env0:+ 1.
 	holder @env0:at: #'___grailSessionPinGeneration___' put: gen.
 	"The generation the pin happened at.  A BoundMethod stamped with an EARLIER
 	one predates the change and redirects; one stamped later was looked up
 	afterwards and must see the change."
-	(holder @env0:at: #'___grailSessionPins___') @env0:at: aSelector @env0:asSymbol put: gen.
+	pins := holder @env0:at: #'___grailSessionPins___'.
+	byClass := pins @env0:at: aSelector @env0:asSymbol otherwise: nil.
+	byClass == nil ifTrue: [
+		byClass := IdentityKeyValueDictionary @env0:new.
+		pins @env0:at: aSelector @env0:asSymbol put: byClass].
+	byClass @env0:at: aClass put: gen.
 	"EVICT THE INTERNED UNBOUND HANDLES for this selector.  ``Cls.m'' is
 	interned per (class, selector), so without this there is only ever ONE
 	handle and the generation stamp cannot separate a capture taken before the
@@ -788,6 +825,7 @@ ___grailSessionPinHolder___
 	temps @env0:at: #'GrailPinHolder' put: holder.
 	{ { self @env0:class. #'___grailPinGeneration___'. 1 }.
 	  { self @env0:class. #'___grailPinnedAt___:'. 1 }.
+	  { self @env0:class. #'___grailPinnedAt___:in:'. 1 }.
 	  { self. #'___pinnedSelectorFor___:receiver:'. 1 }.
 	  { self. #'_setReceiver:selector:'. 0 } } @env0:do: [:each | | cls sel env src |
 		cls := each @env0:at: 1.

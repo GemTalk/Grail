@@ -686,7 +686,7 @@ def _unwrap(obj):
     return obj
 
 
-def _signature_from_spec(func):
+def _signature_from_spec(func, annotation_format=None):
     """Build a Signature from the def-time parameter spec, or None.
 
     FunctionDefAst stamps ``__signature_spec__`` -- a tuple of
@@ -694,11 +694,33 @@ def _signature_from_spec(func):
     on every def.  Grail has no code object to introspect, and the corpus never
     reads ``co_varnames``/``co_argcount`` anyway, so the compiler records what
     it already knows instead.
+
+    A def with NO parameters carries no spec, so "no spec" alone cannot tell
+    it from a callable nothing is known about.  A ``return`` annotation can:
+    only a def has one, and every def with parameters has a spec -- so
+    ``def f() -> User'' is ``() -> User''.  It answered ``()'' with the
+    annotation lost, and FastAPI, which takes a route's response model from
+    it, validated nothing.
     """
     spec = getattr(func, '__signature_spec__', None)
-    if not spec:
+    if spec is not None and not spec:
         return None
-    ann = _annotations_for_render(func)
+    if annotation_format is not None:
+        # ``signature(f, annotation_format=Format.FORWARDREF)'': the
+        # annotations in the format asked for, as CPython's signature reads
+        # them.  FastAPI retries with FORWARDREF when an annotation names
+        # something defined only under TYPE_CHECKING; it was ignored, the
+        # annotation stayed a string, and the route answered 500
+        # (test_stringified_annotation_dependency_py314).
+        import annotationlib
+        ann = annotationlib.get_annotations(func, format=annotation_format)
+    else:
+        ann = _annotations_for_render(func)
+    if spec is None:
+        if 'return' in ann:
+            return Signature(parameters=[],
+                             return_annotation=ann['return'])
+        return None
     values = _default_values(func, spec)
     params = []
     for index, entry in enumerate(spec):
@@ -866,7 +888,8 @@ def _signature_from_callable(obj, *, follow_wrapped=True, globals=None,
                              locals=None, eval_str=False,
                              annotation_format=None, sigcls=None):
     """CPython-private constructor behind signature()."""
-    return signature(obj, follow_wrapped=follow_wrapped)
+    return signature(obj, follow_wrapped=follow_wrapped, globals=globals,
+                     locals=locals, eval_str=eval_str)
 
 
 def _signature_get_user_defined_method(cls, method_name):
@@ -925,7 +948,7 @@ def _defines_own_method(cls, method_name):
     return True
 
 
-def _signature_from_class(cls):
+def _signature_from_class(cls, **kwargs):
     """The signature of CALLING a class, or None to fall through.
 
     CPython's rule, in order:
@@ -948,7 +971,7 @@ def _signature_from_class(cls):
     """
     call = _signature_get_user_defined_method(type(cls), '__call__')
     if call is not None:
-        return _drop_leading_parameter(signature(call))
+        return _drop_leading_parameter(signature(call, **kwargs))
     new = _signature_get_user_defined_method(cls, '__new__')
     init = _signature_get_user_defined_method(cls, '__init__')
     if new is not None and _defines_own_method(cls, '__new__'):
@@ -961,7 +984,7 @@ def _signature_from_class(cls):
         factory = init
     if factory is None:
         return None
-    return _drop_leading_parameter(signature(factory))
+    return _drop_leading_parameter(signature(factory, **kwargs))
 
 
 def _drop_leading_parameter(sig):
@@ -1005,12 +1028,16 @@ def signature(obj, *args, **kwargs):
         return sig
 
     target = _unwrap(obj) if kwargs.get('follow_wrapped', True) else obj
-    from_spec = _signature_from_spec(target)
+    from_spec = _signature_from_spec(target, kwargs.get('annotation_format'))
     if from_spec is not None:
+        if kwargs.get('eval_str'):
+            from_spec = _signature_eval_str(from_spec, target,
+                                            kwargs.get('globals'),
+                                            kwargs.get('locals'))
         return from_spec
 
     if isinstance(obj, type):
-        sig = _signature_from_class(obj)
+        sig = _signature_from_class(obj, **kwargs)
         if sig is not None:
             return sig
         text = getattr(obj, '__text_signature__', None)
@@ -1020,7 +1047,7 @@ def signature(obj, *args, **kwargs):
             call = getattr(type(obj), '__call__', None)
             text = getattr(call, '__text_signature__', None) if call is not None else None
         if not isinstance(text, str):
-            sig = _signature_from_call_method(obj)
+            sig = _signature_from_call_method(obj, **kwargs)
             if sig is not None:
                 return sig
     if isinstance(text, str):
@@ -1030,7 +1057,30 @@ def signature(obj, *args, **kwargs):
     return sig
 
 
-def _signature_from_call_method(obj):
+def _signature_eval_str(sig, func, globals=None, locals=None):
+    """``signature(f, eval_str=True)'': every STRING annotation evaluated in
+    f's globals, as CPython's get_annotations(eval_str=True) does -- an
+    unbound name raises NameError, which FastAPI catches to retry with
+    ``annotation_format=FORWARDREF''.  Ignored, a ``-> "User"'' route kept the
+    string, and its response model was never built."""
+    if globals is None:
+        globals = getattr(func, '__globals__', None)
+        if globals is None:
+            globals = {}
+
+    def value(annotation):
+        if isinstance(annotation, str):
+            return eval(annotation, globals, locals)
+        return annotation
+
+    params = [p.replace(annotation=value(p.annotation))
+              if isinstance(p.annotation, str) else p
+              for p in sig.parameters.values()]
+    return sig.replace(parameters=params,
+                       return_annotation=value(sig.return_annotation))
+
+
+def _signature_from_call_method(obj, **kwargs):
     """A callable INSTANCE's signature: its class's Python ``__call__`` with
     the bound ``self`` dropped, which is CPython's rule.  None when the class
     defines none.
@@ -1051,7 +1101,7 @@ def _signature_from_call_method(obj):
     call = _signature_get_user_defined_method(cls, '__call__')
     if call is None:
         return None
-    return _drop_leading_parameter(signature(call))
+    return _drop_leading_parameter(signature(call, **kwargs))
 
 
 class Signature:
@@ -1485,8 +1535,77 @@ _BoundArguments = BoundArguments
 Signature._bound_arguments_cls = BoundArguments
 
 
-def getsource(obj):
-    return ''
+def getblock(lines):
+    """Extract the block of code at the top of the given list of lines.
+
+    CPython feeds tokenize's tokens to BlockFinder; Grail's tokenize is a stub
+    with no generate_tokens, so the end is found with the parser instead: the
+    block ends before the first later line indented no deeper than its first
+    line at which what came before PARSES -- so a decorator, a signature split
+    over lines, or a body ending in a dedented bracket do not end it early.
+    Trailing blank lines are not part of it, as in CPython.  A block that never
+    parses (a lambda inside an expression) is its first line.
+    """
+    import ast
+    if not lines:
+        return lines
+    first = lines[0]
+    base = first[:len(first) - len(first.lstrip())]
+
+    def parses(k):
+        src = ''.join(l[len(base):] if l.startswith(base) else l.lstrip()
+                      for l in lines[:k])
+        try:
+            ast.parse(src)
+            return True
+        except SyntaxError:
+            return False
+
+    for k in range(1, len(lines) + 1):
+        if k < len(lines):
+            nxt = lines[k]
+            if not nxt.strip():
+                continue
+            indent = nxt[:len(nxt) - len(nxt.lstrip())]
+            if len(indent) > len(base) or nxt.lstrip().startswith('#'):
+                continue
+        if parses(k):
+            end = k
+            while end > 1 and not lines[end - 1].strip():
+                end -= 1
+            return lines[:end]
+    return lines[:1]
+
+
+def getsourcelines(object):
+    """Return a list of source lines and starting line number for an object.
+
+    CPython's.  It did not exist, and FastAPI names the endpoint behind a
+    validation error through it -- inside ``except Exception'', so the
+    AttributeError left every error message without the function, file and
+    line it is meant to carry (test_validation_error_context).
+    """
+    object = unwrap(object)
+    lines, lnum = findsource(object)
+
+    if istraceback(object):
+        object = object.tb_frame
+
+    # for module or frame that corresponds to module, return all source lines
+    if (ismodule(object) or
+        (isframe(object) and object.f_code.co_name == "<module>")):
+        return lines, 0
+    else:
+        return getblock(lines[lnum:]), lnum + 1
+
+
+def getsource(object):
+    """Return the text of the source code for an object.
+
+    CPython's.  It answered '' for everything.
+    """
+    lines, lnum = getsourcelines(object)
+    return ''.join(lines)
 
 
 def getfile(object):

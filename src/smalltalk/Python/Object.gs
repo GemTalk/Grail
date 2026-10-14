@@ -11357,6 +11357,17 @@ ___pyAttrLoad___: aSym
 			does land in the namespace, so both homes are consulted, namespace
 			first."
 			hook := self @env0:at: #'__getattr__' otherwise: nil.
+			"A hook STORED as data -- ``globals()['__getattr__'] = fn'', or
+			through ``sys._getframe(1).f_globals'' as anyio's lazy importer
+			does -- is a dynamic instVar of the module (PyInstanceDict), the
+			home every such store gets.  It was never consulted, so anyio.abc
+			exported nothing once inspect.getsource could read its source and
+			the lazy importer engaged: ``from anyio.abc import
+			ObjectReceiveStream'' failed and FastAPI did not import.  Ahead of
+			the compiled method, so a later rebinding wins, as in CPython's one
+			namespace."
+			hook @env0:isNil ifTrue: [
+				hook := self @env0:dynamicInstVarAt: #'__getattr__'].
 			(hook @env0:isNil
 				and: [self ___respondsTo___: #'__getattr__:'])
 					ifTrue: [hook := BoundMethod
@@ -16620,7 +16631,7 @@ ___pyAttrDelete___: aName
 					== self) ifFalse: [
 					importlib @env0:___copyMethod___: sel from: self to: self
 						prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
-				  BoundMethod @env1:___grailPinSelector___: sel ]
+				  BoundMethod @env1:___grailPinSelector___: sel in: self ]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				self @env1:___removeSelector: sel environmentId: 1].
 			^ self].
@@ -17689,7 +17700,7 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 	place instead -- the store is still visible through the loader."
 	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
 		ifFalse: [^ self].
-	BoundMethod @env1:___grailPinSelector___: aSelector.
+	BoundMethod @env1:___grailPinSelector___: aSelector in: self.
 	"A VARARGS def ``_m: pos kw: kw'' ends in the forward ``^ self m: a b'' to its
 	fixed-arity twin.  In the shadow that forward must reach the twin's SHADOW,
 	not the dispatcher now answering to ``m:'' -- otherwise a decorator that

@@ -226,6 +226,35 @@ __str__
 
 category: 'Grail-Python Protocol'
 method: ShimForeignObject
+__iter__
+	"iter() of a wheel's own object: its C tp_iter.  pydantic_core's
+	ValidatorIterator -- what ``Iterable[Model]'' validates to -- has one; a
+	proxy knew no iteration at all, so ``list(adapter.validate_python(...))''
+	was ``'ShimForeignObject' object is not iterable''."
+
+	| r |
+	r := (CPythonShim @env0:current) @env0:foreignIter: cPtr next: false.
+	r == nil ifTrue: [
+		^ TypeError ___signal___: '''' @env0:, self @env0:unqualifiedName @env0:,
+			''' object is not iterable'].
+	^ r @env0:at: 1
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+__next__
+	"next() of a wheel's own iterator: its C tp_iternext, StopIteration once
+	it is exhausted (and for a type with no tp_iternext, which CPython reports
+	as not an iterator before ever asking)."
+
+	| r |
+	r := (CPythonShim @env0:current) @env0:foreignIter: cPtr next: true.
+	r == nil ifTrue: [^ StopIteration ___signal___: ''].
+	^ r @env0:at: 1
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
 __repr__
 	"repr() of a wheel's own object: its C tp_repr; see __str__."
 
