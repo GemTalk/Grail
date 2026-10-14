@@ -261,9 +261,13 @@ def run_grail(venv, src, tests, timeout, log, max_restarts):
             results.update(got)
             if note:
                 notes.append(note)
-            if how == "exit" or running is None:
+            # A test that started and never reported ended the session, even
+            # when the process then exited with pytest's ordinary status: an
+            # uncatchable error unwinds through pytest.main, which still
+            # prints its summary (tomlkit's test_time: 2 run of 1,051).
+            if running is None:
                 break
-            results[running] = "CRASH" if how == "crash" else "TIMEOUT"
+            results[running] = "TIMEOUT" if how == "timeout" else "CRASH"
             log.write("\n### %s on %s; resuming (%d done)\n"
                       % (results[running], running, len(results)))
     finally:
