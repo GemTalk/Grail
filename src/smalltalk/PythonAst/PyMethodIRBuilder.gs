@@ -1321,10 +1321,24 @@ ___irNoteClassHelper___: aSelector source: aString
 	enclosing class at all.  Only where it is installed depends on the class,
 	and ___irRegenerateOn___: knows that."
 
+	^ self ___irNoteClassHelper___: aSelector source: aString classSide: false
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+___irNoteClassHelper___: aSelector source: aString classSide: aBoolean
+	"___irNoteClassHelper___:source:, also filing the helper on the METACLASS
+	when aBoolean says the enclosing def runs with the class as its receiver
+	(ClassDefAst >> ___irRunsWithClassReceiver___, #1424) -- where its send
+	will look for it."
+
 	deferredInstVars isNil ifTrue: [
-		^ self ___compileClassHelper___: aSelector source: aString on: targetClass].
+		self ___compileClassHelper___: aSelector source: aString on: targetClass.
+		aBoolean ifTrue: [
+			self ___compileClassHelper___: aSelector source: aString on: targetClass class].
+		^ self].
 	deferredClassHelpers isNil ifTrue: [deferredClassHelpers := OrderedCollection new].
-	deferredClassHelpers add: (Array with: aSelector with: aString).
+	deferredClassHelpers add: (Array with: aSelector with: aString with: aBoolean).
 	^ self
 %
 
@@ -1356,8 +1370,10 @@ ___installDeferredClassHelpersOn___: aClass
 	lifetime the text path pays for the whole method."
 
 	deferredClassHelpers ifNotNil: [
-		deferredClassHelpers do: [:pair |
-			self ___compileClassHelper___: (pair at: 1) source: (pair at: 2) on: aClass]].
+		deferredClassHelpers do: [:entry |
+			self ___compileClassHelper___: (entry at: 1) source: (entry at: 2) on: aClass.
+			(entry at: 3) ifTrue: [
+				self ___compileClassHelper___: (entry at: 1) source: (entry at: 2) on: aClass class]]].
 	classHelpersInstalledFor := aClass.
 	^ self
 %

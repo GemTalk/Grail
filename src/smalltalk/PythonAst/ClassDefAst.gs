@@ -7740,6 +7740,28 @@ ___cellSetterSourceFor___: aSymbol
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
+___irRunsWithClassReceiver___
+	"Is this class statement inside a def that runs with a CLASS as its
+	receiver -- __new__, or the implicit classmethods __init_subclass__ and
+	__class_getitem__, at any depth of nested def?  Those compile
+	instance-side but run against the class, so the ``self
+	___irClassDef_<n>_<C>___'' send that builds this class looks on the
+	METACLASS, and the helper has to be filed there too (#1424): pytz's
+	LazyList.__new__ defines a class, and the IR arm died on it with an
+	uncatchable MessageNotUnderstood."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst)
+			and: [#('__new__' '__init_subclass__' '__class_getitem__')
+				includes: node name asString]) ifTrue: [^ true].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
 ___irHelperSelector___: carriedNames
 	"The private selector the class statement's compiled-text helper is
 	installed under -- unary when the class captures nothing, one-keyword
@@ -7951,7 +7973,8 @@ ___emitIRStatementOn___: aBuilder
 	carried := self ___irCarriedCaptureNames___: (aBuilder localNameSet).
 	sel := self ___irHelperSelector___: carried.
 	src := self ___irHelperSourceWithSelector___: sel carrying: carried.
-	aBuilder ___irNoteClassHelper___: sel source: src.
+	aBuilder ___irNoteClassHelper___: sel source: src
+		classSide: self ___irRunsWithClassReceiver___.
 	"``at:'', not ``atNode:'': the OFFSET (so the frame reports the ``class''
 	line) without a position-map ENTRY.  A class statement's extent is its whole
 	suite, so recording it would put carets under every line of the class body
