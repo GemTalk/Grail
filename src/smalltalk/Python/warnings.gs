@@ -1973,15 +1973,27 @@ _warn_explicit: positional kw: kwargs
 	is validated but not consulted: Grail's dedupe is module-global rather
 	than per-module.  Before any of this, a call passing one of them
 	(``module='package.module''' is the common shape) failed argument binding
-	outright."
+	outright.
 
-	| msg cat lineno reg mg line |
-	positional @env0:size @env0:< 4 ifTrue: [
-		TypeError ___signal___:
-			'warn_explicit() missing required arguments'].
-	msg := positional @env0:at: 1.
-	cat := positional @env0:at: 2.
-	lineno := positional @env0:at: 4.
+	The four required arguments bind by position OR by keyword, as CPython's
+	do: pytest's assertion rewriter warns about an always-true assert with
+	``warn_explicit(msg, category=None, filename=..., lineno=...)'', and
+	requiring them positionally failed the collection of every test module
+	holding one (pyyaml's legacy tests)."
+
+	| msg cat file lineno reg mg line required |
+	required := [:index :name |
+		positional @env0:size @env0:>= index
+			ifTrue: [positional @env0:at: index]
+			ifFalse: [(kwargs ~~ nil and: [kwargs @env0:includesKey: name])
+				ifTrue: [kwargs @env0:at: name]
+				ifFalse: [TypeError ___signal___:
+					'warn_explicit() missing required argument ''' @env0:, name
+						@env0:, ''' (pos ' @env0:, index @env0:printString @env0:, ')']]].
+	msg := required @env0:value: 1 value: 'message'.
+	cat := required @env0:value: 2 value: 'category'.
+	file := required @env0:value: 3 value: 'filename'.
+	lineno := required @env0:value: 4 value: 'lineno'.
 	reg := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'registry'])
 		ifTrue: [kwargs @env0:at: 'registry'] ifFalse: [nil].
 	self ___checkWarnExplicitArgs___: msg _: cat _: lineno _: reg.
@@ -1998,7 +2010,7 @@ _warn_explicit: positional kw: kwargs
 	^ self
 		warn_explicit: msg
 		_: cat
-		_: (positional @env0:at: 3)
+		_: file
 		_: lineno
 		module: ((kwargs ~~ nil and: [kwargs @env0:includesKey: 'module'])
 			ifTrue: [kwargs @env0:at: 'module']

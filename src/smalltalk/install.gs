@@ -1556,6 +1556,7 @@ run
 	at: #'WalrusInDisplayTestCase' put: nil;
 	at: #'WalrusInLambdaTestCase' put: nil;
 	at: #'WalrusPlacementTestCase' put: nil;
+	at: #'WarnExplicitKeywordsTestCase' put: nil;
 	at: #'WarnExplicitModuleGlobalsTestCase' put: nil;
 	at: #'WarningDisplayTestCase' put: nil;
 	at: #'WarningFilterOrderTestCase' put: nil;
@@ -3121,6 +3122,7 @@ input src/smalltalk/PythonTests/VarargsReceiverBindingTestCase.gs
 input src/smalltalk/PythonTests/WalrusInDisplayTestCase.gs
 input src/smalltalk/PythonTests/WalrusInLambdaTestCase.gs
 input src/smalltalk/PythonTests/WalrusPlacementTestCase.gs
+input src/smalltalk/PythonTests/WarnExplicitKeywordsTestCase.gs
 input src/smalltalk/PythonTests/WarnExplicitModuleGlobalsTestCase.gs
 input src/smalltalk/PythonTests/WarningDisplayTestCase.gs
 input src/smalltalk/PythonTests/WarningFilterOrderTestCase.gs
