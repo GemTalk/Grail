@@ -77,17 +77,13 @@ StrMethodKeywordArgsTestCase category: 'Grail-SUnit'
 ! rewrite_traceback_stack() -> fake_traceback(), so the ERROR-REPORTING path
 ! is what kills the session.  A wrong answer would be recoverable; this is not.
 !
-! In Flask it is reached without any mistake by the user at all.  ``jinja_env''
-! is a @cached_property, and ClassDefAst realises cached_property WITHOUT
-! caching (the getter recomputes -- see its comment in ClassDefAst.gs), so
-! every read of ``app.jinja_env'' builds a FRESH Environment.  A filter
-! registered by ``app.jinja_env.filters['shout'] = fn'' is written to an
-! environment that is then discarded, ``render_template_string'' compiles
-! against a new one that has never heard of it, and a correctly registered
-! filter takes the unknown-filter path above.  ``app.jinja_env.globals[...]''
-! is lost the same way, which is why it appears to be silently ignored.  Those
-! are separate defects and are not asserted here; this case covers the one that
-! is fatal.
+! In Flask it was reached without any mistake by the user at all.  ``jinja_env''
+! is a @cached_property, which did not cache until #1444, so every read of
+! ``app.jinja_env'' built a FRESH Environment: a filter registered by
+! ``app.jinja_env.filters['shout'] = fn'' was written to an environment that
+! was then discarded, and a correctly registered filter took the
+! unknown-filter path above.  That is fixed (BareCachedPropertyCachesTestCase);
+! this case covers the unknown-filter path itself, which was the fatal part.
 !
 ! THE FIX.  ``_replace:'' now checks the size of its positional array before
 ! reading from it.  Fewer than two positionals with keywords present is

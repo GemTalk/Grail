@@ -1594,7 +1594,7 @@ printSmalltalkRuntimeOn: aStream
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
-	"The names this class declares as @property (or @cached_property), as a
+	"The names this class declares as @property, as a
 	class-side method so the record is committed with the class -- a session
 	stamp would not survive deployment.  A property compiles to an accessor
 	pair that looks, from outside, exactly like a method with a default
@@ -2266,7 +2266,7 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: ' @env1:___classHolderAttrStore___: #''___grailDoitGlobals___'' put: (((Python @env0:at: #builtins) @env0:___instance___) ___doitGlobalsView___: ___pyGlobals___).';
 			lf].
 
-	"For each @property (and @cached_property) method, compile a 1-arg
+	"For each @property method, compile a 1-arg
 	setter that signals AttributeError.  Pairing the getter with a
 	setter makes it look like an instVar to ``___pyAttrLoad___:`` so
 	attribute reads INVOKE the method (returning its value) instead of
@@ -2274,16 +2274,14 @@ printSmalltalkRuntimeOn: aStream
 	explicit @setter is read-only; signalling AttributeError on
 	assignment matches that.
 
-	``cached_property'' is realized via the same getter+setter pairing
-	(detected as the bare-name ``@cached_property'' from ``from
-	functools import cached_property'' / ``from werkzeug.utils import
-	cached_property'').  Functional parity for reads; it does NOT yet
-	cache (the getter recomputes on each access) — fine for the
-	idempotent reads (``.args'' / ``.headers'' / ``.cookies'') that
-	unblock the Werkzeug request path, but stream-consuming
-	cached_properties (``.form'' / ``.data'') would need real caching.
-	The attribute-access form ``@functools.cached_property'' (an
-	AttributeAst decorator) is not detected.
+	A bare ``@cached_property'' gets no pair.  It used to, recognised by its
+	NAME, but the pair never cached -- every read ran the method, so Flask
+	built a new jinja_env and recompiled every template per request (#1444)
+	-- and the name says nothing about which cached_property it is
+	(functools', Werkzeug's, Django's, a user's).  It is applied at run time
+	like any other decorator, as ``@functools.cached_property'' always was;
+	the descriptor caches in the instance's own slot, which
+	___pyAttrLoad___ probes before the class.
 
 	Skip the stub when ``@<name>.setter'' supplied an explicit setter
 	method def — the explicit setter compiles to the same ``name:''
@@ -2309,53 +2307,34 @@ printSmalltalkRuntimeOn: aStream
 	decoratedProps := self ___decoratedPropertyNames___.
 	methodDefs do: [:def |
 		((def decoratorList notNil
-			and: [(def decoratorList includes: #'property')
-				or: [def decoratorList includes: #'cached_property']])
+			and: [def decoratorList includes: #'property'])
 			and: [(settersByName includes: def name asSymbol) not
 			and: [(decoratedProps includes: def name asSymbol) not]]) ifTrue: [
-			| propSetterSrc lf2 isCached |
+			| propSetterSrc lf2 |
 			lf2 := Character lf asString.
-			isCached := def decoratorList includes: #'cached_property'.
-			isCached
-				ifTrue: [
-					"@cached_property is a NON-DATA descriptor in CPython:
-					assigning ``obj.attr = v'' writes the instance __dict__,
-					which then shadows the descriptor on every later read.
-					Grail's ___pyAttrLoad___ probes dynamic-instVar storage
-					BEFORE any getter (Object >> ___pyAttrLoad___:), so a
-					storing setter reproduces that set-then-read behaviour —
-					and doubles as the cache slot.  flask's
-					``create_url_adapter'' relies on this: it does
-					``request.host = get_host(...)'' on a @cached_property."
-					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
-						'	self @env0:dynamicInstVarAt: #''' , def name , ''' put: ___1.' , lf2 ,
-						'	^ ___1' ]
-				ifFalse: [
-					"Plain @property with no explicit @x.setter is read-only —
-					match CPython by signalling AttributeError on assignment.
-					The message is built at RAISE time, not baked in here: it
-					names the owner (``property 'x' of 'C' object has no
-					setter''), which the class body does not yet know.  It used
-					to be an env-0 ``AttributeError signal:'' with a partial
-					text, which reached Python as an AttributeError whose str()
-					was EMPTY -- so test_property's message assertions could
-					never pass.  ___raiseReadOnlyProperty___: is the same text
-					AbstractPropertyDescriptor raises for the call form."
-					"GRAIL_DIRECT_CALLS: ``obj.prop(x)'' compiles to the same ``prop:''
-					send this synthesized setter answers to; on entry the setter asks
-					whether the send is a Python CALL (flag on, no Grail store in
-					progress -- object class>>___grailClassAttrSetterDiverts___) and
-					then calls the property's value with the argument, as CPython does.
-					Same guard on the cached_property setter above."
-					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
-						'	^ self ___raiseReadOnlyProperty___: ''',
-						def name , '''' ].
+			"Plain @property with no explicit @x.setter is read-only —
+			match CPython by signalling AttributeError on assignment.
+			The message is built at RAISE time, not baked in here: it
+			names the owner (``property 'x' of 'C' object has no
+			setter''), which the class body does not yet know.  It used
+			to be an env-0 ``AttributeError signal:'' with a partial
+			text, which reached Python as an AttributeError whose str()
+			was EMPTY -- so test_property's message assertions could
+			never pass.  ___raiseReadOnlyProperty___: is the same text
+			AbstractPropertyDescriptor raises for the call form."
+			"GRAIL_DIRECT_CALLS: ``obj.prop(x)'' compiles to the same ``prop:''
+			send this synthesized setter answers to; on entry the setter asks
+			whether the send is a Python CALL (flag on, no Grail store in
+			progress -- object class>>___grailClassAttrSetterDiverts___) and
+			then calls the property's value with the argument, as CPython does."
+			propSetterSrc := def name , ': ___1' , lf2 ,
+				'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
+				'	^ self ___raiseReadOnlyProperty___: ''',
+				def name , ''''.
 			self
 				emitCompileMethodOn: self ___stVarName___
 				source: propSetterSrc
-				category: (isCached ifTrue: ['Grail-CachedProperty-Setter'] ifFalse: ['Grail-Property-ReadOnly'])
+				category: 'Grail-Property-ReadOnly'
 				env: 1
 				classSide: false
 				onStream: aStream.
@@ -4607,7 +4586,7 @@ ___inferredSlotNames___
 	...'' and ``self.__class__ = ...'' have their own paths; ``_value_'' /
 	``_name_'' are the Enum protocol's, read by the enum runtime straight
 	from dynamic-instVar storage); a name that is a
-	@property / @cached_property / @x.setter / @x.deleter of THIS body (a data
+	@property / @x.setter / @x.deleter of THIS body (a data
 	descriptor must keep winning over the instance store); and every name
 	when the body defines __setattr__, __getattribute__ or __delattr__, whose
 	``self.x = v'' must keep reaching the hook.  A SUBCLASS defining any of
@@ -4728,7 +4707,7 @@ ___collectSelfAttrWrites___: aValue self: selfName into: names
 category: 'Grail-Class Compilation'
 method: ClassDefAst
 ___propertyNamesForSlots___
-	"The names this class body defines as @property / @cached_property
+	"The names this class body defines as @property
 	getters, or as ``@x.setter'' / ``@x.deleter'' methods, as an
 	OrderedCollection of Symbols (mangled as the methods are).  Excluded
 	from slot inference, and handed to the runtime accessor installer so a
@@ -4739,9 +4718,9 @@ ___propertyNamesForSlots___
 	self instanceMethodDefs do: [:def |
 		def decoratorList isNil ifFalse: [
 			def decoratorList do: [:deco |
-				(((deco isKindOf: Symbol) and: [#('property' 'cached_property') includes: deco asString])
+				(((deco isKindOf: Symbol) and: [deco asString = 'property'])
 					or: [(deco isKindOf: NameAst)
-						and: [#('property' 'cached_property') includes: deco id asString]])
+						and: [deco id asString = 'property']])
 					ifTrue: [names add: def ___mangledName___ asSymbol].
 				((deco isKindOf: AttributeAst)
 					and: [(#('setter' 'deleter' 'getter') includes: deco attr asString)
