@@ -322,8 +322,12 @@ category: 'Grail-Built-in Functions'
 method: copyreg
 pickle: obType _: pickleFunc
 	"Python copyreg.pickle(ob_type, pickle_function) — fast path.
-	2-arg form. Records `obType → pickleFunc` in dispatch_table."
+	2-arg form. Records `obType → pickleFunc` in dispatch_table.  A
+	reduction function that is not callable is CPython's TypeError, raised
+	before anything is recorded (test_copyreg test_noncallable_reduce)."
 
+	((builtins instance) callable: pickleFunc) ___isTruthy___ ifFalse: [
+		^ TypeError ___signal___: 'reduction functions must be callable'].
 	((self @env0:class) ___dispatchTable___) @env0:at: obType put: pickleFunc.
 	^ None
 %
@@ -332,14 +336,18 @@ category: 'Grail-Built-in Functions'
 method: copyreg
 pickle: obType _: pickleFunc _: constructor
 	"Python copyreg.pickle(ob_type, pickle_function, constructor_ob)
-	— fast path. 3-arg form. The `constructor` argument is currently
-	ignored.
+	— fast path. 3-arg form.  As in CPython, the constructor is only checked
+	-- copyreg.constructor raises TypeError for one that is not callable
+	(test_copyreg test_noncallable_constructor) -- and the check comes AFTER
+	the reduction function is recorded.  None means no constructor.
 
 	The `re` module calls this form via
 	`copyreg.pickle(Pattern, _pickle, _compile)` to register a
 	pickler for compiled regex patterns."
 
-	^ self pickle: obType _: pickleFunc
+	self pickle: obType _: pickleFunc.
+	constructor == None ifFalse: [self constructor: constructor].
+	^ None
 %
 
 set compile_env: 0
