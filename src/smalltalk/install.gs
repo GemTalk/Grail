@@ -1197,6 +1197,7 @@ run
 	at: #'ModuleAttrsAreNotDictMethodsTestCase' put: nil;
 	at: #'ModuleAttrZeroArgCallTestCase' put: nil;
 	at: #'ModuleCachedAbsentTestCase' put: nil;
+	at: #'ModuleClassZeroArgCallTestCase' put: nil;
 	at: #'ModuleDefRebindingTestCase' put: nil;
 	at: #'ModuleDictItemTestCase' put: nil;
 	at: #'ModuleDocstringTestCase' put: nil;
@@ -2755,6 +2756,7 @@ input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrsAreNotDictMethodsTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrZeroArgCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleCachedAbsentTestCase.gs
+input src/smalltalk/PythonTests/ModuleClassZeroArgCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleDefRebindingTestCase.gs
 input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
