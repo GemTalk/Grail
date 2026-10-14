@@ -519,6 +519,16 @@ _parse: format
 	].
 	specs := OrderedCollection @env0:new.
 	[i @env0:<= src @env0:size] @env0:whileTrue: [
+		"WHITESPACE between format codes is skipped, as CPython's prepare_s
+		does (Py_ISSPACE: space, tab, newline, return, vertical tab, form
+		feed) -- pytz reads its zone files with ``'>4s c 15x 6l''', and the
+		space was a ``bad char''.  Only BEFORE a code: a space between a
+		repeat count and its code, or ahead of the byte-order prefix, is
+		still one, as in CPython."
+		[(i @env0:<= src @env0:size) @env0:and: [self _isFormatSpace: (src @env0:at: i)]]
+			@env0:whileTrue: [i := i @env0:+ 1].
+		i @env0:> src @env0:size ifTrue: [
+			^ Array @env0:with: mode with: order with: specs @env0:asArray].
 		count := 0.
 		sawDigit := false.
 		"Optional decimal repeat count."
@@ -546,6 +556,16 @@ _parse: format
 		i := i @env0:+ 1
 	].
 	^ Array @env0:with: mode with: order with: specs @env0:asArray
+%
+
+category: 'Grail-Private'
+method: struct
+_isFormatSpace: ch
+	"Is ch whitespace in CPython's Py_ISSPACE sense -- what _parse: skips?"
+
+	| cp |
+	cp := ch @env0:codePoint.
+	^ cp @env0:= 32 @env0:or: [cp @env0:>= 9 @env0:and: [cp @env0:<= 13]]
 %
 
 category: 'Grail-Private'
