@@ -1723,19 +1723,24 @@ printBareEvalExecOn: aStream
 	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___evalScopeFor___: '.
 	"MODULE SCOPE reaches here only from inside a comprehension (the caller's
 	guard), where there is no function snapshot to take -- the scope is the
-	globals plus the comprehension's own targets.  ___globalsViewReceiverExpr___
-	rather than ___moduleStoreReceiverExpr___ so a DOIT names its symbol-list
-	scope instead of a nil ``self''."
+	globals plus the comprehension's own targets.
+
+	Both arms name the globals through ___globalsViewReceiverExpr___ rather than
+	___moduleStoreReceiverExpr___, so a DOIT names its symbol-list scope.  The
+	function arm used the module-store receiver, which inside a CLASS METHOD is
+	``<ModuleClass> @env0:___instance___'' -- and an exec'd source has no module
+	class, so compiling a method that called eval() or exec() died with an
+	uncatchable ``UndefinedObject does not understand #name'': pytest's and
+	pyparsing's own test suites stopped there, mid-collection.  In a plain
+	function of exec'd code it was a nil ``self'', and the evaluated source
+	could not see the exec's globals."
+	aStream nextPutAll: self ___globalsViewReceiverExpr___.
+	aStream nextPutAll: ' locals: '.
 	fn isNil
 		ifTrue: [
-			aStream nextPutAll: self ___globalsViewReceiverExpr___.
-			aStream nextPutAll: ' locals: '.
 			self ___printCompTargetLocalsOn___: aStream
 				names: self ___enclosingComprehensionTargetNames___]
-		ifFalse: [
-			aStream nextPutAll: self ___moduleStoreReceiverExpr___.
-			aStream nextPutAll: ' locals: '.
-			self printFunctionLocalsSnapshotOn: aStream].
+		ifFalse: [self printFunctionLocalsSnapshotOn: aStream].
 	aStream nextPutAll: ')'.
 	aStream nextPutAll: '. } kw: nil)'
 %
