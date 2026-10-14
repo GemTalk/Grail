@@ -387,6 +387,7 @@ extern PyTypeObject PyByteArray_Type;
 extern PyTypeObject PyFunction_Type;
 extern PyTypeObject PyModule_Type;
 extern PyTypeObject PySet_Type;
+extern PyTypeObject PySlice_Type;
 extern PyTypeObject PyFrozenSet_Type;
 
 /* ========== NULL ========== */
@@ -900,6 +901,8 @@ PyObject *PyObject_CallFunction(PyObject *callable, const char *format, ...);
 PyObject *PyImport_ImportModule(const char *name);
 PyObject *PyDescr_NewMethod(PyTypeObject *type, PyMethodDef *ml);
 PyObject *PyDescr_NewGetSet(PyTypeObject *type, PyGetSetDef *gs);
+PyObject *PyDescr_NewMember(PyTypeObject *type, PyMemberDef *m);
+Py_hash_t  PyObject_HashNotImplemented(PyObject *v);
 PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg);
 int       PyObject_SetAttrString(PyObject *obj, const char *name,
                                  PyObject *value);

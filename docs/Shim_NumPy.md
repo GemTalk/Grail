@@ -665,7 +665,7 @@ Python semantics.
 `PyObject_GenericGetDict`) and three probes.  Seven `CPythonShimTestCase` tests
 in category "NumPy Stage 2" pin walls 23 to 26 against CPython's answers.
 
-### The frontier now
+### The frontier then
 
 `numpy/_core/memmap.py` line 24, `class memmap(ndarray):` -- "cannot subclass a
 non-class base (ShimForeignObject)".  **This is a different kind of wall.** A
@@ -678,6 +678,121 @@ throughout: `memmap`, `matrix`, `recarray`, `numpy.ma`, and any user subclass of
 is a subtype mirror per Grail subclass (the instance split into a C body in the
 base's layout and a Grail half of the subclass), staged behind a stopgap and the
 foreign operator protocol.
+
+## Stage 3 (2026-10-14): `import numpy` completes; arrays compute
+
+Steps 1 and 2 of [Shim_Foreign_Subclassing.md](Shim_Foreign_Subclassing.md):
+a class statement may subclass a C type, and Python's operators reach a
+wheel's slots.  With them `import numpy` runs to the end on Linux, and on
+macOS up to the polyfit check it runs there (`_mac_os_check`, see the first
+wall below).  Measured with one workaround in the venv, for #1580.
+
+The walls, in the order they fell:
+
+28. **`class memmap(ndarray)`.**  The stopgap: `ShimForeignObject>>
+    ___subclass___:` builds the class on `ShimForeignSubclass`, which records
+    the foreign base for `__bases__`, `__base__`, `__mro__` and `issubclass`,
+    and refuses instantiation with CPython's "cannot create 'X' instances"
+    (and the reason) before any `__new__` can hand numpy a type it cannot
+    allocate.
+29. **Member descriptors, and every descriptor's layout.**  numpy documents
+    `flatiter.base` (a struct member read off its type), so there is now a
+    `member_descriptor` (`PyDescr_NewMember`).  And numpy's `add_docstring`
+    writes through `d_method` / `d_getset` / `d_member` at CPython's offset 40,
+    after `PyDescr_COMMON`; the shim's descriptors kept the definition at 16,
+    so the docstrings went to garbage.  All three now have CPython's layout.
+30. **Slot wrappers.**  `add_newdoc('dtype', ('__ge__', ...))` reads
+    `dtype.__ge__`, which `PyType_Ready` puts in a type's dict.  An operator
+    dunder read off a wheel's type answers a `wrapper_descriptor`, and off an
+    instance a `method-wrapper`, both over the slot table below.
+31. **`np.dtypes.BoolDType` missing.**  A proxy for a TYPE takes its own
+    `tp_name` -- but "is a type" meant "its metatype is `type`", and a DType's
+    is `_DTypeMeta`, a subclass, so every DType was named `_DTypeMeta` and
+    `_add_dtype_helper` wrote one attribute 24 times.
+32. **A cached type descriptor read off an instance answered the descriptor.**
+    The descriptor protocol now applies to a type-dict hit, so after
+    `dtype.char` is read for its docstring, `dtype('int8').char` is still the
+    character.
+33. **Operators: the slot table.**  `ShimForeignObject`'s 80-odd dunders call
+    the object's slots (`shimForeignOp`, `foreign_op_invoke`) with CPython's
+    conventions: binary slots both ways round, `NotImplemented` when a slot is
+    missing (so the other operand is tried), in-place falling back to binary,
+    rich comparison, `nb_bool` then length, `mp_subscript` then `sq_item`,
+    item assignment and deletion, `sq_contains` then iteration, `tp_iter` /
+    `tp_iternext`, and hash with CPython's rule that comparison without a
+    hash is unhashable (ndarray).  A builtin's comparison with a wheel object
+    reaches the object's slot reflected (`3 == box`, `3 < box`).
+34. **`NotImplemented` and `Ellipsis`.**  Both cross as the C singletons, by
+    pointer: numpy's slots answer `Py_NotImplemented`, and its indexing tests
+    `index == Py_Ellipsis`.  `_Py_EllipsisObject` was a pointer VARIABLE of
+    that name, so a wheel's `Py_Ellipsis` was the pointer's address.
+35. **Floats crossed with their OOP where the value belongs.**  numpy reads a
+    float with the inline `PyFloat_AS_DOUBLE` (`ob_fval`, offset 16), and a
+    Grail float's wrapper held its OOP there: `np.subtract(2.0, 0.0)` was
+    `-6e-323`.  An exact float now crosses as its value (magic `GRAILFV1`),
+    and `pyobj_oop` rebuilds it -- this is the "W5" of the pydantic notes.
+36. **Lists and tuples read inline.**  A Grail list or tuple argument of a
+    wheel's callable, operator or module function, and the result of
+    `PySequence_Fast` and `PyDict_Keys` / `Values` / `Items`, is a real-layout
+    copy (`real_layout_arg`); `np.dtype([('a', 'f8')])` read its list with
+    `PyList_GET_ITEM`.  The shim's own modules keep the caller's list:
+    `_bisect.insort` mutates its argument.
+37. **`np.float64(x)` was always 0.0.**  `numpy.float64` subclasses float and
+    builds through `PyFloat_Type.tp_new`, which was object's: a zeroed
+    object.  `float_tp_new` stores the value at `ob_fval` for a subtype, and a
+    wheel's float subtype without slots of its own uses float's arithmetic.
+38. **Silent stubs** that returned "success" with nothing done, each found by
+    a wrong answer or a crash: `PySequence_Fast`, `PySequence_Tuple`,
+    `PyVectorcall_Call` (every numpy function is a vectorcall dispatcher),
+    `PyObject_GetOptionalAttr` (never wrote its result), `PyThreadState_Get` /
+    `PyInterpreterState_Main` (`_reload_guard` reads `->interp`),
+    `PyObject_InitVar`, `PyLong_AsLongAndOverflow` and
+    `PyLong_AsLongLongAndOverflow` (`np.arange(3) == 1` was all False),
+    `PySeqIter_New` / `PyObject_SelfIter` (`for x in array`).  Also
+    `PyObject_HashNotImplemented` was missing, and slices are typed as
+    `PySlice_Type` (`a[:, 1]`).
+39. **Hashing a DType at depth.**  numpy keys its cast tables by DType class;
+    a hash that needed a nested user action failed deep in `np.linspace` and
+    the lookup missed ("builtin cast ... not found").  A proxy now learns at
+    birth whether its type has `tp_richcompare` / `tp_hash`, and one with
+    neither compares and hashes by identity with no user action, as in
+    CPython.
+
+`_grail_demo.so` gained probes for each (a `Box` with slots, `Plain`,
+`NoHash`, `MyFloat`, a type with a `type` subclass as metatype, and ten
+functions that read the C API inline), and 19 `CPythonShimTestCase` tests in
+"NumPy Stage 3" compare each with CPython's answer.
+
+A sample of everyday use -- `arange`, `reshape`, arithmetic, `.T`, `mean`,
+`sum(axis=0)`, indexing and slicing, comparison, `zeros`, `array` from nested
+lists, `dot`, `@`, `std`, `concatenate`, `where`, iteration, item assignment
+-- prints what CPython prints in 18 of 22 lines.
+
+### The frontier now
+
+1. **GemStone's user-action nesting limit.**  `INT_MAX_USER_ACTION = 2`
+   (`src/interp.ht`): the interpreter may be re-entered through a user action
+   twice, and a third time is `RT_ERR_MAX_RECURSION` (2138, "Too many levels
+   of recursion from user actions").  Every public numpy function is a C
+   dispatcher (`_ArrayFunctionDispatcher`) that calls its Python
+   implementation back, so a numpy function written in Python that calls
+   another -- `np.linspace` calling `ndim`, `_mac_os_check`'s `polyfit` --
+   needs a third level.  `GEM_MAX_SMALLTALK_STACK_DEPTH` does not affect it.
+   Two ways out: raise the constant in the VM (it also sizes
+   `currStkSegments`, via `INT_MAX_RECUR`), or have Grail call a
+   dispatcher's Python implementation itself, without the C round trip,
+   when no argument overrides `__array_function__`.
+2. **`str()` / `repr()` of numpy objects.**  numpy formats in Python, called
+   back from C, and the callback ends in error 2758 ("return from on:do:
+   block would cross frame of ... user action"); the proxy then prints
+   itself.
+3. **#1580**: a class-body statement that reads a sibling `@property` sees
+   the function (`numpy/matrixlib/defmatrix.py:1009`).
+4. **55 more stubs** in `shim_numpy.cc` answer as if they succeeded.  The ones
+   above were found by their wrong answers; making the rest real or loud is
+   cheaper than finding them that way.
+5. **A Grail generator cannot be iterated from C** (its body runs on its own
+   GsProcess, and a user action cannot switch process).
 
 ## Repro
 

@@ -388,31 +388,65 @@ PyObject *PyCMethod_New(PyMethodDef *ml, PyObject *self, PyObject *module,
    identity; foreign_generic_getattr (cpython.cc) caches each in the type's
    tp_dict, so every read answers the same object, as in CPython.
 
-   They carry the EXPORTED PyMethodDescr_Type / PyGetSetDescr_Type (zeroed
-   placeholders in shim_numpy.cc, filled in here on first use) so a wheel's
-   type checks against those symbols hold.  Like PyCFunction_Type, neither
-   is registered as a shim type: a descriptor is the wheel's side of the
-   boundary and crosses into Grail as a foreign proxy. */
+   They carry the EXPORTED PyMethodDescr_Type / PyGetSetDescr_Type /
+   PyMemberDescr_Type (zeroed placeholders in shim_numpy.cc, filled in here on
+   first use) so a wheel's type checks against those symbols hold.  Like
+   PyCFunction_Type, none is registered as a shim type: a descriptor is the
+   wheel's side of the boundary and crosses into Grail as a foreign proxy.
+
+   CPYTHON'S LAYOUT, field for field (cpython/descrobject.h): PyDescr_COMMON
+   -- the object head, d_type, d_name, d_qualname -- then the definition
+   pointer at offset 40.  numpy's add_docstring writes a descriptor's doc
+   straight through ``((PyMethodDescrObject *)obj)->d_method->ml_doc'' (and
+   d_getset, d_member), so a definition pointer anywhere else is read as
+   garbage.  These descriptors used to keep it at offset 16.  d_name and
+   d_qualname stay NULL: a descriptor is cached in its type's tp_dict for the
+   life of the process, and a Grail str there would outlive its session. */
 extern "C" PyTypeObject PyMethodDescr_Type;
 extern "C" PyTypeObject PyGetSetDescr_Type;
+extern "C" PyTypeObject PyMemberDescr_Type;
+extern "C" PyObject *PyMember_GetOne(const char *, PyMemberDef *);   /* cpython.cc */
+extern "C" int PyMember_SetOne(char *, PyMemberDef *, PyObject *);   /* cpython.cc */
 
 typedef struct {
     Py_ssize_t    ob_refcnt;
     PyTypeObject *ob_type;
-    PyGetSetDef  *gs;
-    PyTypeObject *owner;
+    PyTypeObject *d_type;
+    PyObject     *d_name;
+    PyObject     *d_qualname;
+} GrailDescrCommon;
+
+typedef struct {
+    GrailDescrCommon c;
+    PyMethodDef     *d_method;
+    vectorcallfunc_t vectorcall;
+} GrailMethodDescr;
+
+typedef struct {
+    GrailDescrCommon c;
+    PyGetSetDef     *d_getset;
 } GrailGetSetDescr;
+
+typedef struct {
+    GrailDescrCommon c;
+    PyMemberDef     *d_member;
+} GrailMemberDescr;
+
+static const char *descr_owner_name(PyObject *descr) {
+    PyTypeObject *t = ((GrailDescrCommon *)descr)->d_type;
+    return (t != NULL && t->tp_name != NULL) ? t->tp_name : "?";
+}
 
 /* descriptor(self, *args, **kwargs): bind the first argument and call. */
 static PyObject *gmd_call(PyObject *descr, PyObject *args, PyObject *kwargs) {
-    GrailCMethodObject *d = (GrailCMethodObject *)descr;
+    GrailMethodDescr *d = (GrailMethodDescr *)descr;
     Py_ssize_t n = PyTuple_Size(args);
     if (n < 1) {
         PyErr_Format(PyExc_TypeError, "descriptor '%s' of '%s' object needs an argument",
-                     d->m_ml->ml_name, d->mm_class ? d->mm_class->tp_name : "?");
+                     d->d_method->ml_name, descr_owner_name(descr));
         return NULL;
     }
-    PyObject *bound = PyCMethod_New(d->m_ml, PyTuple_GetItem(args, 0), NULL, d->mm_class);
+    PyObject *bound = PyCMethod_New(d->d_method, PyTuple_GetItem(args, 0), NULL, d->c.d_type);
     if (bound == NULL) return NULL;
     PyObject *rest = PyTuple_GetSlice(args, 1, n);
     if (rest == NULL) return NULL;
@@ -422,31 +456,93 @@ static PyObject *gmd_call(PyObject *descr, PyObject *args, PyObject *kwargs) {
 /* Read off an instance: a bound method.  Off the class: the descriptor. */
 static PyObject *gmd_get(PyObject *descr, PyObject *obj, PyObject *type) {
     (void)type;
-    GrailCMethodObject *d = (GrailCMethodObject *)descr;
+    GrailMethodDescr *d = (GrailMethodDescr *)descr;
     if (obj == NULL || obj == Py_None) { Py_INCREF(descr); return descr; }
-    return PyCMethod_New(d->m_ml, obj, NULL, d->mm_class);
+    return PyCMethod_New(d->d_method, obj, NULL, d->c.d_type);
 }
 
 static PyObject *ggs_get(PyObject *descr, PyObject *obj, PyObject *type) {
     (void)type;
     GrailGetSetDescr *d = (GrailGetSetDescr *)descr;
     if (obj == NULL || obj == Py_None) { Py_INCREF(descr); return descr; }
-    if (d->gs->get == NULL) {
+    if (d->d_getset->get == NULL) {
         PyErr_Format(PyExc_AttributeError, "attribute '%s' of '%s' objects is not readable",
-                     d->gs->name, d->owner ? d->owner->tp_name : "?");
+                     d->d_getset->name, descr_owner_name(descr));
         return NULL;
     }
-    return d->gs->get(obj, d->gs->closure);
+    return d->d_getset->get(obj, d->d_getset->closure);
 }
 
 static int ggs_set(PyObject *descr, PyObject *obj, PyObject *value) {
     GrailGetSetDescr *d = (GrailGetSetDescr *)descr;
-    if (d->gs->set == NULL) {
+    if (d->d_getset->set == NULL) {
         PyErr_Format(PyExc_AttributeError, "attribute '%s' of '%s' objects is not writable",
-                     d->gs->name, d->owner ? d->owner->tp_name : "?");
+                     d->d_getset->name, descr_owner_name(descr));
         return -1;
     }
-    return d->gs->set(obj, value, d->gs->closure);
+    return d->d_getset->set(obj, value, d->d_getset->closure);
+}
+
+static PyObject *gmb_get(PyObject *descr, PyObject *obj, PyObject *type) {
+    (void)type;
+    GrailMemberDescr *d = (GrailMemberDescr *)descr;
+    if (obj == NULL || obj == Py_None) { Py_INCREF(descr); return descr; }
+    return PyMember_GetOne((const char *)obj, d->d_member);
+}
+
+static int gmb_set(PyObject *descr, PyObject *obj, PyObject *value) {
+    return PyMember_SetOne((char *)obj, ((GrailMemberDescr *)descr)->d_member, value);
+}
+
+/* ``descr.__name__'', ``__qualname__'', ``__doc__'' and ``__objclass__'',
+   which is what a Python reader -- numpy's add_newdoc, inspect, help() --
+   asks a descriptor; d_name is not kept (see above), so the names come from
+   the definition. */
+static PyObject *descr_getattro(PyObject *descr, PyObject *name) {
+    const char *n = PyUnicode_AsUTF8(name);
+    if (n == NULL) return NULL;
+    PyTypeObject *dt = Py_TYPE(descr);
+    const char *dname = NULL, *doc = NULL;
+    if (dt == &PyMethodDescr_Type) {
+        dname = ((GrailMethodDescr *)descr)->d_method->ml_name;
+        doc = ((GrailMethodDescr *)descr)->d_method->ml_doc;
+    } else if (dt == &PyGetSetDescr_Type) {
+        dname = ((GrailGetSetDescr *)descr)->d_getset->name;
+        doc = ((GrailGetSetDescr *)descr)->d_getset->doc;
+    } else if (dt == &PyMemberDescr_Type) {
+        dname = ((GrailMemberDescr *)descr)->d_member->name;
+        doc = ((GrailMemberDescr *)descr)->d_member->doc;
+    }
+    if (strcmp(n, "__name__") == 0 && dname != NULL)
+        return PyUnicode_FromString(dname);
+    if (strcmp(n, "__qualname__") == 0 && dname != NULL) {
+        const char *owner = descr_owner_name(descr);
+        const char *dot = strrchr(owner, '.');
+        return PyUnicode_FromFormat("%s.%s", dot ? dot + 1 : owner, dname);
+    }
+    if (strcmp(n, "__doc__") == 0) {
+        if (doc != NULL) return PyUnicode_FromString(doc);
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    if (strcmp(n, "__objclass__") == 0 && ((GrailDescrCommon *)descr)->d_type != NULL) {
+        PyObject *t = (PyObject *)((GrailDescrCommon *)descr)->d_type;
+        Py_INCREF(t);
+        return t;
+    }
+    PyErr_Format(PyExc_AttributeError, "'%s' object has no attribute '%s'",
+                 dt->tp_name, n);
+    return NULL;
+}
+
+static void init_descr_type(PyTypeObject *t, const char *name, Py_ssize_t size) {
+    t->ob_base.ob_base.ob_refcnt = 1;
+    t->ob_base.ob_base.ob_type = &PyType_Type;
+    t->tp_name = name;
+    t->tp_basicsize = size;
+    t->tp_base = &PyBaseObject_Type;
+    t->tp_getattro = descr_getattro;
+    t->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
 }
 
 static void init_descr_types(void) {
@@ -454,22 +550,15 @@ static void init_descr_types(void) {
     if (done) return;
     done = 1;
     init_cfunction_type();
-    PyMethodDescr_Type.ob_base.ob_base.ob_refcnt = 1;
-    PyMethodDescr_Type.ob_base.ob_base.ob_type = &PyType_Type;
-    PyMethodDescr_Type.tp_name = "method_descriptor";
-    PyMethodDescr_Type.tp_basicsize = sizeof(GrailCMethodObject);
-    PyMethodDescr_Type.tp_base = &PyBaseObject_Type;
+    init_descr_type(&PyMethodDescr_Type, "method_descriptor", sizeof(GrailMethodDescr));
     PyMethodDescr_Type.tp_call = gmd_call;
     PyMethodDescr_Type.tp_descr_get = gmd_get;
-    PyMethodDescr_Type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
-    PyGetSetDescr_Type.ob_base.ob_base.ob_refcnt = 1;
-    PyGetSetDescr_Type.ob_base.ob_base.ob_type = &PyType_Type;
-    PyGetSetDescr_Type.tp_name = "getset_descriptor";
-    PyGetSetDescr_Type.tp_basicsize = sizeof(GrailGetSetDescr);
-    PyGetSetDescr_Type.tp_base = &PyBaseObject_Type;
+    init_descr_type(&PyGetSetDescr_Type, "getset_descriptor", sizeof(GrailGetSetDescr));
     PyGetSetDescr_Type.tp_descr_get = ggs_get;
     PyGetSetDescr_Type.tp_descr_set = ggs_set;
-    PyGetSetDescr_Type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
+    init_descr_type(&PyMemberDescr_Type, "member_descriptor", sizeof(GrailMemberDescr));
+    PyMemberDescr_Type.tp_descr_get = gmb_get;
+    PyMemberDescr_Type.tp_descr_set = gmb_set;
 }
 
 PyObject *PyDescr_NewMethod(PyTypeObject *type, PyMethodDef *ml) {
@@ -478,13 +567,12 @@ PyObject *PyDescr_NewMethod(PyTypeObject *type, PyMethodDef *ml) {
         return NULL;
     }
     init_descr_types();
-    GrailCMethodObject *d = (GrailCMethodObject *)calloc(1, sizeof(GrailCMethodObject));
+    GrailMethodDescr *d = (GrailMethodDescr *)calloc(1, sizeof(GrailMethodDescr));
     if (d == NULL) return PyErr_NoMemory();
-    d->ob_refcnt = 1;
-    d->ob_type = &PyMethodDescr_Type;
-    d->m_ml = ml;
-    d->vectorcall = NULL;
-    d->mm_class = type;
+    d->c.ob_refcnt = 1;
+    d->c.ob_type = &PyMethodDescr_Type;
+    d->c.d_type = type;
+    d->d_method = ml;
     return (PyObject *)d;
 }
 
@@ -496,10 +584,27 @@ PyObject *PyDescr_NewGetSet(PyTypeObject *type, PyGetSetDef *gs) {
     init_descr_types();
     GrailGetSetDescr *d = (GrailGetSetDescr *)calloc(1, sizeof(GrailGetSetDescr));
     if (d == NULL) return PyErr_NoMemory();
-    d->ob_refcnt = 1;
-    d->ob_type = &PyGetSetDescr_Type;
-    d->gs = gs;
-    d->owner = type;
+    d->c.ob_refcnt = 1;
+    d->c.ob_type = &PyGetSetDescr_Type;
+    d->c.d_type = type;
+    d->d_getset = gs;
+    return (PyObject *)d;
+}
+
+/* What a struct field (tp_members) is when read off its TYPE --
+   ``numpy.flatiter.base'', which numpy's _add_newdocs documents at import. */
+PyObject *PyDescr_NewMember(PyTypeObject *type, PyMemberDef *m) {
+    if (m == NULL) {
+        PyErr_SetString(PyExc_SystemError, "PyDescr_NewMember: NULL PyMemberDef");
+        return NULL;
+    }
+    init_descr_types();
+    GrailMemberDescr *d = (GrailMemberDescr *)calloc(1, sizeof(GrailMemberDescr));
+    if (d == NULL) return PyErr_NoMemory();
+    d->c.ob_refcnt = 1;
+    d->c.ob_type = &PyMemberDescr_Type;
+    d->c.d_type = type;
+    d->d_member = m;
     return (PyObject *)d;
 }
 
@@ -886,7 +991,7 @@ unsigned long long PyLong_AsUnsignedLongLongMask(PyObject *o) {
 /* 3.13: the interpreter's constants by number (Include/object.h
    Py_CONSTANT_*).  Borrowed and immortal, so the numbers and empty
    containers are made once and pinned with a large refcount. */
-extern PyObject *_Py_EllipsisObject;          /* shim_numpy.cc */
+extern PyObject _Py_EllipsisObject;           /* shim_numpy.cc */
 PyObject *Py_GetConstantBorrowed(unsigned int id) {
     static PyObject *cache[10];
     if (id >= 10) {
@@ -899,7 +1004,7 @@ PyObject *Py_GetConstantBorrowed(unsigned int id) {
     case 0: v = Py_None; break;
     case 1: v = Py_False; break;
     case 2: v = Py_True; break;
-    case 3: v = _Py_EllipsisObject; break;
+    case 3: v = &_Py_EllipsisObject; break;
     case 4: v = Py_NotImplemented; break;
     case 5: v = PyLong_FromLong(0); break;
     case 6: v = PyLong_FromLong(1); break;
