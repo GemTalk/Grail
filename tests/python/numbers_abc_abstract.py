@@ -85,6 +85,20 @@ class Late(numbers.Complex): pass
 for n in numbers.Complex.__abstractmethods__:
     setattr(Late, n, lambda self, *a: 0)
 t('methods assigned after class creation', lambda: Late())
+
+
+class Declared(numbers.Complex):
+    pass
+
+
+def declare_concrete():
+    # A runtime store, as abc.update_abstractmethods makes: a module-body
+    # ``Declared.__abstractmethods__ = ...'' takes another path in Grail.
+    setattr(Declared, '__abstractmethods__', frozenset())
+    return (k(Declared()), sorted(Declared.__abstractmethods__))
+
+
+t('an explicit __abstractmethods__ store is honoured', declare_concrete)
 class Mixin:
     def __int__(self): return 0
 class MI(Mixin, numbers.Number): pass
@@ -112,6 +126,7 @@ EXPECTED = {
     '__abstractmethods__ full': '[]',
     '__abstractmethods__ Fraction': '[]',
     'methods assigned after class creation': "TypeError: Can't instantiate abstract class Late without an implementation for abstract methods '__abs__', '__add__', '__complex__', '__eq__', '__mul__', '__neg__', '__pos__', '__pow__', '__radd__', '__rmul__', '__rpow__', '__rtruediv__', '__truediv__', 'conjugate', 'imag', 'real'",
+    'an explicit __abstractmethods__ store is honoured': "('Declared', [])",
     'MI over Number': "'MI'",
     'isinstance': '(True, True, True)',
 }
@@ -121,6 +136,16 @@ def mismatches():
     """The rows that differ from CPython's, as 'label: got X, CPython Y'."""
     return ['%s: got %s, CPython %s' % (k, r.get(k), v)
             for k, v in EXPECTED.items() if r.get(k) != v]
+
+
+def mismatches_when_run_by_path():
+    """mismatches() of a second copy run by runpy.run_path rather than
+    imported.  The explicit __abstractmethods__ row behaves differently in
+    the two roles in Grail -- a store on an imported (canonical) class takes
+    another path -- and only this role shows the bug it pins."""
+    import runpy
+    g = runpy.run_path(__file__, run_name='_numbers_abc_abstract_by_path')
+    return g['mismatches']()
 
 
 if __name__ == '__main__':
