@@ -2499,6 +2499,13 @@ knownClassName
 			or: [(metacls whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) notNil])
 				ifTrue: [^nil].
 	].
+	"A VARARGS ``_new:kw:'' takes every positional arity too, so there is no
+	mismatch to report: Object class >> value:value: hands it any arity its
+	fixed ``__new__:'' forms lack.  BaseException is the case that needs it --
+	``OSError(2, 's', 'f', None, 'g', 'h')'' was refused at compile time
+	though CPython's BaseException keeps any number of arguments."
+	(metacls whichClassIncludesSelector: #'_new:kw:' environmentId: 1) notNil
+		ifTrue: [^nil].
 	"Walk the metaclass chain (inherited __new__ counts)."
 	(metacls whichClassIncludesSelector: #__new__ environmentId: 1)
 		ifNotNil: [^funcName].
