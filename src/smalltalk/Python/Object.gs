@@ -2127,64 +2127,45 @@ ___raiseUnhashableUse___: ex context: ctx
 category: 'Grail-Convenience Methods'
 method: object
 ___unpackSequence___
-	"Tuple-unpack coercion (``a, b, c = expr'').  AssignAst's unpack
-	codegen indexes the RHS with __getitem__: -- correct for sequences,
-	wrong for iterables WITHOUT positional indexing.  CPython unpacks any
-	iterable via __iter__.  A REAL indexable receiver (list/tuple/str/range/...:
-	genuine __getitem__ OWNERSHIP, not the PythonInstance fallback) answers
-	itself so the fast index path runs unchanged; anything else is materialized
-	into a list in iteration order so the index-based unpack works
-	(``lhs, rhs = map(str.strip, line.split('->'))'' in test_fractions
-	test_float_format_testfile; ``a, b, c = IteratingSequenceClass(3)'' in
-	test_iter test_unpack_iter, which has __iter__ but no __getitem__).  Enum
-	classes keep their own override.  A NON-iterable materializes via __iter__
-	here, which raises the catchable TypeError (``a, b = len''), matching
-	CPython -- rather than the old ``^ self'' that let a later __getitem__:
-	misbehave.  ``___respondsTo___'' saw the PythonInstance fallback __getitem__:
-	on EVERY instance and wrongly fast-pathed a non-indexable class into a
-	``not subscriptable'' error; ``___hasProtocol___'' probes real ownership.
-	A BoundMethod carries a PEP-585 generic-alias __getitem__ (``list[int]'',
-	``Callable[..., T]'') that is NOT the sequence protocol, so it is excluded
-	from the fast path -- ``a, b = len'' then materializes via __iter__ and
-	raises TypeError (not iterable), like CPython's iter(len).
+	"Tuple-unpack coercion (``a, b, c = expr''), always emitted just before
+	___unpackCheck___:star:after:, which now does all of the work.  Kept as
+	the identity because compiled methods already in the repository send it.
 
-	A MAPPING is excluded for the same reason, and it is not a corner case:
-	``a, b = {1: 'x', 2: 'y'}'' raised ``KeyError: 0''.  A dict owns a REAL
-	__getitem__, so it took the fast path, but that __getitem__ is keyed, not
-	positional -- the unpack then asked for key 0.  CPython unpacks a mapping
-	through __iter__ like everything else, yielding its KEYS.  ``keys'' is the
-	discriminator because it is the same duck-type marker Python itself uses
-	for mapping-ness (``dict(obj)'', ``**obj''), so UserDict and any custom
-	Mapping are covered, while no sequence owns it."
+	It used to materialise every value that was not a sequence into a list
+	HERE -- consuming the whole iterator, where CPython takes exactly one value
+	more than there are targets (``x, y, z = it'' over iter(range(100)) leaves
+	next(it) at 4) -- and to pass a __getitem__-only object through unchecked,
+	so ``a, b = Seq()'' over a three-item Seq succeeded (test_unpack's
+	doctests, which ran for the first time in 0294a688)."
 
-	((self ___hasProtocol___: '__getitem__')
-		@env0:and: [((self @env0:isKindOf: BoundMethod) @env0:not)
-			@env0:and: [(self ___hasProtocol___: 'keys') @env0:not]])
-		ifTrue: [^ self].
-	^ list @env1:__new__: self
+	^ self
 %
 
 category: 'Grail-Convenience Methods'
 method: object
 ___unpackCheck___: nBefore star: hasStar after: nAfter
-	"CPython requires a tuple-unpacking assignment to receive the right number
-	of values -- exactly nBefore for ``a, ..., z = expr'', or at least
-	nBefore + nAfter around a star target -- raising ValueError otherwise
-	(test_iter test_unpack_iter).  Only a receiver with a dependable length (the
-	materialized iterator list, or a kernel sequence -- both SequenceableCollection)
-	is checked; a bare custom-__getitem__ receiver has no reliable size and keeps
-	the lenient index path.  Answers self so it chains after ___unpackSequence___.
+	"CPython's UNPACK_SEQUENCE / UNPACK_EX, for an assignment target and a
+	for-loop target alike: exactly nBefore values, or at least nBefore + nAfter
+	around a star target, else ValueError.  Answers what the codegen then
+	indexes -- the receiver itself when it is a sequence, otherwise a list of
+	the values taken from its iterator (___unpackByIteration___:star:after:).
+
+	A sequence is read by size, as CPython's list and tuple specialisations
+	read it.  Only an EXACT list or tuple says how many values it had --
+	``too many values to unpack (expected 2, got 3)''; a str, a range or a
+	list subclass says just ``(expected 2)'', as CPython's does.
 
 	With a STAR target the answer is always an exact list, because the starred
 	name is bound by SLICING it and CPython binds a list there whatever was
 	unpacked: ``a, *b = (1, 2, 3)'' makes b ``[2, 3]''.  Sliced as it arrived,
 	a tuple gave a tuple and a str gave a str."
 
-	| sz needed |
+	| sz needed cls |
+	(self @env0:isKindOf: SequenceableCollection)
+		@env0:ifFalse: [^ self ___unpackByIteration___: nBefore star: hasStar after: nAfter].
 	(hasStar @env0:and: [(self @env0:class == OrderedCollection) @env0:not])
 		@env0:ifTrue: [
 			^ (list @env1:__new__: self) ___unpackCheck___: nBefore star: hasStar after: nAfter].
-	(self @env0:isKindOf: SequenceableCollection) @env0:ifFalse: [^ self].
 	sz := self @env0:size.
 	hasStar @env0:ifTrue: [
 		needed := nBefore @env0:+ nAfter.
@@ -2198,9 +2179,74 @@ ___unpackCheck___: nBefore star: hasStar after: nAfter
 			@env0:, nBefore @env0:printString @env0:, ', got '
 			@env0:, sz @env0:printString @env0:, ')')].
 	(sz @env0:> nBefore) @env0:ifTrue: [
+		cls := self @env0:class.
+		((cls == OrderedCollection) @env0:or: [(cls == tuple) @env0:or: [cls == Array]])
+			@env0:ifTrue: [
+				ValueError ___signal___: ('too many values to unpack (expected '
+					@env0:, nBefore @env0:printString @env0:, ', got '
+					@env0:, sz @env0:printString @env0:, ')')].
 		ValueError ___signal___: ('too many values to unpack (expected '
 			@env0:, nBefore @env0:printString @env0:, ')')].
 	^ self
+%
+
+category: 'Grail-Convenience Methods'
+method: object
+___unpackByIteration___: nBefore star: hasStar after: nAfter
+	"CPython's unpack_iterable, for a value that is not a sequence: take
+	values one at a time from its iterator -- exactly nBefore and then ONE
+	more to prove there are no extras, or for a star target all of them -- and
+	answer them as a list.  So ``x, y, z = it'' leaves the rest of ``it''
+	unconsumed, and a __getitem__-only object is asked for index 3 to show
+	that ``a, b, c = Seq()'' has no fourth value (whatever that raises,
+	BozoError included, propagates).
+
+	A value with no iteration protocol is ``cannot unpack non-iterable int
+	object'', UNPACK's wording; a TypeError its own __iter__ raises propagates
+	unchanged.  The refusal is recognised in the handler but signalled after
+	it returns.  Of the values that get here only an exact dict says ``got N''
+	when there are too many, as CPython's does."
+
+	| it items done notIterable typeName |
+	notIterable := false.
+	it := [self __iter__] @env0:on: TypeError do: [:ex |
+		typeName := self ___pyTypeNameForError___.
+		((self ___classAttrDunder___: #'__iter__') ~~ None
+			@env0:and: [(ex @env0:messageText) @env0:= ('''' @env0:, typeName @env0:, ''' object is not iterable')])
+				@env0:ifFalse: [ex @env0:pass].
+		notIterable := true.
+		ex @env0:return: nil].
+	notIterable @env0:ifTrue: [
+		^ TypeError ___signal___: ('cannot unpack non-iterable ' @env0:, typeName @env0:, ' object')].
+	items := OrderedCollection @env0:new.
+	1 @env0:to: nBefore do: [:i | | v |
+		done := false.
+		v := [it __next__] @env0:on: StopIteration do: [:ex | done := true. ex @env0:return: nil].
+		done @env0:ifTrue: [
+			^ ValueError ___signal___: ('not enough values to unpack (expected '
+				@env0:, (hasStar @env0:ifTrue: ['at least '] ifFalse: [''])
+				@env0:, (nBefore @env0:+ nAfter) @env0:printString @env0:, ', got '
+				@env0:, (i @env0:- 1) @env0:printString @env0:, ')')].
+		items @env0:add: v].
+	hasStar @env0:ifTrue: [
+		done := false.
+		[done] @env0:whileFalse: [
+			[items @env0:add: it __next__] @env0:on: StopIteration do: [:ex | done := true]].
+		(items @env0:size @env0:< (nBefore @env0:+ nAfter)) @env0:ifTrue: [
+			ValueError ___signal___: ('not enough values to unpack (expected at least '
+				@env0:, (nBefore @env0:+ nAfter) @env0:printString @env0:, ', got '
+				@env0:, items @env0:size @env0:printString @env0:, ')')].
+		^ items].
+	done := false.
+	[it __next__] @env0:on: StopIteration do: [:ex | done := true. ex @env0:return: nil].
+	done @env0:ifFalse: [
+		(self @env0:class == PyDict) @env0:ifTrue: [
+			ValueError ___signal___: ('too many values to unpack (expected '
+				@env0:, nBefore @env0:printString @env0:, ', got '
+				@env0:, self @env0:size @env0:printString @env0:, ')')].
+		ValueError ___signal___: ('too many values to unpack (expected '
+			@env0:, nBefore @env0:printString @env0:, ')')].
+	^ items
 %
 
 category: 'Grail-Attribute Access'
@@ -2790,6 +2836,30 @@ ___isUndrivenCoroutine___
 	capture closes."
 
 	^ false
+%
+
+category: 'Grail-Instantiation'
+method: object
+___grailNewResultSkipsInit___: anObject
+	"Whether the receiver -- a class being called -- must NOT run __init__ on
+	anObject, what its __new__ answered: true unless anObject is an instance
+	of the receiver.  CPython's type.__call__ (``If __new__() does not return
+	an instance of cls, the new instance's __init__() method will not be
+	invoked''), and by the MRO, as its PyObject_TypeCheck is: a metaclass
+	__instancecheck__ is not asked.
+
+	Grail ran the RETURNED object's __init__ with the original arguments, so
+	``A(1)'' for a __new__ answering ``Other()'' raised ``Other() takes no
+	arguments'' (#1425), and pytz's LazyList ran list.__init__ on the list
+	its __new__ had already filled.
+
+	isKindOf: answers the common case without a lookup.  The MRO is asked
+	only when it fails, for a class that has the receiver as a SECONDARY
+	base, which the Smalltalk chain does not hold."
+
+	(anObject @env0:isKindOf: self) ifTrue: [^ false].
+	^ (((Python @env0:at: #importlib) @env0:___mroOf___: anObject @env0:class)
+		@env0:includesIdentical: self) not
 %
 
 category: 'Grail-Instantiation'
@@ -5121,6 +5191,42 @@ ___grailNsDescriptorFor___: aSym loaded: aValue
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___classBodySiblingValue___: aSym
+	"What a class-body statement reads for aSym, a sibling ``def'' of the body
+	-- what CPython's class namespace holds for it at that point: the
+	decorator's result once a decorator has stored one (raw, no __get__), the
+	property for a @property def, else the function.
+
+	It answered the function always, so a later statement that reads a
+	decorated sibling saw the undecorated def: numpy's matrixlib does
+	``getT = T.fget'' after ``@property def T'' (#1580)."
+
+	| v |
+	v := self ___grailNsHolderValueFor___: aSym.
+	v isNil ifTrue: [v := self ___grailNsOwnPropertyFor___: aSym].
+	v isNil ifTrue: [v := UnboundMethod definingClass: self selector: aSym].
+	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___classBodyNamespaceValue___: aSym
+	"What a class-body METHOD DECORATOR reads for aSym, a name the body binds:
+	the namespace's value, raw.  A class read ran the value's __get__ --
+	sqlalchemy's ``@_state_dict_inst.classlevel'', where _state_dict_inst is
+	a hybridmethod, got the function its __get__ answers for the class, not
+	the hybridmethod (#1580).  Falls back to that class read for a name the
+	holder does not have and that is no @property -- a plain def."
+
+	| v |
+	v := self ___grailNsHolderValueFor___: aSym.
+	v isNil ifTrue: [v := self ___grailNsOwnPropertyFor___: aSym].
+	v isNil ifTrue: [v := self ___pyAttrLoad___: aSym].
+	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailNsHolderValueFor___: aSym
 	"What the class's ___dynInstVars___ holder stores under aSym, raw -- a
 	decorated def's decorator result -- or nil."
@@ -6202,6 +6308,7 @@ ___moduleAttrIdentityTable___
 		CPython, not a bespoke type, so that is what it must report."
 		t @env0:at: #'sys_flags' put: #('flags' 'sys').
 		t @env0:at: #'sys_float_info' put: #('float_info' 'sys').
+		t @env0:at: #'sys_version_info' put: #('version_info' 'sys').
 		t @env0:at: #'sys_hash_info' put: #('hash_info' 'sys').
 		t @env0:at: #'sys_int_info' put: #('int_info' 'sys').
 		t @env0:at: #'sys_implementation' put: #('SimpleNamespace' 'types').
@@ -15146,6 +15253,12 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	dunder before they get here."
 	((self @env0:isKindOf: Behavior) and: [other @env0:isKindOf: Behavior])
 		ifTrue: [^ nil].
+	"A wheel's own object on the right: its C slot is the reflected operator,
+	which CPython reaches once the left side's answers NotImplemented -- as a
+	builtin's does for an operand it does not know.  ``3 < box'' raised
+	TypeError instead of asking box.__gt__."
+	((other @env0:isKindOf: ShimForeignObject) and: [(self @env0:isKindOf: ShimForeignObject) not])
+		ifTrue: [^ other @env0:perform: refSelector env: 1 withArguments: { self }].
 	(self ___rightOperandIsSubtype___: other) ifFalse: [^ nil].
 	otherClass := other @env0:class.
 	"A subclass that BLOCKS the reflected method with None counts as overriding
@@ -16043,8 +16156,14 @@ ___typeReprString___
 	meta := [self @env1:___pyAttrLoad___: #'__class__']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	active := SessionTemps @env0:current @env0:at: #GrailMetaReprActive otherwise: nil.
-	(meta @env0:notNil and: [(meta @env0:isKindOf: Behavior) and: [meta @env0:~~ self
-		and: [active @env0:isNil or: [(active @env0:includesIdentical: self) @env0:not]]]])
+	"A class that is ITS OWN metaclass is dispatched too.  h11's sentinels are
+	(``v.__class__ = v'', object >> ___pyChangeMetaclassOf:to:), and CPython
+	reprs one through the __repr__ it inherits from Sentinel -- ``CLIENT'',
+	not ``<class 'h11._state.CLIENT'>''.  ``type'' is the only other such
+	class, and the owner test below already sends it to the plain form; the
+	per-receiver guard above stops any recursion."
+	(meta @env0:notNil and: [(meta @env0:isKindOf: Behavior)
+		and: [active @env0:isNil or: [(active @env0:includesIdentical: self) @env0:not]]])
 		ifTrue: [
 			owner := meta @env0:whichClassIncludesSelector: #'__repr__' environmentId: 1.
 			(owner @env0:notNil
@@ -16418,15 +16537,71 @@ ___pyChangeClassOf: anObject to: newClass
 	(newClass isKindOf: Behavior) ifFalse: [
 		^ TypeError ___signal___:
 			'__class__ must be set to a class, not ''' @env0:,
-			(newClass @env0:class @env0:name @env0:asString) @env0:, ''' object'].
-	[anObject @env0:changeClassTo: newClass]
+			newClass ___pyTypeNameForError___ @env0:, ''' object'].
+	(anObject isKindOf: Behavior) ifTrue: [
+		^ self ___pyChangeMetaclassOf: anObject to: newClass].
+	"The TypeError is signalled AFTER the handler has returned, never from
+	inside it.  A handler block runs on top of the signalling context, so a
+	signal from in here left changeClassTo:'s frames under the TypeError and
+	under every Python ``except'' that caught it.  For a CLASS receiver those
+	frames run in protected mode, and the first thing such a handler did that
+	could switch process (``import traceback'', in the package census's probe)
+	killed the session with InternalError 2261, ``process switch not allowed
+	in protected mode'', which nothing can catch -- h11 and httpcore crashed
+	that way on h11's ``v.__class__ = v''.  A class receiver no longer gets
+	here (___pyChangeMetaclassOf:to: above), and an instance one did not
+	reproduce it (measured: ``C().__class__ = int'' then an import survives
+	the old handler), so this is defence: a kernel error is answered, not
+	re-raised from under the kernel."
+	([anObject @env0:changeClassTo: newClass. true]
 		@env0:on: Error
-		do: [:ex |
+		do: [:ex | ex @env0:return: false]) ifFalse: [
 			^ TypeError ___signal___:
 				'__class__ assignment: ''' @env0:,
 				(newClass @env0:name @env0:asString) @env0:,
 				''' object layout differs from ''' @env0:,
 				(anObject @env0:class @env0:name @env0:asString) @env0:, ''''].
+	^ None
+%
+
+category: 'Grail-Attribute Access'
+classmethod: object
+___pyChangeMetaclassOf: aClass to: newClass
+	"``aClass.__class__ = newClass'' for a CLASS: give it a new metaclass.
+
+	A GemStone class's own class is its Smalltalk metaclass and cannot be
+	changed, but Grail already keeps a class's PYTHON type as a record
+	(___grailSetMetaclass___:), which type(C), C.__class__ and isinstance all
+	read -- so this rewrites the record.  A class statement's build persists
+	the record it finishes with (importlib ___canonicalClassRegister___), so an
+	assignment made by the metaclass while building it survives a warm bind.
+
+	h11 depends on it: its Sentinel metaclass ends __new__ with ``v.__class__ =
+	v'', making every sentinel its own type so that ``type(event)'' dispatches
+	uniformly over events and sentinels.  Grail refused it as a layout
+	mismatch, so h11 and httpcore did not import (#G12, docs/Package_Census.md).
+
+	CPython's rules, measured on 3.14: a builtin class cannot be changed;
+	neither the old nor the new type may be ``type'' itself (both must be
+	mutable heap types); and the new one must be a metaclass, or the layouts
+	differ."
+
+	| old |
+	(aClass @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1) ifFalse: [
+		^ TypeError ___signal___:
+			'cannot set ''__class__'' attribute of immutable type ''' @env0:,
+			aClass @env0:___pyClassNameForError___ @env0:, ''''].
+	old := aClass ___pyMetaclass___.
+	(old == type or: [newClass == type]) ifTrue: [
+		^ TypeError ___signal___:
+			'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+	(newClass @env0:inheritsFrom: type) ifFalse: [
+		^ TypeError ___signal___:
+			'__class__ assignment: ''' @env0:,
+			(newClass @env0:name @env0:asString) @env0:,
+			''' object layout differs from ''' @env0:,
+			(old @env0:name @env0:asString) @env0:, ''''].
+	aClass @env1:___grailSetMetaclass___: newClass.
 	^ None
 %
 
@@ -17726,7 +17901,10 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 					or: [(src @env0:at: last @env0:+ marker @env0:size) @env0:isAlphaNumeric @env0:not]]) ifTrue: [
 				src := (src @env0:copyFrom: 1 to: last @env0:+ 6) @env0:, '___grailOrig_'
 					@env0:, (src @env0:copyFrom: last @env0:+ 7 to: src @env0:size).
-				self @env1:___compileSessionMethod: src category: 'Grail-Dynamic Rebinding Originals']]].
+				"With the original's scope: a method from exec'd source reads the
+				exec's globals through it (Behavior >> ___grailRememberCompileScope___:)."
+				self @env1:___compileSessionMethod: src category: 'Grail-Dynamic Rebinding Originals'
+					scope: definingClass @env1:___grailCompileScope___]]].
 	keywords := aSelector @env0:asString @env0:subStrings: $:.
 	nargs := aSelector @env0:asString @env0:occurrencesOf: $:.
 	argNames := Array @env0:new: nargs.

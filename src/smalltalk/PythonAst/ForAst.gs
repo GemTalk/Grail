@@ -112,21 +112,21 @@ printSmalltalkOn: aStream
 	"Assign next item to target"
 	isTupleTarget ifTrue: [
 		"Tuple unpacking: item := iter __next__ (drain-guarded), then
-		NORMALISED -- the per-element reads below go through __getitem__:,
-		and CPython's UNPACK_SEQUENCE is defined by ITERATION, so an item
-		that is not genuinely subscriptable is materialised through the
-		iterator protocol first.  That is where its errors must come from:
-		``async for i, j in badpairs()'' with an item whose __iter__ raises
-		StopAsyncIteration(42) has to surface exactly that (test_coroutines'
-		test_for_assign_raising_stop_async_iteration_2) -- and a DICT item
-		now unpacks to its KEYS, as upstream, instead of two lookups."
+		CHECKED as an assignment checks it (see ___unpackCheckArgs___): the
+		per-element reads below go through __getitem__:, and CPython's
+		UNPACK_SEQUENCE is defined by ITERATION, so an item that is not a
+		sequence is unpacked through its iterator by the check, which
+		answers a list of exactly the values.  That is where its errors must
+		come from: ``async for i, j in badpairs()'' with an item whose
+		__iter__ raises StopAsyncIteration(42) has to surface exactly that
+		(test_coroutines' test_for_assign_raising_stop_async_iteration_2)
+		-- and a DICT item unpacks to its KEYS, as upstream.  The item used
+		to be materialised by PythonCoroutine ___unpackNormalize___: first,
+		which read ALL of an iterator item and answered ``'int' object is
+		not iterable'' where CPython says ``cannot unpack non-iterable int
+		object''."
 		aStream nextPutAll: itemTemp; nextPutAll: ' := ';
 			nextPutAll: (self ___drainGuardedStepFor___: iterTemp); nextPutAll: '.'; lf.
-		aStream nextPutAll: itemTemp;
-			nextPutAll: ' := PythonCoroutine @env0:___unpackNormalize___: ';
-			nextPutAll: itemTemp; nextPutAll: '.'; lf.
-		"The VALUE COUNT, checked as an assignment checks it -- see
-		___unpackCheckArgs___."
 		self ___emitUnpackCheckOn: aStream item: itemTemp.
 		"Unpack each element, recursing into nested tuples like
 		``for target, (action, param) in items``."
@@ -846,7 +846,7 @@ ___emitIRTargetBindFrom___: stepNode on: aBuilder
 	"Bind the loop target from the drain-guarded step.  A Name: ``target :=
 	step''.  A tuple / list: printSmalltalkOn:'s tuple branch --
 	  ___itemN___ := step.
-	  ___itemN___ := PythonCoroutine @env0:___unpackNormalize___: ___itemN___.
+	  ___itemN___ := ___itemN___ ___unpackCheck___: n star: b after: m.
 	then one ``name := (src __getitem__: i)'' per leaf, a nested tuple reading
 	its own elements off the parenthesised subscript re-evaluated per leaf
 	(emitUnpackOn:target:source:depth:)."
@@ -875,8 +875,7 @@ ___emitIRTargetBindFrom___: stepNode on: aBuilder
 	"THE ITERATOR PROTOCOL IS STAMPED AT THE ITERABLE; ONLY THE NAME BINDINGS ARE
 	 STAMPED AT THE TARGET.  The caller stamps ``target'' before calling this,
 	 which is right for the Name branch above -- that statement IS the binding --
-	 and wrong for both statements here: ``___itemN___'' is Grail's own temp, and
-	 normalising it is a step of the iteration, not of the unpack.
+	 and wrong for both statements here: ``___itemN___'' is Grail's own temp.
 
 	 It is also observable.  An iterator-protocol raise must be attributed to the
 	 ITERATOR EXPRESSION's columns (tests/python/for_traceback_positions.py's
@@ -884,19 +883,17 @@ ___emitIRTargetBindFrom___: stepNode on: aBuilder
 	 ``for a, b in LateBreak():'' whose __next__ raises reported the TARGET:
 
 	     IR before:  colno 12..16  ``a, b''
-	     IR after:   colno 20..31  ``LateBreak()''   == the text path, == CPython
+	     IR after:   colno 20..31  ``LateBreak()''   == the text path
 
-	 The NORMALIZE is the load-bearing one, isolated by moving each statement
-	 alone: moving only the step assignment changed nothing, moving only the
-	 normalize fixed it.  The step assignment is moved with it because it is the
-	 same kind of statement and stamping Grail's temp at the user's target was
-	 never meaningful -- not because a test distinguishes the two."
+	 What the fixture's LateBreak actually raises is the UNPACK of its first
+	 item, the int 1 -- the step that used to be a separate ``normalize'' and is
+	 now the value-count check below, still stamped here.  CPython attributes
+	 that TypeError to the TARGET (colno 12..16), so this span agrees with the
+	 text path but not with CPython (#1583)."
 	aBuilder atNode: iter.
 	aBuilder add: (aBuilder assign: itemLeaf from: stepNode).
-	aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
-		send: #'___unpackNormalize___:' to: (aBuilder globalNamed: #PythonCoroutine)
-		with: { aBuilder var: itemLeaf } env: 0)).
-	"The text's value-count check, send for send -- see ___unpackCheckArgs___."
+	"The text's value-count check, send for send -- see ___unpackCheckArgs___.
+	It also unpacks an item that is not a sequence through its iterator."
 	self ___emitIRUnpackCheck___: itemLeaf on: aBuilder.
 	aBuilder atNode: target.
 	self ___emitIRForUnpack___: target source: [aBuilder var: itemLeaf] on: aBuilder

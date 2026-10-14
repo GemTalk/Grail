@@ -133,3 +133,24 @@ testASubclassOfABuiltinOnTheRightIsAskedFirst
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
 		equals: '21 checks, 0 disagreeing [], keys match: True'
 %
+
+category: 'Grail-Tests'
+method: ReflectedComparisonPriorityTestCase
+testAnIntTimesASequenceSubclassAsksItsRmul
+	"``3 * S('b')'' for ``class S(str)'' with an __rmul__ is S.__rmul__'s answer,
+	not 'bbb' (#1552): CPython's int declines a sequence and the sequence's
+	reflected multiply runs.  The reflected half is the BUILTIN repeat even for
+	a subclass that overrides __mul__ (``3 * M('b')'' is 'bbb'), and an __rmul__
+	that declines is a TypeError.  tests/python/int_times_sequence_subclass.py
+	holds the checks, for str, list, tuple, bytes and bytearray subclasses and a
+	bool on the left, and agrees with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'int_times_sequence_subclass' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/int_times_sequence_subclass.py')
+		name: 'int_times_sequence_subclass'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '9 checks, 0 disagreeing [], keys match: True'
+%

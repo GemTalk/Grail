@@ -846,6 +846,12 @@ ___pyCode___: aCode
 	``name := <block>'' assignment / decorator pipeline."
 
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__code__' put: aCode.
+	"And by the block's COMPILED METHOD, which is all a stack frame has: a
+	frame of this function then reports this code as its f_code -- its def
+	line and its identity -- rather than a stand-in with co_firstlineno 0.  A
+	module-level def compiles to a method and has a code table; a nested def
+	and every def in exec()'d code is a block and has only this."
+	BaseException ___noteCode___: aCode forBlockMethod: self method.
 	^ self
 %
 

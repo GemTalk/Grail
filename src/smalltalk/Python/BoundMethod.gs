@@ -146,7 +146,13 @@ _selectorForArgCount: nargs
 	the per-call string concatenation cost is fine — and the lookup
 	path tries the varargs form first when defaults are present, so
 	this only fires for true fixed-arity calls (Python ``def f(a, b,
-	c, d, e, f, g, h, i):'' compiles to ``f:_:_:_:_:_:_:_:_:'')."
+	c, d, e, f, g, h, i):'' compiles to ``f:_:_:_:_:_:_:_:_:'').
+
+	NIL past GemStone's 1,024-character Symbol limit, near 512 arguments: no
+	method can have that selector, and building it raised an uncatchable
+	ImproperOperation (#1540).  Every caller already treats nil as ``no
+	fixed-arity form'' and goes on to the varargs one.  The same limit as
+	CallAst class >> ___fixedAritySelectorFits___:arity: at compile time."
 
 	| s |
 	nargs == 0 ifTrue: [^ sel0].
@@ -154,6 +160,7 @@ _selectorForArgCount: nargs
 	nargs == 2 ifTrue: [^ sel2].
 	nargs == 3 ifTrue: [^ sel3].
 	nargs < 0 ifTrue: [^ nil].
+	selector asString size + 1 + (2 * (nargs - 1)) > 1024 ifTrue: [^ nil].
 	"Build ``name:'' followed by ``_:'' repeated (nargs - 1) times."
 	s := selector asString , ':'.
 	2 to: nargs do: [:_ | s := s , '_:'].
@@ -2225,6 +2232,20 @@ ___moduleOfClass___: aClass
 
 category: 'Grail-Printing'
 method: BoundMethod
+___receiverIsBuiltinModule___
+	"Is the receiver a module whose functions are BUILTINS in CPython -- one
+	written in Smalltalk (NativeModule), or a C extension's, which
+	CPythonShim >> loadDynamicModule: marks with a class-side
+	___shimModuleName___?  A C extension's functions read as Python
+	``function''s, so numpy's add_newdoc took every one of its own C functions
+	for pure Python and warned 30 times at import."
+
+	(receiver @env0:isKindOf: NativeModule) ifTrue: [^ true].
+	^ receiver @env0:class @env0:class @env0:includesSelector: #'___shimModuleName___'
+%
+
+category: 'Grail-Printing'
+method: BoundMethod
 ___pyTypeNameForError___
 	"The CPython type name for ``'X' object has no attribute ...'' and the other
 	messages that name a type: 'builtin_function_or_method', 'function' or
@@ -2237,7 +2258,7 @@ ___pyTypeNameForError___
 	rest are bound methods."
 
 	(receiver @env0:isKindOf: module) ifTrue: [
-		^ (receiver @env0:isKindOf: NativeModule)
+		^ self ___receiverIsBuiltinModule___
 			ifTrue: ['builtin_function_or_method']
 			ifFalse: ['function']].
 	(receiver @env0:isKindOf: Class) ifTrue: [
@@ -2326,7 +2347,8 @@ __repr__
 
 	  * a MODULE receiver is a module-level def -- ``<function name at 0x...>'',
 	    or ``<built-in function name>'' when that module is builtins, which is
-	    how Grail carries hash / len / the rest;
+	    how Grail carries hash / len / the rest, or a native or C-extension
+	    module (___receiverIsBuiltinModule___);
 	  * an INSTANCE receiver is a bound method -- ``<bound method Cls.name of
 	    <the receiver''''s own repr>>'' -- except that a receiver of a BUILTIN
 	    type takes CPython''''s ``<built-in method append of list object at
@@ -2353,7 +2375,7 @@ __repr__
 	(receiver @env0:isKindOf: module) ifTrue: [ | mn |
 		mn := [(receiver @env1:__name__) @env0:asString]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-		(mn @env0:= 'builtins') ifTrue: [
+		((mn @env0:= 'builtins') or: [self ___receiverIsBuiltinModule___]) ifTrue: [
 			^ ('<built-in function ' @env0:, (self __name__) @env0:asString
 				@env0:, '>') @env0:asUnicodeString].
 		^ ('<function ' @env0:, q @env0:, ' at 0x' @env0:, addr @env0:, '>')

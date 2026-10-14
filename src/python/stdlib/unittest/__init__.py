@@ -11,13 +11,21 @@
 #     the whole test immediately (CPython records it and continues);
 #   * assertWarns works by installing an 'error' warnings filter for
 #     the expected category and resets ALL filters on exit;
-#   * tracebacks are reported as "ExceptionName: message" strings.
+#   * a TestResult keeps "ExceptionName: message" for each error where
+#     CPython keeps the formatted traceback -- though add* is handed the
+#     exc_info triple, as in CPython (see _exc_info).
 
 # Three sys.modules reads were already here -- TestCase's __file__ lookup and
 # the setUpModule/tearDownModule fixture walk -- with nothing importing sys, so
 # each would have raised NameError on the path that reaches it.  main()'s
 # sys.exit is what finally ran into it.
 import sys
+
+# CPython's marker, read from a frame's globals by whoever trims a test's
+# traceback to the test's own frames -- pytest's unittest plugin does, and
+# without it every failure's report also showed the assertEqual / _failWith
+# frames inside this module.
+__unittest = True
 
 __all__ = ["TestCase", "TestSuite", "TestLoader", "TestResult",
            "TextTestRunner", "SkipTest", "main", "defaultTestLoader",
@@ -38,6 +46,17 @@ DIFF_OMITTED = ('\nDiff is %s characters long. '
 
 def _describe_exception(e):
     return type(e).__name__ + ": " + str(e)
+
+
+def _exc_info(e):
+    # What a TestResult's addError / addFailure / addExpectedFailure is handed,
+    # as in CPython: the (type, value, traceback) triple, not a description.
+    # A result class that formats the error itself reads all three -- pytest's
+    # unittest plugin builds its report from the traceback, and was handed a
+    # string, which it took for a sequence of traceback entries: every failing
+    # unittest-style test under pytest ended the run with an INTERNALERROR
+    # ('str' object has no attribute 'frame').
+    return (type(e), e, e.__traceback__)
 
 
 # ---- module cleanups, the companions of setUpModule ------------------------
@@ -119,6 +138,10 @@ def expectedFailure(test_item):
 # ---- result ------------------------------------------------------------
 
 class TestResult:
+    # CPython defines TestResult in unittest.result and its repr names it
+    # there; unittest/result.py re-exports this class so the name resolves.
+    __module__ = 'unittest.result'
+
     def __init__(self):
         self.testsRun = 0
         self.errors = []
@@ -143,17 +166,25 @@ class TestResult:
     def addSuccess(self, test):
         return None
 
+    # err is an exc_info triple (see _exc_info) or, from a setUpClass or
+    # setUpModule that failed, a description already.  What the lists keep is
+    # the description either way, as CPython keeps a formatted string.
+    def _exc_info_to_string(self, err, test):
+        if isinstance(err, tuple) and len(err) == 3:
+            return _describe_exception(err[1])
+        return err
+
     def addError(self, test, err):
-        self.errors.append((test, err))
+        self.errors.append((test, self._exc_info_to_string(err, test)))
 
     def addFailure(self, test, err):
-        self.failures.append((test, err))
+        self.failures.append((test, self._exc_info_to_string(err, test)))
 
     def addSkip(self, test, reason):
         self.skipped.append((test, reason))
 
     def addExpectedFailure(self, test, err):
-        self.expectedFailures.append((test, err))
+        self.expectedFailures.append((test, self._exc_info_to_string(err, test)))
 
     def addUnexpectedSuccess(self, test):
         self.unexpectedSuccesses.append(test)
@@ -170,9 +201,13 @@ class TestResult:
         self.shouldStop = True
 
     def __repr__(self):
-        return ("<TestResult run=" + str(self.testsRun)
-                + " errors=" + str(len(self.errors))
-                + " failures=" + str(len(self.failures)) + ">")
+        # CPython's: the class's dotted home, so a TextTestRunner's result reads
+        # ``<unittest.runner.TextTestResult run=2 errors=0 failures=0>''
+        # (test_statistics' assertApproxEqual doctest checks exactly that).
+        cls = type(self)
+        return "<%s.%s run=%i errors=%i failures=%i>" % (
+            cls.__module__, cls.__qualname__, self.testsRun,
+            len(self.errors), len(self.failures))
 
 
 # ---- assertRaises context manager ---------------------------------------
@@ -905,11 +940,11 @@ class TestCase:
             result.stopTest(self)
             return result
         except AssertionError as e:
-            result.addFailure(self, _describe_exception(e))
+            result.addFailure(self, _exc_info(e))
             result.stopTest(self)
             return result
         except Exception as e:
-            result.addError(self, _describe_exception(e))
+            result.addError(self, _exc_info(e))
             result.stopTest(self)
             return result
         # Where a skipped subTest records itself (see _SubTest).
@@ -923,22 +958,22 @@ class TestCase:
             message = str(e)
         except AssertionError as e:
             status = "failure"
-            message = _describe_exception(e)
+            message = _exc_info(e)
         except Exception as e:
             status = "error"
-            message = _describe_exception(e)
+            message = _exc_info(e)
         try:
             self._callTearDown()
         except Exception as e:
             if status == "success":
                 status = "error"
-                message = _describe_exception(e)
+                message = _exc_info(e)
         try:
             self.doCleanups()
         except Exception as e:
             if status == "success":
                 status = "error"
-                message = _describe_exception(e)
+                message = _exc_info(e)
         # An @expectedFailure marker on the test METHOD reroutes the outcome, the
         # same oversight the @skip block above records one decorator earlier: the
         # decorator set __unittest_expecting_failure__ all along and run() never
@@ -1313,7 +1348,27 @@ defaultTestLoader = TestLoader()
 
 # ---- runner -----------------------------------------------------------------
 
+class TextTestResult(TestResult):
+    """The result a TextTestRunner answers, as in CPython.  Grail's runner
+    still writes its own summary lines, so this adds nothing but CPython's
+    constructor and class identity: ``runner.run(suite)'' reprs as
+    ``<unittest.runner.TextTestResult ...>'', and code that subclasses
+    unittest.TextTestResult (django's test runner) finds a class to subclass."""
+    __module__ = 'unittest.runner'
+
+    def __init__(self, stream=None, descriptions=True, verbosity=1, *,
+                 durations=None):
+        TestResult.__init__(self)
+        self.stream = stream
+        self.showAll = verbosity > 1
+        self.dots = verbosity == 1
+        self.descriptions = descriptions
+        self.durations = durations
+
+
 class TextTestRunner:
+    __module__ = 'unittest.runner'
+
     def __init__(self, stream=None, verbosity=1):
         self.stream = stream
         self.verbosity = verbosity
@@ -1325,7 +1380,7 @@ class TextTestRunner:
             self.stream.write(line + "\n")
 
     def run(self, test):
-        result = TestResult()
+        result = TextTestResult(self.stream, True, self.verbosity)
         result.startTestRun()
         test.run(result)
         result.stopTestRun()

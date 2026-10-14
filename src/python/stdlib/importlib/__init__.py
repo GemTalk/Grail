@@ -105,13 +105,36 @@ class _UtilStub:
         return spec_from_loader(name, loader, origin=origin,
                                 is_package=is_package)
 
+    def module_from_spec(self, spec):
+        from .util import module_from_spec
+        return module_from_spec(spec)
+
 
 util = _UtilStub()
 
 
 class _Loader:
+    """The loader of a spec built for a source file (find_spec,
+    spec_from_file_location), with the PEP 451 pair a caller runs it by:
+    ``module_from_spec(spec)'' asks ``create_module'', then
+    ``spec.loader.exec_module(module)'' runs the file's source in the module.
+
+    sqlalchemy's test bootstrap loads its pytest plugin exactly that way, and
+    with neither method -- nor ``importlib.util.module_from_spec'' -- the
+    conftest failed to import and none of its 26,954 tests were collected."""
+
     def __init__(self, path):
         self.path = path
+
+    def create_module(self, spec):
+        # None: the default module, as for CPython's SourceFileLoader.
+        return None
+
+    def exec_module(self, module):
+        with open(self.path, 'rb') as f:
+            source = f.read()
+        exec(compile(source, self.path, 'exec', dont_inherit=True),
+             module.__dict__)
 
 
 # ``_ModuleSpec`` and ``ModuleSpec`` are NOT defined here.  They are the one

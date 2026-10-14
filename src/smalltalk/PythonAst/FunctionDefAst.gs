@@ -521,6 +521,11 @@ printSmalltalkOn: aStream
 		^self
 	].
 
+	"A decorator that READS THIS DEF'S OWN NAME -- ``@alias.setter'' after
+	``@property def alias'' -- must be evaluated before the def rebinds the
+	name.  See ___printWithPreEvaluatedDecoratorsOn___:."
+	self ___needsPreEvaluatedDecorators___ ifTrue: [
+		^ self ___printWithPreEvaluatedDecoratorsOn___: aStream].
 	"Block params are renamed to underscored sentinels so a user
 	parameter named ``positional`` or ``kwargs`` (Jinja2's
 	``optimizeconst`` wraps ``def new_func(self, node, frame,
@@ -990,6 +995,9 @@ printSmalltalkOn: aStream
 						nextPutAll: self ___mangledName___;
 						nextPutAll: ' := '
 				].
+				(self ___preEvaluatedDecoratorIndexOf___: deco) ifNotNil: [:___i |
+					aStream nextPutAll: '(___grailPreDeco___ @env0:at: '; print: ___i; nextPutAll: ')']
+				ifNil: [
 				(deco isKindOf: Symbol)
 					ifTrue: [
 						"Phase A: a Symbol decorator (parser stored the bare
@@ -1011,7 +1019,7 @@ printSmalltalkOn: aStream
 							]
 							ifFalse: [self ___printDecoratorNameOn___: aStream name: deco]
 					]
-					ifFalse: [deco printSmalltalkWithParenthesisOn: aStream].
+					ifFalse: [deco printSmalltalkWithParenthesisOn: aStream]].
 				"Phase A: when the target is module-scope, the value-block
 				arg ``{ name }'' reads the just-defined function through
 				dynamicInstVarAt: (no Smalltalk temp exists), and the
@@ -1268,8 +1276,6 @@ applicableMethodDecorators
 	  * @staticmethod / @classmethod / @property -- handled at PARSE time by
 	    re-classing this node (isClassDeclarativeDecorator:), and @property is
 	    additionally paired with a synthesized setter.
-	  * @cached_property -- ClassDefAst realises it as the same getter/setter
-	    pair, using the setter as the cache slot.
 	  * @x.setter / @x.getter / @x.deleter -- property accessor forms; the def
 	    IS the accessor and compiles to the paired selector.
 	  * @typing.overload -- the stub is not the implementation.
@@ -1287,18 +1293,7 @@ applicableMethodDecorators
 	decorator_list isNil ifTrue: [^ #()].
 	^ decorator_list reject: [:deco |
 		(self isClassDeclarativeDecorator: deco)
-			or: [(self isCachedPropertyDecorator: deco)
-				or: [self isPropertyAccessorDecorator: deco]]]
-%
-
-category: 'Grail-code generation'
-method: FunctionDefAst
-isCachedPropertyDecorator: deco
-	"Bare ``@cached_property'' -- ClassDefAst turns it into a getter/setter
-	pair, so it must not also be applied as a runtime decorator call."
-
-	(deco isKindOf: Symbol) ifFalse: [^ false].
-	^ deco asSymbol == #'cached_property'
+			or: [self isPropertyAccessorDecorator: deco]]
 %
 
 category: 'Grail-code generation'
@@ -1361,15 +1356,15 @@ category: 'Grail-code generation'
 method: FunctionDefAst
 ___declaresPropertyBinding___
 	"Whether this def, as decorated, leaves a declarative property bound to its
-	name: @property / @cached_property outermost, or an accessor of a property
-	declared earlier (which recurses to that earlier def)."
+	name: @property outermost, or an accessor of a property declared earlier
+	(which recurses to that earlier def)."
 
 	| first |
 	decorator_list isNil ifTrue: [^ false].
 	decorator_list isEmpty ifTrue: [^ false].
 	first := decorator_list at: 1.
 	(first isKindOf: Symbol)
-		ifTrue: [^ #(#'property' #'cached_property') includes: first asSymbol].
+		ifTrue: [^ first asSymbol == #'property'].
 	"``@Base.spam.getter'' -- an accessor form over an EXPRESSION -- leaves a
 	property bound too, and the @spam.setter / @spam.deleter after it are its
 	halves (test_property test_property_decorator_subclass).  Reading those as
@@ -1416,7 +1411,7 @@ isPropertyAccessorDecorator: deco
 category: 'Grail-Decorators'
 method: FunctionDefAst
 ___isPropertyDef___
-	"Whether this def declares a @property or @cached_property, the
+	"Whether this def declares a @property, the
 	``@x.setter'' / ``@x.getter'' / ``@x.deleter'' halves included -- they bind
 	the same name.
 
@@ -1434,7 +1429,7 @@ ___isPropertyDef___
 		and: [decorator_list anySatisfy: [:d | self ___isForeignAccessorDecorator___: d]])
 			ifTrue: [^ false].
 	^ decorators anySatisfy: [:each |
-		#(#'property' #'cached_property' #'setter' #'getter' #'deleter')
+		#(#'property' #'setter' #'getter' #'deleter')
 			includes: each]
 %
 
@@ -1477,8 +1472,7 @@ ___hasWrappingDecorator___
 	path answered the same method), but it now decides whether a classmethod
 	is re-wrapped in a descriptor, where it has to be right."
 	structural := #(#'property' #'staticmethod' #'classmethod' #'setter'
-		#'getter' #'deleter' #'abstractmethod' #'abstractproperty'
-		#'cached_property').
+		#'getter' #'deleter' #'abstractmethod' #'abstractproperty').
 	^ decorator_list anySatisfy: [:deco |
 		(deco isKindOf: Symbol)
 			ifTrue: [(structural includes: deco asSymbol) not]
@@ -2042,12 +2036,121 @@ ___decoratorNodeFor___: decoList index: anIndex
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___applicableLocalDecorators___
+	"The decorators a function-local def's emit applies: every one the
+	parser's re-classing did not already realise."
+
+	^ (decorator_list ifNil: [#()]) reject: [:deco |
+		self ___decoratorRealisedByReclass___: deco]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___needsPreEvaluatedDecorators___
+	"Does this function-local def have a decorator whose EXPRESSION reads
+	the def's own name -- and is it not already being emitted inside the
+	wrapper that evaluates them first?
+
+	CPython evaluates the decorator expressions, then makes the function,
+	applies them and only then binds the name.  The local emit binds first
+	and evaluates each decorator after, which is invisible except when the
+	decorator reads the name it is about to replace: ``@alias.setter def
+	alias'' then read ``.setter'' off the NEW plain function, not the
+	property -- ``ExecBlock object has no attribute 'setter''', which is how
+	beautifulsoup4's _deprecated_alias failed to import."
+
+	| own |
+	(CallAst ___compileContext___ at: #'grailPreDecoratedDef' otherwise: nil) == self
+		ifTrue: [^ false].
+	own := self ___mangledName___ asString.
+	^ self ___applicableLocalDecorators___ anySatisfy: [:deco |
+		(deco isKindOf: Symbol) not
+			and: [self ___node: deco readsName: own]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___node: aValue readsName: aString
+	"Does the expression aValue mention the bare name aString anywhere?  A
+	reflective walk over each node's instance variables (skipping ``parent''),
+	the shape ___irNodeContainsClassDef___: uses."
+
+	aValue isNil ifTrue: [^ false].
+	aValue isString ifTrue: [^ false].
+	(aValue isKindOf: NameAst) ifTrue: [^ aValue id asString = aString].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				(self ___node: (aValue instVarAt: i) readsName: aString) ifTrue: [^ true]]].
+		^ false].
+	(aValue isKindOf: Collection) ifTrue: [
+		aValue do: [:each |
+			(self ___node: each readsName: aString) ifTrue: [^ true]].
+		^ false].
+	^ false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___printWithPreEvaluatedDecoratorsOn___: aStream
+	"Emit the def wrapped so that its decorator expressions are evaluated
+	FIRST, as CPython does:
+
+	    [:___grailPreDeco___ |
+	        alias := <the function>.
+	        alias := (___grailPreDeco___ @env0:at: 1) value: { alias } value: nil.
+	    ] @env0:value: { <decorator 1 expr>. ... }.
+
+	The brace array is evaluated before the block runs, so ``alias.setter''
+	reads the property still bound to the name; the def and its decorators
+	then run as they always do, each decorator taken from the array
+	(___preEvaluatedDecoratorIndexOf___:).  A block parameter because there
+	is no way to declare a temp at this point in the emit -- the trick
+	emitOrderedLocalDecoratorsOn: uses for a chain.  Only for a decorator
+	that reads the def's own name (___needsPreEvaluatedDecorators___), where
+	the order is observable."
+
+	| ctx previous applicable |
+	ctx := CallAst ___compileContext___.
+	previous := ctx at: #'grailPreDecoratedDef' otherwise: nil.
+	applicable := self ___applicableLocalDecorators___.
+	aStream nextPutAll: '[:___grailPreDeco___ |'; lf.
+	ctx at: #'grailPreDecoratedDef' put: self.
+	[self printSmalltalkOn: aStream]
+		ensure: [ctx at: #'grailPreDecoratedDef' put: previous].
+	aStream lf; nextPutAll: '] @env0:value: { '.
+	applicable doWithIndex: [:deco :i |
+		i > 1 ifTrue: [aStream nextPutAll: '. '].
+		self printDecoratorReceiverOn: aStream deco: deco].
+	aStream nextPutAll: ' }.'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___preEvaluatedDecoratorIndexOf___: deco
+	"While this def is emitted inside ___printWithPreEvaluatedDecoratorsOn___:,
+	the position of deco in the array its decorators were evaluated into;
+	nil otherwise, and for a decorator that is not one of them."
+
+	| i |
+	(CallAst ___compileContext___ at: #'grailPreDecoratedDef' otherwise: nil) == self
+		ifFalse: [^ nil].
+	i := self ___applicableLocalDecorators___ indexOfIdentical: deco.
+	^ i = 0 ifTrue: [nil] ifFalse: [i]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printDecoratorReceiverOn: aStream deco: deco
 	"Emit the decorator expression as the receiver of a
 	___pyCallValue___:kw: send.  A bare-Symbol module-scope
 	decorator routes through ___moduleAttrLoad___ so the function
 	lazy-wraps as a BoundMethod; an AttributeAst form
 	(``module.deco_name'') falls through to its own emit."
+
+	(self ___preEvaluatedDecoratorIndexOf___: deco) ifNotNil: [:i |
+		aStream nextPutAll: '(___grailPreDeco___ @env0:at: '; print: i; nextPutAll: ')'.
+		^ self].
 
 	(deco isKindOf: Symbol) ifTrue: [
 		"A CLASS-BODY name used as the decorator itself -- ``@_deco'' naming a
@@ -3951,6 +4054,43 @@ allParameterNames
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
+___multipleValuesParams___: nPos
+	"The parameters an arity check's duplicate-argument guard covers, as
+	{ index in the positional Array . name } pairs: each positional-OR-keyword
+	parameter this call site binds positionally.  Positional-only ones are
+	left out -- a keyword spelled like one goes to **kwargs or is refused by
+	the unexpected-keyword guard -- and so is a stripped receiver, which is
+	the first ``___arityReceiverOffset___:'' of them."
+
+	| all po off out |
+	all := self allParameterNames.
+	po := (args posonlyargs ifNil: [#()]) size.
+	off := self ___arityReceiverOffset___: nPos.
+	out := OrderedCollection new.
+	off + 1 to: all size do: [:k |
+		k > po ifTrue: [out add: { k - off . (all at: k) asString }]].
+	^ out
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+___multipleValuesNamesLiteral___: pairs
+	"The names the duplicate-argument guard covers, as the source of ONE
+	literal Array -- ``#('a' 'b')'' -- handed to the runtime check."
+
+	| ws |
+	ws := WriteStream on: String new.
+	ws nextPutAll: '#('.
+	pairs do: [:pair |
+		ws nextPut: $'.
+		(pair at: 2) do: [:c | c = $' ifTrue: [ws nextPut: $']. ws nextPut: c].
+		ws nextPut: $'; space].
+	ws nextPut: $).
+	^ ws contents
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
 ___arityReceiverOffset___: nPos
 	"How many declared positional parameters an arity check's ``nPos'' leaves
 	out: 1 when the receiver (self, or cls) was stripped because it is the
@@ -4590,8 +4730,24 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	positional-only parameters the second's is
 	___emitIRUnexpectedKeywordWithPosonlyOn___:kw:accepted:'s collecting one."
 
-	| qname |
+	| qname dups |
 	qname := self ___qualifiedNameFor___: name.
+	"0. The duplicate-argument guard, as the text emits it (#1477)."
+	dups := self ___multipleValuesParams___: nPos.
+	dups isEmpty ifFalse: [
+		aBuilder
+			unless: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
+			then: [
+				aBuilder add: (aBuilder
+					send: #'___grailCheckMultipleValues___:pos:kw:skip:name:'
+					to: (aBuilder globalNamed: #TypeError)
+					with: {
+						aBuilder obj: (dups collect: [:pair | pair at: 2]) asArray.
+						aBuilder var: posLeaf.
+						aBuilder var: kwLeaf.
+						aBuilder obj: (dups first at: 1) - 1.
+						aBuilder obj: qname asString }
+					env: 0)]].
 	args vararg isNil ifTrue: [
 		| defcount sig plural prefix cond off total given |
 		"A method counts its receiver on both sides, as the text's
@@ -6010,6 +6166,28 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	posName arrive with self already stripped, so both numbers were one short
 	(#1472); ___arityReceiverOffset___: puts it back, and is 0 for a module def
 	or a @staticmethod, whose messages are unchanged."
+	"0. A parameter given both positionally and by keyword (#1477).  The
+	binding takes the positional value, so without this the keyword was
+	silently dropped: ``f(5, ps=1)'' answered 5 for ``def f(ps, force=False)''.
+	First, as in CPython, which raises it while binding keywords -- before it
+	counts the positional arguments -- and checked whether or not the def
+	collects **kwargs, since a name that IS a parameter never goes there.
+	Only when the call passed keywords; the check itself is one runtime send
+	(TypeError class >> ___grailCheckMultipleValues___:pos:kw:skip:name:,
+	which says why it is not emitted inline)."
+	(self ___multipleValuesParams___: nPos) isEmpty ifFalse: [ | pairs skip lit |
+		pairs := self ___multipleValuesParams___: nPos.
+		skip := (pairs first at: 1) - 1.
+		lit := self ___multipleValuesNamesLiteral___: pairs.
+		aStream
+			nextPutAll: '('; nextPutAll: kwName;
+			nextPutAll: ' @env0:isNil) ifFalse: [TypeError @env0:___grailCheckMultipleValues___: ';
+			nextPutAll: lit;
+			nextPutAll: ' pos: '; nextPutAll: posName;
+			nextPutAll: ' kw: '; nextPutAll: kwName;
+			nextPutAll: ' skip: '; print: skip;
+			nextPutAll: ' name: '; print: (self ___qualifiedNameFor___: name) asString;
+			nextPutAll: '].'; lf].
 	args vararg isNil ifTrue: [ | defcount sig plural prefix off total given |
 		off := self ___arityReceiverOffset___: nPos.
 		total := nPos + off.
@@ -8306,6 +8484,10 @@ ___irNestedDefReasonUnguarded___: localNames
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].
+	"A decorator that reads the def's own name has to be evaluated before the
+	def binds it; the text emit wraps the def to do that
+	(___printWithPreEvaluatedDecoratorsOn___:), and this emit has no such form."
+	self ___needsPreEvaluatedDecorators___ ifTrue: [^ #'nestedDef:decoratorReadsOwnName'].
 	(args defaults ifNil: [#()]) do: [:d |
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'nestedDef:defaultExpr']].
 	nestedLocals := self ___irNestedLocals___: localNames.

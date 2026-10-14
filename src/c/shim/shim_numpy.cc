@@ -132,9 +132,11 @@ extern "C" int PyDict_ContainsString(PyObject *mp, const char *key) {
     STUBLOG("PyDict_ContainsString");
     return 0;
 }
+/* Was a stub answering success without deleting anything. */
 extern "C" int PyDict_DelItemString(PyObject *dp, const char *key) {
-    STUBLOG("PyDict_DelItemString");
-    return 0;
+    PyObject *k = PyUnicode_FromString(key);
+    if (k == NULL) return -1;
+    return PyDict_DelItem(dp, k);
 }
 /* CPython 3.13+ setdefault with a strong reference: 0 when the default was
    inserted, 1 when the key was already present, -1 on error.  *result, when
@@ -209,18 +211,32 @@ extern "C" void PyGILState_Release(PyGILState_STATE) {
     (void)0;
 }
 /* PyImport_Import lives in cpython.cc (it needs is_foreign). */
+/* ONE interpreter and ONE thread state, both zeroed static blocks: what the
+   gem is, as far as a wheel can ask.  A wheel reads a thread state's fields
+   inline -- numpy's _reload_guard compares ``PyThreadState_Get()->interp''
+   with PyInterpreterState_Main(), and both were stubs answering NULL, so
+   ``import numpy'' died on that read.  CPython 3.14's PyThreadState begins
+   prev, next, interp; the blocks are far larger than either struct, so any
+   other field a wheel reads is zero (no frame, no exception, depth 0). */
+static union { char bytes[8192]; void *align; } g_shim_interp;
+static union {
+    char bytes[8192];
+    struct { void *prev; void *next; void *interp; } head;
+} g_shim_tstate = { .head = { NULL, NULL, &g_shim_interp } };
 extern "C" PyInterpreterState * PyInterpreterState_Main(void) {
-    STUBLOG("PyInterpreterState_Main");
-    return 0;
+    return (PyInterpreterState *)&g_shim_interp;
 }
 /* PyList_GetItemRef implemented in cpython.cc (strong-ref PyList_GetItem). */
-extern "C" long PyLong_AsLongAndOverflow(PyObject *, int *) {
-    STUBLOG("PyLong_AsLongAndOverflow");
-    return 0;
-}
-extern "C" long long PyLong_AsLongLongAndOverflow(PyObject *, int *) {
-    STUBLOG("PyLong_AsLongLongAndOverflow");
-    return 0;
+/* PyLong_AsLongAndOverflow lives in cpython.cc. */
+/* long and long long are the same width on the platforms the shim builds
+   for (LP64), so this is PyLong_AsLongAndOverflow (cpython.cc).  It was a
+   stub answering 0 with *overflow never written, and numpy's comparison of
+   an integer array with a Python int (special_integer_comparisons.cpp)
+   read the garbage as "out of range": np.arange(3) == 1 was all False. */
+extern "C" long PyLong_AsLongAndOverflow(PyObject *, int *);
+extern "C" long long PyLong_AsLongLongAndOverflow(PyObject *obj, int *overflow) {
+    static_assert(sizeof(long) == sizeof(long long), "LP64 only");
+    return (long long)PyLong_AsLongAndOverflow(obj, overflow);
 }
 extern "C" void * PyLong_AsVoidPtr(PyObject *) {
     STUBLOG("PyLong_AsVoidPtr");
@@ -329,8 +345,16 @@ extern "C" PyObject * PyObject_GenericGetAttr(PyObject *, PyObject *) {
 }
 /* PyObject_GenericGetDict lives in cpython.cc. */
 /* PyObject_GenericSetAttr lives in cpython.cc. */
-extern "C" int PyObject_GetOptionalAttr(PyObject *, PyObject *, PyObject **) {
-    STUBLOG("PyObject_GetOptionalAttr");
+/* PyObject_GetOptionalAttr: 1 and the value, 0 and NULL when there is no
+   such attribute, -1 on any other error.  It was a stub answering 0 WITHOUT
+   writing *result, and numpy's PyArray_LookupSpecial (np.can_cast,
+   np.linspace, every ufunc call that checks for __array_ufunc__) then read
+   whatever was in its uninitialised result variable. */
+extern "C" int PyObject_GetOptionalAttr(PyObject *obj, PyObject *name, PyObject **result) {
+    *result = PyObject_GetAttr(obj, name);
+    if (*result != NULL) return 1;
+    if (PyErr_Occurred() && !PyErr_ExceptionMatches(PyExc_AttributeError)) return -1;
+    PyErr_Clear();
     return 0;
 }
 /* Initialize a freshly-allocated object: set its type and refcount. */
@@ -340,9 +364,12 @@ extern "C" PyObject * PyObject_Init(PyObject *op, PyTypeObject *type) {
     op->ob_type = type;
     return op;
 }
-extern "C" PyVarObject * PyObject_InitVar(PyVarObject *, PyTypeObject *, Py_ssize_t) {
-    STUBLOG("PyObject_InitVar");
-    return 0;
+/* PyObject_Init plus the item count -- was a stub answering NULL. */
+extern "C" PyVarObject * PyObject_InitVar(PyVarObject *op, PyTypeObject *type, Py_ssize_t size) {
+    if (op == NULL) return NULL;
+    op->ob_size = size;
+    PyObject_Init((PyObject *)op, type);
+    return op;
 }
 /* PyObject_IsInstance / PyObject_IsSubclass live in cpython.cc. */
 extern "C" Py_ssize_t PyObject_LengthHint(PyObject *o, Py_ssize_t) {
@@ -363,27 +390,18 @@ extern "C" int PyObject_Print(PyObject *, FILE *, int) {
 extern "C" void * PyObject_Realloc(void *ptr, size_t new_size) {
     return realloc(ptr, new_size);
 }
-extern "C" PyObject * PyObject_SelfIter(PyObject *) {
-    STUBLOG("PyObject_SelfIter");
-    return 0;
-}
+/* PyObject_SelfIter lives in cpython.cc. */
 /* len(o): PyObject_Length's other name (cpython.cc).  It was a stub
    answering 0, which pydantic_core's model_dump reaches. */
 extern "C" Py_ssize_t PyObject_Size(PyObject *o) {
     return PyObject_Length(o);
 }
-extern "C" PyObject * PySeqIter_New(PyObject *) {
-    STUBLOG("PySeqIter_New");
-    return 0;
-}
+/* PySeqIter_New lives in cpython.cc. */
 extern "C" PyObject * PySequence_Concat(PyObject *o1, PyObject *o2) {
     STUBLOG("PySequence_Concat");
     return 0;
 }
-extern "C" PyObject * PySequence_Fast(PyObject *o, const char* m) {
-    STUBLOG("PySequence_Fast");
-    return 0;
-}
+/* PySequence_Fast lives in cpython.cc. */
 extern "C" PyObject * PySequence_InPlaceConcat(PyObject *o1, PyObject *o2) {
     STUBLOG("PySequence_InPlaceConcat");
     return 0;
@@ -396,15 +414,11 @@ extern "C" PyObject * PySequence_Repeat(PyObject *o, Py_ssize_t count) {
     STUBLOG("PySequence_Repeat");
     return 0;
 }
-extern "C" PyObject * PySequence_Tuple(PyObject *o) {
-    STUBLOG("PySequence_Tuple");
-    return 0;
-}
+/* PySequence_Tuple lives in cpython.cc. */
 /* PySys_GetObject is implemented for real in cpython.cc (delegates to the
    Grail sys module via the server) — not stubbed here. */
 extern "C" PyThreadState * PyThreadState_Get(void) {
-    STUBLOG("PyThreadState_Get");
-    return 0;
+    return (PyThreadState *)&g_shim_tstate;   /* see PyInterpreterState_Main */
 }
 extern "C" int PyTraceMalloc_Track(unsigned int domain, uintptr_t ptr, size_t size) {
     return 0;
@@ -441,17 +455,37 @@ extern "C" PyObject* PyUnicode_AsUTF8String(PyObject *unicode) {
     if (s == NULL) return NULL;
     return PyBytes_FromStringAndSize(s, n);
 }
+/* Comparing UTF-8 bytes orders strings as comparing their code points does
+   (a property of UTF-8), and a match of one UTF-8 string inside another
+   starts on a character boundary.  These were stubs answering "equal" and
+   "absent"; numpy's dtype naming reached PyUnicode_Compare. */
+static int utf8_compare(const char *a, Py_ssize_t na, const char *b, Py_ssize_t nb) {
+    int c = memcmp(a, b, (size_t)(na < nb ? na : nb));
+    if (c != 0) return c < 0 ? -1 : 1;
+    return na < nb ? -1 : (na > nb ? 1 : 0);
+}
 extern "C" int PyUnicode_Compare(PyObject *left, PyObject *right) {
-    STUBLOG("PyUnicode_Compare");
-    return 0;
+    Py_ssize_t na = 0, nb = 0;
+    const char *a = PyUnicode_AsUTF8AndSize(left, &na);
+    if (a == NULL) return -1;
+    const char *b = PyUnicode_AsUTF8AndSize(right, &nb);
+    if (b == NULL) return -1;
+    return utf8_compare(a, na, b, nb);
 }
 extern "C" int PyUnicode_CompareWithASCIIString(PyObject *left, const char *right) {
-    STUBLOG("PyUnicode_CompareWithASCIIString");
-    return 0;
+    Py_ssize_t na = 0;
+    const char *a = PyUnicode_AsUTF8AndSize(left, &na);
+    if (a == NULL) { PyErr_Clear(); return -1; }
+    return utf8_compare(a, na, right, (Py_ssize_t)strlen(right));
 }
 extern "C" int PyUnicode_Contains(PyObject *container, PyObject *element) {
-    STUBLOG("PyUnicode_Contains");
-    return 0;
+    Py_ssize_t nc = 0, ne = 0;
+    const char *c = PyUnicode_AsUTF8AndSize(container, &nc);
+    if (c == NULL) return -1;
+    const char *e = PyUnicode_AsUTF8AndSize(element, &ne);
+    if (e == NULL) return -1;
+    if (ne == 0) return 1;
+    return memmem(c, (size_t)nc, e, (size_t)ne) != NULL;
 }
 extern "C" PyObject * PyUnicode_Format(PyObject *format, PyObject *args) {
     STUBLOG("PyUnicode_Format");
@@ -481,10 +515,7 @@ extern "C" int PyUnstable_Object_IsUniquelyReferenced(PyObject *) {
     STUBLOG("PyUnstable_Object_IsUniquelyReferenced");
     return 0;
 }
-extern "C" PyObject * PyVectorcall_Call(PyObject *callable, PyObject *tuple, PyObject *dict) {
-    STUBLOG("PyVectorcall_Call");
-    return 0;
-}
+/* PyVectorcall_Call lives in cpython.cc. */
 extern "C" int Py_EnterRecursiveCall(const char *where) {
     return 0;
 }
@@ -544,7 +575,13 @@ extern "C" {
   PyTypeObject PyMethodDescr_Type;
   PyTypeObject PySet_Type;
   PyTypeObject PySlice_Type;
-  PyObject _shim_Ellipsis={1,0}; PyObject *_Py_EllipsisObject=&_shim_Ellipsis;
+  /* THE Ellipsis object, as CPython declares it (sliceobject.h:
+     ``PyAPI_DATA(PyObject) _Py_EllipsisObject'', Py_Ellipsis being its
+     ADDRESS).  This used to be a POINTER variable of that name, so a wheel's
+     Py_Ellipsis was the address of the pointer, and numpy's ``index ==
+     Py_Ellipsis'' never matched.  Typed and mapped to Grail's Ellipsis in
+     cpython.cc (pyobj_oop, shimTypeAddr ``Ellipsis''). */
+  PyObject _Py_EllipsisObject={1,0};
   static struct _object _exc_FPE={1,0}; PyObject *PyExc_FloatingPointError=&_exc_FPE;
   static struct _object _exc_IW={1,0}; PyObject *PyExc_ImportWarning=&_exc_IW;
 }

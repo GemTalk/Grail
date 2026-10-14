@@ -760,7 +760,13 @@ def _resolve_patch_target(target):
         raise TypeError("Need a valid target to patch. You supplied: "
                         + repr(target))
     prefix, attribute = target[:idx], target[idx + 1:]
-    parts = prefix.split(".")
+    return _import_dotted(prefix, target), attribute
+
+
+def _import_dotted(path, target):
+    """The object a dotted path names: its longest importable prefix, then
+    getattr for the rest (see _resolve_patch_target)."""
+    parts = path.split(".")
     obj = None
     n = len(parts)
     while n > 0:
@@ -774,7 +780,7 @@ def _resolve_patch_target(target):
                         + repr(target))
     for comp in parts[n:]:
         obj = getattr(obj, comp)
-    return obj, attribute
+    return obj
 
 
 def patch(target, new=DEFAULT, **kwargs):
@@ -790,6 +796,96 @@ def patch_object(target_obj, attribute, new=DEFAULT, **kwargs):
 
 
 patch.object = patch_object
+
+
+class _MultiPatcher:
+    """What patch.multiple answers: one _Patcher per keyword, entered and
+    exited together.  As a context manager it answers a dict of the mocks it
+    CREATED (the attributes given DEFAULT), keyed by name; as a decorator it
+    hands the same mocks to the function as keyword arguments -- both as in
+    CPython."""
+
+    def __init__(self, target_obj, attributes, kwargs):
+        self._target_obj = target_obj
+        self._attributes = attributes
+        self._kwargs = kwargs
+        self._entered = []
+
+    def _fresh(self):
+        return [_Patcher(self._target_obj, name, new, dict(self._kwargs))
+                for name, new in self._attributes.items()]
+
+    def __enter__(self):
+        created = {}
+        entered = []
+        try:
+            for p in self._fresh():
+                value = p.__enter__()
+                entered.append(p)
+                if p._new is DEFAULT:
+                    created[p._attribute] = value
+        except BaseException:
+            for p in reversed(entered):
+                p.__exit__(None, None, None)
+            raise
+        self._entered = entered
+        return created
+
+    def __exit__(self, exc_type, exc_value, tb):
+        entered, self._entered = self._entered, []
+        for p in reversed(entered):
+            p.__exit__(exc_type, exc_value, tb)
+        return False
+
+    def start(self):
+        return self.__enter__()
+
+    def stop(self):
+        return self.__exit__(None, None, None)
+
+    def __call__(self, func):
+        if isinstance(func, type):
+            raise TypeError(
+                "patch.multiple() as a class decorator is not supported in "
+                "Grail; decorate the individual test methods")
+        patcher = self
+
+        def wrapper(*args, **kwargs):
+            fresh = _MultiPatcher(patcher._target_obj, patcher._attributes,
+                                  patcher._kwargs)
+            created = fresh.__enter__()
+            try:
+                kwargs.update(created)
+                return func(*args, **kwargs)
+            finally:
+                fresh.__exit__(None, None, None)
+
+        wrapper.__name__ = getattr(func, "__name__", "wrapper")
+        wrapper.__doc__ = getattr(func, "__doc__", None)
+        wrapper.__wrapped__ = func
+        return wrapper
+
+
+def patch_multiple(target, spec=None, create=False, spec_set=None,
+                   autospec=None, new_callable=None, **kwargs):
+    """patch.multiple(target, name=value, ...): patch several attributes of
+    one object at once (test_uuid patches a module's caches this way).  A
+    string target is imported as a dotted path, as CPython does; DEFAULT as a
+    value makes a MagicMock."""
+    if isinstance(target, str):
+        target = _import_dotted(target, target)
+    if not kwargs:
+        raise ValueError(
+            'Must supply at least one keyword argument with patch.multiple')
+    options = {}
+    for key, value in (("spec", spec), ("spec_set", spec_set),
+                       ("autospec", autospec), ("new_callable", new_callable)):
+        if value is not None:
+            options[key] = value
+    return _MultiPatcher(target, kwargs, options)
+
+
+patch.multiple = patch_multiple
 
 
 def _clear_dict(in_dict):

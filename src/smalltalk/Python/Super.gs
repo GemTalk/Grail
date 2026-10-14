@@ -655,16 +655,25 @@ ___bindHolderValue___: v
 	``super().foo()'' from a classmethod then called the classmethod OBJECT
 	(``'classmethod' object is not callable''), and ``super().foo'' from a
 	property answered a bound method instead of the parent's value
-	(test_abc's abstract* tests)."
+	(test_abc's abstract* tests).
+
+	A Python-level descriptor -- any object whose class defines __get__,
+	functools.cached_property, Werkzeug's or Django's -- is asked the same way
+	(object >> ___isValueDescriptor___:, the test the instance read uses).
+	``super().p'' over a parent's cached_property answered a MethodBinding
+	around the descriptor instead of the parent's value."
 
 	| inst owner |
 	((v @env0:isKindOf: PyClassMethod)
 		or: [(v @env0:isKindOf: PyStaticMethod)
-		or: [v @env0:isKindOf: PropertyDescriptor]])
+		or: [(v @env0:isKindOf: PropertyDescriptor)
+		or: [obj ___isValueDescriptor___: v]]])
 			ifFalse: [^ MethodBinding instance: obj callable: v].
 	(obj @env0:isKindOf: Behavior)
 		ifTrue: [inst := None. owner := obj]
 		ifFalse: [inst := obj. owner := obj @env0:class].
+	(v ___respondsTo___: #'___get__:kw:')
+		ifTrue: [^ v ___get__: { inst. owner } kw: nil].
 	^ v __get__: inst _: owner
 %
 

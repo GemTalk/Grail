@@ -5128,17 +5128,6 @@ __iter__
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
-___unpackSequence___
-	"``R, W, X = Perm'': the unpack codegen indexes with __getitem__:,
-	which on an enum CLASS is name lookup (Perm[0] -> KeyError: 0).
-	Materialize the canonical members in definition order instead --
-	CPython unpacks the class via __iter__."
-
-	^ list @env0:withAll: (Enum ___grailMembers: self)
-%
-
-category: 'Grail-Enum Metaclass'
-classmethod: Enum
 __len__
 	^ (Enum ___grailMembers: self) @env0:size
 %
@@ -5543,16 +5532,6 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __iter__
 	^ (Enum ___grailMembers: self) __iter__
-%
-
-category: 'Grail-Enum Metaclass'
-classmethod: IntEnum
-___unpackSequence___
-	"Duplicate of Enum class>>___unpackSequence___ -- the IntEnum
-	metaclass chain is AbstractPyInt-rooted and never passes Enum's
-	class side (the established duplicate-onto-int-chain idiom)."
-
-	^ list @env0:withAll: (Enum ___grailMembers: self)
 %
 
 category: 'Grail-Enum Metaclass'
@@ -6055,7 +6034,7 @@ __and__: other
 	ov := self ___flagOperandOrNil___: other.
 	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '&'].
 	^ Enum ___grailLookupValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: ov)
+		value: ((self @env0:dynamicInstVarAt: #value) ___pyBitAnd___: ov)
 %
 
 category: 'Grail-Flag Member'
@@ -6067,7 +6046,7 @@ __xor__: other
 	ov := self ___flagOperandOrNil___: other.
 	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '^'].
 	^ Enum ___grailLookupValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: ov)
+		value: ((self @env0:dynamicInstVarAt: #value) ___pyBitXor___: ov)
 %
 
 category: 'Grail-Flag Member'
@@ -6601,12 +6580,6 @@ category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 __iter__
 	^ (Enum ___grailMembers: self) __iter__
-%
-
-category: 'Grail-Enum Metaclass'
-classmethod: StrEnum
-___unpackSequence___
-	^ list @env0:withAll: (Enum ___grailMembers: self)
 %
 
 category: 'Grail-Enum Metaclass'

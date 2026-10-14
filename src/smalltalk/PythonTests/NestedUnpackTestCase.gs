@@ -168,12 +168,13 @@ testMappingUnpacksToItsKeys
 category: 'Grail-Tests-NestedUnpack'
 method: NestedUnpackTestCase
 testMappingTooManyRaisesValueError
-	"With the mapping materialized, the count check applies to it as well —
-	it could not fire at all while the dict took the fast path."
+	"Unpacked through its iterator, the mapping gets the count check as well --
+	it could not fire at all while the dict took the fast path.  An EXACT dict
+	also says how many it had, as CPython's does."
 
 	self
 		assert: (self loadFixture @env1:mapping_too_many)
-		equals: 'ValueError: too many values to unpack (expected 2)'
+		equals: 'ValueError: too many values to unpack (expected 2, got 3)'
 %
 
 category: 'Grail-Tests-NestedUnpack'
@@ -267,19 +268,42 @@ testChainedIterableTarget
 category: 'Grail-Tests-NestedUnpack'
 method: NestedUnpackTestCase
 testChainedTooManyRaisesValueError
+	"An exact tuple says how many values it had, as CPython's does."
+
 	self
 		assert: (self loadFixture @env1:chained_too_many)
-		equals: 'ValueError: too many values to unpack (expected 2)'
+		equals: 'ValueError: too many values to unpack (expected 2, got 3)'
 %
 
 category: 'Grail-Tests-NestedUnpack'
 method: NestedUnpackTestCase
 testNonIterableStillRaisesTypeError
 	"``a, b, c = len'' — a BoundMethod carries a PEP-585 generic-alias
-	__getitem__ that is not the sequence protocol, so it must still
-	materialize via __iter__ and raise CPython's TypeError."
+	__getitem__ that is not the sequence protocol, so it is unpacked through
+	__iter__ and raises CPython's TypeError, in UNPACK's wording."
 
 	self
 		assert: (self loadFixture @env1:flat_not_iterable)
-		equals: 'TypeError: ''builtin_function_or_method'' object is not iterable'
+		equals: 'TypeError: cannot unpack non-iterable builtin_function_or_method object'
+%
+
+category: 'Grail-Tests-NestedUnpack'
+method: NestedUnpackTestCase
+testUnpackTakesValuesByIterationAsCPythonDoes
+	"A value that is not a sequence is unpacked through its iterator, one value
+	past the targets and no further: ``x, y, z = it'' leaves the rest of ``it''
+	unread, and a __getitem__-only object is checked for a fourth value.  An
+	exact tuple, list or dict says how many values it had, and a non-iterable
+	is ``cannot unpack non-iterable int object'' -- test_unpack's doctests.
+	tests/python/unpack_by_iteration.py holds the checks, each agreeing with
+	CPython 3.14, for-loop targets included."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'unpack_by_iteration' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/unpack_by_iteration.py')
+		name: 'unpack_by_iteration'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '16 checks, 0 disagreeing [], keys match: True'
 %

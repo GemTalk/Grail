@@ -244,3 +244,22 @@ with mock.patch.object(b, "lookup") as p:
 repr(kinds + (p.call_count, b.lookup()))'.
 	self assert: result asString equals: '(''MagicMock'', [], 0, 1, [''real''])'
 %
+
+category: 'Grail-Tests - MagicMock'
+method: MockTestCase
+testPatchMultiple
+	"mock.patch.multiple patches several attributes of one object together --
+	as a context manager (answering the mocks it created), a decorator, or
+	start/stop, with a string target imported as a dotted path.  It did not
+	exist (10 of test_uuid's errors).  tests/python/mock_patch_multiple.py
+	holds the checks, each agreeing with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'mock_patch_multiple' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/mock_patch_multiple.py')
+		name: 'mock_patch_multiple'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '7 checks, 0 disagreeing [], keys match: True'
+%

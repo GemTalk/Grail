@@ -847,6 +847,88 @@ ___numberError___: aMessage
 
 category: 'Grail-tokenizing'
 method: PythonTokenizer
+___escapeError___: aReason from: aBackslash to: aLast literal: lit
+	"CPython's error for an escape it cannot decode, located at the literal:
+
+	    (unicode error) 'unicodeescape' codec can't decode bytes in
+	    position 2-17: unknown Unicode character name
+
+	The positions are those of the escape in the literal's BODY, from the
+	backslash to its last character, because CPython decodes the body with
+	the unicode_escape codec and reports what that codec said (see
+	___bodyOffsetOf:literal: for how they count).  These used to be bare
+	``SyntaxError signal:''s with no location at all -- compile() had the
+	message and no line, eval() and an import not even the message (#1412) --
+	so iniconfig's one unknown \N{} name read as an anonymous SyntaxError and
+	took a file-by-file compile() to find."
+
+	^ self ___literalError___:
+		'(unicode error) ''unicodeescape'' codec can''t decode bytes in position '
+			, (self ___bodyOffsetOf: aBackslash literal: lit) printString , '-'
+			, ((self ___bodyOffsetOf: aLast + 1 literal: lit) - 1) printString
+			, ': ' , aReason
+		literal: lit
+%
+
+category: 'Grail-tokenizing'
+method: PythonTokenizer
+___bodyOffsetOf: anIndex literal: lit
+	"Where CPython says the source character at anIndex sits in the literal's
+	body.  An ASCII character counts one and any other counts TEN: CPython
+	rewrites each non-ASCII character as a \UXXXXXXXX escape before it runs
+	the unicode_escape codec, and reports offsets into that.  So an escape
+	after one accented letter is at 10, measured."
+
+	| n |
+	n := 0.
+	(lit at: 2) to: anIndex - 1 do: [:i |
+		n := n + (((source at: i) codePoint < 128) ifTrue: [1] ifFalse: [10])].
+	^ n
+%
+
+category: 'Grail-tokenizing'
+method: PythonTokenizer
+___literalError___: aMessage literal: lit
+	"Raise aMessage over the whole literal token, as CPython locates a string
+	literal it cannot decode: from the token's first character (its prefix
+	included) to just past its closing quote.
+
+	One divergence is left: an f-string, which CPython reports at its CLOSING
+	quote, with the escape's span counted from the literal segment after the
+	last replacement field.  Here an f-string is reported like any literal."
+
+	^ PythonParser ___signal___: SyntaxError message: aMessage
+		in: source from: (lit at: 1) to: (self ___literalEnd___: lit)
+%
+
+category: 'Grail-tokenizing'
+method: PythonTokenizer
+___literalEnd___: lit
+	"The source index just past the closing quote of the literal being
+	scanned, found by reading on from where the scan stopped; nil when the
+	literal never closes, which ___signal___ reads as a point."
+
+	| q isTriple n i c |
+	q := lit at: 3.
+	isTriple := lit at: 4.
+	n := source size.
+	i := position.
+	[i <= n] whileTrue: [
+		c := source at: i.
+		c == $\
+			ifTrue: [i := i + 2]
+			ifFalse: [
+				(c == q and: [isTriple not
+						or: [i + 2 <= n and: [(source at: i + 1) == q
+							and: [(source at: i + 2) == q]]]])
+					ifTrue: [^ i + (isTriple ifTrue: [3] ifFalse: [1])].
+				(isTriple not and: [c == Lf]) ifTrue: [^ nil].
+				i := i + 1]].
+	^ nil
+%
+
+category: 'Grail-tokenizing'
+method: PythonTokenizer
 ___unterminatedString___: isTriple from: aStart
 	"CPython's unterminated-string errors: at the start of the literal, its
 	prefix included, naming the line where the lexer found the end missing."
@@ -1003,7 +1085,7 @@ tokenizeOperator
 
 category: 'Grail-tokenizing'
 method: PythonTokenizer
-___hexEscapeDigits___: aCount for: aLetter decodedSoFar: aPosition inBytes: isBytes
+___hexEscapeDigits___: aCount for: aLetter backslash: aBackslash literal: lit inBytes: isBytes
 	"The aCount hex digits of a ``\\xNN'' / ``\\uNNNN'' / ``\\UNNNNNNNN''
 	escape, or a SyntaxError naming it.
 
@@ -1019,9 +1101,12 @@ ___hexEscapeDigits___: aCount for: aLetter decodedSoFar: aPosition inBytes: isBy
 	rather than the SyntaxError CPython raises.  Digits are now taken only
 	while they ARE hex, which is also what makes the reported span right.
 
-	The span is CPython's: from the backslash -- ``aPosition'' is how much
-	of the literal has decoded, and the backslash sits at exactly that
-	offset -- to the last character actually consumed.  So ``'\\x''' is
+	The span is CPython's: from the backslash to the last character actually
+	consumed, counted in the RAW body (___bodyOffsetOf:literal:).  It used to
+	count the DECODED body, which put an escape after another one off by one
+	-- a tab escape then a short hex escape said 1-3 where CPython says 2-4.
+	And it is located at the literal now, as the other literal errors are
+	(#1412).  So ``'\\x''' is
 	0-1 and ``'\\x0''' is 0-2, while ``'\\xzz''' is 0-1 again, the z's
 	never having been taken.
 
@@ -1036,14 +1121,13 @@ ___hexEscapeDigits___: aCount for: aLetter decodedSoFar: aPosition inBytes: isBy
 			whileTrue: [digits add: self advance].
 	digits size = aCount ifTrue: [^ digits].
 	isBytes ifTrue: [
-		^ SyntaxError signal: '(value error) invalid \' , aLetter asString
-			, ' escape at position ' , aPosition printString].
-	^ SyntaxError signal:
-		'(unicode error) ''unicodeescape'' codec can''t decode bytes in position '
-			, aPosition printString , '-'
-			, (aPosition + digits size + 1) printString
-			, ': truncated \' , aLetter asString
+		^ self ___literalError___: '(value error) invalid \' , aLetter asString
+			, ' escape at position '
+			, (self ___bodyOffsetOf: aBackslash literal: lit) printString
+			literal: lit].
+	^ self ___escapeError___: 'truncated \' , aLetter asString
 			, ((String new: aCount) atAllPut: $X; yourself) , ' escape'
+		from: aBackslash to: position - 1 literal: lit
 %
 
 category: 'Grail-tokenizing'
@@ -1083,7 +1167,7 @@ tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  fields nestQuote fieldStarts isTString frame |
+	  fields nestQuote fieldStarts isTString frame bodyStart lit |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -1124,6 +1208,10 @@ tokenizeString
 
 	"Read string contents"
 	str := Unicode7 new.
+	"Where the body starts: a bad escape reports its position within it.
+	``lit'' carries what every located error in the literal needs."
+	bodyStart := position.
+	lit := { startPos. bodyStart. quoteChar. triple }.
 	fields := OrderedCollection new.
 	fieldStarts := nil.
 	nestQuote := nil.
@@ -1308,19 +1396,19 @@ tokenizeString
 					"integerFrom:radix: instead of ('16r',hex) asInteger — a host
 					 extent may override asInteger with Squeak semantics."
 					 str addCodePoint: (PythonParser integerFrom:
-						(self ___hexEscapeDigits___: 2 for: $x decodedSoFar: str size
+						(self ___hexEscapeDigits___: 2 for: $x backslash: bsPos literal: lit
 							inBytes: isBytes)
 						radix: 16).
 				]
 				ifFalse: [(escaped == $u and: [isBytes not]) ifTrue: [
 					 str := self ___addCodePoint___: (PythonParser integerFrom:
-						(self ___hexEscapeDigits___: 4 for: $u decodedSoFar: str size
+						(self ___hexEscapeDigits___: 4 for: $u backslash: bsPos literal: lit
 							inBytes: isBytes)
 						radix: 16) to: str.
 				]
 				ifFalse: [(escaped == $U and: [isBytes not]) ifTrue: [
 					 str := self ___addCodePoint___: (PythonParser integerFrom:
-						(self ___hexEscapeDigits___: 8 for: $U decodedSoFar: str size
+						(self ___hexEscapeDigits___: 8 for: $U backslash: bsPos literal: lit
 							inBytes: isBytes)
 						radix: 16) to: str.
 				]
@@ -1333,17 +1421,25 @@ tokenizeString
 					literals invisibly."
 					| nameStr cp |
 					(self atEnd not and: [self peek == ${]) ifFalse: [
-						SyntaxError signal: '(unicode error) malformed \N character escape'].
+						^ self ___escapeError___: 'malformed \N character escape'
+							from: bsPos to: position - 1 literal: lit].
 					self advance.
 					nameStr := Unicode7 new .
-					[self atEnd not and: [self peek ~~ $}]] whileTrue: [
-						nameStr add: self advance].
-					self atEnd ifTrue: [
-						SyntaxError signal: '(unicode error) malformed \N character escape'].
+					"The name ends at ``}'' -- or, malformed, at the end of the
+					literal's body: CPython decodes the body alone, so an unclosed
+					brace reports the escape up to the closing quote, and a scan that
+					ran on past the quote reported the rest of the file."
+					[self atEnd not and: [self peek ~~ $}
+						and: [self peek ~~ quoteChar and: [triple or: [self peek ~~ Lf]]]]]
+							whileTrue: [nameStr add: self advance].
+					(self atEnd or: [self peek ~~ $}]) ifTrue: [
+						^ self ___escapeError___: 'malformed \N character escape'
+							from: bsPos to: position - 1 literal: lit].
 					self advance.
 					cp := self ___unicodeNameToCodePoint___: nameStr .
 					cp isNil ifTrue: [
-						SyntaxError signal: '(unicode error) unknown Unicode character name: ' , nameStr ].
+						^ self ___escapeError___: 'unknown Unicode character name'
+							from: bsPos to: position - 1 literal: lit].
 					str addCodePoint: cp .
 				]
 				ifFalse: [escaped == Lf ifTrue: ["line continuation in string - skip"]
@@ -1364,9 +1460,8 @@ tokenizeString
 				rejects b'<non-ascii>' at compile time (escapes like \xaa are fine
 				and never reach here, having been decoded above)."
 				(isBytes and: [char codePoint > 127]) ifTrue: [
-					SyntaxError signal:
-						'bytes can only contain ASCII literal characters at line '
-							, startLine printString].
+					^ self ___literalError___: 'bytes can only contain ASCII literal characters'
+						literal: lit].
 				"An f-string's ``{`` opens a replacement field, and from there the
 				branch above takes over.  A DOUBLED brace is the literal ``{``:
 				consume the first here so the second falls through, leaving ``{{``

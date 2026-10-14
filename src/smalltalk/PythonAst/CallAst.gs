@@ -314,7 +314,8 @@ ___emitSmalltalkOn___: aStream
 				and: [keywords isEmpty
 					and: [self ___superNameIsShadowed___ not
 						and: [CallAst classBeingCompiled notNil
-							and: [CallAst moduleClassBeingCompiled notNil]]]]]])
+							and: [CallAst moduleClassBeingCompiled notNil
+								or: [ModuleAst compilingDoitScope notNil]]]]]]])
 		ifTrue: [
 			"A METHOD-LOCAL class (defined in a function body) is not a
 			module attribute, so the module-instance-by-name lookup below
@@ -388,7 +389,15 @@ ___emitSmalltalkOn___: aStream
 			CallAst ___printClassCellReadOn___: aStream
 				selector: '___grailClassCellValueForSuper___'
 				around: [
-				(CallAst classDefIsModuleScope == false)
+				"A class an exec'd source defines is no module's attribute either:
+				a doit compiles with no module class at all, so this arm used to
+				be skipped and every zero-argument super() in exec'd code reached
+				the run-time ``super(): no arguments''.  pytest imports test
+				modules and conftests through exec, so each test class and
+				conftest class that called super() failed (pygments' 1,508
+				collection errors).  The cell knows the class without a module."
+				(CallAst classDefIsModuleScope == false
+						or: [CallAst moduleClassBeingCompiled isNil])
 					ifTrue: [
 						CallAst addCapturedClassName: CallAst classBeingCompiled.
 						aStream
@@ -1009,10 +1018,14 @@ fastPathSelectorForAttr: anAttrName arity: nargs
 	  0 args  →  #attr             (unary)
 	  1 arg   →  #attr:
 	  2 args  →  #attr:_:
-	  N args  →  #attr: followed by (N-1) `_:` keywords."
+	  N args  →  #attr: followed by (N-1) `_:` keywords.
+
+	NIL when that selector cannot exist -- see
+	___fixedAritySelectorFits___:arity:."
 
 	| sb |
 	nargs = 0 ifTrue: [^ anAttrName asSymbol].
+	(self ___fixedAritySelectorFits___: anAttrName arity: nargs) ifFalse: [^ nil].
 	sb := AppendStream on: String new.
 	sb nextPutAll: anAttrName asString; nextPut: $:.
 	2 to: nargs do: [:i | sb nextPutAll: '_:'].
@@ -1543,13 +1556,34 @@ fastPathSelectorForName: aName arity: nargs
 	  1 arg   →  #aName:
 	  2 args  →  #aName:_:
 	  3 args  →  #aName:_:_:
-	(0 args is not handled by the fast path — see bareCallFastPathSelector.)"
+	(0 args is not handled by the fast path — see bareCallFastPathSelector.)
+
+	NIL when that selector cannot exist -- see
+	___fixedAritySelectorFits___:arity:."
 
 	| sb |
+	(self ___fixedAritySelectorFits___: aName arity: nargs) ifFalse: [^ nil].
 	sb := AppendStream on: String new.
 	sb nextPutAll: aName asString; nextPut: $:.
 	2 to: nargs do: [:i | sb nextPutAll: '_:'].
 	^ sb contents asSymbol
+%
+
+category: 'Grail-other'
+classmethod: CallAst
+___fixedAritySelectorFits___: aName arity: nargs
+	"Whether the fixed-arity selector for ``aName'' with nargs arguments --
+	``aName:'' then a ``_:'' per further argument -- fits in a Symbol, which
+	GemStone caps at 1,024 characters.  It stops fitting near 512 arguments, and
+	building it anyway raised an uncatchable ImproperOperation (error 2402) at
+	compile time: ``f(0, 1, ..., 599)'' killed the session (#1540).
+
+	Past the limit no method can have that selector, so there is no fixed-arity
+	send to make: the builders answer nil and every fast path declines, which
+	leaves the call to the array form (``value: {args} value: kw''), the one
+	that already handles a call of any size."
+
+	^ aName asString size + 1 + (2 * (nargs - 1)) <= 1024
 %
 
 category: 'Grail-other'
@@ -1689,19 +1723,24 @@ printBareEvalExecOn: aStream
 	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___evalScopeFor___: '.
 	"MODULE SCOPE reaches here only from inside a comprehension (the caller's
 	guard), where there is no function snapshot to take -- the scope is the
-	globals plus the comprehension's own targets.  ___globalsViewReceiverExpr___
-	rather than ___moduleStoreReceiverExpr___ so a DOIT names its symbol-list
-	scope instead of a nil ``self''."
+	globals plus the comprehension's own targets.
+
+	Both arms name the globals through ___globalsViewReceiverExpr___ rather than
+	___moduleStoreReceiverExpr___, so a DOIT names its symbol-list scope.  The
+	function arm used the module-store receiver, which inside a CLASS METHOD is
+	``<ModuleClass> @env0:___instance___'' -- and an exec'd source has no module
+	class, so compiling a method that called eval() or exec() died with an
+	uncatchable ``UndefinedObject does not understand #name'': pytest's and
+	pyparsing's own test suites stopped there, mid-collection.  In a plain
+	function of exec'd code it was a nil ``self'', and the evaluated source
+	could not see the exec's globals."
+	aStream nextPutAll: self ___globalsViewReceiverExpr___.
+	aStream nextPutAll: ' locals: '.
 	fn isNil
 		ifTrue: [
-			aStream nextPutAll: self ___globalsViewReceiverExpr___.
-			aStream nextPutAll: ' locals: '.
 			self ___printCompTargetLocalsOn___: aStream
 				names: self ___enclosingComprehensionTargetNames___]
-		ifFalse: [
-			aStream nextPutAll: self ___moduleStoreReceiverExpr___.
-			aStream nextPutAll: ' locals: '.
-			self printFunctionLocalsSnapshotOn: aStream].
+		ifFalse: [self printFunctionLocalsSnapshotOn: aStream].
 	aStream nextPutAll: ')'.
 	aStream nextPutAll: '. } kw: nil)'
 %
@@ -2277,37 +2316,39 @@ printArgumentsArrayOn: aStream
 	(grouping consecutive non-starred args into sub-array literals
 	to keep the output compact).  Without this the StarredAst stub
 	emitted a runtime TypeError that fired the moment Python source
-	used ``f(*args)`` — pervasive in the jinja2 visitor pattern."
+	used ``f(*args)`` — pervasive in the jinja2 visitor pattern.
 
-	| hasStar |
+	Both go through ___printElementsArrayOf___:on:, which chunks a brace
+	past the compiler's limits as a list display's does: a call of 2,500
+	arguments was ``CompileError 1001, expression nesting too deep'' (#1540).
+	For the same reason a RUN of plain arguments between splats is one array,
+	not one ``,'' link per argument."
+
+	| hasStar run |
 	hasStar := arguments anySatisfy: [:each | each isKindOf: StarredAst].
-	hasStar ifFalse: [
-		aStream nextPutAll: '{ '.
-		arguments do: [:each |
-			each printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $.; space.
-		].
-		aStream nextPutAll: '}'.
-		^ self
-	].
-	"Splat path: emit ``({a. b.} @env0:, (splat @env0:asArray) @env0:, {c.})``.
+	hasStar ifFalse: [^ self ___printElementsArrayOf___: arguments on: aStream].
+	"Splat path: emit ``({} @env0:, {a. b.} @env0:, (splat @env0:___pyStarToArray___) ...)``.
 	Inject an empty seed so the result is always parenthesized.
 	``@env0:,`` dispatches the env-0 Array concatenation; bare ``,``
 	would resolve to env-1 where Array has no comma method."
 	aStream nextPutAll: '({} '.
+	run := OrderedCollection new.
 	arguments do: [:each |
-		aStream nextPutAll: '@env0:, '.
 		(each isKindOf: StarredAst)
 			ifTrue: [
-				aStream nextPut: $(.
+				run isEmpty ifFalse: [
+					aStream nextPutAll: '@env0:, '.
+					self ___printElementsArrayOf___: run asArray on: aStream.
+					aStream space.
+					run := OrderedCollection new].
+				aStream nextPutAll: '@env0:, ('.
 				each value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ' @env0:___pyStarToArray___) '.
-			] ifFalse: [
-				aStream nextPutAll: '{ '.
-				each printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: '. } '.
-			].
-	].
+				aStream nextPutAll: ' @env0:___pyStarToArray___) ']
+			ifFalse: [run add: each]].
+	run isEmpty ifFalse: [
+		aStream nextPutAll: '@env0:, '.
+		self ___printElementsArrayOf___: run asArray on: aStream.
+		aStream space].
 	aStream nextPut: $).
 %
 
@@ -3239,8 +3280,14 @@ ___printShadowableSuperOn___: aStream arm: aBlock
 	Shared by all four emits -- the proxy and the three precondition errors --
 	because a replacement ``super'' is entitled to take the call even where the
 	builtin would have refused it.  Raising past the probe would make patching
-	work only for the calls that were going to succeed anyway."
+	work only for the calls that were going to succeed anyway.
 
+	Not inside a doit, which has no module to probe: exec'd source compiles
+	with no module class, so the probe's receiver was nil and the compile died
+	with an uncatchable MessageNotUnderstood.  The compile-time half --
+	___superNameIsShadowed___, a ``super'' the source binds -- still applies."
+
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ aBlock value].
 	aStream nextPutAll: '([:___sup___ | ___sup___ == nil ifTrue: ['.
 	aBlock value.
 	aStream
@@ -3822,8 +3869,8 @@ classAttrNames
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classPropertyNames
-	"Names the class body declares as a @property (or @cached_property, or one
-	of its setter/getter/deleter halves).  classSelfSendSelector consults it so
+	"Names the class body declares as a @property (or one of its
+	setter/getter/deleter halves).  classSelfSendSelector consults it so
 	``self.kind(n)'' takes the attribute path instead of fusing into the
 	property's setter selector."
 
@@ -4022,9 +4069,12 @@ ___printClassObjectOn___: aStream cellSelector: aCellSelector
 	Split out because ``del __class__'' needs the class in order to empty its
 	cell, and going through the wrapper would READ the cell first: on a second
 	delete that read raises, turning a repeat of a legal statement into an
-	error.  The delete targets the container, not the contents."
+	error.  The delete targets the container, not the contents.
 
-	(self classDefIsModuleScope == false)
+	A class an exec'd source defines takes the cell route too: a doit has no
+	module class to read it from."
+
+	(self classDefIsModuleScope == false or: [self moduleClassBeingCompiled isNil])
 		ifTrue: [
 			self addCapturedClassName: self classBeingCompiled.
 			aStream

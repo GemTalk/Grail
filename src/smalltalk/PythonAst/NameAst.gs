@@ -701,7 +701,7 @@ ___emitSmalltalkOn___: aStream
 			aStream
 				nextPutAll: '(';
 				nextPutAll: CallAst classBodyDecoratorScope key;
-				nextPutAll: ' @env1:___pyAttrLoad___: #''';
+				nextPutAll: ' @env1:___classBodyNamespaceValue___: #''';
 				nextPutAll: id;
 				nextPutAll: ''')'.
 			^ self
@@ -852,10 +852,14 @@ ___emitSmalltalkOn___: aStream
 						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ' @env1:___grailClassDictCell___)'].
 			^ self].
+	"Inside a doit too: an exec'd class has no module class, and its methods
+	reach the class through the cell (CallAst >> ___printClassObjectOn___:
+	cellSelector:)."
 	((ctx isKindOf: LoadAst)
 		and: [id asSymbol == #'__class__'
 		and: [CallAst classBeingCompiled notNil
-		and: [CallAst moduleClassBeingCompiled notNil
+		and: [(CallAst moduleClassBeingCompiled notNil
+			or: [ModuleAst compilingDoitScope notNil])
 		and: [(CallAst inClassBodyValueEmit ~~ true
 			or: [CallAst classBodyValueDefNode notNil])
 		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
@@ -2867,12 +2871,16 @@ ___printSiblingFunctionOn___: aStream
 	``f = __repr__'' and ``recursive_repr()(__repr__)'' in one class body held
 	two different objects where CPython holds one (test_reprlib's
 	test__wrapped__), and it printed as ``<bound method
-	UndefinedObject.__repr__ of None>''."
+	UndefinedObject.__repr__ of None>''.
+
+	Through object class >> ___classBodySiblingValue___:, which answers the
+	same function for a plain def, and what CPython's namespace holds for a
+	decorated one or a @property (#1580)."
 
 	aStream
-		nextPutAll: '(UnboundMethod @env1:definingClass: ';
+		nextPutAll: '(';
 		nextPutAll: CallAst ___classBeingCompiledVar___;
-		nextPutAll: ' selector: #''';
+		nextPutAll: ' @env1:___classBodySiblingValue___: #''';
 		nextPutAll: self ___mangledId___;
 		nextPutAll: ''')'
 %

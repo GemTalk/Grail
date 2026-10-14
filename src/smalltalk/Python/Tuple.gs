@@ -429,13 +429,23 @@ __hash__
 	rather than from the mixing.
 
 	Order-sensitive, so (1, 2) and (2, 1) do not collide, and the length is
-	folded in so (1, 2) and (1, 2, 0) do not either."
+	folded in so (1, 2) and (1, 2, 0) do not either.
+
+	A CLASS member is hashed as hash() hashes it -- by type.__hash__, which
+	its metaclass may replace -- never by sending it __hash__, which reads the
+	class's own attribute: the one describing its INSTANCES.  h11's event
+	classes set ``__hash__ = None'' to make events unhashable, so its state
+	tables, keyed by tuples like ``(Request, CLIENT)'', got None as a member's
+	hash and died on ``nil bitXor:'', an uncatchable MessageNotUnderstood."
 
 	| acc |
 	acc := 3430008.
 	1 @env0:to: self @env0:size do: [:i |
-		| lane |
-		lane := (self @env0:at: i) __hash__.
+		| lane e |
+		e := self @env0:at: i.
+		lane := (e @env0:isKindOf: Behavior)
+			ifTrue: [(builtins instance) hash: e]
+			ifFalse: [e __hash__].
 		acc := ((acc @env0:* 1000003) @env0:bitXor: lane) @env0:bitAnd: 16r3FFFFFFF].
 	^ (acc @env0:bitXor: self @env0:size) @env0:bitAnd: 16r3FFFFFFF
 %

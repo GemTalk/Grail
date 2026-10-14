@@ -718,6 +718,11 @@ __eq__: other
 	this, equality is non-transitive (1 == 1.0, 1 == True, but 1.0 != True),
 	which corrupts a set/dict bucket where 1 / 1.0 / True collapse together."
 	(other isKindOf: Boolean) ifTrue: [^ other @env1:__eq__: self].
+	"A wheel's own object -- numpy.float64, a C type's instance -- compares by
+	its C slot: the reflected == that CPython makes once this side answers
+	NotImplemented.  It answered false outright, so ``3 == box'' was False
+	where ``box == 3'' was True."
+	(other isKindOf: ShimForeignObject) ifTrue: [^ other __eq__: self].
 	(other isKindOf: PythonInstance) ifTrue: [
 		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [

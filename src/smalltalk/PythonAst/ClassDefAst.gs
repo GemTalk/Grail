@@ -131,8 +131,9 @@ printSmalltalkRuntimeOn: aStream
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedNeedsClassDict savedCellMethodNames
 	  savedCellRebindable
 	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody
-	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder |
+	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder earlyDecorated |
 	methodDefs := self instanceMethodDefs.
+	earlyDecorated := IdentitySet new.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
 	selfParam := self selfParameterName.
@@ -1594,7 +1595,7 @@ printSmalltalkRuntimeOn: aStream
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
-	"The names this class declares as @property (or @cached_property), as a
+	"The names this class declares as @property, as a
 	class-side method so the record is committed with the class -- a session
 	stamp would not survive deployment.  A property compiles to an accessor
 	pair that looks, from outside, exactly like a method with a default
@@ -1758,6 +1759,9 @@ printSmalltalkRuntimeOn: aStream
 		= g'' in a class body must leave y == 2 (test_listcomps
 		test_explicit_global), and with a trailing pass it answered 1."
 		pendingStmts := self ___classBodyOrderedRuntimeStatements___.
+		"Defs whose decorators run AT THE DEF, below -- see
+		___defsDecoratedAtTheirPosition___."
+		earlyDecorated := self ___defsDecoratedAtTheirPosition___.
 		"PARAMETER DEFAULTS, AT THE DEF -- where CPython evaluates them, once.  A
 		class body that CALLS its own helper needs them stored by then: pygments'
 		``def _make_begin_state(compound, _core_token=_core_token, ...)'' followed
@@ -1860,7 +1864,17 @@ printSmalltalkRuntimeOn: aStream
 										aStream nextPutAll: self ___stVarName___;
 											nextPutAll: ' @env1:___grailNsBind___: ''';
 											nextPutAll: stmt name asString;
-											nextPutAll: '''.']
+											nextPutAll: '''.'.
+										"A def a later statement reads gets its decorators
+										here, as CPython applies them at the def (#1580)."
+										(earlyDecorated includes: stmt) ifTrue: [
+											aStream lf.
+											stmt
+												printMethodDecoratorsOn: aStream
+												decorators: stmt applicableMethodDecorators
+												className: self ___stVarName___
+												siblingNames: (self ___decoratorScopeFor___: stmt
+													base: (self ___classBodyDecoratorScopeWith___: classAttrs))]]
 									ifFalse: [(stmt isKindOf: IfAst)
 										ifTrue: [self emitClassBodyIf: stmt on: aStream]
 										ifFalse: [stmt printSmalltalkOn: aStream]]]]
@@ -2266,7 +2280,7 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: ' @env1:___classHolderAttrStore___: #''___grailDoitGlobals___'' put: (((Python @env0:at: #builtins) @env0:___instance___) ___doitGlobalsView___: ___pyGlobals___).';
 			lf].
 
-	"For each @property (and @cached_property) method, compile a 1-arg
+	"For each @property method, compile a 1-arg
 	setter that signals AttributeError.  Pairing the getter with a
 	setter makes it look like an instVar to ``___pyAttrLoad___:`` so
 	attribute reads INVOKE the method (returning its value) instead of
@@ -2274,16 +2288,14 @@ printSmalltalkRuntimeOn: aStream
 	explicit @setter is read-only; signalling AttributeError on
 	assignment matches that.
 
-	``cached_property'' is realized via the same getter+setter pairing
-	(detected as the bare-name ``@cached_property'' from ``from
-	functools import cached_property'' / ``from werkzeug.utils import
-	cached_property'').  Functional parity for reads; it does NOT yet
-	cache (the getter recomputes on each access) — fine for the
-	idempotent reads (``.args'' / ``.headers'' / ``.cookies'') that
-	unblock the Werkzeug request path, but stream-consuming
-	cached_properties (``.form'' / ``.data'') would need real caching.
-	The attribute-access form ``@functools.cached_property'' (an
-	AttributeAst decorator) is not detected.
+	A bare ``@cached_property'' gets no pair.  It used to, recognised by its
+	NAME, but the pair never cached -- every read ran the method, so Flask
+	built a new jinja_env and recompiled every template per request (#1444)
+	-- and the name says nothing about which cached_property it is
+	(functools', Werkzeug's, Django's, a user's).  It is applied at run time
+	like any other decorator, as ``@functools.cached_property'' always was;
+	the descriptor caches in the instance's own slot, which
+	___pyAttrLoad___ probes before the class.
 
 	Skip the stub when ``@<name>.setter'' supplied an explicit setter
 	method def — the explicit setter compiles to the same ``name:''
@@ -2309,53 +2321,34 @@ printSmalltalkRuntimeOn: aStream
 	decoratedProps := self ___decoratedPropertyNames___.
 	methodDefs do: [:def |
 		((def decoratorList notNil
-			and: [(def decoratorList includes: #'property')
-				or: [def decoratorList includes: #'cached_property']])
+			and: [def decoratorList includes: #'property'])
 			and: [(settersByName includes: def name asSymbol) not
 			and: [(decoratedProps includes: def name asSymbol) not]]) ifTrue: [
-			| propSetterSrc lf2 isCached |
+			| propSetterSrc lf2 |
 			lf2 := Character lf asString.
-			isCached := def decoratorList includes: #'cached_property'.
-			isCached
-				ifTrue: [
-					"@cached_property is a NON-DATA descriptor in CPython:
-					assigning ``obj.attr = v'' writes the instance __dict__,
-					which then shadows the descriptor on every later read.
-					Grail's ___pyAttrLoad___ probes dynamic-instVar storage
-					BEFORE any getter (Object >> ___pyAttrLoad___:), so a
-					storing setter reproduces that set-then-read behaviour —
-					and doubles as the cache slot.  flask's
-					``create_url_adapter'' relies on this: it does
-					``request.host = get_host(...)'' on a @cached_property."
-					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
-						'	self @env0:dynamicInstVarAt: #''' , def name , ''' put: ___1.' , lf2 ,
-						'	^ ___1' ]
-				ifFalse: [
-					"Plain @property with no explicit @x.setter is read-only —
-					match CPython by signalling AttributeError on assignment.
-					The message is built at RAISE time, not baked in here: it
-					names the owner (``property 'x' of 'C' object has no
-					setter''), which the class body does not yet know.  It used
-					to be an env-0 ``AttributeError signal:'' with a partial
-					text, which reached Python as an AttributeError whose str()
-					was EMPTY -- so test_property's message assertions could
-					never pass.  ___raiseReadOnlyProperty___: is the same text
-					AbstractPropertyDescriptor raises for the call form."
-					"GRAIL_DIRECT_CALLS: ``obj.prop(x)'' compiles to the same ``prop:''
-					send this synthesized setter answers to; on entry the setter asks
-					whether the send is a Python CALL (flag on, no Grail store in
-					progress -- object class>>___grailClassAttrSetterDiverts___) and
-					then calls the property's value with the argument, as CPython does.
-					Same guard on the cached_property setter above."
-					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
-						'	^ self ___raiseReadOnlyProperty___: ''',
-						def name , '''' ].
+			"Plain @property with no explicit @x.setter is read-only —
+			match CPython by signalling AttributeError on assignment.
+			The message is built at RAISE time, not baked in here: it
+			names the owner (``property 'x' of 'C' object has no
+			setter''), which the class body does not yet know.  It used
+			to be an env-0 ``AttributeError signal:'' with a partial
+			text, which reached Python as an AttributeError whose str()
+			was EMPTY -- so test_property's message assertions could
+			never pass.  ___raiseReadOnlyProperty___: is the same text
+			AbstractPropertyDescriptor raises for the call form."
+			"GRAIL_DIRECT_CALLS: ``obj.prop(x)'' compiles to the same ``prop:''
+			send this synthesized setter answers to; on entry the setter asks
+			whether the send is a Python CALL (flag on, no Grail store in
+			progress -- object class>>___grailClassAttrSetterDiverts___) and
+			then calls the property's value with the argument, as CPython does."
+			propSetterSrc := def name , ': ___1' , lf2 ,
+				'	(___object___ @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
+				'	^ self ___raiseReadOnlyProperty___: ''',
+				def name , ''''.
 			self
 				emitCompileMethodOn: self ___stVarName___
 				source: propSetterSrc
-				category: (isCached ifTrue: ['Grail-CachedProperty-Setter'] ifFalse: ['Grail-Property-ReadOnly'])
+				category: 'Grail-Property-ReadOnly'
 				env: 1
 				classSide: false
 				onStream: aStream.
@@ -2586,7 +2579,8 @@ printSmalltalkRuntimeOn: aStream
 			and: [def ___wrapsPropertyAccessor___ not].
 		(decos isEmpty not
 			and: [(decoratedProps includes: def name asSymbol) not
-			and: [marking or: [(self ___isRebindLaterInBody___: def) not]]]) ifTrue: [
+			and: [(earlyDecorated includes: def) not
+			and: [marking or: [(self ___isRebindLaterInBody___: def) not]]]]) ifTrue: [
 			marking
 				ifTrue: [
 					def
@@ -3673,9 +3667,11 @@ emitCompileMethodOn: classVarName source: sourceString category: categoryString 
 	classdef survived only through the raising stub Grail installs for a
 	method it cannot compile.  The handle ensureModuleScope: parks in the
 	scope is what names it here; outside a doit there is no scope to pass
-	and the plain two-keyword form stands."
+	and the plain two-keyword form stands.  ``globals:'' and not ``scope:''
+	so the class notes it: a method copied later (an instance attribute over
+	it, ``del'', the MI merge) is recompiled with it too."
 	ModuleAst compilingDoitScope ifNotNil: [
-		aStream nextPutAll: ' scope: ___pyGlobals___'].
+		aStream nextPutAll: ' globals: ___pyGlobals___'].
 	aStream nextPutAll: '.'; lf.
 %
 
@@ -3831,6 +3827,10 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					to the Python metaclass that built it.  See
 					object class >> ___grailInitBuiltClass___:pos:kw:."
 					src nextPutAll: '(instance @env0:isBehavior) ifTrue: [^ self @env1:___grailInitBuiltClass___: instance pos: ___pos___ kw: ___kw___].'; nextPutAll: lf.
+					"__new__ answered something that is not an instance of this
+					class: CPython hands it back without __init__ (#1425).  See
+					object >> ___grailNewResultSkipsInit___:."
+					src nextPutAll: '(self @env1:___grailNewResultSkipsInit___: instance) ifTrue: [^ instance].'; nextPutAll: lf.
 					"A subclass of a built-in COLLECTION (list, ...) with no
 					__init__ of its own inherits population from the built-in
 					__init__.  Detected at RUNTIME (isKindOf) so DYNAMIC bases --
@@ -4601,7 +4601,7 @@ ___inferredSlotNames___
 	...'' and ``self.__class__ = ...'' have their own paths; ``_value_'' /
 	``_name_'' are the Enum protocol's, read by the enum runtime straight
 	from dynamic-instVar storage); a name that is a
-	@property / @cached_property / @x.setter / @x.deleter of THIS body (a data
+	@property / @x.setter / @x.deleter of THIS body (a data
 	descriptor must keep winning over the instance store); and every name
 	when the body defines __setattr__, __getattribute__ or __delattr__, whose
 	``self.x = v'' must keep reaching the hook.  A SUBCLASS defining any of
@@ -4722,7 +4722,7 @@ ___collectSelfAttrWrites___: aValue self: selfName into: names
 category: 'Grail-Class Compilation'
 method: ClassDefAst
 ___propertyNamesForSlots___
-	"The names this class body defines as @property / @cached_property
+	"The names this class body defines as @property
 	getters, or as ``@x.setter'' / ``@x.deleter'' methods, as an
 	OrderedCollection of Symbols (mangled as the methods are).  Excluded
 	from slot inference, and handed to the runtime accessor installer so a
@@ -4733,9 +4733,9 @@ ___propertyNamesForSlots___
 	self instanceMethodDefs do: [:def |
 		def decoratorList isNil ifFalse: [
 			def decoratorList do: [:deco |
-				(((deco isKindOf: Symbol) and: [#('property' 'cached_property') includes: deco asString])
+				(((deco isKindOf: Symbol) and: [deco asString = 'property'])
 					or: [(deco isKindOf: NameAst)
-						and: [#('property' 'cached_property') includes: deco id asString]])
+						and: [deco id asString = 'property']])
 					ifTrue: [names add: def ___mangledName___ asSymbol].
 				((deco isKindOf: AttributeAst)
 					and: [(#('setter' 'deleter' 'getter') includes: deco attr asString)
@@ -4885,6 +4885,66 @@ ___classBodyOrderedRuntimeStatements___
 			or: [(self ___isClassBodyNamespaceBinding___: stmt)
 			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]]])
 				ifTrue: [result add: pos -> stmt]].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyDecoratorScopeWith___: classAttrs
+	"The names a class-body method decorator may read off the class: every def
+	and every attribute the body binds.  The decorator pass in
+	printSmalltalkRuntimeOn: builds the same set (decoratorScope) and says why."
+
+	| scope |
+	scope := IdentitySet new.
+	self ___allFunctionDefs___ do: [:d | scope add: d name asSymbol].
+	classAttrs do: [:pair | scope add: pair key asSymbol].
+	^ scope
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___decoratorStoresOver___: aDef decoratedProps: decoratedProps
+	"Will aDef's method decorators store their result over the compiled
+	method?  The condition the method-decorator pass in printSmalltalkRuntimeOn:
+	applies, for the non-marking branch: it has applicable decorators, it is
+	not one accessor of a decorated property, it does not merely mark a
+	property accessor, and no later statement rebinds its name."
+
+	| decos kind |
+	decos := aDef applicableMethodDecorators.
+	decos isEmpty ifTrue: [^ false].
+	(decoratedProps includes: aDef name asSymbol) ifTrue: [^ false].
+	kind := aDef ___propertyAccessorKind___.
+	((kind == #getter or: [kind == #setter or: [kind == #deleter]])
+		and: [aDef ___wrapsPropertyAccessor___ not]) ifTrue: [^ false].
+	^ (self ___isRebindLaterInBody___: aDef) not
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___defsDecoratedAtTheirPosition___
+	"The top-level defs whose method decorators are applied AT THE DEF, in the
+	ordered flush of the class body -- CPython's order -- rather than in the
+	decorator pass after it: every def whose decorators store their result over
+	the compiled method.
+
+	The pass after the body made a later statement read the UNDECORATED def:
+	``getT = T.fget'' after ``@property def T'' (numpy's matrixlib), ``btag =
+	b.tag'' after ``@tagging def b'', and a decorator's side effects ran after
+	every statement below it (#1580).  What stays in that pass: a decorator that
+	only MARKS a property accessor, a decorated property's accessors (one
+	property object, built once all of them exist), and a def a later
+	statement rebinds (___isRebindLaterInBody___:)."
+
+	| result decoratedProps |
+	result := IdentitySet new.
+	body isNil ifTrue: [^ result].
+	decoratedProps := self ___decoratedPropertyNames___.
+	body body do: [:stmt |
+		((stmt isKindOf: FunctionDefAst)
+			and: [self ___decoratorStoresOver___: stmt decoratedProps: decoratedProps])
+				ifTrue: [result add: stmt]].
 	^ result
 %
 
@@ -5940,25 +6000,18 @@ emitMethodDocTableOn: aStream className: aClassName
 	No-op when no method has a docstring, so only classes that need it pay
 	for the extra class-side method."
 
-	| documented src |
+	| documented entries |
 	documented := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def ___docString___ notNil]].
 	documented isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodDocTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	documented do: [:def |
+	entries := OrderedCollection new.
+	documented do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitStringLiteral: def ___docString___ on: src.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Docstrings'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodDocTable___' entries: entries category: 'Grail-Docstrings' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -5975,26 +6028,19 @@ emitMethodTypeParamsTableOn: aStream className: aClassName
 
 	No-op when no method is generic."
 
-	| generic src |
+	| generic entries |
 	generic := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not
 			and: [def type_params notNil and: [def type_params notEmpty]]].
 	generic isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodTypeParamsTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	generic do: [:def |
+	entries := OrderedCollection new.
+	generic do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: #('.
 		def type_params do: [:n | src nextPut: $'; nextPutAll: n asString; nextPutAll: ''' '].
-		src nextPutAll: ');'].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Python Metadata'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPutAll: ');'.
+		entries add: src contents].
+	self ___emitTable___: '___methodTypeParamsTable___' entries: entries category: 'Grail-Python Metadata' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6020,24 +6066,17 @@ emitMethodCodeTableOn: aStream className: aClassName
 	no-defs case): unlike a docstring, EVERY def has a line number, so there is
 	no ``method without one'' to skip."
 
-	| defs src |
+	| defs entries |
 	defs := self ___allFunctionDefs___ reject: [:def | def isOverloadStub].
 	defs isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodCodeTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	defs do: [:def |
+	entries := OrderedCollection new.
+	defs do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
 		def emitPyCodeExprOn: src qualname: aClassName , '.' , def name asString.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Tracebacks'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodCodeTable___' entries: entries category: 'Grail-Tracebacks' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6056,14 +6095,13 @@ emitMethodSignatureTableOn: aStream className: aClassName
 	No-op when no method declares a parameter, so only classes that need it
 	pay for the extra class-side method."
 
-	| withParams src |
+	| withParams entries |
 	withParams := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def hasSignatureSpec]].
 	withParams isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodSignatureTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	withParams do: [:def |
+	entries := OrderedCollection new.
+	withParams do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		"Skip ``self''/``cls'' for an instance method or classmethod: what this
 		table feeds is a BOUND access (``instance.method'', or a classmethod
@@ -6077,15 +6115,9 @@ emitMethodSignatureTableOn: aStream className: aClassName
 		``__wrapped__'' and the raw def's own spec, which keeps ``self''."
 		def emitSignatureSpecOn: src
 			skipReceiver: (def isKindOf: StaticFunctionDefAst) not.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Signatures'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodSignatureTable___' entries: entries category: 'Grail-Signatures' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6107,17 +6139,16 @@ emitMethodDefaultKeysTableOn: aStream className: aClassName
 	Exactly the defs that store does (no static methods, no overload stubs),
 	keyed by the same ___classDefaultKeyFor___:className: spelling."
 
-	| defs src |
+	| defs entries |
 	defs := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not
 			and: [(def isKindOf: StaticFunctionDefAst) not
 			and: [def ___defaultedPositionalParams___ notEmpty
 				or: [def ___defaultedKeywordOnlyParams___ notEmpty]]]].
 	defs isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodDefaultKeysTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	defs do: [:def |
+	entries := OrderedCollection new.
+	defs do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString;
 			nextPutAll: ''' put: #( #('.
 		def ___defaultedPositionalParams___ do: [:pair |
@@ -6128,15 +6159,9 @@ emitMethodDefaultKeysTableOn: aStream className: aClassName
 			src nextPutAll: ' '''; nextPutAll: (pair at: 1) asString; nextPutAll: ''' #''';
 				nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
 				nextPut: $'].
-		src nextPutAll: ' ) );'].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Signatures'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPutAll: ' ) );'.
+		entries add: src contents].
+	self ___emitTable___: '___methodDefaultKeysTable___' entries: entries category: 'Grail-Signatures' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6244,28 +6269,21 @@ emitMethodReceiverTableOn: aStream className: aClassName
 	A @staticmethod has no receiver to record, so it is skipped and its unbound
 	read stays exactly as it is."
 
-	| withReceiver src |
+	| withReceiver entries |
 	withReceiver := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not
 			and: [def hasSignatureSpec
 			and: [(def isKindOf: StaticFunctionDefAst) not
 			and: [def ___receiverParamName___ notNil]]]].
 	withReceiver isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
-	src nextPutAll: '___methodReceiverTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	withReceiver do: [:def |
+	entries := OrderedCollection new.
+	withReceiver do: [:def | | src |
+		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString;
 			nextPutAll: ''' put: '''; nextPutAll: def ___receiverParamName___;
-			nextPutAll: ''''; nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Signatures'
-		env: 1
-		classSide: true
-		onStream: aStream
+			nextPutAll: ''''; nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodReceiverTable___' entries: entries category: 'Grail-Signatures' onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -6355,25 +6373,18 @@ emitMethodAnnotationsTableOn: aStream className: aClassName
 	registration.  Overload stubs stay out, as they do for instanceMethodDefs
 	-- the stub is not the implementation."
 
-	| annotated src |
+	| annotated entries |
 	annotated := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def hasAnnotations]].
 	annotated isEmpty ifTrue: [^ self].
-	src := AppendStream on: String new.
-	src nextPutAll: '___methodAnnotationsTable___'; lf.
-	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
-	annotated do: [:def |
+	entries := OrderedCollection new.
+	annotated do: [:def | | src |
+		src := AppendStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitAnnotateBlockOn: src.
-		src nextPut: $;].
-	src nextPutAll: ' @env0:yourself)'.
-	self
-		emitCompileMethodOn: self ___stVarName___
-		source: src contents
-		category: 'Grail-Annotations'
-		env: 1
-		classSide: true
-		onStream: aStream
+		src nextPut: $;.
+		entries add: src contents].
+	self ___emitTable___: '___methodAnnotationsTable___' entries: entries category: 'Grail-Annotations' onStream: aStream
 %
 
 category: 'Grail-Class Compilation'
@@ -6953,10 +6964,12 @@ emitIRTextSourcesOn: classVarName pairs: pairs onStream: aStream
 category: 'Grail-IR Codegen'
 method: ClassDefAst
 ___irTextSourcesLiteralBudget___
-	"Bytes one twin accessor's literal may occupy in the class-build text.  A
-	fifth of GemStone's 5M-byte limit: the estimate below counts the outer
-	quote doubling and the storage width, but not every byte a literal costs,
-	and the margin is cheap -- a chunk is one more method on the metaclass.
+	"Bytes one table accessor's literal may occupy in the class-build text --
+	the IR text twin's and each per-method table's (___emitTable___:...).  A
+	fifth of GemStone's 5M-byte limit: ___literalChunks___:spelledBy: counts
+	the outer quote doubling and the widest storage, but not every byte a
+	literal costs, and the margin is cheap -- a chunk is one more method on
+	the metaclass.
 
 	A session may lower it (``___grailIRTextSourcesBudget___'' in SessionTemps)
 	so a test can split a SMALL class and check the split loses nothing --
@@ -6970,49 +6983,115 @@ category: 'Grail-IR Codegen'
 method: ClassDefAst
 ___irTextSourceChunks___: pairs
 	"pairs split, in order, into runs whose accessor literal stays inside
-	___irTextSourcesLiteralBudget___.  Each entry's cost is its accessor line
-	after the OUTER quoting ___compileMethod: applies (every quote doubled
-	again), times the widest storage the run needs -- 1, 2 or 4 bytes per
-	character, fixed by the run's highest code point.  An entry too large for
-	any budget still gets a run of its own: it is one method's source, which
-	the text path compiles too."
+	___irTextSourcesLiteralBudget___ (___literalChunks___:spelledBy:), each
+	entry costed as its accessor line."
 
-	| chunks current currentChars currentWidth budget |
-	budget := self ___irTextSourcesLiteralBudget___.
-	chunks := OrderedCollection new.
-	current := OrderedCollection new.
-	currentChars := 0.
-	currentWidth := 1.
-	pairs do: [:assoc |
-		| line chars width |
-		line := self ___irTextSourceLineFor___: assoc.
-		chars := line size + (line occurrencesOf: $').
-		width := self ___storageWidthOf___: line.
-		(current notEmpty and: [
-			(currentChars + chars) * (currentWidth max: width) > budget])
-				ifTrue: [
-					chunks add: current.
-					current := OrderedCollection new.
-					currentChars := 0.
-					currentWidth := 1].
-		current add: assoc.
-		currentChars := currentChars + chars.
-		currentWidth := currentWidth max: width].
-	current notEmpty ifTrue: [chunks add: current].
-	^ chunks
+	^ self ___literalChunks___: pairs
+		spelledBy: [:assoc | self ___irTextSourceLineFor___: assoc]
 %
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
-___storageWidthOf___: aString
-	"Bytes per character GemStone stores aString in: 1, 2, or 4."
+___emitTable___: aSelector entries: entries category: aCategory onStream: aStream
+	"Compile the class-side accessor aSelector answering a KeyValueDictionary
+	filled by entries -- each `` @env0:at: <key> put: <value>;'' -- under
+	GemStone's 5M-byte limit on a string literal.
 
-	| widest |
-	widest := 0.
-	aString do: [:c | widest := widest max: c codePoint].
-	widest > 16rFFFF ifTrue: [^ 4].
-	widest > 16rFF ifTrue: [^ 2].
-	^ 1
+	Every per-method table a class carries (docs, code objects, signatures,
+	default keys, receivers, annotations, type parameters) was ONE accessor
+	whose source is ONE literal in the class-build text, with an entry per
+	method.  A class with thousands of methods -- idna's generated UTS46Tests
+	has 6,329 -- made that literal millions of characters, and the limit is in
+	STORAGE bytes: one character above U+FFFF anywhere in the class, escaped
+	or not, makes the whole build text four bytes a character.  The import then failed with an
+	uncatchable ``string literal too big'' CompileError.
+
+	A table that fits is the single accessor every class used to get, and
+	still does.  One that does not is split exactly as the IR text twin is
+	(emitIRTextSourcesOn:...): chunk accessors ``<stem>_N___:'' each fill the
+	table they are handed, and aSelector threads a fresh one through them, so
+	every reader asks the selector it always asked."
+
+	| chunks src stem main |
+	chunks := self ___literalChunks___: entries spelledBy: [:line | line].
+	chunks size <= 1 ifTrue: [
+		src := WriteStream on: String new.
+		src nextPutAll: aSelector; lf; nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+		entries do: [:each | src nextPutAll: each].
+		src nextPutAll: ' @env0:yourself)'.
+		^ self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: aCategory
+			env: 1
+			classSide: true
+			onStream: aStream].
+	stem := aSelector copyFrom: 1 to: aSelector size - 3.
+	1 to: chunks size do: [:i |
+		src := WriteStream on: String new.
+		src nextPutAll: stem , '_' , i printString , '___: ___d___'; lf;
+			nextPutAll: '	^ ___d___'.
+		(chunks at: i) do: [:each | src nextPutAll: each].
+		src nextPutAll: ' @env0:yourself'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: src contents
+			category: aCategory
+			env: 1
+			classSide: true
+			onStream: aStream].
+	main := WriteStream on: String new.
+	main nextPutAll: aSelector; lf; nextPutAll: '	^ '.
+	main nextPutAll: ((1 to: chunks size) inject: '(KeyValueDictionary @env0:new)'
+		into: [:acc :i | '(self ' , stem , '_' , i printString , '___: ' , acc , ')']).
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: main contents
+		category: aCategory
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___literalChunks___: entries spelledBy: aBlock
+	"entries split, in order, into runs whose accessor literal stays inside
+	___irTextSourcesLiteralBudget___.  aBlock answers an entry's text as the
+	accessor spells it, and the entry costs that text's length after the
+	OUTER quoting ___compileMethod: applies (every quote doubled again), at
+	four bytes a character.
+
+	FOUR, WHATEVER THE ENTRY HOLDS.  GemStone stores a literal as wide as the
+	TEXT it is compiled from, and the class-build text is as wide as anything
+	in the class needs: one character above U+FFFF anywhere -- even one the
+	source spells as an escape, ``\U0001F600'' -- makes every table four bytes
+	a character, all-ASCII entries included.  The entry's own code points say
+	nothing about that, and the class's other methods are not written yet.
+	Measured on 6,000 trivial methods: they import when the module is ASCII,
+	and fail on the limit with one such character added, raw or escaped.
+
+	An entry too large for any budget still gets a run of its own: it is one
+	method's text, which the class build compiles too."
+
+	| chunks current currentChars budget |
+	budget := self ___irTextSourcesLiteralBudget___.
+	chunks := OrderedCollection new.
+	current := OrderedCollection new.
+	currentChars := 0.
+	entries do: [:each |
+		| line chars |
+		line := aBlock value: each.
+		chars := line size + (line occurrencesOf: $').
+		(current notEmpty and: [(currentChars + chars) * 4 > budget])
+			ifTrue: [
+				chunks add: current.
+				current := OrderedCollection new.
+				currentChars := 0].
+		current add: each.
+		currentChars := currentChars + chars].
+	current notEmpty ifTrue: [chunks add: current].
+	^ chunks
 %
 
 category: 'Grail-IR Codegen'
@@ -7740,6 +7819,28 @@ ___cellSetterSourceFor___: aSymbol
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
+___irRunsWithClassReceiver___
+	"Is this class statement inside a def that runs with a CLASS as its
+	receiver -- __new__, or the implicit classmethods __init_subclass__ and
+	__class_getitem__, at any depth of nested def?  Those compile
+	instance-side but run against the class, so the ``self
+	___irClassDef_<n>_<C>___'' send that builds this class looks on the
+	METACLASS, and the helper has to be filed there too (#1424): pytz's
+	LazyList.__new__ defines a class, and the IR arm died on it with an
+	uncatchable MessageNotUnderstood."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst)
+			and: [#('__new__' '__init_subclass__' '__class_getitem__')
+				includes: node name asString]) ifTrue: [^ true].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
 ___irHelperSelector___: carriedNames
 	"The private selector the class statement's compiled-text helper is
 	installed under -- unary when the class captures nothing, one-keyword
@@ -7951,7 +8052,8 @@ ___emitIRStatementOn___: aBuilder
 	carried := self ___irCarriedCaptureNames___: (aBuilder localNameSet).
 	sel := self ___irHelperSelector___: carried.
 	src := self ___irHelperSourceWithSelector___: sel carrying: carried.
-	aBuilder ___irNoteClassHelper___: sel source: src.
+	aBuilder ___irNoteClassHelper___: sel source: src
+		classSide: self ___irRunsWithClassReceiver___.
 	"``at:'', not ``atNode:'': the OFFSET (so the frame reports the ``class''
 	line) without a position-map ENTRY.  A class statement's extent is its whole
 	suite, so recording it would put carets under every line of the class body

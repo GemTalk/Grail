@@ -21,8 +21,9 @@ CachedPropertyTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
-! CachedPropertyTestCase — @cached_property realized via getter+setter pairing
-! (the mechanism behind werkzeug Request.args / .headers / .cookies).
+! CachedPropertyTestCase — a bare @cached_property (werkzeug's, the decorator
+! behind Request.args / .headers / .cookies) reads as its value, and an
+! assignment shadows it.  BareCachedPropertyCachesTestCase covers caching.
 ! ===============================================================================
 
 set compile_env: 0

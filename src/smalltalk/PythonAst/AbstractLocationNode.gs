@@ -115,6 +115,7 @@ column
   "used by ___emitTracebackFrame...  in ComprehensionAst"
   "result is zero based"
   | src prevEolPos lf col |
+  (self dynamicInstVarAt: #'___noColumns___') == true ifTrue: [^ nil].
   (self dynamicInstVarAt: #column) ifNotNil:[:v | ^ v ].
   src := self sourceString .
   lf := Character lf .
@@ -129,6 +130,7 @@ endColumn
   "used by ___emitTracebackFrame...  in ComprehensionAst"
   "result is zero based plus 1 "
   | src prevEolPos lf col |
+  (self dynamicInstVarAt: #'___noColumns___') == true ifTrue: [^ nil].
   endPosition ifNil:[ ^  self column ].
   (self dynamicInstVarAt: #endColumn) ifNotNil:[:v | ^ v ].
   src := self sourceString .
@@ -194,6 +196,9 @@ category: 'Grail-other'
 method: AbstractLocationNode
 sourceLine
 	| i j string lf |
+	"A line-mapped module's text is an unparse whose lines the node's numbers
+	no longer refer to: no line is better than the wrong one."
+	([self module ___isLineMapped___] on: Error do: [:ex | false]) ifTrue: [^ nil].
 	string := self sourceString .
 	i := 0.
   lf := Character lf .
@@ -340,4 +345,34 @@ ___mapDecorator___: aNode on: aStream do: aBlock
 		and: [aNode ___hasFullPositionSpan___
 		and: [aNode ___hasFragmentPositions___ not]]]])
 			ifTrue: [aStream mapPythonNode: aNode from: start + 1]
+%
+
+set compile_env: 0
+
+category: 'Grail-line map'
+method: AbstractLocationNode
+___remapLines___: aMap
+	"Map this node's own lines first, then its children's.  Its columns are
+	the unparse's, not the tree's, and the tree's are not known here: they
+	become unknown (nil), as CPython reports a position it does not have,
+	rather than wrong."
+
+	self dynamicInstVarAt: #'___noColumns___' put: true.
+	beginLine isNil ifFalse: [beginLine := self ___mappedLine___: beginLine in: aMap].
+	endLine isNil ifFalse: [endLine := self ___mappedLine___: endLine in: aMap].
+	^ super ___remapLines___: aMap
+%
+
+category: 'Grail-line map'
+method: AbstractLocationNode
+___mappedLine___: aLine in: aMap
+	"aLine of the unparse, as a line of the tree.  The map is the ast module's
+	list, which is indexed by line number from 0 -- its first element stands
+	for no line -- so line n is at n + 1 here.  A line past the map, or an
+	entry the unparse had no statement line for, keeps its own number."
+
+	| mapped |
+	(aLine between: 1 and: aMap size - 1) ifFalse: [^ aLine].
+	mapped := aMap at: aLine + 1.
+	^ (mapped isKindOf: SmallInteger) ifTrue: [mapped] ifFalse: [aLine]
 %

@@ -306,6 +306,11 @@ wrap: aValue
 	"A reverse proxy round-trips straight back to its original foreign
 	PyObject* — numpy must get its own DType pointer again, not a wrapper."
 	(aValue isKindOf: ShimForeignObject) ifTrue: [ ^ aValue pyObjectView ].
+	"A function of a C module goes back as its builtin_function_or_method,
+	not as a wrapper of the BoundMethod Grail reads it as."
+	aValue class == BoundMethod ifTrue: [
+		pyObj := self ___functionObjectFor: aValue.
+		pyObj notNil ifTrue: [ ^ pyObj ]].
 	"A tuple that C built in CPython's own layout goes back as that object,
 	not as a wrapper -- see ___noteRealTuple:origin:.  Only an exact tuple
 	can have such an origin, so every other value pays one class compare."
@@ -355,8 +360,19 @@ wrap: aValue
 	pyObj := CByteArray gcMalloc: 32.
 	pyObj int64At: 0 put: 1.
 	pyObj int64At: 8 put: (self typeAddrFor: aValue).
-	self storeOop: aValue asOop in: pyObj at: 16.
-	pyObj int64At: 24 put: 16r475241494C575031.
+	"A FLOAT crosses as its value, in CPython's PyFloatObject layout (ob_fval
+	at 16), marked GRAILFV1: a wheel reads it with the inline
+	PyFloat_AS_DOUBLE, which read the OOP below as a double -- numpy answered
+	np.subtract(2.0, 0.0) as -6e-323.  The shim's pyobj_oop rebuilds the float
+	from the double.  Only an exact float: a Python float SUBCLASS instance
+	keeps its OOP, so it comes back as itself."
+	((aValue class == SmallDouble) or: [aValue class == Float])
+		ifTrue: [
+			pyObj doubleAt: 16 put: aValue.
+			pyObj int64At: 24 put: 16r475241494C465631]
+		ifFalse: [
+			self storeOop: aValue asOop in: pyObj at: 16.
+			pyObj int64At: 24 put: 16r475241494C575031].
 	self valueToPyObject at: aValue put: pyObj.
 	^ pyObj
 %
@@ -380,6 +396,19 @@ foreignProxyForPointer: ptrInt typeName: nameStr
 		p setCPtr: ptrInt typeName: nameStr.
 		map at: ptrInt put: p.
 		p ]
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+foreignProxyForPointer: ptrInt typeName: nameStr ops: anInteger
+	"foreignProxyForPointer:typeName:, recording what the object's C type does
+	for == and hash (see ShimForeignObject>>___compareHashBits) -- the shim's
+	foreign_proxy_oop computes it as the object first crosses."
+
+	| p |
+	p := self foreignProxyForPointer: ptrInt typeName: nameStr.
+	p ___compareHashBits: anInteger.
+	^ p
 %
 
 category: 'Grail-Calling'
@@ -832,6 +861,43 @@ ___noteForeignException: instPtr type: typePtr typeName: nameStr
 
 category: 'Grail-Wrapping'
 method: CPythonShim
+___functionObjectFor: aBoundMethod
+	"C's builtin_function_or_method for aBoundMethod, as a CByteArray, when it
+	is a function of a dynamically loaded C module; nil for any other
+	BoundMethod, which crosses as an ordinary wrapper.
+
+	Such a module's functions are methods of its module class
+	(loadDynamicModule:fromPath:), so ``mod.f'' is a BoundMethod, and C code
+	that checks the type of what it is handed refused it: numpy's
+	add_docstring writes a module function's ml_doc only when
+	``Py_TYPE(obj) == &PyCFunction_Type'', and ``import numpy'' stopped at
+	the first one (_core/overrides.py).
+
+	The class answers ___shimModuleName___, compiled on it by
+	loadDynamicModule:fromPath: and tested by includesSelector: so that only
+	that class qualifies.  The C name is the selector up to its first colon:
+	``mod.f'' reads as #f, a call site's forwarder is #f: or #f:_:, and the
+	varargs form is #_f:kw:."
+
+	| rcvClass sel name addr |
+	rcvClass := aBoundMethod receiver class.
+	(rcvClass class includesSelector: #'___shimModuleName___') ifFalse: [^ nil].
+	sel := aBoundMethod selector.
+	sel isNil ifTrue: [^ nil].
+	name := sel asString.
+	(name includes: $:) ifTrue: [
+		((name endsWith: ':kw:') and: [(name at: 1) == $_])
+			ifTrue: [name := name copyFrom: 2 to: (name indexOf: $:) - 1]
+			ifFalse: [name := name copyFrom: 1 to: (name indexOf: $:) - 1]].
+	addr := self ___duringCallDo: [
+		System userAction: #shimFunctionObject
+			withArgs: { rcvClass ___shimModuleName___ . name }].
+	addr isNil ifTrue: [^ nil].
+	^ CByteArray fromCPointer: (CPointer forAddress: addr) numBytes: 64
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
 typeAddrFor: aValue
 	"Return the C type address for a Smalltalk value.  Returns 0 if type
 	addresses are not yet initialized or the type is unregistered.
@@ -923,7 +989,7 @@ initTypeAddresses
 	| addr |
 	typeAddresses := Dictionary new.
 	#('float' 'int' 'bool' 'str' 'bytes' 'list' 'dict' 'tuple' 'object' 'type' 'NoneType'
-		'set' 'frozenset')
+		'set' 'frozenset' 'slice')
 		do: [:name |
 			typeAddresses at: name asSymbol put: (System userAction: #shimTypeAddr with: name).
 		].
@@ -935,7 +1001,7 @@ initTypeAddresses
 	"set and frozenset, and their subclasses, to the shim's static types of
 	those names: a wheel's PySet_Check is an inline compare against them (see
 	the shim's init_types)."
-	#(#set #frozenset) do: [:n | | cls |
+	#(#set #frozenset #slice) do: [:n | | cls |
 		cls := Python at: n otherwise: nil.
 		(cls notNil and: [(typeAddresses at: n otherwise: 0) ~= 0]) ifTrue: [
 			addr := typeAddresses at: n.
@@ -1011,6 +1077,35 @@ initTypeAddresses
 			(pair at: 1) isNil
 				ifTrue: [noneWrapper := v]
 				ifFalse: [self valueToPyObject at: (pair at: 1) put: v]]].
+	"NotImplemented the same way, as _Py_NotImplementedStruct: a wheel's
+	binary slot tests ``r == Py_NotImplemented'' by pointer, and answers it to
+	decline an operand (pyobj_oop maps it back -- see ___notImplemented)."
+	"Ellipsis likewise: numpy's indexing tests ``index == Py_Ellipsis''."
+	#( #NotImplemented #Ellipsis ) do: [:nm |
+		(Python at: nm otherwise: nil) ifNotNil: [:single | | a |
+			a := System userAction: #shimTypeAddr with: nm asString.
+			a = 0 ifFalse: [ | v |
+				v := CByteArray fromCPointer: (CPointer forAddress: a) numBytes: 16.
+				v int64At: 0 put: 16r40000000.
+				self valueToPyObject at: single put: v]]].
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___ellipsis
+	"Grail's Ellipsis, which the shim's pyobj_oop answers for C's Py_Ellipsis
+	(asked once per session)."
+
+	^ Python at: #Ellipsis
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___notImplemented
+	"Grail's NotImplemented, which the shim's pyobj_oop answers for C's
+	Py_NotImplemented (asked once per session)."
+
+	^ Python at: #NotImplemented
 %
 
 ! ===============================================================================
@@ -1367,6 +1462,36 @@ foreignGetAttr: cPtr name: aString
 
 category: 'Grail-Calling'
 method: CPythonShim
+foreignOp: cPtr name: aDunder with: a with: b
+	"``self <op> a'' on a wheel's own object, by its C slot: aDunder names the
+	operator (``__add__'', ``__radd__'', ``__getitem__'', ...), a and b are the
+	operands (nil when absent; b is an item assignment's value or a pow
+	modulus).  Answers the result, nil when C has no answer (an inherited
+	identity __hash__), and raises what the slot raised.  See
+	foreign_op_invoke in cpython.cc."
+
+	^ self ___shimUserAction: #shimForeignOp withArgs: {
+		cPtr . aDunder .
+		(a == nil ifTrue: [0] ifFalse: [(self wrap: a) memoryAddress]) .
+		(b == nil ifTrue: [0] ifFalse: [(self wrap: b) memoryAddress]) }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+foreignSetAttr: cPtr name: aString value: aValue
+	"Store an attribute on a wheel's own C object in C, as C's own
+	PyObject_SetAttrString would: a type's tp_dict, or an instance's data
+	descriptor, tp_setattro or instance dict.  Answers true when stored, and
+	false when C has nowhere to put it (no such descriptor, no instance dict);
+	a refusal -- a read-only member -- raises, translated like any shim
+	error."
+
+	^ self ___shimUserAction: #shimForeignSetAttr
+		withArgs: { cPtr . aString . (self wrap: aValue) memoryAddress }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 foreignTypeCheck: objPtr type: typePtr subclass: aBoolean
 	"isinstance (aBoolean false) / issubclass (true) against a wheel's own TYPE
 	typePtr, for the candidate objPtr -- 0 for a Grail object.  nil when
@@ -1374,6 +1499,26 @@ foreignTypeCheck: objPtr type: typePtr subclass: aBoolean
 
 	^ self ___shimUserAction: #shimForeignTypeCheck
 		withArgs: { objPtr . typePtr . aBoolean == true }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+arrayDispatcherParts: cPtr
+	"{ dispatcher. implementation } of numpy's _ArrayFunctionDispatcher at
+	cPtr -- the Python function that picks out the relevant arguments and the
+	one that does the work -- or nil when cPtr is not one Grail can read.  See
+	shimArrayDispatcherParts in cpython.cc."
+
+	^ self ___shimUserAction: #shimArrayDispatcherParts withArgs: { cPtr }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+arrayFunctionKind: cPtr
+	"0 when the wheel object at cPtr has no __array_function__, 1 when it has
+	ndarray's, 2 for any other.  See shimArrayFunctionKind in cpython.cc."
+
+	^ self ___shimUserAction: #shimArrayFunctionKind withArgs: { cPtr }
 %
 
 category: 'Grail-Calling'
@@ -2592,6 +2737,15 @@ loadDynamicModule: moduleName fromPath: pathString
 	Fixed-arity forwarders delegate to the varargs form so there is one
 	place where the actual C call happens."
 	symbolList := System myUserProfile symbolList.
+	"The C module this class fronts, for wrap: -- a function read off the
+	module is a BoundMethod on it, and goes back to C as that module's
+	function object (___functionObjectFor:)."
+	moduleClass class
+		compileMethod: '___shimModuleName___
+	^ ' , moduleName printString
+		dictionaries: symbolList
+		category: 'Grail-C Extension'
+		environmentId: 0.
 	methodNames do: [:methName |
 		| varargsSrc arity0Src arity1Src arity2Src arity3Src |
 		"Varargs form — actually invokes the C function. Keyword args
@@ -2855,10 +3009,14 @@ PyObject_SetAttrString: obj name: nameString value: aValue
 category: 'Grail-CPython API'
 method: CPythonShim
 ___ug_PyObject_SetAttrString: obj name: nameString value: aValue
-	"setattr(obj, name, value) — Grail compiles attribute stores as a
-	`name:` setter in env 1."
+	"setattr(obj, name, value), through the builtin, so a __setattr__
+	override intercepts and a NEW attribute is stored.  This used to send the
+	env-1 setter ``name:'', which exists only for an attribute the class
+	declares: on anything else it was taken for a call of a method ``name''
+	and raised AttributeError.  numpy's finfo fills an empty instance this way
+	(_populate_finfo_constants), and np.polyfit needs it."
 
-	obj perform: (nameString , ':') asSymbol env: 1 withArguments: { aValue }.
+	(builtins @env1:instance) @env1:setattr: obj _: nameString _: aValue.
 %
 
 category: 'Grail-CPython API'

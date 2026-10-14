@@ -97,7 +97,7 @@ sin: x
 	"sin(+/-inf) is a domain error (ValueError); sin(nan) = nan."
 	| f |
 	f := self ___real___: x.
-	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	(f @env0:_getKind) == 3 ifTrue: [self ___domainError___: 'expected a finite input' got: f].
 	^ f @env0:sin
 %
 
@@ -107,7 +107,7 @@ cos: x
 	"cos(+/-inf) is a domain error (ValueError); cos(nan) = nan."
 	| f |
 	f := self ___real___: x.
-	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	(f @env0:_getKind) == 3 ifTrue: [self ___domainError___: 'expected a finite input' got: f].
 	^ f @env0:cos
 %
 
@@ -117,7 +117,7 @@ tan: x
 	"tan(+/-inf) is a domain error (ValueError); tan(nan) = nan."
 	| f |
 	f := self ___real___: x.
-	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	(f @env0:_getKind) == 3 ifTrue: [self ___domainError___: 'expected a finite input' got: f].
 	^ f @env0:tan
 %
 
@@ -127,7 +127,7 @@ asin: x
 	| f |
 	f := self ___real___: x.
 	(f @env0:< -1.0 or: [f @env0:> 1.0]) ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		self ___domainError___: 'expected a number in range from -1 up to 1' got: f].
 	^ f @env0:arcSin
 %
 
@@ -137,7 +137,7 @@ acos: x
 	| f |
 	f := self ___real___: x.
 	(f @env0:< -1.0 or: [f @env0:> 1.0]) ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		self ___domainError___: 'expected a number in range from -1 up to 1' got: f].
 	^ f @env0:arcCos
 %
 
@@ -195,7 +195,7 @@ acosh: x
 	| f |
 	f := self ___real___: x.
 	f @env0:< 1.0 ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		self ___domainError___: 'expected argument value not less than 1' got: f].
 	^ f @env0:arcCosh
 %
 
@@ -205,14 +205,24 @@ atanh: x
 	| f |
 	f := self ___real___: x.
 	(f @env0:<= -1.0 or: [f @env0:>= 1.0]) ifTrue: [
-		ValueError ___signal___: 'expected a number between -1 and 1, got '
-			@env0:, f @env0:printString].
+		self ___domainError___: 'expected a number between -1 and 1' got: f].
 	^ f @env0:arcTanh
 %
 
 ! ===============================================================================
 ! Fast-path callables — exponential and logarithmic
 ! ===============================================================================
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+___domainError___: aMessage got: f
+	"Signal CPython 3.14's ValueError for a domain error: math_1 names the
+	argument, so sin(inf) says ``expected a finite input, got inf''.  The
+	value is spelled as repr(float) -- inf, -1.0 -- never GemStone's
+	printString (PlusInfinity, MinusInfinity)."
+
+	^ ValueError ___signal___: aMessage @env0:, ', got ' @env0:, f __repr__
+%
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
@@ -341,7 +351,7 @@ ___naturalLog___: x
 		(self ___intFitsFloat___: x) ifFalse: [^ self ___logHugeInt___: x]].
 	f := self ___real___: x.
 	f @env0:<= 0.0 ifTrue: [
-		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
+		self ___domainError___: 'expected a positive input' got: f].
 	^ f @env0:ln
 %
 
@@ -356,9 +366,14 @@ category: 'Grail-Exponential and Logarithmic'
 method: math
 log: x _: base
 	"math.log(x, base) — logarithm of x to the given base.  Domain:
-	x <= 0 raises CPython's ValueError."
+	x <= 0 raises CPython's ValueError.  Base 1 has ln(base) = 0, and
+	CPython divides the two logs as floats: ZeroDivisionError, not inf."
 
-	^ (self ___naturalLog___: x) @env0:/ (self ___naturalLog___: base)
+	| num den |
+	num := self ___naturalLog___: x.
+	den := self ___naturalLog___: base.
+	den @env0:= 0.0 ifTrue: [ZeroDivisionError ___signal___: 'division by zero'].
+	^ num @env0:/ den
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -368,15 +383,18 @@ log10: x
 	natural log (log10(10**1000) = 1000) rather than overflowing."
 
 	| f |
+	"An integer argument <= 0 says just ``expected a positive input'', as
+	in log() -- CPython's loghelper checks an int before converting it."
+	((x isKindOf: Integer) and: [x @env0:<= 0]) ifTrue: [
+		ValueError ___signal___: 'expected a positive input'].
 	((x isKindOf: Integer) and: [(self ___intFitsFloat___: x) not]) ifTrue: [
 		| me |
-		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
 		"CPython's loghelper: log10(m) + e*log10(2) over the frexp."
 		me := self ___hugeIntFrexp___: x.
 		^ (self ___log10Of___: (me @env0:at: 1)) @env0:+ ((me @env0:at: 2) @env0:* (self ___log10Of___: 2.0))].
 	f := self ___real___: x.
 	f @env0:<= 0.0 ifTrue: [
-		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
+		self ___domainError___: 'expected a positive input' got: f].
 	"A NaN or inf goes to the primitive, which answers them as libm does."
 	((f @env0:_isNaN) or: [(f @env0:_getKind) @env0:= 3]) ifTrue: [^ f @env0:log10].
 	^ self ___log10Of___: f
@@ -395,7 +413,7 @@ log2: x
 
 	| f e |
 	(x isKindOf: Integer) ifTrue: [
-		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'expected a positive input'].
 		((x @env0:bitAnd: x @env0:- 1) @env0:= 0) ifTrue: [^ (x @env0:highBit @env0:- 1) @env0:asFloat].
 		(self ___intFitsFloat___: x) ifFalse: [
 			"log2(m) + e over the frexp, CPython's loghelper."
@@ -417,7 +435,7 @@ sqrt: x
 	| f |
 	f := self ___real___: x.
 	f @env0:< 0.0 ifTrue: [
-		ValueError ___signal___: 'expected a nonnegative input, got ' @env0:, f @env0:printString].
+		self ___domainError___: 'expected a nonnegative input' got: f].
 	^ f @env0:sqrt
 %
 
@@ -1371,7 +1389,7 @@ log1p: x
 	f @env0:_isNaN ifTrue: [^ f].
 	u := 1.0 @env0:+ f.
 	"log1p(-1) is log(0), and x <= -1 is log of a negative: domain error."
-	u @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+	u @env0:<= 0.0 ifTrue: [self ___domainError___: 'expected argument value > -1' got: f].
 	"x = +inf: log1p(+inf) = +inf."
 	(u @env0:_getKind) == 3 ifTrue: [^ PlusInfinity].
 	"1+x rounds to 1 for |x| tiny (and for x = +/-0.0): log1p(x) = x."
@@ -1508,8 +1526,7 @@ gamma: x
 	"CPython's gamma names the value in EVERY domain error (0, the negative
 	integers, and -inf all share this message, not the generic ``math
 	domain error'' -- test_exception_messages checks it)."
-	domainMsg := [ValueError ___signal___:
-		'expected a noninteger or positive integer, got ' @env0:, f @env0:printString].
+	domainMsg := [self ___domainError___: 'expected a noninteger or positive integer' got: f].
 	"Non-finite: nan and +inf pass through; -inf is a domain error."
 	(f @env0:_isNaN) @env0:ifTrue: [^ f].
 	(f @env0:_getKind) == 3 ifTrue: [
@@ -1581,7 +1598,8 @@ lgamma: x
 	(f @env0:_getKind) == 3 ifTrue: [^ PlusInfinity].
 	"Integer arguments <= 2: n<=0 is a pole (ValueError); 1 and 2 give 0.0."
 	((f @env0:= f @env0:floor) and: [f @env0:<= 2.0]) ifTrue: [
-		f @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		f @env0:<= 0.0 ifTrue: [
+			self ___domainError___: 'expected a noninteger or positive integer' got: f].
 		^ 0.0].
 	absx := f @env0:abs.
 	"Tiny arguments: lgamma(x) ~ -log|x|."

@@ -104,10 +104,8 @@ testWithAsNonNameTargets
 		{ 'nested'. '(1, 2, 3)' }.
 		{ 'list_target'. '(9, 8)' }.
 		{ 'multi_item'. '(1, 2, 3)' }.
-		"The fixture normalises CPython's ``, got 3'' tail away -- Grail's
-		shared unpack check does not emit it.  A separate gap; what this
-		case shows is that a with-target gets the check at all."
-		{ 'wrong_count'. '''ValueError: too many values to unpack (expected 2)''' }.
+		"A with-target gets the shared unpack check, ``, got 3'' and all."
+		{ 'wrong_count'. '''ValueError: too many values to unpack (expected 2, got 3)''' }.
 		{ 'property_setter'. '(42, [42])' } }
 %
 

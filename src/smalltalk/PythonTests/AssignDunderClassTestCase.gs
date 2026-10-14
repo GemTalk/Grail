@@ -168,3 +168,26 @@ testTheIRArmActuallyCompiledTheFixture
 		description: 'fewer defs compiled than the cut measured (9): compiled = '
 			, (stats at: #compiled) printString
 %
+
+category: 'Grail-Tests'
+method: AssignDunderClassTestCase
+testAssigningAClassItsOwnTypeAsH11Does
+	"h11's Sentinel metaclass ends __new__ with ``v.__class__ = v'', so each
+	sentinel is its own type; Grail refused it, from inside a kernel handler
+	running in protected mode, so the ``except'' that caught it died on its
+	first import with InternalError 2261 and h11 and httpcore crashed the
+	package census.  Behind that, a tuple holding a class with ``__hash__ =
+	None'' hashed to None, an uncatchable bitXor: MNU.
+	tests/python/class_assign_on_a_class.py holds the checks -- CPython's
+	rules for __class__ assignment on a class, the sentinel shape, and the two
+	failures -- and agrees with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'class_assign_on_a_class' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/class_assign_on_a_class.py')
+		name: 'class_assign_on_a_class'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '11 checks, 0 disagreeing [], keys match: True'
+%

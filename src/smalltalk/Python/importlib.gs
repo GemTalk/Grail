@@ -4643,6 +4643,57 @@ ___refreshCarriedSubmodulesOf___: aPackage named: aName
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___bindBodySubmodulesOf___: aName
+	"Import, through the ordinary path, each module of aName's own PACKAGE TREE
+	its body imported -- the ``top.*'' entries of its dependency record, top
+	being aName's top-level package -- that this session has not imported yet
+	(issue #1475).  Called by the warm bind.
+
+	The warm bind does not run the body, so neither do the body's imports: a
+	package whose ``__init__'' does ``from . import api'' bound with
+	``pkg.api'' reachable as an attribute but missing from sys.modules, and
+	with api's __session_init__ never run -- so the session saw api's
+	committed state without the hook meant to re-bind its files, sockets and
+	environment snapshots.  CPython re-executes the body, so the import
+	happens; this makes it.  Each one is current (the package being current
+	says its dependencies are), so its load is a warm bind of its own, which
+	registers it, adopts it and runs its hook -- and binds what ITS body
+	imported in turn.
+
+	The package TREE and not only aName's children, because a submodule's
+	body imports its siblings: asyncio's __init__ imports asyncio.events,
+	whose ``from . import format_helpers'' is what puts asyncio.format_helpers
+	in sys.modules.  Each module is registered before this runs for it, so a
+	cycle among siblings stops at the lookup.  Modules outside the tree
+	(``import json'') are left to whatever imports them next: an import of one
+	binds it then.
+
+	Parents first, then by name: the record is a set and keeps no order, and
+	``pkg.sub.mod'' needs ``pkg.sub'' registered before it.
+
+	A failure propagates, as the body's own import would have raised it."
+
+	| rec prefix names |
+	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
+	rec isNil ifTrue: [^ self].
+	prefix := (aName asString subStrings: '.') first , '.'.
+	names := ((rec at: 2) collect: [:pair | (pair at: 1) asString])
+		select: [:n | n size > prefix size and: [(n copyFrom: 1 to: prefix size) = prefix]].
+	"Parents first: a dependency outside aName's own subtree can sit at any
+	depth, and binding it binds its parents' body imports too."
+	names := names asSortedCollection: [:x :y |
+		| dx dy |
+		dx := x occurrencesOf: $..
+		dy := y occurrencesOf: $..
+		dx = dy ifTrue: [x <= y] ifFalse: [dx < dy]].
+	names do: [:n | | path |
+		(self @env1:lookupModule: n) isNil ifTrue: [
+			path := self @env1:___moduleNameToPath___: n.
+			path isNil ifFalse: [self loadModuleFromPath: path name: n]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___rebuildCarriedSubmodule___: aDottedName
 	"Load the stale carried submodule aDottedName through the ordinary path --
 	see ___refreshCarriedSubmodulesOf___:named:, which says why a failure is
@@ -4871,6 +4922,9 @@ ___loadModuleFromPath___: pathString name: moduleName
 			same reason -- see ___restoreAllCanonicalMetaclasses___."
 			self ___restoreAllCanonicalMetaclasses___.
 			self ___restoreAllBodyClassAttrs___.
+			"The submodules the body imported, before the package's own hook:
+			in the body those imports ran before its tail did."
+			self ___bindBodySubmodulesOf___: moduleName.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
@@ -6822,6 +6876,41 @@ ___hasBuiltinStorage___: b
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___isDatetimeValueClass___: b
+	"Is b one of the datetime value classes -- PyDate (and PyDateTime under
+	it), PyTime, PyTimedelta, PyTzinfo -- or a subclass?
+
+	Each sits DIRECTLY under Object, so the chain-depth fallback in
+	___selectStorageBase___: ranks it below a plain Python mixin (two deep
+	against three), and each builds its instances in a class-side
+	___fromFields___: and checks its operands with isKindOf:.  Merged as a
+	secondary base it keeps its Python methods but neither of those, so
+	tomlkit's ``class Time(Item, time)'' -- Item first -- died in
+	``time.__new__(cls, ...)'' with an uncatchable ``Time class does not
+	understand ___fromFields___:...'', and the same for its Date and
+	DateTime.  CPython agrees: each is a C type with its own fields, the
+	solid base a subclass must extend."
+
+	(b isKindOf: Behavior) ifFalse: [^ false].
+	^ #(#'PyDate' #'PyTime' #'PyTimedelta' #'PyTzinfo') anySatisfy: [:rootName |
+		| root |
+		root := Python at: rootName otherwise: nil.
+		root ~~ nil and: [(b == root) or: [b inheritsFrom: root]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___isEnumClass___: b
+	"Is b Enum or a subclass (Grail's Enum is a Smalltalk class)?"
+
+	| root |
+	(b isKindOf: Behavior) ifFalse: [^ false].
+	root := Python at: #'Enum' otherwise: nil.
+	^ root ~~ nil and: [(b == root) or: [b inheritsFrom: root]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___selectStorageBase___: rawBases
 	"Pick the Smalltalk superclass for a multi-base Python class.
 	Return the LEFTMOST base whose class chain reaches a built-in
@@ -6866,6 +6955,15 @@ ___selectStorageBase___: rawBases
 		(self ___hasBuiltinStorage___: b)
 			ifTrue: [^ self ___widenStrBase___: b]
 	].
+	"A DATETIME base is the solid base too -- see ___isDatetimeValueClass___:
+	-- except in an enum, which must stay on Enum's chain: ``class
+	Period(timedelta, Enum)'' builds its members through
+	___grailValueMixinFor:, and rooting it at PyTimedelta took it off that
+	chain (test_enum's 52 date-mixin tests).  Not part of
+	___hasBuiltinStorage___:, which 3-arg type() asks as well."
+	(bases anySatisfy: [:b | self ___isEnumClass___: b]) ifFalse: [
+		bases do: [:b |
+			(self ___isDatetimeValueClass___: b) ifTrue: [^ b]]].
 	"A base carrying SLOTS carries storage too -- CPython's ``solid base'',
 	the one whose instance layout the new class must extend -- so it wins
 	over chain depth.  Slots are positions in the Smalltalk class's indexed
@@ -10066,34 +10164,40 @@ modules
 category: 'Grail-Private'
 method: importlib
 ___resolve_name___: name package: package
-	"Resolve a relative module name to an absolute name"
-	| dots remaining parentParts |
+	"import_module's relative form: ``name'' starts with one dot per level
+	(``..util'' is level 2).  Counts them and resolves the rest."
+
+	| s dots |
+	s := name @env0:asString.
 	dots := 0.
-	name do: [:c | c = $. ifTrue: [dots := dots + 1] ifFalse: [^ self error: 'Invalid relative import']].
-	remaining := name copyFrom: dots + 1 to: name size.
-	parentParts := $. @env0:split: package.
-	(dots > parentParts __len__) ifTrue: [
-		ImportError ___signal___: 'attempted relative import beyond top-level package'
-	].
-	parentParts := parentParts __getitem__: (0 @env0:to: (parentParts __len__ - dots)).
-	remaining isEmpty
-		ifTrue: ['.' join: parentParts]
-		ifFalse: [('.' join: parentParts parentParts) @env0:, '.' @env0:, remaining]
+	[dots @env0:< s @env0:size @env0:and: [(s @env0:at: dots @env0:+ 1) @env0:== $.]]
+		@env0:whileTrue: [dots := dots @env0:+ 1].
+	^ self ___resolve_name___: (s @env0:copyFrom: dots @env0:+ 1 to: s @env0:size)
+		package: package level: dots
 %
 
 category: 'Grail-Private'
 method: importlib
 ___resolve_name___: name package: package level: level
-	"Resolve a relative module name to an absolute name with explicit level"
-	| parentParts |
-	parentParts := $. @env0:split: package.
-	(level > parentParts __len__) ifTrue: [
-		ImportError ___signal___: 'attempted relative import beyond top-level package'
-	].
-	parentParts := parentParts __getitem__: (0 @env0:to: (parentParts __len__ - level + 1)).
-	name isEmpty
-		ifTrue: ['.' join: parentParts parentParts]
-		ifFalse: [('.' join: parentParts parentParts) @env0:, '.' @env0:, name]
+	"CPython's importlib._bootstrap._resolve_name: ``package'' less its last
+	level - 1 components, then ``.name'' when there is a name.
+
+	It answered the importlib instance instead -- the method had no return --
+	and before that it sent an env-1 ``>'' to the level, an uncatchable
+	MessageNotUnderstood.  So every relative __import__ died
+	(``__import__('', globals, None, ('util',), 2)''), and so did
+	import_module('.x', 'pkg'): nothing had reached this path, because a
+	module's own ``from . import x'' is resolved at compile time."
+
+	| parts keep base |
+	parts := package @env0:asString @env0:subStrings: '.'.
+	keep := parts @env0:size @env0:- (level @env0:- 1).
+	keep @env0:< 1 ifTrue: [
+		^ ImportError ___signal___: 'attempted relative import beyond top-level package'].
+	base := parts @env0:at: 1.
+	2 @env0:to: keep do: [:i | base := (base @env0:, '.') @env0:, (parts @env0:at: i)].
+	(name @env0:isNil @env0:or: [name @env0:asString @env0:isEmpty]) ifTrue: [^ base].
+	^ (base @env0:, '.') @env0:, name @env0:asString
 %
 
 
@@ -11277,8 +11381,12 @@ ___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCate
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	src notNil ifTrue: [
 		src := self ___unshadowInstVarsIn___: src for: aClass.
-		^ [aClass perform: #'___compileMethod:category:' env: 1
-			withArguments: { aPrefix , src. aCategory }] on: Error do: [:e | e return: nil]].
+		"With the scope the original was compiled with: a method from exec'd
+		source reads the exec's globals through it (Behavior >>
+		___grailRememberCompileScope___:)."
+		^ [aClass perform: #'___compileMethod:category:scope:' env: 1
+			withArguments: { aPrefix , src. aCategory. aProvider @env1:___grailCompileScope___ }]
+				on: Error do: [:e | e return: nil]].
 	"No text source to recompile (an IR method of a class built before the
 	text table existed): share the method object -- sound for what method
 	mode admits (no super, no instVar references)."
@@ -11320,8 +11428,10 @@ ___copySessionMethod___: sel from: aProvider to: aClass prefix: aPrefix
 	meth isNil ifTrue: [^ self].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	src notNil ifTrue: [
-		^ [aClass perform: #'___compileSessionMethod:category:' env: 1
-			withArguments: { aPrefix , src. 'Grail-Dynamic Rebinding Originals' }]
+		"With the original's scope, as ___copyMethod___:from:to:prefix:category:."
+		^ [aClass perform: #'___compileSessionMethod:category:scope:' env: 1
+			withArguments: { aPrefix , src. 'Grail-Dynamic Rebinding Originals'.
+				aProvider @env1:___grailCompileScope___ }]
 				on: Error do: [:e | e return: nil]].
 	[aClass perform: #'___installSessionMethod:as:' env: 1
 		withArguments: { meth. (aPrefix , sel asString) asSymbol }]
@@ -11415,9 +11525,9 @@ pythonSelectorMaxSearchedArity
 	"PUBLIC.  The highest fixed arity ``pythonSelectorsForName:arity:'' enumerates
 	when asked for every plausible shape (a nil arity).
 
-	There is no upper bound in the encoding itself -- BoundMethod>>_selectorForArgCount:
-	builds one for any arity -- so a search over candidate selectors has to choose a
-	horizon.  16 matches the range that method documents as worth precomputing
+	The encoding's only upper bound is GemStone's 1,024-character Symbol, near 512
+	arguments (BoundMethod>>_selectorForArgCount: answers nil past it, #1540) -- so
+	a search over candidate selectors has to choose a horizon.  16 matches the range that method documents as worth precomputing
 	(``4..16 are built lazily here; higher arities are rare enough'').  A caller that
 	wants to report what it searched should read this rather than hard-coding 16."
 
@@ -11462,11 +11572,14 @@ pythonSelectorsForName: aString arity: anIntegerOrNil
 		ifTrue: [
 			out add: (CallAst varargsSelectorForName: aString).
 			1 to: self pythonSelectorMaxSearchedArity do: [:n |
-				out add: (CallAst fastPathSelectorForName: aString arity: n)]]
+				(CallAst fastPathSelectorForName: aString arity: n)
+					ifNotNil: [:sel | out add: sel]]]
 		ifFalse: [
 			anIntegerOrNil < 0 ifTrue: [^ #()].
+			"Past the Symbol limit there is no fixed-arity selector (#1540)."
 			anIntegerOrNil >= 1 ifTrue: [
-				out add: (CallAst fastPathSelectorForName: aString arity: anIntegerOrNil)].
+				(CallAst fastPathSelectorForName: aString arity: anIntegerOrNil)
+					ifNotNil: [:sel | out add: sel]].
 			out add: (CallAst varargsSelectorForName: aString)].
 	^ out asArray
 %

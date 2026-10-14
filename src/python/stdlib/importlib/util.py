@@ -39,6 +39,62 @@ def spec_from_file_location(name, location=None, *, loader=None,
     return _ModuleSpec(name, loader, location, search)
 
 
+def module_from_spec(spec):
+    """A new module for ``spec'', CPython's: the loader's ``create_module''
+    makes it when it will (None means the default module), and a loader that
+    has ``exec_module'' without ``create_module'' is refused.  The module gets
+    the spec's attributes but is NOT executed and NOT entered in sys.modules
+    -- the caller runs ``spec.loader.exec_module(module)''."""
+    module = None
+    if hasattr(spec.loader, 'create_module'):
+        module = spec.loader.create_module(spec)
+    elif hasattr(spec.loader, 'exec_module'):
+        raise ImportError('loaders that define exec_module() '
+                          'must also define create_module()')
+    if module is None:
+        import types
+        module = types.ModuleType(spec.name)
+    _init_module_attrs(spec, module)
+    return module
+
+
+def _init_module_attrs(spec, module):
+    # CPython's _bootstrap._init_module_attrs without ``override'' and without
+    # the namespace-package loader it invents for a loaderless package spec.
+    if getattr(module, '__name__', None) is None:
+        try:
+            module.__name__ = spec.name
+        except AttributeError:
+            pass
+    if getattr(module, '__loader__', None) is None:
+        try:
+            module.__loader__ = spec.loader
+        except AttributeError:
+            pass
+    if getattr(module, '__package__', None) is None:
+        try:
+            module.__package__ = spec.parent
+        except AttributeError:
+            pass
+    try:
+        module.__spec__ = spec
+    except AttributeError:
+        pass
+    if getattr(module, '__path__', None) is None:
+        if spec.submodule_search_locations is not None:
+            try:
+                module.__path__ = spec.submodule_search_locations
+            except AttributeError:
+                pass
+    if spec.has_location:
+        if getattr(module, '__file__', None) is None:
+            try:
+                module.__file__ = spec.origin
+            except AttributeError:
+                pass
+    return module
+
+
 def cache_from_source(path, debug_override=None, *, optimization=None):
     """The bytecode-cache path CPython would use for a source file.
 

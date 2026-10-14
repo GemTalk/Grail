@@ -62,7 +62,7 @@ initialize
 ! Stored attribute (not a callable)
 ! ===============================================================================
 
-category: 'Grail-Types'
+category: 'Grail-Type Accessors'
 method: fractions
 Fraction
 	"Return the Fraction type exposed by this module (the GemStone

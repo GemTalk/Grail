@@ -1,7 +1,7 @@
 # Fixture for CachedPropertyTestCase.
 #
-# @cached_property is realized via the same getter+setter pairing as
-# @property: a bare ``instance.attr'' read invokes the getter and
+# A bare @cached_property is a descriptor applied at run time (#1444): a bare
+# ``instance.attr'' read invokes the getter and
 # returns its value (rather than returning a BoundMethod).  This is the
 # mechanism werkzeug's Request.args / .headers / .cookies rely on.
 #

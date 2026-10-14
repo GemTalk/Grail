@@ -616,6 +616,26 @@ testTrunc
 	self assert: result equals: -3
 %
 
+category: 'Grail-Tests - Floating Point'
+method: MathTestCase
+testDomainErrorMessagesMatchCPython
+	"CPython 3.14 names the argument in each function's domain error --
+	sin(inf) says 'expected a finite input, got inf', not 'math domain
+	error' -- spelled as repr(float), never GemStone's MinusInfinity; and
+	log(x, 1) is ZeroDivisionError, not inf.  test_math's ieee754.txt
+	doctest checks these.  tests/python/math_domain_error_messages.py holds
+	the checks, each agreeing with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'math_domain_error_messages' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/math_domain_error_messages.py')
+		name: 'math_domain_error_messages'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '15 checks, 0 disagreeing [], keys match: True'
+%
+
 category: 'Grail-Tests - Added Functions'
 method: MathTestCase
 testAddedFunctions

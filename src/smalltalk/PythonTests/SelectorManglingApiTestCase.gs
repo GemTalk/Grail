@@ -187,3 +187,36 @@ test_round_trip
 		(importlib pythonSelectorsForName: name arity: nil) do: [:sel |
 			self assert: (importlib pythonNameOfSelector: sel) equals: name]].
 %
+
+category: 'Grail-Tests-SelectorMangling'
+method: SelectorManglingApiTestCase
+test_no_fixed_arity_selector_past_the_symbol_limit
+	"A Symbol holds at most 1,024 characters, so ``foo:'' plus a ``_:'' per
+	further argument stops fitting near 512 arguments.  Building it anyway
+	was an uncatchable ImproperOperation (#1540); the builders answer nil and
+	the public API lists only the varargs form, which every arity has."
+
+	self assert: (CallAst fastPathSelectorForName: 'foo' arity: 511) notNil.
+	self assert: (CallAst fastPathSelectorForName: 'foo' arity: 512) isNil.
+	self assert: (CallAst fastPathSelectorForAttr: 'foo' arity: 600) isNil.
+	self assert: (importlib pythonSelectorsForName: 'foo' arity: 600)
+		equals: (Array with: #'_foo:kw:')
+%
+
+category: 'Grail-Tests-SelectorMangling'
+method: SelectorManglingApiTestCase
+testALargeCallCompilesAndRuns
+	"``f(0, 1, ..., 599)'' and calls of 2,500 arguments, as module calls,
+	attribute calls, self-sends, builtins and around ``*'' splats, compile and
+	answer what CPython does (#1540).  tests/python/large_call_arity.py holds
+	the checks and agrees with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'large_call_arity' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/large_call_arity.py')
+		name: 'large_call_arity'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '10 checks, 0 disagreeing [], keys match: True'
+%
