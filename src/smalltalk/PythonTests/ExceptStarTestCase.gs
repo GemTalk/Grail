@@ -280,3 +280,26 @@ testTheRuleAppliesOnlyToTheHandlerBody
 	self assertMatchesCPythonAt: 'flow_finally'.
 	self assertMatchesCPythonAt: 'flow_plain_except'.
 %
+
+category: 'Grail-Tests - except star'
+method: ExceptStarTestCase
+testWhatTheClausesRaiseIsMergedAsCPythonDoes
+	"test_except_star's 20 failures, in four groups.  A group raised a second
+	time arrived as a CARRIER, which matched nothing and left nothing over, so
+	it vanished.  A clause that raised let that exception escape at once,
+	where CPython runs every clause and raises the new exceptions followed by
+	what is left of the original -- telling ``raise e'' (new: it gained a
+	traceback entry) from a bare ``raise'' (not).  ``except* ExceptionGroup''
+	and a non-class were accepted; a group subclass's own split() was not
+	consulted.  tests/python/except_star_raise.py holds the checks, each
+	agreeing with CPython 3.14 but for one pinned traceback frame."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'except_star_raise' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/except_star_raise.py')
+		name: 'except_star_raise'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '22 checks, 0 disagreeing [], keys match: True'
+%
