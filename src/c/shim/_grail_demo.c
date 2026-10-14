@@ -188,14 +188,96 @@ static PyGetSetDef box_getset[] = {
     {NULL, NULL, NULL, NULL, NULL}
 };
 
+/* Box's operators delegate to its value -- enough to see Grail's operator
+   protocol reach a wheel's slots: Box(3) + 4, 4 + Box(3), -Box(3),
+   Box(3) == 3, hash(Box(3)), Box([1, 2])[0], len(...), iter(...), in. */
+static PyTypeObject Box_Type;
+#define BOX_VALUE(o) (((BoxObject *)(o))->value)
+static PyObject *box_unbox(PyObject *o) { return PyObject_TypeCheck(o, &Box_Type) ? BOX_VALUE(o) : o; }
+static PyObject *box_add(PyObject *a, PyObject *b) { return PyNumber_Add(box_unbox(a), box_unbox(b)); }
+static PyObject *box_neg(PyObject *a) { return PyNumber_Negative(BOX_VALUE(a)); }
+static int box_bool(PyObject *a) { return PyObject_IsTrue(BOX_VALUE(a)); }
+static PyObject *box_richcompare(PyObject *a, PyObject *b, int op) {
+    return PyObject_RichCompare(box_unbox(a), box_unbox(b), op);
+}
+static Py_hash_t box_hash(PyObject *a) { return PyObject_Hash(BOX_VALUE(a)); }
+static PyObject *box_getitem(PyObject *a, PyObject *k) { return PyObject_GetItem(BOX_VALUE(a), k); }
+static Py_ssize_t box_len(PyObject *a) { return PyObject_Length(BOX_VALUE(a)); }
+static PyObject *box_iter(PyObject *a) { return PyObject_GetIter(BOX_VALUE(a)); }
+static int box_contains(PyObject *a, PyObject *v) { return PySequence_Contains(BOX_VALUE(a), v); }
+static PyObject *box_twice(PyObject *self, PyObject *noargs) {
+    (void)noargs;
+    return PyNumber_Add(BOX_VALUE(self), BOX_VALUE(self));
+}
+static PyNumberMethods box_as_number = { .nb_add = box_add, .nb_negative = box_neg, .nb_bool = box_bool };
+static PyMappingMethods box_as_mapping = { .mp_length = box_len, .mp_subscript = box_getitem };
+static PySequenceMethods box_as_sequence = { .sq_contains = box_contains };
+static PyMethodDef box_methods[] = {
+    {"twice", box_twice, METH_NOARGS, "value + value"},
+    {NULL, NULL, 0, NULL}
+};
+
 static PyTypeObject Box_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "_grail_demo.Box",
     .tp_basicsize = sizeof(BoxObject),
     .tp_dictoffset = offsetof(BoxObject, dict),
-    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .tp_members = box_members,
     .tp_getset = box_getset,
+    .tp_methods = box_methods,
+    .tp_as_number = &box_as_number,
+    .tp_as_mapping = &box_as_mapping,
+    .tp_as_sequence = &box_as_sequence,
+    .tp_richcompare = box_richcompare,
+    .tp_hash = box_hash,
+    .tp_iter = box_iter,
+};
+
+/* Plain: no slots at all -- == is identity and hash is object's, as for a
+   numpy DType class.  NoHash: compares, never hashes -- ndarray's case. */
+typedef struct { PyObject_HEAD } PlainObject;
+static PyTypeObject Plain_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Plain",
+    .tp_basicsize = sizeof(PlainObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+};
+static PyObject *nohash_richcompare(PyObject *a, PyObject *b, int op) {
+    if (op == Py_EQ) return PyBool_FromLong(a == b);
+    Py_RETURN_NOTIMPLEMENTED;
+}
+static PyTypeObject NoHash_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.NoHash",
+    .tp_basicsize = sizeof(PlainObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_richcompare = nohash_richcompare,
+    .tp_hash = PyObject_HashNotImplemented,
+};
+
+/* MyFloat: a float subclass of the wheel's own, built through float's
+   tp_new as numpy.float64 is. */
+static PyTypeObject MyFloat_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.MyFloat",
+    .tp_basicsize = sizeof(PyFloatObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+};
+
+/* WithMeta: a type whose METATYPE subclasses type, as numpy's DTypes are
+   instances of _DTypeMeta. */
+static PyTypeObject Meta_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Meta",
+    .tp_basicsize = sizeof(PyHeapTypeObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_TYPE_SUBCLASS,
+};
+static PyTypeObject WithMeta_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.WithMeta",
+    .tp_basicsize = sizeof(PlainObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
 };
 
 static PyObject *
@@ -214,6 +296,159 @@ grail_make_box(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     box->tag = NULL;
     box->dict = NULL;
     return (PyObject *)box;
+}
+
+#define ONE_ARG(fn) if (nargs != 1) { PyErr_SetString(PyExc_TypeError, fn "() takes 1 argument"); return NULL; }
+
+static PyObject *
+grail_make_plain(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module; (void)args; (void)nargs;
+    return (PyObject *)PyObject_New(PlainObject, &Plain_Type);
+}
+
+static PyObject *
+grail_make_nohash(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module; (void)args; (void)nargs;
+    return (PyObject *)PyObject_New(PlainObject, &NoHash_Type);
+}
+
+/* The definition a descriptor reads through, at CPython's offset -- what
+   numpy's add_docstring does. */
+static PyObject *
+grail_descr_def_name(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    ONE_ARG("descr_def_name")
+    PyObject *d = args[0];
+    if (Py_TYPE(d) == &PyMethodDescr_Type)
+        return PyUnicode_FromString(((PyMethodDescrObject *)d)->d_method->ml_name);
+    if (Py_TYPE(d) == &PyMemberDescr_Type)
+        return PyUnicode_FromString(((PyMemberDescrObject *)d)->d_member->name);
+    if (Py_TYPE(d) == &PyGetSetDescr_Type)
+        return PyUnicode_FromString(((PyGetSetDescrObject *)d)->d_getset->name);
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+grail_singletons(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 2) {
+        PyErr_SetString(PyExc_TypeError, "singletons() takes 2 arguments");
+        return NULL;
+    }
+    return Py_BuildValue("(OO)", args[0] == Py_NotImplemented ? Py_True : Py_False,
+                         args[1] == Py_Ellipsis ? Py_True : Py_False);
+}
+
+static PyObject *
+grail_give_singletons(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module; (void)args; (void)nargs;
+    return Py_BuildValue("(OO)", Py_NotImplemented, Py_Ellipsis);
+}
+
+/* A float read inline (PyFloat_AS_DOUBLE), as a wheel built against the
+   full API reads one. */
+static PyObject *
+grail_float_inline(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    ONE_ARG("float_inline")
+    if (!PyFloat_Check(args[0])) Py_RETURN_NONE;
+    return PyFloat_FromDouble(PyFloat_AS_DOUBLE(args[0]));
+}
+
+/* Lists and tuples read inline: the sum of a list of ints, and of a list
+   of (int, int) pairs. */
+static PyObject *
+grail_sum_inline(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    ONE_ARG("sum_inline")
+    PyObject *l = args[0];
+    if (!PyList_Check(l)) { PyErr_SetString(PyExc_TypeError, "a list"); return NULL; }
+    long total = 0;
+    for (Py_ssize_t i = 0; i < PyList_GET_SIZE(l); i++) {
+        PyObject *x = PyList_GET_ITEM(l, i);
+        if (PyTuple_Check(x)) {
+            for (Py_ssize_t j = 0; j < PyTuple_GET_SIZE(x); j++)
+                total += PyLong_AsLong(PyTuple_GET_ITEM(x, j));
+        } else {
+            total += PyLong_AsLong(x);
+        }
+    }
+    return PyLong_FromLong(total);
+}
+
+static PyObject *
+grail_seq_fast_len(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    ONE_ARG("seq_fast_len")
+    PyObject *f = PySequence_Fast(args[0], "not a sequence");
+    if (f == NULL) return NULL;
+    Py_ssize_t n = PySequence_Fast_GET_SIZE(f);
+    PyObject *first = n > 0 ? PySequence_Fast_GET_ITEM(f, 0) : Py_None;
+    PyObject *r = Py_BuildValue("(nO)", n, first);
+    Py_DECREF(f);
+    return r;
+}
+
+static PyObject *
+grail_as_long_overflow(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    ONE_ARG("as_long_overflow")
+    int overflow = 99;
+    long v = PyLong_AsLongAndOverflow(args[0], &overflow);
+    if (v == -1 && overflow == 0 && PyErr_Occurred()) return NULL;
+    int overflow2 = 99;
+    long long w = PyLong_AsLongLongAndOverflow(args[0], &overflow2);
+    if (w == -1 && overflow2 == 0 && PyErr_Occurred()) return NULL;
+    return Py_BuildValue("(lili)", v, overflow, (long)w, overflow2);
+}
+
+static PyObject *
+grail_interp_matches(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module; (void)args; (void)nargs;
+    return PyBool_FromLong(PyThreadState_Get()->interp == PyInterpreterState_Main());
+}
+
+static PyObject *
+grail_optional_attr(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 2) {
+        PyErr_SetString(PyExc_TypeError, "optional_attr() takes 2 arguments");
+        return NULL;
+    }
+    PyObject *v = (PyObject *)0x1;   /* must be overwritten */
+    int rc = PyObject_GetOptionalAttr(args[0], args[1], &v);
+    if (rc < 0) return NULL;
+    return Py_BuildValue("(iO)", rc, v == NULL ? Py_None : v);
+}
+
+/* PyDict_Values read with the inline sequence macros, as numpy's ufunc
+   dispatch reads its loop table. */
+static PyObject *
+grail_dict_values_inline(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    ONE_ARG("dict_values_inline")
+    PyObject *vals = PyDict_Values(args[0]);
+    if (vals == NULL) return NULL;
+    Py_ssize_t n = PySequence_Fast_GET_SIZE(vals);
+    PyObject *out = PyTuple_New(n);
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyObject *x = PySequence_Fast_GET_ITEM(vals, i);
+        Py_INCREF(x);
+        PyTuple_SET_ITEM(out, i, x);
+    }
+    return out;
 }
 
 static PyObject *
@@ -250,6 +485,18 @@ static PyMethodDef grail_demo_methods[] = {
      METH_FASTCALL, "A Box holding a value."},
     {"getattr_in_c", (PyCFunction)(void *)grail_getattr_in_c,
      METH_FASTCALL, "PyObject_GetAttrString, from C."},
+    {"make_plain", (PyCFunction)(void *)grail_make_plain, METH_FASTCALL, NULL},
+    {"make_nohash", (PyCFunction)(void *)grail_make_nohash, METH_FASTCALL, NULL},
+    {"descr_def_name", (PyCFunction)(void *)grail_descr_def_name, METH_FASTCALL, NULL},
+    {"singletons", (PyCFunction)(void *)grail_singletons, METH_FASTCALL, NULL},
+    {"give_singletons", (PyCFunction)(void *)grail_give_singletons, METH_FASTCALL, NULL},
+    {"float_inline", (PyCFunction)(void *)grail_float_inline, METH_FASTCALL, NULL},
+    {"sum_inline", (PyCFunction)(void *)grail_sum_inline, METH_FASTCALL, NULL},
+    {"seq_fast_len", (PyCFunction)(void *)grail_seq_fast_len, METH_FASTCALL, NULL},
+    {"as_long_overflow", (PyCFunction)(void *)grail_as_long_overflow, METH_FASTCALL, NULL},
+    {"interp_matches", (PyCFunction)(void *)grail_interp_matches, METH_FASTCALL, NULL},
+    {"optional_attr", (PyCFunction)(void *)grail_optional_attr, METH_FASTCALL, NULL},
+    {"dict_values_inline", (PyCFunction)(void *)grail_dict_values_inline, METH_FASTCALL, NULL},
 #endif
     {NULL, NULL, 0, NULL}
 };
@@ -261,6 +508,16 @@ static int
 grail_demo_exec(PyObject *mod) {
 #ifndef GRAIL_SHIM
     if (PyType_Ready(&Box_Type) < 0) return -1;
+    if (PyModule_AddObjectRef(mod, "Box", (PyObject *)&Box_Type) < 0) return -1;
+    if (PyType_Ready(&Plain_Type) < 0 || PyType_Ready(&NoHash_Type) < 0) return -1;
+    MyFloat_Type.tp_base = &PyFloat_Type;
+    if (PyType_Ready(&MyFloat_Type) < 0) return -1;
+    if (PyModule_AddObjectRef(mod, "MyFloat", (PyObject *)&MyFloat_Type) < 0) return -1;
+    Meta_Type.tp_base = &PyType_Type;
+    if (PyType_Ready(&Meta_Type) < 0) return -1;
+    Py_SET_TYPE(&WithMeta_Type, &Meta_Type);
+    if (PyType_Ready(&WithMeta_Type) < 0) return -1;
+    if (PyModule_AddObjectRef(mod, "WithMeta", (PyObject *)&WithMeta_Type) < 0) return -1;
 #endif
     PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
     PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");

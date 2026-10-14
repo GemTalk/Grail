@@ -129,10 +129,21 @@ extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
    Offsets are handed to Smalltalk by shimTypeMirrorLayout, never restated. */
 #define GRAIL_MIRROR_MAGIC 0x524f5252494d4c47ULL   /* "GLMIRROR" */
 #define GRAIL_WRAP_MAGIC 0x475241494C575031ULL    /* "GRAILWP1" -- see is_foreign() */
+/* "GRAILFV1": a Grail FLOAT crossing as its VALUE -- [refcnt][&PyFloat_Type]
+   [double][this] -- which is a CPython PyFloatObject in its first 24 bytes.
+   A wheel built against the full API reads a float with the inline
+   PyFloat_AS_DOUBLE (ob_fval, offset 16), and from an ordinary wrapper it
+   read the OOP as a double: numpy's np.subtract(2.0, 0.0) answered -6e-323.
+   A float is an immutable value, so the wrapper keeps no OOP at all;
+   pyobj_oop rebuilds the Grail float from the double (CPythonShim>>wrap:). */
+#define GRAIL_FLOAT_MAGIC 0x475241494C465631ULL   /* "GRAILFV1" */
+static inline int is_grail_wrapper_magic(uint64_t m) {
+    return m == GRAIL_WRAP_MAGIC || m == GRAIL_FLOAT_MAGIC;
+}
 static inline int is_type_mirror(PyObject *obj) {
     /* A wrapper is excluded FIRST: it is only 32 bytes, and an instance of a
        mirrored class carries the mirror as its ob_type. */
-    if (*(uint64_t *)((char *)obj + 24) == GRAIL_WRAP_MAGIC) return 0;
+    if (is_grail_wrapper_magic(*(uint64_t *)((char *)obj + 24))) return 0;
     PyTypeObject *mt = obj->ob_type;
     if (mt == NULL || !plausible_pyobj(mt)) return 0;
     /* Its metatype is type, or itself a mirror (a Grail metaclass). */
@@ -143,9 +154,14 @@ static inline int is_type_mirror(PyObject *obj) {
     return (uint64_t)(uintptr_t)((PyTypeObject *)obj)->tp_cache == GRAIL_MIRROR_MAGIC;
 }
 
+static OopType notimpl_oop(void);                 /* Grail's NotImplemented */
+static OopType ellipsis_oop(void);                /* Grail's Ellipsis */
+extern "C" PyObject _Py_EllipsisObject;           /* shim_numpy.cc */
 static inline OopType pyobj_oop(PyObject *obj) {
     if (obj == NULL)     return none_oop;
     if (obj == Py_None)  return none_oop;
+    if (obj == Py_NotImplemented) return notimpl_oop();
+    if (obj == &_Py_EllipsisObject) return ellipsis_oop();
     if (obj == Py_True)  return true_oop;
     if (obj == Py_False) return false_oop;
     /* Every line below this dereferences obj.  Report and bail instead of
@@ -159,6 +175,8 @@ static inline OopType pyobj_oop(PyObject *obj) {
     if (is_real_layout(obj)) return real_obj_to_oop(obj);
     if (is_type_mirror(obj)) return (OopType)(uintptr_t)((PyTypeObject *)obj)->tp_weaklist;
     if (is_foreign(obj)) return foreign_proxy_oop(obj);
+    if (*(uint64_t *)((char *)obj + 24) == GRAIL_FLOAT_MAGIC)
+        return GciFltToOop(*(double *)((char *)obj + 16));
     return *(OopType *)((char *)obj + 16);
 }
 
@@ -232,6 +250,44 @@ static PyObject *object_tp_new(PyTypeObject *subtype, PyObject *args, PyObject *
     return alloc(subtype, 0);
 }
 
+/* float.__new__(type, x=0.0): Grail's float() decides the value -- a str
+   parsed, __float__ / __index__ honoured, CPython's errors -- and a SUBTYPE
+   gets an instance of its own, the value stored at ob_fval.  numpy's
+   numpy.float64 subclasses float and builds every instance through
+   PyFloat_Type.tp_new (scalartypes.c double_arrtype_new); with object's
+   tp_new inherited it got a zeroed object back, so np.float64(0.5) was 0.0
+   and np.float64(0.5) + 1 was 1.0.  The server is asked directly: the
+   static type is foreign to PyObject_Call, which would come back here. */
+static int check_gci_error(void);
+static PyObject *float_tp_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    if (kwds != NULL && PyDict_Size(kwds) > 0) {
+        PyErr_SetString(PyExc_TypeError, "float() takes no keyword arguments");
+        return NULL;
+    }
+    Py_ssize_t n = args ? PyTuple_Size(args) : 0;
+    if (n > 1) {
+        PyErr_Format(PyExc_TypeError, "float expected at most 1 argument, got %zd", n);
+        return NULL;
+    }
+    double v = 0.0;
+    if (n == 1) {
+        OopType cargs[2] = { pyobj_oop((PyObject *)&PyFloat_Type), pyobj_oop(args) };
+        OopType r = GciPerform(server, "PyObject_Call:args:", cargs, 2);
+        if (check_gci_error()) return NULL;
+        PyObject *g = addr_to_pyobj(r);
+        if (type == &PyFloat_Type) return g;
+        v = PyFloat_AsDouble(g);
+        if (v == -1.0 && PyErr_Occurred()) return NULL;
+    } else if (type == &PyFloat_Type) {
+        return PyFloat_FromDouble(0.0);
+    }
+    allocfunc alloc = type->tp_alloc ? type->tp_alloc : PyType_GenericAlloc;
+    PyObject *o = alloc(type, 0);
+    if (o == NULL) return NULL;
+    *(double *)((char *)o + 16) = v;
+    return o;
+}
+
 static void init_types(void) {
     init_type(&PyType_Type, "type", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_TYPE_SUBCLASS);
@@ -246,6 +302,7 @@ static void init_types(void) {
 
     init_type(&PyFloat_Type, "float", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
+    PyFloat_Type.tp_new = float_tp_new;
 
     init_type(&PyLong_Type, "int", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_LONG_SUBCLASS);
@@ -290,6 +347,11 @@ static void init_types(void) {
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
     init_type(&PyFrozenSet_Type, "frozenset", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
+    /* slice likewise: numpy's indexing tests PySlice_Check -- an inline
+       ``Py_TYPE(o) == &PySlice_Type'' -- and reads the bounds through
+       PySlice_Unpack, so a Grail slice crossing typed ``object'' made a[:, 1]
+       an IndexError. */
+    init_type(&PySlice_Type, "slice", &PyBaseObject_Type, Py_TPFLAGS_DEFAULT);
 
     /* Record every static shim type so is_foreign() can tell a Grail-backed
        wrapper (ob_type is one of these) from a wheel's own object. */
@@ -306,6 +368,7 @@ static void init_types(void) {
     register_shim_type(&_PyNone_Type);
     register_shim_type(&PySet_Type);
     register_shim_type(&PyFrozenSet_Type);
+    register_shim_type(&PySlice_Type);
 
     init_exception_types();
 }
@@ -584,8 +647,36 @@ static struct {
 } dyn_exceptions[MAX_DYN_EXCEPTIONS];
 static int dyn_exception_count = 0;
 
-/* NotImplemented singleton */
+/* NotImplemented singleton.  Typed by init_types (NotImplementedType), and
+   crossing both ways as Grail's NotImplemented: pyobj_oop answers its OOP,
+   asked once per session of CPythonShim>>___notImplemented, and Grail hands C
+   this address for it (CPythonShim>>initTypeAddresses).  A wheel's binary
+   slot answers it to decline an operand -- numpy's do for a type they do not
+   know -- and read as anything else, the other operand was never tried. */
 PyObject _Py_NotImplementedStruct = { 1, NULL };
+static PyTypeObject _PyNotImplemented_Type;
+static OopType g_notimpl_oop = 0;
+/* Ellipsis the same way: numpy's indexing tests ``index == Py_Ellipsis'' by
+   pointer, so ``y[-1, ...]'' was an IndexError while Grail's Ellipsis
+   crossed as a wrapper. */
+static PyTypeObject _PyEllipsis_Type;
+static OopType g_ellipsis_oop = 0;
+static OopType ellipsis_oop(void) {
+    if (g_ellipsis_oop == 0) {
+        GciErrSType e;
+        g_ellipsis_oop = GciPerform(server, "___ellipsis", NULL, 0);
+        if (GciErr(&e)) g_ellipsis_oop = 0;
+    }
+    return g_ellipsis_oop != 0 ? g_ellipsis_oop : none_oop;
+}
+static OopType notimpl_oop(void) {
+    if (g_notimpl_oop == 0) {
+        GciErrSType e;
+        g_notimpl_oop = GciPerform(server, "___notImplemented", NULL, 0);
+        if (GciErr(&e)) g_notimpl_oop = 0;
+    }
+    return g_notimpl_oop != 0 ? g_notimpl_oop : none_oop;
+}
 
 /* ====================================================================
  * Singleton objects — match CPython's ABI symbol names
@@ -1252,11 +1343,16 @@ extern "C" PyObject *PyFloat_FromDouble(double v) {
     return addr_to_pyobj(GciPerform(server, "PyFloat_FromDouble:", &arg, 1));
 }
 
+static void *foreign_nb_slot(PyTypeObject *t, int off);   /* below */
 extern "C" double PyFloat_AsDouble(PyObject *obj) {
     if (obj == NULL) {
         PyErr_BadArgument();
         return -1.0;
     }
+    /* A wheel's own subclass of float has a real ob_fval (float_tp_new). */
+    if (is_foreign(obj) && Py_TYPE(obj) && PyType_IsSubtype(Py_TYPE(obj), &PyFloat_Type)
+            && foreign_nb_slot(Py_TYPE(obj), (int)offsetof(PyNumberMethods, nb_float)) == NULL)
+        return *(double *)((char *)obj + 16);
     /* Foreign numpy scalar: take its own nb_float (or nb_index for ints). */
     if (is_foreign(obj)) {
         OopType fo = foreign_number_oop(obj, 1);
@@ -1409,6 +1505,27 @@ extern "C" Py_ssize_t PyLong_AsSsize_t(PyObject *obj) {
 extern "C" long PyLong_AsLong(PyObject *obj) {
     if (obj == NULL) return -1;
     return (long)oopToLongWithIndex(int_conv_oop(obj));
+}
+
+/* PyLong_AsLong, with an integer out of range reported through *overflow
+   (its sign) rather than as an error.  numpy reads every Python int it is
+   given this way -- an index, a shape, a scalar operand -- and it was a stub
+   answering 0 with *overflow never written. */
+extern "C" long PyLong_AsLongAndOverflow(PyObject *obj, int *overflow) {
+    *overflow = 0;
+    if (obj == NULL) { PyErr_BadInternalCall(); return -1; }
+    OopType oop = int_conv_oop(obj);
+    if (GCI_OOP_IS_SMALL_INT(oop)) return (long)GciOopToI64(oop);
+    if (oop != OOP_NIL && GciIsKindOfClass(oop, OOP_CLASS_INTEGER)) {
+        GciErrSType e;
+        int64 v = GciOopToI64(oop);
+        if (!GciErr(&e)) return (long)v;
+        OopType sign = GciPerform(oop, "sign", NULL, 0);
+        if (GciErr(&e)) return -1;
+        *overflow = GCI_OOP_IS_SMALL_INT(sign) && GciOopToI64(sign) < 0 ? -1 : 1;
+        return -1;
+    }
+    return (long)oopToLongWithIndex(oop);
 }
 
 /* Subclass-aware check: CPython's PyXxx_Check tests tp_flags subclass
@@ -1723,7 +1840,7 @@ static int is_foreign(PyObject *obj) {
     if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
     if (is_real_layout(obj)) return 0;
     if (is_type_mirror(obj)) return 0;     /* a Grail class's type mirror */
-    return *(uint64_t *)((char *)obj + 24) != GRAIL_WRAP_MAGIC;
+    return !is_grail_wrapper_magic(*(uint64_t *)((char *)obj + 24));
 }
 
 /* Observe-only diagnostic for foreign crossings (gated by GRAIL_SHIM_DIAG).
@@ -1769,11 +1886,19 @@ static void foreign_class_method_names(PyTypeObject *type, char *buf, size_t cap
    can use it.  The server keeps a session-scoped pointer->proxy map so the
    same foreign pointer always yields the same proxy.  Pass the name a
    Python `__name__` should report: for a *type* object that is the type's
-   own tp_name; otherwise its ob_type's tp_name. */
+   own tp_name; otherwise its ob_type's tp_name.  A type is anything whose
+   metatype is type OR A SUBCLASS of it: numpy's DTypes are instances of
+   _DTypeMeta, and testing for PyType_Type alone named every one of them
+   ``_DTypeMeta'', so numpy.dtypes._add_dtype_helper's
+   ``setattr(dtypes, DType.__name__, DType)'' wrote one attribute 24 times
+   and np.dtypes.BoolDType never existed. */
+static int64 foreign_compare_hash_bits(PyObject *obj);   /* see below */
 static OopType foreign_proxy_oop(PyObject *obj) {
     if (g_diag_on == 1) diag_foreign(obj);
-    PyTypeObject *t = (obj->ob_type == &PyType_Type)
-                        ? (PyTypeObject *)obj : obj->ob_type;
+    PyTypeObject *mt = obj->ob_type;
+    int is_type = mt == &PyType_Type
+        || (mt != NULL && plausible_pyobj(mt) && PyType_IsSubtype(mt, &PyType_Type));
+    PyTypeObject *t = is_type ? (PyTypeObject *)obj : mt;
     /* THE CRASH SITE.  A wrapper whose gcMalloc block has been freed and reused
        fails the offset-24 sentinel check, so it arrives here as "foreign" -- but
        its ob_type is now whatever reused the block, and reading t->tp_name (at
@@ -1823,8 +1948,9 @@ static OopType foreign_proxy_oop(PyObject *obj) {
             "foreignExceptionTypeForPointer:typeName:baseName:isShimType:classMethods:",
             args, 5);
     }
-    OopType args[2] = { GciI64ToOop((int64)(intptr_t)obj), GciNewString(nm) };
-    return GciPerform(server, "foreignProxyForPointer:typeName:", args, 2);
+    OopType args[3] = { GciI64ToOop((int64)(intptr_t)obj), GciNewString(nm),
+                        GciI64ToOop(foreign_compare_hash_bits(obj)) };
+    return GciPerform(server, "foreignProxyForPointer:typeName:ops:", args, 3);
 }
 
 /* ABI-identical to CPython 3.14's PyTupleObject: PyObject_VAR_HEAD, then a
@@ -1840,10 +1966,13 @@ typedef struct {
     PyObject     *ob_item[1];   /* inline, flexible (offset 32) */
 } ShimTupleObject;
 
+static PyObject *real_layout_arg(PyObject *o, int depth);
+
 /* Build a real-layout tuple from a Grail-backed tuple, so a prebuilt
    wheel's C (numpy's tp_new) can struct-access the call arguments.  The
    result is registered as real-layout so it round-trips correctly if it
-   ever crosses back into Grail. */
+   ever crosses back into Grail.  Its ELEMENTS go the same way when they are
+   Grail lists or tuples (real_layout_arg). */
 static PyObject *to_real_tuple(PyObject *t) {
     if (t == NULL) return NULL;
     if (is_real_layout(t)) return t;          /* already real */
@@ -1860,9 +1989,55 @@ static PyObject *to_real_tuple(PyObject *t) {
     for (Py_ssize_t i = 0; i < n; i++)
         /* PyTuple_GetItem answers a BORROWED reference; the raw pointer stored
            here outlives the call, so take one (as PyList_Append does). */
-        op->ob_item[i] = Py_XNewRef(PyTuple_GetItem(t, i));
+        op->ob_item[i] = real_layout_arg(Py_XNewRef(PyTuple_GetItem(t, i)), 1);
     real_reg_add((PyObject *)op);
     return (PyObject *)op;
+}
+
+/* An ARGUMENT bound for a wheel's own code -- a positional or keyword
+   argument of a foreign call, an operand of a foreign operator: a
+   Grail-backed list or tuple becomes a real-layout copy, its elements
+   likewise, to a bounded depth; anything else is answered as it is.
+
+   A wheel reads such arguments with the inline macros (PyList_GET_SIZE,
+   PyList_GET_ITEM, PyTuple_GET_ITEM), which read a Grail wrapper's OOP and
+   magic words as the size and the item array.  numpy's np.dtype([('a',
+   'f8')]) -- _convert_from_array_descr -- died that way, inside the polyfit
+   that ``import numpy'' runs on macOS.  A COPY is exact for reading, which
+   is what an argument is for; a wheel that mutated an argument list in place
+   would change the copy, not the caller's list.  Tuples are immutable, so
+   for them nothing is lost. */
+static PyObject *real_layout_arg(PyObject *o, int depth) {
+    if (o == NULL || depth > 8) return o;
+    if (o == Py_None || o == Py_True || o == Py_False || o == Py_NotImplemented) return o;
+    if (!plausible_pyobj(o) || is_real_layout(o) || is_type_mirror(o) || is_foreign(o)) return o;
+    PyTypeObject *t = o->ob_type;
+    if (t == &PyTuple_Type) {
+        Py_ssize_t n = PyTuple_Size(o);
+        if (n < 0) { PyErr_Clear(); return o; }
+        ShimTupleObject *op = (ShimTupleObject *)calloc(
+            1, sizeof(ShimTupleObject) + (size_t)(n > 0 ? n - 1 : 0) * sizeof(PyObject *));
+        if (op == NULL) return o;
+        op->ob_refcnt = 1;
+        op->ob_type   = &PyTuple_Type;
+        op->ob_size   = n;
+        op->ob_hash   = -1;
+        for (Py_ssize_t i = 0; i < n; i++)
+            op->ob_item[i] = real_layout_arg(Py_XNewRef(PyTuple_GetItem(o, i)), depth + 1);
+        real_reg_add((PyObject *)op);
+        return (PyObject *)op;
+    }
+    if (t == &PyList_Type) {
+        Py_ssize_t n = PyList_Size(o);
+        if (n < 0) { PyErr_Clear(); return o; }
+        PyObject *l = PyList_New(n);
+        if (l == NULL) { PyErr_Clear(); return o; }
+        for (Py_ssize_t i = 0; i < n; i++)
+            ((ShimListObject *)l)->ob_item[i] =
+                real_layout_arg(Py_XNewRef(PyList_GetItem(o, i)), depth + 1);
+        return l;
+    }
+    return o;
 }
 
 /* Bridge a real-layout object to an equivalent Grail value's OOP.  Lists
@@ -2614,6 +2789,563 @@ static int foreign_setattr(PyObject *obj, const char *name, PyObject *value) {
     return foreign_generic_setattr(obj, name, value);
 }
 
+/* ====================================================================
+ * OPERATORS on a wheel's own object (docs/Shim_Foreign_Subclassing.md,
+ * step 2).  A C type implements its operators as slots -- nb_add,
+ * tp_richcompare, mp_subscript, ... -- and CPython's interpreter is what
+ * turns ``a + b'' into a slot call.  For a wheel object reaching Grail that
+ * part is ours: ShimForeignObject's dunder methods call foreign_op_invoke
+ * through the shimForeignOp user action, and an attribute read of the same
+ * dunder answers a slot wrapper (wrapper_descriptor off the type,
+ * method-wrapper off an instance), as CPython's PyType_Ready puts in a type's
+ * dict.  numpy reads ``dtype.__ge__'' at import, and ``abs(x.dot(x) -
+ * float32(2.0)) < 1e-5'' in its import-time sanity check needs the rest.
+ *
+ * Slots are looked up along tp_base, stopping at the shim's own static types
+ * (Grail-backed builtins), because the shim's PyType_Ready does not copy the
+ * number / sequence / mapping suites into a subtype as CPython's does.
+ * ==================================================================== */
+
+enum ForeignOpKind {
+    FOP_BIN, FOP_RBIN, FOP_IBIN, FOP_CMP, FOP_UNARY, FOP_BOOL, FOP_LEN,
+    FOP_HASH, FOP_ITER, FOP_NEXT, FOP_GETITEM, FOP_SETITEM, FOP_DELITEM,
+    FOP_CONTAINS
+};
+
+struct ForeignOpDef {
+    const char *name;
+    int kind;
+    int off;            /* offset in PyNumberMethods; the compare op for FOP_CMP */
+    const char *sym;    /* the operator, for an error message */
+};
+
+#define NBO(f) ((int)offsetof(PyNumberMethods, f))
+static const ForeignOpDef g_foreign_ops[] = {
+    {"__add__", FOP_BIN, NBO(nb_add), "+"},             {"__radd__", FOP_RBIN, NBO(nb_add), "+"},
+    {"__sub__", FOP_BIN, NBO(nb_subtract), "-"},        {"__rsub__", FOP_RBIN, NBO(nb_subtract), "-"},
+    {"__mul__", FOP_BIN, NBO(nb_multiply), "*"},        {"__rmul__", FOP_RBIN, NBO(nb_multiply), "*"},
+    {"__matmul__", FOP_BIN, NBO(nb_matrix_multiply), "@"}, {"__rmatmul__", FOP_RBIN, NBO(nb_matrix_multiply), "@"},
+    {"__truediv__", FOP_BIN, NBO(nb_true_divide), "/"}, {"__rtruediv__", FOP_RBIN, NBO(nb_true_divide), "/"},
+    {"__floordiv__", FOP_BIN, NBO(nb_floor_divide), "//"}, {"__rfloordiv__", FOP_RBIN, NBO(nb_floor_divide), "//"},
+    {"__mod__", FOP_BIN, NBO(nb_remainder), "%"},       {"__rmod__", FOP_RBIN, NBO(nb_remainder), "%"},
+    {"__divmod__", FOP_BIN, NBO(nb_divmod), "divmod()"}, {"__rdivmod__", FOP_RBIN, NBO(nb_divmod), "divmod()"},
+    {"__pow__", FOP_BIN, NBO(nb_power), "**"},          {"__rpow__", FOP_RBIN, NBO(nb_power), "**"},
+    {"__lshift__", FOP_BIN, NBO(nb_lshift), "<<"},      {"__rlshift__", FOP_RBIN, NBO(nb_lshift), "<<"},
+    {"__rshift__", FOP_BIN, NBO(nb_rshift), ">>"},      {"__rrshift__", FOP_RBIN, NBO(nb_rshift), ">>"},
+    {"__and__", FOP_BIN, NBO(nb_and), "&"},             {"__rand__", FOP_RBIN, NBO(nb_and), "&"},
+    {"__or__", FOP_BIN, NBO(nb_or), "|"},               {"__ror__", FOP_RBIN, NBO(nb_or), "|"},
+    {"__xor__", FOP_BIN, NBO(nb_xor), "^"},             {"__rxor__", FOP_RBIN, NBO(nb_xor), "^"},
+    {"__iadd__", FOP_IBIN, NBO(nb_inplace_add), "+="},  {"__isub__", FOP_IBIN, NBO(nb_inplace_subtract), "-="},
+    {"__imul__", FOP_IBIN, NBO(nb_inplace_multiply), "*="}, {"__imatmul__", FOP_IBIN, NBO(nb_inplace_matrix_multiply), "@="},
+    {"__itruediv__", FOP_IBIN, NBO(nb_inplace_true_divide), "/="}, {"__ifloordiv__", FOP_IBIN, NBO(nb_inplace_floor_divide), "//="},
+    {"__imod__", FOP_IBIN, NBO(nb_inplace_remainder), "%="}, {"__ipow__", FOP_IBIN, NBO(nb_inplace_power), "**="},
+    {"__ilshift__", FOP_IBIN, NBO(nb_inplace_lshift), "<<="}, {"__irshift__", FOP_IBIN, NBO(nb_inplace_rshift), ">>="},
+    {"__iand__", FOP_IBIN, NBO(nb_inplace_and), "&="},  {"__ior__", FOP_IBIN, NBO(nb_inplace_or), "|="},
+    {"__ixor__", FOP_IBIN, NBO(nb_inplace_xor), "^="},
+    {"__lt__", FOP_CMP, Py_LT, "<"}, {"__le__", FOP_CMP, Py_LE, "<="}, {"__eq__", FOP_CMP, Py_EQ, "=="},
+    {"__ne__", FOP_CMP, Py_NE, "!="}, {"__gt__", FOP_CMP, Py_GT, ">"}, {"__ge__", FOP_CMP, Py_GE, ">="},
+    {"__neg__", FOP_UNARY, NBO(nb_negative), "unary -"}, {"__pos__", FOP_UNARY, NBO(nb_positive), "unary +"},
+    {"__abs__", FOP_UNARY, NBO(nb_absolute), "abs()"},   {"__invert__", FOP_UNARY, NBO(nb_invert), "unary ~"},
+    {"__int__", FOP_UNARY, NBO(nb_int), "int()"},       {"__float__", FOP_UNARY, NBO(nb_float), "float()"},
+    {"__index__", FOP_UNARY, NBO(nb_index), "index()"},
+    {"__bool__", FOP_BOOL, NBO(nb_bool), "bool()"},
+    {"__len__", FOP_LEN, 0, "len()"}, {"__hash__", FOP_HASH, 0, "hash()"},
+    {"__iter__", FOP_ITER, 0, "iter()"}, {"__next__", FOP_NEXT, 0, "next()"},
+    {"__getitem__", FOP_GETITEM, 0, "[]"}, {"__setitem__", FOP_SETITEM, 0, "[]="},
+    {"__delitem__", FOP_DELITEM, 0, "del []"}, {"__contains__", FOP_CONTAINS, 0, "in"},
+    {NULL, 0, 0, NULL}
+};
+#undef NBO
+
+static const ForeignOpDef *foreign_op_named(const char *name) {
+    if (name == NULL || name[0] != '_' || name[1] != '_') return NULL;
+    for (const ForeignOpDef *d = g_foreign_ops; d->name != NULL; d++)
+        if (strcmp(d->name, name) == 0) return d;
+    return NULL;
+}
+
+/* The first type on t's tp_base chain, short of the shim's own types, for
+   which pick() answers a slot -- and that slot. */
+#define FOREIGN_SLOT(t, expr) ({ void *_r = NULL; \
+    for (PyTypeObject *_t = (t); _t != NULL && !is_shim_type(_t); _t = _t->tp_base) { \
+        PyTypeObject *T = _t; (void)T; void *_v = (void *)(expr); if (_v) { _r = _v; break; } } _r; })
+
+static void *foreign_nb_slot(PyTypeObject *t, int off) {
+    return FOREIGN_SLOT(t, T->tp_as_number ? *(void **)((char *)T->tp_as_number + off) : NULL);
+}
+static void *foreign_mp_subscript(PyTypeObject *t) { return FOREIGN_SLOT(t, T->tp_as_mapping ? (void *)T->tp_as_mapping->mp_subscript : NULL); }
+static void *foreign_mp_ass(PyTypeObject *t)       { return FOREIGN_SLOT(t, T->tp_as_mapping ? (void *)T->tp_as_mapping->mp_ass_subscript : NULL); }
+static void *foreign_mp_length(PyTypeObject *t)    { return FOREIGN_SLOT(t, T->tp_as_mapping ? (void *)T->tp_as_mapping->mp_length : NULL); }
+static void *foreign_sq_length(PyTypeObject *t)    { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_length : NULL); }
+static void *foreign_sq_item(PyTypeObject *t)      { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_item : NULL); }
+static void *foreign_sq_ass_item(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_ass_item : NULL); }
+static void *foreign_sq_contains(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_contains : NULL); }
+static void *foreign_tp_richcompare(PyTypeObject *t) { return FOREIGN_SLOT(t, (void *)T->tp_richcompare); }
+static void *foreign_tp_iter(PyTypeObject *t)      { return FOREIGN_SLOT(t, (void *)T->tp_iter); }
+static void *foreign_tp_iternext(PyTypeObject *t)  { return FOREIGN_SLOT(t, (void *)T->tp_iternext); }
+
+/* tp_hash and tp_richcompare go together, as CPython inherits them: the first
+   type defining either decides.  Comparison without a hash is CPython's
+   ``__hash__ = None'' -- ndarray's case.  *unhashable says so; NULL with it
+   clear means object's identity hash applies. */
+/* What a type sets as its tp_hash to say it is unhashable (CPython's
+   object.h).  Missing from the shim, so a wheel that used it did not load. */
+extern "C" Py_hash_t PyObject_HashNotImplemented(PyObject *v) {
+    PyErr_Format(PyExc_TypeError, "unhashable type: '%s'",
+                 v && Py_TYPE(v) && Py_TYPE(v)->tp_name ? Py_TYPE(v)->tp_name : "?");
+    return -1;
+}
+
+static hashfunc foreign_tp_hash(PyTypeObject *t, int *unhashable) {
+    *unhashable = 0;
+    for (; t != NULL && !is_shim_type(t); t = t->tp_base) {
+        if (t->tp_hash == PyObject_HashNotImplemented) { *unhashable = 1; return NULL; }
+        if (t->tp_hash != NULL) return t->tp_hash;
+        if (t->tp_richcompare != NULL) { *unhashable = 1; return NULL; }
+    }
+    return NULL;
+}
+
+/* What a proxy needs to know to compare and hash WITHOUT asking C, handed to
+   it at birth (CPythonShim>>foreignProxyForPointer:typeName:ops:): 1 = its
+   type has tp_richcompare, 2 = tp_hash, 4 = unhashable (compares, no hash).
+   Most wheel objects have neither -- every numpy DType class, every ufunc --
+   and for those == is identity and the hash is the identity hash, as in
+   CPython, with no user action.  That matters beyond speed: numpy keys its
+   cast tables by DType class, and a hash that needed a nested user action
+   failed deep inside np.linspace, so the lookup missed ("builtin cast ...
+   not found, this should not be possible"). */
+static int64 foreign_compare_hash_bits(PyObject *obj) {
+    PyTypeObject *t = obj ? obj->ob_type : NULL;
+    if (t == NULL || !plausible_pyobj(t)) return 0;
+    int unhashable = 0;
+    int64 bits = 0;
+    if (foreign_tp_richcompare(t) != NULL) bits |= 1;
+    if (foreign_tp_hash(t, &unhashable) != NULL) bits |= 2;
+    if (unhashable) bits |= 4;
+    /* A subclass of float compares and hashes as float does
+       (float_subtype_op), whatever slots its own type lacks. */
+    if (PyType_IsSubtype(t, &PyFloat_Type)) {
+        bits |= 1;
+        if (!unhashable) bits |= 2;
+    }
+    return bits;
+}
+
+/* Does t implement op at all -- whether an attribute read answers a wrapper. */
+static int foreign_op_present(PyTypeObject *t, const ForeignOpDef *d) {
+    int unhashable;
+    switch (d->kind) {
+        case FOP_BIN: case FOP_RBIN: case FOP_IBIN: case FOP_UNARY: case FOP_BOOL:
+            return foreign_nb_slot(t, d->off) != NULL;
+        case FOP_CMP:      return foreign_tp_richcompare(t) != NULL;
+        case FOP_LEN:      return foreign_mp_length(t) != NULL || foreign_sq_length(t) != NULL;
+        case FOP_HASH:     return foreign_tp_hash(t, &unhashable) != NULL;
+        case FOP_ITER:     return foreign_tp_iter(t) != NULL;
+        case FOP_NEXT:     return foreign_tp_iternext(t) != NULL;
+        case FOP_GETITEM:  return foreign_mp_subscript(t) != NULL || foreign_sq_item(t) != NULL;
+        case FOP_SETITEM:
+        case FOP_DELITEM:  return foreign_mp_ass(t) != NULL || foreign_sq_ass_item(t) != NULL;
+        case FOP_CONTAINS: return foreign_sq_contains(t) != NULL;
+    }
+    return 0;
+}
+
+static PyObject *foreign_not_implemented(void) {
+    Py_INCREF(Py_NotImplemented);
+    return Py_NotImplemented;
+}
+
+static PyObject *foreign_bool_obj(int v) {
+    PyObject *r = v ? Py_True : Py_False;
+    Py_INCREF(r);
+    return r;
+}
+
+/* A sequence index for sq_item / sq_ass_item, made non-negative with
+   sq_length as CPython's PySequence_GetItem does.  -1 with an error set on
+   failure. */
+static Py_ssize_t foreign_seq_index(PyTypeObject *t, PyObject *self, PyObject *key) {
+    Py_ssize_t i = PyNumber_AsSsize_t(key, PyExc_IndexError);
+    if (i == -1 && PyErr_Occurred()) return -1;
+    if (i < 0) {
+        lenfunc len = (lenfunc)foreign_sq_length(t);
+        if (len != NULL) {
+            Py_ssize_t n = len(self);
+            if (n < 0) return -1;
+            i += n;
+        }
+    }
+    return i;
+}
+
+/* ``self <op> a'' (and b, the value of an item assignment or a pow modulus)
+   by self's own slot, with CPython's semantics: a binary slot missing is
+   NotImplemented, so the caller can try the other operand; the rest raise
+   CPython's TypeError.  NULL with no error set means ``no answer here'' --
+   only __hash__ (object's identity hash applies) and __contains__ (no
+   sq_contains, so search by iteration) answer that way, and the
+   searching is done here.  New reference, or NULL with an error. */
+/* An instance of a wheel's own SUBCLASS OF FLOAT, for an operator its type
+   does not implement itself: float's.  In CPython the subclass inherits
+   float's C slots; the shim's float has none -- Grail does float arithmetic
+   -- so the instance's value (its ob_fval, real since float_tp_new) goes to
+   the shim's number API as a float.  NULL with no error: not applicable. */
+extern "C" PyObject *PyNumber_Add(PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_Subtract(PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_Multiply(PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_TrueDivide(PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_FloorDivide(PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_Remainder(PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_Power(PyObject *, PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_Divmod(PyObject *, PyObject *);
+extern "C" PyObject *PyNumber_Negative(PyObject *);
+extern "C" PyObject *PyNumber_Positive(PyObject *);
+extern "C" PyObject *PyNumber_Absolute(PyObject *);
+extern "C" PyObject *PyNumber_Long(PyObject *);
+static PyObject *float_subtype_op(PyObject *self, const ForeignOpDef *d, PyObject *a, PyObject *b) {
+    PyObject *f = PyFloat_FromDouble(*(double *)((char *)self + 16));
+    if (f == NULL) return NULL;
+    PyObject *x = d->kind == FOP_RBIN ? a : f, *y = d->kind == FOP_RBIN ? f : a;
+    switch (d->kind) {
+        case FOP_BIN: case FOP_RBIN: case FOP_IBIN: {
+            int off = d->off;
+#define NB_IS(f1, f2) (off == (int)offsetof(PyNumberMethods, f1) || off == (int)offsetof(PyNumberMethods, f2))
+            if (NB_IS(nb_add, nb_inplace_add))                 return PyNumber_Add(x, y);
+            if (NB_IS(nb_subtract, nb_inplace_subtract))       return PyNumber_Subtract(x, y);
+            if (NB_IS(nb_multiply, nb_inplace_multiply))       return PyNumber_Multiply(x, y);
+            if (NB_IS(nb_true_divide, nb_inplace_true_divide)) return PyNumber_TrueDivide(x, y);
+            if (NB_IS(nb_floor_divide, nb_inplace_floor_divide)) return PyNumber_FloorDivide(x, y);
+            if (NB_IS(nb_remainder, nb_inplace_remainder))     return PyNumber_Remainder(x, y);
+            if (NB_IS(nb_power, nb_inplace_power))             return PyNumber_Power(x, y, b ? b : Py_None);
+            if (off == (int)offsetof(PyNumberMethods, nb_divmod)) return PyNumber_Divmod(x, y);
+#undef NB_IS
+            return foreign_not_implemented();
+        }
+        case FOP_CMP:   return PyObject_RichCompare(f, a, d->off);
+        case FOP_UNARY:
+            if (d->off == (int)offsetof(PyNumberMethods, nb_negative)) return PyNumber_Negative(f);
+            if (d->off == (int)offsetof(PyNumberMethods, nb_positive)) return PyNumber_Positive(f);
+            if (d->off == (int)offsetof(PyNumberMethods, nb_absolute)) return PyNumber_Absolute(f);
+            if (d->off == (int)offsetof(PyNumberMethods, nb_float))    return f;
+            if (d->off == (int)offsetof(PyNumberMethods, nb_int))      return PyNumber_Long(f);
+            break;
+        case FOP_BOOL:  return foreign_bool_obj(*(double *)((char *)self + 16) != 0.0);
+        case FOP_HASH: {
+            Py_hash_t h = PyObject_Hash(f);
+            if (h == -1 && PyErr_Occurred()) return NULL;
+            return PyLong_FromSsize_t((Py_ssize_t)h);
+        }
+        default: break;
+    }
+    return NULL;
+}
+
+static PyObject *foreign_op_invoke(PyObject *self, const ForeignOpDef *d, PyObject *a, PyObject *b) {
+    PyTypeObject *t = Py_TYPE(self);
+    const char *tn = (t && t->tp_name) ? t->tp_name : "?";
+    if (t != NULL && PyType_IsSubtype(t, &PyFloat_Type) && !foreign_op_present(t, d)) {
+        PyObject *r = float_subtype_op(self, d, a, b);
+        if (r != NULL || PyErr_Occurred()) return r;
+    }
+    switch (d->kind) {
+        case FOP_BIN:
+        case FOP_RBIN:
+        case FOP_IBIN: {
+            void *f = foreign_nb_slot(t, d->off);
+            if (f == NULL) return foreign_not_implemented();
+            PyObject *x = d->kind == FOP_RBIN ? a : self;
+            PyObject *y = d->kind == FOP_RBIN ? self : a;
+            if (d->off == (int)offsetof(PyNumberMethods, nb_power)
+                    || d->off == (int)offsetof(PyNumberMethods, nb_inplace_power))
+                return ((ternaryfunc)f)(x, y, b != NULL ? b : Py_None);
+            return ((binaryfunc)f)(x, y);
+        }
+        case FOP_CMP: {
+            richcmpfunc f = (richcmpfunc)foreign_tp_richcompare(t);
+            if (f == NULL) return foreign_not_implemented();
+            return f(self, a, d->off);
+        }
+        case FOP_UNARY: {
+            unaryfunc f = (unaryfunc)foreign_nb_slot(t, d->off);
+            if (f == NULL) {
+                /* CPython's words for each, from float(), int() and
+                   operator.index() */
+                if (d->off == (int)offsetof(PyNumberMethods, nb_float))
+                    PyErr_Format(PyExc_TypeError, "float() argument must be a string or a real number, not '%s'", tn);
+                else if (d->off == (int)offsetof(PyNumberMethods, nb_int))
+                    PyErr_Format(PyExc_TypeError, "int() argument must be a string, a bytes-like object or a real number, not '%s'", tn);
+                else if (d->off == (int)offsetof(PyNumberMethods, nb_index))
+                    PyErr_Format(PyExc_TypeError, "'%s' object cannot be interpreted as an integer", tn);
+                else
+                    PyErr_Format(PyExc_TypeError, "bad operand type for %s: '%s'", d->sym, tn);
+                return NULL;
+            }
+            return f(self);
+        }
+        case FOP_BOOL: {
+            inquiry f = (inquiry)foreign_nb_slot(t, d->off);
+            int r;
+            if (f != NULL) {
+                r = f(self);
+            } else {
+                lenfunc len = (lenfunc)foreign_mp_length(t);
+                if (len == NULL) len = (lenfunc)foreign_sq_length(t);
+                if (len == NULL) return foreign_bool_obj(1);
+                Py_ssize_t n = len(self);
+                r = n < 0 ? -1 : n != 0;
+            }
+            if (r < 0) return NULL;
+            return foreign_bool_obj(r);
+        }
+        case FOP_LEN: {
+            lenfunc len = (lenfunc)foreign_mp_length(t);
+            if (len == NULL) len = (lenfunc)foreign_sq_length(t);
+            if (len == NULL) {
+                PyErr_Format(PyExc_TypeError, "object of type '%s' has no len()", tn);
+                return NULL;
+            }
+            Py_ssize_t n = len(self);
+            if (n < 0) return NULL;
+            return PyLong_FromSsize_t(n);
+        }
+        case FOP_HASH: {
+            int unhashable;
+            hashfunc f = foreign_tp_hash(t, &unhashable);
+            if (unhashable) {
+                PyErr_Format(PyExc_TypeError, "unhashable type: '%s'", tn);
+                return NULL;
+            }
+            if (f == NULL) return NULL;
+            Py_hash_t h = f(self);
+            if (h == -1 && PyErr_Occurred()) return NULL;
+            return PyLong_FromSsize_t((Py_ssize_t)h);
+        }
+        case FOP_ITER: {
+            getiterfunc f = (getiterfunc)foreign_tp_iter(t);
+            if (f == NULL) {
+                PyErr_Format(PyExc_TypeError, "'%s' object is not iterable", tn);
+                return NULL;
+            }
+            return f(self);
+        }
+        case FOP_NEXT: {
+            iternextfunc f = (iternextfunc)foreign_tp_iternext(t);
+            if (f == NULL) {
+                PyErr_Format(PyExc_TypeError, "'%s' object is not an iterator", tn);
+                return NULL;
+            }
+            PyObject *r = f(self);
+            if (r == NULL && !PyErr_Occurred()) PyErr_SetNone(PyExc_StopIteration);
+            return r;
+        }
+        case FOP_GETITEM: {
+            binaryfunc f = (binaryfunc)foreign_mp_subscript(t);
+            if (f != NULL) return f(self, a);
+            ssizeargfunc g = (ssizeargfunc)foreign_sq_item(t);
+            if (g == NULL) {
+                PyErr_Format(PyExc_TypeError, "'%s' object is not subscriptable", tn);
+                return NULL;
+            }
+            Py_ssize_t i = foreign_seq_index(t, self, a);
+            if (i == -1 && PyErr_Occurred()) return NULL;
+            return g(self, i);
+        }
+        case FOP_SETITEM:
+        case FOP_DELITEM: {
+            PyObject *v = d->kind == FOP_SETITEM ? b : NULL;
+            int rc;
+            objobjargproc f = (objobjargproc)foreign_mp_ass(t);
+            if (f != NULL) {
+                rc = f(self, a, v);
+            } else {
+                ssizeobjargproc g = (ssizeobjargproc)foreign_sq_ass_item(t);
+                if (g == NULL) {
+                    PyErr_Format(PyExc_TypeError, d->kind == FOP_SETITEM
+                                     ? "'%s' object does not support item assignment"
+                                     : "'%s' object doesn't support item deletion", tn);
+                    return NULL;
+                }
+                Py_ssize_t i = foreign_seq_index(t, self, a);
+                if (i == -1 && PyErr_Occurred()) return NULL;
+                rc = g(self, i, v);
+            }
+            if (rc < 0) return NULL;
+            Py_INCREF(Py_None);
+            return Py_None;
+        }
+        case FOP_CONTAINS: {
+            objobjproc f = (objobjproc)foreign_sq_contains(t);
+            if (f != NULL) {
+                int r = f(self, a);
+                if (r < 0) return NULL;
+                return foreign_bool_obj(r);
+            }
+            /* No sq_contains: search by iteration, CPython's
+               _PySequence_IterSearch. */
+            getiterfunc gi = (getiterfunc)foreign_tp_iter(t);
+            if (gi == NULL) {
+                PyErr_Format(PyExc_TypeError, "argument of type '%s' is not a container or iterable", tn);
+                return NULL;
+            }
+            PyObject *it = gi(self);
+            if (it == NULL) return NULL;
+            for (;;) {
+                PyObject *item = PyIter_Next(it);
+                if (item == NULL) {
+                    if (PyErr_Occurred()) return NULL;
+                    return foreign_bool_obj(0);
+                }
+                int eq = PyObject_RichCompareBool(item, a, Py_EQ);
+                if (eq < 0) return NULL;
+                if (eq) return foreign_bool_obj(1);
+            }
+        }
+    }
+    PyErr_SetString(PyExc_SystemError, "unknown foreign operator");
+    return NULL;
+}
+
+/* --- Slot wrappers: what a dunder read off a wheel's type or object answers.
+   ``wrapper_descriptor'' off the type -- called with the instance first --
+   and ``method-wrapper'' off an instance, bound to it.  Both call
+   foreign_op_invoke.  numpy's import reads ``dtype.__ge__'' and friends to
+   attach docstrings (which add_docstring declines for these, as CPython's
+   does; numpy's _add_docstring ignores that). */
+typedef struct {
+    Py_ssize_t ob_refcnt;
+    PyTypeObject *ob_type;
+    PyTypeObject *d_type;
+    PyObject *d_name;
+    PyObject *d_qualname;
+    const ForeignOpDef *op;
+} GrailSlotWrapper;
+
+typedef struct {
+    Py_ssize_t ob_refcnt;
+    PyTypeObject *ob_type;
+    PyObject *self;
+    const ForeignOpDef *op;
+} GrailMethodWrapper;
+
+static PyTypeObject GrailSlotWrapper_Type;
+static PyTypeObject GrailMethodWrapper_Type;
+
+static PyObject *foreign_wrapper_call(PyObject *self, const ForeignOpDef *op,
+                                      PyObject *args, Py_ssize_t from) {
+    Py_ssize_t n = PyTuple_Size(args) - from;
+    PyObject *a = n >= 1 ? PyTuple_GetItem(args, from) : NULL;
+    PyObject *b = n >= 2 ? PyTuple_GetItem(args, from + 1) : NULL;
+    int want = (op->kind == FOP_UNARY || op->kind == FOP_BOOL || op->kind == FOP_LEN
+                || op->kind == FOP_HASH || op->kind == FOP_ITER || op->kind == FOP_NEXT) ? 0
+             : (op->kind == FOP_SETITEM) ? 2 : 1;
+    int is_pow = (op->kind == FOP_BIN || op->kind == FOP_RBIN || op->kind == FOP_IBIN)
+                 && op->off == (int)offsetof(PyNumberMethods, nb_power);
+    if (n != want && !(is_pow && n == 2)) {
+        PyErr_Format(PyExc_TypeError, "expected %d argument%s, got %zd",
+                     want, want == 1 ? "" : "s", n);
+        return NULL;
+    }
+    PyObject *r = foreign_op_invoke(self, op, a, b);
+    if (r == NULL && !PyErr_Occurred()) {
+        if (op->kind == FOP_HASH) return PyLong_FromSsize_t((Py_ssize_t)(((uintptr_t)self) >> 4));
+        PyErr_SetString(PyExc_SystemError, "slot wrapper answered nothing");
+    }
+    return r;
+}
+
+static PyObject *slotwrapper_call(PyObject *w, PyObject *args, PyObject *kw) {
+    (void)kw;
+    GrailSlotWrapper *d = (GrailSlotWrapper *)w;
+    if (PyTuple_Size(args) < 1) {
+        PyErr_Format(PyExc_TypeError, "descriptor '%s' of '%s' object needs an argument",
+                     d->op->name, d->d_type ? d->d_type->tp_name : "?");
+        return NULL;
+    }
+    return foreign_wrapper_call(PyTuple_GetItem(args, 0), d->op, args, 1);
+}
+
+static PyObject *new_method_wrapper(PyObject *self, const ForeignOpDef *op);
+
+static PyObject *slotwrapper_get(PyObject *w, PyObject *obj, PyObject *type) {
+    (void)type;
+    if (obj == NULL || obj == Py_None) { Py_INCREF(w); return w; }
+    return new_method_wrapper(obj, ((GrailSlotWrapper *)w)->op);
+}
+
+static PyObject *methodwrapper_call(PyObject *w, PyObject *args, PyObject *kw) {
+    (void)kw;
+    GrailMethodWrapper *m = (GrailMethodWrapper *)w;
+    return foreign_wrapper_call(m->self, m->op, args, 0);
+}
+
+static PyObject *wrapper_getattro(PyObject *w, PyObject *name) {
+    const char *n = PyUnicode_AsUTF8(name);
+    if (n == NULL) return NULL;
+    int bound = Py_TYPE(w) == &GrailMethodWrapper_Type;
+    const ForeignOpDef *op = bound ? ((GrailMethodWrapper *)w)->op : ((GrailSlotWrapper *)w)->op;
+    PyTypeObject *owner = bound ? Py_TYPE(((GrailMethodWrapper *)w)->self) : ((GrailSlotWrapper *)w)->d_type;
+    if (strcmp(n, "__name__") == 0) return PyUnicode_FromString(op->name);
+    if (strcmp(n, "__qualname__") == 0) {
+        const char *tn = owner && owner->tp_name ? owner->tp_name : "?";
+        const char *dot = strrchr(tn, '.');
+        return PyUnicode_FromFormat("%s.%s", dot ? dot + 1 : tn, op->name);
+    }
+    if (strcmp(n, "__doc__") == 0) { Py_INCREF(Py_None); return Py_None; }
+    if (strcmp(n, "__objclass__") == 0 && owner != NULL) { Py_INCREF((PyObject *)owner); return (PyObject *)owner; }
+    if (bound && strcmp(n, "__self__") == 0) {
+        PyObject *s = ((GrailMethodWrapper *)w)->self;
+        Py_INCREF(s);
+        return s;
+    }
+    PyErr_Format(PyExc_AttributeError, "'%s' object has no attribute '%s'", Py_TYPE(w)->tp_name, n);
+    return NULL;
+}
+
+static void init_wrapper_types(void) {
+    static int done = 0;
+    if (done) return;
+    done = 1;
+    PyTypeObject *ts[2] = { &GrailSlotWrapper_Type, &GrailMethodWrapper_Type };
+    const char *names[2] = { "wrapper_descriptor", "method-wrapper" };
+    for (int i = 0; i < 2; i++) {
+        ts[i]->ob_base.ob_base.ob_refcnt = 1;
+        ts[i]->ob_base.ob_base.ob_type = &PyType_Type;
+        ts[i]->tp_name = names[i];
+        ts[i]->tp_base = &PyBaseObject_Type;
+        ts[i]->tp_getattro = wrapper_getattro;
+        ts[i]->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
+    }
+    GrailSlotWrapper_Type.tp_basicsize = sizeof(GrailSlotWrapper);
+    GrailSlotWrapper_Type.tp_call = slotwrapper_call;
+    GrailSlotWrapper_Type.tp_descr_get = slotwrapper_get;
+    GrailMethodWrapper_Type.tp_basicsize = sizeof(GrailMethodWrapper);
+    GrailMethodWrapper_Type.tp_call = methodwrapper_call;
+}
+
+static PyObject *new_slot_wrapper(PyTypeObject *t, const ForeignOpDef *op) {
+    init_wrapper_types();
+    GrailSlotWrapper *w = (GrailSlotWrapper *)calloc(1, sizeof(GrailSlotWrapper));
+    if (w == NULL) return PyErr_NoMemory();
+    w->ob_refcnt = 1;
+    w->ob_type = &GrailSlotWrapper_Type;
+    w->d_type = t;
+    w->op = op;
+    return (PyObject *)w;
+}
+
+static PyObject *new_method_wrapper(PyObject *self, const ForeignOpDef *op) {
+    init_wrapper_types();
+    GrailMethodWrapper *m = (GrailMethodWrapper *)calloc(1, sizeof(GrailMethodWrapper));
+    if (m == NULL) return PyErr_NoMemory();
+    m->ob_refcnt = 1;
+    m->ob_type = &GrailMethodWrapper_Type;
+    Py_INCREF(self);
+    m->self = self;
+    m->op = op;
+    return (PyObject *)m;
+}
+
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     int is_type = is_foreign_type(obj);
     PyTypeObject *start = is_type ? (PyTypeObject *)obj : obj->ob_type;
@@ -2627,6 +3359,14 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
         }
     }
     PyObject *v = foreign_type_dict_lookup(start, name);
+    /* A descriptor found in the type's dict binds to an instance, as in
+       CPython's PyObject_GenericGetAttr.  A type read caches one there
+       (cache_type_descr: ``dtype.char'' read for its docstring), and the next
+       read off an INSTANCE -- ``dtype('int8').char'' -- answered the member
+       descriptor itself, not the character. */
+    if (v != NULL && !is_type && Py_TYPE(v) != NULL && plausible_pyobj(Py_TYPE(v))
+            && Py_TYPE(v)->tp_descr_get != NULL)
+        return Py_TYPE(v)->tp_descr_get(v, obj, (PyObject *)start);
     if (v != NULL) return v;
     for (PyTypeObject *t = start; t != NULL; t = t->tp_base) {
         for (PyMethodDef *ml = t->tp_methods; ml && ml->ml_name; ml++) {
@@ -2644,11 +3384,19 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
             if (is_type) return cache_type_descr(t, name, PyDescr_NewGetSet(t, gs));
             if (gs->get) return gs->get(obj, gs->closure);
         }
-        /* A struct field (tp_members), read off an instance.  Off the type
-           it would be a member descriptor, which the shim does not make. */
-        if (!is_type)
-            for (PyMemberDef *m = t->tp_members; m && m->name; m++)
-                if (strcmp(m->name, name) == 0) return PyMember_GetOne((const char *)obj, m);
+        /* A struct field (tp_members): its value off an instance, its member
+           descriptor off the type (numpy documents ``flatiter.base''). */
+        for (PyMemberDef *m = t->tp_members; m && m->name; m++) {
+            if (strcmp(m->name, name) != 0) continue;
+            if (is_type) return cache_type_descr(t, name, PyDescr_NewMember(t, m));
+            return PyMember_GetOne((const char *)obj, m);
+        }
+    }
+    /* An operator dunder the type implements as a slot: its slot wrapper. */
+    const ForeignOpDef *op = foreign_op_named(name);
+    if (op != NULL && foreign_op_present(start, op)) {
+        if (is_type) return cache_type_descr(start, name, new_slot_wrapper(start, op));
+        return new_method_wrapper(obj, op);
     }
     return NULL;
 }
@@ -4549,6 +5297,19 @@ static void check_and_raise_error(void) {
  * Returns: the target OOP read from the result PyObject's offset 16
  * ==================================================================== */
 
+/* Was ``name'' loaded from a wheel's .so (shimDynLoad), rather than being
+   one of the shim's own modules?  A wheel is built against CPython's
+   headers and reads its arguments with the inline list / tuple macros, so a
+   Grail list or tuple argument goes to it as a real-layout copy
+   (real_layout_arg).  The shim's own modules are built against cpython.h,
+   use the functions, and may MUTATE a list argument -- _bisect.insort does
+   -- so they keep receiving the caller's list itself. */
+static int is_wheel_module(const char *name) {
+    for (int i = 0; i < g_dyn_ever_count; i++)
+        if (strcmp(g_dyn_ever[i].name, name) == 0) return 1;
+    return 0;
+}
+
 static OopType shimCall(OopType modOop, OopType methOop,
                         OopType a1, OopType a2, OopType a3,
                         OopType a4, OopType a5, OopType flagsOop)
@@ -4618,6 +5379,9 @@ static OopType shimCall(OopType modOop, OopType methOop,
         pyArgs[4] = (PyObject *)(intptr_t)GciOopToI64(a5);
         pyArgs[5] = NULL;
     }
+
+    if (is_wheel_module(modName))
+        for (int i = 0; i < nargs && i < 6; i++) pyArgs[i] = real_layout_arg(pyArgs[i], 0);
 
     /* 6. Call the method */
     PyObject *result = call_method(module, methIdx, pyArgs, nargs);
@@ -4706,6 +5470,9 @@ static OopType shimCallKw(OopType modOop, OopType methOop,
         args[npos + i] = (PyObject *)(intptr_t)GciOopToI64(valAddrOop);
     }
 
+    if (is_wheel_module(modName))
+        for (Py_ssize_t i = 0; i < npos + nkw; i++) args[i] = real_layout_arg(args[i], 0);
+
     PyModuleDef *def = (PyModuleDef *)module;
     PyMethodDef *method = &def->m_methods[methIdx];
     PyErr_Clear();
@@ -4783,6 +5550,17 @@ static OopType shimInit(OopType serverOop, OopType noneAddr,
 
     /* Set type pointers on the static singletons. */
     _Py_TrueStruct.ob_type  = &PyBool_Type;
+    if (_Py_NotImplementedStruct.ob_type == NULL) {
+        init_type(&_PyNotImplemented_Type, "NotImplementedType", &PyBaseObject_Type,
+                  Py_TPFLAGS_DEFAULT);
+        register_shim_type(&_PyNotImplemented_Type);
+        _Py_NotImplementedStruct.ob_type = &_PyNotImplemented_Type;
+    }
+    if (_Py_EllipsisObject.ob_type == NULL) {
+        init_type(&_PyEllipsis_Type, "ellipsis", &PyBaseObject_Type, Py_TPFLAGS_DEFAULT);
+        register_shim_type(&_PyEllipsis_Type);
+        _Py_EllipsisObject.ob_type = &_PyEllipsis_Type;
+    }
     _Py_FalseStruct.ob_type = &PyBool_Type;
     check_and_raise_error();
 
@@ -4834,12 +5612,15 @@ static OopType shimTypeAddr(OopType nameOop)
     else if (strcmp(name, "type")   == 0) type = &PyType_Type;
     else if (strcmp(name, "NoneType") == 0) type = &_PyNone_Type;
     else if (strcmp(name, "set")    == 0) type = &PySet_Type;
+    else if (strcmp(name, "slice")  == 0) type = &PySlice_Type;
     else if (strcmp(name, "frozenset") == 0) type = &PyFrozenSet_Type;
     /* Not types: the three singletons, so Grail can hand C THESE pointers
        for None / True / False (CPythonShim>>initTypeAddresses). */
     else if (strcmp(name, "None")  == 0) type = (PyTypeObject *)&_Py_NoneStruct;
     else if (strcmp(name, "True")  == 0) type = (PyTypeObject *)&_Py_TrueStruct;
     else if (strcmp(name, "False") == 0) type = (PyTypeObject *)&_Py_FalseStruct;
+    else if (strcmp(name, "NotImplemented") == 0) type = (PyTypeObject *)&_Py_NotImplementedStruct;
+    else if (strcmp(name, "Ellipsis") == 0) type = (PyTypeObject *)&_Py_EllipsisObject;
     /* The shim's static exception types, by name, so a Grail exception
        class mirrors onto the very type C compares against. */
     if (!type) type = (PyTypeObject *)static_exc_named(name);
@@ -5533,7 +6314,10 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
     for (Py_ssize_t i = 0; i < npos; i++) {
         OopType idxOop = GciI64ToOop(i + 1);
         OopType addrOop = GciFetchOop(posArrOop, GciOopToI64(idxOop));
-        PyTuple_SetItem(tuple, i, (PyObject *)(intptr_t)GciOopToI64(addrOop));
+        /* A Grail list or tuple argument as a real-layout copy: the tuple is
+           real already, so call_foreign's to_real_tuple would not look at its
+           elements (real_layout_arg). */
+        PyTuple_SetItem(tuple, i, real_layout_arg((PyObject *)(intptr_t)GciOopToI64(addrOop), 1));
     }
     PyObject *kwargs = NULL;
     if (nkw > 0) {
@@ -5544,7 +6328,7 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
             OopType valAddrOop = GciFetchOop(kwValsOop, GciOopToI64(idxOop));
             OopType nameAddr = GciPerform(server, "PyUnicode_FromString:", &nameOop, 1);
             PyDict_SetItem(kwargs, addr_to_pyobj(nameAddr),
-                           (PyObject *)(intptr_t)GciOopToI64(valAddrOop));
+                           real_layout_arg((PyObject *)(intptr_t)GciOopToI64(valAddrOop), 0));
         }
     }
     PyErr_Clear();
@@ -5628,6 +6412,34 @@ static OopType shimForeignSetAttr(OopType ptrOop, OopType nameOop, OopType valAd
     buffer_cache_clear();
     check_and_raise_error();
     return OOP_TRUE;
+}
+
+/* ``self <op> a'' from Grail (ShimForeignObject's dunder methods): the
+   operator by its dunder name, the operands as wrap: addresses (0 when
+   absent).  Answers the result; nil when there is no answer here (an
+   inherited identity __hash__); raises what the slot raised. */
+static OopType shimForeignOp(OopType ptrOop, OopType nameOop, OopType aAddrOop, OopType bAddrOop)
+{
+    char name[64];
+    fetch_string(nameOop, name, sizeof(name));
+    PyObject *self = (PyObject *)(intptr_t)GciOopToI64(ptrOop);
+    int64 aa = GciOopToI64(aAddrOop), ba = GciOopToI64(bAddrOop);
+    PyObject *a = aa ? real_layout_arg((PyObject *)(intptr_t)aa, 0) : NULL;
+    PyObject *b = ba ? real_layout_arg((PyObject *)(intptr_t)ba, 0) : NULL;
+    PyErr_Clear();
+    const ForeignOpDef *op = foreign_op_named(name);
+    if (op == NULL || !plausible_pyobj(self) || !plausible_pyobj(self->ob_type)) {
+        PyErr_Format(PyExc_TypeError, "no foreign operator '%s'", name);
+        check_and_raise_error();
+        return OOP_NIL;
+    }
+    PyObject *r = foreign_op_invoke(self, op, a, b);
+    buffer_cache_clear();
+    check_and_raise_error();
+    if (r == NULL) return OOP_NIL;
+    OopType res = pyobj_oop(r);
+    check_and_raise_error();
+    return res;
 }
 
 /* str() / repr() of a wheel's own object, asked by Grail
@@ -6696,6 +7508,175 @@ extern "C" PyObject *PyIter_Next(PyObject *iterator) {
     return (PyObject *)(intptr_t)addr;
 }
 
+/* PySequence_Fast: a list or tuple as itself, anything else iterated into a
+   new list -- and in REAL LAYOUT either way, because the caller reads the
+   result with the inline PySequence_Fast_GET_SIZE / _ITEMS macros, which is
+   the whole point of the call.  A Grail list or tuple is answered as a
+   real-layout copy (real_layout_arg).  It was a stub answering NULL with no
+   error set, so np.array([3., 2., 1.]) answered nothing at all -- which a
+   Grail assignment then read as an unbound local. */
+extern "C" PyObject *PySequence_Fast(PyObject *o, const char *m) {
+    if (o == NULL) {
+        if (!PyErr_Occurred())
+            PyErr_SetString(PyExc_SystemError, "null argument to internal routine");
+        return NULL;
+    }
+    PyTypeObject *t = Py_TYPE(o);
+    int listish = t == &PyList_Type || t == &PyTuple_Type
+        || (t != NULL && plausible_pyobj(t)
+            && (PyType_IsSubtype(t, &PyList_Type) || PyType_IsSubtype(t, &PyTuple_Type)));
+    if (listish && (is_real_layout(o) || is_foreign(o))) { Py_INCREF(o); return o; }
+    if (listish) return real_layout_arg(o, 0);
+    PyObject *it = PyObject_GetIter(o);
+    if (it == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_TypeError)) {
+            PyErr_Clear();
+            PyErr_SetString(PyExc_TypeError, m ? m : "expected a sequence");
+        }
+        return NULL;
+    }
+    PyObject *l = PyList_New(0);
+    if (l == NULL) return NULL;
+    for (;;) {
+        PyObject *item = PyIter_Next(it);
+        if (item == NULL) break;
+        if (PyList_Append(l, item) < 0) return NULL;
+    }
+    if (PyErr_Occurred()) return NULL;
+    return l;
+}
+
+/* PySequence_Tuple: a tuple of o's items, in real layout (see above).  Was a
+   stub answering NULL with no error set. */
+extern "C" PyObject *PySequence_Tuple(PyObject *o) {
+    if (o != NULL && Py_TYPE(o) == &PyTuple_Type) {
+        if (is_real_layout(o) || is_foreign(o)) { Py_INCREF(o); return o; }
+        return real_layout_arg(o, 0);
+    }
+    PyObject *f = PySequence_Fast(o, "argument must be an iterable");
+    if (f == NULL) return NULL;
+    /* f is a list or tuple in real layout (PySequence_Fast's contract). */
+    int is_tup = Py_TYPE(f) == &PyTuple_Type
+        || PyType_IsSubtype(Py_TYPE(f), &PyTuple_Type);
+    Py_ssize_t n = is_tup ? ((ShimTupleObject *)f)->ob_size : ((ShimListObject *)f)->ob_size;
+    PyObject **items = is_tup ? ((ShimTupleObject *)f)->ob_item : ((ShimListObject *)f)->ob_item;
+    PyObject *tup = PyTuple_New(n);
+    if (tup == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyObject *item = items[i];
+        Py_XINCREF(item);
+        if (PyTuple_SetItem(tup, i, item) < 0) return NULL;
+    }
+    return to_real_tuple(tup);
+}
+
+/* PyVectorcall_Call: call ``callable'' through the vectorcall function it
+   stores at its type's tp_vectorcall_offset, turning an args tuple and a
+   kwargs dict into the vector form (positional values, then keyword values,
+   and a tuple of the keyword names).  A type uses it AS its tp_call when its
+   instances are vectorcall-only -- numpy's _ArrayFunctionDispatcher, which
+   every public numpy function is -- so as a stub answering NULL with no
+   error, np.linspace(0, 2, 5) answered nothing. */
+extern "C" PyObject *PyVectorcall_Call(PyObject *callable, PyObject *tuple, PyObject *kwargs) {
+    PyTypeObject *t = Py_TYPE(callable);
+    Py_ssize_t off = t ? t->tp_vectorcall_offset : 0;
+    vectorcallfunc func = off > 0 ? *(vectorcallfunc *)((char *)callable + off) : NULL;
+    if (func == NULL) {
+        PyErr_Format(PyExc_TypeError, "'%.200s' object does not support vectorcall",
+                     t && t->tp_name ? t->tp_name : "?");
+        return NULL;
+    }
+    Py_ssize_t nargs = tuple ? PyTuple_Size(tuple) : 0;
+    if (nargs < 0) return NULL;
+    Py_ssize_t nkw = kwargs ? PyDict_Size(kwargs) : 0;
+    if (nkw < 0) return NULL;
+    PyObject **stack = (PyObject **)calloc((size_t)(nargs + nkw + 1), sizeof(PyObject *));
+    if (stack == NULL) return PyErr_NoMemory();
+    for (Py_ssize_t i = 0; i < nargs; i++)
+        stack[i] = PyTuple_GetItem(tuple, i);
+    PyObject *kwnames = NULL;
+    if (nkw > 0) {
+        kwnames = PyTuple_New(nkw);
+        if (kwnames == NULL) { free(stack); return NULL; }
+        Py_ssize_t pos = 0, k = 0;
+        PyObject *key, *value;
+        while (k < nkw && PyDict_Next(kwargs, &pos, &key, &value)) {
+            Py_INCREF(key);
+            PyTuple_SetItem(kwnames, k, key);
+            stack[nargs + k] = value;
+            k++;
+        }
+        kwnames = to_real_tuple(kwnames);
+    }
+    PyObject *r = func(callable, stack, (size_t)nargs, kwnames);
+    free(stack);
+    return r;
+}
+
+/* PySeqIter_New: an iterator that indexes a sequence from 0 until
+   IndexError -- what CPython's iter() makes of an object with __getitem__
+   and no __iter__, and what numpy's array_iter returns.  It was a stub
+   answering NULL with no error, so ``for x in np.arange(3)'' found nothing
+   to iterate.  A C object of its own type, so it crosses into Grail as a
+   foreign proxy whose __next__ is tp_iternext. */
+typedef struct {
+    Py_ssize_t    ob_refcnt;
+    PyTypeObject *ob_type;
+    PyObject     *seq;      /* NULL once exhausted */
+    Py_ssize_t    index;
+} GrailSeqIterObject;
+
+static PyTypeObject GrailSeqIter_Type;
+
+static PyObject *seqiter_next(PyObject *self) {
+    GrailSeqIterObject *it = (GrailSeqIterObject *)self;
+    if (it->seq == NULL) return NULL;
+    PyObject *r;
+    if (is_foreign(it->seq)) {
+        PyObject *k = PyLong_FromSsize_t(it->index);
+        if (k == NULL) return NULL;
+        r = foreign_op_invoke(it->seq, foreign_op_named("__getitem__"), k, NULL);
+    } else {
+        r = PySequence_GetItem(it->seq, it->index);
+    }
+    if (r == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_IndexError)
+                || PyErr_ExceptionMatches(PyExc_StopIteration)) {
+            PyErr_Clear();
+            it->seq = NULL;
+        }
+        return NULL;
+    }
+    it->index++;
+    return r;
+}
+
+extern "C" PyObject *PyObject_SelfIter(PyObject *obj) {
+    Py_INCREF(obj);
+    return obj;
+}
+
+extern "C" PyObject *PySeqIter_New(PyObject *seq) {
+    if (seq == NULL) { PyErr_BadInternalCall(); return NULL; }
+    if (GrailSeqIter_Type.tp_name == NULL) {
+        GrailSeqIter_Type.ob_base.ob_base.ob_refcnt = 1;
+        GrailSeqIter_Type.ob_base.ob_base.ob_type = &PyType_Type;
+        GrailSeqIter_Type.tp_name = "iterator";
+        GrailSeqIter_Type.tp_basicsize = sizeof(GrailSeqIterObject);
+        GrailSeqIter_Type.tp_base = &PyBaseObject_Type;
+        GrailSeqIter_Type.tp_iter = PyObject_SelfIter;
+        GrailSeqIter_Type.tp_iternext = seqiter_next;
+        GrailSeqIter_Type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
+    }
+    GrailSeqIterObject *it = (GrailSeqIterObject *)calloc(1, sizeof(GrailSeqIterObject));
+    if (it == NULL) return PyErr_NoMemory();
+    it->ob_refcnt = 1;
+    it->ob_type = &GrailSeqIter_Type;
+    Py_INCREF(seq);
+    it->seq = seq;
+    return (PyObject *)it;
+}
+
 extern "C" int PyIter_Check(PyObject *obj) {
     /* Best effort: anything with __next__ would pass; cheap heuristic is
        to say yes and let PyIter_Next raise if not. Type-level info isn't
@@ -6945,16 +7926,24 @@ static PyObject *dict_view_call(PyObject *dict, const char *selector) {
     return addr_to_pyobj(result);
 }
 
+/* Keys, values and items come back as REAL-LAYOUT lists (and items as
+   real-layout pairs): a wheel reads them with the inline list macros --
+   numpy's ufunc dispatch takes PySequence_Fast_GET_ITEM over
+   PyDict_Values(ufunc->_loops) for every call -- and a Grail list's wrapper
+   would be read as garbage (real_layout_arg). */
 extern "C" PyObject *PyDict_Keys(PyObject *dict) {
-    return dict_view_call(dict, "PyDict_Keys:");
+    PyObject *r = dict_view_call(dict, "PyDict_Keys:");
+    return r == NULL ? NULL : real_layout_arg(r, 0);
 }
 
 extern "C" PyObject *PyDict_Values(PyObject *dict) {
-    return dict_view_call(dict, "PyDict_Values:");
+    PyObject *r = dict_view_call(dict, "PyDict_Values:");
+    return r == NULL ? NULL : real_layout_arg(r, 0);
 }
 
 extern "C" PyObject *PyDict_Items(PyObject *dict) {
-    return dict_view_call(dict, "PyDict_Items:");
+    PyObject *r = dict_view_call(dict, "PyDict_Items:");
+    return r == NULL ? NULL : real_layout_arg(r, 0);
 }
 
 extern "C" PyObject *PyDict_Copy(PyObject *dict) {
@@ -7310,6 +8299,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
     GCI_DECLARE_ACTION("shimForeignSetAttr", shimForeignSetAttr, 3);
+    GCI_DECLARE_ACTION("shimForeignOp", shimForeignOp, 4);
     GCI_DECLARE_ACTION("shimForeignStr", shimForeignStr, 2);
     GCI_DECLARE_ACTION("shimForeignTypeCheck", shimForeignTypeCheck, 3);
 }
@@ -7326,6 +8316,8 @@ static void new_session_reset(void) {
     module_attrs_count = 0;
     for (int i = 0; i < DICT_NEXT_SLOTS; i++) { free(g_dn[i].items); g_dn[i].items = NULL; g_dn[i].dict = NULL; }
     g_fn_count = 0;   /* each function object's m_module is a Grail str */
+    g_notimpl_oop = 0;
+    g_ellipsis_oop = 0;
     g_cb_error_flag = 0;
     current_error_type = NULL;
     current_error_msg[0] = '\0';

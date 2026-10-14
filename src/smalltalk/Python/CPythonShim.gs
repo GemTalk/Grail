@@ -360,8 +360,19 @@ wrap: aValue
 	pyObj := CByteArray gcMalloc: 32.
 	pyObj int64At: 0 put: 1.
 	pyObj int64At: 8 put: (self typeAddrFor: aValue).
-	self storeOop: aValue asOop in: pyObj at: 16.
-	pyObj int64At: 24 put: 16r475241494C575031.
+	"A FLOAT crosses as its value, in CPython's PyFloatObject layout (ob_fval
+	at 16), marked GRAILFV1: a wheel reads it with the inline
+	PyFloat_AS_DOUBLE, which read the OOP below as a double -- numpy answered
+	np.subtract(2.0, 0.0) as -6e-323.  The shim's pyobj_oop rebuilds the float
+	from the double.  Only an exact float: a Python float SUBCLASS instance
+	keeps its OOP, so it comes back as itself."
+	((aValue class == SmallDouble) or: [aValue class == Float])
+		ifTrue: [
+			pyObj doubleAt: 16 put: aValue.
+			pyObj int64At: 24 put: 16r475241494C465631]
+		ifFalse: [
+			self storeOop: aValue asOop in: pyObj at: 16.
+			pyObj int64At: 24 put: 16r475241494C575031].
 	self valueToPyObject at: aValue put: pyObj.
 	^ pyObj
 %
@@ -385,6 +396,19 @@ foreignProxyForPointer: ptrInt typeName: nameStr
 		p setCPtr: ptrInt typeName: nameStr.
 		map at: ptrInt put: p.
 		p ]
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+foreignProxyForPointer: ptrInt typeName: nameStr ops: anInteger
+	"foreignProxyForPointer:typeName:, recording what the object's C type does
+	for == and hash (see ShimForeignObject>>___compareHashBits) -- the shim's
+	foreign_proxy_oop computes it as the object first crosses."
+
+	| p |
+	p := self foreignProxyForPointer: ptrInt typeName: nameStr.
+	p ___compareHashBits: anInteger.
+	^ p
 %
 
 category: 'Grail-Calling'
@@ -958,7 +982,7 @@ initTypeAddresses
 	| addr |
 	typeAddresses := Dictionary new.
 	#('float' 'int' 'bool' 'str' 'bytes' 'list' 'dict' 'tuple' 'object' 'type' 'NoneType'
-		'set' 'frozenset')
+		'set' 'frozenset' 'slice')
 		do: [:name |
 			typeAddresses at: name asSymbol put: (System userAction: #shimTypeAddr with: name).
 		].
@@ -970,7 +994,7 @@ initTypeAddresses
 	"set and frozenset, and their subclasses, to the shim's static types of
 	those names: a wheel's PySet_Check is an inline compare against them (see
 	the shim's init_types)."
-	#(#set #frozenset) do: [:n | | cls |
+	#(#set #frozenset #slice) do: [:n | | cls |
 		cls := Python at: n otherwise: nil.
 		(cls notNil and: [(typeAddresses at: n otherwise: 0) ~= 0]) ifTrue: [
 			addr := typeAddresses at: n.
@@ -1046,6 +1070,35 @@ initTypeAddresses
 			(pair at: 1) isNil
 				ifTrue: [noneWrapper := v]
 				ifFalse: [self valueToPyObject at: (pair at: 1) put: v]]].
+	"NotImplemented the same way, as _Py_NotImplementedStruct: a wheel's
+	binary slot tests ``r == Py_NotImplemented'' by pointer, and answers it to
+	decline an operand (pyobj_oop maps it back -- see ___notImplemented)."
+	"Ellipsis likewise: numpy's indexing tests ``index == Py_Ellipsis''."
+	#( #NotImplemented #Ellipsis ) do: [:nm |
+		(Python at: nm otherwise: nil) ifNotNil: [:single | | a |
+			a := System userAction: #shimTypeAddr with: nm asString.
+			a = 0 ifFalse: [ | v |
+				v := CByteArray fromCPointer: (CPointer forAddress: a) numBytes: 16.
+				v int64At: 0 put: 16r40000000.
+				self valueToPyObject at: single put: v]]].
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___ellipsis
+	"Grail's Ellipsis, which the shim's pyobj_oop answers for C's Py_Ellipsis
+	(asked once per session)."
+
+	^ Python at: #Ellipsis
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___notImplemented
+	"Grail's NotImplemented, which the shim's pyobj_oop answers for C's
+	Py_NotImplemented (asked once per session)."
+
+	^ Python at: #NotImplemented
 %
 
 ! ===============================================================================
@@ -1309,6 +1362,22 @@ foreignGetAttr: cPtr name: aString
 	error."
 
 	^ self ___shimUserAction: #shimForeignGetAttr withArgs: { cPtr . aString }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+foreignOp: cPtr name: aDunder with: a with: b
+	"``self <op> a'' on a wheel's own object, by its C slot: aDunder names the
+	operator (``__add__'', ``__radd__'', ``__getitem__'', ...), a and b are the
+	operands (nil when absent; b is an item assignment's value or a pow
+	modulus).  Answers the result, nil when C has no answer (an inherited
+	identity __hash__), and raises what the slot raised.  See
+	foreign_op_invoke in cpython.cc."
+
+	^ self ___shimUserAction: #shimForeignOp withArgs: {
+		cPtr . aDunder .
+		(a == nil ifTrue: [0] ifFalse: [(self wrap: a) memoryAddress]) .
+		(b == nil ifTrue: [0] ifFalse: [(self wrap: b) memoryAddress]) }
 %
 
 category: 'Grail-Calling'

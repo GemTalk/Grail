@@ -1,6 +1,8 @@
 # Subclassing a C extension type from Python
 
-Status: **design proposal** (2026-10-13). Nothing here is implemented yet.
+Status: **design proposal** (2026-10-13).  Steps 1 and 2 of §6 are
+implemented (2026-10-14; see Shim_NumPy.md, stage 3); steps 3 and 4, real
+subclass instances, are not.
 It is written for the numpy frontier in [Shim_NumPy.md](Shim_NumPy.md), stage 2,
 and builds on [Shim_Object_Model.md](Shim_Object_Model.md) and on the type
 mirrors of [Support_Pydantic.md](Support_Pydantic.md), Phase 5.

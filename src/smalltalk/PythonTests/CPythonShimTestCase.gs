@@ -1604,7 +1604,10 @@ testDynLoadGrailDemo
 	methodNames := System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
 	self assert: (methodNames isKindOf: Array).
 	self assert: methodNames asSortedCollection asArray
-		equals: #('add' 'dot_product' 'function_name' 'getattr_in_c' 'make_box' 'same_object' 'scale').
+		equals: #('add' 'as_long_overflow' 'descr_def_name' 'dict_values_inline' 'dot_product'
+			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
+			'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
+			'seq_fast_len' 'singletons' 'sum_inline').
 %
 
 category: 'Grail-Tests - Dynamic Loading'
@@ -3327,3 +3330,279 @@ except AttributeError as e:
     refused = str(e)
 repr((b.tag, d.getattr_in_c(b, ''tag''), b.__dict__, refused, b.count))') equals: '(''T'', ''T'', {}, ''readonly attribute'', 1)'
 %
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAClassStatementMaySubclassAWheelType
+	"Step 1 of docs/Shim_Foreign_Subclassing.md (option C): ``class Sub(Box)'' succeeds,
+	its bases and MRO name the C type, issubclass reaches it, and calling it refuses with
+	CPython's ``cannot create'' -- which is also what CPython says here, since Box has no
+	tp_new.  It used to raise ``cannot subclass a non-class base (ShimForeignObject)''
+	(numpy's memmap, recarray, record and matrix)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Box):
+    extra = 1
+class SubSub(Sub):
+    pass
+def make(cls):
+    try:
+        cls()
+        return ''created''
+    except TypeError as e:
+        return str(e).split('':'')[0]
+repr((Sub.extra, make(Sub), make(SubSub), issubclass(SubSub, d.Box), Sub.__bases__ == (d.Box,), SubSub.__mro__ == (SubSub, Sub, d.Box, object)))') equals: '(1, "cannot create ''Sub'' instances", "cannot create ''SubSub'' instances", True, True, True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testWheelObjectArithmeticUsesItsSlots
+	"Python's operators on a wheel's object are its C slots (ShimForeignObject's dunders,
+	shimForeignOp): ``b + 4'' is nb_add, and ``4 + b'' reaches it reflected."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((b3 + 4, 4 + b3, -b3, bool(d.make_box(0))))') equals: '(7, 7, -3, False)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testWheelObjectComparisonsUseItsSlots
+	"tp_richcompare, forward and reflected -- ``3 == b'' and ``3 < b'' ask the box once
+	the int declines, as CPython does."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((b3 == 3, b3 != 3, b3 < 4, 3 == b3, b3 == d.make_box(3), 3 < b3, 2 < b3, 3.0 == b3))') equals: '(True, False, True, True, True, False, True, True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testWheelObjectHashUsesItsSlot
+	"tp_hash, so an equal box finds the dict entry."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((hash(b3) == hash(3), {b3: ''x''}[d.make_box(3)]))') equals: '(True, ''x'')'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testWheelObjectContainerSlots
+	"mp_length, mp_subscript (negative index included), tp_iter and sq_contains."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+bl = d.make_box([10, 20, 30])
+repr((len(bl), bl[1], bl[-1], list(bl), 20 in bl, 99 in bl))') equals: '(3, 20, 30, [10, 20, 30], True, False)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelObjectWithoutSlotsComparesByIdentity
+	"No tp_richcompare and no tp_hash: == is identity and the hash is object's, decided at
+	the proxy's birth without a user action (numpy's DType classes, which key its cast
+	tables -- a hash that needed a nested user action missed inside np.linspace)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+p = d.make_plain()
+q = d.make_plain()
+repr((p == p, p == q, p != q, {p: 1}[p], hash(p) == hash(p)))') equals: '(True, False, True, 1, True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelObjectThatComparesWithoutHashingIsUnhashable
+	"tp_richcompare and PyObject_HashNotImplemented -- ndarray's case."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def unhashable():
+    try:
+        hash(d.make_nohash())
+        return ''hashed''
+    except TypeError as e:
+        return str(e)
+nh = d.make_nohash()
+repr((unhashable(), nh == nh))') equals: '("unhashable type: ''_grail_demo.NoHash''", True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testOperatorDundersReadOffAWheelTypeAreSlotWrappers
+	"``Box.__add__'' is a wrapper_descriptor and ``b.__add__'' a method-wrapper, as
+	PyType_Ready puts them in CPython; numpy reads ``dtype.__ge__'' at import."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((type(d.Box.__add__).__name__, d.Box.__add__(b3, 1), type(b3.__add__).__name__, b3.__add__(2), d.Box.__add__.__name__))') equals: '(''wrapper_descriptor'', 4, ''method-wrapper'', 5, ''__add__'')'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testMembersAndMethodsReadOffAWheelTypeAreDescriptors
+	"A struct member read off the type is a member_descriptor, and C reads every descriptor's
+	definition at CPython's offset 40 (numpy's add_docstring); the shim's descriptors kept it
+	at 16.  ``count'' read off the type first, then off an instance, binds."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((type(d.Box.value).__name__, type(d.Box.twice).__name__, d.descr_def_name(d.Box.value), d.descr_def_name(d.Box.twice), b3.twice(), d.make_box(''v'').value, type(d.Box.count).__name__, d.make_box(1).count))') equals: '(''member_descriptor'', ''method_descriptor'', ''value'', ''twice'', 6, ''v'', ''member_descriptor'', 1)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testNotImplementedAndEllipsisAreTheCSingletons
+	"Both cross as CPython's own singletons, compared by pointer in C (numpy's binary slots
+	answer Py_NotImplemented; its indexing tests ``index == Py_Ellipsis'').
+	_Py_EllipsisObject was a pointer variable, so Py_Ellipsis was the pointer's address."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.singletons(NotImplemented, ...), d.singletons(None, None), d.give_singletons()[0] is NotImplemented, d.give_singletons()[1] is Ellipsis))') equals: '((True, True), (False, False), True, True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAFloatCrossesWithItsValueAtObFval
+	"A wheel reads a float with the inline PyFloat_AS_DOUBLE; a Grail float's wrapper held
+	its OOP there, and numpy's np.subtract(2.0, 0.0) answered -6e-323."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.float_inline(2.5), d.float_inline(-0.125), d.float_inline(1e300)))') equals: '(2.5, -0.125, 1e+300)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testListAndTupleArgumentsReadInline
+	"A Grail list or tuple argument reaches a wheel as a real-layout copy, nested ones too
+	(np.dtype([('a', 'f8')]) read its list with PyList_GET_ITEM)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.sum_inline([1, 2, 3]), d.sum_inline([(1, 2), (3, 4), 5])))') equals: '(6, 15)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testSequenceFastAnswersARealLayoutSequence
+	"PySequence_Fast was a stub answering NULL with no error, so np.array([...]) answered
+	nothing.  (A Grail GENERATOR cannot be iterated from C: its body runs on its own
+	GsProcess, which a user action cannot switch to.)"
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.seq_fast_len([7, 8]), d.seq_fast_len((9,)), d.seq_fast_len(range(4)), d.seq_fast_len({''a'': 1, ''b'': 2}.keys())))') equals: '((2, 7), (1, 9), (4, 0), (2, ''a''))'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testLongAsLongAndOverflowReportsOverflow
+	"Both were stubs that never wrote *overflow; numpy's ``np.arange(3) == 1'' read the
+	garbage as out of range and answered all False."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.as_long_overflow(5), d.as_long_overflow(-5), d.as_long_overflow(2 ** 70), d.as_long_overflow(-2 ** 70)))') equals: '((5, 0, 5, 0), (-5, 0, -5, 0), (-1, 1, -1, 1), (-1, -1, -1, -1))'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelFloatSubclassHasItsValue
+	"float's tp_new builds a subtype with its value at ob_fval (np.float64(0.5) was 0.0), and
+	the subtype uses float's arithmetic, comparison and conversions."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.float_inline(d.MyFloat(2.5)), d.MyFloat(2.5) + 1, d.MyFloat() + 0, d.float_inline(d.MyFloat(''1.25'')), 0.5 == d.MyFloat(0.5), d.MyFloat(0.5) == 0.5, float(d.MyFloat(1.5)), -d.MyFloat(2.0)))') equals: '(2.5, 3.5, 0.0, 1.25, True, True, 1.5, -2.0)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testThreadStateNamesTheMainInterpreter
+	"PyThreadState_Get and PyInterpreterState_Main were stubs answering NULL; numpy's
+	_reload_guard reads ``PyThreadState_Get()->interp''."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.interp_matches())') equals: 'True'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testGetOptionalAttrWritesItsResult
+	"It was a stub answering 0 without writing *result (numpy's PyArray_LookupSpecial)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.optional_attr(d.make_box(4), ''value''), d.optional_attr(d.make_box(4), ''nope'')))') equals: '((1, 4), (0, None))'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testDictValuesReadInline
+	"PyDict_Values answers a real-layout list (numpy's ufunc dispatch reads its loop table
+	with PySequence_Fast_GET_ITEM)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.dict_values_inline({''a'': 1, ''b'': (2, 3), ''c'': [4]}))') equals: '(1, (2, 3), [4])'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testATypeWhoseMetatypeSubclassesTypeKeepsItsName
+	"A type is named by its own tp_name when its metatype is a SUBCLASS of type, not only
+	type itself (numpy's DTypes are _DTypeMeta instances; np.dtypes.BoolDType was missing)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.WithMeta.__name__,))') equals: '(''WithMeta'',)'
+%
+

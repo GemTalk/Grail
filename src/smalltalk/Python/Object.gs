@@ -15159,6 +15159,12 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	dunder before they get here."
 	((self @env0:isKindOf: Behavior) and: [other @env0:isKindOf: Behavior])
 		ifTrue: [^ nil].
+	"A wheel's own object on the right: its C slot is the reflected operator,
+	which CPython reaches once the left side's answers NotImplemented -- as a
+	builtin's does for an operand it does not know.  ``3 < box'' raised
+	TypeError instead of asking box.__gt__."
+	((other @env0:isKindOf: ShimForeignObject) and: [(self @env0:isKindOf: ShimForeignObject) not])
+		ifTrue: [^ other @env0:perform: refSelector env: 1 withArguments: { self }].
 	(self ___rightOperandIsSubtype___: other) ifFalse: [^ nil].
 	otherClass := other @env0:class.
 	"A subclass that BLOCKS the reflected method with None counts as overriding
