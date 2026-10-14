@@ -848,7 +848,7 @@ fixes reverted, the four that cover them error (nesting, ndarray-default
 arguments, a generator dispatcher, the C setattr) and the two that cover
 what still goes to C pass.
 
-### The frontier now
+### The frontier then
 
 1. **The VM's nesting limit** still applies to any other path that re-enters
    three deep: an override's `__array_function__`, a ufunc calling a Python
@@ -867,6 +867,76 @@ what still goes to C pass.
 6. **A Grail generator cannot be iterated from C** (its body runs on its own
    GsProcess, and a user action cannot switch process).  numpy's dispatchers
    no longer need it.
+
+## Stage 5 (2026-10-14): printing -- two shim bugs, then the nesting limit again
+
+Before: `str(np.dtype('f8'))` printed the proxy, `<ShimForeignObject
+numpy.dtypes.Float64DType @...>`, after error 2758 in the callback.  Two
+shim bugs sat in front of the real wall:
+
+**Wall 42 -- a metatype's getset, read off a type.**  numpy's `dtype.name`
+is a C getset that calls Python `_dtype._name_get`, which reads
+`type(dtype)._legacy`.  `_legacy` is a getset of the METATYPE `_DTypeMeta`.
+CPython's `type_getattro` looks there first, for a data descriptor, with
+the type as the instance; the shim looked only along the type's own chain,
+and answered AttributeError.  `foreign_generic_getattr` now does what
+`type_getattro` does.  After it, `dt.name`, `_dtype.__str__(dt)` and
+`_dtype.__repr__(dt)` all answer CPython's `'float64'` / `"dtype('float64')"`
+when called from Grail.
+
+**Wall 43 -- `PyUnicode_Compare`** (and `PyUnicode_Contains`,
+`PyUnicode_CompareWithASCIIString`) were stubs answering "equal" and
+"absent".  numpy's dtype naming reached the first.  They compare UTF-8 bytes,
+which orders strings as their code points do.
+
+**The wall: the nesting limit, counted correctly this time.**  `str(dt)` still
+prints the proxy.  The limit is not on callbacks but on USER ACTIONS IN
+FLIGHT: `pushUaMarker` (`intloopsup.c`) increments `ffiEntryCount` each time a
+user action is invoked and refuses the third; a GciPerform back into Smalltalk
+(`Bc_BOOT_EXECUTE`) is not counted.  `str(dt)` is three:
+
+1. `str(dt)` -- `shimForeignStr`, which runs numpy's `arraydescr_str`, which
+   calls `_dtype.__str__` back;
+2. its `dtype.name` -- `shimForeignGetAttr`, which runs `arraydescr_name_get`,
+   which calls `_dtype._name_get` back;
+3. its first statement's `dtype.isbuiltin` -- `shimForeignGetAttr` again, a
+   leaf read that would not even call back.  Refused.
+
+The refusal (2138) is raised inside the user-action primitive, and the
+callback guard's `ex return: nil` would unwind through that primitive's frame,
+so what surfaces is 2758.  The same count explains the dispatchers (stage 4):
+the third user action, not the third callback.
+
+Ways around it on the Grail side, measured and closed:
+
+* **FFI instead of user actions.**  A C function called through `CCallout`
+  does not touch `ffiEntryCount`, but it may not call back: GciExecuteStr from
+  inside one answers error 2203 ("GCI operation requested while a nonblocking
+  or thread safe call in progress").  `CCallin`, GemStone's FFI callback,
+  needs native code (its own tests skip without it), which Darwin arm64 does
+  not have.
+* **Doing numpy's printing in Grail**, as stage 4 does its dispatching:
+  `arraydescr_str`/`repr` and `array_str`/`repr` call fixed Python functions
+  (`_dtype.__str__`, `_default_array_str`, ...), so Grail could call them
+  itself.  Possible, but it copies numpy internals that are not a protocol
+  (`npy_runtime_imports`), and any Python that numpy calls back two deep
+  meets the same wall the next time.
+
+So the general fix is the VM constant.  `INT_MAX_USER_ACTION` also sizes
+`currStkSegments` (`INT_MAX_RECUR = INT_MAX_USER_ACTION * 3`), which is why it
+is a VM change rather than a configuration.
+
+### The frontier now
+
+1. **The VM's user-action limit** (two in flight): numpy's printing, an
+   override's `__array_function__`, a ufunc calling a Python `__array_ufunc__`,
+   and any callback that reads a wheel object two deep.
+2. **A C builtin function reads as a Python function** (30 `add_newdoc`
+   UserWarnings at import).
+3. **#1580**: a class-body statement that reads a sibling `@property` sees
+   the function (`numpy/matrixlib/defmatrix.py:1009`).
+4. **The remaining stubs** in `shim_numpy.cc` (57 `STUBLOG` calls by grep) answer as if they succeeded.
+5. **A Grail generator cannot be iterated from C.**
 
 ## Repro
 

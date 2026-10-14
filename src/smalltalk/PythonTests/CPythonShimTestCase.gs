@@ -1607,7 +1607,7 @@ testDynLoadGrailDemo
 		equals: #('add' 'as_long_overflow' 'descr_def_name' 'dict_values_inline' 'dot_product'
 			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
 			'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
-			'seq_fast_len' 'setattr_in_c' 'singletons' 'sum_inline').
+			'seq_fast_len' 'setattr_in_c' 'singletons' 'sum_inline' 'unicode_compare').
 %
 
 category: 'Grail-Tests - Dynamic Loading'
@@ -3728,5 +3728,33 @@ s = Seen()
 d.setattr_in_c(o, ''fresh'', 1)
 d.setattr_in_c(s, ''x'', 2)
 repr((o.fresh, s.x))') equals: '(1, (''seen'', 2))'
+%
+
+
+category: 'Grail-Tests - NumPy Printing'
+method: CPythonShimTestCase
+testAMetatypeGetsetIsReadOffTheType
+	"On a TYPE, a getset of its metatype is a data descriptor and comes first, as in
+	CPython's type_getattro.  numpy's _DTypeMeta gives each DType class ``_legacy'', and
+	dtype.name reads ``type(dtype)._legacy'' -- so str(dtype) failed."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.WithMeta._legacy, type(d.WithMeta).__name__))') equals: '(''legacy:_grail_demo.WithMeta'', ''Meta'')'
+%
+
+category: 'Grail-Tests - NumPy Printing'
+method: CPythonShimTestCase
+testUnicodeCompareAndContainsFromC
+	"PyUnicode_Compare, PyUnicode_Contains and PyUnicode_CompareWithASCIIString were stubs
+	answering equal and absent; numpy's dtype naming reached the first."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr([d.unicode_compare(a, b) for a, b in [(''abc'', ''abd''), (''abd'', ''abc''), (''ab'', ''ab''), (''ab'', ''abc''), (''h\u00e9llo'', ''\u00e9''), (''a\u20ac'', ''a''), (''xyz'', ''q''), ('''', '''')]])') equals: '[(-1, False, -1), (1, False, 1), (0, True, 0), (-1, False, -1), (-1, True, -1), (1, True, 1), (1, False, 1), (0, True, 0)]'
 %
 

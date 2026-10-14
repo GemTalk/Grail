@@ -270,12 +270,22 @@ static PyTypeObject MyFloat_Type = {
 };
 
 /* WithMeta: a type whose METATYPE subclasses type, as numpy's DTypes are
-   instances of _DTypeMeta. */
+   instances of _DTypeMeta.  Meta's getset ``_legacy'' answers the type's
+   name, read off WithMeta the way numpy reads ``type(dtype)._legacy''. */
+static PyObject *meta_legacy(PyObject *type, void *closure) {
+    (void)closure;
+    return PyUnicode_FromFormat("legacy:%s", ((PyTypeObject *)type)->tp_name);
+}
+static PyGetSetDef meta_getset[] = {
+    {"_legacy", meta_legacy, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL, NULL}
+};
 static PyTypeObject Meta_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "_grail_demo.Meta",
     .tp_basicsize = sizeof(PyHeapTypeObject),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_TYPE_SUBCLASS,
+    .tp_getset = meta_getset,
 };
 static PyTypeObject WithMeta_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -468,6 +478,25 @@ grail_getattr_in_c(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     return PyObject_GetAttrString(args[0], name);
 }
 
+/* PyUnicode_Compare and PyUnicode_Contains, from C: (compare, contains). */
+static PyObject *
+grail_unicode_compare(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs != 2) {
+        PyErr_SetString(PyExc_TypeError, "unicode_compare() takes 2 arguments");
+        return NULL;
+    }
+    int c = PyUnicode_Compare(args[0], args[1]);
+    if (c == -1 && PyErr_Occurred()) return NULL;
+    int k = PyUnicode_Contains(args[0], args[1]);
+    if (k < 0) return NULL;
+    const char *b = PyUnicode_AsUTF8(args[1]);
+    if (b == NULL) return NULL;
+    return Py_BuildValue("(iOi)", c, k ? Py_True : Py_False,
+                         PyUnicode_CompareWithASCIIString(args[0], b));
+}
+
 /* PyObject_SetAttrString, asked from C (numpy's finfo fills an empty
    instance this way, _populate_finfo_constants). */
 static PyObject *
@@ -642,6 +671,7 @@ static PyMethodDef grail_demo_methods[] = {
     {"optional_attr", (PyCFunction)(void *)grail_optional_attr, METH_FASTCALL, NULL},
     {"dict_values_inline", (PyCFunction)(void *)grail_dict_values_inline, METH_FASTCALL, NULL},
     {"setattr_in_c", (PyCFunction)(void *)grail_setattr_in_c, METH_FASTCALL, NULL},
+    {"unicode_compare", (PyCFunction)(void *)grail_unicode_compare, METH_FASTCALL, NULL},
 #endif
     {NULL, NULL, 0, NULL}
 };

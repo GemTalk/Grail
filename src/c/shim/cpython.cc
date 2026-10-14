@@ -3358,6 +3358,23 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
             if (iv != NULL) { Py_INCREF(iv); return iv; }
         }
     }
+    /* On a TYPE, a data descriptor of its metatype comes first, as in
+       CPython's type_getattro: a getset or member of a wheel's own metatype,
+       read with the type as its instance.  numpy's _DTypeMeta gives every
+       DType class ``_legacy'', ``_abstract'' and ``type'' this way, and
+       dtype.name reads ``type(dtype)._legacy'' -- so str(dtype) and
+       repr(dtype) failed. */
+    if (is_type) {
+        for (PyTypeObject *m = obj->ob_type; m != NULL && m != &PyType_Type
+                && plausible_pyobj((PyObject *)m); m = m->tp_base) {
+            for (PyGetSetDef *gs = m->tp_getset; gs && gs->name; gs++) {
+                if (strcmp(gs->name, name) != 0 || gs->get == NULL) continue;
+                return gs->get(obj, gs->closure);
+            }
+            for (PyMemberDef *mb = m->tp_members; mb && mb->name; mb++)
+                if (strcmp(mb->name, name) == 0) return PyMember_GetOne((const char *)obj, mb);
+        }
+    }
     PyObject *v = foreign_type_dict_lookup(start, name);
     /* A descriptor found in the type's dict binds to an instance, as in
        CPython's PyObject_GenericGetAttr.  A type read caches one there
