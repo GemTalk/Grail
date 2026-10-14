@@ -119,6 +119,10 @@ def expectedFailure(test_item):
 # ---- result ------------------------------------------------------------
 
 class TestResult:
+    # CPython defines TestResult in unittest.result and its repr names it
+    # there; unittest/result.py re-exports this class so the name resolves.
+    __module__ = 'unittest.result'
+
     def __init__(self):
         self.testsRun = 0
         self.errors = []
@@ -170,9 +174,13 @@ class TestResult:
         self.shouldStop = True
 
     def __repr__(self):
-        return ("<TestResult run=" + str(self.testsRun)
-                + " errors=" + str(len(self.errors))
-                + " failures=" + str(len(self.failures)) + ">")
+        # CPython's: the class's dotted home, so a TextTestRunner's result reads
+        # ``<unittest.runner.TextTestResult run=2 errors=0 failures=0>''
+        # (test_statistics' assertApproxEqual doctest checks exactly that).
+        cls = type(self)
+        return "<%s.%s run=%i errors=%i failures=%i>" % (
+            cls.__module__, cls.__qualname__, self.testsRun,
+            len(self.errors), len(self.failures))
 
 
 # ---- assertRaises context manager ---------------------------------------
@@ -1313,7 +1321,27 @@ defaultTestLoader = TestLoader()
 
 # ---- runner -----------------------------------------------------------------
 
+class TextTestResult(TestResult):
+    """The result a TextTestRunner answers, as in CPython.  Grail's runner
+    still writes its own summary lines, so this adds nothing but CPython's
+    constructor and class identity: ``runner.run(suite)'' reprs as
+    ``<unittest.runner.TextTestResult ...>'', and code that subclasses
+    unittest.TextTestResult (django's test runner) finds a class to subclass."""
+    __module__ = 'unittest.runner'
+
+    def __init__(self, stream=None, descriptions=True, verbosity=1, *,
+                 durations=None):
+        TestResult.__init__(self)
+        self.stream = stream
+        self.showAll = verbosity > 1
+        self.dots = verbosity == 1
+        self.descriptions = descriptions
+        self.durations = durations
+
+
 class TextTestRunner:
+    __module__ = 'unittest.runner'
+
     def __init__(self, stream=None, verbosity=1):
         self.stream = stream
         self.verbosity = verbosity
@@ -1325,7 +1353,7 @@ class TextTestRunner:
             self.stream.write(line + "\n")
 
     def run(self, test):
-        result = TestResult()
+        result = TextTestResult(self.stream, True, self.verbosity)
         result.startTestRun()
         test.run(result)
         result.stopTestRun()
