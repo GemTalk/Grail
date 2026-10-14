@@ -34,6 +34,9 @@
 #include <Python.h>
 #endif
 #include <stddef.h>   /* offsetof */
+#include <errno.h>
+#include <stdarg.h>
+#include <stdint.h>
 
 /* ------------------------------------------------------------------ */
 /* add(a, b) -> a + b  (integers)                                      */
@@ -512,6 +515,209 @@ grail_setattr_in_c(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     Py_RETURN_NONE;
 }
 
+/* capi(name, *args): one C-API entry point each, called from C, so a test
+   can compare Grail's shim with CPython for the same calls.  These were
+   shim_numpy.cc stubs that answered as if they had succeeded. */
+static PyObject *capi_formatv(PyObject *exc, const char *fmt, ...) {
+    va_list va;
+    va_start(va, fmt);
+    PyErr_FormatV(exc, fmt, va);
+    va_end(va);
+    return NULL;
+}
+static PyObject *ucs4_list(const Py_UCS4 *buf, Py_ssize_t n) {
+    PyObject *out = PyList_New(n);
+    for (Py_ssize_t i = 0; i < n; i++) PyList_SetItem(out, i, PyLong_FromLong((long)buf[i]));
+    return out;
+}
+static PyObject *
+grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs < 1 || !PyUnicode_Check(args[0])) {
+        PyErr_SetString(PyExc_TypeError, "capi() takes a name");
+        return NULL;
+    }
+    const char *n = PyUnicode_AsUTF8(args[0]);
+    PyObject *a = nargs > 1 ? args[1] : NULL, *b = nargs > 2 ? args[2] : NULL;
+    PyObject *c = nargs > 3 ? args[3] : NULL;
+#define IS(x) (strcmp(n, x) == 0)
+    if (IS("bytes_from_string")) return PyBytes_FromString(PyUnicode_AsUTF8(a));
+    if (IS("bytes_as_string_and_size")) {
+        char *s; Py_ssize_t len;
+        if (PyBytes_AsStringAndSize(a, &s, &len) < 0) return NULL;
+        return PyTuple_Pack(2, PyLong_FromSsize_t(len), PyBytes_FromStringAndSize(s, len));
+    }
+    if (IS("bytes_as_string_no_len")) {
+        char *s;
+        if (PyBytes_AsStringAndSize(a, &s, NULL) < 0) return NULL;
+        return PyBytes_FromString(s);
+    }
+    if (IS("dict_contains_string")) return PyBool_FromLong(PyDict_ContainsString(a, PyUnicode_AsUTF8(b)));
+    if (IS("err_formatv")) return capi_formatv(PyExc_ValueError, "x=%d y=%s", 5, "abc");
+    if (IS("normalize")) {
+        PyObject *t, *v, *tb;
+        PyErr_SetString(PyExc_KeyError, "k");
+        PyErr_Fetch(&t, &v, &tb);
+        PyErr_NormalizeException(&t, &v, &tb);
+        return PyTuple_Pack(2, PyBool_FromLong(PyObject_IsInstance(v, t) == 1), v);
+    }
+    if (IS("set_from_errno")) { errno = ENOENT; return PyErr_SetFromErrno(PyExc_OSError); }
+    if (IS("warn_format")) {
+        if (PyErr_WarnFormat(PyExc_UserWarning, 1, "warned %d %s", 7, "times") < 0) return NULL;
+        Py_RETURN_NONE;
+    }
+    if (IS("print_clears")) {
+        PyErr_SetString(PyExc_ValueError, "printed by capi");
+        PyErr_Print();
+        return PyBool_FromLong(PyErr_Occurred() == NULL);
+    }
+    if (IS("unraisable_clears")) {
+        PyErr_SetString(PyExc_ValueError, "unraisable from capi");
+        PyErr_WriteUnraisable(a);
+        return PyBool_FromLong(PyErr_Occurred() == NULL);
+    }
+    if (IS("builtins_len")) {
+        PyObject *d = PyEval_GetBuiltins();
+        if (d == NULL) return NULL;
+        PyObject *v = PyDict_GetItemString(d, "len");
+        if (v == NULL) Py_RETURN_NONE;
+        Py_INCREF(v);
+        return v;
+    }
+    if (IS("set_cause")) {
+        Py_INCREF(b);
+        PyException_SetCause(a, b);
+        PyException_SetContext(a, c);
+        if (PyException_SetTraceback(a, Py_None) < 0) return NULL;
+        Py_INCREF(a);
+        return a;
+    }
+    if (IS("float_from_string")) return PyFloat_FromString(a);
+    if (IS("long_from_unicode")) return PyLong_FromUnicodeObject(a, (int)PyLong_AsLong(b));
+    if (IS("void_ptr_roundtrip")) {
+        void *p = PyLong_AsVoidPtr(a);
+        if (p == NULL && PyErr_Occurred()) return NULL;
+        return PyLong_FromVoidPtr(p);
+    }
+    if (IS("long_is_zero")) return PyLong_FromLong(PyLong_IsZero(a));
+    if (IS("mapping_get_item_string")) return PyMapping_GetItemString(a, PyUnicode_AsUTF8(b));
+    if (IS("memoryview_bytes")) {
+        PyObject *mv = PyMemoryView_FromObject(a);
+        if (mv == NULL) return NULL;
+        PyObject *r = PyObject_Bytes(mv);
+        Py_DECREF(mv);
+        return r;
+    }
+    if (IS("method_new_call")) {
+        PyObject *m = PyMethod_New(a, b);
+        if (m == NULL) return NULL;
+        PyObject *r = PyObject_CallNoArgs(m);
+        Py_DECREF(m);
+        return r;
+    }
+    if (IS("as_fd")) {
+        int fd = PyObject_AsFileDescriptor(a);
+        if (fd < 0) return NULL;
+        return PyLong_FromLong(fd);
+    }
+    if (IS("object_bytes")) return PyObject_Bytes(a);
+    if (IS("object_format")) return PyObject_Format(a, b);
+    if (IS("generic_getattr")) return PyObject_GenericGetAttr(a, b);
+    if (IS("length_hint")) {
+        Py_ssize_t h = PyObject_LengthHint(a, PyLong_AsSsize_t(b));
+        if (h < 0) return NULL;
+        return PyLong_FromSsize_t(h);
+    }
+    if (IS("object_not")) return PyLong_FromLong(PyObject_Not(a));
+    if (IS("object_print")) {
+        FILE *fp = tmpfile();
+        if (fp == NULL) Py_RETURN_NONE;
+        if (PyObject_Print(a, fp, 0) < 0 || PyObject_Print(a, fp, 1) < 0) { fclose(fp); return NULL; }
+        long len = ftell(fp);
+        rewind(fp);
+        char buf[256];
+        size_t got = fread(buf, 1, len < 255 ? (size_t)len : 255, fp);
+        fclose(fp);
+        return PyUnicode_FromStringAndSize(buf, (Py_ssize_t)got);
+    }
+    if (IS("seq_concat")) return PySequence_Concat(a, b);
+    if (IS("seq_repeat")) return PySequence_Repeat(a, PyLong_AsSsize_t(b));
+    if (IS("seq_inplace_concat")) {
+        PyObject *r = PySequence_InPlaceConcat(a, b);
+        if (r == NULL) return NULL;
+        return PyTuple_Pack(2, r, PyBool_FromLong(r == a));
+    }
+    if (IS("seq_inplace_repeat")) {
+        PyObject *r = PySequence_InPlaceRepeat(a, PyLong_AsSsize_t(b));
+        if (r == NULL) return NULL;
+        return PyTuple_Pack(2, r, PyBool_FromLong(r == a));
+    }
+    if (IS("as_ascii")) return PyUnicode_AsASCIIString(a);
+    if (IS("as_latin1")) return PyUnicode_AsLatin1String(a);
+    if (IS("as_encoded")) return PyUnicode_AsEncodedString(a, PyUnicode_AsUTF8(b), NULL);
+    if (IS("as_ucs4")) {
+        Py_UCS4 buf[64];
+        if (PyUnicode_AsUCS4(a, buf, 64, 1) == NULL) return NULL;
+        return ucs4_list(buf, PyUnicode_GetLength(a));
+    }
+    if (IS("as_ucs4_short_buffer")) {
+        Py_UCS4 buf[2];
+        if (PyUnicode_AsUCS4(a, buf, 2, 1) == NULL) return NULL;
+        Py_RETURN_NONE;
+    }
+    if (IS("as_ucs4_copy")) {
+        Py_UCS4 *buf = PyUnicode_AsUCS4Copy(a);
+        if (buf == NULL) return NULL;
+        PyObject *r = ucs4_list(buf, PyUnicode_GetLength(a));
+        PyMem_Free(buf);
+        return r;
+    }
+    if (IS("from_kind_and_data")) {
+        int kind = (int)PyLong_AsLong(a);
+        Py_ssize_t size = PyList_Size(b);
+        uint32_t buf4[64]; uint16_t buf2[64]; uint8_t buf1[64];
+        for (Py_ssize_t i = 0; i < size && i < 64; i++) {
+            long v = PyLong_AsLong(PyList_GetItem(b, i));
+            buf4[i] = (uint32_t)v; buf2[i] = (uint16_t)v; buf1[i] = (uint8_t)v;
+        }
+        return PyUnicode_FromKindAndData(kind, kind == 1 ? (void *)buf1 : kind == 2 ? (void *)buf2 : (void *)buf4, size);
+    }
+    if (IS("unicode_format")) return PyUnicode_Format(a, b);
+    if (IS("from_encoded")) return PyUnicode_FromEncodedObject(a, PyUnicode_AsUTF8(b), NULL);
+    if (IS("unicode_replace")) return PyUnicode_Replace(a, b, c, nargs > 4 ? PyLong_AsSsize_t(args[4]) : -1);
+    if (IS("tailmatch")) {
+        return PyTuple_Pack(2,
+            PyLong_FromSsize_t(PyUnicode_Tailmatch(a, b, 0, PY_SSIZE_T_MAX, -1)),
+            PyLong_FromSsize_t(PyUnicode_Tailmatch(a, b, 0, PY_SSIZE_T_MAX, 1)));
+    }
+    if (IS("char_classes")) {
+        Py_UCS4 ch = (Py_UCS4)PyLong_AsLong(a);
+        return Py_BuildValue("(iiiiiiii)",
+            _PyUnicode_IsAlpha(ch) != 0, _PyUnicode_IsDecimalDigit(ch) != 0,
+            _PyUnicode_IsDigit(ch) != 0, _PyUnicode_IsLowercase(ch) != 0,
+            _PyUnicode_IsNumeric(ch) != 0, _PyUnicode_IsTitlecase(ch) != 0,
+            _PyUnicode_IsUppercase(ch) != 0, _PyUnicode_IsWhitespace(ch) != 0);
+    }
+    if (IS("hash_double")) return PyLong_FromSsize_t(_Py_HashDouble(a, PyFloat_AsDouble(a)));
+    if (IS("capsule")) {
+        static int target = 42, ctx = 7;
+        PyObject *cap = PyCapsule_New(&target, "first", NULL);
+        if (cap == NULL) return NULL;
+        int before = PyCapsule_GetContext(cap) == NULL;
+        if (PyCapsule_SetContext(cap, &ctx) < 0 || PyCapsule_SetName(cap, "second") < 0) return NULL;
+        int *ptr = (int *)PyCapsule_GetPointer(cap, "second");
+        int *got = (int *)PyCapsule_GetContext(cap);
+        Py_DECREF(cap);
+        if (ptr == NULL) return NULL;
+        return Py_BuildValue("(iii)", before, *ptr, got == NULL ? -1 : *got);
+    }
+    if (IS("unique_temporary")) return PyLong_FromLong(PyUnstable_Object_IsUniqueReferencedTemporary(a));
+#undef IS
+    PyErr_Format(PyExc_ValueError, "capi: unknown name %s", n);
+    return NULL;
+}
+
 /* ------------------------------------------------------------------ */
 /* Dispatcher: numpy's _ArrayFunctionDispatcher in miniature -- its    */
 /* tp_name and struct layout, which is what Grail recognises it by     */
@@ -672,6 +878,7 @@ static PyMethodDef grail_demo_methods[] = {
     {"dict_values_inline", (PyCFunction)(void *)grail_dict_values_inline, METH_FASTCALL, NULL},
     {"setattr_in_c", (PyCFunction)(void *)grail_setattr_in_c, METH_FASTCALL, NULL},
     {"unicode_compare", (PyCFunction)(void *)grail_unicode_compare, METH_FASTCALL, NULL},
+    {"capi", (PyCFunction)(void *)grail_capi, METH_FASTCALL, NULL},
 #endif
     {NULL, NULL, 0, NULL}
 };
