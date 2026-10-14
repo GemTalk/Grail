@@ -887,6 +887,7 @@ run
 	at: #'CsvTestCase' put: nil;
 	at: #'DataclassesTestCase' put: nil;
 	at: #'DataDescriptorSetTestCase' put: nil;
+	at: #'DatetimeIsADateTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'DecimalTestCase' put: nil;
 	at: #'DecodeErrorHandlersTestCase' put: nil;
@@ -2435,6 +2436,7 @@ input src/smalltalk/PythonTests/CrossModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/DataclassesTestCase.gs
 input src/smalltalk/PythonTests/DataDescriptorSetTestCase.gs
+input src/smalltalk/PythonTests/DatetimeIsADateTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/DecimalTestCase.gs
 input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
