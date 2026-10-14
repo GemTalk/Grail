@@ -1198,6 +1198,7 @@ run
 	at: #'ModuleDocstringTestCase' put: nil;
 	at: #'ModuleFixturesTestCase' put: nil;
 	at: #'ModuleFrameTestCase' put: nil;
+	at: #'ModuleFromSpecTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ModuleFunctionsFirstClassTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
@@ -2751,6 +2752,7 @@ input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
 input src/smalltalk/PythonTests/ModuleDocstringTestCase.gs
 input src/smalltalk/PythonTests/ModuleFixturesTestCase.gs
 input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
+input src/smalltalk/PythonTests/ModuleFromSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionsFirstClassTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
