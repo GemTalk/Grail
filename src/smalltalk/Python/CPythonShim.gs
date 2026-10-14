@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'CPythonShim'
-  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep callDepth shimEntryProcess shimEntryDepth uaProcess uaDepths)
+  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep callDepth shimEntryProcess shimEntryDepth)
   classVars: #()
   classInstVars: #( libraryPath)
   poolDictionaries: #()
@@ -1135,92 +1135,24 @@ ___noteShimEntry
 %
 
 category: 'Grail-Management'
-method: CPythonShim
-___enterUserAction
-	"Record that a user action -- C code that may call back into Smalltalk --
-	is starting on this process, at this stack depth.  Paired with
-	___exitUserAction; read by ___userActionActiveHere.
-
-	NOT callDepth / shimEntryDepth: those serve the sweep, are allowed to be
-	wrong (see ___betweenShimCalls) and in doubt say ``in a call''.  This one
-	must be EXACT both ways, because a yes changes how a generator runs.  So it
-	is a stack of entry depths, and an entry an exception unwound past is
-	pruned the moment anything is asked from at or above its depth: a LIVE
-	entry is always shallower than the frame asking.
-
-	One process at a time: nothing switches process while a user action is
-	active (the VM refuses), so entries recorded on another process are
-	stale."
-
-	| d p |
-	"The CALLER's depth -- the frame that sends ``System userAction:'' and
-	stays on the stack for as long as the user action is active, which is
-	what ___userActionActiveHere checks for."
-	d := System stackDepth - 1.
-	p := Processor activeProcess.
-	(uaProcess ~~ p or: [uaDepths isNil]) ifTrue: [
-		uaProcess := p.
-		uaDepths := OrderedCollection new].
-	[uaDepths notEmpty and: [uaDepths last >= d]] whileTrue: [uaDepths removeLast].
-	uaDepths addLast: d
-%
-
-category: 'Grail-Management'
-method: CPythonShim
-___exitUserAction
-	"The user action ___enterUserAction recorded has returned."
-
-	(uaDepths notNil and: [uaDepths notEmpty]) ifTrue: [uaDepths removeLast]
-%
-
-category: 'Grail-Management'
-method: CPythonShim
-___userActionActiveHere
-	"Is the running process inside a user action -- on top of C frames, where
-	the VM refuses a process switch (``GsProcess switch not allowed while FFI,
-	UserAction or IntRecur call is active'', uncontinuable)?"
-
-	"AN ENTRY IS LIVE ONLY WHILE ITS FRAME IS.  An exception that unwinds
-	past the entering method skips its ___exitUserAction, and pruning by depth
-	alone cannot see that once the stack has grown back past the entry: the
-	stale entry then read as a live user action, and every generator started
-	afterwards ran inline -- os.walk could no longer be pruned between yields
-	(PathWalkAndMountTestCase).  So the frame at the entry's depth must still
-	be one of the methods that enter: ___shimUserAction:withArgs:,
-	loadModule:, or loadDynamicModule:fromPath:'s block.  Checked only when
-	an entry exists, which outside a shim call is never."
-
-	| d entry level fc meth home |
-	(uaDepths isNil or: [uaDepths isEmpty]) ifTrue: [^ false].
-	uaProcess == Processor activeProcess ifFalse: [^ false].
-	d := System stackDepth.
-	[uaDepths notEmpty] whileTrue: [
-		entry := uaDepths last.
-		entry >= d
-			ifTrue: [uaDepths removeLast]
-			ifFalse: [
-				level := d - entry + 1.
-				fc := GsProcess _frameContentsAt: level.
-				meth := fc ifNotNil: [fc at: 1].
-				home := fc ifNotNil: [(fc at: 7) ifNil: [meth]].
-				(home notNil and: [#(#'___shimUserAction:withArgs:' #'loadModule:'
-						#'loadDynamicModule:fromPath:') includes: home selector])
-					ifTrue: [^ true].
-				uaDepths removeLast]].
-	^ false
-%
-
-category: 'Grail-Management'
 classmethod: CPythonShim
 ___userActionActiveHere
-	"Whether this process is inside a CPython-shim user action -- false, at the
-	cost of one SessionTemps probe, when no shim was ever loaded.  A Python
-	generator started there cannot fork its body (PythonGenerator >>
-	___mustRunInline___)."
+	"Is the running process on top of C frames -- inside a user action, an FFI
+	call or an IntRecur -- where the VM refuses a process switch (``GsProcess
+	switch not allowed while FFI, UserAction or IntRecur call is active'',
+	uncontinuable)?  A Python generator started there cannot fork its body
+	(PythonGenerator >> ___mustRunInline___).
 
-	^ (SessionTemps current at: #CPythonShim ifAbsent: [nil])
-		ifNil: [false]
-		ifNotNil: [:shim | shim ___userActionActiveHere]
+	The VM's OWN test, read directly: it refuses the switch when the current
+	stack's entry count is above 1 (intloopsup.c, IntLpSupProcessSwitch), and
+	``System _vmStEntryCount'' answers that count.  The first two cuts kept a
+	record of user actions instead: by depth alone, a user action an exception
+	unwound past left an entry that made every later generator in the gem run
+	inline; checked against the entering frame with ``GsProcess
+	_frameContentsAt:'', it read every live entry as stale under native code
+	(Linux x86_64, CI), where frames are not introspectable that way."
+
+	^ System _vmStEntryCount > 1
 %
 
 category: 'Grail-Management'
@@ -1722,16 +1654,9 @@ ___shimUserAction: selector withArgs: argsArray
 	| r |
 	callDepth := (callDepth ifNil: [0]) + 1.
 	self ___noteShimEntry.
-	self ___enterUserAction.
 	r := [ System userAction: selector withArgs: argsArray ]
 		on: GrailShimError
-		do: [:ex |
-			"The C frames are gone by now (see above), so the user action is
-			over: retire its entry before the translated exception unwinds past
-			this frame and skips the line below."
-			self ___exitUserAction.
-			self ___translateShimError: ex].
-	self ___exitUserAction.
+		do: [:ex | self ___translateShimError: ex].
 	callDepth := callDepth - 1.
 	^ r
 %
@@ -1974,9 +1899,7 @@ loadModule: moduleName
 	| r |
 	callDepth := (callDepth ifNil: [0]) + 1.
 	self ___noteShimEntry.
-	self ___enterUserAction.
 	r := System userAction: #shimLoadModule with: moduleName.
-	self ___exitUserAction.
 	callDepth := callDepth - 1.
 	^ r
 %
@@ -2698,11 +2621,8 @@ loadDynamicModule: moduleName fromPath: pathString
 	"Depth-track like ___shimUserAction:withArgs: -- a dynamic module's
 	init exec re-enters wrap: via server callbacks; a sweep mid-load
 	could reap in-flight wrappers (see wrap:)."
-	methodNames := self current ___duringCallDo: [ | names |
-		self current ___enterUserAction.
-		names := System userAction: #shimDynLoad withArgs: { pathString . moduleName }.
-		self current ___exitUserAction.
-		names].
+	methodNames := self current ___duringCallDo: [
+		System userAction: #shimDynLoad withArgs: { pathString . moduleName }].
 	"Create a module subclass for this C extension.  Named by a legal
 	IDENTIFIER derived from the module name, not by the name itself: an
 	in-package extension arrives dotted (pydantic_core._pydantic_core,

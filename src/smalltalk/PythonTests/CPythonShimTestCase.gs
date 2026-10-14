@@ -3258,16 +3258,23 @@ f'.
 
 category: 'Grail-Tests - FastAPI Phase 6'
 method: CPythonShimTestCase
-testAStaleUserActionEntryIsNotActive
-	"A user action recorded and never exited -- what an exception unwinding
-	past the entering method leaves -- must not read as active once its frame
-	is gone.  It did: every generator started afterwards ran INLINE, so a
-	consumer could no longer act between yields (os.walk pruned by mutating
-	dirnames, PathWalkAndMountTestCase)."
+testOutsideACallbackGeneratorsSuspend
+	"Only a generator started on top of C frames runs inline.  Anywhere else it
+	must SUSPEND, so a consumer can act between yields -- os.walk is pruned by
+	mutating dirnames (PathWalkAndMountTestCase).  A record of user actions
+	kept by the shim once went stale and made every later generator in the gem
+	run inline; the test is now the VM's own entry count, which this checks is
+	not raised outside a shim call, including after one that raised."
 
 	| shim gen |
 	shim := CPythonShim current.
-	shim ___enterUserAction.
+	shim loadModule: '_shimtest'.
+	self deny: CPythonShim ___userActionActiveHere.
+	[shim callModule: '_shimtest' method: 'test_call_one'
+		with: (self eval: 'def boom(x):
+    raise KeyError(x)
+boom') with: 1]
+		on: Exception do: [:ex | ex return: nil].
 	self deny: CPythonShim ___userActionActiveHere.
 	gen := self eval: 'def f():
     seen = []
