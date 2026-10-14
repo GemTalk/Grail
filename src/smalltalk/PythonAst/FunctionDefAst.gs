@@ -521,6 +521,11 @@ printSmalltalkOn: aStream
 		^self
 	].
 
+	"A decorator that READS THIS DEF'S OWN NAME -- ``@alias.setter'' after
+	``@property def alias'' -- must be evaluated before the def rebinds the
+	name.  See ___printWithPreEvaluatedDecoratorsOn___:."
+	self ___needsPreEvaluatedDecorators___ ifTrue: [
+		^ self ___printWithPreEvaluatedDecoratorsOn___: aStream].
 	"Block params are renamed to underscored sentinels so a user
 	parameter named ``positional`` or ``kwargs`` (Jinja2's
 	``optimizeconst`` wraps ``def new_func(self, node, frame,
@@ -990,6 +995,9 @@ printSmalltalkOn: aStream
 						nextPutAll: self ___mangledName___;
 						nextPutAll: ' := '
 				].
+				(self ___preEvaluatedDecoratorIndexOf___: deco) ifNotNil: [:___i |
+					aStream nextPutAll: '(___grailPreDeco___ @env0:at: '; print: ___i; nextPutAll: ')']
+				ifNil: [
 				(deco isKindOf: Symbol)
 					ifTrue: [
 						"Phase A: a Symbol decorator (parser stored the bare
@@ -1011,7 +1019,7 @@ printSmalltalkOn: aStream
 							]
 							ifFalse: [self ___printDecoratorNameOn___: aStream name: deco]
 					]
-					ifFalse: [deco printSmalltalkWithParenthesisOn: aStream].
+					ifFalse: [deco printSmalltalkWithParenthesisOn: aStream]].
 				"Phase A: when the target is module-scope, the value-block
 				arg ``{ name }'' reads the just-defined function through
 				dynamicInstVarAt: (no Smalltalk temp exists), and the
@@ -2042,12 +2050,121 @@ ___decoratorNodeFor___: decoList index: anIndex
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___applicableLocalDecorators___
+	"The decorators a function-local def's emit applies: every one the
+	parser's re-classing did not already realise."
+
+	^ (decorator_list ifNil: [#()]) reject: [:deco |
+		self ___decoratorRealisedByReclass___: deco]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___needsPreEvaluatedDecorators___
+	"Does this function-local def have a decorator whose EXPRESSION reads
+	the def's own name -- and is it not already being emitted inside the
+	wrapper that evaluates them first?
+
+	CPython evaluates the decorator expressions, then makes the function,
+	applies them and only then binds the name.  The local emit binds first
+	and evaluates each decorator after, which is invisible except when the
+	decorator reads the name it is about to replace: ``@alias.setter def
+	alias'' then read ``.setter'' off the NEW plain function, not the
+	property -- ``ExecBlock object has no attribute 'setter''', which is how
+	beautifulsoup4's _deprecated_alias failed to import."
+
+	| own |
+	(CallAst ___compileContext___ at: #'grailPreDecoratedDef' otherwise: nil) == self
+		ifTrue: [^ false].
+	own := self ___mangledName___ asString.
+	^ self ___applicableLocalDecorators___ anySatisfy: [:deco |
+		(deco isKindOf: Symbol) not
+			and: [self ___node: deco readsName: own]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___node: aValue readsName: aString
+	"Does the expression aValue mention the bare name aString anywhere?  A
+	reflective walk over each node's instance variables (skipping ``parent''),
+	the shape ___irNodeContainsClassDef___: uses."
+
+	aValue isNil ifTrue: [^ false].
+	aValue isString ifTrue: [^ false].
+	(aValue isKindOf: NameAst) ifTrue: [^ aValue id asString = aString].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				(self ___node: (aValue instVarAt: i) readsName: aString) ifTrue: [^ true]]].
+		^ false].
+	(aValue isKindOf: Collection) ifTrue: [
+		aValue do: [:each |
+			(self ___node: each readsName: aString) ifTrue: [^ true]].
+		^ false].
+	^ false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___printWithPreEvaluatedDecoratorsOn___: aStream
+	"Emit the def wrapped so that its decorator expressions are evaluated
+	FIRST, as CPython does:
+
+	    [:___grailPreDeco___ |
+	        alias := <the function>.
+	        alias := (___grailPreDeco___ @env0:at: 1) value: { alias } value: nil.
+	    ] @env0:value: { <decorator 1 expr>. ... }.
+
+	The brace array is evaluated before the block runs, so ``alias.setter''
+	reads the property still bound to the name; the def and its decorators
+	then run as they always do, each decorator taken from the array
+	(___preEvaluatedDecoratorIndexOf___:).  A block parameter because there
+	is no way to declare a temp at this point in the emit -- the trick
+	emitOrderedLocalDecoratorsOn: uses for a chain.  Only for a decorator
+	that reads the def's own name (___needsPreEvaluatedDecorators___), where
+	the order is observable."
+
+	| ctx previous applicable |
+	ctx := CallAst ___compileContext___.
+	previous := ctx at: #'grailPreDecoratedDef' otherwise: nil.
+	applicable := self ___applicableLocalDecorators___.
+	aStream nextPutAll: '[:___grailPreDeco___ |'; lf.
+	ctx at: #'grailPreDecoratedDef' put: self.
+	[self printSmalltalkOn: aStream]
+		ensure: [ctx at: #'grailPreDecoratedDef' put: previous].
+	aStream lf; nextPutAll: '] @env0:value: { '.
+	applicable doWithIndex: [:deco :i |
+		i > 1 ifTrue: [aStream nextPutAll: '. '].
+		self printDecoratorReceiverOn: aStream deco: deco].
+	aStream nextPutAll: ' }.'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___preEvaluatedDecoratorIndexOf___: deco
+	"While this def is emitted inside ___printWithPreEvaluatedDecoratorsOn___:,
+	the position of deco in the array its decorators were evaluated into;
+	nil otherwise, and for a decorator that is not one of them."
+
+	| i |
+	(CallAst ___compileContext___ at: #'grailPreDecoratedDef' otherwise: nil) == self
+		ifFalse: [^ nil].
+	i := self ___applicableLocalDecorators___ indexOfIdentical: deco.
+	^ i = 0 ifTrue: [nil] ifFalse: [i]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printDecoratorReceiverOn: aStream deco: deco
 	"Emit the decorator expression as the receiver of a
 	___pyCallValue___:kw: send.  A bare-Symbol module-scope
 	decorator routes through ___moduleAttrLoad___ so the function
 	lazy-wraps as a BoundMethod; an AttributeAst form
 	(``module.deco_name'') falls through to its own emit."
+
+	(self ___preEvaluatedDecoratorIndexOf___: deco) ifNotNil: [:i |
+		aStream nextPutAll: '(___grailPreDeco___ @env0:at: '; print: i; nextPutAll: ')'.
+		^ self].
 
 	(deco isKindOf: Symbol) ifTrue: [
 		"A CLASS-BODY name used as the decorator itself -- ``@_deco'' naming a
@@ -8381,6 +8498,10 @@ ___irNestedDefReasonUnguarded___: localNames
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].
+	"A decorator that reads the def's own name has to be evaluated before the
+	def binds it; the text emit wraps the def to do that
+	(___printWithPreEvaluatedDecoratorsOn___:), and this emit has no such form."
+	self ___needsPreEvaluatedDecorators___ ifTrue: [^ #'nestedDef:decoratorReadsOwnName'].
 	(args defaults ifNil: [#()]) do: [:d |
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'nestedDef:defaultExpr']].
 	nestedLocals := self ___irNestedLocals___: localNames.
