@@ -151,3 +151,11 @@ def mismatches():
     """The rows that differ from CPython's, as 'label: got X, CPython Y'."""
     return ['%s: got %s, CPython %s' % (k, r.get(k), v)
             for k, v in EXPECTED.items() if r.get(k) != v]
+
+
+if __name__ == '__main__':
+    for k in sorted(EXPECTED):
+        actual = r[k]
+        print('%-4s %s: %r' % ('OK' if actual == EXPECTED[k] else 'DIFF', k, actual))
+    for extra in sorted(set(r) - set(EXPECTED)):
+        print('%-4s %s is not in EXPECTED' % ('DIFF', extra))
