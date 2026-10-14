@@ -723,16 +723,105 @@ __add__: other
 
 category: 'Grail-Bitwise Operations'
 method: int
+___pyShiftLeft___: count
+	"Python's ``self << count'' for an Integer count.  A negative count is
+	ValueError; zero shifted any distance is zero (``0 << (1 << 1000)'');
+	anything else past GemStone's LargeInteger ceiling (~130144 bits) is the
+	catchable OverflowError __pow__: raises for the same ceiling.  The
+	kernel's own answers there were uncatchable: NumericError for a SmallInteger
+	count, ArgumentTypeError for a LargeInteger one, each ending a ``./grail''
+	run outright (test_long's test_lshift_of_zero)."
+
+	(count @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
+	self @env0:= 0 ifTrue: [^ 0].
+	"A count past a SmallInteger overflows CPython too, in its own words."
+	(count @env0:class == SmallInteger) ifFalse: [
+		^ OverflowError ___signal___: 'too many digits in integer'].
+	(count @env0:> 64) ifTrue: [
+		^ [self @env0:bitShift: count]
+			@env0:on: NumericError
+			do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity']].
+	^ self @env0:bitShift: count
+%
+
+category: 'Grail-Bitwise Operations'
+method: int
+___pyShiftRight___: count
+	"Python's ``self >> count'' for an Integer count.  A negative count is
+	ValueError, and a count that is itself a LargeInteger shifts every bit out:
+	0, or -1 for a negative self (``-42 >> (1 << 1000)'').  The kernel's
+	bitShift: refused that count with an uncatchable ArgumentTypeError
+	(test_long's test_huge_rshift)."
+
+	(count @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
+	(count @env0:class == SmallInteger) ifFalse: [
+		^ (self @env0:< 0) ifTrue: [-1] ifFalse: [0]].
+	^ self @env0:bitShift: count @env0:negated
+%
+
+category: 'Grail-Bitwise Operations'
+method: int
+___pyBitAnd___: other
+	"Python's ``&'' on two Integers.  GemStone's bitAnd: answers WRONG bits when
+	an operand is a negative LargeInteger -- measured on 4.0 over operands at
+	the SmallInteger boundary and beyond, 290 of 11,881 pairs, e.g. some
+	-(2**128 - 1) & -(2**120 - 2) -- and bitXor: is worse (see ___pyBitXor___:).
+	bitOr:, bitInvert and bitShift: are right on every pair, and so are both
+	operations when neither operand is negative or both are SmallIntegers.  So
+	those keep the primitive, and the rest is rewritten over non-negative
+	operands with ~x = -1 - x:  a & b = ~(~a | ~b) for two negatives, and
+	b & ~na = b - (b & na) when only a is negative (na = ~a)."
+
+	| na |
+	"A Flag hands its int-subclass operand straight through; that is not a
+	kernel Integer, so it keeps the primitive's own coercion."
+	(other @env0:isKindOf: Integer) ifFalse: [^ self @env0:bitAnd: other].
+	(((self @env0:>= 0) @env0:and: [other @env0:>= 0])
+		@env0:or: [(self @env0:class == SmallInteger) @env0:and: [other @env0:class == SmallInteger]])
+			ifTrue: [^ self @env0:bitAnd: other].
+	self @env0:< 0 ifFalse: [^ other ___pyBitAnd___: self].
+	na := self @env0:bitInvert.
+	other @env0:< 0 ifTrue: [^ (na @env0:bitOr: other @env0:bitInvert) @env0:bitInvert].
+	^ other @env0:- (other @env0:bitAnd: na)
+%
+
+category: 'Grail-Bitwise Operations'
+method: int
+___pyBitXor___: other
+	"Python's ``^'' on two Integers.  GemStone's bitXor: answers WRONG bits when
+	an operand is a negative LargeInteger: measured on 4.0, 2,782 of 11,881
+	pairs, every negative-with-negative pair involving a LargeInteger among
+	them -- ``-6148914691236517206 ^ -1'' was -12297829382473034411, not
+	6148914691236517205 (test_long's test_bitop_identities).  As for
+	___pyBitAnd___:, the safe cases keep the primitive and the rest is
+	rewritten over non-negative operands: a ^ b = ~a ^ ~b for two negatives,
+	and ~(~a ^ b) when only a is negative."
+
+	| na |
+	"A Flag hands its int-subclass operand straight through; that is not a
+	kernel Integer, so it keeps the primitive's own coercion."
+	(other @env0:isKindOf: Integer) ifFalse: [^ self @env0:bitXor: other].
+	(((self @env0:>= 0) @env0:and: [other @env0:>= 0])
+		@env0:or: [(self @env0:class == SmallInteger) @env0:and: [other @env0:class == SmallInteger]])
+			ifTrue: [^ self @env0:bitXor: other].
+	self @env0:< 0 ifFalse: [^ other ___pyBitXor___: self].
+	na := self @env0:bitInvert.
+	other @env0:< 0 ifTrue: [^ na @env0:bitXor: other @env0:bitInvert].
+	^ (na @env0:bitXor: other) @env0:bitInvert
+%
+
+category: 'Grail-Bitwise Operations'
+method: int
 __and__: other
 	"Bitwise AND."
 
-	(other isKindOf: Integer) ifTrue: [^ self @env0:bitAnd: other].
+	(other isKindOf: Integer) ifTrue: [^ self ___pyBitAnd___: other].
 	"An int subclass that overrides __rand__ answers first, as CPython's
 	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
 	(other @env0:isSpecial) ifFalse: [ | pri |
 		pri := self ___numericReflectedFirst___: other selector: #'__rand__:'.
 		pri == nil ifFalse: [^ pri]].
-	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:bitAnd: (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self ___pyBitAnd___: (other __index__)].
 	^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'
 %
 
@@ -1052,28 +1141,15 @@ method: int
 __lshift__: other
 	"Left shift.
 
-	A shift past GemStone's LargeInteger ceiling (~130144 bits) raises the
-	kernel's NumericError, which no Python ``except'' catches and which ends a
-	``./grail'' run outright; it is resignalled as the catchable OverflowError
-	__pow__: already raises for the same ceiling.  Only a count that could
-	reach it pays for the handler."
+	See ___pyShiftLeft___: for the counts the kernel cannot take."
 
-	(other isKindOf: Integer) ifTrue: [
-		(other @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
-		(other @env0:> 64) ifTrue: [
-			^ [self @env0:bitShift: other]
-				@env0:on: NumericError
-				do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity']].
-		^ self @env0:bitShift: other].
+	(other isKindOf: Integer) ifTrue: [^ self ___pyShiftLeft___: other].
 	"An int subclass that overrides __rlshift__ answers first, as CPython's
 	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
 	(other @env0:isSpecial) ifFalse: [ | pri |
 		pri := self ___numericReflectedFirst___: other selector: #'__rlshift__:'.
 		pri == nil ifFalse: [^ pri]].
-	(self ___isPyIntOperand___: other) ifTrue: [ | idx |
-		idx := other __index__.
-		(idx @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
-		^ self @env0:bitShift: idx].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self ___pyShiftLeft___: other __index__].
 	^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'
 %
 
@@ -1300,8 +1376,8 @@ method: int
 __rand__: other
 	"Reverse bitwise AND (other & self)."
 
-	(other isKindOf: Integer) ifTrue: [^ other @env0:bitAnd: self].
-	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitAnd: self].
+	(other isKindOf: Integer) ifTrue: [^ other ___pyBitAnd___: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) ___pyBitAnd___: self].
 	^ self ___rbinOpFallback___: other op: '&'
 %
 
@@ -1352,8 +1428,8 @@ __rlshift__: other
 	"Reverse left shift (other << self)."
 
 	(self @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
-	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: self].
-	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitShift: self].
+	(other isKindOf: Integer) ifTrue: [^ other ___pyShiftLeft___: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) ___pyShiftLeft___: self].
 	^ self ___rbinOpFallback___: other op: '<<'
 %
 
@@ -1410,12 +1486,18 @@ __round__: ndigits
 	__round__: documents this same trap and checks for both; int did not.
 	test_builtin test_bug_27936, which passes None for an int, a float, a
 	Decimal and a Fraction -- and only the int leg failed."
+	| n |
 	((ndigits @env0:== None) or: [ndigits @env0:isNil]) ifTrue: [ ^ self ].
+	"Anything else must be an integer, through __index__ as CPython takes it:
+	``round(3, 'brian')'' is TypeError ('str' object cannot be interpreted as
+	an integer).  It reached the kernel's ``'brian' < 0'', an uncatchable
+	ArgumentTypeError that ended the run (test_long's test_round)."
+	n := ndigits ___asIndex___.
 
 	"If ndigits is negative, round to that many places left of decimal"
-	(ndigits @env0:< 0) ifTrue: [
+	(n @env0:< 0) ifTrue: [
 		| divisor |
-		divisor := (10 @env0:raisedTo: (ndigits @env0:abs)).
+		divisor := (10 @env0:raisedTo: (n @env0:abs)).
 		"TIES TO EVEN here too: ``round(25, -1)'' is 20, not 30.  The quotient
 		is a Fraction, so the helper's exact tie test matters -- see
 		object>>___roundHalfToEven___."
@@ -1443,8 +1525,8 @@ __rrshift__: other
 	"Reverse right shift (other >> self)."
 
 	(self @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
-	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: (self @env0:negated)].
-	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitShift: (self @env0:negated)].
+	(other isKindOf: Integer) ifTrue: [^ other ___pyShiftRight___: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) ___pyShiftRight___: self].
 	^ self ___rbinOpFallback___: other op: '>>'
 %
 
@@ -1453,18 +1535,13 @@ method: int
 __rshift__: other
 	"Right shift."
 
-	(other isKindOf: Integer) ifTrue: [
-		(other @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
-		^ self @env0:bitShift: (other @env0:negated)].
+	(other isKindOf: Integer) ifTrue: [^ self ___pyShiftRight___: other].
 	"An int subclass that overrides __rrshift__ answers first, as CPython's
 	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
 	(other @env0:isSpecial) ifFalse: [ | pri |
 		pri := self ___numericReflectedFirst___: other selector: #'__rrshift__:'.
 		pri == nil ifFalse: [^ pri]].
-	(self ___isPyIntOperand___: other) ifTrue: [ | idx |
-		idx := other __index__.
-		(idx @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
-		^ self @env0:bitShift: (idx @env0:negated)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self ___pyShiftRight___: other __index__].
 	^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'
 %
 
@@ -1514,6 +1591,11 @@ ___intTrueDivFloat___: other
 		OverflowError ___signal___: 'integer division result too large for a float'].
 	((f @env0:_getKind) @env0:== 3) ifTrue: [
 		OverflowError ___signal___: 'integer division result too large for a float'].
+	"A ZERO result carries the quotient's sign, as CPython's does: 0 / -3 and
+	-1 / 2**2000 are -0.0.  The exact rational has no signed zero, so asFloat
+	answered +0.0 (test_long's test_correctly_rounded_true_division, 0 / -big)."
+	((f @env0:= 0.0) @env0:and: [(self @env0:< 0) ~~ (other @env0:< 0)])
+		ifTrue: [^ 0.0 @env0:negated].
 	^ f
 %
 
@@ -1522,8 +1604,8 @@ method: int
 __rxor__: other
 	"Reverse bitwise XOR (other ^ self)."
 
-	(other isKindOf: Integer) ifTrue: [^ other @env0:bitXor: self].
-	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) @env0:bitXor: self].
+	(other isKindOf: Integer) ifTrue: [^ other ___pyBitXor___: self].
+	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) ___pyBitXor___: self].
 	^ self ___rbinOpFallback___: other op: '^'
 %
 
@@ -1615,13 +1697,13 @@ method: int
 __xor__: other
 	"Bitwise XOR."
 
-	(other isKindOf: Integer) ifTrue: [^ self @env0:bitXor: other].
+	(other isKindOf: Integer) ifTrue: [^ self ___pyBitXor___: other].
 	"An int subclass that overrides __rxor__ answers first, as CPython's
 	subclass priority has it: ``7 & IntFlag.X'' is the flag, not 3."
 	(other @env0:isSpecial) ifFalse: [ | pri |
 		pri := self ___numericReflectedFirst___: other selector: #'__rxor__:'.
 		pri == nil ifFalse: [^ pri]].
-	(self ___isPyIntOperand___: other) ifTrue: [^ self @env0:bitXor: (other __index__)].
+	(self ___isPyIntOperand___: other) ifTrue: [^ self ___pyBitXor___: (other __index__)].
 	^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'
 %
 

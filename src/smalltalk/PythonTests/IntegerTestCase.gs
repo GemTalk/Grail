@@ -792,3 +792,42 @@ testFromBytesTwoArgForm
 	self assert: (int @env1:from_bytes: #[1 0] _: 'big' _: false) equals: 256.
 	self assert: (int @env1:from_bytes: #[255] _: 'big' _: true) equals: -1
 %
+
+category: 'Grail-Tests'
+method: IntegerTestCase
+testBitwiseOnNegativeLargeIntegersMatchesCPython
+	"GemStone's bitXor: and bitAnd: answer wrong bits when an operand is a
+	negative LargeInteger -- ``-6148914691236517206 ^ -1'' was
+	-12297829382473034411 (test_long's test_bitop_identities).  int's ^ and &
+	route around them.  tests/python/int_bitwise_negative_large.py checksums
+	every pair over 109 operands at and past the SmallInteger boundary, each
+	check agreeing with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'int_bitwise_negative_large' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/int_bitwise_negative_large.py')
+		name: 'int_bitwise_negative_large'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '11 checks, 0 disagreeing [], keys match: True'
+%
+
+category: 'Grail-Tests'
+method: IntegerTestCase
+testHugeShiftsRoundAndZeroQuotientSignMatchCPython
+	"A LargeInteger shift count and ``round(3, 'brian')'' each reached a kernel
+	primitive that refused them with an uncatchable error; a zero quotient
+	lost its sign (0 / -2**70 was 0.0).  tests/python/int_shift_round_zero_sign.py
+	holds the checks, agreeing with CPython 3.14 except the pinned 130144-bit
+	ceiling."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'int_shift_round_zero_sign' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/int_shift_round_zero_sign.py')
+		name: 'int_shift_round_zero_sign'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '8 checks, 0 disagreeing [], keys match: True'
+%
