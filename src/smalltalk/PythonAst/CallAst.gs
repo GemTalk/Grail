@@ -3869,8 +3869,8 @@ classAttrNames
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classPropertyNames
-	"Names the class body declares as a @property (or @cached_property, or one
-	of its setter/getter/deleter halves).  classSelfSendSelector consults it so
+	"Names the class body declares as a @property (or one of its
+	setter/getter/deleter halves).  classSelfSendSelector consults it so
 	``self.kind(n)'' takes the attribute path instead of fusing into the
 	property's setter selector."
 

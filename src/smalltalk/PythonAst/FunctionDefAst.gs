@@ -1276,8 +1276,6 @@ applicableMethodDecorators
 	  * @staticmethod / @classmethod / @property -- handled at PARSE time by
 	    re-classing this node (isClassDeclarativeDecorator:), and @property is
 	    additionally paired with a synthesized setter.
-	  * @cached_property -- ClassDefAst realises it as the same getter/setter
-	    pair, using the setter as the cache slot.
 	  * @x.setter / @x.getter / @x.deleter -- property accessor forms; the def
 	    IS the accessor and compiles to the paired selector.
 	  * @typing.overload -- the stub is not the implementation.
@@ -1295,18 +1293,7 @@ applicableMethodDecorators
 	decorator_list isNil ifTrue: [^ #()].
 	^ decorator_list reject: [:deco |
 		(self isClassDeclarativeDecorator: deco)
-			or: [(self isCachedPropertyDecorator: deco)
-				or: [self isPropertyAccessorDecorator: deco]]]
-%
-
-category: 'Grail-code generation'
-method: FunctionDefAst
-isCachedPropertyDecorator: deco
-	"Bare ``@cached_property'' -- ClassDefAst turns it into a getter/setter
-	pair, so it must not also be applied as a runtime decorator call."
-
-	(deco isKindOf: Symbol) ifFalse: [^ false].
-	^ deco asSymbol == #'cached_property'
+			or: [self isPropertyAccessorDecorator: deco]]
 %
 
 category: 'Grail-code generation'
@@ -1369,15 +1356,15 @@ category: 'Grail-code generation'
 method: FunctionDefAst
 ___declaresPropertyBinding___
 	"Whether this def, as decorated, leaves a declarative property bound to its
-	name: @property / @cached_property outermost, or an accessor of a property
-	declared earlier (which recurses to that earlier def)."
+	name: @property outermost, or an accessor of a property declared earlier
+	(which recurses to that earlier def)."
 
 	| first |
 	decorator_list isNil ifTrue: [^ false].
 	decorator_list isEmpty ifTrue: [^ false].
 	first := decorator_list at: 1.
 	(first isKindOf: Symbol)
-		ifTrue: [^ #(#'property' #'cached_property') includes: first asSymbol].
+		ifTrue: [^ first asSymbol == #'property'].
 	"``@Base.spam.getter'' -- an accessor form over an EXPRESSION -- leaves a
 	property bound too, and the @spam.setter / @spam.deleter after it are its
 	halves (test_property test_property_decorator_subclass).  Reading those as
@@ -1424,7 +1411,7 @@ isPropertyAccessorDecorator: deco
 category: 'Grail-Decorators'
 method: FunctionDefAst
 ___isPropertyDef___
-	"Whether this def declares a @property or @cached_property, the
+	"Whether this def declares a @property, the
 	``@x.setter'' / ``@x.getter'' / ``@x.deleter'' halves included -- they bind
 	the same name.
 
@@ -1442,7 +1429,7 @@ ___isPropertyDef___
 		and: [decorator_list anySatisfy: [:d | self ___isForeignAccessorDecorator___: d]])
 			ifTrue: [^ false].
 	^ decorators anySatisfy: [:each |
-		#(#'property' #'cached_property' #'setter' #'getter' #'deleter')
+		#(#'property' #'setter' #'getter' #'deleter')
 			includes: each]
 %
 
@@ -1485,8 +1472,7 @@ ___hasWrappingDecorator___
 	path answered the same method), but it now decides whether a classmethod
 	is re-wrapped in a descriptor, where it has to be right."
 	structural := #(#'property' #'staticmethod' #'classmethod' #'setter'
-		#'getter' #'deleter' #'abstractmethod' #'abstractproperty'
-		#'cached_property').
+		#'getter' #'deleter' #'abstractmethod' #'abstractproperty').
 	^ decorator_list anySatisfy: [:deco |
 		(deco isKindOf: Symbol)
 			ifTrue: [(structural includes: deco asSymbol) not]

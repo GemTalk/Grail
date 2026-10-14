@@ -38,11 +38,10 @@ CachedPropertyDescriptorTestCase category: 'Grail-SUnit'
 ! first, every later read is the cached value and never reaches the descriptor
 ! again.  That is exactly CPython's non-data-descriptor arrangement.
 !
-! DISTINCT from the parse-time realisation of a bare ``@cached_property''
-! (ClassDefAst's getter/setter pairing), which flask / werkzeug / django depend
-! on and which is untouched.  This class serves the attribute-access decorator
-! form (``@functools.cached_property''), the value form (``x =
-! cached_property(f)'') and direct construction.
+! It serves every form: the bare decorator (``@cached_property'', which until
+! #1444 was a parse-time getter/setter pair that never cached), the
+! attribute-access form (``@functools.cached_property''), the value form
+! (``x = cached_property(f)'') and direct construction.
 !
 ! NOT supported, and covered by tests that still fail upstream:
 !   * ``Cls.method.__doc__'' -- a method's docstring is not recorded anywhere
