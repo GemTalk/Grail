@@ -1256,7 +1256,7 @@ The walls, in the order met:
 | a module `__getattr__` STORED as data (`globals()[...]`, a frame's `f_globals`) was never consulted | exposed by the line above: with a real `getsource` anyio's lazy importer engages, and `from anyio.abc import ObjectReceiveStream` -- so `import fastapi` -- failed | PEP 562's hook is also read from the module's dynamic instVar, where such a store lands |
 | a bound classmethod's (`MethodBinding`) `__signature_spec__` read as a METHOD | `inspect.signature` iterated it and failed; pydantic then called a `field_validator(cls, v, info)` without `info` | it is a value attr |
 | `eval_str` / `annotation_format` reached only a plain def's signature | `from __future__ import annotations` on a callable class's `__call__` stayed a string (`Depends(Dep())`), and FastAPI's FORWARDREF retry for a `TYPE_CHECKING`-only name was ignored | both are passed through the class and callable-instance paths, and `annotation_format` reads the annotations in that format |
-| a wheel's own ITERATOR was not iterable | `-> Iterable[Model]`: pydantic_core's `ValidatorIterator` is a PyO3 iterator; the shim's `PyObject_GetIter` / `PyIter_Next` sent it round through Grail, whose proxy knew no iteration (3 tests), and its length hint was a raw `__len__` send -- an uncatchable MessageNotUnderstood in the callback | a foreign object iterates through its own `tp_iter` / `tp_iternext`, from C and through the proxy's `__iter__` / `__next__`; `PyObject_Length` is `len()` |
+| a wheel's own ITERATOR was not iterable | `-> Iterable[Model]`: pydantic_core's `ValidatorIterator` is a PyO3 iterator; the shim's `PyObject_GetIter` / `PyIter_Next` sent it round through Grail, whose proxy knew no iteration (3 tests), and its length hint was a raw `__len__` send -- an uncatchable MessageNotUnderstood in the callback | C iterates a foreign object through its own `tp_iter` / `tp_iternext`; the proxy's `__iter__` / `__next__` are main's generic foreign ops (landed alongside), whose slot search stopped at the first shim-built type -- which every PyO3 class is -- so for iteration it now searches heap types too; `PyObject_Length` is `len()` |
 
 **Where it stands** (same slice, runner and CPython reference run as Phase 5).
 `compare_results.py` counts 1,270 tests in that reference -- 1,260 CPython
@@ -1287,4 +1287,15 @@ test___all__) and each is its baseline row exactly when run alone;
 `check_python_fixtures.sh` 606 fixtures agree with CPython.  An earlier SUnit
 run caught the stale user-action entry (above): 6 errors and 1 failure, all
 from generators made inline outside any callback.
+
+Re-gated after merging `origin/main` (2026-10-14), which brought Phase 5
+(#1568) and a generic foreign-object protocol of its own (`ShimForeignObject`
+operators through `shimForeignOp`): its `__iter__` / `__next__` replaced this
+phase's, and its slot search, which stops at the first shim-built type, was
+taught to search heap types for iteration (above).  `run_tests.sh` **8103
+run, 8103 passed**, 8 of 8 shards; the CPython conformance gate **0
+regressions, 5 improvements** (test_unpack, test_statistics, test_long,
+test_copyreg, test_uuid) -- test_math, test_pickle and test___all__ timed out
+beside the SUnit suite and are OK alone; `check_python_fixtures.sh` 651
+fixtures agree with CPython.  The FastAPI slice is unchanged at 1,252 / 1,270.
 

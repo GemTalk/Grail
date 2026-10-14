@@ -1532,16 +1532,6 @@ foreignStr: cPtr repr: aBoolean
 
 category: 'Grail-Calling'
 method: CPythonShim
-foreignIter: cPtr next: aBoolean
-	"iter() -- or next() when aBoolean -- of a wheel's own C object, through
-	its tp_iter / tp_iternext: { value }, or nil when the type has no such slot
-	or (for next) the iterator is exhausted."
-
-	^ self ___shimUserAction: #shimForeignIter withArgs: { cPtr . aBoolean == true }
-%
-
-category: 'Grail-Calling'
-method: CPythonShim
 callModuleReturnCPtr: moduleName method: methodName
 	"Call a no-arg module method that returns a raw C pointer
 	(SmallInteger address) instead of a Smalltalk value."

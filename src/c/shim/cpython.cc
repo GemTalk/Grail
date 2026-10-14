@@ -114,8 +114,6 @@ static int is_foreign(PyObject *obj);              /* not a Grail wrapper */
 static OopType foreign_number_oop(PyObject *obj, int want_float); /* nb_* slot */
 static OopType foreign_proxy_oop(PyObject *obj);   /* reverse proxy bridge */
 static int is_foreign_type(PyObject *obj);         /* a wheel's type object */
-static getiterfunc foreign_tp_iter(PyObject *obj);      /* its own tp_iter */
-static iternextfunc foreign_tp_iternext(PyObject *obj); /* its own tp_iternext */
 static inline int plausible_pyobj(const void *p);  /* could this be a PyObject*? */
 static void report_bad_pyobj(const char *where, const void *p);
 extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
@@ -2929,8 +2927,23 @@ static void *foreign_sq_item(PyTypeObject *t)      { return FOREIGN_SLOT(t, T->t
 static void *foreign_sq_ass_item(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_ass_item : NULL); }
 static void *foreign_sq_contains(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_contains : NULL); }
 static void *foreign_tp_richcompare(PyTypeObject *t) { return FOREIGN_SLOT(t, (void *)T->tp_richcompare); }
-static void *foreign_tp_iter(PyTypeObject *t)      { return FOREIGN_SLOT(t, (void *)T->tp_iter); }
-static void *foreign_tp_iternext(PyTypeObject *t)  { return FOREIGN_SLOT(t, (void *)T->tp_iternext); }
+/* Iteration searches HEAP types too.  The shim's PyType_FromSpec registers
+   every type it builds as a shim type, and every PyO3 class is built that way
+   -- pydantic_core's ValidatorIterator, what an ``Iterable[Model]'' validates
+   to -- so stopping at the first shim type found no tp_iter and the iterator
+   answered ``not iterable''.  Only iteration: the compare / hash slots keep
+   FOREIGN_SLOT's stop, so a PyO3 object's == and hash stay consistent. */
+#define FOREIGN_ITER_STOP(t) (is_shim_type(t) && !((t)->tp_flags & Py_TPFLAGS_HEAPTYPE))
+static void *foreign_tp_iter(PyTypeObject *t) {
+    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+        if (t->tp_iter) return (void *)t->tp_iter;
+    return NULL;
+}
+static void *foreign_tp_iternext(PyTypeObject *t) {
+    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+        if (t->tp_iternext) return (void *)t->tp_iternext;
+    return NULL;
+}
 
 /* tp_hash and tp_richcompare go together, as CPython inherits them: the first
    type defining either decides.  Comparison without a hash is CPython's
@@ -6533,40 +6546,6 @@ static OopType shimForeignStr(OopType ptrOop, OopType reprOop)
     return res;
 }
 
-/* iter() -- or next() when nextOop is true -- of a wheel's own object, asked
-   by Grail (ShimForeignObject>>__iter__ / __next__): its own tp_iter /
-   tp_iternext.  nil when the type has no such slot (Grail then raises
-   CPython's TypeError) or, for next(), when the iterator is exhausted; the
-   answer comes back as { value } so that a None it yields is not mistaken
-   for either. */
-static OopType shimForeignIter(OopType ptrOop, OopType nextOop)
-{
-    PyObject *obj = (PyObject *)(intptr_t)GciOopToI64(ptrOop);
-    if (!plausible_pyobj(obj) || !plausible_pyobj(obj->ob_type)) return OOP_NIL;
-    PyErr_Clear();
-    PyObject *r;
-    if (nextOop == OOP_TRUE) {
-        iternextfunc fn = foreign_tp_iternext(obj);
-        if (!fn) return OOP_NIL;
-        r = fn(obj);
-        if (r == NULL && PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
-            PyErr_Clear();
-    } else {
-        getiterfunc fi = foreign_tp_iter(obj);
-        if (!fi) return OOP_NIL;
-        r = fi(obj);
-    }
-    buffer_cache_clear();
-    check_and_raise_error();
-    if (r == NULL) return OOP_NIL;
-    OopType val = pyobj_oop(r);
-    check_and_raise_error();
-    OopType oneOop = GciI64ToOop(1);
-    OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &oneOop, 1);
-    GciStoreOop(arr, 1, val);
-    return arr;
-}
-
 /* isinstance() / issubclass() against a wheel's own TYPE, asked by Grail
    (ShimForeignObject>>___foreignTypeCheck___:).  typeOop is the proxied type's
    pointer; objOop is the candidate's pointer, or 0 for a Grail object, which
@@ -7685,23 +7664,19 @@ PyObject *PyCallIter_New(PyObject *callable, PyObject *sentinel) {
    ``Iterable[Model]'' validates to -- is one: serialising it round-tripped
    through Grail, which knew no iteration for a foreign proxy, and FastAPI's
    ``-> Iterable[Model]'' routes failed with ``Error serializing to JSON''. */
-static getiterfunc foreign_tp_iter(PyObject *obj) {
+static getiterfunc foreign_obj_iter(PyObject *obj) {
     if (!is_foreign(obj) || is_foreign_type(obj)) return NULL;
-    for (PyTypeObject *b = obj->ob_type; b != NULL; b = b->tp_base)
-        if (b->tp_iter) return b->tp_iter;
-    return NULL;
+    return (getiterfunc)foreign_tp_iter(obj->ob_type);
 }
 
-static iternextfunc foreign_tp_iternext(PyObject *obj) {
+static iternextfunc foreign_obj_iternext(PyObject *obj) {
     if (!is_foreign(obj) || is_foreign_type(obj)) return NULL;
-    for (PyTypeObject *b = obj->ob_type; b != NULL; b = b->tp_base)
-        if (b->tp_iternext) return b->tp_iternext;
-    return NULL;
+    return (iternextfunc)foreign_tp_iternext(obj->ob_type);
 }
 
 extern "C" PyObject *PyObject_GetIter(PyObject *obj) {
     if (obj == NULL) return NULL;
-    getiterfunc fi = foreign_tp_iter(obj);
+    getiterfunc fi = foreign_obj_iter(obj);
     if (fi) return fi(obj);
     OopType arg = pyobj_oop(obj);
     OopType result = GciPerform(server, "PyObject_GetIter:", &arg, 1);
@@ -7711,7 +7686,7 @@ extern "C" PyObject *PyObject_GetIter(PyObject *obj) {
 
 extern "C" PyObject *PyIter_Next(PyObject *iterator) {
     if (iterator == NULL) return NULL;
-    iternextfunc fn = foreign_tp_iternext(iterator);
+    iternextfunc fn = foreign_obj_iternext(iterator);
     if (fn) {
         PyObject *r = fn(iterator);
         /* CPython's PyIter_Next: an exhausted iterator's StopIteration is
@@ -8521,7 +8496,6 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimForeignSetAttr", shimForeignSetAttr, 3);
     GCI_DECLARE_ACTION("shimForeignOp", shimForeignOp, 4);
     GCI_DECLARE_ACTION("shimForeignStr", shimForeignStr, 2);
-    GCI_DECLARE_ACTION("shimForeignIter", shimForeignIter, 2);
     GCI_DECLARE_ACTION("shimForeignTypeCheck", shimForeignTypeCheck, 3);
     GCI_DECLARE_ACTION("shimArrayDispatcherParts", shimArrayDispatcherParts, 1);
     GCI_DECLARE_ACTION("shimArrayFunctionKind", shimArrayFunctionKind, 1);
