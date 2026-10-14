@@ -892,6 +892,62 @@ ___compileMethod: aSource category: aCategory scope: aScopeOrNil
 
 category: 'Grail-Class Compilation'
 method: Behavior
+___compileMethod: aSource category: aCategory globals: aScope
+	"___compileMethod:category:scope: for a method of a class an exec'd source
+	defines, aScope being the exec's globals -- what ClassDefAst emits inside
+	a doit.  The scope is noted against the receiver first
+	(___grailRememberCompileScope___:), so that whatever compiles the method
+	again can hand it back.
+
+	A separate entry point because other callers pass a scope of their own
+	for one compile -- a slot pair's ``___grailSlotPairOwner___'' -- and
+	noting those replaced the exec's globals."
+
+	self ___grailRememberCompileScope___: aScope.
+	^ self ___compileMethod: aSource category: aCategory scope: aScope
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___grailRememberCompileScope___: aScope
+	"Note that the receiver's methods were compiled with aScope -- an exec's
+	globals -- searched first (___compileMethod:category:globals:), so that
+	anything compiling one of them AGAIN can hand the same scope back:
+	___grailCompileScope___.
+
+	A name the source reads from those globals compiles to the scope's own
+	ASSOCIATION.  Recompiled without the scope, the same name binds to
+	whatever else answers to it on the symbol list -- for a module's name,
+	the class Grail backs that module with -- so ``json.dumps(x)'' became a
+	send to the class.  Grail recompiles a method's text to keep the original
+	under a second selector (an instance attribute or ``del'' over a method,
+	a varargs forward to that copy) and to give a class its second base's
+	methods; every one of those copies lost the exec's globals, and pytest's
+	unittest plugin makes the first on every test of a module it imported
+	through exec.
+
+	Kept for this session only, in SessionTemps: the scope is the exec's
+	globals -- a module, or a dictionary of one run -- and a class built at
+	run time is rebuilt by the next session's exec, which notes its own."
+
+	((SessionTemps @env0:current @env0:at: #'GrailClassCompileScopes' otherwise: nil)
+		@env0:ifNil: [SessionTemps @env0:current
+			@env0:at: #'GrailClassCompileScopes' put: IdentityKeyValueDictionary @env0:new])
+				@env0:at: self put: aScope
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___grailCompileScope___
+	"The scope the receiver's methods were compiled with, or nil: see
+	___grailRememberCompileScope___:."
+
+	^ (SessionTemps @env0:current @env0:at: #'GrailClassCompileScopes' otherwise: nil)
+		@env0:ifNotNil: [:d | d @env0:at: self otherwise: nil]
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
 ___traceCodegenGap___: aSource error: aCompileError
 	"Under GRAIL_CODEGEN_TRACE_DIR, append a runtime method that failed to
 	compile -- its generated source and the compiler's complaint -- to
