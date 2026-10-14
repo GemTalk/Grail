@@ -1074,6 +1074,7 @@ run
 	at: #'GzipTestCase' put: nil;
 	at: #'HeapqTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
+	at: #'HttpClientStatusConstantsTestCase' put: nil;
 	at: #'HttpClientTestCase' put: nil;
 	at: #'HttpCookiejarTestCase' put: nil;
 	at: #'HttpCookiesTestCase' put: nil;
@@ -2621,6 +2622,7 @@ input src/smalltalk/PythonTests/GzipTestCase.gs
 input src/smalltalk/PythonTests/HeapqTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
+input src/smalltalk/PythonTests/HttpClientStatusConstantsTestCase.gs
 input src/smalltalk/PythonTests/HttpClientTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiejarTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
