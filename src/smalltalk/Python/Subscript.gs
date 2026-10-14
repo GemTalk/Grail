@@ -131,7 +131,7 @@ ___grailClassGetitemDispatch___: index
 	Specific scalar metaclasses override this with a TypeError to mirror
 	CPython's strictness (`int[X]` etc.)."
 
-	| attr definer objectMeta recordedMeta metaOwner baseOwner |
+	| attr definer instDefiner objectMeta recordedMeta metaOwner baseOwner |
 	"THE METATYPE COMES FIRST, ahead of every shape below.  CPython
 	evaluates ``C[int]'' as ``type(C).__getitem__(C, int)'' whenever the
 	metatype defines one, falling back to ``C.__class_getitem__(index)''
@@ -184,20 +184,35 @@ ___grailClassGetitemDispatch___: index
 	"(2) a class-body ``def'', which compiles instance-side -- under the plain
 	selector for a fixed signature and the varargs one for
 	``def __class_getitem__(*args, **kwargs)''.  UnboundMethod resolves
-	between them, so both go through one call with the CLASS supplied first."
-	((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
-		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+	between them, so both go through one call with the CLASS supplied first.
+
+	(3) an explicit @classmethod, which lands metaclass-side under the
+	one-argument selector.  EVERY class answers that one, because object
+	defines the permissive default there -- so the definer has to be checked,
+	and only a definer other than object's metaclass is a real override.
+
+	The NEARER of the two wins, as any attribute lookup does.  Asking (2)
+	first was wrong whenever a @classmethod overrides an inherited def: the
+	classmethod also compiles an instance-side FORWARDER, ``^ self class
+	__class_getitem__: x'', so an instance can call it -- and (2) found that
+	forwarder and ran it with the CLASS as receiver, sending the hook to the
+	metaclass: an uncatchable MessageNotUnderstood.  sqlalchemy's
+	``cython.const'' -- ``class const(Generic[_T])'' with a @classmethod hook,
+	subscripted at import -- is that shape."
+	instDefiner := self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1.
+	instDefiner == nil ifTrue: [
+		instDefiner := self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1].
+	definer := self @env0:class @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1.
+	objectMeta := (Python @env0:at: #object) @env0:class.
+	(definer ~~ nil and: [definer ~~ objectMeta
+		and: [instDefiner == nil
+			or: [definer @env0:thisClass == instDefiner
+			or: [definer @env0:thisClass @env0:inheritsFrom: instDefiner]]]])
+		ifTrue: [^ self @env0:perform: #'__class_getitem__:' env: 1 withArguments: { index }].
+	instDefiner ~~ nil
 		ifTrue: [
 			^ (UnboundMethod definingClass: self selector: #'__class_getitem__')
 				@env1:value: { self. index } value: nil].
-	"(3) an explicit @classmethod, which lands metaclass-side under the
-	one-argument selector.  EVERY class answers that one, because object
-	defines the permissive default there -- so the definer has to be checked,
-	and only a definer other than object's metaclass is a real override."
-	definer := self @env0:class @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1.
-	objectMeta := (Python @env0:at: #object) @env0:class.
-	(definer ~~ nil and: [definer ~~ objectMeta])
-		ifTrue: [^ self @env0:perform: #'__class_getitem__:' env: 1 withArguments: { index }].
 	"(4) a runtime ``Cls.__class_getitem__ = fn'' lands in the attribute store."
 	attr := self ___classChainAttrLookup___: #'__class_getitem__'.
 	attr == nil ifTrue: [

@@ -817,6 +817,7 @@ run
 	at: #'ClassDictOrderTestCase' put: nil;
 	at: #'ClassDictProxyTestCase' put: nil;
 	at: #'ClassFunctionBindingTestCase' put: nil;
+	at: #'ClassGetitemNearestTestCase' put: nil;
 	at: #'ClassGetitemPrecedenceTestCase' put: nil;
 	at: #'ClassGetitemTestCase' put: nil;
 	at: #'ClassHeaderEvaluatedOnceTestCase' put: nil;
@@ -2374,6 +2375,7 @@ input src/smalltalk/PythonTests/ClassDictEntriesTestCase.gs
 input src/smalltalk/PythonTests/ClassDictOrderTestCase.gs
 input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
+input src/smalltalk/PythonTests/ClassGetitemNearestTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemPrecedenceTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
 input src/smalltalk/PythonTests/ClassHeaderEvaluatedOnceTestCase.gs
