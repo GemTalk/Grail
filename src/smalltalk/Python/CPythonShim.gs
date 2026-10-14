@@ -441,6 +441,19 @@ ___guardCallback: aBlock
 
 category: 'Grail-Calling'
 method: CPythonShim
+___noteCallbackExceptionInstance: anObject
+	"C made a Grail exception OBJECT its pending error (PyErr_SetObject /
+	PyErr_Restore with an instance): keep it as ___guardCallback: keeps a
+	callback's, so if C hands the error back unhandled it is raised as itself.
+	False for anything that is not an exception instance."
+
+	(anObject isKindOf: BaseException) ifFalse: [^ false].
+	SessionTemps current at: #'GrailShimCallbackExceptionTaken' put: anObject.
+	^ true
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 ___takeCallbackError
 	"{ Python name of the nearest shim exception type. message. the C instance
 	of a wheel's own exception it carries, or 0. the C type object of its own
@@ -2905,6 +2918,15 @@ ___ug_PyObject_SetItem: obj key: aKey value: aValue
 	"obj[key] = value via __setitem__."
 
 	obj perform: #'__setitem__:_:' env: 1 withArguments: { aKey . aValue }.
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_Hash: obj
+	"Python's hash(obj) for C's PyObject_Hash.  Guarded: an unhashable object's
+	TypeError becomes C's pending error -- see ___guardCallback:."
+
+	^ self ___guardCallback: [(builtins @env1:instance) @env1:hash: obj]
 %
 
 category: 'Grail-CPython API'

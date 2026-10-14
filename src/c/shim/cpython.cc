@@ -819,9 +819,12 @@ extern "C" void PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptb)
 static int is_foreign_exc_instance(PyObject *v);
 static void foreign_exc_text(PyObject *v, char *buf, size_t cap);
 
+static int keep_grail_exc_instance(PyObject *type, PyObject *value);
+
 extern "C" void PyErr_Restore(PyObject *type, PyObject *value, PyObject *tb) {
     (void)tb;
     forget_saved_gs_error();
+    if (type != NULL && keep_grail_exc_instance(type, value)) return;
     current_error_type = type;
     if (value && is_foreign_exc_instance(value)) {
         foreign_exc_text(value, current_error_msg, sizeof(current_error_msg));
@@ -2577,7 +2580,7 @@ static int is_shim_module(PyObject *obj);
    whatever #[classattr]s a class declares), so they are kept where CPython
    keeps them, in tp_dict, and read back from the tp_dict chain before the
    Grail-side proxy is consulted. */
-extern "C" PyObject *PyObject_GenericGetAttr(PyObject *, PyObject *);  /* shim_numpy.cc */
+extern "C" PyObject *PyObject_GenericGetAttr(PyObject *, PyObject *);  /* below */
 
 static int is_foreign_type(PyObject *obj) {
     if (!is_foreign(obj)) return 0;
@@ -3483,6 +3486,22 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
    the object's own tp_getattro (not the shim_numpy.cc GenericGetAttr stub),
    then the generic walk.  Shared by PyObject_GetAttrString (a C caller) and
    the shimForeignGetAttr user action (a Grail caller). */
+/* object.__getattribute__ as C calls it -- the generic walk, NOT the type's
+   tp_getattro, which commonly falls back to this function: going through
+   PyObject_GetAttr here would call that tp_getattro again and recurse.  A
+   Grail object's attributes are Grail's.  It was a shim_numpy.cc stub that
+   answered NULL with no error. */
+extern "C" PyObject *PyObject_GenericGetAttr(PyObject *obj, PyObject *name) {
+    const char *s = PyUnicode_AsUTF8(name);
+    if (s == NULL) return NULL;
+    if (!is_foreign(obj)) return PyObject_GetAttrString(obj, s);
+    PyObject *v = foreign_generic_getattr(obj, s);
+    if (v != NULL || PyErr_Occurred()) return v;
+    PyErr_Format(PyExc_AttributeError, "'%.100s' object has no attribute '%.200s'",
+                 Py_TYPE(obj)->tp_name, s);
+    return NULL;
+}
+
 static PyObject *foreign_getattr_c(PyObject *obj, const char *name) {
     PyTypeObject *mt = obj->ob_type;
     if (!is_foreign_type(obj) && mt != NULL && mt->tp_getattro != NULL
@@ -4184,6 +4203,34 @@ extern "C" int PyObject_SetItem(PyObject *obj, PyObject *key, PyObject *value) {
     return 0;
 }
 
+/* One of the shim's own static builtin types (int, str, bytes, ...), with no
+   tp_new of its own: it crosses into Grail as the Grail class of that name
+   (foreign_proxy_oop), so a call is the class's.  call_foreign found no tp_new
+   on PyLong_Type and answered "foreign object of type 'type' is not callable",
+   so a C call of builtins.int, bytes, str or memoryview failed.  float has a
+   tp_new (float_tp_new) and keeps it; so do the exception types (exc_tp_new,
+   which a wheel's exception pyclass builds on). */
+static int is_grail_class_type(PyObject *callable) {
+    PyTypeObject *t = (PyTypeObject *)callable;
+    if (callable->ob_type != &PyType_Type || t->tp_new != NULL) return 0;
+    PyTypeObject *const statics[] = { &PyType_Type, &PyBaseObject_Type, &PyLong_Type,
+        &PyBool_Type, &PyUnicode_Type, &PyBytes_Type, &PyList_Type, &PyDict_Type,
+        &PyTuple_Type };
+    for (size_t i = 0; i < sizeof(statics) / sizeof(statics[0]); i++)
+        if (t == statics[i]) return 1;
+    return 0;
+}
+
+/* The exception CLASS a static shim exception type stands for, as Grail
+   names it (ValueError, OSError, ...), or NULL for any other type -- a
+   wheel's own exception pyclass among them. */
+extern "C" const char *_grail_static_exc_name(PyObject *type) {
+    if (type == NULL || type->ob_type != &PyType_Type) return NULL;
+    if (!(((PyTypeObject *)type)->tp_flags & Py_TPFLAGS_BASE_EXC_SUBCLASS)) return NULL;
+    if (((PyTypeObject *)type)->tp_new != exc_tp_new) return NULL;
+    return name_for_exc_type(type);
+}
+
 /* Call a foreign callable — a prebuilt wheel's own object — in C, instead
    of delegating to the Grail server (where the proxy isn't callable).  Used
    when numpy instantiates a DType, e.g. PyObject_Call(StringDType, ()).
@@ -4221,7 +4268,7 @@ extern "C" PyObject *PyObject_Call(PyObject *callable, PyObject *args,
     if (callable == NULL || args == NULL) {
       return NULL;
     }
-    if (is_foreign(callable))
+    if (is_foreign(callable) && !is_grail_class_type(callable))
         return call_foreign(callable, args, kwargs);
     /* Grail-backed callable: delegate to the server.  Keywords used to be
        dropped here ("not yet wired") -- a C caller's f(x, key=v) ran as f(x),
@@ -4234,6 +4281,17 @@ extern "C" PyObject *PyObject_Call(PyObject *callable, PyObject *args,
         OopType cargs[2] = { pyobj_oop(callable), args ? pyobj_oop(args) : OOP_NIL };
         result = GciPerform(server, "PyObject_Call:args:", cargs, 2);
     }
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+/* callable(*args) in Grail, whatever it is in C: the server half of
+   PyObject_Call.  For one of the shim's static exception types, whose C call
+   runs exc_tp_new and builds a C-level exception, this builds the Grail
+   exception of that class (shim_numpy.cc, grail_new_exception). */
+extern "C" PyObject *_grail_call_in_grail(PyObject *callable, PyObject *args) {
+    OopType cargs[2] = { pyobj_oop(callable), args ? pyobj_oop(args) : OOP_NIL };
+    OopType result = GciPerform(server, "PyObject_Call:args:", cargs, 2);
     if (check_gci_error()) return NULL;
     return addr_to_pyobj(result);
 }
@@ -5032,10 +5090,20 @@ extern "C" int PyArg_Parse(PyObject *arg, const char *format, ...) {
  * CPython API — Warning
  * ==================================================================== */
 
+/* warnings.warn(message, category, level), so the warning filters apply --
+   ``error'' turns it into an exception, and the caller sees -1.  It was a
+   silent no-op (_sre's deprecation warnings among others went nowhere). */
+extern "C" PyObject *PyObject_CallMethod(PyObject *, const char *, const char *, ...);
 extern "C" int PyErr_WarnEx(PyObject *category, const char *message,
                              Py_ssize_t level) {
-    /* No-op warning — _sre uses this for deprecation warnings */
-    (void)category; (void)message; (void)level;
+    PyObject *warnings = PyImport_ImportModule("warnings");
+    if (warnings == NULL) return -1;
+    PyObject *r = PyObject_CallMethod(warnings, "warn", "sOn", message,
+                                      category == NULL ? PyExc_UserWarning : category,
+                                      level < 1 ? (Py_ssize_t)1 : level);
+    Py_DECREF(warnings);
+    if (r == NULL) return -1;
+    Py_DECREF(r);
     return 0;
 }
 
@@ -7047,7 +7115,32 @@ PyObject *PyErr_NewExceptionWithDoc(const char *name, const char *doc,
     return PyErr_NewException(name, base, dict);
 }
 
+/* A GRAIL exception OBJECT handed to C as an error value -- the instance
+   PyErr_SetFromErrno builds with OSError(errno, text), or one a wheel got back
+   from a call -- is kept as itself: the server records it
+   (CPythonShim>>___noteCallbackExceptionInstance:) and the error is marked as
+   from Grail, so it is raised again as that object (a FileNotFoundError with
+   its errno), and PyErr_Fetch answers it.  It used to become its type and
+   str(value): an OSError with an empty message. */
+static int keep_grail_exc_instance(PyObject *type, PyObject *value) {
+    if (value == NULL || value == Py_None || is_foreign(value) || PyUnicode_Check(value))
+        return 0;
+    OopType oop = pyobj_oop(value);
+    OopType kept = GciPerform(server, "___noteCallbackExceptionInstance:", &oop, 1);
+    GciErrSType e;
+    if (GciErr(&e) || kept != OOP_TRUE) return 0;
+    PyObject *str = PyObject_Str(value);
+    const char *text = str ? PyUnicode_AsUTF8(str) : NULL;
+    PyErr_SetString(type, text ? text : "");
+    if (str == NULL) PyErr_Clear();
+    current_error_type = type;
+    current_error_instance = value;
+    current_error_from_grail = 1;
+    return 1;
+}
+
 void PyErr_SetObject(PyObject *type, PyObject *value) {
+    if (keep_grail_exc_instance(type, value)) return;
     if (value != NULL && is_foreign_exc_instance(value)) {
         char text[1024];
         foreign_exc_text(value, text, sizeof(text));
@@ -7565,6 +7658,14 @@ PyObject *Py_BuildValue(const char *format, ...) {
     return result;
 }
 
+extern "C" PyObject *Py_VaBuildValue(const char *format, va_list vargs) {
+    va_list ap;
+    va_copy(ap, vargs);
+    PyObject *result = va_build_value(format, &ap);
+    va_end(ap);
+    return result;
+}
+
 /* Wrap the result of va_build_value as a positional-args tuple: a tuple
    passes through; anything else (incl. None for an empty build) becomes a
    1-tuple.  Used by PyObject_CallFunction / PyObject_CallMethod. */
@@ -7620,13 +7721,18 @@ Py_ssize_t PyNumber_AsSsize_t(PyObject *obj, PyObject *exc) {
 
 /* --- Object protocol (hash) --- */
 
+/* Python's hash(obj) (CPythonShim>>PyObject_Hash:), so a wheel's hash agrees
+   with Grail's dicts.  It sent Smalltalk's #hash, which is another function:
+   hash(1.5) from C differed from hash(1.5) in Python, and 1 and 1.0 could
+   hash apart.  An unhashable object raises TypeError, as in CPython. */
 Py_hash_t PyObject_Hash(PyObject *obj) {
     if (obj == NULL) return -1;
     OopType oop = pyobj_oop(obj);
-    OopType result = GciPerform(oop, "hash", NULL, 0);
-    check_and_raise_error();
-    
-    return (Py_hash_t)GciOopToI64(result);
+    OopType result = GciPerform(server, "PyObject_Hash:", &oop, 1);
+    if (check_gci_error()) return -1;
+    Py_hash_t h = (Py_hash_t)GciOopToI64(result);
+    if (check_gci_error()) return -1;
+    return h == -1 ? -2 : h;
 }
 
 Py_hash_t Py_HashBuffer(const void *ptr, Py_ssize_t len) {
@@ -8311,6 +8417,7 @@ typedef struct {
     void                *pointer;
     const char          *name;
     PyCapsule_Destructor destructor;
+    void                *context;
 } GrailCapsule;
 
 /* Capsules carry the EXPORTED PyCapsule_Type (defined, zero-initialized, in
@@ -8342,6 +8449,34 @@ extern "C" PyObject *PyCapsule_New(void *pointer, const char *name,
 
 extern "C" int PyCapsule_CheckExact(PyObject *op) {
     return op != NULL && Py_TYPE(op) == &PyCapsule_Type;
+}
+
+/* A capsule's context and name.  These were stubs in shim_numpy.cc answering
+   NULL and success without storing anything. */
+extern "C" void *PyCapsule_GetContext(PyObject *capsule) {
+    if (!PyCapsule_CheckExact(capsule)) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_GetContext called with invalid PyCapsule object");
+        return NULL;
+    }
+    return ((GrailCapsule *)capsule)->context;
+}
+
+extern "C" int PyCapsule_SetContext(PyObject *capsule, void *context) {
+    if (!PyCapsule_CheckExact(capsule)) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_SetContext called with invalid PyCapsule object");
+        return -1;
+    }
+    ((GrailCapsule *)capsule)->context = context;
+    return 0;
+}
+
+extern "C" int PyCapsule_SetName(PyObject *capsule, const char *name) {
+    if (!PyCapsule_CheckExact(capsule)) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_SetName called with invalid PyCapsule object");
+        return -1;
+    }
+    ((GrailCapsule *)capsule)->name = name;
+    return 0;
 }
 
 static int capsule_name_matches(GrailCapsule *cap, const char *name) {

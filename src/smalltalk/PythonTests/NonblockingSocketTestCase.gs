@@ -335,23 +335,15 @@ testArgsTruncationFollowsFilenameNotArity
 	self assertMatchesCPythonAt: 'args_truncation_follows_filename_not_arity'.
 %
 
-! ------------------- the pinned deviation
-
-category: 'Grail-Tests - Known deviations'
+category: 'Grail-Tests'
 method: NonblockingSocketTestCase
-testMoreThanFiveArgumentsRaisesInsteadOfKeepingArgsWhole
-	"KNOWN DEVIATION, asserted as Grail's answer rather than CPython's.
+testMoreThanFiveArgumentsKeepsArgsWhole
+	"Above five positional arguments CPython does no unpacking and str() is the
+	args tuple.  This was a pinned deviation -- Grail's exception constructors
+	took at most five arguments, so OSError(1, 2, 3, 4, 5, 6) was a TypeError
+	before unpacking arose -- kept so that lifting the limit would show up here.
+	BaseException class >> _new:kw: lifted it; the ``> 5'' branch of
+	OSError >> ___args___: is now reached, and the answer is CPython's."
 
-	Above five positional arguments CPython does no unpacking and str() is the
-	args tuple.  Grail's exception constructors accept at most five, so the
-	TypeError arrives before the question of unpacking does -- which makes the
-	``> 5'' branch of OSError >> ___args___: unreachable from Python today.  The
-	branch is kept because it is what CPython specifies and the constructor
-	limit is the thing that should move.
-
-	Pinned so that lifting the constructor limit shows up HERE as a failing
-	test rather than as a silent change in what OSError renders."
-
-	self assert: (self resultAt: 'more_than_five_arguments')
-		equals: '''TypeError: OSError() takes wrong number of arguments (6 positional, 0 keyword) - no matching method'''.
+	self assertMatchesCPythonAt: 'more_than_five_arguments'.
 %
