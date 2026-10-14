@@ -135,3 +135,22 @@ testTextRunner
 	self assert: (result @env1:__getitem__: 1).
 	self assert: (result @env1:__getitem__: 2)
 %
+
+category: 'Grail-Tests - unittest'
+method: UnittestTestCase
+testResultClassesLookLikeCPythons
+	"TextTestRunner answers a TextTestResult whose repr names its CPython home
+	-- ``<unittest.runner.TextTestResult run=2 errors=0 failures=0>'', which
+	test_statistics' doctest shows -- and unittest.result / unittest.runner
+	resolve to the same classes.  tests/python/unittest_result_repr.py holds
+	the checks, each agreeing with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'unittest_result_repr' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/unittest_result_repr.py')
+		name: 'unittest_result_repr'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '7 checks, 0 disagreeing [], keys match: True'
+%

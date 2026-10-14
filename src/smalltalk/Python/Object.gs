@@ -2127,64 +2127,45 @@ ___raiseUnhashableUse___: ex context: ctx
 category: 'Grail-Convenience Methods'
 method: object
 ___unpackSequence___
-	"Tuple-unpack coercion (``a, b, c = expr'').  AssignAst's unpack
-	codegen indexes the RHS with __getitem__: -- correct for sequences,
-	wrong for iterables WITHOUT positional indexing.  CPython unpacks any
-	iterable via __iter__.  A REAL indexable receiver (list/tuple/str/range/...:
-	genuine __getitem__ OWNERSHIP, not the PythonInstance fallback) answers
-	itself so the fast index path runs unchanged; anything else is materialized
-	into a list in iteration order so the index-based unpack works
-	(``lhs, rhs = map(str.strip, line.split('->'))'' in test_fractions
-	test_float_format_testfile; ``a, b, c = IteratingSequenceClass(3)'' in
-	test_iter test_unpack_iter, which has __iter__ but no __getitem__).  Enum
-	classes keep their own override.  A NON-iterable materializes via __iter__
-	here, which raises the catchable TypeError (``a, b = len''), matching
-	CPython -- rather than the old ``^ self'' that let a later __getitem__:
-	misbehave.  ``___respondsTo___'' saw the PythonInstance fallback __getitem__:
-	on EVERY instance and wrongly fast-pathed a non-indexable class into a
-	``not subscriptable'' error; ``___hasProtocol___'' probes real ownership.
-	A BoundMethod carries a PEP-585 generic-alias __getitem__ (``list[int]'',
-	``Callable[..., T]'') that is NOT the sequence protocol, so it is excluded
-	from the fast path -- ``a, b = len'' then materializes via __iter__ and
-	raises TypeError (not iterable), like CPython's iter(len).
+	"Tuple-unpack coercion (``a, b, c = expr''), always emitted just before
+	___unpackCheck___:star:after:, which now does all of the work.  Kept as
+	the identity because compiled methods already in the repository send it.
 
-	A MAPPING is excluded for the same reason, and it is not a corner case:
-	``a, b = {1: 'x', 2: 'y'}'' raised ``KeyError: 0''.  A dict owns a REAL
-	__getitem__, so it took the fast path, but that __getitem__ is keyed, not
-	positional -- the unpack then asked for key 0.  CPython unpacks a mapping
-	through __iter__ like everything else, yielding its KEYS.  ``keys'' is the
-	discriminator because it is the same duck-type marker Python itself uses
-	for mapping-ness (``dict(obj)'', ``**obj''), so UserDict and any custom
-	Mapping are covered, while no sequence owns it."
+	It used to materialise every value that was not a sequence into a list
+	HERE -- consuming the whole iterator, where CPython takes exactly one value
+	more than there are targets (``x, y, z = it'' over iter(range(100)) leaves
+	next(it) at 4) -- and to pass a __getitem__-only object through unchecked,
+	so ``a, b = Seq()'' over a three-item Seq succeeded (test_unpack's
+	doctests, which ran for the first time in 0294a688)."
 
-	((self ___hasProtocol___: '__getitem__')
-		@env0:and: [((self @env0:isKindOf: BoundMethod) @env0:not)
-			@env0:and: [(self ___hasProtocol___: 'keys') @env0:not]])
-		ifTrue: [^ self].
-	^ list @env1:__new__: self
+	^ self
 %
 
 category: 'Grail-Convenience Methods'
 method: object
 ___unpackCheck___: nBefore star: hasStar after: nAfter
-	"CPython requires a tuple-unpacking assignment to receive the right number
-	of values -- exactly nBefore for ``a, ..., z = expr'', or at least
-	nBefore + nAfter around a star target -- raising ValueError otherwise
-	(test_iter test_unpack_iter).  Only a receiver with a dependable length (the
-	materialized iterator list, or a kernel sequence -- both SequenceableCollection)
-	is checked; a bare custom-__getitem__ receiver has no reliable size and keeps
-	the lenient index path.  Answers self so it chains after ___unpackSequence___.
+	"CPython's UNPACK_SEQUENCE / UNPACK_EX, for an assignment target and a
+	for-loop target alike: exactly nBefore values, or at least nBefore + nAfter
+	around a star target, else ValueError.  Answers what the codegen then
+	indexes -- the receiver itself when it is a sequence, otherwise a list of
+	the values taken from its iterator (___unpackByIteration___:star:after:).
+
+	A sequence is read by size, as CPython's list and tuple specialisations
+	read it.  Only an EXACT list or tuple says how many values it had --
+	``too many values to unpack (expected 2, got 3)''; a str, a range or a
+	list subclass says just ``(expected 2)'', as CPython's does.
 
 	With a STAR target the answer is always an exact list, because the starred
 	name is bound by SLICING it and CPython binds a list there whatever was
 	unpacked: ``a, *b = (1, 2, 3)'' makes b ``[2, 3]''.  Sliced as it arrived,
 	a tuple gave a tuple and a str gave a str."
 
-	| sz needed |
+	| sz needed cls |
+	(self @env0:isKindOf: SequenceableCollection)
+		@env0:ifFalse: [^ self ___unpackByIteration___: nBefore star: hasStar after: nAfter].
 	(hasStar @env0:and: [(self @env0:class == OrderedCollection) @env0:not])
 		@env0:ifTrue: [
 			^ (list @env1:__new__: self) ___unpackCheck___: nBefore star: hasStar after: nAfter].
-	(self @env0:isKindOf: SequenceableCollection) @env0:ifFalse: [^ self].
 	sz := self @env0:size.
 	hasStar @env0:ifTrue: [
 		needed := nBefore @env0:+ nAfter.
@@ -2198,9 +2179,74 @@ ___unpackCheck___: nBefore star: hasStar after: nAfter
 			@env0:, nBefore @env0:printString @env0:, ', got '
 			@env0:, sz @env0:printString @env0:, ')')].
 	(sz @env0:> nBefore) @env0:ifTrue: [
+		cls := self @env0:class.
+		((cls == OrderedCollection) @env0:or: [(cls == tuple) @env0:or: [cls == Array]])
+			@env0:ifTrue: [
+				ValueError ___signal___: ('too many values to unpack (expected '
+					@env0:, nBefore @env0:printString @env0:, ', got '
+					@env0:, sz @env0:printString @env0:, ')')].
 		ValueError ___signal___: ('too many values to unpack (expected '
 			@env0:, nBefore @env0:printString @env0:, ')')].
 	^ self
+%
+
+category: 'Grail-Convenience Methods'
+method: object
+___unpackByIteration___: nBefore star: hasStar after: nAfter
+	"CPython's unpack_iterable, for a value that is not a sequence: take
+	values one at a time from its iterator -- exactly nBefore and then ONE
+	more to prove there are no extras, or for a star target all of them -- and
+	answer them as a list.  So ``x, y, z = it'' leaves the rest of ``it''
+	unconsumed, and a __getitem__-only object is asked for index 3 to show
+	that ``a, b, c = Seq()'' has no fourth value (whatever that raises,
+	BozoError included, propagates).
+
+	A value with no iteration protocol is ``cannot unpack non-iterable int
+	object'', UNPACK's wording; a TypeError its own __iter__ raises propagates
+	unchanged.  The refusal is recognised in the handler but signalled after
+	it returns.  Of the values that get here only an exact dict says ``got N''
+	when there are too many, as CPython's does."
+
+	| it items done notIterable typeName |
+	notIterable := false.
+	it := [self __iter__] @env0:on: TypeError do: [:ex |
+		typeName := self ___pyTypeNameForError___.
+		((self ___classAttrDunder___: #'__iter__') ~~ None
+			@env0:and: [(ex @env0:messageText) @env0:= ('''' @env0:, typeName @env0:, ''' object is not iterable')])
+				@env0:ifFalse: [ex @env0:pass].
+		notIterable := true.
+		ex @env0:return: nil].
+	notIterable @env0:ifTrue: [
+		^ TypeError ___signal___: ('cannot unpack non-iterable ' @env0:, typeName @env0:, ' object')].
+	items := OrderedCollection @env0:new.
+	1 @env0:to: nBefore do: [:i | | v |
+		done := false.
+		v := [it __next__] @env0:on: StopIteration do: [:ex | done := true. ex @env0:return: nil].
+		done @env0:ifTrue: [
+			^ ValueError ___signal___: ('not enough values to unpack (expected '
+				@env0:, (hasStar @env0:ifTrue: ['at least '] ifFalse: [''])
+				@env0:, (nBefore @env0:+ nAfter) @env0:printString @env0:, ', got '
+				@env0:, (i @env0:- 1) @env0:printString @env0:, ')')].
+		items @env0:add: v].
+	hasStar @env0:ifTrue: [
+		done := false.
+		[done] @env0:whileFalse: [
+			[items @env0:add: it __next__] @env0:on: StopIteration do: [:ex | done := true]].
+		(items @env0:size @env0:< (nBefore @env0:+ nAfter)) @env0:ifTrue: [
+			ValueError ___signal___: ('not enough values to unpack (expected at least '
+				@env0:, (nBefore @env0:+ nAfter) @env0:printString @env0:, ', got '
+				@env0:, items @env0:size @env0:printString @env0:, ')')].
+		^ items].
+	done := false.
+	[it __next__] @env0:on: StopIteration do: [:ex | done := true. ex @env0:return: nil].
+	done @env0:ifFalse: [
+		(self @env0:class == PyDict) @env0:ifTrue: [
+			ValueError ___signal___: ('too many values to unpack (expected '
+				@env0:, nBefore @env0:printString @env0:, ', got '
+				@env0:, self @env0:size @env0:printString @env0:, ')')].
+		ValueError ___signal___: ('too many values to unpack (expected '
+			@env0:, nBefore @env0:printString @env0:, ')')].
+	^ items
 %
 
 category: 'Grail-Attribute Access'

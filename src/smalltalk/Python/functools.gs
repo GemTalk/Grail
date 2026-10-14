@@ -1124,9 +1124,23 @@ ___asArray___
 category: 'Grail-Sequence'
 method: functools_CacheInfo
 __getitem__: idx
-	"Namedtuples index like tuples (0-based)."
+	"Namedtuples index like tuples: 0-based, negative from the end, slices, and
+	IndexError past the end.  It used to answer the kernel's raw OffsetError
+	there, which nothing in Python can catch -- so the legacy sequence
+	iterator, which stops on IndexError, never stopped: list(cache_info())
+	died, and so did ``hits, misses, maxsize, currsize = f.cache_info()'' once
+	unpacking asked for the one value past the targets that CPython asks for
+	(test_functools' test_lru)."
 
-	^ self ___asArray___ @env0:at: idx @env0:+ 1
+	^ (tuple @env0:withAll: self ___asArray___) __getitem__: idx
+%
+
+category: 'Grail-Sequence'
+method: functools_CacheInfo
+__iter__
+	"Iterate the four fields, as the tuple CPython's _CacheInfo is."
+
+	^ (tuple @env0:withAll: self ___asArray___) __iter__
 %
 
 category: 'Grail-Sequence'
