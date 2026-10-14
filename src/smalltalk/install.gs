@@ -895,6 +895,7 @@ run
 	at: #'DecoratedMethodSelfCallTestCase' put: nil;
 	at: #'DecoratorEvalOrderTestCase' put: nil;
 	at: #'DecoratorLocalBaseTestCase' put: nil;
+	at: #'DecoratorReadsOwnNameTestCase' put: nil;
 	at: #'DecoratorSecondaryBaseTestCase' put: nil;
 	at: #'DefaultObjectReprTestCase' put: nil;
 	at: #'DefaultsAndAttrsTestCase' put: nil;
@@ -2447,6 +2448,7 @@ input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
 input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
 input src/smalltalk/PythonTests/DecoratorEvalOrderTestCase.gs
 input src/smalltalk/PythonTests/DecoratorLocalBaseTestCase.gs
+input src/smalltalk/PythonTests/DecoratorReadsOwnNameTestCase.gs
 input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
 input src/smalltalk/PythonTests/DefaultObjectReprTestCase.gs
 input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
