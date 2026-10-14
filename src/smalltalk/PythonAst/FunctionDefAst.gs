@@ -3951,6 +3951,43 @@ allParameterNames
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
+___multipleValuesParams___: nPos
+	"The parameters an arity check's duplicate-argument guard covers, as
+	{ index in the positional Array . name } pairs: each positional-OR-keyword
+	parameter this call site binds positionally.  Positional-only ones are
+	left out -- a keyword spelled like one goes to **kwargs or is refused by
+	the unexpected-keyword guard -- and so is a stripped receiver, which is
+	the first ``___arityReceiverOffset___:'' of them."
+
+	| all po off out |
+	all := self allParameterNames.
+	po := (args posonlyargs ifNil: [#()]) size.
+	off := self ___arityReceiverOffset___: nPos.
+	out := OrderedCollection new.
+	off + 1 to: all size do: [:k |
+		k > po ifTrue: [out add: { k - off . (all at: k) asString }]].
+	^ out
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+___multipleValuesNamesLiteral___: pairs
+	"The names the duplicate-argument guard covers, as the source of ONE
+	literal Array -- ``#('a' 'b')'' -- handed to the runtime check."
+
+	| ws |
+	ws := WriteStream on: String new.
+	ws nextPutAll: '#('.
+	pairs do: [:pair |
+		ws nextPut: $'.
+		(pair at: 2) do: [:c | c = $' ifTrue: [ws nextPut: $']. ws nextPut: c].
+		ws nextPut: $'; space].
+	ws nextPut: $).
+	^ ws contents
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
 ___arityReceiverOffset___: nPos
 	"How many declared positional parameters an arity check's ``nPos'' leaves
 	out: 1 when the receiver (self, or cls) was stripped because it is the
@@ -4590,8 +4627,24 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	positional-only parameters the second's is
 	___emitIRUnexpectedKeywordWithPosonlyOn___:kw:accepted:'s collecting one."
 
-	| qname |
+	| qname dups |
 	qname := self ___qualifiedNameFor___: name.
+	"0. The duplicate-argument guard, as the text emits it (#1477)."
+	dups := self ___multipleValuesParams___: nPos.
+	dups isEmpty ifFalse: [
+		aBuilder
+			unless: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
+			then: [
+				aBuilder add: (aBuilder
+					send: #'___grailCheckMultipleValues___:pos:kw:skip:name:'
+					to: (aBuilder globalNamed: #TypeError)
+					with: {
+						aBuilder obj: (dups collect: [:pair | pair at: 2]) asArray.
+						aBuilder var: posLeaf.
+						aBuilder var: kwLeaf.
+						aBuilder obj: (dups first at: 1) - 1.
+						aBuilder obj: qname asString }
+					env: 0)]].
 	args vararg isNil ifTrue: [
 		| defcount sig plural prefix cond off total given |
 		"A method counts its receiver on both sides, as the text's
@@ -6010,6 +6063,28 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	posName arrive with self already stripped, so both numbers were one short
 	(#1472); ___arityReceiverOffset___: puts it back, and is 0 for a module def
 	or a @staticmethod, whose messages are unchanged."
+	"0. A parameter given both positionally and by keyword (#1477).  The
+	binding takes the positional value, so without this the keyword was
+	silently dropped: ``f(5, ps=1)'' answered 5 for ``def f(ps, force=False)''.
+	First, as in CPython, which raises it while binding keywords -- before it
+	counts the positional arguments -- and checked whether or not the def
+	collects **kwargs, since a name that IS a parameter never goes there.
+	Only when the call passed keywords; the check itself is one runtime send
+	(TypeError class >> ___grailCheckMultipleValues___:pos:kw:skip:name:,
+	which says why it is not emitted inline)."
+	(self ___multipleValuesParams___: nPos) isEmpty ifFalse: [ | pairs skip lit |
+		pairs := self ___multipleValuesParams___: nPos.
+		skip := (pairs first at: 1) - 1.
+		lit := self ___multipleValuesNamesLiteral___: pairs.
+		aStream
+			nextPutAll: '('; nextPutAll: kwName;
+			nextPutAll: ' @env0:isNil) ifFalse: [TypeError @env0:___grailCheckMultipleValues___: ';
+			nextPutAll: lit;
+			nextPutAll: ' pos: '; nextPutAll: posName;
+			nextPutAll: ' kw: '; nextPutAll: kwName;
+			nextPutAll: ' skip: '; print: skip;
+			nextPutAll: ' name: '; print: (self ___qualifiedNameFor___: name) asString;
+			nextPutAll: '].'; lf].
 	args vararg isNil ifTrue: [ | defcount sig plural prefix off total given |
 		off := self ___arityReceiverOffset___: nPos.
 		total := nPos + off.
