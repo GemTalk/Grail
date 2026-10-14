@@ -145,4 +145,4 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_random | ERROR | 116 | 0 | 8 | 5 |  |
 | test.test_string.test_string | OK | 42 | 0 | 0 | 1 |  |
 | test.test_shlex | OK | 45 | 0 | 0 | 1 |  |
-| test.test_uuid | ERROR | 120 | 5 | 10 | 73 |  |
+| test.test_uuid | ERROR | 120 | 4 | 10 | 73 |  |
