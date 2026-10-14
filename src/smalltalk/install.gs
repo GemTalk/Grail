@@ -837,6 +837,7 @@ run
 	at: #'ClassScopeTestCase' put: nil;
 	at: #'ClassSideArityMessageTestCase' put: nil;
 	at: #'ClassSubclassesTestCase' put: nil;
+	at: #'ClassTablesChunkedTestCase' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ClassTransientTestCase' put: nil;
 	at: #'ClassTypeParamsTestCase' put: nil;
@@ -2383,6 +2384,7 @@ input src/smalltalk/PythonTests/ClassScopeComprehensionTestCase.gs
 input src/smalltalk/PythonTests/ClassScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassSideArityMessageTestCase.gs
 input src/smalltalk/PythonTests/ClassSubclassesTestCase.gs
+input src/smalltalk/PythonTests/ClassTablesChunkedTestCase.gs
 input src/smalltalk/PythonTests/ClassTestCase.gs
 input src/smalltalk/PythonTests/ClassTransientTestCase.gs
 input src/smalltalk/PythonTests/ClassTypeParamsTestCase.gs
