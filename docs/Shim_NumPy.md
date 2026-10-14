@@ -935,7 +935,17 @@ is a VM change rather than a configuration.
    UserWarnings at import).
 3. **#1580**: a class-body statement that reads a sibling `@property` sees
    the function (`numpy/matrixlib/defmatrix.py:1009`).
-4. **The remaining stubs** in `shim_numpy.cc` (57 `STUBLOG` calls by grep) answer as if they succeeded.
+4. ~~**The remaining stubs**~~ -- all real since the C-API stubs PR (2026-10-14):
+   every `STUBLOG` entry point in `shim_numpy.cc` now does its CPython work,
+   each checked against CPython through `_grail_demo.capi` (seven
+   `CPythonShimTestCase` tests, "Grail-Tests - C API").  Making them real
+   exposed four shim defects that had read as success: C could not call the
+   shim's own builtin types (`int`, `bytes`, `str`, `memoryview`) or build a
+   Grail exception from one of its exception types; `PyErr_WarnEx` was a
+   silent no-op; `PyObject_Hash` sent Smalltalk's `#hash`, not Python's
+   `hash()`; and `PyErr_SetObject` turned a Grail exception object into its
+   text.  A list still reaches C as a copy, so an in-place change C makes to
+   it (`PySequence_InPlaceConcat`) is not seen by Grail.
 5. **A Grail generator cannot be iterated from C.**
 
 ## Repro

@@ -1127,6 +1127,7 @@ PyObject *_PyImport_GetModuleAttrString(const char *modname, const char *attrnam
 
 /* Py_BuildValue — format-based value construction */
 PyObject *Py_BuildValue(const char *format, ...);
+PyObject *Py_VaBuildValue(const char *format, va_list vargs);
 
 /* Number protocol (additional) */
 Py_ssize_t PyNumber_AsSsize_t(PyObject *obj, PyObject *exc);
