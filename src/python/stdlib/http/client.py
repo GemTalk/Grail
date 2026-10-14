@@ -62,6 +62,7 @@
 import email.errors
 import email.message
 import errno
+import http
 import io
 import socket
 from collections import OrderedDict
@@ -109,25 +110,13 @@ _MAXHEADERS = _MAX_HEADERS
 # platforms whose TCP stack has no such option.
 _ENOPROTOOPT = getattr(errno, 'ENOPROTOOPT', 42)
 
-# Subset of http.HTTPStatus reason phrases used in error messages and
-# by consumers that map codes to text.
-responses = {
-    100: 'Continue', 101: 'Switching Protocols',
-    200: 'OK', 201: 'Created', 202: 'Accepted',
-    204: 'No Content', 206: 'Partial Content',
-    301: 'Moved Permanently', 302: 'Found', 303: 'See Other',
-    304: 'Not Modified', 307: 'Temporary Redirect',
-    308: 'Permanent Redirect',
-    400: 'Bad Request', 401: 'Unauthorized', 402: 'Payment Required',
-    403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed',
-    406: 'Not Acceptable', 408: 'Request Timeout', 409: 'Conflict',
-    410: 'Gone', 411: 'Length Required', 413: 'Payload Too Large',
-    414: 'URI Too Long', 415: 'Unsupported Media Type',
-    422: 'Unprocessable Entity', 429: 'Too Many Requests',
-    500: 'Internal Server Error', 501: 'Not Implemented',
-    502: 'Bad Gateway', 503: 'Service Unavailable',
-    504: 'Gateway Timeout', 505: 'HTTP Version Not Supported',
-}
+# CPython's two "backwards compatibility" hacks: every status is a module
+# constant (http.client.OK, .NOT_FOUND, ...; google-auth reads a dozen), and
+# responses maps every status to its phrase.  Both come from http.HTTPStatus,
+# so neither can drift from it.
+globals().update(http.HTTPStatus.__members__)
+
+responses = {v: v.phrase for v in http.HTTPStatus.__members__.values()}
 
 
 class HTTPException(Exception):
