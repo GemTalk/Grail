@@ -3831,6 +3831,10 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					to the Python metaclass that built it.  See
 					object class >> ___grailInitBuiltClass___:pos:kw:."
 					src nextPutAll: '(instance @env0:isBehavior) ifTrue: [^ self @env1:___grailInitBuiltClass___: instance pos: ___pos___ kw: ___kw___].'; nextPutAll: lf.
+					"__new__ answered something that is not an instance of this
+					class: CPython hands it back without __init__ (#1425).  See
+					object >> ___grailNewResultSkipsInit___:."
+					src nextPutAll: '(self @env1:___grailNewResultSkipsInit___: instance) ifTrue: [^ instance].'; nextPutAll: lf.
 					"A subclass of a built-in COLLECTION (list, ...) with no
 					__init__ of its own inherits population from the built-in
 					__init__.  Detected at RUNTIME (isKindOf) so DYNAMIC bases --

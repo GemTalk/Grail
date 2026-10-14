@@ -1239,6 +1239,7 @@ run
 	at: #'NestedStarImportTestCase' put: nil;
 	at: #'NestedUnboundLocalTestCase' put: nil;
 	at: #'NestedUnpackTestCase' put: nil;
+	at: #'NewResultSkipsInitTestCase' put: nil;
 	at: #'NextIterTestCase' put: nil;
 	at: #'NoDictAttributesTestCase' put: nil;
 	at: #'NonblockingSocketTestCase' put: nil;
@@ -2791,6 +2792,7 @@ input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/NestedStarImportTestCase.gs
 input src/smalltalk/PythonTests/NestedUnboundLocalTestCase.gs
 input src/smalltalk/PythonTests/NestedUnpackTestCase.gs
+input src/smalltalk/PythonTests/NewResultSkipsInitTestCase.gs
 input src/smalltalk/PythonTests/NextIterTestCase.gs
 input src/smalltalk/PythonTests/NoDictAttributesTestCase.gs
 input src/smalltalk/PythonTests/NonblockingSocketTestCase.gs
