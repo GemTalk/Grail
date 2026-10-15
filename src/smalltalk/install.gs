@@ -1590,6 +1590,7 @@ run
 	at: #'WeakReferenceTestCase' put: nil;
 	at: #'WeakReferenceTestSubject' put: nil;
 	at: #'WeakrefModuleTestCase' put: nil;
+	at: #'WerkzeugUtilsUpstreamTestCase' put: nil;
 	at: #'WideStrTypeAndAugmentedAttrStoreTestCase' put: nil;
 	at: #'WithAsTargetsTestCase' put: nil;
 	at: #'WithBlockShapesTestCase' put: nil;
@@ -3170,6 +3171,7 @@ input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningTestCase.gs
 input src/weakref/WeakReferenceTestCase.gs
 input src/smalltalk/PythonTests/WeakrefModuleTestCase.gs
+input src/smalltalk/PythonTests/WerkzeugUtilsUpstreamTestCase.gs
 input src/smalltalk/PythonTests/WideStrTypeAndAugmentedAttrStoreTestCase.gs
 input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
 input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
