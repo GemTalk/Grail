@@ -3008,10 +3008,9 @@ testStringIOCloseThenRead
 category: 'Grail-Tests - io'
 method: FlaskScaffoldingTestCase
 testBytesIOGetbuffer
-	"buf.getbuffer() returns a memoryview-equivalent that round-trips
-	through bytes().  Grail's getbuffer returns a bytes copy (no
-	memoryview yet); functionally identical for the common
-	``bytes(buf.getbuffer())'' idiom."
+	"buf.getbuffer() returns a memoryview over the stream that
+	round-trips through bytes() (#1637; BytesioGetbufferViewTestCase
+	covers the view itself)."
 
 	| mod |
 	mod := self loadFixture: 'use_io'.
