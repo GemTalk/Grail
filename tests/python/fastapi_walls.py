@@ -119,6 +119,9 @@ Phase 6 -- the rest of FastAPI's core tests:
 36. ``subprocess.run(..., cwd=Path(...))`` handed the shell the path's
     Smalltalk print string, and an argument past Latin-1 (``'🌐'``) could not
     be spawned at all.
+37. A class's ``__module__`` ignored a module that renames itself
+    (_pydecimal's ``__name__ = 'decimal'``): CPython reads ``__name__`` as the
+    class statement runs.
 """
 
 import sys
@@ -1268,6 +1271,23 @@ check('subprocess_cwd_may_be_a_path', (_pwd.returncode, _pwd.stdout.strip() == s
       (0, True))
 _printed = _subprocess.run(['printf', '%s', '\U0001f310 \u00e9'], capture_output=True, text=True)
 check('subprocess_args_past_latin1', (_printed.returncode, _printed.stdout), (0, '\U0001f310 \u00e9'))
+
+
+# --- 37. Phase 6: __module__ follows a module that renames itself -------------------
+
+_ren_dir = _tempfile.mkdtemp(prefix='grail_walls_rename_')
+with open(os.path.join(_ren_dir, 'walls_renamed_impl.py'), 'w') as _f:
+    _f.write('class Before:\n    pass\n'
+             '__name__ = "walls_public_name"\n'
+             'class After:\n    pass\n')
+sys.path.insert(0, _ren_dir)
+try:
+    import walls_renamed_impl as _ren                            # noqa: E402
+finally:
+    sys.path.remove(_ren_dir)
+check('class_module_follows_a_renamed_module',
+      (_ren.Before.__module__, _ren.After.__module__),
+      ('walls_renamed_impl', 'walls_public_name'))
 
 
 if __name__ == '__main__':

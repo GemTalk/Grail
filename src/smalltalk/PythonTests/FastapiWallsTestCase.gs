@@ -99,6 +99,7 @@ ___names___
 	    'class_eq_assigned_in_dict'
 	    'class_eq_assigned_unchanged'
 	    'class_hash_assigned'
+	    'class_module_follows_a_renamed_module'
 	    'classmethod_defaults'
 	    'classmethod_keyword_errors'
 	    'classmethod_keywords'

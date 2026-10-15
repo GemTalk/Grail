@@ -1349,3 +1349,19 @@ improvements** (test_unpack, test_long, test_exception_hierarchy, test_copyreg,
 test_uuid) -- test_math and test___all__ timed out beside the SUnit suite and
 are OK alone; `check_python_fixtures.sh` 652 fixtures agree with CPython.
 
+Re-gated after merging `origin/main` (2026-10-15, which brought #1626):
+`run_tests.sh` **8130 run, 8130 passed**, 8 of 8 shards; the CPython
+conformance gate **0 regressions, 4 improvements** (test_setcomps,
+test_generators, test_exception_hierarchy, test_uuid) -- test_math,
+test_bytes, test_pickle and test___all__ timed out beside the SUnit suite and
+are OK alone.  The gate's fifth row was real and is fixed: with module-level
+docstrings, doctest now runs the examples in `statistics._sum`, and one expects
+`<class 'decimal.Decimal'>` where Grail printed `_pydecimal.Decimal`.
+_pydecimal renames itself (`__name__ = 'decimal'    # For pickling`) and
+CPython's class body reads `__name__` when it runs, so a module-level class in
+a module that assigns `__name__` now does too (`ClassDefAst >>
+___moduleReassignsItsName___`; every other class keeps the compile-time
+literal).  test_statistics and test_decimal now run 25 and 65 more tests
+(their newly visible doctests), all passing; `check_python_fixtures.sh` 652
+fixtures agree with CPython.
+

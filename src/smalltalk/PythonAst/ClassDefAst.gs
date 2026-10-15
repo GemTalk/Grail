@@ -1528,7 +1528,10 @@ printSmalltalkRuntimeOn: aStream
 		self ___readsModuleNameAtRunTime___
 			ifTrue: [aStream nextPutAll:
 				'(((Python @env0:at: #builtins) @env0:___instance___) ___doitModuleName___: ___pyGlobals___)']
-			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
+			ifFalse: [
+				self ___moduleReassignsItsName___
+					ifTrue: [aStream nextPutAll: '(self @env1:___moduleAttrLoad___: #''__name__'')']
+					ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream]].
 		aStream nextPutAll: '.'; lf.
 	].
 
@@ -5801,6 +5804,30 @@ ___enclosingModuleName___
 			^ node name ifNil: ['__main__'] ifNotNil: [:n | n asString]].
 		node := node parent].
 	^ '__main__'
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___moduleReassignsItsName___
+	"True for a MODULE-LEVEL class in a module whose body assigns
+	``__name__'' -- _pydecimal's ``__name__ = 'decimal'    # For pickling''.
+	CPython's class body opens with ``__module__ = __name__'', so every class
+	defined after that line reports 'decimal'; the compile-time literal said
+	'_pydecimal', which a doctest in statistics shows the moment module-level
+	docstrings exist (``<class 'decimal.Decimal'>'').  Such a class reads the
+	module's __name__ as its statement runs; every other class keeps the
+	literal.  Module level only: there ``self'' is the module."
+
+	| node mod |
+	self isModuleLevelClassDef ifFalse: [^ false].
+	node := self.
+	[node notNil and: [(node isKindOf: ModuleAst) not]] whileTrue: [node := node parent].
+	mod := node.
+	(mod isNil or: [mod body isNil]) ifTrue: [^ false].
+	^ (mod body body ifNil: [#()]) anySatisfy: [:stmt |
+		(stmt isKindOf: AssignAst) and: [
+			(stmt targets ifNil: [#()]) anySatisfy: [:t |
+				(t isKindOf: NameAst) and: [t id asString = '__name__']]]]
 %
 
 category: 'Grail-Class Compilation'
