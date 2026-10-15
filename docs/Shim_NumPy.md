@@ -926,27 +926,102 @@ So the general fix is the VM constant.  `INT_MAX_USER_ACTION` also sizes
 `currStkSegments` (`INT_MAX_RECUR = INT_MAX_USER_ACTION * 3`), which is why it
 is a VM change rather than a configuration.
 
+## Stage 6 (2026-10-14): a census, and three silent wrong answers
+
+With `import numpy` complete, a probe of 105 everyday operations
+(`scripts/numpy_census.py` -- construction, indexing, ufuncs, reductions,
+linalg, polyfit, I/O, scalars, string arrays) was run under Grail and CPython
+and diffed.  The basics agree: arange/reshape/arithmetic/broadcasting,
+sum/mean/std, slicing, fancy and boolean indexing, linspace, dot/matmul,
+where/sort/argsort, cumsum, sqrt/exp, astype, isnan, linalg.inv/det,
+polyfit, structured arrays, datetime64, einsum, histogram, nditer.  What did
+not is listed in the frontier below; this stage fixed the three that answered
+WRONG DATA with no error.
+
+**Wall 44 -- a bytes object's buffer died with the call.**
+`np.frombuffer(b'abcd', 'u1')` answered `[115, 244, 43, 130]`: numpy keeps
+the buffer view's pointer as the array's data (and the bytes as its base),
+but the shim's `PyObject_GetBuffer` and `PyBytes_AsString` handed out a copy
+from a per-call cache, freed when the call returned.  A bytes object's copy
+now lives as long as its WRAPPER (`CPythonShim>>PyBytes_Buffer:`), as a
+str's UTF-8 form already did, and the sweep drops both with the wrapper.  The
+copy is made with `copyBytesFrom:...allowCodePointZero: true`: the plain form
+has C-string semantics and refuses a NUL.  A bytearray's copy is refreshed in
+place on each request; a change either side makes after C took the pointer is
+not seen by the other.  `PyObject_GetBuffer` is now CPython's, through a real
+`PyBuffer_FillInfo`: a WRITABLE request on a bytes raises
+`BufferError: Object is not writable.` (so the array is read-only, as in
+CPython), format and shape are filled on request, `view->obj` holds a
+reference that `PyBuffer_Release` drops, and a str has no buffer.
+
+**Wall 45 -- numpy re-readied the shim's own builtin types.**
+`np.array(b'ab')` held `b''`.  numpy's `setup_scalartypes` calls
+`PyType_Ready(&PyBytes_Type)`, `&PyUnicode_Type` and others before deriving
+its scalar types, and the shim's `PyType_Ready` ran its slot inheritance on
+them: `bytes` and `str` inherited object's `tp_new`, so the shim no longer
+routed a C call of `builtins.bytes` to Grail, and `PyObject_Bytes(b'xy')`
+built five zero bytes in C.  `PyType_Ready` now leaves a READY type alone, as
+CPython does.  `bytes` and `str` have a `tp_new` of their own, which the
+scalar types inherit: the type itself still goes to Grail; a subtype
+(`numpy.bytes_`) gets an instance in CPython's `PyBytesObject` layout, which
+the shim's bytes functions read in place.  A `numpy.str_` is still a zeroed
+instance (the frontier below).  `PyType_Ready` also passes on the base's
+int/list/tuple/bytes/str/dict `_SUBCLASS` flag, as `inherit_special` does,
+so `PyBytes_Check(numpy.bytes_ instance)` holds in numpy's C.  Side effect:
+`complex(np.complex128(1+2j))` now keeps its imaginary part.
+
+**Wall 46 -- `np.array(range(4))` was a 0-d object array.**  numpy treats
+anything that passes `PySequence_Check` as a sequence; the shim answered from
+the C type's slots, and a Grail object's type has none.  It now asks the
+server (`CPythonShim>>PySequence_Check:`), which applies CPython's rule: the
+class defines a real `__getitem__` and is not a dict.  "Real" excludes the
+refusal methods Grail gives int and None (`hasattr(int, '__getitem__')` is
+True in Grail, False in CPython), the same exclusions %-formatting's mapping
+test already made -- now one method, `object>>___hasOwnGetitem___`.  A range,
+a deque, an `array.array` and a class with `__len__`/`__getitem__` convert as
+in CPython.
+
+All of it is checked against CPython through `_grail_demo.capi`
+(`CPythonShimTestCase>>testCApiBuffersSequencesAndBuiltinTypes`), and each
+fix's control fails it.
+
 ### The frontier now
 
-1. **The VM's user-action limit** (two in flight): numpy's printing, an
-   override's `__array_function__`, a ufunc calling a Python `__array_ufunc__`,
-   and any callback that reads a wheel object two deep.
-2. **A C builtin function reads as a Python function** (30 `add_newdoc`
-   UserWarnings at import).
-3. **#1580**: a class-body statement that reads a sibling `@property` sees
-   the function (`numpy/matrixlib/defmatrix.py:1009`).
-4. ~~**The remaining stubs**~~ -- all real since the C-API stubs PR (2026-10-14):
-   every `STUBLOG` entry point in `shim_numpy.cc` now does its CPython work,
-   each checked against CPython through `_grail_demo.capi` (seven
-   `CPythonShimTestCase` tests, "Grail-Tests - C API").  Making them real
-   exposed four shim defects that had read as success: C could not call the
-   shim's own builtin types (`int`, `bytes`, `str`, `memoryview`) or build a
-   Grail exception from one of its exception types; `PyErr_WarnEx` was a
-   silent no-op; `PyObject_Hash` sent Smalltalk's `#hash`, not Python's
-   `hash()`; and `PyErr_SetObject` turned a Grail exception object into its
-   text.  A list still reaches C as a copy, so an in-place change C makes to
-   it (`PySequence_InPlaceConcat`) is not seen by Grail.
-5. **A Grail generator cannot be iterated from C.**
+1. **The VM's user-action limit** (two in flight): `str()`/`repr()` of an
+   array or dtype, an override's `__array_function__`, a ufunc calling a
+   Python `__array_ufunc__`, and any callback that reads a wheel object two
+   deep.
+2. **A Python subclass of `ndarray` cannot be instantiated** ("Grail cannot
+   yet make an instance of a Python subclass of the C extension type"):
+   `np.matrix`, `ndarray.view(Sub)`, and `numpy.ma` (whose `MaskedArray`
+   import fails part-way, so `np.ma.masked_array` and `np.ma.is_masked` are
+   missing -- and `np.percentile` uses the latter).
+3. **`numpy.random` -- Cython.**  Its modules are Cython-generated, and
+   between them import ~50 CPython symbols the shim does not export
+   (`nm -u` over numpy's `.so` files against `libcpython_ua`): Cython's
+   module-init and traceback machinery (`PyImport_GetModule`,
+   `PyImport_AddModuleRef`, `PyCode_NewEmpty`, `PyFrame_New`,
+   `PyTraceBack_Here`, `_PyType_Lookup`, `PyType_FromMetaclass`,
+   `PyThreadState_GetUnchecked`, `Py_Version`, ...), the in-place number
+   protocol, `PyMethod_Type`/`PyRange_Type`, and a few `_PyDict_`/`_PyUnicode_`
+   internals.  dlopen reports only the first (`PyMethod_Type`).  This is
+   Cython support in general, not numpy's: pandas, scipy and scikit-learn are
+   built the same way.
+4. **Complex dtypes**: `np.fft.fft` raises `Cannot interpret '1j' as a data
+   type`.
+5. **`numpy.str_` / `numpy.bytes_` scalars** are not str/bytes to Grail
+   (`len`, `==`); a `numpy.str_` is built zeroed.
+6. **Session-killers**: `np.save`/`np.load` (error 2085, "Expected
+   numpy.bool to be a Boolean"); `np.savetxt`/`np.loadtxt` (core dump).
+7. **`np.unique`**: a codegen CompileError 1001 ("You may not compile a
+   method for this selector").
+8. Smaller: `np.allclose` ("'ShimForeignObject' object is not callable"),
+   `format(np.float64(1.5), '.1f')`, `pickle`/`copy.deepcopy` of an array
+   ("issubclass() arg 1 must be a class"), `memoryview(ndarray)` and the
+   dtype of `np.asarray(memoryview)` (Grail objects export no buffer),
+   `np.char.upper` (AlmostOutOfStack), and `np.array.__doc__` (C docstrings
+   are not read back).
+9. **A Grail generator cannot be iterated from C.**
 
 ## Repro
 

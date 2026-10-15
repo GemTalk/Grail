@@ -930,6 +930,8 @@ Py_ssize_t PySlice_AdjustIndices(Py_ssize_t length, Py_ssize_t *start,
 #define PyBUF_WRITE     0x200
 
 int  PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags);
+int  PyBuffer_FillInfo(Py_buffer *view, PyObject *obj, void *buf,
+                       Py_ssize_t len, int readonly, int flags);
 void PyBuffer_Release(Py_buffer *view);
 int  PyObject_CheckBuffer(PyObject *obj);
 

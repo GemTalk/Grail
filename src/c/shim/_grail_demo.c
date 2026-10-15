@@ -272,6 +272,16 @@ static PyTypeObject MyFloat_Type = {
     .tp_flags = Py_TPFLAGS_DEFAULT,
 };
 
+/* ByteSub: a bytes subclass of the wheel's own, built through bytes' tp_new
+   and read inline (PyBytes_AS_STRING) as numpy.bytes_ is. */
+static PyTypeObject ByteSub_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.ByteSub",
+    .tp_basicsize = sizeof(PyBytesObject),
+    .tp_itemsize = 1,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+};
+
 /* WithMeta: a type whose METATYPE subclasses type, as numpy's DTypes are
    instances of _DTypeMeta.  Meta's getset ``_legacy'' answers the type's
    name, read off WithMeta the way numpy reads ``type(dtype)._legacy''. */
@@ -712,6 +722,63 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         if (ptr == NULL) return NULL;
         return Py_BuildValue("(iii)", before, *ptr, got == NULL ? -1 : *got);
     }
+    /* A pointer into a bytes object stays valid while C holds the object:
+       kept here in one call and read back in a later one, as numpy's
+       frombuffer keeps the view's buf in the array it returns. */
+    if (IS("buffer_keep")) {
+        static Py_buffer kept;
+        static int have = 0;
+        if (a != NULL) {
+            if (have) PyBuffer_Release(&kept);
+            if (PyObject_GetBuffer(a, &kept, PyBUF_SIMPLE) < 0) { have = 0; return NULL; }
+            have = 1;
+            Py_RETURN_NONE;
+        }
+        if (!have) Py_RETURN_NONE;
+        /* Reuse whatever memory of that size has been freed since, so a
+           buffer that did not outlive its call reads back as scribble. */
+        void *junk[64];
+        for (int i = 0; i < 64; i++) {
+            junk[i] = malloc((size_t)kept.len + 1);
+            if (junk[i] != NULL) memset(junk[i], 0x5a, (size_t)kept.len + 1);
+        }
+        PyObject *r = PyBytes_FromStringAndSize((const char *)kept.buf, kept.len);
+        for (int i = 0; i < 64; i++) free(junk[i]);
+        PyBuffer_Release(&kept);
+        have = 0;
+        return r;
+    }
+    if (IS("getbuffer")) {
+        Py_buffer v;
+        if (PyObject_GetBuffer(a, &v, (int)PyLong_AsLong(b)) < 0) return NULL;
+        PyObject *r = Py_BuildValue("(inziin)", v.readonly, v.len, v.format, v.ndim,
+                                    v.shape != NULL, v.shape != NULL ? v.shape[0] : (Py_ssize_t)-1);
+        PyBuffer_Release(&v);
+        return r;
+    }
+    if (IS("sequence_check")) return PyLong_FromLong(PySequence_Check(a));
+    if (IS("check_buffer")) return PyLong_FromLong(PyObject_CheckBuffer(a));
+    /* numpy's setup_scalartypes readies the builtin types it derives from;
+       that must leave them what they were. */
+    if (IS("ready_then_call")) {
+        if (PyType_Ready(&PyBytes_Type) < 0 || PyType_Ready(&PyUnicode_Type) < 0
+                || PyType_Ready(&PyLong_Type) < 0)
+            return NULL;
+        PyObject *x = PyObject_CallOneArg((PyObject *)&PyBytes_Type, a);
+        PyObject *y = PyObject_CallOneArg((PyObject *)&PyUnicode_Type, b);
+        PyObject *z = PyObject_Bytes(a);
+        PyObject *w = PyObject_CallOneArg((PyObject *)&PyLong_Type, y);
+        if (x == NULL || y == NULL || z == NULL || w == NULL) return NULL;
+        return Py_BuildValue("(NNNN)", x, y, z, w);
+    }
+    if (IS("bytesub")) {
+        PyObject *o = PyObject_CallOneArg((PyObject *)&ByteSub_Type, a);
+        if (o == NULL) return NULL;
+        PyObject *r = Py_BuildValue("(snN)", Py_TYPE(o)->tp_name, Py_SIZE(o),
+                                    PyBytes_FromStringAndSize(PyBytes_AS_STRING(o), Py_SIZE(o)));
+        Py_DECREF(o);
+        return r;
+    }
     if (IS("unique_temporary")) return PyLong_FromLong(PyUnstable_Object_IsUniqueReferencedTemporary(a));
 #undef IS
     PyErr_Format(PyExc_ValueError, "capi: unknown name %s", n);
@@ -895,6 +962,8 @@ grail_demo_exec(PyObject *mod) {
     MyFloat_Type.tp_base = &PyFloat_Type;
     if (PyType_Ready(&MyFloat_Type) < 0) return -1;
     if (PyModule_AddObjectRef(mod, "MyFloat", (PyObject *)&MyFloat_Type) < 0) return -1;
+    ByteSub_Type.tp_base = &PyBytes_Type;
+    if (PyType_Ready(&ByteSub_Type) < 0) return -1;
     Meta_Type.tp_base = &PyType_Type;
     if (PyType_Ready(&Meta_Type) < 0) return -1;
     Py_SET_TYPE(&WithMeta_Type, &Meta_Type);

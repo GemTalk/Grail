@@ -670,21 +670,99 @@ PyUnicode_UTF8Buffer: aString
 	buffer exactly when it drops the wrapper -- which a holder's reference
 	prevents."
 
-	| map entry utf b |
-	map := SessionTemps current
-		at: #'GrailShimUtf8Buffers'
-		ifAbsentPut: [ IdentityKeyValueDictionary new ].
+	| map entry utf |
+	map := self ___wrapperBuffers.
 	entry := map at: aString otherwise: nil.
 	entry isNil ifTrue: [
 		utf := (aString respondsTo: #encodeAsUTF8)
 			ifTrue: [aString encodeAsUTF8]
 			ifFalse: [aString].
-		b := CByteArray gcMalloc: utf size + 1.
-		utf size > 0 ifTrue: [b copyBytesFrom: utf from: 1 to: utf size into: 0].
-		b uint8At: utf size put: 0.
-		entry := { b. utf size }.
+		entry := { self ___cBufferHolding: utf. utf size }.
 		map at: aString put: entry].
 	^ { (entry at: 1) memoryAddress. entry at: 2 }
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyBytes_Buffer: aByteObject
+	"{ address. size. writable } of aByteObject's bytes, NUL-terminated, in gcMalloc'd
+	memory that lives as long as its WRAPPER does -- the shim's
+	PyBytes_AsString and PyObject_GetBuffer answer it, as PyUnicode_UTF8Buffer:
+	does for a str.
+
+	CPython's bytes data is IN the object, so a pointer from PyBytes_AsString
+	or a buffer view is valid while the caller holds a reference, and numpy's
+	frombuffer keeps exactly that: the array's data is the view's buf and its
+	base holds the bytes.  The shim answered a copy from the per-call cache,
+	freed when the call returned, so np.frombuffer(b'abcd', 'u1') read freed
+	memory -- [115, 244, 43, 130].
+
+	A bytearray (and every ByteArray that is not a Python bytes) is mutable, so
+	its copy is refreshed on every request: rewritten in place while the size
+	is unchanged, so an earlier pointer sees the current bytes as it would in
+	CPython; at a new size a new block, the old ones kept until the sweep,
+	because a holder may still point into them.  A change made on either side
+	AFTER C took the pointer is not seen by the other -- the bytes are a copy,
+	as a list crossing to C is.  writable is that mutability: PyObject_GetBuffer
+	refuses a WRITABLE view of a bytes, as CPython does."
+
+	| map entry size mutable |
+	map := self ___wrapperBuffers.
+	entry := map at: aByteObject otherwise: nil.
+	size := aByteObject size.
+	mutable := (Python @env0:at: #bytearray otherwise: nil)
+		ifNil: [false]
+		ifNotNil: [:ba | aByteObject isKindOf: ba].
+	entry isNil ifTrue: [
+		entry := { self ___cBufferHolding: aByteObject. size. nil }.
+		map at: aByteObject put: entry.
+		^ { (entry at: 1) memoryAddress. size. mutable }].
+	mutable ifTrue: [
+		size = (entry at: 2)
+			ifTrue: [
+				self ___copyBytesOf: aByteObject into: (entry at: 1)]
+			ifFalse: [
+				(entry at: 3) ifNil: [entry at: 3 put: OrderedCollection new].
+				(entry at: 3) add: (entry at: 1).
+				entry at: 1 put: (self ___cBufferHolding: aByteObject).
+				entry at: 2 put: size]].
+	^ { (entry at: 1) memoryAddress. entry at: 2. mutable }
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___cBufferHolding: aByteObject
+	"A gcMalloc'd copy of aByteObject's bytes with a NUL after them."
+
+	| b |
+	b := CByteArray gcMalloc: aByteObject size + 1.
+	self ___copyBytesOf: aByteObject into: b.
+	b uint8At: aByteObject size put: 0.
+	^ b
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___copyBytesOf: aByteObject into: aCByteArray
+	"Copy every byte, NULs included: copyBytesFrom:from:to:into: alone has C
+	string semantics and refuses a zero byte (ArgumentError, ``code point zero
+	in source data'')."
+
+	aByteObject size > 0 ifTrue: [
+		aCByteArray copyBytesFrom: aByteObject from: 1 to: aByteObject size
+			into: 0 allowCodePointZero: true]
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+___wrapperBuffers
+	"The C buffers that live as long as a WRAPPER does, keyed by the wrapped
+	object as the wrapper map is: a str's UTF-8 form, a bytes object's data.
+	sweep drops an entry when it drops the wrapper."
+
+	^ SessionTemps current
+		at: #'GrailShimWrapperBuffers'
+		ifAbsentPut: [ IdentityKeyValueDictionary new ]
 %
 
 category: 'Grail-CPython API'
@@ -1255,10 +1333,10 @@ sweep
 		].
 	].
 	toRemove do: [:key | map removeKey: key].
-	"A swept string's UTF-8 buffer goes with its wrapper -- see
-	PyUnicode_UTF8Buffer:."
-	(SessionTemps current at: #'GrailShimUtf8Buffers' otherwise: nil) ifNotNil: [:utf8 |
-		toRemove do: [:key | utf8 removeKey: key ifAbsent: [nil]]].
+	"A swept object's C buffer goes with its wrapper -- see
+	PyUnicode_UTF8Buffer: and PyBytes_Buffer:."
+	(SessionTemps current at: #'GrailShimWrapperBuffers' otherwise: nil) ifNotNil: [:bufs |
+		toRemove do: [:key | bufs removeKey: key ifAbsent: [nil]]].
 %
 
 ! ===============================================================================
@@ -2497,6 +2575,25 @@ PyCallable_Check: obj
 	(obj isKindOf: Behavior) ifTrue: [^ true].
 	"Anything else: not callable."
 	^ false
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySequence_Check: obj
+	"CPython's rule for an object whose C type the shim has no slots for: a
+	sequence when its type has __getitem__ (a class defining it gets sq_item)
+	and is not a dict.  numpy's array coercion asks it of everything that is
+	not a scalar, an array or a buffer, and answering 0 made a range a 0-d
+	object array: np.array(range(4)) answered range(0, 4).
+
+	Not hasattr: Grail's int and None carry a __getitem__ that only raises,
+	so hasattr(int, '__getitem__') is true here and 5 would read as a
+	sequence -- object>>___hasOwnGetitem___ tells a real one.  A predicate
+	cannot fail in CPython, so an error answers false."
+
+	^ [(obj @env1:___hasOwnGetitem___)
+			and: [((obj isKindOf: KeyValueDictionary) or: [obj isKindOf: PyInstanceDict]) not]]
+		on: AbstractException do: [:e | e return: false]
 %
 
 category: 'Grail-CPython API'
