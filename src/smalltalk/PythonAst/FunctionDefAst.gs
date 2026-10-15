@@ -1499,6 +1499,27 @@ isDeleterDecorated
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___keepsThePropertyDocstring___
+	"True when the outermost decorator is ``@<expr>.setter'' or
+	``@<expr>.deleter'': CPython's property.setter / .deleter carry the
+	property's __doc__ over, so this def does not replace the docstring a
+	class's ___methodDocTable___ holds for the name (ClassDefAst >>
+	emitMethodDocTableOn:className:) -- test_property's
+	``spam.__doc__ == 'BaseClass.getter''' after an undocumented setter and
+	deleter.  Read off the syntax, not ___propertyAccessorKind___: a
+	subclass's ``@spam.setter'' over ``@BaseClass.spam.getter'' names a
+	property this class body does not declare with @property."
+
+	| first |
+	decorator_list isNil ifTrue: [^ false].
+	decorator_list isEmpty ifTrue: [^ false].
+	first := decorator_list at: 1.
+	(first isKindOf: AttributeAst) ifFalse: [^ false].
+	^ first attr asString = 'setter' or: [first attr asString = 'deleter']
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 ___propertyAccessorKind___
 	"Which accessor of a property this def is, read off its OUTERMOST
 	decorator: #getter for ``@property'', #setter / #deleter for
@@ -3635,7 +3656,10 @@ ___docString___
 	and this supplies the real text when there is one.
 
 	Gated on CharacterCollection rather than String so a docstring holding
-	non-Latin-1 text (a Unicode16/32 literal) is still recognised."
+	non-Latin-1 text (a Unicode16/32 literal) is still recognised.
+
+	Cleaned as CPython 3.13's compiler cleans it (AbstractNode class >>
+	___cleanDoc___:)."
 
 	| stmts first inner |
 	body isNil ifTrue: [^ nil].
@@ -3646,7 +3670,7 @@ ___docString___
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner value]
+		ifTrue: [AbstractNode ___cleanDoc___: inner value]
 		ifFalse: [nil]
 %
 

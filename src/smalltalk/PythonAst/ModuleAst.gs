@@ -890,9 +890,34 @@ ___docString___
 	(first isKindOf: ExprAst) ifFalse: [^ nil].
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	"A NEW node holding the cleaned text (AbstractNode class >>
+	___cleanDoc___:, as CPython 3.13's compiler cleans it): the tree keeps
+	the literal, which ast.parse answers."
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner]
+		ifTrue: [ConstantAst new
+			value: (AbstractNode ___cleanDoc___: inner value);
+			kind: inner kind;
+			yourself]
 		ifFalse: [nil]
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+___rebindsName___
+	"True when a top-level statement of the module assigns ``__name__''.
+	_pydecimal does (``__name__ = 'decimal'  # For pickling''), so CPython
+	stamps every class defined after it with __module__ 'decimal' -- a class
+	body opens with ``__module__ = __name__'', a run-time read.  Grail
+	compiles a module's class __module__ in as a literal, so such a module's
+	module-level classes read it at run time instead (ClassDefAst >>
+	___readsRebindableModuleName___).  Only the top level is looked at: a
+	rebinding inside a function or under an if is not seen."
+
+	body isNil ifTrue: [^ false].
+	^ (body body ifNil: [#()]) anySatisfy: [:stmt |
+		(stmt isKindOf: AssignAst) and: [
+			stmt targets anySatisfy: [:target |
+				(target isKindOf: NameAst) and: [target id asString = '__name__']]]]
 %
 
 category: 'Grail-evaluation'

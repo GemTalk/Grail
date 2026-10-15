@@ -993,6 +993,46 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			] on: CompileWarning do: [:ex | ex resume].
 		].
 
+		"The DEFS' docstrings, as a class's are (ClassDefAst >>
+		emitMethodDocTableOn:className:): a module-level def compiles to a
+		METHOD of the module class, so it cannot carry the def-time stamp a
+		nested def's __doc__ rides on, and BoundMethod >> __doc__ looks for a
+		___methodDocTable___ on the class -- which modules never had.  Every
+		module-level function answered __doc__ None, and numpy.ma, which edits
+		np.fromfunction's docstring as it imports, failed.  The LAST def of a
+		name is the function, so its docstring or its lack of one is the one.
+		Emitted only when a def has one; a table too large to compile leaves
+		the docstrings out rather than the module."
+		[:documented |
+			documented isEmpty ifFalse: [
+				| tblSrc |
+				tblSrc := WriteStream on: String new.
+				tblSrc nextPutAll: '___methodDocTable___'; nextPutAll: lf;
+					nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+				documented do: [:def |
+					tblSrc nextPutAll: ' @env0:at: '''; nextPutAll: def name asString;
+						nextPutAll: ''' put: '.
+					moduleAst emitStringLiteral: def ___docString___ on: tblSrc.
+					tblSrc nextPut: $;].
+				tblSrc nextPutAll: ' @env0:yourself)'.
+				traceDir ifNotNil: [
+					debugStream
+						nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
+						nextPutAll: 'classmethod: '; nextPutAll: debugClassName; lf.
+					self ___writeMethodSource: tblSrc contents on: debugStream.
+					debugStream nextPutAll: '%'; lf; lf].
+				[[moduleClass class compileMethod: tblSrc contents
+					dictionaries: sl
+					category: 'Grail-Python Metadata'
+					environmentId: 1.
+				] on: CompileWarning do: [:ex | ex resume]]
+					on: CompileError do: [:ex | ex return: nil]]]
+			value: ([:last |
+					(topLevelDefs reject: [:stmt | stmt isOverloadStub])
+						do: [:stmt | last at: stmt name asString put: stmt].
+					last values select: [:stmt | stmt ___docString___ notNil]]
+				value: Dictionary new).
+
 		"Generate the module body as Smalltalk source for the initialize method.
 		Top-level defs emit BoundMethod assignments; calls emit self-sends."
 		stream := PrettyWriteStream on: Unicode7 new.
