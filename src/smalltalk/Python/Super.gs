@@ -137,6 +137,33 @@ _assignedInitSubclassOn: aClass
 
 category: 'Python-Dispatch'
 method: Super
+_implementationOf: aClass in: mro
+	"aClass, then each Smalltalk superclass of it that the MRO does not list,
+	up to the next class it does -- the classes whose methods ARE aClass's
+	behaviour to Python.  A built-in type's MRO names one class, but its
+	methods can live on a hidden implementation superclass: ``property'' is
+	PropertyDescriptor, whose __init__ is AbstractPropertyDescriptor's.  Asking
+	only the MRO class itself skipped that, so ``super().__init__(fget)'' in a
+	property subclass reached object's no-op __init__ and left fget unset --
+	Werkzeug's cached_property, a property subclass, then failed every read.
+
+	PythonInstance ends the walk too: every Python class's Smalltalk superclass
+	is a Python base or PythonInstance, and PythonInstance's defaults must not
+	answer for a Python class ahead of the MRO classes after it -- the
+	cooperative-mixin order super() exists for."
+
+	| out w |
+	out := OrderedCollection with: aClass.
+	w := aClass superClass.
+	[w notNil and: [w ~~ PythonInstance and: [(mro includesIdentical: w) not]]]
+		whileTrue: [
+			out add: w.
+			w := w superClass].
+	^ out
+%
+
+category: 'Python-Dispatch'
+method: Super
 _lookupMethodAndSideFirstOf: selectors
 	"The single-family form: probe BOTH sides of every MRO class with the same
 	selectors.  That is right for every name whose two sides share one calling
@@ -264,18 +291,21 @@ _lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
 					| hook |
 					hook := self _assignedInitSubclassOn: (mro at: i).
 					hook == nil ifFalse: [^ { hook. #assigned }]].
-				1 to: selectors size do: [:k |
-					| sel metaSel |
-					sel := selectors at: k.
-					metaSel := metaSelectors at: k.
-					sel ifNotNil: [
-						((mro at: i) compiledMethodAt: sel environmentId: 1 otherwise: nil)
-							ifNotNil: [:m | ^ { self _unforwarded: m. false }]].
-					(metaSel notNil and: [alsoMeta]) ifTrue: [
-						((mro at: i) class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
-							ifNotNil: [:m |
-								(self _isPythonClassMethod: metaSel on: (mro at: i))
-									ifTrue: [^ { m. true }]]]]].
+				"An MRO entry's HIDDEN implementation ancestors answer for it: see
+				_implementationOf:in:."
+				(self _implementationOf: (mro at: i) in: mro) do: [:impl |
+					1 to: selectors size do: [:k |
+						| sel metaSel |
+						sel := selectors at: k.
+						metaSel := metaSelectors at: k.
+						sel ifNotNil: [
+							(impl compiledMethodAt: sel environmentId: 1 otherwise: nil)
+								ifNotNil: [:m | ^ { self _unforwarded: m. false }]].
+						(metaSel notNil and: [alsoMeta]) ifTrue: [
+							(impl class compiledMethodAt: metaSel environmentId: 1 otherwise: nil)
+								ifNotNil: [:m |
+									(self _isPythonClassMethod: metaSel on: impl)
+										ifTrue: [^ { m. true }]]]]]].
 			^ nil]].
 	walker := cls superClass.
 	[walker notNil] whileTrue: [
