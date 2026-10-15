@@ -8,12 +8,12 @@
 
 from urllib.parse import urlsplit, urljoin
 
-from requests.adapters import HTTPAdapter
-from requests.exceptions import (
+from _grail_requests.adapters import HTTPAdapter
+from _grail_requests.exceptions import (
     ConnectionError, SSLError, Timeout, TooManyRedirects, RequestException)
-from requests.hooks import default_hooks, dispatch_hook
-from requests.models import Request, PreparedRequest, Response
-from requests.structures import CaseInsensitiveDict
+from _grail_requests.hooks import default_hooks, dispatch_hook
+from _grail_requests.models import Request, PreparedRequest, Response
+from _grail_requests.structures import CaseInsensitiveDict
 
 
 def _default_headers():

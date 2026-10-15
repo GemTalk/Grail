@@ -18,7 +18,9 @@ import logging
 import socket
 import threading
 
-import requests
+# Layer 1 tests Grail's requests STAND-IN itself, by its own name; twilio
+# (layer 2) uses it because no real requests is installed here.
+import _grail_requests as requests
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
