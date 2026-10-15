@@ -102,7 +102,7 @@ def stringio_close_then_read():
 
 
 def bytesio_getbuffer():
-    # bytes(buf.getbuffer()) round-trips the underlying data.
-    # CPython returns a memoryview; Grail returns a bytes copy.
+    # bytes(buf.getbuffer()) round-trips the underlying data: getbuffer()
+    # is a memoryview over the stream, as in CPython (#1637).
     buf = io.BytesIO(b"hello")
     return bytes(buf.getbuffer())

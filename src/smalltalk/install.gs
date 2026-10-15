@@ -758,6 +758,7 @@ run
 	at: #'BuiltinTypeDictAndBasesTestCase' put: nil;
 	at: #'ByteArrayReceiverTypeTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
+	at: #'BytesioGetbufferViewTestCase' put: nil;
 	at: #'BytesTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
@@ -2333,6 +2334,7 @@ input src/smalltalk/PythonTests/BuiltinSubclassPropertyTestCase.gs
 input src/smalltalk/PythonTests/BuiltinTypeDictAndBasesTestCase.gs
 input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
+input src/smalltalk/PythonTests/BytesioGetbufferViewTestCase.gs
 input src/smalltalk/PythonTests/BytesSubclassTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
 input src/smalltalk/PythonTests/BytesWarningTestCase.gs
