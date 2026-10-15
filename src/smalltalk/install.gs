@@ -1533,6 +1533,7 @@ run
 	at: #'TypeParamScopesTestCase' put: nil;
 	at: #'TypeParamsTestCase' put: nil;
 	at: #'TypePrepareDefaultTestCase' put: nil;
+	at: #'TypeSlotsWeakrefDictOverBaseTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'TypeThreeArgTestCase' put: nil;
 	at: #'TypeWithScalarMixinTestCase' put: nil;
@@ -3119,6 +3120,7 @@ input src/smalltalk/PythonTests/TypeInCallPositionTestCase.gs
 input src/smalltalk/PythonTests/TypeParamScopesTestCase.gs
 input src/smalltalk/PythonTests/TypeParamsTestCase.gs
 input src/smalltalk/PythonTests/TypePrepareDefaultTestCase.gs
+input src/smalltalk/PythonTests/TypeSlotsWeakrefDictOverBaseTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgTestCase.gs
 input src/smalltalk/PythonTests/TypeWithScalarMixinTestCase.gs
