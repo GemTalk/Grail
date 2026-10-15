@@ -259,3 +259,27 @@ def _search_roots():
         if entry and str(entry) not in roots:
             roots.append(str(entry))
     return roots
+
+
+def _grail_find_distributions(context=None):
+    """``sys.meta_path[0].find_distributions(context)`` -- how
+    importlib.metadata discovers installed distributions in Grail.
+
+    CPython's ``Distribution.discover()`` asks every meta_path finder for
+    ``find_distributions``, and its PathFinder answers by scanning
+    ``context.path`` (sys.path by default) for ``*.dist-info``.  Grail's
+    meta_path holds only GrailBuiltinImporter, so it answers for both: the
+    same scan, with a DEFAULT path of the roots Grail imports from -- its own
+    tree, then sys.path (``_search_roots``).  Grail's stdlib directory plays
+    the part of CPython's lib directory, which is on sys.path there; that is
+    where the dist-info of the distributions Grail vendors (flask, werkzeug,
+    ...) lives.  A context that names a path is searched as given.
+    """
+    from importlib.metadata import DistributionFinder, MetadataPathFinder
+
+    if context is None:
+        context = DistributionFinder.Context()
+    if 'path' not in vars(context):
+        context = DistributionFinder.Context(
+            **dict(vars(context), path=_search_roots()))
+    return MetadataPathFinder.find_distributions(context)
