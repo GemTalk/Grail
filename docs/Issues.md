@@ -3391,6 +3391,20 @@ is missing.
 
 ### errno: 108 names, and they are BSD
 
+**Superseded: `errno` is now the RUNNING platform's table** — the 108 Darwin
+names on a Mac, CPython's 134 on Linux, both copied from CPython 3.14.8's own
+`errno` and held in `OSError class >> ___errnoPairsFor___:`. The BSD table
+everywhere was self-consistent for the names Python compares, but not with the
+numbers the kernel reports: `os` raises the raw errno, and on Linux 36 is
+`ENAMETOOLONG` where the BSD table said `EINPROGRESS`. The socket layer had to
+translate Linux numbers onto BSD ones to keep its own side straight; it now
+reports the platform's numbers, looked up by name. OSError's errnomap is
+CPython's whole map, by name (`EAGAIN` -> `BlockingIOError`, `ECONNRESET` ->
+`ConnectionResetError`, `ETIMEDOUT` -> `TimeoutError`, …), where it used to
+cover only the errnos the two platforms number alike.
+`tests/python/errno_platform_tables.py` checks both tables against CPython on
+whichever platform runs it. What follows is the history.
+
 `errno` went from 25 names to the 108 CPython publishes on Darwin, plus
 `errorcode`. Values were read from the host's `errno` rather than recalled, so
 the table stays the self-consistent BSD/macOS one its header documents.
