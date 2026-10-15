@@ -63,8 +63,8 @@ def main():
     print(f"wrote {OUT}: lower={len(lower)} upper={len(upper)} cased_extra={len(cased_extra)}")
 
     # Also emit the Smalltalk multi-character SpecialCasing arrays used by
-    # str.gs (___multicharUpperData___ / ___multicharLowerData___).  These are
-    # pasted into src/smalltalk/Python/str.gs by hand when the Unicode version
+    # str (___multicharUpperData___ / ___multicharLowerData___).  These are
+    # pasted into src/Grail-Kernel-PyEnv/CharacterCollection.extension.st by hand when the Unicode version
     # changes -- the layout is flat: key, count, cp1..cpCount, key, count, ...
     import textwrap
 
@@ -80,7 +80,7 @@ def main():
     for kind, meth in (("upper", "___multicharUpperData___"),
                        ("lower", "___multicharLowerData___")):
         arr, n = flat_full(kind)
-        print(f"\n--- str.gs {meth}  ({n} chars, {kind}) ---")
+        print(f"\n--- str {meth}  ({n} chars, {kind}) ---")
         print("\t^ #(")
         for line in textwrap.wrap(" ".join(map(str, arr)), 84):
             print("\t\t" + line)
