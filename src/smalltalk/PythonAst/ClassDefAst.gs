@@ -1523,12 +1523,18 @@ printSmalltalkRuntimeOn: aStream
 		ignored the globals exec() was handed (GemTalk/Grail#1170).  CPython's
 		class body opens with ``__module__ = __name__'', a run-time read of
 		the globals, so a doit's class reads its ``__name__'' when it runs.
-		Still a string, so the reachability constraint holds."
+		Still a string, so the reachability constraint holds.
+
+		And in a module that REBINDS ``__name__'' at top level, which reads it
+		too (___readsRebindableModuleName___)."
 		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
 		self ___readsModuleNameAtRunTime___
 			ifTrue: [aStream nextPutAll:
 				'(((Python @env0:at: #builtins) @env0:___instance___) ___doitModuleName___: ___pyGlobals___)']
-			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
+			ifFalse: [
+				self ___readsRebindableModuleName___
+					ifTrue: [aStream nextPutAll: '(self @env1:___moduleAttrLoad___: #''__name__'')']
+					ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream]].
 		aStream nextPutAll: '.'; lf.
 	].
 
@@ -4197,8 +4203,14 @@ ___docString___
 	(first isKindOf: ExprAst) ifFalse: [^ nil].
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	"A NEW node holding the cleaned text (AbstractNode class >>
+	___cleanDoc___:, as CPython 3.13's compiler cleans it): the tree keeps
+	the literal, which ast.parse answers."
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner]
+		ifTrue: [ConstantAst new
+			value: (AbstractNode ___cleanDoc___: inner value);
+			kind: inner kind;
+			yourself]
 		ifFalse: [nil]
 %
 
@@ -5816,6 +5828,20 @@ ___readsModuleNameAtRunTime___
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___readsRebindableModuleName___
+	"True when this module-level class's ``__module__'' must be read from the
+	module's ``__name__'' as the class statement runs, because the module
+	rebinds that name (ModuleAst >> ___rebindsName___): _pydecimal's classes
+	are decimal.Decimal, not _pydecimal.Decimal, which statistics' doctests
+	print.  Module level only, where the emit runs in the module's initialize
+	and ``self'' is the module; a nested class keeps the literal."
+
+	self isModuleLevelClassDef ifFalse: [^ false].
+	^ parent parent ___rebindsName___
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 isModuleLevelClassDef
 	"True if this class def is a direct child of a module body (not nested in
 	a function or another class).  Parent chain: self -> BlockAst -> ModuleAst.
@@ -6000,9 +6026,17 @@ emitMethodDocTableOn: aStream className: aClassName
 	No-op when no method has a docstring, so only classes that need it pay
 	for the extra class-side method."
 
-	| documented entries |
-	documented := self ___allFunctionDefs___ select: [:def |
-		def isOverloadStub not and: [def ___docString___ notNil]].
+	| last documented entries |
+	"The LAST def of a name is the method, so its docstring -- or its lack of
+	one -- is the one: a documented def followed by an undocumented def of
+	the same name has __doc__ None, and the first def's entry used to
+	survive.  Except a property's setter or deleter, which keeps the
+	property's docstring (FunctionDefAst >> ___keepsThePropertyDocstring___)."
+	last := Dictionary new.
+	(self ___allFunctionDefs___ reject: [:def |
+		def isOverloadStub or: [def ___keepsThePropertyDocstring___]])
+			do: [:def | last at: def ___mangledName___ asString put: def].
+	documented := last values select: [:def | def ___docString___ notNil].
 	documented isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
 	documented do: [:def | | src |
