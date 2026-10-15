@@ -1275,6 +1275,7 @@ run
 	at: #'NotImplementedSingletonTestCase' put: nil;
 	at: #'NulPathsLongKeysTempfilesTestCase' put: nil;
 	at: #'NumbersAbcAbstractTestCase' put: nil;
+	at: #'NumbersConcreteMixinsTestCase' put: nil;
 	at: #'NumbersTestCase' put: nil;
 	at: #'NumericSubclassOperandsTestCase' put: nil;
 	at: #'ObjectNewArgsAndSurrogateWarningsTestCase' put: nil;
@@ -2853,6 +2854,7 @@ input src/smalltalk/PythonTests/NotImplementedErrorTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
 input src/smalltalk/PythonTests/NulPathsLongKeysTempfilesTestCase.gs
 input src/smalltalk/PythonTests/NumbersAbcAbstractTestCase.gs
+input src/smalltalk/PythonTests/NumbersConcreteMixinsTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/NumericSubclassOperandsTestCase.gs
 input src/smalltalk/PythonTests/ObjectNewArgsAndSurrogateWarningsTestCase.gs
