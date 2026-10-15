@@ -1375,4 +1375,9 @@ versions were kept throughout, and this branch's duplicates
 `ClassDefAst >> ___moduleReassignsItsName___`, its contextlib docstrings) were
 removed.  The one piece #1646 did not cover is kept on top of it: an Ellipsis
 body is still not a docstring.
+Gates after that merge: `run_tests.sh` **8134 run, 8134 passed**, 8 of 8
+shards; the CPython conformance gate **0 regressions, 4 improvements**
+(test_setcomps, test_generators, test_exception_hierarchy, test_uuid) --
+test_math and test___all__ timed out beside the SUnit suite and are OK alone;
+`check_python_fixtures.sh` 667 fixtures agree with CPython.
 
