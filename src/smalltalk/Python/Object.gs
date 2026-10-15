@@ -12522,6 +12522,10 @@ ___pyAttrLoad___: aSym
 	``def __getattr__'' and not the ``__getattr__ = fn'' class-attribute form, so
 	django's LazyObject never set itself up and recursed until the gem ran out of
 	memory."
+	"A FOREIGN BASE TYPE comes before __getattr__, as a base's type dict does in
+	CPython: an instance of ``class memmap(ndarray)'' reads ndarray's ``shape''
+	and ``sum'' off its C body (ShimForeignSubclass)."
+	(self ___pyAttrForeignBaseLoad___: aSym) @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
 	self ___pyAttrHasGetattr___ ifTrue: [^ self ___pyAttrCallGetattr___: s].
 	"Carries CPython's ``name'' / ``obj'' -- see
 	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for
@@ -19637,6 +19641,17 @@ ___hasOwnGetitem___
 	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
 	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
 		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___pyAttrForeignBaseLoad___: aSym
+	"aSym read off a C base type this object's class descends from, as an
+	Association whose value is the attribute, or nil when there is none --
+	nil for every object but an instance of a Python subclass of a C type
+	(ShimForeignSubclass), which ___pyAttrLoad___: asks just before its miss."
+
+	^ nil
 %
 
 category: 'Grail-Match Protocol'

@@ -911,6 +911,97 @@ static PyTypeObject Dispatcher_Type = {
 };
 #endif
 
+#ifndef GRAIL_SHIM
+/* ------------------------------------------------------------------ */
+/* Cell: a subclassable type with its own tp_new and struct, as        */
+/* ndarray is -- what ``class Sub(Cell)'' instances exercise          */
+/* (docs/Shim_Foreign_Subclassing.md).  tp_new allocates through       */
+/* type->tp_alloc, so a Python subclass's instance is a C body of the  */
+/* subtype; ``describe'' reads a Python attribute of self from C, as   */
+/* numpy reads __array_priority__ and __array_finalize__; ``is_cell''  */
+/* is PyObject_TypeCheck, which walks the subtype's tp_mro / tp_base.  */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    PyObject_HEAD
+    PyObject *value;
+} CellObject;
+
+static PyTypeObject Cell_Type;
+#define CELL_VALUE(o) (((CellObject *)(o))->value)
+
+static PyObject *cell_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    PyObject *value = Py_None;
+    static char *kwlist[] = {"value", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O:Cell", kwlist, &value))
+        return NULL;
+    CellObject *self = (CellObject *)type->tp_alloc(type, 0);
+    if (self == NULL) return NULL;
+    self->value = Py_NewRef(value);
+    return (PyObject *)self;
+}
+static void cell_dealloc(PyObject *self) {
+    Py_CLEAR(CELL_VALUE(self));
+    Py_TYPE(self)->tp_free(self);
+}
+static PyObject *cell_get(PyObject *self, PyObject *noargs) {
+    (void)noargs;
+    return Py_NewRef(CELL_VALUE(self));
+}
+static PyObject *cell_describe(PyObject *self, PyObject *noargs) {
+    (void)noargs;
+    PyObject *label = PyObject_GetAttrString(self, "label");
+    if (label == NULL) return NULL;
+    PyObject *out = PyUnicode_FromFormat("%s:%S", Py_TYPE(self)->tp_name, label);
+    Py_DECREF(label);
+    return out;
+}
+static PyObject *cell_add(PyObject *a, PyObject *b) {
+    if (PyObject_TypeCheck(a, &Cell_Type)) return PyNumber_Add(CELL_VALUE(a), b);
+    return PyNumber_Add(a, CELL_VALUE(b));
+}
+static PyNumberMethods cell_as_number = { .nb_add = cell_add };
+static PyMemberDef cell_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(CellObject, value), Py_READONLY, NULL},
+    {NULL, 0, 0, 0, NULL}
+};
+static PyMethodDef cell_methods[] = {
+    {"get", cell_get, METH_NOARGS, "the value"},
+    {"describe", cell_describe, METH_NOARGS, "tp_name:self.label, read from C"},
+    {NULL, NULL, 0, NULL}
+};
+static PyTypeObject Cell_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Cell",
+    .tp_basicsize = sizeof(CellObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .tp_new = cell_new,
+    .tp_dealloc = cell_dealloc,
+    .tp_members = cell_members,
+    .tp_methods = cell_methods,
+    .tp_as_number = &cell_as_number,
+};
+
+/* sig_demo: a function whose doc carries a text signature, as Argument
+   Clinic writes one -- ``__doc__'' is the text after the ``--'' line and
+   ``__text_signature__'' the signature, which inspect.signature reads. */
+static PyObject *
+grail_sig_demo(PyObject *mod, PyObject *const *args, Py_ssize_t nargs) {
+    (void)mod;
+    return PyLong_FromSsize_t(nargs);
+}
+
+static PyObject *
+grail_is_cell(PyObject *mod, PyObject *const *args, Py_ssize_t nargs) {
+    (void)mod;
+    if (nargs != 1) {
+        PyErr_SetString(PyExc_TypeError, "is_cell takes one argument");
+        return NULL;
+    }
+    return PyBool_FromLong(PyObject_TypeCheck(args[0], &Cell_Type));
+}
+#endif
+
 /* ------------------------------------------------------------------ */
 /* Module definition                                                   */
 /* ------------------------------------------------------------------ */
@@ -946,6 +1037,9 @@ static PyMethodDef grail_demo_methods[] = {
     {"setattr_in_c", (PyCFunction)(void *)grail_setattr_in_c, METH_FASTCALL, NULL},
     {"unicode_compare", (PyCFunction)(void *)grail_unicode_compare, METH_FASTCALL, NULL},
     {"capi", (PyCFunction)(void *)grail_capi, METH_FASTCALL, NULL},
+    {"is_cell", (PyCFunction)(void *)grail_is_cell, METH_FASTCALL, NULL},
+    {"sig_demo", (PyCFunction)(void *)grail_sig_demo, METH_FASTCALL,
+     "sig_demo($module, a, /, b=2, *, c=None)\n--\n\nA function with a text signature."},
 #endif
     {NULL, NULL, 0, NULL}
 };
@@ -976,6 +1070,8 @@ grail_demo_exec(PyObject *mod) {
             || PyModule_AddObjectRef(mod, "NdLike", (PyObject *)&NdLike_Type) < 0
             || PyModule_AddObjectRef(mod, "OverLike", (PyObject *)&OverLike_Type) < 0)
         return -1;
+    if (PyType_Ready(&Cell_Type) < 0) return -1;
+    if (PyModule_AddObjectRef(mod, "Cell", (PyObject *)&Cell_Type) < 0) return -1;
 #endif
     PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
     PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");

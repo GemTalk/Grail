@@ -70,7 +70,11 @@ int Py_IsFinalizing(void) {
 /* tp_name is "module.qualname" for a static or FromSpec type, a bare name
    for a builtin.  The three getters answer the parts CPython does: the text
    after the last dot (__name__, and __qualname__ for anything not nested),
-   and the text before it (__module__, "builtins" when there is no dot). */
+   and the text before it (__module__, "builtins" when there is no dot).
+   A subtype mirror -- a Python class over a C type -- is a heap type, whose
+   tp_name is the bare __name__; CPython reads its qualname and module off
+   the class, and so do these. */
+int _grail_is_subtype_mirror(PyTypeObject *t);   /* cpython.cc */
 static const char *tp_name_of(PyTypeObject *t) {
     return (t && t->tp_name) ? t->tp_name : "?";
 }
@@ -82,10 +86,14 @@ PyObject *PyType_GetName(PyTypeObject *t) {
 }
 
 PyObject *PyType_GetQualName(PyTypeObject *t) {
+    if (t != NULL && _grail_is_subtype_mirror(t))
+        return PyObject_GetAttrString((PyObject *)t, "__qualname__");
     return PyType_GetName(t);
 }
 
 PyObject *PyType_GetModuleName(PyTypeObject *t) {
+    if (t != NULL && _grail_is_subtype_mirror(t))
+        return PyObject_GetAttrString((PyObject *)t, "__module__");
     const char *n = tp_name_of(t);
     const char *dot = strrchr(n, '.');
     if (dot == NULL) return PyUnicode_FromString("builtins");
@@ -318,17 +326,59 @@ static PyObject *gcm_call(PyObject *callable, PyObject *args, PyObject *kwargs) 
    Grail, the foreign proxy answered its TYPE's name, so every function in
    the module was bound as ``builtin_function_or_method'' and
    ``from pydantic_core._pydantic_core import from_json'' found none. */
+/* CPython's internal-doc split (Objects/typeobject.c): a builtin's ml_doc
+   may open with its signature -- ``name(sig)\n--\n\n'' -- which
+   ``__text_signature__'' answers (inspect.signature reads it) and
+   ``__doc__'' leaves out.  numpy's add_docstring writes every function's doc
+   that way, and numpy.ma builds its wrappers from inspect.signature of
+   np.arange and friends. */
+#define GRAIL_SIG_END_MARKER ")\n--\n\n"
+#define GRAIL_SIG_END_MARKER_LENGTH 6
+static const char *grail_find_signature(const char *name, const char *doc) {
+    if (name == NULL || doc == NULL) return NULL;
+    const char *dot = strrchr(name, '.');
+    if (dot) name = dot + 1;
+    size_t length = strlen(name);
+    if (strncmp(doc, name, length) != 0) return NULL;
+    doc += length;
+    return *doc == '(' ? doc : NULL;
+}
+static const char *grail_skip_signature(const char *doc) {
+    while (*doc) {
+        if (*doc == *GRAIL_SIG_END_MARKER
+                && strncmp(doc, GRAIL_SIG_END_MARKER, GRAIL_SIG_END_MARKER_LENGTH) == 0)
+            return doc + GRAIL_SIG_END_MARKER_LENGTH;
+        if (*doc == '\n' && doc[1] == '\n') return NULL;
+        doc++;
+    }
+    return NULL;
+}
+extern "C" PyObject *_grail_doc_from_internal_doc(const char *name, const char *doc) {
+    if (doc == NULL) { Py_INCREF(Py_None); return Py_None; }
+    const char *sig = grail_find_signature(name, doc);
+    const char *rest = sig ? grail_skip_signature(sig) : NULL;
+    if (rest == NULL) return PyUnicode_FromString(doc);
+    if (*rest == '\0') { Py_INCREF(Py_None); return Py_None; }
+    return PyUnicode_FromString(rest);
+}
+extern "C" PyObject *_grail_text_signature_from_internal_doc(const char *name, const char *doc) {
+    const char *start = grail_find_signature(name, doc);
+    const char *end = start ? grail_skip_signature(start) : NULL;
+    if (end == NULL) { Py_INCREF(Py_None); return Py_None; }
+    end -= GRAIL_SIG_END_MARKER_LENGTH - 1;
+    return PyUnicode_FromStringAndSize(start, end - start);
+}
+
 static PyObject *gcm_getattro(PyObject *self, PyObject *name) {
     GrailCMethodObject *f = (GrailCMethodObject *)self;
     const char *n = PyUnicode_AsUTF8(name);
     if (n == NULL) return NULL;
     if (strcmp(n, "__name__") == 0 || strcmp(n, "__qualname__") == 0)
         return PyUnicode_FromString(f->m_ml->ml_name);
-    if (strcmp(n, "__doc__") == 0) {
-        if (f->m_ml->ml_doc) return PyUnicode_FromString(f->m_ml->ml_doc);
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
+    if (strcmp(n, "__doc__") == 0)
+        return _grail_doc_from_internal_doc(f->m_ml->ml_name, f->m_ml->ml_doc);
+    if (strcmp(n, "__text_signature__") == 0)
+        return _grail_text_signature_from_internal_doc(f->m_ml->ml_name, f->m_ml->ml_doc);
     if (strcmp(n, "__module__") == 0) {
         if (f->m_module) { Py_INCREF(f->m_module); return f->m_module; }
         Py_INCREF(Py_None);
@@ -498,6 +548,7 @@ static int gmb_set(PyObject *descr, PyObject *obj, PyObject *value) {
    which is what a Python reader -- numpy's add_newdoc, inspect, help() --
    asks a descriptor; d_name is not kept (see above), so the names come from
    the definition. */
+extern "C" PyObject *PyObject_GenericGetAttr(PyObject *obj, PyObject *name);
 static PyObject *descr_getattro(PyObject *descr, PyObject *name) {
     const char *n = PyUnicode_AsUTF8(name);
     if (n == NULL) return NULL;
@@ -530,9 +581,10 @@ static PyObject *descr_getattro(PyObject *descr, PyObject *name) {
         Py_INCREF(t);
         return t;
     }
-    PyErr_Format(PyExc_AttributeError, "'%s' object has no attribute '%s'",
-                 dt->tp_name, n);
-    return NULL;
+    /* Everything else is the generic walk's: the slot method-wrappers
+       (``__get__'' / ``__set__'', which numpy asks of void's dtype getset),
+       the type's methods, and its AttributeError. */
+    return PyObject_GenericGetAttr(descr, name);
 }
 
 static void init_descr_type(PyTypeObject *t, const char *name, Py_ssize_t size) {

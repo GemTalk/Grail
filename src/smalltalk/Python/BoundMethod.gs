@@ -376,6 +376,7 @@ ___pythonValueAttrs___
 		add: #'__defaults__';
 		add: #'__kwdefaults__';
 		add: #'__doc__';
+		add: #'__text_signature__';
 		add: #'__code__';
 		add: #'__closure__';
 		"``__globals__'' is a value for the same reason ``__closure__'' beside it
@@ -1763,6 +1764,8 @@ __doc__
 	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
 	self ___isPythonBoundMethod___ ifTrue: [
 		^ self __func__ ___pyAttrLoad___: #'__doc__'].
+	"A C extension's function: its ml_doc, without the signature line."
+	(self ___shimFunctionAttr___: '__doc__') @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
 	cls := (receiver == nil and: [definingClass @env0:notNil])
 		ifTrue: [definingClass]
 		ifFalse: [
@@ -2248,6 +2251,37 @@ ___moduleOfClass___: aClass
 	^ [(aClass __module__) @env0:asString @env0:asUnicodeString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___shimFunctionAttr___: aName
+	"aName read off the C function object of a C extension's module function
+	(CPythonShim>>___functionObjectFor:), as an Association, or nil for any
+	other BoundMethod.  The shim's builtin_function_or_method answers
+	``__doc__'' and ``__text_signature__'' from its ml_doc as CPython splits
+	it, and numpy's add_docstring writes the signature into it."
+
+	| shim view |
+	(receiver @env0:class @env0:class @env0:includesSelector: #'___shimModuleName___')
+		ifFalse: [^ nil].
+	shim := CPythonShim @env0:current.
+	view := shim @env0:___functionObjectFor: self.
+	view @env0:isNil ifTrue: [^ nil].
+	^ aName @env0:-> (shim @env0:foreignGetAttr: view @env0:memoryAddress name: aName)
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__text_signature__
+	"A C function's signature as its docstring declares it -- what
+	inspect.signature reads for a builtin.  Only a C extension's function has
+	one here; for anything else the attribute is missing, as it is for a
+	Python function."
+
+	(self ___shimFunctionAttr___: '__text_signature__') @env0:ifNotNil: [:assoc |
+		^ assoc @env0:value].
+	^ AttributeError @env0:___signalMissing___: '__text_signature__' on: self
 %
 
 category: 'Grail-Printing'
