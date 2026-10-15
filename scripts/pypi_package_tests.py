@@ -29,6 +29,12 @@ WHAT IT DOES, PER PROJECT
    nothing for --timeout seconds, costs only the test it was running: that test
    is scored CRASH or TIMEOUT and the run resumes in a fresh process with
    everything already reported deselected.
+4. Bounds each Grail session and each project.  A session runs its whole
+   suite in one transaction and so cannot vote; one that lived for hours
+   stalled garbage collection for every session on the stone.  So a session
+   is recycled after --session-minutes (resuming as above, the test it was in
+   run again), and a project stops after --budget-minutes, the rest scored
+   not run.
 
 THE SCORE
 ---------
@@ -147,11 +153,12 @@ def find_tests(src):
 
 # --------------------------------------------------------------- the runs
 
-def stream(argv, cwd, env, timeout, log):
+def stream(argv, cwd, env, timeout, log, deadline=None):
     """Run argv, reading its report lines as they arrive.  Answers
     ({nodeid: outcome}, started-but-unfinished nodeid or None, how it ended,
-    a note) where `how' is 'exit', 'crash' or 'timeout' and the note says
-    what stopped a run that never reached its tests."""
+    a note) where `how' is 'exit', 'crash', 'timeout' or 'recycle' -- the
+    session reached ``deadline'' (a time.time() value) and was ended -- and
+    the note says what stopped a run that never reached its tests."""
     proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, errors="replace", start_new_session=True)
@@ -165,10 +172,14 @@ def stream(argv, cwd, env, timeout, log):
     results, running, how, exited = {}, None, "crash", False
     collected, internal = False, None
     while True:
+        wait = timeout
+        if deadline is not None:
+            wait = min(wait, max(deadline - time.time(), 0))
         try:
-            ln = lines.get(timeout=timeout)
+            ln = lines.get(timeout=wait)
         except queue.Empty:
-            how = "timeout"
+            how = ("recycle" if deadline is not None and time.time() >= deadline
+                   else "timeout")
             break
         if ln is None:
             break
@@ -189,7 +200,7 @@ def stream(argv, cwd, env, timeout, log):
                 running = None
         elif ln.startswith("GRAIL_EXIT|"):
             exited = True
-    if how == "timeout":
+    if how in ("timeout", "recycle"):
         # The whole group: ./grail starts topaz, and killing only the launcher
         # leaves the gem running.
         try:
@@ -197,7 +208,7 @@ def stream(argv, cwd, env, timeout, log):
         except ProcessLookupError:
             pass
     proc.wait()
-    if how != "timeout":
+    if how not in ("timeout", "recycle"):
         how = "exit" if (exited or proc.returncode in (0, 1, 2, 5)) else "crash"
     note = ""
     if internal:
@@ -246,27 +257,57 @@ def grail_env(venv):
     return env
 
 
-def run_grail(venv, src, tests, timeout, log, max_restarts):
+def run_grail(venv, src, tests, timeout, log, max_restarts,
+              session_seconds, budget_seconds):
     """{nodeid: outcome}, resuming past every test that kills or stalls the
-    session -- each such test is scored CRASH or TIMEOUT."""
+    session -- each such test is scored CRASH or TIMEOUT.
+
+    No session lives longer than session_seconds.  A Grail session runs the
+    whole suite inside ONE transaction and never commits or aborts, and a
+    session in a transaction cannot vote: while it lives, the stone cannot
+    finish a garbage-collection vote, and every other session on the stone
+    slows.  pygments held one for hours (5,337 tests, slow collection, and a
+    re-collect after each of its timeouts).  So a session past its time is
+    ended and the run resumes in a fresh one, everything reported so far
+    deselected; the test it was in is not scored, and runs again.
+
+    And no project takes longer than budget_seconds: past it, the run stops
+    and what it has not reached scores as not run."""
     results, notes = {}, []
     env = grail_env(venv)
     skipfile = Path(tempfile.mkstemp(prefix="grail-deselect-", dir=OUTDIR)[1])
     env["GRAIL_TEST_DESELECT"] = str(skipfile)
+    start = time.time()
+    project_end = start + budget_seconds
+    restarts = 0
     try:
-        for attempt in range(max_restarts + 1):
+        while True:
             skipfile.write_text("".join(n + "\n" for n in results))
+            deadline = min(time.time() + session_seconds, project_end)
             got, running, how, note = stream(grail_argv(venv, src, tests), ROOT,
-                                             env, timeout, log)
+                                             env, timeout, log, deadline)
             results.update(got)
-            if note:
+            if note and how != "recycle":
                 notes.append(note)
+            if how == "recycle":
+                if time.time() >= project_end:
+                    notes.append("stopped at the %d-minute budget"
+                                 % (budget_seconds // 60))
+                    break
+                if not got:
+                    notes.append("a %d-minute session reported nothing"
+                                 % (session_seconds // 60))
+                    break
+                log.write("\n### session recycled after %d minutes; resuming (%d done)\n"
+                          % (session_seconds // 60, len(results)))
+                continue
             # A test that started and never reported ended the session, even
             # when the process then exited with pytest's ordinary status: an
             # uncatchable error unwinds through pytest.main, which still
             # prints its summary (tomlkit's test_time: 2 run of 1,051).
-            if running is None:
+            if running is None or restarts >= max_restarts:
                 break
+            restarts += 1
             results[running] = "TIMEOUT" if how == "timeout" else "CRASH"
             log.write("\n### %s on %s; resuming (%d done)\n"
                       % (results[running], running, len(results)))
@@ -346,6 +387,10 @@ def main():
                     help="seconds of silence before a session is called hung")
     ap.add_argument("--max-restarts", type=int, default=20,
                     help="crashed or hung tests to resume past, per project")
+    ap.add_argument("--session-minutes", type=int, default=15,
+                    help="longest a Grail session lives before it is recycled")
+    ap.add_argument("--budget-minutes", type=int, default=45,
+                    help="longest the Grail run of one project takes")
     ap.add_argument("--report", action="store_true", help="re-print the last TSV")
     opts = ap.parse_args()
     if opts.report:
@@ -357,7 +402,7 @@ def main():
     OUTDIR.mkdir(parents=True, exist_ok=True)
     versions = installed_versions(venv)
     projects = opts.only.split(",") if opts.only else read_packages()
-    with (OUTDIR / "warm.log").open("w") as log:
+    with (OUTDIR / "warm.log").open("w", buffering=1) as log:
         if not warm_grail(venv, log):
             sys.exit("could not import pytest under Grail; see %s" % log.name)
     rows = []
@@ -379,16 +424,17 @@ def main():
                              note="no sdist" if src is None else "no tests in the sdist"))
             print("%-22s no tests" % project, flush=True)
             continue
-        with (OUTDIR / ("%s.cpython.log" % project)).open("w") as log:
+        with (OUTDIR / ("%s.cpython.log" % project)).open("w", buffering=1) as log:
             ref = run_cpython(venv, src, tests, opts.timeout, log)
         if not any(o == "passed" for o in ref.values()):
             rows.append(score(project, version, tests, ref, {},
                               note="CPython passes none"))
             print("%-22s CPython passes none" % project, flush=True)
             continue
-        with (OUTDIR / ("%s.grail.log" % project)).open("w") as log:
+        with (OUTDIR / ("%s.grail.log" % project)).open("w", buffering=1) as log:
             got, note = run_grail(venv, src, tests, opts.timeout, log,
-                                  opts.max_restarts)
+                                  opts.max_restarts, opts.session_minutes * 60,
+                                  opts.budget_minutes * 60)
         write_tests(project, ref, got)
         row = score(project, version, tests, ref, got, note=note)
         rows.append(row)
