@@ -85,6 +85,19 @@ _setReceiver: aReceiver selector: aSymbol
 
 category: 'Grail-Private'
 method: BoundMethod
+_setStaticExceptionNewOn: aClass
+	"``Exc.__new__'' for a built-in exception class: reads as ``__new__'' bound
+	to aClass, but every call reaches BaseException class >>
+	___excStaticNew:kw: with the whole argument list, ``cls'' first -- no
+	fixed-arity selector is answered, so value:value: takes the varargs one."
+
+	self _setReceiver: aClass selector: #'__new__'.
+	sel0 := sel1 := sel2 := sel3 := #'___grailNoFixedArityForStaticNew___'.
+	selVarargs := #'___excStaticNew:kw:'
+%
+
+category: 'Grail-Private'
+method: BoundMethod
 _setDefiningClass: aClass
 	"Record the class an unbound (receiver-less) reference's selector is defined
 	on -- the staticmethod-style invocation fallback in value:value:."
@@ -245,6 +258,13 @@ ___forAttrRead___: aReceiver selector: aSymbol
 	(aSymbol == #'__new__' and: [aReceiver @env0:isKindOf: Behavior])
 		ifFalse: [^ self receiver: aReceiver selector: aSymbol].
 	aReceiver == object ifTrue: [^ self receiver: aReceiver selector: aSymbol].
+	"A BUILT-IN EXCEPTION'S __new__ takes the class to build first, as every
+	__new__ does in CPython; the class-side ``__new__:'' family it would
+	otherwise bind is the class-call CONSTRUCTOR.  Unless Python code on the
+	chain defines its own __new__, which is then what the read answers."
+	(((aReceiver == BaseException) or: [aReceiver @env0:inheritsFrom: BaseException])
+		and: [(aReceiver ___pythonClassDefines: #'__new__') not])
+			ifTrue: [^ self @env0:new @env0:_setStaticExceptionNewOn: aReceiver].
 	objectMeta := object @env0:class.
 	fromObject := false.
 	#(#'__new__' #'__new__:' #'__new__:_:' #'__new__:_:_:' #'__new__:_:_:_:'

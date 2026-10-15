@@ -2,7 +2,10 @@ from logging import Logger
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlencode
 
-from requests import Response
+from _grail_standins import installed_or_stand_in
+
+# GRAIL: the real requests when one is installed, else Grail's stand-in.
+Response = installed_or_stand_in('requests', '_grail_requests').Response
 
 from twilio.base.exceptions import TwilioException
 from twilio.http.request import Request as TwilioRequest

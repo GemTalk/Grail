@@ -14,12 +14,11 @@ Only for OSError ITSELF, and only where an errno was really supplied:
   * ``OSError('just a message')'' and ``OSError(None, 'msg')'' stay OSError:
     the (errno, strerror) form is 2 to 5 arguments with an integer first.
 
-ONLY THE ERRNOS DARWIN AND LINUX NUMBER ALIKE are mapped -- all of 1..34 plus
-ECHILD, which is where every error a file operation reports lives.  CPython's
-map also covers the network and non-blocking family (EAGAIN ->
-BlockingIOError, ETIMEDOUT -> TimeoutError, ...), whose numbers differ between
-the platforms; this fixture therefore asserts by NUMBER and never through the
-errno module, whose values are the BSD ones everywhere (see its header).
+This fixture asserts the errnos Darwin and Linux number alike (1..34 plus
+ECHILD), by NUMBER, so one expectation holds on both.  The network and
+non-blocking family (EAGAIN -> BlockingIOError, ETIMEDOUT -> TimeoutError,
+...) is numbered differently on the two; errno_platform_tables.py checks the
+whole map by name against the running platform's errno.
 
 Every expectation here was measured against CPython 3.14.
 """

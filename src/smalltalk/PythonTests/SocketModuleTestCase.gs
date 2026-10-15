@@ -186,11 +186,16 @@ testAbortiveCloseResetsPeer
 	"setsockopt(SO_LINGER, (1, 0)) reaches the descriptor: close() sends a
 	RST, so the peer reads what arrived and then ConnectionResetError, where
 	a plain close() ends in a clean EOF.  GsSocket has no LINGER option, and
-	setsockopt used to accept and ignore it."
+	setsockopt used to accept and ignore it.
 
+	The errno is the PLATFORM'S ECONNRESET -- 54 on Darwin, 104 on Linux --
+	which errno.ECONNRESET is too, so the fixture reports both."
+
+	| n |
+	n := (OSError @env1:___errnoNamed: 'ECONNRESET') printString.
 	self
 		assert: (self loadFixture @env1:abortive_close_resets_peer) @env1:__repr__
-		equals: '[[b''hello'', (''ConnectionResetError'', 54)], [b''hello'', b''''], 54]'
+		equals: '[[b''hello'', (''ConnectionResetError'', ' , n , ')], [b''hello'', b''''], ' , n , ']'
 %
 
 category: 'Grail-Tests-Socket'

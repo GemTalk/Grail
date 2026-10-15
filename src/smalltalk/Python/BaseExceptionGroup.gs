@@ -242,7 +242,7 @@ ___splitOn___: aCondition
 	"{ matching. rest }, each a group or nil -- the shape ``except*'' consumes
 	(___exceptStarClause___:...), over the same engine as split()."
 
-	| leaf kind |
+	| leaf kind pair |
 	"A WRAPPER ___exceptStarNormalize___ built around a naked exception is not
 	split.  CPython matches the naked exception ITSELF and wraps it only on a
 	match, so the clause binds exactly that wrapper -- ``ExceptionGroup('',
@@ -255,7 +255,35 @@ ___splitOn___: aCondition
 		^ (self ___node___: leaf matches: aCondition kind: kind)
 			ifTrue: [Array @env0:with: self with: nil]
 			ifFalse: [Array @env0:with: nil with: self]].
-	^ self ___split___: aCondition constructRest: true
+	"CPython calls the group's own ``split'' method, so a subclass that
+	overrides it decides the match -- and is held to answering a tuple of at
+	least two (match, rest), extra items allowed for backwards compatibility
+	(gh-128049).  The two built-in classes keep the direct path."
+	((self @env0:class == ExceptionGroup) or: [self @env0:class == BaseExceptionGroup])
+		ifTrue: [^ self ___split___: aCondition constructRest: true].
+	pair := self split: aCondition.
+	(pair @env0:class == tuple) ifFalse: [
+		^ TypeError ___signal___: (bytes ___pyTypeNameOf___: self)
+			@env0:, '.split must return a tuple, not '
+			@env0:, (bytes ___pyTypeNameOf___: pair)].
+	pair @env0:size @env0:< 2 ifTrue: [
+		^ TypeError ___signal___: (bytes ___pyTypeNameOf___: self)
+			@env0:, '.split must return a 2-tuple, got tuple of size '
+			@env0:, pair @env0:size @env0:printString].
+	^ Array
+		@env0:with: ((pair @env0:at: 1) == None ifTrue: [nil] ifFalse: [pair @env0:at: 1])
+		with: ((pair @env0:at: 2) == None ifTrue: [nil] ifFalse: [pair @env0:at: 2])
+%
+
+category: 'Grail-Except Star'
+method: BaseExceptionGroup
+___exceptStarHandled___
+	"The exception an ``except*'' is handling: this group, or the naked
+	exception when this is the wrapper ___exceptStarNormalize___ built."
+
+	(self @env0:dynamicInstVarAt: #'___exceptStarWrapper___') == true
+		ifTrue: [^ self exceptions @env0:at: 1].
+	^ self
 %
 
 category: 'Grail-Exception Groups'
@@ -384,7 +412,15 @@ ___subsetOf___: anOriginal with: someExceptions
 	(eg @env0:isKindOf: BaseExceptionGroup) ifFalse: [
 		^ TypeError ___signal___: 'derive must return an instance of BaseExceptionGroup'].
 	tb := anOriginal __traceback__.
-	tb == None ifFalse: [eg with_traceback: tb].
+	tb == None ifFalse: [
+		"A COPY, not with_traceback()'s user attach: its mark tells the next
+		catch to prepend that raise's frames, and a part propagated by
+		``except*'' is re-raised the way RERAISE does it, adding none.  With
+		the mark the remainder arrived with a new two-frame traceback where
+		CPython has the original's object (test_except_star_EG_subclass).  An
+		explicit ``raise part'' sets the mark again in ___pyRaise___:."
+		eg with_traceback: tb.
+		eg @env0:dynamicInstVarAt: #'___tbUserAttached___' put: false].
 	cause := anOriginal __cause__.
 	context := anOriginal __context__.
 	eg ___setCause___: (cause == None ifTrue: [nil] ifFalse: [cause])
@@ -593,10 +629,18 @@ ___exceptStarNormalize___: anException
 
 	The ORIGINAL is not discarded: see ___exceptStarFinish___:original:,
 	which propagates it unchanged when nothing matched, rather than
-	handing back a wrapper CPython never made."
+	handing back a wrapper CPython never made.
 
-	| inst |
-	(anException @env0:isKindOf: BaseExceptionGroup) ifTrue: [^ anException].
+	anException is what the handler CAUGHT, which for a re-raised exception
+	is a CARRIER (BaseException class >> ___signalCarrying___:), an empty
+	instance of the payload's class.  It is unwrapped first: matching the
+	carrier split an empty group, matched nothing and left no remainder, so
+	the exception vanished -- every ``except*'' after the first on one
+	ExceptionGroup object that had already escaped a handler."
+
+	| exc inst |
+	exc := BaseException @env0:___payloadOf___: anException.
+	(exc @env0:isKindOf: BaseExceptionGroup) ifTrue: [^ exc].
 	inst := ExceptionGroup ___new___.
 	"A TUPLE, where #derive: uses a list -- CPython keeps args[1] as whatever
 	was passed, and the two are passed differently: a group written out in
@@ -604,7 +648,7 @@ ___exceptStarNormalize___: anException
 	CPython synthesizes here is built from a tuple.  repr() shows the
 	difference, so the fixture pins it."
 	inst ___args___: (Array @env0:with: ''
-		with: (tuple @env0:withAll: (Array @env0:with: anException))).
+		with: (tuple @env0:withAll: (Array @env0:with: exc))).
 	"Marked, so ___splitOn___: treats it as the naked exception it stands for."
 	inst @env0:dynamicInstVarAt: #'___exceptStarWrapper___' put: true.
 	^ inst
@@ -629,32 +673,92 @@ ___exceptStarClause___: aGroupOrNil type: aType reraised: aColl do: aBlock
 	   ``except*'' clause answered None; CPython answers exactly the object
 	   ``as'' binds, which is this one (checked against 3.14).
 
-	 * a bare ``raise'' is ABSORBED and recorded in aColl rather than
-	   propagated.  ___reRaise___: re-signals the session's current
-	   exception, which the line above has just made the matched subgroup,
-	   so the re-raise arrives here as that same object BY IDENTITY --
-	   which is also how an explicit ``raise g'' arrives, and CPython
-	   treats the two alike.  PEP 654 collects the re-raised parts and
-	   merges them with the unhandled remainder once every clause has run;
-	   letting the first one propagate from here skipped the later clauses
-	   entirely.  Anything else the body raises is a NEW exception and
-	   passes straight out, control-flow carriers included.
+	 * whatever the body RAISES is ABSORBED and recorded in aColl rather
+	   than propagated.  PEP 654 runs every clause and only then raises
+	   what they raised, merged with the unhandled remainder; letting the
+	   first raise propagate from here skipped the later clauses entirely.
+	   Two kinds are recorded, in the order they happen, because the merge
+	   treats them differently:
 
-	See ___exceptStarFinish___:original:reraised:normalized: for the merge."
+	    - a RE-RAISE, recorded as the matched subgroup itself.  A bare
+	      ``raise'' re-signals the session's current exception, which the
+	      line above has just made the matched subgroup, so it arrives here
+	      as that same object BY IDENTITY.
+
+	    - a NEW exception, recorded as ``#raised -> exc''.  It is raised
+	      inside the clause, so its __context__ is already the matched
+	      subgroup, as CPython has it.
+
+	   An explicit ``raise e'' of the matched subgroup is the SECOND kind,
+	   although it arrives by identity too.  CPython tells them apart by
+	   metadata, not identity (is_same_exception_metadata): ``raise e''
+	   adds a traceback entry, so e no longer carries the original's
+	   traceback, and
+
+	       except* ValueError as e: raise e      -- TypeError left over
+	         => ExceptionGroup('', [ExceptionGroup('eg', [ValueError(1)]),
+	                                ExceptionGroup('eg', [TypeError(2)])])
+
+	   where a bare ``raise'' gives back the original group.  Grail's mark
+	   for the same fact is ___tbUserAttached___: ___pyRaise___: sets it on
+	   an exception that already has a traceback, a bare raise does not,
+	   and a split part starts without it (___subsetOf___:with:).
+
+	   Grail's control-flow carriers are not BaseExceptions, so a
+	   ``return'' still passes straight out.
+
+	See ___exceptStarFinishReraised___:original:reraised:normalized: for
+	the merge."
 
 	| pair matched |
 	aGroupOrNil == nil ifTrue: [^ nil].
-	pair := aGroupOrNil ___splitOn___: aType.
+	"Both of these can raise, and CPython raises them while HANDLING the
+	exception, so that is their __context__ -- the naked exception itself
+	when there is a wrapper."
+	BaseException @env0:___whileHandling___: (aGroupOrNil ___exceptStarHandled___) do: [
+		self ___exceptStarCheckType___: aType.
+		pair := aGroupOrNil ___splitOn___: aType].
 	matched := pair @env0:at: 1.
 	matched == nil ifFalse: [
 		BaseException @env0:___whileHandling___: matched do: [
 			[aBlock @env0:value: matched]
 				@env0:on: BaseException
 				do: [:ex |
-					((BaseException @env0:___payloadOf___: ex) == matched)
-						ifTrue: [aColl @env0:add: matched. ex @env0:return: nil]
-						ifFalse: [ex @env0:pass]]]].
+					| payload |
+					payload := BaseException @env0:___payloadOf___: ex.
+					(payload == matched
+						and: [(matched @env0:dynamicInstVarAt: #'___tbUserAttached___') ~~ true])
+							ifTrue: [aColl @env0:add: matched]
+							ifFalse: [aColl @env0:add: #'raised' @env0:-> payload].
+					ex @env0:return: nil]]].
 	^ pair @env0:at: 2
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___exceptStarCheckType___: aType
+	"CPython's _PyEval_CheckExceptStarTypeValid, run as each clause is reached.
+
+	``except*'' takes exception CLASSES only -- a tuple of them, or one --
+	so a predicate, which split() accepts, is refused here.  And none of
+	them may be a group class: ``except* ExceptionGroup'' would match a
+	group the machinery has already opened up, so CPython rejects it at
+	run time, naked exception or not.  Grail accepted both and matched
+	nothing."
+
+	| types |
+	types := (aType @env0:isKindOf: tuple)
+		ifTrue: [aType]
+		ifFalse: [Array @env0:with: aType].
+	types @env0:do: [:each |
+		((each @env0:isKindOf: Behavior)
+			and: [(each == BaseException) or: [each @env0:inheritsFrom: BaseException]])
+				ifFalse: [^ TypeError ___signal___:
+					'catching classes that do not inherit from BaseException is not allowed']].
+	types @env0:do: [:each |
+		((each == BaseExceptionGroup) or: [each @env0:inheritsFrom: BaseExceptionGroup])
+			ifTrue: [^ TypeError ___signal___:
+				'catching ExceptionGroup with except* is not allowed. Use except instead.']]
 %
 
 category: 'Grail-Except Star'
@@ -669,30 +773,55 @@ ___exceptStarFinish___: aRemainderOrNil original: anOriginal reraised: aColl
 
 	Answers nil once anything WAS re-raised: that case is
 	___exceptStarFinishReraised___:original:reraised:normalized:, which the
-	emit calls straight after this one."
+	emit calls straight after this one.
 
+	anOriginal is the caught object, so possibly a carrier: unwrapped, as in
+	___exceptStarNormalize___:.
+
+	Both are re-signalled the way a bare ``raise'' is, adding no frame.
+	CPython propagates them with RERAISE, which skips the traceback entry an
+	ordinary raise adds, so the remainder keeps the very traceback object
+	the split copied onto it from the original -- the one every matched
+	part also holds, and test_except_star compares them with ==.  The
+	``raise exc'' path built a new traceback for the remainder instead."
+
+	| original |
 	aColl @env0:isEmpty ifFalse: [^ nil].
 	aRemainderOrNil == nil ifTrue: [^ nil].
-	(anOriginal @env0:isKindOf: BaseExceptionGroup)
-		ifTrue: [^ BaseException ___pyRaise___: aRemainderOrNil].
-	^ BaseException ___pyRaise___: anOriginal
+	original := BaseException @env0:___payloadOf___: anOriginal.
+	(original @env0:isKindOf: BaseExceptionGroup)
+		ifTrue: [^ BaseException @env0:___signalCarrying___: aRemainderOrNil].
+	^ BaseException @env0:___signalCarrying___: original
 %
 
 category: 'Grail-Except Star'
 classmethod: BaseExceptionGroup
 ___exceptStarFinishReraised___: aRemainderOrNil original: anOriginal reraised: aColl normalized: aGroup
 	"The other half of ___exceptStarFinish___:original:reraised:, answering nil
-	unless a clause re-raised.
+	unless a clause raised.
 
-	PEP 654 rebuilds the group from the parts still in flight: the unhandled
-	remainder plus every re-raised subgroup.  When that is all of them the
-	NORMALIZED group is the answer -- which is what makes
+	CPython's _PyExc_PrepReraiseStar.  The parts of the original still in
+	flight -- the unhandled remainder plus every re-raised subgroup -- are
+	rebuilt into ONE group projected onto the original.  When that is all
+	of them the NORMALIZED group is the answer -- which is what makes
 
 	    try: raise Exception(42)
 	    except* Exception as e: raise
 
 	propagate ExceptionGroup('', (Exception(42),)) rather than the naked
 	Exception.
+
+	The NEW exceptions the clauses raised come first, in the order they were
+	raised, and that rebuilt group (if any) last.  More than one in all is
+	raised as ExceptionGroup('', [...]); exactly one is raised as itself:
+
+	    except* OSError: raise TypeError(3)    -- with a ValueError left over
+	      => ExceptionGroup('', [TypeError(3), ExceptionGroup('eg', [ValueError(1)])])
+	    except* (TypeError, ValueError): raise SyntaxError(3)
+	      => SyntaxError(3)
+
+	A lone new exception is re-signalled the way a bare ``raise'' does it,
+	keeping the frames of its own raise inside the clause.
 
 	Two entry points for what reads as one decision, because the SOURCE
 	POSITION differs between them and Grail recovers a frame's position by
@@ -701,21 +830,48 @@ ___exceptStarFinishReraised___: aRemainderOrNil original: anOriginal reraised: a
 	``___curPos___'' store sits between the two calls in the emit, so only
 	the re-raise picks it up -- see TryAst>>printExceptStarOn:."
 
-	| result |
+	| raised reraised regrouped result |
 	aColl @env0:isEmpty ifTrue: [^ nil].
-	result := self ___exceptStarRegroup___: aGroup
-		remainder: aRemainderOrNil reraised: aColl.
-	"DROP THE STALE CAPTURE.  The clause's bare raise re-signalled this very
-	object a moment ago, and primitive 2022 fills _gsStack only when it is nil
-	on entry -- so without this clear the frames are the ones live INSIDE the
-	clause body, and the group reports the ``raise'' line where CPython reports
-	the whole except* clause.
+	raised := OrderedCollection @env0:new.
+	reraised := OrderedCollection @env0:new.
+	aColl @env0:do: [:each |
+		(each @env0:isKindOf: Association)
+			ifTrue: [raised @env0:add: each @env0:value]
+			ifFalse: [reraised @env0:add: each]].
+	regrouped := self ___exceptStarRegroup___: aGroup
+		remainder: aRemainderOrNil reraised: reraised.
+	regrouped == nil ifFalse: [raised @env0:add: regrouped].
+	raised @env0:size @env0:= 1 ifTrue: [
+		result := raised @env0:first.
+		result == regrouped ifFalse: [
+			^ BaseException @env0:___signalCarrying___: result]].
+	raised @env0:size @env0:> 1 ifTrue: [
+		"BaseExceptionGroup('', raised), so it narrows like the constructor:
+		an ExceptionGroup unless a KeyboardInterrupt-like part is among them."
+		| groupArgs |
+		groupArgs := Array @env0:with: ''
+			with: (list @env0:withAll: raised @env0:asArray).
+		result := (BaseExceptionGroup ___classForArgs___: groupArgs) ___new___.
+		result ___args___: groupArgs].
+	"Everything but the SYNTHESIZED wrapper is re-signalled the way CPython's
+	RERAISE does it, adding no frame: the original group keeps exactly the
+	traceback it was raised with, and a projection keeps the copy of it.  The
+	``raise exc'' path these used to take added one at the except* line.
 
-	Only the capture is dropped.  A group that already has __traceback__ frames
-	keeps them, because ___pushCatchingFrame___ no-ops on one that has any, and
-	that is what preserves the original raise site of a group that really was
-	raised -- CPython shows that site rather than the clause, and only the
-	SYNTHESIZED wrapper, which has no frames of its own, picks up the clause."
+	A fresh MERGED group still gets that frame, where CPython's shows none for
+	the function whose except* built it.  Its traceback starts from this raise
+	whatever path signals it; the opt-out stamp (``_gsStack: #()'') that would
+	skip the frame left a catcher in another FUNCTION with no traceback at all.
+	The fixture pins the extra frame (exception_star_raise.py)."
+	(result @env0:dynamicInstVarAt: #'___exceptStarWrapper___') == true
+		ifFalse: [^ BaseException @env0:___signalCarrying___: result].
+	"The wrapper does get a frame, at the except* clause: CPython's
+	CHECK_EG_MATCH gives the wrapper it builds a traceback of the current
+	frame.  So DROP THE STALE CAPTURE.  The clause's bare raise re-signalled
+	this very object a moment ago, and primitive 2022 fills _gsStack only
+	when it is nil on entry -- so without this clear the frames are the ones
+	live INSIDE the clause body, and the group reports the ``raise'' line
+	where CPython reports the whole except* clause."
 	[result @env0:_gsStack: nil]
 		@env0:on: Error do: [:ex |
 			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].

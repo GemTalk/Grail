@@ -7,7 +7,7 @@ StatementAst ifNil: [self error: 'StatementAst is not defined. Check file orderi
 expectvalue /Class
 doit
 StatementAst subclass: 'IfAst'
-  instVarNames: #( test body orelse)
+  instVarNames: #( test body orelse wrapsReservedBinding)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -183,4 +183,30 @@ ___irFlowBound___: boundIn locals: localSet
 		ifFalse: [entry].
 	elseOut isNil ifTrue: [^ nil].
 	^ self ___irFlowMeet___: thenOut with: elseOut
+%
+
+category: 'Grail-accessing'
+method: IfAst
+wrapsReservedBinding
+	"Is this ``if True:'' not in the source -- added by ModuleAst
+	class>>___wrapReservedSelectorBindingsIn___: around a statement that binds
+	a name GemStone will not compile as a selector?"
+
+	^ wrapsReservedBinding == true
+%
+
+category: 'Grail-accessing'
+method: IfAst
+wrapsReservedBinding: aBoolean
+	wrapsReservedBinding := aBoolean
+%
+
+category: 'Grail-AST export'
+method: IfAst
+___asPythonAst___
+	"ast.parse answers the source's tree: a wrapper the source did not write
+	is its one statement."
+
+	self wrapsReservedBinding ifTrue: [^ body body first ___asPythonAst___].
+	^ super ___asPythonAst___
 %

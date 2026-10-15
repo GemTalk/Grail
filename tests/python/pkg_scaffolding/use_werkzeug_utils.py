@@ -1,18 +1,13 @@
 # Probe for Werkzeug Step 9 — werkzeug.utils.
 #
-# werkzeug.utils ships as a hand-rolled minimal shim, not a
-# source-drop of upstream.  Upstream depends on full ``**kwargs''
-# call-site unpacking + the descriptor protocol, neither of which
-# Grail supports yet.  The shim provides the names that downstream
-# Werkzeug + the Flask demo path import:
+# werkzeug.utils is upstream Werkzeug 3.1.5's file (#1447).  It replaced a
+# hand-rolled shim whose header_property / environ_property were not
+# descriptors; this probe used to pin that shim's own answers
+# (cached_property's ``.func'', an always-empty find_modules), and now pins
+# upstream's.  The names downstream Werkzeug + the Flask demo path import:
 #
 #   cached_property, redirect, header_property, environ_property,
 #   import_string, find_modules
-#
-# See ``src/python/stdlib/werkzeug/utils.py'' header for the
-# rationale.  When ``**kwargs'' unpacking lands, the upstream
-# source-drop becomes viable (`utils_upstream.py.bak'' kept
-# alongside).
 
 
 def import_succeeded():
@@ -31,16 +26,17 @@ def public_surface_present():
 
 
 def cached_property_constructs():
-    """cached_property(func, name=, doc=) returns a descriptor that
-    stashes the wrapped function on .func.  Kwargs reach __init__
-    so .__name__ ends up as ``'producer'''."""
+    """cached_property(func, name=, doc=) is a property subclass: the
+    wrapped function is its .fget, and the keywords reach __init__, so
+    .__name__ is ``'producer''' and .__doc__ is ``'d'''."""
     import werkzeug.utils as wu
 
     def producer(self):
         return 'cached'
 
     cp = wu.cached_property(producer, name='producer', doc='d')
-    return cp.func is producer and cp.__name__ == 'producer'
+    return (cp.fget is producer and cp.__name__ == 'producer'
+            and cp.__doc__ == 'd' and isinstance(cp, property))
 
 
 def import_string_finds_module():
@@ -51,7 +47,13 @@ def import_string_finds_module():
 
 
 def find_modules_is_empty():
-    """find_modules returns an empty iterator (Grail has no
-    filesystem-walking pkgutil yet)."""
+    """find_modules walks the package with pkgutil, as upstream's does:
+    the vendored werkzeug's top-level modules, and its subpackages only
+    when asked for.  (The name is historical: the shim's answer was
+    empty.)"""
     import werkzeug.utils as wu
-    return list(wu.find_modules('werkzeug')) == []
+    found = list(wu.find_modules('werkzeug'))
+    with_packages = list(wu.find_modules('werkzeug', include_packages=True))
+    return ('werkzeug.utils' in found and 'werkzeug._internal' in found
+            and 'werkzeug.routing' not in found
+            and 'werkzeug.routing' in with_packages)

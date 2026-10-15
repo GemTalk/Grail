@@ -9,8 +9,12 @@ from types import TracebackType
 from urllib.parse import urlsplit
 
 import werkzeug.test
-from click.testing import CliRunner
-from click.testing import Result
+from _grail_standins import installed_or_stand_in
+
+# GRAIL: the real click when one is installed, else Grail's stand-in.
+_click_testing = installed_or_stand_in('click.testing', '_grail_click.testing')
+CliRunner = _click_testing.CliRunner
+Result = _click_testing.Result
 from werkzeug.test import Client
 from werkzeug.wrappers import Request as BaseRequest
 

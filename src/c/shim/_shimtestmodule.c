@@ -1307,6 +1307,8 @@ Counter_getbuffer(PyObject *self, Py_buffer *view, int flags) {
     (void)flags;
     CounterObject *c = (CounterObject *)self;
     memset(view, 0, sizeof(Py_buffer));
+    /* The exporter's reference, as CPython requires: PyBuffer_Release drops it. */
+    Py_INCREF(self);
     view->obj = self;
     view->buf = c->text;
     view->len = (Py_ssize_t)strlen(c->text);

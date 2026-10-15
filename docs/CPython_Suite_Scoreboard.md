@@ -28,7 +28,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
-| test.test_math | FAIL | 89 | 1 | 0 | 5 |  |
+| test.test_math | OK | 89 | 0 | 0 | 5 |  |
 | test.test_int | OK | 52 | 0 | 0 | 17 |  |
 | test.test_float | OK | 54 | 0 | 0 | 3 |  |
 | test.test_heapq | OK | 68 | 0 | 0 | 34 |  |
@@ -49,7 +49,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_enum | OK | 1077 | 0 | 0 | 6 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
-| test.test_unpack | FAIL | 2 | 1 | 0 | 0 |  |
+| test.test_unpack | OK | 2 | 0 | 0 | 0 |  |
 | test.test_augassign | OK | 7 | 0 | 0 | 0 |  |
 | test.test_contains | OK | 4 | 0 | 0 | 0 |  |
 | test.test_dictcomps | OK | 10 | 0 | 0 | 0 |  |
@@ -122,7 +122,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_netrc | OK | 24 | 0 | 0 | 1 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
 | test.test_sax | OK | 191 | 0 | 0 | 0 |  |
-| test.test_ssl | OK | 203 | 0 | 0 | 23 |  |
+| test.test_ssl | OK | 203 | 0 | 0 | 22 |  |
 | test.test_urllib2_localnet | OK | 21 | 0 | 0 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_xml_etree | OK | 233 | 0 | 0 | 7 |  |
@@ -133,16 +133,16 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_taskgroups | OK | 96 | 0 | 0 | 12 |  |
-| test.test_statistics | FAIL | 375 | 1 | 0 | 6 |  |
+| test.test_statistics | OK | 375 | 0 | 0 | 6 |  |
 | test.test_abc | OK | 74 | 0 | 0 | 0 |  |
 | test.test_userstring | OK | 71 | 0 | 0 | 2 |  |
 | test.test_exception_group | OK | 53 | 0 | 0 | 0 |  |
-| test.test_except_star | ERROR | 60 | 10 | 10 | 0 |  |
+| test.test_except_star | OK | 60 | 0 | 0 | 0 |  |
 | test.test_generators | ERROR | 59 | 17 | 9 | 1 |  |
-| test.test_long | ERROR | 47 | 6 | 8 | 7 |  |
-| test.test_exception_hierarchy | ERROR | 16 | 2 | 3 | 1 |  |
-| test.test_copyreg | FAIL | 6 | 2 | 0 | 0 |  |
+| test.test_long | ERROR | 47 | 4 | 5 | 7 |  |
+| test.test_exception_hierarchy | ERROR | 16 | 1 | 2 | 1 |  |
+| test.test_copyreg | OK | 6 | 0 | 0 | 0 |  |
 | test.test_random | ERROR | 116 | 0 | 8 | 5 |  |
 | test.test_string.test_string | OK | 42 | 0 | 0 | 1 |  |
 | test.test_shlex | OK | 45 | 0 | 0 | 1 |  |
-| test.test_uuid | ERROR | 120 | 4 | 10 | 73 |  |
+| test.test_uuid | FAIL | 120 | 8 | 0 | 73 |  |

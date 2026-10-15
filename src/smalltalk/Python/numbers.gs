@@ -278,6 +278,187 @@ __float__
 		@env0:/ ((self ___pyAttrLoad___: #denominator) @env0:asFloat)
 %
 
+! ------- The other concrete mixins of CPython's numbers.py (#1619).  Each is
+! the Python one-liner it is in numbers.py, spelled with the sends Grail's
+! codegen emits for the same expression, so reflected operands and
+! NotImplemented behave as they do in compiled Python.  real / imag /
+! numerator / denominator are read-only PROPERTIES there, so here they are a
+! getter paired with a refusing setter -- the shape @property compiles to.
+
+category: 'Grail-Mixins'
+classmethod: numbers_Real
+___grailBuiltinPropertyNames___
+	"The same names, as builtin ``property'' objects: what the class
+	__dict__ (object >> ___classDict___) enters for them."
+
+	^ #( #real #imag )
+%
+
+category: 'Grail-Mixins'
+classmethod: numbers_Real
+___grailOwnPropertyNames___
+	"real and imag are properties in CPython's numbers.Real, so a class read
+	(``numbers.Real.real'', ``vars(numbers.Real)'') answers a property object,
+	as it does for a Python class's own @property (ClassDefAst emits the same
+	record)."
+
+	^ #( #real #imag )
+%
+
+category: 'Grail-Mixins'
+classmethod: numbers_Integral
+___grailBuiltinPropertyNames___
+	"The same names, as builtin ``property'' objects: what the class
+	__dict__ (object >> ___classDict___) enters for them."
+
+	^ #( #numerator #denominator )
+%
+
+category: 'Grail-Mixins'
+classmethod: numbers_Integral
+___grailOwnPropertyNames___
+	"numerator and denominator are properties in CPython's numbers.Integral;
+	see numbers_Real class >> ___grailOwnPropertyNames___."
+
+	^ #( #numerator #denominator )
+%
+
+category: 'Grail-Mixins'
+method: numbers_Complex
+__bool__
+	"PEP 3141 concrete mixin: ``self != 0''."
+
+	^ (self ___cmpNe___: 0)
+%
+
+category: 'Grail-Mixins'
+method: numbers_Complex
+__sub__: other
+	"PEP 3141 concrete mixin: ``self + -other''."
+
+	^ self ___binOpAdd___: other __neg__
+%
+
+category: 'Grail-Mixins'
+method: numbers_Complex
+__rsub__: other
+	"PEP 3141 concrete mixin: ``-self + other''."
+
+	^ self __neg__ ___binOpAdd___: other
+%
+
+category: 'Grail-Mixins'
+method: numbers_Real
+__complex__
+	"PEP 3141 concrete mixin: ``complex(float(self))''."
+
+	^ complex @env1:__new__: (float @env1:__new__: self)
+%
+
+category: 'Grail-Mixins'
+method: numbers_Real
+real
+	"PEP 3141 concrete mixin: a real number is its own real part, ``+self''."
+
+	^ self __pos__
+%
+
+category: 'Grail-Property-ReadOnly'
+method: numbers_Real
+real: ___1
+	"A read-only property, as CPython's is: assigning raises AttributeError."
+
+	^ self ___raiseReadOnlyProperty___: 'real'
+%
+
+category: 'Grail-Mixins'
+method: numbers_Real
+imag
+	"PEP 3141 concrete mixin: a real number's imaginary part is 0."
+
+	^ 0
+%
+
+category: 'Grail-Property-ReadOnly'
+method: numbers_Real
+imag: ___1
+	"A read-only property, as CPython's is: assigning raises AttributeError."
+
+	^ self ___raiseReadOnlyProperty___: 'imag'
+%
+
+category: 'Grail-Mixins'
+method: numbers_Real
+conjugate
+	"PEP 3141 concrete mixin: a real number is its own conjugate, ``+self''."
+
+	^ self __pos__
+%
+
+category: 'Grail-Mixins'
+method: numbers_Real
+__divmod__: other
+	"PEP 3141 concrete mixin: ``(self // other, self % other)''."
+
+	^ tuple @env0:withAll: { self ___binOpFloorDiv___: other. self ___binOpMod___: other }
+%
+
+category: 'Grail-Mixins'
+method: numbers_Real
+__rdivmod__: other
+	"PEP 3141 concrete mixin: ``(other // self, other % self)''."
+
+	^ tuple @env0:withAll: { other ___binOpFloorDiv___: self. other ___binOpMod___: self }
+%
+
+category: 'Grail-Mixins'
+method: numbers_Integral
+__index__
+	"PEP 3141 concrete mixin: ``int(self)''."
+
+	^ int @env1:__new__: self
+%
+
+category: 'Grail-Mixins'
+method: numbers_Integral
+__float__
+	"PEP 3141 concrete mixin: ``float(int(self))'', overriding Rational's ratio."
+
+	^ float @env1:__new__: (int @env1:__new__: self)
+%
+
+category: 'Grail-Mixins'
+method: numbers_Integral
+numerator
+	"PEP 3141 concrete mixin: an integer is its own numerator, ``+self''."
+
+	^ self __pos__
+%
+
+category: 'Grail-Property-ReadOnly'
+method: numbers_Integral
+numerator: ___1
+	"A read-only property, as CPython's is: assigning raises AttributeError."
+
+	^ self ___raiseReadOnlyProperty___: 'numerator'
+%
+
+category: 'Grail-Mixins'
+method: numbers_Integral
+denominator
+	"PEP 3141 concrete mixin: an integer's denominator is 1."
+
+	^ 1
+%
+
+category: 'Grail-Property-ReadOnly'
+method: numbers_Integral
+denominator: ___1
+	"A read-only property, as CPython's is: assigning raises AttributeError."
+
+	^ self ___raiseReadOnlyProperty___: 'denominator'
+%
+
 category: 'Grail-ABC'
 classmethod: numbers_Number
 ___numbersAbcAbstractNames___

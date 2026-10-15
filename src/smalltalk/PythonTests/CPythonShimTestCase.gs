@@ -3956,6 +3956,46 @@ ascii((t(''bytes_from_string'', ''h\u00e9llo''), t(''bytes_as_string_and_size'',
 
 category: 'Grail-Tests - C API'
 method: CPythonShimTestCase
+testCApiBuffersSequencesAndBuiltinTypes
+	"A bytes object's buffer outlives the call that took it (kept, then read back in a later
+	call, after memory of its size has been reused): numpy's frombuffer keeps the view's pointer
+	in the array, and from the per-call cache it read freed memory.  PyObject_GetBuffer is
+	CPython's -- PyBuffer_FillInfo refusing a WRITABLE view of a bytes, a bytearray writable,
+	format and shape on request, and no buffer for a str (nor does PyObject_CheckBuffer
+	claim one).  PySequence_Check asks a Grail object's class for a real __getitem__ (a
+	range, a class defining one) and not a dict; int's and None's refusal methods do not
+	count.  PyType_Ready on the shim's own bytes, str or int (numpy's setup_scalartypes
+	readies the first two) leaves them callable in Grail -- it gave them object's tp_new, and
+	PyObject_Bytes(b'xy') answered five zero bytes.  A wheel's bytes subtype is built in
+	CPython's layout and passes PyBytes_Check, as numpy.bytes_ needs."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(*a):
+    try:
+        return d.capi(*a)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Seq:
+    def __getitem__(self, i):
+        return i
+class Mapping(dict):
+    pass
+WRITABLE, FORMAT, ND = 1, 4, 8
+data = bytes([1, 0, 2, 0]) * 10
+t(''buffer_keep'', data)
+filler = [t(''bytes_from_string'', ''x'' * n) for n in range(40)]
+ascii((t(''buffer_keep''),
+ t(''getbuffer'', b''ab'', 0), t(''getbuffer'', b''ab'', WRITABLE), t(''getbuffer'', bytearray(b''ab''), WRITABLE),
+ t(''getbuffer'', b''ab'', FORMAT | ND), t(''getbuffer'', ''h\u00e9'', 0), t(''getbuffer'', ''ab'', WRITABLE),
+ [t(''sequence_check'', o) for o in (range(3), Seq(), [1], (1,), ''ab'', b''ab'', {}, Mapping(), {1}, 5, None)],
+ [t(''check_buffer'', o) for o in (b''ab'', bytearray(b''a''), ''ab'', 5)], t(''ready_then_call'', b''xy'', 12), t(''bytesub'', b''ab\x00c'')))') equals: '(b''\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x02\x00'', (1, 2, None, 1, 0, -1), (''raised'', ''BufferError'', ''Object is not writable.''), (0, 2, None, 1, 0, -1), (1, 2, ''B'', 1, 1, 2), (''raised'', ''TypeError'', "a bytes-like object is required, not ''str''"), (''raised'', ''TypeError'', "a bytes-like object is required, not ''str''"), [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 0, 0], (b''xy'', ''12'', b''xy'', 12), (''_grail_demo.ByteSub'', 4, b''ab\x00c''))'
+%
+
+category: 'Grail-Tests - C API'
+method: CPythonShimTestCase
 testCApiErrors
 	"PyErr_FormatV, PyErr_NormalizeException (Fetch answers the text; normalizing builds the
 	instance), PyErr_SetFromErrno (OSError(errno, text), so a FileNotFoundError), PyErr_WarnFormat

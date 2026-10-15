@@ -4,9 +4,9 @@ import base64
 import json as _json
 from urllib.parse import urlencode, urlsplit
 
-from requests.structures import CaseInsensitiveDict
-from requests.exceptions import HTTPError, MissingSchema
-from requests.hooks import default_hooks
+from _grail_requests.structures import CaseInsensitiveDict
+from _grail_requests.exceptions import HTTPError, MissingSchema
+from _grail_requests.hooks import default_hooks
 
 
 class Request:

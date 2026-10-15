@@ -45,9 +45,11 @@ VERDICTS
 --------
     IMPORTS   `import <pkg>' returned, and it was the VENV's copy
     SHADOWED  it returned, but Grail's own src/python/stdlib answered the
-              import instead of the venv -- Grail bundles `requests', `click',
-              `jinja2' and `markupsafe', and grailDir/src/python/stdlib beats
-              sys.path by design (docs/Sys_Path_Bootstrap.md).  Counting these
+              import instead of the venv -- Grail bundles `jinja2' and
+              `markupsafe', and grailDir/src/python/stdlib beats sys.path by
+              design (docs/Sys_Path_Bootstrap.md).  (Its stand-ins for `click'
+              and `requests' are named _grail_click and _grail_requests, so an
+              installed real one is what imports.)  Counting these
               as the pip package working would be a straight falsehood, so
               they get their own verdict and sit outside the headline.
     FAILS     it raised; the exception type, message and raising file are kept

@@ -118,3 +118,27 @@ testEveryFixtureCheckIsAssertedByATestHere
 
 	self assert: (self results @env1:__len__) equals: 9
 %
+
+category: 'Grail-Tests - OSError'
+method: OsErrorErrnoSubclassTestCase
+testErrnoIsTheRunningPlatformsAndMapsEverySubclass
+	"errno was the macOS table on every platform, so on Linux it disagreed with
+	every number os raised, and OSError's errnomap could only cover the errnos
+	both platforms number alike: OSError(EAGAIN, ...) stayed an OSError
+	(test_exception_hierarchy).  tests/python/errno_platform_tables.py holds
+	CPython 3.14.8's table for each platform; the fixture checks the running
+	one against CPython, and GRAIL_ROWS compares BOTH of Grail's tables, so the
+	row this machine does not run is checked too."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'errno_platform_tables' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/errno_platform_tables.py')
+		name: 'errno_platform_tables'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '4 checks, 0 disagreeing [], keys match: True'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #GRAIL_ROWS_SUMMARY) asString
+		equals: '{''darwin'': True, ''linux'': True}'
+%

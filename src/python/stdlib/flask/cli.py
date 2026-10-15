@@ -27,7 +27,10 @@
 
 from __future__ import annotations
 
-import click
+from _grail_standins import installed_or_stand_in
+
+# GRAIL: the real click when one is installed, else Grail's stand-in.
+click = installed_or_stand_in('click', '_grail_click')
 
 
 class NoAppException(click.UsageError):

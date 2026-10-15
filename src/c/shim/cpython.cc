@@ -288,6 +288,53 @@ static PyObject *float_tp_new(PyTypeObject *type, PyObject *args, PyObject *kwds
     return o;
 }
 
+/* builtins.<type>(*args, **kwds) in Grail, for one of the shim's own static
+   types.  The server is asked directly, as float_tp_new does: the static
+   type is foreign to PyObject_Call, which would come back to its tp_new. */
+static PyObject *grail_static_type_call(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    OopType r;
+    if (kwds != NULL && PyDict_Size(kwds) > 0) {
+        OopType cargs[3] = { pyobj_oop((PyObject *)type), pyobj_oop(args), pyobj_oop(kwds) };
+        r = GciPerform(server, "PyObject_Call:args:kwargs:", cargs, 3);
+    } else {
+        OopType cargs[2] = { pyobj_oop((PyObject *)type), args ? pyobj_oop(args) : OOP_NIL };
+        r = GciPerform(server, "PyObject_Call:args:", cargs, 2);
+    }
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
+}
+
+/* bytes.__new__(type, ...): Grail's bytes() decides the value, and a SUBTYPE
+   gets an instance of its own in CPython's PyBytesObject layout -- ob_size,
+   ob_shash, then the bytes at ob_sval -- as bytes_subtype_new builds it,
+   because a wheel reads that data inline (PyBytes_AS_STRING).  numpy's
+   numpy.bytes_ subclasses bytes and builds its instances through
+   PyBytes_Type.tp_new. */
+#define GRAIL_BYTES_SVAL_OFFSET 32
+static PyObject *bytes_tp_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    PyObject *g = grail_static_type_call(&PyBytes_Type, args, kwds);
+    if (g == NULL || type == &PyBytes_Type) return g;
+    Py_ssize_t n = PyBytes_Size(g);
+    const char *data = PyBytes_AsString(g);
+    if (data == NULL) return NULL;
+    allocfunc alloc = type->tp_alloc ? type->tp_alloc : PyType_GenericAlloc;
+    PyObject *o = alloc(type, n);
+    if (o == NULL) return NULL;
+    Py_SET_SIZE(o, n);
+    *(Py_hash_t *)((char *)o + 24) = -1;
+    memcpy((char *)o + GRAIL_BYTES_SVAL_OFFSET, data, (size_t)n);
+    ((char *)o)[GRAIL_BYTES_SVAL_OFFSET + n] = '\0';
+    return o;
+}
+
+/* str.__new__(type, ...): Grail's str() for str itself.  A SUBTYPE (numpy's
+   numpy.str_) still gets a zeroed instance -- what object's tp_new gave it
+   before -- because CPython's PyUnicodeObject layout is not built here yet. */
+static PyObject *unicode_tp_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    if (type == &PyUnicode_Type) return grail_static_type_call(&PyUnicode_Type, args, kwds);
+    return object_tp_new(type, args, kwds);
+}
+
 static void init_types(void) {
     init_type(&PyType_Type, "type", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_TYPE_SUBCLASS);
@@ -312,9 +359,11 @@ static void init_types(void) {
 
     init_type(&PyUnicode_Type, "str", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_UNICODE_SUBCLASS);
+    PyUnicode_Type.tp_new = unicode_tp_new;
 
     init_type(&PyBytes_Type, "bytes", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_BYTES_SUBCLASS);
+    PyBytes_Type.tp_new = bytes_tp_new;
 
     init_type(&PyList_Type, "list", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE |
@@ -1608,19 +1657,36 @@ extern "C" PyObject *PyUnicode_FromString(const char *str) {
    object bytes: String / ISOLatin store latin-1 code points and Unicode16
    UTF-16 units, whose 0x00 high bytes truncated every strlen() consumer at
    the first wide character (re.sub on 'ab\u0800c' answered 'a'). */
-static const char *grail_utf8(PyObject *obj, Py_ssize_t *size) {
-    if (size) *size = 0;
-    if (obj == NULL) return NULL;
-    OopType oop = pyobj_oop(obj);
-    if (refuse_unusable_oop(oop, "PyUnicode_AsUTF8", obj)) return NULL;
-    OopType arr = GciPerform(server, "PyUnicode_UTF8Buffer:", &oop, 1);
+/* A wheel's own instance of a bytes subtype (numpy.bytes_), in CPython's
+   PyBytesObject layout as bytes_tp_new builds it: its data is read in place. */
+static int is_foreign_bytes(PyObject *obj) {
+    return obj != NULL && is_foreign(obj) && !is_foreign_type(obj)
+        && (Py_TYPE(obj)->tp_flags & Py_TPFLAGS_BYTES_SUBCLASS);
+}
+
+/* The { address. size } a server buffer method (PyUnicode_UTF8Buffer:,
+   PyBytes_Buffer:) answers for oop: a block that lives as long as the
+   object's wrapper.  writable, when asked, reads PyBytes_Buffer:'s third
+   element: is the object a bytearray? */
+static char *grail_wrapper_buffer(const char *sel, OopType oop, Py_ssize_t *size,
+                                  int *writable) {
+    OopType arr = GciPerform(server, sel, &oop, 1);
     if (check_gci_error()) return NULL;
     OopType one = GciI64ToOop(1), two = GciI64ToOop(2);
     OopType addrOop = GciFetchOop(arr, GciOopToI64(one));
     OopType sizeOop = GciFetchOop(arr, GciOopToI64(two));
     if (check_gci_error()) return NULL;
     if (size) *size = (Py_ssize_t)GciOopToI64(sizeOop);
-    return (const char *)(intptr_t)GciOopToI64(addrOop);
+    if (writable) *writable = GciFetchOop(arr, 3) == OOP_TRUE;
+    return (char *)(intptr_t)GciOopToI64(addrOop);
+}
+
+static const char *grail_utf8(PyObject *obj, Py_ssize_t *size) {
+    if (size) *size = 0;
+    if (obj == NULL) return NULL;
+    OopType oop = pyobj_oop(obj);
+    if (refuse_unusable_oop(oop, "PyUnicode_AsUTF8", obj)) return NULL;
+    return grail_wrapper_buffer("PyUnicode_UTF8Buffer:", oop, size, NULL);
 }
 
 extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
@@ -1649,10 +1715,19 @@ extern "C" PyObject *PyBytes_FromStringAndSize(const char *data, Py_ssize_t len)
 
 /* The bytes of any byte-indexable Grail object (bytes, bytearray, a buffer),
    with no type check: what the shim's own bytes-like paths need --
-   PyByteArray_AsString and the PyArg "y#"/"s#" parsers. */
+   PyByteArray_AsString and the PyArg "y#"/"s#" parsers.
+
+   One that crosses as bytes (a bytes or a bytearray) answers a block that
+   lives as long as its WRAPPER (CPythonShim>>PyBytes_Buffer:), as CPython's
+   data lives as long as the object: numpy's frombuffer keeps the pointer in
+   the array it returns, and from the per-call cache below, freed when the
+   call returned, np.frombuffer(b'abcd', 'u1') read freed memory. */
 static char *grail_buffer_of(PyObject *obj) {
     if (obj == NULL) return NULL;
+    if (is_foreign_bytes(obj)) return (char *)obj + GRAIL_BYTES_SVAL_OFFSET;
     OopType oop = pyobj_oop(obj);
+    if (PyBytes_Check(obj))
+        return grail_wrapper_buffer("PyBytes_Buffer:", oop, NULL, NULL);
     char *cached = buffer_cache_get(oop);
     if (cached) return cached;
     int64 size = GciFetchSize_(oop);
@@ -1679,6 +1754,7 @@ extern "C" char *PyBytes_AsString(PyObject *obj) {
 
 extern "C" Py_ssize_t PyBytes_Size(PyObject *obj) {
     if (obj == NULL) return  0;
+    if (is_foreign_bytes(obj)) return Py_SIZE(obj);
     return (Py_ssize_t)GciFetchSize_(pyobj_oop(obj));
 }
 
@@ -4207,12 +4283,15 @@ extern "C" int PyObject_SetItem(PyObject *obj, PyObject *key, PyObject *value) {
    tp_new of its own: it crosses into Grail as the Grail class of that name
    (foreign_proxy_oop), so a call is the class's.  call_foreign found no tp_new
    on PyLong_Type and answered "foreign object of type 'type' is not callable",
-   so a C call of builtins.int, bytes, str or memoryview failed.  float has a
-   tp_new (float_tp_new) and keeps it; so do the exception types (exc_tp_new,
+   so a C call of builtins.int, bytes, str or memoryview failed.  bytes and str
+   have a tp_new now, for a wheel's subtype, and their own call still goes to
+   Grail.  float has a tp_new (float_tp_new) and keeps it; so do the exception types (exc_tp_new,
    which a wheel's exception pyclass builds on). */
 static int is_grail_class_type(PyObject *callable) {
     PyTypeObject *t = (PyTypeObject *)callable;
-    if (callable->ob_type != &PyType_Type || t->tp_new != NULL) return 0;
+    if (callable->ob_type != &PyType_Type) return 0;
+    if (t->tp_new != NULL && t->tp_new != bytes_tp_new && t->tp_new != unicode_tp_new)
+        return 0;
     PyTypeObject *const statics[] = { &PyType_Type, &PyBaseObject_Type, &PyLong_Type,
         &PyBool_Type, &PyUnicode_Type, &PyBytes_Type, &PyList_Type, &PyDict_Type,
         &PyTuple_Type };
@@ -4511,33 +4590,72 @@ extern "C" Py_ssize_t PySlice_AdjustIndices(Py_ssize_t length, Py_ssize_t *start
  * CPython API — Buffer protocol
  * ==================================================================== */
 
+/* A str has no buffer in CPython ("a bytes-like object is required, not
+   'str'"); the shim used to answer its UTF-8 bytes. */
 extern "C" int PyObject_CheckBuffer(PyObject *obj) {
-    if (PyBytes_Check(obj) || PyUnicode_Check(obj)) return 1;
+    if (PyBytes_Check(obj)) return 1;
     return obj != NULL && Py_TYPE(obj) != NULL &&
            Py_TYPE(obj)->tp_as_buffer != NULL &&
            Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL;
 }
 
-extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
-    (void)flags;
-    memset(view, 0, sizeof(Py_buffer));
-    view->obj = obj;
-
-    if (PyBytes_Check(obj)) {
-        view->buf = PyBytes_AsString(obj);
-        view->len = PyBytes_Size(obj);
-        view->itemsize = 1;
-        view->readonly = 1;
-        return 0;
+/* CPython's PyBuffer_FillInfo (Objects/abstract.c): a one-dimensional byte
+   view of buf, refusing a WRITABLE request on read-only memory -- which is
+   how numpy's frombuffer learns that a bytes object's array must be
+   read-only.  view->obj takes a reference, which PyBuffer_Release drops. */
+extern "C" int PyBuffer_FillInfo(Py_buffer *view, PyObject *obj, void *buf,
+                                 Py_ssize_t len, int readonly, int flags) {
+    if (view == NULL) {
+        PyErr_SetString(PyExc_BufferError,
+                        "PyBuffer_FillInfo: view==NULL argument is obsolete");
+        return -1;
     }
-    if (PyUnicode_Check(obj)) {
-        /* Return the raw UTF-8 bytes; len is the BYTE length (the
-           code-point count can be shorter for non-ASCII strings). */
-        view->buf = (void *)PyUnicode_AsUTF8(obj);
-        view->len = (Py_ssize_t)GciFetchSize_(pyobj_oop(obj));
-        view->itemsize = 1;
-        view->readonly = 1;
-        return 0;
+    if (flags != PyBUF_SIMPLE && (flags == PyBUF_READ || flags == PyBUF_WRITE)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    if ((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE && readonly == 1) {
+        PyErr_SetString(PyExc_BufferError, "Object is not writable.");
+        return -1;
+    }
+    view->obj = obj;
+    Py_XINCREF(obj);
+    view->buf = buf;
+    view->len = len;
+    view->readonly = readonly;
+    view->itemsize = 1;
+    view->format = NULL;
+    if ((flags & PyBUF_FORMAT) == PyBUF_FORMAT)
+        view->format = (char *)"B";
+    view->ndim = 1;
+    view->shape = NULL;
+    if ((flags & PyBUF_ND) == PyBUF_ND)
+        view->shape = &(view->len);
+    view->strides = NULL;
+    if ((flags & PyBUF_STRIDES) == PyBUF_STRIDES)
+        view->strides = &(view->itemsize);
+    view->suboffsets = NULL;
+    view->internal = NULL;
+    return 0;
+}
+
+extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
+    memset(view, 0, sizeof(Py_buffer));
+
+    /* A bytes is read-only, as in CPython.  A bytearray crosses as bytes too
+       (CPythonShim>>typeAddrFor:), and is writable there: its block is the
+       wrapper's copy (PyBytes_Buffer:), so a write C makes is not seen by
+       Grail -- the old per-call copy lost it the same way. */
+    if (is_foreign_bytes(obj))
+        return PyBuffer_FillInfo(view, obj, (char *)obj + GRAIL_BYTES_SVAL_OFFSET,
+                                 Py_SIZE(obj), 1, flags);
+    if (PyBytes_Check(obj)) {
+        Py_ssize_t len = 0;
+        int writable = 0;
+        char *buf = grail_wrapper_buffer("PyBytes_Buffer:", pyobj_oop(obj),
+                                         &len, &writable);
+        if (buf == NULL) return -1;
+        return PyBuffer_FillInfo(view, obj, buf, len, writable ? 0 : 1, flags);
     }
     /* Heap types implementing the buffer protocol (Py_bf_getbuffer slot) */
     if (obj != NULL && Py_TYPE(obj) != NULL &&
@@ -4550,15 +4668,17 @@ extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
     return -1;
 }
 
+/* CPython's: the exporter's release hook, then the reference view->obj
+   holds.  A bytes object's block is its wrapper's, freed by the sweep. */
 extern "C" void PyBuffer_Release(Py_buffer *view) {
-    /* Heap types with a release hook get it; str/bytes buffers are owned
-       by the buffer cache and must not be freed here. */
-    if (view->obj != NULL && Py_TYPE(view->obj) != NULL &&
-        Py_TYPE(view->obj)->tp_as_buffer != NULL &&
-        Py_TYPE(view->obj)->tp_as_buffer->bf_releasebuffer != NULL) {
-        Py_TYPE(view->obj)->tp_as_buffer->bf_releasebuffer(view->obj, view);
+    PyObject *obj = view->obj;
+    if (obj != NULL && Py_TYPE(obj) != NULL &&
+        Py_TYPE(obj)->tp_as_buffer != NULL &&
+        Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer != NULL) {
+        Py_TYPE(obj)->tp_as_buffer->bf_releasebuffer(obj, view);
     }
-    memset(view, 0, sizeof(Py_buffer));
+    view->obj = NULL;
+    Py_XDECREF(obj);
 }
 
 /* ====================================================================
@@ -5794,7 +5914,16 @@ static OopType shimTypeAddr(OopType nameOop)
 
 extern "C" int PyType_Ready(PyTypeObject *type) {
     /* In real CPython, this resolves bases, populates tp_dict, etc.
-       For our shim, just set the READY flag and default base. */
+       For our shim, just set the READY flag and default base.
+
+       A type that is already READY is left alone, as CPython does.  numpy's
+       setup_scalartypes readies the builtin types it derives from
+       (PyType_Ready(&PyBytes_Type), &PyUnicode_Type, &PyBool_Type, ...),
+       and the slot inheritance below gave the shim's own static types
+       object's tp_new: is_grail_class_type then no longer routed a C call
+       of builtins.bytes or str to Grail, and PyObject_Bytes(b'xy') answered
+       five zero bytes from a C-level object -- np.array(b'ab') held b''. */
+    if (type->tp_flags & Py_TPFLAGS_READY) return 0;
     if (type->tp_base == NULL && type != &PyBaseObject_Type)
         type->tp_base = &PyBaseObject_Type;
     type->tp_flags |= Py_TPFLAGS_READY;
@@ -5833,6 +5962,15 @@ extern "C" int PyType_Ready(PyTypeObject *type) {
         INHERIT_SLOT(tp_descr_get);
         INHERIT_SLOT(tp_descr_set);
         if (type->tp_itemsize == 0) type->tp_itemsize = base->tp_itemsize;
+        /* CPython's inherit_special: a subtype of a builtin value type is
+           one for PyBytes_Check and the rest, which read these flags inline.
+           numpy.bytes_ failed PyBytes_Check in numpy's own C.  (TYPE_SUBCLASS
+           is not inherited here: a wheel's metatype -- numpy's _DTypeMeta --
+           would turn every DType class into a PyType_Check'd type.) */
+        type->tp_flags |= base->tp_flags & (Py_TPFLAGS_LONG_SUBCLASS
+            | Py_TPFLAGS_LIST_SUBCLASS | Py_TPFLAGS_TUPLE_SUBCLASS
+            | Py_TPFLAGS_BYTES_SUBCLASS | Py_TPFLAGS_UNICODE_SUBCLASS
+            | Py_TPFLAGS_DICT_SUBCLASS);
 #undef INHERIT_SLOT
     }
     /* object's default allocator — every type needs a working tp_alloc. */
@@ -8197,7 +8335,14 @@ extern "C" int PySequence_Check(PyObject *obj) {
         return 1;
     if (t->tp_as_sequence && t->tp_as_sequence->sq_item)
         return 1;
-    return 0;
+    /* A Grail object's C type has no slots, list/tuple/str/bytes aside: the
+       server applies CPython's rule (CPythonShim>>PySequence_Check:). */
+    if (is_foreign(obj) || is_real_layout(obj) || is_type_mirror(obj)) return 0;
+    if (t->tp_flags & Py_TPFLAGS_DICT_SUBCLASS) return 0;
+    OopType oop = pyobj_oop(obj);
+    OopType r = GciPerform(server, "PySequence_Check:", &oop, 1);
+    if (check_gci_error()) return 0;
+    return r == OOP_TRUE;
 }
 
 extern "C" int PySequence_Contains(PyObject *seq, PyObject *item) {
