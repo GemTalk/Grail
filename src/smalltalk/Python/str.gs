@@ -763,25 +763,13 @@ ___percentOperandIsMapping___: args forBytes: forBytes
 	refusal methods that exist only to raise CPython's TypeError, every Python
 	instance inherits PythonInstance's, a builtin function's BoundMethod
 	subscripts as a PEP 585 pass-through, and a module is a SymbolDictionary.
-	None of those is a mapping to CPython, so each is excluded by name."
+	None of those is a mapping to CPython: object>>___hasOwnGetitem___
+	excludes them."
 
-	| defCls meth |
 	(args @env0:isKindOf: Array) ifTrue: [^ false].
 	(args @env0:isKindOf: CharacterCollection) ifTrue: [^ false].
 	(forBytes @env0:and: [args @env0:isKindOf: ByteArray]) ifTrue: [^ false].
-	((args @env0:isKindOf: BoundMethod) @env0:or: [args @env0:isKindOf: module])
-		ifTrue: [^ false].
-	defCls := (args @env0:class)
-		@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
-	defCls @env0:isNil ifTrue: [
-		defCls := (args @env0:class)
-			@env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1.
-		defCls @env0:isNil ifTrue: [^ false].
-		^ defCls ~~ PythonInstance].
-	defCls == PythonInstance ifTrue: [^ false].
-	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
-	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
-		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
+	^ args ___hasOwnGetitem___
 %
 
 category: 'Grail-String Operations'
