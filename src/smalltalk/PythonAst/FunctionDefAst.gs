@@ -652,7 +652,7 @@ printSmalltalkOn: aStream
 	inner function) are declared via their ``_<name>'' transport —
 	NameAst's reserved-name rename points every read and write at
 	that temp; the pseudo-variable itself can't be declared."
-	body variables do: [:n |
+	body sortedVariables do: [:n |
 		((paramNames includes: n)
 			or: [paramNames includes: (self transportParamName: n)])
 			ifFalse: [paramNames add: (self transportParamName: n)].
@@ -4268,7 +4268,7 @@ ___irBodyLocalNames___
 	params := Set new.
 	self ___irAllBoundParamNames___ do: [:p | params add: p].
 	result := OrderedCollection new.
-	body variables do: [:v |
+	body sortedVariables do: [:v |
 		(params includes: v asString) ifFalse: [result add: v asString]].
 	^ result
 %
@@ -6614,7 +6614,7 @@ generateModuleMethodSourceOn: aStream
 		^ self generateSmalltalkForwarderSourceOn: aStream
 			argCount: self allParameterNames size].
 	paramNames := self allParameterNames.
-	bodyVars := body variables.
+	bodyVars := body sortedVariables.
 	"Whether to apply the method-arg optimisation (use the real Python
 	parameter name as the Smalltalk method argument when it's read-only
 	and not a pseudo-var).  Only safe when we know exactly which class
@@ -7760,7 +7760,7 @@ generateMethodSourceOn: aStream
 		^ self generateSmalltalkForwarderSourceOn: aStream
 			argCount: self instanceMethodParameterNames size].
 	paramNames := self instanceMethodParameterNames.
-	bodyVars := body variables.
+	bodyVars := body sortedVariables.
 
 	"CPython treats the self/cls parameter as an ordinary rebindable
 	local (``self = None'' to break reference cycles in asgiref;
