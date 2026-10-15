@@ -2,8 +2,12 @@ import os
 import logging
 from typing import Dict, Optional, Tuple
 
-from requests import Request, Session, hooks
-from requests.adapters import HTTPAdapter
+from _grail_standins import installed_or_stand_in
+
+# GRAIL: the real requests when one is installed, else Grail's stand-in.
+_requests = installed_or_stand_in('requests', '_grail_requests')
+Request, Session, hooks = _requests.Request, _requests.Session, _requests.hooks
+HTTPAdapter = installed_or_stand_in('requests.adapters', '_grail_requests.adapters').HTTPAdapter
 
 from twilio.http import HttpClient
 from twilio.http.request import Request as TwilioRequest

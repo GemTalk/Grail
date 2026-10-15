@@ -10,6 +10,9 @@
 #
 # Stubs make ``import click'' and ``from click.testing import
 # CliRunner'' resolve cleanly without bringing in the full library.
+#
+# Named _grail_click, not click: see _grail_standins.  Grail's vendored code
+# imports it only when no real click is installed, so it never shadows one.
 
 
 def secho(message=None, fg=None, bg=None, bold=None, dim=None,

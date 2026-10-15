@@ -11,7 +11,10 @@ from itertools import chain
 from types import TracebackType
 from urllib.parse import quote as _url_quote
 
-import click
+from _grail_standins import installed_or_stand_in
+
+# GRAIL: the real click when one is installed, else Grail's stand-in.
+click = installed_or_stand_in('click', '_grail_click')
 from werkzeug.datastructures import Headers
 from werkzeug.datastructures import ImmutableDict
 from werkzeug.exceptions import BadRequestKeyError

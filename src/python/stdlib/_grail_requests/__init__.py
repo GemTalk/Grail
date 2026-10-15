@@ -13,18 +13,21 @@
 # Not implemented: proxies, cookies/CookieJar, multipart file upload,
 # streaming responses, urllib3 Retry semantics (max_retries counts
 # connection-level retries only).
+#
+# Named _grail_requests, not requests: see _grail_standins.  Grail's vendored code
+# imports it only when no real requests is installed, so it never shadows one.
 
-from requests import hooks
-from requests import adapters
-from requests import exceptions
-from requests.adapters import HTTPAdapter
-from requests.exceptions import (
+from _grail_requests import hooks
+from _grail_requests import adapters
+from _grail_requests import exceptions
+from _grail_requests.adapters import HTTPAdapter
+from _grail_requests.exceptions import (
     RequestException, ConnectionError, SSLError, HTTPError, Timeout,
     ConnectTimeout, ReadTimeout, TooManyRedirects, InvalidURL,
     MissingSchema, JSONDecodeError)
-from requests.models import Request, PreparedRequest, Response
-from requests.sessions import Session
-from requests.structures import CaseInsensitiveDict
+from _grail_requests.models import Request, PreparedRequest, Response
+from _grail_requests.sessions import Session
+from _grail_requests.structures import CaseInsensitiveDict
 
 __version__ = '2.32.0+grail.shim'
 
