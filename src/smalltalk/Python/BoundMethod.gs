@@ -1958,15 +1958,20 @@ ___methodDocForClass___: aClass name: aName
 	"First ___methodDocTable___ entry named aName along the lookup chain
 	(see ___methodLookupChainFor___:), or nil.  Mirrors ___methodSignatureForClass___:name:, including the env-1
 	probe -- the table is compiled in environment 1, so an env-0
-	``canUnderstand:'' would never see it."
+	``canUnderstand:'' would never see it.
 
-	| tbl v |
+	The walk stops at the first table that HAS the name, even when the entry
+	is nil: ClassDefAst records an undocumented def as nil, so an override
+	without a docstring answers None rather than its base's docstring (#1650).
+	A table without the name -- a hand-written one such as Flag's -- still
+	passes the read on to the next class."
+
+	| tbl |
 	aClass == nil ifTrue: [^ nil].
 	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
 		((c @env0:class @env0:whichClassIncludesSelector: #'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
 			tbl := c ___methodDocTable___.
-			v := tbl @env0:at: aName otherwise: nil.
-			v == nil ifFalse: [^ v]]].
+			(tbl @env0:includesKey: aName) ifTrue: [^ tbl @env0:at: aName]]].
 	^ nil
 %
 

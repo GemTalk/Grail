@@ -6023,10 +6023,18 @@ emitMethodDocTableOn: aStream className: aClassName
 	Same shape as the annotations and signature tables, and for the same
 	reason.  Overload stubs stay out: the stub is not the implementation.
 
-	No-op when no method has a docstring, so only classes that need it pay
-	for the extra class-side method."
+	An UNDOCUMENTED def is recorded too, as nil, and that entry is what stops
+	the readers' superclass walk here (BoundMethod >> ___methodDocForClass___:
+	name:, UnboundMethod >> ___tableEntryFor___:table:).  With documented defs
+	only, an override without a docstring had no entry, the walk went on to
+	the base, and the override reported the BASE method's docstring where
+	CPython says None -- which google-auth's ``copy_docstring'' decorator reads
+	as ``Method already has a docstring'' and raises on (#1650).  So the table
+	is compiled for every class body that has a def, not only a documented
+	one: whether a base documents the same name is not known until the bases
+	are."
 
-	| last documented entries |
+	| last entries |
 	"The LAST def of a name is the method, so its docstring -- or its lack of
 	one -- is the one: a documented def followed by an undocumented def of
 	the same name has __doc__ None, and the first def's entry used to
@@ -6036,13 +6044,14 @@ emitMethodDocTableOn: aStream className: aClassName
 	(self ___allFunctionDefs___ reject: [:def |
 		def isOverloadStub or: [def ___keepsThePropertyDocstring___]])
 			do: [:def | last at: def ___mangledName___ asString put: def].
-	documented := last values select: [:def | def ___docString___ notNil].
-	documented isEmpty ifTrue: [^ self].
+	last isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
-	documented do: [:def | | src |
+	last values do: [:def | | src |
 		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
-		def emitStringLiteral: def ___docString___ on: src.
+		def ___docString___ isNil
+			ifTrue: [src nextPutAll: 'nil']
+			ifFalse: [def emitStringLiteral: def ___docString___ on: src].
 		src nextPut: $;.
 		entries add: src contents].
 	self ___emitTable___: '___methodDocTable___' entries: entries category: 'Grail-Docstrings' onStream: aStream
