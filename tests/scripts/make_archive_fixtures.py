@@ -19,8 +19,8 @@ Usage:
     python3 tests/scripts/make_archive_fixtures.py --check  # verify only
 
 The printed hex is pasted into:
-    src/smalltalk/PythonTests/ZipfileTestCase.gs
-    src/smalltalk/PythonTests/TarfileTestCase.gs
+    src/Grail-PythonTests/ZipfileTestCase.class.st
+    src/Grail-PythonTests/TarfileTestCase.class.st
 """
 
 import gzip
@@ -337,12 +337,12 @@ def wrap(label, data, width=96):
         print('    "%s"' % h[i:i + width])
 
 
-GS_FILES = ("src/smalltalk/PythonTests/ZipfileTestCase.gs",
-            "src/smalltalk/PythonTests/TarfileTestCase.gs")
+GS_FILES = ("src/Grail-PythonTests/ZipfileTestCase.class.st",
+            "src/Grail-PythonTests/TarfileTestCase.class.st")
 
 # The metadata archives live in ONE file, the self-running fixture, rather than
-# in both .gs test files -- so they are listed separately from the five above,
-# which every .gs file must carry byte-identical copies of.
+# in both test classes -- so they are listed separately from the five above,
+# which both test classes must carry byte-identical copies of.
 EXTRA_FILES = (("tests/python/archive_metadata.py",
                 ("_TARMODEHEX", "_ZIPMODEHEX")),)
 
@@ -350,7 +350,7 @@ EXTRA_FILES = (("tests/python/archive_metadata.py",
 def check_embedded():
     """Confirm the hex embedded in the SUnit tests is what this script makes.
 
-    The fixtures live as hex literals inside the .gs test files, so nothing
+    The fixtures live as hex literals inside the SUnit test classes, so nothing
     would otherwise stop a hand-edit from drifting away from the archives
     CPython actually produces -- and a fixture edited by hand to make a test
     pass is exactly the failure mode the CPython-produced fixtures exist to
