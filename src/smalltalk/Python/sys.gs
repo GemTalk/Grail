@@ -1047,7 +1047,7 @@ exc_info
 	lands."
 
 	| e |
-	e := BaseException @env0:___currentException___.
+	e := BaseException @env0:___handledException___.
 	e ifNil: [ ^ tuple @env0:withAll: {None. None. None} ].
 	^ tuple @env0:withAll: { e @env0:class. e. e @env1:__traceback__ }
 %
@@ -1058,7 +1058,7 @@ exception
 	"exception() -> the exception instance currently being handled (CPython
 	3.11+), or None outside any except block."
 
-	^ (BaseException @env0:___currentException___) ifNil: [ None ]
+	^ (BaseException @env0:___handledException___) ifNil: [ None ]
 %
 
 category: 'Grail-Built-in Functions'

@@ -706,7 +706,7 @@ ___pyRaise___: excValue cause: aCause
 			was trying to construct instead of the one construction actually threw
 			-- and only when nothing happened to be in flight, which is why it
 			survived so long (test_raise test_erroneous_exception)."
-			((BaseException @env0:___currentException___) isNil
+			((BaseException @env0:___handledException___) isNil
 				and: [(excValue @env0:___hasUserInit___) not])
 					ifTrue: [^ excValue @env0:signal].
 			^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: nil].
@@ -1493,7 +1493,7 @@ ___signal___: message
 	Idempotent and memoised in SessionTemps, so after the first exception it is
 	one dictionary probe on a path that already does one."
 	BaseException @env0:___ensureStackCapture___.
-	(BaseException @env0:___currentException___) isNil ifFalse: [
+	(BaseException @env0:___handledException___) isNil ifFalse: [
 		self ___applyImplicitContext___].
 	self ___captureFrameLocalsIfSuggestible___.
 	^ self @env0:signal: message
@@ -1731,8 +1731,9 @@ ___applyImplicitContext___
 	cause=Y and context=Y there, with the flag on so only the cause renders.
 
 	The exception being handled is the one TryAst records in
-	___currentException___ on handler entry (and restores on exit), so no new
-	bookkeeping is needed.
+	___currentException___ on handler entry (and restores on exit), or, in a
+	generator body with no handler of its own running, the one it inherited
+	from its resumer -- ___handledException___ answers whichever applies.
 
 	It must not overwrite a context already set -- an explicit one, or this
 	exception being re-raised -- and must not chain an exception to itself.
@@ -1747,7 +1748,7 @@ ___applyImplicitContext___
 
 	| current probe next |
 	(self ___rawContext___) isNil ifFalse: [^ self].
-	current := BaseException @env0:___currentException___.
+	current := BaseException @env0:___handledException___.
 	current isNil ifTrue: [^ self].
 	current == self ifTrue: [^ self].
 	probe := current.
@@ -6092,13 +6093,60 @@ ___payloadOf___: anException
 category: 'Grail-Current Exception'
 classmethod: BaseException
 ___currentException___
-	"The exception currently being HANDLED in this session -- what CPython
-	sys.exc_info() / sys.exception() report -- or nil outside any active except
-	block.  Session-local via SessionTemps (never committed).  TryAst codegen
-	sets it on except-handler entry and restores the prior value on exit, so
-	nested handlers stack correctly."
+	"The exception the RUNNING CODE'S OWN handlers are handling, or nil outside
+	any active except block.  Session-local via SessionTemps (never committed).
+	TryAst codegen sets it on except-handler entry and restores the prior value
+	on exit, so nested handlers stack correctly.
+
+	This is the raw slot that the save/restore pairs read and write.  What
+	sys.exception() reports, and what implicit chaining reads, is
+	___handledException___, which falls back to the exception a resumed
+	generator body inherited from whoever resumed it."
 
 	^ (SessionTemps current) at: #'GrailCurrentException' ifAbsent: [nil]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___handledException___
+	"The exception currently being HANDLED -- what CPython sys.exc_info() /
+	sys.exception() report, and what a raise takes as its implicit __context__.
+
+	It is the running code's own (___currentException___) when there is one,
+	and otherwise the one inherited from whoever resumed the generator body this
+	is running in (___inheritedException___).  That is CPython's exc_info
+	chain, two links deep: each generator has its own handled-exception slot,
+	stacked on the resumer's while it runs, and a lookup walks down to the
+	first one that is set.  So a generator resumed from inside ``except
+	ValueError'' sees ValueError, and stops seeing it once a later resume comes
+	from outside any handler -- the second half is what a single shared slot
+	could not do, because the body's own except clauses restore what they
+	saved, and what they saved was the resumer's (test_generators
+	test_except_gen_except)."
+
+	^ self ___currentException___ ifNil: [self ___inheritedException___]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___inheritedException___
+	"The resumer's handled exception, installed while a generator body runs --
+	see ___handledException___.  nil outside a generator body."
+
+	^ (SessionTemps current) at: #'GrailInheritedException' ifAbsent: [nil]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___setInheritedException___: anExceptionOrNil
+	"Set (nil clears) the exception a resumed generator body inherits.  Set by
+	PythonGenerator on each resume, and saved and restored with the rest of each
+	side's exception state."
+
+	anExceptionOrNil isNil
+		ifTrue: [ (SessionTemps current) removeKey: #'GrailInheritedException' ifAbsent: [] ]
+		ifFalse: [ (SessionTemps current) at: #'GrailInheritedException' put: anExceptionOrNil ].
+	^ anExceptionOrNil
 %
 
 category: 'Grail-Current Exception'
@@ -6297,7 +6345,7 @@ ___reRaise___: lexicalException
 	correct than either alone."
 
 	| cur |
-	cur := self ___currentException___.
+	cur := self ___handledException___.
 	cur isNil ifTrue: [cur := lexicalException].
 	cur isNil ifTrue: [
 		"CPython spells it ``reraise'', unhyphenated.  Grail had ``re-raise'',
