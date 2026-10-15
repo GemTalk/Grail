@@ -4875,6 +4875,16 @@ vars: anObject
 	stack included, where CPython answers only what Python code stored.
 	BaseException >> __dict__ is that view."
 	(anObject isKindOf: BaseException) ifTrue: [^ anObject __dict__].
+	"AN INSTANCE OF A PYTHON CLASS answers the LIVE view ``obj.__dict__''
+	answers, because vars(obj) IS obj.__dict__.  The snapshot below dropped
+	every write made through it: ``vars(self).update(name=...)'' is how a
+	class whose __setattr__ refuses stores initialises itself
+	(importlib.metadata's EntryPoint), and ``vars(res).update(vars(orig))''
+	how one copies another's state (its _adapters.Message) -- both were
+	silently lost (#1657).  The walk stays for kernel objects, which have no
+	such view."
+	(anObject @env0:class ___grailIsPythonClass___) ifTrue: [
+		^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
