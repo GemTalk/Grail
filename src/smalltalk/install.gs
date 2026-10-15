@@ -1413,6 +1413,7 @@ run
 	at: #'SliceOmittedBoundsTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
+	at: #'SlotWrapperGetBindsImplementationTestCase' put: nil;
 	at: #'SmalltalkForwarderTestCase' put: nil;
 	at: #'SocketModuleTestCase' put: nil;
 	at: #'SpanEndTokenTestCase' put: nil;
@@ -2993,6 +2994,7 @@ input src/smalltalk/PythonTests/SliceBlockCopyTestCase.gs
 input src/smalltalk/PythonTests/SliceOmittedBoundsTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
+input src/smalltalk/PythonTests/SlotWrapperGetBindsImplementationTestCase.gs
 input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs
 input src/smalltalk/PythonTests/SocketModuleTestCase.gs
 input src/smalltalk/PythonTests/SpanEndTokenTestCase.gs
