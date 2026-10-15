@@ -61,3 +61,22 @@ testGeneratorApiMatchesCPython
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
 		equals: '28 checks, 0 disagreeing [], keys match: True'
 %
+
+category: 'Grail-Tests-Generators'
+method: GeneratorApiTestCase
+testGeneratorIntrospectionMatchesCPython
+	"tests/python/generator_introspection.py: dir() of a generator lists no
+	``withBlock''; type(gi_frame) is ``frame'' in builtins; every gi_ / cr_ /
+	ag_ attribute refuses a set and a delete with CPython's message;
+	__next__ / __iter__ carry CPython's docstrings, and test.support has
+	HAVE_DOCSTRINGS (test_generators' email doctest)."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'generator_introspection' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/generator_introspection.py')
+		name: 'generator_introspection'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '7 checks, 0 disagreeing [], keys match: True'
+%

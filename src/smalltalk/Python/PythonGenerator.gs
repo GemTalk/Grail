@@ -278,6 +278,19 @@ ___withBlock___: aBlock
 	^ self withBlock: aBlock
 %
 
+category: 'Grail-Introspection'
+classmethod: PythonGenerator
+__dir__
+	"dir(generator) without ``withBlock''.  withBlock: is the Smalltalk
+	constructor (the senders are Grail's own Smalltalk; generated code uses
+	___withBlock___:), compiled in env 1, so it decodes as a Python method
+	name and the class-side scan listed it -- in dir() of every generator,
+	coroutine and async generator, since an instance's dir() includes its
+	type's (test_generators' email doctest)."
+
+	^ super __dir__ @env0:reject: [:each | each @env0:asString @env0:= 'withBlock']
+%
+
 category: 'Grail-Instance Creation'
 classmethod: PythonGenerator
 withBlock: aBlock
@@ -513,6 +526,8 @@ StopIteration.
 the (type, val, tb) signature is deprecated, 
 and may be removed in a future version of Python.';
 		@env0:at: 'close' put: 'close() -> raise GeneratorExit inside generator.';
+		@env0:at: '__next__' put: 'Implement next(self).';
+		@env0:at: '__iter__' put: 'Implement iter(self).';
 		@env0:at: '__name__' put: 'name of the generator';
 		@env0:at: '__qualname__' put: 'qualified name of the generator';
 		yourself
@@ -984,6 +999,7 @@ ___pyAttrStore___: aName put: aValue
 				(aValue @env0:isKindOf: CharacterCollection) ifFalse: [
 					^ TypeError ___signal___:
 						aName @env0:asString @env0:, ' must be set to a string object']].
+	self ___refuseReadOnlyAttr___: aName.
 	^ super ___pyAttrStore___: aName put: aValue
 %
 
@@ -998,7 +1014,45 @@ ___pyAttrDelete___: aName
 			ifTrue: [
 				^ TypeError ___signal___:
 					aName @env0:asString @env0:, ' must be set to a string object'].
+	self ___refuseReadOnlyAttr___: aName.
 	^ super ___pyAttrDelete___: aName
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___refuseReadOnlyAttr___: aName
+	"gi_running, gi_frame and the rest are read-only in CPython, for a set and
+	a delete alike.  Grail's are reader methods, and a store beside one made a
+	dynamic instVar that the reader then ignored, so ``gen.gi_running = 42''
+	silently did nothing (test_generators' email doctest).
+
+	Two messages, because CPython has two kinds: a getset with no setter says
+	``attribute 'gi_running' of 'generator' objects is not writable'', a plain
+	read-only member just ``readonly attribute'' (cr_origin, ag_running).
+	Measured on 3.14 for every gi_ / cr_ / ag_ attribute."
+
+	| n |
+	((aName @env0:size @env0:between: 7 and: 12)
+		and: [(aName @env0:at: 3) == $_]) ifFalse: [^ self].
+	n := aName @env0:asString.
+	(self ___readOnlyGetsetNames___ @env0:includes: n) ifTrue: [
+		^ AttributeError ___signal___: 'attribute ''' @env0:, n
+			@env0:, ''' of ''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' objects is not writable'].
+	(self ___readOnlyMemberNames___ @env0:includes: n) ifTrue: [
+		^ AttributeError ___signal___: 'readonly attribute']
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___readOnlyGetsetNames___
+	^ #('gi_code' 'gi_frame' 'gi_running' 'gi_suspended' 'gi_yieldfrom')
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___readOnlyMemberNames___
+	^ #()
 %
 
 category: 'Grail-Generator Protocol'

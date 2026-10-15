@@ -6257,6 +6257,11 @@ ___moduleAttrIdentityTable___
 		as types.TracebackType -- so Grail's ``PyTraceback'' spelling leaked into
 		every repr and every ``type(tb).__name__''."
 		t @env0:at: #'PyTraceback' put: #('traceback' 'builtins').
+		"The frame object, the same way: ``<class 'frame'>'', __module__
+		'builtins', reachable from Python only as types.FrameType.  The repr
+		already said ``frame''; __name__ said ``PyFrame'' and __module__ was
+		missing (test_generators' email doctest reads type(g.gi_frame))."
+		t @env0:at: #'PyFrame' put: #('frame' 'builtins').
 
 		"``list[int]'' and ``int | str''.  CPython's are ``types.GenericAlias'' and
 		``types.UnionType'' -- reprs, pickling (``Can't pickle <class

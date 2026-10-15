@@ -220,6 +220,20 @@ ___isMidAwait___
 
 category: 'Grail-Coroutine Protocol'
 method: PythonCoroutine
+___readOnlyGetsetNames___
+	"See PythonGenerator >> ___refuseReadOnlyAttr___:."
+
+	^ #('cr_await' 'cr_code' 'cr_frame' 'cr_running' 'cr_suspended')
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+___readOnlyMemberNames___
+	^ #('cr_origin')
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
 cr_code
 	"Python's ``coro.cr_code'' -- the coroutine spelling of gi_code.  CPython's
 	test_func_1 masks CO_COROUTINE off its co_flags directly, which works here
