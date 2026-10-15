@@ -158,6 +158,17 @@ variables
 
 category: 'Grail-other'
 method: BlockAst
+sortedVariables
+	"The scope's variables in name order, for code that DECLARES them.  ``variables''
+	is an IdentitySet, which iterates in the Symbols' object-identifier order -- the
+	order they happened to be created in this image -- so temps declared from it came
+	out in a different order in two images holding the same Grail."
+
+	^ (variables ifNil: [#()]) asSortedCollection: [:a :b | a asString <= b asString]
+%
+
+category: 'Grail-other'
+method: BlockAst
 hasReturnBlocking
 	"True iff parsing encountered a node within this scope whose
 	codegen emits statements AFTER the inlined body content in the
