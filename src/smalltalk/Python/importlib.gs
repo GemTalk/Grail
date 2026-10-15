@@ -8597,7 +8597,12 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 	linearization the rules above decide, as before.
 
 	Only for an ancestor written in PYTHON (ClassDefAst's ___pyDefinedClass___
-	marker, on the class itself).  The linearization is exact for those, being
+	marker, on the class itself) -- or a built-in EXCEPTION, whose Smalltalk
+	classes are CPython's own single-inheritance chain, so the linearization is
+	exact for them too.  Without that, ``class NewFirst(WithNew, WithInit)''
+	over OSError never got WithInit's __init__: BaseException's own
+	``___init__:kw:'' blocked the copy, where CPython's MRO puts BaseException
+	after WithInit (test_exception_hierarchy test_init_new_overridden).  The linearization is exact for those, being
 	built from class statements; for Grail's Smalltalk-written stand-ins it is
 	not -- ``class HelloEnum(EnumMixin, StrEnum)'' linearizes as HelloEnum,
 	EnumMixin, Enum, StrEnum, str where CPython has StrEnum, str, ReprEnum,
@@ -8630,7 +8635,8 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 				ifFalse: [
 					(sourceIdx > 0
 						and: [(mro indexOf: walker) > sourceIdx
-						and: [walker includesSelector: #'___pyDefinedClass___' environmentId: 1]])
+						and: [(walker includesSelector: #'___pyDefinedClass___' environmentId: 1)
+							or: [walker == BaseException or: [walker inheritsFrom: BaseException]]]])
 						ifTrue: [false]
 						ifFalse: [
 							((aSource isKindOf: Behavior)

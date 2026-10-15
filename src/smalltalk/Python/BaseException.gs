@@ -312,6 +312,81 @@ _new: positional kw: kwargs
 
 category: 'Grail-Initialization'
 classmethod: BaseException
+___excStaticNew: positional kw: kwargs
+	"CPython's ``Exc.__new__(cls, *args)'' -- __new__ called EXPLICITLY, with the
+	class to build as its first argument: ``Exception.__new__(cls, m)'' and
+	``super().__new__(cls, m)'' in a subclass's own __new__.
+
+	The class-side ``__new__:'' family cannot serve that call.  It is the
+	CONSTRUCTOR the class-call fast path emits -- ``ValueError('m')'' is
+	``ValueError __new__: 'm''' -- so its receiver is the class and every
+	argument is a constructor argument, and an explicit call reached it with
+	``cls'' as the first ARGUMENT: ``Exception.__new__(C, 'm')'' built an
+	Exception whose args were (C, 'm').  A subclass's __init__ resetting
+	``args'' hid that for every class but OSError, whose __init__ CPython makes
+	a no-op once __new__ is overridden (test_exception_hierarchy's
+	test_new_overridden and test_init_new_overridden).
+
+	So the __new__ a class READ answers for a built-in exception (BoundMethod
+	class >> ___forAttrRead___:selector:) and the one super() resolves to
+	(SuperBoundMethod >> value:value:) both come here.  The receiver is the
+	class whose __new__ was read, which is what CPython's messages name.  No
+	__init__ runs: CPython's type call runs it, an explicit __new__ does not."
+
+	| cls |
+	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
+		^ TypeError ___signal___: self @env0:name @env0:asString
+			@env0:, '.__new__(): not enough arguments'].
+	cls := positional @env0:at: 1.
+	(cls @env0:isKindOf: Behavior) ifFalse: [
+		^ TypeError ___signal___: self @env0:name @env0:asString
+			@env0:, '.__new__(X): X is not a type object ('
+			@env0:, (bytes ___pyTypeNameOf___: cls) @env0:, ')'].
+	((cls == self) or: [cls @env0:inheritsFrom: self]) ifFalse: [
+		^ TypeError ___signal___: self @env0:name @env0:asString
+			@env0:, '.__new__(' @env0:, (cls ___pyAttrLoad___: #'__name__') @env0:asString
+			@env0:, '): ' @env0:, (cls ___pyAttrLoad___: #'__name__') @env0:asString
+			@env0:, ' is not a subtype of ' @env0:, self @env0:name @env0:asString].
+	^ cls ___allocateForNew: (positional @env0:copyFrom: 2 to: positional @env0:size)
+		kw: kwargs
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+___allocateForNew: args kw: kwargs
+	"CPython's BaseException_new: an instance of the receiver holding args.
+	Keywords are ignored here -- BaseException_init is what refuses them -- and
+	___classForArgs___: still decides the class, so OSError.__new__(OSError,
+	2, 'x') is a FileNotFoundError and a bare group narrows, as in CPython."
+
+	| inst |
+	inst := (self ___classForArgs___: args) ___new___.
+	inst ___args___: args.
+	^ inst
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+___pythonClassDefines: aName
+	"Does a Python-defined class on the receiver's chain, at or below the
+	built-in it rests on, define aName itself (instance or class side)?  A
+	merged secondary base's methods are compiled into the subclass, so they
+	count as its own."
+
+	| c family |
+	family := importlib @env0:___pythonNameFamilyOf___: aName.
+	c := self.
+	[c ~~ nil and: [(c @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) ~~ nil]] whileTrue: [
+		((c ___grailOwnsPythonDef___: aName family: family forwarders: true)
+			or: [c @env0:class ___grailOwnsPythonDef___: aName family: family forwarders: true])
+				ifTrue: [^ true].
+		c := c @env0:superclass].
+	^ false
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
 __new__: arg1 _: arg2 _: arg3 _: arg4
 	"``ExceptionClass(a, b, c, d)'' as an expression -- OSError's
 	(errno, strerror, filename, winerror) form among others.  Through
