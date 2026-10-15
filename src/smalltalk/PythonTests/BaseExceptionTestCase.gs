@@ -357,3 +357,25 @@ testExceptionsTakeAnyNumberOfArguments
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
 		equals: '8 checks, 0 disagreeing [], keys match: True'
 %
+
+category: 'Grail-Tests'
+method: BaseExceptionTestCase
+testAnExplicitNewTakesTheClassFirst
+	"``super().__new__(cls, m)'' and ``Exception.__new__(cls, m)'' reached the
+	class-call constructor, which put cls into args and built the receiver's
+	class instead of cls.  OSError's __init__ then re-read the whole call as
+	(errno, strerror) where CPython's is a no-op once __new__ is overridden,
+	and ``class NewFirst(WithNew, WithInit)'' never ran WithInit.__init__
+	(test_exception_hierarchy's ExplicitSubclassingTest).
+	tests/python/exception_explicit_new.py holds the checks, each agreeing
+	with CPython 3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'exception_explicit_new' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_explicit_new.py')
+		name: 'exception_explicit_new'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '18 checks, 0 disagreeing [], keys match: True'
+%

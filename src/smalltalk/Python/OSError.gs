@@ -237,6 +237,78 @@ ___classForArgs___: positional
 
 category: 'Grail-Initialization'
 classmethod: OSError
+___allocateForNew: args kw: kwargs
+	"CPython's OSError_new, reached by an explicit ``OSError.__new__(cls, ...)''
+	or a subclass's ``super().__new__(cls, ...)'' (BaseException class >>
+	___excStaticNew:kw:).
+
+	CPython parses the (errno, strerror, ...) arguments in __new__ and makes
+	__init__ a no-op -- EXCEPT for a subclass that overrides __init__ and not
+	__new__ (oserror_use_init), which gets empty args here and parses in its
+	__init__ instead, so any extra arguments its __init__ takes are not
+	misread as an errno.  Keywords are refused only when __new__ parses."
+
+	| inst |
+	self ___oserrorUsesInit ifTrue: [
+		inst := self ___new___.
+		inst ___args___: #().
+		^ inst].
+	((kwargs @env0:notNil) and: [kwargs @env0:notEmpty]) ifTrue: [
+		^ TypeError ___signal___: (self @env0:name @env0:asString
+			@env0:, '() takes no keyword arguments')].
+	^ super ___allocateForNew: args kw: kwargs
+%
+
+category: 'Grail-Initialization'
+classmethod: OSError
+___oserrorUsesInit
+	"CPython's oserror_use_init: a subclass whose own Python code overrides
+	__init__ but not __new__ parses its arguments in __init__."
+
+	^ (self ___pythonClassDefines: #'__init__')
+		and: [(self ___pythonClassDefines: #'__new__') not]
+%
+
+category: 'Grail-Initialization'
+method: OSError
+___initIsANoOp
+	"CPython's OSError_init does nothing unless oserror_use_init holds: the
+	arguments were parsed by __new__.  In Grail that matters only when a
+	Python class on the chain overrides __new__ -- then ``args'' is what that
+	__new__ passed to super().__new__, and the type call's __init__, given the
+	CALL's arguments, must not overwrite it.  Without a Python __new__ the
+	generated constructor allocates without arguments and relies on __init__
+	to store them, which is the same answer CPython's __new__ gives."
+
+	^ self @env0:class ___pythonClassDefines: #'__new__'
+%
+
+category: 'Grail-Initialization'
+method: OSError
+__init__
+	self ___initIsANoOp ifTrue: [^ None].
+	^ super __init__
+%
+
+category: 'Grail-Initialization'
+method: OSError
+__init__: a
+	self ___initIsANoOp ifTrue: [^ None].
+	^ super __init__: a
+%
+
+category: 'Grail-Initialization'
+method: OSError
+___init__: positional kw: kwargs
+	"See ___initIsANoOp: no keyword check either, as CPython's OSError_init
+	returns before making one."
+
+	self ___initIsANoOp ifTrue: [^ None].
+	^ super ___init__: positional kw: kwargs
+%
+
+category: 'Grail-Initialization'
+classmethod: OSError
 ___classForErrno: anErrno
 	"The OSError subclass CPython's errnomap answers for anErrno, or OSError
 	when it maps none.  os asks this too, so an errno reaching Python names
