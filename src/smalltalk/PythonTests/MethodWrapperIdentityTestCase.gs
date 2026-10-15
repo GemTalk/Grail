@@ -166,10 +166,19 @@ testAModuleLevelFunctionsIdentityAttrsAreStillUnstable
 	f.__name__'' is false and no amount of correct forwarding makes identity
 	hold through a wrapper.  A nested def has none of these problems, which is
 	why the fixture nests its function exactly as upstream does.  CPython
-	answers True, True, True and the docstring.  The docstring itself is no
-	longer part of the gap: it was None, and a module records it now
-	(docs/Support_FastAPI.md Phase 6)."
+	answers True, True, True."
 
 	self assert: (self reprAt: 'module_level_function_attrs_are_unstable')
-		equals: '[False, False, False, ''a module-level docstring'']'.
+		equals: '[False, False, False]'.
+%
+
+category: 'Grail-Tests'
+method: MethodWrapperIdentityTestCase
+testAModuleLevelFunctionHasItsDocstring
+	"It answered None, which testAModuleLevelFunctionsIdentityAttrsAreStillUnstable
+	used to pin alongside the identity gap: a module-level def compiles to a
+	method of the module class, and modules had no ___methodDocTable___."
+
+	self assert: (self reprAt: 'module_level_function_doc')
+		equals: '''a docstring the module-level path used to drop'''.
 %

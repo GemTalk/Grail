@@ -835,6 +835,7 @@ run
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
 	at: #'ClassMethodViaInstanceTestCase' put: nil;
 	at: #'ClassmethodViaSelfMergedTestCase' put: nil;
+	at: #'ClassModuleFollowsNameTestCase' put: nil;
 	at: #'ClassNewAttributeTestCase' put: nil;
 	at: #'ClassPrivateNameTestCase' put: nil;
 	at: #'ClassQualnameStoreTestCase' put: nil;
@@ -927,6 +928,7 @@ run
 	at: #'DirOfAClassTestCase' put: nil;
 	at: #'DirSlotsAndTracebackTestCase' put: nil;
 	at: #'DjangoTestCase' put: nil;
+	at: #'DocstringValuesTestCase' put: nil;
 	at: #'DunderClassInjectedCellTestCase' put: nil;
 	at: #'DunderClassMethodLocalTestCase' put: nil;
 	at: #'DunderClassTestCase' put: nil;
@@ -1057,6 +1059,7 @@ run
 	at: #'FutureWarningTestCase' put: nil;
 	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
+	at: #'GeneratorCloseTestCase' put: nil;
 	at: #'GeneratorExceptionContextTestCase' put: nil;
 	at: #'GeneratorExitTestCase' put: nil;
 	at: #'GeneratorStackFrameTestCase' put: nil;
@@ -2413,6 +2416,7 @@ input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/ClassmethodViaSelfMergedTestCase.gs
+input src/smalltalk/PythonTests/ClassModuleFollowsNameTestCase.gs
 input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
 input src/smalltalk/PythonTests/ClassPrivateNameTestCase.gs
 input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
@@ -2505,6 +2509,7 @@ input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
 input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/DirSlotsAndTracebackTestCase.gs
 input src/smalltalk/PythonTests/DjangoTestCase.gs
+input src/smalltalk/PythonTests/DocstringValuesTestCase.gs
 input src/smalltalk/PythonTests/DunderClassInjectedCellTestCase.gs
 input src/smalltalk/PythonTests/DunderClassMethodLocalTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs
@@ -2637,6 +2642,7 @@ input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/FutureWarningTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
+input src/smalltalk/PythonTests/GeneratorCloseTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExceptionContextTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs

@@ -360,6 +360,72 @@ ___rootModuleSource___
 
 category: 'Grail-codegen helpers'
 classmethod: AbstractNode
+___cleanDoc___: aString
+	"aString as CPython 3.13+ stores a docstring (_PyCompile_CleanDoc): tabs
+	expanded to 8, the first line's leading spaces removed, and the margin
+	common to every later non-blank line removed from each later line.  The
+	compiler does this to the value it puts in __doc__, while the AST keeps
+	the literal, so ast.parse is unaffected.  Grail kept the indentation, so
+	every indented docstring -- most of them -- differed from CPython's.
+
+	Answers aString itself when there is nothing to remove."
+
+	| text lines margin first out |
+	text := self ___expandTabs___: aString.
+	lines := OrderedCollection new.
+	[ | nl |
+		nl := text indexOf: Character lf.
+		nl = 0
+			ifTrue: [lines add: text. false]
+			ifFalse: [
+				lines add: (text copyFrom: 1 to: nl - 1).
+				text := text copyFrom: nl + 1 to: text size.
+				true]] whileTrue.
+	margin := nil.
+	2 to: lines size do: [:i | | line indent |
+		line := lines at: i.
+		indent := 0.
+		[indent < line size and: [(line at: indent + 1) == $ ]] whileTrue: [indent := indent + 1].
+		indent < line size ifTrue: [
+			margin := margin isNil ifTrue: [indent] ifFalse: [margin min: indent]]].
+	margin isNil ifTrue: [margin := 0].
+	first := lines first.
+	((first isEmpty or: [first first ~~ $ ]) and: [margin = 0]) ifTrue: [^ aString].
+	out := WriteStream on: aString species new.
+	[first notEmpty and: [first first == $ ]] whileTrue: [first := first copyFrom: 2 to: first size].
+	out nextPutAll: first.
+	2 to: lines size do: [:i | | line skip |
+		line := lines at: i.
+		skip := 0.
+		[skip < margin and: [skip < line size and: [(line at: skip + 1) == $ ]]]
+			whileTrue: [skip := skip + 1].
+		out nextPut: Character lf; nextPutAll: (line copyFrom: skip + 1 to: line size)].
+	^ out contents
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
+___expandTabs___: aString
+	"str.expandtabs(8): each tab to the next multiple of 8 columns, counting
+	from the last newline or carriage return."
+
+	| out col |
+	(aString includes: Character tab) ifFalse: [^ aString].
+	out := WriteStream on: aString species new.
+	col := 0.
+	aString do: [:ch |
+		ch == Character tab
+			ifTrue: [ | n | n := 8 - (col \\ 8). n timesRepeat: [out nextPut: $ ]. col := col + n]
+			ifFalse: [
+				out nextPut: ch.
+				(ch == Character lf or: [ch == Character cr])
+					ifTrue: [col := 0]
+					ifFalse: [col := col + 1]]].
+	^ out contents
+%
+
+category: 'Grail-codegen helpers'
+classmethod: AbstractNode
 ___currentModuleSource___
 	"The source text of the module now being parsed and emitted, or nil.
 
@@ -3583,65 +3649,6 @@ ___emitIRModuleReceiverOn___: aBuilder
 			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
 			with: { } env: 0]
 		ifFalse: [aBuilder selfNode]
-%
-
-category: 'Grail-code generation'
-method: AbstractNode
-___cleanDocString___: aString
-	"aString as CPython 3.13+'s COMPILER stores a docstring (_PyCompile_CleanDoc):
-	tabs expanded, the first line's leading spaces removed, and the smallest
-	indent of the later lines that have content removed from every later
-	line -- an all-space line shorter than that becomes empty.  Unlike
-	inspect.cleandoc, blank lines are kept.  It applies to every docstring --
-	module, class and def -- so ``f.__doc__'' of an indented docstring read
-	its raw indentation where CPython's has none."
-
-	| s ws col lines start margin first k |
-	s := aString.
-	(s includes: Character tab) ifTrue: [
-		ws := WriteStream on: s species new.
-		col := 0.
-		s do: [:c |
-			c == Character tab
-				ifTrue: [ | n |
-					n := 8 - (col \\ 8).
-					n timesRepeat: [ws nextPut: Character space].
-					col := col + n]
-				ifFalse: [
-					ws nextPut: c.
-					col := (c == Character lf or: [c == Character cr])
-						ifTrue: [0]
-						ifFalse: [col + 1]]].
-		s := ws contents].
-	lines := OrderedCollection new.
-	start := 1.
-	1 to: s size do: [:i |
-		(s at: i) == Character lf ifTrue: [
-			lines add: (s copyFrom: start to: i - 1).
-			start := i + 1]].
-	lines add: (s copyFrom: start to: s size).
-	margin := nil.
-	2 to: lines size do: [:i | | line n |
-		line := lines at: i.
-		n := 0.
-		[n < line size and: [(line at: n + 1) == Character space]] whileTrue: [n := n + 1].
-		n < line size ifTrue: [
-			margin := margin isNil ifTrue: [n] ifFalse: [margin min: n]]].
-	first := lines first.
-	k := 0.
-	[k < first size and: [(first at: k + 1) == Character space]] whileTrue: [k := k + 1].
-	lines at: 1 put: (first copyFrom: k + 1 to: first size).
-	margin notNil ifTrue: [
-		2 to: lines size do: [:i | | line |
-			line := lines at: i.
-			lines at: i put: (line size > margin
-				ifTrue: [line copyFrom: margin + 1 to: line size]
-				ifFalse: [line copyFrom: 1 to: 0])]].
-	ws := WriteStream on: s species new.
-	lines doWithIndex: [:line :i |
-		i > 1 ifTrue: [ws nextPut: Character lf].
-		ws nextPutAll: line].
-	^ ws contents
 %
 
 category: 'Grail-code generation'

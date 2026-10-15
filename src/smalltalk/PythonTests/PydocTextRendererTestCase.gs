@@ -231,11 +231,9 @@ testTheMroNamesOnlyClassesCPythonAlsoNames
 category: 'Grail-Tests'
 method: PydocTextRendererTestCase
 testAModuleLevelFunctionHasItsDocstring
-	"A def at module scope carries its docstring -- cleaned, as CPython 3.13+'s
-	compiler cleans it.  It was a known gap (None), pinned here: a top-level def
-	compiles to a method on the module class, and no table carried its
-	docstring until the module recorded it (module >> ___setFunctionDoc___:doc:,
-	docs/Support_FastAPI.md Phase 6)."
+	"It answered None (a module-level def compiles to a method of the module
+	class, and modules had no ___methodDocTable___), so pydoc's function
+	sections came out empty.  The text is cleaned as CPython 3.13+ cleans it."
 
 	self assert: (self resultAt: 'function_docstring') asString
 		equals: '''One line summary.\n\nAnd a second paragraph.\n'''.

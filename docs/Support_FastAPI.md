@@ -1309,8 +1309,8 @@ On `jmason/fastapi6`, after #1626.  The walls, each a general Grail bug:
 |---|---|---|
 | a body of just `...` was taken for a DOCSTRING | the parser records Ellipsis as the Symbol `#'...'`, and a Symbol is a CharacterCollection: `class E(str, Enum): ...` had Ellipsis for `__doc__` and pydantic's `cleandoc` failed on it (`test_schema_compat_pydantic_v2`); `def m(self): ...` had `'...'` | the three `___docString___` readers skip the marker |
 | an annotation that RAISES was swallowed by `inspect.signature` | `Annotated[int, Path(default=1)]` must fail Path's own assert when FastAPI reads the signature; the route registered instead (`test_ambiguous_params`) | a function's own annotate errors propagate, as in CPython; only an object with no annotate function still answers none |
-| a module-level def had no docstring at all | `__doc__` was None for every top-level function, so FastAPI's OpenAPI description of every module-level route was missing (`test_sub_callbacks`, `test_webhooks_security`) | the compiler records it with the module (`module >> ___setFunctionDoc___:doc:`, committed for a deployed module, like the signature) |
-| docstrings were not cleaned as CPython 3.13+'s COMPILER cleans them | an indented docstring kept its indentation | `AbstractNode >> ___cleanDocString___:`, applied by all three docstring readers -- identical to CPython on both arms |
+| a module-level def had no docstring at all | `__doc__` was None for every top-level function, so FastAPI's OpenAPI description of every module-level route was missing (`test_sub_callbacks`, `test_webhooks_security`) | fixed on main independently (#1646: a module ``___methodDocTable___``); this branch's version was dropped in the merge |
+| docstrings were not cleaned as CPython 3.13+'s COMPILER cleans them | an indented docstring kept its indentation | likewise #1646 (`AbstractNode class >> ___cleanDoc___:`) |
 | `inspect.cleandoc` blanked a line holding only a form feed | the `\f` FastAPI cuts a description at was gone (two formfeed tests) | CPython 3.14's `cleandoc` |
 | `sys._clear_type_descriptors` did nothing | a class's `__dict__` lists `__dict__`/`__weakref__` descriptors; dataclasses' `slots=True` copied them into the slotted class's namespace, so its instances had a `__dict__` (`test_derived_values_are_not_stored_on_dependant`) | the class is recorded as cleared and its `__dict__` stops listing them |
 | a LAMBDA that captures nothing was one object for every evaluation | GemStone reuses a clean block as a literal: 3000 lambdas were one lru_cache key (`test_callable_classification_cache_supports_large_apps`), and an attribute set on one lambda was set on all | `shallowCopy` before the stamps, as a def does -- both the text and the IR emitter |
@@ -1364,4 +1364,15 @@ ___moduleReassignsItsName___`; every other class keeps the compile-time
 literal).  test_statistics and test_decimal now run 25 and 65 more tests
 (their newly visible doctests), all passing; `check_python_fixtures.sh` 652
 fixtures agree with CPython.
+
+**Merged with `origin/main` again (2026-10-15).**  Main had landed #1646
+independently: module-level docstrings, CPython 3.13 docstring cleaning,
+`contextlib.closing`/`aclosing` as classes, a module-level class reading
+`__name__` at run time when its module renames itself, and the same two
+known-gap tests -- the very walls this branch met the same week.  Main's
+versions were kept throughout, and this branch's duplicates
+(`module >> ___setFunctionDoc___:doc:`, `AbstractNode >> ___cleanDocString___:`,
+`ClassDefAst >> ___moduleReassignsItsName___`, its contextlib docstrings) were
+removed.  The one piece #1646 did not cover is kept on top of it: an Ellipsis
+body is still not a docstring.
 

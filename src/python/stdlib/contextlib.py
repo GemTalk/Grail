@@ -98,27 +98,6 @@ def asynccontextmanager(func):
     return helper
 
 
-def closing(thing):
-    """`with closing(x):` ensures x.close() runs at block exit."""
-    return _ClosingContext(thing)
-
-
-class _ClosingContext:
-    # The instance reports closing()'s docstring, as CPython's -- where
-    # closing IS the class -- does (test_contextlib test_instance_docs).
-    """`with closing(x):` ensures x.close() runs at block exit."""
-
-    def __init__(self, thing):
-        self.thing = thing
-
-    def __enter__(self):
-        return self.thing
-
-    def __exit__(self, exc_type, exc, tb):
-        self.thing.close()
-        return False
-
-
 class suppress:
     """`with suppress(ValueError): ...` swallows the named
     exception types raised in the block."""
@@ -771,26 +750,59 @@ class _AsyncGeneratorContextManager(
                 await self.gen.aclose()
 
 
-# aclosing returned the SYNCHRONOUS closing(), which calls x.close() -- a
-# method an async iterator does not have.
-def aclosing(thing):
-    """``async with aclosing(x):`` awaits x.aclose() at block exit."""
-    return _AsyncClosingContext(thing)
+# closing and aclosing are CLASSES, as CPython's are.  They were factory
+# functions returning a private context class, so an instance's __doc__
+# was that class's (None) rather than closing's -- test_instance_docs
+# passed only while a module-level def's own __doc__ was None too.
+class closing(AbstractContextManager):
+    """Context to automatically close something at the end of a block.
 
+    Code like this:
 
-class _AsyncClosingContext:
-    # The instance reports aclosing()'s docstring, as CPython's does.
-    """``async with aclosing(x):`` awaits x.aclose() at block exit."""
+        with closing(<module>.open(<arguments>)) as f:
+            <block>
 
+    is equivalent to this:
+
+        f = <module>.open(<arguments>)
+        try:
+            <block>
+        finally:
+            f.close()
+
+    """
     def __init__(self, thing):
         self.thing = thing
+    def __enter__(self):
+        return self.thing
+    def __exit__(self, *exc_info):
+        self.thing.close()
 
+
+class aclosing(AbstractAsyncContextManager):
+    """Async context manager for safely finalizing an asynchronously cleaned-up
+    resource such as an async generator, calling its ``aclose()`` method.
+
+    Code like this:
+
+        async with aclosing(<module>.fetch(<arguments>)) as agen:
+            <block>
+
+    is equivalent to this:
+
+        agen = <module>.fetch(<arguments>)
+        try:
+            <block>
+        finally:
+            await agen.aclose()
+
+    """
+    def __init__(self, thing):
+        self.thing = thing
     async def __aenter__(self):
         return self.thing
-
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, *exc_info):
         await self.thing.aclose()
-        return False
 
 
 class chdir(AbstractContextManager):

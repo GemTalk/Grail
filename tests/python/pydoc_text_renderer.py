@@ -176,10 +176,9 @@ r['getattribute_raises_catchably'] = repr(_missing())
 # All three keys below were recorded as GRAIL_ONLY when this file was written,
 # precisely so the gate would flag the day they started matching CPython.
 
-# A module-level def's __doc__ is None: the docstring is reachable on a class and
-# on a method, so this is specific to functions defined at module scope.  pydoc
-# renders every docstring it is given, so the sections it builds for functions
-# come out empty -- which is a separate piece of work from the mro one.
+# A module-level def's __doc__ was None, while a class's and a method's worked,
+# so pydoc's function sections came out empty.  Fixed: module functions now get
+# their docstrings, cleaned as CPython 3.13+ cleans them.
 r['function_docstring'] = repr(sample.__doc__)
 r['class_docstring'] = repr(Documented.__doc__.splitlines()[0])
 
@@ -213,7 +212,7 @@ EXPECTED = {
     'class_body_is_rendered': 'True',
     'getclasstree_root': "'object'",
     'mro_of_an_enum': "['Color', 'Enum', 'object']",
-    'function_docstring': "'One line summary.\\n\\nAnd a second paragraph.\\n'",
+    'function_docstring': repr('One line summary.\n\nAnd a second paragraph.\n'),
 }
 
 GRAIL_ONLY = {
