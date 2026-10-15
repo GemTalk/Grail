@@ -1,0 +1,710 @@
+Class {
+	#name : 'ComplexTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Initialization' }
+ComplexTestCase >> test___real_imaginary [
+	"Test Smalltalk-side constructor"
+
+	| c |
+	c := complex ___new___: 5 _: 12.
+	self assert: c class equals: complex.
+	self assert: (c @env1:real) equals: 5.0.
+	self assert: (c @env1:imag) equals: 12.0.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__abs__ [
+	"Test absolute value (magnitude): |3+4i| = 5"
+
+	| c result |
+	c := complex ___new___: 3 _: 4.
+	result := c @env1:__abs__.
+	self assert: result equals: 5.0.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__add__complex [
+	"Test adding two complex numbers"
+
+	| c1 c2 result |
+	c1 := complex ___new___: 3 _: 4.
+	c2 := complex ___new___: 1 _: 2.
+	result := c1 @env1:__add__: c2.
+	self assert: (result @env1:real) equals: 4.0.
+	self assert: (result @env1:imag) equals: 6.0.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__add__real [
+	"Test adding complex and real number"
+
+	| c result |
+	c := complex ___new___: 3 _: 4.
+	result := c @env1:__add__: 5.
+	self assert: (result @env1:real) equals: 8.0.
+	self assert: (result @env1:imag) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Type Conversion' }
+ComplexTestCase >> test__bool__nonzero [
+	"Test __bool__ returns true for non-zero complex"
+
+	| c |
+	c := complex ___new___: 3 _: 4.
+	self assert: (c @env1:__bool__).
+
+]
+
+{ #category : 'Grail-Type Conversion' }
+ComplexTestCase >> test__bool__zero [
+	"Test __bool__ returns false for zero complex"
+
+	| c |
+	c := complex ___new___: 0 _: 0.
+	self deny: (c @env1:__bool__).
+
+]
+
+{ #category : 'Grail-Type Conversion' }
+ComplexTestCase >> test__complex__ [
+	"Test __complex__ returns self"
+
+	| c result |
+	c := complex ___new___: 3 _: 4.
+	result := c @env1:__complex__.
+	self assert: result equals: c.
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+ComplexTestCase >> test__dir__ [
+	"Test that __dir__ returns list of attributes including complex methods"
+
+	| c dirResult |
+	c := complex ___new___: 3 _: 4.
+	dirResult := c @env1:__dir__.
+
+	"Verify it's an array"
+	self assert: dirResult class equals: Array.
+
+	"Verify it includes key complex methods"
+	self assert: (dirResult includes: '__add__').
+	self assert: (dirResult includes: '__mul__').
+	self assert: (dirResult includes: 'conjugate').
+	self assert: (dirResult includes: 'real').
+	self assert: (dirResult includes: 'imag').
+
+	"Verify it includes inherited methods from object"
+	self assert: (dirResult includes: '__dir__').
+	self assert: (dirResult includes: '__class__').
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+ComplexTestCase >> test__dir__sorted [
+	"Test that __dir__ returns sorted list"
+
+	| c dirResult |
+	c := complex ___new___: 3 _: 4.
+	dirResult := c @env1:__dir__.
+
+	"Verify the list is sorted"
+	self assert: dirResult first equals: '__abs__'.
+
+]
+
+{ #category : 'Grail-Comparison' }
+ComplexTestCase >> test__eq__different_imag [
+	"Test inequality with different imaginary parts"
+
+	| c1 c2 |
+	c1 := complex ___new___: 3 _: 4.
+	c2 := complex ___new___: 3 _: 5.
+	self deny: (c1 @env1:__eq__: c2).
+
+]
+
+{ #category : 'Grail-Comparison' }
+ComplexTestCase >> test__eq__different_real [
+	"Test inequality with different real parts"
+
+	| c1 c2 |
+	c1 := complex ___new___: 3 _: 4.
+	c2 := complex ___new___: 5 _: 4.
+	self deny: (c1 @env1:__eq__: c2).
+
+]
+
+{ #category : 'Grail-Comparison' }
+ComplexTestCase >> test__eq__different_type [
+	"Test inequality with different type"
+
+	| c |
+	c := complex ___new___: 3 _: 4.
+	self deny: (c @env1:__eq__: 42).
+
+]
+
+{ #category : 'Grail-Comparison' }
+ComplexTestCase >> test__eq__same_values [
+	"Test equality with same values"
+
+	| c1 c2 |
+	c1 := complex ___new___: 3 _: 4.
+	c2 := complex ___new___: 3 _: 4.
+	self assert: (c1 @env1:__eq__: c2).
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__mul__complex [
+	"Test multiplying two complex numbers: (3+4i)(1+2i) = -5+10i"
+
+	| c1 c2 result |
+	c1 := complex ___new___: 3 _: 4.
+	c2 := complex ___new___: 1 _: 2.
+	result := c1 @env1:__mul__: c2.
+	self assert: (result @env1:real) equals: -5.0.
+	self assert: (result @env1:imag) equals: 10.0.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__mul__real [
+	"Test multiplying complex by real number"
+
+	| c result |
+	c := complex ___new___: 3 _: 4.
+	result := c @env1:__mul__: 2.
+	self assert: (result @env1:real) equals: 6.0.
+	self assert: (result @env1:imag) equals: 8.0.
+
+]
+
+{ #category : 'Grail-Comparison' }
+ComplexTestCase >> test__ne__different_values [
+	"Test inequality with different values"
+
+	| c1 c2 |
+	c1 := complex ___new___: 3 _: 4.
+	c2 := complex ___new___: 5 _: 6.
+	self assert: (c1 @env1:__ne__: c2).
+
+]
+
+{ #category : 'Grail-Comparison' }
+ComplexTestCase >> test__ne__same_values [
+	"Test inequality returns false for same values"
+
+	| c1 c2 |
+	c1 := complex ___new___: 3 _: 4.
+	c2 := complex ___new___: 3 _: 4.
+	self deny: (c1 @env1:__ne__: c2).
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__neg__ [
+	"Test negation of complex number"
+
+	| c result |
+	c := complex ___new___: 3 _: 4.
+	result := c @env1:__neg__.
+	self assert: (result @env1:real) equals: -3.0.
+	self assert: (result @env1:imag) equals: -4.0.
+
+]
+
+{ #category : 'Grail-Initialization' }
+ComplexTestCase >> test__new__ [
+	"Test that __new__ creates a complex number"
+
+	| c |
+	c := complex ___new___: 3 _: 4.
+	self assert: c class equals: complex.
+	self assert: (c @env1:real) equals: 3.0.
+	self assert: (c @env1:imag) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Initialization' }
+ComplexTestCase >> test__new__defaults [
+	"Test that __new__ handles nil arguments with defaults"
+
+	| c |
+	c := complex ___new___: nil _: nil.
+	self assert: (c @env1:real) equals: 0.0.
+	self assert: (c @env1:imag) equals: 0.0.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__pos__ [
+	"Test unary plus returns self"
+
+	| c result |
+	c := complex ___new___: 3 _: 4.
+	result := c @env1:__pos__.
+	self assert: result equals: c.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__pow__positive [
+	"Test raising to positive integer power: (1+1i)^2 = 2i"
+
+	| c result realPart imagPart |
+	c := complex ___new___: 1 _: 1.
+	result := c @env1:__pow__: 2.
+	realPart := result @env1:real.
+	imagPart := result @env1:imag.
+	"Check that real part is close to 0.0 (within tolerance for floating point)"
+	self assert: realPart abs < 0.0001.
+	"Check that imaginary part is close to 2.0"
+	self assert: (imagPart - 2.0) abs < 0.0001.
+
+]
+
+{ #category : 'Grail-String Representation' }
+ComplexTestCase >> test__repr__negative_imag [
+	"Test __repr__ with negative imaginary part.  Real CPython drops the
+	trailing '.0' for whole-number components (repr(complex(3,-4)) ==
+	'(3-4j)', confirmed against actual CPython -- unlike plain float repr,
+	which always keeps it)."
+
+	| c repr |
+	c := complex ___new___: 3 _: -4.
+	repr := c @env1:__repr__.
+	self assert: repr equals: '(3-4j)'.
+
+]
+
+{ #category : 'Grail-String Representation' }
+ComplexTestCase >> test__repr__positive_imag [
+	"Test __repr__ with positive imaginary part.  See
+	test__repr__negative_imag for why there's no trailing '.0'."
+
+	| c repr |
+	c := complex ___new___: 3 _: 4.
+	repr := c @env1:__repr__.
+	self assert: repr equals: '(3+4j)'.
+
+]
+
+{ #category : 'Grail-String Representation' }
+ComplexTestCase >> test__repr__pure_imaginary [
+	"Test __repr__ for pure imaginary number.  See
+	test__repr__negative_imag for why there's no trailing '.0'."
+
+	| c repr |
+	c := complex ___new___: 0 _: 5.
+	repr := c @env1:__repr__.
+	self assert: repr equals: '5j'.
+
+]
+
+{ #category : 'Grail-String Representation' }
+ComplexTestCase >> test__str__ [
+	"Test that __str__ returns same as __repr__"
+	
+	| c str repr |
+	c := complex ___new___: 3 _: 4.
+	str := c @env1:__str__.
+	repr := c @env1:__repr__.
+	self assert: str equals: repr.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__sub__complex [
+	"Test subtracting two complex numbers"
+
+	| c1 c2 result |
+	c1 := complex ___new___: 5 _: 7.
+	c2 := complex ___new___: 2 _: 3.
+	result := c1 @env1:__sub__: c2.
+	self assert: (result @env1:real) equals: 3.0.
+	self assert: (result @env1:imag) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+ComplexTestCase >> test__truediv__real [
+	"Test dividing complex by real number"
+
+	| c result |
+	c := complex ___new___: 6 _: 8.
+	result := c @env1:__truediv__: 2.
+	self assert: (result @env1:real) equals: 3.0.
+	self assert: (result @env1:imag) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Numbers' }
+ComplexTestCase >> test_conjugate [
+	"Test complex conjugate"
+	
+	| c conj |
+	c := complex ___new___: 3 _: 4.
+	conj := c @env1:conjugate.
+	self assert: (conj @env1:real) equals: 3.0.
+	self assert: (conj @env1:imag) equals: -4.0.
+
+]
+
+{ #category : 'Grail-Numbers' }
+ComplexTestCase >> test_conjugate_negative_imag [
+	"Test conjugate with negative imaginary part"
+	
+	| c conj |
+	c := complex ___new___: 2 _: -5.
+	conj := c @env1:conjugate.
+	self assert: (conj @env1:real) equals: 2.0.
+	self assert: (conj @env1:imag) equals: 5.0.
+
+]
+
+{ #category : 'Grail-Type Conversion' }
+ComplexTestCase >> test_from_number [
+	"Test class method from_number"
+
+	| c |
+	c := complex @env1:from_number: 5.
+	self assert: (c @env1:real) equals: 5.0.
+	self assert: (c @env1:imag) equals: 0.0.
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+ComplexTestCase >> test_imag [
+	"Test that imag returns the imaginary part"
+	
+	| c |
+	c := complex ___new___: 3 _: 4.
+	self assert: (c @env1:imag) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Inheritance' }
+ComplexTestCase >> test_inherits_from_object [
+	"Test that complex inherits from object"
+
+	| superclass |
+	superclass := complex superclass.
+	self assert: superclass equals: object.
+
+]
+
+{ #category : 'Grail-Edge Cases' }
+ComplexTestCase >> test_negative_both [
+	"Test complex number with both parts negative"
+
+	| c |
+	c := complex ___new___: -3 _: -4.
+	self assert: (c @env1:real) equals: -3.0.
+	self assert: (c @env1:imag) equals: -4.0.
+
+]
+
+{ #category : 'Grail-Edge Cases' }
+ComplexTestCase >> test_negative_real [
+	"Test complex number with negative real part"
+
+	| c |
+	c := complex ___new___: -3 _: 4.
+	self assert: (c @env1:real) equals: -3.0.
+	self assert: (c @env1:imag) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+ComplexTestCase >> test_real [
+	"Test that real returns the real part"
+	
+	| c |
+	c := complex ___new___: 3 _: 4.
+	self assert: (c @env1:real) equals: 3.0.
+
+]
+
+{ #category : 'Grail-Edge Cases' }
+ComplexTestCase >> test_zero_complex [
+	"Test complex number with zero real and imaginary parts.  See
+	test__repr__negative_imag for why the repr has no trailing '.0'."
+
+	| c |
+	c := complex ___new___: 0 _: 0.
+	self assert: (c @env1:real) equals: 0.0.
+	self assert: (c @env1:imag) equals: 0.0.
+	self assert: (c @env1:__repr__) equals: '0j'.
+
+]
+
+{ #category : 'Grail-Tests - Construction' }
+ComplexTestCase >> testComplexOneArgConstructor [
+	"complex(x) -- the one-arg form fell through to the inherited
+	object.__new__: (whose argument is a CLASS) and sent #new to the
+	number: complex(10**23) died with 'LargeInteger does not understand
+	#new' (test_fractions testBigComplexComparisons)."
+
+	| c |
+	c := self eval: 'complex(10**23)'.
+	self assert: (c @env1:imag) equals: 0.0.
+	c := self eval: 'complex(5)'.
+	self assert: (c @env1:real) equals: 5.0.
+	self assert: (self eval: 'complex(complex(1, 2)).imag') equals: 2.0
+
+]
+
+{ #category : 'Grail-Tests - Hashing' }
+ComplexTestCase >> testComplexWorksAsADictKey [
+	"dict buckets on the SMALLTALK hash (its backing store is a
+	KeyValueDictionary), so the identity hash meant a dict could not find a
+	complex key it already held: ``d[3j] = 'a'; d[3j]'' RAISED, and a
+	re-stored key added a second entry instead of replacing.  Surfaced as an
+	intermittent test.test_richcmp DictTest.test_dicts failure -- its dicts
+	are keyed by ``random.randrange(100)*1j'', so whether it fired depended on
+	the random draw."
+
+	self assert: (self eval: 'len({3j: "a", 3j: "b"})') equals: 1.
+	self assert: (self eval: '{3j: "a", 3j: "b"}[3j]') equals: 'b'.
+	self assert: (self eval: 'd = {}; d[3j] = "x"; d[3j]') equals: 'x'.
+	"A zero-imaginary key is reachable as the equal int, as in CPython."
+	self assert: (self eval: 'd = {}; d[0j] = "c"; 0 in d') equals: true
+
+]
+
+{ #category : 'Grail-Tests - Hashing' }
+ComplexTestCase >> testComplexWorksInASet [
+	"Same contract, the other hashed collection."
+
+	self assert: (self eval: 'len({3j, 3j, 3j})') equals: 1.
+	self assert: (self eval: '3j in {1j, 2j, 3j}') equals: true.
+	self assert: (self eval: 'len({0j, 0, 0.0})') equals: 1
+
+]
+
+{ #category : 'Grail-Initialization' }
+ComplexTestCase >> testConstructorHonorsDunderComplex [
+	"complex(x) follows CPython's protocol: a non-numeric object that
+	defines __complex__ is converted through it.  test_fractions
+	testMixedMultiplication needs complex(Rect(4, 3)) inside Fraction's
+	reflected __rmul__; complex() used to ignore __complex__ and coerce the
+	object as a real number ('must be real number, not Rect').  A
+	__complex__ that returns a non-complex is a TypeError."
+
+	| mods mod pt c raised |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_complex_convert' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_complex_convert.py')
+		name: 'grail_complex_convert'.
+	pt := mod @env1:___pyAttrLoad___: #point.
+	c := complex @env1:__new__: pt.
+	self assert: c class equals: complex.
+	self assert: (c @env1:real) equals: 4.0.
+	self assert: (c @env1:imag) equals: 3.0.
+	raised := false.
+	[complex @env1:__new__: (mod @env1:___pyAttrLoad___: #bad)]
+		@env0:on: (Python @env0:at: #TypeError) do: [:ex | raised := true].
+	self assert: raised.
+
+]
+
+{ #category : 'Grail-Tests - Hashing' }
+ComplexTestCase >> testDictsOfComplexKeysCompareEqual [
+	"``{0j: 1j} == {0j: 1j}'' was False: dict equality looks each key up in
+	the other dict, and the lookup missed."
+
+	| lf src |
+	self assert: (self eval: '{0j: 1j} == {0j: 1j}') equals: true.
+	self assert: (self eval: '{5j: 1j} == {5j: 1j}') equals: true.
+	"A build / re-insert / compare round trip, the shape test_dicts uses.
+	Assembled with real linefeeds -- a Smalltalk literal has no escapes."
+	lf := String with: Character lf.
+	src := 'a = {}' , lf
+		, 'for i in range(50):' , lf
+		, '    a[i * 1j] = i' , lf
+		, 'b = {}' , lf
+		, 'for k, v in list(a.items()):' , lf
+		, '    b[k] = v' , lf
+		, 'a == b' , lf.
+	self assert: (self eval: src) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Eval - Complex Functions' }
+ComplexTestCase >> testEvalComplexAbs [
+	"Test abs() on complex number via Python source"
+
+	self assert: (self eval: 'abs(3 + 4j)') equals: 5.0.
+
+]
+
+{ #category : 'Grail-Tests - Eval - Complex Arithmetic' }
+ComplexTestCase >> testEvalComplexArithmetic [
+	"Test complex arithmetic via Python source"
+
+	| result |
+	result := self eval: '(3 + 4j) + (1 + 2j)'.
+	self assert: (result @env1:real) equals: 4.0.
+	self assert: (result @env1:imag) equals: 6.0.
+
+]
+
+{ #category : 'Grail-Tests - Eval - Complex Creation' }
+ComplexTestCase >> testEvalComplexCreation [
+	"Test complex number via real + imaginary syntax"
+
+	| result |
+	result := self eval: '3 + 4j'.
+	self assert: (result isKindOf: complex).
+	self assert: (result @env1:real) equals: 3.0.
+	self assert: (result @env1:imag) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Tests - Eval - Complex Comparison' }
+ComplexTestCase >> testEvalComplexEquality [
+	"Test complex equality via Python source"
+
+	self assert: (self eval: '(3 + 4j) == (3 + 4j)').
+	self assert: (self eval: '(3 + 4j) != (1 + 2j)').
+
+]
+
+{ #category : 'Grail-Tests - Eval - Complex Creation' }
+ComplexTestCase >> testEvalComplexLiteral [
+	"Test complex literal creation via Python source"
+
+	| result |
+	result := self eval: '5j'.
+	self assert: (result isKindOf: complex).
+	self assert: (result @env1:real) equals: 0.0.
+	self assert: (result @env1:imag) equals: 5.0.
+
+]
+
+{ #category : 'Grail-Tests - Eval - Complex Arithmetic' }
+ComplexTestCase >> testEvalComplexMultiplication [
+	"Test complex multiplication via Python source"
+
+	| result |
+	result := self eval: '(2 + 3j) * 2'.
+	self assert: (result @env1:real) equals: 4.0.
+	self assert: (result @env1:imag) equals: 6.0.
+
+]
+
+{ #category : 'Grail-Tests - Eval - Complex Arithmetic' }
+ComplexTestCase >> testEvalComplexNegation [
+	"Test complex negation via Python source"
+
+	| result |
+	result := self eval: '-(3 + 4j)'.
+	self assert: (result @env1:real) equals: -3.0.
+	self assert: (result @env1:imag) equals: -4.0.
+
+]
+
+{ #category : 'Grail-Tests - Hashing' }
+ComplexTestCase >> testHashAgreesAcrossNumericTypes [
+	"__eq__ says complex(5) == 5 == 5.0, so the hashes must agree too --
+	otherwise an equal Number key lands in a different bucket.  A zero
+	imaginary part contributes nothing to CPython's formula, which is
+	exactly what makes this hold."
+
+	self assert: (self eval: 'hash(0j) == hash(0)') equals: true.
+	self assert: (self eval: 'hash(complex(5)) == hash(5)') equals: true.
+	self assert: (self eval: 'hash(complex(5)) == hash(5.0)') equals: true.
+	self assert: (self eval: 'hash(complex(2.5)) == hash(2.5)') equals: true
+
+]
+
+{ #category : 'Grail-Tests - Hashing' }
+ComplexTestCase >> testHashIsValueBasedNotIdentityBased [
+	"complex overrode ``='' but not ``hash'', so it inherited Object's
+	IDENTITY hash and two separately-computed equal values hashed
+	differently -- ``hash(3j) == hash(3j)'' was False."
+
+	self assert: (self eval: 'hash(3j) == hash(3j)') equals: true.
+	self assert: (self eval: 'hash(complex(1.5, 2.5)) == hash(complex(1.5, 2.5))')
+		equals: true.
+	self assert: (self eval: 'hash(-1j) == hash(-1j)') equals: true
+
+]
+
+{ #category : 'Grail-Tests - Hashing' }
+ComplexTestCase >> testHashMatchesCPythonValues [
+	"CPython's combine is hash(real) + sys.hash_info.imag * hash(imag), in
+	unsigned 64-bit reinterpreted as signed.  These are CPython 3.14's actual
+	answers, including the wraparound case."
+
+	self assert: (self eval: 'hash(0j)') equals: 0.
+	self assert: (self eval: 'hash(3j)') equals: 3000009.
+	self assert: (self eval: 'hash(complex(5, 0))') equals: 5.
+	self assert: (self eval: 'hash(complex(-2, 3))') equals: 3000007.
+	self assert: (self eval: 'hash(-1j)') equals: -2000006.
+	self assert: (self eval: 'hash(complex(1.5, 2.5))')
+		equals: 4611686018429387911
+
+]
+
+{ #category : 'Grail-Tests - Comparison' }
+ComplexTestCase >> testNumericEqualityWithComplex [
+	"int/float == complex must route through complex.__eq__ -- the
+	kernel env-0 = tried GemStone Number coercion and sent the internal
+	#_getKind to complex (DNU).  CPython: complex(5) == 5 is True; a
+	nonzero imaginary part compares unequal."
+
+	self assert: (self eval: '5 == complex(5)') equals: true.
+	self assert: (self eval: 'complex(5) == 5') equals: true.
+	self assert: (self eval: '5.0 == complex(5)') equals: true.
+	self assert: (self eval: '5 == complex(5, 1)') equals: false.
+	self assert: (self eval: '10**23 == complex(10**23)') equals: false
+
+]
+
+{ #category : 'Grail-Initialization' }
+ComplexTestCase >> testPythonAttrLoadReturnsValue [
+	"Phase B+1 red light: ``cpx.real'' from Python should return the
+	float value, not a BoundMethod.  Before the dynamic-instVar sweep
+	of value-type wrappers, ``real'' was a unary method on complex
+	with no paired ``real:'' setter — ___pyAttrLoad___ wrapped it as
+	a BoundMethod (treating it as a callable method instead of a value
+	attribute).  After the sweep, real/imag live in dynamic-instVar
+	storage and ___pyAttrLoad___'s top-level probe returns the value
+	directly."
+
+	| c |
+	c := complex ___new___: 5 _: 12.
+	self assert: (c @env1:___pyAttrLoad___: #real) equals: 5.0.
+	self assert: (c @env1:___pyAttrLoad___: #imag) equals: 12.0.
+
+]
+
+{ #category : 'Grail-Initialization' }
+ComplexTestCase >> testSetattrOverridesRealImag [
+	"Phase B+1: ``setattr(cpx, 'real', 99)'' from outside writes to
+	the same dynamic-instVar storage that __init__ wrote to.  Before
+	the sweep, real was a static instVar with a synthesized setter
+	(``real:''), but setattr's perform: would target ``real:'' (which
+	complex didn't actually define, so setattr fell back to writing
+	a dynamic instVar — but reads still came from the static slot,
+	so the set was invisible)."
+
+	| c bi |
+	c := complex ___new___: 5 _: 12.
+	bi := (Python at: #builtins) ___instance___.
+	bi @env1:setattr: c _: 'real' _: 99.0.
+	self assert: (c @env1:___pyAttrLoad___: #real) equals: 99.0.
+	self assert: (c @env1:real) equals: 99.0.
+
+]

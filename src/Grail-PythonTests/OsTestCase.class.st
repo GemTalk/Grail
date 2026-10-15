@@ -1,0 +1,1252 @@
+Class {
+	#name : 'OsTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Tests - Constants' }
+OsTestCase >> testAccessWhichAndDefpath [
+	"os.defpath, os.access (with F_OK/R_OK/W_OK/X_OK), shutil.which and a
+	bytes os.path.join, which uuid's _ifconfig/_arp/_netstat getters need to
+	find their commands; all were missing (#1511).  On macOS, where all three
+	getters are in uuid._GETTERS, test_uuid read one more error than in CI.
+	tests/python/os_access_which.py holds the checks and agrees with CPython
+	3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'os_access_which' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/os_access_which.py')
+		name: 'os_access_which'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '12 checks, 0 disagreeing [], keys match: True'
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testChdir [
+	"Test os.chdir()"
+
+	| o originalCwd testDir newCwd |
+	o := os @env1:instance.
+	originalCwd := o @env1:getcwd.
+	testDir := '/tmp'.
+
+	"Change to test directory"
+	o @env1:chdir: testDir.
+	newCwd := o @env1:getcwd.
+
+	self assert: (newCwd includesString: testDir).
+
+	"Change back to original directory"
+	o @env1:chdir: originalCwd.
+
+]
+
+{ #category : 'Grail-Tests - Process Information' }
+OsTestCase >> testCpuCountReportsHostCount [
+	"os.cpu_count() used to answer a hardcoded 4, on the belief that no
+	host-CPU primitive was reachable from a gem.  System hostCpuCount is
+	exactly that primitive, so the value must now track the host and be a
+	plausible CPU count rather than the old constant."
+
+	| n |
+	n := self eval: 'import os
+os.cpu_count()'.
+	self assert: (n isKindOf: Integer).
+	self assert: n > 0.
+	self assert: n equals: (System hostCpuCount)
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testEnvironEnumeratesTouchedNames [
+	"DEVIATION, pinned deliberately.  GemStone exposes no way to read back
+	the environment BLOCK, so iteration can only report names this session
+	has named (seeded probes plus anything since read or written).  What
+	must hold is that a name written through the view then appears, and
+	that keys()/items() stay consistent with the live lookups."
+
+	self assert: (self eval: 'import os
+os.environ["GRAIL_ENUM_PROBE"] = "here"
+ks = list(os.environ.keys())
+ok = "GRAIL_ENUM_PROBE" in ks and len(os.environ) == len(ks)
+pairs = dict(os.environ.items())
+ok = ok and pairs["GRAIL_ENUM_PROBE"] == "here"
+del os.environ["GRAIL_ENUM_PROBE"]
+ok and "GRAIL_ENUM_PROBE" not in list(os.environ.keys())') equals: true
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testEnvironIsLiveNotASnapshot [
+	"The view reads through on every lookup, so a variable set through
+	putenv AFTER the view was first built is still visible through it."
+
+	self assert: (self eval: 'import os
+e = os.environ
+os.putenv("GRAIL_LIVE_PROBE", "later")
+seen = e.get("GRAIL_LIVE_PROBE")
+os.unsetenv("GRAIL_LIVE_PROBE")
+seen') equals: 'later'
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testEnvironMissingKeyRaisesKeyError [
+	"Subscript on an unset name raises KeyError, as CPython; .get does not."
+
+	self
+		should: [self eval: 'import os
+os.environ["GRAIL_NO_SUCH_VAR_XYZ"]']
+		raise: KeyError
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testEnvironReadsThroughToGemEnvironment [
+	"REGRESSION: os.environ was an empty KeyValueDictionary created at
+	module-init and never populated, while its docstring promised a
+	read-through.  So os.environ.get(name) answered None for a variable
+	os.getenv(name) could see -- silently unsetting every variable read the
+	documented way.  Both spellings must now agree."
+
+	self assert: (self eval: 'import os
+os.environ.get("HOME") == os.getenv("HOME") and os.getenv("HOME") is not None') equals: true.
+	self assert: (self eval: 'import os
+"HOME" in os.environ') equals: true.
+	self assert: (self eval: 'import os
+os.environ.get("GRAIL_NO_SUCH_VAR_XYZ", "fallback")') equals: 'fallback'
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testEnvironSetAndDeleteReachTheProcess [
+	"os.environ[k] = v must really putenv (CPython semantics -- a child
+	process inherits it), and del must really unset."
+
+	self assert: (self eval: 'import os
+os.environ["GRAIL_SET_PROBE"] = "v1"
+viaGetenv = os.getenv("GRAIL_SET_PROBE")
+del os.environ["GRAIL_SET_PROBE"]
+gone = "GRAIL_SET_PROBE" not in os.environ
+viaGetenv == "v1" and gone') equals: true
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testExists [
+	"Test os.exists()"
+
+	| o |
+	o := os @env1:instance.
+
+	"Test with existing path"
+	self assert: (o @env1:exists: '/tmp').
+
+	"Test with non-existing path"
+	self deny: (o @env1:exists: (self tmp: 'os_test_nonexistent_xyz123'))
+
+]
+
+{ #category : 'Grail-Tests - Integration' }
+OsTestCase >> testFileOperationsSequence [
+	"Test a sequence of file operations"
+
+	| o testDir testFile file listResult |
+	o := os @env1:instance.
+	testDir := (self tmp: 'os_test_sequence').
+	testFile := testDir , '/test_file.txt'.
+
+	"Clean up if it exists"
+	(o @env1:exists: testDir) ifTrue: [
+		(o @env1:exists: testFile) ifTrue: [
+			o @env1:remove: testFile
+		].
+		o @env1:rmdir: testDir
+	].
+
+	"Create directory"
+	o @env1:mkdir: testDir.
+	self assert: (o @env1:isdir: testDir).
+
+	"List directory (should be empty or have minimal entries)"
+	listResult := o @env1:listdir: testDir.
+	self assert: (listResult isKindOf: OrderedCollection).
+
+	"Create file in directory"
+	file := GsFile open: testFile mode: 'w' onClient: false.
+	file nextPutAll: 'test content'.
+	file close.
+
+	"Verify file exists"
+	self assert: (o @env1:exists: testFile).
+	self assert: (o @env1:isfile: testFile).
+
+	"List directory again (should now include our file)"
+	listResult := o @env1:listdir: testDir.
+	self assert: (listResult includes: 'test_file.txt').
+
+	"Remove file"
+	o @env1:remove: testFile.
+	self deny: (o @env1:exists: testFile).
+
+	"Remove directory"
+	o @env1:rmdir: testDir.
+	self deny: (o @env1:exists: testDir)
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testGetcwd [
+	"Test os.getcwd()"
+
+	| o result |
+	o := os @env1:instance.
+	result := o @env1:getcwd.
+
+	self assert: (result isKindOf: String).
+	self deny: result isEmpty
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testGetenv [
+	"Test os.getenv() - get environment variable"
+
+	| o result |
+	o := os @env1:instance.
+
+	"Try to get a common environment variable (may or may not exist)"
+	result := o @env1:getenv: 'PATH'.
+
+	"Result may be nil or a string"
+	(result notNil) ifTrue: [
+		self assert: (result isKindOf: String)
+	]
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testGetenvWithDefault [
+	"Test os.getenv() with default value"
+
+	| o result default |
+	o := os @env1:instance.
+	default := 'default_value'.
+
+	"Try to get a non-existent environment variable"
+	result := o @env1:getenv: 'GRAIL_TEST_NONEXISTENT_VAR_XYZ123' _: default.
+
+	"Should return default value"
+	self assert: result equals: default
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testGetmtimeOfMissingFileRaisesOSError [
+	"os.path.getmtime shared the guard, and answered ``2 mtimeUtcSeconds''."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.path.getmtime("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Process Management' }
+OsTestCase >> testGetpid [
+	"os.getpid() - this gem's OS process id.
+
+	test.support.os_helper appends it to its scratch filename so concurrent
+	sessions do not collide.  Its absence mattered: run_cpython_suite.sh runs
+	four modules CONCURRENTLY in one directory, and without a pid the fallback
+	name was shared by all of them."
+
+	| pid |
+	pid := os @env1:instance @env1:getpid.
+	self assert: (pid isKindOf: Integer).
+	self assert: pid > 0
+
+]
+
+{ #category : 'Grail-Tests - Process Management' }
+OsTestCase >> testGetuidMatchesAFileThisGemCreated [
+	"os.getuid()/getgid() and their effective twins.  pytest's tmp_path calls
+	getuid unguarded and compares it with os.stat's st_uid of the directory it
+	made, so the ids have to be the ones the file system records for this gem's
+	own files -- checked the same way here."
+
+	| o testFile f st |
+	o := os @env1:instance.
+	testFile := 'grail_getuid_test.txt'.
+	f := GsFile openWriteOnServer: testFile.
+	f notNil ifTrue: [f nextPutAll: 'x'; close].
+	[st := o @env1:stat: testFile.
+	 self assert: (o @env1:getuid) equals: (st @env1:st_uid).
+	 self assert: (o @env1:geteuid) equals: (st @env1:st_uid).
+	 self assert: (o @env1:getgid isKindOf: Integer).
+	 self assert: (o @env1:getegid isKindOf: Integer).
+	 self assert: (o @env1:getgid) >= 0]
+		ensure: [GsFile removeServerFile: testFile]
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testIsdir [
+	"Test os.isdir()"
+
+	| o testDir |
+	o := os @env1:instance.
+	testDir := (self tmp: 'os_test_isdir').
+
+	"Clean up if it exists"
+		(o @env1:exists: testDir) ifTrue: [
+			o @env1:rmdir: testDir
+	].
+
+	"Create directory"
+	o @env1:mkdir: testDir.
+
+	"Test isdir"
+	self assert: (o @env1:isdir: testDir).
+	self deny: (o @env1:isdir: (self tmp: 'os_test_isdir_nonexistent')).
+
+	"Clean up"
+	o @env1:rmdir: testDir
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testIsfile [
+	"Test os.isfile()"
+
+	| o testFile file |
+	o := os @env1:instance.
+	testFile := (self tmp: 'os_test_isfile').
+
+	"Clean up if it exists"
+	(o @env1:exists: testFile) ifTrue: [
+		o @env1:remove: testFile
+	].
+
+	"Create a test file"
+	file := GsFile open: testFile mode: 'w' onClient: false.
+	file nextPutAll: 'test content'.
+	file close.
+
+	"Test isfile"
+	self assert: (o @env1:isfile: testFile).
+	self deny: (o @env1:isfile: (self tmp: 'os_test_isfile_nonexistent')).
+
+	"Test that directory is not a file"
+	self deny: (o @env1:isfile: '/tmp').
+
+	"Clean up"
+	o @env1:remove: testFile
+
+]
+
+{ #category : 'Grail-Tests - Constants' }
+OsTestCase >> testLinesep [
+	"Test os.linesep constant"
+
+	| o result |
+	o := os @env1:instance.
+	result := o @env1:linesep.
+
+	self assert: (result size) equals: 1
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testListdir [
+	"Test os.listdir() with no argument (uses current directory)"
+
+	| o result |
+	o := os @env1:instance.
+	result := o @env1:_listdir: {} kw: nil.
+
+	self assert: (result isKindOf: OrderedCollection).
+	self deny: result isEmpty
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testListdirExcludesDotEntries [
+	"Regression: GsFile contentsOfDirectory: reports '.' and '..';
+	CPython's os.listdir never does.  Leaving them in sent recursive
+	walkers (shutil.rmtree/copytree) into infinite recursion."
+
+	| result |
+	result := self eval: 'import os
+names = os.listdir("/tmp")
+"." not in names and ".." not in names'.
+	self assert: result
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testListdirWithPath [
+	"Test os.listdir() with path"
+
+	| o result |
+	o := os @env1:instance.
+	result := o @env1:listdir: '/tmp'.
+
+	self assert: (result isKindOf: OrderedCollection)
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testLstat [
+	"Test os.lstat()"
+
+	| o testFile file statResult |
+	o := os @env1:instance.
+	testFile := (self tmp: 'os_test_lstat').
+
+	"Clean up if it exists"
+	(o @env1:exists: testFile) ifTrue: [
+		o @env1:remove: testFile
+	].
+
+	"Create a test file"
+	file := GsFile open: testFile mode: 'w' onClient: false.
+	file nextPutAll: 'test content'.
+	file close.
+
+	"Get lstat"
+	statResult := o @env1:lstat: testFile.
+
+	"Verify lstat result is not nil"
+	self assert: statResult notNil.
+
+	"Clean up"
+	o @env1:remove: testFile
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testLstatOfMissingFileRaisesOSError [
+	"os.lstat had the identical never-fires nil guard."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.lstat("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testMakedirs [
+	"Test os.makedirs() - recursive directory creation"
+
+	| o testDir |
+	o := os @env1:instance.
+	testDir := (self tmp: 'os_test_makedirs/level1/level2').
+
+	"Clean up if it exists"
+	(o @env1:exists: (self tmp: 'os_test_makedirs')) ifTrue: [
+		o @env1:rmdir: (self tmp: 'os_test_makedirs/level1/level2').
+		o @env1:rmdir: (self tmp: 'os_test_makedirs/level1').
+		o @env1:rmdir: (self tmp: 'os_test_makedirs')
+	].
+
+	"Create nested directories"
+	o @env1:makedirs: testDir.
+
+	"Verify all levels exist"
+	self assert: (o @env1:exists: (self tmp: 'os_test_makedirs')).
+	self assert: (o @env1:exists: (self tmp: 'os_test_makedirs/level1')).
+	self assert: (o @env1:exists: testDir).
+
+	"Clean up"
+	o @env1:rmdir: (self tmp: 'os_test_makedirs/level1/level2').
+	o @env1:rmdir: (self tmp: 'os_test_makedirs/level1').
+	o @env1:rmdir: (self tmp: 'os_test_makedirs')
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testMakedirsBelowAPlainFileRaisesNotADirectory [
+	"makedirs walks the path creating each level, asking existsOnServer: at
+	every step -- so a PARENT component that is a plain file (ENOTDIR) is a
+	probe that ERRORS, and existsOnServer: answers nil there, not false.  The
+	bare ifFalse: that nil reached raised ImproperOperation (error 2085), an
+	uncatchable Smalltalk error, where CPython raises NotADirectoryError.
+	os.symlink had the same unguarded probe (its parent check, three lines
+	below, was already guarded and explains why)."
+
+	| o parent f |
+	o := os @env1:instance.
+	parent := (self tmp: 'os_notadir').
+	(GsFile existsOnServer: parent) == true ifTrue: [GsFile removeServerFile: parent].
+	f := GsFile open: parent mode: 'wb' onClient: false.
+	f nextPutAll: 'not a directory'; close.
+	self
+		should: [o @env1:makedirs: parent , '/a/b']
+		raise: NotADirectoryError.
+	self
+		should: [o @env1:symlink: '/tmp' _: parent , '/link']
+		raise: OSError.
+	GsFile removeServerFile: parent
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testMkdir [
+	"Test os.mkdir()"
+
+	| o testDir |
+	o := os @env1:instance.
+	testDir := (self tmp: 'os_test_mkdir').
+
+	"Clean up if it exists"
+		(o @env1:exists: testDir) ifTrue: [
+			o @env1:rmdir: testDir
+	].
+
+	"Create directory"
+	o @env1:mkdir: testDir.
+
+	"Verify it exists and is a directory"
+	self assert: (o @env1:exists: testDir).
+	self assert: (o @env1:isdir: testDir).
+
+	"Clean up"
+	o @env1:rmdir: testDir
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testMkdirWithMode [
+	"Test os.mkdir() with mode"
+
+	| o testDir |
+	o := os @env1:instance.
+	testDir := (self tmp: 'os_test_mkdir_mode').
+
+	"Clean up if it exists"
+		(o @env1:exists: testDir) ifTrue: [
+			o @env1:rmdir: testDir
+	].
+
+	"Create directory with mode"
+	o @env1:mkdir: testDir _: 493.
+
+	"Verify it exists"
+	self assert: (o @env1:exists: testDir).
+
+	"Clean up"
+	o @env1:rmdir: testDir
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathAbspath [
+	"Test os.path.abspath()"
+
+	| o path result cwd |
+	o := os @env1:instance.
+	path := o @env1:path.
+	cwd := o @env1:getcwd.
+
+	"Absolute path should remain absolute"
+	result := path @env1:abspath: '/usr/bin'.
+	self assert: result equals: '/usr/bin'.
+
+	"Relative path should become absolute"
+	result := path @env1:abspath: 'file.txt'.
+	self assert: (path @env1:isabs: result).
+	self assert: (result endsWith: 'file.txt')
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathBasename [
+	"Test os.path.basename()"
+
+	| o path result |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	result := path @env1:basename: '/usr/bin/python'.
+	self assert: result equals: 'python'.
+
+	"CPython: everything after the LAST slash, so a trailing slash yields ''."
+	result := path @env1:basename: '/usr/bin/'.
+	self assert: result equals: ''.
+
+	result := path @env1:basename: '/usr/'.
+	self assert: result equals: ''.
+
+	result := path @env1:basename: 'python'.
+	self assert: result equals: 'python'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathCommonpath [
+	"Test os.path.commonpath()"
+
+	| o path result paths |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	paths := OrderedCollection with: '/usr/lib/python3' with: '/usr/lib/python2'.
+	result := path @env1:commonpath: paths.
+	self assert: result equals: '/usr/lib'.
+
+	paths := OrderedCollection with: '/usr/lib/python3' with: '/usr/local/lib'.
+	result := path @env1:commonpath: paths.
+	self assert: result equals: '/usr'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathCommonprefix [
+	"Test os.path.commonprefix()"
+
+	| o path result paths |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	paths := OrderedCollection with: '/usr/lib' with: '/usr/lib/python3'.
+	result := path @env1:commonprefix: paths.
+	self assert: result equals: '/usr/lib'.
+
+	paths := OrderedCollection with: '/usr/lib' with: '/usr/local/lib'.
+	result := path @env1:commonprefix: paths.
+	self assert: result equals: '/usr/l'.
+
+	paths := OrderedCollection with: 'file1.txt' with: 'file2.txt'.
+	result := path @env1:commonprefix: paths.
+	self assert: result equals: 'file'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathDirname [
+	"Test os.path.dirname()"
+
+	| o path result |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	result := path @env1:dirname: '/usr/bin/python'.
+	self assert: result equals: '/usr/bin'.
+
+	"CPython: up to the LAST slash, so a trailing slash keeps the whole
+	directory, and a bare name has the dirname ''."
+	result := path @env1:dirname: '/usr/bin/'.
+	self assert: result equals: '/usr/bin'.
+
+	result := path @env1:dirname: 'python'.
+	self assert: result equals: ''.
+
+	result := path @env1:dirname: '/'.
+	self assert: result equals: '/'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathExists [
+	"Test os.path.exists()"
+
+	| o path |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	"Test with existing path"
+	self assert: (o @env1:exists: '/tmp').
+
+	"Test with non-existing path"
+	self deny: (o @env1:exists: (self tmp: 'os_path_test_nonexistent_xyz123'))
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathIntegration [
+	"Test integration of multiple os.path functions"
+
+	| o path result paths |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	"Join paths, then split"
+	paths := OrderedCollection with: '/usr' with: 'local'.
+	result := path @env1:join: paths.
+	result := path @env1:split: result.
+	self assert: (result at: 1) equals: '/usr'.
+	self assert: (result at: 2) equals: 'local'.
+
+	"Get basename and dirname"
+	paths := OrderedCollection with: '/usr' with: 'bin/python'.
+	result := path @env1:join: paths.
+	self assert: (path @env1:basename: result) equals: 'python'.
+	self assert: (path @env1:dirname: result) equals: '/usr/bin'.
+
+	"Normalize and get absolute path"
+	result := path @env1:normpath: 'usr/../bin/python'.
+	result := path @env1:abspath: result.
+	self assert: (path @env1:isabs: result)
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathIsabs [
+	"Test os.path.isabs()"
+
+	| o path |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	self assert: (path @env1:isabs: '/usr/bin').
+	self assert: (path @env1:isabs: '/').
+	self deny: (path @env1:isabs: 'usr/bin').
+	self deny: (path @env1:isabs: 'file.txt')
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathIsdir [
+	"Test os.path.isdir()"
+
+	| o path testDir |
+	o := os @env1:instance.
+	path := o @env1:path.
+	testDir := (self tmp: 'os_path_test_isdir').
+
+	"Clean up if it exists"
+		(o @env1:exists: testDir) ifTrue: [
+			o @env1:rmdir: testDir
+	].
+
+	"Create directory"
+	o @env1:mkdir: testDir.
+
+	"Test isdir"
+	self assert: (o @env1:isdir: testDir).
+	self deny: (o @env1:isdir: (self tmp: 'os_path_test_isdir_nonexistent')).
+
+	"Clean up"
+	o @env1:rmdir: testDir
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathIsfile [
+	"Test os.path.isfile()"
+
+	| o path testFile file |
+	o := os @env1:instance.
+	path := o @env1:path.
+	testFile := (self tmp: 'os_path_test_isfile').
+
+	"Clean up if it exists"
+	(o @env1:exists: testFile) ifTrue: [
+		o @env1:remove: testFile
+	].
+
+	"Create a test file"
+	file := GsFile open: testFile mode: 'w' onClient: false.
+	file nextPutAll: 'test content'.
+	file close.
+
+	"Test isfile"
+	self assert: (o @env1:isfile: testFile).
+	self deny: (o @env1:isfile: (self tmp: 'os_path_test_isfile_nonexistent')).
+
+	"Test that directory is not a file"
+	self deny: (o @env1:isfile: '/tmp').
+
+	"Clean up"
+	o @env1:remove: testFile
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathJoin [
+	"Test os.path.join() with paths"
+
+	| o path result paths |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	paths := OrderedCollection with: '/usr' with: 'bin'.
+	result := path @env1:join: paths.
+	self assert: result equals: '/usr/bin'.
+
+	paths := OrderedCollection with: '/usr/' with: 'bin'.
+	result := path @env1:join: paths.
+	self assert: result equals: '/usr/bin'.
+
+	paths := OrderedCollection with: '/usr' with: '/bin'.
+	result := path @env1:join: paths.
+	self assert: result equals: '/bin'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathJoinAll [
+	"Test os.path.join() with collection (already covered by testPathJoinMultiple, but keeping for completeness)"
+
+	| o path result paths |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	paths := OrderedCollection with: '/usr' with: 'local' with: 'bin'.
+	result := path @env1:join: paths.
+	self assert: result equals: '/usr/local/bin'.
+
+	paths := OrderedCollection with: 'home' with: 'user' with: 'docs'.
+	result := path @env1:join: paths.
+	self assert: result equals: 'home/user/docs'.
+
+	paths := OrderedCollection with: '/usr/'.
+	result := path @env1:join: paths.
+	self assert: result equals: '/usr/'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathJoinMultiple [
+	"Test os.path.join() with multiple paths"
+
+	| o path result paths |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	paths := OrderedCollection with: '/usr' with: 'local' with: 'bin'.
+	result := path @env1:join: paths.
+	self assert: result equals: '/usr/local/bin'.
+
+	paths := OrderedCollection with: 'home' with: 'user' with: 'docs' with: 'file.txt'.
+	result := path @env1:join: paths.
+	self assert: result equals: 'home/user/docs/file.txt'
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testPathLikeArgumentsAreAccepted [
+	"PEP 519: os and os.path accept anything with __fspath__, not just str.
+	Grail handed the argument straight to the GsFile primitives, which send
+	``encodeAsUTF8'' to whatever they are given -- a pathlib.Path does not
+	understand it, so the result was a MessageNotUnderstood that is
+	UNCATCHABLE from Python and escapes even ``except Exception''.  The
+	shape that found this was ``shutil.rmtree(Path(tempfile.mkdtemp()))'',
+	whose os.listdir killed the whole session."
+
+	self assert: (self eval: 'import os, shutil, tempfile
+from pathlib import Path
+d = Path(tempfile.mkdtemp())
+(d / "b.txt").write_text("hi")
+out = [
+    sorted(os.listdir(d)) == ["b.txt"],
+    os.path.exists(d),
+    os.path.isdir(d),
+    os.path.isfile(d / "b.txt"),
+    os.path.join(d, "b.txt") == str(d) + "/b.txt",
+    os.path.basename(d / "b.txt") == "b.txt",
+    os.path.splitext(d / "b.txt")[1] == ".txt",
+    os.stat(d / "b.txt") is not None,
+    open(d / "b.txt").read() == "hi",
+]
+shutil.rmtree(d)
+out.append(not os.path.exists(d))
+all(out)') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathNormpath [
+	"Test os.path.normpath()"
+
+	| o path result |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	result := path @env1:normpath: '/usr/../usr/bin'.
+	self assert: result equals: '/usr/bin'.
+
+	result := path @env1:normpath: '/usr/./bin'.
+	self assert: result equals: '/usr/bin'.
+
+	result := path @env1:normpath: 'usr/../bin'.
+	self assert: result equals: 'bin'.
+
+	result := path @env1:normpath: 'usr/./bin'.
+	self assert: result equals: 'usr/bin'.
+
+	result := path @env1:normpath: '/usr//bin'.
+	self assert: result equals: '/usr/bin'.
+
+	result := path @env1:normpath: '..'.
+	self assert: result equals: '..'.
+
+	result := path @env1:normpath: '.'.
+	self assert: result equals: '.'
+
+]
+
+{ #category : 'Grail-Tests - Constants' }
+OsTestCase >> testPathsep [
+	"Test os.pathsep constant"
+
+	| o result |
+	o := os @env1:instance.
+	result := o @env1:pathsep.
+
+	self assert: result equals: ':'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathSplit [
+	"Test os.path.split()"
+
+	| o path result |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	result := path @env1:split: '/usr/bin/python'.
+	self assert: (result size) equals: 2.
+	self assert: (result at: 1) equals: '/usr/bin'.
+	self assert: (result at: 2) equals: 'python'.
+
+	result := path @env1:split: '/usr/bin/'.
+	self assert: (result at: 1) equals: '/usr/bin'.
+	self assert: (result at: 2) equals: ''.
+
+	result := path @env1:split: 'python'.
+	self assert: (result at: 1) equals: ''.
+	self assert: (result at: 2) equals: 'python'
+
+]
+
+{ #category : 'Grail-Tests - Path Manipulation' }
+OsTestCase >> testPathSplitext [
+	"Test os.path.splitext()"
+
+	| o path result |
+	o := os @env1:instance.
+	path := o @env1:path.
+
+	result := path @env1:splitext: 'file.txt'.
+	self assert: (result size) equals: 2.
+	self assert: (result at: 1) equals: 'file'.
+	self assert: (result at: 2) equals: '.txt'.
+
+	result := path @env1:splitext: '/path/to/file.txt'.
+	self assert: (result at: 1) equals: '/path/to/file'.
+	self assert: (result at: 2) equals: '.txt'.
+
+	result := path @env1:splitext: 'file'.
+	self assert: (result at: 1) equals: 'file'.
+	self assert: (result at: 2) equals: ''.
+
+	result := path @env1:splitext: '.hidden'.
+	self assert: (result at: 1) equals: '.hidden'.
+	self assert: (result at: 2) equals: ''
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testPutenv [
+	"Test os.putenv() - set environment variable"
+
+	| o testVar testValue result |
+	o := os @env1:instance.
+	testVar := 'GRAIL_TEST_PUTENV_VAR'.
+	testValue := 'test_value_123'.
+
+	"Set the environment variable"
+	o @env1:putenv: testVar _: testValue.
+
+	"Get it back"
+	result := o @env1:getenv: testVar.
+
+	"Should match what we set"
+	self assert: result equals: testValue
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testRemove [
+	"Test os.remove() - remove file"
+
+	| o testFile file |
+	o := os @env1:instance.
+	testFile := (self tmp: 'os_test_remove').
+
+	"Create a test file"
+	file := GsFile open: testFile mode: 'w' onClient: false.
+	file nextPutAll: 'test content'.
+	file close.
+
+	"Verify it exists"
+	self assert: (o @env1:exists: testFile).
+
+	"Remove it"
+	o @env1:remove: testFile.
+
+	"Verify it's gone"
+	self deny: (o @env1:exists: testFile)
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testRemoveMissingRaisesFileNotFoundError [
+	"CPython raises FileNotFoundError, not a bare OSError, for a missing file.
+	os_helper.unlink() swallows exactly FileNotFoundError/NotADirectoryError,
+	so a bare OSError propagated out of every cleanup.  FileNotFoundError is an
+	OSError subclass, so existing ``except OSError'' handlers still match."
+
+	| o raised |
+	o := os @env1:instance.
+	raised := nil.
+	[o @env1:unlink: 'grail_definitely_absent_file.txt']
+		on: (Python at: #FileNotFoundError)
+		do: [:ex | raised := ex].
+	self assert: raised notNil
+		description: 'unlink of a missing file did not raise FileNotFoundError'
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testRename [
+	"Test os.rename() - rename file"
+
+	| o oldPath newPath file |
+	o := os @env1:instance.
+	oldPath := (self tmp: 'os_test_rename_old').
+	newPath := (self tmp: 'os_test_rename_new').
+
+	"Clean up if they exist"
+	(o @env1:exists: oldPath) ifTrue: [
+		o @env1:remove: oldPath
+	].
+	(o @env1:exists: newPath) ifTrue: [
+		o @env1:remove: newPath
+	].
+
+	"Create a test file"
+	file := GsFile open: oldPath mode: 'w' onClient: false.
+	file nextPutAll: 'test content'.
+	file close.
+
+	"Verify old file exists"
+	self assert: (o @env1:exists: oldPath).
+
+	"Rename it"
+	o @env1:rename: oldPath _: newPath.
+
+	"Verify old file is gone and new file exists"
+	self deny: (o @env1:exists: oldPath).
+	self assert: (o @env1:exists: newPath).
+
+	"Clean up"
+	o @env1:remove: newPath
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testRmdir [
+	"Test os.rmdir() - remove directory"
+
+	| o testDir |
+	o := os @env1:instance.
+	testDir := (self tmp: 'os_test_rmdir').
+
+	"Clean up if it exists"
+		(o @env1:exists: testDir) ifTrue: [
+			o @env1:rmdir: testDir
+	].
+
+	"Create directory"
+	o @env1:mkdir: testDir.
+
+	"Verify it exists"
+	self assert: (o @env1:exists: testDir).
+
+	"Remove it"
+	o @env1:rmdir: testDir.
+
+	"Verify it's gone"
+	self deny: (o @env1:exists: testDir)
+
+]
+
+{ #category : 'Grail-Tests - Constants' }
+OsTestCase >> testSep [
+	"Test os.sep constant"
+
+	| o result |
+	o := os @env1:instance.
+	result := o @env1:sep.
+
+	self assert: result equals: '/'
+
+]
+
+{ #category : 'Grail-Tests - File and Directory Operations' }
+OsTestCase >> testStat [
+	"Test os.stat()"
+
+	| o testFile file statResult |
+	o := os @env1:instance.
+	testFile := (self tmp: 'os_test_stat').
+
+	"Clean up if it exists"
+	(o @env1:exists: testFile) ifTrue: [
+		o @env1:remove: testFile
+	].
+
+	"Create a test file"
+	file := GsFile open: testFile mode: 'w' onClient: false.
+	file nextPutAll: 'test content'.
+	file close.
+
+	"Get stat"
+	statResult := o @env1:stat: testFile.
+
+	"Verify stat result is not nil"
+	self assert: statResult notNil.
+
+	"Clean up"
+	o @env1:remove: testFile
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testStatOfExistingFileStillAnswersStatResult [
+	"Guard the success path: the fix tests for the GsFileStat shape rather than
+	for nil, so it must not reject a real stat."
+
+	self assert: (self eval: 'import os, tempfile
+p = os.path.join(tempfile.mkdtemp(), "s.txt")
+with open(p, "w") as f:
+    f.write("hello")
+st = os.stat(p)
+lst = os.lstat(p)
+mt = os.path.getmtime(p)
+os.remove(p)
+all([st.st_size == 5, lst.st_size == 5, mt > 0])') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testStatOfMissingFileIsCatchableAsOSError [
+	"The whole point of raising: ``except OSError'' has to see it, because that
+	is what stdlib code guards a stat with (linecache.updatecache)."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.stat("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testStatOfMissingFileRaisesFileNotFoundError [
+	"GsFile>>stat:isLstat: answers a SmallInteger ERRNO on failure, never nil.
+	os.stat tested for nil, so a missing file produced no exception at all --
+	the errno was wrapped as a stat_result and the first st_* read died as an
+	UNCATCHABLE Smalltalk MNU (#mode sent to a SmallInteger)."
+
+	self assert: (self eval: 'import os
+r = "no exception raised"
+try:
+    os.stat("/no/such/file.py")
+except FileNotFoundError as e:
+    r = "FileNotFoundError" if "No such file or directory" in str(e) else str(e)
+except OSError as e:
+    r = "bare OSError: " + str(e)
+r') equals: 'FileNotFoundError'.
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testStringPathsAreUnaffectedByPathLikeCoercion [
+	"The coercion is permissive on purpose -- it fires only for an object
+	that defines __fspath__ and passes everything else through UNCHANGED --
+	so adding it cannot turn a call that used to work into an error."
+
+	self assert: (self eval: 'import os, shutil, tempfile
+d = tempfile.mkdtemp()
+out = [os.listdir(d) == [], os.path.isdir(d),
+       os.path.join(d, "z") == d + "/z",
+       os.path.basename("/a/b/c.txt") == "c.txt",
+       os.path.dirname("/a/b/c.txt") == "/a/b",
+       os.path.splitext("/a/b/c.txt") == ("/a/b/c", ".txt")]
+shutil.rmtree(d)
+all(out)') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Process Management' }
+OsTestCase >> testSystem [
+	"Test os.system() - execute shell command"
+
+	| o result |
+	o := os @env1:instance.
+
+	"Execute a simple command"
+	result := o @env1:system: 'echo "test"'.
+
+	"Result should not be nil (exit code or output)"
+	self assert: result notNil
+
+]
+
+{ #category : 'Grail-Tests - File Operations' }
+OsTestCase >> testUnlink [
+	"os.unlink() - semantically identical to os.remove() in CPython, and the
+	spelling test.support.os_helper uses to clean up.
+
+	Grail had only remove(), so every vendored test touching os_helper.TESTFN
+	raised AttributeError INSTEAD of cleaning up (7 such errors in
+	test.test_iter alone) and left its scratch file behind -- the origin of the
+	stray ``@test'' that kept appearing in the working tree."
+
+	| o testFile f |
+	o := os @env1:instance.
+	testFile := 'grail_unlink_test.txt'.
+	f := GsFile openWriteOnServer: testFile.
+	f notNil ifTrue: [f nextPutAll: 'x'; close].
+	self assert: (o @env1:exists: testFile).
+	o @env1:unlink: testFile.
+	self deny: (o @env1:exists: testFile)
+
+]
+
+{ #category : 'Grail-Tests - Environment Variables' }
+OsTestCase >> testUnsetenv [
+	"Test os.unsetenv() - remove an environment variable.  numpy's _core
+	init relies on this to undo a transient putenv inside a finally block;
+	a missing os.unsetenv there raised an AttributeError that masked the
+	real import failure."
+
+	| o testVar |
+	o := os @env1:instance.
+	testVar := 'GRAIL_TEST_UNSETENV_VAR'.
+
+	"Set then clear it; getenv should no longer return the set value."
+	o @env1:putenv: testVar _: 'transient_value'.
+	o @env1:unsetenv: testVar.
+
+	"After unsetenv the value must not be the one we set (nil/None or empty)."
+	self deny: ((o @env1:getenv: testVar) = 'transient_value')
+
+]

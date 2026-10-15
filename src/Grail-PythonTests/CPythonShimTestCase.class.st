@@ -1,0 +1,3895 @@
+Class {
+	#name : 'CPythonShimTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Setup' }
+CPythonShimTestCase >> setUp [
+	"Ensure the shim library is loaded."
+
+	CPythonShim current.
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testA128BitIntRoundTripsTheAbi3Way [
+	"PyO3's abi3 build reads a 128-bit int as two unsigned 64-bit halves
+	(PyLong_AsUnsignedLongLongMask, PyNumber_Rshift) and rebuilds one with
+	PyLong_FromUnsignedLongLong / PyNumber_Lshift / PyNumber_Or.  The
+	PyNumber_* were stubs answering NULL with no error, and the 64-bit
+	conversions went through the signed SmallInteger path, so a UUID's int
+	killed the gem."
+
+	| shim n |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	n := 16r123456781234567812345678123456FF.
+	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: n) equals: n.
+	n := (2 raisedTo: 128) - 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: n) equals: n.
+	self assert: (shim callModule: '_shimtest' method: 'test_u128' with: 5) equals: 5
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testAClassStatementMaySubclassAWheelType [
+	"Step 1 of docs/Shim_Foreign_Subclassing.md (option C): ``class Sub(Box)'' succeeds,
+	its bases and MRO name the C type, issubclass reaches it, and calling it refuses with
+	CPython's ``cannot create'' -- which is also what CPython says here, since Box has no
+	tp_new.  It used to raise ``cannot subclass a non-class base (ShimForeignObject)''
+	(numpy's memmap, recarray, record and matrix)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Box):
+    extra = 1
+class SubSub(Sub):
+    pass
+def make(cls):
+    try:
+        cls()
+        return ''created''
+    except TypeError as e:
+        return str(e).split('':'')[0]
+repr((Sub.extra, make(Sub), make(SubSub), issubclass(SubSub, d.Box), Sub.__bases__ == (d.Box,), SubSub.__mro__ == (SubSub, Sub, d.Box, object)))') equals: '(1, "cannot create ''Sub'' instances", "cannot create ''SubSub'' instances", True, True, True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testADottedExtensionNameCallsPositionally [
+	"#1433 cause 2: shimCall read any dot in the module name as the combined
+	'module.method' form, so every positional call into an extension loaded
+	inside a package -- markupsafe._speedups, numpy._core._multiarray_umath --
+	looked up the top-level package and failed 'Module not found'."
+
+	| soPath mod |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	mod := CPythonShim loadDynamicModule: 'grailpkg._grail_demo' fromPath: soPath.
+	self assert: (mod @env1:_add: { 3 . 4 } kw: nil) equals: 7
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testAFloatCrossesWithItsValueAtObFval [
+	"A wheel reads a float with the inline PyFloat_AS_DOUBLE; a Grail float's wrapper held
+	its OOP there, and numpy's np.subtract(2.0, 0.0) answered -6e-323."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.float_inline(2.5), d.float_inline(-0.125), d.float_inline(1e300)))') equals: '(2.5, -0.125, 1e+300)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Dispatch' }
+CPythonShimTestCase >> testAGeneratorDispatcherIsIteratedInGrail [
+	"Some of numpy's dispatchers are generators.  C cannot iterate a Grail generator from a
+	callback (its body runs on its own GsProcess); Grail can."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def _gdisp(*xs):
+    yield from xs
+repr(d.Dispatcher(_gdisp, lambda *xs: sum(xs))(1, 2, 3))') equals: '6'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Dispatch' }
+CPythonShimTestCase >> testALikeDispatcherAndADispatcherErrorGoThroughC [
+	"A like= dispatcher (no relevant_arg_func) is left to C, and so is a call its dispatcher
+	rejects: it runs again there and raises as numpy would."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def _disp(x):
+    return (x,)
+f = d.Dispatcher(_disp, lambda x: x)
+def err():
+    try:
+        f(1, 2)
+    except TypeError as e:
+        return str(e)
+repr((d.Dispatcher(None, lambda x: x * 3)(5), err()))') equals: '(15, ''_disp() takes 1 positional argument but 2 were given'')'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Printing' }
+CPythonShimTestCase >> testAMetatypeGetsetIsReadOffTheType [
+	"On a TYPE, a getset of its metatype is a data descriptor and comes first, as in
+	CPython's type_getattro.  numpy's _DTypeMeta gives each DType class ``_legacy'', and
+	dtype.name reads ``type(dtype)._legacy'' -- so str(dtype) failed."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.WithMeta._legacy, type(d.WithMeta).__name__))') equals: '(''legacy:_grail_demo.WithMeta'', ''Meta'')'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testAMethodReadOffAWheelTypeIsAStableDescriptor [
+	"An instance method or a getset read off a wheel's TYPE answered nothing.
+	numpy reads ndarray.__array_finalize__ and four more this way and compares
+	later lookups against them by identity.  31 = an object (1), the same one
+	twice (2), a method_descriptor (4), the property too (8), callable (16)."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_type_descriptors') equals: 31
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testAModuleDictOnlyNameIsAnAttribute [
+	"numpy stores its ufuncs with PyDict_SetItemString into PyModule_GetDict.
+	A module attribute read from C, and the export Grail builds the module
+	from, both looked only at the PyModule_AddObject table."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_module_dict_attr') equals: 7.
+	self assert: ((shim moduleAttrs: '_shimtest') at: #DICT_ONLY otherwise: nil) equals: 7
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 2' }
+CPythonShimTestCase >> testAModuleFunctionCrossesAsItsBuiltinFunction [
+	"A function of a dynamically loaded C module reached C as a wrapper of the
+	Grail BoundMethod it is read as, so a type test against PyCFunction_Type
+	failed -- numpy's add_docstring, and ``import numpy'' with it
+	(_core/overrides.py).  It now crosses as the module's own
+	builtin_function_or_method.  The answer is CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.function_name(d.add), d.function_name(d.scale), d.function_name(1)))') equals: '(''add'', ''scale'', None)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 2' }
+CPythonShimTestCase >> testAModuleFunctionCrossesAsOneObject [
+	"Each crossing hands C the same function object, so a docstring written
+	into it, or a pointer compared, holds from one call to the next."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.same_object(d.add, d.add))') equals: 'True'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Dispatch' }
+CPythonShimTestCase >> testAnArgumentWithNdarraysArrayFunctionIsNotAnOverride [
+	"An argument whose __array_function__ is ndarray's -- the default -- or that has none
+	(a wheel object without one, a Grail int) lets Grail call the implementation itself,
+	as numpy's C does; nested four deep, so a wrong answer would reach the nesting limit."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+D = d.Dispatcher
+def _disp(x):
+    return (x,)
+def nest(depth, f):
+    for _ in range(depth):
+        f = (lambda g: D(_disp, lambda x: g(x)))(f)
+    return f
+def _impl(x):
+    return ''impl''
+repr((nest(4, D(_disp, _impl))(d.NdLike()), nest(4, D(_disp, _impl))(d.make_box(1)), nest(4, D(_disp, _impl))(7)))') equals: '(''impl'', ''impl'', ''impl'')'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Dispatch' }
+CPythonShimTestCase >> testAnArrayFunctionOverrideStillReceivesTheCall [
+	"An argument with an __array_function__ of its own -- a Grail class's, or a wheel type's
+	other than ndarray's -- is left to C, which hands it the call."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Over:
+    def __array_function__(self, func, types, args, kwargs):
+        return (''python override'', func is f, len(args), sorted(kwargs))
+f = d.Dispatcher(lambda a, b=None: (a, b), lambda a, b=None: ''impl'')
+repr((f(Over(), b=2), f(d.OverLike(), 5)[0], f(d.OverLike(), 5)[1][1], f(d.NdLike(), 5)))') equals: '((''python override'', True, 1, [''b'']), ''overridden'', 5, ''impl'')'
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testANativeTypeInstanceIsItsTypesSubtype [
+	"A datetime.date -- a natively implemented type -- crossed typed as
+	``object'', so PyObject_TypeCheck against the date type failed and
+	pydantic_core refused a real date."
+
+	| shim pair |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	pair := self eval: 'import datetime
+(datetime.date(2017, 1, 1), datetime.date, datetime.datetime)'.
+	self assert: (shim callModule: '_shimtest' method: 'test_type_check'
+		with: (pair at: 1) with: (pair at: 2)) equals: true.
+	self assert: (shim callModule: '_shimtest' method: 'test_type_check'
+		with: (pair at: 1) with: (pair at: 3)) equals: false
+
+]
+
+{ #category : 'Grail-Tests - FastAPI Phase 5' }
+CPythonShimTestCase >> testAnImportedModuleKeepsAReferenceInTheImportCache [
+	"PyImport_ImportModule answers a NEW reference, which PyO3 drops when it is
+	done, and the shim's C-side import cache keeps the pointer for the life of
+	the process.  The cache handed it out uncounted and held no reference of its
+	own, so a few import/decref cycles took the module's wrapper to zero and
+	CPythonShim>>sweep freed it under the cache.  Once that memory held a str,
+	pydantic_core's ``re.compile'' failed with ``'str' object has no attribute
+	'compile''' -- or the gem segfaulted -- after enough other imports."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_import_refcount'
+		with: 'json' with: 5) >= 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_import_refcount'
+		with: 'json' with: 5) >= 1
+
+]
+
+{ #category : 'Grail-Tests - NumPy Dispatch' }
+CPythonShimTestCase >> testANumpyFunctionCallsItsImplementationFromGrail [
+	"A numpy public function (an _ArrayFunctionDispatcher, here the demo's miniature of one)
+	called from Grail runs its dispatcher and implementation in Grail
+	(ShimForeignObject>>___callArrayDispatch:args:kwargs:).  Through C each call cost two
+	user-action re-entries, so a Python-written numpy function calling another needed a
+	third, which GemStone refuses (INT_MAX_USER_ACTION, error 2138): np.linspace failed.
+	Four levels deep here."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+D = d.Dispatcher
+def _disp(x):
+    return (x,)
+inner = D(_disp, lambda x: x + 1)
+mid = D(_disp, lambda x: inner(x) * 2)
+outer = D(_disp, lambda x: mid(x) + 100)
+top = D(_disp, lambda x: outer(x) - 1)
+repr((top(3), top._implementation(3), inner._implementation is not None))') equals: '(107, 107, True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testARealLayoutTupleComesBackAsItself [
+	"A tuple C built in CPython's layout, stored in a dict and read back, is the
+	same object and readable with an inlined PyTuple_GET_ITEM.  It came back as
+	a wrapper, and numpy's get_info_no_cast read NULL past it."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_real_tuple_roundtrip'
+		with: (self eval: '{}')) equals: 1
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testAsLongOfAStrRaisesTypeError [
+	"PyLong_AsLong of a str answered 0 with no error set, so PyO3 read a str
+	literal as the integer 0."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_long' with: 'abc')
+		equals: 'TypeError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_long' with: 41)
+		equals: 41
+	"Not asserted for a plain object(): that still goes through the __index__
+	PROBE, whose expected DNU raised under SUnit's handlers is the 6011 loop
+	CPythonShim>>___betweenShimCalls describes, not a TypeError."
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testATypeWhoseMetatypeSubclassesTypeKeepsItsName [
+	"A type is named by its own tp_name when its metatype is a SUBCLASS of type, not only
+	type itself (numpy's DTypes are _DTypeMeta instances; np.dtypes.BoolDType was missing)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.WithMeta.__name__,))') equals: '(''WithMeta'',)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testAWheelFloatSubclassHasItsValue [
+	"float's tp_new builds a subtype with its value at ob_fval (np.float64(0.5) was 0.0), and
+	the subtype uses float's arithmetic, comparison and conversions."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.float_inline(d.MyFloat(2.5)), d.MyFloat(2.5) + 1, d.MyFloat() + 0, d.float_inline(d.MyFloat(''1.25'')), 0.5 == d.MyFloat(0.5), d.MyFloat(0.5) == 0.5, float(d.MyFloat(1.5)), -d.MyFloat(2.0)))') equals: '(2.5, 3.5, 0.0, 1.25, True, True, 1.5, -2.0)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Builtins' }
+CPythonShimTestCase >> testAWheelModuleFunctionIsABuiltin [
+	"A C extension's module function is a builtin_function_or_method, as a native module's
+	is: type(), isinstance with types.BuiltinFunctionType / FunctionType, and repr.  It
+	read as a Python ``function'', so numpy's add_newdoc took its own C functions for pure
+	Python and warned 30 times at import."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import types, math
+import _grail_demo as d
+repr([(type(f).__name__, isinstance(f, types.BuiltinFunctionType), isinstance(f, types.FunctionType), repr(f)) for f in (d.add, math.sqrt, len)])') equals: '[(''builtin_function_or_method'', True, False, ''<built-in function add>''), (''builtin_function_or_method'', True, False, ''<built-in function sqrt>''), (''builtin_function_or_method'', True, False, ''<built-in function len>'')]'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testAWheelObjectThatComparesWithoutHashingIsUnhashable [
+	"tp_richcompare and PyObject_HashNotImplemented -- ndarray's case."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def unhashable():
+    try:
+        hash(d.make_nohash())
+        return ''hashed''
+    except TypeError as e:
+        return str(e)
+nh = d.make_nohash()
+repr((unhashable(), nh == nh))') equals: '("unhashable type: ''_grail_demo.NoHash''", True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testAWheelObjectWithoutSlotsComparesByIdentity [
+	"No tp_richcompare and no tp_hash: == is identity and the hash is object's, decided at
+	the proxy's birth without a user action (numpy's DType classes, which key its cast
+	tables -- a hash that needed a nested user action missed inside np.linspace)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+p = d.make_plain()
+q = d.make_plain()
+repr((p == p, p == q, p != q, {p: 1}[p], hash(p) == hash(p)))') equals: '(True, False, True, 1, True)'
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectLeftBetween [
+	"bisect_left for a non-present value is the same as bisect_right."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'bisect_left'
+		withList: #(1.0 2.0 3.0 4.0 5.0) andDouble: 2.5.
+	self assert: result equals: 2.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectLeftPresent [
+	"bisect_left finds the insertion point before an existing element."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'bisect_left'
+		withList: #(1.0 2.0 3.0 4.0 5.0) andDouble: 3.0.
+	self assert: result equals: 2.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectRightAfterAll [
+	"bisect_right returns list size when value is larger than all elements."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'bisect_right'
+		withList: #(10.0 20.0 30.0) andDouble: 99.0.
+	self assert: result equals: 3.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectRightBeforeAll [
+	"bisect_right returns 0 when value is smaller than all elements."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'bisect_right'
+		withList: #(10.0 20.0 30.0) andDouble: 5.0.
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectRightBetween [
+	"bisect_right finds the insertion point for a value between elements."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'bisect_right'
+		withList: #(1.0 2.0 3.0 4.0 5.0) andDouble: 2.5.
+	self assert: result equals: 2.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectRightEmptyList [
+	"bisect_right on an empty list returns 0."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'bisect_right'
+		withList: #() andDouble: 42.0.
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectRightPresent [
+	"bisect_right finds the insertion point after an existing element."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'bisect_right'
+		withList: #(1.0 2.0 3.0 4.0 5.0) andDouble: 3.0.
+	self assert: result equals: 3.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testBisectWithDuplicates [
+	"bisect_left and bisect_right differ for duplicate elements."
+
+	| shim left right |
+	shim := CPythonShim current.
+	left := shim callModule: '_bisect' method: 'bisect_left'
+		withList: #(1.0 2.0 2.0 2.0 3.0) andDouble: 2.0.
+	right := shim callModule: '_bisect' method: 'bisect_right'
+		withList: #(1.0 2.0 2.0 2.0 3.0) andDouble: 2.0.
+	self assert: left equals: 1.
+	self assert: right equals: 4.
+
+]
+
+{ #category : 'Grail-Tests - Argument Parsing' }
+CPythonShimTestCase >> testBuildValueNested [
+	"Py_BuildValue '(ns[nn])' builds a tuple of int, str, and nested list."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_build_value'
+		with: 2 with: 'hi'.
+	self assert: result size equals: 3.
+	self assert: (result at: 1) equals: 3.
+	self assert: (result at: 2) equals: 'hi'.
+	self assert: (result at: 3) asArray equals: #(2 2).
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testBuildValueSkipsSeparatorsBeforeAnyUnit [
+	"numpy builds '{s, [(i), (i, i), (i)]}' -- ', ' between a dict's key and
+	value -- and the dict case only stepped over a ':'."
+
+	| shim result |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	result := shim callModule: '_shimtest' method: 'test_build_value_separators'.
+	"'(i)' is a 1-tuple, as in CPython."
+	self assert: (result @env1:__repr__) asString equals: '{''k'': [(1,), (2, 3)]}'
+
+]
+
+{ #category : 'Grail-Tests - Bytearray' }
+CPythonShimTestCase >> testByteArrayRoundtrip [
+	"PyByteArray_FromStringAndSize creates a Grail bytearray instance."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_bytearray'
+		with: 'abc' asByteArray.
+	self assert: result class name equals: #bytearray.
+	self assert: result size equals: 3.
+	self assert: (result at: 1) equals: 97.
+	self assert: (result at: 3) equals: 99.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testBytesAsStringRefusesANonBytes [
+	"PyBytes_AsString answered the bytes of whatever it was given.  numpy's
+	string_to_long_double tries it on a float and falls back to the number on
+	NULL, so a float identity read as the empty string and module init failed
+	with 'invalid literal for long double: '."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_bytes_as_string'
+		with: (self eval: 'b"abcd"')) equals: 4.
+	self assert: (shim callModule: '_shimtest' method: 'test_bytes_as_string'
+		with: 1.5) equals: 'TypeError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_bytes_as_string'
+		with: 'abc') equals: 'TypeError'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiBytes [
+	"PyBytes_FromString and PyBytes_AsStringAndSize (with and without a length; an embedded
+	null refused without one).
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii((t(''bytes_from_string'', ''h\u00e9llo''), t(''bytes_as_string_and_size'', b''ab\x00cd''), t(''bytes_as_string_no_len'', b''ab\x00cd''), t(''bytes_as_string_no_len'', b''abcd''),))') equals: '(b''h\xc3\xa9llo'', (5, b''ab\x00cd''), (''raised'', ''ValueError'', ''embedded null byte''), b''abcd'')'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiErrors [
+	"PyErr_FormatV, PyErr_NormalizeException (Fetch answers the text; normalizing builds the
+	instance), PyErr_SetFromErrno (OSError(errno, text), so a FileNotFoundError), PyErr_WarnFormat
+	and PyErr_WarnEx (through warnings.warn -- WarnEx was a silent no-op), PyErr_Print and
+	PyErr_WriteUnraisable (they report and clear), PyException_SetCause/Context/Traceback.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii((t(''err_formatv''), t(''normalize''), t(''set_from_errno''), t(''warn_format''), t(''print_clears''), t(''unraisable_clears'', o), (r is e1, e1.__cause__ is e2, e1.__suppress_context__, e1.__context__ is e3, e1.__traceback__),))') equals: '((''raised'', ''ValueError'', ''x=5 y=abc''), (True, KeyError(''k'')), (''raised'', ''FileNotFoundError'', ''[Errno 2] No such file or directory''), (''warned'', ''UserWarning'', ''warned 7 times''), True, True, (True, True, True, True, None))'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiHashCapsuleAndUniqueness [
+	"_Py_HashDouble and PyObject_Hash agree with hash() (PyObject_Hash sent Smalltalk's #hash), a
+	capsule's context and name, and IsUniqueReferencedTemporary's always-safe 0.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''hash_double'', 1.5) == hash(1.5), t(''hash_double'', 2.0) == hash(2.0)), t(''capsule''), t(''unique_temporary'', [1]),))') equals: '((True, True), (1, 42, 7), 0)'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiNumbers [
+	"PyFloat_FromString, PyLong_FromUnicodeObject (through int(), which C could not call: the
+	shim's PyLong_Type had no tp_new), PyLong_As/FromVoidPtr, PyLong_IsZero.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''float_from_string'', ''1.5''), t(''float_from_string'', ''x'')), (t(''long_from_unicode'', ''ff'', 16), t(''long_from_unicode'', '' 12 '', 10), t(''long_from_unicode'', ''zz'', 10)), (t(''void_ptr_roundtrip'', 123456789), t(''void_ptr_roundtrip'', 0)), (t(''long_is_zero'', 0), t(''long_is_zero'', 5), t(''long_is_zero'', 2 ** 80)),))') equals: '((1.5, (''raised'', ''ValueError'', "could not convert string to float: ''x''")), (255, 12, (''raised'', ''ValueError'', "invalid literal for int() with base 10: ''zz''")), (123456789, 0), (1, 0, 0))'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiObjects [
+	"PyEval_GetBuiltins, PyDict_ContainsString, PyMapping_GetItemString, PyMemoryView_FromObject,
+	PyMethod_New, PyObject_AsFileDescriptor, PyObject_Bytes, PyObject_Format, PyObject_GenericGetAttr,
+	PyObject_LengthHint, PyObject_Not, PyObject_Print.
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii((t(''builtins_len'')([1, 2, 3]), (t(''dict_contains_string'', {''k'': 1}, ''k''), t(''dict_contains_string'', {''k'': 1}, ''z'')), (t(''mapping_get_item_string'', {''k'': ''v''}, ''k''), t(''mapping_get_item_string'', {}, ''k'')), t(''memoryview_bytes'', b''xyz''), t(''method_new_call'', meth, o), (t(''as_fd'', 3), t(''as_fd'', Fd()), t(''as_fd'', -1), t(''as_fd'', ''x'')), (t(''object_bytes'', [104, 105]), t(''object_bytes'', b''q'')), (t(''object_format'', 3.14159, ''.2f''), t(''object_format'', 42, ''>5'')), (t(''generic_getattr'', o, ''x''), t(''generic_getattr'', o, ''nope'')[:2]), (t(''length_hint'', [1, 2, 3], 0), t(''length_hint'', Hint(), 0), t(''length_hint'', Obj(), 4)), (t(''object_not'', 0), t(''object_not'', [1]), t(''object_not'', '''')), t(''object_print'', ''q''),))') equals: '(3, (True, False), (''v'', (''raised'', ''KeyError'', "''k''")), b''xyz'', (''bound to'', ''Obj''), (3, 5, (''raised'', ''ValueError'', ''file descriptor cannot be a negative integer (-1)''), (''raised'', ''TypeError'', ''argument must be an int, or have a fileno() method.'')), (b''hi'', b''q''), (''3.14'', ''   42''), (''xv'', (''raised'', ''AttributeError'')), (3, 9, 4), (1, 0, 1), "''q''q")'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiSequences [
+	"PySequence_Concat / Repeat and the in-place forms (a list reaches C as a copy, so only the
+	result is compared, not the identity).
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''seq_concat'', [1], [2]), t(''seq_concat'', (1,), (2,)), t(''seq_concat'', ''a'', ''b'')), (t(''seq_repeat'', [0], 3), t(''seq_repeat'', ''ab'', 2)), t(''seq_inplace_concat'', lst, [3])[0], t(''seq_inplace_repeat'', [7], 2)[0],))') equals: '(([1, 2], (1, 2), ''ab''), ([0, 0, 0], ''abab''), [1, 2, 3], [7, 7])'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiUnicode [
+	"Encoding, UCS4 in and out, PyUnicode_FromKindAndData, PyUnicode_Format, FromEncodedObject,
+	Replace, Tailmatch, and the _PyUnicode_Is* character classes (titlecase is category Lt, not
+	str.istitle).
+	These were shim_numpy.cc stubs that answered as if they had succeeded."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import warnings, os, io, sys
+import _grail_demo as d
+def t(*a):
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter(''always'')
+            r = d.capi(*a)
+        if w:
+            return (''warned'', w[0].category.__name__, str(w[0].message))
+        return r
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Hint:
+    def __length_hint__(self):
+        return 9
+class Fd:
+    def fileno(self):
+        return 5
+class Obj:
+    pass
+o = Obj(); o.x = ''xv''
+def meth(self):
+    return (''bound to'', type(self).__name__)
+e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
+r = t(''set_cause'', e1, e2, e3)
+lst = [1, 2]
+ascii(((t(''as_ascii'', ''abc''), t(''as_ascii'', ''\u00e9'')[:2], t(''as_latin1'', ''\u00e9''), t(''as_encoded'', ''\u00e9'', ''utf-8'')), (t(''as_ucs4'', ''a\u00e9\u20ac\U0001f600''), t(''as_ucs4_copy'', ''xy\u20ac''), t(''as_ucs4_short_buffer'', ''abcd'')), (t(''from_kind_and_data'', 1, [104, 233]), t(''from_kind_and_data'', 2, [8364, 65]), t(''from_kind_and_data'', 4, [128512, 66])), t(''unicode_format'', ''%s-%d'', (''a'', 3)), (t(''from_encoded'', b''h\xc3\xa9'', ''utf-8''), t(''from_encoded'', b''\xff'', ''utf-8'')[:2]), (t(''unicode_replace'', ''aaaa'', ''a'', ''b''), t(''unicode_replace'', ''aaaa'', ''a'', ''b'', 2)), (t(''tailmatch'', ''hello'', ''he''), t(''tailmatch'', ''hello'', ''lo'')), [t(''char_classes'', ord(ch)) for ch in ''aZ5 \u0663\u2155\u01c5\u00e9''],))') equals: '((b''abc'', (''raised'', ''UnicodeEncodeError''), b''\xe9'', b''\xc3\xa9''), ([97, 233, 8364, 128512], [120, 121, 8364], (''raised'', ''SystemError'', ''string is longer than the buffer'')), (''h\xe9'', ''\u20acA'', ''\U0001f600B''), ''a-3'', (''h\xe9'', (''raised'', ''UnicodeDecodeError'')), (''bbbb'', ''bbaa''), ((1, 0), (0, 1)), [(1, 0, 0, 1, 0, 0, 0, 0), (1, 0, 0, 0, 0, 0, 1, 0), (0, 1, 1, 0, 1, 0, 0, 0), (0, 0, 0, 0, 0, 0, 0, 1), (0, 1, 1, 0, 1, 0, 0, 0), (0, 0, 0, 0, 1, 0, 0, 0), (1, 0, 0, 0, 0, 1, 0, 0), (1, 0, 0, 1, 0, 0, 0, 0)])'
+
+]
+
+{ #category : 'Grail-Tests - Capsules' }
+CPythonShimTestCase >> testCapsuleRoundtrip [
+	"PyCapsule_New / GetPointer / GetName / IsValid round-trip in C."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_capsule_roundtrip'.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testCapsulesCarryTheExportedCapsuleType [
+	"A wheel inlines PyCapsule_CheckExact as ob_type == &PyCapsule_Type; the
+	shim's capsules carried a private type, so numpy refused its own promoter."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_capsule_exact') equals: 1
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testComplexFromDoublesRoundTrips [
+	"The complex API was log-once stubs answering 0 with no error set."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: ((shim callModule: '_shimtest' method: 'test_complex_parts'
+		with: 1.5 with: -2.0) @env1:__repr__) asString equals: '(1.5, -2.0)'
+
+]
+
+{ #category : 'Grail-Tests - Heap Types' }
+CPythonShimTestCase >> testCounterBufferProtocol [
+	"PyObject_GetBuffer consults a heap type's bf_getbuffer slot."
+
+	| shim ptr text |
+	shim := CPythonShim current.
+	ptr := shim callModuleReturnCPtr: '_shimtest' method: 'test_make_counter'.
+	text := shim callModule: '_shimtest' method: 'test_counter_text' with: ptr.
+	self assert: text equals: 'counter!'.
+
+]
+
+{ #category : 'Grail-Tests - Heap Types' }
+CPythonShimTestCase >> testCounterMethodsAndGetSet [
+	"shimCallTyped on a heap type: METH_NOARGS method, tp_getset getter,
+	and (new) tp_getset SETTER via the flags bit-4 path."
+
+	| shim ptr |
+	shim := CPythonShim current.
+	ptr := shim callModuleReturnCPtr: '_shimtest' method: 'test_make_counter'.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'incr' selfPtr: ptr) equals: 1.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'incr' selfPtr: ptr) equals: 2.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'value' selfPtr: ptr) equals: 2.
+	shim callTyped: '_shimtest' type: 'Counter' setattr: 'value' selfPtr: ptr value: 41.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'value' selfPtr: ptr) equals: 41.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'incr' selfPtr: ptr) equals: 42.
+
+]
+
+{ #category : 'Grail-Tests - CRC32C' }
+CPythonShimTestCase >> testCrc32cEmptyBytes [
+	"crc32c of empty bytes should be 0."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_crc32c' method: 'crc32c'
+		withBytes: #[].
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - CRC32C' }
+CPythonShimTestCase >> testCrc32cExtendChaining [
+	"Chaining extend should produce the same result as a single crc32c call."
+
+	| shim crc1 crc2 |
+	shim := CPythonShim current.
+	crc1 := shim callModule: '_crc32c' method: 'extend'
+		extendCrc: 0 withBytes: '1234' asByteArray.
+	crc2 := shim callModule: '_crc32c' method: 'extend'
+		extendCrc: crc1 withBytes: '56789' asByteArray.
+	self assert: crc2 equals: 16rE3069283.
+
+]
+
+{ #category : 'Grail-Tests - CRC32C' }
+CPythonShimTestCase >> testCrc32cKnownValue [
+	"crc32c of '123456789' should be 0xE3069283 (standard check value)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_crc32c' method: 'crc32c'
+		withBytes: '123456789' asByteArray.
+	self assert: result equals: 16rE3069283.
+
+]
+
+{ #category : 'Grail-Tests - CRC32C' }
+CPythonShimTestCase >> testCrc32cSingleByte [
+	"crc32c of a single byte should return a valid checksum."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_crc32c' method: 'crc32c'
+		withBytes: #[0].
+	self assert: (result isKindOf: Integer).
+	self assert: (result >= 0).
+
+]
+
+{ #category : 'Grail-Tests - Error Handling' }
+CPythonShimTestCase >> testDeadWrapperIsRefusedRatherThanSentToNil [
+	"A block that is NOT a live Grail wrapper must come back as ONE ordinary
+	Python-level error naming the fault -- never as a message sent to nil.
+
+	Built by construction, because it does not reproduce by running anything:
+	the nightly CPython run hits it in test.test_re
+	(ReTests.test_large_subn) on x86_64 Linux, 2 of the last 5 nights, and
+	5 local runs plus a five-point GEM_TEMPOBJ_CACHE_SIZE sweep on arm64
+	Darwin never did.
+
+	The fourth word is the GRAILWP1 sentinel wrap: stamps at offset 24, so a
+	block whose sentinel is stale -- a gcMalloc block freed and REUSED, see
+	docs/Shim_Foreign_Proxy_Misattribution.md -- reaches is_foreign() as
+	``foreign'', and foreign_proxy_oop then refuses to dereference its
+	ob_type and answers nil.  0x41 is the exact ob_type the nightly
+	reported.
+
+	Before the guard in PyUnicode_AsUTF8 that nil was the RECEIVER of
+	``encodeAsUTF8''.  A DNU inside a user action is signalled with the C
+	frame still live, so a caller's broad Smalltalk handler runs on top of
+	it and its terminating return is refused with 2758 rather than 2010 --
+	which is why probe_failed_for_real's expected-DNU fallback never fired,
+	and why the nightly scored ONE failure twice (166 tests for 165 cases,
+	2 errors: an escaped MessageNotUnderstood and a RuntimeError naming
+	encodeAsUTF8, neither naming the dead block)."
+
+	"AbstractException, not Error: the refusal arrives as Grail's Python
+	SystemError, which is not a kind of Smalltalk Error -- an ``on: Error''
+	here let it straight through to PythonTestCase>>performTest, which
+	re-signals it, and the test ERRORED while the fix was working perfectly."
+
+	| buf raised text |
+	buf := CByteArray gcMalloc: 32.
+	buf int64At: 0 put: 1.            "refcnt"
+	buf int64At: 8 put: 16r41.        "ob_type -- the value the nightly reported"
+	buf int64At: 16 put: 0.           "oop slot: nothing behind it"
+	buf int64At: 24 put: 0.           "sentinel: NOT GRAILWP1, so 'foreign'"
+	raised := false.
+	[ CPythonShim current
+		callModule: '_shimtest' method: 'test_asutf8_at' with: buf memoryAddress ]
+		on: AbstractException
+		do: [:e |
+			raised := true.
+			text := (e messageText ifNil: ['']) asString.
+			self assert: (text includesString: 'no Grail object behind')
+				description: 'expected the refusal, got: ' , text.
+			self deny: (text includesString: 'encodeAsUTF8')
+				description: 'must name the dead block, not the probe: ' , text].
+	self assert: raised
+		description: 'PyUnicode_AsUTF8 on a dead wrapper must raise, not answer bytes'
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictClear [
+	"PyDict_Clear empties the dictionary."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1; at: 'b' put: 2.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_clear'
+		with: dict.
+	self assert: result equals: 0.
+	self assert: dict size equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictContains [
+	"test_dict_contains returns true after adding a key."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_contains'
+		with: 'key1'.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testDictCopyOfAnInstanceDictIsIndependent [
+	"PyDict_Copy of an instance's __dict__ answered a second VIEW of the same
+	instance, and PyDict_DelItem sent the view removeKey: -- so pydantic_core's
+	validate_assignment edited the model in place, or failed."
+
+	| shim inst copy |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	inst := self eval: 'class _ShimP6:
+    pass
+_shimp6 = _ShimP6()
+_shimp6.a = 1
+_shimp6.b = 2
+_shimp6'.
+	copy := shim callModule: '_shimtest' method: 'test_dict_copy_del'
+		with: (inst @env1:___pyAttrLoad___: #'__dict__') with: 'a'.
+	self assert: (copy @env1:__len__) equals: 1.
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 1.
+	self assert: (inst @env1:___pyAttrLoad___: #b) equals: 2
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictDel [
+	"test_dict_del removes a key, size becomes 0."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_del'
+		with: 'removeMe' with: 42.
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictItemsCount [
+	"PyDict_Items returns a list of (key, value) tuples."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1; at: 'b' put: 2; at: 'c' put: 3.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_items_count'
+		with: dict.
+	self assert: result equals: 3.
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictKeys [
+	"PyDict_Keys returns a list of the keys."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1; at: 'b' put: 2.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_keys'
+		with: dict.
+	self assert: result size equals: 2.
+	self assert: (result includes: 'a').
+	self assert: (result includes: 'b').
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictMerge [
+	"PyDict_Merge with override=false keeps existing entries."
+
+	| a b |
+	a := KeyValueDictionary new. a at: 'k' put: 1.
+	b := KeyValueDictionary new. b at: 'k' put: 2. b at: 'n' put: 3.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_merge'
+		with: a with: b with: false.
+	self assert: (a at: 'k') equals: 1.
+	self assert: (a at: 'n') equals: 3.
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testDictNextWalksTwoDictsInLockstep [
+	"PyDict_Next serves a walk from one snapshot taken at pos 0 (the shim's
+	g_dn ring), which halved a model_dump's crossings.  Two walks in flight
+	at once must each see their own dict, in insertion order."
+
+	| shim r |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	r := shim callModule: '_shimtest' method: 'test_dict_next'
+		with: (self eval: '{"a": 1, "b": 2, "c": 3}')
+		with: (self eval: '{"x": 10, "y": 20}').
+	self assert: r asArray equals: #('a' 1 'x' 10 'b' 2 'y' 20 'c' 3)
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictRoundtrip [
+	"test_dict_roundtrip sets a key-value pair and retrieves it."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_roundtrip'
+		with: 'hello' with: 42.
+	self assert: result equals: 42.
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictRoundtripFloat [
+	"test_dict_roundtrip with float values."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_roundtrip'
+		with: 'pi' with: 3.14.
+	self assert: result equals: 3.14.
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictSetDefault [
+	"PyDict_SetDefault returns existing values and stores defaults."
+
+	| dict shim |
+	shim := CPythonShim current.
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_dict_setdefault'
+		with: dict with: 'a' with: 99) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_dict_setdefault'
+		with: dict with: 'b' with: 99) equals: 99.
+	self assert: (dict at: 'b') equals: 99.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testDictSetDefaultRef [
+	"0 and the default when it inserts, 1 and the existing value when the key
+	is already there."
+
+	| shim d |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	d := self eval: '{}'.
+	self assert: ((shim callModule: '_shimtest' method: 'test_dict_setdefault_ref'
+		with: d with: 'k' with: 'v') @env1:__repr__) asString equals: '(0, ''v'')'.
+	self assert: ((shim callModule: '_shimtest' method: 'test_dict_setdefault_ref'
+		with: d with: 'k' with: 'w') @env1:__repr__) asString equals: '(1, ''v'')'
+
+]
+
+{ #category : 'Grail-Tests - Dict API' }
+CPythonShimTestCase >> testDictStringKey [
+	"test_dict_string_key sets via C string key and retrieves."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_string_key'
+		with: 99.
+	self assert: result equals: 99.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testDictValuesReadInline [
+	"PyDict_Values answers a real-layout list (numpy's ufunc dispatch reads its loop table
+	with PySequence_Fast_GET_ITEM)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.dict_values_inline({''a'': 1, ''b'': (2, 3), ''c'': [4]}))') equals: '(1, (2, 3), [4])'
+
+]
+
+{ #category : 'Grail-Tests - Wrapper lifetime' }
+CPythonShimTestCase >> testDuringCallDoRestoresDepthAndReturnsValue [
+	"___duringCallDo: passes the block value through, and sweeping resumes
+	after the call -- including after a NON-LOCAL EXIT out of it.
+
+	How it resumes changed.  There used to be an
+	``ensure: [callDepth := callDepth - 1]'', which restored the counter
+	eagerly; that ensure: was removed because an ensure: between a caller's
+	handler and a live user-action C frame turns the VM's refusal of that
+	unwind into an unbounded 6011 loop (CPythonShim>>___betweenShimCalls,
+	scripts/probe_handler_recursion.gs).  So an escape now SKIPS the
+	decrement and the guard repairs it instead.  The contract this test
+	holds to is the one that matters -- sweeping resumes -- not the
+	mechanism, so it asserts the guard directly."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim ___duringCallDo: [42]) equals: 42.
+	self assert: shim ___betweenShimCalls.
+	"Nested use unwinds cleanly."
+	self assert: (shim ___duringCallDo: [shim ___duringCallDo: [7]]) equals: 7.
+	self assert: shim ___betweenShimCalls.
+	"A non-local exit leaves the counter high; the guard must repair it, or
+	sweeping would stop for the rest of the session."
+	[shim ___duringCallDo: [Error signal: 'escape from a shim call']]
+		on: Error do: [:ex | ex return: nil].
+	self assert: shim ___betweenShimCalls.
+	"And a call still defers sweeps after that repair."
+	self deny: (shim ___duringCallDo: [shim ___betweenShimCalls])
+
+]
+
+{ #category : 'Grail-Tests - Dynamic Loading' }
+CPythonShimTestCase >> testDynLoadCallAdd [
+	"Call _grail_demo.add(3, 4) via shimCall after dynamic loading."
+
+	| soPath result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
+	result := CPythonShim current
+		callModule: '_grail_demo' method: 'add' with: 3 with: 4.
+	self assert: result equals: 7.
+
+]
+
+{ #category : 'Grail-Tests - Dynamic Loading' }
+CPythonShimTestCase >> testDynLoadGrailDemo [
+	"shimDynLoad should load _grail_demo.so and return method names."
+
+	| soPath methodNames |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	methodNames := System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
+	self assert: (methodNames isKindOf: Array).
+	self assert: methodNames asSortedCollection asArray
+		equals: #('add' 'as_long_overflow' 'capi' 'descr_def_name' 'dict_values_inline' 'dot_product'
+			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
+			'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
+			'seq_fast_len' 'setattr_in_c' 'singletons' 'sum_inline' 'unicode_compare').
+
+]
+
+{ #category : 'Grail-Tests - Dynamic Loading' }
+CPythonShimTestCase >> testDynLoadModule [
+	"loadDynamicModule:fromPath: should create a module subclass with compiled
+	methods. The generated methods use the `_name:kw:` varargs shape; calling
+	through the varargs entry point exercises the same path Phase 4d codegen
+	dispatches to for `module.method(args)` call sites."
+
+	| soPath mod result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	mod := CPythonShim loadDynamicModule: '_grail_demo' fromPath: soPath.
+	self assert: mod class name equals: #'_grail_demo'.
+	self assert: (mod class superclass == module).
+	result := mod @env1:_add: { 10 . 20 } kw: nil.
+	self assert: result equals: 30.
+
+]
+
+{ #category : 'Grail-Tests - Module Attrs' }
+CPythonShimTestCase >> testDynLoadModuleConstants [
+	"Dynamically loaded modules run Py_mod_exec (previously skipped) and
+	expose their PyModule_Add*Constant values as Python attributes."
+
+	| soPath mod |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	mod := CPythonShim loadDynamicModule: '_grail_demo' fromPath: soPath.
+	self assert: (mod @env1:DEMO_VERSION) equals: 7.
+	self assert: (mod @env1:DEMO_NAME) equals: 'grail-demo'.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalBisectLeft [
+	"Evaluate bisect_left through Python source.
+
+	>>> import _bisect
+	>>> _bisect.bisect_left([1.0, 2.0, 3.0, 4.0, 5.0], 3.0)
+	2"
+
+	| result |
+	result := self eval:
+'import _bisect
+result = _bisect.bisect_left([1.0, 2.0, 3.0, 4.0, 5.0], 3.0)
+result
+'.
+	self assert: result equals: 2.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalBisectRight [
+	"Evaluate the same Python source that CPython uses for _bisect.
+
+	>>> import _bisect
+	>>> _bisect.bisect_right([1.0, 2.0, 3.0, 4.0, 5.0], 3.0)
+	3"
+
+	| result |
+	result := self eval:
+'import _bisect
+result = _bisect.bisect_right([1.0, 2.0, 3.0, 4.0, 5.0], 3.0)
+result
+'.
+	self assert: result equals: 3.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalCrc32cBasic [
+	"Evaluate crc32c through Python source with the standard check value.
+
+	>>> import _crc32c
+	>>> _crc32c.crc32c(b'123456789')
+	3808858755"
+
+	| result |
+	result := self eval:
+'import _crc32c
+result = _crc32c.crc32c(b''123456789'')
+result
+'.
+	self assert: result equals: 16rE3069283.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalCrc32cEmpty [
+	"Evaluate crc32c of empty bytes through Python source.
+
+	>>> import _crc32c
+	>>> _crc32c.crc32c(b'')
+	0"
+
+	| result |
+	result := self eval:
+'import _crc32c
+result = _crc32c.crc32c(b'''')
+result
+'.
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalCrc32cExtend [
+	"Evaluate crc32c extend chaining through Python source.
+
+	>>> import _crc32c
+	>>> crc = _crc32c.extend(0, b'1234')
+	>>> _crc32c.extend(crc, b'56789')
+	3808858755"
+
+	| result |
+	result := self eval:
+'import _crc32c
+crc = _crc32c.extend(0, b''1234'')
+result = _crc32c.extend(crc, b''56789'')
+result
+'.
+	self assert: result equals: 16rE3069283.
+
+]
+
+{ #category : 'Grail-Tests - Dynamic Loading' }
+CPythonShimTestCase >> testEvalImportGrailDemo [
+	"End-to-end: Python source 'import _grail_demo; _grail_demo.add(3, 4)' returns 7."
+
+	| soPath result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	result := self eval:
+'import _grail_demo
+result = _grail_demo.add(3, 4)
+result
+'.
+	self assert: result equals: 7.
+
+]
+
+{ #category : 'Grail-Tests - Dynamic Loading' }
+CPythonShimTestCase >> testEvalImportGrailDemoDotProduct [
+	"End-to-end: dot_product via Python import."
+
+	| soPath result |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	result := self eval:
+'import _grail_demo
+result = _grail_demo.dot_product([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])
+result
+'.
+	self assert: result equals: 32.0.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalInsortRight [
+	"Evaluate insort_right through Python source — modifies list in place.
+
+	>>> import _bisect
+	>>> a = [1.0, 3.0, 5.0]
+	>>> _bisect.insort_right(a, 4.0)
+	>>> a
+	[1.0, 3.0, 4.0, 5.0]"
+
+	| result |
+	result := self eval:
+'import _bisect
+a = [1.0, 3.0, 5.0]
+_bisect.insort_right(a, 4.0)
+a
+'.
+	self assert: result asArray equals: #(1.0 3.0 4.0 5.0).
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalSreAsciiIscased [
+	"Evaluate _sre.ascii_iscased via Python source."
+
+	| result |
+	result := self eval:
+'import _sre
+result = _sre.ascii_iscased(65)
+result
+'.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalSreAsciiTolower [
+	"Evaluate _sre.ascii_tolower via Python source."
+
+	| result |
+	result := self eval:
+'import _sre
+result = _sre.ascii_tolower(90)
+result
+'.
+	self assert: result equals: 122.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalSreImport [
+	"import _sre should succeed and module should be accessible."
+
+	| result |
+	result := self eval:
+'import _sre
+result = _sre.getcodesize()
+result
+'.
+	self assert: result equals: 4.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalStatisticsFromImport [
+	"Evaluate the same Python source that CPython uses for _statistics.
+
+	>>> from _statistics import _normal_dist_inv_cdf
+	>>> _normal_dist_inv_cdf(0.5, 0.0, 1.0)
+	0.0"
+
+	| result |
+	result := self eval:
+'from _statistics import _normal_dist_inv_cdf
+result = _normal_dist_inv_cdf(0.5, 0.0, 1.0)
+result
+'.
+	self assert: result equals: 0.0.
+
+]
+
+{ #category : 'Grail-Tests - Python Eval' }
+CPythonShimTestCase >> testEvalStatisticsKnownValue [
+	"Evaluate _statistics with a known result through Python source.
+
+	>>> from _statistics import _normal_dist_inv_cdf
+	>>> _normal_dist_inv_cdf(0.975, 0.0, 1.0)
+	1.959963984540054"
+
+	| result |
+	result := self eval:
+'from _statistics import _normal_dist_inv_cdf
+result = _normal_dist_inv_cdf(0.975, 0.0, 1.0)
+result
+'.
+	self assert: (result - 1.959963984540054) abs < 1e-10.
+
+]
+
+{ #category : 'Grail-Tests - Error Handling' }
+CPythonShimTestCase >> testExceptionMatchesHierarchy [
+	"PyErr_ExceptionMatches: KeyError matches LookupError and Exception."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_exc_matches'.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - FastAPI Phase 3' }
+CPythonShimTestCase >> testFloatAsDoubleFollowsCPython [
+	"PyFloat_AsDouble read anything that was not a SmallInteger or a Float with
+	GciOopToFlt -- ``The given object is not a float'' for a bool or a dict,
+	``not representable'' for an int beyond 64 bits -- which pydantic hit
+	building FastAPI's OpenAPI document.  Now CPython's nb_float / nb_index,
+	with TypeError and OverflowError, and no exception raised inside the user
+	action."
+
+	| shim r |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: 2) equals: 2.0.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: 1.5) equals: 1.5.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: true) equals: 1.0.
+	r := shim callModule: '_shimtest' method: 'test_as_double' with: (self eval: '10**20').
+	self assert: r equals: 1.0e20.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: (self eval: '10**400'))
+		equals: 'OverflowError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double' with: (self eval: '{1: 2}'))
+		equals: 'TypeError'.
+	self assert: (shim callModule: '_shimtest' method: 'test_as_double'
+			with: (self eval: '__import__(''fractions'').Fraction(1, 4)'))
+		equals: 0.25
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 2' }
+CPythonShimTestCase >> testForeignAttributeStoreLandsInTheInstanceDict [
+	"``obj.attr = value'' on a wheel's own object stores in its instance dict
+	(tp_dictoffset), read back from Python and from C alike.  It used to stay
+	on the Grail proxy, invisible to C and to the proxy's own reads."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(1)
+b.label = ''x''
+repr((b.label, d.getattr_in_c(b, ''label''), b.__dict__))') equals: '(''x'', ''x'', {''label'': ''x''})'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 2' }
+CPythonShimTestCase >> testForeignDictReadFromC [
+	"``__dict__'' asked from C, where the type's getset is
+	PyObject_GenericGetDict.  That answered PyObject_GetAttrString(obj,
+	'__dict__'), which found the same getset, and recursed until the gem's C
+	stack overflowed (numpy's _ArrayFunctionDispatcher under functools.wraps)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(1)
+b.label = ''x''
+repr(d.getattr_in_c(b, ''__dict__''))') equals: '{''label'': ''x''}'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 2' }
+CPythonShimTestCase >> testForeignMemberStores [
+	"A writable member stores into the struct, not the dict; a read-only one
+	refuses with CPython's message (PyMember_SetOne)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(1)
+b.tag = ''T''
+try:
+    b.count = 5
+    refused = None
+except AttributeError as e:
+    refused = str(e)
+repr((b.tag, d.getattr_in_c(b, ''tag''), b.__dict__, refused, b.count))') equals: '(''T'', ''T'', {}, ''readonly attribute'', 1)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 2' }
+CPythonShimTestCase >> testForeignObjectUnderFunctoolsWraps [
+	"What numpy/_core/overrides.py does to every dispatcher it makes."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import functools
+import _grail_demo as d
+def impl(a):
+    ''the doc''
+w = functools.wraps(impl)(d.make_box(1))
+repr((w.__name__, w.__doc__, w.__wrapped__ is impl, w.__qualname__.endswith(''impl'')))') equals: '(''impl'', ''the doc'', True, True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 2' }
+CPythonShimTestCase >> testForeignStructMembersRead [
+	"A wheel object's struct fields (tp_members) read through
+	PyMember_GetOne: numpy's ``dtype.type'' is one, and
+	_core/_type_aliases.py reads it for every typeinfo entry.  ``tag'' is a
+	_Py_T_OBJECT member (code 6, which the shim's header numbered 16) left
+	unset, so it reads None."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.make_box(''v'')
+repr((b.value, b.count, b.tag))') equals: '(''v'', 1, None)'
+
+]
+
+{ #category : 'Grail-Tests - String API' }
+CPythonShimTestCase >> testFromFormatObjectConversions [
+	"PyUnicode_FromFormat handles %R (repr), %S (str), and %d."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_from_format'
+		with: 'hi'.
+	self assert: result equals: 'repr=<''hi''> str=<hi> n=42'.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testGetattr [
+	"test_getattr on an integer returns __class__."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_getattr'
+		with: 42 with: '__class__'.
+	self assert: (result isKindOf: Behavior).
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testGetAttrObjectName [
+	"PyObject_GetAttr (PyObject* name variant)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_getattr_obj'
+		with: 42 with: '__class__'.
+	self assert: (result isKindOf: Behavior).
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testGetOptionalAttrWritesItsResult [
+	"It was a stub answering 0 without writing *result (numpy's PyArray_LookupSpecial)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.optional_attr(d.make_box(4), ''value''), d.optional_attr(d.make_box(4), ''nope'')))') equals: '((1, 4), (0, None))'
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testHasattrFalse [
+	"test_hasattr returns false for a non-existing attribute."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_hasattr'
+		with: 42 with: 'nonexistent_attribute_xyz'.
+	self assert: result equals: false.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testHasattrTrue [
+	"test_hasattr returns true for an existing attribute."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_hasattr'
+		with: 'hello' with: '__len__'.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqHeapify [
+	"heapify transforms a list into a heap in-place."
+
+	| shim heap result |
+	shim := CPythonShim current.
+	heap := OrderedCollection withAll: { 5.0 . 3.0 . 1.0 . 4.0 . 2.0 }.
+	shim callModule: '_heapq' method: 'heapify' with: heap.
+	"After heapify, the smallest element should be at position 0."
+	result := shim callModule: '_heapq' method: 'heappop' with: heap.
+	self assert: result equals: 1.0.
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqHeapifyPreservesAll [
+	"heapify + repeated heappop returns all original elements sorted."
+
+	| shim heap sorted |
+	shim := CPythonShim current.
+	heap := OrderedCollection withAll: { 9.0 . 7.0 . 5.0 . 3.0 . 1.0 . 8.0 . 6.0 . 4.0 . 2.0 }.
+	shim callModule: '_heapq' method: 'heapify' with: heap.
+	sorted := OrderedCollection new.
+	9 timesRepeat: [
+		sorted addLast: (shim callModule: '_heapq' method: 'heappop' with: heap).
+	].
+	self assert: sorted asArray equals: #(1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0).
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqHeappushpop [
+	"heappushpop pushes an item and then pops the smallest."
+
+	| shim heap result |
+	shim := CPythonShim current.
+	heap := OrderedCollection withAll: { 2.0 . 4.0 . 6.0 }.
+	shim callModule: '_heapq' method: 'heapify' with: heap.
+	"Push 1.0 which is smaller than current min (2.0), so it comes right back."
+	result := shim callModule: '_heapq' method: 'heappushpop' with: heap with: 1.0.
+	self assert: result equals: 1.0.
+	"Push 3.0 which is bigger than current min (2.0), so 2.0 pops."
+	result := shim callModule: '_heapq' method: 'heappushpop' with: heap with: 3.0.
+	self assert: result equals: 2.0.
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqHeapreplace [
+	"heapreplace pops the smallest and pushes a new item."
+
+	| shim heap result |
+	shim := CPythonShim current.
+	heap := OrderedCollection withAll: { 1.0 . 3.0 . 5.0 }.
+	shim callModule: '_heapq' method: 'heapify' with: heap.
+	result := shim callModule: '_heapq' method: 'heapreplace' with: heap with: 2.0.
+	self assert: result equals: 1.0.
+	"The new smallest should be 2.0."
+	result := shim callModule: '_heapq' method: 'heappop' with: heap.
+	self assert: result equals: 2.0.
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqMaxHeap [
+	"_heapify_max + _heappop_max gives elements in descending order."
+
+	| shim heap result |
+	shim := CPythonShim current.
+	heap := OrderedCollection withAll: { 1.0 . 5.0 . 3.0 . 2.0 . 4.0 }.
+	shim callModule: '_heapq' method: '_heapify_max' with: heap.
+	result := shim callModule: '_heapq' method: '_heappop_max' with: heap.
+	self assert: result equals: 5.0.
+	result := shim callModule: '_heapq' method: '_heappop_max' with: heap.
+	self assert: result equals: 4.0.
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqPopEmpty [
+	"heappop on an empty heap raises a catchable Python IndexError (the
+	shim translates the raw error via ___translateShimError:)."
+
+	self should: [
+		CPythonShim current
+			callModule: '_heapq' method: 'heappop'
+			with: OrderedCollection new.
+	] raise: IndexError.
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqPushPop [
+	"heappush + heappop maintains sorted order."
+
+	| shim heap result |
+	shim := CPythonShim current.
+	heap := OrderedCollection new.
+	shim callModule: '_heapq' method: 'heappush' with: heap with: 3.0.
+	shim callModule: '_heapq' method: 'heappush' with: heap with: 1.0.
+	shim callModule: '_heapq' method: 'heappush' with: heap with: 2.0.
+	result := shim callModule: '_heapq' method: 'heappop' with: heap.
+	self assert: result equals: 1.0.
+	result := shim callModule: '_heapq' method: 'heappop' with: heap.
+	self assert: result equals: 2.0.
+	result := shim callModule: '_heapq' method: 'heappop' with: heap.
+	self assert: result equals: 3.0.
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqSortIntegers [
+	"Use heapq to sort a list of integers."
+
+	| shim heap sorted |
+	shim := CPythonShim current.
+	heap := OrderedCollection new.
+	#(5 1 4 2 3) do: [:each |
+		shim callModule: '_heapq' method: 'heappush' with: heap with: each.
+	].
+	sorted := OrderedCollection new.
+	5 timesRepeat: [
+		sorted addLast: (shim callModule: '_heapq' method: 'heappop' with: heap).
+	].
+	self assert: sorted asArray equals: #(1 2 3 4 5).
+
+]
+
+{ #category : 'Grail-Tests - Heapq' }
+CPythonShimTestCase >> testHeapqSortStrings [
+	"Use heapq to sort strings."
+
+	| shim heap sorted |
+	shim := CPythonShim current.
+	heap := OrderedCollection new.
+	#('banana' 'apple' 'cherry' 'date') do: [:each |
+		shim callModule: '_heapq' method: 'heappush' with: heap with: each.
+	].
+	sorted := OrderedCollection new.
+	4 timesRepeat: [
+		sorted addLast: (shim callModule: '_heapq' method: 'heappop' with: heap).
+	].
+	self assert: sorted asArray equals: #('apple' 'banana' 'cherry' 'date').
+
+]
+
+{ #category : 'Grail-Tests - Heap Types' }
+CPythonShimTestCase >> testHeapTypeBase [
+	"PyType_FromSpecWithBases with a single type base sets tp_base and
+	inherits the subclass-identity flag (PyLong_Check passes)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_heap_type_base'.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testImportGetAttr [
+	"_PyImport_GetModuleAttrString imports a module and reads an attribute."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_import_attr'
+		with: 'math' with: 'pi'.
+	self assert: (result - Float pi) abs < 1e-12.
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testInsortLeft [
+	"insort_left inserts before an existing duplicate."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'insort_left'
+		insortList: #(1.0 2.0 3.0) value: 2.0.
+	self assert: result equals: #(1.0 2.0 2.0 3.0).
+
+]
+
+{ #category : 'Grail-Tests - Bisect' }
+CPythonShimTestCase >> testInsortRight [
+	"insort_right inserts a value into the correct position."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_bisect' method: 'insort_right'
+		insortList: #(1.0 3.0 5.0) value: 4.0.
+	self assert: result equals: #(1.0 3.0 4.0 5.0).
+
+]
+
+{ #category : 'Grail-Tests - Statistics' }
+CPythonShimTestCase >> testInvCdfErrorAtOne [
+	"inv_cdf(1.0, 0, 1) raises a catchable Python ValueError (the shim
+	translates the raw error via ___translateShimError:)."
+
+	self should: [
+		CPythonShim current
+			callModule: '_statistics'
+			method: '_normal_dist_inv_cdf'
+			doubles: { 1.0 . 0.0 . 1.0 }.
+	] raise: ValueError.
+
+]
+
+{ #category : 'Grail-Tests - Statistics' }
+CPythonShimTestCase >> testInvCdfErrorAtZero [
+	"inv_cdf(0.0, 0, 1) raises a catchable Python ValueError (the shim
+	translates the raw error via ___translateShimError:)."
+
+	self should: [
+		CPythonShim current
+			callModule: '_statistics'
+			method: '_normal_dist_inv_cdf'
+			doubles: { 0.0 . 0.0 . 1.0 }.
+	] raise: ValueError.
+
+]
+
+{ #category : 'Grail-Tests - Statistics' }
+CPythonShimTestCase >> testInvCdfKnownValue [
+	"inv_cdf(0.975, 0, 1) ≈ 1.96 — the 97.5th percentile of standard normal."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_statistics'
+		method: '_normal_dist_inv_cdf'
+		doubles: { 0.975 . 0.0 . 1.0 }.
+	self assert: (result - 1.959963984540054) abs < 1e-10.
+
+]
+
+{ #category : 'Grail-Tests - Statistics' }
+CPythonShimTestCase >> testInvCdfMedian [
+	"inv_cdf(0.5, 0, 1) = 0.0 — the median of the standard normal distribution."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_statistics'
+		method: '_normal_dist_inv_cdf'
+		doubles: { 0.5 . 0.0 . 1.0 }.
+	self assert: result equals: 0.0.
+
+]
+
+{ #category : 'Grail-Tests - Statistics' }
+CPythonShimTestCase >> testInvCdfMedianWithMu [
+	"inv_cdf(0.5, mu, sigma) = mu — the median always equals mu."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_statistics'
+		method: '_normal_dist_inv_cdf'
+		doubles: { 0.5 . 10.0 . 5.0 }.
+	self assert: result equals: 10.0.
+
+]
+
+{ #category : 'Grail-Tests - Statistics' }
+CPythonShimTestCase >> testInvCdfSymmetry [
+	"inv_cdf(p) and inv_cdf(1-p) should be symmetric around the mean."
+
+	| shim low high |
+	shim := CPythonShim current.
+	low := shim callModule: '_statistics' method: '_normal_dist_inv_cdf'
+		doubles: { 0.1 . 0.0 . 1.0 }.
+	high := shim callModule: '_statistics' method: '_normal_dist_inv_cdf'
+		doubles: { 0.9 . 0.0 . 1.0 }.
+	self assert: (low + high) abs < 1e-10.
+
+]
+
+{ #category : 'Grail-Tests - FastAPI Phase 3' }
+CPythonShimTestCase >> testIsinstanceAgainstAForeignType [
+	"A type defined in a C extension reaches Grail as a proxy, not a Behavior,
+	and ``isinstance(x, T)'' raised ``arg 2 must be a type'' -- fastapi's
+	jsonable_encoder asks it of pydantic_core's PydanticUndefinedType for every
+	value.  Answered in C now (shimForeignTypeCheck), and type() of a proxy is
+	its C type, by identity."
+
+	| shim bi obj typ |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	bi := builtins @env1:instance.
+	obj := shim callModule: '_shimtest' method: 'test_make_counter'.
+	typ := shim callModule: '_shimtest' method: 'test_counter_type'.
+	self assert: (bi @env1:isinstance: obj _: typ).
+	self deny: (bi @env1:isinstance: 5 _: typ).
+	self assert: (bi @env1:isinstance: obj _: (self eval: '(int, )') , { typ }).
+	self assert: (bi @env1:issubclass: typ _: typ).
+	self deny: (bi @env1:issubclass: (self eval: 'int') _: typ).
+	self assert: (bi @env1:type: obj) == typ
+
+]
+
+{ #category : 'Grail-Tests - Truthiness' }
+CPythonShimTestCase >> testIsTrueEmptyContainersAreFalsy [
+	"PyObject_IsTrue: empty str/list/dict and 0.0 are falsy; non-empty truthy."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: '') equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: 'x') equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: OrderedCollection new) equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: (OrderedCollection withAll: { 1 })) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: KeyValueDictionary new) equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: 0.0) equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: 0.5) equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - Iteration' }
+CPythonShimTestCase >> testIterSum [
+	"PyObject_GetIter + PyIter_Next traverse a Python list."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_iter_sum'
+		with: (OrderedCollection withAll: { 1 . 2 . 3 }).
+	self assert: result equals: 6.
+
+]
+
+{ #category : 'Grail-Tests - Kwargs' }
+CPythonShimTestCase >> testKwargsFastcall [
+	"METH_FASTCALL|METH_KEYWORDS receives kwnames + trailing values."
+
+	| shim kw result |
+	shim := CPythonShim current.
+	kw := KeyValueDictionary new.
+	kw at: 'x' put: 3.
+	result := shim callModule: '_shimtest' method: 'test_kwargs'
+		args: { 1 . 2 } kwargs: kw.
+	self assert: result equals: 303.  "1 + 2 + 100*3"
+	kw at: 'y' put: 1.
+	result := shim callModule: '_shimtest' method: 'test_kwargs'
+		args: { } kwargs: kw.
+	self assert: result equals: 10300.  "100*3 + 10000*1"
+	result := shim callModule: '_shimtest' method: 'test_kwargs'
+		args: { 5 } kwargs: nil.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - Kwargs' }
+CPythonShimTestCase >> testKwargsRejectedByPositionalOnly [
+	"A method without METH_KEYWORDS raises a catchable Python TypeError
+	when kwargs are given (the shim translates the raw error via
+	___translateShimError:)."
+
+	| kw |
+	kw := KeyValueDictionary new.
+	kw at: 'x' put: 1.
+	self should: [
+		CPythonShim current
+			callModule: '_shimtest' method: 'test_int'
+			args: { 1 } kwargs: kw.
+	] raise: TypeError.
+
+]
+
+{ #category : 'Grail-Tests - Kwargs' }
+CPythonShimTestCase >> testKwargsVarargsDict [
+	"METH_VARARGS|METH_KEYWORDS receives a kwargs dict."
+
+	| kw result |
+	kw := KeyValueDictionary new.
+	kw at: 'key' put: 'val'.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_kwargs_dict'
+		args: { } kwargs: kw.
+	self assert: result equals: 'val'.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testLengthList [
+	"test_length on a list returns its size."
+
+	| oc result |
+	oc := OrderedCollection withAll: { 1 . 2 . 3 . 4 . 5 }.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_length'
+		with: oc.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testLengthString [
+	"test_length on a string returns its size."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_length'
+		with: 'hello'.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - Session-Local State' }
+CPythonShimTestCase >> testLibraryPathChangeDoesDiscardTheWrapperMap [
+	"The one case where dropping the wrappers is correct: a library CHANGE.
+	Each wrapper caches a tp_* address from the old library at offset 8, and
+	those do not survive a reload, so they must not be reused.
+
+	The change has to be a REAL one.  This test used to re-set the SAME path
+	and assert a discard, which only held because >>libraryPath: discarded
+	unconditionally -- so the test was a session poisoner: it threw away the
+	live wrappers belonging to every other test in the session.  C structures
+	outlive their refcount (_Py_Dealloc is a no-op), so a regex compiled
+	earlier kept pointing into freed memory and failed much later and
+	somewhere else.  Sharding hid it; one session did not.
+
+	It also has to put the map BACK, because even a genuine change discards
+	the real session's wrappers.  The ensure: restores the path first and
+	only then reinstates the very same map object -- restoring the path is
+	itself a change and would discard whatever we had just put back."
+
+	| shim value saved savedMap |
+	shim := CPythonShim current.
+	value := Array with: 19 with: 20.
+	shim wrap: value.
+	savedMap := SessionTemps current at: #GrailShimWrapperMap otherwise: nil.
+	self assert: savedMap notNil.
+
+	saved := CPythonShim libraryPath.
+	[CPythonShim libraryPath: saved , '.reload-probe'.
+	 self assert: (SessionTemps current at: #GrailShimWrapperMap otherwise: nil) isNil
+		description: 'a library CHANGE must discard wrappers holding old tp_* addresses']
+		ensure: [
+			CPythonShim libraryPath: saved.
+			savedMap ifNotNil: [
+				SessionTemps current at: #GrailShimWrapperMap put: savedMap].
+			CPythonShim current]
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testListAndTupleArgumentsReadInline [
+	"A Grail list or tuple argument reaches a wheel as a real-layout copy, nested ones too
+	(np.dtype([('a', 'f8')]) read its list with PyList_GET_ITEM)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.sum_inline([1, 2, 3]), d.sum_inline([(1, 2), (3, 4), 5])))') equals: '(6, 15)'
+
+]
+
+{ #category : 'Grail-Tests - List API' }
+CPythonShimTestCase >> testListAsTuple [
+	"PyList_AsTuple converts list to tuple (Array)."
+
+	| oc result |
+	oc := OrderedCollection withAll: { 1 . 2 }.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_astuple'
+		with: oc.
+	self assert: (result isKindOf: Array).
+	self assert: result asArray equals: #(1 2).
+
+]
+
+{ #category : 'Grail-Tests - List API' }
+CPythonShimTestCase >> testListGetSlice [
+	"PyList_GetSlice returns a clamped sub-list."
+
+	| oc result |
+	oc := OrderedCollection withAll: { 10 . 20 . 30 . 40 }.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_slice'
+		with: oc with: 1 with: 3.
+	self assert: result asArray equals: #(20 30).
+
+]
+
+{ #category : 'Grail-Tests - List API' }
+CPythonShimTestCase >> testListReverseInPlace [
+	"PyList_Reverse reverses in place."
+
+	| oc |
+	oc := OrderedCollection withAll: { 1 . 2 . 3 }.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_list_reverse'
+		with: oc.
+	self assert: oc asArray equals: #(3 2 1).
+
+]
+
+{ #category : 'Grail-Tests - List API' }
+CPythonShimTestCase >> testListSortInPlace [
+	"PyList_Sort sorts in place via Python __lt__."
+
+	| oc |
+	oc := OrderedCollection withAll: { 3 . 1 . 2 }.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_list_sort'
+		with: oc.
+	self assert: oc asArray equals: #(1 2 3).
+
+]
+
+{ #category : 'Grail-Tests - Module Loading' }
+CPythonShimTestCase >> testLoadBisect [
+	"The _bisect module should load successfully."
+
+	self assert: (CPythonShim current loadModule: '_bisect') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Module Loading' }
+CPythonShimTestCase >> testLoadCrc32c [
+	"The _crc32c module should load successfully."
+
+	self assert: (CPythonShim current loadModule: '_crc32c') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Module Loading' }
+CPythonShimTestCase >> testLoadHeapq [
+	"The _heapq module should load successfully."
+
+	self assert: (CPythonShim current loadModule: '_heapq') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Module Loading' }
+CPythonShimTestCase >> testLoadShimtest [
+	"The _shimtest module should load successfully."
+
+	self assert: (CPythonShim current loadModule: '_shimtest') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Module Loading' }
+CPythonShimTestCase >> testLoadSre [
+	"The _sre module should load successfully."
+
+	self assert: (CPythonShim current loadModule: '_sre') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Module Loading' }
+CPythonShimTestCase >> testLoadStatistics [
+	"The _statistics module should load successfully."
+
+	self assert: (CPythonShim current loadModule: '_statistics') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testLongAsLongAndOverflowReportsOverflow [
+	"Both were stubs that never wrote *overflow; numpy's ``np.arange(3) == 1'' read the
+	garbage as out of range and answered all False."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.as_long_overflow(5), d.as_long_overflow(-5), d.as_long_overflow(2 ** 70), d.as_long_overflow(-2 ** 70)))') equals: '((5, 0, 5, 0), (-5, 0, -5, 0), (-1, 1, -1, 1), (-1, -1, -1, -1))'
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testLongCheckAcceptsBool [
+	"bool is an int subclass in CPython: PyLong_Check(True) is 1."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim callModule: '_shimtest' method: 'test_long_check' with: true) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_long_check' with: 3) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_long_check' with: 'x') equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - Integer API' }
+CPythonShimTestCase >> testLongLongRoundtrip [
+	"PyLong_AsLongLong / PyLong_FromLongLong handle values beyond 32 bits."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_long64'
+		with: 10000000000.
+	self assert: result equals: 20000000000.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testMembersAndMethodsReadOffAWheelTypeAreDescriptors [
+	"A struct member read off the type is a member_descriptor, and C reads every descriptor's
+	definition at CPython's offset 40 (numpy's add_docstring); the shim's descriptors kept it
+	at 16.  ``count'' read off the type first, then off an instance, binds."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((type(d.Box.value).__name__, type(d.Box.twice).__name__, d.descr_def_name(d.Box.value), d.descr_def_name(d.Box.twice), b3.twice(), d.make_box(''v'').value, type(d.Box.count).__name__, d.make_box(1).count))') equals: '(''member_descriptor'', ''method_descriptor'', ''value'', ''twice'', 6, ''v'', ''member_descriptor'', 1)'
+
+]
+
+{ #category : 'Grail-Tests - Module Attrs' }
+CPythonShimTestCase >> testModuleAttrsExport [
+	"shimModuleAttrs exports PyModule_AddIntConstant / AddStringConstant /
+	AddObjectRef values -- and a C-ONLY object (here a capsule) as its
+	foreign proxy.
+
+	The capsule used to be SKIPPED, which is what the fixture's name still
+	says: only Grail value types were exported.  CPython exposes a capsule as
+	an ordinary module attribute (datetime.datetime_CAPI), and a PyO3 module
+	exports every class and function this way, so skipping left
+	``from pydantic_core._pydantic_core import SchemaValidator'' with nothing
+	to find (docs/Support_Pydantic.md, Phase 2 wall 6)."
+
+	| attrs |
+	attrs := CPythonShim current moduleAttrs: '_shimtest'.
+	self assert: (attrs at: #MAGIC_INT) equals: 42.
+	self assert: (attrs at: #MAGIC_STR) equals: 'grail'.
+	self assert: (attrs at: #MAGIC_FLOAT) equals: 2.5.
+	self assert: ((attrs at: #SKIPPED_CAPSULE ifAbsent: [nil]) isKindOf: ShimForeignObject)
+		description: 'the capsule should cross as a foreign proxy: '
+			, (attrs at: #SKIPPED_CAPSULE ifAbsent: [nil]) printString.
+
+]
+
+{ #category : 'Grail-Tests - Error Handling' }
+CPythonShimTestCase >> testNewExceptionRaisesByName [
+	"PyErr_NewException creates a type whose raises carry its short name."
+
+	| raised |
+	raised := false.
+	[ CPythonShim current callModule: '_shimtest' method: 'test_new_exception' ]
+		on: Error
+		do: [:e |
+			raised := true.
+			self assert: (e messageText includesString: 'CustomError').
+			self assert: (e messageText includesString: 'custom failure') ].
+	self assert: raised.
+
+]
+
+{ #category : 'Grail-Tests - Py_None Wrapping' }
+CPythonShimTestCase >> testNoneWrapperEmbedsSingletonOop [
+	"None crosses into C as the shim's own static Py_None (_Py_NoneStruct),
+	not as a wrapper: an extension tests ``x == Py_None'' by pointer, and a
+	wrapper is another address (abi3 PyO3 took Grail's None for not-None --
+	docs/Support_Pydantic.md, Phase 5).  It used to be a wrapper carrying the
+	None OOP at offset 16; the static is 16 bytes and has no such field, and
+	the shim answers the None OOP for it instead.  So: the pointer is the
+	shim's, and a C round trip still yields None, not nil."
+
+	| addr |
+	addr := (CPythonShim current wrap: None) memoryAddress.
+	self assert: addr equals: (System userAction: #shimTypeAddr with: 'None').
+	self assert: (CPythonShim current wrap: true) memoryAddress
+		equals: (System userAction: #shimTypeAddr with: 'True').
+	self assert: (CPythonShim current wrap: false) memoryAddress
+		equals: (System userAction: #shimTypeAddr with: 'False').
+	self assert: (CPythonShim current callModule: '_shimtest' method: 'test_bool_not' with: false) == true.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testNotImplementedAndEllipsisAreTheCSingletons [
+	"Both cross as CPython's own singletons, compared by pointer in C (numpy's binary slots
+	answer Py_NotImplemented; its indexing tests ``index == Py_Ellipsis'').
+	_Py_EllipsisObject was a pointer variable, so Py_Ellipsis was the pointer's address."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.singletons(NotImplemented, ...), d.singletons(None, None), d.give_singletons()[0] is NotImplemented, d.give_singletons()[1] is Ellipsis))') equals: '((True, True), (False, False), True, True)'
+
+]
+
+{ #category : 'Grail-Tests - Generic Calling' }
+CPythonShimTestCase >> testObjectCallNoArgs [
+	"PyObject_CallNoArgs calls a zero-arg callable."
+
+	| callable result |
+	callable := BoundMethod @env1:receiver: 'hello' selector: #'__len__'.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_call_noargs'
+		with: callable.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - Generic Calling' }
+CPythonShimTestCase >> testObjectCallOneArg [
+	"PyObject_CallOneArg routes through the server's PyObject_Call:args:."
+
+	| callable result |
+	callable := BoundMethod @env1:receiver: 10 selector: #'__add__'.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_call_one'
+		with: callable with: 5.
+	self assert: result equals: 15.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testObjectGetItem [
+	"PyObject_GetItem reads dict[key] via __getitem__."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 41.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_obj_getitem'
+		with: dict with: 'a'.
+	self assert: result equals: 41.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testObjectSetItem [
+	"PyObject_SetItem stores dict[key] = value via __setitem__."
+
+	| dict |
+	dict := KeyValueDictionary new.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_obj_setitem'
+		with: dict with: 'k' with: 99.
+	self assert: (dict at: 'k') equals: 99.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeBool [
+	"test_ob_type on true returns 'bool'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: true.
+	self assert: result equals: 'bool'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeBytes [
+	"test_ob_type on a ByteArray returns 'bytes'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: #[1 2 3].
+	self assert: result equals: 'bytes'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeDict [
+	"test_ob_type on a KeyValueDictionary returns 'dict'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: KeyValueDictionary new.
+	self assert: result equals: 'dict'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeFloat [
+	"test_ob_type on a float returns 'float'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: 3.14.
+	self assert: result equals: 'float'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeInt [
+	"test_ob_type on an integer returns 'int'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: 42.
+	self assert: result equals: 'int'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeList [
+	"test_ob_type on an OrderedCollection returns 'list'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: (OrderedCollection withAll: { 1 . 2 . 3 }).
+	self assert: result equals: 'list'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeString [
+	"test_ob_type on a string returns 'str'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: 'hello'.
+	self assert: result equals: 'str'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testObTypeTuple [
+	"test_ob_type on an Array returns 'tuple'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: #(1 2 3).
+	self assert: result equals: 'tuple'.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testOperatorDundersReadOffAWheelTypeAreSlotWrappers [
+	"``Box.__add__'' is a wrapper_descriptor and ``b.__add__'' a method-wrapper, as
+	PyType_Ready puts them in CPython; numpy reads ``dtype.__ge__'' at import."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((type(d.Box.__add__).__name__, d.Box.__add__(b3, 1), type(b3.__add__).__name__, b3.__add__(2), d.Box.__add__.__name__))') equals: '(''wrapper_descriptor'', 4, ''method-wrapper'', 5, ''__add__'')'
+
+]
+
+{ #category : 'Grail-Tests - Argument Parsing' }
+CPythonShimTestCase >> testParseTupleFormats [
+	"PyArg_ParseTuple 'snd' parses str, ssize_t, double."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_parse_tuple'
+		with: 'abc' with: 4 with: 0.5.
+	self assert: result equals: 7.5.
+
+]
+
+{ #category : 'Grail-Tests - Error Handling' }
+CPythonShimTestCase >> testRealLayoutListAppendTakesAReference [
+	"PyList_Append must INCREF what it stores.
+
+	PyList_New answers a real-layout ShimListObject whose ob_item holds raw
+	PyObject*, and for a Grail-backed item that raw pointer is all the C side
+	has: the wrapper's only strong reference is its entry in the session
+	wrapper map, and CPythonShim>>sweep drops that entry the moment the
+	refcount reaches 0.  Every CPython caller appends and then releases its own
+	reference -- sre.c's pattern_subx is PyList_Append followed by Py_DECREF --
+	so an append that does not take one leaves the element at refcount 0 while
+	the list still points at it.  A sweep then frees the block and the next read
+	of that element is a dead wrapper.
+
+	Measured that way in ReTests.test_large_subn, whose re.subn('', '',
+	'a'*5147) builds a 10295-element list of exactly such elements and then
+	reads every one of them back in PyUnicode_Join.  The delta is the assertion
+	because it is the invariant; the crash it prevents needs the freed block to
+	be REUSED as well, which is why the nightly saw it only intermittently."
+
+	| delta |
+	delta := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_append_refcount'
+		with: 'a wrapper of its own' copy.
+	self assert: delta equals: 1
+		description: 'PyList_Append must add one reference, not zero'
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testReprInteger [
+	"test_repr on an integer returns its __repr__."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_repr'
+		with: 42.
+	self assert: result equals: '42'.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testReprString [
+	"test_repr on a string returns a quoted representation."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_repr'
+		with: 'hello'.
+	self assert: result equals: '''hello'''.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareFloatLt [
+	"1.5 < 2.5 is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 1.5 with: 2.5 with: 0.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareIntEq [
+	"7 == 7 is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 7 with: 7 with: 2.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareIntGe [
+	"5 >= 3 is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 5 with: 3 with: 5.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareIntGt [
+	"5 > 3 is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 5 with: 3 with: 4.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareIntLe [
+	"3 <= 3 is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 3 with: 3 with: 1.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareIntLt [
+	"1 < 2 is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 1 with: 2 with: 0.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareIntLtFalse [
+	"2 < 1 is false."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 2 with: 1 with: 0.
+	self assert: result equals: false.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareIntNe [
+	"3 != 5 is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 3 with: 5 with: 3.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testRichCompareObject [
+	"PyObject_RichCompare returns the comparison result as an object."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare_obj'
+		with: 1 with: 2 with: 0) equals: true.   "1 < 2"
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare_obj'
+		with: 1 with: 2 with: 4) equals: false.  "1 > 2"
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testRichCompareOfStrAndNoneIsFalse [
+	"PyObject_RichCompareBool sent the bare __eq__, which answers
+	NotImplemented for str and None, and C read that as TRUE -- so
+	exclude_defaults dropped a str field whose default is None."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare'
+		with: 'z' with: (Python at: #None) with: 2) equals: false.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare'
+		with: (Python at: #None) with: 'q' with: 2) equals: false.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare'
+		with: 'z' with: (Python at: #None) with: 3) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareStringEq [
+	"'abc' == 'abc' is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 'abc' with: 'abc' with: 2.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Rich Comparison' }
+CPythonShimTestCase >> testRichCompareStringLt [
+	"'abc' < 'def' is true."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_richcompare'
+		with: 'abc' with: 'def' with: 0.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - Session-Local State' }
+CPythonShimTestCase >> testSameLibraryPathKeepsTheWrapperMap [
+	"Re-setting the SAME library path must keep the wrapper map, and every
+	wrapper in it, byte-for-byte identical.
+
+	Nothing about the loaded library moved, so every tp_* cached at a
+	wrapper's offset 8 is still valid and the C structures pointing into
+	those wrappers are still live.  Dropping the map there is a pure
+	use-after-free generator: the map is the only strong reference to a
+	wrapper and -- as the map's KEY -- to the Smalltalk object whose OOP sits
+	at offset 16, so the Smalltalk object is collected and C reads back a
+	dangling OOP.  It cost 170 reported errors in a single-session suite run,
+	all of them one orphaned regex groupindex dict."
+
+	| shim value wrapper saved map |
+	shim := CPythonShim current.
+	value := Array with: 21 with: 22.
+	wrapper := shim wrap: value.
+	map := SessionTemps current at: #GrailShimWrapperMap otherwise: nil.
+	self assert: map notNil.
+
+	saved := CPythonShim libraryPath.
+	CPythonShim libraryPath: saved.
+
+	self assert: (SessionTemps current at: #GrailShimWrapperMap otherwise: nil) == map
+		description: 'a same-path libraryPath: must keep the very same wrapper map'.
+	self assert: (CPythonShim current wrap: value) == wrapper
+		description: 'a wrapper must survive a same-path libraryPath:, or every '
+			, 'C structure holding its pointer reads a dangling OOP'
+
+]
+
+{ #category : 'Grail-Tests - Sequence API' }
+CPythonShimTestCase >> testSequenceContains [
+	"PySequence_Contains uses __contains__."
+
+	| shim oc |
+	shim := CPythonShim current.
+	oc := OrderedCollection withAll: { 1 . 2 . 3 }.
+	self assert: (shim callModule: '_shimtest' method: 'test_seq_contains'
+		with: oc with: 2) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_seq_contains'
+		with: oc with: 9) equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testSequenceFastAnswersARealLayoutSequence [
+	"PySequence_Fast was a stub answering NULL with no error, so np.array([...]) answered
+	nothing.  (A Grail GENERATOR cannot be iterated from C: its body runs on its own
+	GsProcess, which a user action cannot switch to.)"
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.seq_fast_len([7, 8]), d.seq_fast_len((9,)), d.seq_fast_len(range(4)), d.seq_fast_len({''a'': 1, ''b'': 2}.keys())))') equals: '((2, 7), (1, 9), (4, 0), (2, ''a''))'
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testSequenceGetItemString [
+	"PySequence_GetItem on a str exercises the server fallback path
+	(strings are neither PyList nor PyTuple on the C side)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_seq_getitem'
+		with: 'hello' with: 1.
+	self assert: result equals: 'e'.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Dispatch' }
+CPythonShimTestCase >> testSetattrFromCStoresANewAttribute [
+	"PyObject_SetAttrString on a Grail object is setattr(): a new attribute is stored and a
+	__setattr__ override sees it.  It sent the env-1 setter, which exists only for a
+	declared attribute, and raised AttributeError (numpy's finfo, so np.polyfit)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Seen:
+    def __setattr__(self, k, v):
+        object.__setattr__(self, k, (''seen'', v))
+class Plain:
+    pass
+o = Plain()
+s = Seen()
+d.setattr_in_c(o, ''fresh'', 1)
+d.setattr_in_c(s, ''x'', 2)
+repr((o.fresh, s.x))') equals: '(1, (''seen'', 2))'
+
+]
+
+{ #category : 'Grail-Tests - Sets' }
+CPythonShimTestCase >> testSetRoundtrip [
+	"PySet_New/Add/Contains/Size/Check against the Grail set class."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_set_roundtrip'
+		with: 'a'.
+	self assert: (result isKindOf: Set).
+	self assert: result size equals: 1.
+	self assert: (result includes: 'a').
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testSetsCrossAsTheSetTypes [
+	"pyo3-ffi INLINES PySet_Check as a compare against &PySet_Type, which the
+	shim never initialised; a Grail set crossed as ``object''."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_set_type'
+		with: (self eval: '{1, 2}')) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_set_type'
+		with: (self eval: 'frozenset((1,))')) equals: 2.
+	self assert: (shim callModule: '_shimtest' method: 'test_set_type'
+		with: (self eval: '[1]')) equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Session-Local State' }
+CPythonShimTestCase >> testShimSingletonLivesInSessionTempsNotCommitted [
+	"Regression: CPythonShim current must live in SessionTemps, not a classInstVar.
+	A committed singleton holds stale C-backed CByteArray wrappers after a session
+	restart, and two concurrent sessions writing the same slot cause a conflict.
+	After CPythonShim current, the instance must be in SessionTemps."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (SessionTemps current at: #CPythonShim ifAbsent: [nil]) == shim.
+	"reset clears the SessionTemps entry."
+	CPythonShim reset.
+	self assert: (SessionTemps current at: #CPythonShim ifAbsent: [nil]) isNil.
+	"setUp will reinitialize via the next test's setUp call; restore now."
+	CPythonShim current.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestBoolNotFalse [
+	"test_bool_not(false) -> true"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_bool_not'
+		with: false.
+	self assert: result equals: true.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestBoolNotTrue [
+	"test_bool_not(true) -> false"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_bool_not'
+		with: true.
+	self assert: result equals: false.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestBytesLen [
+	"test_bytes_len(b) -> len(b)"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_bytes_len'
+		with: 'hello' asByteArray.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestBytesRoundtrip [
+	"test_bytes_roundtrip creates bytes from C and returns the size."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_bytes_roundtrip'
+		with: #[10 20 30 40 50].
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestError [
+	"test_error() raises a catchable Python ValueError (the shim
+	translates the raw error via ___translateShimError:)."
+
+	self should: [
+		CPythonShim current
+			callModule: '_shimtest' method: 'test_error'.
+	] raise: ValueError.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestErrorFormat [
+	"test_error_format raises a catchable, formatted Python TypeError
+	(the shim translates the raw error via ___translateShimError:)."
+
+	self should: [
+		CPythonShim current
+			callModule: '_shimtest' method: 'test_error_format'
+			with: 42.
+	] raise: TypeError.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestFloat [
+	"test_float(x) -> x * 2.0"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_float'
+		with: 3.14.
+	self assert: result equals: 6.28.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestFloatNegative [
+	"test_float works with negative values."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_float'
+		with: -5.0.
+	self assert: result equals: -10.0.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestInt [
+	"test_int(n) -> n + 1"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_int'
+		with: 41.
+	self assert: result equals: 42.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestListInsert [
+	"test_list_insert inserts a value at a given index."
+
+	| oc |
+	oc := OrderedCollection withAll: { 1.0 . 3.0 . 5.0 }.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_list_insert'
+		with: oc with: 1 with: 2.0.
+	self assert: oc asArray equals: #(1.0 2.0 3.0 5.0).
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestListModify [
+	"test_list_modify appends to an existing list."
+
+	| oc result |
+	oc := OrderedCollection withAll: { 1.0 . 2.0 . 3.0 }.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_modify'
+		with: oc with: 4.0.
+	self assert: result equals: 4.
+	self assert: oc size equals: 4.
+	self assert: (oc at: 4) equals: 4.0.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestListSetItem [
+	"test_list_setitem sets an element and returns it."
+
+	| oc result |
+	oc := OrderedCollection withAll: { 10.0 . 20.0 . 30.0 }.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_setitem'
+		with: oc with: 1 with: 99.0.
+	self assert: result equals: 99.0.
+	self assert: (oc at: 2) equals: 99.0.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestListSum [
+	"test_list_sum(n) -> sum of [1..n] = n*(n+1)/2"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_sum'
+		with: 5.
+	self assert: result equals: 15.0.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestNone [
+	"test_none() -> Python ``None`` (Py_None round-trips to the singleton)"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_none'.
+	self assert: result equals: None.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestStringLen [
+	"test_string_len(s) -> len(s)"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_string_len'
+		with: 'hello'.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - ShimTest API' }
+CPythonShimTestCase >> testShimtestStringRoundtrip [
+	"test_string_roundtrip creates a new string from C and returns it."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_string_roundtrip'
+		with: 'hello world'.
+	self assert: result equals: 'hello world'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testSizeofType [
+	"sizeof(PyTypeObject) should be > 200 bytes (full CPython 3.14 layout)."
+
+	| size |
+	size := CPythonShim current
+		callModule: '_shimtest' method: 'test_sizeof_type'.
+	self assert: size > 200.
+
+]
+
+{ #category : 'Grail-Tests - Slices' }
+CPythonShimTestCase >> testSliceAdjustIndices [
+	"PySlice_AdjustIndices clamps like CPython: len 5, [-3:10:1] -> 3 items from 2 to 5."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_slice_adjust'
+		with: 5 with: -3 with: 10 with: 1.
+	self assert: result asArray equals: #(3 2 5).
+
+]
+
+{ #category : 'Grail-Tests - Slices' }
+CPythonShimTestCase >> testSliceRoundtrip [
+	"PySlice_New + PySlice_Unpack round-trip explicit values."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_slice_roundtrip'
+		with: 1 with: 10 with: 2.
+	self assert: result asArray equals: #(1 10 2).
+
+]
+
+{ #category : 'Grail-Tests - Slices' }
+CPythonShimTestCase >> testSliceUnpackDefaults [
+	"slice(None, None, None) unpacks to CPython defaults (0, MAX, 1)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_slice_defaults'.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreAsciiIscasedDigit [
+	"ascii_iscased('0') => 0 (digit is not cased)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_iscased'
+		with: 48.
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreAsciiIscasedLowerA [
+	"ascii_iscased('a') => 1 (lowercase letter is cased)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_iscased'
+		with: 97.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreAsciiIscasedUpperA [
+	"ascii_iscased('A') => 1 (uppercase letter is cased)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_iscased'
+		with: 65.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreAsciiTolowerAlreadyLower [
+	"ascii_tolower('a'=97) => 97 (already lowercase)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_tolower'
+		with: 97.
+	self assert: result equals: 97.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreAsciiTolowerUpperA [
+	"ascii_tolower('A'=65) => 'a'=97."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'ascii_tolower'
+		with: 65.
+	self assert: result equals: 97.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreGetcodesize [
+	"getcodesize() returns sizeof(SRE_CODE), which is 4."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'getcodesize'.
+	self assert: result equals: 4.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreUnicodeIscasedDigit [
+	"unicode_iscased('0') => 0."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'unicode_iscased'
+		with: 48.
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreUnicodeIscasedUpperA [
+	"unicode_iscased('A') => 1."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'unicode_iscased'
+		with: 65.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - SRE' }
+CPythonShimTestCase >> testSreUnicodeTolowerUpperA [
+	"unicode_tolower('A'=65) => 'a'=97."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_sre' method: 'unicode_tolower'
+		with: 65.
+	self assert: result equals: 97.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testStrInteger [
+	"test_str on an integer returns its string form."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_str'
+		with: 42.
+	self assert: result equals: '42'.
+
+]
+
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testStrString [
+	"test_str on a string returns the string itself."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_str'
+		with: 'hello'.
+	self assert: result equals: 'hello'.
+
+]
+
+{ #category : 'Grail-Tests - Wrapper lifetime' }
+CPythonShimTestCase >> testSweepDeferredWhileCallInFlight [
+	"While a shim call is in flight (___duringCallDo:), crossing the
+	1000-wrap sweep boundary must NOT reap a zero-refcount wrapper --
+	server callbacks re-enter wrap: thousands of times during one C
+	call, and the in-flight C code still holds raw pointers to such
+	wrappers.  The same wrapper (identity) must come back."
+
+	| shim v w result |
+	shim := CPythonShim current.
+	v := 'defer-probe' copy.
+	w := shim wrap: v.
+	w int64At: 0 put: 0.
+	result := shim ___duringCallDo: [ | probe |
+		probe := 'boundary-filler' copy.
+		"Cross at least one 1000-wrap sweep boundary while 'in flight'."
+		1001 timesRepeat: [shim wrap: probe].
+		shim wrap: v].
+	self assert: result == w.
+	self assert: (w int64At: 0) equals: 1
+
+]
+
+{ #category : 'Grail-Tests - Wrapper lifetime' }
+CPythonShimTestCase >> testSweepReapsIdleZeroRefcountWrappers [
+	"sweep still reclaims wrappers whose refcount is <= 0 when no call is
+	in flight: a re-wrap after the sweep builds a FRESH wrapper."
+
+	| shim v w w2 |
+	shim := CPythonShim current.
+	v := 'reap-probe' copy.
+	w := shim wrap: v.
+	w int64At: 0 put: 0.
+	shim sweep.
+	w2 := shim wrap: v.
+	self deny: w == w2.
+	self assert: (w2 int64At: 0) equals: 1
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testThreadStateNamesTheMainInterpreter [
+	"PyThreadState_Get and PyInterpreterState_Main were stubs answering NULL; numpy's
+	_reload_guard reads ``PyThreadState_Get()->interp''."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.interp_matches())') equals: 'True'
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTpBaseNameBool [
+	"Bool's base type is 'int' (bool subclasses int in Python)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tp_base_name'
+		with: true.
+	self assert: result equals: 'int'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTpBaseNameFloat [
+	"Float's base type is 'object'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tp_base_name'
+		with: 3.14.
+	self assert: result equals: 'object'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTpFlagsDict [
+	"Dict type has DICT_SUBCLASS and MAPPING flags."
+
+	| flags |
+	flags := CPythonShim current
+		callModule: '_shimtest' method: 'test_tp_flags'
+		with: (KeyValueDictionary new).
+	"Py_TPFLAGS_DICT_SUBCLASS = 1<<29 = 536870912, MAPPING = 1<<6 = 64"
+	self assert: (flags bitAnd: 536870912) equals: 536870912.
+	self assert: (flags bitAnd: 64) equals: 64.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTpFlagsFloat [
+	"Float type has BASETYPE and READY flags set."
+
+	| flags |
+	flags := CPythonShim current
+		callModule: '_shimtest' method: 'test_tp_flags'
+		with: 3.14.
+	"Py_TPFLAGS_BASETYPE = 1<<10 = 1024, Py_TPFLAGS_READY = 1<<12 = 4096"
+	self assert: (flags bitAnd: 1024) equals: 1024.
+	self assert: (flags bitAnd: 4096) equals: 4096.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTpFlagsInt [
+	"Int type has LONG_SUBCLASS, BASETYPE, and READY flags."
+
+	| flags |
+	flags := CPythonShim current
+		callModule: '_shimtest' method: 'test_tp_flags'
+		with: 42.
+	"Py_TPFLAGS_LONG_SUBCLASS = 1<<24 = 16777216"
+	self assert: (flags bitAnd: 16777216) equals: 16777216.
+	self assert: (flags bitAnd: 1024) equals: 1024.
+	self assert: (flags bitAnd: 4096) equals: 4096.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTpFlagsList [
+	"List type has LIST_SUBCLASS, SEQUENCE, BASETYPE, and READY flags."
+
+	| flags |
+	flags := CPythonShim current
+		callModule: '_shimtest' method: 'test_tp_flags'
+		with: (OrderedCollection withAll: { 1 . 2 }).
+	"Py_TPFLAGS_LIST_SUBCLASS = 1<<25 = 33554432, SEQUENCE = 1<<5 = 32"
+	self assert: (flags bitAnd: 33554432) equals: 33554432.
+	self assert: (flags bitAnd: 32) equals: 32.
+	self assert: (flags bitAnd: 4096) equals: 4096.
+
+]
+
+{ #category : 'Grail-Tests - Tuple API' }
+CPythonShimTestCase >> testTupleGetSlice [
+	"PyTuple_GetSlice returns a clamped sub-tuple."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tuple_slice'
+		with: { 10 . 20 . 30 } with: 0 with: 2.
+	self assert: result asArray equals: #(10 20).
+
+]
+
+{ #category : 'Grail-Tests - Tuple API' }
+CPythonShimTestCase >> testTupleRoundtrip [
+	"test_tuple_roundtrip(a,b,c) -> b"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tuple_roundtrip'
+		with: 10 with: 20 with: 30.
+	self assert: result equals: 20.
+
+]
+
+{ #category : 'Grail-Tests - Tuple API' }
+CPythonShimTestCase >> testTupleRoundtripStrings [
+	"test_tuple_roundtrip works with strings."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tuple_roundtrip'
+		with: 'a' with: 'b' with: 'c'.
+	self assert: result equals: 'b'.
+
+]
+
+{ #category : 'Grail-Tests - Tuple API' }
+CPythonShimTestCase >> testTupleSize [
+	"test_tuple_size(n) -> n"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tuple_size'
+		with: 5.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - Tuple API' }
+CPythonShimTestCase >> testTupleSizeZero [
+	"test_tuple_size(0) -> 0"
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tuple_size'
+		with: 0.
+	self assert: result equals: 0.
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testTypeChecksBytes [
+	"test_type_checks on a ByteArray returns bit3 (8)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_checks'
+		with: #[1 2 3].
+	self assert: (result bitAnd: 8) equals: 8.
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testTypeChecksDict [
+	"test_type_checks on a KeyValueDictionary returns bit5 (32)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_checks'
+		with: KeyValueDictionary new.
+	self assert: (result bitAnd: 32) equals: 32.
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testTypeChecksFloat [
+	"test_type_checks on a float returns bit0 (1)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_checks'
+		with: 3.14.
+	self assert: (result bitAnd: 1) equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testTypeChecksInt [
+	"test_type_checks on an integer returns bit1 (2)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_checks'
+		with: 42.
+	self assert: (result bitAnd: 2) equals: 2.
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testTypeChecksList [
+	"test_type_checks on an OrderedCollection returns bit4 (16)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_checks'
+		with: (OrderedCollection withAll: { 1 . 2 . 3 }).
+	self assert: (result bitAnd: 16) equals: 16.
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testTypeChecksString [
+	"test_type_checks on a string returns bit2 (4)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_checks'
+		with: 'hello'.
+	self assert: (result bitAnd: 4) equals: 4.
+
+]
+
+{ #category : 'Grail-Tests - Type Checks' }
+CPythonShimTestCase >> testTypeChecksTuple [
+	"test_type_checks on an Array returns bit6 (64)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_checks'
+		with: #(1 2 3).
+	self assert: (result bitAnd: 64) equals: 64.
+
+]
+
+{ #category : 'Grail-Tests - Type Creation' }
+CPythonShimTestCase >> testTypeGenericNew [
+	"PyType_GenericNew allocates a zeroed instance with refcnt 1 and the type set."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_generic_new'.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTypeIdentityBool [
+	"test_type_identity on true returns 3 (PyBool_Type)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_identity'
+		with: true.
+	self assert: result equals: 3.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTypeIdentityFloat [
+	"test_type_identity on a float returns 1 (PyFloat_Type)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_identity'
+		with: 3.14.
+	self assert: result equals: 1.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTypeIdentityInt [
+	"test_type_identity on an integer returns 2 (PyLong_Type)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_identity'
+		with: 42.
+	self assert: result equals: 2.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTypeIdentityList [
+	"test_type_identity on an OrderedCollection returns 6 (PyList_Type)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_identity'
+		with: (OrderedCollection withAll: { 1 . 2 }).
+	self assert: result equals: 6.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTypeIdentityNone [
+	"test_ob_type on nil (Py_None) returns 'NoneType'."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_ob_type'
+		with: nil.
+	self assert: result equals: 'NoneType'.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTypeIdentityString [
+	"test_type_identity on a string returns 4 (PyUnicode_Type)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_identity'
+		with: 'hello'.
+	self assert: result equals: 4.
+
+]
+
+{ #category : 'Grail-Tests - PyTypeObject' }
+CPythonShimTestCase >> testTypeReady [
+	"PyType_Ready sets READY flag and assigns base type."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_type_ready'.
+	self assert: result equals: 2.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testUnicodeAsUTF8StringEncodes [
+	"A stub answering NULL with no error set, which ended numpy's module exec
+	with no pending error at all."
+
+	| shim result |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	result := shim callModule: '_shimtest' method: 'test_utf8_string'
+		with: (Character codePoint: 233) asString.
+	self assert: (result @env1:__repr__) asString equals: 'b''\xc3\xa9'''
+
+]
+
+{ #category : 'Grail-Tests - NumPy Printing' }
+CPythonShimTestCase >> testUnicodeCompareAndContainsFromC [
+	"PyUnicode_Compare, PyUnicode_Contains and PyUnicode_CompareWithASCIIString were stubs
+	answering equal and absent; numpy's dtype naming reached the first."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr([d.unicode_compare(a, b) for a, b in [(''abc'', ''abd''), (''abd'', ''abc''), (''ab'', ''ab''), (''ab'', ''abc''), (''h\u00e9llo'', ''\u00e9''), (''a\u20ac'', ''a''), (''xyz'', ''q''), ('''', '''')]])') equals: '[(-1, False, -1), (1, False, 1), (0, True, 0), (-1, False, -1), (-1, True, -1), (1, True, 1), (1, False, 1), (0, True, 0)]'
+
+]
+
+{ #category : 'Grail-Tests - String API' }
+CPythonShimTestCase >> testUnicodeConcat [
+	"PyUnicode_Concat joins two strings via the server."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_unicode_concat'
+		with: 'foo' with: 'bar'.
+	self assert: result equals: 'foobar'.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 1' }
+CPythonShimTestCase >> testUnicodeFromObjectAcceptsOnlyAStr [
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self assert: (shim callModule: '_shimtest' method: 'test_unicode_from_object'
+		with: 'abc') equals: 'abc'.
+	self assert: (shim callModule: '_shimtest' method: 'test_unicode_from_object'
+		with: 5) equals: 'TypeError'
+
+]
+
+{ #category : 'Grail-Tests - String API' }
+CPythonShimTestCase >> testUtf8AndSize [
+	"PyUnicode_AsUTF8AndSize reports the BYTE length (é is 2 bytes)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_utf8_size'
+		with: 'hello'.
+	self assert: result equals: 5.
+
+]
+
+{ #category : 'Grail-Tests - Pydantic Phase 6' }
+CPythonShimTestCase >> testVectorcallMethodCallsTheMethod [
+	"PyObject_VectorcallMethod was a stub answering NULL with no error set:
+	pydantic_core's call of model_post_init surfaced as ``SystemError:
+	attempted to fetch exception but none was set''."
+
+	| shim r |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	r := shim callModule: '_shimtest' method: 'test_vectorcall_method'
+		with: 'a,b' with: 'split' with: ','.
+	self assert: r asArray equals: #('a' 'b')
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testWheelObjectArithmeticUsesItsSlots [
+	"Python's operators on a wheel's object are its C slots (ShimForeignObject's dunders,
+	shimForeignOp): ``b + 4'' is nb_add, and ``4 + b'' reaches it reflected."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((b3 + 4, 4 + b3, -b3, bool(d.make_box(0))))') equals: '(7, 7, -3, False)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testWheelObjectComparisonsUseItsSlots [
+	"tp_richcompare, forward and reflected -- ``3 == b'' and ``3 < b'' ask the box once
+	the int declines, as CPython does."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((b3 == 3, b3 != 3, b3 < 4, 3 == b3, b3 == d.make_box(3), 3 < b3, 2 < b3, 3.0 == b3))') equals: '(True, False, True, True, True, False, True, True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testWheelObjectContainerSlots [
+	"mp_length, mp_subscript (negative index included), tp_iter and sq_contains."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+bl = d.make_box([10, 20, 30])
+repr((len(bl), bl[1], bl[-1], list(bl), 20 in bl, 99 in bl))') equals: '(3, 20, 30, [10, 20, 30], True, False)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testWheelObjectHashUsesItsSlot [
+	"tp_hash, so an equal box finds the dict entry."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b3 = d.make_box(3)
+repr((hash(b3) == hash(3), {b3: ''x''}[d.make_box(3)]))') equals: '(True, ''x'')'
+
+]
+
+{ #category : 'Grail-Tests - Py_None Wrapping' }
+CPythonShimTestCase >> testWrapNilAliasesNone [
+	"wrap: nil returns the same wrapper as wrap: None — both map to Py_None
+	at the bridge layer."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim wrap: nil) == (shim wrap: None).
+
+]
+
+{ #category : 'Grail-Tests - Py_None Wrapping' }
+CPythonShimTestCase >> testWrapNoneReturnsNoneWrapper [
+	"wrap: None returns the cached Py_None CByteArray."
+
+	| shim w1 w2 |
+	shim := CPythonShim current.
+	w1 := shim wrap: None.
+	w2 := shim wrap: None.
+	self assert: w1 == w2.
+	self assert: w1 class == CByteArray.
+
+]
+
+{ #category : 'Grail-Tests - Session-Local State' }
+CPythonShimTestCase >> testWrapperMapSurvivesSingletonReplacement [
+	"Replacing the singleton must NOT orphan the wrappers.
+
+	The map is the only strong reference to each wrapper, and a wrapper's
+	gcMalloc'd memory dies with its CByteArray -- while long-lived C
+	structures hold raw pointers into it for the life of the process
+	(_PyObject_New calloc's a PatternObject and _Py_Dealloc is a no-op, so a
+	compiled regex never goes away).  When the map lived only on the instance,
+	the reset in the test above dropped 106 of 108 wrappers; once a freed block
+	was reused, the offset-24 sentinel stopped reading GRAILWP1 and
+	is_foreign() called it foreign -- surfacing either as ``a
+	ShimForeignObject does not understand #includesKey:'' or, reading tp_name
+	off the stale ob_type, as a SIGSEGV in the whole-suite-in-one-session run
+	(docs/Shim_Foreign_Proxy_Misattribution.md)."
+
+	| shim1 value wrapper shim2 |
+	shim1 := CPythonShim current.
+	value := Array with: 17 with: 18.
+	wrapper := shim1 wrap: value.
+	self assert: (shim1 valueToPyObject at: value otherwise: nil) == wrapper.
+
+	CPythonShim reset.
+	shim2 := CPythonShim current.
+	self deny: shim1 == shim2
+		description: 'reset must actually replace the singleton'.
+	self assert: (shim2 valueToPyObject at: value otherwise: nil) == wrapper
+		description: 'a new singleton must inherit the session wrapper map'.
+	self assert: (shim2 wrap: value) == wrapper
+		description: 'wrap: must answer the SAME wrapper, not a fresh one whose '
+			, 'predecessor C still points at'
+
+]
+
+{ #category : 'Grail-Tests - Wrapper lifetime' }
+CPythonShimTestCase >> testWrapResurrectsZeroRefcountOnCacheHit [
+	"A cached wrapper whose refcount the C side dropped to zero must be
+	resurrected (refcnt := 1) when handed out again -- otherwise it is
+	sweep-bait while in flight and pyobj_oop reads freed memory (the
+	GC-geometry-sensitive test_em_dash HostCoreDump)."
+
+	| shim v w w2 |
+	shim := CPythonShim current.
+	v := 'resurrect-probe' copy.
+	w := shim wrap: v.
+	self assert: (w int64At: 0) equals: 1.
+	w int64At: 0 put: 0.
+	w2 := shim wrap: v.
+	self assert: w == w2.
+	self assert: (w int64At: 0) equals: 1
+
+]

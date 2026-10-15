@@ -1,0 +1,948 @@
+Extension { #name : 'Behavior' }
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___compileMethod: aSource category: aCategory [
+	"Compile aSource as a method on the receiver, env-1, using the
+	Grail compilation symbol list, wrapped in a CompileWarning
+	handler that resumes (matches the module-body compile path —
+	without this an upstream-shaped class body that shadows a
+	method argument aborts the whole module load).  Returns the
+	receiver.
+
+	Installed on Behavior, not Class, so the class-side form
+	``Foo class ___compileMethod: ...'' works too — ``Foo class''
+	is a Metaclass3 instance, and Metaclass3's class chain
+	(Metaclass3 < Module < Behavior) does NOT include Class.  Both
+	Class and Metaclass3 inherit from Behavior, so a Behavior
+	method covers ``Foo ___compileMethod:'' (instance side) and
+	``Foo class ___compileMethod:'' (class side) uniformly.
+
+	Hides the per-method boilerplate ClassDefAst codegen used to
+	inline at every emit site:
+
+	  [Foo @env0:compileMethod: '...'
+	      dictionaries: (Python @env0:at: #importlib)
+	          @env0:___compilationSymbolList___
+	      category: '...' environmentId: 1
+	  ] @env0:on: CompileWarning do: [:___ex___ | ___ex___ @env0:resume]
+
+	becomes
+
+	  Foo ___compileMethod: '...' category: '...'
+
+	~250 chars per method → ~50.  Class-side compiles use ``Foo class
+	___compileMethod: ...''."
+
+	^ self ___compileMethod: aSource category: aCategory scope: nil
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___compileMethod: aSource category: aCategory globals: aScope [
+	"___compileMethod:category:scope: for a method of a class an exec'd source
+	defines, aScope being the exec's globals -- what ClassDefAst emits inside
+	a doit.  The scope is noted against the receiver first
+	(___grailRememberCompileScope___:), so that whatever compiles the method
+	again can hand it back.
+
+	A separate entry point because other callers pass a scope of their own
+	for one compile -- a slot pair's ``___grailSlotPairOwner___'' -- and
+	noting those replaced the exec's globals."
+
+	self ___grailRememberCompileScope___: aScope.
+	^ self ___compileMethod: aSource category: aCategory scope: aScope
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___compileMethod: aSource category: aCategory scope: aScopeOrNil [
+	"As ___compileMethod:category:, with aScopeOrNil -- a SymbolDictionary --
+	searched FIRST when the method's source resolves a name.
+
+	That scope is a DOIT's.  ``exec'' runs its source with a SymbolDictionary
+	of the exec'd names on the compiler's symbol list, but a class defined in
+	that source compiles its METHODS here, at RUNTIME, against the user
+	profile's symbol list -- which the doit's scope is not on.  So a method
+	could not see a name from the very source it was written in:
+
+	    exec('x = 12
+	    class C:
+	        def get(self): return x
+	    got = C().get()')
+
+	``get'' failed to compile at all.  The classdef survived only because the
+	CompileError handler below installs a raising stub, which is why this
+	surfaced as a NameError about a codegen gap rather than as a missing name.
+
+	Nothing about it is specific to ``global'' -- any read of an exec-level
+	name from a method body hit it.  ClassDefAst passes the scope when it is
+	emitting inside a doit and nil otherwise, which is every other caller.
+
+	Resolve the rest of the symbol list locally rather than calling
+	``importlib ___compilationSymbolList___'' — Class.gs files in
+	early during install (as SystemUser, before the Python /
+	importlib globals exist), so the bare ``Python at: #importlib''
+	would fail to compile here.  The user-profile symbol list is the
+	same value importlib's helper would return."
+
+	| dicts |
+	dicts := self ___grailRuntimeCompileDictionaries___: aScopeOrNil.
+	[[self @env0:compileMethod: aSource
+		dictionaries: dicts
+		category: aCategory
+		environmentId: 1.
+	] @env0:on: CompileWarning do: [:ex | ex @env0:resume]]
+		@env0:on: CompileError
+		do: [:ex |
+			"A RUNTIME classdef whose method can't compile (a Grail
+			codegen gap, e.g. yield-in-lambda) must not abort the whole
+			classdef -- that turned ONE bad method into a module-wide
+			IMPORTERROR (test_collections' test_Generator).  Install a
+			same-selector STUB that raises a catchable NameError when
+			the method is actually CALLED; if even the stub won't
+			compile, fall back to raising the NameError here (still
+			catchable -- the pre-stub behavior)."
+			| lfIdx endIdx pattern stubSrc |
+			self ___traceCodegenGap___: aSource error: ex.
+			lfIdx := aSource @env0:indexOf: Character @env0:lf.
+			endIdx := lfIdx @env0:= 0
+				ifTrue: [aSource @env0:size]
+				ifFalse: [lfIdx @env0:- 1].
+			pattern := aSource @env0:copyFrom: 1 to: endIdx.
+			stubSrc := pattern @env0:, (Character @env0:lf @env0:asString) @env0:,
+				'	(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
+		@env1:___signal___: ''Grail could not compile this method (codegen gap); see install/import log'''.
+			[[self @env0:compileMethod: stubSrc
+				dictionaries: dicts
+				category: aCategory
+				environmentId: 1.
+			] @env0:on: CompileWarning do: [:wx | wx @env0:resume]]
+				@env0:on: CompileError
+				do: [:ex2 |
+					(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
+						___signal___: ('method compile failed ['
+							@env0:, (pattern @env0:copyFrom: 1 to: (pattern @env0:size @env0:min: 80)) @env0:asString
+							@env0:, ']: '
+							@env0:, (ex @env0:messageText @env0:ifNil: ['(no details)']))]].
+	^ self
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___compileSessionMethod: aSource category: aCategory [
+	"As ___compileMethod:category:, but the method is a TRANSIENT session
+	method: it overrides the receiver's own method of that selector in THIS
+	session only, is never committed, and modifies no persistent object.
+
+	This is what monkey-patching needs.  A patch is one program's change to a
+	class, and CPython's patch dies with the process; here a persistent
+	compile outlived the program, conflicted with any other session that
+	patched the same class, and left every later session paying for the
+	patch's dispatcher.  See ___installSessionMethod:as:."
+
+	^ self ___compileSessionMethod: aSource category: aCategory scope: nil
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___compileSessionMethod: aSource category: aCategory scope: aScopeOrNil [
+	"As ___compileSessionMethod:category:, with aScopeOrNil -- a
+	SymbolDictionary -- searched first when the source resolves a name.  A
+	name bound there compiles to that dictionary's ASSOCIATION, so a later
+	``at:put:'' on it changes what the method reads without recompiling it:
+	the fast path of a native-module patch holds its override that way.
+
+	A compile error is signalled, not stubbed: every caller installs these
+	speculatively and treats a failure as ``leave the original in place''."
+
+	^ self ___compileSessionMethod: aSource category: aCategory scope: aScopeOrNil environmentId: 1
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___compileSessionMethod: aSource category: aCategory scope: aScopeOrNil environmentId: envId [
+	"As ___compileSessionMethod:category:scope:, in environment envId -- 0 for
+	a Smalltalk-level method such as BoundMethod's pin readers."
+
+	| dicts meth |
+	dicts := self ___grailRuntimeCompileDictionaries___: aScopeOrNil.
+	meth := [self @env0:compileMethod: aSource
+			dictionaries: dicts
+			category: aCategory @env0:asSymbol
+			intoMethodDict: GsMethodDictionary @env0:new
+			"A scratch categories dictionary too: nil means the CLASS's own,
+			and filing the selector there was a persistent write -- measured,
+			the class's categories dictionary and a category's selector set,
+			on every patch."
+			intoCategories: GsMethodDictionary @env0:new
+			intoPragmas: nil
+			environmentId: envId]
+		@env0:on: CompileWarning do: [:ex | ex @env0:resume].
+	^ self ___installSessionMethod: meth as: meth @env0:selector environmentId: envId
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___dropSessionMethods___ [
+	"Discard every session method on the receiver, when Grail installed all
+	of them, and answer what was there (envId -> selector -> method) so a
+	caller can put the rest back; nil when nothing could be dropped.
+
+	THE REASON THIS EXISTS: once a class has a transient method dictionary
+	for an environment, the kernel's own removeSelector:environmentId: fails
+	for EVERY selector of that environment, patched or not -- it looks the
+	selector up in the transient dictionary first, and that lookup is
+	protected.  GsPackagePolicy's sessionMethodRemoveAllMethodsFor: runs in
+	protected mode and discards the dictionaries outright, for each
+	environment the policy manages this session.  It cannot be told which
+	environment, so it is used only when every dictionary it would discard is
+	one Grail created."
+
+	| rec policy envs |
+	rec := self ___sessionMethodRecord___: false.
+	rec == nil ifTrue: [^ nil].
+	policy := GsPackagePolicy @env0:current.
+	envs := SessionTemps @env0:current
+		@env0:at: policy @env0:sessionMethodEnvsGlobalName otherwise: nil.
+	envs == nil ifTrue: [^ nil].
+	"Every environment Grail installed in must be one the policy will clear,
+	and every one it will clear must hold nothing but Grail's."
+	((rec @env0:at: 2) @env0:keys @env0:detect: [:e | (envs @env0:includes: e) @env0:not] ifNone: [nil])
+		== nil ifFalse: [^ nil].
+	(envs @env0:detect: [:e |
+		(self @env0:transientMethodDictForEnv: e) ~~ nil
+			and: [((rec @env0:at: 1) @env0:includes: e) @env0:not]] ifNone: [nil])
+		== nil ifFalse: [^ nil].
+	policy @env0:sessionMethodRemoveAllMethodsFor: self.
+	(SessionTemps @env0:current @env0:at: #'GrailSessionMethods') @env0:removeKey: self.
+	^ rec @env0:at: 2
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___forgetSessionPatches___ [
+	"A class being REBUILT starts with no patches, as a re-executed class
+	statement does in CPython: drop its session methods (dispatchers, shadows,
+	forwarders) and the records that say they are installed, for the class
+	and its metaclass.  Without this the rebuilt class kept the old
+	dispatcher, whose shadow is a copy of the old method."
+
+	{ self. self @env0:class } @env0:do: [:c | | temps |
+		c ___dropSessionMethods___.
+		temps := SessionTemps @env0:current.
+		#(#'GrailSelfSendDispatchers' #'GrailFastOverrideHolders') @env0:do: [:k |
+			(temps @env0:at: k otherwise: nil) @env0:ifNotNil: [:reg |
+				reg @env0:removeKey: c ifAbsent: []]]].
+	^ self
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> ___grailAsTuple___: aCollection [
+	"aCollection as a Python TUPLE.
+
+	``cls.__bases__'' and ``cls.__mro__'' are tuples in CPython, and code
+	compares them as such -- ``self.assertEqual(D.__bases__, (A, C, B))''
+	fails against a plain Array however right its contents are, which is
+	most of test_genericclass's TestMROEntry.  A Grail tuple is an Array
+	SUBCLASS, so every Smalltalk reader (do:, at:, size, the MI registry)
+	keeps working unchanged.
+
+	Falls back to the collection itself while the tuple class does not yet
+	exist: Class.gs loads early, and both accessors are reachable during
+	that window."
+
+	| t |
+	t := Python @env0:at: #tuple otherwise: nil.
+	t == nil ifTrue: [^ aCollection @env0:asArray].
+	^ t @env0:withAll: (aCollection @env0:asArray)
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> ___grailClassSideDefIsNearer___: aSym family: family [
+	"Does a class-side def (@staticmethod / @classmethod) of this name sit at
+	or below the nearest instance-side one on the receiver's chain?  Then a
+	CLASS read of the name must answer the class-side def: in CPython the
+	nearest class dict in the MRO wins, whichever decorator put it there.
+	``S.find_class(a, b)'' for a @staticmethod over a base's ordinary
+	find_class resolved to the BASE's method -- the instance-side search runs
+	first and found it -- and raised a missing-argument TypeError.
+
+	At one class, the class side is asked first: an instance method there
+	under ``Grail-Class Side Forwarders'' is the forwarder for that very def.
+	Only reached for a class carrying ___grailClassSideOverrides___, so the
+	common read pays one cached respondsTo: and no walk."
+
+	| c |
+	c := self.
+	[c ~~ nil and: [c ~~ PythonInstance and: [c ~~ Object]]] whileTrue: [
+		(c @env0:class ___grailOwnsPythonDef___: aSym family: family forwarders: false)
+			ifTrue: [^ true].
+		(c ___grailOwnsPythonDef___: aSym family: family forwarders: false)
+			ifTrue: [^ false].
+		c := c @env0:superclass].
+	^ false
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___grailCompileScope___ [
+	"The scope the receiver's methods were compiled with, or nil: see
+	___grailRememberCompileScope___:."
+
+	^ (SessionTemps @env0:current @env0:at: #'GrailClassCompileScopes' otherwise: nil)
+		@env0:ifNotNil: [:d | d @env0:at: self otherwise: nil]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___grailForwarderSourceTo___: aSelector [
+	"``m:_: a1 _: a2  ^ self class m: a1 _: a2'' -- an instance method that
+	resends aSelector, arguments unchanged, to the receiver's class."
+
+	| kws head send lf part |
+	lf := String @env0:with: Character @env0:lf.
+	(aSelector @env0:includes: $:) ifFalse: [
+		^ ((aSelector @env0:asString @env0:, lf) @env0:, '	^ self @env0:class ')
+			@env0:, aSelector @env0:asString].
+	"Split at each colon by hand: every keyword ends in one, and ``_'' is a
+	keyword of its own (``m:_:'')."
+	kws := OrderedCollection @env0:new.
+	part := WriteStream @env0:on: String @env0:new.
+	aSelector @env0:asString @env0:do: [:ch |
+		ch == $:
+			ifTrue: [kws @env0:add: part @env0:contents. part := WriteStream @env0:on: String @env0:new]
+			ifFalse: [part @env0:nextPut: ch]].
+	head := WriteStream @env0:on: String @env0:new.
+	send := WriteStream @env0:on: String @env0:new.
+	kws @env0:doWithIndex: [:kw :i | | arg |
+		arg := ((kw @env0:, ': ___a') @env0:, i @env0:printString) @env0:, ' '.
+		head @env0:nextPutAll: arg.
+		send @env0:nextPutAll: arg].
+	^ ((head @env0:contents @env0:, lf) @env0:, '	^ self @env0:class ')
+		@env0:, send @env0:contents
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> ___grailInheritsStorageOf___: aBase [
+	"Whether this class carries aBase's storage -- the test __base__ uses to
+	pick the SOLID BASE out of a declared base list.
+
+	Direct inheritance is not enough, because a scalar built-in is not in any
+	subclass's chain: Grail substitutes AbstractPyInt for int, AbstractPyFloat
+	for float and AbstractPyStr for str, since those kernel classes are sealed.
+	So the substitute is what the chain holds and the declared base is what the
+	caller named."
+
+	| sub |
+	(aBase @env0:isKindOf: Behavior) ifFalse: [^ false].
+	sub := aBase.
+	aBase @env0:== int ifTrue: [sub := AbstractPyInt].
+	aBase @env0:== float ifTrue: [sub := AbstractPyFloat].
+	aBase @env0:== str ifTrue: [
+		"Either str substitute counts; see __base__ for why there are two."
+		^ ((self @env0:== AbstractPyStr) @env0:or: [self @env0:inheritsFrom: AbstractPyStr])
+			@env0:or: [(self @env0:== Unicode32) @env0:or: [self @env0:inheritsFrom: Unicode32]]].
+	^ (self @env0:== sub) @env0:or: [self @env0:inheritsFrom: sub]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___grailInstallClassSideForwarders___ [
+	"Give each @staticmethod / @classmethod that shadows a Python BASE's
+	ordinary method an instance-side entry point that forwards to it.
+
+	Both decorators compile onto the METACLASS, a base's ``def m(self, ...)''
+	onto the base's instance side, and a base's ``self.m(a, b)'' is a plain
+	send of ``m:_:'' to an instance -- which finds the base's method and never
+	sees the subclass's.  CPython looks ``m'' up on type(self) and finds the
+	subclass's staticmethod first, so pickle's _Unpickler, whose load_global
+	calls ``self.find_class(module, name)'', ignored a subclass's
+	``@staticmethod def find_class(module, name)'' (test_pickle
+	test_custom_find_class).  The forwarder is ``m:_: a _: b  ^ self class
+	m: a _: b'': the class side receives the class, which a classmethod wants
+	as cls and a staticmethod ignores.
+
+	Only where a Python base below the universal roots defines the selector on
+	its instance side, in a class-body category: nothing else sends it to an
+	instance.  A base's own forwarder does not count -- it already sends to
+	``self class'', which is this class for this class's instances.  __new__
+	is static by nature and never an instance method.
+
+	The forwarders are filed under their own category, and a class-side
+	marker ___grailClassSideOverrides___ records that the class has any: a
+	CLASS read of the name must still answer the class-side def
+	(___grailClassSideDefIsNearer___:family:), which the forwarder, being an
+	instance method nearer than the base's, would otherwise shadow."
+
+	| meta sup installed md lf |
+	meta := self @env0:class.
+	sup := self @env0:superclass.
+	sup == nil ifTrue: [^ self].
+	md := meta @env0:methodDictForEnv: 1.
+	md == nil ifTrue: [^ self].
+	installed := false.
+	md @env0:keys @env0:asArray
+		@env0:do: [:sel | | owner |
+			((meta @env0:categoryOfSelector: sel environmentId: 1) @env0:= #'Grail-Class Methods'
+				and: [sel ~~ #'__new__'
+				and: [((sel @env0:asString @env0:copyFrom: 1 to: (3 @env0:min: sel @env0:size)) @env0:= '___') @env0:not]])
+				ifTrue: [
+					owner := sup @env0:whichClassIncludesSelector: sel environmentId: 1.
+					(owner ~~ nil
+						and: [owner ~~ PythonInstance
+						and: [owner ~~ Object
+						and: [(owner @env0:categoryOfSelector: sel environmentId: 1)
+								@env0:~= #'Grail-Class Side Forwarders'
+						and: [self ___isPythonSourceMethodCategory___:
+								(owner @env0:categoryOfSelector: sel environmentId: 1)]]]])
+						ifTrue: [
+							self ___compileMethod: (self ___grailForwarderSourceTo___: sel)
+								category: 'Grail-Class Side Forwarders'.
+							installed := true]]].
+	installed ifTrue: [
+		lf := String @env0:with: Character @env0:lf.
+		meta ___compileMethod: ('___grailClassSideOverrides___' @env0:, lf) @env0:, '	^ true'
+			category: 'Grail-Class Side Forwarders']
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> ___grailOwnsPythonDef___: aSym family: family forwarders: includeForwarders [
+	"Does the receiver's OWN env-1 method dictionary hold aSym, or a
+	spelling of it in family, compiled from a class-body def?  The
+	class-side forwarders count only when includeForwarders is true."
+
+	| md hit |
+	md := self @env0:methodDictForEnv: 1.
+	md == nil ifTrue: [^ false].
+	hit := [:sel | (md @env0:includesKey: sel) and: [ | cat |
+		cat := self @env0:categoryOfSelector: sel environmentId: 1.
+		(cat @env0:= #'Grail-Class Side Forwarders')
+			ifTrue: [includeForwarders]
+			ifFalse: [self ___isPythonSourceMethodCategory___: cat]]].
+	(hit @env0:value: aSym) ifTrue: [^ true].
+	family == nil ifTrue: [^ false].
+	^ family @env0:anySatisfy: [:sel | sel ~~ nil and: [hit @env0:value: sel]]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___grailRememberCompileScope___: aScope [
+	"Note that the receiver's methods were compiled with aScope -- an exec's
+	globals -- searched first (___compileMethod:category:globals:), so that
+	anything compiling one of them AGAIN can hand the same scope back:
+	___grailCompileScope___.
+
+	A name the source reads from those globals compiles to the scope's own
+	ASSOCIATION.  Recompiled without the scope, the same name binds to
+	whatever else answers to it on the symbol list -- for a module's name,
+	the class Grail backs that module with -- so ``json.dumps(x)'' became a
+	send to the class.  Grail recompiles a method's text to keep the original
+	under a second selector (an instance attribute or ``del'' over a method,
+	a varargs forward to that copy) and to give a class its second base's
+	methods; every one of those copies lost the exec's globals, and pytest's
+	unittest plugin makes the first on every test of a module it imported
+	through exec.
+
+	Kept for this session only, in SessionTemps: the scope is the exec's
+	globals -- a module, or a dictionary of one run -- and a class built at
+	run time is rebuilt by the next session's exec, which notes its own."
+
+	((SessionTemps @env0:current @env0:at: #'GrailClassCompileScopes' otherwise: nil)
+		@env0:ifNil: [SessionTemps @env0:current
+			@env0:at: #'GrailClassCompileScopes' put: IdentityKeyValueDictionary @env0:new])
+				@env0:at: self put: aScope
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___grailRuntimeCompileDictionaries___: aScopeOrNil [
+	"The symbol list a method compiled at RUNTIME -- a class-body def, a
+	session method, a re-bound UnboundMethod -- resolves names against: a copy
+	of the user profile's, with aScopeOrNil (a doit's names) first.
+
+	Plus the SESSION-LOCAL module classes (``__main__'', issue #851), ahead
+	of the profile's entries.  importlib files a script's backing class there
+	instead of in PythonModules, and a method of a class the script defines
+	reaches that class BY NAME; the profile list holds PythonModules but not
+	the session dictionary, so without it such a method failed to compile and
+	was replaced by a NameError-raising stub.  Read straight from SessionTemps,
+	not through importlib: Class.gs files in before importlib exists.  Only when
+	present -- composing a list must not create it."
+
+	| dicts temps ns stack |
+	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
+	"An app's module classes (docs/App_Namespaces_Design.md §3.3), for the
+	same reason: the profile list holds PythonModules, not an app's
+	dictionary.  The namespace is the one importlib >> ___grailNamespace___
+	answers -- the module being loaded, else the session's app -- read the
+	same way, straight from SessionTemps."
+	temps := SessionTemps @env0:current.
+	ns := temps @env0:at: #'GrailCurrentApp' otherwise: nil.
+	ns == nil ifFalse: [
+		stack := temps @env0:at: #'GrailNamespaceStack' otherwise: nil.
+		(stack == nil or: [stack @env0:isEmpty]) ifFalse: [ns := stack @env0:last].
+		ns == UserGlobals ifFalse: [
+			(ns @env0:at: #'GrailModuleClasses' otherwise: nil)
+				@env0:ifNotNil: [:d | dicts @env0:insertObject: d at: 1]]].
+	(temps @env0:at: #'GrailSessionModuleClasses' otherwise: nil)
+		@env0:ifNotNil: [:d | dicts @env0:insertObject: d at: 1].
+	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
+	^ dicts
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___grailSuperImplements___: aSelector [
+	"True when a SUPERCLASS of the receiver implements aSelector in env 1.
+
+	The gate on fixed-arity forwarders (§9.36).  A def carrying defaults
+	compiles to ``_m:kw:'' only, so a base-class ``self.m(x)'' -- a fixed-arity
+	send -- misses the override; the cure is a ``m:'' entry point delegating
+	into the varargs body.  Emitting one for EVERY defaulted def is what does
+	the damage: the extra spellings are indistinguishable from a property
+	setter, and they win selector-by-arity lookups that must reach the varargs
+	body.  Measured, that cost 114 SUnit errors and 22 CPython-suite
+	regressions across three unrelated mechanisms.
+
+	A forwarder is only ever NEEDED where a superclass already answers that
+	exact fixed-arity selector -- that is the definition of the override case
+	§9.35 describes.  Asking the question here, at class-creation time, is what
+	makes the answer available at all: the base class is a runtime object, and
+	codegen cannot see it.
+
+	Starts at ``superclass'' deliberately.  The receiver's own ``_m:kw:'' is
+	already compiled by this point, and a class does not override itself."
+
+	| s |
+	s := self @env0:superclass.
+	s == nil ifTrue: [^ false].
+	^ (s @env0:whichClassIncludesSelector: aSelector environmentId: 1) ~~ nil
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> ___grailVisibleSuperclass___: il [
+	"The nearest Smalltalk superclass Python can see as a base -- the
+	receiver's superclass, walked past every class __mro__ leaves out
+	(importlib class >> ___isHiddenBase___:of:).  il is importlib, or nil
+	before it exists, when this is the bare superclass.
+
+	__mro__ has hidden those classes since ___visibleMroOf___:, but __bases__
+	and __base__ still answered the raw superclass: ``int.__bases__'' was
+	(Number,), ``tuple.__bases__'' (Array,), ``BaseException.__bases__'' the
+	kernel Exception, and ``dict.__bases__'' / ``str.__bases__'' a kernel
+	class that prints the same name -- fourteen of the builtins types, each
+	disagreeing with its own __mro__.  inspect.getclasstree builds its tree
+	from __bases__ alone."
+
+	| s |
+	s := self @env0:superclass.
+	il == nil ifTrue: [^ s].
+	[s ~~ nil and: [s ~~ Object
+		and: [(il @env0:___isHiddenBase___: s of: self) and: [s ~~ PythonInstance]]]]
+			whileTrue: [s := s @env0:superclass].
+	^ s
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___installSessionMethod: aMethod as: aSelector [
+	"Make aMethod answer aSelector on the receiver, for THIS session only.
+
+	The kernel's own route, ``compileTransientMethod:dictionaries:
+	environmentId:'', refuses every environment-1 method: it checks that the
+	method overrides an existing one with a lookup that always asks
+	environment 0.  That check sits in a protected method, which a session
+	method may not override, and creating a class's transient method
+	dictionary is itself protected.  GsPackagePolicy's lookup-cache update is
+	the unprotected way in -- it is how the policy installs a user's session
+	methods at login -- and it installs any compiled method under any key:
+	measured, zero persistent objects modified, the override visible to
+	whichClassIncludesSelector: and compiledMethodAt: (so the shadow checks
+	in the dispatcher installer see it), surviving an abort, invisible to
+	every other session.
+
+	The key need not be the method's own selector: the dispatcher's
+	``___grailOrig_'' shadow can be an existing method shared under the
+	shadow key."
+
+	^ self ___installSessionMethod: aMethod as: aSelector environmentId: 1
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___installSessionMethod: aMethod as: aSelector environmentId: envId [
+	"___installSessionMethod:as: in environment envId."
+
+	| rec |
+	rec := self ___sessionMethodRecord___: true.
+	"Whether Grail created this class's transient dictionary for envId -- only
+	then may ___dropSessionMethods___ discard the whole dictionary."
+	(self @env0:transientMethodDictForEnv: envId) == nil
+		ifTrue: [(rec @env0:at: 1) @env0:add: envId].
+	GsPackagePolicy @env0:current
+		@env0:updateMethodLookupCacheForSelector: aSelector @env0:asSymbol
+		method: aMethod
+		in: self
+		environmentId: envId.
+	((rec @env0:at: 2) @env0:at: envId otherwise: nil) == nil ifTrue: [
+		(rec @env0:at: 2) @env0:at: envId put: IdentityKeyValueDictionary @env0:new].
+	((rec @env0:at: 2) @env0:at: envId) @env0:at: aSelector @env0:asSymbol put: aMethod.
+	^ self
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___removeSelector: aSelector environmentId: envId [
+	"removeSelector:environmentId: that also works on a class carrying Grail's
+	session methods (see ___dropSessionMethods___): drop them, remove the
+	selector, then put back every session method but the one removed.  A
+	selector that existed only as a session method is removed by the drop."
+
+	| sym removed pmd |
+	sym := aSelector @env0:asSymbol.
+	removed := self ___dropSessionMethods___.
+	^ [pmd := self @env0:persistentMethodDictForEnv: envId.
+		((pmd ~~ nil and: [pmd @env0:includesKey: sym]) or: [removed == nil])
+			ifTrue: [self @env0:removeSelector: sym environmentId: envId]]
+		@env0:ensure: [
+			removed @env0:ifNotNil: [:byEnv |
+				byEnv @env0:keysAndValuesDo: [:e :sels |
+					sels @env0:keysAndValuesDo: [:k :m |
+						(e == envId and: [k == sym]) ifFalse: [
+							self ___installSessionMethod: m as: k environmentId: e]]]]]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___sessionMethodRecord___: create [
+	"This session's record of the session methods Grail installed on the
+	receiver: { envIds whose transient dictionary Grail created . envId ->
+	(selector -> method) }, or nil.  Kept because a transient method
+	dictionary cannot be READ outside protected mode -- its hash function is
+	protected -- so this is the only way to know, and to restore, what is in
+	it."
+
+	| temps reg rec |
+	temps := SessionTemps @env0:current.
+	reg := temps @env0:at: #'GrailSessionMethods' otherwise: nil.
+	reg == nil ifTrue: [
+		create ifFalse: [^ nil].
+		reg := IdentityKeyValueDictionary @env0:new.
+		temps @env0:at: #'GrailSessionMethods' put: reg].
+	rec := reg @env0:at: self otherwise: nil.
+	(rec == nil and: [create]) ifTrue: [
+		rec := { IdentitySet @env0:new. IdentityKeyValueDictionary @env0:new }.
+		reg @env0:at: self put: rec].
+	^ rec
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+Behavior >> ___traceCodegenGap___: aSource error: aCompileError [
+	"Under GRAIL_CODEGEN_TRACE_DIR, append a runtime method that failed to
+	compile -- its generated source and the compiler's complaint -- to
+	<dir>/codegen_gaps.txt.
+
+	The stub installed in its place says ``see install/import log'', but
+	nothing was ever logged: the source exists only for this call, so a
+	codegen gap in a class defined at run time (a class inside a function)
+	could not be inspected at all.  Module-level classes are already in the
+	trace dir's .tpz; this is the half that never reached it."
+
+	| dir file |
+	dir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
+	(dir == nil or: [dir @env0:isEmpty]) ifTrue: [^ self].
+	file := GsFile @env0:open: dir @env0:, '/codegen_gaps.txt' mode: 'a' onClient: false.
+	file == nil ifTrue: [^ self].
+	[file @env0:nextPutAll: '==== '; @env0:nextPutAll: self @env0:name @env0:asString;
+		@env0:nextPutAll: (String @env0:with: Character @env0:lf);
+		@env0:nextPutAll: (aCompileError @env0:messageText @env0:ifNil: ['(no details)']) @env0:asString;
+		@env0:nextPutAll: (String @env0:with: Character @env0:lf);
+		@env0:nextPutAll: aSource @env0:asString;
+		@env0:nextPutAll: (String @env0:with: Character @env0:lf)]
+		@env0:ensure: [file @env0:close]
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> __base__ [
+	"Python ``cls.__base__'': the primary (first) base class.  Grail
+	classes are single-inheritance Smalltalk classes, so this is the
+	Smalltalk superclass; a class with no superclass (Object) reports
+	Python None.  Read as a value — listed among the class-level dunders
+	in Object>>___pyAttrLoad___:.  numpy._core._exceptions does
+	``cls.__name__ = cls.__base__.__name__'' in a class decorator.
+
+	Class.gs loads before the ``None'' global is declared, so the
+	no-superclass case resolves None from the symbol list at run time
+	(when it exists) rather than referencing the bare ``None'' symbol
+	(which would be an undefined-symbol compile error here)."
+
+	| s il entry |
+	"A MULTI-BASE CLASS REPORTS ONE OF ITS DECLARED BASES, not the Smalltalk
+	superclass that was chosen to carry its storage.  CPython's __base__ is the
+	SOLID BASE -- the base whose instance layout the class uses -- and for
+	``type('C', (B, int), {})'' that is int.
+
+	__bases__ already reads the MI registry for exactly this reason; __base__
+	did not, so it answered whatever ___selectStorageBase___ picked, which is
+	an internal substitute.  The two disagreed about the same class."
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifFalse: [
+		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
+		entry == nil ifFalse: [
+			| declared |
+			declared := (entry @env0:at: 1) @env0:collect: [:b |
+				b @env0:== PythonInstance @env0:ifTrue: [Object] @env0:ifFalse: [b]].
+			declared @env0:isEmpty @env0:ifFalse: [
+				^ declared
+					@env0:detect: [:b | self ___grailInheritsStorageOf___: b]
+					ifNone: [declared @env0:at: 1]]]].
+	s := self ___grailVisibleSuperclass___: il.
+	"A Python-defined class's Smalltalk superclass is ``PythonInstance'', which
+	is Grail's implementation of the role CPython gives to ``object'' -- so that
+	is the name to report.  See
+	importlib class >> ___withoutImplementationRoots___:for:."
+	s == PythonInstance ifTrue: [^ Object].
+	"AND THE SCALAR SUBSTITUTES ARE INTERNAL TOO.  A Grail subclass of int is
+	rooted at AbstractPyInt -- Integer is sealed and its instances have no room
+	for instance variables -- so ``class D(int): pass'' reported a class whose
+	__name__ prints ``int'' and which IS NOT int.  ``D.__base__ is int'' was
+	False while its repr read ``<class 'int'>'', which is the worst way for a
+	value to be wrong.  __mro__ and __bases__ already hide the general roots;
+	these three are the ones __base__ can reach."
+	s == AbstractPyInt ifTrue: [^ int].
+	s == AbstractPyFloat ifTrue: [^ float].
+	"str has TWO substitutes.  AbstractPyStr is the sealed-kernel stand-in, and
+	___widenStrBase___ widens a str base to Unicode32 so a subclass can hold
+	any code point -- so that is what a ``class E(str)'' is actually rooted at.
+	Neither is a Python-visible type; both print as ``str''."
+	((s @env0:== AbstractPyStr)
+		@env0:or: [(s @env0:== Unicode32) @env0:or: [s @env0:== Unicode16]])
+			ifTrue: [^ str].
+	^ s == nil
+		ifTrue: [System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None']
+		ifFalse: [s]
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> __bases__ [
+	"Python ``cls.__bases__'': the direct base classes as a tuple.
+	Single-inheritance approximation — the Smalltalk superclass as a
+	1-element Array (empty when there is no superclass), mirroring how
+	__mro__ answers a plain Array."
+
+	| il s |
+	"Multiple-inheritance classes report their TRUE declared bases."
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifFalse: [
+		| entry |
+		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
+		"The SAME ``PythonInstance'' -> ``object'' mapping the superclass path
+		below applies, because the registry can hold that root too: a class
+		built by ``type(name, (), ns)'' has its empty base list defaulted to
+		{PythonInstance} before ___mergeSecondaryBases___ registers it, so
+		``type('X', (), {}).__bases__'' reported (PythonInstance,) where
+		CPython says (object,).  Mapping here rather than at registration
+		keeps the registry holding what Grail actually built and confines the
+		substitution to the Python-VISIBLE view, which is the same division
+		importlib ___withoutImplementationRoots___:for: makes for __mro__."
+		entry == nil ifFalse: [
+			^ self ___grailAsTuple___: ((entry @env0:at: 1) @env0:collect: [:b |
+				b == PythonInstance
+					ifTrue: [Object]
+					ifFalse: [(il @env0:___exposedBuiltinFor___: b) ifNil: [b]]])]].
+	s := self ___grailVisibleSuperclass___: il.
+	"A stand-in root reports as the builtin it stands for -- ``class Y(int)''
+	sits on AbstractPyInt, and __bases__ is (int,).  See importlib >>
+	___visibleMroOf___:."
+	(il ~~ nil and: [s ~~ nil]) ifTrue: [
+		(il @env0:___exposedBuiltinFor___: s) ifNotNil: [:ex |
+			^ self ___grailAsTuple___: (Array @env0:with: ex)]].
+	"``PythonInstance'' -> ``object'', for the reason __base__ gives above.
+	Without it ``class Plain: pass'' reported __bases__ == (PythonInstance,)
+	where CPython reports (object,), and inspect.getclasstree -- which builds
+	its tree purely from __bases__ -- rooted every tree at PythonInstance."
+	s == PythonInstance ifTrue: [^ self ___grailAsTuple___: (Array @env0:with: Object)].
+	^ self ___grailAsTuple___:
+		(s == nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s])
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> __mro__ [
+	"Python ``cls.__mro__'': the method resolution order, as a tuple
+	beginning with the receiver class and walking up the superclass
+	chain.  Single inheritance is the simple chain — correct for the
+	exception hierarchy, which is where flask consults
+	``exc_class.__mro__'' during error-handler lookup
+	(``for cls in exc_class.__mro__: handler_map.get(cls)'').
+
+	The chain runs up through the GemStone-internal ancestors to
+	Object; that's harmless for identity-keyed handler maps because
+	those internal classes are never registered as handler keys.  It is
+	NOT a full C3 linearization — multiple inheritance would need the
+	merge — but no exception class uses MI, and the only consumers
+	today walk the chain looking for an identity match.
+
+	One internal ancestor IS hidden: ``PythonInstance'', the root every
+	Python-defined class sits on, which stands in for CPython's ``object''
+	rather than being a base CPython has.  See
+	importlib class >> ___withoutImplementationRoots___:for:, which does the
+	filtering for both this method and its fallback below.
+
+	Read as a *value* (not wrapped as a BoundMethod) because
+	``___pyAttrLoad___:'' lists ``__mro__'' among the class-level
+	dunders that always resolve to their value."
+
+	| il result c |
+	"Single source of truth: importlib ___mroOf___: derives the C3 MRO,
+	splicing an MI-registered ancestor's SECONDARY bases when a
+	single-inheritance subclass would otherwise re-walk the raw Smalltalk
+	superclass chain and drop them (``class E(int, Flag)'' is
+	Integer-chained; a subclass of E must keep Flag/Enum -- Enum
+	___grailIsFlagClass: reads __mro__, so auto() numbering and
+	issubclass(sub, Flag) both hinge on it).  Fall back to the bare chain
+	only before importlib exists (Class.gs loads early).
+
+	The VISIBLE view (___visibleMroOf___:), not ___mroOf___: itself: the
+	kernel classes a built-in is implemented on -- KeyValueDictionary and
+	Collection above dict, the kernel Exception above BaseException -- are
+	not bases Python has, while super() and isinstance still need them."
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifFalse: [^ self ___grailAsTuple___: (il @env0:___visibleMroOf___: self)].
+	result := OrderedCollection @env0:new.
+	c := self.
+	[c == nil] whileFalse: [
+		"Same PythonInstance elision importlib does, open-coded: this branch
+		runs only before importlib exists, so it cannot call over there."
+		((c @env0:== PythonInstance) @env0:and: [c @env0:~~ self])
+			ifFalse: [result @env0:add: c].
+		c := c @env0:superclass.
+	].
+	^ self ___grailAsTuple___: result
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> __subclasses__ [
+	"Python ``cls.__subclasses__()'': the class's DIRECT subclasses, as a list.
+
+	Answered as a real method, like ``mro'' and unlike ``__mro__'': CPython's is
+	callable, and callers pass the result straight to len() or iterate it.
+
+	The Python-visible subclasses only.  Grail presents some of a class's
+	Smalltalk descendants to Python and hides the rest -- ``dict'' has PyDict
+	beneath it, ``str'' has the Unicode variants -- so the answer has to be the
+	set CPython would name, not the raw ``subclasses''.  functools already owns
+	that computation for its ABC C3 walk (___pyDirectSubclassesOf___:), including
+	the part a plain Smalltalk walk gets WRONG: a multiple-inheritance class is
+	chained under its primary base alone, so its secondary bases have to come out
+	of importlib's MI registry or they never see it at all.  Delegated rather
+	than reimplemented, so the two cannot drift.
+
+	Resolved through the symbol list because Class.gs is filed long before
+	functools.gs; a bare reference would not compile.  Before functools exists,
+	the raw Smalltalk subclasses are the honest approximation -- nothing calls
+	this that early, and answering an empty list would be a worse lie."
+
+	| ft out lst |
+	ft := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #functools.
+	out := ft == nil
+		ifTrue: [self @env0:subclasses @env0:asOrderedCollection]
+		ifFalse: [ft @env0:___instance___ @env1:___pyDirectSubclassesOf___: self].
+	lst := Python @env0:at: #list otherwise: nil.
+	lst == nil ifTrue: [^ Array @env0:withAll: out].
+	^ lst @env0:withAll: out
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> __type_params__ [
+	"``cls.__type_params__'': the PEP 695 type parameters, as a tuple of
+	typing.TypeVar -- and an EMPTY tuple for a class that declares none, which
+	is what CPython gives every ordinary class.
+
+	BUILT ON FIRST READ, from the NAMES ClassDefAst recorded at class creation.
+	That laziness is the design and not an optimisation: materialising a
+	TypeVar means importing typing, and typing defines its own generic classes
+	(``SupportsAbs[T]'', ``SupportsRound[T]''), so doing it while a class is
+	being defined re-enters typing's own import and breaks ForwardRef --
+	deterministically, and far from here.  An earlier cut did it eagerly and
+	had to be reverted for exactly that.
+
+	An ASSIGNED value wins, because ``A.__type_params__ = whatever'' is legal
+	and lands in the class-attribute holder, which ___pyAttrLoad___ reads
+	before it reaches a method like this one.
+
+	A name that cannot be turned into a TypeVar -- typing missing, or the
+	import failing -- answers the empty tuple rather than raising: this is
+	introspection, and a reader that cannot get the parameters is better served
+	by ``none'' than by an exception from an attribute read."
+
+	| names vars holder assigned result |
+	holder := [self @env0:perform: #___dynInstVars___ env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"AN ASSIGNED VALUE WINS.  ``A.__type_params__ = whatever'' is legal and
+	lands in the holder; the class-level value-attribute branch that routes
+	here runs BEFORE the holder is consulted, so the assignment has to be
+	honoured from inside rather than around."
+	assigned := [self @env1:___classAttrOverlayLookup___: self name: #'__type_params__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	assigned @env0:isNil ifFalse: [^ assigned].
+	holder @env0:isNil ifFalse: [
+		assigned := [holder @env0:dynamicInstVarAt: #'__type_params__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		assigned @env0:isNil ifFalse: [^ assigned]].
+	names := holder @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [[holder @env0:dynamicInstVarAt: #'___typeParamNames___']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(names @env0:isNil @env0:or: [names @env0:isEmpty])
+		ifTrue: [^ tuple @env0:withAll: (Array @env0:new: 0)].
+	"One builder for every shape, which also reads the ``*Ts'' / ``**P'' kind
+	 prefix -- a TypeVarTuple or ParamSpec was built as a TypeVar here."
+	vars := names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n
+		globals: (ExecBlock @env0:___pyGlobalsOfClass___: self)].
+	"BUILT ONCE, then cached where the ``assigned'' branch above reads it.  A
+	 class's type parameters are FIXED objects: ``(T,) = Gen.__type_params__''
+	 followed by a second read must answer the same T, and everything that
+	 resolves a forward reference through the class's type parameters depends
+	 on it -- ForwardRef('T').evaluate(owner=Gen) is T (test_annotationlib
+	 test_evaluate_with_type_params).  Building afresh on every read gave a new
+	 TypeVar each time.  The laziness itself stays, for the import-cycle reason
+	 above; only the result is kept."
+	result := tuple @env0:withAll: (Array @env0:withAll: vars).
+	[holder @env0:dynamicInstVarAt: #'__type_params__' put: result]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ result
+
+]
+
+{ #category : 'Grail-Reflection' }
+Behavior >> mro [
+	"Python ``cls.mro()'': the method resolution order as a LIST.
+
+	The same linearization ``cls.__mro__'' answers -- this is the callable
+	spelling of it, and CPython's differs only in returning a fresh list where
+	__mro__ is a tuple.  A metaclass computing subclass relationships reaches for
+	it (test_typechecks's ABC.__subclasscheck__ does ``any(c in candidates for c
+	in sub.mro())''), and abc-style code generally prefers it because the list is
+	safe to mutate.
+
+	Answered as a real method rather than a value, so ``cls.mro'' wraps as a
+	BoundMethod and ``cls.mro()'' calls it -- unlike __mro__, which
+	___pyAttrLoad___: lists among the dunders that always read as their value."
+
+	| lst |
+	lst := Python @env0:at: #list otherwise: nil.
+	lst == nil ifTrue: [^ Array @env0:withAll: self __mro__].
+	^ lst @env0:withAll: self __mro__
+
+]

@@ -1,0 +1,279 @@
+Class {
+	#name : 'OperatorSemanticsTestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Setup' }
+OperatorSemanticsTestCase >> setUp [
+	"Reload tests/python/operator_semantics.py fresh each test."
+
+	| mods |
+	mods := importlib @env1:modules.
+	"Evict the fixture so it reloads from disk each run.  Do NOT evict
+	``operator'': it is a canonical (deployed) module in the warm suite, and
+	removing a canonical module then re-importing it raises ImportError.  The
+	deployed ``operator'' is built from the current operator.py at install, so
+	the fixture's ``import operator'' already sees the fixes."
+	mods removeKey: #'operator_semantics' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/operator_semantics.py')
+		name: 'operator_semantics'.
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugAddDispatchesIadd [
+	"``x += 1'' uses __iadd__ when defined."
+
+	self assert: (testModule @env1:aug_iadd) equals: 'iadd'
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugAddIntCounterNoRegression [
+	"``i += 1'' on a plain int still works (falls back to __add__)."
+
+	self assert: (testModule @env1:aug_int_counter) equals: 5
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugAddIntToFloatNoRegression [
+	"``x += 1.5'' on an int yields a float (binary __add__ fallback)."
+
+	self assert: (testModule @env1:aug_int_to_float) equals: 1.5
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugAddListExtendNoRegression [
+	"``lst += [2, 3]'' still extends a list."
+
+	self assert: (testModule @env1:aug_list_extend) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugIaddNoneDisablesOperator [
+	"``__iadd__ = None'' disables the in-place op AND blocks the __add__
+	fallback: ``x += 10'' raises TypeError (test_augassign testCustomMethods1
+	aug_test4).  The None class attribute is invisible to the inherited
+	compiled __iadd__, so the sentinel is read via ___classAttrDunder___."
+
+	self assert: (testModule @env1:aug_iadd_none_disabled) equals: 'TypeError'
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugIaddNoneSentinelNoRegression [
+	"The None sentinel check does not disturb ordinary dispatch: a sibling
+	with a real __iadd__ still mutates in place, and one with only __add__
+	still falls back."
+
+	self assert: (testModule @env1:aug_iadd_none_present_still_works) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugMulDispatchesImul [
+	"``x *= 2'' uses __imul__."
+
+	self assert: (testModule @env1:aug_imul) equals: 'imul'
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugSubDispatchesIsub [
+	"``x -= 1'' uses __isub__."
+
+	self assert: (testModule @env1:aug_isub) equals: 'isub'
+
+]
+
+{ #category : 'Grail-Tests - Augmented Assignment' }
+OperatorSemanticsTestCase >> testAugXorDispatchesIxor [
+	"``x ^= 1'' uses __ixor__."
+
+	self assert: (testModule @env1:aug_ixor) equals: 'ixor'
+
+]
+
+{ #category : 'Grail-Tests - Comparison' }
+OperatorSemanticsTestCase >> testDequeEqualityIsNonreflexive [
+	"deque == deque is element-wise with identity-before-equality, so a deque
+	holding a shared float('nan') equals a deque built from the same objects;
+	a non-deque operand is NotImplemented (test_contains test_nonreflexive)."
+
+	self assert: (testModule @env1:deque_nonreflexive_eq) equals: true
+
+]
+
+{ #category : 'Grail-Tests - type identity' }
+OperatorSemanticsTestCase >> testIsinstanceClassOfType [
+	"isinstance(cls, type) stays True; isinstance(instance, type) False."
+
+	self assert: (testModule @env1:isinstance_class_of_type) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Shift' }
+OperatorSemanticsTestCase >> testLeftShiftNegativeCountRaisesValueError [
+	"2 << -1 raises ValueError, not a sign-flipped bitShift result."
+
+	self assert: (testModule @env1:lshift_negative) equals: 'ValueError'
+
+]
+
+{ #category : 'Grail-Tests - Shift' }
+OperatorSemanticsTestCase >> testLeftShiftPositive [
+	"5 << 1 = 10 (unaffected by the negative-count guard)."
+
+	self assert: (testModule @env1:lshift_ten) equals: 10
+
+]
+
+{ #category : 'Grail-Tests - type identity' }
+OperatorSemanticsTestCase >> testLengthHintClassValuedHint [
+	"operator.length_hint: a class-valued __length_hint__ raises via
+	``type(v) is type'' — TypeError swallowed to default, LookupError propagates."
+
+	self assert: (testModule @env1:length_hint_class_raises_default) equals: true
+
+]
+
+{ #category : 'Grail-Tests - type identity' }
+OperatorSemanticsTestCase >> testLengthHintIterator [
+	"operator.length_hint(iter(seq)) uses list_iterator __length_hint__
+	(remaining count), decreasing as items are consumed."
+
+	self assert: (testModule @env1:length_hint_iterator) equals: true
+
+]
+
+{ #category : 'Grail-Tests - operator module' }
+OperatorSemanticsTestCase >> testOperatorConcatLists [
+	"operator.concat concatenates sequences."
+
+	self assert: (testModule @env1:op_concat_lists) equals: true
+
+]
+
+{ #category : 'Grail-Tests - operator module' }
+OperatorSemanticsTestCase >> testOperatorConcatNumbersRaisesTypeError [
+	"operator.concat(13, 29) raises TypeError (numbers are not sequences)."
+
+	self assert: (testModule @env1:op_concat_numbers) equals: 'TypeError'
+
+]
+
+{ #category : 'Grail-Tests - operator module' }
+OperatorSemanticsTestCase >> testOperatorDunderAliasesAreOriginal [
+	"Every operator op is exposed under both its plain and dunder name with
+	the SAME object identity (operator.__add__ is operator.add)."
+
+	self assert: (testModule @env1:op_dunder_is_original) equals: 'ALL_MATCH'
+
+]
+
+{ #category : 'Grail-Tests - operator module' }
+OperatorSemanticsTestCase >> testOperatorIconcatNumbersMessage [
+	"operator.iconcat(1, 0.5) raises TypeError naming the Python type."
+
+	self assert: (testModule @env1:op_iconcat_numbers_msg)
+		equals: '''int'' object can''t be concatenated'
+
+]
+
+{ #category : 'Grail-Tests - Shift' }
+OperatorSemanticsTestCase >> testRightShiftNegativeCountRaisesValueError [
+	"2 >> -1 raises ValueError."
+
+	self assert: (testModule @env1:rshift_negative) equals: 'ValueError'
+
+]
+
+{ #category : 'Grail-Tests - Shift' }
+OperatorSemanticsTestCase >> testRightShiftPositive [
+	"5 >> 1 = 2 (unaffected by the negative-count guard)."
+
+	self assert: (testModule @env1:rshift_two) equals: 2
+
+]
+
+{ #category : 'Grail-Tests - type identity' }
+OperatorSemanticsTestCase >> testTypeIsType [
+	"``type is type'' — the type builtin is an identity-stable singleton."
+
+	self assert: (testModule @env1:type_is_type) equals: true
+
+]
+
+{ #category : 'Grail-Tests - type identity' }
+OperatorSemanticsTestCase >> testTypeOfClassIsType [
+	"``type(cls) is type'' for classes (int / TypeError / LookupError)."
+
+	self assert: (testModule @env1:type_of_class_is_type) equals: true
+
+]
+
+{ #category : 'Grail-Tests - type identity' }
+OperatorSemanticsTestCase >> testTypeOfInstanceIsNotType [
+	"``type(x) is type'' is False for instances (incl. NotImplemented)."
+
+	self assert: (testModule @env1:type_of_instance_is_not_type) equals: true
+
+]
+
+{ #category : 'Grail-Tests - type identity' }
+OperatorSemanticsTestCase >> testTypeOfInstanceReturnsClass [
+	"``type(instance)'' still returns the instance's class (unchanged)."
+
+	self assert: (testModule @env1:type_of_instance_returns_class) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Context Manager' }
+OperatorSemanticsTestCase >> testVarargsExitReachableByNormalCall [
+	"``obj.__exit__(a, b, c)'' (a plain call, not via ``with'') reaches the
+	varargs __exit__ rather than object's context-manager default."
+
+	self assert: (testModule @env1:cm_call_exit_directly) equals: 3
+
+]
+
+{ #category : 'Grail-Tests - Context Manager' }
+OperatorSemanticsTestCase >> testWithCallsFixedExitWithThreeArgs [
+	"A fixed-arity ``__exit__(self, a, b, c)'' is reached by ``with''."
+
+	self assert: (testModule @env1:cm_fixed_exit_argc) equals: 3
+
+]
+
+{ #category : 'Grail-Tests - Context Manager' }
+OperatorSemanticsTestCase >> testWithCallsVarargsExitWithThreeArgs [
+	"A varargs ``__exit__(self, *exc)'' is reached by ``with'' with the
+	three protocol args (None, None, None on a clean exit)."
+
+	self assert: (testModule @env1:cm_varargs_exit_argc) equals: 3
+
+]
+
+{ #category : 'Grail-Tests - Context Manager' }
+OperatorSemanticsTestCase >> testWithEntersVarargsContextManager [
+	"``with cm:'' runs __enter__ on a user context manager."
+
+	self assert: (testModule @env1:cm_varargs_entered) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Context Manager' }
+OperatorSemanticsTestCase >> testWithExitReturningFalseDoesNotSuppress [
+	"__exit__ returning False must let the exception propagate."
+
+	self assert: (testModule @env1:cm_exit_does_not_suppress) equals: 'propagated'
+
+]

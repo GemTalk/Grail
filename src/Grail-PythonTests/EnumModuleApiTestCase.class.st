@@ -1,0 +1,199 @@
+Class {
+	#name : 'EnumModuleApiTestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Private' }
+EnumModuleApiTestCase >> resultAt: key [
+	^ (testModule @env1:___pyAttrLoad___: #r) @env1:__getitem__: key
+
+]
+
+{ #category : 'Grail-Setup' }
+EnumModuleApiTestCase >> setUp [
+	"Reload tests/python/enum_module_api.py fresh each test."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'enum_module_api' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/enum_module_api.py')
+		name: 'enum_module_api'.
+
+]
+
+{ #category : 'Grail-Tests - enum types belong to enum' }
+EnumModuleApiTestCase >> testAUserEnumKeepsItsOwnModule [
+	"Only the classes enum DEFINES are relabelled.  A user's enum belongs to the
+	module that declared it -- which is also what lets pickle find it."
+
+	self assert: (self resultAt: 'user_enum_module') asString
+		equals: '''enum_module_api'''.
+
+]
+
+{ #category : 'Grail-Tests - dir()' }
+EnumModuleApiTestCase >> testAVarargsFunctionIsReportedByItsPythonName [
+	"A module-level ``def verify(*args, **kwargs)'' compiles to the varargs
+	selector ``_verify:kw:''.  That one prefix underscore is Grail's encoding,
+	not part of the name, and reporting it verbatim made a public function look
+	private to every consumer that filters leading underscores -- while
+	getattr(enum, 'verify') worked perfectly all along."
+
+	self assert: (self resultAt: 'dir_has_verify') asString equals: 'True'.
+	self assert: (self resultAt: 'dir_has_underscore_verify') asString equals: 'False'.
+	self assert: (self resultAt: 'verify_callable') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Module identity' }
+EnumModuleApiTestCase >> testBoundaryMemberOrderIsUpstreams [
+	"Definition order is member order, which is why the functional API is fed an
+	ordered list of pairs rather than a dictionary -- a KeyValueDictionary's
+	order is its hash order."
+
+	self assert: (self resultAt: 'boundary_member_order') asString
+		equals: '[''STRICT'', ''CONFORM'', ''EJECT'', ''KEEP'']'.
+	self assert: (self resultAt: 'check_member_order') asString
+		equals: '[''CONTINUOUS'', ''NAMED_FLAGS'', ''UNIQUE'']'.
+
+]
+
+{ #category : 'Grail-Tests - Module identity' }
+EnumModuleApiTestCase >> testBoundaryMembersAreRealMembers [
+	"A StrEnum member IS its value, so ``enum.STRICT == 'strict''' holds -- it
+	was False while STRICT was the symbol #STRICT."
+
+	self assert: (self resultAt: 'boundary_members_are_members') asString
+		equals: '[''STRICT'', ''strict'', True]'.
+	self assert: (self resultAt: 'members_are_the_classes_own') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Module identity' }
+EnumModuleApiTestCase >> testEnumPropertyReportsItsModule [
+	"``enum.property'' is a class of its own upstream, defined in enum, so
+	CPython reports 'enum'.  It does here too now.
+
+	This used to be recorded as a known gap on the reasoning that the same
+	PropertyDescriptor backed the builtin ``property'', so claiming 'enum'
+	would relabel the builtin.  That stopped applying once enum.property became
+	its own class -- and the gap was never cosmetic.  __module__ is how pickle
+	saves a class BY REFERENCE; without it pickle SCANS sys.modules for a module
+	exposing the object under its __qualname__, and ``types'' exposes this one.
+	So pickling enum.property depended on whether an earlier test had imported
+	types, which is why EnumPickleByNameTestCase passed alone and failed in a
+	whole-suite run."
+
+	self assert: (self resultAt: 'enum_property_module') asString
+		equals: '''enum'''.
+
+]
+
+{ #category : 'Grail-Tests - enum types belong to enum' }
+EnumModuleApiTestCase >> testEnumsOwnClassesReportTheirModule [
+	"CPython: enum.Enum.__module__ == 'enum'.  Grail answered nothing."
+
+	self assert: (self resultAt: 'Enum_module') asString equals: 'enum'.
+	self assert: (self resultAt: 'Flag_module') asString equals: 'enum'.
+	self assert: (self resultAt: 'EnumType_module') asString equals: 'enum'.
+	self assert: (self resultAt: 'EnumDict_module') asString equals: 'enum'.
+
+]
+
+{ #category : 'Grail-Tests - __all__' }
+EnumModuleApiTestCase >> testEveryPublicNameIsDeclared [
+	"The property test.support.check__all__ checks: dir() and __all__ agree."
+
+	self assert: (self resultAt: 'dir_matches_all') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Known gaps' }
+EnumModuleApiTestCase >> testFlagBoundaryAndEnumCheckAreRealEnums [
+	"Both are real StrEnums, as upstream.  They used to be absent ENTIRELY:
+	Grail modelled only their MEMBERS, as opaque symbols, and never built the
+	enclosing enum, so ``enum.FlagBoundary'' was an AttributeError and a
+	``member'' had no name, value or repr.
+
+	Symbols were enough to import and enough for the internal boundary
+	machinery, which still speaks them -- ___grailBoundaryMemberFor: converts
+	only where the value escapes into Python, at ``cls._boundary_''.  What they
+	could not do is be looked at."
+
+	self assert: (self resultAt: 'boundary_class_present') asString equals: 'True'.
+	self assert: (self resultAt: 'check_class_present') asString equals: 'True'.
+	self assert: (self resultAt: 'boundary_members_resolve') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - The metaclass read' }
+EnumModuleApiTestCase >> testReadingAMetaclassModuleDoesNotRaise [
+	"It used to raise a MessageNotUnderstood that Python could not catch -- the
+	script died rather than seeing an exception.  Reading __module__ off a
+	metaclass is ordinary introspection: repr helpers, pickle and inspect all
+	do it."
+
+	self assert: (self resultAt: 'metaclass_module') asString equals: '''enum'''.
+
+]
+
+{ #category : 'Grail-Tests - __all__' }
+EnumModuleApiTestCase >> testShowFlagValuesIsDefinedButNotExported [
+	"Exactly as upstream -- test_enum's own check names it as not_exported."
+
+	self assert: (self resultAt: 'show_flag_values_defined') asString equals: 'True'.
+	self assert: (self resultAt: 'show_flag_values_exported') asString equals: 'False'.
+
+]
+
+{ #category : 'Grail-Tests - Known gaps' }
+EnumModuleApiTestCase >> testStarImportIgnoresAllWhichIsAKnownGap [
+	"THE METHOD HALF OF THIS GAP IS NOW CLOSED.  ``unique'' is a METHOD on the
+	enum module rather than a stored dict entry, and it used to be missed for
+	exactly that reason: the star-import walked the dict entries and the dynamic
+	instVars and never looked at the method dictionary.  module >>
+	___mergePublicAttrsFrom___: now walks the methods too, so ``unique'' arrives,
+	and this test asserts that rather than the old absence.
+
+	WHAT REMAINS a gap, and why the name of this test still fits: the
+	star-import does not consult ``__all__''.  It publishes every public
+	attribute it can find, which for this module is a superset of __all__ -- so
+	declaring __all__ is still not what makes these names arrive, and a name
+	listed there that is neither a stored entry nor a method would still be
+	missed.  Teaching the star-import to consult __all__ is a change in the
+	import machinery.
+
+	Only ``unique'' is named, and that is still deliberate: which names a
+	dict-only walk missed was session state rather than a property of the module
+	-- a name became a stored entry the first time something put it there -- so
+	an inventory here passed alone and failed in the suite. That fragility is
+	what the method walk removes."
+
+	self assert: (self resultAt: 'star_import_brings_IntEnum') asString equals: 'True'.
+	self assert: (self resultAt: 'star_import_brings_unique_a_module_method') asString
+		equals: 'True'.
+	self assert: (self resultAt: 'unique_is_declared') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - __all__' }
+EnumModuleApiTestCase >> testTheModuleDeclaresItsApi [
+	self assert: (self resultAt: 'has_all') asString equals: 'True'.
+	self assert: (self resultAt: 'all_has_Enum') asString equals: 'True'.
+	self assert: (self resultAt: 'all_has_verify') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - dir()' }
+EnumModuleApiTestCase >> testTheSmalltalkSetupHookIsNotAPythonAttribute [
+	"``initialize'' populates the namespace at import for a module written in
+	Smalltalk.  CPython's enum has no such name, and dir() offered it as public."
+
+	self assert: (self resultAt: 'dir_has_initialize') asString equals: 'False'.
+
+]

@@ -1,0 +1,590 @@
+Extension { #name : 'type' }
+
+{ #category : 'Grail-Class Construction' }
+type class >> ___classUnderConstruction___ [
+	"The class whose statement is currently running its metaclass __new__, or
+	nil.  A STACK, because a class statement can appear inside another class's
+	body and each needs its own answer.
+
+	Session-local scaffolding for the duration of a class statement, exactly
+	like the prepared namespace it partners: it must never be committed."
+
+	| stk |
+	stk := SessionTemps @env0:current
+		@env0:at: #'GrailClassUnderConstruction' otherwise: nil.
+	(stk @env0:isNil or: [stk @env0:isEmpty]) ifTrue: [^ nil].
+	^ stk @env0:last
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type class >> ___grailBases___: aBasesTuple differFrom: aClass [
+	"Does aBasesTuple name different bases, in a different order, from the ones
+	aClass -- the one under construction -- was declared with?  Identity,
+	element by element: a metaclass that passes the bases it was given, the
+	common case, must keep answering the class it was handed."
+
+	| mine theirs |
+	aBasesTuple @env0:isNil ifTrue: [^ false].
+	mine := [aClass ___pyAttrLoad___: #'__bases__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mine @env0:isNil ifTrue: [^ false].
+	theirs := [aBasesTuple @env0:asArray]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	theirs @env0:isNil ifTrue: [^ false].
+	mine := mine @env0:asArray.
+	"``()'' and ``(object,)'' are the same declaration."
+	(theirs @env0:isEmpty and: [mine @env0:size @env0:= 1
+		and: [(mine @env0:at: 1) == object]]) ifTrue: [^ false].
+	(mine @env0:size @env0:= theirs @env0:size) ifFalse: [^ true].
+	1 @env0:to: mine @env0:size do: [:i |
+		(mine @env0:at: i) == (theirs @env0:at: i) ifFalse: [^ true]].
+	^ false
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type class >> ___grailBuildWithMetaclass___: mcls as: aBlock [
+	"Run aBlock -- a type() build -- with mcls recorded for the class it makes
+	before that class's __set_name__ / __init_subclass__ run (builtins >>
+	type:_:_:kw: takes it).  Cleared however the build ends, so a build that
+	raises before taking it cannot hand it to an unrelated later class."
+
+	^ [SessionTemps @env0:current @env0:at: #'GrailTypeBuildMetaclass' put: mcls.
+	   aBlock @env0:value]
+		@env0:ensure: [SessionTemps @env0:current
+			@env0:removeKey: #'GrailTypeBuildMetaclass' ifAbsent: [nil]]
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type class >> ___new__: positional kw: kwargs [
+	"``type.__new__'' reached with KEYWORDS, which CPython refuses.
+
+	The three arguments are positional-only there:
+
+	    type.__new__(cls, name=n, bases=b, dict=ns)
+	    TypeError: type.__new__() takes exactly 3 arguments (0 given)
+
+	and a metaclass written that way is a real mistake rather than a curio
+	-- test_subclassinit''s test_errors_changed_pep487 asserts it, because
+	before PEP 487 that spelling APPEARED to work and silently built a class
+	whose keywords went nowhere.
+
+	Grail had no varargs entry on type at all, so such a call fell through
+	to the inherited Object one and was accepted, building the class and
+	answering it.
+
+	The count CPython reports is of the three arguments AFTER cls, which is
+	what arrives here as ``positional'' -- cls is the receiver by then.
+	Extra KEYWORDS beyond the three are not rejected here: CPython lets them
+	travel on to __init_subclass__, which is where the refusal belongs and
+	where it already happens."
+
+	| n args mcls recv |
+	args := positional == nil ifTrue: [#()] ifFalse: [positional].
+	n := args @env0:size.
+	mcls := self.
+	recv := self.
+	"``super().__new__(mcls, name, bases, ns, **kwargs)'' -- what abc.ABCMeta
+	and every metaclass forwarding class keywords writes -- arrives through
+	Super's varargs path with the metaclass STILL LEADING: a class-side varargs
+	hit is handed cls included (see Super >> ___pyAttrLoad___:).  It counted as
+	four and was refused, so no class with a Python metaclass could take a
+	class keyword (test_abc's TestABCWithInitSubclass).  A leading metaclass
+	is that cls, not an argument -- at any count, so a refusal reports what
+	CPython counts.  The keywords travel on to the class's __init_subclass__
+	chain below."
+	(n @env0:>= 1
+		and: [((args @env0:at: 1) @env0:isKindOf: Behavior)
+		and: [(args @env0:at: 1) == (Python @env0:at: #type)
+			or: [(args @env0:at: 1) @env0:inheritsFrom: (Python @env0:at: #type)]]]) ifTrue: [
+			mcls := args @env0:at: 1.
+			recv := Python @env0:at: #type.
+			args := args @env0:copyFrom: 2 to: n.
+			n := n @env0:- 1].
+	n @env0:= 3 ifFalse: [
+		^ TypeError @env1:___signal___:
+			('type.__new__() takes exactly 3 arguments (' @env0:,
+				n @env0:printString @env0:, ' given)')].
+	"Delegated to the fixed-arity form with the RECEIVER as mcls: by the
+	time a call reaches a varargs entry the first positional has already
+	become the receiver, so ``self'' is the cls the caller passed."
+	"The KEYWORDS ride along for the class under construction: they are what
+	this metaclass forwarded, which is what its deferred __init_subclass__
+	chain must receive (see object class >> ___grailInitSubclass___:)."
+	SessionTemps @env0:current @env0:at: #'GrailTypeNewKwargs' put: kwargs.
+	^ [recv __new__: mcls
+		_: (args @env0:at: 1)
+		_: (args @env0:at: 2)
+		_: (args @env0:at: 3)]
+			@env0:ensure: [SessionTemps @env0:current
+				@env0:removeKey: #'GrailTypeNewKwargs' ifAbsent: [nil]]
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type class >> ___prepare__: positional kw: kwargs [
+	"``type.__prepare__(name, bases, **kwds)'': the namespace a class body runs
+	in when the metaclass has nothing better -- a new, empty dict.  CPython's
+	accepts any arguments and ignores them, and so does this.
+
+	What makes it matter is ``super().__prepare__(name, bases, **kwds)'', the
+	way a metaclass's own __prepare__ asks for the default before wrapping or
+	seeding it.  With nothing on type the super() read raised AttributeError,
+	so any metaclass written that way failed its class statement.
+
+	object >> ___grailPrepareNamespace___:bases:keywords: does NOT treat this
+	as a __prepare__ the metaclass supplies (see ___grailOwnPrepare___:): a
+	metaclass that overrides nothing must still allocate no namespace."
+
+	^ dict @env1:___new___
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+type class >> __dict__ [
+	"``type.__dict__'' as a read-only mappingproxy, so ``type(type.__dict__)''
+	yields the mappingproxy TYPE -- which is how test_dict test_views_mapping
+	gets hold of it in order to assert that a dict view's ``.mapping'' is one.
+
+	INHERITED, not invented: BoundMethod >> __dict__ carried this for exactly
+	the same reason while ``type'' was a BoundMethod.  Once ``type'' became a
+	class the read went to the Behavior branch of ___pyAttrLoad___, which
+	answered ___classDict___ -- a snapshot KeyValueDictionary -- so the test
+	derived PyDict as ``mappingproxy'' and failed against a real one.  That
+	branch now consults a metaclass-defined __dict__ first, which is what makes
+	this method reachable at all; defining it without that change was a no-op.
+
+	The proxy wraps an EMPTY dict, as the BoundMethod version did: only its
+	TYPE is consulted here.  Answering type's real namespace is a separate
+	question, and a snapshot would be no more faithful than the empty one until
+	class __dict__ is a live proxy generally -- which is the wider fix, since
+	CPython hands back a mappingproxy for EVERY class."
+
+	"NOW TYPE'S REAL NAMESPACE, not an empty dict.  collections.abc is
+	CPython's own now, and its Callable check is _check_methods over the MRO's
+	__dict__s: ``isinstance(int, Callable)'' asks whether ``type.__dict__''
+	holds __call__, so the empty proxy made every class non-callable."
+	^ mappingproxy @env1:___on: self ___classDict___
+
+]
+
+{ #category : 'Grail-Class-Call Fast Path' }
+type class >> __new__ [
+	"``type()'' with NO arguments.
+
+	_new:kw: beside this already answers ``type() takes 1 or 3 arguments'' for
+	every other count, but it never saw the zero-argument call: object class >>
+	___pyInstantiate___ dispatches 0 positional and no keywords straight to
+	``__new__'', ahead of the keyword branch that reaches _new:kw:.  So
+	``type()'' inherited object's __new__ and ALLOCATED one -- answering
+	``<type object at 0x...>'', an instance of type that is not a class and
+	that nothing else in Grail can use.
+
+	The arity rule lives in _new:kw:; this is the one count that does not
+	arrive there."
+
+	^ TypeError @env1:___signal___: 'type() takes 1 or 3 arguments'
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type class >> __new__: mcls _: aName _: bases _: ns [
+	"``super().__new__(cls, name, bases, namespace)'' from inside a metaclass
+	__new__.  This is the single shape almost every metaclass in the corpus is
+	written in:
+
+	    def __new__(cls, name, bases, namespace):
+	        self = super().__new__(cls, name, bases, namespace)
+	        ...observe or mutate self...
+	        return self
+
+	CPython BUILDS the class here.  Grail cannot: the class statement has
+	already compiled its body onto a real Smalltalk class by the time a
+	metaclass hook can run, and that class is what the module's methods, closure
+	cells and __class__ references are bound to.  Building a second one and
+	handing it back would leave the first one live and referenced.
+
+	So the class under construction is what this ANSWERS.  The identity is the
+	point -- the metaclass gets the very object the class statement is defining,
+	so ``self.f()'', ``self.meta_owner = ...'' and ``namespace.copy()'' all see
+	and affect the real class, and returning it re-binds the name to itself.
+	The namespace argument needs no replay: ___grailNsStore___:value: writes
+	each class-body binding to the namespace AND to the class as it happens, so
+	the two already agree.
+
+	Outside a class statement there is nothing under construction and this is an
+	ordinary three-argument type() call, which builds a class as it always did."
+
+	| pending built own |
+	"VALIDATE THE NAMESPACE ARGUMENT, as CPython's type.__new__ does --
+	``type.__new__(cls, 'A', (), None)'' is a TypeError there, not a crash.
+	Not decorative here: a class-body __new__ with a REQUIRED extra parameter
+	(``def __new__(cls, name, bases, ns, cell)``) compiles its body
+	fixed-arity on the class's INSTANCE side, and its varargs forwarder
+	re-dispatches with a virtual self-send -- which, run against a CLASS
+	receiver, resolves up the metaclass chain to THIS method with the
+	arguments shifted one left (ns receives the extra parameter's value).
+	Before this guard that arrived as ``NoneType does not understand
+	#isEmpty'', an UNCATCHABLE Smalltalk error; now it is the TypeError
+	CPython's own argument checking would raise, which
+	test___classcell___overwrite can catch.  The mis-forward itself is the
+	same instance-side-method-против-class-receiver disease the
+	__init_subclass__ DNU repair covers, in a costume that FINDS a wrong
+	method instead of failing to find one; fixing the forwarder's dispatch
+	is its own change."
+	"THE MIS-FORWARD IS NOW REPAIRED RATHER THAN REPORTED.  Everything the
+	comment above describes still happens -- but this method is handed all
+	four of the original arguments and the metaclass itself as receiver, so
+	it can finish the dispatch the self-send got wrong instead of turning it
+	into a TypeError.
+
+	How the two cases are told apart: a genuine ``super().__new__(cls, name,
+	bases, ns)'' passes the METACLASS as the first argument, so mcls is a
+	Behavior.  The mis-forward passes what the self-send had in hand, which
+	is the class NAME -- a string -- with everything else shifted one left.
+	Requiring BOTH that mcls is not a Behavior AND that the receiver owns an
+	instance-side __new__:_:_:_: of its own keeps an ordinary bad call
+	(``type.__new__(cls, 'A', (), None)'') on the TypeError below, which
+	test___classcell___overwrite still needs.
+
+	Performed NON-virtually on the receiver, which is the metaclass and so
+	the ``cls'' that def was written to take.  The body's own
+	``super().__new__(cls, name, bases, ns)'' then arrives here with mcls a
+	Behavior and builds the class, so this terminates."
+	((mcls @env0:isBehavior) @env0:not) ifTrue: [
+		own := self @env0:compiledMethodAt: #'__new__:_:_:_:'
+			environmentId: 1 otherwise: nil.
+		own @env0:notNil ifTrue: [
+			^ self @env0:with: mcls with: aName with: bases with: ns
+				performMethod: own]].
+	((ns @env0:isNil)
+		or: [(ns @env0:isKindOf: AbstractDictionary)
+			or: [ns @env0:isKindOf: KeyValueDictionary]]) ifFalse: [
+		^ TypeError @env1:___signal___:
+			('type.__new__() argument 3 must be dict, not '
+				@env0:, ns @env0:class @env0:name @env0:asString)].
+	"A NONSENSE __classcell__ IS REJECTED, as CPython rejects it:
+
+	    __classcell__ must be a nonlocal cell, not <class 'NoneType'>
+
+	This check had no reason to exist before, because the metaclass whose
+	__new__ overwrites the entry never RAN -- its four-argument signature
+	was mis-forwarded straight to this method, and the shifted ``ns''
+	(None / 0 / '' / object()) tripped the dict guard just above.  So
+	test_super's test___classcell___overwrite passed on an error about the
+	wrong argument entirely.
+
+	Repairing the mis-forward makes that metaclass run, which is what it
+	should always have done, and the accidental TypeError goes with it.
+	This is the one CPython actually raises, from the check the test is
+	named after."
+	(ns @env0:notNil and: [ns @env1:__contains__: '__classcell__']) ifTrue: [
+		| ___cellVal |
+		___cellVal := ns @env1:__getitem__: '__classcell__'.
+		(___cellVal @env0:isKindOf: PyCell) ifFalse: [
+			^ TypeError @env1:___signal___:
+				('__classcell__ must be a nonlocal cell, not <class ''' @env0:,
+					(___cellVal ___pyTypeNameForError___) @env0:, '''>')]].
+	(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: bases.
+	pending := type ___classUnderConstruction___.
+	"DIFFERENT BASES BUILD A DIFFERENT CLASS.  The class under construction can
+	only be answered when the metaclass asks for the class the statement was
+	already building.  typing's _TypedDictMeta does not: it calls
+	``type.__new__(_TypedDictMeta, name, (*generic_base, dict), ns)'', so a
+	``class Movie(TypedDict)'' is a dict subclass, not a TypedDict one.
+	Answering the pending class dropped that ``dict'' on the floor -- the
+	recorded reason typing.py carried its own TypedDict.
+
+	So a changed bases tuple builds a fresh class from the namespace, exactly
+	as the direct three-argument form below does, and the class statement
+	re-binds its name to it (___grailDispatchMetaclass___ answers whatever
+	__new__ returned).  The body's defs travel as the functions the namespace
+	holds -- the same thing typing's NamedTupleMeta relies on when it copies a
+	namespace onto the class collections.namedtuple built -- and the metaclass
+	is recorded unconditionally, since it built this class itself."
+	(pending @env0:notNil
+		and: [type ___grailBases___: bases differFrom: pending]) ifTrue: [ | rebuilt |
+			rebuilt := type ___grailBuildWithMetaclass___: mcls
+				as: [(builtins @env1:instance) @env1:type: aName _: bases _: ns].
+			rebuilt @env1:___grailSetMetaclass___: mcls.
+			^ rebuilt].
+	pending @env0:notNil ifTrue: [
+		"APPLY THE NAMESPACE.  type.__new__ is defined as ``build a class with
+		this namespace'', so what the metaclass did to the mapping before
+		calling it has to land on the class -- and a metaclass that ADDS to the
+		namespace is the whole reason several of them override __new__ at all
+		(``namespace['__classcell__'] = cell'').
+
+		Grail's class already carries every binding the BODY made, because
+		___grailNsStore___:value: writes to the namespace and the class as each
+		statement runs.  What it cannot know about is a write the metaclass
+		itself made between the body finishing and this call, which is exactly
+		what this replays -- and ONLY that.  A body ``def'' sits in the mapping
+		as the method read back off the class, and storing it again made the
+		compiled method a data attribute holding a bound method (see
+		object class >> ___grailDispatchMetaclass___ for what that broke), so a
+		binding the metaclass left as it found it is skipped."
+		(ns @env0:isNil @env0:not and: [ns @env0:isEmpty @env0:not]) ifTrue: [
+			ns @env0:keysAndValuesDo: [:k :v |
+				"``__classcell__'' is protocol, not a class attribute.  CPython
+				consumes it here and never stores it on the class -- copying it
+				across would leave a stray attribute on every class whose methods
+				mention __class__."
+				"Replayed when the metaclass changed it -- or when the class does
+				not have it at all, which is a __prepare__ that SEEDED the
+				namespace with a name the body never bound."
+				"...or, for __annotations__, when the metaclass changed its
+				CONTENTS.  The namespace's dict is a copy of the class's (object
+				class >> ___grailDispatchMetaclass___ seeds it), so a metaclass
+				that edits it in place leaves the same object behind, which the
+				snapshot reads as untouched.  pydantic's ModelMetaclass clears
+				BaseModel's that way -- ``namespace.get('__annotations__',
+				{}).clear()'' -- and on CPython, where that dict IS the class's,
+				BaseModel then has no annotations.  Grail's kept them, every
+				model inherited ``__pydantic_extra__: Dict[str, Any] | None'',
+				and extra='allow' refused it as not a dict annotation."
+				((k @env0:asString @env0:= '__classcell__') @env0:not
+					and: [(pending ___grailNamespaceChanged___: k value: v)
+						or: [([pending ___pyAttrLoad___: k @env0:asSymbol. false]
+							@env0:on: AbstractException do: [:ex | ex @env0:return: true])
+						or: [(k @env0:asString @env0:= '__annotations__')
+							and: [[((pending ___pyAttrLoad___: #'__annotations__')
+									@env1:__eq__: v) ___isTruthy___ @env0:not]
+								@env0:on: AbstractException do: [:ex | ex @env0:return: false]]]]])
+						@env0:ifTrue: [
+						[pending ___pyAttrStore___: k @env0:asSymbol put: v]
+							@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]].
+		"BUILD THE ENUM'S MEMBERS, if this class deferred them.  CPython reaches
+		EnumType.__new__ through exactly this call -- ``super().__new__'' from
+		inside a metaclass __new__ -- and THAT is where an enum's members are
+		created, which is why a metaclass may add entries to the classdict and
+		have them become members (test_enum test_extra_member_creation).  Grail
+		builds members from its own ___pyClassDefined___: hook, which runs
+		BEFORE any Python metaclass, so the injected names arrived too late and
+		the enum answered only the two the body declared.  Enum class
+		>> ___pyClassDefined___: now defers the build when a Python metaclass is
+		going to run, and this is where it lands -- after the namespace replay
+		above, so the injected values are on the class as raw attributes, which
+		is the state the builder expects.
+		Deferral is fulfilled here or, if the metaclass never delegates up, by
+		the safety net at the end of ___grailDispatchMetaclass___; either way it
+		happens exactly once."
+		Enum ___grailRunDeferredMemberBuild___: pending namespace: ns.
+		"Fill the cell, and police what the metaclass did to it: this is the
+		moment CPython populates ``__class__'', and the moment it raises if the
+		metaclass dropped the cell or replaced it with something else."
+		pending ___grailFillClassCell___: ns.
+		"PEP 487, where CPython runs it: the end of type.__new__, with the
+		keywords that reached it.  Only for a class whose hook was DEFERRED --
+		a metaclass __new__ ending in **kwargs; every other class ran its hook
+		from the class statement already."
+		pending ___grailRunDeferredInitSubclass___: (SessionTemps @env0:current
+			@env0:at: #'GrailTypeNewKwargs' otherwise: nil).
+		^ pending].
+	"NO class statement is running, so this is the DIRECT form:
+
+		_NamedTuple = type.__new__(NamedTupleMeta, 'NamedTuple', (), {})
+
+	which is how CPython 3.14's typing.py mints the base that ``class
+	Point(NamedTuple)'' actually inherits from, and how it mints TypedDict's.
+	The first argument names the metaclass the new class is to be an INSTANCE
+	of, and dropping it -- which is what happened here -- produced a class of
+	type ``type''.  Everything then still worked except the one thing the
+	spelling exists for: subclassing it did not run NamedTupleMeta.__new__, so
+	``class Point(NamedTuple)'' answered a class with no fields and no tuple in
+	its ancestry, silently, rather than raising anything.
+
+	Recorded rather than dispatched, on the same terms as ``class C(metaclass=
+	M)'' -- see object >> ___grailSetMetaclass___: for why a record is what
+	Grail can offer here.  The record is what makes type(C) answer M, which is
+	in turn what makes a SUBCLASS of C find M's __new__."
+	built := (builtins @env1:instance) @env1:type: aName _: bases _: ns.
+	"Recorded only for a metaclass that takes part in CLASS CREATION, which is
+	the same gate ``class C(metaclass=M)'' applies -- see object class >>
+	___grailMetaclassConstructs___: for why a metaclass that merely adds
+	methods must NOT be dispatched into.  Recording unconditionally broke the
+	install itself: it named Grail's own Smalltalk metaclasses, whose __new__
+	takes a different protocol entirely, and the first ``type.__new__'' the
+	bootstrap ran left a class routing to one of them."
+	((mcls ~~ built)
+		and: [object ___grailMetaclassConstructs___: mcls])
+			ifTrue: [
+				built ___grailSetMetaclass___: mcls.
+				"Committed too, for a module body's call -- see importlib >>
+				___recordDirectMetaclass___:meta:."
+				importlib @env0:___recordDirectMetaclass___: built meta: mcls].
+	^ built
+
+]
+
+{ #category : 'Grail-Class Attrs' }
+type class >> __subclasses__ [
+	"``type.__subclasses__'' -- the UNBOUND spelling of C.__subclasses__().
+
+	In CPython __subclasses__ is a method descriptor on ``type'', so it has two
+	callable forms: bound (``C.__subclasses__()'') and unbound, taking the class
+	explicitly -- ``type.__subclasses__(C)''.  pydoc's docclass uses precisely
+	the second, as ``type.__subclasses__(object)'' where ``object'' is its local
+	name for the class being documented.
+
+	Grail answers the BOUND form from Behavior>>__subclasses__, which is
+	reachable because a class IS a Behavior.  The unbound form cannot come from
+	the same place: reading ``__subclasses__'' off the ``type'' CLASS OBJECT
+	finds that Behavior method on type's own METACLASS chain and binds the
+	receiver to ``type'' -- so the explicit class arrives as a surplus argument
+	(``__subclasses__() takes a different number of arguments (1 given)'') and a
+	no-argument call would answer type's own subclasses rather than the caller's.
+
+	So the read has to answer the DESCRIPTOR, which is what CPython's
+	``type.__subclasses__'' is, and UnboundMethod is Grail's descriptor: it
+	substitutes the first positional argument as the receiver and runs the named
+	method on it.  Filed under ``Grail-Class Attrs'' because that is the category
+	___pyAttrLoad___ reads as a VALUE -- an ordinary method here would itself be
+	wrapped as a BoundMethod on ``type'', reintroducing the binding this exists
+	to avoid.
+
+	Behavior is named as the defining class rather than ``type'': that is where
+	Grail keeps the methods whose receiver is a class, i.e. the ones CPython puts
+	in type's own dict.
+
+	The other reflection methods have the same seam -- ``type.mro(C)'' is
+	missing for the same reason -- and each needs its own entry.  Added where a
+	caller demonstrably needs it rather than speculatively across the set."
+
+	^ UnboundMethod definingClass: Behavior selector: #'__subclasses__'
+
+]
+
+{ #category : 'Grail-Class-Call Fast Path' }
+type class >> _new: positional kw: kwargs [
+	"Python's ``type'' constructor, both spellings:
+
+	  type(x)                 -- the object's type
+	  type(name, bases, ns)   -- build a class
+
+	Delegates to the builtins implementations rather than reimplementing
+	either, so this is a re-entry point and not a second copy: ``type(x)''
+	is object >> ___pyMetaclass___, and the three-argument form is the class
+	builder that learned to honour a non-empty namespace.
+
+	CPython rejects the keyword SPELLING of the three arguments --
+	``type(name='C', bases=(), dict={})'' raises TypeError, which
+	test_subclassinit test_type asserts -- so a keyword cannot stand in for a
+	positional one.
+
+	IT DOES ACCEPT CLASS KEYWORDS ALONGSIDE the three positionals, though, and
+	that is a different thing: ``type(name, bases, ns, **kwds)'' has forwarded
+	kwds to __init_subclass__ since 3.6, exactly as a class header's keywords
+	are forwarded.  Refusing every keyword conflated the two, so the only way
+	to build a class dynamically AND pass it class keywords did not exist --
+	which is what types.new_class needs to do its job."
+
+	| n |
+	n := positional @env0:size.
+	(n @env0:= 3) @env0:ifTrue: [
+		^ (builtins @env1:instance)
+			@env1:type: (positional @env0:at: 1)
+			_: (positional @env0:at: 2)
+			_: (positional @env0:at: 3)
+			kw: kwargs].
+	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) @env0:ifTrue: [
+		^ TypeError @env1:___signal___: 'type() takes no keyword arguments'].
+	(n @env0:= 1) @env0:ifTrue: [
+		^ (builtins @env1:instance) @env1:type: (positional @env0:at: 1)].
+	^ TypeError @env1:___signal___:
+		'type() takes 1 or 3 arguments'
+
+]
+
+{ #category : 'Grail-Class-Call Fast Path' }
+type class >> value: positional value: kwargs [
+	"``type(...)'' reaching the class through the legacy call dispatch.
+
+	Binding the NAME ``type'' to this class is what makes the call arrive here
+	at all: NameAst >> isResolvableSymbol: then answers true, so a bare
+	``type'' in call position emits the CLASS rather than a BoundMethod on
+	builtins, and CallAst routes the call to the metaclass.  Registering the
+	name WITHOUT this method was tried and broke class creation outright --
+	``type('NewClass', (object,), {})'' died with ``a Metaclass3 does not
+	understand #_new:kw:'' (test_subclassinit test_type).  The name and the
+	call protocol have to land together, which is why they do."
+
+	^ self _new: positional kw: kwargs
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type >> ___call__: positional kw: kwargs [
+	"``type.__call__(cls, *args, **kwargs)'' -- the DEFAULT instantiation, and
+	what ``super().__call__(...)'' inside a metaclass __call__ reaches.
+
+	That spelling is how almost every real metaclass __call__ is written: do
+	something, then delegate.  Without it a metaclass could only REPLACE
+	instantiation, never wrap it, and the singleton and registry idioms --
+	the reason metaclass __call__ exists -- still could not be expressed.
+
+	THE RECEIVER IS THE CLASS BEING INSTANTIATED, because super() binds to the
+	current instance and a metaclass's instances are classes.  So this
+	performs the ordinary construction on self, which is the very method the
+	metaclass hook guards -- hence the BYPASS: without it the guard would send
+	the call straight back into the metaclass __call__ that delegated here.
+
+	The bypass is a set of classes currently delegating rather than a flag,
+	so a metaclass __call__ that constructs a DIFFERENT class on the way (a
+	registry building its entry) still gets that class's own metaclass hook."
+
+	| bypass |
+	bypass := SessionTemps @env0:current
+		@env0:at: #'GrailMetaCallBypass'
+		ifAbsentPut: [IdentitySet @env0:new].
+	bypass @env0:add: self.
+	^ [self @env1:value: positional value: kwargs]
+		@env0:ensure: [bypass @env0:remove: self ifAbsent: []]
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type >> ___withCheckHookBypassed___: aBlock [
+	"Run aBlock with this class's metaclass __instancecheck__ / __subclasscheck__
+	hook suppressed -- object >> ___metaclassCheckHook___: answers nil for a
+	class in the set.  A set of classes rather than a flag, so a default check
+	that asks about a DIFFERENT class on the way still gets that class's hook."
+
+	| bypass |
+	bypass := SessionTemps @env0:current
+		@env0:at: #'GrailCheckHookBypass'
+		ifAbsentPut: [IdentitySet @env0:new].
+	(bypass @env0:includes: self) ifTrue: [^ aBlock @env0:value].
+	bypass @env0:add: self.
+	^ aBlock @env0:ensure: [bypass @env0:remove: self ifAbsent: []]
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type >> __instancecheck__: anObject [
+	"``type.__instancecheck__(cls, obj)'' -- the DEFAULT check, and what
+	``super().__instancecheck__(obj)'' inside a metaclass reaches: typing's
+	_AnyMeta, _ProtocolMeta and _TypedDictMeta all end that way.  Grail had no
+	such method, so the super() read raised AttributeError.
+
+	The receiver is the class being checked (see ___call__:kw: for why).  The
+	ordinary builtin check runs with THIS class's metaclass hook bypassed --
+	without the bypass it would ask the very metaclass __instancecheck__ that
+	delegated here, and recurse."
+
+	^ self ___withCheckHookBypassed___: [
+		(builtins @env1:instance) @env1:isinstance: anObject _: self]
+
+]
+
+{ #category : 'Grail-Class Construction' }
+type >> __subclasscheck__: aClass [
+	"``type.__subclasscheck__(cls, sub)'' -- the default, for
+	``super().__subclasscheck__(sub)''.  See __instancecheck__:."
+
+	^ self ___withCheckHookBypassed___: [
+		(builtins @env1:instance) @env1:issubclass: aClass _: self]
+
+]

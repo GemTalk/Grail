@@ -1,0 +1,834 @@
+Extension { #name : 'OrderedCollection' }
+
+{ #category : 'Grail-Generics' }
+OrderedCollection class >> __getitem__: item [
+	"``list[int]'' -- a REAL types.GenericAlias, not Grail's usual collapse to
+	the class itself.
+
+	Grail inverts CPython's default and answers the class from Metaclass3,
+	because dozens of sites in the vendored frameworks subscript a class only to
+	use it as a BASE and want the subscript discarded.  Opting in means
+	overriding here, exactly as functools_partial does -- and it is safe to opt
+	in now that PEP 560's __mro_entries__ is applied where Grail resolves bases,
+	so ``class Foo(list[V]):'' still inherits from list.
+
+	The collapse was observable: ``list[int] is list'' was true, so
+	singledispatch's register() accepted a subscripted generic as a dispatch
+	class and silently registered the UNSUBSCRIPTED one -- CPython rejects it
+	(test_register_genericalias)."
+
+	"A SUBCLASS with its own __class_getitem__ must get it.  This override
+	sits on the metaclass chain AHEAD of Metaclass3 >>
+	___grailClassGetitemDispatch___:, so it swallowed the PEP 560 dispatch
+	for every list subclass -- ``class L(list): def __class_getitem__(cls,
+	item)'' then ``L[int]'' answered a GenericAlias over L and the hook never
+	ran.  Same shape as the dict shortcut; only dict is covered by a corpus
+	test (test_genericclass test_class_getitem_with_builtins), and fixing one
+	without the other would leave the two built-ins disagreeing.
+
+	Delegating only when a hook exists keeps plain ``list[int]'' on the alias
+	path, which is the whole point of this override."
+	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
+			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
+			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
+	^ PyGenericAlias ___fromSubscript___: item origin: self
+
+]
+
+{ #category : 'Grail-Initialization' }
+OrderedCollection class >> __new__ [
+	"list() — create an empty list. Receiver is the class."
+
+	^ self ___new___
+
+]
+
+{ #category : 'Grail-Initialization' }
+OrderedCollection class >> __new__: iterable [
+	"list(iterable) — create a list from the elements of iterable.
+	Receiver is the class.
+
+	Three iteration shapes are recognised, in priority order:
+	  1. SequenceableCollection — copy by index for speed.
+	  2. Python ``__iter__`` / ``__next__`` protocol — the most
+	     general path, used for generators and built-in iterators.
+	  3. Python sequence-protocol fallback — when the class
+	     defines ``__len__`` + ``__getitem__`` but not ``__iter__``
+	     (the re._parser SubPattern idiom).  Walks indices 0..n-1
+	     calling __getitem__ on each, matching CPython's iter()
+	     behaviour for classes that lack __iter__."
+
+	| result iter done cls hasIter hasGetitem ic |
+	result := self ___new___.
+	"Strings are SequenceableCollections, but ``at:'' yields Characters, not
+	the 1-char Python strings CPython's ``list(str)'' produces.  Route
+	CharacterCollections through the __iter__ / sequence-protocol paths below
+	instead.  bytes/bytearray are NOT CharacterCollections, so they keep the
+	fast path (elements are ints, matching CPython).
+
+	The index-copy fast path is used ONLY for the EXACT built-in sequence
+	classes: a subclass may override __iter__ to iterate in a different order
+	(seq_tests test_constructors' LyingList/LyingTuple, issue #23757), and
+	CPython always constructs via the iterator protocol -- so any subclass
+	falls through to the __iter__ path below."
+	ic := iterable @env0:class.
+	((ic == OrderedCollection) or: [(ic == Array) or: [ic == tuple]]) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			result @env0:add: (iterable @env0:at: i)
+		].
+		^ result
+	].
+	"CPython presizes the result by asking the iterable for a length hint
+	BEFORE consuming it, so an exception raised by its __len__ /
+	__length_hint__ escapes list() (test_iterlen test_issue1242657).  Grail has
+	nothing to presize -- the answer is discarded -- but the call is observable;
+	see object>>___presizeLengthHint___.  Deliberately AFTER the exact-built-in
+	fast path above, which cannot raise."
+	iterable ___presizeLengthHint___.
+	cls := iterable @env0:class.
+	hasIter := (cls @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil.
+	hasIter ifTrue: [
+		iter := iterable __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[result @env0:add: iter __next__]
+				@env0:on: StopIteration do: [:ex | done := true]
+		].
+		^ result
+	].
+	hasGetitem := (cls @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) notNil.
+	hasGetitem ifTrue: [
+		| n |
+		n := iterable __len__.
+		0 @env0:to: n @env0:- 1 do: [:i |
+			result @env0:add: (iterable __getitem__: i)
+		].
+		^ result
+	].
+	TypeError ___signal___:
+		('''' @env0:, cls @env0:name @env0:, ''' object is not iterable')
+
+]
+
+{ #category : 'Grail-Initialization' }
+OrderedCollection class >> _new: positional kw: kwargs [
+	"list(**kw) / list(a, b) -- CPython rejects keyword arguments and
+	more than one positional; raise the catchable TypeError instead of
+	an uncatchable MNU (list_tests' test_keyword_args)."
+
+	(kwargs ~~ nil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
+		TypeError ___signal___: 'list() takes no keyword arguments'].
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: 'list expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
+	positional @env0:size @env0:= 0 ifTrue: [^ self __new__].
+	^ self __new__: (positional @env0:at: 1)
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> ___consumeSortMutation [
+	"Remove and answer whether the receiver was marked mutated during its sort."
+
+	| mutated |
+	mutated := SessionTemps @env0:current @env0:at: #GrailSortMutated @env0:otherwise: nil.
+	mutated @env0:isNil ifTrue: [^ false].
+	(mutated @env0:includes: self) ifFalse: [^ false].
+	mutated @env0:remove: self @env0:ifAbsent: [].
+	^ true
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+OrderedCollection >> ___delSlice___: aSlice [
+	"Slice deletion.  Normalises the slice against self's size and
+	removes every visited index.  For step=1 (the common case) it
+	delegates to removeFrom:to:.  Extended-step deletion walks the
+	indices in descending order so earlier removes don't shift the
+	later ones."
+
+	| size indices lo hi st indicesArray unpacked |
+	"__index__ first, the size after -- see slice >> ___unpackedSlice___."
+	unpacked := aSlice ___unpackedSlice___.
+	size := self @env0:size.
+	indices := unpacked indices: size.
+	lo := indices @env0:at: 1.
+	hi := indices @env0:at: 2.
+	st := indices @env0:at: 3.
+	(st @env0:= 1) ifTrue: [
+		hi @env0:> lo ifTrue: [
+			self @env0:removeFrom: lo @env0:+ 1 to: hi
+		].
+		^ None
+	].
+	"Clamp |st| to size+1: visits the same index set while keeping the
+	inlined to:by:do: comparisons in SmallInteger range -- a LargeInteger
+	step (del a[9::1<<333]) MNUs on the env-1 _nonZeroGte: bridge."
+	st := (st @env0:> 0)
+		ifTrue: [st @env0:min: size @env0:+ 1]
+		ifFalse: [st @env0:max: (size @env0:+ 1) @env0:negated].
+	indicesArray := OrderedCollection @env0:new.
+	"hi is Python-style EXCLUSIVE: last included index is hi-1 for a
+	positive step but hi+1 for a negative one."
+	(st @env0:> 0)
+		ifTrue: [lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i]]
+		ifFalse: [lo @env0:to: hi @env0:+ 1 by: st do: [:i | indicesArray @env0:add: i]].
+	"Delete in descending INDEX-VALUE order to avoid renumbering (for a
+	negative step the array itself is already descending)."
+	(st @env0:> 0)
+		ifTrue: [indicesArray @env0:size @env0:to: 1 by: -1 do: [:k |
+			self @env0:removeAtIndex: (indicesArray @env0:at: k) @env0:+ 1]]
+		ifFalse: [1 @env0:to: indicesArray @env0:size do: [:k |
+			self @env0:removeAtIndex: (indicesArray @env0:at: k) @env0:+ 1]].
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> ___noteSortMutation [
+	"Record that the receiver was mutated while a list.sort() is in progress on
+	it, so that sort() raises ``list modified during sort'' afterwards.  Called
+	at the top of every Python-level list mutator; a cheap session-local probe
+	that no-ops in the common case (no sort active)."
+
+	| guarded mutated |
+	guarded := SessionTemps @env0:current @env0:at: #GrailSortGuarded @env0:otherwise: nil.
+	guarded @env0:isNil ifTrue: [^ self].
+	(guarded @env0:includes: self) ifFalse: [^ self].
+	mutated := SessionTemps @env0:current @env0:at: #GrailSortMutated @env0:otherwise: nil.
+	mutated @env0:isNil ifTrue: [
+		mutated := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailSortMutated @env0:put: mutated].
+	mutated @env0:add: self.
+	^ self
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+OrderedCollection >> ___setSlice___: aSlice _: anIterable [
+	"Slice assignment.  Replaces self[lo..hi] with anIterable's
+	items, growing or shrinking as needed.  For the simple
+	contiguous case (step = 1, the only case re._parser uses) it
+	delegates to OrderedCollection's removeFrom:to: + addAll:.  An
+	extended slice (step != 1) requires len(iterable) == slice
+	length and replaces one-for-one."
+
+	| size indices lo hi st values len indicesArray |
+	"Coerce anIterable to an array FIRST.  Python iterables that aren't
+	SequenceableCollections (e.g. re._parser SubPattern, which exposes
+	its data through an env-1 __iter__/__next__ pair) need to go
+	through the list constructor's iteration loop, not Smalltalk
+	asArray -- and that loop runs USER __iter__ code which may mutate
+	self (gh-120384: an evil iterable clearing the target list), so
+	the slice indices must be computed from the post-iteration size."
+	"CharacterCollections take the constructor path too (asArray would yield
+	Characters, not 1-char strings) -- ``a[i:j] = 'ham''' assigns strings."
+	values := ((anIterable isKindOf: SequenceableCollection)
+			and: [(anIterable isKindOf: CharacterCollection) not])
+		ifTrue: [anIterable @env0:asArray]
+		ifFalse: [(list __new__: anIterable) @env0:asArray].
+	len := values @env0:size.
+	"__index__ first, the size after -- see slice >> ___unpackedSlice___."
+	indices := aSlice ___unpackedSlice___.
+	size := self @env0:size.
+	indices := indices indices: size.
+	lo := indices @env0:at: 1.
+	hi := indices @env0:at: 2.
+	st := indices @env0:at: 3.
+	"Clamp |st| to size+1 -- see ___delSlice___ (LargeInteger steps MNU
+	on the env-1 _nonZeroGte: bridge inside inlined to:by:do:)."
+	st := (st @env0:> 0)
+		ifTrue: [st @env0:min: size @env0:+ 1]
+		ifFalse: [st @env0:max: (size @env0:+ 1) @env0:negated].
+	(st @env0:= 1) ifTrue: [
+		"Contiguous: remove [lo..hi) then insert new items at lo."
+		hi @env0:> lo ifTrue: [
+			self @env0:removeFrom: lo @env0:+ 1 to: hi
+		].
+		1 @env0:to: len do: [:i |
+			self @env0:add: (values @env0:at: i)
+				beforeIndex: lo @env0:+ i
+		].
+		^ None
+	].
+	"Extended slice: must match length.  hi is Python-style EXCLUSIVE:
+	the last included index is hi-1 for a positive step but hi+1 for a
+	negative one (a[::-1] on size 4 -> lo 3, hi -1, st -1 -> 3..0)."
+	indicesArray := OrderedCollection @env0:new.
+	(st @env0:> 0)
+		ifTrue: [lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i]]
+		ifFalse: [lo @env0:to: hi @env0:+ 1 by: st do: [:i | indicesArray @env0:add: i]].
+	(indicesArray @env0:size @env0:= len) ifFalse: [
+		ValueError ___signal___:
+			('attempt to assign sequence of size ' @env0:,
+				len @env0:printString @env0:,
+				' to extended slice of size ' @env0:,
+				indicesArray @env0:size @env0:printString)
+	].
+	1 @env0:to: len do: [:i |
+		self @env0:at: (indicesArray @env0:at: i) @env0:+ 1
+			put: (values @env0:at: i)
+	].
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> ___sortInPlaceKey: keyFn reverse: rev [
+	"Shared in-place sort for sort() and sort(key=,reverse=).  Sorts a SNAPSHOT
+	(via ___stableSortedArray:reverse:, which reads self asArray up front) so a
+	mutating/raising comparator cannot corrupt the sort primitive, and detects
+	mutation of the receiver DURING the sort -- CPython forbids it and raises
+	``ValueError: list modified during sort'' (test_sort test_bug453523 /
+	test_undetected_mutation).  Detection mirrors CPython's allocated=-1
+	sentinel: while this list is registered in the session-local guard, every
+	Python-level mutator marks it (___noteSortMutation), so even a net-zero
+	append+pop is caught -- a size-delta check alone would miss it.  A raising
+	comparator propagates its OWN exception (the guard is cleared in ensure:),
+	matching CPython's ``don't already have another error to report''."
+
+	| guarded n0 sorted wasMutated |
+	guarded := SessionTemps @env0:current @env0:at: #GrailSortGuarded @env0:otherwise: nil.
+	guarded @env0:isNil ifTrue: [
+		guarded := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailSortGuarded @env0:put: guarded].
+	guarded @env0:add: self.
+	n0 := self @env0:size.
+	wasMutated := false.
+	sorted := [self ___stableSortedArray: keyFn reverse: rev]
+		@env0:ensure: [
+			guarded @env0:remove: self @env0:ifAbsent: [].
+			wasMutated := self ___consumeSortMutation].
+	(wasMutated or: [self @env0:size @env0:~= n0]) ifTrue: [
+		ValueError ___signal___: 'list modified during sort'].
+	self @env0:replaceFrom: 1 to: n0 with: sorted startingAt: 1.
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> ___stableSortedArray: keyFn reverse: rev [
+	"Return a fresh Array of the receiver's elements in Python-stable sorted
+	order.  GemStone's @env0:sort: is NOT stable -- it reverses equal-key
+	runs -- so decorate each element with its ORIGINAL index and break
+	comparison ties by that index.  Equal-key elements then keep their input
+	order, and for reverse=true they keep input order too, matching CPython's
+	stable sorted() / sorted(..., reverse=True).  The key, when supplied, is
+	evaluated ONCE per element (Python semantics), not once per comparison.
+	Reads a snapshot up front, so the receiver is never indexed during the
+	sort itself (a mutating comparator can't corrupt the sort primitive)."
+
+	| snapshot n dec sortedArr |
+	snapshot := self @env0:asArray.
+	n := snapshot @env0:size.
+	dec := Array @env0:new: n.
+	1 @env0:to: n do: [:i | | elem sortVal |
+		elem := snapshot @env0:at: i.
+		sortVal := keyFn @env0:isNil
+			ifTrue: [elem]
+			ifFalse: [keyFn value: { elem } value: nil].
+		dec @env0:at: i put: { sortVal. i. elem }].
+	"Compare via the full rich ``<'' (___cmpLt___): a key whose __lt__ returns
+	NotImplemented falls back to the reflected __gt__ and, if that also punts,
+	raises CPython's ``'<' not supported'' TypeError -- rather than feeding the
+	___NotImplemented___ sentinel to the sort primitive as a non-Boolean
+	(test_sort test_unsafe_object_compare's PointlessComparator).  ___isTruthy___
+	coerces the Python result to a Smalltalk Boolean, as PyObject_RichCompareBool
+	does."
+	sortedArr := dec @env0:sort: [:pa :pb | | sa sb |
+		sa := pa @env0:at: 1.
+		sb := pb @env0:at: 1.
+		rev
+			ifTrue: [
+				(sb ___cmpLt___: sa) ___isTruthy___
+					ifTrue: [true]
+					ifFalse: [(sa ___cmpLt___: sb) ___isTruthy___
+						ifTrue: [false]
+						ifFalse: [(pa @env0:at: 2) @env0:< (pb @env0:at: 2)]]]
+			ifFalse: [
+				(sa ___cmpLt___: sb) ___isTruthy___
+					ifTrue: [true]
+					ifFalse: [(sb ___cmpLt___: sa) ___isTruthy___
+						ifTrue: [false]
+						ifFalse: [(pa @env0:at: 2) @env0:< (pb @env0:at: 2)]]]].
+	^ sortedArr @env0:collect: [:p | p @env0:at: 3]
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+OrderedCollection >> __delitem__: index [
+	"Delete the item at the given index, or every item in a slice.
+	Supports negative indices (counting from end).  Slice deletion
+	is what ``del lst[:]`` (used by re._parser.parse_template's
+	literal-buffer reset) and friends compile to."
+
+	| size idx |
+	self ___noteSortMutation.
+	(index isKindOf: slice) ifTrue: [
+		^ self ___delSlice___: index
+	].
+	((index isKindOf: Integer)
+		or: [index ___hasIndexDunder___]) ifFalse: [
+		TypeError ___signal___: ('list indices must be integers or slices, not '
+			@env0:, (index ___pyTypeNameForError___))].
+	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):
+	probing only proved it is index-like, and __index__ may resize self, so
+	read the size afterward."
+	idx := index ___asIndex___.
+	size := self @env0:size.
+
+	"Handle negative indices"
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
+	].
+
+	"Check bounds (Python uses 0-based indexing)"
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
+	]) ifTrue: [
+		IndexError ___signal___: 'list assignment index out of range'
+	].
+
+	"Convert to 1-based Smalltalk index"
+	self @env0:removeAtIndex: (idx @env0:+ 1).
+	^ None
+
+]
+
+{ #category : 'Grail-Introspection' }
+OrderedCollection >> __dict__ [
+	"``obj.__dict__'' for a list SUBCLASS instance -- a live view of its
+	dynamic-instVar storage, the same one PythonInstance and bytes publish.
+	Subclassing list is how user code hangs attributes off a sequence, and a
+	copy / pickle round trip has to enumerate them: test_copy.py's
+	test_reduce_4tuple reduces a list subclass through ``self.__dict__''.
+	An EXACT list has no instance dict, exactly as in CPython."
+
+	self @env0:class == list ifTrue: [
+		^ AttributeError ___signal___:
+			'''list'' object has no attribute ''__dict__'''
+	].
+	^ PyInstanceDict @env0:on: self
+
+]
+
+{ #category : 'Grail-Other' }
+OrderedCollection >> __doc__ [
+	"Return the docstring for list."
+
+	^ 'Built-in mutable sequence.
+
+If no argument is given, the constructor creates a new empty list.
+The argument must be an iterable if specified.'
+
+]
+
+{ #category : 'Grail-Hashing' }
+OrderedCollection >> __hash__ [
+	"Lists are mutable and therefore unhashable (matches CPython).  Grail
+	collections key on Smalltalk hashing, so this makes the Python rule
+	explicit: hash([]) and using a list as a set element / dict key raise."
+
+	TypeError ___signal___: 'unhashable type: ''list'''
+
+]
+
+{ #category : 'Grail-Sequence Operations' }
+OrderedCollection >> __iadd__: other [
+	"In-place concatenation: self += other. Returns self.
+
+	CPython subtlety: ``list'' has no nb_inplace_add slot, so ``lst += x'' first
+	attempts the ordinary binary add.  When type(x) defines a REFLECTED add
+	(__radd__) that returns a value -- e.g. a collections.UserList on the right --
+	that result (x's type, NOT a list) is what ``lst'' is rebound to; only when the
+	reflected add is absent or punts (NotImplemented) does CPython fall back to
+	extending in place.  Mirror that: if other's class defines its OWN __radd__:,
+	try other.__radd__(self) and honour a non-NotImplemented result; otherwise
+	extend in place.  ``lst += 5'' still reaches the ``not iterable'' TypeError via
+	extend (int.__radd__ punts on a list); ``lst += [..]/(..)/'..''' stay in-place
+	(list/tuple/str define no __radd__).  test_userlist test_mixed_iadd asserts
+	``list += UserList'' yields a UserList."
+
+	| owner ni result |
+	owner := other @env0:class @env0:whichClassIncludesSelector: #'__radd__:' environmentId: 1.
+	owner ~~ nil ifTrue: [
+		ni := Python @env0:at: #NotImplemented otherwise: nil.
+		result := other @env0:perform: #'__radd__:' env: 1 withArguments: { self }.
+		result ~~ ni ifTrue: [^ result]].
+	self extend: other.
+	^ self
+
+]
+
+{ #category : 'Grail-Sequence Operations' }
+OrderedCollection >> __imul__: n [
+	"In-place repetition: self *= n. Returns self."
+
+	| original count |
+	"Fetch + range-check the count through __index__ (an argument cannot be
+	assigned in Smalltalk, hence the temp): ``lst *= o'' with an __index__
+	object used to send env-0 #<= to the object and die on an uncatchable DNU
+	(test_index.ListTestCase.test_inplace_repeat)."
+	self ___noteSortMutation.
+	count := n ___asRepeatCount___.
+	(count @env0:<= 0) ifTrue: [
+		self @env0:size: 0.
+		^ self
+	].
+	"lst *= sys.maxsize must raise, not exhaust the gem's temporary
+	object memory (test_list_resize_overflow kills the whole session
+	otherwise)."
+	(self @env0:size @env0:* count) @env0:> 50000000 ifTrue: [
+		MemoryError ___signal___: 'repeated list would exhaust memory'].
+
+	original := self @env0:copy.
+	(count @env0:- 1) @env0:timesRepeat: [
+		self @env0:addAll: original.
+	].
+	^ self
+
+]
+
+{ #category : 'Grail-Initialization' }
+OrderedCollection >> __init__ [
+	"list.__init__() with no iterable clears the list (CPython list___init__
+	with no argument).  `a = [1,2,3]; a.__init__()` -> []  (list_tests
+	test_init)."
+
+	self @env0:size: 0.
+	^ None
+
+]
+
+{ #category : 'Grail-Initialization' }
+OrderedCollection >> __init__: iterable [
+	"list.__init__(iterable) resets the list to the iterable's elements.
+	CPython clears then extends; clearing first keeps this idempotent with
+	the __new__: population (so plain `list(x)` stays single-populated) while
+	an explicit `a.__init__(y)` -- or a list subclass's `super().__init__(y)`
+	(list_tests test_init, test_list test_keywords_in_subclass) -- replaces
+	the contents."
+
+	self @env0:size: 0.
+	self extend: iterable.
+	^ None
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+OrderedCollection >> __iter__ [
+	"Return an iterator over the list."
+
+	^ list_iterator ___on: self
+
+]
+
+{ #category : 'Grail-String Representation' }
+OrderedCollection >> __repr__ [
+	"Return a string representation of the list: [item1, item2, ...].
+	A self-referential list (l.append(l)) prints '[...]' at the cycle
+	like CPython, instead of recursing to AlmostOutOfStack; the
+	in-progress set is session-local (repr is not reentrant across
+	green threads in a way that matters here)."
+
+	| stream seen |
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '[...]'].
+	"seen's size is the current repr nesting depth: deep nesting must raise the catchable
+	RecursionError before the gem's real stack overflows -- threshold 200
+	because a default gem has GEM_MAX_SMALLTALK_STACK_DEPTH 1000 and each
+	repr level costs several frames (list_tests test_repr_deep nests 200k)."
+	seen @env0:size @env0:> 200 ifTrue: [
+		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
+	seen @env0:add: self.
+	^ [[ | i |
+	stream := WriteStream @env0:on: (String ___new___).
+	stream @env0:nextPut: $[.
+	"Index walk re-reading size each step (like CPython's list_repr): an
+	element __repr__ may mutate this very list (test_list test_repr_mutate
+	pops during repr), so the visited count follows the CURRENT size."
+	i := 1.
+	[i @env0:<= self @env0:size] @env0:whileTrue: [
+		i @env0:> 1 ifTrue: [stream @env0:nextPutAll: ', '].
+		stream @env0:nextPutAll: ((self @env0:at: i) __repr__ @env0:___reprResult___).
+		i := i @env0:+ 1].
+	stream @env0:nextPut: $].
+	stream @env0:contents]
+		@env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex |
+			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
+			overflows before the seen-size guard fires -- convert the
+			resumable notification into CPython's RecursionError."
+			RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+OrderedCollection >> __reversed__ [
+	"reversed(list): a reverse iterator SHARING this list (so later mutation
+	is reflected -- test_list test_reversed_pickle), walking from the last
+	index down.  builtins.reversed prefers this over the reverse-copy
+	fallback."
+
+	^ list_iterator ___onReverse: self
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+OrderedCollection >> __setitem__: index _: value [
+	"Set the item at the given index.
+	Supports negative indices (counting from end) and slice
+	assignment (``lst[i:j] = iterable`` and ``lst[i:j:k] = iterable``).
+	Used by re._parser, which rewrites parts of a SubPattern in-place
+	via ``subpattern[i:i+1] = p``."
+
+	| size idx |
+	self ___noteSortMutation.
+	(index isKindOf: slice) ifTrue: [
+		^ self ___setSlice___: index _: value
+	].
+	((index isKindOf: Integer)
+		or: [index ___hasIndexDunder___]) ifFalse: [
+		TypeError ___signal___: ('list indices must be integers or slices, not '
+			@env0:, (index ___pyTypeNameForError___))].
+	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):
+	probing only proved it is index-like, and __index__ may resize self, so
+	read the size afterward."
+	idx := index ___asIndex___.
+	size := self @env0:size.
+
+	"Handle negative indices"
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
+	].
+
+	"Check bounds (Python uses 0-based indexing)"
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
+	]) ifTrue: [
+		IndexError ___signal___: 'list assignment index out of range'
+	].
+
+	"Convert to 1-based Smalltalk index"
+	self @env0:at: (idx @env0:+ 1) put: value.
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> _sort: positional kw: kwargs [
+	"Python list.sort(*, key=None, reverse=False) — in-place sort with
+	the keyword-only ``key'' and ``reverse'' args.  Mirrors the
+	builtins ``_sorted:kw:'' comparison logic but sorts the receiver in
+	place (and returns None).  flask's routing sorts the rule list with
+	a key at request time."
+
+	| keyFn reverse |
+	"key and reverse are keyword-ONLY (Python ``sort(*, key=None,
+	reverse=False)``); any positional argument is a TypeError (list_tests
+	test_sort: u.sort(42, 42))."
+	(positional @env0:notNil and: [positional @env0:isEmpty @env0:not]) ifTrue: [
+		TypeError ___signal___: 'sort() takes no positional arguments'].
+	keyFn := kwargs @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [kwargs @env0:at: 'key' ifAbsent: [nil]].
+	"An EXPLICIT key=None means no key (as in _sorted:kw:); calling the None
+	singleton as a key would raise 'NoneType is not callable'."
+	keyFn == None ifTrue: [keyFn := nil].
+	reverse := kwargs @env0:isNil
+		ifTrue: [false]
+		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
+	^ self ___sortInPlaceKey: keyFn reverse: (reverse ___isTruthy___)
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> append: item [
+	"Add item to the end of the list."
+
+	self ___noteSortMutation.
+	self @env0:add: item.
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> clear [
+	"Remove all items from the list."
+
+	self ___noteSortMutation.
+	self @env0:size: 0.
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> copy [
+	"Return a shallow copy of the list."
+
+	^ self @env0:copy
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> extend: iterable [
+	"Extend the list by appending all items from iterable.  A plain
+	addAll: sends #do: to the argument, which is an uncatchable MNU for
+	non-collections (a.extend(None)) -- probe for iterability and route
+	Python-protocol iterables through __iter__/__next__ instead."
+
+	"Strings are Collections, but addAll: iterates them with Smalltalk do:
+	yielding Characters, not the 1-char Python strings CPython's
+	``list.extend(str)'' appends -- route CharacterCollections through the
+	__iter__ path below so ``a.extend('eggs')'' matches ``a += list('eggs')''
+	(test_list's test_extend / test_iadd)."
+	self ___noteSortMutation.
+	((iterable isKindOf: Collection)
+		and: [(iterable isKindOf: CharacterCollection) not
+		and: [iterable ___iterIsPythonDefined___ not]]) ifTrue: [
+		self @env0:addAll: iterable.
+		^ None].
+	((iterable @env0:class
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) ~~ nil) ifTrue: [
+		| iter done |
+		"CPython's list_extend presizes from a length hint first, so a raising
+		__len__ / __length_hint__ escapes extend() -- see
+		object>>___presizeLengthHint___ and list class>>__new__:."
+		iterable ___presizeLengthHint___.
+		iter := iterable __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[self @env0:add: iter __next__]
+				@env0:on: StopIteration do: [:ex | done := true]].
+		^ None].
+	TypeError ___signal___: '''' @env0:, iterable @env0:class @env0:name @env0:asString
+		@env0:, ''' object is not iterable'
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> insert: index _: item [
+	"Insert item before the given index."
+
+	| size idx temp |
+	self ___noteSortMutation.
+	size := self @env0:size.
+	"Coerced through __index__ (PEP 357): the negative test just below
+	is an env-0 send, which on a Python object is an uncatchable
+	MessageNotUnderstood rather than a TypeError a program can handle."
+	idx := index ___asIndex___.
+
+	"Handle negative indices"
+	(idx @env0:< 0) ifTrue: [
+		temp := size @env0:+ idx.
+		idx := temp @env0:max: 0
+	].
+
+	"Clamp to valid range"
+	temp := idx @env0:max: 0.
+	idx := temp @env0:min: size.
+
+	"Convert to 1-based Smalltalk index (add at position idx+1)"
+	(idx @env0:= 0)
+		ifTrue: [self @env0:addFirst: item]
+		ifFalse: [self @env0:add: item afterIndex: idx].
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> pop [
+	"Remove and return the last item. Raises IndexError if list is empty."
+
+	| size |
+	self ___noteSortMutation.
+	size := self @env0:size.
+	(size == 0) ifTrue: [
+		IndexError ___signal___: 'pop from empty list'
+	].
+
+	^ self @env0:removeLast
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> pop: index [
+	"Remove and return the item at index. Raises IndexError if index is out of range."
+
+	| size idx item stIdx |
+	self ___noteSortMutation.
+	size := self @env0:size.
+	"Coerced through __index__ (PEP 357): the negative test just below
+	is an env-0 send, which on a Python object is an uncatchable
+	MessageNotUnderstood rather than a TypeError a program can handle."
+	idx := index ___asIndex___.
+
+	"Handle negative indices"
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
+	].
+
+	"Check bounds (Python uses 0-based indexing)"
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
+	]) ifTrue: [
+		IndexError ___signal___: 'pop index out of range'
+	].
+
+	"Convert to 1-based Smalltalk index"
+	stIdx := idx @env0:+ 1.
+	item := self @env0:at: stIdx.
+	self @env0:removeAtIndex: stIdx.
+	^ item
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> remove: value [
+	"Remove the first element equal to value (Python rich equality: identity,
+	then element.__eq__, then reflected), NOT Smalltalk `remove:` (`=`) which
+	misses custom __eq__ and identity (list_tests test_remove: ALWAYS_EQ /
+	NEVER_EQ / BadCmp).  Raises ValueError if no element matches.  Size is
+	re-read each step so a mutating/raising __eq__ is safe."
+
+	| i |
+	self ___noteSortMutation.
+	i := 1.
+	[i @env0:<= self @env0:size] @env0:whileTrue: [
+		((self @env0:at: i) ___pyRichEqBool___: value) ifTrue: [
+			"The __eq__ just run may have shrunk self (gh-126033: it clears the
+			list and answers True).  CPython deletes through list_ass_slice,
+			which clamps, so the call then removes nothing and returns None;
+			removeAtIndex: past the end is an uncatchable OffsetError."
+			i @env0:<= self @env0:size ifTrue: [self @env0:removeAtIndex: i].
+			^ None].
+		i := i @env0:+ 1].
+	^ ValueError ___signal___: 'list.remove(x): x not in list'
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> reverse [
+	"Reverse the list in place."
+
+	| reversed |
+	self ___noteSortMutation.
+	reversed := self @env0:reversed.
+	self @env0:size: 0.
+	self @env0:addAll: reversed.
+	^ None
+
+]
+
+{ #category : 'Grail-List Methods' }
+OrderedCollection >> sort [
+	"Sort the list IN PLACE using Python's __lt__ for comparison (stable)."
+
+	^ self ___sortInPlaceKey: nil reverse: false
+
+]

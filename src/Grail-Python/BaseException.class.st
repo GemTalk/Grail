@@ -1,0 +1,6710 @@
+"Python BaseException - root of Python exception hierarchy.
+
+This is the base class for all built-in exceptions in Python.
+It inherits from GemStone's Exception to integrate with GemStone's
+exception handling mechanism.
+
+Instance variables:
+  args - tuple of arguments passed to the exception constructor
+         (Note: This is separate from GemStone's gsArgs instance variable)
+  tracebackObj - the PyTraceback chain __traceback__ answers, or nil
+
+Embedding (category Grail-Embedding, env 0).  Frames are attached on the
+Python catch path only, so an exception caught by a Smalltalk
+``on: BaseException do:' arrives with no __traceback__ although the VM's
+raise-time stack capture is on it.  Five public selectors walk that capture
+on demand, at no raise-path cost:
+  ensurePythonTraceback   unwrap a carrier, attach the frames; answer the payload
+  pythonTracebackFrames   { filename. lineno. name. line [. endLineno. colno. endColno] } per frame
+  pythonExceptionChain    { { exception. #cause | #context } ... }, nearest first
+  pythonTracebackString   the text CPython prints, via traceback.py or a Smalltalk renderer
+  releasePythonCapture    drop the raw capture once the caller will not re-raise into Python
+All are idempotent and never raise.  scripts/grail.tpz is the first caller.
+
+"
+Class {
+	#name : 'BaseException',
+	#superclass : 'Exception',
+	#instVars : [
+		'args',
+		'tracebackObj'
+	],
+	#classVars : [
+		'MiSecondaryBases',
+		'CatchAllSelector'
+	],
+	#gs_superclassDictionary : 'Globals',
+	#category : 'Grail-Exceptions'
+}
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___capturedIpsAreNative___ [
+	"Are the ips in a _gsStack capture NATIVE code offsets?
+
+	They are, whenever the gem generates native code -- and then they are the
+	wrong currency for every lookup Grail does with them.  _lineNumberForIp:,
+	_sourceAtIp: and the step-point methods all want a PORTABLE ip, and handed a
+	native one they answer a confident WRONG position rather than failing:
+	measured on 3.7.5 Linux x86_64, a raise on source line 5 read as line 6.
+
+	Gated on the GEM CONFIG rather than on GsProcess>>_nativeStack, deliberately.
+	_gsStack is filled at RAISE time and read later, possibly from another
+	process -- a generator body is a forked GsProcess, and its stashed levels are
+	walked by the consumer -- so the capturing process is not reliably the one
+	asking.  The config is gem-wide and cannot disagree with itself between the
+	two moments.
+
+	Not memoised: it is one config read, and the suite's own probes flip this
+	setting at runtime."
+
+	^ (System configurationAt: #GemNativeCodeEnabled) ~~ 0
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___captureHandlerState___ [
+	"The running-handler bookkeeping, as one value, so a second thread of
+	execution can put its own in place and hand this back afterwards.
+
+	The depth and the token stack are session-wide slots, but what they describe
+	-- ``which except handler bodies am I inside'' -- is a property of ONE call
+	stack.  A generator body is a second call stack (it runs on a forked
+	GsProcess), and a coroutine is a generator, so an ``await'' inside an
+	``except'' handler suspends with the handler still counted.  Whoever runs next
+	then sees, and unwinds, bookkeeping that is not theirs.
+
+	The symptom is not a mismatched handler but an UNCAUGHT exception: a token
+	left behind makes ___handlerTokenActive___: answer true for its try site
+	forever after, and a shielded clause refuses everything -- ``except
+	BaseException'' included.  Two coroutines both parked inside
+	``except BlockingIOError: await ...'' (the canonical asyncio retry, and what
+	every socket coroutine in the event loop is written as) is enough to produce
+	it.
+
+	This is the same problem ___currentException___ already has, and the same
+	answer: PythonGenerator save/restores it across every suspension, from both
+	sides.  See PythonGenerator >> ___captureConsumerState___ and >> ___yield___:.
+
+	The stack is COPIED.  It is a mutable OrderedCollection living in a session
+	slot, so handing back the same object would hand back whatever the other side
+	did to it."
+
+	^ { self ___handlerDepth___ . self ___handlerTokenStack___ @env0:copy }
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___caretSourceLineIn___: report [
+	"The source line a ``_sourceAtIp:'' report's FIRST caret marks, or nil when
+	it has none.
+
+	The report is the method's source, one report line per source line (tabs
+	expanded, every line indented), with a caret line inserted BELOW the line
+	holding the step point.  So the number of lines above the first caret is
+	the caret's source line.  Counted with empty lines KEPT: a ``subStrings:''
+	split drops them, which made its index no source line at all.
+
+	Walked with indexOf:, testing only a line whose first non-blank character
+	is ``*'' -- the rest cannot be a caret line -- so finding the caret costs
+	no copy per line."
+
+	| start lineNo |
+	report isNil ifTrue: [^ nil].
+	start := 1.
+	lineNo := 0.
+	[start <= report size] whileTrue: [
+		| stop k |
+		stop := report indexOf: Character lf startingAt: start.
+		stop = 0 ifTrue: [stop := report size + 1].
+		k := start.
+		[k < stop and: [(report at: k) isSeparator]] whileTrue: [k := k + 1].
+		(k < stop and: [(report at: k) == $*
+			and: [self ___isCaretLine___: (report copyFrom: start to: stop - 1)]])
+				ifTrue: [^ lineNo].
+		lineNo := lineNo + 1.
+		start := stop + 1].
+	^ nil
+
+]
+
+{ #category : 'Grail-Exception handling' }
+BaseException class >> ___catchAll___ [
+	"The selector for a handler that must see every Python exception AND a raw
+	stack overflow: ``BaseException , AlmostOutOfStackError , AlmostOutOfStack''.
+
+	A raw overflow is a RecursionError to Python (BaseException class >>
+	handles:), but on:do: takes a VM fast path for a CLASS or an ExceptionSet
+	selector -- Behavior>>_subclassOf:, never #handles: -- so ``on:
+	BaseException'' passes it by.  Grail's own catch-everything sites (with,
+	finally, a first bare except, except*, the shim's callback guard) use this
+	set instead, which keeps the fast path and still lets them meet the
+	overflow in the first search, before anything unwinds.  Built once at
+	install (___initCatchAll___); BaseException alone if that has not run."
+
+	^ CatchAllSelector ifNil: [BaseException]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___catchingHandlerIndexIn___: st for: anException [
+	"The index in the capture ``st'' of the on:do: (or onException:do:) frame
+	whose handler is running now, catching anException -- or nil when that
+	cannot be established, which leaves the caller on its name test (#1401).
+
+	Asked at the catch, from inside the handler.  A handler runs ON TOP of the
+	frames that signalled, so the frame that caught is still live below us, and
+	the live stack says which one it is: the topmost
+	``AbstractException >> _executeHandler:'' frame is running the handler, its
+	argument is the block it runs, and the catching frame is the one holding that
+	same block as its ``handlerBlock'' argument -- on:do: itself for an exception
+	class or set, onException:do: for the general form Grail's PyLazyExceptSelector
+	takes.  Measured on 4.0: _frameContentsAt: answers the arguments from index
+	11, so _executeHandler:'s block is at 11 and handlerBlock, the second argument
+	of both, at 12.
+
+	The capture names frames by triple and the live stack by level, and the two
+	differ by one constant, derived here by identity on the capture's two
+	innermost methods (as ___attachFrameLocalsWork___ derives it) and re-checked
+	on every frame read.  Only the capture's own on:do: frames are read, innermost
+	first, and the first match wins: for a fresh raise that is one or two reads.
+
+	EVERY LEVEL READ IS IN ONE FRAME -- the protected block's; the loops inside
+	it are all inlined -- because a level counts from whatever calls the
+	primitive, and reads from two different frames would disagree by one.
+
+	Nil when the topmost handler is not handling anException (a traceback built
+	outside a handler), when no alignment is found (a capture from another
+	stack: a generator section, a re-raise across processes), or on any error."
+
+	| execMeth onDoMeth onExcMeth lvl fc aBlock execLvl anchor1 anchor2 offset limit i meth |
+	(st isNil or: [st size < 5]) ifTrue: [^ nil].
+	anchor1 := st at: 2.
+	anchor2 := st at: 5.
+	(anchor1 isNil or: [anchor2 isNil]) ifTrue: [^ nil].
+	^ [
+		execMeth := AbstractException compiledMethodAt: #'_executeHandler:'.
+		onDoMeth := ExecBlock compiledMethodAt: #'on:do:'.
+		onExcMeth := ExecBlock compiledMethodAt: #'onException:do:'.
+		"1. The handler running now."
+		lvl := 1.
+		execLvl := nil.
+		[execLvl isNil and: [lvl <= 40]] whileTrue: [
+			fc := GsProcess _frameContentsAt: lvl.
+			fc isNil ifTrue: [lvl := 41] ifFalse: [
+				(fc at: 1) == execMeth ifTrue: [execLvl := lvl. aBlock := fc atOrNil: 11]].
+			lvl := lvl + 1].
+		execLvl isNil
+			ifTrue: [nil]
+			ifFalse: [ | rcv payload |
+				rcv := (GsProcess _frameContentsAt: execLvl) atOrNil: 10.
+				payload := rcv == anException
+					ifTrue: [anException]
+					ifFalse: [rcv dynamicInstVarAt: #'___grailPayload___'].
+				(payload ~~ anException or: [aBlock isNil])
+					ifTrue: [nil]
+					ifFalse: [
+						"2. The alignment: capture triple k is live level k + offset.
+						The capture is entirely below the handler, so the search
+						starts there."
+						offset := nil.
+						lvl := execLvl.
+						limit := execLvl + 512.
+						[offset isNil and: [lvl < limit]] whileTrue: [
+							fc := GsProcess _frameContentsAt: lvl.
+							fc isNil ifTrue: [lvl := limit] ifFalse: [
+								(fc at: 1) == anchor1 ifTrue: [ | fc2 |
+									fc2 := GsProcess _frameContentsAt: lvl + 1.
+									(fc2 notNil and: [(fc2 at: 1) == anchor2])
+										ifTrue: [offset := lvl - 1]]].
+							lvl := lvl + 1].
+						offset isNil
+							ifTrue: [nil]
+							ifFalse: [ | found |
+								"3. The capture's on:do: frames, innermost first."
+								found := nil.
+								i := 2.
+								[found isNil and: [i <= st size and: [(meth := st at: i) notNil]]] whileTrue: [
+									(meth == onDoMeth or: [meth == onExcMeth]) ifTrue: [
+										fc := GsProcess _frameContentsAt: (i + 1) // 3 + offset.
+										(fc notNil and: [(fc at: 1) == meth
+											and: [(fc atOrNil: 12) == aBlock]])
+												ifTrue: [found := i]].
+									i := i + 3].
+								found]]]]
+		on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError) ifTrue: [e pass].
+			e return: nil]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___classBodyHelperClassNameFor___: aSelector [
+	"The PYTHON CLASS NAME inside a method-local class body helper's selector,
+	or nil when aSelector is not one.
+
+	The shape is ``___irClassDef_<sourceOffset>_<Name>___'', optionally with a
+	``:setters:'' keyword tail (ClassDefAst>>___irHelperSelector___:).  Parsed
+	rather than matched against a registry: the selector is derived from the
+	class's source offset and name at BUILD time, and a traceback runs long
+	afterwards, in a session that need not have compiled anything.
+
+	The name is taken between the SECOND underscore run and the trailing
+	``___'', so a class whose own name contains underscores survives."
+
+	| str body us |
+	aSelector isNil ifTrue: [^ nil].
+	str := aSelector asString.
+	(str @env0:beginsWith: '___irClassDef_') ifFalse: [^ nil].
+	body := str @env0:copyFrom: '___irClassDef_' size + 1 to: str size.
+	"Drop the keyword tail of the capturing form, then the trailing ___."
+	us := body @env0:indexOf: $:.
+	us > 0 ifTrue: [body := body @env0:copyFrom: 1 to: us - 1].
+	(body @env0:endsWith: '___') ifFalse: [^ nil].
+	body := body @env0:copyFrom: 1 to: body size - 3.
+	"...and the leading ``<offset>_''."
+	us := body @env0:indexOf: $_.
+	us = 0 ifTrue: [^ nil].
+	body := body @env0:copyFrom: us + 1 to: body size.
+	^ body isEmpty ifTrue: [nil] ifFalse: [body]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___codeForBlockMethod___: aBlockMethod name: aName [
+	"The PyCode of the function whose block aBlockMethod compiles, when one was
+	stamped in this session and it is named aName; nil otherwise."
+
+	| table code |
+	aBlockMethod isNil ifTrue: [^ nil].
+	table := SessionTemps current at: #'GrailBlockMethodCodes' otherwise: nil.
+	table isNil ifTrue: [^ nil].
+	code := table at: aBlockMethod otherwise: nil.
+	code isNil ifTrue: [^ nil].
+	(([code @env0:dynamicInstVarAt: #'co_name'] @env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]) @env0:= aName) ifFalse: [^ nil].
+	^ code
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___codeOccurrencesOf___: aPattern in: src [
+	"Every index at which aPattern starts in src's CODE, as an Array in source
+	order -- skipping occurrences inside a string or symbol literal ('...',
+	with '' as an escaped quote), a comment (between double quotes), or after a
+	character literal's $.
+
+	A lexer, but only as much of one as tells code from literal, and driven by
+	indexOf: rather than by character: in code the next thing that matters is
+	the nearest quote, double quote or $, and inside a literal only its closing
+	character does.  Each of the three code-state positions is searched again
+	only once the lexer has moved past it, so an absent character costs one
+	failed search, not one per step.  A 541 KB module body therefore costs a
+	few thousand primitive searches, not half a million interpreted steps.
+
+	aPattern must not START inside a literal for this to say anything; it may
+	contain quote characters, in which case the lexer resumes AT the
+	occurrence and lexes the pattern's own quotes like any other."
+
+	| out cand pos sq dq dl skip |
+	out := OrderedCollection new.
+	(src isNil or: [aPattern isEmpty]) ifTrue: [^ out asArray].
+	skip := (aPattern detect: [:c | c == $' or: [c == $" or: [c == $$]]] ifNone: [nil])
+		isNil ifTrue: [aPattern size] ifFalse: [0].
+	pos := 1.
+	sq := dq := dl := -1.
+	cand := src indexOfSubCollection: aPattern startingAt: 1.
+	[cand > 0] whileTrue: [
+		| inCode |
+		inCode := nil.
+		[inCode isNil] whileTrue: [
+			| q close |
+			(sq ~= 0 and: [sq < pos]) ifTrue: [sq := src indexOf: $' startingAt: pos].
+			(dq ~= 0 and: [dq < pos]) ifTrue: [dq := src indexOf: $" startingAt: pos].
+			(dl ~= 0 and: [dl < pos]) ifTrue: [dl := src indexOf: $$ startingAt: pos].
+			q := sq.
+			(dq > 0 and: [q = 0 or: [dq < q]]) ifTrue: [q := dq].
+			(dl > 0 and: [q = 0 or: [dl < q]]) ifTrue: [q := dl].
+			(q = 0 or: [q >= cand])
+				ifTrue: [inCode := true]
+				ifFalse: [
+					close := self ___literalEndAt___: q in: src.
+					"Unterminated: everything after q is inside it."
+					close = 0 ifTrue: [^ out asArray].
+					close >= cand ifTrue: [inCode := false].
+					pos := close + 1]].
+		inCode ifTrue: [
+			out add: cand.
+			pos := cand + skip].
+		cand := src indexOfSubCollection: aPattern startingAt: (pos max: cand + 1)].
+	^ out asArray
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___curPosPositionsFromSource___: src [
+	"Private to the position API: every one of src's OWN ___curPos___ stores, in
+	source order -- never one inside a string literal, where a module body
+	carries the source of every method it compiles (issue #1137)."
+
+	| out |
+	out := OrderedCollection new.
+	(self ___ownCurPosStoresIn___: src) do: [:p |
+		(self ___parsePositionAt___: p + 16 in: src)
+			ifNotNil: [:each | out add: each]].
+	^ out asArray
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___currentException___ [
+	"The exception currently being HANDLED in this session -- what CPython
+	sys.exc_info() / sys.exception() report -- or nil outside any active except
+	block.  Session-local via SessionTemps (never committed).  TryAst codegen
+	sets it on except-handler entry and restores the prior value on exit, so
+	nested handlers stack correctly."
+
+	^ (SessionTemps current) at: #'GrailCurrentException' ifAbsent: [nil]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___deriveIRNestedNameForBlock___: aBlockMethod home: aHomeMethod [
+	"Uncached worker for ___irNestedNameForBlock___:home:.  The block's offset
+	lands on the nested ``def'' -- or one character past it: a def two levels
+	down reports a beginPosition one too high (measured: ``a'' at its ``d'',
+	``b'' inside it at its ``e'') -- so the LINE holding the offset is parsed,
+	from its first non-blank character, for ``[async ]def NAME''.  A lambda is
+	recognised at the offset itself (give or take one), since it sits mid-line."
+
+	| home src off n lineStart lineEnd probeFrom probeTo |
+	home := aHomeMethod.
+	(home isNil or: [home @env0:== aBlockMethod]) ifTrue: [^ nil].
+	(self ___isIRPythonMethod___: home) ifFalse: [^ nil].
+	src := [home @env0:sourceString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	off := [aBlockMethod @env0:_firstSourceOffset]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(off isNil or: [off @env0:< 1]) ifTrue: [^ nil].
+	n := src @env0:size.
+	off @env0:> n ifTrue: [^ nil].
+	probeFrom := (off @env0:- 1) @env0:max: 1.
+	probeTo := (off @env0:+ 6) @env0:min: n.
+	probeFrom to: (probeTo @env0:- 5) do: [:k |
+		((src @env0:copyFrom: k to: k @env0:+ 5) @env0:= 'lambda') ifTrue: [^ '<lambda>']].
+	lineStart := off.
+	[lineStart @env0:> 1 and: [(src @env0:at: lineStart @env0:- 1) @env0:~= Character lf]]
+		@env0:whileTrue: [lineStart := lineStart @env0:- 1].
+	lineEnd := off.
+	[lineEnd @env0:<= n and: [(src @env0:at: lineEnd) @env0:~= Character lf]]
+		@env0:whileTrue: [lineEnd := lineEnd @env0:+ 1].
+	^ self ___irDefNameOnLine___: (src @env0:copyFrom: lineStart to: lineEnd @env0:- 1)
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___deriveNestedFunctionNameFor___: aMethod line: aLine [
+	"Uncached worker for ___nestedFunctionNameFor___:line:.
+
+	One linear pass over the generated source, taking ``___curPos___ :='' stores
+	and ``PyCode @env0:name:'' stamps in the order they appear.  A store raises
+	the running maximum Python line; a stamp closes a def, whose range is then
+	its own firstlineno up to that maximum."
+
+	| src lines best bestF maxLine rest pc ps |
+	src := [aMethod @env0:sourceString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	"An IR-built method carries the def's PYTHON source: a nested def is found
+	by INDENTATION, not by a stamp (cut 64).  This is the path a nested def
+	that captures NOTHING takes -- its closure is a clean block with no home
+	method, so the block-offset namer above cannot see it -- and the path every
+	line-only caller takes.  aLine is a MODULE line and the attached slice is
+	unpadded, so it is rebased by the slice's first module line first; indexing
+	the slice with the module line named the wrong def, or the home, for every
+	def not on line 1 (test_yield_from test_delegator_is_visible_to_debugger)."
+	(self ___isIRPythonMethod___: aMethod) ifTrue: [
+		^ self ___irNestedNameIn___: src
+			line: (aLine isNil ifFalse: [
+				aLine @env0:- ((self ___irSliceFirstLineIn___: src) ifNil: [1]) @env0:+ 1])].
+	lines := src @env0:subStrings: (String @env0:with: Character lf).
+	best := nil.
+	bestF := 0.
+	maxLine := 0.
+	1 to: lines @env0:size do: [:li |
+		rest := lines @env0:at: li.
+		"``pc''/``ps'' are METHOD temps, not condition-block ones: the body below
+		reads them, and a temp declared inside a whileTrue: condition is out of
+		scope there."
+		[ pc := rest @env0:indexOfSubCollection: '___curPos___ := '.
+		  ps := rest @env0:indexOfSubCollection: 'PyCode @env0:name: '''.
+		  (pc @env0:> 0) or: [ps @env0:> 0] ] @env0:whileTrue: [
+			(pc @env0:> 0 and: [(ps @env0:= 0) or: [pc @env0:< ps]])
+				ifTrue: [
+					| n |
+					n := self ___lineNumberAfterStore___: rest from: (pc @env0:+ 16).
+					(n notNil and: [n @env0:> maxLine]) ifTrue: [maxLine := n].
+					rest := rest @env0:copyFrom: (pc @env0:+ 16) to: rest @env0:size]
+				ifFalse: [
+					| k nm fl |
+					k := ps @env0:+ 20.
+					nm := WriteStream @env0:on: String @env0:new.
+					[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:~= $']]
+						whileTrue: [
+							nm @env0:nextPut: (rest @env0:at: k).
+							k := k @env0:+ 1].
+					fl := self ___firstlinenoAfter___: rest from: k.
+					((fl notNil) and: [
+						(fl @env0:<= aLine) and: [
+							(aLine @env0:<= maxLine) and: [fl @env0:> bestF]]])
+						ifTrue: [
+							bestF := fl.
+							best := nm @env0:contents].
+					rest := rest @env0:copyFrom: (ps @env0:+ 20) to: rest @env0:size]]].
+	^ best
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___derivePythonLineForMethod___: aMethod ip: anIp [
+	"Uncached worker for ___pythonLineForMethod___:ip: -- see its comment."
+
+	| report lines caretIdx result |
+	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+	report isNil ifTrue: [^ nil].
+	lines := report @env0:subStrings: (String @env0:with: Character lf).
+	"_sourceAtIp: marks the ip with a caret on a line whose first non-blank
+	character is ``*''.  Everything at or above it is what has been reached.
+
+	No caret means FAIL CLOSED -- answer nil, which drops the frame and leaves
+	the single-frame fallback.  Defaulting to the whole method instead (the
+	obvious reading of ``everything above'') answers the LAST ___curPos___ in
+	it: a wrong line that is never nil, so it also passes the is-this-a-Python-
+	frame test.  A missing frame is recoverable; a confidently wrong line
+	number is not."
+	caretIdx := 0.
+	1 to: lines @env0:size do: [:i |
+		(self ___isCaretLine___: (lines @env0:at: i))
+			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
+	caretIdx @env0:= 0 ifTrue: [^ nil].
+	"The stores are read from the method's SOURCE, not from the report lines,
+	and only the method's OWN ones -- see ___ownStoreLineIn___:report:."
+	result := self ___ownStoreLineIn___: aMethod report: report.
+	"OPT-IN trace, off unless GRAIL_LINE_TRACE_DIR is set.  Deliberately a single
+	guarded SEND rather than an inline block: this method's temp count is
+	load-bearing.  It runs while a traceback is being built, which is exactly
+	when the stack is shortest, and widening its frame moves the depth at which
+	the deep-recursion tests overflow."
+	self ___lineTraceDir___ ifNotNil: [
+		self ___traceLineDerivation___: aMethod ip: anIp caret: caretIdx
+			lines: lines result: result].
+	^ result
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___derivePythonSpanForMethod___: aMethod ip: anIp [
+	"Uncached worker for ___pythonSpanForMethod___:ip:.
+
+	Same scan as ___derivePythonLineForMethod___:ip: -- last ``___curPos___ :=''
+	at or above the ip's caret -- but keeps the SPAN form only.  A bare-integer
+	store answers nil here, so a statement codegen gave no span to is left
+	exactly as it was rather than guessed at."
+
+	| report lines caretIdx result |
+	"EVERY probe in this file re-passes AlmostOutOfStackError, because it is an
+	Error SUBCLASS (AlmostOutOfStackError -> Error), while the sibling
+	AlmostOutOfStack is a Notification.  So a bare `on: Error do: [:ex | ex
+	return: nil]' eats the VM's stack warning, the recursion continues, and the
+	next overflow is a fatal Red Zone crash rather than a catchable signal.  PR
+	#648 fixed five such handlers; these deep-walk probes were missed and are
+	the same hazard.  The guard costs nothing on the success path -- it lives
+	inside the handler, which runs only once the probe has already failed."
+	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+	report isNil ifTrue: [^ nil].
+	lines := report @env0:subStrings: (String @env0:with: Character lf).
+	caretIdx := 0.
+	1 to: lines @env0:size do: [:i |
+		(self ___isCaretLine___: (lines @env0:at: i))
+			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
+	caretIdx @env0:= 0 ifTrue: [^ nil].
+	result := self ___ownStoreSpanIn___: aMethod report: report.
+	^ self ___refineSpan___: result forMethod: aMethod ip: anIp
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___deriveSoleNestedFunctionNameIn___: aMethod [
+	"Uncached worker for ___soleNestedFunctionNameIn___:.  One pass, counting
+	stamps and remembering the first; answers nil the moment a second appears, so
+	an ambiguous method costs no more than an unambiguous one."
+
+	| src lines found n rest ps |
+	src := [aMethod @env0:sourceString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	"An IR-built method's source is the def's Python (cut 64): its nested defs
+	are the ``def'' lines after its own header."
+	(self ___isIRPythonMethod___: aMethod) ifTrue: [
+		^ self ___irSoleNestedNameIn___: src].
+	lines := src @env0:subStrings: (String @env0:with: Character lf).
+	found := nil.
+	n := 0.
+	1 to: lines @env0:size do: [:li |
+		rest := lines @env0:at: li.
+		[ ps := rest @env0:indexOfSubCollection: 'PyCode @env0:name: '''.
+		  ps @env0:> 0 ] @env0:whileTrue: [
+			| k nm |
+			k := ps @env0:+ 20.
+			nm := WriteStream @env0:on: String @env0:new.
+			[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:~= $']]
+				whileTrue: [
+					nm @env0:nextPut: (rest @env0:at: k).
+					k := k @env0:+ 1].
+			n := n @env0:+ 1.
+			n @env0:= 1 ifTrue: [found := nm @env0:contents].
+			rest := rest @env0:copyFrom: (ps @env0:+ 20) to: rest @env0:size]].
+	n @env0:= 1 ifTrue: [^ found].
+	^ nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___deriveStampedNameForBlock___: aBlockMethod [
+	"Uncached worker for ___stampedNameForBlock___:.
+
+	Answers nil for anything that is not a codegen-stamped block: a method
+	answers offset 1, where the source is a selector pattern and not a bracket,
+	so the bracket test alone rejects it."
+
+	| home src off close |
+	home := [aBlockMethod @env0:homeMethod]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(home isNil or: [home @env0:== aBlockMethod]) ifTrue: [^ nil].
+	src := [home @env0:sourceString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	off := [aBlockMethod @env0:_firstSourceOffset]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(off isNil or: [off @env0:< 1]) ifTrue: [^ nil].
+	(off @env0:> src @env0:size) ifTrue: [^ nil].
+	(src @env0:at: off) @env0:= $[ ifFalse: [^ nil].
+	close := self ___matchingBracketIn___: src from: off.
+	close isNil ifTrue: [^ nil].
+	^ self ___pyNamedStampIn___: src after: close
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___doitGlobalsFor___: aMethod [
+	"The globals mapping for a frame whose method belongs to a DOIT, or
+	None.
+
+	PyModuleDict serves a doit scope as well as a module -- see its
+	___isDoitScope___ -- so the answer is the same KIND of object
+	f_globals gives an ordinary frame, and ``globals()'' inside the exec'd
+	body answers the same view.
+
+	None rather than nil, because PyFrame's constructor stores a supplied
+	globals into a dynamic instVar and ___pyAttrLoad___ probes those
+	BEFORE the method chain: storing nil-as-absent is what keeps the lazy
+	f_globals accessor reachable for every frame this cannot answer for."
+
+	| scope |
+	scope := [(PythonAst @env0:at: #'ModuleAst') @env0:___doitScopeFor: aMethod]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	scope @env0:isNil ifTrue: [^ None].
+	^ [(Python @env0:at: #'PyModuleDict') @env0:on: scope]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___dropGeneratorStack___: anException [
+	"Forget anException's stashed generator-side capture, if it has one.  For a
+	re-raise that takes a fresh capture (___pyRaise___:cause:): the stash
+	describes the EARLIER raise, whose frames are already in the traceback."
+
+	| reg |
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	reg removeKey: anException ifAbsent: [].
+	^ self
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___ensureFinally___: protectedBlock finally: finallyBlock [
+	"Run protectedBlock, then finallyBlock unconditionally (Python try/finally
+	semantics == GemStone ensure:), BUT when a Python exception is PROPAGATING
+	out of protectedBlock, install it as this session's current exception for the
+	duration of finallyBlock -- so sys.exc_info() / sys.exception() inside a
+	``finally'' report the in-flight exception, matching CPython -- then restore
+	the prior value and let the exception keep propagating.
+
+	Only real Python exceptions (BaseException) are installed: Grail's
+	control-flow signals (PythonReturn/PythonBreak/PythonContinue) and
+	StopIteration subclass the kernel Exception directly, NOT this BaseException,
+	so a return / break / continue / normal exit through the finally leaves
+	exc_info untouched (correct -- CPython shows the ENCLOSING handled exception
+	there, not a fresh one).
+
+	TryAst emits this in place of a bare ``ensure:'' for EVERY try/finally,
+	generator bodies included.  (It once skipped generators, because the
+	exceptional path re-raised with ``ex pass'', which is unsafe on a forked
+	generator process; it now returns from the handler and re-signals -- see
+	below -- and the carve-out went with that.)
+
+	WHEN the finally runs matters as much as that it runs.  It used to run from
+	the ensure: block for every exit, including the exceptional one -- but an
+	ensure: fires while the stack UNWINDS, and by then ``ex pass'' has already
+	delivered the exception to the enclosing handler.  So for
+
+	    try:      raise ValueError()
+	    finally:  raise KeyError()
+
+	the caller's ``except'' ran TWICE: once for the ValueError that pass had
+	already handed it, and then again for the KeyError, arriving as a second,
+	unrelated propagation.  Python has one exception leave a try/finally, and it
+	is the finally's: a raise there REPLACES the in-flight exception (chaining
+	to it through __context__).
+
+	So the exceptional path now runs the finally INSIDE the handler, before
+	``ex pass'' lets anything see it.  A finally that raises simply propagates
+	from there, replacing ex and never reaching the pass; a finally that
+	completes falls through to pass, which propagates ex as before.  The
+	ensure: is still what covers the other exits -- normal completion and the
+	control-flow signals (PythonReturn / PythonBreak / PythonContinue), none of
+	which are BaseException -- with ``ranFinally'' keeping the two paths from
+	both firing."
+
+	| ranFinally propExc result |
+	ranFinally := false.
+	propExc := nil.
+	result := [ [protectedBlock value]
+			on: self ___catchAll___
+			do: [:ex |
+				ranFinally := true.
+				"A ``return'' / ``break'' / ``continue'' passing through the
+				try is NOT an exception being handled, so it must not become
+				the session's current one -- CPython reports the ENCLOSING
+				handled exception inside such a finally, not a fresh thing.
+				This method's comment used to claim the distinction came for
+				free because the control-flow signals ``subclass the kernel
+				Exception directly, NOT this BaseException''.  They do not:
+				PythonReturn's chain runs through Grail's BaseException, so
+				``on: BaseException'' catches it like anything else, and
+				installing it leaked a PythonReturn into sys.exc_info() and
+				into the __context__ of anything the finally raised."
+				(self ___isControlFlowSignal___: ex)
+					ifTrue: [finallyBlock value]
+					ifFalse: [self ___runFinally___: finallyBlock during: ex].
+				propExc := ex.
+				"RETURN from the handler rather than ``pass'', then re-signal
+				below.  Both keep the exception propagating, but an exception
+				that was passed retains a handler frame, and the VM refuses to
+				signal one of those again -- so every later re-raise has to
+				work on a COPY (PythonGenerator >> _resignalable:), and the
+				object's IDENTITY is lost.  Returning pops the frames, so the
+				re-signal below is the same object the raise site created.
+				That matters wherever Python compares exceptions by identity:
+				a generator whose ``finally'' yields suspends mid-propagation,
+				and test_close_and_throw_yield asserts the exception coming
+				back out of the resuming next() ``is'' the one thrown."
+				ex return: nil] ]
+		ensure: [
+			ranFinally ifFalse: [finallyBlock value]].
+	propExc isNil ifFalse: [^ (self ___resignalable___: propExc) @env0:signal].
+	^ result
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___ensureStackCapture___ [
+	"Turn on the VM's raise-time stack capture, once per session.
+
+	``#GemExceptionSignalCapturesStack'' makes primitive 2022 fill
+	``AbstractException >> _gsStack'' with a SmallInteger followed by triples of
+	(GsNMethod, ipOffset, receiver) whenever _gsStack is nil on entry to
+	_signal.  Measured cost is ~1.3 ns per Smalltalk frame per raise and NOTHING
+	per call (§9.2), which is what makes multi-frame tracebacks affordable at
+	all -- the alternative was a per-call body wrapper at +14 ns on every Python
+	call.
+
+	It is a GEM configuration, so it is per-session and must be re-set rather
+	than stored; memoised in SessionTemps so the repeated calls cost a
+	dictionary probe.  Grail's own control-flow signals pre-stamp _gsStack to
+	opt out (PythonReturn / PythonBreak / PythonContinue class >> ___signal___),
+	so the flag does not tax an #exception-mode function's every return."
+
+	| st armed |
+	st := SessionTemps current.
+	(st at: #'GrailStackCaptureOn' otherwise: nil) == true ifTrue: [^ self].
+	"Set the flag, then READ IT BACK, and memoise only a CONFIRMED arming.
+
+	The memo used to be written BEFORE the attempt, and the attempt swallowed
+	every Error -- so a set that failed was remembered as having succeeded and
+	nothing ever retried it.  The cost of that combination is not a failing
+	call here: it is every traceback in the session silently losing its frames,
+	reported by whatever reads the walk as a fact about ITS OWN request (a
+	shortfall from sys._getframe, a one-frame stack from extract_tb) with
+	nothing pointing back to the arming.
+
+	Read back rather than trusting the set to raise on refusal: the contract of
+	interest is `is the capture on', and only reading answers that."
+	armed := [System gemConfigurationAt: #'GemExceptionSignalCapturesStack' put: true.
+		(System gemConfigurationAt: #'GemExceptionSignalCapturesStack') == true]
+			on: Error do: [:ex |
+				"An image that does not offer the flag keeps today's single-frame
+				tracebacks rather than failing -- the walk below simply finds no
+				captured stack."
+				ex return: false].
+	"Only a confirmed arming is memoised.  Leaving the memo unset when it failed
+	means the next raise tries again, so a TRANSIENT failure heals itself; the
+	repeated cost falls only on an image that cannot arm at all, which is the
+	case that has no working capture either way."
+	armed ifTrue: [st at: #'GrailStackCaptureOn' put: true].
+	^ self
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___enterHandler___ [
+	"Called as an ``except'' handler body starts."
+
+	^ self ___enterHandler___: nil
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___enterHandler___: aTokenOrNil [
+	"Called as an ``except'' handler body starts, naming the TRY ACTIVATION the
+	handler belongs to.
+
+	The token is what tells a later clause of the SAME try apart from a handler
+	somewhere else that happens to be running.  A depth counter cannot: it rises
+	for any handler at all, including one inside a function the try body CALLED,
+	and shielding on that caught exceptions the try should have handled.  See
+	___handlerTokenActive___:.
+
+	Emitted only for a try with two or more clauses -- a single-clause try has no
+	sibling to shield, so it still calls the no-argument form and pushes nil."
+
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerDepth'
+		put: self ___handlerDepth___ @env0:+ 1.
+	self ___handlerTokenStack___ @env0:addLast: aTokenOrNil.
+	^ self
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___exitHandler___ [
+	"Called as an ``except'' handler body finishes, however it finishes -- the
+	caller pairs this with the enter through ensure:, so a return / break /
+	continue or a re-raise still unwinds the count.
+
+	POPPING THE TOP IS CORRECT, but only because the stack is per-thread-of-
+	execution rather than per session -- which it was not until
+	___captureHandlerState___ was added.  Handler bodies on ONE call stack finish
+	in the order they started (ensure: guarantees the pairing), so last-in-first-out
+	holds.  What broke that was two COROUTINES: each runs on its own forked
+	GsProcess, and either can suspend inside a handler, so their handler bodies
+	interleave and whoever resumed first popped the other's entry.  The answer is
+	to give each its own stack across suspensions, not to search this one -- a
+	search would also have to guess which entry was 'mine' among identical
+	per-SITE tokens, which is exactly the case it cannot distinguish."
+
+	| d stack |
+	d := self ___handlerDepth___.
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerDepth'
+		put: (d @env0:> 0 ifTrue: [d @env0:- 1] ifFalse: [0]).
+	stack := self ___handlerTokenStack___.
+	stack @env0:isEmpty ifFalse: [stack @env0:removeLast].
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___firstlinenoAfter___: aString from: anIndex [
+	"The ``firstlineno:'' of the PyCode literal starting at anIndex, or nil."
+
+	| q j digits |
+	q := (aString @env0:copyFrom: anIndex to: aString @env0:size)
+		@env0:indexOfSubCollection: 'firstlineno: '.
+	q @env0:= 0 ifTrue: [^ nil].
+	j := anIndex @env0:+ q @env0:+ 12.
+	digits := WriteStream @env0:on: String @env0:new.
+	[(j @env0:<= aString @env0:size)
+		and: [(aString @env0:at: j) @env0:isDigit]] whileTrue: [
+			digits @env0:nextPut: (aString @env0:at: j).
+			j := j @env0:+ 1].
+	digits @env0:contents @env0:isEmpty ifTrue: [^ nil].
+	^ digits @env0:contents @env0:asNumber
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___forgetMethodCaches___ [
+	"Drop every session cache keyed by a METHOD OBJECT (#1463).
+
+	Each holds its methods strongly, on purpose (see
+	___pythonLineForMethod___:ip:), and none is ever pruned.  That is bounded
+	while methods are only added, but a recompile REPLACES them: every entry
+	for a replaced method then keeps the old GsNMethod alive, and with it the
+	whole generated source of its home method -- for a module body, hundreds
+	of KB.  Measured on importlib.reload of _strptime: ~1 MB of every reload
+	stayed live, every old ``initialize'' source survived code compaction,
+	and the session died near reload 25 of a 37 MB temp space.  Dropping
+	these six after the rebuild kept one copy and live memory flat.
+
+	They are pure memo tables -- each answer is re-derived from the method on
+	the next miss -- so dropping them whole is always safe and costs only
+	that.  NOT the def-site table (ExecBlockAttrs staticSlotTable): it is
+	state an old function object still reads, not a cache."
+
+	| st |
+	st := SessionTemps current.
+	#(#'GrailIpLineCache' #'GrailIpTbLineCache' #'GrailIpSpanCache'
+	  #'GrailIRMethodCache' #'GrailMethodFileCache' #'___GrailReceiverNameCache___')
+		do: [:k | st removeKey: k otherwise: nil]
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___framesAndLevelsOfSuspendedProcess___: aProcess [
+	"{ triples. levels } for a SUSPENDED process, or nil -- the triples exactly as
+	___framesOfSuspendedProcess___: describes them, and beside them the
+	frame-contents Array of every level, indexed BY LEVEL.
+
+	The two come from one pass because they come from ONE READ.  The loop already
+	had to call ``_frameContentsAt:'' for each level to get the method and ip; it
+	simply threw the rest of each Array away.  Keeping it is what lets a consumer
+	section have f_locals at all: ___tempsFromFrameContents___ interprets a
+	contents Array by fixed slots (9 names, 10 receiver, 11.. values) and does not
+	care which process produced it, so an instance-side read serves it as well as
+	the class-side sweep does.
+
+	AND THE ALIGNMENT IS FREE HERE, which is the other half.  For the running
+	process a triple index and a level differ by a constant nobody can hardcode --
+	___liveFrameLevelOffset___:levels: derives it by identity, because the level
+	numbering starts at the sender of whoever called the primitive.  Here the loop
+	IS the numbering: level i produced triple i, so the offset is 0 by
+	construction rather than by derivation.
+
+	Answers nil rather than an empty array when the process cannot be read, and
+	RAISES through ___unreadableFrame___: rather than shortening, both exactly as
+	before -- a short stack that looks complete is the failure this walk most
+	needs to avoid."
+
+	| out levels d |
+	aProcess isNil ifTrue: [^ nil].
+	d := [aProcess stackDepth] on: Error do: [:ex | ex return: 0].
+	((d isNil) or: [d <= 0]) ifTrue: [^ nil].
+	out := OrderedCollection new.
+	levels := Array new: d.
+	1 to: d do: [:i |
+		| fc meth |
+		fc := [aProcess _frameContentsAt: i] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+		fc isNil ifTrue: [
+			^ self ___unreadableFrame___: i of: d in: aProcess why: 'frame contents'].
+		meth := [aProcess _methodInFrameContents: fc]
+			on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+		meth isNil ifTrue: [
+			^ self ___unreadableFrame___: i of: d in: aProcess why: 'method in frame contents'].
+		levels at: i put: fc.
+		"The RECEIVER stays tolerant on purpose: a missing receiver leaves the
+		 triple in place, so it costs one slot and shifts nothing.  It is the
+		 METHOD that carries position."
+		out add: meth;
+			add: (fc at: 2);
+			add: ([aProcess _receiverInFrameContents: fc]
+				on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil])].
+	out isEmpty ifTrue: [^ nil].
+	^ { out asArray. levels }
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___framesOfSuspendedProcess___: aProcess [
+	"The frames of a SUSPENDED process as (method, ip, receiver) triples,
+	innermost first -- the same shape ___trimCapturedStack___: answers for a
+	raise-time capture, so the one walk serves both.
+
+	``_frameContentsAt:'' answers an Array whose first slot is the GsNMethod and
+	whose SECOND is the ip in the ``_sourceAtIp:'' convention -- the same ip
+	_gsStack records, so line derivation needs no translation.  (Not the ip in
+	``_frameDescrAt:'', which is a different number for the same frame.)
+
+	Answers nil rather than an empty array when the process cannot be read: a
+	terminated or running process has no readable frames, and a caller
+	distinguishing ``no frames'' from ``no more sections'' would be reading a
+	distinction that does not exist."
+
+	| both |
+	both := self ___framesAndLevelsOfSuspendedProcess___: aProcess.
+	^ both isNil ifTrue: [nil] ifFalse: [both at: 1]
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___generatorOwningStack___: triples [
+	"The PythonGenerator whose body is running on the stack ``triples'' belongs
+	to, or nil when that stack is not a generator body.
+
+	Read off the frames themselves: _forkBody's blocks run with the generator as
+	self, so the generator is reachable from any frame whose home method is
+	_forkBody.  Scanned from the innermost end, because the first such frame out
+	from here is this process's own -- a process runs exactly one generator body.
+
+	Through ``selfValue'', NOT the triple's third slot.  A captured triple holds
+	(method, ip, RECEIVER), and the receiver of a BLOCK frame is the ExecBlock
+	itself, not the self it closes over -- so the obvious read answers an
+	ExecBlock for every frame here and the generator is never found."
+
+	| i |
+	triples isNil ifTrue: [^ nil].
+	i := 1.
+	[i + 2 <= triples size] whileTrue: [
+		| meth home rcvr cand |
+		meth := triples at: i.
+		home := meth isNil
+			ifTrue: [nil]
+			ifFalse: [[meth homeMethod] on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: meth]].
+		(home notNil and: [home selector == #'_forkBody']) ifTrue: [
+			rcvr := triples at: i + 2.
+			cand := (rcvr isKindOf: PythonGenerator)
+				ifTrue: [rcvr]
+				ifFalse: [[rcvr selfValue] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]].
+			(cand isKindOf: PythonGenerator) ifTrue: [^ cand]].
+		i := i + 3].
+	^ nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___generatorStackFor___: anException [
+	"The stashed generator-side capture for anException, or nil."
+
+	| reg |
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [^ nil].
+	^ reg at: anException otherwise: nil
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___handlerDepth___ [
+	"How many ``except'' handler BODIES are currently running in this session.
+
+	Used to keep an exception raised in one handler from being caught by a LATER
+	handler of the same try.  Python's except clauses are alternatives for the try
+	BODY only, but they compile to nested protected blocks -- so the later
+	handlers' on:do: enclose the earlier handlers' bodies and would catch what
+	they raise.
+
+	A selector records this depth when it is INSTALLED and refuses to handle
+	anything once the depth has risen above it (PyLazyExceptSelector
+	>>on:shieldedAbove:).  Recording the depth rather than a flag is what makes
+	nesting work: a try INSIDE a handler installs its own selectors at the raised
+	depth, so its own handlers still catch from its own body, while the outer
+	try's later handlers stay shielded."
+
+	^ (SessionTemps @env0:current @env0:at: #'GrailHandlerDepth' otherwise: 0)
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___handlerTokenActive___: aToken [
+	"Is one of THIS try activation's own handler bodies currently running?
+
+	Identity against the token, and a search of the WHOLE stack rather than just
+	its top, because both readings matter:
+
+	  * my clause-1 handler is running            -> shield my later clauses
+	  * my clause-1 handler called g, and g's own
+	    handler is raising                        -> still inside my handler,
+	                                                 so still shield
+	  * g's handler is raising and no handler of
+	    mine is running                           -> NOT mine, so my later
+	                                                 clauses must catch
+
+	That last line is the one a depth test got wrong.
+
+	A fresh token per try ACTIVATION, not per try site: a recursive function
+	whose outer call is inside its own handler would otherwise shield the inner
+	call's clauses against an exception that has nothing to do with them."
+
+	aToken @env0:isNil ifTrue: [^ false].
+	^ self ___handlerTokenStack___ @env0:anySatisfy: [:each | each @env0:== aToken]
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___handlerTokenStack___ [
+	"The try-activation tokens of the ``except'' handler bodies currently
+	running, outermost first.  Session-local, like the depth it parallels."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'GrailHandlerTokens'
+		ifAbsentPut: [OrderedCollection @env0:new]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___hasPythonPragma___: aMethod [
+	"True iff aMethod is marked by codegen's ``<grailPython>'' pragma.
+
+	A BLOCK carries none of its own -- a block's compiled method is a separate
+	GsNMethod whose ``pragmas'' is empty -- so a block is asked through its
+	``homeMethod'', which is where the pragma was written.  That is the case the
+	temp probe this replaces gets wrong: a nested def, and any body codegen wraps
+	in an outer block, declares ___curPos___ inside the block where method-level
+	debugInfo cannot see it.
+
+	No source read, so nothing here can fault against the repository."
+
+	| m |
+	aMethod isNil ifTrue: [^ false].
+	m := aMethod @env0:isMethodForBlock
+		ifTrue: [aMethod @env0:homeMethod]
+		ifFalse: [aMethod].
+	m isNil ifTrue: [^ false].
+	^ (m @env0:pragmas @env0:ifNil: [#()])
+		@env0:anySatisfy: [:p | p @env0:keyword @env0:== #'grailPython']
+
+]
+
+{ #category : 'Grail-Initialization' }
+BaseException class >> ___hasUserInit___ [
+	"True if this class defines its OWN Python __init__ (any arity) somewhere
+	below BaseException — i.e. a user-defined exception (or a library one like
+	werkzeug's HTTPException/BuildError) that must run __init__ when raised.
+	Built-in exceptions inherit BaseException's __init__ and return false."
+
+	| c |
+	c := self.
+	[c notNil and: [c ~~ BaseException]] whileTrue: [
+		| md |
+		md := c methodDictForEnv: 1.
+		((md includesKey: #'__init__')
+			or: [(md includesKey: #'__init__:')
+			or: [(md includesKey: #'__init__:_:')
+			or: [(md includesKey: #'__init__:_:_:')
+			or: [md includesKey: #'___init__:kw:']]]])
+				ifTrue: [^ true].
+		c := c superclass.
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-Initialization' }
+BaseException class >> ___hasUserNew___ [
+	"True if this class defines its OWN Python __new__ (any arity) somewhere
+	below BaseException.  The companion of ___hasUserInit___, and it exists for
+	the same reason: a raise has to know whether CALLING the class differs from
+	ALLOCATING it.
+
+	It differs in a way __init__ does not.  A user __init__ can only fail, and
+	the failure is an exception either way; a user __new__ can SUCCEED and hand
+	back something that is not an exception at all -- CPython's own test raises
+	a class whose __new__ answers ``[''mortal value'']'' -- and then the raise
+	owes a TypeError rather than the class it was given.  Allocating directly,
+	which is what ___signalNew___ does, cannot see any of that."
+
+	| c |
+	c := self.
+	[c notNil and: [c ~~ BaseException]] whileTrue: [
+		| md |
+		md := c methodDictForEnv: 1.
+		((md includesKey: #'__new__')
+			or: [(md includesKey: #'__new__:')
+			or: [(md includesKey: #'__new__:_:')
+			or: [(md includesKey: #'__new__:_:_:')
+			or: [md includesKey: #'___new__:kw:']]]])
+				ifTrue: [^ true].
+		c := c superclass.
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-Exception handling' }
+BaseException class >> ___initCatchAll___ [
+	CatchAllSelector := (BaseException , AlmostOutOfStackError) , AlmostOutOfStack
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___innermostMapEntryIn___: src marker: marker containing: ofs [
+	"The position-map entry -- { startOfs. endOfs. beginLine. colno. endLine.
+	endColno } -- with the SMALLEST range containing ofs, or nil.  marker is
+	___positionMapMarkerIn___:'s answer for src.
+
+	INNERMOST IS SMALLEST RANGE.  Ranges nest exactly as the AST does, so the
+	shortest containing one is the deepest node.  Ties cannot arise between
+	different nodes: two nodes with identical extents describe the same text,
+	and either answer is the same span.
+
+	Parsed in one pass without collecting the map, because the ip-keyed caller
+	runs while a traceback is being built and asks about one offset.  A caller
+	asking about many offsets of one method (pythonSendSitesIn:selector:) pays
+	this per offset; maps are short next to the sources they describe."
+
+	| k n best bestWidth |
+	"Six numbers per entry, whitespace separated, to the closing quote."
+	k := marker + 15.
+	n := Array new: 6.
+	[k <= src size and: [(src at: k) ~= $"]] whileTrue: [
+		| i good any |
+		good := true.
+		1 to: 6 do: [:j |
+			| digits |
+			[k <= src size and: [(src at: k) = $ ]] whileTrue: [k := k + 1].
+			"Accumulated, not collected: a WriteStream per number is six
+			allocations per entry for a value that is always a SmallInteger."
+			digits := 0.
+			any := false.
+			[k <= src size and: [(src at: k) isDigit]] whileTrue: [
+				any := true.
+				digits := digits * 10 + (src at: k) digitValue.
+				k := k + 1].
+			any
+				ifTrue: [n at: j put: digits]
+				ifFalse: [good := false]].
+		good ifFalse: [
+			"Malformed tail -- keep whatever complete entries were read."
+			^ best].
+		i := (n at: 2) - (n at: 1).
+		((n at: 1) <= ofs and: [ofs <= (n at: 2)])
+			ifTrue: [
+				(best isNil or: [i < bestWidth]) ifTrue: [
+					bestWidth := i.
+					best := n copy]].
+		[k <= src size and: [(src at: k) = $ ]] whileTrue: [k := k + 1]].
+	^ best
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irDefNameOnLine___: ln [
+	"The NAME of the ``[async ]def NAME'' that ln, a line of Python, opens --
+	after any indentation -- or nil when it opens none."
+
+	| i n start |
+	n := ln @env0:size.
+	i := 1.
+	[i @env0:<= n and: [(ln @env0:at: i) @env0:= $  or: [(ln @env0:at: i) @env0:= Character tab]]]
+		@env0:whileTrue: [i := i @env0:+ 1].
+	((i @env0:+ 5) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 5) @env0:= 'async ']) ifTrue: [
+		i := i @env0:+ 6.
+		[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1]].
+	((i @env0:+ 3) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 3) @env0:= 'def ']) ifFalse: [^ nil].
+	i := i @env0:+ 4.
+	[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1].
+	start := i.
+	[i @env0:<= n and: [(ln @env0:at: i) @env0:isLetter
+		or: [(ln @env0:at: i) @env0:isDigit or: [(ln @env0:at: i) @env0:= $_]]]]
+		@env0:whileTrue: [i := i @env0:+ 1].
+	i @env0:= start ifTrue: [^ nil].
+	^ (ln @env0:copyFrom: start to: i @env0:- 1) @env0:asString
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irNestedNameForBlock___: aBlockMethod home: aHomeMethod [
+	"The Python name of the nested def (or ``<lambda>'') whose closure block
+	aBlockMethod compiles, when aHomeMethod -- the walk's own idea of the
+	frame's home, which a CLEAN block (a nested def capturing nothing) cannot
+	supply itself -- is an IR-built Python method: read
+	from the home's attached PYTHON source at the block's own source offset,
+	where FunctionDefAst>>___emitIRNestedBlockOn___: stamps the block: the
+	``def'' keyword (``async def'' for a coroutine), or ``lambda''.  Nil for a
+	text-compiled home, an offset that is not at one of those, or any error:
+	the caller then falls back to the text scans, so this only ADDS names.
+	Cached per block method with the method as key, like the stamp cache."
+
+	| cache |
+	cache := SessionTemps current at: #'GrailIRBlockNameCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIRBlockNameCache' put: cache].
+	^ cache at: aBlockMethod ifAbsent: [
+		| name |
+		name := [self ___deriveIRNestedNameForBlock___: aBlockMethod home: aHomeMethod]
+			@env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+		cache at: aBlockMethod put: name.
+		name]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irNestedNameIn___: pythonSource line: aLine [
+	"The innermost nested ``def'' of pythonSource -- an IR method's attached
+	Python slice -- whose body contains SLICE line aLine, by indentation: a def at
+	indentation k on line L owns every following non-blank line indented
+	deeper than k, up to the first one that is not.  The FIRST def in the
+	source is the method's own header (the slice begins at its ``def'', so it
+	sits at column 0 while its body carries the module's indentation) and is
+	skipped: this namer answers nested defs only, nil for a line in none --
+	the caller's ``merge into the home'' case.  Innermost = the greatest
+	containing L."
+
+	| lines best bestL sawHome |
+	aLine isNil ifTrue: [^ nil].
+	lines := pythonSource @env0:subStrings: (String @env0:with: Character lf).
+	best := nil.
+	bestL := 0.
+	sawHome := false.
+	1 to: (lines @env0:size min: aLine) do: [:li |
+		| ln i n k name |
+		ln := lines @env0:at: li.
+		n := ln @env0:size.
+		i := 1.
+		[i @env0:<= n and: [(ln @env0:at: i) @env0:= $  or: [(ln @env0:at: i) @env0:= Character tab]]]
+			@env0:whileTrue: [i := i @env0:+ 1].
+		k := i @env0:- 1.
+		((i @env0:+ 5) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 5) @env0:= 'async ']) ifTrue: [
+			i := i @env0:+ 6.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1]].
+		name := nil.
+		((i @env0:+ 3) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 3) @env0:= 'def ']) ifTrue: [
+			| start |
+			i := i @env0:+ 4.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1].
+			start := i.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:isLetter
+				or: [(ln @env0:at: i) @env0:isDigit or: [(ln @env0:at: i) @env0:= $_]]]]
+				@env0:whileTrue: [i := i @env0:+ 1].
+			i @env0:> start ifTrue: [name := (ln @env0:copyFrom: start to: i @env0:- 1) @env0:asString]].
+		name notNil ifTrue: [
+			sawHome
+				ifFalse: [sawHome := true]
+				ifTrue: [
+					"The range: forward to the first non-blank line indented k or less."
+					| e j done |
+					e := li.
+					j := li @env0:+ 1.
+					done := false.
+					[done not and: [j @env0:<= lines @env0:size]] @env0:whileTrue: [
+						| l2 m2 i2 |
+						l2 := lines @env0:at: j.
+						m2 := l2 @env0:size.
+						i2 := 1.
+						[i2 @env0:<= m2 and: [(l2 @env0:at: i2) @env0:= $  or: [(l2 @env0:at: i2) @env0:= Character tab]]]
+							@env0:whileTrue: [i2 := i2 @env0:+ 1].
+						i2 @env0:> m2
+							ifTrue: [j := j @env0:+ 1]
+							ifFalse: [
+								(i2 @env0:- 1) @env0:> k
+									ifTrue: [e := j. j := j @env0:+ 1]
+									ifFalse: [done := true]]].
+					(li @env0:<= aLine and: [aLine @env0:<= e and: [li @env0:> bestL]]) ifTrue: [
+						bestL := li.
+						best := name]]]].
+	^ best
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___irPositionsFromSource___: src [
+	"Private to the position API: an IR method's attached source IS the user's
+	Python -- the def's slice of the module, verbatim -- so a line's INDEX in the
+	slice, rebased by the def's first module line (___irSliceFirstLineIn___:), is
+	its absolute module line number.
+
+	Split by hand rather than with ``subStrings:'', which DROPS empty parts: a
+	blank line inside the def still occupies a line number, so collapsing it
+	would renumber every position below it.
+
+	Only the slice's own lines are positions.  What follows them is metadata
+	Grail appends (___irSliceSourceLineCountIn___: says exactly what), and it
+	used to be reported as Python: every IR method with a ___GRAILPOS___ map --
+	any def that sends anything -- answered one extra entry, the map comment
+	itself, at a module line past the def's end that belongs to other code."
+
+	| out lines base |
+	out := OrderedCollection new.
+	lines := self ___splitLinesOf___: src.
+	base := ((self ___irSliceFirstLineIn___: src) ifNil: [1]) - 1.
+	1 to: (self ___irSliceSourceLineCountIn___: lines) do: [:i |
+		| ln |
+		ln := lines at: i.
+		ln trimSeparators isEmpty ifFalse: [
+			out add: (Array with: i + base with: nil with: nil with: nil with: ln)]].
+	^ out asArray
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irPythonLineForMethod___: aMethod ip: anIp [
+	"The ABSOLUTE Python line an IR-built method was executing at anIp.
+
+	TWO STEPS, because neither half can do the job alone.
+
+	The CARET SCAN decides whether there is a frame at all.  _sourceAtIp: marks
+	the reached position with a caret line (first non-blank ``*''), and a frame
+	is identified as Python by this derivation answering non-nil -- so the scan
+	has to run and has to fail closed, exactly as ___refineSpan___:forMethod:ip:
+	describes for the span: nil in, nil out.  What it yields is the count of
+	source lines above the caret, which is SLICE-relative.
+
+	The MAP supplies the absolute line.  The slice is attached verbatim -- it is
+	NOT prefixed with (beginLine - 1) newlines, which an earlier reader of this
+	comment will remember, and which is what used to make the count absolute by
+	construction.  Nor can the VM be asked: methNode lineNumber is set, but
+	nothing on this build carries it through to the generated method, and
+	_lineNumberForIp: answers the slice-relative line too (measured: 1 and 2 for
+	a def whose body spans module lines 11-14).  The position map is the one
+	place the ABSOLUTE line survives, because atNode: records ``aNode beginLine''
+	from the AST itself rather than deriving it from an offset.
+
+	So the traceback walk and the live walk now agree about WHERE a frame is
+	while still disagreeing about what a frame is -- the map lookup is the same
+	one ___tracebackLineForMethod___:ip: makes, but the caret scan above still
+	sets frame identity and statement granularity, which is what that method's
+	``the live walk keeps the statement-granular scan'' is about.
+
+	Falls back to the relative count when the method carries no map: a body
+	whose only expression emits no send records nothing, and answering the
+	def-relative line there is what this did for every method before."
+
+	| report lines caretIdx count |
+	report := [aMethod _sourceAtIp: anIp] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	report isNil ifTrue: [^ nil].
+	lines := report subStrings: (String with: Character lf).
+	caretIdx := 0.
+	1 to: lines size do: [:i |
+		(self ___isCaretLine___: (lines at: i))
+			ifTrue: [caretIdx = 0 ifTrue: [caretIdx := i]]].
+	caretIdx = 0 ifTrue: [^ nil].
+	count := 0.
+	1 to: caretIdx - 1 do: [:i |
+		(self ___isCaretLine___: (lines at: i)) ifFalse: [count := count + 1]].
+	count = 0 ifTrue: [^ nil].
+	"No map: count is SLICE-relative, so rebase it by the def's first module
+	line, read from the ``# line N file ...'' comment FunctionDefAst appends to
+	the slice.  Answering count bare reported a frame paused on a def's second
+	line as module line 2 -- a blank line near the top of the file, so the
+	traceback printed an empty source line (ClassBodyTracebackTestCase)."
+	^ (self ___mapSpanForMethod___: aMethod ip: anIp)
+		ifNil: [
+			(self ___irSliceFirstLineIn___: ([aMethod @env0:sourceString]
+					on: Error do: [:ex |
+						(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+						ex return: nil]))
+				ifNil: [count]
+				ifNotNil: [:first | count + first - 1]]
+		ifNotNil: [:map | map @env0:at: 1]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irPythonSpanForMethod___: aMethod ip: anIp [
+	"The PEP 657 span an IR-built method was executing at anIp, or nil.
+
+	THE TWIN of ___irPythonLineForMethod___:ip:, and the same division of labour
+	as on the text path: the line comes first, the span refines it.  What is
+	NOT the same is how much work is left to do.  A text-compiled method needs
+	both halves of a journey -- ip to Smalltalk offset, then Smalltalk offset to
+	Python node -- and only the second half is knowable at emit time, which is
+	why PrettyWriteStream has to record it.  An IR method needs no Smalltalk
+	half at all: the builder stamps every node with its PYTHON offset already,
+	so the VM's own source-offset table answers a Python offset directly, and
+	the only thing missing was offset -> span.  Hence a map that is read by
+	___mapSpanForMethod___:ip:onLine: with no IR-specific parsing at all.
+
+	THE LINE COMES FROM THE MAP, not from the caret scan, so that this agrees
+	with ___tracebackLineForMethod___:ip: BY CONSTRUCTION -- that method takes
+	the traceback's line from the very same lookup.  An earlier version filtered
+	the lookup to the caret scan's line instead, which was right while the map
+	refined columns only; once a frame's LINE began to come from the map too,
+	filtering on the caret line would have restricted the span to a line the
+	frame no longer claims to be on, and the caller's ``span line = frame line''
+	gate would have thrown the columns away.
+
+	The caret scan still DECIDES whether there is a frame at all: nil in, nil
+	out, exactly as ___tracebackLineForMethod___:ip: does it.  And where the two
+	disagree -- the live-frame walk, which deliberately keeps the coarse
+	statement line -- that same gate drops the span, which is the wanted
+	behaviour there (CPython reports colno None for a walk_stack frame).
+
+	Element 5 is the RAW source line, indentation included, because the columns
+	are absolute and traceback.FrameSummary does its own stripping.  An IR
+	method's attached source is the UNPADDED def slice, so the absolute line is
+	rebased by the slice's first module line (___irSliceFirstLineIn___:)."
+
+	| line map src |
+	line := self ___irPythonLineForMethod___: aMethod ip: anIp.
+	line isNil ifTrue: [^ nil].
+	map := self ___mapSpanForMethod___: aMethod ip: anIp.
+	map isNil ifTrue: [^ nil].
+	line := map @env0:at: 1.
+	src := [aMethod @env0:sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	"line is ABSOLUTE (the map records each node's own beginLine) but the
+	attached source is the unpadded def slice, so index it slice-relative."
+	^ { map @env0:at: 1.
+		map @env0:at: 2.
+		map @env0:at: 3.
+		map @env0:at: 4.
+		self ___sourceLine___: line - ((self ___irSliceFirstLineIn___: src) ifNil: [1]) + 1 of: src }
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irSliceFirstLineIn___: src [
+	"The ABSOLUTE module line an IR method's attached def slice starts on, or
+	nil.  FunctionDefAst>>___irMethodBodyCoreOn___:install: attaches the def
+	slice VERBATIM and ends it with one comment line of its own,
+	``# line <beginLine> file <path>'' -- the only place the slice's module
+	position survives now that the slice is no longer padded with
+	(beginLine - 1) newlines.  Every reader that turns a line of the slice into
+	a module line needs it.
+
+	Read from the END: that comment is the slice's last source line, and only a
+	position-map comment (a ___GRAILPOS___ comment) may follow it.  Accepting it
+	ONLY there means a user comment of the same shape inside the def cannot be
+	mistaken for it."
+
+	| lines |
+	src isNil ifTrue: [^ nil].
+	lines := self ___splitLinesOf___: src.
+	lines size to: 1 by: -1 do: [:i | | ln tokens n |
+		ln := (lines at: i) trimSeparators.
+		(ln isEmpty or: [ln at: 1 equals: '"___GRAILPOS___']) ifFalse: [
+			(ln at: 1 equals: '# line ') ifFalse: [^ nil].
+			tokens := ln subStrings: ' '.
+			tokens size >= 3 ifFalse: [^ nil].
+			n := [(tokens at: 3) asNumber] on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+			^ ((n isKindOf: Integer) and: [n >= 1]) ifTrue: [n] ifFalse: [nil]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___irSliceSourceLineCountIn___: lines [
+	"Private to the position API: how many of lines -- an IR method's attached
+	source, split by ___splitLinesOf___: -- are the user's def slice, i.e. the
+	index of its last line.  Everything after that is metadata Grail appends:
+
+	  # line <beginLine> file <path>      FunctionDefAst, always
+	  ""___GRAILPOS___ ...""                PyMethodIRBuilder>>attachPositionMap,
+	                                      when the body recorded any position
+
+	each possibly behind a blank line.  Walked from the END under the same rule
+	___irSliceFirstLineIn___: reads the ``# line'' comment by, so the two agree
+	on where the slice stops, and so a user comment of the same shape INSIDE the
+	def is still counted as source rather than mistaken for the trailer.  With
+	no ``# line'' comment there is no trailer to cut beyond the map, and every
+	line above it is source."
+
+	| i |
+	i := lines size.
+	[i >= 1 and: [| ln |
+		ln := (lines at: i) trimSeparators.
+		ln isEmpty or: [ln at: 1 equals: '"___GRAILPOS___']]]
+			whileTrue: [i := i - 1].
+	(i >= 1 and: [(lines at: i) trimSeparators at: 1 equals: '# line '])
+		ifTrue: [i := i - 1].
+	^ i
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irSoleNestedNameIn___: pythonSource [
+	"The name of the ONE nested def in an IR method's Python source slice, or
+	nil when there are none or several.  The first ``def'' line is the
+	method's own header and is skipped (see ___irNestedNameIn___:line:)."
+
+	| lines found count sawHome |
+	lines := pythonSource @env0:subStrings: (String @env0:with: Character lf).
+	found := nil.
+	count := 0.
+	sawHome := false.
+	lines do: [:ln |
+		| i n name |
+		n := ln @env0:size.
+		i := 1.
+		[i @env0:<= n and: [(ln @env0:at: i) @env0:= $  or: [(ln @env0:at: i) @env0:= Character tab]]]
+			@env0:whileTrue: [i := i @env0:+ 1].
+		((i @env0:+ 5) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 5) @env0:= 'async ']) ifTrue: [
+			i := i @env0:+ 6.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1]].
+		name := nil.
+		((i @env0:+ 3) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 3) @env0:= 'def ']) ifTrue: [
+			| start |
+			i := i @env0:+ 4.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1].
+			start := i.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:isLetter
+				or: [(ln @env0:at: i) @env0:isDigit or: [(ln @env0:at: i) @env0:= $_]]]]
+				@env0:whileTrue: [i := i @env0:+ 1].
+			i @env0:> start ifTrue: [name := (ln @env0:copyFrom: start to: i @env0:- 1) @env0:asString]].
+		name notNil ifTrue: [
+			sawHome
+				ifFalse: [sawHome := true]
+				ifTrue: [
+					count := count @env0:+ 1.
+					found := name]]].
+	^ count @env0:= 1 ifTrue: [found] ifFalse: [nil]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___irSourceLooksLikeDef___: src [
+	"src, ignoring leading whitespace, begins with ``def ''/``async def ''."
+
+	| trimmed |
+	src isNil ifTrue: [^ false].
+	trimmed := src trimSeparators.
+	^ ((trimmed size >= 4) and: [(trimmed copyFrom: 1 to: 4) = 'def '])
+		or: [(trimmed size >= 10) and: [(trimmed copyFrom: 1 to: 10) = 'async def ']]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___isCaretLine___: aLine [
+	"Is this line _sourceAtIp:'s IP MARKER, rather than source that merely looks
+	like one?
+
+	The marker is an asterisk, then the caret and the ip, then padding:
+
+	    * ^1                                                            *******
+
+	Both derivations used to test ``trimSeparators beginsWith: $*'' alone, and
+	that is not sufficient: a Python DOCSTRING is emitted as a multi-line
+	Smalltalk string literal, so its own lines appear in the report verbatim, and
+	a docstring bullet list is indistinguishable from the marker --
+
+	    'Summary line.
+
+	        * first bullet
+	        * second bullet
+	        '.
+
+	Since the scan takes the FIRST match, a bullet ABOVE the real marker wins,
+	and the caret is then located too early.  Measured on a four-line function
+	with a bulleted docstring: Grail reported line 5 (the docstring's own
+	___curPos___) where CPython reports 15.  When the misplaced caret lands above
+	EVERY ___curPos___ the scan answers nil instead, and a nil drops the frame --
+	which surfaces as sys._getframe raising ``call stack is not deep enough''.
+	One cause, both symptoms, and the reason this family looked like two
+	unrelated intermittent bugs.
+
+	Requiring ``^'' followed by a digit is what separates them: the marker always
+	carries the ip, and a prose bullet does not begin with a caret and a number.
+	Grail's own Smalltalk method comments use the same bullet style (11 of 1060
+	probed methods have such a line), so this is not exotic input."
+
+	| t rest |
+	aLine isNil ifTrue: [^ false].
+	t := aLine @env0:trimSeparators.
+	(t @env0:beginsWith: '*') ifFalse: [^ false].
+	rest := (t @env0:copyFrom: 2 to: t @env0:size) @env0:trimSeparators.
+	(rest @env0:beginsWith: '^') ifFalse: [^ false].
+	rest @env0:size @env0:< 2 ifTrue: [^ false].
+	^ (rest @env0:at: 2) @env0:isDigit
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___isControlFlowSignal___: anException [
+	"True for Grail's internal ``return'' / ``break'' / ``continue'' carriers.
+
+	They are signalled like exceptions so they can unwind through ensure: and
+	ifCurtailed:, but they are not exceptions in Python's sense: nothing is
+	being handled, so they must never appear in sys.exc_info(), become an
+	exception's __context__, or be reported to user code.  The same three are
+	screened by TryAst's per-handler control-flow guard, which re-raises them
+	rather than letting an ``except Exception'' swallow a pending return."
+
+	^ (anException @env0:isKindOf: PythonReturn)
+		or: [(anException @env0:isKindOf: PythonBreak)
+		or: [anException @env0:isKindOf: PythonContinue]]
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___isGeneratedPythonMethod___: aMethod [
+	"Whether ``aMethod'' is compiled Python rather than part of Grail's runtime.
+
+	Asked of the METHOD rather than of an ip, so the answer is independent of
+	where the frame is suspended (§9.10).
+
+	IT HAS TO BE ANSWERED PER FRAME.  The two languages INTERLEAVE rather than
+	layer -- a Python ``sorted'' calls Smalltalk's sort, which calls a Python
+	``__lt__'', which can call ``sorted'' again -- so there is no boundary frame
+	to mark and no depth above which everything is Python.  Every dunder is such
+	a callback (__lt__ from a sort, __getattr__ from the attribute path,
+	__str__, __iter__, __eq__), and the traceback must ELIDE the Smalltalk
+	frames between two Python ones, which is a per-frame question.
+
+	THREE PROBES, ordered by what they touch.  WHICH ONE ANSWERS DEPENDS ON HOW
+	THE METHOD WAS BUILT, and both build paths now answer from memory:
+
+	  * TEXT codegen writes a ``<grailPython>'' PRAGMA at method level
+	    (AbstractNode >> ___emitPythonPragmaOn___:), so ``pragmas'' answers from
+	    the compiled method in memory, for every emit shape, and for a doit --
+	    which has no selector at all.  A BLOCK's own pragmas are empty, so a
+	    block asks its ``homeMethod'' first.
+	  * IR codegen CANNOT carry a pragma, and this is structural rather than an
+	    omission: a pragma is created by GemStone's Smalltalk LEXER
+	    (comparse.c ``appendToPragmasObj'', the only writer of cst->PragmasH)
+	    and copied into debugInfo by the generator (comgen.c:1721), but
+	    primitive 679 runs the generator WITHOUT the lexer, and GsComMethNode
+	    has no pragma ivar to carry one.  So the IR builder stores its own
+	    marker temp instead (PyMethodIRBuilder >> ___emitPythonIdentityMarker___),
+	    which the SECOND probe reads.  A request is open with the GemStone team
+	    for a pragma ivar on GsComMethNode plus a few lines in prim 679 to seed
+	    cst->PragmasH from it; everything downstream in comgen.c already exists,
+	    and when that lands the marker temp can go.
+
+	SO THE SOURCE PROBE IS NOT A LEGACY SHIM.  It reads as one -- it was added
+	for methods compiled before the pragma -- but with IR enabled it is the
+	route for any generated method whose temps the second probe cannot see, and
+	it is the one read here that goes back to the repository and can fault under
+	concurrent shard workers.  Do not prune it as dead compatibility code.
+
+	The two probes below the pragma, and why each is weaker:
+
+	  * argsAndTemps reads METHOD-level debugInfo, and a def whose body compiles
+	    into an inner block declares the temp in the BLOCK, out of its reach.
+	    Measured on argparse: 26 of 129 generated methods (20%) miss it -- the
+	    docstring here used to say 11 of 46 for _py_warnings, and the shape is
+	    the same.
+	  * those 26 fall through to the SOURCE probe, and the source string is the
+	    one read here that goes back to the repository, which under concurrent
+	    shard workers can fault.
+
+	A TRANSIENT fault used to drop the frame from THIS walk only: the walk
+	answered false, the chain came up short (``ValueError: call stack is not
+	deep enough''), and the next walk re-probed fine -- a one-off failure in
+	whatever frame-sensitive test was running, clean on every re-run.  Three
+	sightings in one week (WarningLocation, FrameEquality, Traceback), never
+	reproducible.  So the source probe now RETRIES once -- a faulting page
+	read that just failed is the likeliest read to succeed a moment later --
+	and a double failure leaves a breadcrumb in SessionTemps
+	(#GrailPyProbeFailures) so a run that still flakes says why.  Failures
+	stay UNCACHED either way: a real false is a property of the method, a
+	failed probe is a property of the moment.
+
+	#GrailPyProbeFailCount is a TEST SEAM: the resilience test sets it to
+	simulate that many consecutive transient faults, because a real page
+	fault cannot be scheduled.  One proves the retry absorbs a single fault;
+	two prove a double fault answers false for this walk only, leaves the
+	breadcrumb, and stays uncached.  Each injected fault decrements it, and
+	it costs one dictionary probe per source-probe attempt.
+
+	Cached per method in SessionTemps, like the ip -> line cache and for the
+	same reason: the answer is fixed for the life of the method, and a stack
+	walk revisits the same methods constantly."
+
+	| cache key |
+	cache := SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' put: cache].
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := aMethod.
+	^ cache @env0:at: key ifAbsent: [
+		| answer attempt |
+		"Fast path: the PRAGMA codegen stamps on every generated method."
+		answer := [BaseException ___hasPythonPragma___: aMethod]
+			@env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: false].
+		answer ifTrue: [
+			cache @env0:at: key put: true.
+			^ true].
+		"Second: a marker as a METHOD temp, read from in-memory debugInfo.
+		 EITHER name answers.  ``___grailPython___'' is deliberate and exact --
+		 PyMethodIRBuilder >> ___emitPythonIdentityMarker___ declares and stores
+		 it as the first statement of every IR-built method, because an IR
+		 method can carry no pragma (pragmas are made by GemStone's Smalltalk
+		 lexer, which primitive 679 does not run).  ``___curPos___'' is the old
+		 INFERENCE, and stays for text methods compiled before the pragma; it
+		 is the weaker of the two, missing a def whose body compiles into an
+		 inner block."
+		answer := [ | names |
+			names := aMethod @env0:argsAndTemps @env0:ifNil: [#()].
+			(names @env0:includes: #'___grailPython___')
+				or: [names @env0:includes: #'___curPos___']]
+			@env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: false].
+		answer ifTrue: [
+			cache @env0:at: key put: true.
+			^ true].
+		"Source probe, twice.  attempt = 1 is allowed to fail quietly; a second
+		failure is recorded and answered as ``not Python'' for this walk only."
+		answer := nil.
+		attempt := 1.
+		[answer isNil and: [attempt @env0:<= 2]] whileTrue: [
+			answer := [
+				| seam |
+				seam := SessionTemps @env0:current
+					@env0:at: #'GrailPyProbeFailCount' otherwise: 0.
+				seam @env0:> 0 ifTrue: [
+					SessionTemps @env0:current
+						@env0:at: #'GrailPyProbeFailCount' put: seam @env0:- 1.
+					Error @env0:new @env0:signal: 'grail probe test seam'].
+				BaseException ___sourceMarksGeneratedPython___: aMethod @env0:sourceString]
+				@env0:on: Error do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil].
+			attempt := attempt @env0:+ 1].
+		answer isNil ifTrue: [
+			SessionTemps @env0:current
+				@env0:at: #'GrailPyProbeFailures'
+				put: ((SessionTemps @env0:current
+					@env0:at: #'GrailPyProbeFailures' otherwise: 0) @env0:+ 1).
+			^ false].
+		cache @env0:at: key put: answer.
+		answer]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___isIRPythonMethod___: aMethod [
+	"True iff aMethod is a direct-to-IR compiled Python method: its attached
+	source is the def's PYTHON source, so with leading whitespace trimmed it
+	begins with ``def ''/``async def ''.  Its Python line then comes from the
+	native source-offset mechanism, not a ___curPos___ scan.  The prefix test
+	is decisive on its own: a text-compiled method's source begins with its
+	Smalltalk selector pattern, and no Python identifier is ``def''.  It USED to
+	be paired with ``source contains no ___curPos___'', on the reasoning that
+	only generated text carries the marker -- but an IR method's source is the
+	user's Python, COMMENTS INCLUDED, and general_traceback.py's comments
+	discuss ___curPos___ by name: under the flag its defs were classed as text,
+	the marker scan found no ``___curPos___ :='' store, and both catching
+	frames vanished from their tracebacks.  Cached per method in SessionTemps,
+	like the ip->line cache; the answer is fixed for the method."
+
+	| cache |
+	cache := SessionTemps current at: #'GrailIRMethodCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIRMethodCache' put: cache].
+	^ cache at: aMethod ifAbsent: [
+		| verdict src |
+		verdict := [src := aMethod sourceString.
+			src notNil and: [self ___irSourceLooksLikeDef___: src]]
+			on: Error do: [:ex | false].
+		cache at: aMethod put: verdict.
+		verdict]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___lineNumberAfterStore___: aString from: anIndex [
+	"The Python line a ``___curPos___ :='' store records.  Codegen emits BOTH
+	shapes -- the bare SmallInteger of an ordinary statement and the 5-element
+	PEP 657 literal array -- and the line is the first number in either."
+
+	| k digits |
+	k := anIndex.
+	[(k @env0:<= aString @env0:size)
+		and: [(aString @env0:at: k) @env0:= $ ]] whileTrue: [k := k @env0:+ 1].
+	(k @env0:<= aString @env0:size and: [(aString @env0:at: k) @env0:= $#])
+		ifTrue: [k := k @env0:+ 1].
+	(k @env0:<= aString @env0:size and: [(aString @env0:at: k) @env0:= $(])
+		ifTrue: [k := k @env0:+ 1].
+	digits := WriteStream @env0:on: String @env0:new.
+	[(k @env0:<= aString @env0:size)
+		and: [(aString @env0:at: k) @env0:isDigit]] whileTrue: [
+			digits @env0:nextPut: (aString @env0:at: k).
+			k := k @env0:+ 1].
+	digits @env0:contents @env0:isEmpty ifTrue: [^ nil].
+	^ digits @env0:contents @env0:asNumber
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___lineTraceDir___ [
+	"The directory line-derivation tracing writes to, or nil when it is off.
+
+	Same shape as importlib ___codegenTraceDir___: read the env var once per
+	session and cache in SessionTemps, so each gem reads its own value and two
+	sessions never contend on a committed slot.
+
+	This exists for a failure that happens only somewhere one cannot attach to.
+	test_iter's test_exception_locations reports line 1161 where 1160 is right,
+	on Linux x86_64, deterministically, and never on Darwin arm64 -- not on 4.0,
+	not on 3.7.5, and not at the exact SHA CI failed on.  The generated Smalltalk
+	for that function is byte-identical on the two platforms, so the divergence
+	is in what _sourceAtIp: answers, and nothing in a pass/fail line can show
+	that."
+
+	| temps dir |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailLineTraceDirChecked___')
+		ifTrue: [^ temps at: #'___grailLineTraceDir___' otherwise: nil].
+	dir := System gemEnvironmentVariable: 'GRAIL_LINE_TRACE_DIR'.
+	(dir notNil and: [dir isEmpty]) ifTrue: [dir := nil].
+	dir ifNotNil: [
+		"== true: existsOnServer: answers NIL when the probe errors, and a nil
+		reaching an inlined ifFalse: is an uncatchable error 2085."
+		(GsFile existsOnServer: dir) == true ifFalse: [
+			GsFile createServerDirectory: dir].
+		temps at: #'___grailLineTraceDir___' put: dir].
+	temps at: #'___grailLineTraceDirChecked___' put: true.
+	^ dir
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___literalEndAt___: q in: src [
+	"Private to ___codeOccurrencesOf___:in: -- the index of the LAST character of
+	the literal or comment that src's character q opens, or 0 when it is never
+	closed."
+
+	| c i e |
+	c := src at: q.
+	c == $$ ifTrue: [^ q + 1].
+	c == $" ifTrue: [^ src indexOf: $" startingAt: q + 1].
+	"A string or symbol: a doubled quote is one literal quote, not the end."
+	i := q + 1.
+	[e := src indexOf: $' startingAt: i.
+	 e > 0 and: [e < src size and: [(src at: e + 1) == $']]]
+		whileTrue: [i := e + 2].
+	^ e
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameChain___ [
+	"The CALLER's live Python stack as a chain of PyFrames, innermost first,
+	linked by f_back.  Answers nil when no frame could be built.
+
+	This is what sys._getframe stands on, and it gets the stack the only way a
+	running gem can: by RAISING.  GsProcess>>_frameContentsAt: reads a SUSPENDED
+	process -- ``GsProcess current'' inside running code answers stackDepth 0 and
+	no frames at all -- while the VM's raise-time capture
+	(#GemExceptionSignalCapturesStack) fills _gsStack with (method, ip, receiver)
+	triples for the whole live stack.  So a throwaway Error is signalled and
+	immediately caught, purely for its capture.  CPython's _getframe is free;
+	this one costs a raise, which the traceback machinery already measures at
+	~1.3 ns per frame.
+
+	Deliberately NOT ___buildFramesFromCapturedStack___: that walk answers a
+	TRACEBACK -- the path from raise to catch -- so it trims at the catching
+	function, which is precisely the frame a live stack walk wants to continue
+	past.  It also merges block frames into their home method, which is right for
+	both uses, and that rule is repeated here rather than shared, because the two
+	walks agree on almost nothing else.
+
+	The chain is built OUTERMOST-first so each frame can be handed its caller as
+	f_back; the innermost frame, returned here, is therefore the last one built.
+
+	A GENERATOR body runs on its own forked GsProcess, so its capture ends at the
+	fork and contains nothing of the consumer that resumed it -- the same process
+	boundary the traceback walk crosses by stashing (___stashGeneratorStack___:).
+	The live walk cannot stash, because nothing raised; instead it follows the
+	link the other way and READS the consumer, which is legitimately suspended
+	(blocked on consumerSem) and so is exactly the case _frameContentsAt: serves.
+	___liveFrameSections___: follows that chain; the walk runs once per section
+	and the sections concatenate innermost-first."
+
+	| probe st trimmed levels offset sections pairs isFirstSection |
+	self ___ensureStackCapture___.
+	"Signal and catch in one breath.  ``ex return:'' unwinds without letting the
+	Error reach any outer handler -- notably not a Python ``except''."
+	probe := [Error @env0:new @env0:signal: 'grail live-frame probe']
+		@env0:on: Error do: [:ex | ex @env0:return: ex].
+	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	st isNil ifTrue: [^ nil].
+	"Same currency problem as ___walkableStack___, and for the same reason: this
+	is a _gsStack capture, so its ips are NATIVE offsets whenever the gem
+	generates native code.  Converting here is what makes traceback.extract_stack
+	and format_stack report the calling line rather than the one after it."
+	st := BaseException ___toPortableIps___: st.
+	trimmed := self ___trimCapturedStack___: st.
+	"LOCALS.  The capture above answers (method, ip, receiver) and no temporaries
+	ever, so f_locals has to come from the OTHER live-stack reader --
+	GsProcess class>>_frameContentsAt:, which does answer names and values but is
+	addressed by LEVEL rather than by frame.  Collected here, at the same point of
+	this method as the capture, so that a triple index and a level differ by one
+	constant offset for the whole walk; ___liveFrameLevelOffset___:levels: finds
+	that offset by identity rather than assuming it.
+
+	EVERY SECTION GETS THEM, each from its own process.  This is where the sweep
+	below serves the FIRST section -- the running one.  A later section is a
+	suspended CONSUMER, and the class-side _frameContentsAt: read here would
+	describe this stack rather than that one: the same frames, silently
+	mislabelled.  That is why later sections used to be handed nil, and the cost
+	was that any frame BELOW a generator had no f_locals at all -- for
+	``next(gen())'' inside a function, that function's own variables.
+
+	The instance-side read answers the right stack, and the consumer is
+	legitimately suspended, so ___framesAndLevelsOfSuspendedProcess___: now
+	returns each section's levels alongside its triples, from the one pass it
+	already made.  Nil levels still means no f_locals, which every consumer
+	treats as ``not available''."
+	levels := PyFrame @env0:___liveFrameContentsByLevel___.
+	offset := self ___liveFrameLevelOffset___: trimmed levels: levels.
+	sections := self ___liveFrameSections___: trimmed.
+	pairs := OrderedCollection @env0:new.
+	isFirstSection := true.
+	sections @env0:do: [:section |
+		"Each section brings its OWN levels now.  The first is the running process,
+		 whose sweep and derived offset are above; a later one is a suspended
+		 consumer, read level-by-level in ___framesAndLevelsOfSuspendedProcess___:
+		 so that its offset is 0 by construction.  Passing nil for a later section
+		 was the reason a frame BELOW a generator had no f_locals at all."
+		| secLevels secOffset |
+		isFirstSection
+			ifTrue: [secLevels := levels. secOffset := offset]
+			ifFalse: [
+				secLevels := section @env0:at: 3.
+				secOffset := secLevels isNil ifTrue: [nil] ifFalse: [0]].
+		(self ___liveFramePairsFrom___: (section @env0:at: 1)
+			generatorBody: (section @env0:at: 2)
+			levels: secLevels
+			offset: secOffset
+			running: isFirstSection)
+				@env0:do: [:each | pairs @env0:add: each].
+		isFirstSection := false].
+	^ self ___liveFrameChainFromPairs___: pairs
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameChainFromPairs___: pairs [
+	"Turn the { method. ip. name. lineOrNil } quadruples of a whole live stack --
+	all its sections, innermost first -- into a chain of PyFrames linked by
+	f_back, and answer the INNERMOST.  Nil when there is nothing to report.
+
+	Built outermost-first so each frame can be handed its caller as f_back; the
+	innermost frame, returned here, is therefore the last one built."
+
+	| prev frame |
+	pairs @env0:isEmpty ifTrue: [^ nil].
+	prev := None.
+	pairs @env0:size @env0:to: 1 by: -1 do: [:k |
+		| pair meth ip name line code locals |
+		pair := pairs @env0:at: k.
+		meth := pair @env0:at: 1.
+		ip := pair @env0:at: 2.
+		name := pair @env0:at: 3.
+		"A nil line is not a reason to drop the frame -- see the filter above -- so it
+		becomes 0, the same ``position unknown'' a traceback frame uses.  A nested
+		function carries its line already, resolved from the block that supplied it;
+		a method frame derives it from its own ip."
+		line := (pair @env0:at: 4)
+			ifNil: [self ___pythonLineForMethod___: meth ip: ip].
+		"The function's own PyCode where it has one, for its co_firstlineno and so
+		that f_code is __code__ -- see ___codeForMethod___:name:ip:aCode:."
+		code := (self ___realCodeForMethod___: meth name: name) ifNil: [
+			"A nested or exec()'d def runs as a block; element 7 is that block's
+			method when it differs from the home in element 1."
+			((pair @env0:size @env0:>= 7) ifTrue: [
+				self ___codeForBlockMethod___: (pair @env0:at: 7) name: name]) ifNil: [
+					PyCode @env0:name: name
+						filename: (self ___liveFrameFilenameFor___: meth)
+						firstlineno: 0]].
+		"f_globals for a frame the FILENAME cannot identify.  PyFrame
+		derives globals from co_filename by finding the module whose
+		__file__ matches, and a doit has no file -- so a function built by
+		exec() answered None, and every stacklevel walk in the stdlib that
+		reads f_globals to decide how far to climb stopped there.  The doit
+		registry knows the namespace; see ModuleAst class >>
+		___rememberDoitScope:for:.  nil leaves the derivation to
+		PyFrame, unchanged, for every ordinary module frame."
+		frame := PyFrame @env0:code: code lineno: (line ifNil: [0]) back: prev
+			globals: (self ___doitGlobalsFor___: meth).
+		"f_locals.  STORED ONLY WHEN THERE ARE SOME: traceback.py reads it as
+		``getattr(frame, ''f_locals'', None)'', so an absent dynamic instVar already
+		means ``this frame cannot say'' -- the honest answer for a frame whose levels
+		could not be aligned, for a suspended consumer process, and for a gem where the
+		temporaries were not readable at all.  Storing an empty dict instead would have
+		the frame assert, positively, that it has no variables.
+
+		EVERY frame gets one, and THE COST IS REAL: this roughly DOUBLES sys._getframe.
+		Measured on a ~10-frame stack, 3000 calls, repeatable to the digit -- 3.33
+		us/call before, 6.33 us/call after.  An earlier draft of this comment claimed
+		410 us/call before, which made the addition look like rounding error; that
+		figure was wrong, and it is mentioned only because the argument it supported --
+		``too cheap to bother bounding'' -- is not the argument that survives.
+
+		What survives is that the ORDER is unchanged.  This walk was already O(depth) in
+		allocations: a PyFrame and a PyCode per frame, before this change.  One locals
+		dictionary per frame keeps both the order and the lifetime, and CPython's frames
+		carry their locals too.  Bounding attachment to the innermost N was tried and
+		rejected -- at any stack shallow enough to measure it saves nothing (6.33 us/call
+		at N=8 and unbounded alike, because the bound never binds), and on a deep stack
+		it buys that saving by silently dropping the outer frames' locals."
+		locals := PyFrame @env0:___pyLocalsFromFrameContentsList___: (pair @env0:atOrNil: 5).
+		"NOT INTO ``f_locals''.  ___pyAttrLoad___ probes dynamic instVars BEFORE the
+		method chain, so a stored one would shadow PyFrame >> f_locals -- and that
+		method is what makes a LIVE frame's locals live.
+
+		CPython's frame.f_locals is a view, not a copy (PEP 667), and the difference
+		is observable the moment an inlined comprehension ends: its iteration
+		variable is in the frame while the loop runs and gone afterwards, so
+		``'a' in [sys._getframe().f_locals for a in [0]][0]'' is False -- the read
+		happens after the comprehension.  A snapshot taken when sys._getframe() ran
+		answers True and cannot do otherwise, which is test_listcomps'
+		test_frame_locals in every one of its three scopes.
+
+		So the snapshot becomes the FALLBACK and the two things needed to re-derive
+		it are recorded instead: which method this frame is running, and how far it
+		is from the OUTER end of the chain.  Outer and not inner because that is the
+		end that does not move -- a later read is deeper, never shallower, so the
+		frames beneath are the same frames at the same distance from the bottom."
+		locals isNil ifFalse: [
+			frame @env0:dynamicInstVarAt: #'___liveLocals___' put: locals].
+		frame @env0:dynamicInstVarAt: #'___liveOuterIndex___'
+			put: pairs @env0:size @env0:- k.
+		frame @env0:dynamicInstVarAt: #'___liveMethod___' put: meth.
+		"...and the same distance measured in _frameContentsAt: LEVELS, which is
+		what lets a re-read skip the walk entirely -- see PyFrame >>
+		___liveLocalsFromLevels___.  The chain index above stays as the fallback
+		route, for a frame whose levels could not be aligned."
+		(pair @env0:atOrNil: 6) ifNotNil: [:ol |
+			frame @env0:dynamicInstVarAt: #'___liveOuterLevel___' put: ol.
+			"THE LEVEL'S OWN METHOD, which is not always ``meth'' above: a nested def
+			is a two-argument BLOCK and the pair identifies it by its HOME, so the
+			method to confirm a level against and the method to identify a frame by
+			are different objects for exactly that shape."
+			(pair @env0:atOrNil: 7) ifNotNil: [:am |
+				frame @env0:dynamicInstVarAt: #'___liveLevelMethod___' put: am]].
+		prev := frame].
+	^ frame
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameCodeFor___: aClass name: aName [
+	"First ___methodCodeTable___ entry named aName along aClass's lookup chain,
+	or nil.  The Python-visible counterpart of
+	BoundMethod>>___methodCodeForClass___:name:, over the same chain
+	(importlib ___methodLookupChainFor___:) and for the same reason -- a mixin's
+	method is recompiled onto the subclass but its PyCode is not.
+
+	Each hop is guarded: this runs while a stack is being formatted, often while
+	an exception is already being reported, so a class whose table accessor
+	refuses must cost this frame its filename and nothing more."
+
+	| chain |
+	aClass isNil ifTrue: [^ nil].
+	chain := [importlib @env0:___methodLookupChainFor___: aClass]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	chain isNil ifTrue: [chain := { aClass }].
+	chain @env0:do: [:c |
+		| tbl code |
+		"The table is compiled in environment 1, so an env-0 probe would never
+		 see it -- same reason BoundMethod passes environmentId: 1 here."
+		((c @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___'
+			environmentId: 1) ~~ nil) ifTrue: [
+				tbl := [c @env1:___methodCodeTable___]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				tbl isNil ifFalse: [
+					code := [tbl @env0:at: aName otherwise: nil]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+					code isNil ifFalse: [^ code]]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameContentsFor___: aMethod at: tripleIndex in: levels offset: offset [
+	"The frame contents for one triple of the capture, or nil when they cannot be
+	had.
+
+	VALIDATED BY IDENTITY, not trusted.  The offset says which level a triple
+	should be at; this checks that the frame there is running the method the triple
+	names, and answers nil when it is not.  That guard is the whole reason locals
+	can be attached at all without the risk ___tempsFromFrameContents___ describes:
+	a misaligned read does not fail, it reports a DIFFERENT frame's variables under
+	this frame's name, and nothing downstream could tell.  Failing closed costs a
+	missing f_locals, which is a shape traceback.py already handles."
+
+	| fc lvl |
+	(levels isNil or: [offset isNil]) ifTrue: [^ nil].
+	"Bounds-checked BEFORE atOrNil:, which is documented for an index past the end
+	and not for one below the start.  A negative offset is reachable in principle --
+	it only takes the level walk bottoming out shallower than the capture -- and
+	this is code every sys._getframe runs."
+	lvl := tripleIndex + offset.
+	(lvl < 1 or: [lvl > levels size]) ifTrue: [^ nil].
+	fc := levels atOrNil: lvl.
+	fc isNil ifTrue: [^ nil].
+	(fc atOrNil: 1) == aMethod ifFalse: [^ nil].
+	^ fc
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameContentsList___: contents pending: pendingContents forHome: home pendingHome: pendingHome [
+	"Every Smalltalk frame whose temporaries belong to the ONE Python frame about
+	to be pushed, innermost first, or nil when there are none.
+
+	Two sources, and both are needed.  ``contents'' is the frame the pair itself
+	names.  ``pendingContents'' is the body blocks already walked past for the same
+	home method -- which is where a class-body def keeps ALL of its locals, the
+	method frame having none -- and they are included only when ``pendingHome''
+	still matches, the same guard the line number uses one branch over.
+
+	Innermost first, so that PyFrame class>>___pyLocalsFromFrameContentsList___:
+	resolving collisions first-wins gives the executing frame's value for a name
+	that appears in both."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	(pendingHome @env0:== home and: [pendingContents @env0:notNil])
+		ifTrue: [pendingContents @env0:do: [:each | out @env0:add: each]].
+	contents isNil ifFalse: [out @env0:add: contents].
+	out @env0:isEmpty ifTrue: [^ nil].
+	^ out
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameFilenameFor___: aMethod [
+	"The ``co_filename'' for a live frame's method.
+
+	A traceback takes ONE filename for every frame, from the catching function's
+	PyCode -- fine there, because a traceback is usually within one module, and
+	wrong in general.  A live stack walk crosses modules routinely (the test
+	runner calls the test calls the library), so the filename is derived per
+	frame instead.
+
+	Two routes, because there are two def shapes and only one of them names a
+	module.
+
+	A MODULE-LEVEL def's defining class IS its module: ``meth inClass name''
+	answers the module name, so the module's own ``__file__'' is one sys.modules
+	lookup away.  That was the only route here, and it silently failed for the
+	other shape.
+
+	A CLASS-BODY def compiles to a Smalltalk method whose ``inClass'' is the
+	PYTHON CLASS, not the module -- ``T'', not ``stackprobe'' -- so the
+	sys.modules lookup missed and EVERY live frame for a method reported
+	``<grail>''.  Exception tracebacks were unaffected (they take the filename
+	from the catching function's PyCode), which is why code_filename.py passed
+	throughout while test_format_stack / test_print_stack / test_extract_stack
+	did not.  The class-side ``___methodCodeTable___'' holds the very PyCode that
+	backs ``__code__'', so its co_filename is exactly the path code_filename.py
+	already pins -- consult it FIRST, and the two paths cannot disagree.
+
+	Falls back to ``<grail>'', which is what a frame with no locatable module has
+	always reported."
+
+	| cls clsName mod file pyName code |
+	"Route 0: a NAMED DOIT -- code run by exec()/eval() under the filename
+	compile() was given.  Neither route below can see it: a doit has no module
+	class and no code table, so every live frame of exec'd code reported
+	``<grail>'' while its traceback, which already asks the doit registry
+	(___codeForMethod___:name:ip:aCode:), reported the real name.  A warning raised there
+	was then recorded against ``<grail>'' (test_warnings test_exec_filename).
+	Nil for an unnamed doit and for every ordinary method, so the other routes
+	are unchanged."
+	(self ___pythonFileForDoitOf___: aMethod) ifNotNil: [:f | ^ f @env0:asString].
+	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	cls isNil ifTrue: [^ '<grail>'].
+	"A @classmethod or @staticmethod compiles to a CLASS-SIDE Smalltalk method,
+	 so its inClass is the METACLASS -- ``K class'', not ``K''.  The code table
+	 is reached through the class side of ``K'' (it is a class-side method of
+	 it), so probing from the metaclass looks one level too high and finds
+	 nothing at all: every @classmethod and @staticmethod frame reported
+	 ``<grail>'', and with no filename linecache could not read its source line
+	 either, so the frame also rendered with an empty line.
+
+	 The table itself was never the problem -- it already holds the entry, with
+	 the right path.  Measured on 4.0 for a class K with all three shapes:
+	 ``___liveFrameCodeFor___: K name: 'cmeth''' answers the real filename while
+	 ``___liveFrameCodeFor___: K class name: 'cmeth''' answers nil, and K's table
+	 keys are anArray( 'cmeth', 'meth', 'smeth').  So this is a one-hop
+	 correction, not a missing registration.
+
+	 Instance methods were unaffected, which is why this survived: their inClass
+	 is the Python class itself.  It surfaced when traceback.walk_stack became
+	 lazy and StackSummary.extract -- a @classmethod -- appeared on a live chain
+	 that _live_frames_of_caller strips BY FILENAME.  Reporting ``<grail>'' there
+	 meant the strip could not recognise traceback.py's own frame and left it in
+	 the walk."
+	(([cls @env0:isMeta] @env0:on: AbstractException do: [:ex | ex @env0:return: false])
+		== true) ifTrue: [
+			cls := [cls @env0:thisClass]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: cls]].
+	"Route 1: a class-body def's code table.  Searched along the whole lookup
+	 chain (superclasses, then the C3 MRO) rather than just aMethod's inClass,
+	 because a MIXIN's methods are RECOMPILED onto the subclass by
+	 ___mergeSecondaryBases___ while their PyCode stays in the mixin's own table:
+	 for ``class TestTracebackFormat(unittest.TestCase, TracebackFormatMixin)''
+	 inClass is TestTracebackFormat, whose own class side has no table at all, so
+	 the probe found unittest.TestCase's inherited one, missed, and every mixin
+	 method's frame reported ``<grail>'' -- while the bound method's __code__ for
+	 the same method, which already walked the MRO, reported the real path."
+	"NOT ``name'': this is a CLASSMETHOD, so self is the class and GemStone's
+	 Class instVar ``name'' is already in scope -- CompileError 1030."
+	pyName := [self ___pythonFrameNameFor___: aMethod @env0:selector]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	pyName isNil ifFalse: [
+		code := self ___liveFrameCodeFor___: cls name: pyName.
+		code isNil ifFalse: [
+			file := [code @env0:dynamicInstVarAt: #'co_filename']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			((file isKindOf: CharacterCollection)
+				and: [(file @env0:asString @env0:= '<grail>') @env0:not])
+					ifTrue: [^ file @env0:asString]]].
+	"Route 2: inClass names a module (a module-level def)."
+	clsName := [cls @env0:name @env0:asString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	clsName isNil ifTrue: [^ '<grail>'].
+	mod := [(importlib @env1:modules) @env0:at: clsName @env0:asSymbol otherwise: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"A SUBMODULE's class is not named by its dotted module name -- module class
+	names flatten the dots -- so ``pk.sub'' missed by name and every frame of
+	its body reported ``<grail>'', f_globals None: typing's _caller() then
+	answered None for every TypeVar and NewType a package module defines
+	(test.test_typing's SpecialAttrsT).  The module whose class IS this one."
+	mod isNil ifTrue: [
+		mod := [(importlib @env1:modules) @env0:detect: [:m | m @env0:class == cls]
+				ifNone: [nil]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	mod isNil ifTrue: [^ '<grail>'].
+	file := [mod @env0:dynamicInstVarAt: #'__file__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((file isNil) or: [(file isKindOf: CharacterCollection) @env0:not])
+		ifTrue: [^ '<grail>'].
+	^ file @env0:asString
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameLevelOffset___: st levels: levels [
+	"How much to ADD to a triple index in ``st'' to get the _frameContentsAt:
+	level of the same physical frame.  Nil when the two cannot be aligned, which
+	means no f_locals rather than a wrong one.
+
+	Both sequences enumerate the SAME live stack, innermost first, one entry per
+	frame -- so they differ by a single constant, and the only question is what it
+	is.  It cannot be hardcoded: a level is counted from the sender of whichever
+	method called the primitive, so the constant depends on how deep the collector
+	ran, and it changes if either method gains or loses a block around the call.
+	Measured at +2 for the current arrangement, which is exactly the kind of number
+	that is right until someone edits a line near it.
+
+	So it is DERIVED, from a frame that is certain to be in both: this method's own
+	caller, ___liveFrameChain___.  Found by selector in the levels and then by
+	OBJECT IDENTITY in the triples, taking the innermost occurrence on each side so
+	that a nested sys._getframe (one live walk inside another) still aligns.
+	Matching on identity rather than on the selector a second time matters because
+	the blocks INSIDE ___liveFrameChain___ have frames of their own, whose method
+	answers a nil selector and whose homeMethod is the method being looked for --
+	identity distinguishes them, a home comparison would not."
+
+	| chainMethod levelIndex tripleIndex |
+	(st isNil or: [levels isNil]) ifTrue: [^ nil].
+	levelIndex := nil.
+	1 to: levels size do: [:i |
+		levelIndex isNil ifTrue: [
+			| meth |
+			meth := (levels at: i) atOrNil: 1.
+			"Error, NOT AbstractException: AlmostOutOfStack is a Notification, and
+			 swallowing it here would defeat ___recursionGuard___ -- see
+			 PyFrame class>>___liveFrameContentsByLevel___, which shares the hazard."
+			(meth notNil
+				and: [([meth selector] on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]])
+					== #'___liveFrameChain___'])
+						ifTrue: [
+							chainMethod := meth.
+							levelIndex := i]]].
+	chainMethod isNil ifTrue: [^ nil].
+	tripleIndex := nil.
+	1 to: st size by: 3 do: [:i |
+		(tripleIndex isNil and: [(st at: i) == chainMethod])
+			ifTrue: [tripleIndex := (i + 2) // 3]].
+	tripleIndex isNil ifTrue: [^ nil].
+	^ levelIndex - tripleIndex
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offset: offset running: isRunningProcess [
+	"{ method. ip. name. lineOrNil. frameContentsOrNil } for every frame of ONE section of a live
+	stack, innermost first.  ``st'' is a headerless run of (method, ip, receiver)
+	triples -- the shape ___trimCapturedStack___: answers and the shape
+	___framesOfSuspendedProcess___: builds.
+
+	THIS IS WHERE A FRAME GOES MISSING SILENTLY, and as of 2026-08-25 it is the
+	last place it can.  The generated-method gate below is an ``ifTrue:'' with NO
+	else branch, so a frame the gate rejects is simply omitted -- no error, no
+	marker, and a chain one element short.  Injecting a single ``false'' there
+	reproduces ``ValueError: call stack is not deep enough'' deterministically.
+	Everything else that could shorten a chain has been ruled out by measurement:
+	  * ___liveFrameSections___:'s three stop conditions -- 72 traversals, both
+	    guards, every hop, never once satisfied (see that method's comment); and
+	  * ___framesOfSuspendedProcess___: RAISES rather than shortening, verified by
+	    forcing its unreadable-frame path: the import fails with the diagnostic
+	    Error, not with a short list.  Note WHY that survives the Python layer,
+	    because it is not obvious -- inspect.stack() wraps sys._getframe in
+	    ``except BaseException: return []'', which would turn the raise into an
+	    empty stack, but a raw Smalltalk Error is not a Python BaseException and
+	    passes straight through the Python handler.
+
+	SO THE GATE IS THE REMAINING SUSPECT, and it can answer false WITHOUT the
+	cache being at fault (#663 re-keyed GrailPyMethodCache on the method object,
+	so OOP recycling can no longer poison it -- though note that fix POSTDATES the
+	one CI failure we have, so recycling is a poor but not excluded explanation
+	for that run, at a measured 1 in 10^5).  The live route is the gate's own
+	logic: the fast path asks ``argsAndTemps includes: #'___curPos___''', and a def
+	whose body compiles into an inner BLOCK declares that temp where method-level
+	debugInfo cannot see it -- 11 of 46 methods in one module.  Those legitimately
+	miss the fast path and fall through to the SOURCE probe, which reads from the
+	repository and can fault under concurrent shards.  PR #653 hardened exactly
+	that route, and its breadcrumb read #'none' across four independent failures,
+	so attempt 1 never failed there.  Which leaves: the source probe failing by a
+	path the breadcrumb does not record, or the false originating elsewhere in the
+	gate.
+
+	A WARNING TO WHOEVER INSTRUMENTS THIS.  Counting inside the loop below has
+	measured the bug away three times -- a ring buffer gave 0/8 and per-frame drop
+	counters 0/12 while the failure was live, where integer counters OUTSIDE the
+	loop left the rate intact.  Prefer a post-hoc check that adds nothing per
+	frame (compare the pair count against the trimmed triple count, once per
+	walk), and validate any counter against a FORCED drop before believing a zero
+	from it: a quiet session produces zero here whether or not the instrument
+	works.
+
+	``isGeneratorBody'' says this section is a generator's forked process, which
+	changes one thing: what is left PENDING at the end of the section is flushed
+	as a frame instead of discarded.  See the flush at the bottom for why that is
+	the only way a generator's own frame can appear at all."
+
+	"``levels''/``offset'' are the f_locals half, and they are OPTIONAL: nil for
+	either means the pairs come back with a nil contents slot and the frames report
+	no locals.  See ___liveFrameLevelOffset___:levels: for how a triple index turns
+	into a level, and PyFrame class>>___pyLocalsFromFrameContentsList___: for why a
+	single Python frame hands over a LIST of Smalltalk frames rather than one."
+	| pairs done pendingHome pendingLine pendingContents |
+	"{ method. ip. name. lineOrNil } for every frame that is a Python FUNCTION,
+	innermost first.  A block frame carries a nil selector and normally belongs to
+	its home method, so it is skipped -- CPython has no frame for a comprehension
+	body or an except block.
+
+	EXCEPT when the block IS a Python function.  A nested ``def'' compiles to a
+	block (only a block closes over the enclosing function's locals, only a block
+	has no class to live in, and only a fresh copy per execution gives CPython's
+	distinct function object per ``def''), so skipping every block erased nested
+	functions from the live stack exactly as it did from tracebacks -- 9.45.  From
+	inside ``def outer(): def inner(): traceback.extract_stack()'' CPython answers
+	['<module>', 'outer', 'inner'] and this walk answered ['outer'].
+
+	Told apart by ARGUMENT COUNT, the same discriminator 9.45 established for the
+	traceback walk: codegen calls a Python function block as
+	``[:___positional___ :___kwargs___ | ...]'' and nothing else in env 1 emits a
+	two-argument block.  The NAME comes from ___nestedFunctionNameFor___:line:,
+	which is shared with the traceback walk and derives containment from the
+	Python line rather than from _sourceAtIp: -- see there for why that matters in
+	a native-code gem."
+	pairs := OrderedCollection @env0:new.
+	"``done'' rather than leaving the loop early: the index of a to:do: is a block
+	PARAMETER and not assignable, so there is nothing to advance past the end."
+	done := false.
+	pendingHome := nil.
+	pendingLine := nil.
+	pendingContents := nil.
+	1 to: st @env0:size by: 3 do: [:i |
+		| meth ip home contents outerLvl |
+		done ifFalse: [
+			meth := st @env0:at: i.
+			"Trailing nils pad the array; the real frames end at the first one."
+			meth isNil
+				ifTrue: [done := true]
+				ifFalse: [
+					ip := st @env0:at: i @env0:+ 1.
+					contents := self ___liveFrameContentsFor___: meth
+						at: (i @env0:+ 2) @env0:// 3
+						in: levels
+						offset: offset.
+					"HOW FAR THIS FRAME'S OWN LEVEL IS FROM THE OUTER END of the
+					_frameContentsAt: sweep.  Carried as the sixth element of the pair so
+					PyFrame can re-read the frame LATER without walking the stack again:
+					the outer end does not move while a frame is alive, so the same
+					distance names the same level, and the method recorded beside it is
+					what proves so.  Nil whenever the levels could not be aligned, which
+					is the same ``no locals'' the contents already are."
+					"ONLY FOR THE RUNNING PROCESS.  This distance is what PyFrame >>
+					 ___liveLocalsFromLevels___ re-reads a frame by later, and it re-reads
+					 by sweeping whatever process is running THEN.  For a frame belonging
+					 to a suspended consumer that is a different stack, so the same
+					 distance would name some other frame -- and the method recorded beside
+					 it could confirm a genuine coincidence.  Such a frame keeps the
+					 SNAPSHOT taken here (correct, and what a traceback frame has always
+					 offered) and declines the live re-read, which is the honest half of
+					 the two."
+					outerLvl := (levels isNil or: [offset isNil or: [isRunningProcess not]])
+						ifTrue: [nil]
+						ifFalse: [levels @env0:size @env0:- (((i @env0:+ 2) @env0:// 3) @env0:+ offset)].
+					home := (meth @env0:environmentId @env0:= 1)
+						ifTrue: [[meth @env0:homeMethod]
+							@env0:on: Error do: [:ex |
+								(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+								ex @env0:return: meth]]
+						ifFalse: [nil].
+					home isNil ifTrue: [home := meth].
+					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector isNil])
+						ifTrue: [
+							| nArgs blockLine |
+							nArgs := [meth @env0:numArgs]
+								@env0:on: Error do: [:ex |
+									(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+									ex @env0:return: 0].
+							blockLine := self ___pythonLineForMethod___: meth ip: ip.
+							"A DOIT'S OWN FRAME.  exec(), eval() and the REPL compile their
+							source with ``_compileInContext: nil'', which answers a method with
+							NO SELECTOR -- so the walk classified the body of every exec as a
+							block, accumulated it as pending contents for a home that never
+							arrived, and dropped it.  ``sys._getframe()'' inside exec'd code
+							therefore answered the CALLER's frame: measured as
+							['outer', '<module>'] where CPython gives
+							['<module>', 'outer', '<module>'], with f_locals and co_name both
+							the caller's.  That is the quiet kind of wrong -- a frame's name
+							over another frame's variables, which nothing downstream can tell
+							apart from the truth (test_listcomps' test_frame_locals reads
+							f_locals from inside an exec, and two of its three scopes are this).
+
+							Emitted exactly as the module-body case below is, and for the same
+							reason: the doit IS a module body, CPython calls that frame
+							``<module>'', and the generated-Python marker probe is beside the
+							point for a frame recognised by what it is.  Consuming the pending
+							contents is what gives it the temps of the blocks inside it -- an
+							inlined comprehension's target among them."
+							"Reached through the dictionary rather than by name, as
+							___doitGlobalsFor___ does: BaseException.gs files before the
+							PythonAst classes are on the symbol list, so a bare ``ModuleAst''
+							would not compile here."
+							([((PythonAst @env0:at: #'ModuleAst') @env0:___isDoitMethod___: meth)]
+								@env0:on: Error do: [:ex |
+									(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+									ex @env0:return: false])
+								ifTrue: [
+									pairs @env0:add: { meth. ip. '<module>'. (blockLine ifNil: [0]).
+										(self ___liveFrameContentsList___: contents
+											pending: pendingContents
+											forHome: home
+											pendingHome: pendingHome). outerLvl. meth }.
+									pendingHome := nil.
+									pendingLine := nil.
+									pendingContents := nil]
+								ifFalse: [
+							(nArgs @env0:= 2)
+								ifTrue: [
+									| fnLine fnName |
+									"The nested function is parked where its BODY is, which the
+									inner zero-argument blocks already resolved into pendingLine.
+									Fall back to this block's own position when there were none."
+									fnLine := pendingLine isNil
+										ifTrue: [blockLine]
+										ifFalse: [pendingLine].
+									"See the traceback walk's twin, and
+									___nestedFrameNameFor___: the NAME no longer gates the
+									frame, only ``is this generated Python code'' does -- the
+									one test here that no ip can affect.  This walk is the
+									one sys._getframe counts through, so it is the one where
+									a silently dropped frame does not shorten the answer but
+									SHIFTS it."
+									fnName := self ___nestedFrameNameFor___: home line: fnLine
+										block: meth.
+									(self ___isGeneratedPythonMethod___: home) ifTrue: [
+											pairs @env0:add: { home. ip. fnName. (fnLine ifNil: [0]).
+												(self ___liveFrameContentsList___: contents
+													pending: pendingContents
+													forHome: home
+													pendingHome: pendingHome). outerLvl. meth }.
+											"Consumed: the home method's own frame must not reuse
+											this line, or ``outer'' would report the line inside
+											``inner''."
+											pendingHome := nil.
+											pendingLine := nil.
+											pendingContents := nil]]
+								ifFalse: [
+									pendingHome @env0:~~ home ifTrue: [
+										pendingHome := home.
+										pendingLine := blockLine.
+										"A FRESH list per home, where the LINE is kept from the
+										innermost block only.  The line wants one frame -- the one
+										executing -- but the locals want them ALL: a method's
+										arguments and its body block's variables are different
+										halves of one Python frame."
+										pendingContents := OrderedCollection @env0:new].
+									"Guarded on BOTH, not just on contents.  Every path that clears
+									pendingContents also clears pendingHome, and home is never nil,
+									so the reset above always fires first and this cannot see a nil
+									list -- but a doesNotUnderstand here would land in every
+									sys._getframe, and so in every warning and every import, which
+									is a wide enough blast radius to spend two words defending."
+									(contents notNil and: [pendingContents @env0:notNil]) ifTrue: [
+										pendingContents @env0:add: contents]]]].
+					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
+						ifTrue: [
+							| frameLine |
+							"The line a 0-argument block already resolved for THIS home wins over
+							the one this method's own ip derives -- the rule the traceback walk
+							states as ``pendingHome == home and: [pendingLine notNil]'' and this
+							walk was missing.
+
+							It is not a refinement.  A class-body def whose body contains a
+							nested def compiles with the body inside a block, so the METHOD's ip
+							sits at the end of that block and ___pythonLineForMethod___ answers
+							the method's LAST statement for every such frame -- measured as
+							``line 21, in nested_assign_last'' where the call was on line 20, and
+							as ``line 2162, in test_format_stack'' (the assertEqual) where
+							test_format_stack called fmt() on line 2160.  The enclosing block
+							frame, one hop innermost of the method, carries the call site
+							exactly; the method branch simply threw it away.
+
+							Read BEFORE the reset below, which is why this is a temp and not an
+							expression in the push."
+							frameLine := (pendingHome @env0:== home and: [pendingLine notNil])
+								ifTrue: [pendingLine]
+								ifFalse: [nil].
+							"Env 1 plus a decodable selector is not enough to mean ``Python frame'':
+							Grail compiles its own runtime helpers into env 1 too, and they decode to
+							perfectly plausible names -- ``perform'' and ``value'' duly appeared at the
+							innermost end of every walk.
+
+							The test is whether the method IS generated Python code, asked of its
+							SOURCE and so independent of the ip.  The first version asked instead
+							whether a Python LINE could be derived at this ip, which conflated two
+							different questions and broke under native code: §9.10 records that ip ->
+							line derivation fails closed for a frame suspended inside a protected
+							block, and native ips differ from bytecode ips, so on CI (native code on,
+							unavailable on macOS/arm64) legitimate frames were silently DROPPED from
+							the walk rather than merely losing their line number."
+							"A MODULE BODY'S frame.  Module-init codegen emits plain
+							attr-store statements with no ``___curPos___'' markers, so the
+							generated-Python probe honestly answers false and the walk
+							dropped the frame -- which is the real origin of ``module-level
+							code has no Python frame''.  The init IS the module body, and
+							CPython calls that frame ``<module>''.  Recognised by what it
+							is rather than by the marker it lacks: the receiver is a module
+							instance and the selector is #initialize.  What this repairs is
+							everything ABOVE the body being reachable at all --
+							``warnings.warn(..., stacklevel=2)'' at module level during an
+							import walked one hop from the wrong frame and blamed the
+							importer's CALLER (unittest) instead of the importer.
+
+							THE LINE.  A block inside the body supplies one as frameLine;
+							otherwise it is derived at the body's own ip -- module bodies
+							do carry ___curPos___ stores, and the derivation reads only the
+							body's OWN ones, never those of the methods it embeds as
+							literals (issue #1137).  This used to answer 0 whenever no block
+							supplied a line, which went unseen while module-level decorators
+							were applied inside a block; with that block gone (issue #1369)
+							a decorator reading sys._getframe(1).f_lineno saw 0.  0 remains
+							the answer only when nothing is derivable, since CPython's
+							walkers need an int."
+							((meth @env0:selector == #'initialize')
+								and: [(st @env0:at: i @env0:+ 2) @env0:isKindOf: module])
+								ifTrue: [
+									pairs @env0:add: { meth. ip. '<module>'.
+										(frameLine ifNil: [
+											(self ___pythonLineForMethod___: meth ip: ip) ifNil: [0]]).
+										(self ___liveFrameContentsList___: contents
+											pending: pendingContents
+											forHome: home
+											pendingHome: pendingHome). outerLvl. meth }]
+								ifFalse: [
+							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
+								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
+									pairs @env0:add: { meth. ip.
+										(self ___pythonFrameNameFor___: meth @env0:selector).
+										frameLine.
+										(self ___liveFrameContentsList___: contents
+											pending: pendingContents
+											forHome: home
+											pendingHome: pendingHome). outerLvl. meth }]].
+							"A real method frame ends any pending block line: whether it took
+							the line above or not, no frame further out can be this home's."
+							pendingHome := nil.
+							pendingLine := nil.
+							pendingContents := nil]]]].
+	"THE GENERATOR'S OWN FRAME.  A generator body is a BLOCK -- codegen emits
+	``PythonGenerator withBlock: [:___gen___ | ...]'' -- and the frame for the
+	``def'' that contains it is not on this process at all: the def RETURNED, on
+	the consumer's process, as soon as it built the generator.  So the block's
+	home never arrives to consume the pending line the way an ordinary call does,
+	and without this flush a stack walked from inside ``def gen(): yield f()''
+	reported ['f'] where CPython reports ['f', 'gen', ...].
+
+	The name comes from the pending LINE, which is inside the def: a nested def
+	resolves through ___nestedFunctionNameFor___:line: exactly as the 2-argument
+	block branch above does, and a module-level def is a real Smalltalk method
+	whose own selector already decodes to the Python name."
+	(isGeneratorBody and: [pendingHome @env0:notNil]) ifTrue: [
+		| fnName |
+		fnName := self ___nestedFunctionNameFor___: pendingHome line: pendingLine.
+		fnName isNil ifTrue: [
+			fnName := self ___pythonFrameNameFor___: pendingHome @env0:selector].
+		((fnName notNil) and: [self ___isGeneratedPythonMethod___: pendingHome]) ifTrue: [
+			pairs @env0:add: { pendingHome. 0. fnName. (pendingLine ifNil: [0]).
+				pendingContents }]].
+	^ pairs
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameSections___: triples [
+	"The live stack in SECTIONS, innermost first: { tripleRun. isGeneratorBody }
+	for the current process, then for each consumer process out through the
+	generator delegation chain.
+
+	One section per GsProcess, because that is the unit a stack capture covers.
+	A generator body runs forked, so ``for x in spam(gen()): ...'' has THREE
+	processes live at the moment gen's body runs -- gen's, spam's, and the
+	caller's -- and only the first is in the capture.  CPython has one stack with
+	all three functions on it, and a debugger is entitled to see them: that is
+	what test_yield_from's test_delegator_is_visible_to_debugger checks.
+
+	The links are read off the stack itself rather than out of a registry.  Every
+	generator body has PythonGenerator>>_forkBody frames beneath it running with
+	the generator as self (___generatorOwningStack___: recovers it), and the
+	generator remembers the process that last resumed it.  Nothing has to be
+	registered, so nothing has to be unregistered -- an abandoned generator would
+	otherwise pin a dead GsProcess in a session-lifetime dictionary for as long as
+	the session lived.
+
+	The consumer is genuinely suspended (blocked on consumerSem inside send: /
+	throw: / close), which is the precondition _frameContentsAt: needs and which
+	the CURRENT process can never satisfy for itself.
+
+	Bounded and loop-guarded: a chain deeper than 64 delegations, or one that
+	revisits a process, stops rather than walks forever.
+
+	THE LOOP BELOW ENDS FOR THREE DIFFERENT REASONS, and anyone instrumenting it
+	must count them SEPARATELY: the consumer lookup answers nil, the next process
+	is already in ``seen'' (cycle guard), or it is GsProcess current (self guard).
+	Only the first is a failure -- the other two are the hop SUCCEEDING and the
+	walk stopping anyway.  A counter written as ``(gen notNil and: [next isNil])''
+	sees ONE of the three while reading like coverage of the method: that was
+	measured at 0 errors in 72 attempts and reported as evidence the walk was
+	sound, with two thirds of the exits never looked at.  Make the outcomes
+	exhaustive and assert that they sum to the attempts.
+
+	MEASURED, so it is not re-derived: NEITHER GUARD EVER FIRES in a ``yield
+	from'' chain.  Recording, uninjected, whether next already satisfied either
+	guard -- one character per traversal, per hop, over the two-deep fixture and
+	then all three frame test classes -- gave n in all 72 traversals, both guards,
+	every hop including the last.
+
+	Why, for each.  The walk runs inside the INNERMOST generator, so ``current''
+	is that generator's process, and for a link to equal it some generator would
+	have to have been resumed BY the innermost one -- which resumes nobody.  And
+	`consumerProcess' is overwritten on every send:, so in
+	next(spam(eggs(gen()))) the resumers M->spam, S->eggs, E->gen are distinct and
+	no two links ever share a value for ``seen'' to catch.  What actually ends the
+	walk is the outermost section not being a generator body.
+
+	So a short chain is NOT produced here.  Both guards are effectively dead code
+	in this shape, and a frame lost from a delegation chain was lost elsewhere --
+	`___framesOfSuspendedProcess___:' raises rather than shortening (see
+	`___unreadableFrame___:'), which leaves the pair building.
+
+	Both guards produce the SAME short chain when forced, so a truncated chain
+	identifies WHICH HOP was lost but not which guard did it -- for the two-deep
+	fixture, stopping at the first hop leaves ['call_stack', 'gen'], the second
+	['call_stack', 'gen', 'eggs'].  That is why
+	tests/python/generator_stack_frames.py reports its chain instead of raising:
+	the names missing from the report are the diagnosis."
+
+	| sections cur curLevels gen next seen hops both |
+	sections := OrderedCollection new.
+	cur := triples.
+	"Nil for the FIRST section: those triples came from the raise-time capture of
+	 the RUNNING process, whose levels ___liveFrameChain___ sweeps and aligns
+	 itself.  Every later section carries its own, read from the suspended
+	 process in the same pass as its triples."
+	curLevels := nil.
+	seen := IdentitySet new.
+	hops := 0.
+	[(cur notNil) and: [hops < 64]] whileTrue: [
+		gen := self ___generatorOwningStack___: cur.
+		sections add: { cur. gen notNil. curLevels }.
+		next := gen isNil
+			ifTrue: [nil]
+			ifFalse: [[gen ___consumerProcess___]
+				on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]].
+		((next isNil)
+			or: [(seen includes: next) or: [next == GsProcess current]])
+				ifTrue: [cur := nil. curLevels := nil]
+				ifFalse: [
+					seen add: next.
+					both := self ___framesAndLevelsOfSuspendedProcess___: next.
+					both isNil
+						ifTrue: [cur := nil. curLevels := nil]
+						ifFalse: [cur := both at: 1. curLevels := both at: 2]].
+		hops := hops + 1].
+	^ sections
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___mapSpanForMethod___: aMethod ip: anIp [
+	"The PEP 657 span for anIp, read from the method's POSITION MAP -- or nil
+	when the method carries none.
+
+	ONE READER, TWO PATHS.  A text-compiled method's map records SMALLTALK
+	offsets and a step point resolves to a Smalltalk offset; an IR-built
+	method's map records PYTHON offsets and a step point resolves to a Python
+	offset, because the IR builder stamps every node with its Python position
+	(PyMethodIRBuilder>>atNode:).  The two never meet in one method, and the
+	rule below -- innermost range containing the offset -- is the same rule in
+	both coordinate systems, so this method needs to know nothing about which
+	kind it is reading.
+
+	TWO PRIMITIVES AND A TABLE LOOKUP, replacing a formatted-report scan.
+	``_previousStepPointForIp:'' answers the step point preceding the ip and
+	``_sourceOffsetsAt:'' answers that step point's SMALLTALK source offset, and
+	that offset lands on the SELECTOR of the send in flight -- so the innermost
+	Python node whose recorded Smalltalk range contains it is the operation that
+	raised.  Which is CPython's rule, arrived at without a single per-shape
+	special case: ``1 / 0 + 5'' blames the division because the ``/'' send sits
+	inside the division's range and the ``+'' send does not.
+
+	INNERMOST IS SMALLEST RANGE.  Ranges nest exactly as the AST does, so the
+	shortest containing one is the deepest node.  Ties cannot arise between
+	different nodes: two nodes with identical Smalltalk extents describe the same
+	text, and either answer is the same span.
+
+	Answers nil rather than guessing whenever any step of the walk fails -- no
+	map, no step point, no containing range -- so the caller falls back to the
+	___curPos___ scan exactly as before."
+
+	| src marker ofs step entry |
+	src := [aMethod @env0:sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	src isNil ifTrue: [^ nil].
+	"The map is checked for BEFORE the step-point primitives, so a method that
+	carries none -- most Smalltalk, every IR def that sends nothing -- pays for
+	one character test and nothing else."
+	marker := self ___positionMapMarkerIn___: src.
+	marker isNil ifTrue: [^ nil].
+	step := [aMethod @env0:_previousStepPointForIp: anIp] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	step isNil ifTrue: [^ nil].
+	ofs := [aMethod @env0:_sourceOffsetsAt: step] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	ofs isNil ifTrue: [^ nil].
+	entry := self ___innermostMapEntryIn___: src marker: marker containing: ofs.
+	entry isNil ifTrue: [^ nil].
+	^ { entry at: 3. entry at: 4. entry at: 5. entry at: 6 }
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___matchingBracketIn___: aString from: anIndex [
+	"The index of the ``]'' closing the ``['' at anIndex, or nil.
+
+	Brackets are counted in CODE only.  Generated Smalltalk is full of brackets
+	that are not brackets: every ``___curPos___'' literal carries the Python
+	source line verbatim, so ``x = a[0]'' appears inside a string, and a
+	lambda's restore comment repeats it inside a comment.  A naive count is
+	wrong on any function that subscripts anything.
+
+	Handles the three things that hide a character from the code: a quoted
+	string and a comment, each of which escapes its own delimiter by doubling
+	it, and a ``$'' character literal, whose next character is data whatever it
+	is -- ``$['' is legal Smalltalk."
+
+	| i depth n c dq |
+	"The comment delimiter itself, taken from a one-character string.  Spelling
+	 it as a character literal would end this comment where it sits, and
+	 ``Character value:'' does not exist in 3.7 -- it is ``codePoint:'' there."
+	dq := '"' @env0:at: 1.
+	n := aString @env0:size.
+	i := anIndex.
+	depth := 0.
+	[i @env0:<= n] @env0:whileTrue: [
+		c := aString @env0:at: i.
+		c @env0:= $$
+			ifTrue: [i := i @env0:+ 2]
+			ifFalse: [
+				c @env0:= $'
+					ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: $']
+					ifFalse: [
+						c @env0:= dq
+							ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: dq]
+							ifFalse: [
+								c @env0:= $[ ifTrue: [depth := depth @env0:+ 1].
+								c @env0:= $] ifTrue: [
+									depth := depth @env0:- 1.
+									depth @env0:= 0 ifTrue: [^ i]].
+								i := i @env0:+ 1]]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Exception handling' }
+BaseException class >> ___miSecondaryBases___ [
+	"The map #handles: consults -- off-chain base -> the classes reaching it -- or
+	nil when no MI exception class has been defined in this repository.  Exposed
+	for tests and for diagnosing a handler that is taking the slow path; nothing
+	in the runtime reads it through here, since #handles: touches the classVar
+	directly and that is the point of it."
+
+	^ MiSecondaryBases
+
+]
+
+{ #category : 'Grail-Exception handling' }
+BaseException class >> ___miSubclassHandles___: anException among: aSet [
+	"The slow half of #handles:, in its own method so the hot one stays narrow --
+	#handles: runs during stack-exhaustion unwinds, where frame width is
+	load-bearing (see ___pyAttrLoad___'s).
+
+	``isKindOf:'' rather than identity, so a SUBCLASS of a class that reaches the
+	off-chain base is caught too: ``class MyErr(DivisionByZero)'' is a
+	ZeroDivisionError for the same reason its parent is."
+
+	aSet do: [:each |
+		(anException isKindOf: each) ifTrue: [^ true]].
+	^ false
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___moveGeneratorStack___: oldException to: newException [
+	"Follow the stash when PythonGenerator has to re-signal a COPY (an exception
+	that was passed on its way out keeps live handler frames and cannot be
+	signalled again -- PythonGenerator >> _resignalable:).  Also clears the copy's
+	_gsStack, which `copy' brought along with the other named instVars."
+
+	| reg st |
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	oldException == newException ifTrue: [^ self].
+	st := reg at: oldException otherwise: nil.
+	st isNil ifTrue: [^ self].
+	reg removeKey: oldException ifAbsent: [].
+	reg at: newException put: st.
+	newException _gsStack: nil.
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___nestedFrameNameFor___: aMethod line: aLine [
+	"The name to give a nested ``def'''s frame: the containing def's name when the
+	line resolves it, else the sole nested def's name, else ``<nested>''.
+
+	NEVER NIL, and that is the whole point.  Both callers -- the traceback walk
+	and the live walk -- used to push the frame only when a name came back, so a
+	line that failed to derive did not cost the frame its NAME, it cost the frame
+	its EXISTENCE.  The method branch beside them was hardened against exactly
+	that (its comment records legitimate frames ``silently DROPPED from the walk
+	rather than merely losing their line number''), and the design note states
+	the resulting rule: a nil line costs a frame its line number, not its
+	existence.  This branch was written afterwards and did not inherit it.
+
+	Dropping is worse than a placeholder for a reason that is not aesthetic.
+	Rendering a traceback, a missing frame is a missing line of output.  But
+	``sys._getframe(n)'' COUNTS POSITIONS in this same chain, so a frame that
+	silently disappears does not shorten the answer, it SHIFTS it: every depth
+	past the gap names the wrong function, and nothing downstream can tell.  A
+	placeholder keeps the count honest and makes the gap visible.
+
+	``<nested>'' follows CPython's own convention for a frame whose name is not a
+	Python identifier -- ``<module>'', ``<lambda>'', ``<listcomp>'' -- so it reads
+	as a name rather than as an error string, and it cannot collide with a real
+	def name."
+
+	^ self ___nestedFrameNameFor___: aMethod line: aLine block: nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___nestedFrameNameFor___: aMethod line: aLine block: aBlockMethod [
+	"As ___nestedFrameNameFor___:line:, but told WHICH BLOCK the frame is running.
+
+	The line scan cannot separate two Python functions that BEGIN ON THE SAME
+	LINE, and a lambda inside a nested def's statement is exactly that:
+
+	    def outer():
+	        def inner():
+	            return (lambda: 1 / 0)()      <- line 3
+
+	codegen stamps the lambda at firstlineno 3 and ``inner'' at 2, both ranges
+	contain line 3, and innermost-wins picks the lambda -- for BOTH frames.
+	Reported ['outer', '<lambda>', '<lambda>'] where CPython says ['outer',
+	'inner', '<lambda>'].  Nested lambdas on one line collapse the same way.
+
+	The block itself is the discriminator, and it is exact: a block's compiled
+	method knows the OFFSET of its own ``['' in the home method's source
+	(``_firstSourceOffset''), so matching that bracket and reading the
+	``___pyNamed___:'' stamp just past it names THIS block and no other.
+
+	Deliberately not an ip: §9.10 and ___nestedFunctionNameFor___ both record
+	scans that were exact locally and wrong in CI because ``_sourceAtIp:'' moves
+	with GEM_NATIVE_CODE_ENABLED.  A source offset is fixed at compile time and
+	cannot move with the execution mode.
+
+	Falls back to the line scan whenever the offset is unusable -- no home, no
+	bracket there, an unbalanced scan, or a block codegen did not stamp -- so
+	this can only ADD precision, never remove a name that used to resolve."
+
+	| exact byLine |
+	exact := aBlockMethod isNil
+		ifTrue: [nil]
+		ifFalse: [self ___stampedNameForBlock___: aBlockMethod].
+	exact notNil ifTrue: [^ exact].
+	"An IR-built method's nested def is a block too, but its home's source is
+	the def's PYTHON (cut 64): the closure block is stamped at the nested
+	``def'' keyword's offset, so the name is read straight off the source
+	there -- no stamp, no line range.  Same discriminator as above: the
+	block's own source offset, fixed at compile time."
+	aBlockMethod isNil ifFalse: [
+		(self ___irNestedNameForBlock___: aBlockMethod home: aMethod) ifNotNil: [:n | ^ n]].
+	byLine := self ___nestedFunctionNameFor___: aMethod line: aLine.
+	byLine notNil ifTrue: [^ byLine].
+	^ (self ___soleNestedFunctionNameIn___: aMethod) ifNil: ['<nested>']
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___nestedFunctionNameFor___: aMethod line: aLine [
+	"The Python name of the nested ``def'' whose body contains aLine, within
+	aMethod's source -- or nil if aLine is in no nested def.
+
+	A nested def compiles to a BLOCK, so it has no selector to decode a name
+	from (___pythonFrameNameFor___ works off the selector, which is nil for a
+	block).  But codegen stamps every nested def's identity into the ENCLOSING
+	method's source:
+
+	    ___curPos___ := #(4 12 4 17 '            1 / 0').   <- inside b
+	    ]) ... ___pyCode___: (PyCode @env0:name: 'b' ... firstlineno: 3).
+	    ___curPos___ := #(5 8 5 11 '        b()').          <- inside a
+	    ]) ... ___pyCode___: (PyCode @env0:name: 'a' ... firstlineno: 2).
+
+	so the name is recoverable by finding the def whose LINE RANGE contains
+	aLine, innermost (greatest firstlineno) winning.
+
+	``firstlineno'' gives each range's start.  Its END comes free from the scan
+	order: codegen emits a def's stamp immediately AFTER the block it names has
+	closed, so at the moment the scan reaches that stamp, the greatest Python
+	line it has passed IS that def's last body line.  Source order is line
+	order, so a preceding sibling's lines are always lower and cannot inflate
+	it.
+
+	TWO EARLIER CUTS GOT THIS WRONG, in opposite directions, and the difference
+	between them is worth keeping.
+
+	The first took the greatest ``firstlineno'' not exceeding aLine, reasoning
+	that an inner def is stamped higher than the def enclosing it so the
+	innermost enclosing one wins.  That holds only when aLine is inside the last
+	def OPENED before it.  In
+
+	    def two_deep():
+	        def a():
+	            def b():
+	                1 / 0
+	            b()          # line 5
+	        a()
+
+	the frame for ``a'' sits at line 5, and ``b'' (firstlineno 3) both precedes
+	line 5 and does not contain it -- reported as ['two_deep', 'b', 'b'] where
+	CPython says ['two_deep', 'a', 'b'].  A start line alone cannot express
+	containment; that is what the range is for.
+
+	The second scanned the generated source FORWARD from ``_sourceAtIp:'''s
+	caret, taking the first stamp after it -- exact, since blocks nest, and it
+	passed everywhere locally.  It fails in CI.  ``_sourceAtIp:'' is
+	GEM-DEPENDENT: with native code enabled (GemNativeCodeEnabled=2, the CI gem
+	on Linux x86_64) the caret for a block frame sits PAST THE WHOLE BLOCK, and
+	so past that block's own stamp, making the scan find the next stamp OUT --
+	['two_deep', 'a', 'a'], every name one level too shallow.  An interpreted
+	gem (macOS/arm64) answers the call site and the same code is correct.  This
+	is the trap §9.10 records for the catching frame's position, which also
+	passed on every local gem and failed in CI.
+
+	Hence deriving containment from the PYTHON LINE, which both gem modes agree
+	on -- the CI run that exposed the caret bug reported every line correctly
+	while every name was wrong -- and touching ``_sourceAtIp:'' not at all.
+
+	Answers nil rather than guessing when nothing matches, and the caller treats
+	nil as ``merge this block into its home'' -- the pre-existing behaviour.
+
+	Cached per (method, line): the scan is pure and reads the whole method
+	source, and a deep or repeated traceback revisits the same sites
+	constantly."
+
+	| cache key |
+	aLine isNil ifTrue: [^ nil].
+	cache := SessionTemps current at: #'GrailFnNameCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailFnNameCache' put: cache].
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. aLine }.
+	^ cache @env0:at: key ifAbsent: [
+		| name |
+		name := self ___deriveNestedFunctionNameFor___: aMethod line: aLine.
+		cache @env0:at: key put: name.
+		name]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___noteCode___: aCode forBlockMethod: aBlockMethod [
+	"Record the PyCode stamped on a function BLOCK against the block's compiled
+	method (ExecBlock >> ___pyCode___:), for ___codeForBlockMethod___:name:.
+
+	Session-local, and keyed by the METHOD OBJECT -- an identity table holds it
+	alive, so an entry can never answer for a recycled OOP.  It holds one entry
+	per distinct def site, however many closures that site makes: every
+	closure of one def shares its compiled method, and the latest code wins."
+
+	| table |
+	table := SessionTemps current at: #'GrailBlockMethodCodes' otherwise: nil.
+	table isNil ifTrue: [
+		table := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailBlockMethodCodes' put: table].
+	table at: aBlockMethod put: aCode
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___noteStackOverflow___: anException [
+	"Record that stack exhaustion was caught, and how deep.
+
+	Runs in the yellow zone, so it does as little as possible: a counter, a
+	high-water mark, and -- only under GRAIL_STACK_TRACE -- one log line.  The
+	line is what survives a gem that dies moments later; SessionTemps does not.
+
+	GRAIL_STACK_TRACE is read ONCE per session and memoised, because
+	System gemEnvironmentVariable: is not something to call from inside a nearly
+	exhausted stack."
+
+	| st n trace |
+	st := SessionTemps @env0:current.
+	trace := st at: #'GrailStackTrace' otherwise: nil.
+	trace isNil ifTrue: [
+		trace := ((System gemEnvironmentVariable: 'GRAIL_STACK_TRACE')
+			ifNil: ['']) = '1'.
+		st at: #'GrailStackTrace' put: trace].
+	n := (st at: #'GrailStackOverflowCount' otherwise: 0) + 1.
+	st at: #'GrailStackOverflowCount' put: n.
+	st at: #'GrailStackOverflowDeepest'
+		put: ((st at: #'GrailStackOverflowDeepest' otherwise: 0)
+			max: System stackDepth).
+	trace == true ifTrue: [
+		GsFile gciLogServer:
+			'GRAIL_STACK_EVENT|enter|seq=', n printString,
+			'|depth=', System stackDepth printString,
+			'|class=', anException class name,
+			'|num=', ([anException number printString]
+				on: Error do: [:e | e return: '?'])].
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___noteStackOverflowConverted___ [
+	"Second half of ___noteStackOverflow___: the depth reached just before
+	resignalAs:, i.e. after the replacement has been built.  Kept separate and
+	deliberately tiny -- if the gem dies between the two, the .out shows an
+	``enter'' with no ``converted'' and that alone says the conversion overran the
+	yellow-zone reserve."
+
+	| st |
+	st := SessionTemps @env0:current.
+	st at: #'GrailStackOverflowConverted'
+		put: ((st at: #'GrailStackOverflowConverted' otherwise: 0) + 1).
+	(st at: #'GrailStackTrace' otherwise: false) == true ifTrue: [
+		GsFile gciLogServer:
+			'GRAIL_STACK_EVENT|converted|seq=',
+			(st at: #'GrailStackOverflowCount' otherwise: 0) printString,
+			'|depth=', System stackDepth printString].
+	^ self
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___ownCurPosStoresIn___: src [
+	"Private to the position readers: the index of every ``___curPos___ :=''
+	store that is src's OWN code, as an Array in source order -- never one
+	inside a string literal or a comment.
+
+	A module body embeds the source of every method it compiles as a STRING
+	LITERAL, stores and all, so a plain substring search over a module
+	initialize answers the stores of every method defined in the module.
+	Measured on _grail_session>>initialize: 32 matches, 2 of them its own, and
+	the last match on line 81 (inside SessionDict.items()) where the module's
+	own last store is line 21 (issue #1137)."
+
+	^ self ___codeOccurrencesOf___: '___curPos___ := ' in: src
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___ownCurPosTableFor___: aMethod [
+	"{ source. storeOffsets. storeLines } for aMethod's OWN ``___curPos___ :=''
+	stores (___ownCurPosStoresIn___:), each store's 1-based source line beside
+	it; nil when the source is unreadable.
+
+	NOT CACHED, deliberately.  Lexing costs about 2.5% of the ``_sourceAtIp:''
+	report every caller has already paid for: 1.0 ms against 38.8 ms on
+	traceback's 541 KB module body, 3.0 ms against 126.8 ms on argparse's
+	1.76 MB one.  And a cache keyed on the method would retain every method a
+	frame walk touched, including the ones it answered nil for, which is what
+	TracebackTestCase>>testTheLineCacheIsNotPoisonedByRecycledMethodOops
+	forbids: a retained method's OOP can never be recycled, so that test goes
+	vacuous.  The (method, ip) caches above this one already make a revisit
+	free."
+
+	| src offsets lineNos line from |
+	src := [aMethod sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	src isNil ifTrue: [^ nil].
+	offsets := self ___ownCurPosStoresIn___: src.
+	lineNos := Array new: offsets size.
+	line := 1.
+	from := 1.
+	1 to: offsets size do: [:i |
+		| lf |
+		[lf := src indexOf: Character lf startingAt: from.
+		 lf > 0 and: [lf < (offsets at: i)]] whileTrue: [
+			line := line + 1.
+			from := lf + 1].
+		lineNos at: i put: line].
+	^ { src. offsets. lineNos }
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___ownStoreLineIn___: aMethod report: report [
+	"The Python line of the LAST of aMethod's own ``___curPos___ :='' stores on a
+	source line at or above report's caret, or nil.  report is aMethod's
+	``_sourceAtIp:'' answer and is read only to find which source line the caret
+	marks (___caretSourceLineIn___:).
+
+	OWN STORES ONLY (issue #1137).  This used to scan the report text, and a
+	module body embeds the source of every method it compiles as a STRING
+	LITERAL, stores included.  So while a module-level statement that compiles
+	a method was still running -- a class statement's __init_subclass__, a
+	class decorator, anything sys._getframe(1) or extract_stack() sees from
+	there -- the scan answered the last line of the last method embedded
+	before the caret.  Measured: ``class C(Base):'' on line 7, with a method
+	ending on line 13, read f_lineno 13 where CPython reads 7, on both codegen
+	paths (module bodies are text-compiled either way).
+
+	Read only the digits IMMEDIATELY following the assignment.  Collecting every
+	digit to end-of-line instead concatenated the line number with any other
+	numeric literal the statement carried -- a for-loop over a generator derived
+	``37133718'' from ``___curPos___ := 37.'' followed by more generated code on
+	the same line -- and a whole statement does land on one line, so this is the
+	common case, not an exotic one.
+
+	A PEP 657 span store -- ``___curPos___ := #(line col endLine endCol src)'' --
+	carries the line as the array's FIRST element.  Stepping over the ``#(''
+	finds it in the same place the bare-integer form puts it.  This is
+	load-bearing beyond the line number: a frame is IDENTIFIED as Python by this
+	scan answering non-nil, so a store shape it cannot read makes the whole frame
+	vanish from the traceback rather than merely lose its columns (§9.39)."
+
+	| table src caretLine offsets lineNos |
+	table := self ___ownCurPosTableFor___: aMethod.
+	table isNil ifTrue: [^ nil].
+	caretLine := self ___caretSourceLineIn___: report.
+	caretLine isNil ifTrue: [^ nil].
+	src := table at: 1.
+	offsets := table at: 2.
+	lineNos := table at: 3.
+	offsets size to: 1 by: -1 do: [:i |
+		(lineNos at: i) <= caretLine ifTrue: [
+			| k n any |
+			k := (offsets at: i) + 16.
+			(k < src size and: [(src at: k) == $# and: [(src at: k + 1) == $(]])
+				ifTrue: [k := k + 2].
+			n := 0.
+			any := false.
+			[k <= src size and: [(src at: k) isDigit]] whileTrue: [
+				any := true.
+				n := n * 10 + (src at: k) digitValue.
+				k := k + 1].
+			any ifTrue: [^ n]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___ownStoreSpanIn___: aMethod report: report [
+	"The 5-element span of the LAST of aMethod's own SPAN-form stores --
+	``___curPos___ := #(...)'' -- at or above report's caret, or nil.  The twin
+	of ___ownStoreLineIn___:report:, and own-stores-only for the same reason.  A
+	bare-integer store is skipped rather than answered, so a statement codegen
+	gave no span to is left exactly as it was rather than guessed at."
+
+	| table src caretLine offsets lineNos |
+	table := self ___ownCurPosTableFor___: aMethod.
+	table isNil ifTrue: [^ nil].
+	caretLine := self ___caretSourceLineIn___: report.
+	caretLine isNil ifTrue: [^ nil].
+	src := table at: 1.
+	offsets := table at: 2.
+	lineNos := table at: 3.
+	offsets size to: 1 by: -1 do: [:i |
+		(lineNos at: i) <= caretLine ifTrue: [
+			| k |
+			k := (offsets at: i) + 16.
+			(k < src size and: [(src at: k) == $# and: [(src at: k + 1) == $(]])
+				ifTrue: [
+					(self ___parsePositionLiteral___: src from: k + 2)
+						ifNotNil: [:parsed | ^ parsed]]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___parsePositionArrayAt___: anIndex in: src [
+	"Private to the position API: the four integers then the source line of a
+	``#(...)'' position literal.  The fifth element is a quoted string with
+	doubled quotes, or the bare token ``nil'' when the node had no module to ask
+	for its source line."
+
+	| i nums srcLine |
+	i := anIndex.
+	nums := OrderedCollection new.
+	[nums size < 4] whileTrue: [
+		| r |
+		i := self ___skipSpacesFrom___: i in: src.
+		r := self ___readIntegerAt___: i in: src.
+		r isNil ifTrue: [^ nil].
+		nums add: (r at: 1).
+		i := r at: 2].
+	i := self ___skipSpacesFrom___: i in: src.
+	i > src size ifTrue: [^ nil].
+	srcLine := nil.
+	(src at: i) == $' ifTrue: [
+		| r |
+		r := self ___readQuotedStringAt___: i in: src.
+		r isNil ifTrue: [^ nil].
+		srcLine := r at: 1].
+	^ Array
+		with: (nums at: 1) with: (nums at: 2)
+		with: (nums at: 3) with: (nums at: 4)
+		with: srcLine
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___parsePositionAt___: anIndex in: src [
+	"Private to the position API: decode ONE ___curPos___ right-hand side, which
+	codegen emits in exactly two shapes -- a bare beginLine Integer, or the
+	5-element literal ``#(beginLine colno endLine endColno sourceLine)'' built by
+	AbstractLocationNode>>___pyPositionLiteralArray.  Answers the 5-element Array
+	or nil.
+
+	Owning this decode is the whole point of the public API: a consumer parsing
+	the text itself gets no error when the layout changes, just wrong numbers."
+
+	| i c |
+	i := self ___skipSpacesFrom___: anIndex in: src.
+	i > src size ifTrue: [^ nil].
+	c := src at: i.
+	(c == $# and: [i < src size and: [(src at: i + 1) == $(]])
+		ifTrue: [^ self ___parsePositionArrayAt___: i + 2 in: src].
+	(c isDigit or: [c == $-]) ifTrue: [
+		| r |
+		r := self ___readIntegerAt___: i in: src.
+		r isNil ifTrue: [^ nil].
+		^ Array with: (r at: 1) with: nil with: nil with: nil with: nil].
+	^ nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___parsePositionLiteral___: aString from: anIndex [
+	"Parse ``line col endLine endCol 'src')'' -- the body of the literal array
+	___pyPositionLiteralArray emits -- into a 5-element Array, or nil.
+
+	Read from the generated SOURCE rather than from the method's literal frame:
+	the frame holds every literal the method has and nothing says which store
+	an ip belongs to, whereas the source scan already located the right one."
+
+	| nums k n src |
+	nums := Array @env0:new: 4.
+	k := anIndex.
+	1 to: 4 do: [:i |
+		| digits |
+		[(k @env0:<= aString @env0:size)
+			and: [(aString @env0:at: k) @env0:= $ ]] whileTrue: [k := k @env0:+ 1].
+		digits := WriteStream @env0:on: String @env0:new.
+		[(k @env0:<= aString @env0:size)
+			and: [(aString @env0:at: k) @env0:isDigit]] whileTrue: [
+				digits @env0:nextPut: (aString @env0:at: k).
+				k := k @env0:+ 1].
+		digits @env0:contents @env0:isEmpty ifTrue: [^ nil].
+		nums @env0:at: i put: digits @env0:contents @env0:asNumber].
+	[(k @env0:<= aString @env0:size)
+		and: [(aString @env0:at: k) @env0:= $ ]] whileTrue: [k := k @env0:+ 1].
+	src := nil.
+	(k @env0:<= aString @env0:size and: [(aString @env0:at: k) @env0:= $'])
+		ifTrue: [
+			| out done |
+			out := WriteStream @env0:on: String @env0:new.
+			k := k @env0:+ 1.
+			done := false.
+			[done @env0:not and: [k @env0:<= aString @env0:size]] whileTrue: [
+				| ch |
+				ch := aString @env0:at: k.
+				ch @env0:= $'
+					ifTrue: [
+						"A doubled quote is one literal quote, not the end."
+						((k @env0:< aString @env0:size)
+							and: [(aString @env0:at: (k @env0:+ 1)) @env0:= $'])
+							ifTrue: [out @env0:nextPut: $'. k := k @env0:+ 2]
+							ifFalse: [done := true. k := k @env0:+ 1]]
+					ifFalse: [out @env0:nextPut: ch. k := k @env0:+ 1]].
+			done ifTrue: [src := out @env0:contents]].
+	n := Array @env0:new: 5.
+	n @env0:at: 1 put: (nums @env0:at: 1).
+	n @env0:at: 2 put: (nums @env0:at: 2).
+	n @env0:at: 3 put: (nums @env0:at: 3).
+	n @env0:at: 4 put: (nums @env0:at: 4).
+	n @env0:at: 5 put: src.
+	^ n
+
+]
+
+{ #category : 'Grail-Carrier' }
+BaseException class >> ___payloadOf___: anException [
+	"The Python exception anException stands for: itself, unless it is a
+	CARRIER, in which case the object it was raised to deliver.
+
+	THE ONE SANCTIONED CROSSING.  Every path that hands a caught exception back
+	to Python goes through here -- the ``except X as e'' binding, the
+	sys.exc_info() current-exception record, and a bare ``raise''.  Leaking a
+	carrier to Python instead of its payload reintroduces the identity bug this
+	removes, but rarer and much harder to find, so there is deliberately ONE
+	way across rather than an unwrap open-coded at each site.
+
+	Answers anException unchanged for everything that is not a carrier, which is
+	every exception raised for the first time and every exception GemStone
+	itself signals."
+
+	| payload ovf |
+	(anException @env0:isKindOf: AbstractException) @env0:ifFalse: [^ anException].
+	payload := [anException @env0:dynamicInstVarAt: #'___grailPayload___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	payload == nil ifTrue: [
+		"A raw stack overflow caught by a Python handler in the first search
+		(BaseException class >> handles:) carries a RecursionError it has not
+		built yet."
+		ovf := anException @env0:class.
+		(ovf == AlmostOutOfStackError or: [ovf == AlmostOutOfStack])
+			ifFalse: [^ anException].
+		payload := BaseException @env1:___overflowPayloadFor___: anException].
+	"The CAPTURE crosses too, when the payload has none of its own.  A carrier is
+	what gets signalled, so the VM's raise-time capture lands on the carrier --
+	and a payload whose own capture was spent (released once its traceback was
+	built, cleared by a re-raise, or stashed as it left a generator) then reached
+	its next catch with nothing to walk.  That is how a bare ``raise'' out of a
+	generator's except clause lost every frame of the consumer: the generator
+	stash held the body's half and the consumer's half was on a carrier nobody
+	read.  A payload that still has its capture keeps it -- that one describes
+	its first raise, which the bare-re-raise splice depends on."
+	((payload @env0:isKindOf: AbstractException)
+		@env0:and: [payload @env0:_gsStack @env0:isNil]) @env0:ifTrue: [
+			payload @env0:_gsStack: anException @env0:_gsStack].
+	^ payload
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___positionIn___: src kind: kind at: anInteger marker: marker stores: stores [
+	"Private to the position API: pythonPositionForMethod:atSourceIndex: with
+	the per-method work -- finding the map, lexing for the own stores -- done
+	once by the caller, so a caller asking about every send pays for it once."
+
+	| entry |
+	(anInteger isKindOf: SmallInteger) ifFalse: [^ nil].
+	(anInteger < 1 or: [anInteger > src size]) ifTrue: [^ nil].
+	entry := marker isNil ifFalse: [
+		self ___innermostMapEntryIn___: src marker: marker containing: anInteger].
+	kind == #irSource ifTrue: [
+		| first line |
+		first := (self ___irSliceFirstLineIn___: src) ifNil: [1].
+		entry isNil ifFalse: [
+			line := entry at: 3.
+			^ { line. entry at: 4. entry at: 5. entry at: 6.
+				self ___sourceLine___: line - first + 1 of: src }].
+		"No node covers it: the slice line the index is on -- unless that is
+		past the slice, in the metadata Grail appends after it."
+		line := 1.
+		1 to: anInteger - 1 do: [:k | (src at: k) == Character lf ifTrue: [line := line + 1]].
+		line > (self ___irSliceSourceLineCountIn___: (self ___splitLinesOf___: src))
+			ifTrue: [^ nil].
+		^ { line + first - 1. nil. nil. nil. self ___sourceLine___: line of: src }].
+	kind == #curPos ifTrue: [
+		| store |
+		store := nil.
+		stores size to: 1 by: -1 do: [:i |
+			(store isNil and: [(stores at: i) < anInteger]) ifTrue: [
+				store := self ___parsePositionAt___: (stores at: i) + 16 in: src]].
+		entry isNil ifTrue: [^ store].
+		^ { entry at: 3. entry at: 4. entry at: 5. entry at: 6.
+			(store notNil and: [(store at: 1) = (entry at: 3)])
+				ifTrue: [store at: 5]
+				ifFalse: [nil] }].
+	^ nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___positionMapMarkerIn___: src [
+	"The index of the quote that opens src's OWN ___GRAILPOS___ position-map
+	comment, or nil when src carries none.  One definition of ``own map'',
+	shared by the ip-keyed reader above and the source-index API (issue #1137).
+
+	THE MAP IS THE LAST THING IN THE SOURCE, and finding it has to cost the
+	MAP's length, not the SOURCE's.  A module body embeds every method it
+	compiles as a STRING LITERAL of that method's source -- maps included -- so
+	searching forwards finds a map belonging to some other method entirely and
+	resolves against it, confidently wrong.  Searching backwards fixes that but
+	is only cheap if it stops: a character-at-a-time scan for the marker cost
+	335 us on argparse's 945 KB module body, all of it in the comparison loop.
+
+	So walk back over what the map is MADE of instead -- trailing whitespace, the
+	closing quote, then a run of digits and spaces -- and require the marker
+	immediately before it.  A method with no map fails on its last character and
+	pays nothing."
+
+	| k marker |
+	src isNil ifTrue: [^ nil].
+	k := src size.
+	[k >= 1 and: [(src at: k) isSeparator]] whileTrue: [k := k - 1].
+	(k >= 1 and: [(src at: k) == $"]) ifFalse: [^ nil].
+	k := k - 1.
+	[k >= 1 and: [(src at: k) isDigit or: [(src at: k) == $ ]]]
+		whileTrue: [k := k - 1].
+	marker := k - 14.
+	(marker >= 1 and: [(src copyFrom: marker to: k) = '"___GRAILPOS___'])
+		ifFalse: [^ nil].
+	^ marker
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pyNamedStampIn___: aString after: anIndex [
+	"The name in the ``___pyNamed___:'' stamp that follows the ``]'' at anIndex,
+	or nil when the block carries none.
+
+	Codegen writes a Python function block's stamp immediately after the block
+	closes -- ``] ... @env0:___pyNamed___: 'inner'; ...'' -- so the FIRST stamp
+	past this bracket, in code, belongs to this block.  Scanning stops at the
+	next bracket in code: an unstamped block (an ordinary ``try'' body, a
+	comprehension) has none of its own, and stopping keeps it from adopting a
+	SIBLING's stamp.  The scan skips strings and comments for the same reason
+	the bracket matcher does, so a restore comment quoting ``[lambda: 0]'' is
+	not mistaken for a bracket."
+
+	| i n c dq marker |
+	marker := '___pyNamed___: '.
+	"The comment delimiter itself, taken from a one-character string.  Spelling
+	 it as a character literal would end this comment where it sits, and
+	 ``Character value:'' does not exist in 3.7 -- it is ``codePoint:'' there."
+	dq := '"' @env0:at: 1.
+	n := aString @env0:size.
+	i := anIndex @env0:+ 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		c := aString @env0:at: i.
+		c @env0:= $$
+			ifTrue: [i := i @env0:+ 2]
+			ifFalse: [
+				c @env0:= $'
+					ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: $']
+					ifFalse: [
+						c @env0:= dq
+							ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: dq]
+							ifFalse: [
+								(c @env0:= $[ or: [c @env0:= $]]) ifTrue: [^ nil].
+								((c @env0:= $_)
+									and: [(i @env0:+ marker @env0:size) @env0:<= n
+										and: [(aString @env0:copyFrom: i
+												to: i @env0:+ marker @env0:size @env0:- 1)
+											@env0:= marker]])
+									ifTrue: [^ self ___quotedStringIn___: aString
+										at: i @env0:+ marker @env0:size].
+								i := i @env0:+ 1]]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___pySourceStringOf___: aMethod [
+	"Private to the position API: aMethod's source, or nil.  Re-passes
+	AlmostOutOfStackError for the reason the rest of this file documents at
+	length -- it is an Error SUBCLASS, so a bare ``on: Error'' eats the VM's
+	stack warning and the next overflow is a fatal Red Zone crash."
+
+	^ [aMethod sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pythonFileForClassBodyMethod___: aMethod [
+	"The Python file a CLASS-BODY def was compiled from, or nil.
+
+	___pythonFileForClassOf___ asks the method's inClass for a module-body
+	stamp, which answers for a module-level def -- its inClass IS the module --
+	and for nothing else: a method's inClass is the PYTHON class, which has no
+	module body.  The frame then fell back to the CATCHING code's file, which is
+	right only while raiser and catcher share a module.  They need not: a
+	coroutine method whose body passes an exception through an
+	@asynccontextmanager is first caught by contextlib's own __aexit__, and its
+	frame was recorded there as ``File ""contextlib.py"", line 19, in test_x'' --
+	the right line of the wrong file, so linecache printed some unrelated line
+	of contextlib (test_contextlib_async test_contextmanager_traceback).
+
+	___liveFrameFilenameFor___ already derives this for sys._getframe, from the
+	class-side code table that backs __code__, so the two cannot disagree.  That
+	table is rebuilt on every read, so the answer is cached per METHOD -- the
+	object, not its asOop, for the reason ___pythonFileForClassOf___ gives -- and
+	a miss is cached too, as '<grail>'."
+
+	| cache file |
+	aMethod isNil ifTrue: [^ nil].
+	cache := SessionTemps current at: #'GrailMethodFileCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailMethodFileCache' put: cache].
+	file := cache @env0:at: aMethod ifAbsent: [
+		| f |
+		f := [self ___liveFrameFilenameFor___: aMethod] @env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+		f := (f @env0:isKindOf: CharacterCollection)
+			ifTrue: [f @env0:asString]
+			ifFalse: ['<grail>'].
+		cache @env0:at: aMethod put: f.
+		f].
+	^ file @env0:= '<grail>' ifTrue: [nil] ifFalse: [file]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pythonFileForClassOf___: aMethod [
+	"The Python file aMethod was compiled FROM, via the module class it is
+	installed in, or nil.
+
+	Every frame but the module body used to take its filename from the CATCHING
+	code object, which ___codeForMethod___ described as ``so every frame in a
+	traceback names the module it came from'' and which is simply wrong the
+	moment an exception crosses a module: ``helper.inner'' called from
+	``main.py'' rendered as ``File <main.py>, line 2, in inner''.  Line and
+	columns were right and the FILE was not, so linecache -- which
+	FrameSummary now prefers over the embedded source line -- read line 2 of the
+	WRONG FILE and printed it, with a caret line under text from another module.
+	Any program of more than one module was affected.
+
+	The method's own class knows better.  A Python function of module X is
+	compiled as a method on class X, whose module body carries the
+	``___pyFile___ := '<path>''' stamp codegen puts there; one scan per class
+	answers for every method on it.  Answers nil for a method with no such class
+	-- Grail's own Smalltalk, or an exec()/eval() doit, which has its own stamp
+	and is read directly.
+
+	Cached on the CLASS OBJECT, not its asOop, for the reason the ip caches
+	beside this give: a bare OOP keeps nothing alive, so a collected class lets
+	the OOP be reused and this session-lifetime entry then answers for an
+	unrelated one."
+
+	| cls cache |
+	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex |
+		(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+		ex @env0:return: nil].
+	cls isNil ifTrue: [^ nil].
+	cache := SessionTemps current at: #'GrailClassFileCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailClassFileCache' put: cache].
+	^ cache @env0:at: cls ifAbsent: [
+		| init file |
+		init := [cls @env0:compiledMethodAt: #'initialize' environmentId: 1
+			otherwise: nil] @env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+		file := init isNil
+			ifTrue: [nil]
+			ifFalse: [self ___pythonFilenameForMethod___: init].
+		cache @env0:at: cls put: file.
+		file]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pythonFileForDoitOf___: aMethod [
+	"The co_filename of the DOIT aMethod was generated into, or nil.
+
+	The third and last place a frame's filename can come from, after the frame's
+	own ``___pyFile___'' stamp (a module body) and the module class the method is
+	installed in (an ordinary def).  A function defined by EVALUATED code --
+	exec(), eval(), the REPL, an embedder's evaluateSource:usingModuleScope:filename:
+	-- is neither of those: it is compiled as a BLOCK inside the doit's own
+	method, so there is no inClass to ask, and it is not the body that carries
+	the stamp.  Every such frame therefore read '<grail>' however the source had
+	been named, which left the name an embedder gave visible on the ``<module>''
+	frame ALONE -- a traceback whose first line said 'named.py' and whose next
+	three said '<grail>' about the very same source.
+
+	NIL FOR A DOIT NOBODY NAMED, which is what keeps this additive.  A frame with
+	nothing of its own to say falls back to the CATCHING code object's filename,
+	so answering here stops it doing that; answering '<grail>' -- the placeholder
+	an unnamed doit's stamp holds -- would be recording an opinion where there was
+	none, and would change that fallback for every exec() and eval() in the
+	corpus.  ModuleAst >> ___rememberDoitScope:for: therefore records the name
+	only when CallAst >> sourcePath is set, and this is a lookup that misses for
+	everything else.
+
+	A DICTIONARY LOOKUP, NOT A SOURCE SCAN.  ___pythonFilenameForMethod___ can
+	recover the stamp from a block's sourceString (which is its home method's),
+	and that was the first implementation; it fetches the whole doit source once
+	per doit frame of every traceback built, so the name is recorded at compile
+	time instead, in the registry ModuleAst already keeps and evicts.
+
+	Bounded by that registry, and evicted with it: past its cap the oldest doits
+	lose their filename and their frames report '<grail>' again, which is exactly
+	what every such frame reported before this existed."
+
+	^ [(PythonAst @env0:at: #'ModuleAst') @env0:___doitFileFor: aMethod]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pythonFilenameForMethod___: aMethod [
+	"The co_filename a generated MODULE BODY records for itself, or nil.
+
+	Read out of the generated source, the same way ___pythonLineForMethod___
+	reads the line: codegen emits ``___pyFile___ := '<path>''' as the body's
+	first statement, and the value is a compile-time constant so any ip in the
+	method sees the same one.  Quotes inside a path are doubled by the emitter,
+	so they are undoubled here.
+
+	Uncached deliberately -- unlike the line scan, this is asked once per
+	traceback at most (only for a frame already named ``<module>''), and it
+	reads the METHOD's source rather than a per-ip report."
+
+	| src p out k done |
+	src := [aMethod @env0:sourceString] @env0:on: Error do: [:ex |
+		(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+		ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	p := src @env0:indexOfSubCollection: '___pyFile___ := '''.
+	p @env0:= 0 ifTrue: [^ nil].
+	"17, not 16: p indexes the FIRST character of the match, and the pattern is
+	17 long counting its opening quote, so the content starts one past it."
+	k := p @env0:+ 17.
+	out := WriteStream @env0:on: String @env0:new.
+	done := false.
+	[done @env0:not and: [k @env0:<= src @env0:size]] whileTrue: [
+		| ch |
+		ch := src @env0:at: k.
+		ch @env0:= $'
+			ifTrue: [
+				((k @env0:< src @env0:size) and: [(src @env0:at: (k @env0:+ 1)) @env0:= $'])
+					ifTrue: [out @env0:nextPut: $'. k := k @env0:+ 2]
+					ifFalse: [done := true]]
+			ifFalse: [out @env0:nextPut: ch. k := k @env0:+ 1]].
+	done ifFalse: [^ nil].
+	^ out @env0:contents
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pythonFrameNameFor___: aSelector [
+	"The Python function name a generated selector came from, or nil when the
+	selector is not one.
+
+	A ``def spam'' compiles to a fixed-arity selector (``spam'', ``spam:'', ...)
+	whose base is the name, and ALSO to a varargs ``_spam:kw:'' whose base reads
+	as ``_spam'' -- the same pair Object >> ___pyAttrDelete___ matches on.  Take
+	everything before the first colon and drop one leading underscore from the
+	varargs form."
+
+	| s idx base |
+	aSelector isNil ifTrue: [^ nil].
+	s := aSelector @env0:asString.
+	"A self-send dispatcher's ``___grailOrig_'' SHADOW is the original def under
+	a new selector (object class >> ___grailInstallOneDispatcher___:definedIn:
+	name:).  A wrapper that calls the raw function -- a decorated test method
+	under GRAIL_DIRECT_CALLS, whose class-body store installs the dispatcher --
+	runs the shadow, and its frame must still carry the def's own name:
+	test_contextlib_async's traceback test read
+	'___grailOrig_test_contextmanager_traceback'."
+	((s @env0:size @env0:> 13)
+		and: [(s @env0:copyFrom: 1 to: 13) @env0:= '___grailOrig_'])
+			ifTrue: [s := s @env0:copyFrom: 14 to: s @env0:size].
+	idx := s @env0:indexOf: $:.
+	base := (idx @env0:= 0) ifTrue: [s] ifFalse: [s @env0:copyFrom: 1 to: idx @env0:- 1].
+	base @env0:isEmpty ifTrue: [^ nil].
+	"``_spam:kw:'' -> ``spam''.  Only when a colon was present: a plain unary
+	``_spam'' is a genuine Python name beginning with an underscore."
+	((idx @env0:> 0) and: [(base @env0:at: 1) @env0:= $_]) ifTrue: [
+		((s @env0:endsWith: ':kw:') and: [base @env0:size @env0:> 1])
+			ifTrue: [base := base @env0:copyFrom: 2 to: base @env0:size]].
+	^ base
+
+]
+
+{ #category : 'Grail-Tracebacks' }
+BaseException class >> ___pythonFrameNameForMethod___: aMethod [
+	"The Python name to report for a generated method's frame.
+
+	Everything routes through ___pythonFrameNameFor___: on the selector, except
+	the MODULE BODY, which the selector alone cannot name: codegen compiles it
+	as an env-1 ``initialize'' (importlib class >> ___defineModuleClass___) and
+	CPython calls that frame ``<module>''.
+
+	Told apart by CATEGORY rather than by the selector, because a module may
+	legitimately contain ``def initialize()'' -- module >> ___pyDir___ makes the
+	same distinction for the same reason, and a Python def compiles into
+	'Grail-Methods', never into 'Grail-Module Body'.  The category probe is
+	behind the cheap selector test, so it costs nothing for the frames that are
+	not candidates."
+
+	| sel cls cat |
+	sel := aMethod @env0:selector.
+	"A METHOD-LOCAL CLASS BODY's compiled-text helper, whose selector
+	ClassDefAst>>___irHelperSelector___: spells
+	``___irClassDef_<offset>_<Name>___'' (with an optional ``:setters:'').
+	CPython gives a class body a frame of its own NAMED FOR THE CLASS, and this
+	is that frame -- the IR path is the only one that has it as a separate
+	method, the text having inlined the same statements into the enclosing def.
+
+	Named here rather than left nil because nil is what SKIPS a frame: without
+	it an exception raised while the class body ran reported no line for the
+	body at all, and the innermost entry was the enclosing method suspended at
+	its ``class C:'' statement."
+	(self ___classBodyHelperClassNameFor___: sel) ifNotNil: [:nm | ^ nm].
+	sel == #'initialize' ifTrue: [
+		cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+		cls notNil ifTrue: [
+			cat := [cls @env0:categoryOfSelector: sel environmentId: 1] @env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+			cat == #'Grail-Module Body' ifTrue: [^ '<module>']]].
+	^ self ___pythonFrameNameFor___: sel
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pythonLineForMethod___: aMethod ip: anIp [
+	"The PYTHON line a generated method was executing at ``anIp''.
+
+	§9.4 assumed this needed a compile-time ip -> line map.  It does not: the
+	generated Smalltalk source carries the Python line as a literal, because
+	codegen emits ``___curPos___ := N'' before every statement, and
+	``GsNMethod >> _sourceAtIp:'' answers that source with a caret marking the
+	exact ip.  So the answer is the last ``___curPos___ := N'' at or above the
+	caret line.  (§9.4's premise -- that another frame's TEMPS are unreachable
+	-- is true and irrelevant: this reads the source literal, not the temp.)
+
+	Cached per (method, ip) in SessionTemps: the derivation is pure, formatting
+	the report costs ~100 us, and a traceback revisits the same sites
+	constantly."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailIpLineCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIpLineCache' put: cache].
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. anIp }.
+	^ cache @env0:at: key ifAbsent: [
+		| line |
+		line := (self ___isIRPythonMethod___: aMethod)
+			ifTrue: [self ___irPythonLineForMethod___: aMethod ip: anIp]
+			ifFalse: [self ___derivePythonLineForMethod___: aMethod ip: anIp].
+		cache @env0:at: key put: line.
+		line]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___pythonSpanForMethod___: aMethod ip: anIp [
+	"The 5-element PEP 657 span of the statement in flight at anIp, or nil.
+
+	The COMPANION of ___pythonLineForMethod___:ip:, and the reason a non-catcher
+	frame can carry columns at all.  That method answers a bare line, and the
+	frame push had ``colno: nil'' hardcoded for every frame but the catching one
+	-- so the RAISING frame, which is exactly the one a caret line attaches to,
+	could never have columns however good codegen's spans were.  §9.39 traced
+	the flow; this closes it.
+
+	Cached on (method, ip) like the line scan, and for the same reason: the
+	underlying _sourceAtIp: report costs ~100us and a traceback revisits the
+	same sites constantly."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailIpSpanCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIpSpanCache' put: cache].
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. anIp }.
+	^ cache @env0:at: key ifAbsent: [
+		| span |
+		span := (self ___isIRPythonMethod___: aMethod)
+			ifTrue: [self ___irPythonSpanForMethod___: aMethod ip: anIp]
+			ifFalse: [self ___derivePythonSpanForMethod___: aMethod ip: anIp].
+		cache @env0:at: key put: span.
+		span]
+
+]
+
+{ #category : 'Grail-Python Attribute Hook' }
+BaseException class >> ___pythonValueAttrs___ [
+	"``e.args'' is the args TUPLE (a value attribute), not a callable -- so
+	``___pyAttrLoad___'' invokes the accessor and returns the tuple rather than
+	wrapping it as a BoundMethod (test_dict test_tuple_keyerror / test_missing
+	check ``exc.args == (key,)'').  ``e.__notes__'' (PEP 678) is likewise the
+	notes list, not a method.  ``e.__traceback__'' is the PyTraceback object
+	(or None) -- a value, not a callable -- so a read returns it instead of a
+	BoundMethod-wrapped selector.
+
+	``e.__context__'' / ``e.__cause__'' / ``e.__suppress_context__'' are the
+	PEP 3134 exception-chaining attributes: getset descriptors in CPython
+	(None / None / False by default), so a read returns the VALUE.  Without
+	this a read wrapped the accessor as a BoundMethod, so ``exc.__context__
+	is None'' was false (test_enum test_default_missing_with_wrong_type_value
+	asserts the raised ValueError has no context).  The accessors return the
+	default today (chaining is not yet tracked); registering them here keeps
+	the Python-visible read a value, matching every other reader."
+
+	^ IdentitySet new
+		add: #'args';
+		add: #'__notes__';
+		add: #'__traceback__';
+		add: #'__context__';
+		add: #'__cause__';
+		add: #'__suppress_context__';
+		add: #'__dict__';
+		yourself
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___quotedStringIn___: aString at: anIndex [
+	"The contents of the quoted literal starting at anIndex, or nil when anIndex
+	is not a quote.  A Python function name cannot contain a quote -- it is an
+	identifier, or one of CPython's own ``<lambda>''/``<listcomp>'' spellings --
+	so no unescaping is needed."
+
+	| i n ws |
+	n := aString @env0:size.
+	(anIndex @env0:<= n and: [(aString @env0:at: anIndex) @env0:= $'])
+		ifFalse: [^ nil].
+	i := anIndex @env0:+ 1.
+	ws := WriteStream @env0:on: String @env0:new.
+	[i @env0:<= n and: [(aString @env0:at: i) @env0:~= $']] @env0:whileTrue: [
+		ws @env0:nextPut: (aString @env0:at: i).
+		i := i @env0:+ 1].
+	i @env0:> n ifTrue: [^ nil].
+	^ ws @env0:contents
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___readIntegerAt___: anIndex in: src [
+	"Private to the position API: answer { value. indexAfter } or nil."
+
+	| i neg digits |
+	i := anIndex.
+	neg := false.
+	(i <= src size and: [(src at: i) == $-]) ifTrue: [neg := true. i := i + 1].
+	digits := WriteStream on: String new.
+	[i <= src size and: [(src at: i) isDigit]] whileTrue: [
+		digits nextPut: (src at: i).
+		i := i + 1].
+	digits contents isEmpty ifTrue: [^ nil].
+	^ Array
+		with: (neg ifTrue: [digits contents asNumber negated] ifFalse: [digits contents asNumber])
+		with: i
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___readQuotedStringAt___: anIndex in: src [
+	"Private to the position API: a Smalltalk single-quoted string starting at
+	anIndex, with '''' meaning one quote.  Answers { contents. indexAfter } or nil
+	when unterminated."
+
+	| i ws |
+	i := anIndex + 1.
+	ws := WriteStream on: String new.
+	[i <= src size] whileTrue: [
+		| c |
+		c := src at: i.
+		c == $'
+			ifTrue: [
+				(i < src size and: [(src at: i + 1) == $'])
+					ifTrue: [ws nextPut: $'. i := i + 2]
+					ifFalse: [^ Array with: ws contents with: i + 1]]
+			ifFalse: [ws nextPut: c. i := i + 1]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___realCodeForMethod___: aMethod name: aName [
+	"The PyCode behind ``aMethod'' -- the one its function's __code__ answers,
+	from the code table of the class (or module class) it was defined in -- when
+	the frame reporting it is named aName; nil otherwise.
+
+	The name has to agree because a nested def or a comprehension runs as a
+	BLOCK of its home method and reports under its own name: the home method's
+	code is not that frame's code.  Every step is guarded, as in
+	___liveFrameFilenameFor___, which walks the same route for the filename:
+	this runs while a stack is being reported."
+
+	| cls pyName code |
+	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	cls isNil ifTrue: [^ nil].
+	"A @classmethod/@staticmethod is a class-side method: its table is reached
+	 from the class, not the metaclass (see ___liveFrameFilenameFor___)."
+	(([cls @env0:isMeta] @env0:on: AbstractException do: [:ex | ex @env0:return: false])
+		== true) ifTrue: [
+			cls := [cls @env0:thisClass]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: cls]].
+	pyName := [self ___pythonFrameNameFor___: aMethod @env0:selector]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(pyName notNil and: [pyName @env0:= aName]) ifFalse: [^ nil].
+	code := self ___liveFrameCodeFor___: cls name: pyName.
+	code isNil ifTrue: [^ nil].
+	(([code @env0:dynamicInstVarAt: #'co_name'] @env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]) @env0:= aName) ifFalse: [^ nil].
+	^ code
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___refineCatcherPos___: posArray span: aBlockSpan [
+	"posArray -- the ___curPos___ value codegen recorded, which for the CATCHING
+	frame is authoritative -- with its COLUMNS taken from aBlockSpan, the span of
+	the frame the exception actually propagated from, when the two agree about
+	the line.
+
+	WHY THE CATCHER CANNOT JUST READ ITS OWN (method, ip).  Two reasons, and the
+	first was measured here: a method suspended at an ``on:do:'' send resolves to
+	no span at all, because the ip is at the SEND and the raising statement lives
+	in the protected BLOCK.  Asking the position map for the method's ip answers
+	nil, so the same-frame catcher stayed coarse even with the map in place.  The
+	second reason is the one the call site records: with native code enabled (the
+	CI gem on Linux x86_64) that ip does not resolve to the statement in flight
+	at all -- ``_sourceAtIp:'' puts the caret past the whole block -- and an
+	interpreted gem answers the call site instead.  Codegen's value is the only
+	reading of the LINE that holds in both modes, and it keeps it here,
+	unconditionally.
+
+	SO THE COLUMNS COME FROM THE BLOCK, which already has them: the walk carries
+	the protected block's span up to its home method as pendingSpan (``THE SPAN
+	FROM THE SAME FRAME THE LINE CAME FROM''), and that span is derived through
+	the BLOCK's ip -- the one pointing at the raise -- so the position map has
+	already narrowed it onto the operation.  Nothing new is resolved here; this
+	only stops the catcher from throwing that span away.
+
+	GUARDED ON THE LINE AGREEING, and against CODEGEN's line rather than another
+	derived one, which is what makes it mode-independent: where the block's ip
+	resolves to a different statement the two disagree and posArray is returned
+	untouched.  A bare SmallInteger posArray is refined too -- codegen recorded a
+	line and no columns for that statement, and the block's span supplies them
+	without moving the line."
+
+	| line |
+	aBlockSpan isNil ifTrue: [^ posArray].
+	line := (posArray @env0:isKindOf: Array)
+		ifTrue: [posArray @env0:size @env0:< 5
+			ifTrue: [^ posArray]
+			ifFalse: [posArray @env0:at: 1]]
+		ifFalse: [posArray].
+	(aBlockSpan @env0:at: 1) @env0:= line ifFalse: [^ posArray].
+	(posArray @env0:isKindOf: Array) ifFalse: [^ aBlockSpan].
+	^ { aBlockSpan @env0:at: 1.
+		aBlockSpan @env0:at: 2.
+		aBlockSpan @env0:at: 3.
+		aBlockSpan @env0:at: 4.
+		posArray @env0:at: 5 }
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___refineSpan___: aScanSpan forMethod: aMethod ip: anIp [
+	"aScanSpan, narrowed onto the OPERATION that raised when the method carries
+	a position map -- see ___mapSpanForMethod___:ip:.
+
+	The scan answers the last ``___curPos___'' store at or above the ip, which
+	is the whole STATEMENT: ``1 / 0 + 5'' comes back as the addition where
+	CPython blames the division.  The map answers the innermost recorded node
+	CONTAINING the send in flight, which is CPython's rule.
+
+	THE SCAN STILL DECIDES WHETHER THERE IS A FRAME AT ALL.  A frame is
+	identified as Python by this derivation answering non-nil (see
+	___derivePythonLineForMethod___), and a generated method need not carry a
+	map -- a body whose only expression is a bare local emits no send, so there
+	is nothing to record.  Letting the map answer on its own would therefore
+	make such frames appear and disappear on a property that has nothing to do
+	with being Python.  So the map only ever REFINES a span the scan already
+	produced; nil in, nil out.
+
+	THE LINE MOVES TOO, and the frame's line moves with it.  A statement can
+	span several lines, and CPython blames the line the failing OPERATION is on:
+	``return (100 +\n            1 / 0)'' is the division's line, not the
+	``return''.  The caller attaches a span only when the span's line equals the
+	frame's, so this would simply discard the columns -- which is what it used
+	to do -- unless the frame's line is refined by the SAME map lookup.  It is:
+	the traceback walk takes its line from ___tracebackLineForMethod___:ip:, so
+	the two readings agree by construction rather than by luck.
+
+	THAT REFINEMENT IS THE TRACEBACK WALK'S ALONE.  The live frame chain keeps
+	the statement-granular scan, for a reason that is about ``traceback
+	.walk_stack'' being eager here rather than about ips -- the full argument,
+	and the measurements that overturned the earlier explanation, are in
+	___tracebackLineForMethod___:ip:.
+
+	Element 5 is the scan's raw source TEXT, and it is dropped when the map moves
+	the line off the statement's first one: it is the text of the line the scan
+	found, so keeping it would caption line 74 with line 73's source.  Consumers
+	already treat a nil there as ``look it up'', which linecache does correctly."
+
+	| map |
+	aScanSpan isNil ifTrue: [^ nil].
+	map := self ___mapSpanForMethod___: aMethod ip: anIp.
+	map isNil ifTrue: [^ aScanSpan].
+	^ { map @env0:at: 1.
+		map @env0:at: 2.
+		map @env0:at: 3.
+		map @env0:at: 4.
+		(map @env0:at: 1) @env0:= (aScanSpan @env0:at: 1)
+			ifTrue: [aScanSpan @env0:at: 5]
+			ifFalse: [nil] }
+
+]
+
+{ #category : 'Grail-Exception handling' }
+BaseException class >> ___registerMiSecondaryBase___: aBase for: aClass [
+	"Record that aClass reaches aBase through MULTIPLE INHERITANCE -- aBase is in
+	aClass's MRO but not on its Smalltalk superclass chain, so #handles: cannot
+	see the relationship without being told.  Called by importlib
+	___registerMiExceptionBases___:mro: at class creation and again at canonical
+	restore.
+
+	Idempotent, so a re-import or a re-bind writes nothing: this is committed
+	state on BaseException, and a repository write per class definition is worth
+	avoiding even when it is small."
+
+	| subs |
+	((aBase isKindOf: Behavior) and: [aClass isKindOf: Behavior]) ifFalse: [^ self].
+	MiSecondaryBases == nil ifTrue: [
+		MiSecondaryBases := IdentityKeyValueDictionary new].
+	subs := MiSecondaryBases at: aBase otherwise: nil.
+	subs == nil ifTrue: [
+		subs := IdentitySet new.
+		MiSecondaryBases at: aBase put: subs].
+	(subs includesIdentical: aClass) ifTrue: [^ self].
+	subs add: aClass.
+	^ self
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___reRaise___: lexicalException [
+	"A bare ``raise''.  ``lexicalException'' is the ___ex of the textually
+	enclosing except handler, or nil when the raise is not inside one.
+
+	CPython's rule is a RUNTIME one: a bare raise re-raises whatever
+	sys.exc_info() points at, and RuntimeError('No active exception to
+	re-raise') only when that is empty.  Grail decided it at COMPILE time from
+	the AST, and the two differ in both directions:
+
+	    def inner():  raise            # not lexically in a handler...
+	    try:  raise TypeError('foo')
+	    except TypeError:  inner()     # ...but there IS an active exception
+
+	answered ``No active exception to re-raise'' where CPython re-raises the
+	TypeError, because handling is a property of the thread and not of the text
+	(test_raise test_nested_reraise); and
+
+	    except TypeError:
+	        try:  raise KeyError('caught')
+	        finally:  raise            # lexically the TypeError handler...
+
+	re-raised the TypeError, where CPython re-raises the KEYERROR that is in
+	flight through the finally -- ___runFinally___:during: installs it as the
+	current exception for exactly this reason (test_finally_reraise).
+
+	So the session's current exception decides, and the lexical one is the
+	fallback for the case it cannot see: an except handler whose body left the
+	current-exception stack in some state this does not model.  Preferring the
+	runtime answer and keeping the compiled one in reserve is strictly more
+	correct than either alone."
+
+	| cur |
+	cur := self ___currentException___.
+	cur isNil ifTrue: [cur := lexicalException].
+	cur isNil ifTrue: [
+		"CPython spells it ``reraise'', unhyphenated.  Grail had ``re-raise'',
+		which test_raise's own check does not notice (it matches only the
+		``No active exception'' prefix) but anything comparing the whole message
+		does."
+		^ RuntimeError @env1:___signal___: 'No active exception to reraise'].
+	^ self ___signalCarrying___: (self ___payloadOf___: cur)
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___resignalable___: anException [
+	"``anException'' if it can be signalled again, else a clean copy of it.
+
+	An exception carries its live handler frames in INDEXED slots appended to
+	its named ones, and the VM refuses -- uncontinuably, error 6011
+	``Exception has already been signaled'' -- to signal one that still has
+	them.  Returning normally from a handler pops them, which is why
+	___ensureFinally___ returns rather than passing, and why the common case
+	re-signals the SAME object and keeps its identity.
+
+	It is not enough on its own: an exception that was already PASSED further
+	in (Grail compiles a bare ``raise'' inside an ``except'' to ``___ex
+	pass'') keeps one frame's worth even after our handler returns, and
+	signalling that one is the 6011 -- which is what TracebackTestCase's
+	testAHandlerRaiseLeavesTheTry and testFinallyDuringPropagation raise.
+	``copy'' answers an instance of the same class with the named and dynamic
+	instance variables (messageText, args, __cause__, __context__, ...) but
+	none of the stale frames, so it signals cleanly and still matches the same
+	``except'' clauses.
+
+	A last resort, not the default -- Python propagates the identical object,
+	and the frame test keeps the copy to the cases that cannot avoid it.  This
+	is PythonGenerator >> _resignalable:'s rule, applied at the other site that
+	re-raises a caught exception."
+
+	| ovf |
+	"A raw stack overflow a ``finally'' caught (BaseException class >> handles:
+	let ``on: BaseException'' take it) goes on as its RecursionError."
+	ovf := anException @env0:class.
+	(ovf == AlmostOutOfStackError or: [ovf == AlmostOutOfStack])
+		ifTrue: [^ self ___resignalable___: (self ___payloadOf___: anException)].
+	^ ((anException @env0:isKindOf: AbstractException)
+		@env0:and: [anException @env0:_basicSize @env0:> 0])
+			ifTrue: [anException @env0:copy]
+			ifFalse: [anException]
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___restoreHandlerState___: anArray [
+	"Reinstate what ___captureHandlerState___ answered."
+
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerDepth'
+		put: (anArray @env0:at: 1).
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerTokens'
+		put: (anArray @env0:at: 2) @env0:copy.
+	^ self
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___runFinally___: finallyBlock during: anException [
+	"Run a ``finally'' body while anException is the session's current
+	exception, then restore whatever was current before.
+
+	Installing it is what makes sys.exc_info() / sys.exception() inside the
+	finally report the in-flight exception, as CPython does, and it is also
+	what gives an exception RAISED by the finally its __context__ -- the
+	implicit chaining reads the same slot.
+
+	Only real Python exceptions reach here: the caller screens out the
+	control-flow signals with ___isControlFlowSignal___: first, so a return /
+	break / continue through a finally leaves exc_info untouched -- correct,
+	since CPython shows the ENCLOSING handled exception there rather than a
+	fresh one.
+
+	What is installed is the PAYLOAD, not the object the handler caught.  When
+	the in-flight exception still had live handler frames it was raised through
+	a CARRIER (see ___signalCarrying___:), and the carrier is a bare instance of
+	the same class that nothing is meant to see.  Installing it made
+	sys.exception() in the finally a blank ``Exception()'' and gave anything the
+	finally raised that blank as its __context__ -- every @contextmanager whose
+	cleanup raises during a thrown-in exception, since the throw is made from
+	inside the ``with'' statement's own handler (test_contextlib_async
+	test_exit_exception_with_correct_context).  The except-clause entry and the
+	``with'' statement already unwrap; this was the one install that did not."
+
+	| saved |
+	saved := self ___currentException___.
+	self ___setCurrentException___: (self ___payloadOf___: anException).
+	^ [finallyBlock value]
+		ensure: [self ___setCurrentException___: saved]
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___setCurrentException___: anExceptionOrNil [
+	"Set (nil clears) the session's currently-handled exception.  Clearing
+	REMOVES the key rather than storing nil, so ___currentException___'s
+	ifAbsent: nil default is the single source of ``no active exception''."
+
+	anExceptionOrNil isNil
+		ifTrue: [ (SessionTemps current) removeKey: #'GrailCurrentException' ifAbsent: [] ]
+		ifFalse: [ (SessionTemps current) at: #'GrailCurrentException' put: anExceptionOrNil ].
+	^ anExceptionOrNil
+
+]
+
+{ #category : 'Grail-Carrier' }
+BaseException class >> ___signalCarrying___: payload [
+	"Raise payload WITHOUT signalling payload itself.
+
+	WHY THIS EXISTS.  GemStone LIFTS a handler onto the signalling frame rather
+	than UNWINDING to it, so a signalled exception is not inert data -- it is
+	the live anchor joining a still-running signal point to its handler.  Those
+	are the frames the VM appends as indexed slots: _basicSize is 5 inside the
+	handler and 0 the moment it returns, that return being the deferred unwind.
+	One object cannot anchor two live signals at once, which is exactly the
+	UncontinuableError 6011 (``Exception has already been signaled'') that
+	``except E as e: raise e'' walks into.
+
+	Python's model is the opposite.  ``raise'' UNWINDS, so by the time an
+	``except'' body runs the original propagation is already over and the
+	exception is ordinary data that may be raised again freely -- and CPython
+	requires the re-raised object to BE the caught one, because ``is''
+	comparisons are built on it (contextlib's _GeneratorContextManager.__exit__
+	is literally ``if exc is not value: raise'').
+
+	So stop asking one object to be both.  Signal a fresh throwaway CARRIER of
+	the payload's own class that references the payload; the handler unwraps.
+	The payload is never signalled, so it never acquires frames and stays
+	raisable for ever.
+
+	SAME CLASS, deliberately: ``on: ValueError do:'' selects on the object
+	actually signalled, so the carrier has to match whatever the payload would
+	have matched -- including a user-defined ``class MyError(ValueError)''.
+	Allocated with env-0 #new rather than any Python constructor: nothing runs
+	__init__ on a carrier, and nothing reads it as a Python object.
+
+	WHAT IT REPLACES.  #pass preserved identity but continued the ORIGINAL
+	search, resuming OUTSIDE the currently-active on:do: -- so a handler
+	established INSIDE the except body was skipped entirely:
+
+	    except RuntimeError as outer:
+	        try:
+	            raise outer
+	        except BaseException:      ""never ran -- the exception left the function""
+	            ...
+
+	A carrier is an ordinary #signal from the raise point, which is precisely
+	CPython's fresh handler search.
+
+	messageText is carried across so an UNCAUGHT re-raise still reports
+	something at the Smalltalk level, where no Grail handler is present to
+	unwrap it.
+
+	A LAST RESORT, not the default.  When the payload has no live frames it can
+	simply be signalled, and then identity is free and nothing needs unwrapping
+	-- which matters because not every catcher unwraps: Grail's own Smalltalk
+	handlers, and any Python code holding the object across the raise, see
+	whatever was signalled.  Wrapping unconditionally is what broke
+	test_yield_from's ``gen.throw(exc) is exc'' assertions on StopIteration and
+	lost an exception's __notes__ in test_dict.  This is #_basicSize > 0, the
+	same test the old #copy path used -- carriers appear exactly where a plain
+	#signal was impossible, and nowhere else."
+
+	| carrier |
+	((payload @env0:isKindOf: AbstractException)
+		@env0:and: [payload @env0:_basicSize @env0:> 0]) @env0:ifFalse: [
+			^ payload @env0:signal].
+	carrier := payload @env0:class @env0:new.
+	carrier @env0:dynamicInstVarAt: #'___grailPayload___' put: payload.
+	[carrier @env0:messageText: payload @env0:messageText]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ carrier @env0:signal
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___skipDelimited___: aString from: anIndex delimiter: aChar [
+	"The index just past the string literal or comment OPENING at anIndex, whose
+	delimiter is aChar and which escapes that delimiter by doubling it.  An
+	unterminated one answers one past the end, so the caller's loop finishes."
+
+	| i n |
+	n := aString @env0:size.
+	i := anIndex @env0:+ 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		(aString @env0:at: i) @env0:= aChar
+			ifTrue: [
+				(i @env0:< n and: [(aString @env0:at: i @env0:+ 1) @env0:= aChar])
+					ifTrue: [i := i @env0:+ 2]
+					ifFalse: [^ i @env0:+ 1]]
+			ifFalse: [i := i @env0:+ 1]].
+	^ n @env0:+ 1
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___skipSpacesFrom___: anIndex in: src [
+	"Private to the position API."
+
+	| i |
+	i := anIndex.
+	[i <= src size and: [(src at: i) == $ ]] whileTrue: [i := i + 1].
+	^ i
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___soleNestedFunctionNameIn___: aMethod [
+	"The name of aMethod's ONLY nested ``def'', or nil when it has none or more
+	than one.
+
+	An IP-INDEPENDENT fallback for ___nestedFunctionNameFor___:line:, which needs
+	a Python line to decide containment and answers nil without one.  The line is
+	derived from ``_sourceAtIp:'' and can legitimately come back nil --
+	___derivePythonLineForMethod___:ip: fails closed when the report carries no
+	caret, deliberately, because ``a missing frame is recoverable; a confidently
+	wrong line number is not''.  That trade is right for the LINE and wrong for
+	the frame's EXISTENCE, which is what the caller used to make depend on it.
+
+	When the enclosing method contains exactly one nested def there is nothing to
+	decide: containment is the only possibility, so the name is knowable with no
+	line at all.  That covers the common shape -- one helper inside a function --
+	and leaves only genuinely ambiguous methods to the placeholder.
+
+	Counts ``PyCode @env0:name: '' stamps the same way
+	___deriveNestedFunctionNameFor___ reads them, so the two agree by construction
+	about what a nested def IS; this one just ignores the ranges.  Cached per
+	method, like both scans beside it."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailSoleFnNameCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailSoleFnNameCache' put: cache].
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := aMethod.
+	^ cache at: key ifAbsent: [
+		| name |
+		name := self ___deriveSoleNestedFunctionNameIn___: aMethod.
+		cache at: key put: name.
+		name]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___sourceLine___: aLine of: src [
+	"Line aLine of src (1-based), without its terminator, or nil.
+
+	Walks rather than splitting: an IR method's source is padded with one
+	newline per module line before the def, so a def deep in a large file has
+	a source whose lines are mostly empty, and ``subStrings:'' would build the
+	whole collection to reach one of them."
+
+	| n start i |
+	(src isNil or: [aLine isNil or: [aLine @env0:< 1]]) ifTrue: [^ nil].
+	n := 1.
+	start := 1.
+	i := 1.
+	[i @env0:<= src @env0:size] @env0:whileTrue: [
+		(src @env0:at: i) @env0:== Character lf
+			ifTrue: [
+				n @env0:= aLine ifTrue: [^ src @env0:copyFrom: start to: i @env0:- 1].
+				n := n @env0:+ 1.
+				start := i @env0:+ 1].
+		i := i @env0:+ 1].
+	n @env0:= aLine ifTrue: [^ src @env0:copyFrom: start to: src @env0:size].
+	^ nil
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___sourceMarksGeneratedPython___: src [
+	"True if a method's source marks it as compiled Python: a ``___curPos___''
+	store (text codegen) OR a leading ``def ''/``async def '' (direct-to-IR
+	codegen attaches the Python def as the method source, padded with leading
+	newlines, and emits NO ___curPos___).  A hand-written Smalltalk method's
+	source begins with its selector, never ``def ''.  compile_env is 0 here."
+
+	| trimmed |
+	src isNil ifTrue: [^ false].
+	(src includesString: '___curPos___') ifTrue: [^ true].
+	trimmed := src trimSeparators.
+	^ ((trimmed size >= 4) and: [(trimmed copyFrom: 1 to: 4) = 'def '])
+		or: [(trimmed size >= 10) and: [(trimmed copyFrom: 1 to: 10) = 'async def ']]
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> ___splitLinesOf___: aString [
+	"Private to the position API: split on LF KEEPING empty lines, so an index
+	into the result is a 1-based line number."
+
+	| out run |
+	out := OrderedCollection new.
+	run := WriteStream on: String new.
+	aString do: [:c |
+		c == Character lf
+			ifTrue: [out add: run contents. run := WriteStream on: String new]
+			ifFalse: [c == Character cr ifFalse: [run nextPut: c]]].
+	out add: run contents.
+	^ out
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___stackOverflowReport___ [
+	"What the stack-exhaustion tally saw this session, for a harness to print.
+	``enter'' counts catches; ``converted'' counts conversions that COMPLETED.
+	enter > converted means a conversion did not finish -- the interesting case."
+
+	| st |
+	st := SessionTemps @env0:current.
+	^ 'enter=', (st at: #'GrailStackOverflowCount' otherwise: 0) printString,
+	  '|converted=', (st at: #'GrailStackOverflowConverted' otherwise: 0) printString,
+	  '|deepest=', (st at: #'GrailStackOverflowDeepest' otherwise: 0) printString
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___stampedNameForBlock___: aBlockMethod [
+	"The Python name codegen stamped on aBlockMethod's block, or nil.
+
+	Cached per block method, and the CACHE HOLDS THE METHOD OBJECT rather than
+	its asOop, for the reason the two scans beside it record: a bare OOP keeps
+	nothing alive, so a collected method's OOP can be reused and a
+	session-lifetime entry then answers for an unrelated method."
+
+	| cache |
+	cache := SessionTemps current at: #'GrailBlockStampCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailBlockStampCache' put: cache].
+	^ cache at: aBlockMethod ifAbsent: [
+		| name |
+		name := self ___deriveStampedNameForBlock___: aBlockMethod.
+		cache at: aBlockMethod put: name.
+		name]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___stashGeneratorStack___: anException [
+	"Remember the frames captured INSIDE a generator's forked process, and clear
+	_gsStack so that re-signalling on the consumer captures the CONSUMER's frames.
+
+	A generator body runs in its own GsProcess, so the stack captured when it
+	raises holds the body and the fork plumbing and NOTHING of the consumer
+	(§9.9).  PythonGenerator stows such an exception and re-signals it on the
+	consumer -- and primitive 2022 fills _gsStack only when it is nil on entry, so
+	without this clear the consumer's half is never captured and the whole
+	traceback collapses to the catch-site frame.  The halves are spliced in
+	___walkableStack___.
+
+	ONE ENTRY PER LEVEL, appended in the order the levels unwind, because
+	``yield from'' nests forked processes: inner_gen raises, its stash is taken,
+	it is re-signalled on OUTER_GEN's process, and outer's handler stashes in turn.
+	Overwriting instead of appending lost the inner generator's frame entirely
+	(``consume_delegated@15 outer_gen@10'' for CPython's
+	``consume_delegated@15 outer_gen@10 inner_gen@6'').  Innermost level first,
+	which is also the order the walk wants.
+
+	Session-local and keyed by IDENTITY, so one generator consuming another keeps
+	its own levels.  Not stored on the exception itself: a dynamic instVar there
+	would be readable as a Python attribute."
+
+	| st reg levels |
+	st := anException _gsStack.
+	st isNil ifTrue: [^ self].
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailGeneratorStacks' put: reg].
+	levels := reg at: anException otherwise: nil.
+	levels isNil ifTrue: [levels := OrderedCollection new].
+	levels add: (self ___trimCapturedStack___: st).
+	reg at: anException put: levels.
+	anException _gsStack: nil.
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___toPortableIps___: aStack [
+	"aStack with every native ip converted to a portable one, or aStack itself
+	when the gem is interpreting.
+
+	Layout is a header followed by (method, ip, receiver) triples, over-allocated
+	with trailing nils, so the GsNMethod test is what finds the real frames
+	rather than the array size.
+
+	asReturn: TRUE for every frame.  Measured across a whole captured stack: at
+	the raise site it is the only value that answers the right line (5, against 4
+	for asReturn: false), on the innermost frame asReturn: false degenerates to
+	line 1, and where the distinction does not matter both answer alike.  The
+	cross-check that this is the RIGHT conversion rather than a number that
+	happens to land well: it turns the native ip 251 into 112, which is exactly
+	the ip an interpreted run captures for that same point.
+
+	MUST NOT be applied to an already-portable ip -- interpreted, the same call
+	answers 0, i.e. line 1 -- which is why the whole thing is gated. There is no
+	per-METHOD native predicate to gate on more finely (GsNMethod publishes only
+	_natIpToPort: and _nativeIpOffsetToPortable:asReturn:), so the gate is
+	necessarily per-gem.
+
+	A conversion that fails leaves the raw ip in place: a slightly wrong line
+	beats a dropped frame, since a nil line makes the frame fail the
+	is-this-a-Python-frame test and vanish from the traceback entirely."
+
+	| out |
+	self ___capturedIpsAreNative___ ifFalse: [^ aStack].
+	aStack isNil ifTrue: [^ aStack].
+	out := aStack copy.
+	2 to: out size - 1 by: 3 do: [:i |
+		| meth ip portable |
+		meth := out at: i.
+		(meth isKindOf: GsNMethod) ifTrue: [
+			ip := out at: i + 1.
+			(ip isKindOf: Integer) ifTrue: [
+				"abs: a negative ip marks a stack breakpoint at that spot."
+				portable := [meth _nativeIpOffsetToPortable: ip abs asReturn: true]
+					on: Error do: [:ex |
+						(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+						ex return: nil].
+				(portable isKindOf: Integer)
+					ifTrue: [out at: i + 1 put: portable]]]].
+	^ out
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___tracebackLineForMethod___: aMethod ip: anIp [
+	"___pythonLineForMethod___:ip:, narrowed onto the OPERATION in flight when
+	the method carries a position map -- the line half of what
+	___refineSpan___:forMethod:ip: does for the columns.
+
+	FOR A TRACEBACK ONLY, which is the whole point of it being a separate
+	selector.  The scan answers the line of the STATEMENT, so a statement
+	spanning several lines reports its first one wherever the failure actually
+	sat: ``return (100 +\n  1 / 0)'' blamed the ``return'' where CPython blames
+	the division a line below.  The map answers the innermost node containing
+	the send in flight, which is CPython's rule, and the SPAN derived alongside
+	it now agrees about the line -- so the caller's ``span line = frame line''
+	gate keeps passing and the frame gets its columns instead of losing them.
+
+	WHY THE LIVE WALK MUST NOT USE THIS, and the reason is NOT the one recorded
+	here before.  The earlier note said the live chain holds ips ``of a
+	different kind'', for which the step point names the last COMPLETED send.
+	That is false, and measuring it says so: both walks read _gsStack through
+	___toPortableIps___:, ___framesOfSuspendedProcess___: never supplies these
+	frames at all (instrumented: it yields none for the failing case), and a
+	CALLER frame on the raise path resolves exactly -- ``outer_raise'' in a
+	``return inner(\n  g(), 2)'' answers CPython's (25,11,26,15).
+
+	What USED TO differ was WHERE GRAIL IS when the live stack is read, and that
+	is now fixed at the root rather than papered over.  ``traceback.walk_stack''
+	was EAGER here while CPython's is a generator whose body runs later, so for
+
+	    return traceback.StackSummary.extract(          <-- line 7
+	        traceback.walk_stack(None), limit=1)        <-- line 8
+
+	CPython captured while the frame was suspended in ``extract'' on line 7 and
+	Grail while it was suspended in ``walk_stack'' on line 8.  Both ips were
+	correct for their own program; the programs were at different points.  The
+	statement-granular scan papered over it BY LUCK -- lines 7 and 8 are one
+	statement, so it answered 7 from either ip -- and the luck ran out under the
+	IR position map, which faithfully reported 8 where CPython reports 7.
+
+	THE REASON RECORDED HERE FOR LEAVING IT ALONE WAS WRONG, and is kept as a
+	caution.  It said a generator ``changes a stdlib return type that other
+	callers join and assert on''.  Measured, every consumer copes: the object is
+	a generator with __next__, and list(...), StackSummary.extract (with and
+	without capture_locals), extract_stack and format_stack all answer exactly
+	what they did.  Only extract_stack's f-given branch needed a list(), because
+	it slices and tests emptiness.  The real obstacle was somewhere else -- a
+	frame built inside a generator had no f_locals, because the level sweep
+	reads one process -- and once that was fixed the change was inert.
+
+	walk_stack is a generator now, so both codegen paths capture where CPython
+	captures.  The scan below still answers the statement's line, which is the
+	same answer for a different and better reason.  (CPython reports colno None
+	for a walk_stack frame, so there are no columns at stake either way.)
+
+	Nil in, nil out, so the scan still DECIDES whether there is a frame: a frame
+	is identified as Python by the scan answering non-nil, and a generated
+	method need not carry a map (a body whose only expression is a bare local
+	emits no send). Letting the map answer alone would make such frames appear
+	and disappear on a property unrelated to being Python."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailIpTbLineCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIpTbLineCache' put: cache].
+	"Cached on the same terms as ___pythonLineForMethod___:ip: and for the same
+	reason -- a traceback revisits the same sites constantly, and the map lookup
+	this adds is the expensive half (a backwards walk over the map text, then a
+	parse of it).  Keyed on the METHOD OBJECT, never its asOop: a bare OOP keeps
+	nothing alive, so a collected method's OOP can be reused and a
+	session-lifetime entry would answer for an unrelated one."
+	key := { aMethod. anIp }.
+	^ cache @env0:at: key ifAbsent: [
+		| line |
+		line := self ___pythonLineForMethod___: aMethod ip: anIp.
+		"THE MAP ANSWERS ON ITS OWN when the scan found nothing, which is not a
+		relaxation of the ``is this a Python frame'' test but the same test read
+		off a better source.  Only codegen writes a ___GRAILPOS___ map, exactly
+		as only codegen writes ``___curPos___ := N'', so a method carrying one
+		is generated Python by the same argument.
+
+		THE FRAME THIS EXISTS FOR is a method-local class BODY.  The IR path
+		compiles it into a helper method of its own (ClassDefAst >>
+		___irHelperSelector___:) and the class emit stamps no ___curPos___
+		inside it -- the enclosing statement's stamp is the enclosing method's
+		-- so the scan answered nil, the capture walk read that as ``not a
+		Python frame'' and skipped it, and an exception raised while the body
+		ran lost its line.  Measured against CPython, which gives a class body
+		a frame of its own named for the class:
+
+		    CPython     make @ 9 ``class C:''  +  C @ 11 ``b = 1 // 0''
+		    Grail IR    make @ 9 ``class C:''     (the line was GONE)
+
+		The text path never needed this: it inlines the class build into the
+		enclosing def, whose own stamps and map cover it."
+		(self ___mapSpanForMethod___: aMethod ip: anIp)
+			ifNotNil: [:map | line := map @env0:at: 1].
+		cache @env0:at: key put: line.
+		line]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___traceLineDerivation___: aMethod ip: anIp caret: caretIdx lines: lines result: result [
+	"Append one record of what the scan actually saw.
+
+	It answers the question the assertion cannot: WHERE the caret landed, and
+	which ___curPos___ stores were above it.  A wrong line means the caret sat
+	below a store it should have sat above, so the caret line and its neighbours
+	ARE the evidence -- as source text, since a line number inside a generated
+	method means nothing without the text.
+
+	nextPutAsUtf8:, not nextPutAll:: a GsFile takes BYTES, and nextPutAll: writes
+	a Unicode16's code units straight through.  Generated source embeds Python
+	string literals, so a non-ASCII one would come out UTF-16 -- a NUL between
+	every ASCII character.
+
+	Never allowed to disturb the run it observes: the body is guarded and a
+	failure to write is swallowed.  A diagnostic that can break what it measures
+	is worse than none."
+
+	| dir fh |
+	dir := self ___lineTraceDir___.
+	dir isNil ifTrue: [^ self].
+	[
+		fh := GsFile openOnServer: dir , '/line_derivation.log' mode: 'a'.
+		fh isNil ifTrue: [^ self].
+		fh nextPutAsUtf8: '=== ' , aMethod printString , ' ip=' , anIp printString
+			, ' caret=' , caretIdx printString , ' of ' , lines size printString
+			, ' -> ' , result printString , (String with: Character lf).
+		"Three lines either side.  Enough to show whether the caret is above or
+		below the store that should have won -- the whole question -- without
+		dumping a generated method that can run to thousands of lines."
+		((caretIdx - 3) max: 1) to: ((caretIdx + 3) min: lines size) do: [:i |
+			fh nextPutAsUtf8: (i = caretIdx ifTrue: ['  >> '] ifFalse: ['     '])
+				, i printString , ': '
+				, ((lines at: i) copyFrom: 1 to: ((lines at: i) size min: 200))
+				, (String with: Character lf)].
+		fh close.
+	] on: Error do: [:ex |
+		"AlmostOutOfStackError is an Error subclass; swallowing it here would eat
+		the VM's stack warning and turn the next overflow into a Red Zone crash."
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___trimCapturedStack___: st [
+	"The (method, ip, receiver) triples of a captured stack, without its header
+	element and without the trailing nils it is over-allocated with."
+
+	| out |
+	st isNil ifTrue: [^ #()].
+	out := OrderedCollection new.
+	2 to: st size by: 3 do: [:i |
+		(st at: i) isNil ifTrue: [^ out asArray].
+		out add: (st at: i); add: (st at: i + 1); add: (st at: i + 2)].
+	^ out asArray
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___unreadableFrame___: anIndex of: aDepth in: aProcess why: aReason [
+	"A process that just claimed aDepth frames would not hand over frame
+	anIndex.  RAISE; do NOT answer a short list.
+
+	WHY RAISING BEATS DROPPING.  The walk is POSITIONAL -- it answers
+	(method, ip, receiver) triples innermost-first -- so dropping one frame
+	shifts every frame outside it one place inwards, and the caller gets a
+	plausible stack that is WRONG.  That cost real time twice, as flaky CI
+	failures whose message pointed anywhere but here:
+	  * GeneratorStackFrameTestCase, ``list.index(x): x not in list'', because
+	    the dropped frame was the one the fixture looked for; and
+	  * TracebackTestCase>>testLiveFramesAndGetframe, where depth 1 answered
+	    the function that belongs at depth 2.
+	For a debugger API, no answer is better than a confidently wrong one.
+
+	WHY IT IS SAFE TO RAISE HERE.  Of the callers of ___liveFrameChain___, the
+	three that merely WANT a frame already guard it and degrade to nil --
+	warnings.gs twice (`on: Error do: [nil]') and importlib.gs
+	(`on: AbstractException do: [nil]') -- so a warning loses its origin
+	rather than failing.  sys._getframe does NOT guard it, and that is exactly
+	the caller for which a wrong stack is worse than an error.
+
+	WHY THE ANOMALY IS NOT YET EXPLAINED, and what the message therefore
+	carries.  A genuinely parked process reads every frame it claims: measured
+	17 of 17 on a process waiting on a Semaphore, and 0 nils through
+	GsProcess>>gtAllFrames.  Native-code stacks are not the cause either --
+	`GsProcess usingNativeCode' is false in this configuration.  So the status,
+	the stack kind, and the depth RE-SAMPLED at failure time are all reported:
+	a depth that has changed says the process ran while we walked it, which is
+	the hypothesis this replaces guessing about.
+
+	Note GsProcess>>_isSuspended is deliberately NOT asserted anywhere: a
+	consumer blocked on consumerSem answers false for it (`suspended' means
+	explicitly suspend'ed), so the obvious precondition check would reject
+	every healthy consumer.  _statusString is the informative one."
+
+	| status kind depthNow |
+	status := [aProcess _statusString] on: Error do: [:ex | ex return: '?'].
+	kind := [aProcess _stackKind] on: Error do: [:ex | ex return: '?'].
+	depthNow := [aProcess stackDepth] on: Error do: [:ex | ex return: '?'].
+	^ Error signal:
+		'Grail live-frame walk: process claimed ' , aDepth printString ,
+		' frames but would not hand over frame ' , anIndex printString ,
+		' (' , aReason , ').  status ' , status printString ,
+		', stackKind ' , kind printString ,
+		', depth re-sampled ' , depthNow printString ,
+		'.  A dropped frame would have shifted every frame outside it, so this'
+		, ' raises instead; see BaseException class>>___unreadableFrame___:of:in:why:.'
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___whileHandling___: anException do: aBlock [
+	"Evaluate aBlock with anException installed as the session's current
+	exception, then restore whatever was current before, and answer aBlock's
+	value.
+
+	``Currently handling'' is what sys.exc_info() reports and what implicit
+	chaining reads, so every construct that runs user code ON BEHALF of an
+	in-flight exception owes this: a ``finally'' body, and a context manager's
+	__exit__.  The second was missing -- an exception raised inside __exit__ got
+	__context__ None, where CPython chains it to the exception __exit__ was
+	called about (test_raise test_context_manager).
+
+	The restore is an ensure:, so a raise from inside aBlock -- the interesting
+	case -- unwinds the stack correctly rather than leaving a stale exception
+	installed for everything that follows."
+
+	| saved |
+	saved := self ___currentException___.
+	self ___setCurrentException___: anException.
+	^ [aBlock value] ensure: [self ___setCurrentException___: saved]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___withExitTraceback___: anException code: aCode pos: posArray [
+	"The traceback a ``with'' statement hands __exit__, after recording the
+	frame running the statement on anException -- what an except clause's entry
+	does, and for the same reason: the statement is a catch in that frame.  See
+	WithAst >> ___emitExitTracebackOn___:.
+
+	aCode is nil where codegen had no frame to name; the exception's current
+	traceback, if any, is still answered.  Answers None rather than nil when
+	there is none, because this is a Python argument."
+
+	(anException isKindOf: BaseException) ifFalse: [^ None].
+	aCode isNil ifFalse: [anException ___pushCatchingFrame___: aCode pos: posArray].
+	^ anException @env1:__traceback__
+
+]
+
+{ #category : 'Grail-Exception handling' }
+BaseException class >> handles: anException [
+	"Whether ``except self:'' catches anException.  ``on:do:'' resolves every
+	handler through this protocol, NOT through issubclass, so a relationship
+	issubclass reports has to be mirrored here or it is introspection-only.
+
+	Python allows MULTIPLE bases; a Smalltalk class has ONE superclass.  So
+	_pydecimal's
+
+	    class DivisionByZero(DecimalException, ZeroDivisionError):
+
+	gets DecimalException as its Smalltalk superclass and reaches
+	ZeroDivisionError only through its second base.  ``except ZeroDivisionError:''
+	therefore let it escape, while ``except ArithmeticError:'' -- ZeroDivisionError's
+	OWN superclass, on the primary chain -- caught it, and issubclass and __mro__
+	both said it was a ZeroDivisionError the whole time (issue #867).
+
+	MiSecondaryBases maps each OFF-CHAIN base to the classes that reach it, and
+	both of its properties are load-bearing:
+
+	CHEAP.  #handles: is sent to every enclosing handler as an exception unwinds,
+	and one of those unwinds is the AlmostOutOfStack that ___recursionGuard___
+	converts, which arrives with almost no stack left.  Doing registry lookups on
+	every probe is what pushed that unwind into the Red Zone once before -- see
+	Exception class >> handles:, restructured for exactly this.  A class VARIABLE
+	is a literal-frame fetch, and it is nil until some MI exception class exists;
+	the identity-hash probe after it misses for every ordinary handler class.
+
+	DURABLE.  It is committed with BaseException, alongside the classes it talks
+	about, rather than derived from the session MI registry.  That registry is
+	SessionTemps state, and a module whose class bodies did not run -- a
+	warm-bound deployed one -- can be serving exception classes whose registered
+	bases are not there: measured in a suite worker, where a raised
+	_pydecimal.DivisionByZero reported ``__bases__ == ('DecimalException',)''.
+	A fix reading the registry works in the session that imported the module cold
+	and silently stops working in every session that binds it."
+
+	| subs ovf |
+	(super handles: anException) ifTrue: [^ true].
+	"A RAW STACK OVERFLOW is a RecursionError to Python, here in the FIRST
+	handler search -- while the VM still has the yellow page unprotected.
+	Waiting for ___recursionGuard___ to convert it means resignalAs:, whose
+	trim back to the signal point can re-protect the page with no margin, so
+	the RecursionError's own search re-trips and escapes every except above
+	the guard (test_pickle test_bad_getattr).  The handler gets the
+	RecursionError through ___payloadOf___:.  A class test only: nothing is
+	built during the search."
+	ovf := anException class.
+	(ovf == AlmostOutOfStackError or: [ovf == AlmostOutOfStack]) ifTrue: [
+		^ RecursionError == self or: [RecursionError inheritsFrom: self]].
+	MiSecondaryBases == nil ifTrue: [^ false].
+	subs := MiSecondaryBases at: self otherwise: nil.
+	subs == nil ifTrue: [^ false].
+	^ self ___miSubclassHandles___: anException among: subs
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> pythonPositionForMethod: aMethod atSourceIndex: anInteger [
+	"PUBLIC (issue #1137).  The Python position of the code at anInteger, a
+	1-based index into ``aMethod sourceString'', as the same 5-element Array
+	pythonPositionsForMethod: answers:
+
+	    { beginLine. colno. endLine. endColno. sourceLine }
+
+	or nil when aMethod is not generated Python or nothing covers the index.
+
+	The static counterpart of the ip-keyed lookup a traceback makes, and the
+	same rule: the innermost range in the method's position map that contains
+	the index; where no range does, the position the method last recorded
+	before it.  Only aMethod's OWN map and stores are read, never ones inside a
+	string literal -- a module body embeds the source of every method it
+	compiles, and a text scan that forgets that answers another method's line.
+
+	The index is in aMethod's OWN coordinates, so it means a different thing
+	on each codegen path (pythonPositionKindForMethod: says which):
+
+	  #curPos    an index into the generated Smalltalk.  Uncovered, it answers
+	             the ___curPos___ store in effect -- a statement.  sourceLine is
+	             that store's, so it is nil when the map names a different line.
+	  #irSource  an index into the def's Python slice.  Uncovered, it answers
+	             the line the index is on, with no columns.
+
+	Indexes worth asking about are where sends are: pythonSendSitesIn:selector:
+	answers them, with their positions, without a text search."
+
+	| kind src |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind isNil ifTrue: [^ nil].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ nil].
+	^ self ___positionIn___: src kind: kind at: anInteger
+		marker: (self ___positionMapMarkerIn___: src)
+		stores: (kind == #curPos
+			ifTrue: [self ___ownCurPosStoresIn___: src]
+			ifFalse: [#()])
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> pythonPositionKindForMethod: aMethod [
+	"PUBLIC (issue #883).  HOW ``pythonPositionsForMethod:'' derived its answer for
+	aMethod, so a consumer can report honestly instead of guessing:
+
+	  #curPos    text codegen -- one position per emitted ___curPos___ store, i.e.
+	             per STATEMENT, and the spans are codegen's own.
+	  #irSource  direct-to-IR -- the method's attached source IS the user's Python,
+	             so the positions are its non-blank source LINES.  A superset of
+	             the call sites, with no column information.
+	  nil        not a generated Python method (or its source is unreadable).
+
+	Answering the kind separately is the point: the two populations are not the
+	same thing, and a caller that prints them as if they were would be back to the
+	confidently-wrong reporting this API exists to remove."
+
+	| src |
+	aMethod isNil ifTrue: [^ nil].
+	(self ___isIRPythonMethod___: aMethod) ifTrue: [^ #irSource].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ nil].
+	"Its OWN stores: a module body whose only stores sit inside the method
+	sources it embeds is not a store-carrying method (issue #1137)."
+	^ (self ___ownCurPosStoresIn___: src) isEmpty
+		ifTrue: [nil]
+		ifFalse: [#curPos]
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> pythonPositionsForMethod: aMethod [
+	"PUBLIC (issue #883).  The Python positions aMethod carries, in source order,
+	as an Array of 5-element Arrays:
+
+	    { beginLine. colno. endLine. endColno. sourceLine }
+
+	the same PEP 657 shape ___pyPositionLiteralArray emits and
+	___pushFrameFromPos___ accepts.  beginLine is always an Integer; the other
+	four are nil when the emitter had nothing to say -- a bare ``___curPos___ :=
+	<line>'' store carries a line alone, and the IR path carries a line and its
+	source text.  Answers an empty Array for a method that is not generated
+	Python; ask ``pythonPositionKindForMethod:'' to tell that apart from a Python
+	method that happens to carry no positions.
+
+	WORKS ON BOTH CODEGEN PATHS, which is the property that makes it worth having
+	as API: the caller does not have to know whether GRAIL_IR_CODEGEN was set for
+	the gem that compiled the method, and a gem serving an MCP session inherits
+	that from the NetLDI or the launcher rather than from whoever tested the tool.
+
+	NOT a promise that every entry is a CALL site.  On the text path an entry is a
+	statement; on the IR path it is a non-blank source line.  Both are supersets,
+	and the kind says which you have."
+
+	| kind src |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind isNil ifTrue: [^ #()].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ #()].
+	kind == #irSource
+		ifTrue: [^ self ___irPositionsFromSource___: src].
+	^ self ___curPosPositionsFromSource___: src
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> pythonSelectorsSentBy: aMethod [
+	"PUBLIC (issue #1155).  The selectors aMethod sends AS PYTHON NAMES: its
+	env-1 sends whose selector importlib >> pythonNameOfSelector: decodes,
+	including sends from its inner blocks, as an IdentitySet.  So a sender
+	search can ask whether a method calls Python ``size'' without counting
+	Grail's own env-0 ``@env0:size'' checks, which _selectorPool merges in.
+
+	What it answers, by pythonPositionKindForMethod: --
+	  #curPos    text codegen: exact.  Every env-0 send in generated text is
+	             spelled @env0:, so the env-1 sends are the others; and Grail's
+	             own plumbing in env 1 uses ___name___ selectors, which do not
+	             decode.  Env1PlumbingSendsTestCase holds codegen to both.
+	  #irSource  direct-to-IR: nil, meaning UNKNOWN.  An IR method has no
+	             generated text, and nothing public in the compiled method says
+	             which environment a send targets.  The kernel half is proposed
+	             on #1155 (GsNMethod >> _selectorIdPool); until it lands, a
+	             consumer should say it cannot tell rather than guess.
+	  nil        not a generated Python method: an empty set.
+
+	Not every answer is a CALL.  A module-global or attribute read compiled as
+	a unary send is a reference to that name, and an operator lowered to a
+	dunder send (``x[i]'' to __getitem__:) appears under the dunder.  Those
+	are Python names the method really uses.  What it cannot report is a name
+	that is never SENT, and that is most method calls: ``o.m(x)'' loads ``m''
+	by a Symbol argument (``o ___pyAttrLoad___: #m'') and calls the result
+	through ``value:value:'', so no send is named m.  Only a direct send --
+	``self.m(x)'' on the class's own method, ``self._dict()'' in _grail_session
+	-- carries the name as its selector.  _selectorPool has the same blind
+	spot; the name is in the method's literals instead.  ``getattr(o, 'x')''
+	and a callable held in a variable are the same case.
+
+	One implicit reference remains: a zero-argument ``super()'' reads its
+	class through the module global, so the class's own name appears in the
+	methods that use it."
+
+	| kind src offs result |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind == #irSource ifTrue: [^ nil].
+	result := IdentitySet new.
+	kind == #curPos ifFalse: [^ result].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ result].
+	offs := aMethod _sourceOffsetsOfSends.
+	1 to: offs size by: 2 do: [:i |
+		| off sel |
+		off := offs at: i.
+		sel := offs at: i + 1.
+		((off > 6 and: [(src copyFrom: off - 6 to: off - 1) = '@env0:']) not
+			and: [(importlib pythonNameOfSelector: sel) notNil])
+				ifTrue: [result add: sel]].
+	^ result
+
+]
+
+{ #category : 'Grail-Python Positions' }
+BaseException class >> pythonSendSitesIn: aMethod selector: aSelectorOrNil [
+	"PUBLIC (issue #1137).  Every send aMethod's compiled code makes of
+	aSelectorOrNil (of every selector, when nil), in source order, as an Array
+	of 4-element Arrays:
+
+	    { selector. sourceIndex. position. nodeRange }
+
+	  sourceIndex  where the VM records the send, a 1-based index into
+	               ``aMethod sourceString'' -- the selector's position.
+	  position     pythonPositionForMethod: aMethod atSourceIndex: sourceIndex,
+	               the 5-element Array, or nil.
+	  nodeRange    { start. end } of the innermost position-map range holding
+	               the send, or nil -- in aMethod's own source coordinates.
+
+	WHICH PYTHON CALL A SEND IS: compare the first four elements of position
+	(beginLine. colno. endLine. endColno), NOT nodeRange.  The text path can
+	compile one Python call more than once: the global-shadow probe prints a
+	builtin call's arguments once per branch, so ``iter(self._dict())'' sends
+	_dict: twice, from two DIFFERENT node ranges (measured: 245-256 and
+	364-375), with one span (6:20-6:32).  Two genuine calls in one statement,
+	``self._dict().update(self._dict())'', differ in their columns.  Equal
+	nodeRanges do mean one node, but one node need not mean equal nodeRanges.
+	PythonCallSitePositionsTestCase pins both cases on both paths.
+
+	Answers an empty Array for a method that is not generated Python.
+
+	READ FROM THE COMPILED METHOD, NOT ITS TEXT.  The sends come from the VM's
+	own send table (``_sourceOffsetsOfSends''), so a send is listed only if the
+	method makes it: a selector that merely appears in a string literal -- every
+	send of every method a module body compiles, which it embeds as source --
+	or in a comment is not.  For the same reason it works on BOTH codegen paths,
+	where a search of the generated Smalltalk finds nothing at all on an IR
+	method, whose source is the user's Python."
+
+	| kind src pairs marker stores want seen out |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind isNil ifTrue: [^ #()].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ #()].
+	pairs := [aMethod _sourceOffsetsOfSends] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	pairs isNil ifTrue: [^ #()].
+	marker := self ___positionMapMarkerIn___: src.
+	stores := kind == #curPos
+		ifTrue: [self ___ownCurPosStoresIn___: src]
+		ifFalse: [#()].
+	want := aSelectorOrNil isNil ifFalse: [aSelectorOrNil asSymbol].
+	seen := Set new.
+	out := OrderedCollection new.
+	1 to: pairs size - 1 by: 2 do: [:i |
+		| ofs sel |
+		ofs := pairs at: i.
+		sel := pairs at: i + 1.
+		((want isNil or: [sel == want])
+			and: [(ofs isKindOf: SmallInteger)
+			and: [(seen includes: { ofs. sel }) not]]) ifTrue: [
+				| entry |
+				seen add: { ofs. sel }.
+				entry := marker isNil ifFalse: [
+					self ___innermostMapEntryIn___: src marker: marker containing: ofs].
+				out add: {
+					sel.
+					ofs.
+					self ___positionIn___: src kind: kind at: ofs
+						marker: marker stores: stores.
+					entry isNil ifFalse: [{ entry at: 1. entry at: 2 }] }]].
+	^ (out asSortedCollection: [:a :b | (a at: 2) <= (b at: 2)]) asArray
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___attachFrameLocalsFrom___: pushedFrames capture: st [
+	"___attachFrameLocalsWork___, behind the two guards every deep-stack walk in
+	this file needs.
+
+	NOT ON A STACK THAT IS ALREADY DEEP.  This runs at the CATCH, which for a
+	runaway recursion is the moment there is least stack left -- and the work it
+	does (a level sweep, a PyDict per frame) is the kind that needs some.  It
+	tipped TracebackTestCase>>testRecursionContextChain over: the RecursionError
+	the test is about arrived while the attach was building a locals dict, from
+	inside Set>>add:.  512 is the same line ___captureFrameLocalsIfSuggestible___
+	draws for the raise-time snapshot, and for the same reason; past it a frame
+	simply reports no locals, which is the fail-closed answer every consumer
+	already handles.
+
+	CATCH BROADLY, BUT PASS AlmostOutOfStack -- see
+	___captureFrameLocalsIfSuggestible___ for the full argument.  The short
+	version is that Grail''s Python exceptions hang off Exception rather than
+	Error, so the ``on: Error'' this started with did not catch the RecursionError
+	at all and it escaped into the test; while swallowing the VM''s AlmostOutOfStack
+	NOTIFICATION would consume its one warning without reducing depth and put the
+	next overflow in the Red Zone."
+
+	System @env0:stackDepth @env0:> 512 ifTrue: [^ self].
+	[self ___attachFrameLocalsWork___: pushedFrames capture: st]
+		@env0:on: Exception do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStack)
+				ifTrue: [ex @env0:pass]
+				ifFalse: [ex @env0:return: nil]].
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___attachFrameLocalsWork___: pushedFrames capture: st [
+	"Hang each traceback frame's f_locals on it, reading the temporaries out of
+	the LIVE stack that is still underneath us.
+
+	WHY THIS CAN WORK AT ALL.  A handler runs ON TOP of the frames that
+	signalled -- Smalltalk unwinds nothing before invoking on:do: -- so at the
+	moment the traceback is built, every frame the capture names is still a real
+	frame of the running process, with its temporaries intact.  That is the same
+	fact §9.10 item 7 is about, used the other way round: there it is a nuisance
+	(the frames of an exception already handled are still visible), here it is
+	the only reason a frame that has conceptually returned can still say what its
+	variables were.
+
+	WHY IT IS NOT DONE AT RAISE TIME.  It used to be, for the innermost frame
+	only, and that snapshot is still there (___frameLocals___, handed to the
+	first frame ___pushTracebackFrame___ builds) because it is the one frame this
+	walk cannot always reach -- a generator body ran in a different process.
+	Extending the raise-time snapshot to every frame would be O(depth) work on
+	every raise INCLUDING the ones nobody ever looks at; doing it here is
+	O(frames the traceback actually kept), once, at the catch.
+
+	WHY IT IS UNCONDITIONAL.  ``capture_locals=True'' is a decision the caller
+	makes long afterwards -- traceback.TracebackException reads
+	``getattr(frame, 'f_locals', None)'' when it is asked to -- and by then the
+	stack is gone.  CPython has the same property and answers it the same way:
+	its traceback holds the frames, locals and all, which is precisely why
+	frame.clear() and traceback.clear_frames() exist.  Grail offers both.
+
+	THE ALIGNMENT.  ``GsProcess class >> _frameContentsAt:'' addresses frames by
+	LEVEL while the capture addresses them by triple, and the two differ by one
+	constant: the handler machinery sitting above the signal point.  It is small
+	(measured 11) and does NOT grow with how far the exception propagated, since
+	the whole propagation path is inside the capture rather than above it.
+	Derived, never assumed, and anchored on the capture''s two INNERMOST triples
+	together -- one method could recur, two adjacent ones agreeing by identity at
+	the same offset is a far stronger claim.  Every individual read is then
+	re-validated by ___liveFrameContentsFor___, which compares the method at that
+	level with the one the triple named, so a bad offset costs missing locals
+	rather than another frame''s variables reported under this frame''s name.
+
+	Frames already carrying f_locals -- the innermost, from the raise-time
+	snapshot -- are left alone: that one was taken at the raise and is the more
+	faithful of the two."
+
+	| maxOrd levels offset budget anchor1 anchor2 |
+	(pushedFrames isNil or: [pushedFrames @env0:isEmpty]) ifTrue: [^ self].
+	(st isNil or: [st @env0:size @env0:< 2]) ifTrue: [^ self].
+	anchor1 := st @env0:at: 2.
+	anchor2 := st @env0:size @env0:>= 5 ifTrue: [st @env0:at: 5] ifFalse: [nil].
+	anchor1 isNil ifTrue: [^ self].
+	maxOrd := 0.
+	pushedFrames @env0:do: [:each |
+		(each @env0:at: 2) @env0:do: [:part | | ord |
+			ord := part @env0:at: 1.
+			(ord notNil and: [ord @env0:> maxOrd]) ifTrue: [maxOrd := ord]]].
+	maxOrd @env0:= 0 ifTrue: [^ self].
+	"Enough levels for the deepest frame we kept, plus room for the handler
+	machinery the offset has to cross.  512 is the ceiling the sweep has always
+	had; 64 is far more slack than the measured 11-14 needs."
+	budget := maxOrd @env0:+ 64.
+	budget @env0:> 512 ifTrue: [budget := 512].
+	levels := PyFrame @env0:___liveFrameContentsByLevel___: budget.
+	(levels isNil or: [levels @env0:isEmpty]) ifTrue: [^ self].
+	offset := nil.
+	0 to: (levels @env0:size @env0:- 1) do: [:o | | fc1 fc2 |
+		offset isNil ifTrue: [
+			fc1 := levels @env0:atOrNil: 1 @env0:+ o.
+			(fc1 notNil and: [(fc1 @env0:atOrNil: 1) == anchor1]) ifTrue: [
+				anchor2 isNil
+					ifTrue: [offset := o]
+					ifFalse: [
+						fc2 := levels @env0:atOrNil: 2 @env0:+ o.
+						(fc2 notNil and: [(fc2 @env0:atOrNil: 1) == anchor2])
+							ifTrue: [offset := o]]]]].
+	offset isNil ifTrue: [^ self].
+	pushedFrames @env0:do: [:each | | frame contents locals |
+		frame := each @env0:at: 1.
+		"NIL *OR EMPTY*.  The raise-time snapshot reads only the ONE innermost
+		 marked frame, and when the raise is inside a ``try:'' body that frame is
+		 the try block's -- which owns no temps, because the function's own
+		 variables live in the frame outside it.  The snapshot was then a
+		 non-nil, EMPTY PyDict, and this sweep skipped the frame for having an
+		 answer already: every raise-and-catch-in-one-function traceback reported
+		 f_locals == {} forever, where CPython reports the whole frame.  An empty
+		 answer is not an answer -- refilling it can only find names the snapshot
+		 did not, and when there really are none ___pyLocalsFromFrameContentsList___
+		 answers nil and the empty dict is left exactly as it was."
+		(self ___frameLocalsWorthReplacing___: frame) ifTrue: [
+			contents := OrderedCollection @env0:new.
+			(each @env0:at: 2) @env0:do: [:part | | fc |
+				fc := BaseException ___liveFrameContentsFor___: (part @env0:at: 2)
+					at: (part @env0:at: 1) in: levels offset: offset.
+				fc notNil ifTrue: [contents @env0:add: fc]].
+			contents @env0:isEmpty ifFalse: [
+				locals := PyFrame @env0:___pyLocalsFromFrameContentsList___:
+					contents @env0:asArray.
+				locals isNil ifFalse: [
+					frame @env0:dynamicInstVarAt: #'f_locals' put: locals]]]]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh [
+	"Build the propagation path from the VM's captured stack and attach each
+	frame's LOCALS, answering true when at least one frame was produced.
+
+	Two steps, and they are separate because the second one needs the first one's
+	answer.  ___buildFramesWalk___ does the walk and records, for every frame it
+	pushed, which capture triple that frame came from;
+	___attachFrameLocalsFrom___ then reads just as many stack levels as those
+	triples span.  Doing it the obvious way round -- sweeping the levels up front
+	and consulting them during the walk -- costs O(the whole live stack) on every
+	caught exception, measured at ~+22%, and nearly all of it is levels no frame
+	of the traceback will ever name."
+
+	| pushedFrames answered walkable |
+	walkable := self ___walkableStack___.
+	pushedFrames := OrderedCollection @env0:new.
+	answered := self ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh
+		walkable: walkable into: pushedFrames.
+	answered ifTrue: [
+		self ___attachFrameLocalsFrom___: pushedFrames
+			capture: (walkable @env0:at: 1)].
+	^ answered
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkable into: pushedFrames [
+	"Build the WHOLE propagation path from the VM's captured stack, newest frame
+	innermost, and answer true when it produced at least one frame.
+
+	``pushedFrames'' collects { PyFrame. parts } for every frame pushed, in push
+	order, for ___attachFrameLocalsFrom___ to hang locals on.  ``parts'' is what
+	___localsPartsFor___ built: the { captureOrdinal. method } of every Smalltalk
+	frame that makes up that one Python frame, innermost first.  The ordinal is
+	1-based over the capture's triples, which is the unit the level offset is
+	expressed in.
+
+	``isFresh'' says whether this exception is being raised for the FIRST time --
+	it arrived at the handler with no traceback of its own.  It decides what to do
+	with the frames of an exception that was already unwound and is still
+	physically on the Smalltalk stack below us, because a handler runs ON TOP of
+	the frames that signalled:
+
+	  * FRESH (``raise KeyError from e'' inside an ``except'' block): those frames
+	    belong to the OTHER exception.  CPython's new exception starts at the
+	    raise, so they are skipped -- §9.10 item 7.
+	  * NOT FRESH (a re-raise: ``raise'', or ``raise z'' where z already has a
+	    traceback): they are this very exception's own original propagation path,
+	    which CPython keeps and extends.  So they are walked.
+
+	Both readings were previously in force at once, split by frame KIND rather
+	than by raise kind -- method frames were skipped, block frames were not -- so
+	which one an exception got depended on whether codegen had wrapped the unwound
+	callee's body in a block.  A class-body def is wrapped and a module-level one
+	is not, which is why ``raise KeyError from e'' after ``self.zero_div()'' came
+	out carrying the ZeroDivisionError's frames while the same code after
+	``free_zero_div()'' did not, and why the RE-RAISE lost its original frames in
+	exactly the opposite case.  test_traceback's test_cause_recursive asserts both
+	halves of one report.
+
+	``_gsStack'' is a SmallInteger followed by (method, ip, receiver) triples,
+	INNERMOST first, over-allocated with trailing nils (so the frame count comes
+	from scanning for nil, not from the array size).  A frame belongs in a Python
+	traceback when its method is env 1 on a generated Python class and its
+	selector decodes to a Python name; block frames carry a NIL selector and
+	belong to the enclosing method, so they are skipped rather than reported --
+	CPython has no frame for a comprehension body or an except block.
+
+	The walk stops after the frame for the CATCHING function (``aCode name''),
+	because a traceback records the propagation path from raise to catch, not the
+	whole stack -- without the trim it would run on into the caller chain and,
+	under a test runner, into unittest's own frames.
+
+	Pushing innermost-first leaves the head at the outermost frame, which is what
+	___pushTracebackFrame___ prepending gives us and what CPython's ``most recent
+	call last'' ordering means.
+
+	Generators are a known gap: a generator body runs in a forked GsProcess, so
+	its captured stack does not contain the consumer's frames at all (§9.9).
+	Such a raise yields only the frames inside the generator, and the single-frame
+	fallback still applies when that leaves nothing."
+
+	| st catchName catchIdx pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending frameSpan flushPending |
+	st := walkable @env0:at: 1.
+	"Record the frame just pushed, against the capture triple it came from.
+	Read back off ``tracebackObj'' rather than returned by the push, because
+	___pushTracebackFrame___ PREPENDS -- the node it just made is the head -- and
+	that keeps both push helpers' signatures alone.  A nil ordinal means ``no
+	level can be found for this frame'' (a generator section, whose frames ran in
+	a different process), which ___attachFrameLocalsFrom___ skips."
+	noteFrame := [:parts |
+		(tracebackObj notNil and: [parts notNil]) ifTrue: [
+			| f |
+			f := tracebackObj @env0:dynamicInstVarAt: #'tb_frame'.
+			f notNil ifTrue: [pushedFrames @env0:add: { f. parts }]]].
+	"Indices where a generator level ends; nil when no generator is involved."
+	boundary := walkable @env0:at: 2.
+	"Push the pending block's home as a frame of its own, and clear it.  A
+	generator body is a BLOCK whose home method frame is never on the stack it
+	runs on -- the body runs on a forked process -- so nothing in the walk below
+	ever consumes its pending line, and this is the only place its frame can come
+	from.  Two places need it.
+
+	  * THE GENERATOR/CONSUMER BOUNDARY, where the exception left the body: flush
+	    it before the consumer's half starts, or the first consumer frame would
+	    read as an already-unwound one (§9.11).
+	  * THE END OF THE CAPTURE, where the exception was CAUGHT INSIDE the body and
+	    there is no consumer half at all.  This case was missing, so every
+	    exception caught inside a generator, a coroutine or an async generator --
+	    ``try: 1/0 except ZeroDivisionError as e:'' in an ``async def'' -- had
+	    __traceback__ None: the walk found no frame, and the single-frame fallback
+	    had no ___curPos___ to build one from.  test_contextlib_async's
+	    test_contextmanager_traceback runs its whole body inside a coroutine.
+	    Reaching the end with a block still pending means its home frame is not
+	    on this stack, which on an ordinary call chain cannot happen: the home
+	    method frame always sits below its blocks and clears them on the way
+	    past."
+	flushPending := [
+		pendingHome notNil ifTrue: [
+			| gname |
+			gname := BaseException ___pythonFrameNameFor___: pendingHome @env0:selector.
+			((gname notNil) and: [pendingLine notNil]) ifTrue: [
+				self ___pushTracebackFrame___:
+						(self ___codeForMethod___: pendingHome name: gname ip: 0
+							aCode: aCode)
+					lineno: pendingLine
+					colno: nil endLineno: nil endColno: nil line: nil.
+				noteFrame @env0:value: nil.
+				pushed := pushed @env0:+ 1].
+			pendingHome := nil.
+			pendingLine := nil.
+			pendingSpan := nil.
+			pendingParts := nil]].
+	st isNil ifTrue: [^ false].
+	"PyCode keeps its fields in DYNAMIC INSTVARS with no accessor methods (a
+	Python read resolves them through ___pyAttrLoad___'s dynamic probe), so this
+	has to read the slot -- ``aCode co_name'' is a MessageNotUnderstood, and
+	catching it silently left catchName nil, which disabled the trim and let the
+	traceback run on past the catching function into its caller."
+	catchName := aCode isNil
+		ifTrue: [nil]
+		ifFalse: [aCode @env0:dynamicInstVarAt: #'co_name'].
+	"WHICH ACTIVATION is catching, not only which name (#1401).  A frame between
+	the raise and the catch can carry the catcher's name -- a recursive call of
+	the catching function, another module's body (``<module>'', imported inside
+	a module's ``try''), a same-named function in exec'd code -- and the name test
+	alone took the first such frame for the catcher: it got the catcher's line,
+	the catcher's file, and the walk stopped there.  The index of the on:do: frame
+	that caught bounds it: the catcher lies outside it.  Nil when that cannot be
+	determined, and the name test then decides alone, as before."
+	catchIdx := catchName isNil
+		ifTrue: [nil]
+		ifFalse: [BaseException ___catchingHandlerIndexIn___: st for: self].
+	pushed := 0.
+	2 to: st @env0:size by: 3 do: [:i |
+		| meth ip name home isDoitFrame |
+		"The generator/consumer boundary: everything before it ran in the
+		generator's forked process.  Flush its pending block as a frame -- the
+		generator body is a BLOCK whose home method frame is not on that stack, so
+		this is the only place its own frame can come from -- and start the
+		consumer's half with nothing pending, or the first consumer frame would
+		read as an already-unwound one (§9.11)."
+		(boundary notNil and: [boundary @env0:includes: i]) ifTrue: [
+			flushPending @env0:value].
+		meth := st @env0:at: i.
+		"Trailing nils pad the array -- the real frames end here."
+		meth isNil ifTrue: [
+			flushPending @env0:value.
+			^ pushed @env0:> 0].
+		ip := st @env0:at: i @env0:+ 1.
+		"Which METHOD a frame belongs to: a block answers its home, a method
+		answers itself.  CPython has no frame of its own for a block (a
+		comprehension body, a try body, an except handler), so blocks are merged
+		into their home rather than reported."
+		home := (meth @env0:environmentId @env0:= 1)
+			ifTrue: [[meth @env0:homeMethod] on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: meth]]
+			ifFalse: [nil].
+		home isNil ifTrue: [home := meth].
+		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector isNil])
+			ifTrue: [
+				"A BLOCK frame supplies the LINE for its home method, and it is the
+				only reliable source of it.  The block is parked at the statement in
+				flight; the home METHOD frame is parked at whatever construct is
+				running that block -- for a ``try'' body or an ``except'' handler,
+				the on:do: -- and such an ip does not resolve back to the statement
+				(§9.10: under native code it reads as the function's LAST
+				___curPos___, which is how a re-raising frame came out at its
+				``raise'' instead of at the call the exception entered on).
+				Innermost block wins: a later one for the same home is an enclosing
+				block, hence a less precise position.
+
+				EXCEPT when the block IS a Python function.  A nested ``def''
+				compiles to a block (it must: only a block can close over the
+				enclosing function's locals, only a block has no class to live in,
+				and only a fresh block copy per execution gives CPython's distinct
+				function object per ``def''), so merging every block into its home
+				erased nested functions from every traceback -- ``def outer(): def
+				inner(): raise'' reported ONE frame where CPython reports two, and
+				three levels still reported one.
+
+				Told apart by ARGUMENT COUNT.  Codegen calls a Python function block
+				as ``[:___positional___ :___kwargs___ | ...]'', and nothing else in
+				env 1 emits a two-argument block: comprehension bodies, ``try''
+				bodies, ``except'' handlers and the generator machinery are all
+				zero-argument (measured across all of them).  The ``___pyNamed___''
+				/ ``___pyCode___'' stamps would be the obvious test and are NOT
+				usable -- they live on the block OBJECT, while this walk sees only
+				compiled methods."
+				nArgs := [meth @env0:numArgs] @env0:on: Error do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: 0].
+				blockLine := BaseException ___tracebackLineForMethod___: meth ip: ip.
+				"A BLOCK OF AN ALREADY-UNWOUND FUNCTION, skipped exactly as the method
+				branch below skips that function's own frame -- §9.10 item 7, which
+				until now was enforced for method frames only.
+
+				Reaching a block whose home is not the pending block's home, while
+				there IS a pending one, means we are inside a handler running ABOVE
+				the frames that signalled: Smalltalk unwinds nothing before invoking
+				on:do:, so the whole propagation path of the exception being HANDLED
+				is still on the stack below us.  In the legitimate case -- an
+				ordinary call chain -- there is no pending home to collide with by
+				then, because the callee's own METHOD frame cleared it on the way
+				past.
+
+				Adopting such a block reset pendingHome/pendingLine to the unwound
+				function, and the method branch then reported that function as a
+				frame of the NEW exception: ``raise KeyError from e'' inside an
+				``except ZeroDivisionError'' handler came out carrying the
+				ZeroDivisionError's frames (test_traceback's test_cause_recursive).
+				It showed only when the unwound callee had a block frame of its own
+				-- a class-body def, whose body codegen wraps in one -- which is why
+				the identical code calling a module-level function was right."
+				"AN exec()/eval() BODY, which is a compiled DOIT and therefore has no
+				selector of its own -- so it lands in this branch, among the blocks,
+				rather than in the method branch below.  A block's home is the method
+				that encloses it; a doit's home is ITSELF, which is what tells the two
+				apart, and a ___curPos___ store confirms codegen wrote it.
+
+				CPython calls this frame ``<module>'', the same as a real module body.
+				Leaving it unpushed cost more than the frame: the adopt below would
+				make the doit the pending home, nothing would ever match it, and every
+				frame OUTSIDE the exec -- the function that called it, and the one
+				catching the exception -- was then skipped as already-unwound.  A
+				NameError raised inside ``eval(...)'' came out with a single frame
+				where CPython shows three."
+				isDoitFrame := (home @env0:== meth) and: [blockLine notNil].
+				isDoitFrame ifTrue: [
+					| isCatcher frameCode line span |
+					line := (pendingHome @env0:== home and: [pendingLine notNil])
+						ifTrue: [pendingLine]
+						ifFalse: [blockLine].
+					isCatcher := (catchName notNil and: ['<module>' @env0:= catchName])
+						and: [catchIdx isNil or: [i @env0:> catchIdx]].
+					frameCode := self ___codeForMethod___: meth name: '<module>' ip: ip
+						aCode: nil.
+					"The PEP 657 span, on the same terms the method branch takes it: from
+					whichever frame supplied the LINE, and only when the two agree about
+					that line.  Without it an exec'd body reported colno None, and a
+					consumer that asks for columns -- traceback's caret renderer is the
+					one that matters -- had nothing to draw."
+					span := (pendingHome @env0:== home and: [pendingSpan notNil])
+						ifTrue: [pendingSpan]
+						ifFalse: [BaseException ___pythonSpanForMethod___: meth ip: ip].
+					(span notNil and: [(span @env0:at: 1) @env0:= line])
+						ifTrue: [self ___pushFrameFromPos___: frameCode pos: span]
+						ifFalse: [
+							self ___pushTracebackFrame___: frameCode
+								lineno: line
+								colno: nil endLineno: nil endColno: nil line: nil].
+					noteFrame @env0:value: (self ___localsPartsFor___: (i @env0:+ 1) @env0:// 3
+						method: meth pending: ((pendingHome @env0:== home)
+							ifTrue: [pendingParts] ifFalse: [nil])).
+					pushed := pushed @env0:+ 1.
+					pendingHome := nil.
+					pendingLine := nil.
+					pendingSpan := nil.
+					pendingParts := nil.
+					isCatcher ifTrue: [^ true]].
+				isDoitFrame ifFalse: [
+				((nArgs @env0:= 2)
+					and: [isFresh not
+						or: [pendingHome isNil or: [pendingHome @env0:== home]]])
+					ifTrue: [
+						| fnLine fnName isCatcher frameCode |
+						"The nested function's frame is parked where its BODY is --
+						which the inner zero-argument blocks already resolved into
+						pendingLine.  Fall back to this block's own position when
+						there were none (a body that raises without an intervening
+						block)."
+						fnLine := pendingLine isNil ifTrue: [blockLine] ifFalse: [pendingLine].
+						"___nestedFrameNameFor___ rather than ___nestedFunctionNameFor___,
+						and the gate is now the IDENTITY test rather than the name.  Both
+						the name and the line used to be required, which made a line that
+						failed to derive cost this frame its EXISTENCE -- see
+						___nestedFrameNameFor___ for why that is worse than a placeholder,
+						and why the method branch below was already fixed the same way.
+
+						``___isGeneratedPythonMethod___'' is what replaces them, and it is
+						the same test the method branch settled on: it asks the method's
+						SOURCE whether codegen wrote it, so no ip can affect the answer.
+						It is also stricter than what was here before -- the old gate would
+						accept any two-argument env-1 block that happened to resolve a name
+						-- so this narrows the branch while making it ip-independent.
+
+						The line still falls back to 0 rather than being invented: a frame
+						with no line renders as line 0, which is visibly unknown, where a
+						guessed line would be confidently wrong."
+						fnName := BaseException ___nestedFrameNameFor___: home line: fnLine
+							block: meth.
+						fnLine isNil ifTrue: [fnLine := 0].
+						(BaseException ___isGeneratedPythonMethod___: home) ifTrue: [
+							isCatcher := (catchName notNil and: [fnName @env0:= catchName])
+								and: [catchIdx isNil or: [i @env0:> catchIdx]].
+							frameCode := (BaseException ___codeForBlockMethod___: meth name: fnName)
+								ifNil: [self ___codeForMethod___: home name: fnName ip: 0
+									aCode: aCode].
+							"A nested function that CATCHES gets codegen's recorded span,
+							exactly as the method branch below does -- pendingLine can only
+							ever answer a LINE, so without this a nested ``def'' reported
+							colno nil where the identical code at module scope reported the
+							PEP 657 columns (test_with's testExceptionLocation asserts the
+							span of the failing context manager, and its functions are
+							nested inside the test method).
+
+							Deliberately narrower than the method branch: taken only when
+							pos arrived as a span AND that span's line already agrees with
+							the derived one.  This can therefore only ADD columns, never
+							move a line -- an ordinary nested try/except, where codegen
+							passes the bare integer, keeps the line the walk derives for it
+							(test_long_context_chain and friends depend on that line), and a
+							disagreement means the two readings did not find the same store,
+							which §9.10 says must lose the columns rather than draw a
+							confident caret under the wrong code."
+							((isCatcher and: [posArray @env0:isKindOf: Array])
+								and: [(posArray @env0:at: 1) @env0:= fnLine])
+								ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
+								ifFalse: [
+									| span |
+									"A nested function that RAISES gets the span recorded by
+									the frame the line came from -- pendingSpan when an inner
+									block supplied it, this block's own otherwise, mirroring
+									how fnLine was chosen just above.  Guarded on the span's
+									line agreeing with fnLine, the same rule the method branch
+									uses: two readings that disagree did not find the same
+									store, and §9.10 says that must lose the columns rather
+									than draw a confident caret under the wrong code."
+									span := pendingLine isNil
+										ifTrue: [BaseException
+											___pythonSpanForMethod___: meth ip: ip]
+										ifFalse: [pendingSpan].
+									(span notNil and: [(span @env0:at: 1) @env0:= fnLine])
+										ifTrue: [self ___pushFrameFromPos___: frameCode pos: span]
+										ifFalse: [
+											self ___pushTracebackFrame___: frameCode
+												lineno: fnLine
+												colno: nil endLineno: nil endColno: nil line: nil]].
+							noteFrame @env0:value: (self ___localsPartsFor___: (i @env0:+ 1) @env0:// 3
+								method: meth pending: pendingParts).
+							pushed := pushed @env0:+ 1.
+							"Consumed: the home method's own frame must not reuse this
+							line, or ``outer'' would report the line inside ``inner''."
+							pendingHome := nil.
+							pendingLine := nil.
+							pendingSpan := nil.
+							pendingParts := nil.
+							"A nested function can be the CATCHER too, and the trim below
+							never sees it -- that test lives in the method branch, and a
+							nested ``def'' has no method frame of its own.  Without this
+							the walk runs past the except clause into the caller chain,
+							which for a function that recurses out of its own handler
+							(test_long_context_chain: ``except ZeroDivisionError: f()'')
+							means frame N of the recursion materialises N frames instead
+							of the 1 CPython reports.  That is quadratic in the recursion
+							depth across the __context__ chain, and it exhausted the
+							session's temporary object memory."
+							isCatcher ifTrue: [^ true]]]
+					ifFalse: [
+						(isFresh
+							ifTrue: [pendingHome isNil]
+							ifFalse: [pendingHome @env0:~~ home]) ifTrue: [
+							pendingHome := home.
+							pendingLine := blockLine.
+							"The BLOCK's own frame, kept for the locals attach: a Python
+							function's temporaries live in whichever Smalltalk frame
+							declared them, and for a body codegen wrapped in a block that
+							is the block rather than the method.  Innermost first, so this
+							one leads the list the method frame will complete."
+							pendingParts := { { (i @env0:+ 1) @env0:// 3. meth } }.
+							"THE SPAN FROM THE SAME FRAME THE LINE CAME FROM.  A nested
+							``def'' compiles to a block, so its body's statement -- and the
+							``___curPos___ := #(line col endLine endCol src)'' store that
+							records the PEP 657 span -- is reached through THIS block's ip,
+							never through the two-argument function block that will consume
+							pendingLine below.  Reading the span there instead answered nil,
+							which is why ``1/0'' inside a nested function printed no ``~^~''
+							anchor line while the identical statement in a module-level
+							function did (test_traceback's
+							TestTracebackException_ExceptionGroups.test_exception_group_format
+							is the case).  Derived here, beside the line, so the two readings
+							come from one frame and the agreement test below is meaningful."
+							pendingSpan := BaseException
+								___pythonSpanForMethod___: meth ip: ip]
+						ifFalse: [
+							"ANOTHER BLOCK OF THE SAME PYTHON FRAME.  One Python function
+							is several Smalltalk frames -- codegen wraps a class-body def's
+							whole body in a block, and a try or an except handler inside it
+							adds more -- and its temporaries live in whichever of them
+							DECLARED them, which for that outer wrapper is the wrapper and
+							not the method.  Keeping only the innermost block therefore left
+							the catching frame with no locals at all: the handler block that
+							supplied its LINE declares nothing, while the wrapper holding
+							``exc_obj'' and friends was passed over.
+
+							So the line still comes from the innermost block -- unchanged,
+							and it is the one actually executing -- while the locals union
+							gets every block of this home the walk crosses on the way to its
+							method frame.  Appended in encounter order, which is innermost
+							first, which is the precedence
+							___pyLocalsFromFrameContentsList___: applies on a name
+							collision."
+							pendingHome @env0:== home ifTrue: [
+								pendingParts := pendingParts
+									@env0:copyWith: { (i @env0:+ 1) @env0:// 3. meth }]]]]].
+		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
+			ifTrue: [
+				| pyLine |
+				"A frame Python has ALREADY UNWOUND.  Reaching a method frame that is
+				not the pending block's home means we are inside a handler that is
+				running ABOVE the frames which signalled: Smalltalk unwinds nothing
+				before invoking on:do:, so the whole propagation path of the exception
+				being HANDLED is still on the stack below us.  Python's model has
+				dropped those frames -- an exception raised in an except block gets
+				its own traceback, and the handled one is reachable only through
+				__context__ -- so skip everything until the pending home's own frame.
+
+				This is §9.10's item 7.  Without it a wrapping raise reported the
+				frames of the exception it was wrapping (``catch@35 wrap_bare@14
+				leaf@5'' where CPython says ``catch@35 wrap_bare@16''), and it also
+				kept the pending line from reaching wrap_bare, because these frames
+				reset it -- one skip fixes both the extra frame and the wrong line."
+				"Skipped only for a FRESH raise -- see freshRaise: in this method's
+				comment.  A re-raise's own original frames sit here too, and CPython
+				keeps those, so the same test that must drop them for ``raise X from
+				e'' must walk them for a bare ``raise''."
+				((isFresh and: [pendingHome notNil]) and: [pendingHome @env0:~~ home])
+					ifTrue: [name := nil]
+					ifFalse: [
+						name := BaseException ___pythonFrameNameForMethod___: meth].
+				"A non-nil derived line is what IDENTIFIES a Python frame, and it
+				is self-validating: only codegen emits ``___curPos___ := N'', so
+				Grail's own hand-written env-1 plumbing (``Object >>
+				___signal___:'', ``BaseException class >> ___pyRaiseNew___:'')
+				answers nil here and is skipped without needing a marker or a
+				class/category allow-list.  A method category is NOT usable for
+				this: importlib and ShimSreModule are hand-written yet also use
+				codegen's 'Grail-Methods'."
+				pyLine := name isNil
+					ifTrue: [nil]
+					ifFalse: [(pendingHome @env0:== home and: [pendingLine notNil])
+						ifTrue: [pendingLine]
+						ifFalse: [BaseException ___tracebackLineForMethod___: meth ip: ip]].
+				"A skipped frame must NOT clear the pending line -- it belongs to the
+				handler's home, which we have not reached yet."
+				"The blocks of THIS Python frame, taken before the clear below wipes
+				them.  The clear has to come first -- pyLine above is the last reader
+				of pendingLine -- so the locals half would otherwise always find the
+				list already emptied, which is exactly why the CATCHING frame reported
+				no locals while every frame below it reported its own."
+				framePending := (pendingHome @env0:== home)
+					ifTrue: [pendingParts] ifFalse: [nil].
+				"AND THE SPAN FROM THAT SAME FRAME, taken before the same clear.  The
+				line above may have come from an inner block -- that is what
+				pendingLine is -- while the span below was read from THIS method's own
+				ip, and the two need not find the same store: a method suspended at an
+				``on:do:'' send resolves to no span store at all, so a frame whose line
+				came from its handler block lost its columns entirely.  The nested
+				function branch already reads pendingSpan for exactly this reason; the
+				method branch did not, which is why ``except* T: raise'' reported the
+				clause's line with colno None."
+				frameSpan := (pendingHome @env0:== home)
+					ifTrue: [pendingSpan] ifFalse: [nil].
+				(pendingHome isNil or: [pendingHome @env0:== home]) ifTrue: [
+					pendingHome := nil.
+					pendingLine := nil.
+					pendingSpan := nil.
+					pendingParts := nil].
+				pyLine notNil ifTrue: [
+					| isCatcher frameCode |
+					isCatcher := (catchName notNil and: [name @env0:= catchName])
+						and: [catchIdx isNil or: [i @env0:> catchIdx]].
+					frameCode := self ___codeForMethod___: meth name: name ip: ip
+						aCode: aCode.
+					"The CATCHING frame takes the position CODEGEN recorded, never the one
+					derived from the ip.  ___pushFrameFromPos___ already handles both shapes
+					pos comes in: the bare ___curPos___ SmallInteger of an ordinary statement,
+					and the 5-tuple { beginLine. beginColumn. endLine. endColumn. sourceLine }
+					of a comprehension / for-loop iterator clause, whose PEP 657 columns
+					test_dictcomps / test_setcomps assert on.
+
+					Codegen's position is not merely the more precise one here, it is the only
+					one that holds everywhere.  This frame is suspended INSIDE the on:do:
+					protected block, and resolving such an ip back to the statement in flight
+					depends on the GEM: with native code enabled (GemNativeCodeEnabled=2, the
+					CI gem on Linux x86_64) _sourceAtIp: answers a report whose caret sits past
+					the whole block, so the scan below returns the function's LAST ___curPos___
+					-- frame_depth's catcher reports 34, ``return None'', for a call on line 31.
+					An interpreted gem (macOS/arm64, where native code is unavailable) answers
+					the call site and derives 31.  Honouring pos ONLY when it was an Array left
+					every ordinary try/except -- codegen passes the bare integer there -- on the
+					derived line, which is why the first cut passed on every local gem and
+					failed in CI.  Frames BELOW the catcher are suspended at a CALL site, which
+					resolves correctly in both modes (CI derives leaf/middle/outer as 18/22/26).
+					"
+					"A non-catcher frame -- the RAISING frame among them -- takes the
+					span codegen recorded when there is one.  Guarded on the line
+					agreeing with the derived one: the scan can only be trusted to
+					have found the right store when both readings of it match, and a
+					wrong span draws a confident caret under the wrong code (§9.10),
+					which is worse than the columns being absent."
+					(isCatcher and: [posArray notNil])
+						ifTrue: [self ___pushFrameFromPos___: frameCode
+									pos: (BaseException ___refineCatcherPos___: posArray
+											span: frameSpan)]
+						ifFalse: [
+							| span |
+							span := frameSpan isNil
+								ifTrue: [BaseException ___pythonSpanForMethod___: meth ip: ip]
+								ifFalse: [frameSpan].
+							(span notNil and: [(span @env0:at: 1) @env0:= pyLine])
+								ifTrue: [self ___pushFrameFromPos___: frameCode pos: span]
+								ifFalse: [
+									self ___pushTracebackFrame___: frameCode
+										lineno: pyLine
+										colno: nil endLineno: nil endColno: nil line: nil]].
+					noteFrame @env0:value: (self ___localsPartsFor___: (i @env0:+ 1) @env0:// 3
+						method: meth pending: framePending).
+					pushed := pushed @env0:+ 1.
+					"Reached the function holding the except clause: the traceback
+					ends here."
+					isCatcher ifTrue: [^ true]]]].
+	flushPending @env0:value.
+	^ pushed @env0:> 0
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode [
+	"A PyCode for one captured frame.  Reuses the catching function's PyCode
+	when the frame IS that function (it already carries the right filename and
+	first line); otherwise builds one, taking the filename from the catching
+	code so every frame in a traceback names the module it came from.
+
+	A MODULE BODY knows better, and says so: codegen stamps ``___pyFile___ :=
+	'<path>''' into it (ModuleAst>>printSmalltalkOn:) precisely because the
+	catching code is the wrong source for this one frame.  It is a different
+	file whenever the exception crosses a module, and for an exec()/eval() body
+	it is unknowable any other way -- co_filename there is compile()'s second
+	argument."
+
+	| filename own |
+	"What the FRAME itself says, asked first, because the catching code is only
+	ever a guess about it.  A module body stamps its own path (and for an
+	exec()/eval() doit that stamp is the only place compile()'s filename
+	survives); every other method takes it from the module class it is installed
+	in.  Nil for Grail's own Smalltalk, which has no Python file.
+
+	BaseException, not self: ___codeForMethod___ is an INSTANCE method, so self
+	here is the exception being built."
+	own := aName @env0:= '<module>'
+		ifTrue: [BaseException ___pythonFilenameForMethod___: aMethod]
+		ifFalse: [nil].
+	own isNil ifTrue: [own := BaseException ___pythonFileForClassOf___: aMethod].
+	own isNil ifTrue: [own := BaseException ___pythonFileForClassBodyMethod___: aMethod].
+	"...and last, the DOIT this frame was generated into, for a function that
+	EVALUATED code defined: no class to ask, and not the body that carries the
+	stamp.  See ___pythonFileForDoitOf___, which answers nil for a doit nobody
+	named -- so an unnamed exec() or eval() keeps the filename it always had."
+	own isNil ifTrue: [own := BaseException ___pythonFileForDoitOf___: aMethod].
+	filename := '<grail>'.
+	catchCode isNil ifFalse: [
+		"Dynamic instVars, no accessors -- see ___buildFramesFromCapturedStack___."
+		filename := (catchCode @env0:dynamicInstVarAt: #'co_filename')
+			ifNil: ['<grail>'].
+		"Reuse the catching function's own PyCode when the frame IS that function
+		-- it already carries the right first line.  The name alone is not enough
+		to know that: a same-named function in ANOTHER module would inherit the
+		catcher's file, which is the very confusion this method is fixing, so the
+		file has to agree too."
+		((catchCode @env0:dynamicInstVarAt: #'co_name') @env0:= aName
+			and: [own isNil or: [own @env0:= filename]])
+			ifTrue: [^ catchCode]].
+	own notNil ifTrue: [filename := own].
+	"The function's OWN PyCode when it has one in a code table, so the frame's
+	f_code is its __code__ and co_firstlineno is the def's line, not 0.  pytest
+	reads the source of every traceback entry from co_firstlineno through
+	inspect.findsource, and a 0 put its window one line BEFORE the file.  Only
+	when the files agree: a frame whose file was worked out differently keeps
+	the answer it always had."
+	(BaseException ___realCodeForMethod___: aMethod name: aName) ifNotNil: [:real |
+		((real @env0:dynamicInstVarAt: #'co_filename') @env0:= filename)
+			ifTrue: [^ real]].
+	^ PyCode @env0:name: aName filename: filename firstlineno: 0
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> ___formatInSmalltalk___ [
+	"pythonTracebackString's fallback renderer.  CPython's layout for the parts
+	Grail has: the chain deepest-first with its two separator sentences, then
+	each exception's frames and final line.  Not linecache: a frame shows its
+	source only when the codegen recorded it (tb_line), and -- as traceback.py
+	does for a name linecache cannot read -- never for a bracketed filename such
+	as ``<grail>'', so the two renderers agree on evaluated code."
+
+	| stream render |
+	stream := WriteStream on: Unicode16 new.
+	render := [:exc | | frames msg notes |
+		frames := exc pythonTracebackFrames.
+		frames isEmpty ifFalse: [
+			stream nextPutAll: 'Traceback (most recent call last):'; lf.
+			frames do: [:f | | line |
+				stream nextPutAll: '  File "'; nextPutAll: (f at: 1);
+					nextPutAll: '", line '; nextPutAll: (f at: 2) printString;
+					nextPutAll: ', in '; nextPutAll: (f at: 3); lf.
+				line := f at: 4.
+				((line isKindOf: CharacterCollection)
+					and: [((f at: 1) isKindOf: CharacterCollection)
+					and: [((f at: 1) beginsWith: '<') not]]) ifTrue: [
+						line := line trimSeparators.
+						line isEmpty ifFalse: [stream nextPutAll: '    '; nextPutAll: line; lf]]]].
+		stream nextPutAll: exc ___pythonTypeNameForTraceback___.
+		msg := exc ___safeStrForTraceback___.
+		msg isEmpty ifFalse: [stream nextPutAll: ': '; nextPutAll: msg].
+		stream lf.
+		"PEP 678 notes, one line each, after the message -- as _format_notes."
+		notes := exc dynamicInstVarAt: #'__notes__'.
+		(notes isKindOf: SequenceableCollection) ifTrue: [
+			notes do: [:note |
+				stream nextPutAll: ((note isKindOf: CharacterCollection)
+					ifTrue: [note] ifFalse: [note printString]); lf]]].
+	self pythonExceptionChain reverseDo: [:pair |
+		render value: (pair at: 1).
+		stream lf; nextPutAll: ((pair at: 2) == #cause
+			ifTrue: ['The above exception was the direct cause of the following exception:']
+			ifFalse: ['During handling of the above exception, another exception occurred:']);
+			lf; lf].
+	render value: self.
+	^ stream contents
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> ___formatWithTracebackModule___ [
+	"''.join(traceback.format_exception(self)) -- a cold import of ``traceback''
+	the first time, which is a database write like any Grail import."
+
+	| mod |
+	mod := (importlib ___instance___) @env1:import_module: 'traceback'.
+	^ '' @env1:join: (mod @env1:format_exception: self)
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___frameLocalsWorthReplacing___: aFrame [
+	"Should the catch-time sweep try to fill in this traceback frame's f_locals?
+
+	Yes when there is nothing there, and ALSO yes when what is there is EMPTY.
+
+	The raise-time snapshot reads one frame -- the innermost marked one -- and a
+	raise inside a ``try:'' body lands on the try block's frame, which owns no
+	temporaries: the function's own variables are in the frame outside it, and
+	the snapshot is a real, non-nil, empty PyDict.  Treating that as an answer
+	made every raise-and-catch-in-one-function traceback report f_locals == {}
+	permanently, because this sweep -- which reads the WHOLE list of Smalltalk
+	frames merged into the Python frame, and would have found them -- skipped it.
+
+	Refilling is safe in the other direction too: the sweep stores only a
+	non-nil result, and ___pyLocalsFromFrameContentsList___ answers nil rather
+	than an empty dict, so a frame that genuinely has no locals keeps the empty
+	dict it already had rather than losing it."
+
+	| existing |
+	existing := aFrame dynamicInstVarAt: #'f_locals'.
+	existing isNil ifTrue: [^ true].
+	^ [existing isEmpty] on: AbstractException do: [:ex | ex return: false]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___graftTraceback___: oldChain under: oldHeadName [
+	"Case 3 of ___pushCatchingFrame___ rebuilt the chain from the capture; put
+	the part the EARLIER catch already recorded back under it.
+
+	The rebuild is right about the frames ABOVE the earlier catcher -- the
+	functions this re-raise has since unwound through, which is what case 3
+	exists to add -- and it re-derives the rest from the same capture.  But the
+	rest is not always in the capture.  An exception caught inside a
+	generator or a coroutine and re-raised from there crosses a process
+	boundary, and the capture the walk splices together names the frames of
+	the RE-RAISE, not of the original raise: ExitStack's __aexit__ re-raises a
+	callback's exception, and the callback, its wrapper and the line __aexit__
+	first caught it at were all gone from the rebuilt chain, leaving the frame
+	of the re-raise alone (test_contextlib_async test_exit_exception_traceback).
+	CPython never loses them, because it only ever PREPENDS.
+
+	So keep the rebuilt chain down to the earlier catcher's frame and the
+	earlier chain from there on.  The earlier catcher is the LAST frame of the
+	rebuilt chain with its name, which is also how that earlier walk found it:
+	a walk stops at the first frame named for its catcher going OUTWARD from
+	the raise, and the chain runs outermost first.  When the rebuilt chain
+	does not name it at all, the rebuild stands as it did before, and the
+	answer is false.
+
+	When the earlier catcher is the rebuilt chain's HEAD there is nothing above
+	it to keep, and the earlier chain is the whole answer.  That is a re-raise
+	that never left the function: the bare ``raise'' after
+	``e.__traceback__ = tb'', caught again in the same function, where
+	CPython adds no frame."
+
+	| node prev graftAt found |
+	(oldChain isNil or: [oldHeadName isNil]) ifTrue: [^ false].
+	node := tracebackObj.
+	prev := nil.
+	graftAt := nil.
+	found := false.
+	[node notNil and: [node ~~ None]] whileTrue: [
+		| frame code |
+		frame := node @env0:dynamicInstVarAt: #'tb_frame'.
+		code := frame isNil ifTrue: [nil] ifFalse: [frame @env0:dynamicInstVarAt: #'f_code'].
+		(code notNil and: [(code @env0:dynamicInstVarAt: #'co_name') @env0:= oldHeadName])
+			ifTrue: [graftAt := prev. found := true].
+		prev := node.
+		node := node @env0:dynamicInstVarAt: #'tb_next'].
+	found ifFalse: [^ false].
+	graftAt isNil
+		ifTrue: [tracebackObj := oldChain]
+		ifFalse: [graftAt @env0:dynamicInstVarAt: #'tb_next' put: oldChain].
+	^ true
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___headFrameName___ [
+	"co_name of the frame at the head of this exception's traceback, or nil when
+	it has none.  PyTraceback / PyFrame / PyCode all keep their fields in DYNAMIC
+	instVars with no accessors (a Python read resolves them through
+	___pyAttrLoad___), so this reads the slots."
+
+	| frame code |
+	tracebackObj isNil ifTrue: [^ nil].
+	frame := tracebackObj @env0:dynamicInstVarAt: #'tb_frame'.
+	frame isNil ifTrue: [^ nil].
+	code := frame @env0:dynamicInstVarAt: #'f_code'.
+	code isNil ifTrue: [^ nil].
+	^ code @env0:dynamicInstVarAt: #'co_name'
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___localsPartsFor___: ordinal method: aMethod pending: pendingParts [
+	"The Smalltalk frames whose temporaries make up ONE Python frame's locals, as
+	{ captureOrdinal. method } pairs, INNERMOST FIRST.
+
+	One Python frame is often several Smalltalk ones and the locals are split
+	across them -- PyFrame class>>___pyLocalsFromFrameContentsList___: has the
+	full account, and takes a list for exactly this reason.  A def in a class
+	body compiles with its body inside a zero-argument block, so the METHOD frame
+	reports no names at all and every local lives in the block; a comprehension
+	inside a function is the same shape reversed.  Reading either alone loses
+	half the answer.
+
+	``pendingParts'' is the inner block the walk had already resolved for this
+	home, or nil.  Innermost first because that is the precedence the union
+	applies on a name collision, and it matches the LINE the walk takes from the
+	same block."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	pendingParts notNil ifTrue: [
+		pendingParts @env0:do: [:each | out @env0:add: each]].
+	aMethod notNil ifTrue: [out @env0:add: { ordinal. aMethod }].
+	^ out @env0:isEmpty ifTrue: [nil] ifFalse: [out @env0:asArray]
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> ___materialisePythonTraceback___: wasReraised [
+	"ensurePythonTraceback's work, on the PAYLOAD (tracebackObj is the receiver's
+	own slot).  Answers whether the walk produced frames."
+
+	| saved |
+	tracebackObj isNil ifTrue: [
+		^ self ___buildFramesFromCapturedStack___: nil pos: nil freshRaise: true].
+	"A chain the user attached with with_traceback() is not a partial unwind
+	record: leave it, as ___pushCatchingFrame___ would."
+	(wasReraised and: [self ___tbUserAttached___ not]) ifFalse: [^ false].
+	saved := tracebackObj.
+	tracebackObj := nil.
+	(self ___buildFramesFromCapturedStack___: nil pos: nil freshRaise: false)
+		ifTrue: [^ true].
+	tracebackObj := saved.
+	^ false
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___pushCatchingFrame___: aCode pos: posArray [
+	"___pushCatchingFrameWork___:pos:, which does the work, with StopIteration let
+	through for the length of it.
+
+	___pushTracebackFrame___ declines to grow a StopIteration's traceback, and at
+	the site it was written for that is right: a comprehension's iterator clause
+	sees the StopIteration that ENDS the iteration, which is protocol rather than
+	an error, and recording a frame there on every exhausted iterator would cost
+	every comprehension a traceback node.  But the same refusal also reached this
+	path, which is a user's own ``except StopIteration as e:'' -- a real catch of
+	a real exception, where CPython gives it a traceback like any other.  So
+	``e.__traceback__'' was None for every caught StopIteration, and a frame
+	count read off it was 0 (test_contextlib_async
+	test_contextmanager_traceback, whose @asynccontextmanager must re-raise a
+	StopIteration from the ``async with'' body with its one frame intact).
+
+	The exemption is keyed on THIS exception in SessionTemps, not on a flag on the
+	object: the walk does not run Python code, so nothing else can be pushing in
+	the meantime, and the object is left exactly as it was."
+
+	| temps saved |
+	(self isKindOf: StopIteration)
+		ifFalse: [^ self ___pushCatchingFrameWork___: aCode pos: posArray].
+	temps := SessionTemps current.
+	saved := temps at: #'GrailTracebackCatching' otherwise: nil.
+	temps at: #'GrailTracebackCatching' put: self.
+	^ [self ___pushCatchingFrameWork___: aCode pos: posArray]
+		ensure: [temps at: #'GrailTracebackCatching' put: saved]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___pushCatchingFrame___: aCode pos: posArray target: aTargetName [
+	"___pushCatchingFrame___, plus the ``except X as NAME'' binding in the frame
+	that catches.
+
+	CPython's f_locals is read LIVE, at format time, off a frame the traceback
+	still holds -- so it shows the ``as'' target, and anything else the handler
+	assigns, because by then the handler has run.  Grail's is a SNAPSHOT taken
+	while the exception is still propagating, which is strictly before the
+	handler starts: the target is bound a few generated statements after this
+	call, and nothing later reopens the frame.
+
+	The name is therefore handed in by codegen, where it is a literal, and the
+	value is this exception -- which is exactly what the binding would store
+	(TryAst emits ``NAME := ___payloadOf___: ___ex'', and ___payloadOf___ of the
+	payload is the payload).  The frame is the HEAD of the traceback, which for a
+	catch IS the catching function's frame: the chain runs outermost-first, and
+	the outermost frame of an exception being caught here is this one.  The same
+	identity the co_name comparison in ___pushCatchingFrame___ relies on.
+
+	Only the ordinary ``except'' emit passes a target.  ``except*'' pushes one
+	frame before dispatching to whichever clause matches, so there is no single
+	name to bind and it keeps using the two-keyword selector.
+
+	Everything is guarded and additive: a frame that cannot take the entry keeps
+	the locals it had.  This runs on the catch path, where an error would turn a
+	handled exception into an unhandled one."
+
+	self ___pushCatchingFrame___: aCode pos: posArray.
+	aTargetName isNil ifTrue: [^ self].
+	[ | frame locals |
+	  frame := tracebackObj isNil
+		ifTrue: [nil]
+		ifFalse: [tracebackObj @env0:dynamicInstVarAt: #'tb_frame'].
+	  frame isNil ifFalse: [
+		locals := frame @env0:dynamicInstVarAt: #'f_locals'.
+		locals isNil ifTrue: [
+			locals := PyFrame @env0:___pyDictFrom___: Dictionary @env0:new.
+			frame @env0:dynamicInstVarAt: #'f_locals' put: locals].
+		locals isNil ifFalse: [
+			locals @env0:at: aTargetName @env0:asString put: self]]
+	] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___pushCatchingFrameWork___: aCode pos: posArray [
+	"Add the frames for an exception arriving at this except handler (TryAst emits
+	this there).  Three cases, distinguished by what -- if anything -- is already
+	on the exception:
+
+	1. NO traceback yet: build the whole propagation path from the VM's captured
+	   stack (§9.9), falling back to the single catch-site frame when there is no
+	   capture (no flag, a generator raise whose captured frames all sat outside
+	   Python code, or an exception that pre-stamped _gsStack to opt out).
+
+	2. A traceback whose head names THIS function: a body wrapper (nested/complex
+	   functions) or the comprehension iterator wrapper already located the
+	   exception inside us, and more precisely than we can -- it has PEP 657
+	   columns.  Leave it alone.  Rebuilding here is what broke
+	   testForLoopExceptionPositions (init_span).
+
+	3. A traceback whose head names ANOTHER function: the exception was caught
+	   somewhere deeper, RE-RAISED (bare ``raise''), and has now propagated up
+	   into us.  CPython adds a frame for every function it unwinds through, each
+	   at the line where the exception ENTERED that function -- not at the
+	   ``raise'' -- and each function appears once:
+
+	       two_levels@21 passthrough@16 mid@10 leaf@5
+
+	   Rebuilding from the live captured stack answers exactly that, because
+	   Smalltalk has not unwound anything: a handler runs ON TOP of the frames
+	   that signalled, so the stack still holds the original chain (leaf, mid)
+	   below the re-raise, with the newly entered frames (passthrough,
+	   two_levels) above it -- all parked at their call sites, which is the
+	   position CPython reports.  So the correct splice is to discard the partial
+	   chain and walk again; prepending the catch-site frame instead would report
+	   only the catcher and drop every pass-through frame.
+
+	Same-name recursion is the one case case 3 cannot see: an exception re-raised
+	in f and caught again in f reads as case 2 and keeps the deeper chain."
+
+	| headName saved assignedOver |
+	assignedOver := self ___tbAssignedOver___.
+	tracebackObj isNil ifTrue: [
+		(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: true)
+			ifTrue: [^ self].
+		^ self ___pushFrameFromPos___: aCode pos: posArray].
+
+	"A chain the USER attached with with_traceback() is not a partial unwind
+	record, and neither of the cases below applies to it.  CPython always
+	PREPENDS the frames of the new raise onto whatever __traceback__ holds --
+	that is the whole point of the idiom, and test_raise's test_accepts_traceback
+	asserts exactly the link: the new head is not the attached node, and its
+	tb_next is.  Grail read the attached chain as a partial one, found its head
+	frame named a different function than the catcher, and took case 3 -- which
+	DISCARDS it -- so the tb the caller had deliberately attached vanished at the
+	raise that was supposed to use it.
+
+	The mark is consumed here, so a later re-raise of the same exception is back
+	under the ordinary rules."
+	(self ___tbUserAttached___) ifTrue: [
+		self @env0:dynamicInstVarAt: #'___tbUserAttached___' put: false.
+		(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: true)
+			ifTrue: [^ self].
+		^ self ___pushFrameFromPos___: aCode pos: posArray].
+
+	headName := self ___headFrameName___.
+	((headName isNil or: [aCode isNil])
+		or: [headName @env0:= (aCode @env0:dynamicInstVarAt: #'co_name')])
+			ifTrue: [^ self].
+
+	"Case 3.  Keep the old chain in hand: if the walk cannot produce frames (no
+	capture in this session) the partial traceback is still better than none, and
+	the catch-site frame is then prepended to it as before."
+	saved := tracebackObj.
+	tracebackObj := nil.
+	(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: false)
+		ifTrue: [
+			"A chain ASSIGNED to __traceback__ need not name the function that
+			re-raises it at all -- only the one contextlib restores does -- so
+			when its own head is not in the rebuild, the head it replaced
+			stands in: that names the function whose handler did the assigning,
+			which is where the bare ``raise'' is."
+			((self ___graftTraceback___: saved under: headName) == false
+				and: [assignedOver notNil])
+					ifTrue: [self ___graftTraceback___: saved under: assignedOver].
+			^ self].
+	tracebackObj := saved.
+	^ self ___pushFrameFromPos___: aCode pos: posArray
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___pushFrameFromPos___: aCode pos: pos [
+	"Prepend a frame for aCode at the enclosing function's ___curPos___,
+	snapshotted as an exception unwinds THROUGH the function.  ___curPos___ is a
+	bare SmallInteger beginLine at statement granularity (columns / source line
+	unknown -- CPython reports them for the raising instruction, which we don't
+	track outside a comprehension).  A nil pos (no statement ran yet) is a no-op,
+	as are control-flow / StopIteration (via ___pushTracebackFrame___).  The
+	Array branch is defensive legacy: an older 5-tuple
+	{ beginLine. beginColumn. endLine. endColumn. sourceLine } still works."
+
+	pos isNil ifTrue: [^ self].
+	"``isKindOf: Integer'' -- NOT ``isInteger'': 3.7.x SmallInteger does not
+	implement isInteger (DNU), though 4.0 does; isKindOf: is universal."
+	(pos isKindOf: Integer) ifTrue: [
+		^ self ___pushTracebackFrame___: aCode
+			lineno: pos colno: nil endLineno: pos endColno: nil line: nil ].
+	^ self ___pushTracebackFrame___: aCode
+		lineno: (pos at: 1)
+		colno: (pos at: 2)
+		endLineno: ((pos at: 3) ifNil: [pos at: 1])
+		endColno: (pos at: 4)
+		line: (pos at: 5)
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec line: src [
+	"Prepend a PyTraceback node (one frame at one PEP 657 position) as this
+	exception unwinds -- CPython's incremental-unwind model, so the head is the
+	shallowest frame and extract_tb(tb)[0] is where the exception surfaced.
+	Called from generated code (env-0 send) at a raise-prone site (currently a
+	comprehension's iterator-protocol clause).
+
+	No-op for Grail's control-flow signals and StopIteration: those are not real
+	Python exceptions and must not grow a traceback -- the caller re-raises them
+	unchanged.  The one exception is a StopIteration being CAUGHT by an except
+	clause, which ___pushCatchingFrame___:pos: marks for the length of its walk:
+	that one is a real Python exception and gets a real traceback."
+
+	| frame tb payload |
+	((self isKindOf: PythonReturn)
+		or: [(self isKindOf: PythonBreak)
+		or: [(self isKindOf: PythonContinue)
+		or: [(self isKindOf: StopIteration)
+			and: [(SessionTemps current at: #'GrailTracebackCatching' otherwise: nil)
+				~~ (BaseException ___payloadOf___: self)]]]]) ifTrue: [^ self].
+	"A CARRIER is the object propagating, but the PAYLOAD is the one Python
+	holds -- so a frame recorded while a carrier is unwinding has to land on the
+	payload or it is discarded with the carrier.  That is what dropped the
+	catch-site frame from a bare re-raise: the frames recorded BEFORE the
+	re-raise were on the payload and survived, and the one added on top of them
+	was not.  See ___signalCarrying___:."
+	payload := BaseException ___payloadOf___: self.
+	payload == self ifFalse: [
+		^ payload ___pushTracebackFrame___: aCode lineno: ln colno: co
+			endLineno: el endColno: ec line: src].
+	frame := PyFrame code: aCode lineno: ln back: None globals: None.
+	"THE INNERMOST frame gets the raise-time locals snapshot, and only it.  Frames
+	are pushed innermost-first (this method PREPENDS), so the first push of a given
+	traceback is the innermost one -- which is where the snapshot came from.  A
+	later push must not receive it or every frame would report the innermost
+	frame's variables as its own, which nothing downstream could detect."
+	(tracebackObj isNil
+		and: [(self @env0:dynamicInstVarAt: #'___frameLocals___') @env0:notNil
+		and: [(self @env0:dynamicInstVarAt: #'___frameLocalsName___')
+			@env0:= (aCode @env0:dynamicInstVarAt: #'co_name')]]) ifTrue: [
+				frame @env0:dynamicInstVarAt: #'f_locals'
+					put: (self @env0:dynamicInstVarAt: #'___frameLocals___')].
+	"Store the None singleton for any absent field: a nil dynamic instVar reads
+	back as ABSENT (AttributeError on tb_line/tb_colno/...), so line-level frames
+	(no columns / source line) must carry None, not nil."
+	tb := PyTraceback frame: frame lineno: ln next: (tracebackObj ifNil: [None])
+		endLineno: (el ifNil: [None]) colno: (co ifNil: [None])
+		endColno: (ec ifNil: [None]) line: (src ifNil: [None]).
+	tracebackObj := tb.
+	^ self
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> ___pythonTypeNameForTraceback___ [
+	"__qualname__ qualified by __module__ unless that is builtins or __main__ --
+	CPython's rule for the last line of a traceback (design log 9.8).  Falls
+	back to the class name for any part that cannot be read."
+
+	| cls guard name mod |
+	cls := self class.
+	guard := [:aBlock :default | aBlock
+		on: Error, BaseException do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: default]].
+	name := guard value: [ | qn |
+			qn := cls @env1:___pyAttrLoad___: #'__qualname__'.
+			(qn isKindOf: CharacterCollection) ifTrue: [qn] ifFalse: [cls name asString]]
+		value: cls name asString.
+	mod := guard value: [ | mv |
+			mv := cls @env1:___pyAttrLoad___: #'__module__'.
+			(mv isKindOf: CharacterCollection) ifTrue: [mv] ifFalse: [nil]]
+		value: nil.
+	(mod isNil or: [mod = 'builtins' or: [mod = '__main__']]) ifTrue: [^ name].
+	^ mod , '.' , name
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___releaseCapturedStack___ [
+	"Drop the VM's raise-time capture.  The frames it held are already in
+	``tracebackObj''; the capture itself is only the raw material.
+
+	This is what keeps a long exception chain affordable.  Primitive 2022 captures
+	the WHOLE Smalltalk stack at every raise, so a recursion that raises once per
+	level captures O(depth) triples at level 1, at level 2, ... -- and when the
+	exceptions stay reachable, as a __context__ chain makes them, the RETAINED
+	total is O(depth^2).  Measured on the classic runaway at 6645 levels (~16
+	Smalltalk frames per level) that is ~350 million triples: it exhausts a gem's
+	temporary object memory outright, and tripling GEM_TEMPOBJ_CACHE_SIZE does not
+	help.
+
+	Called only from ___applyImplicitContext___, deliberately -- NOT when the
+	traceback is first built.  An exception's capture has to outlive its first
+	catch, because a bare re-raise rebuilds the traceback by walking that same
+	capture again with a wider trim: the pass-through frames §9.10 splices in are
+	in the ORIGINAL capture (they were on the stack when the raise happened), and
+	`pass' does not refill _gsStack.  Releasing at catch time broke exactly that
+	(TracebackTestCase>>testBareReraiseSplicesFrames).  By the time an exception
+	becomes another one's __context__ it is being handled and is no longer
+	propagating, so the capture is spent."
+
+	self _gsStack: nil.
+	^ self
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> ___safeStrForTraceback___ [
+	"str(self), or CPython's ``<exception str() failed>'' when that raises or
+	answers a non-string -- a traceback must print whatever is in it."
+
+	^ [ | s |
+		s := self @env1:__str__.
+		(s isKindOf: CharacterCollection) ifTrue: [s] ifFalse: ['<exception str() failed>']]
+			on: Error, BaseException do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: '<exception str() failed>']
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___tbAssignedOver___ [
+	"The head frame name ``e.__traceback__ = tb'' replaced, or nil -- consumed
+	here, so it speaks for the one catch that follows the assignment.  Guarded
+	like ___tbUserAttached___: the slot is absent on nearly every exception."
+
+	| name |
+	name := [self @env0:dynamicInstVarAt: #'___tbAssignedOver___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	name isNil ifFalse: [self @env0:dynamicInstVarAt: #'___tbAssignedOver___' put: nil].
+	^ name
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___tbUserAttached___ [
+	"Was this exception's current traceback put there by with_traceback()?
+
+	Guarded, because the slot is absent on every exception that never went
+	through with_traceback() -- which is nearly all of them -- and an absent
+	dynamic instVar raises rather than answering nil."
+
+	^ ([self @env0:dynamicInstVarAt: #'___tbUserAttached___']
+		@env0:on: AbstractException do: [:e | e @env0:return: false]) == true
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___unbindCatchingTarget___: aTargetName [
+	"Undo ___pushCatchingFrame___:pos:target: when the handler ends.
+
+	CPython deletes the ``as'' target on leaving the except block -- PEP 3110's
+	implicit ``del'' -- so a frame whose handler has RETURNED shows no target in
+	f_locals, while one still inside its handler does.  Both shapes appear in a
+	single ``capture_locals'' rendering of an ExceptionGroup: the outer frame is
+	mid-handler and keeps its ``e'', the sub-exception's frame finished its
+	handler long ago and must not report ``inner_exc''.
+
+	Emitted into the handler's ensure: block, so a return, a break or a re-raise
+	unbinds as well.  Guarded like its counterpart: this runs while an exception
+	is being handled, and failing to tidy up a locals entry must not become an
+	error of its own."
+
+	| frame locals |
+	aTargetName isNil ifTrue: [^ self].
+	[ frame := tracebackObj isNil
+		ifTrue: [nil]
+		ifFalse: [tracebackObj @env0:dynamicInstVarAt: #'tb_frame'].
+	  frame isNil ifFalse: [
+		locals := frame @env0:dynamicInstVarAt: #'f_locals'.
+		locals isNil ifFalse: [
+			locals @env0:removeKey: aTargetName @env0:asString ifAbsent: [nil]]]
+	] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___walkableStack___ [
+	"Answer { stackToWalk. boundaryIndicesOrNil }.
+
+	Normally just _gsStack with no boundaries.  For an exception that escaped one
+	or more generator bodies, every stashed level is concatenated ahead of the
+	consumer's own capture -- innermost level first -- into a single array with the
+	header-then-triples layout the walk expects.
+
+	A boundary is recorded where each section ENDS.  The walk flushes its pending
+	block there, which is what finally reports a generator's own frame: the body is
+	a BLOCK whose home METHOD frame is not on the forked stack at all, so nothing
+	else ever would."
+
+	| levels sections combined boundaries |
+	levels := BaseException ___generatorStackFor___: self.
+	levels isNil ifTrue: [^ { BaseException ___toPortableIps___: self _gsStack. nil }].
+	sections := OrderedCollection new.
+	levels do: [:each | sections add: each].
+	sections add: (BaseException ___trimCapturedStack___: self _gsStack).
+	combined := OrderedCollection new.
+	combined add: 0.
+	boundaries := OrderedCollection new.
+	sections do: [:section |
+		"Where the NEXT section starts -- 1-based, so one past what we have."
+		combined isEmpty ifFalse: [boundaries add: combined size + 1].
+		section do: [:slot | combined add: slot]].
+	"The first boundary is the start of section 1, which is not a boundary at all."
+	boundaries isEmpty ifFalse: [boundaries removeFirst].
+	"Every section here came from a _gsStack capture too, so one conversion of
+	the assembled array covers the stashed generator levels as well."
+	^ { BaseException ___toPortableIps___: combined asArray. boundaries asArray }
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> ensurePythonTraceback [
+	"Give this exception the Python traceback a SMALLTALK catcher never sees, and
+	answer the exception Python knows -- the payload, when the receiver is a
+	carrier (___signalCarrying___:).
+
+	Frames are attached on the Python catch path only: TryAst emits
+	___pushCatchingFrame___:pos: at every except clause.  An ``on: BaseException
+	do:'' handler is not on that path, so the exception it receives has
+	__traceback__ None even though the VM's raise-time capture (_gsStack) is
+	sitting on it in full.  This walks that capture exactly as the outermost
+	Python handler would: no catcher, so no trim, and the Smalltalk frames above
+	the Python code carry no ___curPos___ and drop out of the walk.
+
+	Three states, mirroring ___pushCatchingFrame___:
+	  * no traceback yet -- build the whole propagation path (a first raise);
+	  * a traceback, and the receiver is a carrier -- the exception was caught
+	    in Python and RE-RAISED out to us, so its chain stops at the Python
+	    catcher; rebuild from the original capture, which still holds every
+	    frame up to the top (case 3 there; measured: ``f@3'' alone became
+	    ``<module>@7 f@3'');
+	  * a traceback, no carrier -- leave it, so the call is idempotent.
+
+	Never raises: a traceback is a diagnostic, and must not cost the caller a
+	second failure.  Guarded broadly but PASSING AlmostOutOfStackError, the Error
+	subclass the VM's stack warning arrives as (design log 9.54).  Valid inside
+	the handler and after it has returned -- the walk reads the capture Array,
+	not the live stack -- though frame locals are a raise-time snapshot either
+	way.  Zero cost on the raise path: the capture is already paid for.
+
+	The door for embedders: scripts/grail.tpz and gs-mcp's McpGrailToolset."
+
+	| payload |
+	payload := BaseException ___payloadOf___: self.
+	[payload ___materialisePythonTraceback___: payload ~~ self]
+		on: Error, BaseException do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+	^ payload
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> pythonExceptionChain [
+	"The __cause__ / __context__ links, nearest first, as traceback.py's
+	TracebackException walks them: { { exception. #cause } { exception.
+	#context } ... }.  __cause__ wins where both are set; __context__ is
+	followed only when __suppress_context__ is false, so ``raise X from None''
+	answers an empty chain; a cycle ends the walk.  Never raises."
+
+	| payload out seen cur |
+	payload := BaseException ___payloadOf___: self.
+	out := OrderedCollection new.
+	seen := IdentitySet new.
+	seen add: payload.
+	cur := payload.
+	[[cur notNil] whileTrue: [
+		| link kind cause context |
+		cause := cur @env1:__cause__.
+		(cause notNil and: [cause ~~ None])
+			ifTrue: [link := cause. kind := #cause]
+			ifFalse: [
+				(cur @env1:__suppress_context__) == true ifFalse: [
+					context := cur @env1:__context__.
+					(context notNil and: [context ~~ None])
+						ifTrue: [link := context. kind := #context]]].
+		(link isNil or: [seen includes: link])
+			ifTrue: [cur := nil]
+			ifFalse: [
+				out add: { link. kind }.
+				seen add: link.
+				cur := link]]]
+			on: Error, BaseException do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+	^ out asArray
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> pythonTracebackFrames [
+	"The traceback as data, outermost frame first (CPython's ``most recent call
+	last'' order): one Array per frame, { filename. lineno. name. line } and,
+	when the codegen recorded a PEP 657 span, { filename. lineno. name. line.
+	endLineno. colno. endColno }.  ``line'' is the raw source line the codegen
+	recorded for the statement, or nil.  Empty when there is no traceback.
+
+	Ensures the traceback first, so a Smalltalk catcher can send this alone.
+	Reads the PyTraceback chain directly -- no .py module has to be importable,
+	which is what makes it usable in a session with no grailDir.  Never raises;
+	a frame the walk cannot read ends the list."
+
+	| payload tb out |
+	payload := self ensurePythonTraceback.
+	out := OrderedCollection new.
+	[tb := payload @env1:__traceback__.
+	 [tb isNil or: [tb == None]] whileFalse: [
+		| frame code slot line cols |
+		slot := [:obj :key | | v |
+			v := obj dynamicInstVarAt: key.
+			v == None ifTrue: [nil] ifFalse: [v]].
+		frame := slot value: tb value: #'tb_frame'.
+		code := slot value: frame value: #'f_code'.
+		line := slot value: tb value: #'tb_line'.
+		cols := slot value: tb value: #'tb_colno'.
+		out add: (cols isNil
+			ifTrue: [{ slot value: code value: #'co_filename'.
+				slot value: tb value: #'tb_lineno'.
+				slot value: code value: #'co_name'.
+				line }]
+			ifFalse: [{ slot value: code value: #'co_filename'.
+				slot value: tb value: #'tb_lineno'.
+				slot value: code value: #'co_name'.
+				line.
+				slot value: tb value: #'tb_end_lineno'.
+				cols.
+				slot value: tb value: #'tb_end_colno' }]).
+		tb := slot value: tb value: #'tb_next']]
+			on: Error, BaseException do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+	^ out asArray
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> pythonTracebackString [
+	"The traceback as CPython prints it -- the chained exceptions first, then
+	``Traceback (most recent call last):'', the File lines, and ``Type: str'' --
+	ending in a newline, like ''.join(traceback.format_exception(exc)).
+
+	Rendered by Grail's own traceback module when it is importable (that is
+	CPython's code, and it reads source lines off disk for real files); in
+	Smalltalk otherwise, with the same frame lines, the module-qualified type
+	name rule (design log 9.8) and __notes__, but no source text for frames
+	whose line codegen did not record.  A session with no grailDir gets the
+	second.  Empty only when both fail; never raises."
+
+	| payload text guard |
+	payload := self ensurePythonTraceback.
+	guard := [:aBlock | aBlock
+		on: Error, BaseException do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]].
+	text := guard value: [payload ___formatWithTracebackModule___].
+	text isNil ifTrue: [text := guard value: [payload ___formatInSmalltalk___]].
+	^ text ifNil: ['']
+
+]
+
+{ #category : 'Grail-Embedding' }
+BaseException >> releasePythonCapture [
+	"Drop the VM's raise-time capture -- the public twin of
+	___releaseCapturedStack___, for a caller that will NOT re-raise into Python.
+	The PyTraceback chain survives; only the raw material goes, and it is the
+	bulk: (method, ip, RECEIVER) triples for the whole Smalltalk stack, which an
+	exception parked in a long-lived scope would otherwise keep alive (design
+	log 9.15).  Also forgets the generator-side stash, which is keyed by the
+	exception in SessionTemps.  Both the carrier and its payload are released."
+
+	| payload reg |
+	payload := BaseException ___payloadOf___: self.
+	payload ___releaseCapturedStack___.
+	payload == self ifFalse: [self ___releaseCapturedStack___].
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifFalse: [reg removeKey: payload ifAbsent: []].
+	^ self
+
+]

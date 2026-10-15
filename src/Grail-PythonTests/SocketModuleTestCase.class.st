@@ -1,0 +1,165 @@
+Class {
+	#name : 'SocketModuleTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> loadFixture [
+	"Load tests/python/use_socket.py fresh."
+
+	importlib @env1:modules removeKey: #'use_socket' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/use_socket.py')
+		name: 'use_socket'
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testAbortiveCloseResetsPeer [
+	"setsockopt(SO_LINGER, (1, 0)) reaches the descriptor: close() sends a
+	RST, so the peer reads what arrived and then ConnectionResetError, where
+	a plain close() ends in a clean EOF.  GsSocket has no LINGER option, and
+	setsockopt used to accept and ignore it."
+
+	self
+		assert: (self loadFixture @env1:abortive_close_resets_peer) @env1:__repr__
+		equals: '[[b''hello'', (''ConnectionResetError'', 54)], [b''hello'', b''''], 54]'
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testContextManagerCloses [
+	"``with socket.socket() as s:`` closes the socket on exit (fileno -1)."
+
+	| r |
+	r := self loadFixture @env1:context_manager_closes.
+	self assert: (r @env1:__getitem__: 0) equals: true.
+	self assert: (r @env1:__getitem__: 1) equals: true
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testEchoRoundTrip [
+	"A full client<->server byte exchange over a real TCP socket."
+
+	self assert: (self loadFixture @env1:echo_roundtrip) equals: 'pong:ping'
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testEphemeralPortAssigned [
+	"bind((host, 0)) asks the OS for a port; getsockname reports it."
+
+	self assert: (self loadFixture @env1:ephemeral_port_assigned) > 0
+
+]
+
+{ #category : 'Grail-Tests' }
+SocketModuleTestCase >> testExceptionAliases [
+	"``from socket import timeout'' is common in third-party code (geopy's
+	adapters, urllib3, requests).  Since CPython 3.10 socket.timeout IS
+	TimeoutError and socket.error IS OSError; Grail defined neither, so
+	the import failed with ModuleNotFoundError 'socket.timeout'."
+
+	| r |
+	r := self loadFixture @env1:exception_aliases.
+	self assert: (r @env1:__getitem__: 0) description: 'socket.timeout is not TimeoutError'.
+	self assert: (r @env1:__getitem__: 1) description: 'socket.error is not OSError'.
+	self assert: (r @env1:__getitem__: 2) description: 'from socket import timeout failed'.
+	self assert: (r @env1:__getitem__: 3) description: 'from socket import error failed'.
+	self assert: (r @env1:__getitem__: 4).
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testGethostnameNonEmpty [
+	"socket.gethostname() returns the local host name."
+
+	self assert: (self loadFixture @env1:gethostname_nonempty) equals: true
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testHttpServerGet [
+	"http.server.BaseHTTPRequestHandler parses a GET, dispatches do_GET, and
+	send_response/send_header/end_headers write the HTTP response."
+
+	| r |
+	r := self loadFixture @env1:http_server_get.
+	self assert: ((r @env1:__getitem__: 0) indexOfSubCollection: '200 OK') > 0.
+	self assert: (r @env1:__getitem__: 1) equals: 'hello from http.server'
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testLargePayloadRoundTrip [
+	"50000 bytes exceeds one OS buffer — sendall loops over partial writes
+	and recv reassembles."
+
+	| r |
+	r := self loadFixture @env1:large_payload_roundtrip.
+	self assert: (r @env1:__getitem__: 0) equals: 50000.
+	self assert: (r @env1:__getitem__: 1) equals: true
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testMakefileRoundTrip [
+	"socket.makefile('rb'/'wb') — a buffered file object over the socket:
+	readline() for the request line + headers, read(n) for the body,
+	write()/flush() for the response.  Foundation for http.server."
+
+	| r |
+	r := self loadFixture @env1:makefile_roundtrip.
+	self assert: (r @env1:__getitem__: 0) equals: 'GET /x HTTP/1.1'.
+	self assert: (r @env1:__getitem__: 1) equals: 'Host: y'.
+	self assert: (r @env1:__getitem__: 2) equals: true.
+	self assert: (r @env1:__getitem__: 3) equals: 'BODY'.
+	self assert: (r @env1:__getitem__: 4) equals: true
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testSelectDetectsConnection [
+	"select.select reports the listening socket readable once a client
+	connects (not before)."
+
+	| r |
+	r := self loadFixture @env1:select_detects_connection.
+	self assert: (r @env1:__getitem__: 0) equals: 0.
+	self assert: (r @env1:__getitem__: 1) equals: 1.
+	self assert: (r @env1:__getitem__: 2) equals: true
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testSelectorsDetectsConnection [
+	"selectors.DefaultSelector (over select) detects an incoming connection."
+
+	| r |
+	r := self loadFixture @env1:selectors_detects_connection.
+	self assert: (r @env1:__getitem__: 0) equals: 1.
+	self assert: (r @env1:__getitem__: 1) equals: true
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testSocketServerEcho [
+	"socketserver.TCPServer + StreamRequestHandler: handle_request() accepts
+	one connection; the handler reads a line and writes a reply."
+
+	self assert: (self loadFixture @env1:socketserver_echo) equals: 'echo:hello'
+
+]
+
+{ #category : 'Grail-Tests-Socket' }
+SocketModuleTestCase >> testUnclosedSocketWarns [
+	"A socket that dies open warns ``ResourceWarning: unclosed <repr>'' (and
+	is closed); one closed first is quiet."
+
+	self
+		assert: (self loadFixture @env1:unclosed_socket_warns) @env1:__repr__
+		equals: '[1, 0]'
+
+]

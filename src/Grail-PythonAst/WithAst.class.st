@@ -1,0 +1,667 @@
+"AsyncWith(withitem* items, stmt* body, string? type_comment)"
+Class {
+	#name : 'WithAst',
+	#superclass : 'StatementAst',
+	#instVars : [
+		'items',
+		'body',
+		'type_comment'
+	],
+	#category : 'Grail-Parser'
+}
+
+{ #category : 'Grail-Code Generation' }
+WithAst >> ___awaitPrefix___ [
+	"How the __enter__/__exit__ call is DRIVEN.  A plain ``with'' awaits
+	NOTHING, as in CPython, so there is no prefix at all.
+
+	It used to route through the class-side ``PythonCoroutine ___grailAwait___:''
+	on the reasoning that the helper passes a non-coroutine straight through.
+	It does not pass a GENERATOR through: it drives anything generator-shaped
+	to completion, as await must for a generator-based coroutine.  So a
+	synchronous manager whose __enter__ returned a generator had it RUN, and
+	the ``as'' target got the generator's return value -- None.  That is
+	``with contextlib.closing(gen) as it'', a common idiom, and it is exactly
+	what CPython's glob does to list a directory.
+
+	AsyncWithAst overrides this, because ``async with'' genuinely awaits."
+
+	^ ''
+
+]
+
+{ #category : 'Grail-code generation' }
+WithAst >> ___emitExitTracebackOn___: aStream [
+	"The THIRD argument __exit__ receives when the body raised: the exception's
+	traceback, with the frame of the function running this ``with'' on it.
+
+	CPython records that frame when the exception reaches the statement --
+	the with statement is a catch in its own frame, exactly as an ``except''
+	clause is -- and hands the result to __exit__ as ``tb''.  Grail did
+	neither.  It passed Smalltalk nil, which is not even None, and built no
+	traceback at all, because only an except clause's entry
+	(TryAst >> ___emitPushCatchingFrameOn___:target:) ever did.  An exception
+	that a with statement saw and let go was therefore frameless until some
+	except clause further out caught it -- and one that was never caught
+	again, but became another exception's __context__ instead, stayed
+	frameless for good: ExitStack's ``1/0'' inside ``with self.exit_stack()'',
+	whose traceback test_contextlib[_async] test_exit_exception_traceback reads
+	off the ValueError's __context__.
+
+	The PyCode is the one TryAst names for the same frame, with the same
+	fallback rule: nothing is pushed where there is no frame to name (a class
+	body), and __exit__ still gets whatever traceback the exception already
+	has."
+
+	| frameName firstLine |
+	CallAst functionBeingCompiled
+		ifNil: [
+			CallAst moduleBodyBeingCompiled ifFalse: [
+				^ aStream nextPutAll: '(BaseException @env0:___withExitTraceback___: (BaseException @env0:___payloadOf___: ___ex___) code: nil pos: nil)'].
+			frameName := '<module>'.
+			firstLine := 1]
+		ifNotNil: [:___func |
+			frameName := ___func name asString.
+			firstLine := ___func beginLine].
+	aStream nextPutAll: '(BaseException @env0:___withExitTraceback___: (BaseException @env0:___payloadOf___: ___ex___) code: (PyCode @env0:name: '''.
+	aStream nextPutAll: frameName; nextPutAll: ''' filename: '.
+	self emitSourceFilenameLiteralOn: aStream.
+	aStream nextPutAll: ' firstlineno: '; print: firstLine; nextPutAll: ') pos: ___curPos___)'.
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___emitIRAwait___: callNode site: aSiteSymbol on: aBuilder [
+	"___awaitPrefix___'s IR twin: a plain ``with'' awaits nothing, so the call's
+	value is the enter / exit value itself.  See ___awaitPrefix___ for why it
+	must not go through ___grailAwait___:.  AsyncWithAst overrides."
+
+	^ callNode
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___emitIRExitTraceback___: exLeaf on: aBuilder [
+	"___emitExitTracebackOn___:'s IR twin, as the VALUE node for __exit__'s
+	third argument.  ``pos: nil'' as every IR catching-frame push passes: the
+	walk derives the line from the captured ips."
+
+	| func pyCode |
+	func := CallAst functionBeingCompiled.
+	pyCode := func isNil
+		ifTrue: [aBuilder nilLit]
+		ifFalse: [aBuilder
+			send: #'name:filename:firstlineno:' to: (aBuilder globalNamed: #PyCode)
+			with: { aBuilder obj: func name asString.
+				aBuilder obj: (CallAst sourcePath ifNil: ['<grail>']).
+				aBuilder obj: func beginLine }
+			env: 0].
+	^ aBuilder
+		send: #'___withExitTraceback___:code:pos:' to: (aBuilder globalNamed: #BaseException)
+		with: { self ___emitIRPayloadOf___: exLeaf on: aBuilder. pyCode. aBuilder nilLit }
+		env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___emitIRItem___: anIndex on: aBuilder [
+	"printItem:onStream:'s nest for items[anIndex], as the VALUE node
+	``[:___cm___ | ...] value: (expr)''.  Inside the block:
+	  target := PythonCoroutine @env0:___grailAwait___:
+	      ((___cm___ @env1:___grailProtocolAttr___: #'__enter__') @env1:value: { } value: nil).
+	  [[ body-or-next-item ] @env0:on: BaseException do: [:___ex___ |
+	      ___handled___ := true.
+	      <control-flow signal> ifTrue: [__exit__(None, None, None). ___ex___ pass].
+	      (BaseException ___whileHandling___: payload do: [
+	          __exit__(payload class, payload, nil)]) ___isTruthy___
+	              ifFalse: [___ex___ pass]
+	  ]] @env0:ensure: [___handled___ ifFalse: [__exit__(None, None, None)]]
+	The __exit__ calls are the same ___pyAttrLoad___ / value:value: /
+	___grailAwait___: sends the text makes.  Two departures, both because IR
+	``return'' is a real ``^'' (returnFromHome) where the text signals
+	PythonReturn for its handler to catch:
+	  * the CLEAN __exit__ runs from an ensure: block, guarded by a
+	    ``___handled___'' flag the handler sets, instead of the text's
+	    ``(protected) == true ifTrue: [...]'' after the on:do:.  A ``^'' out of
+	    the body never reaches the handler, but ensure blocks run on every
+	    unwind, so the manager still exits cleanly; a handled exception --
+	    propagated or suppressed -- sets the flag first and so, like the text,
+	    gets no second __exit__.  That flag is ALSO why the extra
+	    ``on: Error'' wrapper below is needed: a Smalltalk error is not a
+	    BaseException, so without it the ensure: would report a clean exit
+	    for an unwind that is anything but;
+	  * there is no ___val___ temp: the enter value is stored straight into the
+	    target (or evaluated for effect when there is none).
+	The ``as'' target may be any store shape the unpack emitter knows."
+
+	| item outer |
+	item := items at: anIndex.
+	aBuilder atNode: item context_expr.
+	outer := aBuilder
+		blockWithArg: #'___cm___' temp: #'___handled___'
+		do: [:cmLeaf :handledLeaf |
+			| enterV protected handler guarded ensureBlk stUnwind |
+			aBuilder add: (aBuilder assign: handledLeaf from: aBuilder falseLit).
+			self ___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder.
+			enterV := self ___emitIRProtocolCall___: self ___enterSelector___ on: cmLeaf
+				args: { } builder: aBuilder at: item context_expr.
+			item optional_vars
+				ifNil: [aBuilder add: enterV]
+				ifNotNil: [:t |
+					self ___emitIRUnpackStore___: t from: enterV holder: '___tgt___' on: aBuilder].
+			protected := aBuilder inBlockDo: [
+				anIndex = items size
+					ifTrue: [body ___emitIRStatementsOn___: aBuilder]
+					ifFalse: [aBuilder add: (self ___emitIRItem___: anIndex + 1 on: aBuilder)]].
+			handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
+				| whileHandling |
+				aBuilder add: (aBuilder assign: handledLeaf from: aBuilder trueLit).
+				aBuilder
+					if: (self ___emitIRControlSignalGuard___: exLeaf on: aBuilder)
+					then: [
+						aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
+							args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
+								aBuilder globalNamed: #None }
+							builder: aBuilder at: item context_expr).
+						aBuilder add: (aBuilder send: #pass to: (aBuilder var: exLeaf) with: { } env: 0)].
+				whileHandling := aBuilder
+					send: #'___whileHandling___:do:'
+					to: (aBuilder globalNamed: #BaseException)
+					with: { self ___emitIRPayloadOf___: exLeaf on: aBuilder.
+						aBuilder inBlockDo: [
+							aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
+								args: {
+									aBuilder send: #class
+										to: (self ___emitIRPayloadOf___: exLeaf on: aBuilder)
+										with: { } env: 0.
+									self ___emitIRPayloadOf___: exLeaf on: aBuilder.
+									self ___emitIRExitTraceback___: exLeaf on: aBuilder }
+								builder: aBuilder at: item context_expr)] }
+					env: 0.
+				aBuilder
+					unless: (aBuilder send: #'___isTruthy___' to: whileHandling with: { } env: 1)
+					then: [aBuilder add: (aBuilder send: #pass to: (aBuilder var: exLeaf) with: { } env: 0)]].
+			"A Smalltalk error is NOT a BaseException, so the handler above never
+			 sees one -- but the ensure: block below runs on every unwind, and
+			 would then call __exit__(None, None, None): telling the manager the
+			 body finished CLEANLY while an error is unwinding through it.  The
+			 text path calls no __exit__ at all in that case (its on: BaseException
+			 simply does not catch), so mark the flag and pass, which reproduces
+			 that and leaves the ensure: for the ``^'' case it exists for.
+			 unittest showed why this matters: its __exit__, told there was no
+			 exception, RAISES from inside the ensure: and replaces the original
+			 error with `TypeError not raised' (test.test_codecs, flag-on).
+			 The exception is always passed, never absorbed -- AlmostOutOfStackError
+			 included, which must never be swallowed.
+			 Error, not AbstractException: a resumable NOTIFICATION raised in the
+			 body would otherwise set the flag and then resume, and the body's
+			 normal completion would find ___handled___ already true and skip the
+			 clean __exit__ entirely.  Error is referenced as a literal because
+			 it is not on the Grail compile symbol list -- ``globalNamed: #Error''
+			 raises, which sends every with-bearing def to the text fallback."
+			stUnwind := aBuilder blockWithArg: #'___sterr___' do: [:stLeaf |
+				aBuilder add: (aBuilder assign: handledLeaf from: aBuilder trueLit).
+				aBuilder add: (aBuilder send: #pass to: (aBuilder var: stLeaf)
+					with: { } env: 0)].
+			guarded := aBuilder
+				send: #on:do:
+				to: (aBuilder inBlockDo: [
+					aBuilder add: (aBuilder
+						send: #on:do: to: protected
+						with: {
+							aBuilder send: #'___catchAll___' to: (aBuilder globalNamed: #BaseException)
+								with: { } env: 0.
+							handler } env: 0)])
+				with: { aBuilder obj: Error. stUnwind } env: 0.
+			ensureBlk := aBuilder inBlockDo: [
+				aBuilder unless: (aBuilder var: handledLeaf) then: [
+					aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
+						args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
+							aBuilder globalNamed: #None }
+						builder: aBuilder at: item context_expr)]].
+			aBuilder add: (aBuilder
+				send: #ensure: to: (aBuilder inBlockDo: [aBuilder add: guarded])
+				with: { ensureBlk } env: 0)].
+	aBuilder atNode: item context_expr.
+	^ aBuilder
+		send: #value: to: outer
+		with: { item context_expr ___emitIRValueOn___: aBuilder } env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___emitIRPayloadOf___: exLeaf on: aBuilder [
+	"``BaseException @env0:___payloadOf___: ___ex___'' -- a fresh node per use."
+
+	^ aBuilder
+		send: #'___payloadOf___:' to: (aBuilder globalNamed: #BaseException)
+		with: { aBuilder var: exLeaf } env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBuilder at: stampNode [
+	"``<await> ((___cm___ @env1:___grailProtocolAttr___: #sel) @env1:value:
+	{ args } value: nil)'' -- the driven protocol call of the text.
+	aSelectorString is ___enterSelector___ or ___exitSelector___; the await is
+	the per-site hook (___emitIRAwait___:site:on:), the class-side pass-through
+	for a plain ``with'', the suspending ___gen___ forms for ``async with''.
+
+	``___grailProtocolAttr___:'', not ``___pyAttrLoad___:'': the text moved to
+	it when a class stopped answering a dunder it does not define, and a MISS
+	must answer the raising default rather than propagate AttributeError --
+	``with Bare:'' is CPython's ``'Bare' object does not support the context
+	manager protocol'', not an AttributeError.  The IR emit still said
+	___pyAttrLoad___: and answered the AttributeError
+	(MetaclassWithAndNextTestCase>>testAClassWithNoMetaclassStillRefuses, flag
+	on only)."
+
+	| load call |
+	"STAMP HERE, not at the call site.  CPython pins a raise out of __init__ /
+	__enter__ / __exit__ to the CONTEXT MANAGER EXPRESSION, so each of these
+	sends has to carry its own manager's position -- and for a multi-item
+	``with'' the builder's current stamp is NOT that.  Item N's block emits
+	item N+1 recursively (that is how the nest is built), which stamps N+1's
+	expression; item N's handler and ensure block, holding item N's __exit__
+	calls, are emitted afterwards.  So ``with self.ExitRaises(), self.Dummy():''
+	blamed ``self.Dummy()'' for a raise out of ExitRaises.__exit__, where the
+	text path and CPython blame ``self.ExitRaises()''
+	(test.test_with NestedWith.testExceptionLocation, flag on only).
+
+	It cannot be stamped by the CALLER either: building the argument array is
+	itself emission, and it re-stamps the builder before this method is
+	entered.  The stamp must be the last thing before the send it labels, which
+	is here."
+	stampNode ifNotNil: [:n | aBuilder atNode: n].
+	load := aBuilder
+		send: #'___grailProtocolAttr___:' to: (aBuilder var: cmLeaf)
+		with: { aBuilder obj: aSelectorString asSymbol } env: 1.
+	call := aBuilder
+		send: #value:value: to: load
+		with: { aBuilder arrayOf: argNodes. aBuilder nilLit } env: 1.
+	^ self ___emitIRAwait___: call
+		site: (aSelectorString = self ___enterSelector___ ifTrue: [#enter] ifFalse: [#exit])
+		on: aBuilder
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder [
+	"___emitProtocolPreflightOn___:'s IR twin: nothing for a plain with."
+
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___emitIRStatementOn___: aBuilder [
+	aBuilder atNode: self.
+	aBuilder add: (self ___emitIRItem___: 1 on: aBuilder).
+	^ self
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> ___emitItemPosOn___: aStream for: anItem [
+	"Store the span of anItem's context-manager EXPRESSION into ___curPos___.
+
+	Uses the same literal-array form ___emitCurPosBefore:on: emits for a
+	statement, so ___pushFrameFromPos___ reads it back identically and the frame
+	gains PEP 657 columns as well as the right line -- which is what lets
+	``with A(), B(), C():'' underline the manager that actually failed.
+
+	No-op outside a function (no ___curPos___ temp there) or when the expression
+	carries no position."
+
+	| expr lit |
+	CallAst functionBeingCompiled isNil ifTrue: [^ self].
+	expr := anItem context_expr.
+	(expr isNil or: [expr beginLine isNil]) ifTrue: [^ self].
+	lit := [expr ___pyPositionLiteralArray] on: Error do: [:ex | ex return: nil].
+	lit isNil ifTrue: [^ self].
+	self ___emitCurPosStore___: lit on: aStream
+
+]
+
+{ #category : 'Grail-Code Generation' }
+WithAst >> ___emitProtocolPreflightOn___: aStream [
+	"Hook: validate the manager BEFORE the enter call.  The synchronous form
+	emits nothing -- its protocol gaps surface through object's raising
+	__enter__/__exit__ defaults, lazily but with the right message, and no
+	failing shape demands more.  AsyncWithAst overrides: CPython's
+	BEFORE_ASYNC_WITH loads both halves up front, and test_with_2 pins that
+	a missing __aexit__ refuses before __aenter__ or the body runs."
+
+	^ self
+
+]
+
+{ #category : 'Grail-Code Generation' }
+WithAst >> ___enterAwaitPrefix___ [
+	"Per-site refinement of ___awaitPrefix___.  A plain ``with'' drives both
+	halves identically, so the defaults just delegate; AsyncWithAst overrides
+	the pair, because CPython's rejection of a non-awaitable __aenter__ /
+	__aexit__ RESULT names the method it came from and the shared prefix
+	cannot."
+
+	^ self ___awaitPrefix___
+
+]
+
+{ #category : 'Grail-Code Generation' }
+WithAst >> ___enterSelector___ [
+	"The half of the protocol this statement enters through.  ``async with'' runs
+	the identical shape over the ``a''-prefixed pair, so the emit is shared and
+	only the two selector names differ -- see AsyncWithAst."
+
+	^ '__enter__'
+
+]
+
+{ #category : 'Grail-Code Generation' }
+WithAst >> ___exitAwaitPrefix___ [
+	^ self ___awaitPrefix___
+
+]
+
+{ #category : 'Grail-Code Generation' }
+WithAst >> ___exitSelector___ [
+	^ '__exit__'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___irEligibleStatementLocals___: localNames [
+	"A with -- or, since cut 54, an async with, which differs in the awaited
+	protocol hooks only (AsyncWithAst): every item's manager expression emittable and its ``as''
+	target absent, a local Name, an attribute or subscript store, or a tuple /
+	list nest the unpack emitter handles (its holder temps free); and an
+	all-emittable body."
+
+	(self class == WithAst or: [self class == AsyncWithAst]) ifFalse: [^ false].
+	(items isNil or: [items isEmpty]) ifTrue: [^ false].
+	items do: [:item |
+		(item context_expr ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+		item optional_vars ifNotNil: [:t |
+			(self ___irWithTargetEligible___: t locals: localNames) ifFalse: [^ false]]].
+	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst]) ifFalse: [^ false].
+	^ body ___irEligibleStatementsWithLocals___: localNames
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___irFlowBound___: boundIn locals: localSet [
+	"Items in order: each manager expression's reads (and its target's
+	attribute / subscript pieces) must be bound by what precedes it, and its
+	target names join the set for what follows -- ``with a() as x, b(x) as
+	y''.  The body walks from that set.  Afterwards only the targets count as
+	bound: a body exception the manager SUPPRESSES skips the rest of the body,
+	so the body's own bindings are not definite."
+
+	| entry |
+	entry := boundIn copy.
+	items do: [:item |
+		| reads |
+		reads := Set new.
+		item context_expr ___irReadLocalNamesInto___: reads locals: localSet.
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackReadsInto___: reads target: t locals: localSet].
+		(reads allSatisfy: [:r | entry includes: r]) ifFalse: [^ nil].
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackLeafNamesInto___: entry target: t locals: localSet]].
+	(body ___irFlowBound___: entry locals: localSet) isNil ifTrue: [^ nil].
+	^ entry
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
+	"Manager expressions and target pieces (attribute / subscript receivers and
+	indices) are reads; the body's reads of the targets are satisfied by the
+	enter stores."
+
+	| sub names |
+	names := self ___irTargetNamesInto___: Set new locals: localSet.
+	items do: [:item |
+		item context_expr ___irReadLocalNamesInto___: aSet locals: localSet.
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackReadsInto___: aSet target: t locals: localSet]].
+	sub := Set new.
+	body ___irReadLocalNamesInto___: sub locals: localSet.
+	sub do: [:r | (names includes: r) ifFalse: [aSet add: r]].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___irTargetNamesInto___: aSet locals: localSet [
+	"The locals every item's ``as'' target binds."
+
+	items do: [:item |
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackLeafNamesInto___: aSet target: t locals: localSet]].
+	^ aSet
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___irWithTargetEligible___: aTarget locals: localNames [
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		^ (self ___irUnpackTargetEligible___: aTarget locals: localNames)
+			and: [self ___irUnpackHoldersFree___: '___tgt____n'
+				depth: (self ___irUnpackDepth___: aTarget) locals: localNames]].
+	^ self ___irUnpackLeafEligible___: aTarget locals: localNames
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+WithAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
+	self ___irTargetNamesInto___: aSet locals: localSet.
+	body ___irWriteLocalNamesInto___: aSet locals: localSet.
+	^ self
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> body [
+	^body
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> body: newValue [
+	body := newValue
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> items [
+	^items
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> items: newValue [
+	items := newValue
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> printItem: anIndex onStream: aStream [
+	"Emit one context-manager wrapper at items[anIndex]. The innermost
+	item (anIndex = items size) runs the actual body; outer items
+	recurse into the next inner item."
+
+	| item |
+	item := items at: anIndex.
+	"Blame THIS context manager's expression, not the statement and not the
+	body.  CPython pins a raise from __init__ / __enter__ / __exit__ to the
+	manager expression precisely so that ``with A(), B(), C():'' says WHICH one
+	failed, and it is the only position that can.  ___curPos___ otherwise still
+	holds whatever the enclosing statement left there -- the ``with'' line for
+	an __enter__ raise, which looked right by accident, and the BODY's last
+	statement for an __init__ or __exit__ raise, which did not."
+	self ___emitItemPosOn___: aStream for: item.
+	aStream nextPutAll: '([:___cm___ |'.
+	aStream increaseIndent; lf.
+	aStream nextPutAll: '| ___val___ |'; lf.
+	"``async with'' runs the SAME shape over __aenter__/__aexit__, and those are
+	coroutines -- so the call has to be DRIVEN, which is what CPython's
+	``await mgr.__aenter__()'' means.  A plain ``with'' drives NOTHING: its
+	prefix is empty (___awaitPrefix___), because the await helper would run a
+	generator that __enter__ merely returned."
+	self ___emitProtocolPreflightOn___: aStream.
+	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___enterAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
+	aStream nextPutAll: self ___enterSelector___.
+	aStream nextPutAll: ''') @env1:value: { } value: nil)).'; lf.
+	"PARENTHESISED because the protected block's VALUE decides whether the
+	clean-exit call below runs -- see the comment on ``true'' at the end of it."
+	aStream nextPutAll: '(['.
+	aStream increaseIndent; lf.
+	item optional_vars ifNotNil: [
+		"``with X as TARGET'' is an assignment, and TARGET may be any
+		assignment target: a name, an attribute, a subscript, or a nested
+		/ starred tuple.  ___emitTargetStore___:from:on: is the shared
+		emitter -- a plain name still routes through the module-scope-aware
+		store (so a module-level y binds the module variable rather than an
+		undeclared temp), and everything else reuses AssignAst's per-element
+		store.  This branch used to emit the non-name shapes via the
+		target's own printSmalltalkOn:, which is a LOAD emit and so failed
+		on every target except a bare name."
+		self ___emitTargetStore___: item optional_vars from: '___val___' on: aStream.
+		aStream lf.
+	].
+	anIndex = items size
+		ifTrue: [body printSmalltalkOn: aStream]
+		ifFalse: [
+			self printItem: anIndex + 1 onStream: aStream.
+			aStream nextPut: $.; lf
+		].
+	"``true'' -- NOT the clean __exit__ call, which now runs AFTER the handler
+	is out of scope.  It used to be the last expression of this block, and that
+	put it inside the very ``on: BaseException'' whose handler calls __exit__
+	again: a manager whose __exit__ RAISED therefore had __exit__ invoked a
+	SECOND time, with its own exception as the excinfo triple.
+
+	CPython's semantics are the ones this method's own docstring already
+	described -- the clean call belongs in the ``else'' of the try, which no
+	``except'' covers -- so a raise out of __exit__(None, None, None)
+	propagates, full stop.
+
+	Found by vendoring asyncio.TaskGroup, whose __aexit__ raises
+	BaseExceptionGroup on the normal path and then re-entered itself with its
+	own ExceptionGroup, by which point its ``finally'' had already cleared
+	_parent_task: ``'NoneType' object has no attribute 'uncancel'''.  It is not
+	async-specific -- plain ``with'' had it identically."
+	aStream nextPutAll: 'true'.
+	aStream decreaseIndent; lf.
+	aStream nextPutAll: '] @env0:on: BaseException @env0:___catchAll___ do: [:___ex___ |'.
+	aStream increaseIndent; lf.
+	"Python's ``return``/``break``/``continue`` are GemStone signals that
+	inherit from BaseException in this hierarchy, so they fall into this
+	handler.  They are NOT real exceptions — the with-statement contract
+	says the manager sees a clean __exit__(None, None, None) and the
+	control-flow signal continues to its real target.  Filter them out
+	before invoking __exit__ with exception details."
+	aStream nextPutAll: '((___ex___ isKindOf: PythonReturn) @env0:or: [(___ex___ isKindOf: PythonBreak) @env0:or: [___ex___ isKindOf: PythonContinue]]) ifTrue: ['; lf.
+	aStream nextPutAll: '    '; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
+	aStream nextPutAll: self ___exitSelector___.
+	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil).'; lf.
+	aStream nextPutAll: '    ___ex___ @env0:pass'; lf.
+	aStream nextPutAll: '].'; lf.
+	"__exit__ receives PYTHON's exception, so it must be handed the PAYLOAD:
+	``___ex___'' may be a carrier, a throwaway raised to deliver the real one
+	without re-signalling it (BaseException ___signalCarrying___:).  Passing the
+	carrier gave the manager an exception with no args -- which is how
+	assertRaisesRegex started reporting ``'...' does not match '''''.  The #pass
+	stays on ``___ex___'': a falsy __exit__ means the exception CONTINUES
+	propagating, which is what #pass expresses, and the carrier is unwrapped by
+	whichever handler finally catches it."
+	"__exit__ runs ON BEHALF of the in-flight exception, so that exception is what
+	sys.exc_info() must report while it runs -- and therefore what anything
+	__exit__ itself raises gets as its __context__.  Without the wrapper,
+	``def __exit__(self, t, v, tb): xyzzy'' produced a NameError with no context
+	at all, losing the ``During handling of the above exception'' half of the
+	report (test_raise test_context_manager)."
+	aStream nextPutAll: '(BaseException @env0:___whileHandling___: (BaseException @env0:___payloadOf___: ___ex___) do: ['.
+	aStream nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
+	aStream nextPutAll: self ___exitSelector___.
+	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). '.
+	self ___emitExitTracebackOn___: aStream.
+	aStream nextPutAll: ' } value: nil)]) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
+	aStream decreaseIndent; lf.
+	aStream nextPut: $].
+	"THE CLEAN EXIT, outside the protection.  Reached only when the body ran to
+	completion: the handler either #pass-es (so control never gets here) or
+	falls off its end having SUPPRESSED the exception, in which case the
+	on:do: answers the handler's value and not ``true''.
+
+	``== true'' rather than ___isTruthy___ or a bare ifTrue:, because the value
+	being tested is whatever the handler happened to answer -- nil today.  A
+	nil reaching an inlined ifTrue: is an uncatchable error 2085, so the
+	comparison is explicit.
+
+	Using the block's value avoids adding a temp to every with-statement, which
+	would cost stack frame width in a construct that can nest."
+	aStream nextPutAll: ') @env0:== true ifTrue: ['.
+	aStream increaseIndent; lf.
+	self ___emitItemPosOn___: aStream for: item.
+	aStream nextPutAll: '('; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
+	aStream nextPutAll: self ___exitSelector___.
+	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil))'.
+	aStream decreaseIndent; lf.
+	aStream nextPut: $].
+	aStream decreaseIndent; lf.
+	aStream nextPutAll: '] @env0:value: '.
+	item context_expr printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPut: $)
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> printSmalltalkOn: aStream [
+	"Codegen for `with E1 as V1, E2 as V2, ...: BODY` — nests context
+	managers so each item runs its own __enter__/__exit__ protocol.
+	Outer item closes over the inner ones. Equivalent Python:
+
+	    mgr = E
+	    val = mgr.__enter__()
+	    try:
+	        V = val
+	        BODY
+	    except BaseException as ex:
+	        if not mgr.__exit__(type(ex), ex, None):
+	            raise
+	    else:
+	        mgr.__exit__(None, None, None)
+
+	The ``else'' is load-bearing and was for a long time a lie: the clean
+	__exit__ was emitted as the last expression INSIDE the try, so a manager
+	whose __exit__ raised had it called a second time with its own exception.
+	It is now emitted after the handler, guarded by whether the protected block
+	answered ``true''.
+
+	Wrapping each item in `[:___cm___ | ...] @env0:value: EXPR` keeps
+	EXPR evaluated exactly once and gives __exit__ a stable handle to
+	the manager — `mgr` is referenced both in the normal-exit path and
+	in the exception handler. Non-local `^return` inside BODY still
+	returns from the enclosing method (Smalltalk block ^ is always
+	non-local), so generator/return semantics carry through."
+
+	self printItem: 1 onStream: aStream.
+	aStream nextPut: $.
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> type_comment [
+	^type_comment
+
+]
+
+{ #category : 'Grail-other' }
+WithAst >> type_comment: newValue [
+	type_comment := newValue
+
+]
