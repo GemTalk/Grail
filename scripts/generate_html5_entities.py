@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Regenerate the ``initialize_html5`` method in
-src/smalltalk/Python/html_entities.gs from CPython's own html.entities.html5.
+"""Regenerate the ``html_entities >> initialize_html5`` method (environment 1) in
+src/Grail-Python-Modules-PyEnv/html_entities.extension.st from CPython's own
+html.entities.html5.
 
 Authoritative source: the vendored CPython's ``html.entities.html5``, which is
 the WHATWG named-character-reference table.  Its SHAPE matters as much as its
@@ -14,17 +15,21 @@ appear a second time under the bare ``name``.  That is what makes
 Grail's table used to hold 2125 BARE names and none with a semicolon, which
 gets the first two wrong in opposite directions: a lookup of 'gt;' missed, and
 'acE' hit when it should not have.  Match upstream exactly and the algorithm in
-html.gs's unescape: needs no special cases.
+the html module's unescape: needs no special cases.
 
 Run with the SAME CPython version Grail vendors (3.14.x):
     python3.14 scripts/generate_html5_entities.py
 """
 import html.entities
-import io
+import os
 import re
 import sys
 
-GS = "src/smalltalk/Python/html_entities.gs"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tonel_methods import Method, set_methods  # noqa: E402
+
+TONEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                     "src", "Grail-Python-Modules-PyEnv", "html_entities.extension.st")
 
 
 def value_expr(text):
@@ -56,14 +61,10 @@ def main():
     for name in sorted(table, key=lambda k: (k.rstrip(';'), k)):
         lines.append("\td @env0:at: '%s' put: %s."
                      % (name, value_expr(table[name])))
-    lines += ["", "\tself @env0:at: #html5 put: d", "%"]
-    generated = "\n".join(lines) + "\n"
-
-    source = io.open(GS, encoding="utf-8").read()
-    start = source.index("initialize_html5\n")
-    end = source.index("\n%\n", source.index("self @env0:at: #html5 put: d", start)) + 3
-    io.open(GS, "w", encoding="utf-8").write(source[:start] + generated + source[end:])
-    print("wrote %d entities into %s" % (len(table), GS))
+    lines += ["", "\tself @env0:at: #html5 put: d"]
+    set_methods(TONEL, "html_entities", [
+        Method(meta=False, category="Grail-Initialization", source="\n".join(lines) + "\n")])
+    print("wrote %d entities into %s" % (len(table), os.path.relpath(TONEL)))
 
 
 if __name__ == "__main__":
