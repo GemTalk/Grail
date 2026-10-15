@@ -140,6 +140,41 @@ ___resolveBuiltinOrSignal___: aName
 
 category: 'Grail-Name Errors'
 classmethod: NameError
+___resolveDoitGlobal___: aName scope: aScope
+	"A free name read by code an exec() compiled -- top level or inside a def
+	it defines -- that had no slot in the exec's scope when it was compiled
+	(NameAst >> emitDoitEnclosingScopeLoad:on:).  CPython's LOAD_GLOBAL reads
+	the GLOBALS DICT as the code runs, and a function an exec defines runs
+	long after the exec returned, so ``g['y'] = 2'' made afterwards, or a later
+	exec's ``me = g()'', must be visible to it.
+
+	The exec's globals dict hangs off its scope (builtins >> ___execScopeFor___:).
+	Which of the two is current depends on whether that exec is still RUNNING:
+	while it is, its own bindings are in the scope and reach the dict only when
+	it finishes; once it is over, the dict is the truth and may have been
+	written since.  Builtins last, through the ordinary resolver, which also
+	answers the live mappings and the __builtins__ override of a running exec."
+
+	| inst d sym v found |
+	sym := NameAst doitScopeNameFor: aName asSymbol.
+	inst := [(System myUserProfile symbolList objectNamed: #builtins) ___instance___]
+		on: Error do: [:ex | ex return: nil].
+	d := [aScope dynamicInstVarAt: #'___grailExecGlobals___']
+		on: AbstractException do: [:ex | ex return: nil].
+	(inst notNil and: [(inst @env1:___grailDoitScope___) == aScope]) ifTrue: [
+		v := aScope at: sym ifAbsent: [nil].
+		v == nil ifFalse: [^ v]].
+	d == nil ifFalse: [
+		found := [d @env1:__getitem__: aName asString]
+			on: KeyError do: [:ex | ex return: #'___grailExecGlobalsMiss___'].
+		found == #'___grailExecGlobalsMiss___' ifFalse: [^ found]].
+	v := aScope at: sym ifAbsent: [nil].
+	v == nil ifFalse: [^ v].
+	^ self ___resolveBuiltinOrSignal___: aName
+%
+
+category: 'Grail-Name Errors'
+classmethod: NameError
 ___resolveDoitName___: aName
 	"A free name read by the top-level code of an exec()/eval() that was handed
 	a LIVE mapping (NameAst >> ___readsDoitLiveMapping___), resolved in

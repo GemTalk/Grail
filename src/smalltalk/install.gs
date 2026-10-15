@@ -1057,6 +1057,7 @@ run
 	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
 	at: #'GeneratorCloseTestCase' put: nil;
+	at: #'GeneratorExceptionContextTestCase' put: nil;
 	at: #'GeneratorExitTestCase' put: nil;
 	at: #'GeneratorStackFrameTestCase' put: nil;
 	at: #'GeneratorStopTestCase' put: nil;
@@ -1591,6 +1592,7 @@ run
 	at: #'WeakReferenceTestCase' put: nil;
 	at: #'WeakReferenceTestSubject' put: nil;
 	at: #'WeakrefModuleTestCase' put: nil;
+	at: #'WerkzeugUtilsUpstreamTestCase' put: nil;
 	at: #'WideStrTypeAndAugmentedAttrStoreTestCase' put: nil;
 	at: #'WithAsTargetsTestCase' put: nil;
 	at: #'WithBlockShapesTestCase' put: nil;
@@ -2635,6 +2637,7 @@ input src/smalltalk/PythonTests/FutureWarningTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GeneratorCloseTestCase.gs
+input src/smalltalk/PythonTests/GeneratorExceptionContextTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
@@ -3172,6 +3175,7 @@ input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningTestCase.gs
 input src/weakref/WeakReferenceTestCase.gs
 input src/smalltalk/PythonTests/WeakrefModuleTestCase.gs
+input src/smalltalk/PythonTests/WerkzeugUtilsUpstreamTestCase.gs
 input src/smalltalk/PythonTests/WideStrTypeAndAugmentedAttrStoreTestCase.gs
 input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
 input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
