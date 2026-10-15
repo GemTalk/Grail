@@ -26,8 +26,9 @@ nothing to do with wrappers.
 THE FUNCTION IS DEFINED INSIDE A def, matching upstream, and that is load-bearing
 rather than incidental.  A Grail MODULE-LEVEL function answers a FRESH object for
 ``__qualname__'', ``__name__'' and ``__annotations__'' on every read, so identity
-cannot hold for it no matter how faithfully the wrapper forwards -- and its
-``__doc__'' is None even with a docstring.  A nested def has none of those
+cannot hold for it no matter how faithfully the wrapper forwards.  (Its
+``__doc__'' used to be None even with a docstring; that is fixed, and
+``module_level_function_doc'' holds it.)  A nested def has none of those
 problems.  Written at module scope this fixture reported the wrapper as broken
 when the wrapper was fine; ``module_level_function_attrs_are_unstable'' records
 that separately, as the distinct gap it is.
@@ -103,12 +104,11 @@ def module_level_function_attrs_are_unstable():
     # why the checks above use a nested def, exactly as upstream does.
     return [module_level.__name__ is module_level.__name__,
             module_level.__qualname__ is module_level.__qualname__,
-            module_level.__annotations__ is module_level.__annotations__,
-            module_level.__doc__]
+            module_level.__annotations__ is module_level.__annotations__]
 
 
 def module_level(x):
-    """a docstring the module-level path drops"""
+    """a docstring the module-level path used to drop"""
     return x
 
 
@@ -124,6 +124,7 @@ r = {
     'annotations_is_a_mapping': annotations_is_a_mapping(),
     'module_level_function_attrs_are_unstable':
         module_level_function_attrs_are_unstable(),
+    'module_level_function_doc': module_level.__doc__,
 }
 
 
@@ -136,6 +137,7 @@ EXPECTED = {
     'classmethod_is_not_callable':
         "TypeError: 'classmethod' object is not callable",
     'annotations_is_a_mapping': [True, True],
+    'module_level_function_doc': 'a docstring the module-level path used to drop',
 }
 
 
@@ -144,7 +146,7 @@ EXPECTED = {
 # path -- the wrapper forwards faithfully, which is why the checks above hold
 # once the function is nested as upstream writes it.
 GRAIL_ONLY = {
-    'module_level_function_attrs_are_unstable': [False, False, False, None],
+    'module_level_function_attrs_are_unstable': [False, False, False],
 }
 
 
