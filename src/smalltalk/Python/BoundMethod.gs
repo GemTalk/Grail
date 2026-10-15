@@ -1496,10 +1496,73 @@ __get__: obj _: objtype
 	(``self._func.__get__(obj, self._cls)'') to re-bind the saved
 	function to the still-alive instance — exercised by Django's signal
 	dispatch once Signal.connect receives its true receiver argument
-	(see the NameAst LEGB guard)."
+	(see the NameAst LEGB guard).
 
+	WHAT obj IS BOUND TO DEPENDS ON WHICH PYTHON OBJECT THIS IS (#1418).  It
+	used to answer ``BoundMethod receiver: obj selector: selector'' for every
+	one, which RE-SENDS the selector to obj -- right only when obj's class
+	resolves that name to this very method:
+
+	  * ``object.__setattr__.__get__(obj)'' is a slot wrapper bound to obj, and
+	    runs object's implementation.  Re-sent, it ran obj's own override, so a
+	    class that freezes itself with ``__setattr__'' and initialises through
+	    the bound form -- attrs' Attribute.__init__ does exactly that -- raised
+	    on its own __init__.  The class-read instance method goes through
+	    UnboundMethod, whose binding is non-virtual.
+	  * a FUNCTION (a module-level def, or a staticmethod read through its
+	    class) binds obj as its first argument; re-sent, ``g.__get__(c)()''
+	    looked for a method ``g'' on c.
+	  * a METHOD -- bound to an instance, or a classmethod bound to its class
+	    -- is already bound, and CPython's method.__get__ answers it unchanged."
+
+	| definer |
 	obj == None ifTrue: [^ self].
-	^ BoundMethod receiver: obj selector: selector
+	"A module function bound to ITS OWN MODULE is itself.  CPython functions
+	 have no __self__, but Grail's answer the module, so code that takes them
+	 for bound methods round-trips them: Django's Signal.connect wraps
+	 ``reset_queries'' in a weakref.WeakMethod, whose call is
+	 ``__func__.__get__(__self__)''.  Binding the module as an argument there
+	 made every request's signal raise ``takes 0 positional arguments''."
+	(receiver @env0:isKindOf: module) ifTrue: [
+		obj == receiver ifTrue: [^ self].
+		^ MethodBinding instance: obj callable: self].
+	(receiver @env0:isKindOf: Behavior) ifFalse: [^ self].
+	(self ___isStaticMethodOnClass___: receiver name: self __name__) ifTrue: [
+		^ MethodBinding instance: obj callable: self].
+	"An implicit classmethod (a class-defined __init_subclass__) is compiled
+	 instance-side on its class, so the definer test below would take it for
+	 an instance method; it is bound to the class already."
+	definingClass == receiver ifTrue: [^ self].
+	definer := self ___instanceSideDefinerIn___: receiver.
+	definer == nil ifTrue: [^ self].
+	(obj @env0:isKindOf: definer) ifFalse: [
+		^ TypeError ___signal___: 'descriptor ''' @env0:, selector @env0:asString
+			@env0:, ''' for ''' @env0:, (definer ___pyTypeNameForError___) @env0:asString
+			@env0:, ''' objects doesn''t apply to a '''
+			@env0:, (obj ___pyTypeNameForError___) @env0:asString @env0:, ''' object'].
+	^ (UnboundMethod definingClass: definer selector: selector) __get__: obj _: objtype
+%
+
+category: 'Grail-Private'
+method: BoundMethod
+___instanceSideDefinerIn___: aClass
+	"The nearest class from aClass up whose INSTANCE side defines this
+	method's name in any arity, or nil.  Non-nil means this handle is an
+	instance method read through a class -- ``object.__setattr__'' -- rather
+	than a classmethod, which lives on the metaclass only."
+
+	| family c |
+	family := importlib @env0:___pythonNameFamilyOf___: selector.
+	c := aClass.
+	[c == nil] @env0:whileFalse: [ | md |
+		md := c @env0:methodDictForEnv: 1.
+		md @env0:notNil ifTrue: [
+			(md @env0:includesKey: selector) ifTrue: [^ c].
+			family @env0:notNil ifTrue: [
+				family @env0:do: [:sel |
+					(sel @env0:notNil and: [md @env0:includesKey: sel]) ifTrue: [^ c]]]].
+		c := c @env0:superclass].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'

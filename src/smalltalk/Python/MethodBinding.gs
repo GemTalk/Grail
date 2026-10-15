@@ -338,5 +338,17 @@ __repr__
 		@env0:, '>') @env0:asUnicodeString
 %
 
+category: 'Grail-Attribute Access'
+method: MethodBinding
+__class__
+	"``type(m)'' is types.MethodType, as __repr__ above already says and as
+	BoundMethod >> __class__ answers for its own bound methods: CPython has one
+	method type.  It answered the Smalltalk class, so ``type(B.f.__get__(b))''
+	read <class 'MethodBinding'>, and so did ``object.__setattr__.__get__(o)''
+	once that bound through here (#1418)."
+
+	^ (BoundMethod ___callableTypeNamed___: 'method') ifNil: [self @env0:class]
+%
+
 
 set compile_env: 0
