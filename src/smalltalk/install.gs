@@ -1308,6 +1308,7 @@ run
 	at: #'OsZipfileSurfaceTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
 	at: #'OverrideDefaultArgTestCase' put: nil;
+	at: #'OverrideDocstringTestCase' put: nil;
 	at: #'PackageImportTestCase' put: nil;
 	at: #'PartialCallableAndCopyTestCase' put: nil;
 	at: #'PartialMethodDescriptorTestCase' put: nil;
@@ -2898,6 +2899,7 @@ input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/OsZipfileSurfaceTestCase.gs
 input src/smalltalk/PythonTests/OverflowErrorTestCase.gs
 input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
+input src/smalltalk/PythonTests/OverrideDocstringTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/ParseErrorLocationTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
