@@ -13,9 +13,221 @@ This is that measurement, done so someone else can repeat it. Its real output
 is not the headline fraction — it is the **ranked gap list** at the bottom,
 which says which single fix unblocks the most packages.
 
+## Top 100, re-measured (2026-10-15)
+
+**This section is the current state; the sections below it are history.**
+It is the same 100 projects, at the same versions and in the same venv as the
+2026-10-11 measurement below, re-run on `main` after a week of fixes. Most of
+those fixes came from that measurement's gap list.
+
+Setup:
+- GemStone 4.0, Grail `main` at `c7ffa6b7`, CPython 3.14.8, Darwin arm64.
+- `./install.sh`, then `./scripts/run_tests.sh` (8122 / 8122, 8 of 8 shards).
+- Then `./scripts/pypi_package_census.py --venv <venv> --submodules`.
+
+| Denominator | 2026-10-11 | **2026-10-15** |
+| --- | ---: | ---: |
+| **pure-Python projects** | 43 / 58 | **52 / 58** |
+| depending on a C-extension project | 4 / 15 | **5 / 15** (+1 shadowed: jinja2) |
+| shipping a C extension | 13 / 27 | **14 / 27** (+1 shadowed: markupsafe) |
+| everything measured | 60 / 100 | **71 / 100** |
+| **submodules, of those CPython imports** | 1,311 / 2,000 | **1,923 / 2,416** (79.6%) |
+
+**The submodule totals are not like for like.** The denominator grew because
+11 more projects import at the top level, and their 370 modules now count.
+Over the projects that imported in both runs, Grail went from 1,357 to
+**1,597** of the same 2,046 modules (66% to 78%). The 11 newcomers add 326 of
+their 370.
+
+**What moved at the top level.** Eleven projects import that did not. For each,
+the fix that unblocked it:
+
+| Project(s) | Was blocked by | Fixed by |
+| --- | --- | --- |
+| boto3, s3transfer | #1411, metaclass `__init__` under `six.add_metaclass` | #1411 |
+| requests, click | Grail's own stand-ins answered (G10) | #1634, stand-ins renamed `_grail_requests` / `_grail_click` |
+| pytest, iniconfig | #1452 `os.path` gaps, #1412 `\N{}` aliases | #1452, #1412 |
+| pyparsing | #1419 `x: T = a, b` | #1419 |
+| pytz | #1424, a class inside `__new__` on the IR arm | #1424 |
+| soupsieve, beautifulsoup4 | #1420, `sys.version_info` a plain tuple | #1420 (#1586) |
+| numpy | its C extension | numpy stage 3 (#1588) |
+
+**No project crashes the session any more, at either level.** On 2026-10-11:
+- pytz crashed at the top level;
+- 156 submodules crashed: 142 on #1422, 13 on #1423, and `botocore.regions`.
+
+All of those now import: #1422, #1423 and #1424 are fixed, and botocore
+imports 73 / 73. One submodule still ends its session,
+`pip._vendor.rich.tree`, and it has not been looked at.
+
+**One row went down.** google-auth's submodules fell from 47 / 75 to
+**40 / 75**. Two Grail bugs this run exposed account for 24 of its 35
+failures (a 25th, newly reached, is #1413's `ctypes`):
+- **18 modules hit a newly exposed wall.** They used to stop on the
+  `http.client` status constants. #1602 added those, and the same 18 now stop on
+  #1650: a decorated override with no docstring reports the base method's
+  `__doc__`, which google-auth's `copy_docstring` refuses.
+- **6 more fail far from their cause, on #1651.** A failed submodule import
+  stays bound on its parent package. So `google.auth.crypt`, which fails on
+  cryptography's Rust bindings, is later answered half-built:
+  `module 'google.auth.crypt' has no attribute 'Signer'`.
+
+**The "tests" column is not here yet.** `scripts/pypi_package_tests.py` runs
+each project's own test suite under CPython and Grail. Its first run on this
+venv was stopped: one project's Grail session held a transaction for hours
+and stalled garbage collection on the shared stone. The runner now recycles a
+session after 15 minutes and stops a project at 45 (#1649). The column is
+added when that run completes.
+
+### Every row
+
+`Submodules` is Grail's count over CPython's, for projects whose top level
+imports; `—` means a single-module wheel. `First blocker` is what stops the
+top-level import. A **bold** verdict changed since 2026-10-11.
+
+| # | Project | Version | Scope | Verdict | Submodules | First blocker |
+| ---: | --- | --- | --- | --- | ---: | --- |
+| 1 | boto3 | 1.43.106 | pure | **IMPORTS** | 37 / 37 |  |
+| 2 | packaging | 26.3 | pure | IMPORTS | 20 / 21 |  |
+| 3 | typing-extensions | 4.16.0 | pure | IMPORTS | — |  |
+| 4 | idna | 3.20 | pure | IMPORTS | 8 / 8 |  |
+| 5 | urllib3 | 2.8.0 | pure | IMPORTS | 27 / 27 |  |
+| 6 | certifi | 2026.7.22 | pure | IMPORTS | 1 / 1 |  |
+| 7 | requests | 2.34.2 | ext-dep | **IMPORTS** | 18 / 18 |  |
+| 8 | charset-normalizer | 3.5.2 | ext | IMPORTS | 9 / 9 |  |
+| 9 | cryptography | 50.0.2 | ext | IMPORTS | 17 / 77 |  |
+| 10 | setuptools | 84.0.0 | pure | FAILS |  | no `_osx_support` (#1429); #1523 is fixed |
+| 11 | cffi | 2.1.1 | ext | IMPORTS | 16 / 19 |  |
+| 12 | pygments | 2.21.0 | pure | IMPORTS | 340 / 340 |  |
+| 13 | pyyaml | 6.0.3 | ext | IMPORTS | 15 / 17 |  |
+| 14 | python-dateutil | 2.9.0.post0 | pure | IMPORTS | 15 / 15 |  |
+| 15 | six | 1.17.0 | pure | IMPORTS | — |  |
+| 16 | pluggy | 1.6.0 | pure | IMPORTS | 7 / 7 |  |
+| 17 | botocore | 1.43.106 | pure | IMPORTS | 73 / 73 |  |
+| 18 | pydantic | 2.14.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
+| 19 | pycparser | 3.11 | pure | IMPORTS | 6 / 6 |  |
+| 20 | click | 8.5.0 | pure | **IMPORTS** | 14 / 15 |  |
+| 21 | pydantic-core | 2.50.0 | ext | FAILS |  | #1414 (pydantic-core extension) |
+| 22 | anyio | 4.15.1 | pure | IMPORTS | 44 / 44 |  |
+| 23 | numpy | 2.5.4 | ext | **IMPORTS** | 125 / 166 |  |
+| 24 | pytest | 9.1.1 | pure | **IMPORTS** | 79 / 79 |  |
+| 25 | iniconfig | 2.3.1 | pure | **IMPORTS** | 3 / 3 |  |
+| 26 | annotated-types | 0.8.0 | pure | IMPORTS | 1 / 1 |  |
+| 27 | h11 | 0.16.0 | pure | IMPORTS | 10 / 10 |  |
+| 28 | typing-inspection | 0.4.4 | pure | IMPORTS | 2 / 2 |  |
+| 29 | attrs | 26.1.0 | pure | FAILS |  | #1418 (attrs) |
+| 30 | s3transfer | 0.19.2 | pure | **IMPORTS** | 14 / 14 |  |
+| 31 | aiobotocore | 3.9.2 | ext-dep | IMPORTS | 19 / 37 |  |
+| 32 | protobuf | 7.36.2 | ext | IMPORTS | 37 / 55 |  |
+| 33 | httpx | 0.28.1 | pure | IMPORTS | 21 / 22 |  |
+| 34 | markupsafe | 3.0.4 | ext | SHADOWED |  | Grail's bundled copy answers (G10) |
+| 35 | httpcore | 1.0.9 | pure | IMPORTS | 25 / 25 |  |
+| 36 | python-dotenv | 1.2.4 | pure | IMPORTS | 5 / 5 |  |
+| 37 | pyjwt | 2.15.1 | pure | FAILS |  | C extension (cryptography) |
+| 38 | platformdirs | 4.13.0 | pure | IMPORTS | 10 / 10 |  |
+| 39 | fsspec | 2026.9.0 | pure | FAILS |  | #1413 |
+| 40 | pandas | 3.0.6 | ext | FAILS |  | `NameError: __doc__` at import, now that numpy imports (not yet root-caused) |
+| 41 | jinja2 | 3.1.6 | ext-dep | SHADOWED |  | Grail's bundled copy answers (G10) |
+| 42 | jmespath | 1.1.0 | pure | IMPORTS | 7 / 7 |  |
+| 43 | pathspec | 1.1.1 | pure | IMPORTS | 30 / 30 |  |
+| 44 | filelock | 4.1.0 | pure | FAILS |  | #1413 |
+| 45 | starlette | 1.7.0 | pure | IMPORTS | 33 / 34 |  |
+| 46 | uvicorn | 0.54.0 | pure | FAILS |  | #1429 |
+| 47 | multidict | 6.9.1 | ext | IMPORTS | 3 / 3 |  |
+| 48 | jsonschema | 4.26.0 | ext-dep | FAILS |  | #1418 (attrs) |
+| 49 | rpds-py | 2026.9.1 | ext | FAILS |  | C extension |
+| 50 | yarl | 1.25.1 | ext | IMPORTS | 7 / 7 |  |
+| 51 | aiohttp | 3.14.5 | ext | FAILS |  | #1418 (attrs) |
+| 52 | rich | 15.0.0 | pure | IMPORTS | 68 / 75 |  |
+| 53 | tomlkit | 0.15.1 | pure | IMPORTS | 11 / 11 |  |
+| 54 | markdown-it-py | 4.2.0 | pure | IMPORTS | 65 / 65 |  |
+| 55 | propcache | 0.5.4 | ext | IMPORTS | 3 / 3 |  |
+| 56 | referencing | 0.37.0 | ext-dep | FAILS |  | #1418 (attrs) |
+| 57 | jsonschema-specifications | 2025.9.1 | ext-dep | FAILS |  | #1418 (attrs) |
+| 58 | mdurl | 0.1.2 | pure | IMPORTS | 5 / 5 |  |
+| 59 | pillow | 12.3.0 | ext | IMPORTS | 31 / 91 |  |
+| 60 | opentelemetry-api | 1.45.1 | pure | IMPORTS | 28 / 29 |  |
+| 61 | frozenlist | 1.8.0 | ext | IMPORTS | — |  |
+| 62 | tqdm | 4.70.1 | pure | IMPORTS | 22 / 24 |  |
+| 63 | pip | 26.2.1 | pure | IMPORTS | 169 / 383 |  |
+| 64 | googleapis-common-protos | 1.75.5 | ext-dep | FAILS |  | #1428 |
+| 65 | pyasn1 | 0.6.4 | pure | IMPORTS | 31 / 31 |  |
+| 66 | aiosignal | 1.4.0 | ext-dep | IMPORTS | — |  |
+| 67 | aiohappyeyeballs | 2.7.1 | pure | IMPORTS | 4 / 4 |  |
+| 68 | websockets | 17.2 | ext | IMPORTS | 44 / 44 |  |
+| 69 | annotated-doc | 0.0.5 | pure | IMPORTS | 1 / 1 |  |
+| 70 | wrapt | 2.5.0 | ext | FAILS |  | #1428 (`'MethodBinding' object is not subscriptable`) |
+| 71 | pytz | 2026.5 | pure | **IMPORTS** | 5 / 5 |  |
+| 72 | sniffio | 1.3.1 | pure | IMPORTS | 2 / 2 |  |
+| 73 | tzdata | 2026.5 | pure | IMPORTS | 21 / 21 |  |
+| 74 | fastapi | 0.143.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
+| 75 | google-auth | 2.61.0 | ext-dep | IMPORTS | 40 / 75 |  |
+| 76 | zipp | 4.1.1 | pure | IMPORTS | 6 / 6 |  |
+| 77 | greenlet | 3.5.6 | ext | FAILS |  | C extension |
+| 78 | importlib-metadata | 9.0.1 | pure | IMPORTS | 10 / 11 |  |
+| 79 | pydantic-settings | 2.15.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
+| 80 | wheel | 0.48.0 | pure | IMPORTS | 9 / 13 |  |
+| 81 | tenacity | 9.2.1 | pure | IMPORTS | 11 / 11 |  |
+| 82 | trove-classifiers | 2026.9.21.13 | pure | IMPORTS | — |  |
+| 83 | python-multipart | 0.0.32 | pure | IMPORTS | 7 / 7 |  |
+| 84 | pyasn1-modules | 0.4.2 | pure | IMPORTS | 131 / 131 |  |
+| 85 | grpcio-status | 1.84.0 | ext-dep | IMPORTS | 0 / 3 |  |
+| 86 | pyarrow | 26.0.0 | ext | FAILS |  | C extension |
+| 87 | sqlalchemy | 2.1.4 | ext | FAILS |  | #1428: its `TypingOnly` check sees attributes Grail adds to a class |
+| 88 | hatchling | 1.32.4 | pure | IMPORTS | 63 / 65 |  |
+| 89 | grpcio | 1.84.0 | ext | FAILS |  | C extension |
+| 90 | pyparsing | 3.3.3 | pure | **IMPORTS** | 14 / 14 |  |
+| 91 | lxml | 6.1.3 | ext | IMPORTS | 6 / 22 |  |
+| 92 | jiter | 0.17.0 | ext | IMPORTS | — |  |
+| 93 | regex | 2026.9.29 | ext | FAILS |  | C extension |
+| 94 | watchfiles | 1.3.0 | ext | FAILS |  | C extension |
+| 95 | s3fs | 2026.9.0 | ext-dep | FAILS |  | #1413 |
+| 96 | ruff | 0.17.0 | pure | IMPORTS | 1 / 1 |  |
+| 97 | scipy | 1.18.1 | ext | FAILS |  | `NameError: submodules` at import, now that numpy imports (not yet root-caused) |
+| 98 | soupsieve | 3.0.1 | pure | **IMPORTS** | 6 / 6 |  |
+| 99 | beautifulsoup4 | 4.15.0 | pure | **IMPORTS** | 11 / 13 |  |
+| 100 | openai | 3.28.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
+
+### The gap list now, ranked
+
+**By projects blocked at the top level** (pure and ext-dep rows; C extensions
+excluded):
+
+| Gap | Projects |
+| --- | --- |
+| #1418 `object.__setattr__.__get__(obj)` re-dispatches to the override (attrs) | attrs, jsonschema, referencing, jsonschema-specifications (and aiohttp) |
+| #1414 pydantic-core's extension needs PEP 489 multi-phase init | pydantic, fastapi, pydantic-settings, openai (and pydantic-core itself) |
+| #1413 no `ctypes` | fsspec, filelock, s3fs |
+| #1428 object-model gaps | googleapis-common-protos (and wrapt, sqlalchemy) |
+| #1429 stdlib gaps: `_osx_support`, `multiprocessing.context` | setuptools, uvicorn |
+| cryptography's Rust bindings | pyjwt |
+
+**By submodules blocked** (projects whose top level imports):
+
+| Gap | Submodules | Where |
+| --- | ---: | --- |
+| #1429 `logging.addLevelName` (the next wall after `setLoggerClass`, #1573) | 184 | pip |
+| cryptography's Rust bindings (`_rust` has no `openssl`, `exceptions`, `x509`, …) | 66 | cryptography 58, google-auth 8 |
+| pillow's Python modules after its extension is missing (`PIL.ImageFile` has no `ImageFile`, …) | 45 | pillow; inferred, not root-caused |
+| #1418 attrs | 41 | pip 17, aiobotocore 16, rich 6, google-auth 2 |
+| #1429 the rest: `types.CapsuleType`, `mmap`, `email.policy.EmailPolicy`, `unittest.case.SkipTest`, `importlib.metadata` (`Distribution`, and `version()` of an installed package), `xmlrpc.client`, `py_compile`, `plistlib`, `cProfile`, `termios`, `_imp` | 41 | pillow, numpy, pip, wheel, hatchling, aiobotocore, … |
+| `dlopen` of a C extension fails | 27 | lxml 16, numpy 5, grpcio-status 2, pillow 2, beautifulsoup4 1, pyyaml 1 |
+| #1429 no `fileinput` | 20 | numpy |
+| #1650 a decorated override reports the base method's `__doc__` | 18 | google-auth |
+| `google.protobuf.descriptor_pb2` has no `FileDescriptorProto` | 15 | protobuf; not yet root-caused |
+| numpy: a CompileError 1001 compiling a method (6), `NameError: __doc__` (3), and two `TypeError`s; not yet root-caused | 11 | numpy 10, tqdm 1 |
+| #1413 `ctypes` | 8 | pip 5, cffi, google-auth, wheel |
+| #1651 a failed import's half-built module is answered later | 6 | google-auth |
+| #1428 `__weakref__` slot check | 3 | protobuf 2, grpcio-status 1 |
+
+**Most of the pure-Python queue is now two issues.** #1418 (attrs) blocks four
+top-level projects and 41 submodules. #1429's `logging.addLevelName` alone is
+184 of pip's modules. The C-extension rows have not moved: pydantic-core,
+cryptography and the `dlopen` failures are the native-extension track.
+
 ## Top 100, with submodules (2026-10-11)
 
-**This section is the current state; the sections below it are history.** Two
+**Superseded by the 2026-10-15 measurement above; kept as history.** Two
 things changed from the measurement just below it. The list is now the top
 **100** (the 2026-10-01 snapshot, so 51 new names). And `--submodules` (see
 Method) scores every module each importing project installed, not just
@@ -88,7 +300,7 @@ httpcore were fixed on 2026-10-13, see the note above):
 * 1 more, `botocore.regions`, whose session died with no message and has not
   been looked at.
 
-### Every row
+### Every row (2026-10-11)
 
 `Submodules` is Grail's count over CPython's, for projects whose top level
 imports; `—` means a single-module wheel. `First blocker` is what stops the
@@ -197,7 +409,7 @@ top-level import.
 | 99 | beautifulsoup4 | 4.15.0 | pure | FAILS |  | #1420 |
 | 100 | openai | 3.28.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
 
-### The gap list now, ranked
+### The gap list now, ranked (2026-10-11)
 
 **By projects blocked at the top level** (pure and ext-dep rows; C extensions
 excluded):
@@ -823,6 +1035,21 @@ alone; the rest have a next blocker already named above. **If you want the wides
 ./scripts/pypi_package_census.py --venv <venv> --submodules          # + level 2
 ./scripts/pypi_package_census.py --report                            # last TSV
 ```
+
+The package test runner, for the coming "tests" column:
+
+```bash
+./scripts/pypi_package_tests.py --venv <venv> --only six,idna        # a subset
+./scripts/pypi_package_tests.py --venv <venv>                         # the census list
+./scripts/pypi_package_tests.py --report                              # last TSV
+```
+
+It writes `out/pypi-tests/results.tsv` (one row per project) and a per-test
+TSV and two logs per project. It holds each Grail session for at most
+`--session-minutes` (15) and each project for `--budget-minutes` (45). A
+session runs in one transaction and cannot vote, so a long one stalls garbage
+collection for every session on the stone. Run the full list when the stone is
+quiet.
 
 `out/pypi/census.tsv` is the machine-readable form and `out/pypi/<project>.out`
 holds each probe's full output. With `--submodules`,
