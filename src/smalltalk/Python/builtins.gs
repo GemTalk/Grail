@@ -387,7 +387,17 @@ _exec: positional kw: kwargs
 	liveGlobals := (self ___isPlainCopyableMapping___: globalsDict)
 		ifTrue: [nil]
 		ifFalse: [globalsDict].
-	scope := SymbolDictionary @env0:new.
+	"ONE SCOPE PER GLOBALS DICT, reused by every exec() into it.  A function an
+	exec defines reads the scope it was compiled against, for as long as it
+	lives -- so with a fresh scope per call, ``m235 = LazyList(m235())'' in one
+	exec rebound a COPY the generator defined by the previous exec never saw,
+	and it went on calling the function (test_generators' doctests; every
+	doctest example is its own exec).  Reused, each exec binds into the scope
+	the earlier code reads.  Only for a plain dict that is both namespaces:
+	the three-argument and live-mapping forms keep a fresh scope each call."
+	scope := ((liveGlobals @env0:isNil) @env0:and: [localsDict @env0:== globalsDict])
+		ifTrue: [self ___execScopeFor___: globalsDict]
+		ifFalse: [SymbolDictionary @env0:new].
 	seeded := liveGlobals @env0:isNil
 		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
 		ifFalse: [KeyValueDictionary @env0:new].
@@ -465,7 +475,88 @@ _exec: positional kw: kwargs
 		self ___grailOptimizeLevel___: savedOpt].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
+	self ___noteExecScopeReflected___: scope for: globalsDict.
 	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___execScopeFor___: aDict
+	"The doit scope exec() runs in for globals aDict: the one an earlier exec()
+	into the same dict left behind, or a new one.
+
+	Kept on the dict itself, so it lives exactly as long as the namespace does
+	and no registry has to be swept.  The link names the dict it was made for:
+	a COPY of the dict carries the dynamic instVar along, and must not share
+	the original's scope, so a link to some other dict is ignored.
+
+	A reused scope is re-seeded by the caller.  Here it only forgets the
+	bindings the dict no longer has -- the reflect-back would otherwise write a
+	``del g['x']'' straight back -- keeping the handles and the unbound (nil)
+	slots compiled code may still reference.  The dict is hung on the scope for
+	NameError >> ___resolveDoitGlobal___:scope:, which reads it once the exec
+	is over."
+
+	| link scope stale |
+	link := [aDict @env0:dynamicInstVarAt: #'___grailExecScope___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((link @env0:isKindOf: Array)
+		@env0:and: [(link @env0:size @env0:>= 2) @env0:and: [(link @env0:at: 1) @env0:== aDict]])
+		ifTrue: [
+			scope := link @env0:at: 2.
+			"WRITES MADE SINCE THE LAST exec FIRST.  A ``global n'' assignment in a
+			function this scope's code defined lands in the SCOPE, and reaches the
+			dict only through an exec's reflect-back -- so a call made between two
+			execs left it in the scope alone, where the re-seed below would
+			overwrite it with the dict's older value.  Anything not identical to
+			what the last reflect-back left is such a write, and goes to the dict."
+			(link @env0:size @env0:>= 3) ifTrue: [ | snapshot |
+				snapshot := link @env0:at: 3.
+				scope @env0:keysAndValuesDo: [:key :value |
+					((value @env0:~~ nil)
+						@env0:and: [(snapshot @env0:at: key otherwise: nil) @env0:~~ value])
+							@env0:ifTrue: [
+								((key @env0:== #'___pyGlobals___') @env0:or: [key @env0:== #'___pyGlobalsView___'])
+									@env0:ifFalse: [
+										self ___storeReflected___: value
+											at: (NameAst @env0:doitScopeNameToPythonName: key)
+											into: aDict]]]].
+			stale := OrderedCollection @env0:new.
+			scope @env0:keysAndValuesDo: [:key :value |
+				((value @env0:~~ nil)
+					@env0:and: [((key @env0:== #'___pyGlobals___') @env0:or: [key @env0:== #'___pyGlobalsView___']) @env0:not])
+						@env0:ifTrue: [
+							([aDict @env1:__contains__: (NameAst @env0:doitScopeNameToPythonName: key) @env0:asString]
+								@env0:on: AbstractException do: [:ex | ex @env0:return: true]) ___isTruthy___
+									@env0:ifFalse: [stale @env0:add: key]]].
+			stale @env0:do: [:key | scope @env0:removeKey: key].
+			^ scope].
+	scope := SymbolDictionary @env0:new.
+	[scope @env0:dynamicInstVarAt: #'___grailExecGlobals___' put: aDict.
+	 aDict @env0:dynamicInstVarAt: #'___grailExecScope___' put: (Array @env0:with: aDict with: scope)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ scope
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___noteExecScopeReflected___: aScope for: aDict
+	"Record what an exec()'s reflect-back left in its reused scope, so the next
+	exec into aDict can tell a write made since -- by a ``global'' assignment in
+	one of the scope's functions -- from a value the dict already has.  See
+	___execScopeFor___:.  A scope that is not aDict's reused one is left alone."
+
+	| link snapshot |
+	link := [aDict @env0:dynamicInstVarAt: #'___grailExecScope___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((link @env0:isKindOf: Array)
+		@env0:and: [(link @env0:size @env0:>= 2) @env0:and: [(link @env0:at: 2) @env0:== aScope]])
+			ifFalse: [^ self].
+	snapshot := IdentityKeyValueDictionary @env0:new.
+	aScope @env0:keysAndValuesDo: [:key :value | snapshot @env0:at: key put: value].
+	[aDict @env0:dynamicInstVarAt: #'___grailExecScope___'
+		put: (Array @env0:with: aDict with: aScope with: snapshot)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Built-in Functions'
@@ -857,6 +948,13 @@ _eval: positional kw: kwargs
 		ifTrue: [nil]
 		ifFalse: [globalsDict].
 	scope := SymbolDictionary @env0:new.
+	"A lambda the expression makes reads its free names through the globals
+	dict once eval() is over (NameError >> ___resolveDoitGlobal___:scope:), so
+	``f = eval('lambda: w', g); g['w'] = 9; f()'' is 9 as in CPython.  No
+	scope reuse here: an expression binds nothing a later eval could share."
+	((liveGlobals @env0:isNil) @env0:and: [localsDict @env0:== globalsDict]) ifTrue: [
+		[scope @env0:dynamicInstVarAt: #'___grailExecGlobals___' put: globalsDict]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	seeded := liveGlobals @env0:isNil
 		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
 		ifFalse: [KeyValueDictionary @env0:new].
