@@ -213,10 +213,10 @@ EXPECTED = {
     'class_body_is_rendered': 'True',
     'getclasstree_root': "'object'",
     'mro_of_an_enum': "['Color', 'Enum', 'object']",
+    'function_docstring': "'One line summary.\\n\\nAnd a second paragraph.\\n'",
 }
 
 GRAIL_ONLY = {
-    'function_docstring': 'None',
 }
 
 

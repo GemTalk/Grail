@@ -593,7 +593,14 @@ printSmalltalkOn: aStream
 	(no ``<locals>'' -- a class body is not a function scope), two lambdas in one
 	scope sharing one qualname, and '<lambda>.<locals>.<lambda>' for one lambda
 	inside another (#1522), which needs the push."
-	aStream nextPutAll: ' @env0:___pyNamed___: ''<lambda>'''.
+	"A DISTINCT function per evaluation, as for a def (see FunctionDefAst's
+	shallowCopy, and why it is taken before the stamps): a lambda that
+	captures nothing is a CLEAN block, which GemStone reuses as a literal, so
+	``[lambda: None for _ in range(3000)]'' was one object three thousand times
+	-- one entry in FastAPI's lru_cache of callables
+	(test_callable_classification_cache_supports_large_apps), and an attribute
+	set on one lambda was set on all of them."
+	aStream nextPutAll: ' @env0:shallowCopy @env0:___pyNamed___: ''<lambda>'''.
 	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
 		aStream
 			nextPutAll: '; @env0:___pyModuleNamed___: ''';
@@ -965,7 +972,9 @@ ___emitIRLambdaBlockOn___: aBuilder
 	specDef := FunctionDefAst new args: args; yourself.
 	specDef hasSignatureSpec ifTrue: [
 		specs add: { #'___pySig___:'. { specDef ___emitIRSignatureSpecOn___: aBuilder }. 0 }]] value.
-	^ aBuilder cascade: blk specs: specs
+	"A distinct function per evaluation, copied before the stamps -- see
+	printSmalltalkOn:, and FunctionDefAst's IR path, which does the same."
+	^ aBuilder cascade: (aBuilder send: #shallowCopy to: blk with: { } env: 0) specs: specs
 %
 
 category: 'Grail-IR Codegen'

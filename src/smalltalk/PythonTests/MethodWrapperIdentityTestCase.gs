@@ -162,12 +162,14 @@ method: MethodWrapperIdentityTestCase
 testAModuleLevelFunctionsIdentityAttrsAreStillUnstable
 	"THE GAP THIS WORK SURFACED, pinned so it cannot be mistaken for the wrapper
 	one.  A Grail module-level function answers a FRESH object per read for
-	__name__, __qualname__ and __annotations__, and None for __doc__ even with a
-	docstring -- so ``f.__name__ is f.__name__'' is false and no amount of correct
-	forwarding makes identity hold through a wrapper.  A nested def has none of
-	these problems, which is why the fixture nests its function exactly as
-	upstream does.  CPython answers True, True, True and the docstring."
+	__name__, __qualname__ and __annotations__ -- so ``f.__name__ is
+	f.__name__'' is false and no amount of correct forwarding makes identity
+	hold through a wrapper.  A nested def has none of these problems, which is
+	why the fixture nests its function exactly as upstream does.  CPython
+	answers True, True, True and the docstring.  The docstring itself is no
+	longer part of the gap: it was None, and a module records it now
+	(docs/Support_FastAPI.md Phase 6)."
 
 	self assert: (self reprAt: 'module_level_function_attrs_are_unstable')
-		equals: '[False, False, False, None]'.
+		equals: '[False, False, False, ''a module-level docstring'']'.
 %

@@ -294,6 +294,15 @@ class Popen:
         if self._merge_err:
             err_mode = _M_PIPE
 
+        # A path-like or bytes cwd, as CPython's Popen takes: the backend
+        # wants text, and a pathlib.Path reached the shell as its Smalltalk
+        # print string -- ``cd: aPosixPath: No such file or directory'' for
+        # every ``subprocess.run(..., cwd=tmp_path)'' (FastAPI's test_translate).
+        if cwd is not None:
+            cwd = os.fspath(cwd)
+            if isinstance(cwd, bytes):
+                cwd = os.fsdecode(cwd)
+
         env_pairs = None
         if env is not None:
             env_pairs = ["%s=%s" % (k, v) for k, v in env.items()]

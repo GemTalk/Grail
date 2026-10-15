@@ -4197,8 +4197,14 @@ ___docString___
 	(first isKindOf: ExprAst) ifFalse: [^ nil].
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	"Not the ``...'' marker: the parser records an Ellipsis literal as the
+	Symbol #'...', and a Symbol IS a CharacterCollection, so ``class E(str,
+	Enum): ...'' had Ellipsis for its __doc__ and ``def m(self): ...'' had
+	'...' -- pydantic's cleandoc then failed on the enum
+	(FastAPI's test_schema_compat_pydantic_v2)."
+	inner value == #'...' ifTrue: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner]
+		ifTrue: [inner copy value: (self ___cleanDocString___: inner value); yourself]
 		ifFalse: [nil]
 %
 

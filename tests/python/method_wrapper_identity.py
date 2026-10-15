@@ -108,7 +108,7 @@ def module_level_function_attrs_are_unstable():
 
 
 def module_level(x):
-    """a docstring the module-level path drops"""
+    """a module-level docstring"""
     return x
 
 

@@ -96,6 +96,29 @@ Phase 6 -- the rest of FastAPI's core tests:
     hidden while getsource answered '', which kept anyio on its eager path.
 28. ``inspect.signature`` of a classmethod bound through ``__get__`` tried to
     iterate a method: pydantic called a validator taking ``info`` without it.
+29. A body of just ``...`` was taken for a docstring: ``class E(str, Enum):
+    ...`` had Ellipsis for ``__doc__`` (pydantic's cleandoc failed on it).
+30. Docstrings: a module-level def had none (``__doc__`` None), so FastAPI's
+    OpenAPI descriptions were missing; none was cleaned the way CPython 3.13+'s
+    compiler cleans them; and ``inspect.cleandoc`` blanked a form-feed line,
+    so a description was not cut at its ``\f``.
+31. A ``@dataclass(slots=True)`` instance had a ``__dict__``: the replaced
+    class's ``__dict__`` descriptor rode into the slotted copy's namespace,
+    because ``sys._clear_type_descriptors`` did nothing.
+32. A lambda that captures nothing was ONE object for every evaluation (a
+    clean block is a literal), so an lru_cache keyed by callables saw one
+    key, and an attribute set on one lambda was set on all.
+33. ``inspect.signature`` of a ``functools.partial`` was ``()`` -- FastAPI
+    saw no parameters on ``partial(main, "foo")`` -- and OrderedDict's pop /
+    setdefault / update left its key order stale.
+34. Patching a Grail-implemented module's function -- ``json.dumps``,
+    ``math.sqrt`` -- was invisible to callers, so ``mock.patch(
+    'starlette.responses.json.dumps', wraps=json.dumps)`` saw no call.
+35. A class's own ``__class__`` property was ignored by isinstance (asyncpg's
+    UUID claims uuid.UUID) and obeyed by type(), the reverse of CPython.
+36. ``subprocess.run(..., cwd=Path(...))`` handed the shell the path's
+    Smalltalk print string, and an argument past Latin-1 (``'🌐'``) could not
+    be spawned at all.
 """
 
 import sys
@@ -1131,6 +1154,120 @@ class _Validated:
 _bound_check = _Validated.__dict__['check'].__get__(None, _Validated)
 check('signature_of_a_classmethod_bound_through_get', str(inspect.signature(_bound_check)),
       '(value, info)')
+
+
+# --- 29. Phase 6: an Ellipsis body is not a docstring --------------------------------
+
+class _EllipsisBody: ...
+
+
+class _EllipsisMethod:
+    def m(self): ...
+
+
+check('ellipsis_body_is_not_a_docstring',
+      (_EllipsisBody.__doc__, _EllipsisMethod.m.__doc__, _EllipsisMethod().m.__doc__),
+      (None, None, None))
+
+
+# --- 30. Phase 6: docstrings -----------------------------------------------------------
+
+def _documented_at_module_level():
+    """Summary.
+
+        Indented more.
+    Back.
+    """
+
+
+check('module_level_def_has_its_cleaned_docstring', _documented_at_module_level.__doc__,
+      'Summary.\n\n    Indented more.\nBack.\n')
+check('cleandoc_keeps_a_form_feed', inspect.cleandoc('Title.\n\f\n    After.'),
+      'Title.\n\f\n    After.')
+
+
+# --- 31. Phase 6: a slotted dataclass has no __dict__ ---------------------------------
+
+@dataclasses.dataclass(slots=True)
+class _SlottedDataclass:
+    x: int = 1
+
+
+check('slotted_dataclass_has_no_dict', hasattr(_SlottedDataclass(), '__dict__'), False)
+
+
+# --- 32. Phase 6: each lambda evaluation is a distinct function ---------------------
+
+def _make_lambda():
+    return lambda: None
+
+
+_lambdas = [lambda: None for _ in range(3)] + [_make_lambda() for _ in range(3)]
+_lambdas[0].tag = 'first'
+check('each_lambda_evaluation_is_distinct',
+      (len(set(map(id, _lambdas))), getattr(_lambdas[1], 'tag', None)), (6, None))
+
+
+# --- 33. Phase 6: signature of a partial; OrderedDict's mutators ----------------------
+
+import functools as _functools                                   # noqa: E402
+from collections import OrderedDict as _OrderedDict              # noqa: E402
+
+
+def _partial_target(a, b, *, c=3, d):
+    return a
+
+
+_od = _OrderedDict(a=1, b=2)
+_od.pop('a')
+_od.setdefault('c', 3)
+_od.update({'d': 4}, e=5)
+check('signature_of_a_partial', str(inspect.signature(_functools.partial(_partial_target, 1, d=4))),
+      '(b, *, c=3, d=4)')
+check('ordered_dict_mutators_keep_order', list(_od.items()),
+      [('b', 2), ('c', 3), ('d', 4), ('e', 5)])
+
+
+# --- 34. Phase 6: patching a Grail-implemented module's function -----------------------
+
+from unittest import mock as _mock                               # noqa: E402
+
+
+def _dump_through_json(x):
+    return json.dumps(x)
+
+
+with _mock.patch('json.dumps', wraps=json.dumps) as _mock_dumps:
+    _dumped = _dump_through_json({'a': 1})
+check('patching_a_native_module_function_is_seen',
+      (_mock_dumps.call_count, _dumped, _dump_through_json([1])), (1, '{"a": 1}', '[1]'))
+
+
+# --- 35. Phase 6: a __class__ property -------------------------------------------------
+
+class _ClaimsInt:
+    @property
+    def __class__(self):
+        return int
+
+
+_claims = _ClaimsInt()
+check('dunder_class_property', (isinstance(_claims, int), type(_claims) is _ClaimsInt,
+                                isinstance(_claims, _ClaimsInt), isinstance(_claims, str)),
+      (True, True, True, False))
+
+
+# --- 36. Phase 6: subprocess cwd may be a path-like ------------------------------------
+
+import pathlib as _pathlib                                       # noqa: E402
+import subprocess as _subprocess                                 # noqa: E402
+
+_cwd_dir = _pathlib.Path(_tempfile.mkdtemp(prefix='grail_walls_cwd_')).resolve()
+_pwd = _subprocess.run(['pwd', '-P'], cwd=_cwd_dir, capture_output=True, text=True)
+check('subprocess_cwd_may_be_a_path', (_pwd.returncode, _pwd.stdout.strip() == str(_cwd_dir)),
+      (0, True))
+_printed = _subprocess.run(['printf', '%s', '\U0001f310 \u00e9'], capture_output=True, text=True)
+check('subprocess_args_past_latin1', (_printed.returncode, _printed.stdout), (0, '\U0001f310 \u00e9'))
 
 
 if __name__ == '__main__':

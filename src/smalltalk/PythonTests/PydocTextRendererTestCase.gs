@@ -228,15 +228,17 @@ testTheMroNamesOnlyClassesCPythonAlsoNames
 	self assert: (self resultAt: 'class_body_is_rendered') asString equals: 'True'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests'
 method: PydocTextRendererTestCase
-testAModuleLevelFunctionHasNoDocstringWhichIsAKnownGap
-	"Recorded, NOT endorsed, and narrow: a CLASS docstring and a METHOD
-	docstring both work, so this is specific to a def at module scope.  pydoc
-	renders whatever docstring it is handed, so the effect is empty sections
-	rather than a failure."
+testAModuleLevelFunctionHasItsDocstring
+	"A def at module scope carries its docstring -- cleaned, as CPython 3.13+'s
+	compiler cleans it.  It was a known gap (None), pinned here: a top-level def
+	compiles to a method on the module class, and no table carried its
+	docstring until the module recorded it (module >> ___setFunctionDoc___:doc:,
+	docs/Support_FastAPI.md Phase 6)."
 
-	self assert: (self resultAt: 'function_docstring') asString equals: 'None'.
+	self assert: (self resultAt: 'function_docstring') asString
+		equals: '''One line summary.\n\nAnd a second paragraph.\n'''.
 	self assert: (self resultAt: 'class_docstring') asString
 		equals: '''One line summary.'''.
 %

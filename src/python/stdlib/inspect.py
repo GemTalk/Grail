@@ -665,7 +665,16 @@ def _annotations_for_render(func):
                 func, format=annotationlib.Format.STRING)
         except BaseException:
             return {}
-    except BaseException:
+    except Exception:
+        # An annotation that RAISES when evaluated is the caller's error, as in
+        # CPython's signature(): FastAPI validates ``Annotated[int,
+        # Path(default=1)]'' by letting Path's own assert fire there, and a
+        # swallowed one registered the route anyway
+        # (test_ambiguous_params).  Only an object with no annotate function of
+        # its own -- a builtin, a callable get_annotations cannot read --
+        # still answers none.
+        if callable(getattr(func, '__annotate__', None)):
+            raise
         return {}
 
 
@@ -1027,6 +1036,14 @@ def signature(obj, *args, **kwargs):
     if isinstance(sig, Signature):
         return sig
 
+    # A functools.partial: the wrapped callable's signature less what the
+    # partial supplies, as CPython's _signature_from_callable does.  It
+    # answered ``()'', so FastAPI saw no parameters on ``partial(main, "foo")''
+    # and never read the query string (test_callable_endpoint).
+    import functools as _functools
+    if isinstance(obj, _functools.partial):
+        return _signature_get_partial(signature(obj.func, **kwargs), obj)
+
     target = _unwrap(obj) if kwargs.get('follow_wrapped', True) else obj
     from_spec = _signature_from_spec(target, kwargs.get('annotation_format'))
     if from_spec is not None:
@@ -1055,6 +1072,91 @@ def signature(obj, *args, **kwargs):
     sig = Signature()
     sig._unknown = True
     return sig
+
+
+def _signature_get_partial(wrapped_sig, partial, extra_args=()):
+    """Private helper to calculate how 'wrapped_sig' signature will
+    look like after applying a 'functools.partial' object (or alike)
+    on it.
+
+    CPython 3.14's.
+    """
+    import functools
+    from collections import OrderedDict
+    placeholder = getattr(functools, 'Placeholder', object())
+
+    old_params = wrapped_sig.parameters
+    new_params = OrderedDict(old_params.items())
+
+    partial_args = partial.args or ()
+    partial_keywords = partial.keywords or {}
+
+    if extra_args:
+        partial_args = extra_args + partial_args
+
+    try:
+        ba = wrapped_sig.bind_partial(*partial_args, **partial_keywords)
+    except TypeError as ex:
+        msg = 'partial object {!r} has incorrect arguments'.format(partial)
+        raise ValueError(msg) from ex
+
+    transform_to_kwonly = False
+    for param_name, param in old_params.items():
+        try:
+            arg_value = ba.arguments[param_name]
+        except KeyError:
+            pass
+        else:
+            if param.kind is _POSITIONAL_ONLY:
+                # If positional-only parameter is bound by partial,
+                # it effectively disappears from the signature
+                # However, if it is a Placeholder it is not removed
+                # And also looses default value
+                if arg_value is placeholder:
+                    new_params[param_name] = param.replace(default=_empty)
+                else:
+                    new_params.pop(param_name)
+                continue
+
+            if param.kind is _POSITIONAL_OR_KEYWORD:
+                if param_name in partial_keywords:
+                    # This parameter, and all parameters after it, become
+                    # keyword-only (and var-positional is removed).
+                    transform_to_kwonly = True
+                    # Set the new default value
+                    new_params[param_name] = param.replace(default=arg_value)
+                else:
+                    # was passed as a positional argument
+                    # Do not pop if it is a Placeholder
+                    #   also change kind to positional only
+                    #   and remove default
+                    if arg_value is placeholder:
+                        new_param = param.replace(
+                            kind=_POSITIONAL_ONLY,
+                            default=_empty
+                        )
+                        new_params[param_name] = new_param
+                    else:
+                        new_params.pop(param_name)
+                    continue
+
+            if param.kind is _KEYWORD_ONLY:
+                # Set the new default value
+                new_params[param_name] = param.replace(default=arg_value)
+
+        if transform_to_kwonly:
+            assert param.kind is not _POSITIONAL_ONLY
+
+            if param.kind is _POSITIONAL_OR_KEYWORD:
+                new_param = new_params[param_name].replace(kind=_KEYWORD_ONLY)
+                new_params[param_name] = new_param
+                new_params.move_to_end(param_name)
+            elif param.kind in (_KEYWORD_ONLY, _VAR_KEYWORD):
+                new_params.move_to_end(param_name)
+            elif param.kind is _VAR_POSITIONAL:
+                new_params.pop(param.name)
+
+    return wrapped_sig.replace(parameters=new_params.values())
 
 
 def _signature_eval_str(sig, func, globals=None, locals=None):
@@ -2011,38 +2113,37 @@ def getattr_static(obj, attr, default=_sentinel):
 
 
 def cleandoc(doc):
-    """``inspect.cleandoc(doc)'' — strip common leading whitespace
-    from a multi-line docstring.  CPython's implementation walks
-    each line, finds the minimum indent (excluding the first line),
-    and removes that prefix from every subsequent line.  Empty
-    docs pass through as ''."""
-    if not doc:
-        return ''
-    # textwrap.dedent-style normalization, simplified for the
-    # werkzeug docstring path.
+    """Clean up indentation from docstrings.
+
+    Any whitespace that can be uniformly removed from the second line
+    onwards is removed.
+
+    CPython 3.14's.  Grail's was a simplified dedent that called a line blank
+    when ``strip()`` emptied it -- so a line holding only a form feed was
+    blanked, and the ``\f`` FastAPI and pydantic cut a docstring at was gone
+    (test_openapi_model_description_trim_on_formfeed).  CPython strips SPACES
+    only and calls only an empty line blank.
+    """
     lines = doc.expandtabs().split('\n')
-    # First line: only strip leading whitespace if it's all blank.
-    if lines:
-        lines[0] = lines[0].lstrip()
-    # Find minimum indent of non-blank subsequent lines.
-    min_indent = None
+
+    # Find minimum indentation of any non-blank lines after first line.
+    margin = _sys.maxsize
     for line in lines[1:]:
-        stripped = line.lstrip()
-        if stripped:
-            indent = len(line) - len(stripped)
-            if min_indent is None or indent < min_indent:
-                min_indent = indent
-    if min_indent:
+        content = len(line.lstrip(' '))
+        if content:
+            indent = len(line) - content
+            margin = min(margin, indent)
+    # Remove indentation.
+    if lines:
+        lines[0] = lines[0].lstrip(' ')
+    if margin < _sys.maxsize:
         for i in range(1, len(lines)):
-            if lines[i].strip():
-                lines[i] = lines[i][min_indent:]
-            else:
-                lines[i] = ''
-    # Strip leading/trailing blank lines.
-    while lines and not lines[0].strip():
-        lines = lines[1:]
-    while lines and not lines[-1].strip():
-        lines = lines[:-1]
+            lines[i] = lines[i][margin:]
+    # Remove any trailing or leading blank lines.
+    while lines and not lines[-1]:
+        lines.pop()
+    while lines and not lines[0]:
+        lines.pop(0)
     return '\n'.join(lines)
 
 

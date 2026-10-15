@@ -1118,11 +1118,24 @@ method: sys
 _clear_type_descriptors: aType
 	"_clear_type_descriptors(type) -> None.  CPython 3.14's dataclasses calls
 	it from _add_slots, on the class it is about to REPLACE with a slotted
-	copy, to drop that class's __dict__ / __weakref__ getset descriptors so
-	they stop referencing it.  Grail has no such descriptors to clear, so this
-	is the whole of it -- but without the name, ``@dataclass(slots=True)''
-	raised AttributeError."
+	copy, to drop that class's __dict__ / __weakref__ getset descriptors --
+	before it copies the class's namespace into the new one.
 
+	Grail's class __dict__ LISTS those descriptors (object >>
+	___grailGetSetDescriptor___:), so they rode into the slotted copy's
+	namespace and type() stored ``__dict__'' as an ordinary class attribute:
+	every ``@dataclass(slots=True)'' instance answered hasattr(o, '__dict__')
+	true (FastAPI's test_derived_values_are_not_stored_on_dependant).  So the
+	class is recorded, for the session, as having had them cleared, and its
+	__dict__ stops listing them -- what deleting them does in CPython."
+
+	| st set |
+	st := SessionTemps @env0:current.
+	set := st @env0:at: #GrailClearedTypeDescriptors otherwise: nil.
+	set == nil ifTrue: [
+		set := IdentitySet @env0:new.
+		st @env0:at: #GrailClearedTypeDescriptors put: set].
+	set @env0:add: aType.
 	^ None
 %
 

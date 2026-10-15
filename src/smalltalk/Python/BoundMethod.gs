@@ -1743,6 +1743,11 @@ __doc__
 	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
 	self ___isPythonBoundMethod___ ifTrue: [
 		^ self __func__ ___pyAttrLoad___: #'__doc__'].
+	"A module-level def: its module recorded the docstring
+	(module >> ___setFunctionDoc___:doc:)."
+	(receiver isKindOf: module) ifTrue: [
+		doc := receiver @env0:___functionDocFor___: selector @env0:asString.
+		doc == nil ifFalse: [^ doc]].
 	cls := (receiver == nil and: [definingClass @env0:notNil])
 		ifTrue: [definingClass]
 		ifFalse: [

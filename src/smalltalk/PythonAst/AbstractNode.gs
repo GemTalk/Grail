@@ -3587,6 +3587,65 @@ ___emitIRModuleReceiverOn___: aBuilder
 
 category: 'Grail-code generation'
 method: AbstractNode
+___cleanDocString___: aString
+	"aString as CPython 3.13+'s COMPILER stores a docstring (_PyCompile_CleanDoc):
+	tabs expanded, the first line's leading spaces removed, and the smallest
+	indent of the later lines that have content removed from every later
+	line -- an all-space line shorter than that becomes empty.  Unlike
+	inspect.cleandoc, blank lines are kept.  It applies to every docstring --
+	module, class and def -- so ``f.__doc__'' of an indented docstring read
+	its raw indentation where CPython's has none."
+
+	| s ws col lines start margin first k |
+	s := aString.
+	(s includes: Character tab) ifTrue: [
+		ws := WriteStream on: s species new.
+		col := 0.
+		s do: [:c |
+			c == Character tab
+				ifTrue: [ | n |
+					n := 8 - (col \\ 8).
+					n timesRepeat: [ws nextPut: Character space].
+					col := col + n]
+				ifFalse: [
+					ws nextPut: c.
+					col := (c == Character lf or: [c == Character cr])
+						ifTrue: [0]
+						ifFalse: [col + 1]]].
+		s := ws contents].
+	lines := OrderedCollection new.
+	start := 1.
+	1 to: s size do: [:i |
+		(s at: i) == Character lf ifTrue: [
+			lines add: (s copyFrom: start to: i - 1).
+			start := i + 1]].
+	lines add: (s copyFrom: start to: s size).
+	margin := nil.
+	2 to: lines size do: [:i | | line n |
+		line := lines at: i.
+		n := 0.
+		[n < line size and: [(line at: n + 1) == Character space]] whileTrue: [n := n + 1].
+		n < line size ifTrue: [
+			margin := margin isNil ifTrue: [n] ifFalse: [margin min: n]]].
+	first := lines first.
+	k := 0.
+	[k < first size and: [(first at: k + 1) == Character space]] whileTrue: [k := k + 1].
+	lines at: 1 put: (first copyFrom: k + 1 to: first size).
+	margin notNil ifTrue: [
+		2 to: lines size do: [:i | | line |
+			line := lines at: i.
+			lines at: i put: (line size > margin
+				ifTrue: [line copyFrom: margin + 1 to: line size]
+				ifFalse: [line copyFrom: 1 to: 0])]].
+	ws := WriteStream on: s species new.
+	lines doWithIndex: [:line :i |
+		i > 1 ifTrue: [ws nextPut: Character lf].
+		ws nextPutAll: line].
+	^ ws contents
+%
+
+category: 'Grail-code generation'
+method: AbstractNode
 emitStringLiteral: aString on: aStream
 	"Emit aString as a Smalltalk string literal, doubling embedded single
 	quotes.

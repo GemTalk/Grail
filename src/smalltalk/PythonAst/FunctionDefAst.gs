@@ -501,6 +501,15 @@ printSmalltalkOn: aStream
 				nextPutAll: ''' spec: '.
 			self emitSignatureSpecOn: aStream.
 			aStream nextPutAll: '.'].
+		"...and its docstring, for __doc__ (module >> ___setFunctionDoc___:doc:)."
+		self ___docString___ ifNotNil: [:doc |
+			aStream
+				lf;
+				nextPutAll: 'self @env0:___setFunctionDoc___: ''';
+				nextPutAll: name;
+				nextPutAll: ''' doc: '.
+			self emitStringLiteral: doc on: aStream.
+			aStream nextPutAll: '.'].
 		"...and its default VALUES, for __defaults__ / __kwdefaults__ and the
 		signature -- see ___emitModuleDefaultsBlockOn___:."
 		self ___emitModuleDefaultsBlockOn___: aStream.
@@ -3589,8 +3598,14 @@ ___docString___
 	(first isKindOf: ExprAst) ifFalse: [^ nil].
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	"Not the ``...'' marker: the parser records an Ellipsis literal as the
+	Symbol #'...', and a Symbol IS a CharacterCollection, so ``class E(str,
+	Enum): ...'' had Ellipsis for its __doc__ and ``def m(self): ...'' had
+	'...' -- pydantic's cleandoc then failed on the enum
+	(FastAPI's test_schema_compat_pydantic_v2)."
+	inner value == #'...' ifTrue: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner value]
+		ifTrue: [self ___cleanDocString___: inner value]
 		ifFalse: [nil]
 %
 

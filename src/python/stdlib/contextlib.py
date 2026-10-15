@@ -104,6 +104,10 @@ def closing(thing):
 
 
 class _ClosingContext:
+    # The instance reports closing()'s docstring, as CPython's -- where
+    # closing IS the class -- does (test_contextlib test_instance_docs).
+    """`with closing(x):` ensures x.close() runs at block exit."""
+
     def __init__(self, thing):
         self.thing = thing
 
@@ -767,14 +771,17 @@ class _AsyncGeneratorContextManager(
                 await self.gen.aclose()
 
 
+# aclosing returned the SYNCHRONOUS closing(), which calls x.close() -- a
+# method an async iterator does not have.
 def aclosing(thing):
-    """``async with aclosing(x):`` awaits x.aclose() at block exit.  It
-    returned the SYNCHRONOUS closing(), which calls x.close() -- a method
-    an async iterator does not have."""
+    """``async with aclosing(x):`` awaits x.aclose() at block exit."""
     return _AsyncClosingContext(thing)
 
 
 class _AsyncClosingContext:
+    # The instance reports aclosing()'s docstring, as CPython's does.
+    """``async with aclosing(x):`` awaits x.aclose() at block exit."""
+
     def __init__(self, thing):
         self.thing = thing
 

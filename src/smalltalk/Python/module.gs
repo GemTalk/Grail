@@ -2412,6 +2412,57 @@ ___functionSignatureFor___: aName
 %
 
 category: 'Grail-Signatures'
+method: module
+___setFunctionDoc___: aName doc: aString
+	"Record a module-level function's docstring.  A top-level def compiles to a
+	METHOD on the module class, so it cannot carry the def-time
+	``___pyNamed___:doc:'' a nested def does, and no class doc table covers it
+	either: every module function's __doc__ answered None.  FastAPI renders a
+	path operation's docstring as its OpenAPI description, so the description
+	of every route defined at module level was missing (test_sub_callbacks,
+	test_webhooks_security).  Same tables as the signature spec: the session's,
+	and the committed record a deployed module's binding session reads."
+
+	| tbl inner |
+	tbl := module ___functionDocTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [
+		inner := KeyValueDictionary new.
+		tbl at: self put: inner].
+	inner at: aName asString put: aString.
+	self ___recordFunctionMeta___: #docs name: aName value: aString.
+	^ self
+%
+
+category: 'Grail-Signatures'
+method: module
+___functionDocFor___: aName
+	"The docstring a module-level def declared, or nil."
+
+	| tbl inner |
+	tbl := module ___functionDocTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [^ self ___recordedFunctionMeta___: #docs name: aName].
+	^ (inner at: aName asString otherwise: nil)
+		ifNil: [self ___recordedFunctionMeta___: #docs name: aName]
+%
+
+category: 'Grail-Signatures'
+classmethod: module
+___functionDocTable___
+	"Session-local module-instance -> (function-name -> docstring); see
+	___functionSignatureTable___."
+
+	| st tbl |
+	st := SessionTemps current.
+	tbl := st at: #GrailModuleFunctionDocs otherwise: nil.
+	tbl isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary new.
+		st at: #GrailModuleFunctionDocs put: tbl].
+	^ tbl
+%
+
+category: 'Grail-Signatures'
 classmethod: module
 ___functionSignatureTable___
 	"Session-local  module-instance -> (function-name -> spec).  Held in

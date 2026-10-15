@@ -1300,3 +1300,52 @@ test_copyreg, test_uuid) -- test_math, test_pickle and test___all__ timed out
 beside the SUnit suite and are OK alone; `check_python_fixtures.sh` 651
 fixtures agree with CPython.  The FastAPI slice is unchanged at 1,252 / 1,270.
 
+
+### Phase 6, part 2 -- the last core tests *(2026-10-14)*
+
+On `jmason/fastapi6`, after #1626.  The walls, each a general Grail bug:
+
+| wall | symptom in FastAPI's tests | fix |
+|---|---|---|
+| a body of just `...` was taken for a DOCSTRING | the parser records Ellipsis as the Symbol `#'...'`, and a Symbol is a CharacterCollection: `class E(str, Enum): ...` had Ellipsis for `__doc__` and pydantic's `cleandoc` failed on it (`test_schema_compat_pydantic_v2`); `def m(self): ...` had `'...'` | the three `___docString___` readers skip the marker |
+| an annotation that RAISES was swallowed by `inspect.signature` | `Annotated[int, Path(default=1)]` must fail Path's own assert when FastAPI reads the signature; the route registered instead (`test_ambiguous_params`) | a function's own annotate errors propagate, as in CPython; only an object with no annotate function still answers none |
+| a module-level def had no docstring at all | `__doc__` was None for every top-level function, so FastAPI's OpenAPI description of every module-level route was missing (`test_sub_callbacks`, `test_webhooks_security`) | the compiler records it with the module (`module >> ___setFunctionDoc___:doc:`, committed for a deployed module, like the signature) |
+| docstrings were not cleaned as CPython 3.13+'s COMPILER cleans them | an indented docstring kept its indentation | `AbstractNode >> ___cleanDocString___:`, applied by all three docstring readers -- identical to CPython on both arms |
+| `inspect.cleandoc` blanked a line holding only a form feed | the `\f` FastAPI cuts a description at was gone (two formfeed tests) | CPython 3.14's `cleandoc` |
+| `sys._clear_type_descriptors` did nothing | a class's `__dict__` lists `__dict__`/`__weakref__` descriptors; dataclasses' `slots=True` copied them into the slotted class's namespace, so its instances had a `__dict__` (`test_derived_values_are_not_stored_on_dependant`) | the class is recorded as cleared and its `__dict__` stops listing them |
+| a LAMBDA that captures nothing was one object for every evaluation | GemStone reuses a clean block as a literal: 3000 lambdas were one lru_cache key (`test_callable_classification_cache_supports_large_apps`), and an attribute set on one lambda was set on all | `shallowCopy` before the stamps, as a def does -- both the text and the IR emitter |
+| `inspect.signature(functools.partial(...))` was `()` | FastAPI saw no parameters on `partial(main, "foo")` (`test_callable_endpoint`) | CPython's `_signature_get_partial` |
+| OrderedDict's `pop` / `setdefault` / `update` bypassed its key order | `pop` left a stale key (the next `items()` raised KeyError); keys added the other two ways were missing from `items()` | each routed through `__setitem__` / `__delitem__` |
+| patching a Grail-implemented module's function was invisible to callers | `mock.patch('starlette.responses.json.dumps', wraps=json.dumps)` saw no call: a call to a NativeModule function is a direct send, and stores on NativeModules installed no self-send dispatcher (`test_dump_json_fast_path`) | they do now (except `builtins`, which has its own forwarders), and the shadows of hand-written methods are recompiled to call each other's shadows -- so a wrapper that calls the captured original does not recurse |
+| a class's own `__class__` was obeyed by `type()` and ignored by `isinstance` | asyncpg's UUID claims `uuid.UUID` through a `__class__` property (`test_inherited_custom_class`) | `type()` answers the real class; isinstance's second chance asks `obj.__class__`, only for a class that overrides it |
+| a wheel's OWN exception type matched none of its bases | pydantic_core's `ValidationError` extends ValueError, and convert_err asks exactly that of an error a wrap validator lets through; unmatched, it became an internal error a union does not catch, so `AnyUrl \| str` refused `"/"` (`test_openapi_servers`) | `PyErr_GivenExceptionMatches` walks a foreign type's `tp_base` chain |
+| `subprocess` with a `Path` cwd, or an argument past Latin-1 | the shell got `cd aPosixPath`; `git commit -m "🌐 ..."` could not be spawned (`test_translate`) | `os.fspath` on cwd; every argument goes to the host process as UTF-8 |
+
+**Left:** the FORWARDREF closure case (Phase 6, above); and
+`test_traceback_for_dependency_with_yield` -- a generator's frames are missing
+from a traceback when it is entered through `contextlib`'s `__enter__` under
+`contextvars.Context.run`'s `try/finally` (each alone keeps them), which is in
+the traceback-stitching machinery and wants a session of its own.
+
+The fixes also closed two known gaps other tests had pinned:
+`PydocTextRendererTestCase` (a module-level function's docstring) and
+`MethodWrapperIdentityTestCase` (the same, inside its record of unstable
+identity attributes) now assert CPython's answers.  And one test had been
+passing on the gap: `contextlib.closing` is a function over a private class, so
+`closing(x).__doc__ == closing.__doc__` held only while both were None; the
+private classes now carry the public docstrings, as CPython's -- where closing
+IS the class -- do.  `OrderedDict.pop`'s sentinel is module-level, not
+CPython's class-private `__marker`: a mangled class-body name read by a
+default expression resolved when collections loaded from source but not once
+deployed, which took collections -- and 12 CPython-suite modules -- down in the
+first gate run.
+
+**Where it stands:** **1,268 of 1,270 (99.8%)** with CPython's outcome; the two
+left are the ones named above.
+
+**Gates** (Darwin arm64, 2026-10-14): `run_tests.sh` **8114 run, 8114
+passed**, 8 of 8 shards; the CPython conformance gate **0 regressions, 5
+improvements** (test_unpack, test_long, test_exception_hierarchy, test_copyreg,
+test_uuid) -- test_math and test___all__ timed out beside the SUnit suite and
+are OK alone; `check_python_fixtures.sh` 652 fixtures agree with CPython.
+
