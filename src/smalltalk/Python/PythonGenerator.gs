@@ -1221,7 +1221,7 @@ close
 	finished.  Raises RuntimeError if the body catches GeneratorExit
 	and yields again — per Python."
 
-	| ___savedState___ |
+	| ___savedState___ result |
 	started ifFalse: [
 		done := true.
 		^ None
@@ -1244,7 +1244,15 @@ close
 	GeneratorExit and returned a value leaves an exhausted generator, not one
 	holding that value.  Dropping it here makes the later next() report
 	``StopIteration'' with value None, as CPython does
-	(test_close_and_throw_return)."
+	(test_close_and_throw_return).
+
+	close() ANSWERS that value instead (CPython 3.13): a body that catches the
+	GeneratorExit and returns 0 makes gen.close() 0, once -- a second close()
+	finds the generator finished and answers None (test_close_return_value,
+	test_close_closed).  A body that let an exception out returned nothing."
+	result := (escapedException @env0:isNil and: [returnValue @env0:notNil])
+		ifTrue: [returnValue]
+		ifFalse: [None].
 	returnValue := None.
 	"The body is now finished.  Absorb the GeneratorExit this method itself
 	injected -- close() answers None rather than re-raising what it asked for --
@@ -1256,7 +1264,7 @@ close
 		(escapedException @env0:isKindOf: GeneratorExit)
 			ifTrue: [escapedException := nil]
 			ifFalse: [^ self _signalEscapedException]].
-	^ None
+	^ result
 %
 
 category: 'Grail-Yield Protocol'
