@@ -1,0 +1,78 @@
+Class {
+	#name : 'ShimForeignObjectTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Tests' }
+ShimForeignObjectTestCase >> testDottedNameStripsModule [
+	"__name__ is the unqualified tail of a dotted C tp_name (CPython's
+	type.__name__ drops the module prefix)."
+
+	| p |
+	p := ShimForeignObject new.
+	p setCPtr: 16r1000 typeName: 'numpy.dtypes.Float64DType'.
+	self assert: (p @env1:___pyAttrLoad___: #'__name__') equals: 'Float64DType'.
+	self assert: (p @env1:___pyAttrLoad___: #'__qualname__') equals: 'Float64DType'.
+	self assert: (p @env1:___pyAttrLoad___: #'__module__') equals: 'numpy.dtypes'
+
+]
+
+{ #category : 'Grail-Tests' }
+ShimForeignObjectTestCase >> testProxyDedup [
+	"The server's pointer->proxy map returns the same proxy for the same
+	foreign pointer, and distinct proxies for distinct pointers."
+
+	| shim a b c |
+	shim := CPythonShim current.
+	a := shim foreignProxyForPointer: 16r4242 typeName: 'pkg.A'.
+	b := shim foreignProxyForPointer: 16r4242 typeName: 'pkg.A'.
+	c := shim foreignProxyForPointer: 16r9999 typeName: 'pkg.C'.
+	self assert: a == b.
+	self deny: a == c.
+	self assert: (a @env1:___pyAttrLoad___: #'__name__') equals: 'A'
+
+]
+
+{ #category : 'Grail-Tests' }
+ShimForeignObjectTestCase >> testRoundTripView [
+	"pyObjectView yields a CByteArray whose memoryAddress IS the foreign
+	pointer, so wrap: hands the original C object straight back."
+
+	| buf addr p |
+	buf := CByteArray gcMalloc: 32.       "a real, readable address to stand in for a PyObject*"
+	addr := buf memoryAddress.
+	p := ShimForeignObject new.
+	p setCPtr: addr typeName: 'foo.Bar'.
+	self assert: p pyObjectView memoryAddress equals: addr.
+	"cached: same view object on a second send"
+	self assert: p pyObjectView == p pyObjectView
+
+]
+
+{ #category : 'Grail-Tests' }
+ShimForeignObjectTestCase >> testUndottedName [
+	"A tp_name with no '.' is its own __name__, with an empty __module__."
+
+	| p |
+	p := ShimForeignObject new.
+	p setCPtr: 16r2000 typeName: 'object'.
+	self assert: (p @env1:___pyAttrLoad___: #'__name__') equals: 'object'.
+	self assert: (p @env1:___pyAttrLoad___: #'__module__') equals: ''
+
+]
+
+{ #category : 'Grail-Tests' }
+ShimForeignObjectTestCase >> testUnknownAttributeRaises [
+	"An attribute the proxy does not forward raises AttributeError."
+
+	| p raised |
+	p := ShimForeignObject new.
+	p setCPtr: 16r3000 typeName: 'foo.Bar'.
+	raised := false.
+	[ p @env1:___pyAttrLoad___: #'no_such_attr' ]
+		on: AbstractException
+		do: [:ex | raised := true].
+	self assert: raised
+
+]

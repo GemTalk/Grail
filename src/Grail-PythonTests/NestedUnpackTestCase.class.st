@@ -1,0 +1,255 @@
+Class {
+	#name : 'NestedUnpackTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> assert: aPyTuple isTuple: anArray [
+	"Compare a Python tuple/list against a Smalltalk Array element-wise."
+
+	self assert: aPyTuple @env1:__len__ equals: anArray size.
+	anArray doWithIndex: [:each :i |
+		self assert: (aPyTuple @env1:__getitem__: i - 1) equals: each]
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> loadFixture [
+	"Load tests/python/nested_unpack.py fresh."
+
+	importlib @env1:modules removeKey: #'nested_unpack' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/nested_unpack.py')
+		name: 'nested_unpack'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testChainedIterableTarget [
+	"The chain temp holds the raw iterable; the unpack still has to coerce."
+
+	| r |
+	r := self loadFixture @env1:chained_iterable.
+	self assert: (r @env1:__getitem__: 0) equals: 0.
+	self assert: (r @env1:__getitem__: 1) equals: 1.
+	self assert: (r @env1:__getitem__: 2) equals: 'IteratingSequenceClass'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testChainedStarTarget [
+	"``a, *b = c = [1, 2, 3]''.  The chained path reaches the unpack through
+	the nested-target branch, so it inherited that branch's missing star
+	support and emitted a ``*-unpack in call sites is not yet supported''
+	TypeError signal into the left-hand side."
+
+	| r |
+	r := self loadFixture @env1:chained_star.
+	self assert: (r @env1:__getitem__: 0) equals: 1.
+	self assert: (r @env1:__getitem__: 1) isTuple: #(2 3).
+	self assert: (r @env1:__getitem__: 2) isTuple: #(1 2 3)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testChainedTooManyRaisesValueError [
+	"An exact tuple says how many values it had, as CPython's does."
+
+	self
+		assert: (self loadFixture @env1:chained_too_many)
+		equals: 'ValueError: too many values to unpack (expected 2, got 3)'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testChainedTupleTargetStillWorks [
+	"``a, b = c = (1, 2)'' — test_dict's test_popitem shape."
+
+	| r |
+	r := self loadFixture @env1:chained_plain.
+	self assert: (r @env1:__getitem__: 0) equals: 1.
+	self assert: (r @env1:__getitem__: 1) equals: 2.
+	self assert: (r @env1:__getitem__: 2) isTuple: #(1 2)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testMappingAsNestedTarget [
+	"Both roots in one statement: a mapping in a nested position."
+
+	self assert: (self loadFixture @env1:mapping_nested) isTuple: #(7 8)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testMappingItemsView [
+	"``(k, v), = {7: 8}.items()'' — a one-element outer target whose single
+	element is itself a tuple target."
+
+	self assert: (self loadFixture @env1:mapping_items) isTuple: #(7 8)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testMappingTooManyRaisesValueError [
+	"Unpacked through its iterator, the mapping gets the count check as well --
+	it could not fire at all while the dict took the fast path.  An EXACT dict
+	also says how many it had, as CPython's does."
+
+	self
+		assert: (self loadFixture @env1:mapping_too_many)
+		equals: 'ValueError: too many values to unpack (expected 2, got 3)'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testMappingUnpacksToItsKeys [
+	"``a, b = {1: 'x', 2: 'y'}'' raised ``KeyError: 0'': a dict owns a real
+	__getitem__ so it took the positional fast path, and got asked for key 0.
+	CPython iterates it, yielding the KEYS."
+
+	self assert: (self loadFixture @env1:mapping_keys) isTuple: #(1 2)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNestedDeepTarget [
+	"Two levels of nesting: the coercion has to reach the INNERMOST target,
+	not just the first one."
+
+	self assert: (self loadFixture @env1:nested_deep) isTuple: #(1 2 0 1 5)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNestedIterableTarget [
+	"``(a, b), (c,) = IteratingSequenceClass(2), {42: 24}'' — the inner
+	iterable has __iter__ but NO __getitem__, so the old nested path raised
+	``'IteratingSequenceClass' object is not subscriptable''."
+
+	self assert: (self loadFixture @env1:nested_iterable) isTuple: #(0 1 42)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNestedStarTarget [
+	"``(a, *b), c = IteratingSequenceClass(3), 9''.  This one did not merely
+	fail — StarredAst fell through to the plain-expression printer, which
+	emits a ``*-unpack in call sites is not yet supported'' TypeError signal
+	into the LEFT-HAND SIDE of an assignment.  That is a CompileError, so the
+	whole enclosing module failed to load."
+
+	| r |
+	r := self loadFixture @env1:nested_star.
+	self assert: (r @env1:__getitem__: 0) equals: 0.
+	self assert: (r @env1:__getitem__: 1) isTuple: #(1 2).
+	self assert: (r @env1:__getitem__: 2) equals: 9
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNestedStarWithTrailingTarget [
+	"``(a, *b, c), d = [1, 2, 3, 4], 9'' — the star's slice has to stop
+	short of the trailing element inside a nested target too."
+
+	| r |
+	r := self loadFixture @env1:nested_star_trailing.
+	self assert: (r @env1:__getitem__: 0) equals: 1.
+	self assert: (r @env1:__getitem__: 1) isTuple: #(2 3).
+	self assert: (r @env1:__getitem__: 2) equals: 4.
+	self assert: (r @env1:__getitem__: 3) equals: 9
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNestedTargetInForLoop [
+	"A for-loop target list goes through the same emitter."
+
+	| r |
+	r := self loadFixture @env1:nested_in_for_loop.
+	self assert: r @env1:__len__ equals: 2.
+	self assert: (r @env1:__getitem__: 0) isTuple: #(1 2 3).
+	self assert: (r @env1:__getitem__: 1) isTuple: #(4 5 6)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNestedTooFewRaisesValueError [
+	"A nested target is as entitled to CPython's ValueError as an outer one;
+	before the fix the count was never checked there."
+
+	self
+		assert: (self loadFixture @env1:nested_too_few)
+		equals: 'ValueError: not enough values to unpack (expected 3, got 2)'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNestedTooManyRaisesValueError [
+	self
+		assert: (self loadFixture @env1:nested_too_many)
+		equals: 'ValueError: too many values to unpack (expected 2)'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testNonIterableStillRaisesTypeError [
+	"``a, b, c = len'' — a BoundMethod carries a PEP-585 generic-alias
+	__getitem__ that is not the sequence protocol, so it is unpacked through
+	__iter__ and raises CPython's TypeError, in UNPACK's wording."
+
+	self
+		assert: (self loadFixture @env1:flat_not_iterable)
+		equals: 'TypeError: cannot unpack non-iterable builtin_function_or_method object'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testTopLevelIterableStillWorks [
+	self assert: (self loadFixture @env1:flat_iterable) isTuple: #(0 1 2)
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testTopLevelStarStillWorks [
+	| r |
+	r := self loadFixture @env1:flat_star.
+	self assert: (r @env1:__getitem__: 0) equals: 1.
+	self assert: (r @env1:__getitem__: 1) isTuple: #(2 3).
+	self assert: (r @env1:__getitem__: 2) equals: 4
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testTopLevelStringStillWorks [
+	"A str is a genuine positional sequence and must KEEP the fast path."
+
+	| r |
+	r := self loadFixture @env1:flat_string.
+	self assert: (r @env1:__getitem__: 0) equals: 'x'.
+	self assert: (r @env1:__getitem__: 1) equals: 'y'.
+	self assert: (r @env1:__getitem__: 2) equals: 'z'
+
+]
+
+{ #category : 'Grail-Tests-NestedUnpack' }
+NestedUnpackTestCase >> testUnpackTakesValuesByIterationAsCPythonDoes [
+	"A value that is not a sequence is unpacked through its iterator, one value
+	past the targets and no further: ``x, y, z = it'' leaves the rest of ``it''
+	unread, and a __getitem__-only object is checked for a fourth value.  An
+	exact tuple, list or dict says how many values it had, and a non-iterable
+	is ``cannot unpack non-iterable int object'' -- test_unpack's doctests.
+	tests/python/unpack_by_iteration.py holds the checks, each agreeing with
+	CPython 3.14, for-loop targets included."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'unpack_by_iteration' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/unpack_by_iteration.py')
+		name: 'unpack_by_iteration'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '16 checks, 0 disagreeing [], keys match: True'
+
+]

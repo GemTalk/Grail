@@ -1,0 +1,735 @@
+Class {
+	#name : 'PythonTokenizerTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-helpers' }
+PythonTokenizerTestCase >> findToken: aSymbol value: aString in: tokens [
+
+	^tokens detect: [:t | t type == aSymbol and: [t value = aString]] ifNone: [nil]
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_all_keywords [
+	"All Python keywords should be recognized."
+
+	| keywords |
+	keywords := #('False' 'None' 'True' 'and' 'as' 'assert' 'async' 'await'
+		'break' 'class' 'continue' 'def' 'del' 'elif' 'else' 'except'
+		'finally' 'for' 'from' 'global' 'if' 'import' 'in' 'is' 'lambda'
+		'nonlocal' 'not' 'or' 'pass' 'raise' 'return' 'try' 'while' 'with' 'yield').
+	keywords do: [:kw |
+		| tokens kwTok |
+		tokens := self tokenize: kw.
+		kwTok := (self tokensOfType: #KEYWORD from: tokens) first.
+		self assert: kwTok value equals: kw.
+	].
+
+]
+
+{ #category : 'Grail-tests - numbers' }
+PythonTokenizerTestCase >> test_binary_number [
+	"Tokenize binary numbers."
+
+	| tokens numTok |
+	tokens := self tokenize: '0b1010'.
+	numTok := (self tokensOfType: #NUMBER from: tokens) first.
+	self assert: numTok value equals: '0b1010'.
+
+]
+
+{ #category : 'Grail-tests - edge cases' }
+PythonTokenizerTestCase >> test_blank_lines_ignored [
+	"Blank lines should not produce NEWLINE tokens between statements."
+
+	| tokens nameToks |
+	tokens := self tokenize: 'x
+
+y'.
+	nameToks := self tokensOfType: #NAME from: tokens.
+	self assert: nameToks size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - structure' }
+PythonTokenizerTestCase >> test_bracket_suppresses_newline [
+	"Newlines inside brackets should produce NL, not NEWLINE."
+
+	| tokens newlines |
+	tokens := self tokenize: '[1,
+2]'.
+	newlines := self tokensOfType: #NEWLINE from: tokens.
+	self assert: newlines size <= 1.
+
+]
+
+{ #category : 'Grail-tests - strings' }
+PythonTokenizerTestCase >> test_byte_string [
+	"Tokenize byte string prefix."
+
+	| tokens strTok |
+	tokens := self tokenize: 'b''hello'''.
+	strTok := (self tokensOfType: #BYTES from: tokens) first.
+	self assert: strTok value equals: 'hello'.
+
+]
+
+{ #category : 'Grail-tests - positions' }
+PythonTokenizerTestCase >> test_column_numbers [
+  "AbstractLocationNode understands column (deriveed from position and sourceString , 
+   but Tokens only hold position."
+	| tokens xTok yTok |
+	tokens := self tokenize: '  x + y'.
+	xTok := (self findToken: #NAME value: 'x' in: tokens).
+	yTok := (self findToken: #NAME value: 'y' in: tokens).
+	self assert: xTok position equals: 3.
+	self assert: yTok position equals: 7.
+
+]
+
+{ #category : 'Grail-tests - structure' }
+PythonTokenizerTestCase >> test_comment_ignored [
+	"Comments should not produce tokens."
+
+	| tokens nameToks |
+	tokens := self tokenize: 'x # this is a comment
+y'.
+	nameToks := self tokensOfType: #NAME from: tokens.
+	self assert: nameToks size equals: 2.
+	self assert: nameToks first value equals: 'x'.
+	self assert: nameToks last value equals: 'y'.
+
+]
+
+{ #category : 'Grail-tests - numbers' }
+PythonTokenizerTestCase >> test_complex_number [
+	"Tokenize complex number literals."
+
+	| tokens numTok |
+	tokens := self tokenize: '3.14j'.
+	numTok := (self tokensOfType: #NUMBER from: tokens) first.
+	self assert: numTok value equals: '3.14j'.
+
+]
+
+{ #category : 'Grail-tests - newlines' }
+PythonTokenizerTestCase >> test_crlf_inside_triple_quoted_literal_becomes_lf [
+	"Translation happens while DECODING, so it reaches inside literals.
+	Verified against CPython: compile of a triple-quoted literal spanning a
+	CRLF break yields a bare LF in the string."
+
+	| cr lf strToks |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	strToks := self tokensOfType: #STRING
+		from: (self tokenize: '"""a', cr, lf, 'b"""').
+	self assert: strToks size equals: 1.
+	self assert: strToks first value equals: 'a', lf, 'b'.
+
+]
+
+{ #category : 'Grail-tests - newlines' }
+PythonTokenizerTestCase >> test_crlf_preserves_line_numbers [
+	"Translation must not shift what line a token is reported on -- one
+	newline per line either way.  A traceback over CRLF source is only
+	trustworthy if this holds.
+
+	Compares the WHOLE token stream against the LF baseline, lines included,
+	rather than picking out the NAME tokens: the first cut of this test did
+	the latter and still passed with translateNewlines: neutralised, because
+	the names landed on the right lines and the junk the stray CR produced
+	was simply not looked at.  A test that cannot fail for the reason it
+	exists is not a test."
+
+	| cr lf crlfToks lfToks triples |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	crlfToks := self tokenize: 'a = 1', cr, lf, 'b = 2', cr, lf, 'c = 3', cr, lf.
+	lfToks := self tokenize: 'a = 1', lf, 'b = 2', lf, 'c = 3', lf.
+	triples := [:toks | (toks collect: [:t | { t type . t value . t line }]) asArray].
+	self assert: (triples value: crlfToks) equals: (triples value: lfToks).
+	"And the lines really are 1, 2, 3 -- not merely equal to a baseline that
+	could itself be wrong."
+	self assert: ((crlfToks select: [:t | t type == #NAME])
+			collect: [:t | t line]) asArray
+		equals: #(1 2 3).
+
+]
+
+{ #category : 'Grail-tests - newlines' }
+PythonTokenizerTestCase >> test_crlf_source_tokenizes_like_lf [
+	"A file written on Windows must tokenize exactly as the same file with
+	unix endings.  Before universal newline translation the CR was neither
+	whitespace, newline, nor identifier character, so it reached
+	checkSimpleStatementTerminator: and raised a line-less SyntaxError --
+	which made whole pip distributions unimportable (29 of the 32 files in
+	the ``kaggle'' sdist are CRLF)."
+
+	| cr lf crlfToks lfToks |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	crlfToks := self tokenize: 'x = 1', cr, lf, 'y = 2', cr, lf.
+	lfToks := self tokenize: 'x = 1', lf, 'y = 2', lf.
+	self assert: (crlfToks collect: [:t | t type])
+		equals: (lfToks collect: [:t | t type]).
+	self assert: (crlfToks collect: [:t | t value])
+		equals: (lfToks collect: [:t | t value]).
+
+]
+
+{ #category : 'Grail-tests - operators' }
+PythonTokenizerTestCase >> test_delimiters [
+	"Tokenize parentheses, brackets, braces."
+
+	| tokens opToks |
+	tokens := self tokenize: '()[]{}:;,.'.
+	opToks := self tokensOfType: #OP from: tokens.
+	self assert: opToks size equals: 10.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_double_dot_is_two_single_dots [
+	"``..'' is NOT a Python operator — it must tokenize as two
+	separate single-dot OPs so the parser can count them as the
+	relative-import level in ``from .. import x''.  Regression:
+	the tokenizer's two-char-op table previously included ``..''
+	and merged them, blocking every relative import with level>=2
+	(Werkzeug's ``from .. import exceptions'' tripped this)."
+
+	| tokens ops |
+	tokens := self tokenize: '..'.
+	ops := self tokensOfType: #OP from: tokens.
+	self assert: ops size equals: 2.
+	self assert: (ops first) value equals: '.'.
+	self assert: (ops second) value equals: '.'.
+
+]
+
+{ #category : 'Grail-tests - operators' }
+PythonTokenizerTestCase >> test_ellipsis [
+	"Tokenize ellipsis (...)."
+
+	| tokens opTok |
+	tokens := self tokenize: '...'.
+	opTok := (self tokensOfType: #OP from: tokens) first.
+	self assert: opTok value equals: '...'.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_empty_source [
+	"Tokenizing empty string produces ENDMARKER."
+
+	| tokens |
+	tokens := self tokenize: ''.
+	self assert: tokens last type equals: #ENDMARKER.
+
+]
+
+{ #category : 'Grail-tests - strings' }
+PythonTokenizerTestCase >> test_empty_string [
+	"Tokenize empty strings."
+
+	| tokens strTok |
+	tokens := self tokenize: ''''''.
+	strTok := (self tokensOfType: #STRING from: tokens) first.
+	self assert: strTok value equals: ''.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_endmarker [
+	"Every token stream ends with ENDMARKER."
+
+	| tokens |
+	tokens := self tokenize: 'x = 1'.
+	self assert: tokens last type equals: #ENDMARKER.
+
+]
+
+{ #category : 'Grail-tests - strings' }
+PythonTokenizerTestCase >> test_escape_sequences [
+	"Tokenize strings with escape sequences."
+
+	| tokens strTok |
+	tokens := self tokenize: '''hello\nworld'''.
+	strTok := (self tokensOfType: #STRING from: tokens) first.
+	self assert: (strTok value includes: Character lf).
+
+]
+
+{ #category : 'Grail-tests - newlines' }
+PythonTokenizerTestCase >> test_escaped_cr_in_literal_is_not_translated [
+	"A backslash-r escape is two SOURCE characters, not a CR byte, so
+	translation must leave it alone -- it still denotes a carriage return.
+	CPython agrees: repr of the compiled literal is 'a\\rb'."
+
+	| strToks |
+	strToks := self tokensOfType: #STRING
+		from: (self tokenize: '"a\rb"').
+	self assert: strToks size equals: 1.
+	self assert: strToks first value
+		equals: 'a', (String with: Character cr), 'b'.
+
+]
+
+{ #category : 'Grail-tests - numbers' }
+PythonTokenizerTestCase >> test_float_dot_only [
+	"Tokenize float starting with dot."
+
+	| tokens numTok |
+	tokens := self tokenize: '.5'.
+	numTok := (self tokensOfType: #NUMBER from: tokens) first.
+	self assert: numTok value equals: '.5'.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_float_literal [
+	"Tokenize float literals."
+
+	| tokens numToks |
+	tokens := self tokenize: '3.14'.
+	numToks := self tokensOfType: #NUMBER from: tokens.
+	self assert: numToks size equals: 1.
+	self assert: numToks first value equals: '3.14'.
+
+]
+
+{ #category : 'Grail-tests - numbers' }
+PythonTokenizerTestCase >> test_float_with_exponent [
+	"Tokenize float with exponent."
+
+	| tokens numTok |
+	tokens := self tokenize: '1e10'.
+	numTok := (self tokensOfType: #NUMBER from: tokens) first.
+	self assert: numTok value equals: '1e10'.
+
+]
+
+{ #category : 'Grail-tests - numbers' }
+PythonTokenizerTestCase >> test_hex_number [
+	"Tokenize hexadecimal numbers."
+
+	| tokens numTok |
+	tokens := self tokenize: '0xFF'.
+	numTok := (self tokensOfType: #NUMBER from: tokens) first.
+	self assert: numTok value equals: '0xFF'.
+
+]
+
+{ #category : 'Grail-tests - indentation' }
+PythonTokenizerTestCase >> test_indent_dedent [
+	"Indented block produces INDENT and DEDENT tokens."
+
+	| tokens indents dedents |
+	tokens := self tokenize: 'if x:
+    y
+z'.
+	indents := self tokensOfType: #INDENT from: tokens.
+	dedents := self tokensOfType: #DEDENT from: tokens.
+	self assert: indents size equals: 1.
+	self assert: dedents size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_integer_literal [
+	"Tokenize integer literals."
+
+	| tokens numToks |
+	tokens := self tokenize: '42'.
+	numToks := self tokensOfType: #NUMBER from: tokens.
+	self assert: numToks size equals: 1.
+	self assert: numToks first value equals: '42'.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_keyword_recognition [
+	"Keywords should be tokenized as KEYWORD type."
+
+	| tokens kwToks |
+	tokens := self tokenize: 'if else while'.
+	kwToks := self tokensOfType: #KEYWORD from: tokens.
+	self assert: kwToks size equals: 3.
+	self assert: kwToks first value equals: 'if'.
+	self assert: (kwToks at: 2) value equals: 'else'.
+	self assert: kwToks last value equals: 'while'.
+
+]
+
+{ #category : 'Grail-tests - structure' }
+PythonTokenizerTestCase >> test_line_continuation [
+	"Backslash-newline joins lines."
+
+	| tokens nameToks |
+	tokens := self tokenize: 'x \
++ y'.
+	nameToks := self tokensOfType: #NAME from: tokens.
+	self assert: nameToks size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - positions' }
+PythonTokenizerTestCase >> test_line_numbers [
+	"Tokens should have correct line numbers."
+
+	| tokens first second |
+	tokens := self tokenize: 'x
+y'.
+	first := (self findToken: #NAME value: 'x' in: tokens).
+	second := (self findToken: #NAME value: 'y' in: tokens).
+	self assert: first line equals: 1.
+	self assert: second line equals: 2.
+
+]
+
+{ #category : 'Grail-tests - newlines' }
+PythonTokenizerTestCase >> test_lone_cr_source_tokenizes_like_lf [
+	"Old-Mac line endings.  CPython's translate_newlines maps a bare CR to LF
+	too, not just the CRLF pair."
+
+	| cr lf crToks lfToks |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	crToks := self tokenize: 'x = 1', cr, 'y = 2', cr.
+	lfToks := self tokenize: 'x = 1', lf, 'y = 2', lf.
+	self assert: (crToks collect: [:t | t type])
+		equals: (lfToks collect: [:t | t type]).
+	self assert: (crToks collect: [:t | t value])
+		equals: (lfToks collect: [:t | t value]).
+
+]
+
+{ #category : 'Grail-tests - edge cases' }
+PythonTokenizerTestCase >> test_mixed_expression [
+	"Tokenize a complex expression."
+
+	| tokens |
+	tokens := self tokenize: 'x = foo(1, "bar", y=True)'.
+	self assert: (self findToken: #NAME value: 'x' in: tokens) notNil.
+	self assert: (self findToken: #OP value: '=' in: tokens) notNil.
+	self assert: (self findToken: #NAME value: 'foo' in: tokens) notNil.
+	self assert: (self findToken: #OP value: '(' in: tokens) notNil.
+	self assert: (self findToken: #NUMBER value: '1' in: tokens) notNil.
+	self assert: (self findToken: #STRING value: 'bar' in: tokens) notNil.
+	self assert: (self findToken: #KEYWORD value: 'True' in: tokens) notNil.
+	self assert: (self findToken: #OP value: ')' in: tokens) notNil.
+
+]
+
+{ #category : 'Grail-tests - indentation' }
+PythonTokenizerTestCase >> test_multiple_dedent [
+	"Dedenting multiple levels at once."
+
+	| tokens indents dedents |
+	tokens := self tokenize: 'if x:
+    if y:
+        z
+a'.
+	indents := self tokensOfType: #INDENT from: tokens.
+	dedents := self tokensOfType: #DEDENT from: tokens.
+	self assert: indents size equals: 2.
+	self assert: dedents size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_multiple_names [
+	"Tokenize multiple identifiers."
+
+	| tokens nameToks |
+	tokens := self tokenize: 'foo bar baz'.
+	nameToks := self tokensOfType: #NAME from: tokens.
+	self assert: nameToks size equals: 3.
+	self assert: nameToks first value equals: 'foo'.
+	self assert: (nameToks at: 2) value equals: 'bar'.
+	self assert: nameToks last value equals: 'baz'.
+
+]
+
+{ #category : 'Grail-tests - indentation' }
+PythonTokenizerTestCase >> test_nested_indent [
+	"Nested indentation produces multiple INDENT/DEDENT pairs."
+
+	| tokens indents dedents |
+	tokens := self tokenize: 'if x:
+    if y:
+        z
+'.
+	indents := self tokensOfType: #INDENT from: tokens.
+	dedents := self tokensOfType: #DEDENT from: tokens.
+	self assert: indents size equals: 2.
+	self assert: dedents size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_newline_token [
+	"Statement-ending newline produces NEWLINE token."
+
+	| tokens nlToks |
+	tokens := self tokenize: 'x
+y'.
+	nlToks := self tokensOfType: #NEWLINE from: tokens.
+	self assert: nlToks size >= 1.
+
+]
+
+{ #category : 'Grail-tests - numbers' }
+PythonTokenizerTestCase >> test_octal_number [
+	"Tokenize octal numbers."
+
+	| tokens numTok |
+	tokens := self tokenize: '0o77'.
+	numTok := (self tokensOfType: #NUMBER from: tokens) first.
+	self assert: numTok value equals: '0o77'.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_operators [
+	"Tokenize basic operators."
+
+	| tokens opToks |
+	tokens := self tokenize: '+ - * /'.
+	opToks := self tokensOfType: #OP from: tokens.
+	self assert: opToks size equals: 4.
+	self assert: opToks first value equals: '+'.
+	self assert: (opToks at: 2) value equals: '-'.
+	self assert: (opToks at: 3) value equals: '*'.
+	self assert: (opToks at: 4) value equals: '/'.
+
+]
+
+{ #category : 'Grail-tests - structure' }
+PythonTokenizerTestCase >> test_paren_suppresses_newline [
+	"Newlines inside parentheses should produce NL, not NEWLINE."
+
+	| tokens newlines |
+	tokens := self tokenize: '(1,
+2)'.
+	newlines := self tokensOfType: #NEWLINE from: tokens.
+	"There should only be the final NEWLINE after the closing paren, not one inside"
+	self assert: newlines size <= 1.
+
+]
+
+{ #category : 'Grail-tests - strings' }
+PythonTokenizerTestCase >> test_raw_string [
+	"Tokenize raw strings (backslash not interpreted)."
+
+	| tokens strTok |
+	tokens := self tokenize: 'r''hello\nworld'''.
+	strTok := (self tokensOfType: #STRING from: tokens) first.
+	self assert: (strTok value includes: $\).
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_single_name [
+	"Tokenize a single identifier."
+
+	| tokens nameToks |
+	tokens := self tokenize: 'hello'.
+	nameToks := self tokensOfType: #NAME from: tokens.
+	self assert: nameToks size equals: 1.
+	self assert: nameToks first value equals: 'hello'.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_string_double_quotes [
+	"Tokenize double-quoted strings."
+
+	| tokens strToks |
+	tokens := self tokenize: '"hello"'.
+	strToks := self tokensOfType: #STRING from: tokens.
+	self assert: strToks size equals: 1.
+	self assert: strToks first value equals: 'hello'.
+
+]
+
+{ #category : 'Grail-tests - basic tokens' }
+PythonTokenizerTestCase >> test_string_single_quotes [
+	"Tokenize single-quoted strings."
+
+	| tokens strToks |
+	tokens := self tokenize: '''hello'''.
+	strToks := self tokensOfType: #STRING from: tokens.
+	self assert: strToks size equals: 1.
+	self assert: strToks first value equals: 'hello'.
+
+]
+
+{ #category : 'Grail-tests - operators' }
+PythonTokenizerTestCase >> test_three_char_operators [
+	"Tokenize three-character operators."
+
+	| ops |
+	ops := #('**=' '//=' '<<=' '>>=').
+	ops do: [:op |
+		| tokens opTok |
+		tokens := self tokenize: op.
+		opTok := (self tokensOfType: #OP from: tokens) first.
+		self assert: opTok value equals: op.
+	].
+
+]
+
+{ #category : 'Grail-tests - newlines' }
+PythonTokenizerTestCase >> test_translateNewlines_does_not_copy_when_there_is_no_cr [
+	"The fast path is load-bearing: source: runs for every module Grail
+	compiles, so the ordinary CR-free file must pay one indexOf: and no
+	allocation.  Identity, not equality, is the assertion that shows it."
+
+	| s |
+	s := 'x = 1', (String with: Character lf), 'y = 2'.
+	self assert: (PythonTokenizer translateNewlines: s) == s.
+
+]
+
+{ #category : 'Grail-tests - strings' }
+PythonTokenizerTestCase >> test_triple_single_quoted [
+	"Tokenize triple single-quoted strings."
+
+	| tokens strToks |
+	tokens := self tokenize: '''''''hello world'''''''.
+	strToks := self tokensOfType: #STRING from: tokens.
+	self assert: strToks size equals: 1.
+	self assert: strToks first value equals: 'hello world'.
+
+]
+
+{ #category : 'Grail-tests - operators' }
+PythonTokenizerTestCase >> test_two_char_operators [
+	"Tokenize two-character operators."
+
+	| ops |
+	ops := #('==' '!=' '<=' '>=' '+=' '-=' '*=' '/=' '**' '//' ':=' '->' '<<' '>>').
+	ops do: [:op |
+		| tokens opTok |
+		tokens := self tokenize: op.
+		opTok := (self tokensOfType: #OP from: tokens) first.
+		self assert: opTok value equals: op.
+	].
+
+]
+
+{ #category : 'Grail-tests - numbers' }
+PythonTokenizerTestCase >> test_underscore_in_number [
+	"Tokenize numbers with underscores."
+
+	| tokens numTok |
+	tokens := self tokenize: '1_000_000'.
+	numTok := (self tokensOfType: #NUMBER from: tokens) first.
+	self assert: numTok value equals: '1000000'.
+
+]
+
+{ #category : 'Grail-Tests' }
+PythonTokenizerTestCase >> testIdentifiersAreNfkcNormalized [
+	"PEP 3131: U+00B5 and U+03BC, Fraktur and ASCII, ``e'' plus U+0301 and
+	U+00E9 each spell one name (#1502), for names, attributes, parameters
+	and keyword arguments; str.isidentifier and getattr do not normalize.
+	tests/python/identifier_nfkc.py holds the checks and agrees with CPython
+	3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'identifier_nfkc' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/identifier_nfkc.py')
+		name: 'identifier_nfkc'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '13 checks, 0 disagreeing [], keys match: True'
+
+]
+
+{ #category : 'Grail-Tests' }
+PythonTokenizerTestCase >> testIdentifiersAreXidStartThenXidContinue [
+	"PEP 3131's rule, for the tokenizer and str.isidentifier alike: combining
+	marks, connectors, U+00B7, supplementary-plane U+E0100 (#1378) and
+	letters newer than GemStone's own Unicode tables all continue an
+	identifier; pyparsing names one with Hebrew vowel points.
+	tests/python/identifier_xid.py holds the checks and agrees with CPython
+	3.14."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'identifier_xid' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/identifier_xid.py')
+		name: 'identifier_xid'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '5 checks, 0 disagreeing [], keys match: True'
+
+]
+
+{ #category : 'Grail-Tests' }
+PythonTokenizerTestCase >> testOnlyANameNfkcCanChangeIsNormalized [
+	"A non-ASCII identifier is NFKC-normalized as CPython binds it (#1502),
+	but only a name with a character NFKC can change goes to
+	unicodedata.normalize -- any other name is answered as it is, the same
+	object, so ASCII source never pays for the import or the table build.
+	Names are built as the tokenizer builds them, a character at a time."
+
+	| name ascii greek |
+	name := [:codePoints | | n |
+		n := Unicode7 new.
+		codePoints do: [:cp | n add: (Character codePoint: cp)].
+		n].
+	ascii := 'plain_name2'.
+	self assert: (PythonTokenizer ___nfkcName___: ascii) == ascii.
+	greek := name value: #(16r3BC 16r78).
+	self assert: (PythonTokenizer ___nfkcName___: greek) == greek.
+	self
+		assert: ((PythonTokenizer ___nfkcName___: (name value: #(16rB5))) asArray collect: [:c | c codePoint])
+		equals: #(16r3BC).
+	self
+		assert: ((PythonTokenizer ___nfkcName___: (name value: #(16r65 16r301))) asArray collect: [:c | c codePoint])
+		equals: #(16rE9)
+
+]
+
+{ #category : 'Grail-Tests' }
+PythonTokenizerTestCase >> testTheIdentifierTablesAreWellFormed [
+	"The generated tables are ascending first/last pairs that never overlap,
+	or the binary search in ___ranges___:include: answers wrong; and the
+	ASCII fast path agrees with them, so the two cannot drift apart."
+
+	{ PythonTokenizer ___xidStartRanges___. PythonTokenizer ___xidContinueRanges___.
+	  PythonTokenizer ___nfkcUnstableRanges___ } do: [:ranges |
+		self assert: ranges size even.
+		1 to: ranges size by: 2 do: [:i |
+			self assert: (ranges at: i) <= (ranges at: i + 1).
+			i > 1 ifTrue: [self assert: (ranges at: i - 1) < (ranges at: i)]]].
+	0 to: 127 do: [:cp | | c |
+		c := Character codePoint: cp.
+		self
+			assert: (PythonTokenizer ___isIdentifierStart___: c)
+			equals: (PythonTokenizer ___ranges___: PythonTokenizer ___xidStartRanges___ include: cp).
+		self
+			assert: (PythonTokenizer ___isIdentifierPart___: c)
+			equals: (PythonTokenizer ___ranges___: PythonTokenizer ___xidContinueRanges___ include: cp).
+		self deny: (PythonTokenizer ___ranges___: PythonTokenizer ___nfkcUnstableRanges___ include: cp)]
+
+]
+
+{ #category : 'Grail-helpers' }
+PythonTokenizerTestCase >> tokenize: aString [
+
+	^PythonTokenizer tokenize: aString
+
+]
+
+{ #category : 'Grail-helpers' }
+PythonTokenizerTestCase >> tokensOfType: aSymbol from: tokens [
+
+	^tokens select: [:t | t type == aSymbol]
+
+]

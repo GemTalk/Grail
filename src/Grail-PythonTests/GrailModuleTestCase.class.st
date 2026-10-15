@@ -1,0 +1,152 @@
+Class {
+	#name : 'GrailModuleTestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> comparingStringBetween: expected and: actual [
+	"String>>streamContents: calls WriteStream>>positionA which is absent in
+	this GemStone build.  Use printString concatenation instead."
+	^ 'Expected ' , expected printString , ' but was ' , actual printString , '.'
+
+]
+
+{ #category : 'Grail-Setup' }
+GrailModuleTestCase >> removeExtensionMethods [
+	"Remove all 'Grail-ST-Extension' methods installed on GrailSTestTarget
+	so each test begins with a clean class."
+	| md toRemove |
+	md := GrailSTestTarget methodDictForEnv: 1.
+	md isNil ifTrue: [^ self].
+	toRemove := OrderedCollection new.
+	md keysDo: [:sel |
+		| cat |
+		cat := GrailSTestTarget categoryOfSelector: sel environmentId: 1.
+		(cat notNil and: [cat = 'Grail-ST-Extension']) ifTrue: [toRemove add: sel]].
+	toRemove do: [:sel | GrailSTestTarget removeSelector: sel environmentId: 1].
+
+]
+
+{ #category : 'Grail-Setup' }
+GrailModuleTestCase >> setUp [
+	"Flush any previously installed extension methods from GrailSTestTarget,
+	clear the module cache, then load the happy-path fixture so each test
+	starts from a known state."
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'grail_smalltalk_class' ifAbsent: [].
+	self removeExtensionMethods.
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_smalltalk_class.py')
+		name: 'grail_smalltalk_class'.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testClassNotFoundRaisesAttributeError [
+	"Looking up a class that doesn't exist raises AttributeError."
+	self should: [
+		grail ___lookupClass: 'NoSuchClassXYZ987' inDictionary: 'Globals'
+	] raise: AttributeError.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testDecoratorReturnsTargetClass [
+	"The decorated name in the Python module refers to the original Smalltalk
+	class, not a freshly-created Python class."
+	| cls |
+	cls := testModule @env1:GrailSTestTarget.
+	self assert: cls equals: GrailSTestTarget.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testMethodWithArguments [
+	"A method with positional arguments is installed and returns the correct value."
+	| inst result |
+	inst := GrailSTestTarget new.
+	result := inst @env1:grail_add: 3 _: 4.
+	self assert: result equals: 7.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testMissingSlotsMustRaiseTypeError [
+	"Importing a module whose @smalltalk_class class omits __slots__ raises TypeError."
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'grail_smalltalk_class_no_slots' ifAbsent: [].
+	self should: [
+		importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/grail_smalltalk_class_no_slots.py')
+			name: 'grail_smalltalk_class_no_slots'
+	] raise: TypeError.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testModuleFunctionIsFirstClass [
+	"A 0-arg native module FUNCTION read as an attribute (``from random
+	import random'', ``time.time'') must be a first-class callable, NOT
+	auto-invoked to its return value.  The getattr dispatch (Object>>
+	___pyAttrLoad___) previously performed any non-``Grail-Methods'' unary
+	module method, so ``random'' (category ``Grail-Built-in Functions'')
+	bound the float random() returns -- test_math's testFsum did
+	``from random import random'' then ``random()'' -> 'SmallDouble' object
+	is not callable.  The fix wraps the FUNCTION categories as BoundMethods
+	while leaving value accessors (``__name__'') performed."
+
+	"random is a first-class callable; calling it yields a float in [0, 1)."
+	"A callable's type is one of CPython's three (issue #1436), never the
+	value it would have answered if performed."
+	self assert: (self eval: 'from random import random
+type(random).__name__ in (''method'', ''builtin_function_or_method'')') equals: true.
+	self assert: (self eval: 'from random import random
+0.0 <= random() < 1.0') equals: true.
+	"Multi-arg functions were already callable -- keep them regressed."
+	self assert: (self eval: 'from random import gauss, shuffle
+type(gauss).__name__ == ''method'' and type(shuffle).__name__ == ''method''') equals: true.
+	"The fix generalises to other native module functions (time.time)."
+	self assert: (self eval: 'import time
+type(time.time).__name__') equals: 'builtin_function_or_method'.
+	"getstate raises NotImplementedError when CALLED; before the fix,
+	merely importing it auto-invoked it and the import blew up.  Now it is
+	a first-class BoundMethod that only raises on an actual call."
+	self assert: (self eval: 'from random import getstate
+type(getstate).__name__') equals: 'method'.
+	"A value accessor (category ``Grail-Accessors'', e.g. sys.stdout) STILL
+	reads as its value, not a BoundMethod -- the default stays perform."
+	self assert: (self eval: 'import sys
+type(sys.stdout).__name__ not in (''method'', ''builtin_function_or_method'', ''BoundMethod'')') equals: true.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testNullaryMethodInstalled [
+	"A method defined inside @smalltalk_class body is callable on instances
+	of the target Smalltalk class."
+	| inst result |
+	inst := GrailSTestTarget new.
+	result := inst @env1:grail_hello.
+	self assert: result equals: 'hello from grail'.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testWrongSlotsMustRaiseTypeError [
+	"Importing a module whose __slots__ don't match the target's instVarNames raises TypeError."
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'grail_smalltalk_class_wrong_slots' ifAbsent: [].
+	self should: [
+		importlib
+			loadModuleFromPath: (importlib grailDir , '/tests/python/grail_smalltalk_class_wrong_slots.py')
+			name: 'grail_smalltalk_class_wrong_slots'
+	] raise: TypeError.
+
+]

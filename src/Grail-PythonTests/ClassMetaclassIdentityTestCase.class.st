@@ -1,0 +1,164 @@
+Class {
+	#name : 'ClassMetaclassIdentityTestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Private' }
+ClassMetaclassIdentityTestCase >> resultAt: key [
+	^ (testModule @env1:___pyAttrLoad___: #r) @env1:__getitem__: key
+
+]
+
+{ #category : 'Grail-Setup' }
+ClassMetaclassIdentityTestCase >> setUp [
+	"Reload tests/python/class_metaclass_identity.py fresh each test."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'class_metaclass_identity' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/class_metaclass_identity.py')
+		name: 'class_metaclass_identity'.
+
+]
+
+{ #category : 'Grail-Tests - Known gaps' }
+ClassMetaclassIdentityTestCase >> testAbcDeclaresItsMetaclass [
+	"CPython: type(ABC) is ABCMeta, and so is it here.  This used to be pinned as
+	a vendored divergence -- Grail's abc.py wrote ``class ABC:'' with no
+	metaclass, to spare every ABC subclass ABCMeta's Python-level checks -- and
+	abc.py is CPython's own now."
+
+	self assert: (self resultAt: 'abc_metaclass_is_abcmeta')
+		asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Metaclass identity' }
+ClassMetaclassIdentityTestCase >> testAMetaclassRemembersThatItSubclassedType [
+	"``issubclass(Meta, type)'' for ``class Meta(type)''.  This was False for
+	as long as there was no ``type'' OBJECT to inherit from: a class cannot
+	subclass a BoundMethod, so ClassDefAst rooted every metaclass at
+	PythonInstance and nothing linked it back to ``type''.
+
+	It is the assertion the known-gap note above named as the thing that would
+	have to change, and it is what unblocks reporting a declared ``metaclass=''
+	from type()."
+
+	self assert: (self resultAt: 'subclass_of_type') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Enums' }
+ClassMetaclassIdentityTestCase >> testAnEnumsMetaclassIsEnumType [
+	"CPython: type(Color) is enum.EnumType, which in Grail IS ``Enum class''.
+	inspect.getmembers(Color)['__class__'] is asserted to be exactly that."
+
+	self assert: (self resultAt: 'enum_metaclass') asString equals: '[True, True]'.
+
+]
+
+{ #category : 'Grail-Tests - Metaclass identity' }
+ClassMetaclassIdentityTestCase >> testAnExplicitMetaclassIsReported [
+	"``class C(metaclass=Meta)'' -- type(C) is Meta, and isinstance(C, Meta).
+	This was the known gap this test case carried, and the note it carried is
+	worth keeping because it names exactly what closing it took.
+
+	Reporting the record was TRIED and reverted once.  ___grailMetaclass___ had
+	it all along, so the resolver could simply prefer it -- and doing so
+	regressed test_copy: copy() decides a class is atomic with
+	``issubclass(type(x), type)'', and Grail rooted ``class Meta(type)'' at a
+	substitute, so nothing linked Meta back to ``type'' and that test answered
+	False.  With type(C) still ``type'' the atomic branch was reached directly,
+	which is why the LESS truthful answer worked and the more truthful one
+	broke it.
+
+	So closing it was never a change to the resolver.  It was making a class
+	that subclasses ``type'' REMEMBER that it did -- type, a real ``type''
+	object for a metaclass to root at.  With that in place the resolver change
+	is the two lines the old note predicted, and the copy() test is satisfied
+	through the ancestry rather than by declining to answer.
+
+	isinstance moves with it and not before it: isinstance(C, M) is
+	issubclass(type(C), M), so while type(C) was ``type'' the question was
+	``issubclass(type, M)'' -- False for every M."
+
+	self assert: (self resultAt: 'explicit_metaclass') asString equals: 'True'.
+	self assert: (self resultAt: 'explicit_metaclass_isinstance') asString
+		equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Ordinary classes' }
+ClassMetaclassIdentityTestCase >> testAnOrdinaryClassesMetaclassIsType [
+	"Unchanged, and the reason the resolver ends at the canonical ``type''
+	object rather than at the receiver's own metaclass: ``type(cls) is type''
+	is what it answered before and what isinstance(cls, type) agrees with."
+
+	self assert: (self resultAt: 'plain_metaclass') asString equals: '[True, True]'.
+	self assert: (self resultAt: 'isinstance_agrees') asString
+		equals: '[True, True, True, False]'.
+
+]
+
+{ #category : 'Grail-Tests - The invariant' }
+ClassMetaclassIdentityTestCase >> testClassAndTypeAgree [
+	"``x.__class__ is type(x)''.  For a CLASS receiver the two answered
+	different objects -- the Smalltalk metaclass and the canonical ``type'' --
+	so this was False for every class in the corpus."
+
+	self assert: (self resultAt: 'invariant_classes') asString
+		equals: '[True, True, True]'.
+	self assert: (self resultAt: 'invariant_instances') asString
+		equals: '[True, True, True]'.
+
+]
+
+{ #category : 'Grail-Tests - Enums' }
+ClassMetaclassIdentityTestCase >> testItIsFoundThroughASecondaryBase [
+	"``class Mixed(int, Enum)'' is rooted at Grail's int, so its SMALLTALK chain
+	never passes Enum -- only the MRO walk finds it.  CPython reaches the same
+	answer by picking the most derived metaclass among the bases."
+
+	self assert: (self resultAt: 'secondary_base_metaclass') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Regressions' }
+ClassMetaclassIdentityTestCase >> testScalarsStillReportTheirPythonType [
+	"REGRESSION GUARD.  type() has always asked __class__, and one Python type
+	is backed by several GemStone classes -- an int is a SmallInteger, and the
+	__class__ override is what normalises it.  Answering ``self class'' instead
+	made type(1) answer SmallInteger; eleven test_enum tests caught it."
+
+	self assert: (self resultAt: 'scalar_types') asString
+		equals: '[True, True, True, True]'.
+
+]
+
+{ #category : 'Grail-Tests - Regressions' }
+ClassMetaclassIdentityTestCase >> testSubclassingAMetaclassStillBuildsTheClass [
+	"REGRESSION GUARD.  ``class auto_enum(type(Enum))'' is how a Python program
+	writes a metaclass and must not raise, even though Grail does not model one.
+	It used to reach the class machinery as the canonical ``type'' -- a
+	BoundMethod, which has a graceful path -- only because type(Enum) answered
+	``type''.  test_enum's test_multiple_mixin_mro."
+
+	self assert: (self resultAt: 'metaclass_subclass_builds') asString
+		equals: '''auto_enum'''.
+
+]
+
+{ #category : 'Grail-Tests - Enums' }
+ClassMetaclassIdentityTestCase >> testTheSmalltalkEnumRootsDeclareItThemselves [
+	"IntEnum and StrEnum are the same shape as Mixed and cannot use the same
+	route: being Smalltalk-written they have no registered bases for the walk to
+	find.  Each declares EnumType directly; IntFlag inherits IntEnum's."
+
+	self assert: (self resultAt: 'enum_roots_metaclass') asString equals: '[True, True]'.
+
+]

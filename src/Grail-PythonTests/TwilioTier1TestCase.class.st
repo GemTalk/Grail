@@ -1,0 +1,75 @@
+Class {
+	#name : 'TwilioTier1TestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Setup' }
+TwilioTier1TestCase >> setUp [
+	"Reload tests/python/twilio_tier1.py fresh each test.  The twilio
+	package modules themselves stay cached in sys.modules — matching
+	how an application session would hold them."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'twilio_tier1' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/twilio_tier1.py')
+		name: 'twilio_tier1'.
+
+]
+
+{ #category : 'Grail-Tests - Request validation' }
+TwilioTier1TestCase >> testComputeSignature [
+	"HMAC-SHA1 over uri + params concatenated in sorted() order, then
+	base64 — must equal the CPython twilio reference signature."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #computed_sig)
+		equals: '0/KCTR6DLpKmkAf8muzZqo1nDgQ='.
+
+]
+
+{ #category : 'Grail-Tests - Request validation' }
+TwilioTier1TestCase >> testJsonBodyHashAndValidation [
+	"JSON webhook: sha256 body hash in the bodySHA256 query param plus
+	signature over the URI with empty params."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #body_hash)
+		equals: '0a1ff7634d9ab3b95db5c9a2dfe9416e41502b283a80c7cf19632632f96e6620'.
+	self assert: (testModule @env1:___pyAttrLoad___: #validate_json).
+
+]
+
+{ #category : 'Grail-Tests - TwiML' }
+TwilioTier1TestCase >> testMessagingResponseXml [
+	"MessagingResponse with text needing escaping — CPython-identical."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #twiml_message)
+		equals: '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Hello &amp; &lt;world&gt; "q"</Message></Response>'.
+
+]
+
+{ #category : 'Grail-Tests - Request validation' }
+TwilioTier1TestCase >> testValidateAcceptsGoodSignature [
+	self assert: (testModule @env1:___pyAttrLoad___: #validate_good).
+
+]
+
+{ #category : 'Grail-Tests - Request validation' }
+TwilioTier1TestCase >> testValidateRejectsBadSignature [
+	self deny: (testModule @env1:___pyAttrLoad___: #validate_bad).
+
+]
+
+{ #category : 'Grail-Tests - TwiML' }
+TwilioTier1TestCase >> testVoiceResponseXml [
+	"VoiceResponse with nesting, attribute camelCasing (num_digits ->
+	numDigits), sorted attributes, and a self-closing empty verb."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #twiml_voice)
+		equals: '<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice">Welcome to Acme</Say><Gather action="/menu" method="POST" numDigits="1"><Say>Press 1 for sales</Say></Gather><Hangup /></Response>'.
+
+]

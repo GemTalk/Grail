@@ -1,0 +1,245 @@
+Extension { #name : 'mimetypes' }
+
+{ #category : 'Grail-Private' }
+mimetypes >> ___extOf___: path [
+	"Return the trailing extension of `path` *including* its leading
+	dot, or the empty string if no extension is present.  Splits on
+	the last `.` after the final `/`."
+
+	| slashIdx lastDot |
+	slashIdx := 0.
+	1 @env0:to: path @env0:size do: [:i |
+		(path @env0:at: i) @env0:= $/ ifTrue: [slashIdx := i]
+	].
+	lastDot := 0.
+	(slashIdx @env0:+ 1) @env0:to: path @env0:size do: [:i |
+		(path @env0:at: i) @env0:= $. ifTrue: [lastDot := i]
+	].
+	lastDot @env0:= 0 ifTrue: [^ ''].
+	^ path @env0:copyFrom: lastDot to: path @env0:size
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> add_type: aType _: ext [
+	^ self add_type: aType _: ext _: true
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> add_type: aType _: ext _: strict [
+	"add_type(type, ext, strict=True) - register a runtime mapping
+	from extension to MIME type."
+
+	self types_map __setitem__: ext _: aType.
+	^ None
+
+]
+
+{ #category : 'Grail-Accessors' }
+mimetypes >> common_types [
+	^ self @env0:at: #common_types
+
+]
+
+{ #category : 'Grail-Accessors' }
+mimetypes >> encodings_map [
+	^ self @env0:at: #encodings_map
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> guess_extension: aType [
+	^ self guess_extension: aType _: true
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> guess_extension: aType _: strict [
+	"guess_extension(type, strict=True) - return an extension for a
+	MIME type, or None if not registered.  Reverse lookup over
+	types_map; first match wins."
+
+	| target |
+	target := aType @env0:asString @env0:asLowercase.
+	self types_map @env0:keysAndValuesDo: [:k :v |
+		v @env0:asLowercase @env0:= target ifTrue: [^ k]
+	].
+	^ None
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> guess_file_type: path [
+	"guess_file_type(path) - CPython 3.13's guess_type for a FILESYSTEM path
+	rather than a URL.  http.server's SimpleHTTPRequestHandler.guess_type
+	calls it.  Grail's guess_type already splits on the last dot of the
+	string it is given, so the one difference that matters here is the
+	argument: a path-like object is reduced with os.fspath first."
+
+	^ self guess_type: (((Python @env0:at: #os) @env0:___instance___) @env1:fspath: path) _: true
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> guess_type: url [
+	^ self guess_type: url _: true
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> guess_type: url _: strict [
+	"guess_type(url, strict=True) - return a (type, encoding) tuple.
+	The path is split on `.` from the right; the trailing segment is
+	the extension.  Suffix-map redirection handles `.tgz` => `.tar.gz`
+	with `.tar.gz` then splitting into encoding=`gzip`, type from
+	`.tar`."
+
+	| path ext encoding type idx suffixes |
+	path := url @env0:asString.
+	encoding := nil.
+	"Strip query / fragment - Werkzeug rarely passes those, but be
+	safe: split on `?` and `#`."
+	idx := path @env0:indexOf: $?.
+	idx @env0:> 0 ifTrue: [path := path @env0:copyFrom: 1 to: idx @env0:- 1].
+	idx := path @env0:indexOf: $#.
+	idx @env0:> 0 ifTrue: [path := path @env0:copyFrom: 1 to: idx @env0:- 1].
+	"Suffix map: rewrite known compound extensions."
+	suffixes := self suffix_map.
+	ext := self ___extOf___: path.
+	(suffixes @env0:includesKey: ext @env0:asLowercase) ifTrue: [
+		path := (path @env0:copyFrom: 1 to: path @env0:size @env0:- ext @env0:size)
+			@env0:, (suffixes @env0:at: ext @env0:asLowercase).
+		ext := self ___extOf___: path
+	].
+	ext @env0:isEmpty ifTrue: [
+		^ tuple @env0:withAll: { None. None }
+	].
+	"Walk off encoding suffix if present (`.gz` -> gzip, etc.)."
+	(self encodings_map @env0:includesKey: ext @env0:asLowercase) ifTrue: [
+		encoding := self encodings_map @env0:at: ext @env0:asLowercase.
+		path := path @env0:copyFrom: 1 to: path @env0:size @env0:- ext @env0:size.
+		ext := self ___extOf___: path
+	].
+	type := self types_map @env0:at: ext @env0:asLowercase ifAbsent: [nil].
+	type == nil ifTrue: [
+		^ tuple @env0:withAll: {
+			None.
+			encoding == nil ifTrue: [None] ifFalse: [encoding]
+		}
+	].
+	^ tuple @env0:withAll: {
+		type.
+		encoding == nil ifTrue: [None] ifFalse: [encoding]
+	}
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+mimetypes >> init [
+	"init() / init([files]) - CPython rebuilds the map; here it is a
+	no-op since the map is already populated at module load."
+
+	^ None
+
+]
+
+{ #category : 'Grail-Public' }
+mimetypes >> init: filenames [
+	^ None
+
+]
+
+{ #category : 'Grail-Accessors' }
+mimetypes >> inited [
+	^ self @env0:at: #inited ifAbsent: [false]
+
+]
+
+{ #category : 'Grail-Initialization' }
+mimetypes >> initialize [
+	"Populate the lookup tables.  Keys are lowercase extensions
+	*including* the leading dot."
+
+	| types encodings suffixes |
+	types := dict ___new___.
+	#(
+		#('.html' 'text/html')
+		#('.htm' 'text/html')
+		#('.shtml' 'text/html')
+		#('.css' 'text/css')
+		#('.xml' 'text/xml')
+		#('.gif' 'image/gif')
+		#('.jpeg' 'image/jpeg')
+		#('.jpg' 'image/jpeg')
+		#('.js' 'text/javascript')
+		#('.mjs' 'text/javascript')
+		#('.atom' 'application/atom+xml')
+		#('.rss' 'application/rss+xml')
+		#('.txt' 'text/plain')
+		#('.png' 'image/png')
+		#('.ico' 'image/vnd.microsoft.icon')
+		#('.svg' 'image/svg+xml')
+		#('.svgz' 'image/svg+xml')
+		#('.tif' 'image/tiff')
+		#('.tiff' 'image/tiff')
+		#('.bmp' 'image/bmp')
+		#('.webp' 'image/webp')
+		#('.json' 'application/json')
+		#('.pdf' 'application/pdf')
+		#('.zip' 'application/zip')
+		#('.gz' 'application/gzip')
+		#('.tar' 'application/x-tar')
+		#('.csv' 'text/csv')
+		#('.md' 'text/markdown')
+		#('.mp3' 'audio/mpeg')
+		#('.wav' 'audio/wav')
+		#('.mp4' 'video/mp4')
+		#('.webm' 'video/webm')
+		#('.woff' 'font/woff')
+		#('.woff2' 'font/woff2')
+		#('.ttf' 'font/ttf')
+		#('.otf' 'font/otf')
+		#('.eot' 'application/vnd.ms-fontobject')
+	) @env0:do: [:pair |
+		types __setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
+	].
+	encodings := dict ___new___.
+	#(
+		#('.gz' 'gzip')
+		#('.Z' 'compress')
+		#('.bz2' 'bzip2')
+		#('.xz' 'xz')
+		#('.br' 'br')
+	) @env0:do: [:pair |
+		encodings __setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
+	].
+	suffixes := dict ___new___.
+	#(
+		#('.tgz' '.tar.gz')
+		#('.taz' '.tar.gz')
+		#('.tz' '.tar.gz')
+		#('.tbz2' '.tar.bz2')
+		#('.txz' '.tar.xz')
+	) @env0:do: [:pair |
+		suffixes __setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
+	].
+	self @env0:at: #types_map put: types.
+	self @env0:at: #common_types put: (dict ___new___).
+	self @env0:at: #encodings_map put: encodings.
+	self @env0:at: #suffix_map put: suffixes.
+	self @env0:at: #inited put: true
+
+]
+
+{ #category : 'Grail-Accessors' }
+mimetypes >> suffix_map [
+	^ self @env0:at: #suffix_map
+
+]
+
+{ #category : 'Grail-Accessors' }
+mimetypes >> types_map [
+	^ self @env0:at: #types_map
+
+]

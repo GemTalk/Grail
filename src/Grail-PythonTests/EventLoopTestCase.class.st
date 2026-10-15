@@ -1,0 +1,263 @@
+Class {
+	#name : 'EventLoopTestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Private' }
+EventLoopTestCase >> assertMatchesCPythonAt: key [
+	"Compare Grail's result for one probe against the CPython 3.14.6 value the
+	fixture records, by repr on both sides."
+
+	| expected |
+	expected := (((Python at: #builtins) @env1:instance)
+		@env1:repr: ((testModule @env1:___pyAttrLoad___: #EXPECTED) @env1:__getitem__: key))
+			asString.
+	self assert: (self resultAt: key) equals: expected.
+
+]
+
+{ #category : 'Grail-Private' }
+EventLoopTestCase >> resultAt: key [
+	^ (((Python at: #builtins) @env1:instance)
+		@env1:repr: ((testModule @env1:___pyAttrLoad___: #r) @env1:__getitem__: key))
+			asString
+
+]
+
+{ #category : 'Grail-Setup' }
+EventLoopTestCase >> setUp [
+	"Reload tests/python/event_loop.py fresh each test.  The module body runs
+	every probe at import -- each one creating, running and closing its own loop
+	-- so a shared instance would let one test read another's leftovers."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'event_loop' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/event_loop.py')
+		name: 'event_loop'.
+
+]
+
+{ #category : 'Grail-Tests - Futures' }
+EventLoopTestCase >> testAFutureIsTheSuspensionPoint [
+	"Future.__await__ is ``yield self'' -- the coroutine hands itself to the
+	loop, which resumes it when the result is in.  Resolution by a timer, by a
+	call_soon exception, and the already-done case (which must NOT suspend, or
+	an awaited completed future would hang the loop)."
+
+	self assertMatchesCPythonAt: 'a_future_is_resolved_by_a_timer'.
+	self assertMatchesCPythonAt: 'a_future_carries_an_exception'.
+	self assertMatchesCPythonAt: 'an_already_done_future_is_awaited_without_suspending'.
+
+]
+
+{ #category : 'Grail-Tests - The Whole Stack' }
+EventLoopTestCase >> testAnAsyncGeneratorRunsOnTheLoop [
+	"Async generators, async for, await, suspension and the loop, in one
+	expression: a generator that awaits between yields, consumed by ``async
+	for'', driven by asyncio.run.  Each of those was a separate increment; this
+	is the check that they compose."
+
+	self assertMatchesCPythonAt: 'an_async_generator_runs_on_the_loop'.
+	self assertMatchesCPythonAt: 'aclose_on_the_loop_runs_the_finally'.
+	self assertMatchesCPythonAt: 'aiter_and_anext_builtins'.
+
+]
+
+{ #category : 'Grail-Tests - The Whole Stack' }
+EventLoopTestCase >> testAnExceptionFromAnAsyncGeneratorReachesTheCaller [
+	"THE SHARED-MACHINERY FIX, end to end.  The exception is raised inside the
+	generator's forked body, stored on a future, and re-raised later by
+	Future.result() -- when the original raise's handler frame is on a
+	different, finished process.
+
+	That is the ordinary asyncio pattern, and it used to die as
+	``ImproperOperation: cannot find handler frame for exception'' -- uncatchable,
+	and the single reported cause for 24 tests of test_asyncgen.  See
+	BaseException class >> ___signalOrPass___:."
+
+	self assertMatchesCPythonAt:
+		'an_async_generator_that_raises_propagates_out_of_run'.
+
+]
+
+{ #category : 'Grail-Tests - The Whole Stack' }
+EventLoopTestCase >> testAReRaisedStoredExceptionKeepsObjectIdentity [
+	"A DEVIATION CLOSED, and this test used to pin it the other way round
+	(...LosesObjectIdentity, expecting False, in a Known Deviations section).
+
+	When ___signalOrPass___: can neither signal nor pass -- the original
+	raise happened on a forked process that has since finished -- it used to
+	signal a COPY: everything Python reads off the exception survived, but
+	``e is t.exception()'' answered False where CPython answers True.  The
+	old comment ended ``if Grail ever learns to reset an exception's
+	signalling state in place, this test fails and points here'' -- which is
+	what happened, except the mechanism is not an in-place reset but the
+	CARRIER the in-flight re-raise and the generator throw path already
+	used: the stored exception is never re-signalled at all, a throwaway
+	carrier of the same class delivers it, and the except machinery unwraps
+	the payload.  Identity is now preserved on every re-raise path, which
+	test_locks' test_cancelled_error_wakeup / _re_aquire assert with ``is''.
+
+	Measured on both sides: ('original', True, 'ValueError', ('original',))."
+
+	| r b |
+	b := (Python at: #builtins) @env1:instance.
+	r := self eval: 'import asyncio
+
+async def boom():
+    raise ValueError(''original'')
+
+async def main():
+    t = asyncio.ensure_future(boom())
+    try:
+        await t
+    except ValueError as e:
+        return (str(e), e is t.exception(), type(e).__name__, e.args)
+    return ''no error''
+
+asyncio.run(main())'.
+	self assert: (b @env1:repr: r) asString
+		equals: '(''original'', True, ''ValueError'', (''original'',))'.
+
+]
+
+{ #category : 'Grail-Tests - Scheduling' }
+EventLoopTestCase >> testATaskRunsWithoutBeingAwaited [
+	"The difference between a task and a bare coroutine: create_task SCHEDULES,
+	so the body runs whether or not the creator ever awaits it."
+
+	self assertMatchesCPythonAt: 'a_task_runs_without_being_awaited'.
+
+]
+
+{ #category : 'Grail-Tests - Scheduling' }
+EventLoopTestCase >> testCallSoonAndTimerOrdering [
+	"call_soon runs in the order queued; timers run in DEADLINE order, not
+	scheduling order, which is the whole reason the scheduled list is a heap and
+	not a queue.  A cancelled timer must not fire -- a timer that outlives its
+	waiter would otherwise resurrect it."
+
+	self assertMatchesCPythonAt: 'call_soon_runs_in_order'.
+	self assertMatchesCPythonAt: 'timers_fire_in_deadline_order_not_scheduling_order'.
+	self assertMatchesCPythonAt: 'a_cancelled_timer_does_not_fire'.
+
+]
+
+{ #category : 'Grail-Tests - Cancellation' }
+EventLoopTestCase >> testCancellationIsDeliveredAtTheSuspensionPoint [
+	"Cancellation is not a flag.  CancelledError is raised INSIDE the coroutine,
+	at whatever it is parked on, so its ``except'' and ``finally'' run where they
+	were written -- the fixture records all three of caught / cleaned /
+	propagated in order, plus that the task reports itself cancelled.
+
+	This is the payoff of throw() reaching the suspension point (added with the
+	await delegation): without it a cancelled task could never clean up in the
+	right place."
+
+	self assertMatchesCPythonAt: 'cancel_is_delivered_at_the_suspension_point'.
+	self assertMatchesCPythonAt: 'a_task_that_swallows_cancellation_still_finishes'.
+
+]
+
+{ #category : 'Grail-Tests - Cancellation' }
+EventLoopTestCase >> testCancelledErrorEscapesExceptException [
+	"CancelledError descends from BaseException, not Exception, and that is
+	load-bearing: an ``except Exception'' around a task body -- which is almost
+	every task body -- must not swallow a cancellation."
+
+	self assertMatchesCPythonAt: 'cancelled_error_is_not_an_exception_subclass'.
+
+]
+
+{ #category : 'Grail-Tests - Futures' }
+EventLoopTestCase >> testEnsureFuture [
+	"ensure_future wraps a coroutine and passes an existing future straight
+	through -- the identity half matters, because wrapping a task twice would
+	drive it twice."
+
+	self assertMatchesCPythonAt:
+		'ensure_future_wraps_a_coroutine_and_passes_a_future_through'.
+
+]
+
+{ #category : 'Grail-Tests - Futures' }
+EventLoopTestCase >> testGather [
+	"Results come back in ARGUMENT order, and the fixture's delays make
+	completion order the exact reverse -- so a gather that answered in
+	completion order would pass a weaker test and fail this one.  Callers index
+	results against their inputs, so getting it wrong is silent."
+
+	self assertMatchesCPythonAt: 'gather_answers_in_argument_order'.
+	self assertMatchesCPythonAt: 'gather_with_return_exceptions'.
+
+]
+
+{ #category : 'Grail-Tests - Accessors' }
+EventLoopTestCase >> testGetRunningLoopContract [
+	"OUTSIDE a loop it must RAISE, and that is a contract rather than a
+	limitation: it is the canonical ``am I inside async code?'' test and
+	asgiref.local branches on the exception.  The stub answered the same way, so
+	this is the one asyncio behaviour that must NOT have changed.
+
+	Inside, it answers the running loop, and get_event_loop agrees with it."
+
+	self assertMatchesCPythonAt: 'get_running_loop_raises_outside_a_loop'.
+	self assertMatchesCPythonAt: 'get_running_loop_inside_answers_the_running_one'.
+
+]
+
+{ #category : 'Grail-Tests - Accessors' }
+EventLoopTestCase >> testRunRefusesToNestAndAllTasksSeesPendingWork [
+	"asyncio.run inside a running loop is a programming error, and reporting it
+	is what keeps a nested run from quietly corrupting the outer one's state.
+	all_tasks must see a pending child (plus the main task itself)."
+
+	self assertMatchesCPythonAt: 'run_refuses_to_nest'.
+	self assertMatchesCPythonAt: 'all_tasks_sees_a_pending_task'.
+
+]
+
+{ #category : 'Grail-Tests - Running' }
+EventLoopTestCase >> testRunReturnsAResultAndPropagatesAnException [
+	"THE HEADLINE.  ``asyncio.run'' used to raise NotImplementedError by
+	design: there was no loop, and no way to build one."
+
+	self assertMatchesCPythonAt: 'run_returns_the_result'.
+	self assertMatchesCPythonAt: 'run_propagates_an_exception'.
+
+]
+
+{ #category : 'Grail-Tests - Running' }
+EventLoopTestCase >> testSleep [
+	"``sleep(0)'' and ``sleep(delay)'' are different operations, not one with an
+	optimisation: the zero case must yield WITHOUT touching the timer heap, or a
+	cooperative loop that yields with sleep(0) would take a clock reading every
+	turn.  The delay case must actually resume the coroutine afterwards rather
+	than abandon it on the heap."
+
+	self assertMatchesCPythonAt: 'sleep_zero_yields_without_a_timer'.
+	self assertMatchesCPythonAt: 'sleep_returns_its_result_argument'.
+	self assertMatchesCPythonAt: 'a_real_sleep_actually_waits'.
+
+]
+
+{ #category : 'Grail-Tests - Scheduling' }
+EventLoopTestCase >> testTwoTasksInterleave [
+	"THE TEST THIS CLASS EXISTS FOR.  Two tasks yielding three times each must
+	ALTERNATE -- a0 b0 a1 b1 a2 b2.
+
+	Every other test here would pass on a runtime that ran each coroutine
+	straight through to completion: same values, wrong order.  Interleaving can
+	only happen if a suspension really returns control to the scheduler and the
+	scheduler really resumes someone else, which is why the ORDER is what is
+	recorded and not just the results."
+
+	self assertMatchesCPythonAt: 'two_tasks_interleave'.
+
+]

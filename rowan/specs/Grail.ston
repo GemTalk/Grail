@@ -1,0 +1,17 @@
+RwLoadSpecificationV2 {
+	#specName : 'Grail',
+	#projectName : 'Grail',
+	#projectSpecFile : 'rowan/project.ston',
+	#componentNames : [
+		'Grail'
+	],
+	#platformProperties : {
+		'gemstone' : {
+			'allusers' : {
+				#defaultUseSessionMethodsForExtensions : false,
+				#defaultSymbolDictName : 'UserGlobals'
+			}
+		}
+	},
+	#comment : 'Load spec for Grail'
+}
