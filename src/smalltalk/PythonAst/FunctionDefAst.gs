@@ -7196,8 +7196,17 @@ nodeContainsYieldExceptNestedDefs: node
 	node isNil ifTrue: [^false].
 	(node isKindOf: YieldAst) ifTrue: [^true].
 	(node isKindOf: YieldFromAst) ifTrue: [^true].
-	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-		ifTrue: [^false].
+	"A nested def's or lambda's BODY is its own scope, but its default values
+	and its decorators are evaluated HERE, when the def or lambda is created:
+	``def f(): lambda x=(yield): 1'' makes f a generator.  Skipping the whole
+	node left f an ordinary function whose yield then named an unbound
+	___gen___, a Smalltalk CompileError rather than a generator
+	(test_generators' coroutine doctest)."
+	(node isKindOf: LambdaAst)
+		ifTrue: [^ self argumentDefaultsContainYield: node args].
+	(node isKindOf: FunctionDefAst) ifTrue: [
+		^ (self bodyContainsYieldExceptNestedDefs: node decoratorList)
+			or: [self argumentDefaultsContainYield: node args]].
 	"Walk all instVars of this AST node; recurse into AbstractNode
 	children and SequenceableCollection containers.  Skip the
 	``parent`` back-pointer to avoid cycling up the tree."
@@ -7215,6 +7224,18 @@ nodeContainsYieldExceptNestedDefs: node
 		]
 	].
 	^false
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+argumentDefaultsContainYield: anArgumentsAst
+	"Does a default value -- positional or keyword-only -- of a nested def or
+	lambda contain a yield?  Those are evaluated in the enclosing function.
+	kw_defaults holds nil for a keyword-only parameter with no default."
+
+	anArgumentsAst isNil ifTrue: [^ false].
+	^ (self bodyContainsYieldExceptNestedDefs: anArgumentsAst defaults)
+		or: [self bodyContainsYieldExceptNestedDefs: anArgumentsAst kw_defaults]
 %
 
 category: 'Grail-Module Method Compilation'
