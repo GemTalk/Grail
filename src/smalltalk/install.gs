@@ -3354,7 +3354,8 @@ overlapBetween := [:nameA :nameB |
 	| a b |
 	a := (symbolList objectNamed: nameA) keys.
 	b := (symbolList objectNamed: nameB) keys.
-	a select: [:k | b includes: k]
+	"Rowan keeps its registry under this key in every dictionary it loads into"
+	a select: [:k | k ~~ #'RwSymbolDictionaryRegistry' and: [b includes: k]]
 ].
 (overlapBetween value: #'Python' value: #'EmbeddedPython') ifNotEmpty: [:overlap |
 	self error: 'Name overlap between Python and EmbeddedPython: ', overlap printString.
