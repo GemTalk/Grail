@@ -2222,14 +2222,51 @@ ___printDecoratorNameOn___: aStream name: aSymbol
 				nextPutAll: aSymbol asString;
 				nextPutAll: '___'')'.
 			^ self].
-	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol)
-		ifFalse: [
-			aStream nextPutAll: aSymbol asString.
-			^ self].
-	aStream
-		nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
-		nextPutAll: aSymbol asString;
-		nextPutAll: ''')'
+	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol) ifTrue: [
+		aStream
+			nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
+			nextPutAll: aSymbol asString;
+			nextPutAll: ''')'.
+		^ self].
+	"Compiled module code has the same hole (#1517): a name bound nowhere the
+	compiler can see -- undefined, or bound only at run time through
+	globals() -- made the WHOLE MODULE fail to compile.  It reads the module's
+	globals then builtins at run time instead, raising NameError on a miss,
+	which is NameAst's late module-name binding for an ordinary read."
+	(self ___decoratorNameIsUnboundInModule___: aSymbol) ifTrue: [
+		aStream
+			nextPutAll: '(';
+			nextPutAll: CallAst moduleClassBeingCompiled name;
+			nextPutAll: ' @env0:___instance___ @env1:___moduleAttrLoad___: #''';
+			nextPutAll: aSymbol asString;
+			nextPutAll: ''')'.
+		^ self].
+	aStream nextPutAll: aSymbol asString
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorNameIsUnboundInModule___: aSymbol
+	"Outside a doit, would a bare identifier for this decorator name fail to
+	compile, because nothing static binds it: no enclosing function's local,
+	no module-body variable or def, no class attribute of the class being
+	built, no resolvable global?  False whenever any of those might, and
+	outside module code, so a working decorator keeps its bare identifier;
+	the doit case is ___decoratorNameNeedsRuntimeLookup___:'s."
+
+	| sym |
+	ModuleAst compilingDoitScope notNil ifTrue: [^ false].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ false].
+	sym := aSymbol asSymbol.
+	(self ___pythonLocalInEnclosingFunctions___: sym) ifTrue: [^ false].
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: sym]) ifTrue: [^ false].
+	(CallAst moduleFunctionNames notNil
+		and: [CallAst moduleFunctionNames includes: sym]) ifTrue: [^ false].
+	(CallAst classAttrNames notNil
+		and: [CallAst classAttrNames includes: sym]) ifTrue: [^ false].
+	(NameAst isResolvableSymbol: sym) ifTrue: [^ false].
+	^ true
 %
 
 category: 'Grail-code generation'

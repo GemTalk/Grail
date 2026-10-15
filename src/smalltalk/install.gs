@@ -1537,6 +1537,7 @@ run
 	at: #'UnboundLocalErrorTestCase' put: nil;
 	at: #'UnboundMethodDictTestCase' put: nil;
 	at: #'UnboundMethodTestCase' put: nil;
+	at: #'UndefinedDecoratorNameTestCase' put: nil;
 	at: #'UnexpectedKeywordMessageTestCase' put: nil;
 	at: #'UnhashableTestCase' put: nil;
 	at: #'UnicodeDecodeErrorTestCase' put: nil;
@@ -3112,6 +3113,7 @@ input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs
 input src/smalltalk/PythonTests/UnboundLocalErrorTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
+input src/smalltalk/PythonTests/UndefinedDecoratorNameTestCase.gs
 input src/smalltalk/PythonTests/UnexpectedKeywordMessageTestCase.gs
 input src/smalltalk/PythonTests/UnhashableTestCase.gs
 input src/smalltalk/PythonTests/UnicodeDecodeErrorTestCase.gs
