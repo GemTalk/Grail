@@ -21,7 +21,7 @@ Transcript show: ''Bound Python ''''Ellipsis'''' to the ellipsis singleton''.
 	"src/smalltalk/Python/BaseException.gs:2"
 	'(Globals at: #Exception) ifNil: [self error: ''Exception is not defined. Check file ordering.''].
 '.
-	"src/smalltalk/Python/BaseException.gs:8478"
+	"src/smalltalk/Python/BaseException.gs:8601"
 	'BaseException ___initCatchAll___.
 BaseException ___catchAll___ printString
 '.
@@ -34,7 +34,7 @@ module ifNil: [self error: ''module is not defined. Check file ordering.''].
 Python at: #''classmethod'' put: PyClassMethod.
 true
 '.
-	"src/smalltalk/install.gs:1751"
+	"src/smalltalk/install.gs:1767"
 	'Python at: #''property'' put: PropertyDescriptor.
 Transcript show: ''Registered: property -> PropertyDescriptor''.
 '.
@@ -107,7 +107,7 @@ PythonInstance ifNil: [self error: ''PythonInstance is not defined. Check file o
 	'NativeModule ifNil: [self error: ''NativeModule is not defined. Check file ordering.''].
 OSError ifNil: [self error: ''OSError is not defined. Check file ordering.''].
 '.
-	"src/smalltalk/install.gs:1857"
+	"src/smalltalk/install.gs:1873"
 	'"Python 3: IOError is an alias of OSError.  Register it in the Python dict so
 Python code that references IOError (jinja2/requests/django exceptions.py)
 resolves to the PYTHON OSError -- not the unrelated GemStone kernel IOError in
@@ -120,7 +120,7 @@ Python at: #''IOError'' put: (Python at: #''OSError'').
 Python at: #''EnvironmentError'' put: (Python at: #''OSError'').
 true
 '.
-	"src/smalltalk/install.gs:1940"
+	"src/smalltalk/install.gs:1956"
 	'System commit
 '.
 	"src/smalltalk/Python/PyDict.gs:2"
@@ -135,39 +135,39 @@ CollisionBucket ifNil: [self error: ''CollisionBucket is not defined.''].
 (System myUserProfile symbolList objectNamed: #''Python'')
 	ifNil: [self error: ''Python dictionary is not defined. Check file ordering.''].
 '.
-	"src/smalltalk/install.gs:1969"
+	"src/smalltalk/install.gs:1985"
 	'System commit
 '.
-	"src/smalltalk/install.gs:1978"
+	"src/smalltalk/install.gs:1994"
 	'numbers @env1:instance.
 '.
-	"src/smalltalk/install.gs:1981"
+	"src/smalltalk/install.gs:1997"
 	'System commit
 '.
-	"src/smalltalk/install.gs:2022"
+	"src/smalltalk/install.gs:2038"
 	'Enum @env1:___grailInstallMemberProperties___.
 '.
-	"src/smalltalk/install.gs:2025"
+	"src/smalltalk/install.gs:2041"
 	'System commit
 '.
-	"src/smalltalk/install.gs:2027"
+	"src/smalltalk/install.gs:2043"
 	'DynamicClassAttribute @env1:___stampPythonIdentity___: ''enum'' qualname: ''property''.
 '.
-	"src/smalltalk/install.gs:2030"
+	"src/smalltalk/install.gs:2046"
 	'System commit
 '.
-	"src/smalltalk/install.gs:2044"
+	"src/smalltalk/install.gs:2060"
 	'#( #tuple #object #importlib #set #list #slice #complex ) do: [:each |
 	Python at: (''___'' , each , ''___'') asSymbol put: (Python at: each)].
 true
 '.
-	"src/smalltalk/install.gs:2049"
+	"src/smalltalk/install.gs:2065"
 	'System commit
 '.
-	"src/smalltalk/install.gs:2051"
+	"src/smalltalk/install.gs:2067"
 	'Transcript show: ''Step 4 complete: Python built-in type classes loaded''.
 '.
-	"src/smalltalk/install.gs:2060"
+	"src/smalltalk/install.gs:2076"
 	'Transcript show: ''Step 5: Loading AST classes...''.
 '.
 	"src/smalltalk/PythonAst/PythonTokenizer.gs:37"
@@ -184,10 +184,10 @@ PythonTokenizer keywords do:[:aWord |
 PythonTokenizer _addInvariantClassVar: #KeywordDict value: dict .
 true
 '.
-	"src/smalltalk/install.gs:2200"
+	"src/smalltalk/install.gs:2216"
 	'Transcript show: ''Step 5 complete: AST classes loaded''.
 '.
-	"src/smalltalk/install.gs:2222"
+	"src/smalltalk/install.gs:2238"
 	'Transcript show: ''Step 6: Loading test classes...''.
 '.
 	"src/smalltalk/PythonTests/CPythonShimTestCase.gs:2"
@@ -213,10 +213,10 @@ dict := System myUserProfile symbolList objectNamed: #''PythonTests''.
 	do: [:nm | (dict includesKey: nm) ifFalse: [dict at: nm put: nil]].
 true
 '.
-	"src/smalltalk/install.gs:3179"
+	"src/smalltalk/install.gs:3210"
 	'Transcript show: ''Step 6 complete: Test classes loaded''.
 '.
-	"src/smalltalk/install.gs:3186"
+	"src/smalltalk/install.gs:3217"
 	'| userProfile symbolList names pythonDict pythonASTDict embeddedPythonDict pythonTestsDict embeddedPythonTestsDict |
 userProfile := System myUserProfile.
 symbolList := userProfile symbolList.
@@ -271,7 +271,7 @@ Transcript show: ''===============================================''.
 Transcript show: '' Smalltail Installation complete!''.
 Transcript show: ''===============================================''.
 '.
-	"src/smalltalk/install.gs:3247"
+	"src/smalltalk/install.gs:3278"
 	'(sys @env1:modules) at: #''hashlib'' put: hashlib @env1:instance.
 (sys @env1:modules) at: #''_thread'' put: _thread @env1:instance.
 (sys @env1:modules) at: #''time'' put: time @env1:instance.
@@ -287,7 +287,7 @@ __instancecheck__ + Integer/Float/Fraction registrations); an
 unregistered name would fall through to a filesystem probe."
 (sys @env1:modules) at: #''numbers'' put: numbers @env1:instance.
 '.
-	"src/smalltalk/install.gs:3264"
+	"src/smalltalk/install.gs:3295"
 	'"Assert no name overlap between Python/EmbeddedPython or PythonTests/EmbeddedPythonTests.
 (an accidental duplicate should fail fast rather than shadow silently)."
 | symbolList overlapBetween |
@@ -307,13 +307,13 @@ overlapBetween := [:nameA :nameB |
 ].
 Transcript show: ''No-overlap assertion: OK''.
 '.
-	"src/smalltalk/install.gs:3289"
+	"src/smalltalk/install.gs:3320"
 	'Transcript show: ''Native module instances committed: '' , NativeModule ___installCommittedInstances___ printString.
 '.
-	"src/smalltalk/install.gs:3292"
+	"src/smalltalk/install.gs:3323"
 	'System commit
 '.
-	"src/smalltalk/install.gs:3294"
+	"src/smalltalk/install.gs:3325"
 	'| libPath pyPath |
 importlib grailDir: (System gemEnvironmentVariable: ''GRAIL_DIR'').
 "Pure-Smalltalk modules — registered unconditionally."
@@ -356,10 +356,10 @@ UserGlobals
 	at: #''GrailRuntimeGeneration''
 	put: ((UserGlobals at: #''GrailRuntimeGeneration'' otherwise: 0) + 1).
 '.
-	"src/smalltalk/install.gs:3337"
+	"src/smalltalk/install.gs:3368"
 	'System commit
 '.
-	"src/smalltalk/install.gs:3339"
+	"src/smalltalk/install.gs:3370"
 	'Transcript show: ''===============================================''.
 Transcript show: '' CPythonShim Installation complete!''.
 Transcript show: ''===============================================''.

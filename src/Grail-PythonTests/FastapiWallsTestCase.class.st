@@ -89,6 +89,7 @@ FastapiWallsTestCase >> ___names___ [
 	    'futures_timeout_is_builtin'
 	    'generic_alias_dict_is_the_origins'
 	    'get_ident_in_generator'
+	    'getsourcelines_finds_the_block'
 	    'hash_none'
 	    'idle_loop_woken_by_thread'
 	    'init_signature'
@@ -110,6 +111,7 @@ FastapiWallsTestCase >> ___names___ [
 	    'module_default_is_call_value'
 	    'module_defaults'
 	    'module_dict_update_forms'
+	    'module_getattr_stored_through_a_frame'
 	    'module_kwdefaults'
 	    'module_signature_str'
 	    'module_signature_values'
@@ -124,6 +126,7 @@ FastapiWallsTestCase >> ___names___ [
 	    'process_pool_name_resolves'
 	    'queue_ping_pong'
 	    'queue_simple_and_shutdown'
+	    'rebinding_one_class_leaves_another_alone'
 	    'rlock_owner_across_generator'
 	    'run_path_namespace'
 	    'run_path_run_name_and_init_globals'
@@ -146,7 +149,10 @@ FastapiWallsTestCase >> ___names___ [
 	    'signal_signals_lookup'
 	    'signal_signals_name'
 	    'signal_valid_signals_are_members'
+	    'signature_eval_str_evaluates_string_annotations'
+	    'signature_keeps_a_zero_arg_return_annotation'
 	    'signature_of_a_callable_instance'
+	    'signature_of_a_classmethod_bound_through_get'
 	    'signature_renders_a_generic_alias'
 	    'spooled_temporary_file'
 	    'staticmethod_keywords'
@@ -155,7 +161,9 @@ FastapiWallsTestCase >> ___names___ [
 	    'type_made_class_init'
 	    'type_made_class_no_init_refuses_args'
 	    'type_of_a_module_is_module_type'
-	    'vars_uses_a_dict_property')
+	    'union_has_no_dict'
+	    'vars_uses_a_dict_property'
+	    'yield_from_checks_its_operand')
 
 ]
 

@@ -183,6 +183,19 @@ SuperBoundMethod >> value: positional value: kwargs [
 					^ obj @env0:___grailCallOverride___: { true. found }
 						name: selector @env0:asSymbol args: positional kw: kwargs].
 				method := shadow]].
+	"``super().__new__(cls, ...)'' REACHING A BUILT-IN EXCEPTION'S __new__.
+	The class-side ``__new__:'' family the walk finds there is the class-call
+	CONSTRUCTOR (receiver = the class, every argument a constructor argument),
+	not CPython's cls-first __new__, so performing it put ``cls'' into args:
+	a subclass's ``super().__new__(cls, m)'' built args (cls, m).  The
+	explicit form takes the call's arguments exactly as written."
+	(selector == #'__new__' and: [(pair @env0:at: 2) == true]) ifTrue: [
+		| owner |
+		owner := method @env0:inClass @env0:thisClass.
+		(((owner == BaseException) or: [owner @env0:inheritsFrom: BaseException])
+			and: [(owner @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+				environmentId: 1) == nil])
+					ifTrue: [^ owner ___excStaticNew: positional kw: kwargs]].
 	"A CLASS-SIDE parent method takes the CLASS as its receiver.  Grail compiles
 	a Python @classmethod onto the metaclass, so when super() from an instance
 	method reaches one -- ``def cm(cls): return super().cm()'' whose MRO

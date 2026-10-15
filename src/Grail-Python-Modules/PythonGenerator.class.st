@@ -52,6 +52,11 @@ State:
   * frameObject        — the PyFrame gi_frame answers while the body has
                          not finished; dropped when it does, because
                          CPython's gi_frame is None after completion.
+  * inlineYields       — the values still to hand out when the body ran
+                         INLINE, to completion, because it was started
+                         inside a C extension's callback (see
+                         ___mustRunInline___); nil otherwise, and once they
+                         are all handed out.
 
 __name__ / __qualname__ are DYNAMIC instVars, stamped at creation by
 withBlock:name:qualname:code: and freely reassignable afterwards — which
@@ -76,7 +81,8 @@ Class {
 		'codeThunk',
 		'codeObject',
 		'frameObject',
-		'delegationTarget'
+		'delegationTarget',
+		'inlineYields'
 	],
 	#category : 'Grail-Modules'
 }
@@ -183,6 +189,9 @@ PythonGenerator >> _forkBody [
 		one's, and so on (importlib class >> ___pythonThreadOf___:).  A
 		generator's body is not a thread of its own in Python."
 		GsProcess @env0:current @env0:environmentAt: #'GrailPyGenerator' put: self.
+		"The body starts with no handled exception of its own, stacked on the
+		resumer's -- see ___yield___: for every later resume."
+		self @env1:___stackOnResumersException___: nil.
 		[
 			[returnValue := block value: self]
 				on: AbstractException

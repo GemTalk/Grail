@@ -232,7 +232,7 @@ PyRawSocket >> ___fail: what [
 	reports failure by answering nil and stashing the detail, so without
 	this the Python side would see a bare ''operation failed''."
 
-	| detail code |
+	| detail code cls |
 	"A peer that RESET or went away is CPython's errno-carrying subclass --
 	``except ConnectionResetError'' is how callers tell a dropped peer from a
 	bug -- not a bare OSError with GemStone's ``recv(14,...) failed with'' text
@@ -240,18 +240,13 @@ PyRawSocket >> ___fail: what [
 	code := [gsSocket isNil ifTrue: [nil] ifFalse: [gsSocket lastErrorCode]]
 		on: Error do: [:e | e return: nil].
 	code isNil ifFalse: [
-		code := self @env1:___normalizeConnectErrno___: code.
-		"Named here rather than through OSError's errnomap, which leaves the
-		network errnos out because Darwin and Linux number them differently;
-		this code has already been normalized to Grail's numbering."
-		code = 54 ifTrue: [
-			^ ConnectionResetError @env1:___signalNew___:
-				{ 54 . 'Connection reset by peer' } kw: nil].
-		code = 53 ifTrue: [
-			^ ConnectionAbortedError @env1:___signalNew___:
-				{ 53 . 'Software caused connection abort' } kw: nil].
-		code = 32 ifTrue: [
-			^ BrokenPipeError @env1:___signalNew___: { 32 . 'Broken pipe' } kw: nil]].
+		"The platform's errno, so OSError's errnomap names the class -- it maps
+		the network errnos now that it resolves them by name per platform."
+		cls := OSError @env1:___classForErrno: code.
+		((cls == ConnectionResetError or: [cls == ConnectionAbortedError])
+			or: [cls == BrokenPipeError]) ifTrue: [
+				^ cls @env1:___signalNew___:
+					{ code . (os @env1:___strerrorCallout callWith: { code }) } kw: nil]].
 	detail := [gsSocket isNil ifTrue: [nil] ifFalse: [gsSocket lastErrorString]]
 		on: Error do: [:e | e return: nil].
 	^ OSError @env1:___signal___:

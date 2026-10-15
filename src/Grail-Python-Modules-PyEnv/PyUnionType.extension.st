@@ -265,6 +265,22 @@ PyUnionType >> __args__ [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+PyUnionType >> __dict__ [
+	"A union has no instance dict: ``(int | str).__dict__'' is an
+	AttributeError in CPython.  PythonInstance's live view was found instead
+	and, not being a value attr, came back as a BOUND METHOD -- pydantic's
+	TypeAdapter reads ``obj.__dict__[name]'' on the type it adapts
+	(_getattr_no_parents), subscripted that method, and used what came back
+	as its validator: every ``TypeAdapter(X | Y)'' failed with ``'function'
+	object has no attribute 'validate_python''' (FastAPI's ``Schema(type=
+	[...])'', whose field is ``SchemaType | list[SchemaType] | None'')."
+
+	^ AttributeError ___signal___:
+		'''typing.Union'' object has no attribute ''__dict__'''
+
+]
+
 { #category : 'Grail-Comparison' }
 PyUnionType >> __eq__: other [
 	"Two unions are equal when they have the same members, in any order.

@@ -162,6 +162,19 @@ memoryview >> ___checkReleased___ [
 ]
 
 { #category : 'Grail-Private' }
+memoryview >> ___inheritReadOnlyFrom___: aView [
+	"A view derived from aView -- a slice or a cast -- is exactly as writable
+	as aView.  ___over___: reads the flag off the SOURCE, which is wrong both
+	ways: a slice of ``memoryview(bytearray).toreadonly()'' accepted writes,
+	and a slice of BytesIO.getbuffer()'s view refused them."
+
+	self @env0:dynamicInstVarAt: #'readonly'
+		put: (aView @env0:dynamicInstVarAt: #'readonly').
+	^ self
+
+]
+
+{ #category : 'Grail-Private' }
 memoryview >> ___isContiguous___ [
 	"True unless this is a stepped slice.  CPython's ``contiguous''; the
 	operations that need raw contiguous memory -- a bulk write, cast,
@@ -316,7 +329,7 @@ memoryview >> ___sliceView___: aSlice [
 				ifTrue: [((start @env0:- stop) @env0:- 1) @env0:// step @env0:negated @env0:+ 1]
 				ifFalse: [0]].
 	oldStep := self ___step___.
-	^ (memoryview
+	^ ((memoryview
 		___over___: (self @env0:dynamicInstVarAt: #'_obj')
 		format: (self @env0:dynamicInstVarAt: #'format')
 		offset: (self @env0:dynamicInstVarAt: #'_offset')
@@ -324,7 +337,8 @@ memoryview >> ___sliceView___: aSlice [
 				ifTrue: [0]
 				ifFalse: [start @env0:* oldStep @env0:* itemsize])
 		length: count @env0:* itemsize)
-			___setStep___: oldStep @env0:* step
+			___setStep___: oldStep @env0:* step)
+				___inheritReadOnlyFrom___: self
 
 ]
 
@@ -649,7 +663,15 @@ memoryview >> cast: fmt [
 	self ___checkReleased___.
 	self ___isContiguous___ ifFalse: [
 		TypeError ___signal___: 'memoryview: casts are restricted to C-contiguous views'].
-	^ memoryview ___over___: (self @env0:dynamicInstVarAt: #'_obj') format: fmt
+	"This view's WINDOW and writability, not the whole source's: a cast of
+	 ``mv[1:3]'' covers those two bytes, and a cast of a read-only view (or of
+	 a writable one over bytes, as BytesIO.getbuffer answers) keeps its flag."
+	^ (memoryview
+		___over___: (self @env0:dynamicInstVarAt: #'_obj')
+		format: fmt
+		offset: (self @env0:dynamicInstVarAt: #'_offset')
+		length: (self @env0:dynamicInstVarAt: #'_length'))
+			___inheritReadOnlyFrom___: self
 
 ]
 

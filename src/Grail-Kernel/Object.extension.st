@@ -351,7 +351,7 @@ Object class >> ___grailInstallOneDispatcher___: aSelector definedIn: definingCl
 	place instead -- the store is still visible through the loader."
 	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
 		ifFalse: [^ self].
-	BoundMethod @env1:___grailPinSelector___: aSelector.
+	BoundMethod @env1:___grailPinSelector___: aSelector in: self.
 	"A VARARGS def ``_m: pos kw: kw'' ends in the forward ``^ self m: a b'' to its
 	fixed-arity twin.  In the shadow that forward must reach the twin's SHADOW,
 	not the dispatcher now answering to ``m:'' -- otherwise a decorator that

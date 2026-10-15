@@ -350,10 +350,9 @@ FlaskScaffoldingTestCase >> testBytesFromBytearray [
 
 { #category : 'Grail-Tests - io' }
 FlaskScaffoldingTestCase >> testBytesIOGetbuffer [
-	"buf.getbuffer() returns a memoryview-equivalent that round-trips
-	through bytes().  Grail's getbuffer returns a bytes copy (no
-	memoryview yet); functionally identical for the common
-	``bytes(buf.getbuffer())'' idiom."
+	"buf.getbuffer() returns a memoryview over the stream that
+	round-trips through bytes() (#1637; BytesioGetbufferViewTestCase
+	covers the view itself)."
 
 	| mod |
 	mod := self loadFixture: 'use_io'.
@@ -5636,11 +5635,9 @@ FlaskScaffoldingTestCase >> testWerkzeugTestImports [
 
 { #category : 'Grail-Tests - werkzeug' }
 FlaskScaffoldingTestCase >> testWerkzeugUtilsImports [
-	"werkzeug.utils — hand-rolled minimal shim (cached_property,
-	redirect, header_property, environ_property, import_string,
-	find_modules).  Upstream source-drop blocked on ``**kwargs''
-	call-site unpacking + full descriptor protocol; saved as
-	``utils_upstream.py.bak'' beside the shim for the rewrite."
+	"werkzeug.utils -- upstream Werkzeug 3.1.5's file since #1447, which
+	replaced a hand-rolled shim.  cached_property is a property subclass
+	(.fget), and find_modules walks the package as upstream's does."
 
 	| mod mods |
 	mods := importlib @env1:modules.

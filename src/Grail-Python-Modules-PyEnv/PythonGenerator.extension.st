@@ -103,7 +103,8 @@ PythonGenerator >> ___captureConsumerState___ [
 	keeps its own."
 
 	^ { BaseException @env0:___currentException___ .
-		BaseException @env0:___captureHandlerState___ }
+		BaseException @env0:___captureHandlerState___ .
+		BaseException @env0:___inheritedException___ }
 
 ]
 
@@ -454,6 +455,16 @@ PythonGenerator >> ___grailAwaitAwith___: anObject from: aMethodName [
 
 ]
 
+{ #category : 'Grail-Generator Protocol' }
+PythonGenerator >> ___isNameAttr___: aName [
+	"Is aName ``__name__'' or ``__qualname__''?"
+
+	| n |
+	n := aName @env0:asString.
+	^ (n @env0:= '__name__') or: [n @env0:= '__qualname__']
+
+]
+
 { #category : 'Grail-Coroutine Protocol' }
 PythonGenerator >> ___isRealIterator___: anObject [
 	"CPython's PyIter_Check is a TYPE-SLOT test, and ___respondsTo___: cannot
@@ -481,17 +492,73 @@ PythonGenerator >> ___isRealIterator___: anObject [
 ]
 
 { #category : 'Grail-Private' }
-PythonGenerator >> ___normalizedLegacyExc___: aType value: aValue [
-	"CPython's normalisation for the deprecated multi-arg signatures: value
-	None constructs the type bare, an exception INSTANCE travels as-is,
-	anything else becomes the type's argument."
+PythonGenerator >> ___mustRunInline___ [
+	"Must this generator's body run INLINE rather than on a forked process?
+	Yes when it is started inside a C extension's callback -- pydantic_core
+	calling a model's __repr__, whose ``''.join(... for ...)'' is a generator.
+	The body cannot fork there: the VM refuses any process switch while a user
+	action is active, uncontinuably, so the first next() ended the thread
+	(FastAPI's ResponseValidationError, whose message reprs the model).
 
-	^ aValue == None
-		ifTrue: [aType @env1:___pyCallValue___: { } kw: nil]
-		ifFalse: [
-			(aValue @env0:isKindOf: BaseException)
-				ifTrue: [aValue]
-				ifFalse: [aType @env1:___pyCallValue___: { aValue } kw: nil]]
+	Plain generators only.  A coroutine or async generator is driven by an
+	event loop, which cannot run inside a callback either, so it keeps its
+	process and its error."
+
+	^ self @env0:class == PythonGenerator
+		and: [CPythonShim @env0:___userActionActiveHere]
+
+]
+
+{ #category : 'Grail-Private' }
+PythonGenerator >> ___nextInline___ [
+	"The next value an inline-run body yielded; once they are spent, what it
+	ended with -- its exception, or StopIteration with its return value -- and
+	from then on the ordinary finished-generator answers."
+
+	inlineYields @env0:isEmpty ifFalse: [^ inlineYields @env0:removeFirst].
+	inlineYields := nil.
+	escapedException == nil ifFalse: [^ self _signalEscapedException].
+	^ self ___signalExhausted___
+
+]
+
+{ #category : 'Grail-Private' }
+PythonGenerator >> ___normalizedLegacyExc___: aType value: aValue [
+	"CPython's normalisation for the deprecated multi-arg signatures
+	(_gen_throw, then PyErr_NormalizeException).
+
+	An exception INSTANCE travels as-is, and may not come with a value of its
+	own.  An exception CLASS is called: with no arguments for value None, with
+	the elements of a tuple value, and with the value as its one argument
+	otherwise -- unless the value is ALREADY an instance of that class, which
+	travels as-is.  An instance of some OTHER exception class is just an
+	argument: ``throw(ValueError, TypeError(1))'' raises ValueError(TypeError(1)).
+	Anything else is the single-arg form's TypeError."
+
+	^ self ___normalizedLegacyExc___: aType value: aValue tb: None
+
+]
+
+{ #category : 'Grail-Private' }
+PythonGenerator >> ___normalizedLegacyExc___: aType value: aValue tb: aTb [
+	"___normalizedLegacyExc___:value:, after CPython's first check: a
+	traceback argument must be None or a traceback.  CPython makes it after
+	the deprecation warning, so the callers warn first."
+
+	(aTb == None or: [aTb @env0:isKindOf: PyTraceback]) ifFalse: [
+		^ TypeError ___signal___: 'throw() third argument must be a traceback object'].
+	(aType @env0:isKindOf: BaseException) ifTrue: [
+		aValue == None ifFalse: [
+			^ TypeError ___signal___: 'instance exception may not have a separate value'].
+		^ aType].
+	((aType @env0:isKindOf: Behavior)
+		@env0:and: [aType @env0:inheritsFrom: BaseException])
+			ifFalse: [^ self ___coercedThrowArg___: aType].
+	aValue == None ifTrue: [^ aType @env1:___pyCallValue___: { } kw: nil].
+	(aValue @env0:isKindOf: aType) ifTrue: [^ aValue].
+	(aValue @env0:isKindOf: tuple) ifTrue: [
+		^ aType @env1:___pyCallValue___: (Array @env0:withAll: aValue) kw: nil].
+	^ aType @env1:___pyCallValue___: { aValue } kw: nil
 
 ]
 
@@ -516,6 +583,39 @@ PythonGenerator >> ___probeDelegationAttr___: anIterator named: aName [
 	^ [anIterator @env1:___pyAttrLoad___: aName @env0:asSymbol]
 		@env0:on: AttributeError
 		do: [:ex | ex @env0:return: nil]
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PythonGenerator >> ___pyAttrDelete___: aName [
+	"CPython routes ``del gen.__name__'' through the same setter with no value,
+	so it is refused with the setter's own message.  See ___pyAttrStore___:put:."
+
+	((aName @env0:size @env0:between: 8 and: 12)
+		and: [self ___isNameAttr___: aName])
+			ifTrue: [
+				^ TypeError ___signal___:
+					aName @env0:asString @env0:, ' must be set to a string object'].
+	^ super ___pyAttrDelete___: aName
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PythonGenerator >> ___pyAttrStore___: aName put: aValue [
+	"__name__ and __qualname__ are getsets in CPython, and their setter takes
+	only a string: ``gen.__name__ = 123'' is a TypeError.  Grail keeps them as
+	dynamic instVars, so the write was accepted, and a delete removed the name
+	altogether, after which reading it was an AttributeError
+	(test_generators test_name).  The size test keeps every other store at one
+	compare."
+
+	((aName @env0:size @env0:between: 8 and: 12)
+		and: [self ___isNameAttr___: aName])
+			ifTrue: [
+				(aValue @env0:isKindOf: CharacterCollection) ifFalse: [
+					^ TypeError ___signal___:
+						aName @env0:asString @env0:, ' must be set to a string object']].
+	^ super ___pyAttrStore___: aName put: aValue
 
 ]
 
@@ -578,7 +678,8 @@ PythonGenerator >> ___restoreConsumerState___: anArray [
 	yielded control back.  See ___captureConsumerState___."
 
 	BaseException @env0:___setCurrentException___: (anArray @env0:at: 1).
-	BaseException @env0:___restoreHandlerState___: (anArray @env0:at: 2)
+	BaseException @env0:___restoreHandlerState___: (anArray @env0:at: 2).
+	BaseException @env0:___setInheritedException___: (anArray @env0:at: 3)
 
 ]
 
@@ -599,6 +700,38 @@ PythonGenerator >> ___resumeFinishedWith___: anExceptionOrNil [
 
 	anExceptionOrNil @env0:ifNil: [^ StopIteration ___signalReturn___: returnValue].
 	^ self _raiseThrown: anExceptionOrNil
+
+]
+
+{ #category : 'Grail-Private' }
+PythonGenerator >> ___runInline___ [
+	"Run the whole body now, on this process, buffering what it yields, and
+	answer the first value -- see ___mustRunInline___.
+
+	The approximation is CPython-visible only to a body that relies on being
+	suspended: its side effects all happen at the first next(), a value sent
+	in is not seen (yield answers None), and throw()/close() find it finished.
+	The consumer in a callback is a join, a list() or a for loop, for which
+	none of that is observable.  An exception the body raises is held back
+	until the values before it have been handed out, which IS what CPython
+	does.  A body that never finishes is stopped -- see ___yieldInline___:."
+
+	| savedState |
+	started := true.
+	inlineYields := OrderedCollection @env0:new.
+	consumerProcess := GsProcess @env0:current.
+	savedState := self ___captureConsumerState___.
+	running := true.
+	"No unwind can leave this block -- every exception is caught and held --
+	so the ensure: never runs across the user action's C frames."
+	[[returnValue := block @env0:value: self]
+		@env0:on: AbstractException
+		do: [:ex | escapedException := ex. ex @env0:return: nil]]
+			@env0:ensure: [
+				running := false.
+				done := true.
+				self ___restoreConsumerState___: savedState].
+	^ self ___nextInline___
 
 ]
 
@@ -643,6 +776,31 @@ PythonGenerator >> ___signalExhausted___ [
 
 ]
 
+{ #category : 'Grail-Private' }
+PythonGenerator >> ___stackOnResumersException___: ownExceptionOrNil [
+	"Install the body's own handled exception (nil at the start, otherwise what
+	it was handling when it last yielded), stacked on the one its resumer is
+	handling.  Sent on the body's process, as the body starts or wakes, while
+	the resumer's state is still the installed state.
+
+	CPython keeps a handled-exception slot per generator and links it onto the
+	resumer's for as long as the body runs, so sys.exception() inside the body
+	answers the generator's own exception if it has one and the resumer's
+	otherwise.  Restoring only the body's own value made a body resumed from
+	inside ``except ValueError'' see nothing; installing only the resumer's
+	would leave the body's own except clauses restoring the RESUMER's exception
+	on exit, which then travelled with the body to its next suspension and
+	answered for it after the resumer had moved on.  Keeping the two in separate
+	slots is what gets both right -- BaseException >> ___handledException___
+	reads them in order."
+
+	| resumers |
+	resumers := BaseException @env0:___handledException___.
+	BaseException @env0:___setCurrentException___: ownExceptionOrNil.
+	BaseException @env0:___setInheritedException___: resumers
+
+]
+
 { #category : 'Grail-Yield Protocol' }
 PythonGenerator >> ___subIterAdvance___: it [
 	"One next() on a delegation sub-iterator.  For the generator family this
@@ -662,9 +820,8 @@ PythonGenerator >> ___throwLegacy___: aType value: aValue [
 	"``gen.throw(type, value, tb)'' -- the pre-3.12 spelling, still honoured
 	by CPython with a DeprecationWarning (measured, 3.14: 'the (type, exc,
 	tb) signature of throw() is deprecated, use the single-arg signature
-	instead.').  Normalisation is CPython's: value None means construct the
-	type bare; an exception INSTANCE is thrown as-is; anything else becomes
-	the type's argument.
+	instead.').  Normalisation is CPython's -- see
+	___normalizedLegacyExc___:value:.
 
 	The warning goes through the vendored warnings machinery UNGUARDED, so
 	assertWarns sees it (test_func_10) and -- just as important -- a
@@ -675,6 +832,35 @@ PythonGenerator >> ___throwLegacy___: aType value: aValue [
 
 	self ___warnLegacySignatureOf___: 'throw'.
 	^ self throw: (self ___normalizedLegacyExc___: aType value: aValue)
+
+]
+
+{ #category : 'Grail-Private' }
+PythonGenerator >> ___thrownInstanceFor___: aClassOrException [
+	"What throw() injects at the suspended yield, as an instance, with its
+	__context__ set the way CPython sets it.  Sent on the body's process, after
+	the body's own exception state is back in place.
+
+	A CLASS is called here, in the body, not by throw() in the caller: CPython
+	builds it at the injection point, so a __new__ that answers something other
+	than an exception raises its TypeError INSIDE the generator, where an
+	``except'' around the yield can catch it (test_except_throw_bad_exception).
+
+	The context comes from the generator's OWN handled exception only --
+	___currentException___, not ___handledException___.  CPython's throw chains
+	with _PyErr_ChainStackItem, which reads just the generator's slot: measured
+	on 3.14, ``g.throw(ValueError)'' from inside ``except KeyError'' leaves
+	__context__ None when the body is not itself handling anything, and sets it
+	when the body yielded from inside its own ``except''
+	(test_exception_context_with_yield)."
+
+	| inst |
+	inst := (aClassOrException @env0:isKindOf: Behavior)
+		ifTrue: [BaseException ___exceptionFromClass___: aClassOrException]
+		ifFalse: [aClassOrException].
+	(BaseException @env0:___currentException___) @env0:isNil ifFalse: [
+		inst ___applyImplicitContext___].
+	^ inst
 
 ]
 
@@ -705,6 +891,7 @@ PythonGenerator >> ___yield___: aValue [
 	  * otherwise → return None (the implicit value for plain next)."
 
 	| sent bodyExc bodyHandlers |
+	inlineYields @env0:notNil ifTrue: [^ self ___yieldInline___: aValue].
 	value := aValue.
 	"The body's own exception bookkeeping, kept across the suspension -- the
 	mirror of ___captureConsumerState___.  A generator may yield from inside an
@@ -725,14 +912,14 @@ PythonGenerator >> ___yield___: aValue [
 	bodyHandlers := BaseException @env0:___captureHandlerState___.
 	consumerSem @env0:signal.
 	producerSem @env0:wait.
-	BaseException @env0:___setCurrentException___: bodyExc.
+	self ___stackOnResumersException___: bodyExc.
 	BaseException @env0:___restoreHandlerState___: bodyHandlers.
 	injectedException ifNotNil: [
 		| ex |
 		ex := injectedException.
 		injectedException := nil.
 		sentValue := nil.
-		^ self ___raiseThrownOnTop___: ex
+		^ self ___raiseThrownOnTop___: (self ___thrownInstanceFor___: ex)
 	].
 	sent := sentValue ifNil: [None].
 	sentValue := nil.
@@ -812,9 +999,15 @@ PythonGenerator >> ___yieldFrom___: anIterable [
 	underneath that refusal -- it is what ``await'' and the @types.coroutine
 	``yield from coro'' pattern run on.  ___subIterAdvance___: makes the same
 	distinction for each advance."
+	"Anything else goes through iter()'s checks (GET_YIELD_FROM_ITER): a
+	non-iterable is ``'NoneType' object is not iterable'', an __iter__ that
+	answers a non-iterator is ``iter() returned non-iterator''.  A bare
+	__iter__ send let both through, and the first advance sent __next__ to
+	whatever came back -- an uncatchable MessageNotUnderstood (FastAPI's
+	test_multi_body_errors, when a misdispatched __iter__ answered None)."
 	it := (anIterable @env0:isKindOf: PythonGenerator)
 		ifTrue: [anIterable]
-		ifFalse: [anIterable @env1:__iter__].
+		ifFalse: [(builtins @env0:___instance___) @env1:___pyIter___: anIterable].
 	"The delegation TARGET, recorded for introspection: cr_await /
 	gi_yieldfrom / ag_await read it back, gated on the generator being
 	PARKED (or, for ag_await, merely unfinished) -- CPython's cr_await is
@@ -889,6 +1082,21 @@ PythonGenerator >> ___yieldFrom___: anIterable [
 					ex @env0:return: nil]]].
 	delegationTarget := nil.
 	^ result
+
+]
+
+{ #category : 'Grail-Private' }
+PythonGenerator >> ___yieldInline___: aValue [
+	"``yield aValue'' in a body running inline: buffer it and carry on, as if
+	resumed by next().  A body that yields without end would never return, so
+	past a bound it is stopped with RuntimeError -- raised in the body, so the
+	values before it still reach the consumer first."
+
+	(inlineYields @env0:size) @env0:>= 1000000 ifTrue: [
+		^ RuntimeError ___signal___:
+			'a generator started inside a C extension''s callback runs to completion at once (no process switch is possible there), and this one yielded more than 1000000 values'].
+	inlineYields @env0:addLast: aValue.
+	^ None
 
 ]
 
@@ -982,10 +1190,15 @@ PythonGenerator >> _raiseThrown: ex [
 	nothing in flight on the consumer to continue.  A carrier is an ordinary
 	#signal here, so the process boundary stops being special.
 
-	A CLASS is signalled directly: ``gen.throw(ValueError)'' passes a class, and
-	a class has no identity to preserve and cannot carry a payload."
+	A CLASS is not carried: ``gen.throw(ValueError)'' passes a class, and
+	a class has no identity to preserve and cannot carry a payload.  It is
+	CALLED, though, rather than signalled bare: ``raise Cls'' is ``raise
+	Cls()'', so a user __new__ or __init__ has to run, and a __new__ that
+	answers a non-exception is CPython's TypeError (test_except_throw_bad_exception,
+	whose unstarted half raises in the caller through here)."
 
-	(ex @env0:isKindOf: Behavior) ifTrue: [^ ex @env0:signal].
+	(ex @env0:isKindOf: Behavior) ifTrue: [
+		^ self _raiseThrown: (BaseException ___exceptionFromClass___: ex)].
 	^ BaseException @env0:___signalCarrying___: (BaseException @env0:___payloadOf___: ex)
 
 ]
@@ -1087,7 +1300,7 @@ PythonGenerator >> close [
 	finished.  Raises RuntimeError if the body catches GeneratorExit
 	and yields again — per Python."
 
-	| ___savedState___ |
+	| ___savedState___ result |
 	started ifFalse: [
 		done := true.
 		^ None
@@ -1110,7 +1323,15 @@ PythonGenerator >> close [
 	GeneratorExit and returned a value leaves an exhausted generator, not one
 	holding that value.  Dropping it here makes the later next() report
 	``StopIteration'' with value None, as CPython does
-	(test_close_and_throw_return)."
+	(test_close_and_throw_return).
+
+	close() ANSWERS that value instead (CPython 3.13): a body that catches the
+	GeneratorExit and returns 0 makes gen.close() 0, once -- a second close()
+	finds the generator finished and answers None (test_close_return_value,
+	test_close_closed).  A body that let an exception out returned nothing."
+	result := (escapedException @env0:isNil and: [returnValue @env0:notNil])
+		ifTrue: [returnValue]
+		ifFalse: [None].
 	returnValue := None.
 	"The body is now finished.  Absorb the GeneratorExit this method itself
 	injected -- close() answers None rather than re-raising what it asked for --
@@ -1122,7 +1343,7 @@ PythonGenerator >> close [
 		(escapedException @env0:isKindOf: GeneratorExit)
 			ifTrue: [escapedException := nil]
 			ifFalse: [^ self _signalEscapedException]].
-	^ None
+	^ result
 
 ]
 
@@ -1224,12 +1445,14 @@ PythonGenerator >> send: aValue [
 	whatever close() had released -- ElementTree's iterparse read a closed
 	file (test_xml_etree's IterparseTest.test_close_not_exhausted)."
 	(started not and: [done]) ifTrue: [^ self ___resumeFinishedWith___: nil].
+	inlineYields @env0:notNil ifTrue: [^ self ___nextInline___].
 	started ifFalse: [
 		aValue == None ifFalse: [
 			TypeError ___signal___:
 				('can''t send non-None value to a just-started '
 					@env0:, self ___pyKindWords___)
 		].
+		self ___mustRunInline___ ifTrue: [^ self ___runInline___].
 		running := true.
 		self @env0:_forkBody.
 	] ifTrue: [
@@ -1256,7 +1479,12 @@ PythonGenerator >> throw: anException [
 	body completes normally, raise StopIteration."
 
 	| ___savedState___ ___exc___ |
-	___exc___ := self ___coercedThrowArg___: anException.
+	"A class is passed through as a class: it is called where it is injected
+	(___thrownInstanceFor___:), not here."
+	___exc___ := ((anException @env0:isKindOf: Behavior)
+		@env0:and: [anException @env0:inheritsFrom: BaseException])
+			ifTrue: [anException]
+			ifFalse: [self ___coercedThrowArg___: anException].
 	self ___checkNotRunning___.
 	started ifFalse: [
 		"Throwing on a not-yet-started generator just raises in the
@@ -1285,7 +1513,10 @@ PythonGenerator >> throw: anException [
 		StopIteration(returned) -- test_close_and_throw_return's ``throw
 		GeneratorExit'' subtest.  The return value is discarded with it, so a
 		later next() reports a plain exhausted generator."
-		(___exc___ @env0:isKindOf: GeneratorExit) ifTrue: [
+		((___exc___ @env0:isKindOf: GeneratorExit)
+			or: [(___exc___ @env0:isKindOf: Behavior)
+				and: [(___exc___ == GeneratorExit)
+					or: [___exc___ @env0:inheritsFrom: GeneratorExit]]]) ifTrue: [
 			returnValue := None.
 			^ self _raiseThrown: ___exc___].
 		^ self ___signalExhausted___
@@ -1304,11 +1535,12 @@ PythonGenerator >> throw: aType _: aValue [
 
 { #category : 'Grail-Generator Protocol' }
 PythonGenerator >> throw: aType _: aValue _: aTb [
-	"The deprecated three-arg signature.  The traceback argument is accepted
-	and ignored -- CPython attaches it to the raised exception, but the
-	exception's own travel through the generator machinery rebuilds the
-	traceback either way."
+	"The deprecated three-arg signature.  The traceback argument is checked
+	(___normalizedLegacyExc___:value:tb:) and otherwise ignored -- CPython
+	attaches it to the raised exception, but the exception's own travel
+	through the generator machinery rebuilds the traceback either way."
 
-	^ self ___throwLegacy___: aType value: aValue
+	self ___warnLegacySignatureOf___: 'throw'.
+	^ self throw: (self ___normalizedLegacyExc___: aType value: aValue tb: aTb)
 
 ]

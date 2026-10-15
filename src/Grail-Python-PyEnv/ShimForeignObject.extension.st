@@ -75,6 +75,11 @@ ShimForeignObject >> ___grailForeignTypeCheck___: aCandidate subclass: aBoolean 
 	ptr := (aCandidate @env0:isKindOf: ShimForeignObject)
 		ifTrue: [aCandidate @env0:cPtr]
 		ifFalse: [0].
+	"An instance of a Python subclass of a C type is its body, typed by the
+	class's subtype mirror, whose tp_base chain reaches the C type."
+	((ptr @env0:= 0) and: [aCandidate @env0:isKindOf: ShimForeignSubclass]) ifTrue: [
+		aCandidate @env0:___grailForeignBody___ @env0:ifNotNil: [:body |
+			ptr := body @env0:memoryAddress]].
 	"A Grail class built on a foreign type (ShimForeignSubclass) is a subclass
 	of every type its foreign base is."
 	(aBoolean == true and: [(ptr @env0:= 0) and: [aCandidate @env0:isBehavior]]) ifTrue: [

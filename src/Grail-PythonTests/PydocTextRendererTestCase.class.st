@@ -27,14 +27,14 @@ PydocTextRendererTestCase >> setUp [
 
 ]
 
-{ #category : 'Grail-Tests - Known gaps' }
-PydocTextRendererTestCase >> testAModuleLevelFunctionHasNoDocstringWhichIsAKnownGap [
-	"Recorded, NOT endorsed, and narrow: a CLASS docstring and a METHOD
-	docstring both work, so this is specific to a def at module scope.  pydoc
-	renders whatever docstring it is handed, so the effect is empty sections
-	rather than a failure."
+{ #category : 'Grail-Tests' }
+PydocTextRendererTestCase >> testAModuleLevelFunctionHasItsDocstring [
+	"It answered None (a module-level def compiles to a method of the module
+	class, and modules had no ___methodDocTable___), so pydoc's function
+	sections came out empty.  The text is cleaned as CPython 3.13+ cleans it."
 
-	self assert: (self resultAt: 'function_docstring') asString equals: 'None'.
+	self assert: (self resultAt: 'function_docstring') asString
+		equals: '''One line summary.\n\nAnd a second paragraph.\n'''.
 	self assert: (self resultAt: 'class_docstring') asString
 		equals: '''One line summary.'''.
 

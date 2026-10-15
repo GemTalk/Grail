@@ -355,6 +355,52 @@ FunctionDefAst >> ___decoratorLineFor___: decoList index: anIndex [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___decoratorNameIsModuleGlobal___: aSymbol [
+	"Does the bare decorator name aSymbol mean the MODULE's binding -- to be
+	read through the module instance -- rather than a local?  Only when the
+	module body binds it AND no local shadows it: a local of an enclosing
+	function, or, from a class nested in a function, a local of a function
+	beyond that class.  CPython resolves those before the global; testing
+	only the module's names applied the global decorator wherever a local
+	reused its name, silently (#1605)."
+
+	| sym |
+	sym := aSymbol asSymbol.
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: sym]) ifFalse: [^ false].
+	(self ___pythonLocalInEnclosingFunctions___: sym) ifTrue: [^ false].
+	(CallAst classBeingCompiled notNil
+		and: [self ___headerLocalBeyondClass___: sym]) ifTrue: [^ false].
+	^ true
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___decoratorNameIsUnboundInModule___: aSymbol [
+	"Outside a doit, would a bare identifier for this decorator name fail to
+	compile, because nothing static binds it: no enclosing function's local,
+	no module-body variable or def, no class attribute of the class being
+	built, no resolvable global?  False whenever any of those might, and
+	outside module code, so a working decorator keeps its bare identifier;
+	the doit case is ___decoratorNameNeedsRuntimeLookup___:'s."
+
+	| sym |
+	ModuleAst compilingDoitScope notNil ifTrue: [^ false].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ false].
+	sym := aSymbol asSymbol.
+	(self ___pythonLocalInEnclosingFunctions___: sym) ifTrue: [^ false].
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: sym]) ifTrue: [^ false].
+	(CallAst moduleFunctionNames notNil
+		and: [CallAst moduleFunctionNames includes: sym]) ifTrue: [^ false].
+	(CallAst classAttrNames notNil
+		and: [CallAst classAttrNames includes: sym]) ifTrue: [^ false].
+	(NameAst isResolvableSymbol: sym) ifTrue: [^ false].
+	^ true
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___decoratorNameNeedsRuntimeLookup___: aSymbol [
 	"Would a bare Smalltalk identifier for this decorator name fail to
 	COMPILE?  Mirrors the four things NameAst's doit fallback accepts as
@@ -520,7 +566,10 @@ FunctionDefAst >> ___docString___ [
 	and this supplies the real text when there is one.
 
 	Gated on CharacterCollection rather than String so a docstring holding
-	non-Latin-1 text (a Unicode16/32 literal) is still recognised."
+	non-Latin-1 text (a Unicode16/32 literal) is still recognised.
+
+	Cleaned as CPython 3.13's compiler cleans it (AbstractNode class >>
+	___cleanDoc___:)."
 
 	| stmts first inner |
 	body isNil ifTrue: [^ nil].
@@ -531,7 +580,7 @@ FunctionDefAst >> ___docString___ [
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner value]
+		ifTrue: [AbstractNode ___cleanDoc___: inner value]
 		ifFalse: [nil]
 
 ]
@@ -842,8 +891,7 @@ FunctionDefAst >> ___emitIRDecoratorValue___: deco on: aBuilder [
 	expression decorator is emitted as a value."
 
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___emitIRValueOn___: aBuilder].
-	(CallAst moduleVariableNames notNil
-		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [
 			^ aBuilder
 				send: #'___moduleAttrLoad___:'
 				to: (aBuilder
@@ -3556,7 +3604,8 @@ FunctionDefAst >> ___irNestedDecoratorEligible___: deco locals: localNames [
 	"printDecoratorReceiverOn:deco:'s branches, in ITS order: a bare-name
 	decorator (the parser records those as Symbols) that names a class-body
 	sibling is refused (the class-attribute load is not emitted here); a
-	module variable loads through the module instance; otherwise the bare
+	module variable no local shadows loads through the module instance
+	(___decoratorNameIsModuleGlobal___:); otherwise the bare
 	identifier -- an enclosing local, or a resolvable global -- unless a doit
 	would need the runtime NameError lookup.  An expression decorator is judged
 	as a value of the enclosing scope."
@@ -3564,8 +3613,7 @@ FunctionDefAst >> ___irNestedDecoratorEligible___: deco locals: localNames [
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___irEligibleValueLocals___: localNames].
 	(CallAst classBodyDecoratorScope notNil
 		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol]) ifTrue: [^ false].
-	(CallAst moduleVariableNames notNil
-		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [^ true].
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ true].
 	(self ___decoratorNameNeedsRuntimeLookup___: deco) ifTrue: [^ false].
 	(localNames includes: deco asString) ifTrue: [^ true].
 	^ NameAst isResolvableSymbol: deco asSymbol
@@ -4286,6 +4334,27 @@ FunctionDefAst >> ___isPropertyDef___ [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___keepsThePropertyDocstring___ [
+	"True when the outermost decorator is ``@<expr>.setter'' or
+	``@<expr>.deleter'': CPython's property.setter / .deleter carry the
+	property's __doc__ over, so this def does not replace the docstring a
+	class's ___methodDocTable___ holds for the name (ClassDefAst >>
+	emitMethodDocTableOn:className:) -- test_property's
+	``spam.__doc__ == 'BaseClass.getter''' after an undocumented setter and
+	deleter.  Read off the syntax, not ___propertyAccessorKind___: a
+	subclass's ``@spam.setter'' over ``@BaseClass.spam.getter'' names a
+	property this class body does not declare with @property."
+
+	| first |
+	decorator_list isNil ifTrue: [^ false].
+	decorator_list isEmpty ifTrue: [^ false].
+	first := decorator_list at: 1.
+	(first isKindOf: AttributeAst) ifFalse: [^ false].
+	^ first attr asString = 'setter' or: [first attr asString = 'deleter']
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___kwonlyParamNameStrings___ [
 	"The keyword-only parameter names, as Strings."
 
@@ -4580,14 +4649,26 @@ FunctionDefAst >> ___printDecoratorNameOn___: aStream name: aSymbol [
 				nextPutAll: aSymbol asString;
 				nextPutAll: '___'')'.
 			^ self].
-	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol)
-		ifFalse: [
-			aStream nextPutAll: aSymbol asString.
-			^ self].
-	aStream
-		nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
-		nextPutAll: aSymbol asString;
-		nextPutAll: ''')'
+	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol) ifTrue: [
+		aStream
+			nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
+			nextPutAll: aSymbol asString;
+			nextPutAll: ''')'.
+		^ self].
+	"Compiled module code has the same hole (#1517): a name bound nowhere the
+	compiler can see -- undefined, or bound only at run time through
+	globals() -- made the WHOLE MODULE fail to compile.  It reads the module's
+	globals then builtins at run time instead, raising NameError on a miss,
+	which is NameAst's late module-name binding for an ordinary read."
+	(self ___decoratorNameIsUnboundInModule___: aSymbol) ifTrue: [
+		aStream
+			nextPutAll: '(';
+			nextPutAll: CallAst moduleClassBeingCompiled name;
+			nextPutAll: ' @env0:___instance___ @env1:___moduleAttrLoad___: #''';
+			nextPutAll: aSymbol asString;
+			nextPutAll: ''')'.
+		^ self].
+	aStream nextPutAll: aSymbol asString
 
 ]
 
@@ -5207,6 +5288,18 @@ FunctionDefAst >> args [
 { #category : 'Grail-printing' }
 FunctionDefAst >> args: newValue [
 	args := newValue
+
+]
+
+{ #category : 'Grail-Module Method Compilation' }
+FunctionDefAst >> argumentDefaultsContainYield: anArgumentsAst [
+	"Does a default value -- positional or keyword-only -- of a nested def or
+	lambda contain a yield?  Those are evaluated in the enclosing function.
+	kw_defaults holds nil for a keyword-only parameter with no default."
+
+	anArgumentsAst isNil ifTrue: [^ false].
+	^ (self bodyContainsYieldExceptNestedDefs: anArgumentsAst defaults)
+		or: [self bodyContainsYieldExceptNestedDefs: anArgumentsAst kw_defaults]
 
 ]
 
@@ -7774,8 +7867,17 @@ FunctionDefAst >> nodeContainsYieldExceptNestedDefs: node [
 	node isNil ifTrue: [^false].
 	(node isKindOf: YieldAst) ifTrue: [^true].
 	(node isKindOf: YieldFromAst) ifTrue: [^true].
-	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-		ifTrue: [^false].
+	"A nested def's or lambda's BODY is its own scope, but its default values
+	and its decorators are evaluated HERE, when the def or lambda is created:
+	``def f(): lambda x=(yield): 1'' makes f a generator.  Skipping the whole
+	node left f an ordinary function whose yield then named an unbound
+	___gen___, a Smalltalk CompileError rather than a generator
+	(test_generators' coroutine doctest)."
+	(node isKindOf: LambdaAst)
+		ifTrue: [^ self argumentDefaultsContainYield: node args].
+	(node isKindOf: FunctionDefAst) ifTrue: [
+		^ (self bodyContainsYieldExceptNestedDefs: node decoratorList)
+			or: [self argumentDefaultsContainYield: node args]].
 	"Walk all instVars of this AST node; recurse into AbstractNode
 	children and SequenceableCollection containers.  Skip the
 	``parent`` back-pointer to avoid cycling up the tree."
@@ -8250,8 +8352,7 @@ FunctionDefAst >> printDecoratorReceiverOn: aStream deco: deco [
 					nextPutAll: deco asString;
 					nextPutAll: ''')'.
 				^ self].
-		(CallAst moduleVariableNames notNil
-			and: [CallAst moduleVariableNames includes: deco asSymbol])
+		(self ___decoratorNameIsModuleGlobal___: deco)
 			ifTrue: [
 				aStream
 					nextPutAll: '((';
@@ -9481,8 +9582,7 @@ FunctionDefAst >> printSmalltalkOn: aStream [
 						compile-fail with ``undefined symbol''.  Route via
 						``___moduleAttrLoad___:'' so top-level defs lazy-wrap
 						as BoundMethods (the typical decorator case)."
-						(CallAst moduleVariableNames notNil
-							and: [CallAst moduleVariableNames includes: deco asSymbol])
+						(self ___decoratorNameIsModuleGlobal___: deco)
 							ifTrue: [
 								aStream
 									nextPutAll: '((';

@@ -11226,6 +11226,38 @@ Object >> ___hasIndexDunder___ [
 
 ]
 
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___hasOwnGetitem___ [
+	"Does this object's class define a REAL __getitem__ -- one its CPython
+	type would have, giving it sq_item and mp_subscript -- rather than one
+	Grail adds only to raise?
+
+	It cannot be asked of hasattr: Grail gives int and None refusal methods
+	(<grailProtocolRefusal>) that exist only to raise CPython's TypeError,
+	every Python instance inherits PythonInstance's, a builtin function's
+	BoundMethod subscripts as a PEP 585 pass-through, and a module is a
+	SymbolDictionary.  None of those subscripts in CPython.  Asked by
+	%-formatting's mapping test (CharacterCollection
+	class>>___percentOperandIsMapping___:forBytes:) and the C shim's
+	PySequence_Check (CPythonShim>>PySequence_Check:)."
+
+	| defCls meth |
+	((self @env0:isKindOf: BoundMethod) @env0:or: [self @env0:isKindOf: module])
+		ifTrue: [^ false].
+	defCls := (self @env0:class)
+		@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
+	defCls @env0:isNil ifTrue: [
+		defCls := (self @env0:class)
+			@env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1.
+		defCls @env0:isNil ifTrue: [^ false].
+		^ defCls ~~ PythonInstance].
+	defCls == PythonInstance ifTrue: [^ false].
+	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
+	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
+		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
+
+]
+
 { #category : 'Grail-Python Protocol' }
 Object >> ___hasProtocol___: aName [
 	"True when the receiver's class chain REALLY defines the Python method
@@ -12768,7 +12800,7 @@ Object >> ___pyAttrDelete___: aName [
 					== self) ifFalse: [
 					importlib @env0:___copyMethod___: sel from: self to: self
 						prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
-				  BoundMethod @env1:___grailPinSelector___: sel ]
+				  BoundMethod @env1:___grailPinSelector___: sel in: self ]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				self @env1:___removeSelector: sel environmentId: 1].
 			^ self].
@@ -12821,6 +12853,17 @@ Object >> ___pyAttrDelete___: aName [
 			'''' @env0:, aName @env0:asString @env0:, ''''
 	].
 	self @env0:removeDynamicInstVar: sym
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___pyAttrForeignBaseLoad___: aSym [
+	"aSym read off a C base type this object's class descends from, as an
+	Association whose value is the attribute, or nil when there is none --
+	nil for every object but an instance of a Python subclass of a C type
+	(ShimForeignSubclass), which ___pyAttrLoad___: asks just before its miss."
+
+	^ nil
 
 ]
 
@@ -13189,6 +13232,17 @@ Object >> ___pyAttrLoad___: aSym [
 			does land in the namespace, so both homes are consulted, namespace
 			first."
 			hook := self @env0:at: #'__getattr__' otherwise: nil.
+			"A hook STORED as data -- ``globals()['__getattr__'] = fn'', or
+			through ``sys._getframe(1).f_globals'' as anyio's lazy importer
+			does -- is a dynamic instVar of the module (PyInstanceDict), the
+			home every such store gets.  It was never consulted, so anyio.abc
+			exported nothing once inspect.getsource could read its source and
+			the lazy importer engaged: ``from anyio.abc import
+			ObjectReceiveStream'' failed and FastAPI did not import.  Ahead of
+			the compiled method, so a later rebinding wins, as in CPython's one
+			namespace."
+			hook @env0:isNil ifTrue: [
+				hook := self @env0:dynamicInstVarAt: #'__getattr__'].
 			(hook @env0:isNil
 				and: [self ___respondsTo___: #'__getattr__:'])
 					ifTrue: [hook := BoundMethod
@@ -14228,6 +14282,10 @@ Object >> ___pyAttrLoad___: aSym [
 	``def __getattr__'' and not the ``__getattr__ = fn'' class-attribute form, so
 	django's LazyObject never set itself up and recursed until the gem ran out of
 	memory."
+	"A FOREIGN BASE TYPE comes before __getattr__, as a base's type dict does in
+	CPython: an instance of ``class memmap(ndarray)'' reads ndarray's ``shape''
+	and ``sum'' off its C body (ShimForeignSubclass)."
+	(self ___pyAttrForeignBaseLoad___: aSym) @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
 	self ___pyAttrHasGetattr___ ifTrue: [^ self ___pyAttrCallGetattr___: s].
 	"Carries CPython's ``name'' / ``obj'' -- see
 	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for

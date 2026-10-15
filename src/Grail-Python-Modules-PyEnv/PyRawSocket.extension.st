@@ -243,9 +243,9 @@ PyRawSocket >> ___connectCode___: sock on: host port: port [
 	connectIssued == true ifFalse: [
 		connectIssued := true.
 		status @env0:== sock ifTrue: [^ 0].
-		status @env0:== false ifTrue: [^ 36].
+		status @env0:== false ifTrue: [^ self ___errno: 'EINPROGRESS'].
 		(status @env0:isKindOf: Integer)
-			ifTrue: [^ self ___normalizeConnectErrno___: status]
+			ifTrue: [^ status]
 			ifFalse: [^ self ___connectCodeFallback___: sock on: host port: port]].
 
 	"A poll of a connect already started.  CPython answers EISCONN once it has
@@ -277,10 +277,9 @@ PyRawSocket >> ___connectCode___: sock on: host port: port [
 	primitive rather than at a guess."
 	verdict := self ___connectVerdictFromReadiness___: sock.
 	verdict @env0:isNil ifFalse: [^ verdict].
-	status @env0:== sock ifTrue: [^ 56].
-	status @env0:== false ifTrue: [^ 37].
-	(status @env0:isKindOf: Integer) ifTrue: [
-		^ self ___normalizeConnectErrno___: status].
+	status @env0:== sock ifTrue: [^ self ___errno: 'EISCONN'].
+	status @env0:== false ifTrue: [^ self ___errno: 'EALREADY'].
+	(status @env0:isKindOf: Integer) ifTrue: [^ status].
 	^ self ___connectCodeFallback___: sock on: host port: port
 
 ]
@@ -304,7 +303,9 @@ PyRawSocket >> ___connectCodeFallback___: sock on: host port: port [
 	(sock @env0:connectTo: port on: host timeoutMs: 0) == true ifTrue: [^ 0].
 	probe := [sock @env0:writeWillNotBlock]
 		@env0:on: Error do: [:e | e @env0:return: #'unknown'].
-	^ probe @env0:isNil ifTrue: [61] ifFalse: [36]
+	^ probe @env0:isNil
+		ifTrue: [self ___errno: 'ECONNREFUSED']
+		ifFalse: [self ___errno: 'EINPROGRESS']
 
 ]
 
@@ -337,9 +338,21 @@ PyRawSocket >> ___connectVerdictFromReadiness___: sock [
 	| w r |
 	w := [sock @env0:writeWillNotBlock] @env0:on: Error do: [:e | e @env0:return: nil].
 	r := [sock @env0:readWillNotBlock] @env0:on: Error do: [:e | e @env0:return: nil].
-	(w @env0:== true @env0:and: [r @env0:~~ true]) ifTrue: [^ 56].
-	(r @env0:== true @env0:and: [w @env0:~~ true]) ifTrue: [^ 61].
+	(w @env0:== true @env0:and: [r @env0:~~ true]) ifTrue: [^ self ___errno: 'EISCONN'].
+	(r @env0:== true @env0:and: [w @env0:~~ true]) ifTrue: [^ self ___errno: 'ECONNREFUSED'].
 	^ nil
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___errno: aName [
+	"The running platform's errno called aName -- ECONNREFUSED is 61 on Darwin
+	and 111 on Linux.  Every errno this class reports is the platform's own,
+	which is what errno.py publishes now too (OSError >> ___errnoPairsFor___:).
+	It used to translate Linux numbers onto Darwin's, because errno.py was the
+	Darwin table everywhere; os never did, so the two disagreed on Linux."
+
+	^ OSError ___errnoNamed: aName
 
 ]
 
@@ -467,7 +480,7 @@ PyRawSocket >> ___neverConnected___: sock [
 	accept, any getpeername that found one), is remembered in hadPeer."
 
 	hadPeer == true ifTrue: [^ false].
-	^ (self ___noPeerErrno___: sock) @env0:= 57
+	^ (self ___noPeerErrno___: sock) @env0:= (self ___errno: 'ENOTCONN')
 
 ]
 
@@ -485,35 +498,8 @@ PyRawSocket >> ___noPeerErrno___: sock [
 	is mapped onto Grail's errno module, which ssl.py compares it against
 	(``e.errno != errno.ENOTCONN'' in SSLSocket._create).  Unmapped, every TLS
 	wrap on Linux re-raised OSError 107.  EINVAL is 22 on both."
-	^ self ___normalizeConnectErrno___:
-		(([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
-			@env0:ifNil: [57])
-
-]
-
-{ #category : 'Grail-Private' }
-PyRawSocket >> ___normalizeConnectErrno___: code [
-	"A platform errno, mapped onto the value Python code will compare it against.
-
-	The raw number is the local platform's -- ECONNREFUSED is 61 on BSD/macOS and
-	111 on Linux -- while Grail's errno module publishes one fixed set.  Reporting
-	the raw number would make ``e.errno == errno.ECONNREFUSED'' false on whichever
-	platform errno.py does not describe, so the KNOWN codes are translated and
-	anything unrecognised is passed through unchanged (better a number Python
-	cannot name than a wrong one it can)."
-
-	"BSD value first, then the Linux one, for each code that matters here."
-	((code @env0:= 61) @env0:or: [code @env0:= 111]) ifTrue: [^ 61].   "ECONNREFUSED"
-	((code @env0:= 36) @env0:or: [code @env0:= 115]) ifTrue: [^ 36].   "EINPROGRESS"
-	((code @env0:= 37) @env0:or: [code @env0:= 114]) ifTrue: [^ 37].   "EALREADY"
-	((code @env0:= 56) @env0:or: [code @env0:= 106]) ifTrue: [^ 56].   "EISCONN"
-	((code @env0:= 60) @env0:or: [code @env0:= 110]) ifTrue: [^ 60].   "ETIMEDOUT"
-	((code @env0:= 51) @env0:or: [code @env0:= 101]) ifTrue: [^ 51].   "ENETUNREACH"
-	((code @env0:= 65) @env0:or: [code @env0:= 113]) ifTrue: [^ 65].   "EHOSTUNREACH"
-	((code @env0:= 57) @env0:or: [code @env0:= 107]) ifTrue: [^ 57].   "ENOTCONN"
-	((code @env0:= 54) @env0:or: [code @env0:= 104]) ifTrue: [^ 54].   "ECONNRESET"
-	((code @env0:= 53) @env0:or: [code @env0:= 103]) ifTrue: [^ 53].   "ECONNABORTED"
-	^ code
+	^ ([sock @env0:lastErrorCode] @env0:on: Error do: [:e | e @env0:return: nil])
+		@env0:ifNil: [self ___errno: 'ENOTCONN']
 
 ]
 
@@ -523,7 +509,7 @@ PyRawSocket >> ___notConnected___ [
 	stream socket that has no peer.  The errno is Grail's errno module's
 	(57), for the reason ___notReadyNow___ gives for EAGAIN."
 
-	^ OSError ___signalNew___: { 57 . 'Socket is not connected' } kw: nil
+	^ self ___raiseErrno: 'ENOTCONN' as: OSError
 
 ]
 
@@ -573,8 +559,7 @@ PyRawSocket >> ___notReadyNow___ [
 	reintroduce the same confusion in the other direction."
 
 	self ___isNonBlocking___ ifTrue: [
-		^ BlockingIOError ___signalNew___:
-			{ 35 . 'Resource temporarily unavailable' } kw: nil].
+		^ self ___raiseErrno: 'EAGAIN' as: BlockingIOError].
 	^ TimeoutError ___signal___: 'timed out'
 
 ]
@@ -590,24 +575,32 @@ PyRawSocket >> ___raiseConnectCode___: code [
 	silently succeeding, which is the behaviour this class of bug hides in."
 
 	code @env0:= 0 ifTrue: [^ None].
-	(code @env0:= 36) ifTrue: [
-		^ BlockingIOError ___signalNew___:
-			{ 36 . 'Operation now in progress' } kw: nil].
-	(code @env0:= 37) ifTrue: [
-		^ BlockingIOError ___signalNew___:
-			{ 37 . 'Operation already in progress' } kw: nil].
-	(code @env0:= 56) ifTrue: [
-		^ OSError ___signalNew___:
-			{ 56 . 'Socket is already connected' } kw: nil].
-	(code @env0:= 61) ifTrue: [
-		^ ConnectionRefusedError ___signalNew___:
-			{ 61 . 'Connection refused' } kw: nil].
-	(code @env0:= 60) ifTrue: [
-		^ TimeoutError ___signalNew___:
-			{ 60 . 'Operation timed out' } kw: nil].
+	code @env0:= (self ___errno: 'EINPROGRESS') ifTrue: [
+		^ self ___raiseErrno: 'EINPROGRESS' as: BlockingIOError].
+	code @env0:= (self ___errno: 'EALREADY') ifTrue: [
+		^ self ___raiseErrno: 'EALREADY' as: BlockingIOError].
+	code @env0:= (self ___errno: 'EISCONN') ifTrue: [
+		^ self ___raiseErrno: 'EISCONN' as: OSError].
+	code @env0:= (self ___errno: 'ECONNREFUSED') ifTrue: [
+		^ self ___raiseErrno: 'ECONNREFUSED' as: ConnectionRefusedError].
+	code @env0:= (self ___errno: 'ETIMEDOUT') ifTrue: [
+		^ self ___raiseErrno: 'ETIMEDOUT' as: TimeoutError].
 	(code @env0:= 22) ifTrue: [
 		^ OSError ___signalNew___: { 22 . 'Invalid argument' } kw: nil].
 	^ OSError ___signalNew___: { code . 'Connect call failed' } kw: nil
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___raiseErrno: aName as: aClass [
+	"aClass(errno, strerror) for the errno called aName, with libc's strerror,
+	so the text is the platform's: Linux says ``Transport endpoint is not
+	connected'' where Darwin says ``Socket is not connected''."
+
+	| n |
+	n := self ___errno: aName.
+	^ aClass ___signalNew___:
+		{ n . (os ___strerrorCallout @env0:callWith: { n }) } kw: nil
 
 ]
 
@@ -681,8 +674,8 @@ PyRawSocket >> ___resolvedConnectCode___: sock on: host port: port timeoutMs: ms
 
 	| code |
 	code := self ___connectCodeFallback___: sock on: host port: port.
-	^ code @env0:= 36
-		ifTrue: [ms @env0:notNil ifTrue: [35] ifFalse: [61]]
+	^ code @env0:= (self ___errno: 'EINPROGRESS')
+		ifTrue: [self ___errno: (ms @env0:notNil ifTrue: ['EWOULDBLOCK'] ifFalse: ['ECONNREFUSED'])]
 		ifFalse: [code]
 
 ]
@@ -723,7 +716,7 @@ PyRawSocket >> ___setLinger___: value on: sock [
 		errno: errno.
 	result @env0:= -1 ifTrue: [
 		^ OSError ___signalNew___: {
-			self ___normalizeConnectErrno___: (errno @env0:at: 1).
+			errno @env0:at: 1.
 			os ___strerrorCallout @env0:callWith: { errno @env0:at: 1 } } kw: nil].
 	^ None
 
@@ -1132,7 +1125,7 @@ PyRawSocket >> getpeername [
 	sock := self @env0:___ensureOpen.
 	code := self ___noPeerErrno___: sock.
 	code @env0:notNil ifTrue: [
-		code @env0:= 57 ifTrue: [^ self ___notConnected___].
+		code @env0:= (self ___errno: 'ENOTCONN') ifTrue: [^ self ___notConnected___].
 		^ OSError ___signalNew___: { code . (sock @env0:lastErrorString) @env0:asString } kw: nil].
 	^ tuple @env0:withAll: { (sock @env0:peerAddress @env0:ifNil: ['']) @env0:asString .
 		(sock @env0:peerPort @env0:ifNil: [0]) }

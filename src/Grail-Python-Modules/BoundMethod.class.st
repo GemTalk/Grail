@@ -153,6 +153,7 @@ BoundMethod class >> ___pythonValueAttrs___ [
 		add: #'__defaults__';
 		add: #'__kwdefaults__';
 		add: #'__doc__';
+		add: #'__text_signature__';
 		add: #'__code__';
 		add: #'__closure__';
 		"``__globals__'' is a value for the same reason ``__closure__'' beside it
@@ -270,6 +271,19 @@ BoundMethod >> _setReceiver: aReceiver selector: aSymbol [
 	variable read and one store, both literal-cheap, on a path that already does
 	five symbol constructions."
 	pinGeneration := GrailPinGeneration
+
+]
+
+{ #category : 'Grail-Private' }
+BoundMethod >> _setStaticExceptionNewOn: aClass [
+	"``Exc.__new__'' for a built-in exception class: reads as ``__new__'' bound
+	to aClass, but every call reaches BaseException class >>
+	___excStaticNew:kw: with the whole argument list, ``cls'' first -- no
+	fixed-arity selector is answered, so value:value: takes the varargs one."
+
+	self _setReceiver: aClass selector: #'__new__'.
+	sel0 := sel1 := sel2 := sel3 := #'___grailNoFixedArityForStaticNew___'.
+	selVarargs := #'___excStaticNew:kw:'
 
 ]
 

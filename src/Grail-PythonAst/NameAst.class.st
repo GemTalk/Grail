@@ -2645,6 +2645,22 @@ NameAst >> emitDoitEnclosingScopeLoad: aSymbol on: aStream [
 	Longstanding -- the previous ___signalUndefined___: emit had the same shape
 	and merged the same way."
 
+	"IN AN exec()'s SCOPE THE NAME IS RESOLVED THROUGH THAT SCOPE, at run time.
+	A free name has no slot when it is compiled, and a function the exec
+	defines keeps reading the doit's scope long after the exec returned -- so
+	``def g(): return next(me)'' followed by ``me = g()'' in a SEPARATE exec
+	(every doctest example is one) found nothing: the builtins-only resolver
+	cannot see the exec's namespace at all once the exec is over.  CPython's
+	LOAD_GLOBAL reads the globals dict as the function runs.  The scope is
+	named by its ``___pyGlobals___'' handle, which ensureModuleScope: binds; a
+	doit compiled against some other symbol list (a class body nested in a
+	function) has none and keeps the builtins resolver."
+	((ModuleAst compilingDoitScope) notNil
+		and: [((ModuleAst compilingDoitScope) resolveSymbol: #'___pyGlobals___') notNil])
+			ifTrue: [
+				aStream nextPutAll: '(NameError @env0:___resolveDoitGlobal___: '; nextPut: $'.
+				aStream nextPutAll: aSymbol; nextPutAll: ''' scope: ___pyGlobals___)'.
+				^ self].
 	aStream nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: '; nextPut: $'.
 	aStream nextPutAll: aSymbol; nextPut: $'.
 	aStream nextPut: $)

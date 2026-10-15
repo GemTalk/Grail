@@ -90,7 +90,7 @@ AsyncioIoTestCase >> testAnImmediateRepollAnswersEALREADY [
 	on Linux, so asking about a REFUSAL tells you nothing about the in-progress
 	state.  CI caught that -- this test's first version connected to port 1."
 
-	| srv addr s codes |
+	| srv addr s codes eisconn |
 	srv := GsSocket new.
 	srv makeServer: 4 atPort: 0.
 	addr := { '127.0.0.1' . srv port }.
@@ -114,14 +114,18 @@ AsyncioIoTestCase >> testAnImmediateRepollAnswersEALREADY [
 	and only later ones raise EISCONN.  Grail's old behaviour was Linux-like for
 	exactly one call; the bug was repeating it forever, which is what made a
 	retry loop look as though it worked."
-	self assert: codes last equals: 56.
+	"By name: the platform's own numbers, 56 / 36 / 37 on Darwin and
+	106 / 115 / 114 on Linux."
+	eisconn := OSError @env1:___errnoNamed: 'EISCONN'.
+	self assert: codes last equals: eisconn.
 	self assert: (codes occurrencesOf: 0) <= 1.
 
 	"EALREADY when it IS still in progress, which is what a poll before
 	completion must answer -- asserted only in that case, since forcing it is
 	not portable."
-	(codes first = 36 and: [(codes at: 2) ~= 0 and: [(codes at: 2) ~= 56]])
-		ifTrue: [self assert: (codes at: 2) equals: 37]
+	(codes first = (OSError @env1:___errnoNamed: 'EINPROGRESS')
+		and: [(codes at: 2) ~= 0 and: [(codes at: 2) ~= eisconn]])
+			ifTrue: [self assert: (codes at: 2) equals: (OSError @env1:___errnoNamed: 'EALREADY')]
 
 ]
 

@@ -58,17 +58,28 @@ MethodWrapperIdentityTestCase >> testAClassmethodObjectRefusesTheCallCatchably [
 ]
 
 { #category : 'Grail-Tests' }
+MethodWrapperIdentityTestCase >> testAModuleLevelFunctionHasItsDocstring [
+	"It answered None, which testAModuleLevelFunctionsIdentityAttrsAreStillUnstable
+	used to pin alongside the identity gap: a module-level def compiles to a
+	method of the module class, and modules had no ___methodDocTable___."
+
+	self assert: (self reprAt: 'module_level_function_doc')
+		equals: '''a docstring the module-level path used to drop'''.
+
+]
+
+{ #category : 'Grail-Tests' }
 MethodWrapperIdentityTestCase >> testAModuleLevelFunctionsIdentityAttrsAreStillUnstable [
 	"THE GAP THIS WORK SURFACED, pinned so it cannot be mistaken for the wrapper
 	one.  A Grail module-level function answers a FRESH object per read for
-	__name__, __qualname__ and __annotations__, and None for __doc__ even with a
-	docstring -- so ``f.__name__ is f.__name__'' is false and no amount of correct
-	forwarding makes identity hold through a wrapper.  A nested def has none of
-	these problems, which is why the fixture nests its function exactly as
-	upstream does.  CPython answers True, True, True and the docstring."
+	__name__, __qualname__ and __annotations__ -- so ``f.__name__ is
+	f.__name__'' is false and no amount of correct forwarding makes identity
+	hold through a wrapper.  A nested def has none of these problems, which is
+	why the fixture nests its function exactly as upstream does.  CPython
+	answers True, True, True."
 
 	self assert: (self reprAt: 'module_level_function_attrs_are_unstable')
-		equals: '[False, False, False, None]'.
+		equals: '[False, False, False]'.
 
 ]
 

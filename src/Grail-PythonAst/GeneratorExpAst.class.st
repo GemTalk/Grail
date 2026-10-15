@@ -103,24 +103,23 @@ GeneratorExpAst >> ___emitIRValueOn___: aBuilder [
 	    (test_async_gen_expression_incorrect).  The wrapper's value is then
 	    already an async iterator, so the clause binds it directly rather than
 	    aiter-ing a one-shot iterable twice;
-	  * first clause SYNC inside an async genexp: the RAW value, no send at
-	    all.  Its __iter__ runs at first drive, as upstream does -- sending
-	    __aiter__ here is what ``((a, b) for a in [1, 2] async for b in ...)''
-	    fails on, with ``'async for' requires an object with __aiter__ method,
-	    got list'';
-	  * a wholly sync genexp: ``(iter) __iter__'', so ``(x for x in None)''
-	    raises from the enclosing statement rather than from the first
-	    __next__.  ___iterN___ sends __iter__ again inside the body and an
-	    iterator answers itself, so that second send is free -- which is
-	    exactly what the async path may NOT rely on."
+	  * first clause SYNC, in an async genexp or a sync one: ``(iter)
+	    __iter__'', so ``(x for x in None)'' raises from the enclosing
+	    statement rather than from the first __next__ -- and so does
+	    ``((a, b) for a in None async for b in ait())'', measured on 3.14.
+	    It must be __iter__, not __aiter__: sending __aiter__ to a sync
+	    clause's list is what ``((a, b) for a in [1, 2] async for b in ...)''
+	    used to fail on.
+
+	Either way the clause binds the wrapper's value directly and acquires
+	nothing more: an iterator need not have __iter__ of its own, and CPython
+	calls it once (test_genexpr_only_calls_dunder_iter_once)."
 	^ aBuilder
 		send: #value: to: outer
-		with: { self ___isAsyncGenexp___
-			ifTrue: [(generators at: 1) is_async = 1
-				ifTrue: [aBuilder
-					send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
-					with: { firstIter } env: 1]
-				ifFalse: [firstIter]]
+		with: { (generators at: 1) is_async = 1
+			ifTrue: [aBuilder
+				send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
+				with: { firstIter } env: 1]
 			ifFalse: [aBuilder send: #'__iter__' to: firstIter with: { } env: 1] }
 		env: 0
 
@@ -329,14 +328,19 @@ GeneratorExpAst >> printSmalltalkOn: aStream [
 		from the enclosing statement even when the genexp is never consumed
 		(test_async_gen_expression_incorrect).  The wrapper-block value is
 		then already an ASYNC ITERATOR, and emitGenerators' outerSource path
-		binds it directly rather than aiter-ing twice.  A sync first clause
-		keeps the raw value; its __iter__ runs at first drive, as upstream."
+		binds it directly rather than aiter-ing twice.  A SYNC first clause is
+		iter()'d at creation the same way, and once: measured on 3.14,
+		``((a, b) for a in None async for b in ait())'' raises at
+		construction, and its iterable's __iter__ runs once in all."
 		(generators at: 1) is_async = 1
 			ifTrue: [
 				aStream nextPutAll: '(PythonCoroutine @env1:___grailAiter___: '.
 				(generators at: 1) iter printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ')']
-			ifFalse: [(generators at: 1) iter printSmalltalkWithParenthesisOn: aStream].
+			ifFalse: [
+				aStream nextPutAll: '('.
+				(generators at: 1) iter printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ' __iter__)'].
 		aStream nextPutAll: ')'.
 		^ self].
 	"The SYNCHRONOUS form, the same shape one class down: a real
@@ -344,9 +348,9 @@ GeneratorExpAst >> printSmalltalkOn: aStream [
 	binds the outermost iterable at CONSTRUCTION for the reason spelled
 	out above, and calls __iter__ on it there too -- CPython's rule, and
 	what makes ``(x for x in None)'' raise its TypeError from the
-	enclosing statement rather than from the first next().  ___iterN___
-	sends __iter__ to it again inside the body; an iterator answers
-	itself, so the second send is free."
+	enclosing statement rather than from the first next().  The body
+	iterates that iterator as it is, without a second __iter__: an
+	iterator need not have one (test_genexpr_only_calls_dunder_iter_once)."
 	aStream nextPutAll: '([:'; nextPutAll: gxTemp; nextPutAll: ' |'; lf; increaseIndent.
 	aStream nextPutAll: '(PythonGenerator @env1:withBlock: [:___gen___ |'; lf; increaseIndent.
 	savedScopeDepth := CallAst ___pushScope___: self kind: #genexpr name: '<genexpr>'.
